@@ -39,6 +39,18 @@ RANGE (knob C). A single note, which is what the trigs hold here, shows the arp'
 cycle: per the manual each completed cycle is transposed one octave up until the RANGE is
 reached, then reset; the tool checks the notes it reads against that.
 
+`--chord SEMITONES,...` puts a chord on track 1's first trig the way the instrument does: in
+GRID RECORDING mode hold that trig and press [NOTE EDIT] (key 53, which the firmware's own
+button table calls STACK), which opens the NOTE EDIT menu on the step; then for each value
+[FUNC]+[DOWN] adds a note below the highlighted one (it starts at that note's value) and
+encoder E (its NOTE) moves it. `--chord-len UNITS` holds [FUNC] and turns encoder G (LEN) so
+every note of the step is long enough for the arp to step through the chord. With `--arp`
+the notes of the first pass are checked against the mode: UP ascending, DOWN descending, CYCL
+ascending then descending without repeating the ends, TRUE as entered (printed, not checked,
+because the entry order is not in the frame). The arp mode is read back from the setter at
+0x4004bea4 and the run is refused if the knob left it somewhere else: the encoder filter
+delivers a unit per 28 detents only on average, so a turned value can end one off.
+
 Digitone II 1.11 only: the addresses and key codes are that image's. With no `--against` the
 file's hash is checked; with it, the reference's is, and IMAGE may be a modified 1.11.
 Needs a panel_drive with `service_forced` and a literal `--capture` length.
@@ -64,6 +76,9 @@ NOTE_WORDS = 2               # byte offset of voice 0's note word
 CPU_HZ = 132_000_000         # what --ssi-hz paces against
 NO, RECORD, PLAY, STOP, TRK, TRIG1 = 12, 19, 20, 21, 16, 25
 ARP_KEY = 51
+NOTE_EDIT_KEY, FUNC, DOWN = 53, 17, 14   # 53 is "STACK" in the firmware's button table
+NOTE_KNOB, LEN_KNOB = 5, 7               # NOTE EDIT menu: encoder E is NOTE, G is LEN
+SET_MODE = "0x4004bea4"                  # the arp menu's MODE setter: stack arg 1 is the mode
 ARP_MODES = {"OFF": 0, "TRUE": 1, "UP": 2, "DOWN": 3, "CYCL": 4}   # knob A, units from OFF
 # RANGE: one unit of knob C in the ARP menu is 56 counts, twice a MODE or NOTE unit
 TRIG_PAGE = 1                # [TRIG PARAMETERS]: encoder A is NOTE there
@@ -132,11 +147,26 @@ def turn_steps(units: int, encoder: int = 1, per_unit: int = DETENTS_PER_UNIT) -
     return steps
 
 
+def chord_steps(step: int, values: list[int], length: int = 0) -> list[str]:
+    """Open NOTE EDIT on STEP (trig held, then the key), add one note per VALUES entry and move
+    it by that many units, make every note of the step LENGTH units longer, leave the menu."""
+    out = [f"press:{TRIG1 + step - 1}", "wait:40M", f"tap:{NOTE_EDIT_KEY}", "wait:60M",
+           f"release:{TRIG1 + step - 1}", "wait:30M"]
+    for units in values:
+        out += [f"press:{FUNC}", f"tap:{DOWN}", f"release:{FUNC}", "wait:40M"]
+        out += turn_steps(units, NOTE_KNOB) + ["wait:30M"]
+    if length:
+        out += [f"press:{FUNC}"] + turn_steps(length, LEN_KNOB) + [f"release:{FUNC}", "wait:30M"]
+    return out + [f"tap:{NO}", "wait:40M"]
+
+
 def script(tracks: dict[int, list[int]], run: str,
            notes: dict[int, int] | None = None, length: int = 0,
-           arp: tuple[int, int] | None = None) -> list[str]:
+           arp: tuple[int, int] | None = None,
+           chord: list[int] | None = None, chord_len: int = 0) -> list[str]:
     """Enter the trigs; then, still in GRID RECORDING, hold each trig of `notes` (step ->
-    semitones, track 1) and turn encoder A; leave RECORDING; PLAY."""
+    semitones, track 1) and turn encoder A, and give track 1's first trig the `chord`; leave
+    RECORDING; PLAY."""
     entered: list[str] = []
     ordered = sorted(tracks.items())
     for index, (track, trigs) in enumerate(ordered):
@@ -150,6 +180,8 @@ def script(tracks: dict[int, list[int]], run: str,
             for step, units in sorted(notes.items()):
                 entered += [f"press:{TRIG1 + step - 1}", "wait:40M"] + turn_steps(units)
                 entered += [f"release:{TRIG1 + step - 1}", "wait:30M"]
+        if chord and last and 1 in tracks:
+            entered += ["wait:30M"] + chord_steps(tracks[1][0], chord, chord_len)
         entered += [f"tap:{RECORD}", "wait:30M"]
     page: list[str] = []
     if notes or length:
@@ -170,6 +202,31 @@ def script(tracks: dict[int, list[int]], run: str,
 def expected_octaves(count: int, rng: int) -> list[int]:
     """Semitone offsets of COUNT arp steps of one note: up an octave each cycle to RANGE."""
     return [12 * (k % (rng + 1)) for k in range(count)]
+
+
+def expected_order(notes: list[float], mode: int) -> list[float] | None:
+    """One cycle of the arp over a chord's NOTES, by the manual: UP ascending, DOWN
+    descending, CYCL ascending then descending without repeating the ends. TRUE plays them
+    as entered, which the frame does not carry: None."""
+    up = sorted(set(notes))
+    if mode == ARP_MODES["UP"]:
+        return up
+    if mode == ARP_MODES["DOWN"]:
+        return up[::-1]
+    if mode == ARP_MODES["CYCL"]:
+        return up + up[::-1][1:-1]
+    return None
+
+
+def cycled(order: list[float], count: int) -> list[float]:
+    """COUNT steps of an arp that repeats ORDER."""
+    return [order[k % len(order)] for k in range(count)]
+
+
+def last_mode(result: dict) -> int | None:
+    """The arp mode the menu's setter was last called with (`--regs-at SET_MODE`), or None."""
+    calls = [r for r in result.get("regs", []) if r.get("pc") == SET_MODE]
+    return int(calls[-1]["stack"][2], 16) if calls else None
 
 
 def runs(found: list[NoteEvent], step: float, tolerance: float = 0.3) -> list[list[NoteEvent]]:
@@ -215,10 +272,15 @@ def panel_drive() -> pathlib.Path:
 def play(image: pathlib.Path, tracks: dict[int, list[int]], run: str, ssi_hz: str,
          keep: pathlib.Path | None = None,
          notes: dict[int, int] | None = None, length: int = 0,
-         arp: tuple[int, int] | None = None) -> list[NoteEvent]:
-    """Boot IMAGE and play the trigs; raises RuntimeError on a fault."""
+         arp: tuple[int, int] | None = None,
+         chord: list[int] | None = None, chord_len: int = 0) -> list[NoteEvent]:
+    """Boot IMAGE and play the trigs; raises RuntimeError on a fault, or when the arp menu's
+    knob left the mode somewhere other than ARP's."""
+    steps = script(tracks, run, notes, length, arp, chord, chord_len)
     cmd = [str(panel_drive()), str(image), "--ssi-hz", ssi_hz,
-           "--capture", f"{EXCHANGE}:1:48", "--steps", ",".join(script(tracks, run, notes, length, arp))]
+           "--capture", f"{EXCHANGE}:1:48", "--steps", ",".join(steps)]
+    if arp is not None:
+        cmd += ["--regs-at", SET_MODE]
     done = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
     if not done.stdout.strip():
         raise RuntimeError(done.stderr[-300:])
@@ -227,6 +289,9 @@ def play(image: pathlib.Path, tracks: dict[int, list[int]], run: str, ssi_hz: st
         keep.write_text(done.stdout)
     if result["outcome"] != "done":
         raise RuntimeError(f"fault: {result['fault']}")
+    if arp is not None and last_mode(result) != arp[0]:
+        raise RuntimeError(f"the arp mode ended at {last_mode(result)}, not {arp[0]}: the "
+                           "encoder filter delivered a different number of units; run again")
     return events(result["captures"])
 
 
@@ -246,6 +311,25 @@ def is_dn2_111(path: pathlib.Path) -> bool:
     return False
 
 
+def chord_order_report(found: list[NoteEvent], mode: int, label: str, size: int,
+                       step: float = 16.5e6) -> int:
+    """Print the first pass of an arpeggiated chord of SIZE notes and check it against the
+    mode. 0 when it is as the manual says (or the mode's order is not in the frame), else 1."""
+    first = runs(found, step)[0]
+    got = [e.notes[0] for e in first if e.notes]
+    print(f"arp {label}: first pass {got}")
+    if len(set(got)) < size:
+        print(f"  only {len(set(got))} of the chord's {size} notes in the pass: raise --chord-len")
+        return 1
+    want = expected_order(got, mode)
+    if want is None:
+        print("  TRUE plays the notes as entered; the frame does not carry the entry order")
+        return 0
+    ok = got == cycled(want, len(got))
+    print(f"  {'as the manual says' if ok else 'DIFFERS from ' + str(cycled(want, len(got)))}")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("image", type=pathlib.Path)
@@ -258,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="raise the TRIG page LEN by this many units before the trigs")
     ap.add_argument("--arp", default="", metavar="MODE[:RANGE]",
                     help="arpeggiator mode (OFF TRUE UP DOWN CYCL) and range units, e.g. UP:1")
+    ap.add_argument("--chord", default="", metavar="SEMITONES,...",
+                    help="notes added to track 1's first trig in NOTE EDIT, each moved from the "
+                         "one before by this many units, e.g. 7,-3")
+    ap.add_argument("--chord-len", type=int, default=0, dest="chord_len", metavar="UNITS",
+                    help="make every note of the chord this many units longer (FUNC + knob G)")
     ap.add_argument("--run", default="700M", help="instructions to play for")
     ap.add_argument("--ssi-hz", default="96000")
     ap.add_argument("--against", type=pathlib.Path, help="an image to compare the result with")
@@ -269,12 +358,14 @@ def main(argv: list[str] | None = None) -> int:
         return 3
     tracks = parse_tracks(a.trigs, a.track)
     notes = {int(k): int(v) for k, v in (p.split(":") for p in a.note.split(",") if p)}
+    chord = [int(v) for v in a.chord.split(",") if v]
     arp = None
     if a.arp:
         mode, _, rng = a.arp.partition(":")
         arp = (ARP_MODES[mode.upper()], int(rng or 0))
     try:
-        found = play(a.image, tracks, a.run, a.ssi_hz, a.json, notes, a.length, arp)
+        found = play(a.image, tracks, a.run, a.ssi_hz, a.json, notes, a.length, arp,
+                     chord, a.chord_len)
     except RuntimeError as error:
         print(error)
         return 2
@@ -291,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
 
     status = 0
     gaps = note_on_gaps(found)
-    if gaps and arp is None:
+    if gaps and arp is None and not chord:
         # the trigs repeat every 16 steps; a step two tracks share is one event
         trigs = sorted({t for steps in tracks.values() for t in steps})
         per_step = [g / s for g, s in zip(gaps, step_counts(trigs, len(gaps)))]
@@ -300,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"step period {mean / 1e6:.2f} M instructions = {bpm(mean):.1f} BPM; "
               f"worst gap off by {worst * 100:.2f}%")
         status = 0 if worst < 0.02 else 1
-    if arp is not None and arp[0] and len(tracks) == 1 and not notes:
+    if arp is not None and arp[0] and len(tracks) == 1 and not notes and not chord:
         step = 16.5e6                                  # 120 BPM, as the step period above
         groups = runs(found, step)
         bad = 0
@@ -310,9 +401,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"arp {a.arp}: {len(groups)} runs, octave cycle "
               f"{'as the manual says' if not bad else str(bad) + ' runs differ'}")
         status = status or (1 if bad else 0)
+    if arp is not None and arp[0] and chord and arp[1] == 0:
+        status = status or chord_order_report(found, arp[0], a.arp, 1 + len(chord))
     if a.against:
         try:
-            other = play(a.against, tracks, a.run, a.ssi_hz, None, notes, a.length, arp)
+            other = play(a.against, tracks, a.run, a.ssi_hz, None, notes, a.length, arp,
+                         chord, a.chord_len)
         except RuntimeError as error:
             print(f"{a.against.name}: {error}")
             return 2

@@ -126,3 +126,52 @@ def test_the_arp_menu_is_opened_after_the_trigs_and_closed_before_play():
     assert menu and menu[0].startswith('turn:1:')               # MODE is knob A
     assert any(y.startswith('turn:3:') for y in menu)           # RANGE is knob C
     assert any(y.startswith('turn:3:') for y in steps[:steps.index('tap:19')])   # LEN first
+
+
+def test_a_chord_is_built_in_note_edit_with_the_trig_held_inside_grid_recording():
+    steps = seqplay.script({1: [1, 5]}, '10M', chord=[7, -3], chord_len=4)
+    hold = steps.index('press:25')
+    assert steps.index('tap:19') < hold < steps.index('tap:53')            # NOTE EDIT key
+    assert steps.index('release:25') > steps.index('tap:53')
+    after = steps[steps.index('tap:53'):steps.index('tap:20')]
+    assert after.count('tap:14') == 2                                       # FUNC + DOWN twice
+    assert [y for y in after if y.startswith('turn:5:')][0] == 'turn:5:10'   # knob E: NOTE
+    assert any(y.startswith('turn:5:-') for y in after)
+    assert any(y.startswith('turn:7:') for y in after)                      # knob G: LEN
+    assert after.index('tap:12') > max(i for i, y in enumerate(after) if y.startswith('turn:'))
+
+
+def test_a_script_without_a_chord_never_opens_note_edit():
+    assert 'tap:53' not in seqplay.script({1: [1]}, '10M', {1: 2}, 4, (2, 0))
+
+
+def test_chord_notes_go_to_the_first_trig_of_track_one():
+    steps = seqplay.script({1: [3, 9]}, '10M', chord=[4])
+    assert 'press:27' in steps and 'press:25' not in steps                  # trig 3 is key 27
+
+
+def test_the_arp_orders_of_a_chord_follow_the_manual():
+    chord = [60.0, 67.0, 63.0]                       # as entered
+    assert seqplay.expected_order(chord, seqplay.ARP_MODES['UP']) == [60.0, 63.0, 67.0]
+    assert seqplay.expected_order(chord, seqplay.ARP_MODES['DOWN']) == [67.0, 63.0, 60.0]
+    assert seqplay.expected_order(chord, seqplay.ARP_MODES['CYCL']) == [60.0, 63.0, 67.0, 63.0]
+    assert seqplay.expected_order(chord, seqplay.ARP_MODES['TRUE']) is None
+    assert seqplay.cycled([60.0, 63.0, 67.0, 63.0], 6) == [60.0, 63.0, 67.0, 63.0, 60.0, 63.0]
+
+
+def test_the_arp_mode_read_back_is_the_setters_last_argument():
+    def call(value):
+        return {'pc': seqplay.SET_MODE, 'stack': ['0x40018ef4', '0x446cad50', f'{value:#010x}']}
+    result = {'regs': [call(0), call(1), {'pc': '0x1', 'stack': ['0', '0', '0x9']}, call(3)]}
+    assert seqplay.last_mode(result) == 3
+    assert seqplay.last_mode({'regs': []}) is None
+
+
+def test_a_pass_with_too_few_notes_is_refused_not_checked():
+    def mk(time, note):
+        return seqplay.NoteEvent(time, 'on', (0,), (note,))
+    two = [mk(0, 60.0), mk(16, 63.0)]
+    assert seqplay.chord_order_report(two, seqplay.ARP_MODES['UP'], 'UP', 3, 16) == 1
+    three = [mk(0, 60.0), mk(16, 63.0), mk(32, 67.0)]
+    assert seqplay.chord_order_report(three, seqplay.ARP_MODES['UP'], 'UP', 3, 16) == 0
+    assert seqplay.chord_order_report(three, seqplay.ARP_MODES['DOWN'], 'DOWN', 3, 16) == 1
