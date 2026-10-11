@@ -84,3 +84,23 @@ def test_the_script_selects_each_track_with_trk_held():
     assert steps.index('press:16') < steps.index('tap:26')   # track 2 is trig key 26
     assert steps.count('press:16') == 2 and steps.count('release:16') == 2
     assert seqplay.script({1: [1]}, '10M').count('press:16') == 0
+
+
+def test_turn_steps_are_packets_of_detents_for_each_unit():
+    steps = seqplay.turn_steps(2)
+    turns = [int(x.split(':')[2]) for x in steps if x.startswith('turn:')]
+    assert sum(turns) == 2 * seqplay.DETENTS_PER_UNIT and max(turns) <= seqplay.PACKET
+    assert sum(int(x.split(':')[2]) for x in seqplay.turn_steps(-1) if x.startswith('turn:'))         == -seqplay.DETENTS_PER_UNIT
+
+
+def test_notes_are_edited_with_the_trig_held_inside_grid_recording():
+    steps = seqplay.script({1: [1, 5]}, '10M', {1: 3})
+    hold = steps.index('press:25')
+    assert steps.index('tap:19') < hold < len(steps) - 1 - steps[::-1].index('tap:19')
+    assert steps.index('release:25') > hold
+    assert any(x.startswith('turn:1:') for x in steps[hold:steps.index('release:25')])
+
+
+def test_the_trig_page_is_selected_only_when_notes_are_edited():
+    assert 'tap:1' in seqplay.script({1: [1]}, '10M', {1: 2})
+    assert 'tap:1' not in seqplay.script({1: [1]}, '10M')

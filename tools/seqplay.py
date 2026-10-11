@@ -1,7 +1,7 @@
 """Play the sequencer headless and list the notes it sends the DSP.
 
     python tools/seqplay.py Digitone_II_OS1.11.syx [--trigs 1,5,9,13] [--track 2:3,11]
-                            [--run 700M] [--against STOCK.syx]
+                            [--note 1:+7,5:-3] [--run 700M] [--against STOCK.syx]
 
 Boots the image from reset with SSI0 paced (`panel_drive --ssi-hz`: the audio-frame
 interrupt runs, and with it the two forced interrupts that tick the sequencer, see
@@ -11,6 +11,12 @@ every send. Prints each note-on (voices and note numbers) and note-off with its 
 checks the note-ons keep to the spacing of the trigs' steps.
 
 `--trigs` is track 1's steps; each `--track N:STEPS` adds a track (TRK held, then trig key N).
+`--note STEP:SEMITONES,...` sets a trig's note on track 1 the way the instrument does: in GRID
+RECORDING mode, on the TRIG page, hold the trig key and turn encoder A. The note is read back from the frame, so
+it is a check of the edit as well as of the playback. In the emulator a unit takes about 28
+detents (`DETENTS_PER_UNIT`, measured: the firmware's encoder filter at 0x4011336e swallows
+the first detents after the knob has been idle, and counts 48 more for each unit it emits);
+200 detents gave +7.
 `--against IMAGE` plays the same pattern on IMAGE too and compares the two event by event:
 kind, voices and notes exactly, the time within `--tolerance` instructions (the capture lands
 wherever the ColdFire was when a frame went out, so different code shifts it by a few). That
@@ -49,6 +55,9 @@ NOTE_ON, NOTE_OFF = 34, 36
 NOTE_WORDS = 2               # byte offset of voice 0's note word
 CPU_HZ = 132_000_000         # what --ssi-hz paces against
 NO, RECORD, PLAY, STOP, TRK, TRIG1 = 12, 19, 20, 21, 16, 25
+TRIG_PAGE = 1                # [TRIG PARAMETERS]: encoder A is NOTE there
+DETENTS_PER_UNIT = 28        # emulator: detents of encoder A for one semitone of NOTE (measured)
+PACKET = 10                  # detents per turn step: small turns are often swallowed
 
 
 @dataclass(frozen=True)
@@ -99,15 +108,38 @@ def step_counts(trigs: list[int], gaps: int) -> list[int]:
     return [between[i % len(between)] for i in range(gaps)]
 
 
-def script(tracks: dict[int, list[int]], run: str) -> list[str]:
+def turn_steps(units: int) -> list[str]:
+    """Encoder A turned by UNITS of NOTE (negative is down), in packets of PACKET detents."""
+    detents = abs(units) * DETENTS_PER_UNIT
+    sign = 1 if units > 0 else -1
+    steps: list[str] = []
+    while detents > 0:
+        part = min(PACKET, detents)
+        steps += [f"turn:1:{sign * part}", "wait:15M"]
+        detents -= part
+    return steps
+
+
+def script(tracks: dict[int, list[int]], run: str,
+           notes: dict[int, int] | None = None) -> list[str]:
+    """Enter the trigs; then, still in GRID RECORDING, hold each trig of `notes` (step ->
+    semitones, track 1) and turn encoder A; leave RECORDING; PLAY."""
     entered: list[str] = []
-    for track, trigs in sorted(tracks.items()):
+    ordered = sorted(tracks.items())
+    for index, (track, trigs) in enumerate(ordered):
         if track != 1 or len(tracks) > 1:
             entered += [f"press:{TRK}", "wait:10M", f"tap:{TRIG1 + track - 1}",
                         f"release:{TRK}", "wait:30M"]
         entered += [f"tap:{RECORD}"] + [f"tap:{TRIG1 + t - 1}" for t in trigs]
+        last = index == len(ordered) - 1
+        if notes and last and 1 in tracks:
+            entered += ["wait:30M"]
+            for step, units in sorted(notes.items()):
+                entered += [f"press:{TRIG1 + step - 1}", "wait:40M"] + turn_steps(units)
+                entered += [f"release:{TRIG1 + step - 1}", "wait:30M"]
         entered += [f"tap:{RECORD}", "wait:30M"]
-    return (["wait:1500M", f"tap:{NO}", "wait:60M"] + entered
+    page = [f"tap:{TRIG_PAGE}", "wait:30M"] if notes else []
+    return (["wait:1500M", f"tap:{NO}", "wait:60M"] + page + entered
             + ["wait:50M", f"tap:{PLAY}", f"wait:{run}", f"tap:{STOP}", "wait:20M"])
 
 
@@ -140,10 +172,11 @@ def panel_drive() -> pathlib.Path:
 
 
 def play(image: pathlib.Path, tracks: dict[int, list[int]], run: str, ssi_hz: str,
-         keep: pathlib.Path | None = None) -> list[NoteEvent]:
+         keep: pathlib.Path | None = None,
+         notes: dict[int, int] | None = None) -> list[NoteEvent]:
     """Boot IMAGE and play the trigs; raises RuntimeError on a fault."""
     cmd = [str(panel_drive()), str(image), "--ssi-hz", ssi_hz,
-           "--capture", f"{EXCHANGE}:1:48", "--steps", ",".join(script(tracks, run))]
+           "--capture", f"{EXCHANGE}:1:48", "--steps", ",".join(script(tracks, run, notes))]
     done = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
     if not done.stdout.strip():
         raise RuntimeError(done.stderr[-300:])
@@ -177,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--trigs", default="1,5,9,13", help="steps of track 1, 1-based, ascending")
     ap.add_argument("--track", action="append", default=[], metavar="N:STEPS",
                     help="another track's steps, e.g. 2:3,11 (repeatable)")
+    ap.add_argument("--note", default="", metavar="STEP:SEMITONES,...",
+                    help="raise or lower a track 1 trig's note, e.g. 1:+7,5:-3")
     ap.add_argument("--run", default="700M", help="instructions to play for")
     ap.add_argument("--ssi-hz", default="96000")
     ap.add_argument("--against", type=pathlib.Path, help="an image to compare the result with")
@@ -187,8 +222,9 @@ def main(argv: list[str] | None = None) -> int:
     if not is_dn2_111(a.against or a.image):
         return 3
     tracks = parse_tracks(a.trigs, a.track)
+    notes = {int(k): int(v) for k, v in (p.split(":") for p in a.note.split(",") if p)}
     try:
-        found = play(a.image, tracks, a.run, a.ssi_hz, a.json)
+        found = play(a.image, tracks, a.run, a.ssi_hz, a.json, notes)
     except RuntimeError as error:
         print(error)
         return 2
@@ -216,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         status = 0 if worst < 0.02 else 1
     if a.against:
         try:
-            other = play(a.against, tracks, a.run, a.ssi_hz)
+            other = play(a.against, tracks, a.run, a.ssi_hz, None, notes)
         except RuntimeError as error:
             print(f"{a.against.name}: {error}")
             return 2
