@@ -104,3 +104,25 @@ def test_notes_are_edited_with_the_trig_held_inside_grid_recording():
 def test_the_trig_page_is_selected_only_when_notes_are_edited():
     assert 'tap:1' in seqplay.script({1: [1]}, '10M', {1: 2})
     assert 'tap:1' not in seqplay.script({1: [1]}, '10M')
+
+
+def test_expected_octaves_climb_to_the_range_then_reset():
+    assert seqplay.expected_octaves(7, 2) == [0, 12, 24, 0, 12, 24, 0]
+    assert seqplay.expected_octaves(3, 0) == [0, 0, 0]
+
+
+def test_runs_split_where_the_gap_is_longer_than_a_step():
+    def mk(time):
+        return seqplay.NoteEvent(time, 'on', (0,), (60.0,))
+    groups = seqplay.runs([mk(0), mk(10), mk(20), mk(100), mk(110)], 10)
+    assert [len(g) for g in groups] == [3, 2]
+
+
+def test_the_arp_menu_is_opened_after_the_trigs_and_closed_before_play():
+    steps = seqplay.script({1: [1]}, '10M', None, 8, (2, 1))
+    assert steps.index('tap:51') > steps.index('tap:25')
+    assert steps.index('tap:51') < steps.index('tap:20')
+    menu = [y for y in steps[steps.index('tap:51'):steps.index('tap:20')] if y.startswith('turn:')]
+    assert menu and menu[0].startswith('turn:1:')               # MODE is knob A
+    assert any(y.startswith('turn:3:') for y in menu)           # RANGE is knob C
+    assert any(y.startswith('turn:3:') for y in steps[:steps.index('tap:19')])   # LEN first
