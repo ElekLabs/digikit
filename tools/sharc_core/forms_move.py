@@ -116,6 +116,16 @@ def _type_17a(
     value = _wide(f, "data") if name == "17a" else _signed(_field(f, "data[15:0]"), 16)
     code = _field(f, "ureg")
     _write_ureg(state, code, Const(value))
+    # SIMD (SHARC+ Core Programming Reference rev. 1.5, p.16-16, Type 17a
+    # "SIMD Mode", and the same text under Type 17b): the instruction
+    # "provides parallel writes for the X and Y processing elements. The X
+    # element uses the specified Ureg, and the Y element uses the
+    # complementary Cureg", so "R1 = 0x3f000000" loads S1 too. A register
+    # with no complement gets no implicit write. An unresolved MODE1.PEYEN
+    # is treated like SISD, as in _type_5a's ureg copy.
+    companion = _cureg_code(code)
+    if companion is not None and _simd_active(state) is True:
+        _write_ureg(state, companion, Const(value))
     _event(state, insn, "ureg-write", ureg=UREG_NAMES[code], value=value & 0xFFFFFFFF)
     return _advance(state, insn)
 

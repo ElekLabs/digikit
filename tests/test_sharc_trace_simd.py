@@ -235,6 +235,50 @@ class SimdRegisterMoveTest(TraceHelpers):
         self.assertNotIn(5, state.uregs)
         self.assertNotIn(85, state.uregs)
 
+    def test_immediate_to_a_complementary_ureg_loads_both_pes(self):
+        # PRM rev. 1.5 p.16-16, Type 17a "SIMD Mode": "The X element uses
+        # the specified Ureg, and the Y element uses the complementary
+        # Cureg"; Type 17b has the same text for its 16-bit data.
+        simd = {T.UREG_CODES["MODE1"]: T.Const(1 << 21)}
+        wide = {"ureg[6:0]": 1, "data[31:16]": 0x3F00, "data[15:0]": 0}
+        state = self.run_one(T.State(1, dict(simd)), insn("17a", wide, 6))
+        self.assertEqual(state.uregs[1], T.Const(0x3F000000))
+        self.assertEqual(state.uregs[81], T.Const(0x3F000000))
+
+        # The named register may be PEy's: its complement is then PEx's.
+        named_s = {"ureg[6:0]": 85, "data[31:16]": 0, "data[15:0]": 7}
+        state = self.run_one(T.State(1, dict(simd)), insn("17a", named_s, 6))
+        self.assertEqual(state.uregs[85], T.Const(7))
+        self.assertEqual(state.uregs[5], T.Const(7))
+
+        # Type 17b sign-extends its 16 bits, for both elements.
+        short = {"ureg[6:0]": 12, "data[15:0]": 0xFFF6}
+        state = self.run_one(T.State(1, dict(simd)), insn("17b", short, 4))
+        self.assertEqual(T._signed(state.uregs[12].value, 32), -10)
+        self.assertEqual(state.uregs[92], state.uregs[12])
+
+    def test_immediate_companion_needs_simd_and_a_complement(self):
+        wide = {"ureg[6:0]": 1, "data[31:16]": 0x3F00, "data[15:0]": 0}
+        # SISD: S1 keeps its value.
+        state = self.run_one(
+            T.State(1, {81: T.Const(0x66), T.UREG_CODES["MODE1"]: T.Const(0)}),
+            insn("17a", wide, 6),
+        )
+        self.assertEqual(state.uregs[1], T.Const(0x3F000000))
+        self.assertEqual(state.uregs[81], T.Const(0x66))
+
+        # An unresolved MODE1 is treated like SISD: no companion.
+        state = self.run_one(T.State(1, {81: T.Const(0x66)}), insn("17a", wide, 6))
+        self.assertEqual(state.uregs[1], T.Const(0x3F000000))
+        self.assertEqual(state.uregs[81], T.Const(0x66))
+
+        # I4 has no complement: nothing else is written.
+        dag = {"ureg[6:0]": 20, "data[31:16]": 0x002D, "data[15:0]": 0xE6C0}
+        before = {84: T.Const(0x66), T.UREG_CODES["MODE1"]: T.Const(1 << 21)}
+        state = self.run_one(T.State(1, dict(before)), insn("17a", dag, 6))
+        self.assertEqual(state.uregs[20], T.Const(0x002DE6C0))
+        self.assertEqual({k: v for k, v in state.uregs.items() if k != 20}, before)
+
 
 class SimdMemoryCompanionTest(TraceHelpers):
     """Type14a/15a/3b UREG<->memory companion transfers (SHARC+ PRM p.212,
