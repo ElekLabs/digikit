@@ -269,6 +269,52 @@ def test_acm_runs_a_chain_to_its_null_pointer_and_honours_the_interrupt_mask():
     assert _dm_read(state, iir.IIR_DMASTAT, 4).value & iir.DMASTAT_ACDONE
 
 
+def _acm_blocks(sgctl: int, blocks: int = 3, window: int = 8):
+    """Two ACM channels run once a block; between runs the core re-arms each TCB's
+    INIDX and OUTIDX to the next block's buffers, which the accelerator set to 0 and
+    0xFFFFFFFF after the last window (HWR chapter 39, ACM)."""
+    state = _state()
+    xs0 = [float(k % 7) - 3.0 for k in range(window * blocks)]
+    xs1 = [0.05 * k for k in range(window * blocks)]
+    _poke(state, IN0, xs0)
+    _poke(state, IN1, xs1)
+    _biquads(state, COEF0, [LOWPASS, PEAK])
+    _biquads(state, COEF1, [PEAK])
+    ctl2 = (_ctl2(2, window, imask=True), _ctl2(1, window, imask=True))
+    _acm_tcb(state, TCB0, TCB1, ctl2[0], COEF0, IN0, OUT0, sgctl=sgctl)
+    _acm_tcb(state, TCB1, 0, ctl2[1], COEF1, IN1, OUT1, sgctl=sgctl)
+    ctl1 = iir.CTL1_EN | iir.CTL1_DMAEN | iir.CTL1_ACM
+    for b in range(blocks):
+        if b:
+            for tcb, inp, out in ((TCB0, IN0, OUT0), (TCB1, IN1, OUT1)):
+                assert _peek(state, tcb + 4 * 14, 1, "I") == [0]
+                assert _peek(state, tcb + 4 * 10, 1, "I") == [0xFFFFFFFF]
+                _poke(state, tcb + 4 * 14, [_w(inp + 4 * window * b)])
+                _poke(state, tcb + 4 * 10, [_w(out + 4 * window * b)])
+            _dm_write(state, iir.IIR_CTL1, 4, Const(0))
+        _start(state, ctl1, _w(TCB0) + 15)
+    return state, xs0, xs1
+
+
+def test_acm_channels_with_save_state_continue_block_after_block_once_re_armed():
+    blocks, window = 3, 8
+    state, xs0, xs1 = _acm_blocks(iir.SGCTL_SS, blocks, window)
+    assert _peek(state, OUT0, blocks * window) == _reference(xs0, [LOWPASS, PEAK])[0]
+    assert _peek(state, OUT1, blocks * window) == _reference(xs1, [PEAK])[0]
+
+
+def test_acm_channels_without_save_state_restart_every_block():
+    blocks, window = 3, 8
+    state, xs0, _ = _acm_blocks(0, blocks, window)
+    for b in range(blocks):  # each block from the stored (zero) states again
+        part = xs0[b * window : (b + 1) * window]
+        assert (
+            _peek(state, OUT0 + 4 * window * b, window)
+            == _reference(part, [LOWPASS, PEAK])[0]
+        )
+    assert _peek(state, OUT0, blocks * window) != _reference(xs0, [LOWPASS, PEAK])[0]
+
+
 def test_reads_leave_the_done_bits_set():
     state = _state()
     _biquads(state, COEF0, [LOWPASS])
