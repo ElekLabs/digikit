@@ -496,6 +496,18 @@ for _n in [
     "_iir_write",
 ]:
     BOUNDARY["sharc_core.iir." + _n] = Bnd()
+# Hand-written twins in native/sharc-rt/src/rt/fir.rs, reached only from periph.
+for _n in [
+    "_mmr",
+    "_coefficients",
+    "_window",
+    "_channel",
+    "_channel_done",
+    "_run",
+    "_fir_read",
+    "_fir_write",
+]:
+    BOUNDARY["sharc_core.fir." + _n] = Bnd()
 for _n in ["_concrete_address", "_byte_present"]:
     BOUNDARY["sharc_core.memory." + _n] = Bnd()
 for _n in [
