@@ -11,7 +11,7 @@
 //! more changes than the per-instruction journal holds (JOURNAL_CAP), and an
 //! IIR store never runs in block code (periph::write_acts sends it to the
 //! interpreter), so only a trap later in the same instruction could want
-//! them undone, and a trap ends the run.
+//! them undone, and a trap ends the run. rt/fir.rs shares the DMA helpers.
 
 use super::*;
 
@@ -100,24 +100,24 @@ fn set(s: &mut St, a: u32, v: u32) -> R<()> {
 }
 
 /// iir._set inside a run (not journaled).
-fn put(s: &mut St, a: u32, v: u32) -> R<()> {
+pub(super) fn put(s: &mut St, a: u32, v: u32) -> R<()> {
     s.mmr_put(a, V::c(v as Int));
     Ok(())
 }
 
 /// iir._word_read: the word at word address W.
-fn word_read(s: &St, w: u32) -> R<u32> {
+pub(super) fn word_read(s: &St, w: u32) -> R<u32> {
     super::periph::ram_word(s, (w & ADDR_MASK) << 2)
 }
 
 /// iir._word_write (inside a run: not journaled).
-fn word_write(s: &mut St, w: u32, v: u32) -> R<()> {
+pub(super) fn word_write(s: &mut St, w: u32, v: u32) -> R<()> {
     s.mem_store_nolog((w & ADDR_MASK) << 2, 4, v);
     Ok(())
 }
 
 /// iir._step: the next index of a circular buffer; length 0 is linear.
-fn step(index: u32, modifier: u32, length: u32, base: u32) -> u32 {
+pub(super) fn step(index: u32, modifier: u32, length: u32, base: u32) -> u32 {
     let m = (modifier & 0xFFFF) as u16 as i16 as i64;
     let mut next = index as i64 + m;
     if length != 0 {
@@ -131,7 +131,7 @@ fn step(index: u32, modifier: u32, length: u32, base: u32) -> u32 {
 }
 
 /// iir._load_tcb
-fn load_tcb(s: &mut St, pointer: u32, layout: &[u32]) -> R<()> {
+pub(super) fn load_tcb(s: &mut St, pointer: u32, layout: &[u32]) -> R<()> {
     for (k, &reg) in layout.iter().enumerate() {
         let v = word_read(s, pointer.wrapping_sub(k as u32))?;
         put(s, reg, v)?;
@@ -175,7 +175,7 @@ fn save_state(s: &mut St, biquads: &[Biquad]) -> R<()> {
     Ok(())
 }
 
-fn position(layout: &[u32], reg: u32) -> u32 {
+pub(super) fn position(layout: &[u32], reg: u32) -> u32 {
     layout.iter().position(|&r| r == reg).unwrap_or(0) as u32
 }
 

@@ -1,4 +1,4 @@
-"""Opt-in system peripherals: the SEC core interface, descriptor DMA and IIR0.
+"""Opt-in system peripherals: the SEC core interface, descriptor DMA, FIR0 and IIR0.
 
 Enabled by State.peripheral_model. Register state lives in State.mmrs, so
 canonical snapshots need no new fields. Public sources: ADSP-2156x HWR
@@ -17,6 +17,7 @@ native/sharc/src/rt/periph.rs (tools/sharc_transpile.py BOUNDARY).
 from __future__ import annotations
 
 from .encoding import UREG_CODES
+from .fir import SID_FIR0_DMA, _fir_read, _fir_write
 from .iir import SID_IIR0_DMA, _iir_read, _iir_write
 from .state import State, _ureg
 from .values import Const
@@ -287,10 +288,13 @@ def _dma_done(state: State, base: int, sid: int) -> None:
 
 
 def _periph_read(state: State, address: int) -> Const | None:
-    """SHDBG_SECI_ID reads the issued SID, IIR0's registers read through
-    iir.py; other addresses read plainly."""
+    """SHDBG_SECI_ID reads the issued SID, FIR0's and IIR0's registers read
+    through fir.py and iir.py; other addresses read plainly."""
     if address == SECI_ID:
         return Const(_mmr(state, SECI_ID))
+    found = _fir_read(state, address)
+    if found is not None:
+        return found
     return _iir_read(state, address)
 
 
@@ -298,6 +302,11 @@ def _periph_write(state: State, address: int, value: int) -> bool:
     """Apply a guest MMR write with peripheral effects; False leaves it plain."""
     if address in (SECI_ID, SEC_CSID):
         _sec_ack(state)
+        return True
+    handled = _fir_write(state, address, value)
+    if handled:
+        for _ in range(handled - 1):
+            _sec_raise(state, SID_FIR0_DMA)
         return True
     handled = _iir_write(state, address, value)
     if handled:

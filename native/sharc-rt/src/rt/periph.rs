@@ -1,4 +1,4 @@
-//! Opt-in system peripherals: the SEC core interface, descriptor DMA and IIR0.
+//! Opt-in system peripherals: the SEC core interface, descriptor DMA, FIR0 and IIR0.
 //!
 //! Hand-written twin of tools/sharc_core/periph.py; keep the two in step.
 //! Register state lives in St::mmrs, so canonical snapshots need no new
@@ -296,6 +296,9 @@ pub fn periph_read(s: &St, a: u32) -> R<Option<V>> {
     if a == SECI_ID {
         return Ok(Some(V::c(mmr(s, SECI_ID)? as Int)));
     }
+    if let Some(v) = super::fir::fir_read(s, a)? {
+        return Ok(Some(v));
+    }
     super::iir::iir_read(s, a)
 }
 
@@ -305,7 +308,7 @@ pub fn write_acts(a: u32) -> bool {
     if a == SECI_ID || a == SEC_CSID || a == SEC_END || a == SEC_RAISE {
         return true;
     }
-    if (super::iir::IIR0..super::iir::IIR_END).contains(&a) {
+    if (super::fir::FIR0..super::fir::FIR_END).contains(&a) || (super::iir::IIR0..super::iir::IIR_END).contains(&a) {
         return true;
     }
     if a >= SEC_SCTL && a < SEC_SCTL + 8 * SEC_SOURCES && (a - SEC_SCTL) & 7 == 4 {
@@ -320,6 +323,13 @@ pub fn write_acts(a: u32) -> bool {
 pub fn periph_write(s: &mut St, a: u32, value: u32) -> R<bool> {
     if a == SECI_ID || a == SEC_CSID {
         sec_ack(s)?;
+        return Ok(true);
+    }
+    let handled = super::fir::fir_write(s, a, value)?;
+    if handled != 0 {
+        for _ in 1..handled {
+            sec_raise(s, super::fir::SID_FIR0_DMA)?;
+        }
         return Ok(true);
     }
     let handled = super::iir::iir_write(s, a, value)?;
