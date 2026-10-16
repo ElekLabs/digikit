@@ -1316,6 +1316,15 @@ fn _dm_write_nolog_full(
 }
 
 impl St {
+    /// An unjournaled store of WIDTH bytes at A, for an accelerator's DMA (rt/iir.rs).
+    pub(crate) fn mem_store_nolog(&mut self, a: u32, width: u32, v: u32) {
+        if !self.mem.write_dirty(a, width, v) {
+            for k in 0..width {
+                self.mem.write_byte(a + k, (v >> (8 * k)) as u8);
+            }
+        }
+    }
+
     #[inline(always)]
     fn mem_write(&mut self, a: u32, width: u32, v: u32) -> R<()> {
         if let Some(old) = self.mem.read_dirty(a, width) {
