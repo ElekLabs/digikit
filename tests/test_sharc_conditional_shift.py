@@ -204,3 +204,18 @@ def test_conditional_type6b_unknown_or_simd_predicate_stops_unchanged():
     assert execute_6b(simd, synthetic_6b_fields(0)).stopped == (
         "unsupported conditional SIMD Type6b"
     )
+
+
+def test_unconditional_type6b_in_simd_shifts_pey_too():
+    # PRM "Type 6a ISA/VISA (cond + shift imm)", SIMD Mode: the immediate shift runs
+    # "simultaneously for the X and Y processing elements": S7 = LSHIFT S4 BY 5 beside
+    # R7 = LSHIFT R4 BY 5. In SISD the S file is untouched.
+    for mode1, s7 in ((1 << 21, 0x20406080), (0, 0x5A5A5A5A)):
+        initial = state(st.Const(0))
+        initial.uregs[st.UREG_CODES["MODE1"]] = st.Const(mode1)
+        initial.uregs[st.UREG_CODES["S4"]] = st.Const(0x01020304)
+        initial.uregs[st.UREG_CODES["S7"]] = st.Const(0x5A5A5A5A)
+        ran = execute_6b(initial, synthetic_6b_fields(0x1F))
+        assert ran.stopped is None
+        assert ran.uregs[st.UREG_CODES["R7"]] == st.Const(0x24466880)
+        assert ran.uregs[st.UREG_CODES["S7"]] == st.Const(s7)
