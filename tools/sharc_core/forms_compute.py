@@ -17,6 +17,8 @@ from .compute import (
     _apply_compute_simd,
     _compute,
     _compute_simd,
+    _pey_special,
+    _pey_view,
     _shift_immediate,
 )
 from .encoding import (
@@ -70,11 +72,19 @@ def _type_6b_shiftimm(
                 predicate_assumption=False,
             )
             return _advance(state, insn)
+    old = _snapshot_uregs(state.uregs)
     try:
-        result = _shift_immediate(f, _snapshot_uregs(state.uregs), state.special)
+        result = _shift_immediate(f, old, state.special)
+        # SIMD: PRM "Type 6a ISA/VISA (cond + shift imm)", SIMD Mode: "the same immediate
+        # shift operation as is available in SISD mode, but ... simultaneously for the X
+        # and Y processing elements" -- PEy's shift reads and writes the S file.
+        result_y = (_shift_immediate(f, _pey_view(old), _pey_special(state.special))
+                    if _simd_active(state) is True else None)
     except ValueError as error:
         return [_stop(state, insn, str(error))]
     _apply_compute(state, insn, result)
+    if result_y is not None:
+        _apply_compute_pey(state, insn, result_y)
     return _advance(state, insn)
 
 
