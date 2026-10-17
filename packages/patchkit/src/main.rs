@@ -13,6 +13,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   inspect X.syx                          device, version, port, patch record
   check   --firmware X.syx [--modules a,b]  which modules fit, and why not
   apply   --firmware X.syx --modules a,b [-o OUT.syx] [--plan plan.json] [--no-record (oracles only)]
+          (no encoding gate: for test fixtures; an image to flash comes from `patchkit.py patch`)
   (any command that reads modules: [--modules-dir DIR], PATCHKIT_MODULES=dir:dir for extra module roots)
   explain --firmware X.syx (--modules a,b | --plan plan.json)   what a patch does, site by site
   verify  OUT.syx [--base X.syx]         re-decode and check an image

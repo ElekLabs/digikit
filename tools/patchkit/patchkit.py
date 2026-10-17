@@ -3,12 +3,16 @@
 
     uv run python -m tools.patchkit.patchkit bin                       print the path of the built binary
     uv run python -m tools.patchkit.patchkit patch --firmware X.syx --modules a,b [-o OUT.syx]   apply; writes out/patch/
+    uv run python -m tools.patchkit.patchkit apply ...                                           the same as patch (gated)
     uv run python -m tools.patchkit.patchkit explain --firmware X.syx --modules a,b              site-by-site account
     uv run python -m tools.patchkit.patchkit list|inspect|check|verify ...                       passed through
     uv run python -m tools.patchkit.patchkit bundle [-o FILE] [--modules-dir DIR]  ports + modules as one JSON (what patchkit.wasm reads)
     uv run python -m tools.patchkit.patchkit inject [OUT.syx] [--hot]  load a patched image into the running emulator
 
-`patch` defaults the output to out/patch/<firmware stem>+<modules>.syx and writes plan.json next to it. `explain`
+`patch` defaults the output to out/patch/<firmware stem>+<modules>.syx and writes plan.json next to it, then runs the
+encoding gate (tools/patchkit/pk_encoding_gate.py): a refused image is deleted; with --no-encoding-gate the image is
+renamed *.ungated.syx. `apply` here is `patch`: only the Rust binary's own `apply` (test fixtures, oracles) writes an
+image without the gate. `explain`
 adds a SHARC+ listing of the DSP sites to the report of the Rust binary. Output files are firmware-derived: they stay
 under out/ and are never committed.
 """
@@ -284,13 +288,14 @@ def main(argv: list[str]) -> int:
         )
         print(out)
         return 0
-    if cmd == "patch":
+    if cmd in ("patch", "apply"):
+        # `apply` through the front end is gated like `patch`; the ungated Rust `apply` stays for test fixtures
         return cmd_patch(args)
     if cmd == "explain":
         return cmd_explain(args)
     if cmd == "inject":
         return cmd_inject(args)
-    if cmd in ("list", "inspect", "check", "verify", "apply", "rebuild"):
+    if cmd in ("list", "inspect", "check", "verify", "rebuild"):
         return run([cmd, *args]).returncode
     print(__doc__)
     return 2

@@ -408,3 +408,27 @@ def test_check_image_refuses_a_plan_whose_object_lost_its_code_range(tmp_path):
     p.write_text(json.dumps(plan))
     got = gate.check_image(tmp_path / "unused.syx", p)
     assert len(got) == 1 and "machines/plaits-48k" in got[0].shape
+
+
+def test_front_end_apply_runs_the_gate(tmp_path, monkeypatch):
+    # `patchkit.py apply` used to pass straight to the Rust binary: a normally named image with no gate
+    patchkit, fake, calls = cmd_patch_env(tmp_path, monkeypatch, lambda: [])
+    out = tmp_path / "o.syx"
+    assert patchkit.main(["apply", *ARGS, "-o", str(out)]) == 0
+    assert fake.args[0] == "apply" and len(calls) == 1 and out.exists()
+
+
+def test_front_end_apply_refused_by_the_gate_leaves_no_image(tmp_path, monkeypatch):
+    viol = [gate.Violation(1, "0000", "x:0")]
+    patchkit, fake, calls = cmd_patch_env(tmp_path, monkeypatch, lambda: viol)
+    out = tmp_path / "o.syx"
+    assert patchkit.main(["apply", *ARGS, "-o", str(out)]) == 1
+    assert not out.exists()
+
+
+def test_front_end_apply_bypass_names_the_image_ungated(tmp_path, monkeypatch):
+    viol = [gate.Violation(1, "0000", "x:0")]
+    patchkit, fake, calls = cmd_patch_env(tmp_path, monkeypatch, lambda: viol)
+    out = tmp_path / "o.syx"
+    assert patchkit.main(["apply", *ARGS, "--no-encoding-gate", "-o", str(out)]) == 0
+    assert not out.exists() and (tmp_path / "o.ungated.syx").exists()
