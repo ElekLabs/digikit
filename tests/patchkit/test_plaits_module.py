@@ -1,4 +1,4 @@
-"""machines/plaits (VA model) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the two H2 images.
+"""machines/plaits (models VA and ASYM-TRI) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
 
 The rig (tests/support/plaits_rig.py) links core/dsp-inline at test addresses and the PLAITS object of
 machines/plaits-48k (mode 1, 48 kHz into the voice output) or machines/plaits-96k (mode 0, 96 kHz into the work
@@ -81,7 +81,7 @@ def port(tmp_path_factory: pytest.TempPathFactory) -> Port:
 
 
 def compare(
-    port: Port, mode: int, setting: dict[str, Any], blocks: int
+    port: Port, mode: int, setting: dict[str, Any], blocks: int, model: int = 0
 ) -> tuple[float, float, float, list[int]]:
     """Track 0's even voice, triggered at block 0, against the host wrapper: (max error, RMS error, signal RMS,
     instructions per block)."""
@@ -90,8 +90,13 @@ def compare(
     tune = setting.get("tune", 0x4000)
     core, host = [], []
     for b in range(blocks):
-        slots = {**setting["first"], **(setting["second"] if b >= blocks // 2 else {})}
-        rig.controls(0, setting["note"], tune=tune, **slots)
+        slots = {
+            "model": model,
+            **setting["first"],
+            **(setting["second"] if b >= blocks // 2 else {}),
+        }
+        # the frame holds MODEL's row value: the model number << 8 (frame() takes the number)
+        rig.controls(0, setting["note"], tune=tune, **{**slots, "model": model << 8})
         rig.active(0)
         rig.trig(0, b == 0)
         core.append(np.array(rig.block(0)["samples"], dtype=np.float32))
@@ -126,6 +131,113 @@ def test_compiled_va_96k_matches_host_on_concrete_core(
     mx, rms, sig, instr = compare(port, 0, SETTINGS[k], blocks)
     assert sig > 0.05
     assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
+
+
+@pytest.mark.parametrize("k", range(len(SETTINGS)))
+def test_compiled_asym_tri_matches_host_on_concrete_core(port: Port, k: int) -> None:
+    """Model 1 (ASYM-TRI, the waveshaping engine) in mode 1: the compiled object against the host build."""
+    mx, rms, sig, instr = compare(port, 1, SETTINGS[k], 120, model=1)
+    assert sig > 0.05, "the setting sounds"
+    assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
+    assert max(instr) < MAX_BLOCK_INSTRUCTIONS_WS[1], max(instr)
+    print(
+        f"ASYM-TRI set {k}: max {mx:.3g} rms {rms:.3g} sig {sig:.3f} instr {min(instr)}..{max(instr)}"
+    )
+
+
+@pytest.mark.parametrize("k", range(len(SETTINGS)))
+def test_compiled_asym_tri_96k_matches_host_on_concrete_core(
+    port: Port, k: int
+) -> None:
+    mx, rms, sig, instr = compare(port, 0, SETTINGS[k], 24, model=1)
+    assert sig > 0.05
+    assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
+    assert max(instr) < MAX_BLOCK_INSTRUCTIONS_WS[0], max(instr)
+
+
+def test_compiled_ws_tables_equal_host_bits(port: Port) -> None:
+    """The waveshaping tables as selcc wrote them into the object (data, which neither the encoding gate nor the
+    cross-check sees; selcc mis-writes negative float initialisers, finding 20) equal the host build's float32 bits,
+    which tests/plaits/test_ws_host.py checks against upstream."""
+    obj = PlaitsRig(1).obj
+    names = [
+        "lut_sine.",
+        "lut_fold.",
+        "lut_fold_2.",
+        "lut_ws_inverse_tan.",
+        "lut_ws_inverse_sin.",
+        "lut_ws_linear.",
+        "lut_ws_bump.",
+        "lut_ws_double_bump.",
+    ]
+    for k, name in enumerate(names):
+        sec, off, _g = obj.data_symbols[name]
+        blob = obj.data[sec][0]
+        n = port.lib.port_ws_lut_size(k)
+        got = np.frombuffer(blob[off : off + 4 * n], dtype="<u4")
+        want = np.array(
+            [port.lib.port_ws_lut(k, i) for i in range(n)], dtype=np.float32
+        )
+        assert got.tolist() == want.view(np.uint32).tolist(), name
+
+
+@pytest.mark.parametrize("mode", [1, 0])
+def test_model_switch_at_note_on_va_asym_tri_va(port: Port, mode: int) -> None:
+    """One voice: VA, then MODEL 1 without a note-on (VA runs on), a note-on (ASYM-TRI), MODEL 0 and a note-on (VA).
+    After each note-on the compiled output equals a fresh rig's voice of the new model bit for bit, and the host."""
+
+    def run(rig: PlaitsRig, steps: list[tuple[int, int]]) -> list[Arr]:
+        out = []
+        for model, trig in steps:
+            rig.controls(0, 57, model=model << 8, harmonics=0x3000, timbre=0x5000)
+            rig.trig(0, bool(trig))
+            out.append(np.array(rig.block(0)["samples"], dtype=np.float32))
+        return out
+
+    seq = [(0, int(b == 0)) for b in range(4)] + [(1, 0)] * 2
+    seq += [(1, int(b == 0)) for b in range(5)] + [(0, int(b == 0)) for b in range(5)]
+    rig = PlaitsRig(mode)
+    rig.active(0)
+    got = run(rig, seq)
+    # VA runs on through the MODEL change (blocks 4, 5) as if it had not happened
+    ref = PlaitsRig(mode)
+    ref.active(0)
+    va_only = run(ref, [(0, int(b == 0)) for b in range(6)])
+    assert all(np.array_equal(a, b) for a, b in zip(got[:6], va_only, strict=True))
+    for start, model in ((6, 1), (11, 0)):
+        fresh = PlaitsRig(mode)
+        fresh.active(0)
+        want = run(fresh, [(model, int(b == 0)) for b in range(5)])
+        assert all(
+            np.array_equal(a, b)
+            for a, b in zip(got[start : start + 5], want, strict=True)
+        ), model
+        assert any(want[1])
+    hv = port.voice()
+    host = [
+        port.render(hv, frame(57, model=m, harmonics=0x3000, timbre=0x5000), t, mode)
+        for m, t in seq
+    ]
+    assert float(np.abs(np.concatenate(got) - np.concatenate(host)).max()) <= MAX_ERR
+
+
+def test_model1_reaches_asym_tri_from_the_model_row() -> None:
+    """The MODEL row's range is 0 .. 0x1700 (UI 0 .. 23): row value 0x100 (UI 1, the knob or a p-lock) is model 1."""
+    import tomllib
+
+    manifest = tomllib.loads((ROOT / "modules/machines/plaits/module.toml").read_text())
+    (row,) = [e for e in manifest["entry"] if e.get("id") == "plaits_model"]
+    assert (row["min"], row["max"], row["default"]) == (0, 0x1700, 0)
+    rig = PlaitsRig(1)
+    rig.active(0)
+    outs = {}
+    for model in (0, 1, 2):
+        rig.controls(0, 60, model=model << 8)  # the row value: UI 1 is 0x100
+        rig.trig(0, True)
+        outs[model] = np.array(rig.block(0)["samples"], dtype=np.float32)
+        rig.trig(0, False)
+    assert outs[0].any() and outs[1].any() and not outs[2].any()
+    assert not np.array_equal(outs[0], outs[1])
 
 
 def f0_autocorr(x: Arr, lo: float, hi: float, fs: float = 48000.0) -> float:
@@ -571,6 +683,10 @@ def test_image_away_on_a_stock_type_clears_active_and_plaits_stays_silent_until_
 # Worst-case instruction bound per even-voice block. The review measured 76,236 instructions (mode 1) at extreme
 # parameters and about 25,000 more in mode 0 (the half-band); the bounds leave about 15 % margin.
 MAX_BLOCK_INSTRUCTIONS = {1: 88_000, 0: 118_000}
+# The same for model 1 (ASYM-TRI). Measured (Task 7) on the extreme grid: 42,307 instructions (mode 1) and 65,842
+# (mode 0) at worst; the bounds leave about 15 % margin. (Model 0's worst case with the model dispatch: 76,249 and
+# 99,784, 13 instructions above H2's.)
+MAX_BLOCK_INSTRUCTIONS_WS = {1: 49_000, 0: 76_000}
 
 
 @pytest.mark.slow
@@ -578,6 +694,17 @@ MAX_BLOCK_INSTRUCTIONS = {1: 88_000, 0: 118_000}
 def test_extreme_parameters_compiled_core(port: Port, mode: int) -> None:
     """All {0, 0x7f00}^3 of HARMONICS/TIMBRE/MORPH at notes 0 and 127 and TUNE 0, 0x4000, 0x7f00: finite output,
     within MAX_ERR of the host build, every block within the instruction bound."""
+    extremes(port, mode, 0, MAX_BLOCK_INSTRUCTIONS[mode])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", [1, 0])
+def test_extreme_parameters_compiled_core_asym_tri(port: Port, mode: int) -> None:
+    """The same grid for model 1 (ASYM-TRI)."""
+    extremes(port, mode, 1, MAX_BLOCK_INSTRUCTIONS_WS[mode])
+
+
+def extremes(port: Port, mode: int, model: int, bound: int) -> None:
     rig = PlaitsRig(mode)
     rig.active(0)
     worst = 0
@@ -586,8 +713,15 @@ def test_extreme_parameters_compiled_core(port: Port, mode: int) -> None:
             for h in (0, 0x7F00):
                 for t in (0, 0x7F00):
                     for m in (0, 0x7F00):
-                        slots = {"harmonics": h, "timbre": t, "morph": m}
-                        rig.controls(0, note, tune=tune, **slots)
+                        slots = {
+                            "model": model,
+                            "harmonics": h,
+                            "timbre": t,
+                            "morph": m,
+                        }
+                        rig.controls(
+                            0, note, tune=tune, **{**slots, "model": model << 8}
+                        )
                         hv = port.voice()
                         for b in range(3):
                             rig.trig(0, b == 0)
@@ -599,7 +733,8 @@ def test_extreme_parameters_compiled_core(port: Port, mode: int) -> None:
                             assert np.isfinite(got).all(), where
                             assert float(np.abs(got - want).max()) <= MAX_ERR, where
                             worst = max(worst, rig.instructions[-1])
-                            assert (
-                                rig.instructions[-1] <= MAX_BLOCK_INSTRUCTIONS[mode]
-                            ), (where, rig.instructions[-1])
-    print(f"mode {mode}: worst block {worst} instructions")
+                            assert rig.instructions[-1] <= bound, (
+                                where,
+                                rig.instructions[-1],
+                            )
+    print(f"mode {mode} model {model}: worst block {worst} instructions")

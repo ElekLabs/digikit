@@ -24,6 +24,7 @@ sources = [
   "../plaits/src/dsp/plaits_entry.s",
   "../plaits/src/dsp/plaits.c",
   "../plaits/src/dsp/engines/va.c",
+  "../plaits/src/dsp/engines/waveshaping.c",
   "../plaits/src/dsp/halfband.c",
 ]
 place = "dsp.l2"

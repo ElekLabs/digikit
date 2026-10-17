@@ -4,7 +4,7 @@ version = "0.1.0"
 name = "Plaits"
 category = "machines"
 status = "experimental"
-summary = "Mutable Instruments Plaits as a Digitakt machine; this version has the virtual-analog model (VA)."
+summary = "Mutable Instruments Plaits as a Digitakt machine; this version has models 0 VA and 1 ASYM-TRI."
 ports = ["dt2-1.17"]
 requires = ["core/machines", "core/params"]
 conflicts = []
@@ -19,7 +19,8 @@ conflicts = []
 #   E TIMBRE                           F MORPH       G MIX         H LEV (MANUAL SLICE's row 0xfe)
 # MODEL, HARMONICS, TIMBRE, MORPH and MIX are rows of this module (core/params), formatted as LEV (template 0xfe, an
 # MSlice row: the owner the UI compares with the track's type mapped to its clone). Values are 0 .. 0x7f00 (UI
-# 0 .. 127); MODEL is 0 .. 0x1700 (UI 0 .. 23, the permanent model numbers: VA = 0).
+# 0 .. 127); MODEL is 0 .. 0x1700 (UI 0 .. 23, the permanent model numbers in Plaits' own order: 0 VA, 1 ASYM-TRI,
+# 2 2FM, ...; docs/design/2026-10-17-plaits-machine-design.md and src/dsp/plaits.h).
 #
 # This module adds the machine and its rows only. The DSP routine (src/dsp/plaits_entry.s and the C sources) is built
 # twice, by two modules that each register it with core/dsp-inline for this type and conflict with each other:
