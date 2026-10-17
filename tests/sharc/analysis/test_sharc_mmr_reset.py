@@ -30,3 +30,20 @@ def test_conflicting_reset_fact_is_an_error():
 def test_missing_reset_table_is_an_error():
     with pytest.raises(ValueError, match="no ADSP-2156x"):
         parse_reset_tables("not a reset register extraction")
+
+
+def test_listed_erratum_is_dropped_but_other_conflicts_still_raise():
+    text = (
+        "0x31026108 DDE_CFG DDE Configuration Register 0x00000220\n"
+        "0x31026108 DMA35_CFG DMA35 Configuration Register 0x00000000\n"
+    )
+    assert parse_reset_tables(text) == {0x31026108: (0, "DMA35_CFG")}
+    assert parse_reset_tables(
+        "0x31026130 DDE_STAT DDE Status Register 0x0000B000\n"
+        "0x31026130 DMA35_STAT DMA35 Status Register 0x00006000\n"
+    ) == {0x31026130: (0x6000, "DMA35_STAT")}
+    with pytest.raises(ValueError, match="conflicting reset values"):
+        parse_reset_tables(
+            "0x31026108 DMA35_CFG DMA35 Configuration Register 0x00000000\n"
+            "0x31026108 OTHER_CFG Other Configuration Register 0x00000220\n"
+        )
