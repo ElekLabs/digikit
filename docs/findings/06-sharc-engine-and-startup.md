@@ -5976,3 +5976,45 @@ voice in record order. The lab read `(DM(0x24f0cc) >> 8v) & 0xff` for v = 0 and 
   was triggered under PLAITS (its own armed flag) **and** ACTIVE is set: ACTIVE drops only when a stock type played
   a sample to its end in between, which the image test
   `test_image_away_on_a_stock_type_clears_active_and_plaits_stays_silent_until_trig` runs through the stock renderer.
+
+## PLAITS: measured DSP load per block (final fix wave, 2026-10-17) **[D]**
+
+One agent, emulator only (not silicon). Each configuration runs on the coupled daemon through the harness
+(`pk_harness` Session from the ready state out/ready-pk-dt2-117, `SHARC_GEN_DIR=out/native/shared-core/gen`) with the
+engine's `SHARC_CYCMIX` profile, interpreter only (`SHARC_AOT=0 SHARC_FAST_REGIONS= SHARC_BLOCKTRANS=`), and is costed
+with `tools/sharc_dev/sharc_cpi.py`'s rules (`cost_profile`, the same as "Real cycles per DSP block" above) against a
+program database of the image itself: `sharcdb build --blocks 56,69,76,78,80,88,91,93,103,104,107` over the patched
+section 7 (blocks 103, 104 and 107 are core/dsp-inline, the PLAITS object and the hook tail; the first 8 instructions
+of `_pl_render` stay undecoded by the database's depth rule, about 370 of 330,000 instructions per block, costed at one
+cycle). `sharc_cpi run` itself cannot run these images: it plays named scenarios on stock firmware with a DSP-only
+`--dsp-patch`, and PLAITS needs the ColdFire side (machine selection). Each configuration ran twice, identical up to a
+window of 500 or 2,500 ms after the last trig; the figures are (second - first) / 3,000 blocks, so boot, reset and the
+panel steps cancel. PLAITS at default parameters (note 60, HARMONICS/TIMBRE/MORPH 0x4000, MIX 0); a track becomes
+PLAITS by FUNC+SRC 7 x DOWN, YES, and one trig (it then renders every block, above). Stock: stock 1.17 with TRIG 1 on its
+sample (the `dt2-sample-trig` setting). The busy counts agree with the `status.audio.dsp_tiers` window counters within
+0.7 %. Block = 666,667 cycles (1 GHz, 1500 blocks per second).
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| stock 1.17 | `0x00000000` | 209,891 | 218,594 / 238,118 / 295,119 | 32.8 / 35.7 / 44.3 |
+| plaits-va-48k, no PLAITS track | `0x00000000` | 212,969 | 222,967 / 243,376 / 302,499 | 33.4 / 36.5 / 45.4 |
+| plaits-va-48k, 1 track | `0x0000000b` | 271,644 | 287,301 / 323,098 / 405,474 | 43.1 / 48.5 / 60.8 |
+| plaits-va-48k, 2 tracks | `0x000b000b` | 330,240 | 347,808 / 394,536 / 489,321 | 52.2 / 59.2 / 73.4 |
+| plaits-va-96k, 1 track | `0x0000000b` | 297,160 | 313,336 / 359,400 / 443,696 | 47.0 / 53.9 / 66.6 |
+| plaits-va-96k, 2 tracks | `0x000b000b` | 381,272 | 400,485 / 468,359 / 570,674 | 60.1 / 70.3 / **85.6** |
+
+- **Per PLAITS track** (against stock, from the 2-track runs): +60,175 instructions and 64,607 / 78,209 / 97,101
+  cycles at 48 kHz; +85,691 instructions and 90,946 / 115,121 / 137,777 cycles at 96 kHz. Cycles per added instruction:
+  1.07 / 1.30 / 1.61 (48k), 1.06 / 1.34 / 1.61 (96k), against the stock mix's 1.13 / 1.41 at nominal / high: the
+  compiled C stalls more than the stock code, so projecting it with the stock factor (as the Task 6 estimate did)
+  is low at the high bound. The 1-track runs give higher ratios (1.79 / 1.70 high) because they also carry the
+  hook's own cost (+3,078 instructions per block on plaits-va-48k with no PLAITS track and no trig, against stock
+  with its sample trig played out: the voice loop's table walk).
+- **Worst-case parameters.** The concrete core's worst block is 76,236 instructions (48k) and 99,771 (96k)
+  (tests/patchkit/test_plaits_module.py `test_extreme_parameters_compiled_core`), 27 % and 16 % above the default
+  setting measured here. At the 2-track ratios that is 81.2 % high for 2 tracks at 48 kHz (85.1 % with the 1-track
+  ratio) and 92 to 95 % for 2 tracks at 96 kHz; 1 track at 96 kHz is 68 to 70 %.
+- **Limits** against `DEFAULT_BUDGET_PCT = 85.0` (tools/patchkit/pk_dsp_budget.py, judged on the high bound): at
+  most **2 tracks triggered as PLAITS on the 48k image** (73.4 % measured; the worst-case parameters reach the
+  budget, 81 to 85 %) and **1 on the 96k image** (2 tracks measure 85.6 % at default parameters). 3 tracks at 48 kHz
+  project to 100 to 106 % high at the worst case. The high bound rests on the assumed L2/DDR latencies (section above).

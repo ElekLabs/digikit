@@ -18,15 +18,27 @@ note and TUNE, and goes through the track's amp envelope, filter, sends and FX l
   straight into the voice output) or machines/plaits-96k (interpolated to 96 kHz, then the stock decimator).
   Selected alone, this module gives the track the PLAITS name and rows but plays it as MANUAL SLICE.
 - Known limits: one model; a triggered PLAITS voice keeps rendering after its note (the amp envelope silences it),
-  so each PLAITS track that has played costs DSP time every block until its type changes. Worst case measured on the
-  concrete core: about 76,000 instructions per track per block at 48 kHz and about 100,000 with the 96 kHz build
-  (the block is 666,667; stock uses about 44 % with stalls). That allows about 3 PLAITS tracks at once with the
-  48 kHz build and 2 with the 96 kHz build; 16 tracks do not fit yet.
+  so each PLAITS track that has played costs DSP time every block. The rule: **never more than N tracks triggered as
+  PLAITS since boot**, N = 2 with the 48 kHz build and N = 1 with the 96 kHz build. A track stops costing DSP only
+  after it has been triggered under another machine (the type reaches the DSP only on a trig). Worst case on the
+  concrete core: 76,236 instructions per track per block at 48 kHz and 99,771 with the 96 kHz build (the block is
+  666,667 cycles at 1 GHz); the DSP load measured in the emulator with the manual's stall rules is in
+  docs/findings/06-sharc-engine-and-startup.md ("PLAITS: measured DSP load per block"). Two tracks with the 96 kHz
+  build go over the 85 % budget of tools/patchkit/pk_dsp_budget.py; 16 tracks do not fit yet.
+- Hardware test (the owner's H1/H2 decision tree, the image hashes and patch commands): HARDWARE-TEST.md.
 - A project saved with PLAITS loads on a stock 1.17 without a fault, but that track comes back as ONESHOT (type 0):
   the stock loader keeps only the stock machine types.
-- Tests: tests/plaits/test_va_host.py (host, bit exact against upstream Plaits; the oracle needs
-  `PLAITS_STMLIB=<stmlib checkout at e3bd7c9>` when ../eurorack/stmlib is empty), tests/patchkit/test_plaits_module.py
-  (compiled code on the concrete core, the images), tools/patchkit/pk_proof_plaits.py (emulator).
+- Tests: tests/plaits/test_va_host.py (host, bit exact against upstream Plaits), tests/patchkit/test_plaits_module.py
+  (compiled code on the concrete core, the images), tools/patchkit/pk_proof_plaits.py (emulator). `mise run verify`
+  runs tests/plaits (suite "plaits") whenever this module, tests/plaits or tests/support/plaits_* change.
+- The bit-exact oracle builds upstream Plaits from ../eurorack (the Mutable Instruments repository next to this one)
+  and its stmlib submodule at commit e3bd7c9. Provide stmlib in one of two ways:
+  `git -C ../eurorack submodule update --init stmlib` (offline from a local clone: `git -C ../eurorack submodule init
+  stmlib`, `git -C ../eurorack config submodule.stmlib.url <clone>/stmlib`,
+  `git -C ../eurorack -c protocol.file.allow=always submodule update stmlib`, then set the URL back), or
+  `PLAITS_STMLIB=<directory holding a stmlib/ checkout at e3bd7c9>`. Without stmlib the oracle tests skip;
+  `PLAITS_ORACLE_REQUIRED=1` turns that skip into a failure, and verify's python-tests step sets it (override with
+  `PLAITS_ORACLE_REQUIRED=0`).
 
 The gallery shows `summary` from module.toml and `gallery/icon.svg`. Keep this file free of firmware bytes and vendor
 tool names.
