@@ -20,6 +20,8 @@ one of the main knobs on the SRC page.
 1. A PLAITS machine type, selected with FUNC+SRC like any other machine, that persists in projects.
 2. v1 models (owner's choice, in this order):
    VA, PHASE-DIST, TERRAIN, STRING MACHINE, 2FM, ADDITIVE, WAVETABLE, CHORD, SPEECH, STRING, RINGS, KICK.
+   This stays the owner's v1 set. Implementation now follows the model table's order (Plaits' own order, below; owner,
+   2026-10-17), so ASYM-TRI (model 1) comes second although it is not in this list.
 3. Model selection through the FUNC+LEV list (the Oneshot sample-select gesture) and through a knob.
 4. One SRC page: TUNE, MODEL, HARMONICS, TIMBRE, MORPH, MIX, LEV. All p-lockable, available as LFO/MOD
    destinations, randomized by SRC+YES.
@@ -33,6 +35,8 @@ one of the main knobs on the SRC page.
 
 - The other 12 slots (VCF-VA, ASYM-TRI/waveshaping, FORMANT/grain, SWARM, NOISE, DUST/particle, SNARE, HIHAT,
   SQUARE/chiptune, three DX7 banks). They come later, in the same machine; model numbers are reserved now.
+  (Since the owner's 2026-10-17 instruction, implementation follows the table order, so ASYM-TRI is model 1 and the
+  second one ported.)
 - Plaits' AUX output as a separate track output (see MIX).
 - MIDI CC/NRPN control of PLAITS parameters (added types ignore CC today, finding 02).
 - Plaits' user-data upload.
@@ -163,10 +167,24 @@ extension.
 The DSP reads them from the frame at `0xda + 0x60t + 2·(mirror − 25)` (finding 06). Image D showed the stock sample
 engine tolerates foreign values in these slots.
 
-**Model numbers are permanent:** VA 0, PHASE-DIST 1, TERRAIN 2, STRING MACHINE 3, 2FM 4, ADDITIVE 5, WAVETABLE 6,
-CHORD 7, SPEECH 8, STRING 9, RINGS 10, KICK 11; then VCF-VA, ASYM-TRI, FORMANT, SWARM, NOISE, DUST, SNARE, HIHAT,
-SQUARE, DX7 1, DX7 2, DX7 3 as 12–23. Unported numbers are hidden from the list and skipped by the knob.
-*(Designer's call.)*
+**Model numbers are permanent and follow Plaits' own order** (owner, 2026-10-17: "add more of the models, basically
+matching the order of engines as they appear in plaits, add the second one"; read against the Plaits manual's model
+order). They replace the earlier table (VA 0, PHASE-DIST 1, TERRAIN 2, ...), under which no model other than VA had
+been implemented; VA keeps 0:
+
+| # | model | # | model | # | model |
+|---|---|---|---|---|---|
+| 0 | VA | 8 | SWARM | 16 | VCF-VA |
+| 1 | ASYM-TRI (waveshaping) | 9 | NOISE | 17 | PHASE-DIST |
+| 2 | 2FM | 10 | DUST (particle) | 18 | DX7 1 |
+| 3 | FORMANT (grain) | 11 | STRING | 19 | DX7 2 |
+| 4 | ADDITIVE | 12 | RINGS (modal) | 20 | DX7 3 |
+| 5 | WAVETABLE | 13 | KICK (bass drum) | 21 | TERRAIN |
+| 6 | CHORD | 14 | SNARE | 22 | STRING MACHINE |
+| 7 | SPEECH | 15 | HIHAT | 23 | SQUARE (chiptune) |
+
+Implemented: 0 VA (H2) and 1 ASYM-TRI (H3). An unported number plays silence; the plan to hide unported numbers from
+the list and skip them with the knob stands. *(The order is the owner's; the rest the designer's call.)*
 
 ## Engine port approach
 
