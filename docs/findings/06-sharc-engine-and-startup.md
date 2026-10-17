@@ -5871,3 +5871,84 @@ real load is 7 (DN2) and 4 (DT2) points higher at nominal, 16 and 13 at the high
   `dsp_clock_hz` in devices/cycle-factors.json and the emulator's 666,667 instructions per 1500 Hz block match it.
 - Open **[O]**: SYS_CLKIN = 20 MHz is the firmware's value, not a board measurement; the chip marking (speed grade)
   is not read. Details and disassembly: scratchpad report of 2026-10-16 (not committed).
+
+## In-renderer hook: core/dsp-inline (DT2 1.17, 2026-10-17) **[D]**
+
+The PLAITS hook framework (`modules/core/dsp-inline`). It hooks inside the stock renderer `0x1c4ecf` instead of
+replacing it: the whole-renderer replacement of core/dsp-voice stalls the unit, the in-renderer branch does not.
+DT2 1.16 and 1.17 DSP blobs are byte-identical, so every address below holds for both.
+
+**Hardware evidence (owner's unit, OS 1.17, 2026-10-17; design doc `docs/design/2026-10-17-plaits-machine-design.md`).**
+
+| Image | What it adds | Result on the unit |
+|---|---|---|
+| `pluck-1.17` | digikit PLUCK (core/machines, core/params, core/dsp-voice) | **stalls** once the PLUCK type reaches the DSP: all audio dead, OS update from the running OS fails |
+| `diag-xslice` | an added MANUAL SLICE clone, no DSP code | works |
+| `diag-D` | PLUCK's machine and rows, no DSP routine | works (track plays the stock sample engine) |
+| `diag-E/F/H` | PLUCK with DECAY 0 / a routine that only writes zeros / stage A skipped | **stall** |
+| `diag-J` | XSLICE + dt2-machine-lab SINE hook | **stalls** |
+| `diag-K` | lab hook, custom branch continues through the stock sample reader | works |
+| `diag-L/M/N` | lab hook, custom branch writes zeros / a register saw / L2 table reads, then the stock decimator | work, M and N audible |
+| `diag-O/P` | + per-voice phase kept in L2 between blocks / + trigger-latch read | work, audible |
+| `diag-Q/R` | J without envelope / J without interpolation | Q **stalls**, R works |
+| `diag-Q1` | Q with its one negative immediate shift replaced by a register-amount shift | **works**: clean 440 Hz |
+
+The lab hook of L to Q1 is the shape core/dsp-inline keeps: a jump at SW `0x1c4f15`, the six displaced bytes
+`5499a801408c` (`R4 = DM(I4, M5)` at 0x1c4f15 and `R12 = LEFTZ R4` at 0x1c4f16, both position-independent) replayed
+before `JUMP 0x1c4f18` for every other type, `DM(-5, I6) = R0` on entry and `R0 = DM(-5, I6)` before the replay.
+
+**Renderer state at 0x1c4f15 [D, disassembly].** The prologue (`I7 = MODIFY(I7, -26) (NW)` at 0x1c4ecf) saves M1-M3,
+B3, I0-I3, I5 and R3, R5-R11, R13-R15 at DM(-8..-26, I6); 0x1c4ed2 `R1 = PASS R8`, 0x1c4f0d `DM(-6, I6) = R4` (the
+record), 0x1c4f0f `I4 = DM(-6, I6)`, 0x1c4f11 `DM(-7, I6) = R1`, 0x1c4f13 `DM(-4, I6) = R2` (= R12 = 32), and
+`R0 = R2 + R2` = 64, which the delay slot at 0x1c4f1b stores at DM(-5, I6). After 0x1c4f18 the stock code assigns
+every register before it reads it except I4 (the record), R0 (the delay-slot store) and the ASTAT flag set by the
+displaced LEFTZ; R1-R3, R5, R12 and I0 are free there.
+
+**Output pointer [D].** The voice's final 32-float output is the caller's R8, kept at **DM(-7, I6)**: the zero path
+reads it at 0x1c4f1d (`I5 = DM(-7, I6)`), the decimator entry at 0x1c5257 (`R12 = DM(-7, I6)`).
+
+**Decimator call and its continuation [D, disassembly and concrete core].** 0x1c524a `MODIFY(I7, M7)`, then
+`R8 = DM(-6, I6)` + 4 (the work buffer), `R0 = DM(-4, I6)` pushed (32), `R4 = DM(-6, I6)` + 0x104 (the decimator
+state), `R2 = 4` (pushed in a delay slot), `R12 = DM(-7, I6)` (the output); 0x1c525d `CJUMP 0xb80000 (DB)` with the
+delay slots 0x1c5260 `DM(I7, M7) = R2` and 0x1c5261 `DM(I7, M7) = PC`. The callee returns with `JUMP (M14, I12) (DB)`
+and RFRAME to **SW 0x1c5264** (`dsp.inline.after_decimate`): `JUMP 0x1c4f56 (DB)`, delay slots
+`I7 = MODIFY(I7, 2) (NW)` and NOP, then the epilogue at 0x1c4f56, which reloads the return address from DM(-1, I6),
+restores the saved registers from the frame and ends with `RETURN` and RFRAME. At 0x1c5264, I6 is the renderer's
+frame again and I7 is two words below the renderer's I7 (the pushed 32 and the CJUMP frame word); the epilogue reads
+nothing else the decimator leaves, and RFRAME resets I7 from I6. A run of `0xb80000` on the concrete core with the
+stock blob (R4 = record + 0x104, R8 = record + 4, R12 = output) returns to 0x1c5264 after 916 instructions.
+
+**What the decimator writes [D, concrete core, watchpoints].** The 32 output words, and in the record only
++0x114..+0x14b: a 4-word ring at +0x114..+0x123, eight state words at +0x124..+0x143 and the two ring indices at
++0x144 and +0x148 (`DM(I5 + 16)`, `DM(I5 + 17)`, I5 = record + 0x104). It reads its coefficients at DM 0x26ef88..
+0x26ef94 and ignores the two stack arguments. This settles the [O] of "The voice record contract" for the
+decimator state in favour of (b). A routine that writes the output itself (core/dsp-inline mode 1) leaves this state as
+it was; nothing else in the record is the decimator's.
+
+**Trigger latch [D, concrete core, frame replay].** 32 bytes at **DM 0x24f0cc**, byte 0x24f0cc + v for voice v. The
+voice setup loop of FUN_1c642a reads byte v at 0x1c6545 (`R2 = DM(I1, M4)`, I1 = 0x24f12c + v, M4 = -0x60) and arms
+the voice (`CALL 0x1c4eaf`) when it is non-zero; nothing writes the latch between that read and the render loop
+(0x1c6ae8..0x1c6b09), so the renderer sees it in the same block. At the end of FUN_1c642a the SIMD loop at
+0x1c7191..0x1c71a6 copies the pending array at 0x24f0ac (written by the trigger code, 0x1c33ce `DM(I4, M4) = M14`,
+I4 = 0x24f0ac) to the latch (0x1c71a3, +0x20) and clears the pending bytes. A replay of one render frame
+(tools/sharc_dev/sharc_harness, run_init then the block handler) with only byte 0x24f0cc + i set armed exactly voice i
+for i = 0, 5 and 31 (record +0x1b8 = 1), and the watch log shows the reads 0x24f0cc..0x24f0eb at 0x1c6545, one per
+voice in record order. The lab read `(DM(0x24f0cc) >> 8v) & 0xff` for v = 0 and 1 is the same layout.
+
+**core/dsp-inline as built [D, concrete core; not yet flashed].**
+- Hook `dsp.voice.render_entry` + 0x8c (SW 0x1c4f15), displaced = run, `expect_sha256` of the six bytes; the
+  fallback is patchkit's tail `hook.dsp.voice.render_entry.140.tail` (the six bytes, `JUMP 0x1c4f18`).
+- Voice v = (record - 0x2412cc) / 0x1d8 by subtraction (records outside the 32 take the stock path), track v >> 1,
+  type = the 16-bit cache entry of the track at 0x255970 (aligned word, register-amount shift); registry
+  `inline_voices` rows {type, pc}, max 16, terminator.
+- Routine ABI (modules/core/dsp-inline/src/dsp/dsp-inline.s): in R4 = record, R0 = v, R2 = track, R1 = type, I1 = record + 4, I2 = the output
+  (DM(-7, I6)); return R0 = 0 (64 floats at 96 kHz in the work buffer, continue at 0x1c524a) or R0 = 1 (32 floats at
+  48 kHz in the output, `I7 = MODIFY(I7, -2) (NW)`, continue at 0x1c5264). Helpers `_di_frame_hw(k)` and `_di_trig(v)`.
+- New anchors: `dsp.inline.decimate` (0x1c524a), `dsp.inline.after_decimate` (0x1c5264), `dsp.inline.trig_latch`
+  (literal 0x24f0ac at 0x1c33c9 plus 0x20; port_resolve's `sharc_literal` takes an `add`), `dsp.inline.frame_base`
+  (0x2558dc), `dsp.inline.voice_records` (literal 0x2412cc at 0x1c14ab).
+- Patched 1.17 image (core/dsp-inline + core/machines) passes the encoding gate. In the patched image's own code on the
+  concrete core, an idle voice renders as stock, and a registered test routine in both modes returns to the voice loop
+  (0x1c6b06) with the caller's registers and frame restored (tests/patchkit/test_dsp_inline.py).
+- Open **[O]**: mode 1 (skipping the decimator) is not yet tried on the unit; its decimator state stays stale across a
+  switch back to mode 0 or to a stock type.

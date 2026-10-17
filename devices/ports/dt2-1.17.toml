@@ -1586,6 +1586,61 @@ mark = "D"
 rule = "fx/master-drive:sharc_mem_addr"
 
 [[anchor]]
+name = "dsp.inline.after_decimate"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838a4c8
+pm = 0x1c5264
+len = 6
+sha256 = "09ee6dcc09c57a250fb543bd8b0041a528659fd1b42b364ae88fe83935a6a30c"
+mark = "D"
+rule = "core/dsp-inline:sharc_func"
+
+[[anchor]]
+name = "dsp.inline.decimate"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838a494
+pm = 0x1c524a
+len = 6
+sha256 = "ad928a73bda3a2307a57197eb827daad9aaa383513a1ee366988efc7052efb74"
+mark = "D"
+rule = "core/dsp-inline:sharc_func"
+
+[[anchor]]
+name = "dsp.inline.frame_base"
+cpu = "sharc"
+kind = "value"
+addr = 0x2558dc
+src = 0x283858e2
+len = 6
+sha256 = "a38cccbdf3151153d57924ae69b6dfc79d3ebdedc6e844e473f567ab30e73bda"
+mark = "D"
+rule = "core/dsp-inline:sharc_literal"
+
+[[anchor]]
+name = "dsp.inline.trig_latch"
+cpu = "sharc"
+kind = "value"
+addr = 0x24f0cc
+src = 0x28386792
+len = 6
+sha256 = "be53cd57e9a3a7ea11cc5615c4a511192b6241728c2c49370804157624980e04"
+mark = "D"
+rule = "core/dsp-inline:sharc_literal"
+
+[[anchor]]
+name = "dsp.inline.voice_records"
+cpu = "sharc"
+kind = "value"
+addr = 0x2412cc
+src = 0x28382956
+len = 6
+sha256 = "b27d218887600dee801aff7d378add5b0353a63655972e777031729001b1ee85"
+mark = "D"
+rule = "core/dsp-inline:sharc_literal"
+
+[[anchor]]
 name = "dsp.machines.selector_data"
 cpu = "sharc"
 kind = "data"

@@ -72,6 +72,7 @@ TYPED = [
     "tests/devtools/test_pathcheck_repo.py",
     "tools/patchkit/pk_encoding_gate.py",
     "tests/patchkit/test_encoding_gate.py",
+    "tests/patchkit/test_dsp_inline.py",
 ]
 
 
