@@ -18,6 +18,7 @@ TYPED = [
     "tools/coldfire/fw.py",
     "tools/coldfire/atlas.py",
     "tests/firmware/test_fw.py",
+    "tests/plaits/test_halfband.py",
     "tools/emulator/audiocheck.py",
     "tools/emulator/fxcheck.py",
     "tools/coldfire/paramtable.py",
