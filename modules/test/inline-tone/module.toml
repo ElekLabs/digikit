@@ -1,0 +1,39 @@
+[module]
+id = "test/inline-tone"
+version = "0.1.0"
+name = "Inline tone (test)"
+category = "test"
+status = "experimental"
+summary = "Test machine ITone for the hardware probe of core/dsp-inline; its sine routine comes from test/inline-tone-48k or -96k."
+ports = ["dt2-1.17"]
+requires = ["core/machines"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# The machine's type number is permanent: modules/core/machines/types.toml, key "test/inline-tone:itone"; it is
+# exported as `machines.itone.index`. A clone of MANUAL SLICE (as XSLICE, the configuration that works on the owner's
+# unit) with only MANUAL SLICE's TUNE (slot 0, 0xf8) and LEV (slot 7, 0xfe) rows on the SRC page.
+#
+# This module adds the machine only. The DSP routine (src/dsp/tone.s, one source) is built twice, by two modules that
+# each register it with core/dsp-inline for this type and conflict with each other:
+#   test/inline-tone-48k   TONE_MODE 1: 32 samples at 48 kHz written to the voice's output (hardware image h1b)
+#   test/inline-tone-96k   TONE_MODE 0: 64 samples at 96 kHz into the work buffer, then the stock decimator (h1a)
+# Selected alone, the track plays as MANUAL SLICE.
+[[entry]]
+registry = "machines"
+id = "itone"
+name = "ITone"
+short = "ITN"
+clone_of = 6
+f0 = 0xf8
+f1 = 0
+f2 = 0
+f3 = 0
+f4 = 0
+f5 = 0
+f6 = 0
+f7 = 0xfe
+f8 = 0x0a
+devices = ["dt2"]

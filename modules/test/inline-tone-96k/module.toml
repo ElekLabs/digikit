@@ -1,0 +1,28 @@
+[module]
+id = "test/inline-tone-96k"
+version = "0.1.0"
+name = "Inline tone, 96 kHz work buffer (test)"
+category = "test"
+status = "experimental"
+summary = "ITone's sine rendered at 96 kHz into the work buffer, then the stock decimator: hardware image h1a."
+ports = ["dt2-1.17"]
+requires = ["test/inline-tone", "core/dsp-inline"]
+conflicts = ["test/inline-tone-48k"]
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# One source for both modes (modules/test/inline-tone/src/dsp/tone.s); src/dsp/mode.s, listed first, defines
+# TONE_MODE 0: the routine fills the 64-sample work buffer (I1) and returns R0 = 0.
+[[object]]
+path = "build/inline-tone-96k-dsp.dko.json"
+sources = ["src/dsp/mode.s", "../inline-tone/src/dsp/tone.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[entry]]
+registry = "inline_voices"
+id = "itone"
+type = "machines.itone.index"
+pc = "_it_render"
+devices = ["dt2"]

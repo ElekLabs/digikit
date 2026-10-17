@@ -403,93 +403,20 @@ def test_image_passes_encoding_gate(patched):
 
 
 # ---- the patched image's own DSP code, run from the renderer's entry 0x1c4ecf to the caller's return point
+# (tests/support/dsp_inline_image.py)
 
-CALLER_RET = 0x1C6B06  # after `CJUMP 0x1c4ecf` in the voice loop of FUN_1c642a
-IMG_RECORDS, IMG_OUT, IMG_TYPES = 0x2412CC, 0x252DF8, 0x255970
-IMG_STACK = 0x2A0000
-IMG_ROUTINES, IMG_PROBE = (
-    0xBF0000,
-    0x200E8000,
-)  # free L2, above everything the image loads
-CALLEE_SAVED: dict[str, int] = {
-    **{f"R{n}": 0x7000 + n for n in (3, 5, 6, 7, 9, 10, 11, 13, 15)},
-    **{f"I{n}": 0x20000010 * (n + 1) for n in (0, 1, 2, 3, 5)},
-    **{"M1": 11, "M2": 12, "M3": 13, "B3": 0x200, "I8": 0x20000080, "M8": 8},
-}
-
-
-def image_memory(syx: Path, extra=None):
-    from tools.patchkit import port_resolve
-    from tools.sharc_dev.sharcldr import LoadedMemory
-
-    mem = LoadedMemory.from_stream(port_resolve.sections_of(syx)[7])
-    if extra is None:
-        return mem
-    blocks = [dict(b) for b in mem.blocks]
-    blocks.append(
-        {
-            "target_address": pk_sharc.SW_ALIAS_BASE + 2 * extra.base_sw,
-            "byte_count": len(extra.code_boot),
-            "fill": False,
-            "payload_offset": len(mem.data),
-            "payload_len": len(extra.code_boot),
-            "index": len(blocks),
-        }
-    )
-    return LoadedMemory(mem.data + extra.code_boot, blocks)
-
-
-def render_voice(mem, v: int, pokes: dict[int, int], active: int = 1) -> dict:
-    """Call the renderer for voice v the way the voice loop does; return the output, the probe and the registers."""
-    from tools.sharc_dev import sharc_run as sr
-    from tools.sharc_dev import sharc_trace as st
-
-    rec, outp = IMG_RECORDS + v * REC, IMG_OUT + v * 0x80
-    regs: dict[str | int, int | str] = {
-        "R4": rec,
-        "R8": outp,
-        "R12": 32,
-        "R14": 32 - v,
-        "M5": 0,
-        "M6": 1,
-        "M7": -1,
-        "M13": 0,
-        "M14": 1,
-        "M15": -1,
-        "I6": IMG_STACK,
-        "I7": IMG_STACK - 8,
-    }
-    for name, value in CALLEE_SAVED.items():
-        regs[name] = value
-    runner = sr.Runner(mem, 0x1C4ECF, regs=regs, breakpoints=[CALLER_RET])
-    runner.state.explicit_memory_model = True
-    words = {
-        IMG_STACK - 4: CALLER_RET - 1,  # the return address the CJUMP pushed
-        IMG_STACK: IMG_STACK + 0x10000,  # the caller's frame pointer
-        rec: 0x300000,  # word +0, the sample pointer
-        **{outp + 4 * k: 0x7F7F7F7F for k in range(32)},
-        **pokes,
-    }
-    for a, w in words.items():
-        st._dm_write(runner.state, a, 4, st.Const(w & 0xFFFFFFFF))
-    st._dm_write(runner.state, rec + 0x1B8, 1, st.Const(active))
-    runner.state.call_stack.append(CALLER_RET)
-    res = runner.run(20000)
-
-    def word(a: int) -> int:
-        x = st._dm_read(runner.state, a, 4)
-        return 0 if x is None else x.value & 0xFFFFFFFF
-
-    return {
-        "halt": res.halt.to_json(),
-        "final_pc_sw": res.final_pc_sw,
-        "out": [word(outp + 4 * k) for k in range(32)],
-        "probe": [word(IMG_PROBE + 4 * k) for k in range(6)],
-        "regs": {
-            n: getattr(runner.state.uregs.get(st.UREG_CODES[n]), "value", None)
-            for n in (*CALLEE_SAVED, "I6", "I7")
-        },
-    }
+from support.dsp_inline_image import (  # noqa: E402
+    CALLEE_SAVED,
+    CALLER_RET,
+    IMG_OUT,
+    IMG_PROBE,
+    IMG_RECORDS,
+    IMG_ROUTINES,
+    IMG_STACK,
+    IMG_TYPES,
+    image_memory,
+    render_voice,
+)
 
 
 @needs_image
@@ -540,3 +467,92 @@ def test_patched_image_runs_a_registered_routine_and_returns_to_the_caller(
         n: x & 0xFFFFFFFF for n, x in CALLEE_SAVED.items()
     }
     assert (got["regs"]["I6"], got["regs"]["I7"]) == (IMG_STACK + 0x10000, IMG_STACK)
+
+
+# An active stock voice: a sample playing forward from position 10 at step 0.7 (record fields per docs/findings/06,
+# "The voice record contract"), int16 samples at SAMPLE_BASE and a non-zero interpolation table (init fills
+# 0x25d940 at run time; the static image holds zeros there), so the renderer's main path from 0x1c4f81 runs and
+# produces audio. Stock and patched images get the same inputs.
+SAMPLE_BASE, SAMPLE_LEN, COEFS = 0x310000, 4000, 0x25D940
+
+
+def active_voice_pokes(v: int) -> dict[int, int]:
+    import math
+
+    rec = IMG_RECORDS + v * REC
+    step = round(0.7 * 2**31)
+    pokes = {
+        rec: SAMPLE_BASE,
+        rec + 0x17C: 0,  # fade-in, zero-cross mute, reseed: off
+        rec + 0x180: 0,  # previous sample
+        rec + 0x188: SAMPLE_LEN,
+        rec + 0x18C: 0,
+        rec + 0x190: 0,  # loop start (Q31 int64, low word first)
+        rec + 0x194: 0,
+        rec + 0x198: 0,  # start
+        rec + 0x19C: 0,
+        rec + 0x1A0: (SAMPLE_LEN << 31) & 0xFFFFFFFF,  # end
+        rec + 0x1A4: SAMPLE_LEN >> 1,
+        rec + 0x1A8: step & 0xFFFFFFFF,  # step
+        rec + 0x1AC: step >> 32,
+        rec + 0x1B0: (10 << 31) & 0xFFFFFFFF,  # phase
+        rec + 0x1B4: 10 >> 1,
+        rec + 0x1B8: 0,  # ACTIVE (set to 1 by render_voice), +0x1b9..+0x1bb, reverse 0
+        rec + 0x1BC: 0,  # loop 0
+    }
+    for k in range(SAMPLE_LEN // 2):
+        lo, hi = (
+            round(12000 * math.sin(2 * math.pi * (2 * k + j) / 37.0)) & 0xFFFF
+            for j in (0, 1)
+        )
+        pokes[SAMPLE_BASE + 4 * k] = lo | (hi << 16)
+    for row in range(256):
+        for tap in range(6):
+            pokes[COEFS + 24 * row + 4 * tap] = (
+                0x08000000 * (tap + 1) + row * 0x1000
+            ) & 0x7FFFFFFF
+    return pokes
+
+
+@needs_image
+@pytest.mark.parametrize("v", [4, 29])
+def test_patched_image_renders_an_active_voice_as_stock_with_a_non_matching_row(
+    patched, v
+):
+    import json
+
+    routines = pk_sharc.link(
+        pk_sharc.assemble(ROUTINES), IMG_ROUTINES, {"_t_probe": IMG_PROBE}
+    )
+    doc = json.loads(patched[1].read_text())
+    rows = next(
+        a for k, a in doc["symbols"].items() if k.endswith(":inline_voices.rows")
+    )
+    t = v >> 1
+    pokes = active_voice_pokes(v)
+    stock = render_voice(image_memory(STOCK), v, pokes)
+    assert stops_at(stock, CALLER_RET), stock["halt"]
+    # the main sample path ran: audio in the output, the playback phase moved on, the voice still ACTIVE
+    assert any(w not in (0, 0x7F7F7F7F) for w in stock["out"])
+    lo, hi = stock["record"][0x1B0 // 4], stock["record"][0x1B0 // 4 + 1]
+    assert ((hi << 32) | lo) == 10 * 2**31 + 64 * round(0.7 * 2**31), "64 steps of 0.7"
+    assert stock["record"][0x1B8 // 4] & 0xFF == 1
+    # the patched image: a registry row for another type (0x21; the track's type stays 0, SAMPLE)
+    pokes.update(
+        {
+            IMG_TYPES + 4 * (t >> 1): 0,
+            rows: 0x21,
+            rows + 4: routines.symbols["_t_mode0"],
+            rows + 8: 0,
+        }
+    )
+    got = render_voice(image_memory(patched[0], routines), v, pokes)
+    assert stops_at(got, CALLER_RET), got["halt"]
+    assert got["probe"] == [0] * 6, "the registered routine did not run"
+    assert got["out"] == stock["out"]
+    assert got["record"] == stock["record"], [
+        hex(4 * k)
+        for k, (a, b) in enumerate(zip(stock["record"], got["record"], strict=True))
+        if a != b
+    ]
+    assert got["regs"] == stock["regs"]

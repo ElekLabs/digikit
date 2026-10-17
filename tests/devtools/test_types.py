@@ -73,6 +73,8 @@ TYPED = [
     "tools/patchkit/pk_encoding_gate.py",
     "tests/patchkit/test_encoding_gate.py",
     "tests/patchkit/test_dsp_inline.py",
+    "tests/patchkit/test_inline_tone.py",
+    "tests/support/dsp_inline_image.py",
 ]
 
 

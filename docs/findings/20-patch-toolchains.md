@@ -127,3 +127,27 @@ One agent; each item was met as a build failure or a wrong result and fixed in t
 - **`CALL (M13, I12)` is not followed by the tracer** (`tools/sharc_dev/sharc_core` ends the callee's `RTS` with "return
   without followed call") and the firmware has no indirect call. core/dsp-voice enters a registered routine with
   `JUMP (M13, I12)` and a return address in `I13`.
+
+## Selache's 48-bit indirect jump (Type 9a) is mis-encoded (2026-10-17) **[D]**
+
+One agent, met writing test/inline-tone (the H1 probe of core/dsp-inline); not checked on silicon.
+
+- **What Selache emits.** Under `.NOCOMPRESS`, `JUMP (Md, Ic)` / `CALL (Md, Ic)` assemble to the 48-bit Type 9a with the
+  delayed-branch flag in bit 32 and the I register in bits 26:24: `JUMP (M14, I12)` = `083e34000000`,
+  `JUMP (M14, I12) (DB)` = `083f34000000`, `JUMP (M13, I12)` = `083e2c000000`, `JUMP (M8, I9)` = `083e01000000`.
+- **What the PRM layout says** (tools/sharc_dev/sharc_visa_tables.py, `9a_abs`): bits 32:30 are PMI, 29:27 PMM, 26 J (the
+  delayed flag), 25 E, 24 CI. That is the 32-bit Type 9b layout shifted up by 16 bits, and for Type 9b Selache and our
+  decoder agree (`JUMP (M13, I12)` = `083f283f`, `JUMP (M13, I13)` = `083f683f`).
+- **The stock code reads the PRM way.** Every confident aligned 9a word in the 1.17 blob (57) has bit 32 = 1 and bits
+  31:30 = 0, which is PMI = 4 (I12, the return-address register), with J and E varying (50 delayed, 7 not; the
+  conditional ones with E = 1 carry the else-compute the mnemonic shows). Read Selache's way, the same words would be
+  jumps through I8, I10 and I12 that are all delayed. Only `JUMP (Mx, I12) (DB)` has the same bits both ways.
+- **Effect.** Selache's `JUMP (M13, I12)` under `.NOCOMPRESS` is, by the PRM layout, `JUMP (M13, I8) (DB)`. The concrete
+  core runs it that way: the two following instructions execute, then the PC goes to I8 + M13. On the unit this would
+  jump into whatever I8 holds.
+- **The encoding gate does not catch it.** It masks bit 32 as part of PMI, so `083e2c000000` has the shape of the stock
+  `JUMP (M14, I12) (DB)` (`9a_abs:80004000000`) and passes. Selache's form with I13 sets bit 24 (CI) and fails.
+- **Rule.** Write indirect jumps outside `.NOCOMPRESS`: Selache then picks the 32-bit Type 9b, which the stock code uses
+  (`JUMP (M14, I12)` non-delayed, 64 times) and which our decoder, the core and Selache read alike. core/dsp-inline's
+  `JUMP (M13, I12)` and test/inline-tone's return `JUMP (M13, I13)` are 9b. **[O]** A Selache patch, or a
+  `pk_sharc` refusal of 48-bit 9a words whose bits disagree with their 9b form.

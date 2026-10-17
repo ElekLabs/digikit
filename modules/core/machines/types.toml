@@ -20,6 +20,7 @@ last = 23
 "machines/xslice:xslice" = 7
 "test/machine-clone:xclone" = 8
 "machines/pluck:pluck" = 9
+"test/inline-tone:itone" = 10
 
 [dn2]
 last = 23

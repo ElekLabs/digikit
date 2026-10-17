@@ -1,0 +1,28 @@
+[module]
+id = "test/inline-tone-48k"
+version = "0.1.0"
+name = "Inline tone, direct 48 kHz (test)"
+category = "test"
+status = "experimental"
+summary = "ITone's sine rendered at 48 kHz straight into the voice output, skipping the decimator: hardware image h1b."
+ports = ["dt2-1.17"]
+requires = ["test/inline-tone", "core/dsp-inline"]
+conflicts = ["test/inline-tone-96k"]
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# One source for both modes (modules/test/inline-tone/src/dsp/tone.s); src/dsp/mode.s, listed first, defines
+# TONE_MODE 1: the routine writes the voice's 32 output samples (I2) and returns R0 = 1.
+[[object]]
+path = "build/inline-tone-48k-dsp.dko.json"
+sources = ["src/dsp/mode.s", "../inline-tone/src/dsp/tone.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[entry]]
+registry = "inline_voices"
+id = "itone"
+type = "machines.itone.index"
+pc = "_it_render"
+devices = ["dt2"]

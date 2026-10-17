@@ -21,6 +21,13 @@
 //        R0 = 1: the routine wrote the 32 output floats at 48 kHz itself; the decimator is skipped and its state
 //                (record +0x114..+0x14b) is left as it was (continue at _fw_after_decimate, SW 0x1c5264).
 //        Any other R0 is taken as 0.
+//        One mode per routine: a routine returns the same R0 in every block. Mode 1 leaves the decimator's state
+//        (its ring and filter words at record +0x114..+0x14b) as the last mode-0 block or the stock renderer left
+//        it; a routine that switched between modes would make the decimator start a mode-0 block from that stale
+//        state (a click or worse).
+//   return  `JUMP (M13, I13)` in its 32-bit form (type 9b; Selache emits it outside .NOCOMPRESS). Selache's 48-bit
+//        form of an indirect jump (type 9a, under .NOCOMPRESS) puts the delayed-branch flag and the I register in
+//        the wrong bits, so the core would run another jump (docs/findings/20-patch-toolchains.md).
 //   may clobber  R0-R15, I0-I5, M1-M4, I12 and the ALU/multiplier state; the renderer's epilogue restores what its
 //        caller needs.
 //   must keep  I6, I7 (and the frame below I6: DM(-4..-26, I6)), I13 or its value, M5-M7 (0, 1, -1),
