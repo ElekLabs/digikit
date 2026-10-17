@@ -191,6 +191,36 @@ section-7 boot stream of firmware/Digitakt_II_OS1.17.syx and of the images in ou
   with the stock `083f283f`. The pre-5b H1 images are kept as `out/patch/diag-h1-i13return-{96k,48k}-1.17.ungated.syx`
   (optional diagnostic: they fail the new gate on exactly that word).
 
+## Modules the encoding gate refuses (2026-10-17) **[D]**
+
+One agent (final fix wave), by building each module on stock firmware/Digitakt_II_OS1.17.syx with the Rust
+`patchkit apply` (no gate) and running `pk_encoding_gate.check_image` on the result. patchkit refuses (deletes) these
+images; their `module.toml` `[targets]` say `refused-by-encoding-gate` for the port concerned. Each can still be built
+with `--no-encoding-gate` as a diagnostic (`*.ungated.syx`, never the default for `inject`).
+
+- **Return through `JUMP (M13, I13)` (`083f683f`, the core/dsp-voice routine ABI): machines/pluck (pluck-dsp 2,
+  pluck-dn2-dsp 2), test/sine-voice (sine-voice-dsp 2), test/dn2-sine (sine-voice-dn2-dsp 2), test/dn2-edge
+  (edge-probe-dn2-dsp 1).** Why: the gate matches indirect jumps (Types 9a/9b) by the whole word, and `083f683f`
+  occurs nowhere in the stock code (section above). To re-admit one: port the routine to core/dsp-inline (a direct
+  return to `_di_return_work` or `_di_return_out`), or give core/dsp-voice a direct-jump return the same way; or, if
+  an owner-unit image that executes `083f683f` passes (the `diag-h1-i13return-*` diagnostics), add `word = "083f683f"`
+  with that evidence to tools/patchkit/encoding_proven.toml.
+- **Unproven shapes.** machines/pluck 16: 10 x `2a_short:18ca000` (`Fn = FLOAT Rm` compressed to 32 bits, e.g.
+  `018ca210` `F2 = FLOAT R1`, `018ca000` `F0 = FLOAT R0`), 3 x `11a:a0000000000` (`0a3e00000000`, a non-delayed `RTS`:
+  stock returns only with `RTS (DB)`), 3 x `2a:10000042000` (`013e00042991`, `R9 = R9 XOR R1` as a 48-bit 2a).
+  test/sine-voice 7: 4 x the same 2a_short FLOAT, 3 x the same non-delayed RTS. fx/master-drive 1: `018ca000`
+  (`F0 = FLOAT R0` as 2a_short) at SW 0xb8d5c3. Why: the gate allows only shapes that occur in aligned, confident stock
+  code or are listed in encoding_proven.toml. To re-admit one: rewrite the source to stock shapes (int-to-float as
+  PLAITS does with `itof_nonneg`, or a form the stock code has, e.g. 2c `F0 = FLOAT R0`; `RTS (DB)` with its two delay
+  slots; XOR in a form the stock code uses), then rebuild the object; or list the shape in encoding_proven.toml with
+  the evidence of an owner-unit image that executed it and passed. Counts with the exact words: pluck 18, sine-voice 9,
+  master-drive 1 violation(s).
+- **Every Digitone II image with DSP code (dn2-1.12: machines/pluck, fx/master-drive, test/dn2-sine,
+  test/dn2-edge, ...).** Why: the gate needs the stock instruction database of the image's port
+  (`out/sharcdb/dn2-1.12.sqlite`); without it `check_image` stops and patchkit refuses the image (fail closed). To
+  re-admit: build that database (`uv run python -m tools.sharc_dev.sharcdb build out/sections/dn2-1.12/section_7_BLOB.bin`);
+  the DN2 images are then judged against DN2's own stock words and shapes, which nobody has checked yet.
+
 ## selcc for a real engine: the PLAITS VA voice (2026-10-17) **[D]**
 
 Measured building machines/plaits-48k/-96k (the Plaits VA engine, the voice wrapper and the half-band filter in C,
@@ -223,7 +253,9 @@ merged with the assembly entry shim by `pk_build`, tools/patchkit/pk_sharc.py `c
 - **Division** compiles to `RECIPS` plus two Newton steps and a correction; the concrete core needs
   `approx_recips=True` for it (an 8-bit seed model, tools/sharc_dev/sharc_core/floats.py), otherwise every quotient is
   unknown. With it, the compiled voice equals the host build of the same C within 1.8e-7 per sample.
-- **Cost.** No optimiser: one even voice's block is about 60,400 instructions at 48 kHz direct and 84,000 with the
-  half-band (22 taps x 32 samples in naive code); the odd voice's copy about 200. Against the DT2's 666,667-instruction
-  block and its 208,600 busy (finding 06, "Headroom"), one PLAITS track is about 9 % (13 % with the half-band) before
-  cache and memory stalls; 16 tracks do not fit without hand-written hot loops.
+- **Cost.** No optimiser. Worst case on the concrete core: 76,236 instructions per even-voice block at 48 kHz direct
+  and 99,771 with the half-band (22 taps x 32 samples in naive code); the odd voice's copy about 200. Measured in the
+  emulator with the manual's stall rules (finding 06, "PLAITS: measured DSP load per block"): one PLAITS track adds
+  about 60,200 instructions and 97,100 cycles per block at the high bound at 48 kHz (85,700 and 137,800 at 96 kHz),
+  1.61 cycles per instruction at the high bound against the stock mix's 1.41. Two tracks at 48 kHz measure 73.4 % of
+  the 666,667-cycle block (high), two at 96 kHz 85.6 %; 16 tracks do not fit without hand-written hot loops.

@@ -10,8 +10,10 @@ requires = ["core/dsp-voice"]
 conflicts = []
 
 [targets]
+# refused-by-encoding-gate: patchkit refuses the image (docs/findings/20-patch-toolchains.md, "Modules the
+# encoding gate refuses"); build it only with --no-encoding-gate, as a diagnostic.
 "dt2-1.16" = "untested"
-"dt2-1.17" = "experimental"
+"dt2-1.17" = "refused-by-encoding-gate"
 "dn2-1.11" = "untested"
 "dn2-1.12" = "untested"
 

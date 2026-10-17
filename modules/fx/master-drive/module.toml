@@ -10,10 +10,12 @@ conflicts = ["fx/master-gain"]
 
 # Test status per firmware; patchkit does not read it.
 [targets]
+# refused-by-encoding-gate: patchkit refuses the image (docs/findings/20-patch-toolchains.md, "Modules the
+# encoding gate refuses"); build it only with --no-encoding-gate, as a diagnostic.
 "dt2-1.16" = "untested"
-"dt2-1.17" = "experimental"
+"dt2-1.17" = "refused-by-encoding-gate"
 "dn2-1.11" = "untested"
-"dn2-1.12" = "experimental"
+"dn2-1.12" = "refused-by-encoding-gate"
 
 # DSP: the master hook (the Q31 converter's one call) and the routine.
 [[object]]

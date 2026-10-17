@@ -10,7 +10,9 @@ requires = ["core/machines", "core/dsp-voice"]
 conflicts = []
 
 [targets]
-"dn2-1.12" = "experimental"
+# refused-by-encoding-gate: patchkit refuses the image (docs/findings/20-patch-toolchains.md, "Modules the
+# encoding gate refuses"); build it only with --no-encoding-gate, as a diagnostic.
+"dn2-1.12" = "refused-by-encoding-gate"
 
 # The machine: its own type (8, permanent: core/machines types.toml), listed before MIDI, sent to the DSP as it is (`own_dsp`); the page layout, parameters
 # and names are FM TONE's (clone_of = 0).
