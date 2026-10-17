@@ -173,6 +173,9 @@ def cmd_explain(args: list[str]) -> int:
     return 0
 
 
+UNGATED = ".ungated.syx"
+
+
 def cmd_patch(args: list[str]) -> int:
     fw, mods = flag(args, "--firmware"), flag(args, "--modules")
     if not fw or not mods:
@@ -188,10 +191,17 @@ def cmd_patch(args: list[str]) -> int:
         a for a in args if a not in ("-o", out, "--plan", plan, "--no-encoding-gate")
     ]
     r = run(["apply", *rest, "-o", out, "--plan", plan])
-    if r.returncode == 0:
-        print(f"plan: {plan}")
-        return encoding_gate(Path(out), Path(plan), gate)
-    return r.returncode
+    if r.returncode != 0:
+        return r.returncode
+    print(f"plan: {plan}")
+    if not gate and not out.endswith(UNGATED):
+        # An image that skipped the gate is named so: it is never the default for `inject`.
+        final = out[: -len(".syx")] + UNGATED if out.endswith(".syx") else out + UNGATED
+        os.replace(out, final)
+        out = final
+    if not gate:
+        print(f"ungated image: {out}")
+    return encoding_gate(Path(out), Path(plan), gate)
 
 
 def encoding_gate(out: Path, plan: Path, enforce: bool) -> int:
@@ -200,7 +210,18 @@ def encoding_gate(out: Path, plan: Path, enforce: bool) -> int:
     With enforce False (--no-encoding-gate, diagnostic images only) the violations are a warning."""
     from tools.patchkit import pk_encoding_gate
 
-    found = pk_encoding_gate.check_image(out, plan)
+    try:
+        found = pk_encoding_gate.check_image(out, plan)
+    except (Exception, SystemExit) as e:  # noqa: BLE001
+        if not enforce:
+            print(
+                f"WARNING: --no-encoding-gate: gate could not run: {e!r}",
+                file=sys.stderr,
+            )
+            return 0
+        out.unlink(missing_ok=True)
+        print(f"encoding gate failed ({e!r}); {out} deleted", file=sys.stderr)
+        return 1
     if not found:
         return 0
     lines = "\n".join(pk_encoding_gate.format_violation(v) for v in found)
@@ -226,7 +247,12 @@ def cmd_inject(args: list[str]) -> int:
     syx = next((a for a in args if not a.startswith("-")), None)
     if syx is None:
         outs = sorted(
-            (ROOT / "out" / "patch").glob("*.syx"), key=lambda p: p.stat().st_mtime
+            (
+                p
+                for p in (ROOT / "out" / "patch").glob("*.syx")
+                if not p.name.endswith(UNGATED)
+            ),
+            key=lambda p: p.stat().st_mtime,
         )
         if not outs:
             raise SystemExit(

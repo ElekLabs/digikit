@@ -55,7 +55,9 @@ class Dev:
         self.goldens = h.Goldens()
         self.session = h.Session(cell, self.goldens, run_name=f"dev-{cell.device}")
         self.opened = False
-        self.out = ROOT / "out" / "patch" / f"dev-{cell.device}-{cell.firmware}.syx"
+        self.out = (
+            ROOT / "out" / "patch" / f"dev-{cell.device}-{cell.firmware}.ungated.syx"
+        )
 
     def start(self) -> None:
         # the daemon starts on the stock firmware; the first iteration loads the patched image

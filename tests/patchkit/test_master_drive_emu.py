@@ -32,7 +32,7 @@ def test_proof(device, tmp_path):
         pytest.skip(f"firmware/{syx} or out/{ready} missing")
     if pk_toolchains.selache_dir() is None:
         pytest.skip("selache not built")
-    patched = tmp_path / f"md-{device}.syx"
+    patched = tmp_path / f"md-{device}.ungated.syx"
     run = [sys.executable, "-m", "tools.patchkit.patchkit", "patch"]
     done = subprocess.run(
         [

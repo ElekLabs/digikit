@@ -2,6 +2,7 @@
 
 import json
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -100,7 +101,8 @@ def test_check_image_on_xslice_image_has_no_dsp_code():
     if not syx.exists() or not plan.exists():
         pytest.skip("needs out/patch/diag-xslice-1.17.syx")
     assert gate.check_image(syx, plan) == []
-    assert not [h for h in json.loads(plan.read_text())["hooks"] if h["cpu"] == "sharc"]
+    hooks = json.loads(plan.read_text()).get("hooks", [])
+    assert not [h for h in hooks if h["cpu"] == "sharc"]
 
 
 def test_cmd_patch_gate_deletes_output_and_exits_1(tmp_path, monkeypatch, capsys):
@@ -126,3 +128,103 @@ def test_cmd_patch_no_gate_flag_keeps_output_and_warns(tmp_path, monkeypatch, ca
     assert out.exists()
     err = capsys.readouterr().err
     assert "WARNING" in err and "023e0000e816" in err
+
+
+def test_gate_exception_deletes_output_and_exits_1(tmp_path, monkeypatch):
+    from tools.patchkit import patchkit
+
+    out = tmp_path / "o.syx"
+    out.write_bytes(b"x")
+
+    def boom(*a, **k):
+        raise KeyError("no such form")
+
+    monkeypatch.setattr(gate, "check_image", boom)
+    assert patchkit.encoding_gate(out, tmp_path / "p.json", True) == 1
+    assert not out.exists()
+
+
+class FakeApply:
+    """Stands in for the Rust patch step: records its args and writes the output."""
+
+    def __init__(self):
+        self.args: list[str] = []
+
+    def __call__(self, args, capture=False):
+        import subprocess
+
+        self.args = args
+        Path(args[args.index("-o") + 1]).write_bytes(b"img")
+        return subprocess.CompletedProcess(args, 0)
+
+
+def cmd_patch_env(tmp_path, monkeypatch, checker):
+    from tools.patchkit import patchkit
+
+    fake = FakeApply()
+    calls: list[tuple] = []
+
+    def check(*a, **k):
+        calls.append(a)
+        return checker()
+
+    monkeypatch.setattr(patchkit, "run", fake)
+    monkeypatch.setattr(gate, "check_image", check)
+    return patchkit, fake, calls
+
+
+ARGS = ["--firmware", "fw.syx", "--modules", "m"]
+
+
+def test_cmd_patch_runs_the_gate_by_default(tmp_path, monkeypatch):
+    patchkit, fake, calls = cmd_patch_env(tmp_path, monkeypatch, lambda: [])
+    out = tmp_path / "o.syx"
+    assert patchkit.cmd_patch([*ARGS, "-o", str(out)]) == 0
+    assert len(calls) == 1 and out.exists()
+
+
+def test_cmd_patch_failing_gate_returns_1_and_removes_output(tmp_path, monkeypatch):
+    viol = [gate.Violation(1, "0000", "x:0")]
+    patchkit, fake, calls = cmd_patch_env(tmp_path, monkeypatch, lambda: viol)
+    out = tmp_path / "o.syx"
+    assert patchkit.cmd_patch([*ARGS, "-o", str(out)]) == 1
+    assert not out.exists()
+
+
+def test_cmd_patch_bypass_strips_flag_and_names_output_ungated(
+    tmp_path, monkeypatch, capsys
+):
+    viol = [gate.Violation(1, "0000", "x:0")]
+    patchkit, fake, calls = cmd_patch_env(tmp_path, monkeypatch, lambda: viol)
+    out = tmp_path / "o.syx"
+    assert patchkit.cmd_patch([*ARGS, "--no-encoding-gate", "-o", str(out)]) == 0
+    assert "--no-encoding-gate" not in fake.args
+    assert not out.exists()
+    final = tmp_path / "o.ungated.syx"
+    assert final.exists()
+    assert str(final) in capsys.readouterr().out
+
+
+def test_inject_default_ignores_ungated_images(tmp_path, monkeypatch):
+    import os
+
+    from tools.control import digi_client
+    from tools.patchkit import patchkit
+
+    d = tmp_path / "out" / "patch"
+    d.mkdir(parents=True)
+    good, bad = d / "a.syx", d / "b.ungated.syx"
+    good.write_bytes(b"g")
+    bad.write_bytes(b"b")
+    os.utime(good, (1, 1))
+    os.utime(bad, (2, 2))  # newer
+    seen: list[list[str]] = []
+    monkeypatch.setattr(patchkit, "ROOT", tmp_path)
+
+    def fake_main(a: list[str]) -> int:
+        seen.append(a)
+        return 0
+
+    monkeypatch.setattr(digi_client, "main", fake_main)
+    assert patchkit.cmd_inject([]) == 0
+    assert seen[0][1] == str(good)
