@@ -84,6 +84,8 @@ TYPED = [
     "tests/support/plaits_rig.py",
     "tests/patchkit/test_plaits_module.py",
     "tools/patchkit/pk_proof_plaits.py",
+    "tests/support/plaits_vectors.py",
+    "tests/patchkit/test_plaits_model0_h2.py",
 ]
 
 
