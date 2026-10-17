@@ -246,6 +246,77 @@ def test_routine_keeps_the_hook_abi_registers() -> None:
         assert rig.symbols["_pl_frame"] and (AFTER if mode else DECIMATE)
 
 
+ISR_WORDS = 64  # words an interrupt handler is assumed to push through I7 (DM(I7, M7) = ..., post-modify)
+CBUFEN = 1 << 24
+
+
+def _isr_writes(i7: int, b7: int, l7: int, mode1: int) -> list[int]:
+    """Byte addresses an interrupt taken now would write with ISR_WORDS pushes through I7: post-modify by one word,
+    wrapping around B7/L7 (L scaled to bytes) when MODE1.CBUFEN is set and L7 != 0 (the manual's rule, as the core
+    applies it: tools/sharc_dev/sharc_core/memory.py `_circular_step`)."""
+    from tools.sharc_dev.sharc_core.memory import _circular_step
+
+    out = []
+    for _ in range(ISR_WORDS):
+        out.append(i7)
+        if mode1 & CBUFEN and l7:
+            i7 = _circular_step(i7, b7, 4 * l7, -4)
+        else:
+            i7 -= 4
+    return out
+
+
+def _interrupt_stack_check(
+    mode: int,
+) -> tuple[list[str], dict[str, int], tuple[int, int]]:
+    """Before every instruction of one block of voice 0, where an interrupt's pushes would land: (states whose pushes
+    leave both stacks, counts, the firmware buffer as the hook is entered)."""
+    rig = PlaitsRig(mode)
+    rig.controls(0, 60)
+    rig.active(0)
+    rig.trig(0)
+    codes = [rig.st.UREG_CODES[n] for n in ("I7", "B7", "L7", "MODE1")]
+    pl_lo = rig.symbols["_pl_stack"]
+    seen = {"steps": 0, "own": 0}
+    fw: list[tuple[int, int]] = []
+    bad: list[str] = []
+
+    def check(state: Any) -> None:
+        i7, b7, l7, mode1 = (getattr(state.uregs.get(c), "value", None) for c in codes)
+        assert (
+            i7 is not None and b7 is not None and l7 is not None and mode1 is not None
+        )
+        if not fw:
+            fw.append((b7, b7 + 4 * l7))
+        seen["steps"] += 1
+        writes = _isr_writes(i7, b7, l7, mode1)
+        inside_fw = all(fw[0][0] <= a < fw[0][1] for a in writes)
+        inside_pl = all(pl_lo <= a < pl_lo + 4096 for a in writes)
+        seen["own"] += inside_pl
+        if not (inside_fw or inside_pl) and len(bad) < 5:
+            bad.append(
+                f"pc {state.pc_sw:#x}: I7 {i7:#x} B7 {b7:#x} L7 {l7:#x} -> writes "
+                f"{min(writes):#x}..{max(writes):#x}"
+            )
+
+    rig.block(0, on_step=check)
+    return bad, seen, fw[0]
+
+
+def test_an_interrupt_at_any_instruction_pushes_inside_one_stack() -> None:
+    """M2: the shim moves I7 between the firmware's circular stack and its own linear one and changes L6/L7. An
+    interrupt between two of those instructions must still push inside one stack. The safe states are: firmware I7
+    with either L (inside the firmware buffer a linear push writes the same addresses as a circular one, as long as
+    it does not reach B7, which the stock firmware itself never does), and our I7 with L = 0. Our I7 with the
+    firmware's L is not: I7 lies above B7 + L7, so every push wraps by -L into foreign memory. Hence L is zeroed
+    before I7 moves to _pl_stack and restored after I7 is back. Checked before every instruction of a block."""
+    for mode in (1, 0):
+        bad, seen, fw = _interrupt_stack_check(mode)
+        assert not bad, (mode, bad)
+        assert seen["own"] > 1000, seen  # the C call ran on _pl_stack
+        assert fw == (0x2009C000 - 0x400, 0x2009C000 - 0x400 + 4 * 0x800)
+
+
 # ---- the H2 images: stock 1.17 + machines/plaits-48k or -96k, and the four owner-image checks
 
 STOCK = ROOT / "firmware" / "Digitakt_II_OS1.17.syx"

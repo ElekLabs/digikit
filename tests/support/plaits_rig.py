@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import struct
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from tools.patchkit import pk_build, pk_sharc, pk_toolchains
 
@@ -214,11 +216,16 @@ class PlaitsRig:
 
     # ---- one block
     def block(
-        self, v: int, max_steps: int = 2_000_000, want: int | None = None
+        self,
+        v: int,
+        max_steps: int = 2_000_000,
+        want: int | None = None,
+        on_step: Callable[[Any], None] | None = None,
     ) -> dict:
         """One render block of voice v through the hook (as the renderer calls it at SW 0x1c4f15), run to the
         continuation `want` (default: the variant's return, AFTER for mode 1, DECIMATE for mode 0; RESUME is the
-        stock path of a type without a row)."""
+        stock path of a type without a row). `on_step(state)` sees the core state before every instruction (an
+        interrupt could be taken at any of those points)."""
         rec, outp = RECORDS + v * REC, OUT + v * 0x80
         for off, val in {-4: 32, -6: rec, -7: outp, -5: 0xDEAD}.items():
             self.poke(STACK + 4 * off, val)
@@ -246,6 +253,14 @@ class PlaitsRig:
         r = self.runner.fresh_call(
             self.core.symbols["_di_entry"], regs=regs, return_address=RETURN_SW
         )
+        if on_step is not None:
+            step = r.step
+
+            def stepped() -> None:
+                on_step(r.state)
+                step()
+
+            r.step = stepped  # type: ignore[method-assign]
         res = r.run(max_steps)
         self.runner = r
         if want is None:

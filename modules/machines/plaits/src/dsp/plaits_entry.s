@@ -22,7 +22,14 @@
 //           frame set up by CJUMP, the return address - 1 in the second delay slot (the stock call sequence).
 //
 // Registers: the renderer's I6, I7, L6 and L7 are saved in _pl_save and restored after the C call (L6 = L7 = 0 during
-// it: the firmware's stack is a circular buffer, ours is linear). The C code (Selache)
+// it: the firmware's stack is a circular buffer, ours is linear). The order of the switch is chosen so that an
+// interrupt between any two of its instructions pushes inside one stack (test_an_interrupt_at_any_instruction_...):
+// L6/L7 are zeroed while I7 is still on the firmware's stack, I7 moves to _pl_stack after, and on the way back I7
+// returns before L6/L7 are restored. A firmware I7 with L = 0 pushes linearly at the very addresses a circular push
+// would use, as long as the push does not run below B7 (where a circular push would overwrite the stack's own
+// oldest frames, so the firmware cannot rely on it); our I7 with the firmware's L would not: _pl_stack lies above
+// B7 + L7, so each push would wrap by -L7 into foreign memory. So never move I7 before zeroing L7, and never restore
+// L7 before I7. The C code (Selache)
 // uses R0-R15, I4, I6, I7, I12 and reads M5 (0), M7 (-1), M14 (1); it leaves I8-I11, I13-I15, M0-M4, M8-M12, the B
 // and L registers and MODE1 alone, as the routine ABI requires. Symbol offsets are computed in registers (Selache
 // drops `symbol + constant` addends, docs/findings/20-patch-toolchains.md); right shifts are not used.
@@ -110,6 +117,7 @@ _pl_render:
     DM(I3, M6) = R0;
     // The firmware runs its stack as a circular buffer (B6 = B7, L6 = L7 non-zero, set at SW 0x1c0f64..0x1c0f76):
     // on our stack every push and frame MODIFY would wrap by L. Linear for the C call, restored after it.
+    // Order (interrupts): L6/L7 = 0 first, while I7 is still the firmware's; only then I7 = _pl_stack.
     R0 = L6;
     DM(I3, M6) = R0;
     R0 = L7;
@@ -142,6 +150,7 @@ _pl_render:
     DM(I7, M7) = R2;
     DM(I7, M7) = _pl_back - 1;
 _pl_back:
+    // Order (interrupts): I6, I7 back to the firmware's stack first (L = 0 there is still safe), then L6/L7.
     R0 = _pl_save;
     I3 = R0;
     R0 = DM(I3, M6);
