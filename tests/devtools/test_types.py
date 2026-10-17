@@ -78,6 +78,7 @@ TYPED = [
     "tests/support/dsp_inline_image.py",
     "tools/patchkit/pk_crosscheck.py",
     "tests/patchkit/test_pk_crosscheck.py",
+    "tests/patchkit/test_pk_build_c.py",
 ]
 
 

@@ -359,19 +359,144 @@ def assemble(
         return result
 
 
-def compile_c(source: str, section: str | None = None) -> SharcObject:
-    """Selache's C compiler (selcc); evaluated in docs/findings/20-patch-toolchains.md."""
+def compile_c(
+    source: str,
+    section: str | None = None,
+    include_dirs: tuple[Path, ...] | list[Path] = (),
+    defines: tuple[str, ...] | list[str] = (),
+) -> SharcObject:
+    """Selache's C compiler (selcc); evaluated in docs/findings/20-patch-toolchains.md.
+
+    `include_dirs` go on the include path (`-I`), `defines` are `NAME` or `NAME=VALUE` (`-D`). The object's
+    source_sha256 is the hash of the preprocessed translation unit, so a changed header changes it. selcc's code is
+    one section (`seg_swco`); a translation unit that it splits over several code sections is refused."""
+    flags = [f"-I{p}" for p in include_dirs] + [f"-D{x}" for x in defines]
     with tempfile.TemporaryDirectory(prefix="pk-sharc-") as d:
-        src, obj = Path(d) / "m.c", Path(d) / "m.doj"
+        src, obj, pre = Path(d) / "m.c", Path(d) / "m.doj", Path(d) / "m.i"
         src.write_text(source)
         r = subprocess.run(
-            [str(_tool("selcc")), "-proc", PROCESSOR, "-c", "-o", str(obj), str(src)],
+            [
+                str(_tool("selcc")),
+                "-proc",
+                PROCESSOR,
+                *flags,
+                "-E",
+                "-o",
+                str(pre),
+                str(src),
+            ],
             capture_output=True,
             text=True,
         )
         if r.returncode:
             raise PkSharcError(f"selcc failed:\n{r.stdout}{r.stderr}")
-        return _object(obj, hashlib.sha256(source.encode()).hexdigest(), section)
+        r = subprocess.run(
+            [
+                str(_tool("selcc")),
+                "-proc",
+                PROCESSOR,
+                *flags,
+                "-c",
+                "-o",
+                str(obj),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode:
+            raise PkSharcError(f"selcc failed:\n{r.stdout}{r.stderr}")
+        elf = pk_elf.parse(obj.read_bytes())
+        code = sorted(
+            x.name
+            for x in elf.sections
+            if x.flags & pk_elf.SHF_EXECINSTR and x.flags & pk_elf.SHF_ALLOC and x.size
+        )
+        if len(code) > 1:
+            raise PkSharcError(
+                f"selcc split the code over sections {code}; patchkit objects have one code section"
+            )
+        result = _object(
+            obj,
+            hashlib.sha256(pre.read_bytes()).hexdigest(),
+            code[0] if code else section,
+        )
+        result.toolchain["selcc_sha256"] = hashlib.sha256(
+            _tool("selcc").read_bytes()
+        ).hexdigest()
+        return result
+
+
+def merge(objs: list[SharcObject]) -> SharcObject:
+    """Several objects (assembled and compiled) as one: the code sections back to back in list order, data sections
+    of the same name joined (each piece at its alignment), symbols and relocations moved with their section.
+
+    A local symbol whose name is already taken by an earlier object is renamed `name~k` (k = the object's index) in
+    that object, together with the relocations that use it; a second definition of a global symbol is an error.
+    Relocations inside data sections are not supported (`_object` refuses them)."""
+    if len(objs) == 1:
+        return objs[0]
+    code = bytearray()
+    symbols: dict[str, tuple[int, bool]] = {}
+    relocs: list[SharcReloc] = []
+    rows: list[tuple[int, str]] = []
+    data: dict[str, tuple[bytes, int, bool]] = {}
+    data_symbols: dict[str, tuple[str, int, bool]] = {}
+    toolchain: dict[str, str] = {}
+    hashes = []
+    for k, o in enumerate(objs):
+        base = len(code) // 2
+        taken = set(symbols) | set(data_symbols)
+        defined = {
+            **{n: g for n, (_, g) in o.symbols.items()},
+            **{n: g for n, (_, _, g) in o.data_symbols.items()},
+        }
+        rename: dict[str, str] = {}
+        for name, glob in defined.items():
+            if name in taken:
+                if glob:
+                    raise PkSharcError(
+                        f"symbol {name} is defined by two sources of one object"
+                    )
+                rename[name] = f"{name}~{k}"
+        for name, (off, glob) in o.symbols.items():
+            symbols[rename.get(name, name)] = (base + off, glob)
+        for r in o.relocs:
+            relocs.append(
+                SharcReloc(
+                    base + r.parcel, r.rtype, rename.get(r.symbol, r.symbol), r.addend
+                )
+            )
+        rows += [(base + p, raw) for p, raw in o.rows]
+        code += o.section
+        for sec, (blob, align, bss) in o.data.items():
+            have, have_align, have_bss = data.get(sec, (b"", align, bss))
+            if have_bss != bss:
+                raise PkSharcError(
+                    f"data section {sec} is bss in one source and data in another"
+                )
+            start = -(-len(have) // align) * align
+            data[sec] = (
+                have + bytes(start - len(have)) + blob,
+                max(align, have_align),
+                bss,
+            )
+            for name, (s, off, glob) in o.data_symbols.items():
+                if s == sec:
+                    data_symbols[rename.get(name, name)] = (sec, start + off, glob)
+        for key, value in o.toolchain.items():
+            toolchain.setdefault(key, value)
+        hashes.append(o.source_sha256)
+    return SharcObject(
+        hashlib.sha256(" ".join(hashes).encode()).hexdigest(),
+        bytes(code),
+        symbols,
+        relocs,
+        rows,
+        toolchain,
+        data,
+        data_symbols,
+    )
 
 
 def self_check(code: bytearray, at: int, size: int, r: SharcReloc) -> None:

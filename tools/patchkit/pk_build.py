@@ -5,7 +5,8 @@
     uv run python -m tools.patchkit.pk_build build-all [--check]
 
 For every `[[object]]` of a module's `module.toml` that lists `sources`, the sources are compiled by the
-pinned toolchain (SHARC+: Selache `selas`; ColdFire: m68k-elf gcc/as, tools/patchkit/pk_link.py), turned into the
+pinned toolchain (SHARC+: Selache `selas` for `.s`, `selcc` for `.c`, merged into one object; ColdFire: m68k-elf
+gcc/as, tools/patchkit/pk_link.py), turned into the
 canonical object JSON (sorted keys, integers only; format in packages/patchkit/src/dko.rs) and written to the
 object's `path`. Every instruction is re-decoded by our own decoders (SHARC: tools/patchkit/pk_sharc.py `verify`;
 ColdFire: tools/patchkit/pk_link.py `check_isa`), so a toolchain encoding bug cannot reach an image.
@@ -62,14 +63,32 @@ def _tu_lines(sources: list[Path], texts: list[str], message: str) -> str:
     return re.sub(r"\bline (\d+):", sub, message)
 
 
+def dsp_object(sources: list[Path]) -> pk_sharc.SharcObject:
+    """A DSP object from `.s` and `.c` sources: the `.s` files, concatenated in order, are one translation unit
+    (pk_sharc.assemble); each `.c` file is compiled by selcc with its own directory on the include path
+    (pk_sharc.compile_c); the pieces are merged in that order, assembly first (pk_sharc.merge)."""
+    asm = [p for p in sources if p.suffix == ".s"]
+    objs = []
+    if asm:
+        texts = [p.read_text() for p in asm]
+        try:
+            objs.append(pk_sharc.assemble("\n".join(texts)))
+        except pk_sharc.PkSharcError as e:
+            raise pk_sharc.PkSharcError(_tu_lines(asm, texts, str(e))) from e
+    for p in sources:
+        if p.suffix == ".c":
+            try:
+                objs.append(pk_sharc.compile_c(p.read_text(), include_dirs=[p.parent]))
+            except pk_sharc.PkSharcError as e:
+                raise pk_sharc.PkSharcError(f"{p}: {e}") from e
+        elif p.suffix != ".s":
+            raise BuildError(f"{p}: a DSP object takes .s and .c sources")
+    return pk_sharc.merge(objs)
+
+
 def sharc_object(sources: list[Path]) -> dict:
-    """One or more `.s` files, concatenated into one translation unit, to an object."""
-    texts = [p.read_text() for p in sources]
-    text = "\n".join(texts)
-    try:
-        obj = pk_sharc.assemble(text)
-    except pk_sharc.PkSharcError as e:
-        raise pk_sharc.PkSharcError(_tu_lines(sources, texts, str(e))) from e
+    """`.s` (one translation unit) and `.c` sources to the canonical object JSON."""
+    obj = dsp_object(sources)
     # ISA check: link at a placeholder base with placeholder externs; verify() re-decodes every instruction
     # and reads every relocated field back.
     undefined = sorted({r.symbol for r in obj.relocs} - set(obj.symbols))
@@ -223,7 +242,7 @@ def build_module(moddir: Path, check: bool) -> list[str]:
             continue
         paths = [moddir / s for s in srcs]
         kinds = {p.suffix for p in paths}
-        if kinds <= {".s"} and any("dsp" in Path(s).parts for s in srcs):
+        if kinds <= {".s", ".c"} and any("dsp" in Path(s).parts for s in srcs):
             obj = sharc_object(paths)
         else:
             obj = cf_object(paths)
