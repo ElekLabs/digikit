@@ -18,8 +18,15 @@ note and TUNE, and goes through the track's amp envelope, filter, sends and FX l
   straight into the voice output) or machines/plaits-96k (interpolated to 96 kHz, then the stock decimator).
   Selected alone, this module gives the track the PLAITS name and rows but plays it as MANUAL SLICE.
 - Known limits: one model; a triggered PLAITS voice keeps rendering after its note (the amp envelope silences it),
-  so each PLAITS track that has played costs DSP time until its type changes; 16 tracks at once do not fit yet.
-- A project saved with PLAITS loads on a stock 1.17 with the track as MANUAL SLICE.
+  so each PLAITS track that has played costs DSP time every block until its type changes. Worst case measured on the
+  concrete core: about 76,000 instructions per track per block at 48 kHz and about 100,000 with the 96 kHz build
+  (the block is 666,667; stock uses about 44 % with stalls). That allows about 3 PLAITS tracks at once with the
+  48 kHz build and 2 with the 96 kHz build; 16 tracks do not fit yet.
+- A project saved with PLAITS loads on a stock 1.17 without a fault, but that track comes back as ONESHOT (type 0):
+  the stock loader keeps only the stock machine types.
+- Tests: tests/plaits/test_va_host.py (host, bit exact against upstream Plaits; the oracle needs
+  `PLAITS_STMLIB=<stmlib checkout at e3bd7c9>` when ../eurorack/stmlib is empty), tests/patchkit/test_plaits_module.py
+  (compiled code on the concrete core, the images), tools/patchkit/pk_proof_plaits.py (emulator).
 
 The gallery shows `summary` from module.toml and `gallery/icon.svg`. Keep this file free of firmware bytes and vendor
 tool names.

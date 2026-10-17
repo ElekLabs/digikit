@@ -495,3 +495,40 @@ def test_image_away_on_a_stock_type_clears_active_and_plaits_stays_silent_until_
     img.poke_byte(rec + 0x1B8, 1)
     _image_trig(img, v, True)
     assert any(img.block(v)["samples"])
+
+
+# Worst-case instruction bound per even-voice block. The review measured 76,236 instructions (mode 1) at extreme
+# parameters and about 25,000 more in mode 0 (the half-band); the bounds leave about 15 % margin.
+MAX_BLOCK_INSTRUCTIONS = {1: 88_000, 0: 118_000}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", [1, 0])
+def test_extreme_parameters_compiled_core(port: Port, mode: int) -> None:
+    """All {0, 0x7f00}^3 of HARMONICS/TIMBRE/MORPH at notes 0 and 127 and TUNE 0, 0x4000, 0x7f00: finite output,
+    within MAX_ERR of the host build, every block within the instruction bound."""
+    rig = PlaitsRig(mode)
+    rig.active(0)
+    worst = 0
+    for note in (0, 127):
+        for tune in (0, 0x4000, 0x7F00):
+            for h in (0, 0x7F00):
+                for t in (0, 0x7F00):
+                    for m in (0, 0x7F00):
+                        slots = {"harmonics": h, "timbre": t, "morph": m}
+                        rig.controls(0, note, tune=tune, **slots)
+                        hv = port.voice()
+                        for b in range(3):
+                            rig.trig(0, b == 0)
+                            got = np.array(rig.block(0)["samples"], dtype=np.float32)
+                            want = port.render(
+                                hv, frame(note, tune=tune, **slots), int(b == 0), mode
+                            )
+                            where = (note, hex(tune), hex(h), hex(t), hex(m), b)
+                            assert np.isfinite(got).all(), where
+                            assert float(np.abs(got - want).max()) <= MAX_ERR, where
+                            worst = max(worst, rig.instructions[-1])
+                            assert (
+                                rig.instructions[-1] <= MAX_BLOCK_INSTRUCTIONS[mode]
+                            ), (where, rig.instructions[-1])
+    print(f"mode {mode}: worst block {worst} instructions")

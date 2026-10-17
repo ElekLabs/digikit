@@ -46,8 +46,16 @@ def hb(tmp_path_factory: pytest.TempPathFactory) -> Lib:
     d = tmp_path_factory.mktemp("hb")
     so = d / "libhb.so"
     subprocess.run(
-        ["cc", "-O2", "-std=c99", "-shared", "-fPIC", "-o", str(so),
-         str(DSP / "halfband.c")],
+        [
+            "cc",
+            "-O2",
+            "-std=c99",
+            "-shared",
+            "-fPIC",
+            "-o",
+            str(so),
+            str(DSP / "halfband.c"),
+        ],
         check=True,
     )
     return Lib(so)

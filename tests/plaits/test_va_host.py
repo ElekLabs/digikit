@@ -75,7 +75,9 @@ def oracle(tmp_path_factory: pytest.TempPathFactory) -> Oracle:
     stm = stmlib_root()
     if stm is None or not (EURORACK / "plaits" / "dsp" / "engine").exists():
         pytest.skip(
-            "needs ../eurorack/plaits and stmlib (../eurorack/stmlib or PLAITS_STMLIB)"
+            "BIT-EXACT ORACLE DISABLED: upstream stmlib not found (../eurorack/stmlib is empty). Enable it with "
+            "PLAITS_STMLIB=<directory holding a stmlib/ checkout at e3bd7c9, the commit ../eurorack pins>, "
+            "e.g. PLAITS_STMLIB=../mutable_instruments_eurorack; ../eurorack/plaits is needed too"
         )
     d = tmp_path_factory.mktemp("oracle")
     inc = d / "stm"

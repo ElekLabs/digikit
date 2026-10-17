@@ -34,8 +34,11 @@
 //   may clobber  R0-R15, I0-I5, M1-M4, I12 and the ALU/multiplier state; the renderer's epilogue restores what its
 //        caller needs.
 //   must keep  I6, I7 (and the frame below I6: DM(-4..-26, I6)), M5-M7 (0, 1, -1), M13-M15 (0, 1, -1), the L
-//        registers (0), MODE1, and every register not in the clobber list (I8-I11, I13-I15, M0, M8-M12, B
-//        registers).
+//        registers, MODE1, and every register not in the clobber list (I8-I11, I13-I15, M0, M8-M12, B
+//        registers). L6 and L7 are NOT zero: the firmware's stack is a circular buffer (B6 = B7, L6 = L7, MODE1
+//        CBUFEN; docs/findings/06-sharc-engine-and-startup.md, "machines/plaits on core/dsp-inline"). A routine
+//        that moves I7 to a stack of its own must save L6/L7, zero them while it uses that stack and restore them
+//        (modules/machines/plaits/src/dsp/plaits_entry.s does), or every push and frame MODIFY wraps by L.
 //
 // Instruction shapes: only stock or silicon-proven shapes (the encoding gate checks the image); right shifts use a
 // negative amount in a register.
