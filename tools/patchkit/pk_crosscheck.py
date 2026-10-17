@@ -14,8 +14,9 @@ operands:
   condition  the IF condition (none = always),
   flags      the delayed-branch flag (DB), clear-interrupt (CI) and loop-abort (LA) of jumps and calls.
 
-When the source statements map one to one onto the instructions (pk_sharc.assemble), each statement must also name
-the same data, index and modify registers (R/F, I, M) as our decoder reads in its word: Selache writes
+An assembly source (pk_sharc.assemble) must map one statement per instruction (a count mismatch is an error), and
+each statement must also name the same data, index and modify registers (R/F, I, M) as our decoder reads in its
+word; a C unit (pk_sharc.compile_c) gets the listing check only. Selache writes
 `PM(I12, M14) = R2` as `DM(I4, M6) = R2`, and its listing agrees with that word, so only the source shows it. Two
 listing quirks are accepted when the source and our decoder agree (`listing_quirk`): seldump prints a Type 3a
 transfer's M0-M3 as M4-M7, and lists a 16-bit Type 3c with M0-M3 as a 32-bit word.
@@ -29,6 +30,10 @@ seldump lists a section linearly and loses step after a width it misjudges (it l
 plus a stray parcel), and it replaces numbers equal to a symbol's address by the symbol's name. So the object is
 listed from a copy whose symbol table is hidden and whose section holds each of our instructions followed by three
 NOPs, which brings seldump back in step before the next instruction.
+
+Relocation addends (`check_addends`, called by pk_sharc): Selache drops the constant of `symbol + constant` in some
+forms. Every reference to a symbol in an assembly statement must match the relocation of its instruction; for a C
+unit, the references in selcc's own assembly output (`-S`) must each have a relocation with the same addend.
 """
 
 from __future__ import annotations
@@ -677,6 +682,117 @@ def statements(preprocessed: str) -> list[tuple[int, str]]:
     return out
 
 
+def statement_count_message(stmts: list[tuple[int, str]], cmp: sel.Comparison) -> str:
+    n = len(cmp.instructions)
+    where = ""
+    if stmts:
+        where = f" (statements from line {stmts[0][0]} `{stmts[0][1]}` to line {stmts[-1][0]} `{stmts[-1][1]}`)"
+    return (
+        f"{len(stmts)} source statements but {n} instructions{where}: the source-statement check needs exactly one "
+        "instruction per `;`-terminated statement (a statement that assembles to no instruction or to several, "
+        "e.g. a data definition in the code section, cannot be checked; move it or split it)"
+    )
+
+
+# ---------------------------------------------------------------- symbol addends
+#
+# Selache drops the constant of `symbol + constant` in some forms (e.g. `R0 = _x + 8;` is relocated as `_x`, the
+# field left 0; docs/findings/20-patch-toolchains.md) and keeps it in others (`JUMP _f + 2`, `DM(I7, M7) = _l - 1`).
+# `check_addends` compares every symbol reference of the source with the relocation Selache emitted for it.
+
+_NUM = re.compile(r"\s*(0x[0-9a-fA-F]+|\d+)")
+_END = re.compile(r"\s*(?:[),;]|$)")
+
+
+def symbol_refs(statement: str, names: set[str]) -> list[tuple[str, int | None]]:
+    """(symbol, addend) for every reference to one of `names` in a statement: 0 for a bare name, c for `name + c`,
+    -c for `name - c`; None for any other expression around the name (which cannot be verified)."""
+    out: list[tuple[str, int | None]] = []
+    for m in re.finditer(r"[A-Za-z_.$][\w.$]*", statement):
+        name = m.group(0)
+        if name not in names:
+            continue
+        before = statement[: m.start()].rstrip()
+        if before.endswith(("+", "-", "*", "/", "<<", ">>", "&", "|")):
+            out.append((name, None))
+            continue
+        rest = statement[m.end() :]
+        op = rest.lstrip()[:1]
+        if op in ("+", "-"):
+            num = _NUM.match(rest.lstrip()[1:])
+            if num and _END.match(rest.lstrip()[1:][num.end() :]):
+                value = int(num.group(1), 0)
+                out.append((name, value if op == "+" else -value))
+            else:
+                out.append((name, None))
+        elif _END.match(rest) or op == "(" or rest[:1].isspace() or not rest:
+            out.append((name, 0))
+        else:
+            out.append((name, None))
+    return out
+
+
+def check_addends(
+    stmts: list[tuple[int, str]],
+    parcels: list[int],
+    relocs: list[tuple[int, str, int]],
+    names: set[str],
+) -> list[str]:
+    """Errors for an assembly source mapped one statement per instruction (`parcels[k]` is statement k's instruction):
+    a reference `name + c` must be relocated with addend c; an addend on an instruction without a relocation, or an
+    expression we cannot read, is refused. `relocs` are (parcel, symbol, addend)."""
+    at = {p: (s, a) for p, s, a in relocs}
+    out: list[str] = []
+    for (line, stmt), parcel in zip(stmts, parcels, strict=True):
+        rel = at.get(parcel)
+        for sym, add in symbol_refs(stmt, names):
+            if add is None:
+                out.append(
+                    f"line {line}: `{stmt}`: the expression around {sym} cannot be verified (Selache drops "
+                    "`symbol + constant` addends in some forms): compute the offset in a register"
+                )
+            elif rel is not None and rel[0] == sym:
+                if rel[1] != add:
+                    out.append(
+                        f"line {line}: `{stmt}`: Selache relocates {sym}{rel[1]:+d}, the source says {sym}{add:+d} "
+                        "(it drops the constant of `symbol + constant` here): compute the offset in a register"
+                    )
+            elif add:
+                out.append(
+                    f"line {line}: `{stmt}`: {sym}{add:+d} on an instruction without a relocation of {sym}: the "
+                    "addend cannot be verified; compute the offset in a register"
+                )
+    return out
+
+
+def check_addends_unmapped(
+    stmts: list[tuple[int, str]], relocs: list[tuple[int, str, int]], names: set[str]
+) -> list[str]:
+    """The same for a compiled unit whose assembly (selcc -S) does not map onto the instructions one to one: every
+    `name + c` reference with c != 0 needs its own relocation of `name` with addend c."""
+    want: dict[tuple[str, int], list[tuple[int, str]]] = {}
+    out: list[str] = []
+    for line, stmt in stmts:
+        for sym, add in symbol_refs(stmt, names):
+            if add is None:
+                out.append(
+                    f"line {line}: `{stmt}`: the expression around {sym} cannot be verified"
+                )
+            elif add:
+                want.setdefault((sym, add), []).append((line, stmt))
+    have: dict[tuple[str, int], int] = {}
+    for _p, s, a in relocs:
+        have[(s, a)] = have.get((s, a), 0) + 1
+    for (sym, add), uses in want.items():
+        if have.get((sym, add), 0) < len(uses):
+            line, stmt = uses[0]
+            out.append(
+                f"line {line}: `{stmt}`: {len(uses)} reference(s) {sym}{add:+d} but {have.get((sym, add), 0)} "
+                f"relocation(s) with that addend (Selache drops `symbol + constant` addends in some forms)"
+            )
+    return out
+
+
 def check(
     obj: bytes,
     section: str,
@@ -686,10 +802,16 @@ def check(
     """Mismatches over the whole section (our extents): between seldump and our decoder, and, when the source
     statements map one to one onto the instructions, between the registers each statement names and our decoder."""
     cmp = sel.compare_external_bytes(section_bytes)
+    if source_statements is not None and len(source_statements) != len(
+        cmp.instructions
+    ):
+        # An assembly source must map statement by statement onto the instructions: otherwise the source check
+        # (Selache's silent PM -> DM encoding) and the listing quirks it vouches for would be skipped unseen.
+        raise CrossCheckError(statement_count_message(source_statements, cmp))
     rows = [(i.external.parcel_address, i.external.raw) for i in cmp.instructions]
     texts, listed = selache_texts(obj, section, rows)
     stmts = source_statements or []
-    use_stmts = len(stmts) == len(cmp.instructions)
+    use_stmts = source_statements is not None
     out: list[Mismatch] = []
     for k, item in enumerate(cmp.instructions):
         parcel = item.external.parcel_address

@@ -292,3 +292,119 @@ def test_inject_default_ignores_ungated_images(tmp_path, monkeypatch):
     monkeypatch.setattr(digi_client, "main", fake_main)
     assert patchkit.cmd_inject([]) == 0
     assert seen[0][1] == str(good)
+
+
+# ---- what the gate decodes: code ranges from the plan, byte -> short-word addresses, data left out
+
+
+def test_byte_to_sw_maps_l2_and_the_l1_short_word_alias():
+    assert gate.byte_to_sw(gate.L2_BYTE) == gate.L2_SW
+    assert gate.byte_to_sw(gate.L2_BYTE + 0x10) == gate.L2_SW + 8
+    assert gate.byte_to_sw(gate.L1_BYTE + 2 * 0x1C4F15) == 0x1C4F15
+
+
+def _plan(writes: list[dict], hooks: list[dict] | None = None) -> dict:
+    return {"base": {"device": "dt2"}, "writes": writes, "hooks": hooks or []}
+
+
+def test_code_ranges_take_object_code_and_sharc_hook_sites_only():
+    lo = gate.L2_BYTE + 0x100
+    plan = _plan(
+        [
+            {"cpu": "sharc", "kind": "place", "addr": lo, "code": [[lo, lo + 0x18]]},
+            {"cpu": "sharc", "kind": "place", "addr": lo + 0x40, "what": "registry r"},
+            {"cpu": "cf", "kind": "place", "addr": 0x47E80000, "code": [[1, 9]]},
+            {"cpu": "sharc", "kind": "patch", "addr": lo + 0x80, "len": 6},
+        ],
+        [
+            {"cpu": "sharc", "addr": gate.L1_BYTE + 2 * 0x1C4F15, "site_len": 6},
+            {"cpu": "cf", "addr": 0x400C89A4, "site_len": 6},
+        ],
+    )
+    assert gate.code_ranges(plan) == [
+        (gate.L2_SW + 0x80, gate.L2_SW + 0x8C),
+        (0x1C4F15, 0x1C4F18),
+    ]
+
+
+class L2Words:
+    """Loader memory with listing-order instructions from short word L2_SW."""
+
+    def __init__(self, *listing_hex: str):
+        self.data = Words("".join(listing_hex)).data
+
+    def read_sw(self, pc_sw: int, size: int = 6) -> bytes | None:
+        lo = 2 * (pc_sw - gate.L2_SW)
+        return (
+            self.data[lo : lo + size]
+            if lo >= 0 and lo + size <= len(self.data)
+            else None
+        )
+
+
+def test_data_after_the_code_range_is_not_decoded():
+    # one stock-shaped instruction (NOP, 0001) then data words that decode as nothing
+    mem = L2Words("0001", "ffffffffffff")
+    code = gate.L2_BYTE, gate.L2_BYTE + 2
+    plan = _plan(
+        [{"cpu": "sharc", "kind": "place", "addr": code[0], "code": [list(code)]}]
+    )
+    shape = gate.shape(gate.decode_listing("0001"))
+    assert gate.check_code(mem, gate.code_ranges(plan), {shape}) == []
+    # the same bytes listed as code are refused
+    whole = [(gate.L2_SW, gate.L2_SW + 4)]
+    assert gate.check_code(mem, whole, {shape}) != []
+
+
+def _module(
+    tmp_path: Path, mid: str, sections: list[dict], place: str = "dsp.l2"
+) -> None:
+    d = tmp_path / mid
+    (d / "build").mkdir(parents=True)
+    (d / "build" / "o.dko.json").write_text(
+        json.dumps({"arch": "sharc", "format": 1, "sections": sections})
+    )
+    (d / "module.toml").write_text(
+        f'[[object]]\npath = "build/o.dko.json"\nplace = "{place}"\ndevices = ["dt2"]\n'
+    )
+
+
+def test_object_with_code_but_no_code_range_is_refused(tmp_path):
+    _module(tmp_path, "x/code", [{"kind": "text", "name": "seg_pmco", "size": 12}])
+    _module(tmp_path, "x/data", [{"kind": "data", "name": "seg_dmda", "size": 12}])
+    w = {
+        "cpu": "sharc",
+        "kind": "place",
+        "addr": gate.L2_BYTE,
+        "what": "object in dsp.l2",
+    }
+    plan = _plan(
+        [
+            {**w, "owner": "x/code@0.1.0"},
+            {**w, "owner": "x/data@0.1.0"},
+            {**w, "owner": "x/gone@0.1.0"},
+            {**w, "owner": "x/code@0.1.0", "code": [[gate.L2_BYTE, gate.L2_BYTE + 12]]},
+        ]
+    )
+    got = gate.missing_code_ranges(plan, tmp_path)
+    assert [v.shape.split(":")[0] for v in got] == ["x/code", "x/gone"]
+    assert "has code" in got[0].shape and "cannot be read" in got[1].shape
+
+
+def test_check_image_refuses_a_plan_whose_object_lost_its_code_range(tmp_path):
+    # the fail-open path: no code range at all used to mean "nothing to check"
+    plan = _plan(
+        [
+            {
+                "cpu": "sharc",
+                "kind": "place",
+                "addr": gate.L2_BYTE,
+                "owner": "machines/plaits-48k@0.1.0",
+                "what": "object in dsp.l2",
+            }
+        ]
+    )
+    p = tmp_path / "p.json"
+    p.write_text(json.dumps(plan))
+    got = gate.check_image(tmp_path / "unused.syx", p)
+    assert len(got) == 1 and "machines/plaits-48k" in got[0].shape

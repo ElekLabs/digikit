@@ -22,7 +22,9 @@ routine that stalled the owner's unit returned, never occurs in stock code (docs
 
 Code versus data: a plan lists, for every object placed in L2 ("place" writes), the byte ranges that
 are code ("code"); the rest of the object (tables, buffers) is data and is not decoded. Hook sites
-(`hooks[]` with cpu "sharc") are code too. Registries and sections are data.
+(`hooks[]` with cpu "sharc") are code too. Registries and sections are data. An object place write that lists no
+code range although its module's object has a text section (or the object cannot be read) is refused: the gate
+would otherwise decode nothing of it.
 """
 
 from __future__ import annotations
@@ -269,6 +271,61 @@ def code_ranges(plan: dict) -> list[tuple[int, int]]:
     return out
 
 
+OBJECT_IN = "object in "
+
+
+def _has_text(moddir: Path, region: str, device: str) -> bool | None:
+    """Whether the module in `moddir` places a SHARC object with a non-empty text section in `region` (None: the
+    module or its object cannot be read)."""
+    manifest = moddir / "module.toml"
+    if not manifest.exists():
+        return None
+    found = False
+    for o in tomllib.loads(manifest.read_text()).get("object", []):
+        if o.get("place") != region:
+            continue
+        devices = o.get("devices")
+        if devices and device not in devices:
+            continue
+        path = moddir / o.get("path", "")
+        if not path.is_file():
+            return None
+        doc = json.loads(path.read_text())
+        if doc.get("arch") != "sharc":
+            continue
+        found = True
+        if any(s.get("kind") == "text" and s.get("size") for s in doc["sections"]):
+            return True
+    return False if found else None
+
+
+def missing_code_ranges(plan: dict, modules: Path | None = None) -> list[Violation]:
+    """SHARC object place writes that list no code range although the object has code (or cannot be told): the
+    gate would decode nothing of them, so they are refused instead of passing unchecked."""
+    modules = modules or ROOT / "modules"
+    device = plan.get("base", {}).get("device", "")
+    out: list[Violation] = []
+    for w in plan["writes"]:
+        if w["cpu"] != "sharc" or w["kind"] != "place" or w.get("code"):
+            continue
+        what = w.get("what", "")
+        if not what.startswith(OBJECT_IN):
+            continue
+        owner = w.get("owner", "").rsplit("@", 1)[0]
+        has = _has_text(modules / owner, what[len(OBJECT_IN) :], device)
+        if has is False:
+            continue  # a data-only object
+        why = "has code" if has else "cannot be read to tell whether it has code"
+        out.append(
+            Violation(
+                byte_to_sw(w["addr"]),
+                "",
+                f"{owner}: {what} lists no code range but {why} (refused: nothing of it would be checked)",
+            )
+        )
+    return out
+
+
 def default_db(plan: dict) -> Path:
     base = plan["base"]
     return ROOT / "out" / "sharcdb" / f"{base['device']}-{base['version']}.sqlite"
@@ -279,9 +336,10 @@ def check_image(syx: Path, plan: Path, db: Path | None = None) -> list[Violation
     from tools.patchkit import dsp_patch
 
     doc = json.loads(plan.read_text())
+    missing = missing_code_ranges(doc)
     ranges = code_ranges(doc)
     if not ranges:
-        return []
+        return missing
     db = db or default_db(doc)
     if not db.exists():
         raise SystemExit(
@@ -289,7 +347,7 @@ def check_image(syx: Path, plan: Path, db: Path | None = None) -> list[Violation
             "`uv run python -m tools.sharc_dev.sharcdb build out/sections/<image>/section_7_BLOB.bin`"
         )
     mem = LoadedMemory.from_stream(dsp_patch.section_blob(syx, 7))
-    return check_code(
+    return missing + check_code(
         mem,
         ranges,
         stock_shapes(db) | proven_shapes(),

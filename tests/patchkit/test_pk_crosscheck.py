@@ -191,3 +191,103 @@ def test_16a_width_bits_fail_closed():
     # sl/by set (a short-word or byte store): not cross-checked
     raw = f"{int('9fc0001c4b32', 16) | (1 << 33):012x}"
     assert "not cross-checked" in (_strict(raw, "dm (i7,m7)=0x1c4b32") or "")
+
+
+# ---- fail-closed paths: unhandled forms, statement counts, relocation addends
+
+
+def test_unhandled_form_fails_closed():
+    with pytest.raises(pk_crosscheck.CrossCheckError, match="not cross-checked yet"):
+        pk_crosscheck.native_operands("26a", {})
+
+
+@needs_selache
+def test_unhandled_form_in_a_source_is_refused_with_its_line():
+    src = ".SECTION/PM seg_pmco;\n_f:\n    R2 <-> S3;\n"
+    with pytest.raises(pk_sharc.PkSharcError) as e:
+        pk_sharc.assemble(src)
+    assert "line 3: `R2 <-> S3`" in str(e.value)
+    assert "5a_swap is not cross-checked yet" in str(e.value)
+
+
+@needs_selache
+def test_statement_count_mismatch_is_an_error(monkeypatch):
+    # The source check (and the listing quirks it vouches for) needs one statement per instruction; a source that
+    # does not map is refused, not silently checked against the listing only.
+    real = pk_crosscheck.statements
+    monkeypatch.setattr(pk_crosscheck, "statements", lambda pre: real(pre)[:-1])
+    src = ".SECTION/PM seg_pmco;\n_f:\n    R0 = 1;\n    R1 = 2;\n"
+    with pytest.raises(pk_sharc.PkSharcError) as e:
+        pk_sharc.assemble(src)
+    assert "1 source statements but 2 instructions" in str(e.value)
+
+
+def test_statement_count_mismatch_raises_in_check():
+    from tools.sharc_dev import sharc_selache as sel
+
+    cmp = sel.compare_external_bytes(bytes.fromhex("00010001"))  # two NOPs
+    with pytest.raises(pk_crosscheck.CrossCheckError, match="1 source statements"):
+        pk_crosscheck.check(b"", "seg_pmco", bytes.fromhex("00010001"), [(3, "NOP")])
+    assert len(cmp.instructions) == 2
+
+
+def test_symbol_refs_read_bare_names_constants_and_refuse_other_expressions():
+    names = {"_x", ".L_ret_1", "plaits_track."}
+    refs = pk_crosscheck.symbol_refs
+    assert refs("R0 = _x", names) == [("_x", 0)]
+    assert refs("R0 = _x + 8", names) == [("_x", 8)]
+    assert refs("DM(I7, M7) = _x - 1", names) == [("_x", -1)]
+    assert refs("DM (I7,M7)=.L_ret_1-1", names) == [(".L_ret_1", -1)]
+    assert refs("CJUMP plaits_track. (DB)", names) == [("plaits_track.", 0)]
+    assert refs("R0 = _x + 4 * 2", names) == [("_x", None)]
+    assert refs("R0 = 4 + _x", names) == [("_x", None)]
+    assert refs("R0 = _xy + 4", names) == []
+
+
+def test_check_addends_maps_statement_to_relocation():
+    names = {"_x"}
+    ok = pk_crosscheck.check_addends([(3, "R0 = _x + 8")], [0], [(0, "_x", 8)], names)
+    assert ok == []
+    dropped = pk_crosscheck.check_addends(
+        [(3, "R0 = _x + 8")], [0], [(0, "_x", 0)], names
+    )
+    assert len(dropped) == 1 and "_x+0" in dropped[0] and "_x+8" in dropped[0]
+    norel = pk_crosscheck.check_addends([(3, "JUMP _x + 2")], [0], [], names)
+    assert len(norel) == 1 and "without a relocation" in norel[0]
+
+
+def test_check_addends_unmapped_counts_relocations_per_addend():
+    names = {".L_r", "t."}
+    stmts = [(5, "DM (I7,M7)=.L_r-1"), (9, "R1 = t.")]
+    assert pk_crosscheck.check_addends_unmapped(stmts, [(0, ".L_r", -1)], names) == []
+    bad = pk_crosscheck.check_addends_unmapped(stmts, [(0, ".L_r", 0)], names)
+    assert len(bad) == 1 and ".L_r-1" in bad[0]
+
+
+@needs_selache
+def test_dropped_addend_is_refused_at_build_time():
+    # Selache relocates `R0 = _x + 8` as `_x` (field 0): the image would load _x, not _x + 8.
+    src = ".SECTION/PM seg_pmco;\n.EXTERN _x;\n_f:\n    R0 = _x + 8;\n"
+    with pytest.raises(pk_sharc.PkSharcError) as e:
+        pk_sharc.assemble(src)
+    assert "line 4: `R0 = _x + 8`" in str(e.value) and "_x+8" in str(e.value)
+
+
+@needs_selache
+def test_kept_addends_assemble():
+    # the forms where Selache keeps the constant: a jump target and a 16a store of a return address
+    src = (
+        ".SECTION/PM seg_pmco;\n.EXTERN _f;\n_a:\n    JUMP _f + 2;\n"
+        "    DM(I7, M7) = _b - 1;\n_b: NOP;\n"
+    )
+    obj = pk_sharc.assemble(src)
+    assert sorted((r.symbol, r.addend) for r in obj.relocs) == [("_b", -1), ("_f", 2)]
+
+
+@needs_selache
+def test_compiled_c_addends_are_checked_against_its_assembly():
+    # selcc computes array offsets in registers and stores return addresses as `label - 1` (kept): it builds.
+    obj = pk_sharc.compile_c(
+        "int t[8];\nint g(void);\nint *f(void){return &t[3];}\nint h(void){return g() + 1;}\n"
+    )
+    assert any(r.addend == -1 for r in obj.relocs)

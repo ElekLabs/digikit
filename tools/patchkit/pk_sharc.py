@@ -115,8 +115,15 @@ def split_symbol(name: str) -> tuple[str, int]:
 
 
 def _object(
-    obj: Path, source_sha: str, section: str | None, preprocessed: str | None = None
+    obj: Path,
+    source_sha: str,
+    section: str | None,
+    preprocessed: str | None = None,
+    compiled_asm: str | None = None,
 ) -> SharcObject:
+    """The object Selache wrote, cross-checked (tools/patchkit/pk_crosscheck.py). `preprocessed` is an assembly
+    source's preprocessor output (one statement per instruction is required); `compiled_asm` is selcc's assembly of a
+    C unit (used only to verify relocation addends)."""
     elf = pk_elf.parse(obj.read_bytes())
     if section is None:
         section = next(
@@ -137,7 +144,10 @@ def _object(
     if b"".join(r.raw for r in rows) != sec.data:
         raise PkSharcError("Selache listing bytes do not equal the section bytes")
     stmts = pk_crosscheck.statements(preprocessed) if preprocessed is not None else None
-    mismatches = pk_crosscheck.check(obj.read_bytes(), section, sec.data, stmts)
+    try:
+        mismatches = pk_crosscheck.check(obj.read_bytes(), section, sec.data, stmts)
+    except pk_crosscheck.CrossCheckError as e:
+        raise PkSharcError(f"cross-check (tools/patchkit/pk_crosscheck.py): {e}") from e
     if mismatches:
         raise PkSharcError(
             "Selache's listing and our decoder disagree on operands (tools/patchkit/pk_crosscheck.py):\n  "
@@ -156,6 +166,26 @@ def _object(
             raise PkSharcError("section-relative relocation not supported")
         name, add = split_symbol(r.symbol.name)
         relocs.append(SharcReloc(r.offset, r.rtype, name, add + r.addend))
+    # Selache drops the constant of `symbol + constant` in some forms: every reference must match its relocation.
+    names = {split_symbol(s.name)[0] for s in elf.symbols if s.name}
+    rel3 = [(r.parcel, r.symbol, r.addend) for r in relocs]
+    if stmts is not None:
+        parcels = [
+            i.external.parcel_address
+            for i in sel.compare_external_bytes(sec.data).instructions
+        ]
+        bad = pk_crosscheck.check_addends(stmts, parcels, rel3, names)
+    elif compiled_asm is not None:
+        bad = pk_crosscheck.check_addends_unmapped(
+            pk_crosscheck.statements(compiled_asm), rel3, names
+        )
+    else:
+        bad = []
+    if bad:
+        raise PkSharcError(
+            "relocation addends (docs/findings/20-patch-toolchains.md):\n  "
+            + "\n  ".join(bad)
+        )
     tc = {"selache_rev": sel.PINNED_REVISION}
     for n in ("selas", "seldump"):
         tc[n + "_sha256"] = hashlib.sha256(_tool(n).read_bytes()).hexdigest()
@@ -406,6 +436,23 @@ def compile_c(
         )
         if r.returncode:
             raise PkSharcError(f"selcc failed:\n{r.stdout}{r.stderr}")
+        asm = Path(d) / "m.s"
+        r = subprocess.run(
+            [
+                str(_tool("selcc")),
+                "-proc",
+                PROCESSOR,
+                *flags,
+                "-S",
+                "-o",
+                str(asm),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode:
+            raise PkSharcError(f"selcc -S failed:\n{r.stdout}{r.stderr}")
         elf = pk_elf.parse(obj.read_bytes())
         code = sorted(
             x.name
@@ -420,6 +467,7 @@ def compile_c(
             obj,
             hashlib.sha256(pre.read_bytes()).hexdigest(),
             code[0] if code else section,
+            compiled_asm=asm.read_text(),
         )
         result.toolchain["selcc_sha256"] = hashlib.sha256(
             _tool("selcc").read_bytes()
