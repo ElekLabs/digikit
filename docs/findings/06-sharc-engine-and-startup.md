@@ -6018,3 +6018,29 @@ sample (the `dt2-sample-trig` setting). The busy counts agree with the `status.a
   most **2 tracks triggered as PLAITS on the 48k image** (73.4 % measured; the worst-case parameters reach the
   budget, 81 to 85 %) and **1 on the 96k image** (2 tracks measure 85.6 % at default parameters). 3 tracks at 48 kHz
   project to 100 to 106 % high at the worst case. The high bound rests on the assumed L2/DDR latencies (section above).
+
+## PLAITS model 1 (ASYM-TRI): measured DSP load per block (Task 7, 2026-10-17) **[D]**
+
+One agent, emulator only, the method of the section above unchanged (paired 500 / 2,500 ms windows, `SHARC_CYCMIX`,
+`sharc_cpi.cost_profile` against `sharcdb build --blocks 56,69,76,78,80,88,91,93,103,104,107` of the patched image; the
+H3 image keeps those block indices). Image `out/patch/plaits-2models-48k-1.17.syx` (machines/plaits-48k with VA and
+ASYM-TRI); each PLAITS track set to MODEL 1 (row value 0x100) by knob B before its counted trig, the other knobs at
+their defaults (0x4000). Stock baseline: the section above's stock runs.
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| plaits-2models-48k, 1 track ASYM-TRI | `0x0000000b` | 250,991 | 268,327 / 300,769 / 396,851 | 40.2 / 45.1 / 59.5 |
+| plaits-2models-48k, 2 tracks ASYM-TRI | `0x000b000b` | 288,936 | 310,876 / 352,473 / 476,974 | 46.6 / 52.9 / **71.5** |
+
+- **Per ASYM-TRI track** (2-track runs, against stock): +39,523 instructions and 46,141 / 57,178 / 90,927 cycles, so
+  1.17 / 1.45 / 2.30 cycles per added instruction (1-track runs: 1.21 / 1.52 / 2.48). Fewer instructions than VA
+  (+60,175), but more stalls per instruction at the high bound: every sample reads seven table words (waveshaper,
+  two wavefolders, sine) from L2, which the high bound's latencies charge. At the high bound one ASYM-TRI track costs
+  about as many cycles as one VA track (90,900 to 101,700 against 97,100).
+- **Worst case.** The concrete core's worst ASYM-TRI block is 42,307 instructions at 48 kHz (65,842 with the
+  half-band) (tests/patchkit/test_plaits_module.py `test_extreme_parameters_compiled_core_asym_tri`; VA's is now
+  76,249 / 99,784, 13 above H2 for the model dispatch). At the measured ratios: 2 ASYM-TRI tracks 73.5 to 75.7 % high,
+  3 tracks 88 to 91 % high; one VA plus one ASYM-TRI track at their worst about 78 % high; 2 VA tracks stay the
+  heaviest pair (81.2 %, 85.1 % with the 1-track ratio, section above).
+- **Limit unchanged:** VA remains the heaviest ported model, so the 48k rule stays **at most 2 tracks triggered as
+  PLAITS since boot**, any mix of models. No 96k image carries ASYM-TRI to the owner.

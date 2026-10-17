@@ -1,4 +1,4 @@
-# PLAITS on the unit: H1 (the hook) and H2 (the machine)
+# PLAITS on the unit: H1 (the hook), H2 (the machine) and H3 (a second model)
 
 One decision tree for the owner's hardware round on a Digitakt II with OS 1.17. H1 tests core/dsp-inline with a
 plain sine (test/inline-tone); H2 tests machines/plaits (the VA model) on the same hook. The images are firmware
@@ -22,6 +22,7 @@ reports 0 errors; `uv run python -m tools.patchkit.pk_encoding_gate X X.plan.jso
 | `out/patch/h1a-tone-96k-1.17.syx` | `bc6a3314170f013b5974cf35b8f001e76adcb000f6c843ae961648af2b8fb139` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules test/inline-tone-96k -o out/patch/h1a-tone-96k-1.17.syx` |
 | `out/patch/plaits-va-48k-1.17.syx` | `507434164c90e42f26c3111d9b5a366b8b2b36f6d7d100c4e519b80d5c3f7492` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-va-48k-1.17.syx` |
 | `out/patch/plaits-va-96k-1.17.syx` | `f37e87a0025ab07895c17275c5e0ee531e04125de34feafa0866781cc761c83f` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-96k -o out/patch/plaits-va-96k-1.17.syx` |
+| `out/patch/plaits-2models-48k-1.17.syx` (H3) | `68fee193f40a611a58613409b3e9c4a81fa242fcf3b09355fa7f073d75d236e4` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-2models-48k-1.17.syx` |
 | `out/patch/diag-h1-i13return-48k-1.17.ungated.syx` | `401ccf2be3f2814e4bb79c6aed1872912da4ee73f2010e93c5b387fbf4279cf3` | a copy of the pre-Task-5b h1b; not rebuildable from this branch |
 | `out/patch/diag-h1-i13return-96k-1.17.ungated.syx` | `02926b3f833ccdaa51172b98af3de83c4f65779999a3ea901d1a527c6796652c` | a copy of the pre-Task-5b h1a; not rebuildable from this branch |
 
@@ -74,6 +75,33 @@ interrupt-safe without a code change, so they equal the images of Task 6).
 6. Record every result in the design's hardware table, and the shapes or `word =` entries of each image that passed in
    tools/patchkit/encoding_proven.toml. Decision for PLAITS: h1b passing keeps mode 1 (plaits-48k) as the default;
    otherwise mode 0 (plaits-96k).
+
+## H3: model 1, ASYM-TRI (only after H2 with plaits-48k passed)
+
+H3 (`out/patch/plaits-2models-48k-1.17.syx`, `68fee193…`) is H2 plus model 1, ASYM-TRI (Plaits' waveshaping model).
+Model 0 (VA) renders bit for bit as in H2 (tests/patchkit/test_plaits_model0_h2.py). The model numbers now follow
+Plaits' own order: 0 VA, 1 ASYM-TRI, 2 2FM, ... 23 SQUARE; 2 to 23 still play silence. Flash it only after step 3
+(H2 with plaits-48k) passed; there is no 96k H3 image.
+
+1. Flash H3. FUNC+SRC, 7 x DOWN (PLAITS, the 8th entry), YES on track 1. Check that track 2 still plays its sample.
+   Trig track 1 with MODEL 0: the H2 VA tone at 261.6 Hz, unchanged.
+2. Turn MODEL (knob B) to 1. A MODEL change takes effect at the next note-on: trig again. Note 60 is 261.6 Hz, a
+   folded-triangle tone that sounds clearly different from VA.
+3. On model 1, per the Plaits manual (the waveshaping model: an asymmetric triangle through a waveshaper and a
+   wavefolder; AUX a variant with another wavefolder curve):
+   - HARMONICS (C): the waveshaper's waveform (the middle is the linear shaper; either end gives other curves).
+   - TIMBRE (E): the wavefolder amount (more folds, brighter and buzzier as it rises).
+   - MORPH (F): the waveform's asymmetry (triangle to saw-like).
+   - MIX (G) to the right: the AUX variant (a sine at TIMBRE 0, the second wavefolder as TIMBRE rises).
+4. MODEL p-lock: hold a trig and set MODEL to 1 on steps 1, 5, 9, 13, leave MODEL 0 on steps 3, 7, 11, 15, PLAY:
+   the two models alternate step by step. Also p-lock TUNE, HARMONICS, TIMBRE, MORPH on single steps of model 1.
+5. Save the project, reboot, load it: MODEL and the knob values are back and model 1 plays.
+6. **Track rule (unchanged from H2): never more than 2 tracks triggered as PLAITS since boot on this image,** with
+   any mix of models. Two ASYM-TRI tracks measure 71.5 % of the block at the high bound and 73.5 to 75.7 % at
+   worst-case settings; two VA tracks at worst-case settings (81 to 85 %) still set the limit (finding 06). A track stops costing DSP only after it has been triggered under another machine.
+- **H3 stalls or is silent** while H2 passed: recover (hold FUNC at power-on, TRIG 4, send the stock
+  `firmware/Digitakt_II_OS1.17.syx` with Transfer's legacy mode over MIDI DIN), go back to the H2 image
+  (`plaits-va-48k-1.17.syx`, `50743416…`) and report which step failed.
 
 ## Known, not faults
 
