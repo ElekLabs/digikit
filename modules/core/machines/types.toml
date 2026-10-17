@@ -21,6 +21,7 @@ last = 23
 "test/machine-clone:xclone" = 8
 "machines/pluck:pluck" = 9
 "test/inline-tone:itone" = 10
+"machines/plaits:plaits" = 11
 
 [dn2]
 last = 23

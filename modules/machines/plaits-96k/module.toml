@@ -1,0 +1,37 @@
+[module]
+id = "machines/plaits-96k"
+version = "0.1.0"
+name = "Plaits, 96 kHz work buffer"
+category = "machines"
+status = "experimental"
+summary = "PLAITS rendered at 48 kHz, interpolated to 96 kHz into the work buffer, then the stock decimator."
+ports = ["dt2-1.17"]
+requires = ["machines/plaits", "core/dsp-inline"]
+conflicts = ["machines/plaits-48k"]
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# The PLAITS voice routine (modules/machines/plaits: the entry shim src/dsp/plaits_entry.s, the C voice wrapper and
+# engines) in mode 0: the 48 kHz block interpolated 2x by the half-band filter (src/dsp/halfband.c) into the 64-sample
+# work buffer, then the stock decimator (core/dsp-inline `_di_return_work`). src/dsp/mode.s, listed first, defines
+# PLAITS_MODE for the shim; the C sources are the same in both builds (the shim passes the output rate). Image:
+# out/patch/plaits-va-96k-1.17.syx.
+[[object]]
+path = "build/plaits-96k-dsp.dko.json"
+sources = [
+  "src/dsp/mode.s",
+  "../plaits/src/dsp/plaits_entry.s",
+  "../plaits/src/dsp/plaits.c",
+  "../plaits/src/dsp/engines/va.c",
+  "../plaits/src/dsp/halfband.c",
+]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[entry]]
+registry = "inline_voices"
+id = "plaits"
+type = "machines.plaits.index"
+pc = "_pl_render"
+devices = ["dt2"]

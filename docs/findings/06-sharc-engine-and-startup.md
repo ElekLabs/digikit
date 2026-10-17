@@ -5955,3 +5955,24 @@ voice in record order. The lab read `(DM(0x24f0cc) >> 8v) & 0xff` for v = 0 and 
   (0x1c6b06) with the caller's registers and frame restored (tests/patchkit/test_dsp_inline.py).
 - Open **[O]**: mode 1 (`_di_return_out`, skipping the decimator) is not yet tried on the unit; its decimator state
   stays stale across a switch back to mode 0 or to a stock type.
+
+## machines/plaits on core/dsp-inline: the circular stack and ACTIVE (2026-10-17) **[D]**
+
+- **The firmware's C stack is a circular buffer.** Its startup sets `B7 = 0x26f000`, `L7 = 0x1fd`, `B6 = B7`,
+  `L6 = L7` (SW 0x1c0f64..0x1c0f76; a second path loads them from a table at SW 0xb885cf..0xb885de), and MODE1 has
+  CBUFEN (bit 24) on. A routine that moves I7 to a stack of its own (machines/plaits' `_pl_stack` in L2) has every
+  post-modify push and every `MODIFY(I6|I7, n)` wrapped by L: in the emulator the first `DM(I7, M7) = R0` on the new
+  stack moved I7 down by 0xf8c bytes instead of 4, the C frames landed in the voice state and the first return jumped
+  to SW 0x8c017d (native trap "no decoded instruction"; on the unit, a stall). The PLAITS entry shim saves L6/L7, sets
+  them to 0 for the C call and restores them; the concrete-core rigs (tests/support/plaits_rig.py) now run with the
+  firmware's circular registers and MODE1, which fails the shim without that fix. The concrete core wraps a
+  load/store post-modify only under CBUFEN and only by the manual's compare against B and B + L.
+- **ACTIVE (+0x1b8) never clears under an inline type.** Emulator, image h1b (ITONE, a MANUAL SLICE clone on
+  core/dsp-inline): ACTIVE of voices 0 and 1 is 0 at boot, 1 50 ms into a held trig, and still 1 three seconds after
+  the release; word +0 holds the track's sample pointer. Its writers are the arm `0x1c4eaf` (set by the trigger latch)
+  and the stock renderer `0x1c4f81` (cleared at the end of a sample), and the hook replaces the renderer after the
+  prologue, so nothing clears it. Also measured: changing the track's machine without a trig leaves the DSP's type
+  cache unchanged (finding above: the type reaches the DSP at the next trig). PLAITS therefore renders a voice when it
+  was triggered under PLAITS (its own armed flag) **and** ACTIVE is set: ACTIVE drops only when a stock type played
+  a sample to its end in between, which the image test
+  `test_image_away_on_a_stock_type_clears_active_and_plaits_stays_silent_until_trig` runs through the stock renderer.

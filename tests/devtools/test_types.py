@@ -79,6 +79,11 @@ TYPED = [
     "tools/patchkit/pk_crosscheck.py",
     "tests/patchkit/test_pk_crosscheck.py",
     "tests/patchkit/test_pk_build_c.py",
+    "tests/plaits/test_va_host.py",
+    "tests/support/plaits_host.py",
+    "tests/support/plaits_rig.py",
+    "tests/patchkit/test_plaits_module.py",
+    "tools/patchkit/pk_proof_plaits.py",
 ]
 
 

@@ -1,0 +1,528 @@
+#!/usr/bin/env python3
+"""patchkit proof: the PLAITS machine (VA model) end to end on Digitakt II 1.17, in the emulator, through the panel.
+
+    uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g] [--jobs N]
+
+Loads the owner image (default out/patch/plaits-va-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
+through the harness (`tools/patchkit/pk_harness.py` Session: panel inputs, health asserted after every input) and
+captures the main output (`pcm.tap`):
+
+  a  pitch     FUNC+SRC, 7 x DOWN (the 8th entry), YES commits type 11 (machines/plaits:plaits); a trig brings the
+               type to the DSP (type cache DM 0x255970); note 60 held 1 s: the fundamental is within 1 cent of
+               261.6256 Hz, and the track's ACTIVE byte stays 1 after the note ends (docs/findings/06).
+  b  knobs     HARMONICS (C), TIMBRE (E) and MORPH (F) turned on the SRC page change their engine slot, the TX frame word
+               and the spectrum of the note (harmonic magnitudes against the default note).
+  c  stock     LEV (H) lowered acts through the level stage (a square) on PLAITS as on a stock sample; the filter (FLTR page, E) closed
+               cuts the high band; the reverb send (FX page, F) adds the reverb's stereo return.
+  d  two       PLAITS on tracks 1 and 2 (track 2 TUNE + 7): both notes sound together, at 261.6 and 392.0 Hz.
+  e  persist   save the project with edited PLAITS values, set track 1 to ONESHOT, load: type 11 and the values are
+               back. The card's writes over the STOCK 1.17 card: the project loads without a fault and track 1 comes
+               back as type 0 (ONESHOT): the stock loader keeps a type only when `(u8)(type + 1) < 8` (finding 02).
+  g  gain      the gain calibration: track 1's stock sample (its int16 data read from DSP memory for its peak) and then
+               PLAITS default VA at note 60 on the same track and LEV: the RMS of the sample normalised to full scale
+               against PLAITS' (Task 6 report, "Gain calibration").
+
+Output (WAV, card images, results.json) goes under OUT (default out/runs/plaits-proof) and is never committed. Exit 0
+only when every check passes. Addresses are the DT2 1.17 ones of findings 02, 04 and 06.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sys
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
+
+from tools.emulator import card_overlay  # noqa: E402
+from tools.patchkit import hook_ab  # noqa: E402
+from tools.patchkit import pk_harness as H  # noqa: E402
+from tools.patchkit import pk_proof_machines as M  # noqa: E402
+from tools.patchkit import pk_proofkit as K  # noqa: E402
+
+PLAITS_TYPE = 11
+PLAITS_DOWNS = 7  # the 8th entry of FUNC+SRC (types 7..10 are gap rows in this image)
+MODS = ["machines/plaits-48k"]
+TYPE_CACHE = 0x255970
+RECORDS, REC = 0x2412CC, 0x1D8
+PITCH_WORD = 0x80005348
+FS = 48000.0
+NOTE60 = 261.6256
+HARM, TIMB, MORPH, LEV = (
+    27,
+    31,
+    32,
+    34,
+)  # engine slots (mirror indexes) of knobs C, E, F, H
+ENC = {HARM: "ENC C", TIMB: "ENC E", MORPH: "ENC F", LEV: "ENC H"}
+DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-va-48k-1.17.syx"
+
+
+def left_of(pcm: np.ndarray) -> np.ndarray:
+    return pcm[0::2].astype(np.float64)
+
+
+def onset(x: np.ndarray, thresh: float = 1e-4) -> int:
+    idx = np.flatnonzero(np.abs(x) > thresh)
+    return int(idx[0]) if len(idx) else -1
+
+
+def f0_fft(x: np.ndarray, guess: float) -> float:
+    """The strongest peak within +-20 % of GUESS: Hann window, 8x zero padding, parabolic interpolation in log."""
+    x = x - x.mean()
+    n = len(x)
+    pad = 8 * n
+    sp = np.abs(np.fft.rfft(x * np.hanning(n), pad))
+    fr = np.fft.rfftfreq(pad, 1 / FS)
+    lo, hi = np.searchsorted(fr, guess * 0.8), np.searchsorted(fr, guess * 1.2)
+    i = lo + int(np.argmax(sp[lo:hi]))
+    a, b, c = (math.log(sp[j] + 1e-30) for j in (i - 1, i, i + 1))
+    return float((i + 0.5 * (a - c) / (a - 2 * b + c)) * FS / pad)
+
+
+def harmonics_db(x: np.ndarray, f0: float, k: int = 12) -> np.ndarray:
+    """Magnitudes (dB, relative to the strongest) of harmonics 1..k of f0."""
+    n = len(x)
+    sp = np.abs(np.fft.rfft((x - x.mean()) * np.hanning(n)))
+    fr = np.fft.rfftfreq(n, 1 / FS)
+    mags = []
+    for h in range(1, k + 1):
+        j = int(np.argmin(np.abs(fr - h * f0)))
+        mags.append(float(np.max(sp[max(0, j - 2) : j + 3])))
+    m = np.array(mags) + 1e-12
+    return 20 * np.log10(m / m.max())
+
+
+def rms(x: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(x**2))) if len(x) else 0.0
+
+
+def band_db(x: np.ndarray, lo: float, hi: float) -> float:
+    sp = np.abs(np.fft.rfft(x * np.hanning(len(x)))) ** 2
+    fr = np.fft.rfftfreq(len(x), 1 / FS)
+    return float(10 * math.log10(np.sum(sp[(fr >= lo) & (fr < hi)]) + 1e-30))
+
+
+class PlaitsProof(M.Proof):
+    tool = "plaits"
+    image: Path = DEFAULT_IMAGE
+
+    def plaits(self, s: H.Session) -> None:
+        """A fresh start with PLAITS selected on track 1 and the SRC page open."""
+        self.fresh(s)
+        self.select(s, PLAITS_DOWNS)
+        s.do_tap("SRC")
+        s.run_ms(300)
+
+    def play(
+        self,
+        s: H.Session,
+        name: str,
+        keys: tuple[str, ...] = ("TRIG 1",),
+        hold: int = 600,
+        total: int = 900,
+    ) -> np.ndarray:
+        """Hold KEYS together with PCM capture; the left channel."""
+        assert s.emu is not None
+        wav = self.out / f"{name}.wav"
+        s.emu.call("pcm.tap", action="capture", path=str(wav))
+        for k in keys:
+            s.emu.button(H.button(k), True)
+        s.run_ms(hold)
+        for k in keys:
+            s.emu.button(H.button(k), False)
+        s.run_ms(total - hold)
+        s.emu.call("pcm.tap", action="capture_stop")
+        s.health(f"play {name}")
+        return left_of(hook_ab.read_wav(wav))
+
+    def held(self, x: np.ndarray, start_ms: int = 60, ms: int = 450) -> np.ndarray:
+        a = onset(x)
+        if a < 0:
+            return x[:0]
+        a += int(start_ms * FS / 1000)
+        return x[a : a + int(ms * FS / 1000)]
+
+    def type_cache(self, s: H.Session) -> int:
+        assert s.emu is not None
+        raw = s.emu.dsp_peek(TYPE_CACHE, 4)["hex"]
+        return int.from_bytes(bytes.fromhex(raw), "little")
+
+    def session_plaits(self, tag: str = "", pool: bool = True) -> K.Lease:
+        return self.session(MODS, tag, pool=pool, image=self.image)
+
+    # -- a: select, type, pitch, ACTIVE
+    def part_a(self) -> None:
+        with self.session_plaits() as s:
+            self.plaits(s)
+            self.check(
+                "FUNC+SRC 8th entry commits type 11",
+                self.type_now(s) == PLAITS_TYPE,
+                f"{self.type_now(s)}",
+            )
+            x = self.play(s, "note60", hold=1200, total=1500)
+            tc = self.type_cache(s)
+            self.check(
+                "the trig brings type 11 to the DSP",
+                tc & 0xFFFF == PLAITS_TYPE,
+                f"{tc:#010x}",
+            )
+            seg = self.held(x, 100, 1000)
+            self.check("note 60 sounds", rms(seg) > 1e-3, f"rms {rms(seg):.4f}")
+            if rms(seg) > 1e-3:
+                f = f0_fft(seg, NOTE60)
+                c = 1200 * math.log2(f / NOTE60)
+                self.results_extra["note60_hz"] = f
+                self.check(
+                    "note 60 within 1 cent of 261.6256 Hz",
+                    abs(c) < 1.0,
+                    f"{f:.4f} Hz, {c:+.3f} cent",
+                )
+            assert s.emu is not None
+            act = [
+                bytes.fromhex(s.emu.dsp_peek(RECORDS + v * REC + 0x1B8, 4)["hex"])[0]
+                for v in (0, 1)
+            ]
+            self.results_extra["active_after_note"] = act
+            self.check(
+                "ACTIVE stays set after the note under PLAITS (never cleared)",
+                act == [1, 1],
+                f"{act}",
+            )
+
+    # -- b: knobs change the spectrum
+    def part_b(self) -> None:
+        with self.session_plaits() as s:
+            self.plaits(s)
+            ref = self.held(self.play(s, "default"))
+            href = harmonics_db(ref, NOTE60)
+            for idx, name, target in (
+                (HARM, "HARMONICS", 0x7000),
+                (TIMB, "TIMBRE", 0x7800),
+                (MORPH, "MORPH", 0x0800),
+            ):
+                before = s.mirror(idx)
+                s.turn_to(ENC[idx], idx, target)
+                after = s.mirror(idx)
+                x = self.held(self.play(s, name.lower()))
+                tx = s.tx_word(idx)
+                h = harmonics_db(x, f0_fft(x, NOTE60) if rms(x) > 1e-3 else NOTE60)
+                d = float(np.mean(np.abs(h[:10] - href[:10])))
+                self.check(
+                    f"{name} moves its slot and the TX word",
+                    abs(after - target) <= 0x300 and abs(tx - after) <= 0x300,
+                    f"slot {before:#x} -> {after:#x}, tx {tx:#x}",
+                )
+                self.check(
+                    f"{name} changes the spectrum",
+                    d > 1.5,
+                    f"mean |d harmonic| {d:.2f} dB",
+                )
+                s.turn_to(ENC[idx], idx, before)
+
+    # -- c: LEV, filter, reverb send act as on a stock track
+    def quiet_play(self, s: H.Session, name: str, **kw: Any) -> np.ndarray:
+        """`play` after 2.5 s without a note: the default amp release of the last note has ended."""
+        s.run_ms(2500)
+        return self.play(s, name, **kw)
+
+    def part_c(self) -> None:
+        with self.session_plaits() as s:
+            self.plaits(s)
+            # LEV: the level stage is a square (finding 06): 20 log10 of the RMS ratio is 40 log10 of the value ratio
+            full = rms(self.held(self.quiet_play(s, "lev-full")))
+            lev = s.mirror(LEV)
+            got = s.turn_to(ENC[LEV], LEV, lev // 2)
+            half = rms(self.held(self.quiet_play(s, "lev-half")))
+            d_pl = 20 * math.log10(max(half, 1e-9) / max(full, 1e-9))
+            want_pl = 40 * math.log10(got / lev)
+            s.turn_to(ENC[LEV], LEV, lev)
+            s.do_tap(
+                ["TRK", "TRIG 2"]
+            )  # track 2: a stock sample (ONESHOT in the default project)
+            s.run_ms(200)
+            s.do_tap("SRC")
+            s.run_ms(200)
+            sfull = rms(
+                self.held(
+                    self.quiet_play(s, "stock-lev-full", keys=("TRIG 2",)), 5, 200
+                )
+            )
+            slev = s.mirror(LEV, 1)
+            sgot = s.turn_to(ENC[LEV], LEV, slev // 2, track=1)
+            shalf = rms(
+                self.held(
+                    self.quiet_play(s, "stock-lev-half", keys=("TRIG 2",)), 5, 200
+                )
+            )
+            d_st = 20 * math.log10(max(shalf, 1e-9) / max(sfull, 1e-9))
+            want_st = 40 * math.log10(sgot / slev)
+            self.check(
+                "LEV lowered: PLAITS follows the level stage as a stock sample does",
+                abs(d_pl - want_pl) < 0.5 and abs(d_st - want_st) < 0.5,
+                f"PLAITS {d_pl:.2f} dB (LEV {lev:#x} -> {got:#x}: {want_pl:.2f}), "
+                f"stock {d_st:.2f} dB ({slev:#x} -> {sgot:#x}: {want_st:.2f})",
+            )
+            s.do_tap(["TRK", "TRIG 1"])
+            s.run_ms(200)
+            # filter: FLTR page, E = FREQ (engine slot 36), from open to 0x1000
+            open_ = self.held(self.quiet_play(s, "flt-open"))
+            s.do_tap("FLTR")
+            s.run_ms(200)
+            freq = s.turn_to("ENC E", 36, 0x1000, tol=0x400)
+            closed = self.held(self.quiet_play(s, "flt-closed"))
+            hf = band_db(closed, 2000, 16000) - band_db(open_, 2000, 16000)
+            self.check(
+                "the filter closes on PLAITS (2-16 kHz)",
+                hf < -12,
+                f"FREQ {freq:#x}: {hf:.1f} dB",
+            )
+            s.turn_to("ENC E", 36, 0x7F00, tol=0x400)
+
+            # reverb: FX page, F = REV (Reverb Send, engine slot 56). PLAITS' two voices carry the same block, so the
+            # dry output has no side signal (L - R); the reverb's stereo return has.
+            def side(name: str) -> float:
+                wav = self.out / f"{name}.wav"
+                pcm = hook_ab.read_wav(wav).astype(np.float64)
+                return rms(pcm[0::2] - pcm[1::2])
+
+            self.quiet_play(s, "rev-dry", hold=300, total=1500)
+            s.do_tap("FX")
+            s.run_ms(200)
+            rev = s.turn_to("ENC F", 56, 0x7000, tol=0x400)
+            self.quiet_play(s, "rev-send", hold=300, total=1500)
+            sd, sw = side("rev-dry"), side("rev-send")
+            self.check(
+                "the reverb send adds the reverb's (stereo) return",
+                sw > 1e-3 and sw > 30 * max(sd, 1e-7),
+                f"REV {rev:#x}: side rms dry {sd:.2e}, send {sw:.2e}",
+            )
+
+    # -- d: two tracks at once
+    def part_d(self) -> None:
+        with self.session_plaits() as s:
+            self.plaits(s)
+            s.do_tap(["TRK", "TRIG 2"])
+            s.run_ms(200)
+            self.select(s, PLAITS_DOWNS)  # track 2 is ONESHOT too: the same 7 x DOWN
+            s.do_tap("SRC")
+            s.run_ms(200)
+            s.do_hold(
+                "TRIG 2", 40
+            )  # the first trig loads the machine's defaults into the slots
+            s.run_ms(300)
+            s.turn_to("ENC A", 25, 0x4700, tol=0x40, track=1)  # TUNE + 7 semitones
+            s.do_tap(["TRK", "TRIG 1"])
+            s.run_ms(200)
+            x = self.held(
+                self.play(s, "two-tracks", ("TRIG 1", "TRIG 2"), hold=900, total=1100),
+                100,
+                700,
+            )
+            tc = self.type_cache(s)
+            self.check(
+                "both tracks are PLAITS at the DSP",
+                tc == (PLAITS_TYPE | PLAITS_TYPE << 16),
+                f"{tc:#010x}",
+            )
+            ok = rms(x) > 1e-3
+            tune2 = s.mirror(25, 1)
+            want2 = NOTE60 * 2 ** (
+                (tune2 - 0x4000) / 256 / 12
+            )  # track 2's TUNE as the knob left it
+            f1 = f0_fft(x, NOTE60) if ok else 0.0
+            f2 = f0_fft(x, want2) if ok else 0.0
+            c1 = 1200 * math.log2(max(f1, 1) / NOTE60)
+            c2 = 1200 * math.log2(max(f2, 1) / want2)
+            self.check(
+                "both notes sound together (track 1 note 60, track 2 note 60 + its TUNE)",
+                ok and abs(c1) < 5 and abs(c2) < 5,
+                f"{f1:.2f} Hz ({c1:+.2f} cent), {f2:.2f} Hz against {want2:.2f} (TUNE {tune2:#x}, {c2:+.2f} cent)",
+            )
+
+    # -- e: persistence, then the saved project on stock
+    def part_e(self) -> None:
+        overlay = self.out / "card.overlay"
+        want = {HARM: 0x1800, TIMB: 0x6000, MORPH: 0x2400}
+        with self.session_plaits("persist", pool=False) as s:
+            self.plaits(s)
+            s.do_hold("TRIG 1", 100)
+            s.run_ms(200)
+            for idx, v in want.items():
+                s.turn_to(ENC[idx], idx, v)
+            keep = {i: s.mirror(i) for i in (25, 26, 27, 31, 32, 33, 34)}
+            self.save_project(s)
+            self.select(s, 0, ups=PLAITS_DOWNS + 2)  # ONESHOT
+            self.check(
+                "track 1 set to ONESHOT", self.type_now(s) == 0, f"{self.type_now(s)}"
+            )
+            self.load_project(s, lambda: self.type_now(s) == PLAITS_TYPE)
+            self.check(
+                "project reload brings type 11 back",
+                self.type_now(s) == PLAITS_TYPE,
+                f"{self.type_now(s)}",
+            )
+            for _ in range(8):
+                s.do_hold("TRIG 1", 40)
+                s.run_ms(260)
+                if {i: s.mirror(i) for i in keep} == keep:
+                    break
+            back = {i: s.mirror(i) for i in keep}
+            self.check(
+                "and the PLAITS values",
+                back == keep,
+                f"{ {i: hex(v) for i, v in back.items()} }",
+            )
+            x = self.held(self.play(s, "reloaded"), 60, 300)
+            self.check(
+                "the reloaded PLAITS track sounds", rms(x) > 1e-3, f"rms {rms(x):.4f}"
+            )
+            assert s.emu is not None
+            r = s.emu.call("card.overlay", path=str(overlay))
+            self.check(
+                "card writes exported", r["sectors"] > 0, f"{r['sectors']} sectors"
+            )
+            card = s.card
+        types = card_overlay.sound_types(overlay.read_bytes())
+        self.check(
+            "the saved project stores type 11",
+            types.get(PLAITS_TYPE, 0) > 0,
+            f"{types}",
+        )
+        base = Path(card or "")
+        out_img = self.out / "card-after-save.img"
+        if not base.is_file():
+            self.check("card image found", False, str(base))
+            return
+        n = card_overlay.apply(base, overlay, out_img)
+        self.check("card image with the saved project written", n > 0, f"{n} sectors")
+        with self.session([], "saved-card", pool=False) as s:
+            assert s.emu is not None
+            s.card = str(out_img)
+            s.load(s.syx, settle=False)
+            s.emu.drain_events()
+            s.run_ms(300)
+            s.emu.pcm_start()
+            s.pcm_mark = 0
+            s.health("stock with the saved card")
+            self.load_project(s)
+            t = self.type_now(s)
+            self.check(
+                "STOCK 1.17 loads the project without a fault; track 1 falls back to type 0 (the loader's bound)",
+                t == 0,
+                f"type {t}",
+            )
+            s.run_ms(500)
+            s.do_hold("TRIG 1", 300)
+            s.run_ms(300)
+            s.health("stock after loading the patched project")
+
+    # -- g: gain calibration
+    def part_g(self) -> None:
+        with self.session_plaits() as s:
+            self.fresh(s)
+            assert s.emu is not None
+            # track 1's stock sample (ONESHOT in the default project): output, and its data from DSP memory
+            xs = self.play(s, "stock-sample", hold=1500, total=1700)
+            rec = RECORDS
+            ptr = int.from_bytes(bytes.fromhex(s.emu.dsp_peek(rec, 4)["hex"]), "little")
+            frames = int.from_bytes(
+                bytes.fromhex(s.emu.dsp_peek(rec + 0x188, 4)["hex"]), "little"
+            )
+            n = min(frames, 48000)
+            raw = b""
+            for off in range(0, 2 * n, 1024):
+                h = s.emu.dsp_peek(ptr + off, min(1024, 2 * n - off))["hex"]
+                raw += bytes.fromhex(h.replace("??", "00"))
+            data = np.frombuffer(raw, "<i2").astype(np.float64) / 32768.0
+            a = onset(xs)
+            seg = xs[a : a + len(data)] if a >= 0 else xs[:0]
+            peak_out, peak_data = (
+                float(np.max(np.abs(seg))) if len(seg) else 0.0,
+                float(np.max(np.abs(data))),
+            )
+            gain_chain = peak_out / max(peak_data, 1e-9)
+            target = rms(data) / max(
+                peak_data, 1e-9
+            )  # the sample's RMS at full scale (peak 1.0)
+            # PLAITS default VA, note 60, the same track and LEV
+            self.select(s, PLAITS_DOWNS)
+            xp = self.held(
+                self.play(s, "plaits-default", hold=1000, total=1200), 100, 800
+            )
+            voice_rms = rms(xp) / max(gain_chain, 1e-9)
+            self.results_extra.update(
+                {
+                    "sample_frames": frames,
+                    "sample_peak": peak_data,
+                    "sample_rms_fullscale": target,
+                    "chain_gain": gain_chain,
+                    "plaits_out_rms": rms(xp),
+                    "plaits_voice_rms": voice_rms,
+                    "gain_for_match": target / max(voice_rms, 1e-9),
+                }
+            )
+            self.check(
+                "gain measured",
+                peak_data > 0.01 and voice_rms > 1e-3,
+                json.dumps(
+                    {
+                        k: round(float(v), 5)
+                        for k, v in self.results_extra.items()
+                        if isinstance(v, float)
+                    }
+                ),
+            )
+
+    results_extra: dict[str, Any] = {}
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.results_extra = {}
+
+    def check(self, name: str, ok: bool, detail: object = "") -> bool:
+        r = super().check(name, ok, detail)
+        (self.out / "extra.json").write_text(
+            json.dumps(self.results_extra, indent=1, default=str)
+        )
+        return r
+
+
+P = PlaitsProof
+PARTS = [
+    K.Part(
+        "a",
+        "select, type at the DSP, note 60 within 1 cent, ACTIVE after the note",
+        P.part_a,
+        True,
+        150,
+    ),
+    K.Part("b", "HARMONICS, TIMBRE, MORPH change the spectrum", P.part_b, True, 300),
+    K.Part("c", "LEV, filter and reverb send as on a stock track", P.part_c, True, 400),
+    K.Part("d", "PLAITS on tracks 1 and 2 at once", P.part_d, True, 200),
+    K.Part(
+        "e", "persistence (patched save and load, then stock load)", P.part_e, True, 250
+    ),
+    K.Part("g", "gain calibration against track 1's stock sample", P.part_g, True, 150),
+]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    ap.add_argument("--image", type=Path, default=DEFAULT_IMAGE)
+    K.add_args(ap, PARTS)
+    a = ap.parse_args()
+    a.out = a.out or (ROOT / "out" / "runs" / "plaits-proof")
+    PlaitsProof.image = a.image.resolve()
+    M.FW = "1.17"
+    return K.run_tool(__file__, PlaitsProof, PARTS, a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

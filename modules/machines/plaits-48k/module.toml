@@ -1,0 +1,36 @@
+[module]
+id = "machines/plaits-48k"
+version = "0.1.0"
+name = "Plaits, direct 48 kHz"
+category = "machines"
+status = "experimental"
+summary = "PLAITS rendered at 48 kHz straight into the voice output (the default build)."
+ports = ["dt2-1.17"]
+requires = ["machines/plaits", "core/dsp-inline"]
+conflicts = ["machines/plaits-96k"]
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# The PLAITS voice routine (modules/machines/plaits: the entry shim src/dsp/plaits_entry.s, the C voice wrapper and
+# engines) in mode 1: 32 samples at 48 kHz written straight into the voice output (the stock decimator is skipped;
+# core/dsp-inline `_di_return_out`). src/dsp/mode.s, listed first, defines PLAITS_MODE for the shim; the C sources are
+# the same in both builds (the shim passes the output rate). Image: out/patch/plaits-va-48k-1.17.syx.
+[[object]]
+path = "build/plaits-48k-dsp.dko.json"
+sources = [
+  "src/dsp/mode.s",
+  "../plaits/src/dsp/plaits_entry.s",
+  "../plaits/src/dsp/plaits.c",
+  "../plaits/src/dsp/engines/va.c",
+  "../plaits/src/dsp/halfband.c",
+]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[entry]]
+registry = "inline_voices"
+id = "plaits"
+type = "machines.plaits.index"
+pc = "_pl_render"
+devices = ["dt2"]

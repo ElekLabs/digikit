@@ -190,3 +190,40 @@ section-7 boot stream of firmware/Digitakt_II_OS1.17.syx and of the images in ou
   direct jump (Type 8a, as in the images that worked) to `_di_return_work` or `_di_return_out`; the hook enters them
   with the stock `083f283f`. The pre-5b H1 images are kept as `out/patch/diag-h1-i13return-{96k,48k}-1.17.ungated.syx`
   (optional diagnostic: they fail the new gate on exactly that word).
+
+## selcc for a real engine: the PLAITS VA voice (2026-10-17) **[D]**
+
+Measured building machines/plaits-48k/-96k (the Plaits VA engine, the voice wrapper and the half-band filter in C,
+merged with the assembly entry shim by `pk_build`, tools/patchkit/pk_sharc.py `compile_c` and `merge`):
+
+- **Shapes.** Over the whole object (3,382 instructions, 6,720 parcels) the encoding gate finds one shape absent
+  from stock: selcc's `Fn = FLOAT Rm` with n != m, which selas compresses to a 32-bit 2a_short word (op 0xca; stock
+  has FLOAT only as 2c `F0 = FLOAT R0`, 48-bit 2a and in multifunction forms). The C avoids it: int-to-float goes
+  through `itof_nonneg` (modules/machines/plaits/src/dsp/dsp_util.h; `0x4B000000 | i` reinterpreted, minus 2^23, exact
+  for 0 <= i < 2^23). Everything else, including the 9b return `JUMP (M14, I12) (DB)` (an exact stock word), passes.
+- **Cross-check.** The only form selcc emits that the operand cross-check did not handle is Type 16a,
+  `DM(I7, M7) = label - 1`, the return address of every call (the stock call sequence has the same word, e.g. SW
+  0x1c4b30 `9fc0001c4b32`). 16a and 16b are now compared role by role (memory, I, M, immediate; width bits fail
+  closed) against seldump's line (tools/patchkit/pk_crosscheck.py `STRICT_FORMS`). seldump lists some stock 16a/16b
+  words with another M register or as a different form (stock `99840000`, our decoder `DM(I4, M6) = 0`, seldump
+  `dm (i4,m4)=0x0`); those are refused, which costs nothing as selcc emits only I7/M7.
+- **A data bug: negative float initialisers.** In an initialised table (`.VAR`), selcc writes a negative float as
+  `0x80000000 | -bits(x)` (the two's-complement negation of the IEEE bits, with the sign bit set): `-1.0f` becomes
+  `0xC0800000` (-4.0), `-5.258025909e-06f` becomes `0xC94F91E7` (-850206.4). The same constants in code are right
+  (`R1 = -0x494F91E7`, i.e. `0xB6B06E19`), and negative integers in tables are right (`-1` is `0xFFFFFFFF`). The
+  half-band filter's coefficient table hit it (its even phase was garbage on the core); the table is now IEEE bit
+  patterns in an `unsigned int` array read through a union (modules/machines/plaits/src/dsp/gen_halfband.py). Neither
+  the gate nor the cross-check can see data; the concrete-core equivalence tests did.
+- **Pointers.** selcc's byte-address pointers are the firmware's own convention on the Digitakt: the voice records
+  (0x2412cc), the voice outputs (0x252df8) and the patch region in L2 (0x2001xxxx) are byte addresses, and normal-word
+  accesses through them scale the modifier by 4 (the stock renderer's frames, core/dsp-inline's table walk). The C
+  stack lives in L2 (`_pl_stack`), so `DM(-n, I6)` frames and `&local` (`I6 = MODIFY(I6, -n) (NW)`) are byte
+  addresses too. This settles the open question of the selcc section for this use; silicon evidence comes with the
+  owner's H2 run.
+- **Division** compiles to `RECIPS` plus two Newton steps and a correction; the concrete core needs
+  `approx_recips=True` for it (an 8-bit seed model, tools/sharc_dev/sharc_core/floats.py), otherwise every quotient is
+  unknown. With it, the compiled voice equals the host build of the same C within 1.8e-7 per sample.
+- **Cost.** No optimiser: one even voice's block is about 60,400 instructions at 48 kHz direct and 84,000 with the
+  half-band (22 taps x 32 samples in naive code); the odd voice's copy about 200. Against the DT2's 666,667-instruction
+  block and its 208,600 busy (finding 06, "Headroom"), one PLAITS track is about 9 % (13 % with the half-band) before
+  cache and memory stalls; 16 tracks do not fit without hand-written hot loops.

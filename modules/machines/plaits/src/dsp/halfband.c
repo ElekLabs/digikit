@@ -19,13 +19,15 @@ void hb_up2(HalfBand *s, const float *in48, float *out96, int n48)
     const int mask = HB_BUFSZ - 1;
     int pos = s->pos;
     int k, i;
+    union { unsigned int u; float f; } c; /* a tap: its bits from hb_coef_bits (halfband.h) */
 
     for (k = 0; k < n48; k++) {
         float acc = 0.0f;
         /* newest sample x[k] at index `pos`; x[k-j] at (pos - j) & mask */
         s->buf[pos] = in48[k];
         for (i = 0; i < HB_PAIRS; i++) {
-            acc += hb_coef[i] * (s->buf[(pos - i) & mask]
+            c.u = hb_coef_bits[i];
+            acc += c.f * (s->buf[(pos - i) & mask]
                                  + s->buf[(pos - (HB_HIST - 1) + i) & mask]);
         }
         out96[2 * k] = acc;

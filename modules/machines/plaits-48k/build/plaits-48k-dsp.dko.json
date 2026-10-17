@@ -1,0 +1,3530 @@
+{
+ "arch": "sharc",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 15,
+   "section": "seg_pmco",
+   "symbol": "_pl_odd",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": "seg_pmco",
+   "symbol": "_pl_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 27,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 81,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 111,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": "seg_pmco",
+   "symbol": "_di_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 159,
+   "section": "seg_pmco",
+   "symbol": "_di_trig",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 165,
+   "section": "seg_pmco",
+   "symbol": "_pl_save",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 201,
+   "section": "seg_pmco",
+   "symbol": "_pl_stack",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 234,
+   "section": "seg_pmco",
+   "symbol": "_pl_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 240,
+   "section": "seg_pmco",
+   "symbol": "plaits_track.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 246,
+   "section": "seg_pmco",
+   "symbol": "_pl_back",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 249,
+   "section": "seg_pmco",
+   "symbol": "_pl_save",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 279,
+   "section": "seg_pmco",
+   "symbol": "_pl_return",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 306,
+   "section": "seg_pmco",
+   "symbol": "_pl_copy",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 309,
+   "section": "seg_pmco",
+   "symbol": "_di_return_out",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 326,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_unit_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 333,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_unit_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 342,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_unit_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 387,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_dc_block_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 557,
+   "section": "seg_pmco",
+   "symbol": "va_init.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 561,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_note_on_va_init_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 595,
+   "section": "seg_pmco",
+   "symbol": "hb_init.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 599,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_note_on_hb_init_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 687,
+   "section": "seg_pmco",
+   "symbol": "unit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 691,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_render_va_unit_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 709,
+   "section": "seg_pmco",
+   "symbol": "unit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 713,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_render_va_unit_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 731,
+   "section": "seg_pmco",
+   "symbol": "unit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 735,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_render_va_unit_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 753,
+   "section": "seg_pmco",
+   "symbol": "unit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 757,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_render_va_unit_3",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 782,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_render_va_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 816,
+   "section": "seg_pmco",
+   "symbol": "va_render.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 820,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_render_va_va_render_4",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 939,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_render_va_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 957,
+   "section": "seg_pmco",
+   "symbol": "plaits_dc_block.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 961,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_render_va_plaits_dc_block_5",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 992,
+   "section": "seg_pmco",
+   "symbol": "plaits_gain.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1089,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1104,
+   "section": "seg_pmco",
+   "symbol": "note_on.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1108,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_plaits_render_note_on_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1124,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1139,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1154,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1174,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_5",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1200,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1262,
+   "section": "seg_pmco",
+   "symbol": "render_va.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1266,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_plaits_render_render_va_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1276,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_plaits_render_6",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1300,
+   "section": "seg_pmco",
+   "symbol": "hb_up2.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1304,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_plaits_render_hb_up2_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1369,
+   "section": "seg_pmco",
+   "symbol": "plaits_voices.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1396,
+   "section": "seg_pmco",
+   "symbol": "plaits_render.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1400,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_plaits_track_plaits_render_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1432,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_maxf_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1443,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_maxf_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1458,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_minf_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1469,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_minf_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1527,
+   "section": "seg_pmco",
+   "symbol": "itof_nonneg.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1531,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_interp_itof_nonneg_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1673,
+   "section": "seg_pmco",
+   "symbol": "itof_nonneg.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1677,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_ratio_itof_nonneg_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1683,
+   "section": "seg_pmco",
+   "symbol": "lut_pitch_ratio_high.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1697,
+   "section": "seg_pmco",
+   "symbol": "lut_pitch_ratio_low.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1749,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_NoteToFrequency_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1757,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_NoteToFrequency_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1766,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_NoteToFrequency_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1785,
+   "section": "seg_pmco",
+   "symbol": "ratio.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1789,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_NoteToFrequency_ratio_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1897,
+   "section": "seg_pmco",
+   "symbol": "NextIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 1901,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_ThisIntegratedBlepSample_NextIntegratedBlepSample_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2031,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_naive_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2039,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_naive_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2073,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_naive_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2083,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_naive_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2201,
+   "section": "seg_pmco",
+   "symbol": "kMaxFrequency.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2205,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2208,
+   "section": "seg_pmco",
+   "symbol": "kMaxFrequency.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2215,
+   "section": "seg_pmco",
+   "symbol": "kMaxFrequency.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2219,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2222,
+   "section": "seg_pmco",
+   "symbol": "kMaxFrequency.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2233,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2241,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2254,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_4",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2266,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_5",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2284,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_6",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2331,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2335,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_interp_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2362,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2366,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_interp_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2393,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2397,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_interp_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2424,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2428,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_interp_3",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2455,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2459,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_interp_4",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2524,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_8",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2547,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2551,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_next_5",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2563,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2567,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_next_6",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2579,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2583,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_next_7",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2595,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2599,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_next_8",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2617,
+   "section": "seg_pmco",
+   "symbol": "maxf.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2621,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_maxf_9",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2648,
+   "section": "seg_pmco",
+   "symbol": "maxf.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2652,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_maxf_10",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2756,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_9",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2836,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_10",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2864,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_11",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2872,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_11",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2900,
+   "section": "seg_pmco",
+   "symbol": "shape_naive.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2904,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_shape_naive_11",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2923,
+   "section": "seg_pmco",
+   "symbol": "ThisBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2927,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_ThisBlepSample_12",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2948,
+   "section": "seg_pmco",
+   "symbol": "NextBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 2952,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_NextBlepSample_13",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 2983,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_14",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 2991,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_13",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3006,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_15",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3021,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_13",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3109,
+   "section": "seg_pmco",
+   "symbol": "ThisBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3113,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_ThisBlepSample_14",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3134,
+   "section": "seg_pmco",
+   "symbol": "NextBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3138,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_NextBlepSample_15",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3159,
+   "section": "seg_pmco",
+   "symbol": "ThisIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3163,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_ThisIntegratedBlepSample_16",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3184,
+   "section": "seg_pmco",
+   "symbol": "NextIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3188,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_NextIntegratedBlepSample_17",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3221,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_16",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3237,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_13",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3323,
+   "section": "seg_pmco",
+   "symbol": "ThisBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3327,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_ThisBlepSample_18",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3353,
+   "section": "seg_pmco",
+   "symbol": "NextBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3357,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_NextBlepSample_19",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3378,
+   "section": "seg_pmco",
+   "symbol": "ThisIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3382,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_ThisIntegratedBlepSample_20",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3403,
+   "section": "seg_pmco",
+   "symbol": "NextIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3407,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_NextIntegratedBlepSample_21",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3428,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_12",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3436,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_17",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3496,
+   "section": "seg_pmco",
+   "symbol": "shape_naive.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3500,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_shape_naive_22",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3545,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_shape_render_7",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3570,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3574,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_commit_23",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3589,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3593,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_commit_24",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3608,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3612,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_commit_25",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3627,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3631,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_commit_26",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3646,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3650,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_shape_render_commit_27",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3710,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_naive_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3717,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_naive_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3723,
+   "section": "seg_pmco",
+   "symbol": "kVariableSawNotchDepth.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3745,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_naive_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3755,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_naive_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3849,
+   "section": "seg_pmco",
+   "symbol": "kMaxFrequency.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3853,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3856,
+   "section": "seg_pmco",
+   "symbol": "kMaxFrequency.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3867,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3875,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3888,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3900,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_4",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3918,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_5",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 3965,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 3969,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_interp_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 3996,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4000,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_interp_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4027,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4031,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_interp_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4086,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_7",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4103,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4107,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_next_3",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4119,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4123,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_next_4",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4135,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4139,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_next_5",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4247,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_8",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4258,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_8",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4277,
+   "section": "seg_pmco",
+   "symbol": "kVariableSawNotchDepth.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4356,
+   "section": "seg_pmco",
+   "symbol": "ThisBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4360,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_ThisBlepSample_6",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4381,
+   "section": "seg_pmco",
+   "symbol": "NextBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4385,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_NextBlepSample_7",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4406,
+   "section": "seg_pmco",
+   "symbol": "ThisIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4410,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_ThisIntegratedBlepSample_8",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4431,
+   "section": "seg_pmco",
+   "symbol": "NextIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4435,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_NextIntegratedBlepSample_9",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4456,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_9",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4468,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_10",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4500,
+   "section": "seg_pmco",
+   "symbol": "kVariableSawNotchDepth.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4555,
+   "section": "seg_pmco",
+   "symbol": "ThisBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4559,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_ThisBlepSample_10",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4580,
+   "section": "seg_pmco",
+   "symbol": "NextBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4584,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_NextBlepSample_11",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4605,
+   "section": "seg_pmco",
+   "symbol": "ThisIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4609,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_ThisIntegratedBlepSample_12",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4630,
+   "section": "seg_pmco",
+   "symbol": "NextIntegratedBlepSample.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4634,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_NextIntegratedBlepSample_13",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4682,
+   "section": "seg_pmco",
+   "symbol": "saw_naive.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4686,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_saw_naive_14",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4721,
+   "section": "seg_pmco",
+   "symbol": "kVariableSawNotchDepth.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4763,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_saw_render_6",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4788,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4792,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_commit_15",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4807,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4811,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_commit_16",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4826,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4830,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_saw_render_commit_17",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4909,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_ComputeDetuning_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4917,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_ComputeDetuning_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4926,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_ComputeDetuning_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4939,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_ComputeDetuning_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4948,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_ComputeDetuning_4",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 4987,
+   "section": "seg_pmco",
+   "symbol": "itof_nonneg.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 4991,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_ComputeDetuning_itof_nonneg_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4997,
+   "section": "seg_pmco",
+   "symbol": "intervals.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5011,
+   "section": "seg_pmco",
+   "symbol": "intervals.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5036,
+   "section": "seg_pmco",
+   "symbol": "Squash.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5040,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_ComputeDetuning_Squash_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5047,
+   "section": "seg_pmco",
+   "symbol": "Squash.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5051,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_ComputeDetuning_Squash_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5087,
+   "section": "seg_pmco",
+   "symbol": "shape_init.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5091,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_init_shape_init_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5103,
+   "section": "seg_pmco",
+   "symbol": "shape_init.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5107,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_init_shape_init_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5130,
+   "section": "seg_pmco",
+   "symbol": "shape_init.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5134,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_init_shape_init_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5313,
+   "section": "seg_pmco",
+   "symbol": "ComputeDetuning.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5317,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_ComputeDetuning_0",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5331,
+   "section": "seg_pmco",
+   "symbol": "NoteToFrequency.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5335,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_NoteToFrequency_1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5353,
+   "section": "seg_pmco",
+   "symbol": "NoteToFrequency.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5357,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_NoteToFrequency_2",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5380,
+   "section": "seg_pmco",
+   "symbol": "NoteToFrequency.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5384,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_NoteToFrequency_3",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5411,
+   "section": "seg_pmco",
+   "symbol": "NoteToFrequency.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5415,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_NoteToFrequency_4",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5442,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5449,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5458,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5496,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_3",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5504,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_4",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5513,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_5",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5549,
+   "section": "seg_pmco",
+   "symbol": "shape_render.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5553,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_shape_render_5",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5588,
+   "section": "seg_pmco",
+   "symbol": "shape_render.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5592,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_shape_render_6",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5607,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_8",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5660,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_6",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5690,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_9",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5698,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_10",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5707,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_11",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5728,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_12",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5736,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_13",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5806,
+   "section": "seg_pmco",
+   "symbol": "minf.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 5810,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_minf_7",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 5829,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_14",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5849,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_15",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5900,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_16",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5908,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_17",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5917,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_18",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5951,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_19",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5958,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_20",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 5967,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_21",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6002,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_22",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6010,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_23",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6019,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_24",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6039,
+   "section": "seg_pmco",
+   "symbol": "NoteToFrequency.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6043,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_NoteToFrequency_8",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6082,
+   "section": "seg_pmco",
+   "symbol": "shape_render.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6086,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_shape_render_9",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6118,
+   "section": "seg_pmco",
+   "symbol": "saw_render.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6122,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_saw_render_10",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6140,
+   "section": "seg_pmco",
+   "symbol": "maxf.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6144,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_maxf_11",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6209,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6213,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_interp_12",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6249,
+   "section": "seg_pmco",
+   "symbol": "interp.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6253,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_interp_13",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6285,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_27",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6308,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6312,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_next_14",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6325,
+   "section": "seg_pmco",
+   "symbol": "next.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6329,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_next_15",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6375,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_va_render_25",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6389,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6393,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_commit_16",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6408,
+   "section": "seg_pmco",
+   "symbol": "commit.",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 6412,
+   "section": "seg_pmco",
+   "symbol": ".L_ret_va_render_commit_17",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6537,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_hb_up2_2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 6569,
+   "section": "seg_pmco",
+   "symbol": "hb_coef_bits.",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 6723,
+   "section": "seg_pmco",
+   "symbol": ".L_branch_hb_up2_0",
+   "type": "sharc.abs24"
+  }
+ ],
+ "sections": [
+  {
+   "align": 8,
+   "hex": "3e01020000183e01020020193e010200401a000f000001003e0104008000200600000000000f000000003e70800a00003e0102009090be06000000003e010c0000a0be5b008000003e020000b9053e02000019043e010000b11b010f00006d003e010000b11b3e010200b010be06000000003e010c0000a0be5b008000003e010200b090be06000000003e010c0000a0be5b00800000010f000002003e010000b110be06000000003e010c0000a0be5b00800000010f000006003e010000b110be06000000003e010c0000a0be5b00800000010f000007003e010000b110be06000000003e010c0000a0be5b00800000010f000008003e010000b110be06000000003e010c0000a0be5b00800000010f0000b8013e010000a1113e70008a00007e5900000000010f0000ff003e0104000100be5b008000003e0102008010be06000000003e010200001c000f000000003e70800900007f7100000000be57008000007f7100800000be57008000007f7300000000be57008000007f7300800000be5700800000360f00000000370f00000000000f00000000010f0000fc0f3e01000001103e70800b0000000f000080bbfe5f00800000000f00002000fe5f008000003f7100000000fe5f008000003e0102009014080f000000007f7100010000041800000000fe5f00810000c09fffffffff000f000000003e7080090000be57000000003e70000b0000be57000000003e70800b0000be57000000003e70001b0000be57000000003e70801b00003e06000000003f7100000000010fffff80ff3e01000001103e7080090000030f00002000be5700000000be55008000003e01020030a32006000000003e06000000008715fffffdff010f0138040293014105089dfd02810f000035c231cb220600000000810f0000089dfd003e0600000000089cfd00030f803f000013cb040600000000010f803f0000089dfd00089cfd0001c2871500000300fe4d3f0e3f083f34011901008715fffffaff089dfd0404c23e703f0a5099089d7c00800f0400800140113e703f8a5099089d7b00800f0000bf6c00d00ca02206000000000c0d0000420000acfffffaff010f000002003e01200001033e01000083157e70008a00007e59800100003f6c82e230163e0108006527050f7f3f1bd506acfffffbff3e01130056093e010800791505adfffffbff03adfffffcff3e01200001033e01000083103e70000a00007e598082000000acfffffaff010f000001003e010000011303adfffffaff3f6c02e040113e703f8a7099089c7b00810f0400800141133f703f8a7099089cfd04871500000600fe4d3f0e3f083f3401190100800f0000810f8801800141133f703f8a7099810f8401800141133f703f8a7099810f7c01800141133f703f8a7e5900804113810f0400800131157e703f8a7099fe4d3f0e3f083f34011901008715fffffaff089d7d02810f0800800181133f703f8a5199030f803b000054c2930113068c0160d1830f8401800153167f703f0a7199089cfd00089d7c0241c27f713f01041800000000f29fc09fffffffff810f0000089cfd01850f7c01800135167f703f0a7199089cfd0180013516830f0400800163157e703f8a7199089cfd00830f8c018001131545c27f713f01041800000000f29fc09fffffffff810f0100089cfd01850f8801800135167f703f0a7199871500000600fe4d3f0e3f083f34011901008715ffffe7ff089d7d04089dfc04089d7b05089dfa05089d7906089d7802089d7704089d7606089cf7003e703f8a5199030f803b000093011305089cf700860f0400800116177f703f8a7e598200301693011603010f804200008801312688015611089df200089cf700830f0c00800113157e703f8a5199089d6e0241c27f713f01041800000000f29fc09fffffffff10c2089df300089cf700830f1000800113157e703f8a519941c27f713f01041800000000f29fc09fffffffff10c2089df400089cf700830f1400800113157e703f8a519941c27f713f01041800000000f29fc09fffffffff10c2089df500089cf700830f1800800113157e703f8a519941c27f713f01041800000000f29fc09fffffffff10c2089df100810f0000089df0008615fffff2ff7f71bf00861500000e00089ded00089cf000830f200013c3220600000000089cf800089cf801850ffc0080013516089cf801850f3c0180013517830f1000f39ffe5f82831014089ced00089d6c04bf6c025e1018c6c291c27f713f01041800000000f29fc09fffffffff871500000200810f0000089def00000c0010600001acfffff8ff030f0000fc003e010000131501acffffefff030f000002003e01200013063e01000056177f70008a00007e598002000006acfffff1ff07acfffff8ff0a0f00003c013e0100007a1b3e01200013073e010000b71abf70000a00007e598203501a3e010200501b3e0108007b253e01130065073e010800a71506acfffff6ff07acfffff0ff3e010000711a3e012000a3013e01000061133f70008a00007e598082000001acffffefff030f000001003e010000131505adffffefff089cf000830f100080011315089df002089ded043e0600000000089cf800830f7c0180011315089cf600830f200045c281c2c3c27f713f01041800000000f29fc09fffffffff810f0000089def00000c0020360001acfffff6ff03acffffefff050f000002003e01200035063e01000016177f70008a00007e59800000000610000000003e011300160701acfffff6ff3e01200035063e01000016133f70008a00007e598083000001acffffefff030f000001003e010000131505adffffefff089c7906089cfa05089c7b05089cfc04089c7d04871500001900fe4d3f0e3f083f34011901008715ffffe9ff089d7d04089dfc04089d7b05089dfa05089d7906089d7802bf6c02bcc0117f713f0a8415000001005399089df5017f713f0a8415000002005399089df4017f713f0a8415000003005399089df301830f000013c3000600000000089cf800089cf701089d6e02bf6c026c101483c27f713f01041800000000f29fc09fffffffff10c2089cf800830f8801800113157e703f8a5199830f000013c3000600000000089cf700830f1c00800113157e703f8a5199830f000013c3000600000000089cf800830f8401800113157e703f8a5199830f000013c3000600000000089cf500089df100089cf400089df000810f0000089def00089cef00089cf00113c3220600000000810f0000089cf101089cef02860f0200a0015607800137157e703f8a7199089cef00830f010080011315089def023e0600000000810f000001c2089c7906089cfa05089c7b05089cfc04089c7d04871500001700fe4d3f0e3f083f3401190100089cf800830f900280011315089cf501089c7303070f01000077890f01008a0f0000b3c267c300010200901a830f0000a3c320010200501b3f6c82b91014bf6c02663018cbc27f713f01041800000000f29fc09fffffffff10c2089cf300030f0100007713c3200600000000089cf800830f8c0180011315830f900280011316089cf500830f2000fe5f8281501486c2c1c27f713f01041800000000f29fc09fffffffff87150000010010c2810f010001c2089c7906089cfa05089c7b05089cfc04089c7d04871500001700fe4d3f0e3f083f34011901008715fffff0ff089d7d04089dfc04089d7b05089dfa05089d7906089df80614c238c25cc27f713f0a84150000010056997f713f0a84150000020057997f713f0a84150000030059990a0f000000008b0f0f0084011b0d810f10039701d10bfe5f8084ab11f79ff69f089d7702bf6c02b41014bf6c02ae3018c5c27f713f01041800000000f29fc09fffffffff87150000030010c201c2089cf806089c7906089cfa05089c7b05089cfc04089c7d04871500001000fe4d3f0e3f083f340119010014c238c213cb04060000000014c201c2fe4d3f0e3f083f34011901003e060000000018c201c2fe4d3f0e3f083f3401190100010014c238c213cb22060000000014c201c2fe4d3f0e3f083f34011901003e060000000018c201c2fe4d3f0e3f083f34011901000100010f004b00008401141531c28801532101c2fe4d3f0e3f083f34011901008715fffff3ff089dfd0434c258c26cc271c2089df903089df6013f703f8a5799089df7033f703f8a7e598201501788017325089d750246c295c27f713f01041800000000f29fc09fffffffff30c259c263c2030f004000008c016047930167098801392979cf930167098801392979cf35c257cf930165098801392997cf59c835c2089df801089cf901850f0400089c76033f703f8a76993f6c80bb35167f703f0a779980016517089cf8027f703f8a7e5982823010089cfd04871500000d00fe4d3f0e3f083f3401190100810f0400800141133f703f8a5599860f0800800146177f703f8a5699880156173f703f8a7e59808341133f703f8a519901c2fe4d3f0e3f083f3401190100800f0400800140113e703f8a7e59020040113e703f8a51993e703f8a7099fe4d3f0e3f083f34011901008715fffff7ff089d7d04010f0043000034c28801311515c28c0110d3bf6c82d15011089d790243c281c27f713f01041800000000f29fc09fffffffff10c288018123010f00000000089cfa02860f0200a0015607800117157e703f8a5199050f00000000070f8043000083c2930187038c0130d7a0017603800153167f703f0a53999301130505c2089c7d04871500000900fe4d3f0e3f083f34011901008715fffff9ff089d7d04089d7c02010f1041000034c288013125089dfc02010f00c3000035c231cb220600000000010f00c30000089dfc003e0600000000089cfc00030ffe42000013cb040600000000010ffe420000089dfc00010f9639c92f089cfc01089d7b0243c281c27f713f01041800000000f29fc09fffffffff10c29301810303c2089c7d04871500000700fe4d3f0e3f083f3401190100010f003f000034c29301130514c29301510303c2fe4d3f0e3f083f3401190100010f803f000034c288011325010f00bf000035c29301130615c29301610303c2fe4d3f0e3f083f3401190100010f003f000034c29301130515c235c29301130616c236c293011307010f403e000035c288011325010fc03f000036c2930113068801561137c28801132505c2fe4d3f0e3f083f34011901008715fffffbff010f803f000034c288011325089d7d0245c27f713f01041800000000f29fc09fffffffff871500000500fe4d3f0e3f083f3401190100800f000014c23e703f8a7099810f0400800141133f703f8a7099810f0800800141133f703f8a7099010f003f0000830f0c00800143157e703f8a7199830f1000800143157e703f8a7099830f1400800143157e703f8a7099030f233c0ad7850f1800800145167f703f0a7399830f1c00800143157e703f8a7199810f2000800141133f703f8a7099810f2400800141133f703f8a7099fe4d3f0e3f083f34011901008715fffff5ff089dfd047f713f0a84150000010051997f713f0a84150000020053997f713f0a8415000003005599bf6c02e2401674c298c279cb089dfb00089dfa01089df902089d7803220600000000810f000031c2089df7013e0600000000010f803f0000089cf70131c2089df701089cfc00089cf70288015123089cf90215c293013105089cf80188013511bf6c82e0101314c258c215cb089df60122060000000014c23cc29301130515c2089df5003e0600000000010f803f000034c258c288013526089cfb0235c29301630588011523089cf50013c2089df500089cfc00089cf50288015123089cfa0215c293013105089cf60188013511bf6c82e01010089cfd04871500000b00fe4d3f0e3f083f34011901008715ffffbdff089d7d04089dfc04089d7b05089dfa05089d7906089df806089d7707089df607089d7502089d7404089d73067f713f0a8415000001005399089df2017f713f0a8415000002005399089df1017f713f0a8415000003005399089df0017f713f0a8415000004005399089def01830f0100089dee01830f0000089ded01089cf40105100000000035cb020600000000031000000000089df401089cf30105100000000035cb020600000000031000000000089df301089cf301050f803e000035cb020600000000030f003f0000089df2013e0600000000089cf201089cf302060f004000009301560737cb220600000000089cf301050f0040000093013506089d72033e0600000000089cf201050f803f0000060f00400000089cf303930167098801592636cb040600000000030f803f0000050f00400000089c73039301560788013725089df202089cf501850f140080013516089cf401089cef028615ffffe9ff7f71bf03861500001700089d490246c2089d480483c2089d4706c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f180080013516089cf301089cef028615ffffe6ff7f71bf03861500001a0046c283c2c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f1c0080013516089cf201089cef028615ffffe3ff7f71bf03861500001d0046c283c2c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f200080013516089cf101089cef028615ffffe0ff7f71bf0386150000200046c283c2c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f240080013516830f0000089cef028615ffffddff7f71bf0386150000230046c283c2c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f0800800135167f703f0a5399089ddc018615ffffe9ff7f71bf018615000017008615ffffe6ff7f71bf02861500001a008615ffffe3ff7f713f03861500001d008615ffffe0ff7f71bf03861500002000089dc601089dc502089d4403089dc303089cef01850f010080013526089d6f03850f000035c3000600000000830f0000089ddb01089dda01089dd901089cdc02089dd802089ddc01089cc60143c293c27f713f01041800000000f29fc09fffffffff30c2089dd701089cc50143c2a3c27f713f01041800000000f29fc09fffffffff30c2089dd601089cc40143c2b3c27f713f01041800000000f29fc09fffffffff30c2089dd501089cc30143c2d3c27f713f01041800000000f29fc09fffffffff30c2089dd401050f003f000063c288016523850f000043c285c27f713f01041800000000f29fc09fffffffff30c2050f0040000093013506089d5303030f803f0000089c540375c29301670588013526830f000046c283c27f713f01041800000000f29fc09fffffffff30c2089dd201030f803f0000089cd50263c275c20e0f004000008c01704f089dc20293017f058801e525f5cf93017f058801e525f5cf56c26fcf9301760e88015e2eefcf6ec856c2089dd10253c263c2089c42077ec28801672e65c25ec2070f004000008c01504e93015e0f88017f2fefcf93015e0f88017f2fefcf76c26ecf9301560f88017f2ffecf6fc856c2089dd002089cf5027e703f8a5699089cd7038801671e7e703f8a7e99089cf5027e703f8a7e598202301656cb089dc604089d4505089dc405089dc306020600000000089cf5013f703f8a5599060f803f0000880156273f703f8a7799089cf5013f703f8a5399089cd70273c235c2050f004000008c0130499301390a88015a2a9acf9301390a88015a2a9acf57c279cf9301370a88015a2aa9cf7ac837c2089dd901089cf502870f040080015719be703f8a7e598202601793c288017923089cd6039301370988015913089dcf01850f0100089ddb0253c236c253cb020600000000089ccf01050f803f000088013526089d4f03830f0100089dda01089cf501850f1000800135167f703f0a5399850f000035c3200600000000089ccf01089cd50235cb020600000000830f0100089dda01089ccf01089cd502089c5103089cd003089cd204089c5305fa9ff99ffe5f8283301485c2c6c27f713f01041800000000f29fc09fffffffff87150000030030c2089dce01089cd802089c590373c246c295c2a7c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089dd801089cdc01089cce02089c590346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089ddc01089cf501850f0400800135167f703f0a5399089cd602880135177f703f0a7799089cda01850f000035c3200600000000089cdb01850f000035c3200600000000089cf501850f1000800135167f703f0a5399850f000035c3200600000000089cf501850f0400800135167f703f0a5399089cd50235cb020600000000089cf501850f0400800135167f703f0a5399089cd50288013526089cf501870f0c0080013719be703f8a7e598201501788013725089cd6018801531756c267c2070f004000008c0160499301690a88017a2a9acf9301690a88017a2a9acf75c259cf9301650a88017a2aa9cf5ac865c2089d4d03089cd102089cd0038801571953c293019503089dcc01089cd20273c293017503089dcc01089cd801089cd30246c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089dd801089cdc01089cd302089c4d0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089ddc01089cd801089ccc02089c4d0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089dd801089cdc01089ccc02089c4d0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089ddc01830f0100089cf502860f1000800156177f703f8a7399089cf501850f1000800135167f703f0a5399850f000035c3000600000000089cf501850f0400800135167f703f0a5399050f803f000035cb020600000000089cf501850f0400800135167f703f0a5399070f803f0000880137297f703f0a7999089cf501800135167f703f0a5399089cd60263c235c2090f004000008c01304a93013a0b88019b2babcf93013a0b88019b2babcf96c26acf9301360b88019b2bbacf6bc836c2089dcb01089c5103089cd0048801691a65c29301a605089dca02089c520395c293019605089dca02089cd80297c276c28801972643c295c2a6c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089dd801089cdc01050f803f0000089c520388015627089ccb0245c293c2a7c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089ddc01089cd801089cca02089c4b0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089dd801089cdc01089cca02089c4b0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089ddc01830f0000089cf502860f1000800156177f703f8a73993e0600000000089cdb01850f000035c3000600000000089cd901089cd60293013506089cf501850f0400800135177f703f8a7699830f0000089cf502860f1000800156177f703f8a7399089cdc01089cf502860f0400800156177f703f8a5599089c5503089cd103089cd004089c5205089cd305fb9ffa9ffe5f8284501486c2c7c293c27f713f01041800000000f29fc09fffffffff87150000030030c288019315089ddc02089cd501089cf502860f0c00800156177f703f8a7399030f00400000089cd80293013506030f803f000088016325089cf001860f040080013617089df0033f703f8a75993e0600000000089cdc01089cf502860f0800800156177f703f8a73998615ffffe9ff7f71bf0186150000170043c27f713f01041800000000f29fc09fffffffff30c28615ffffe6ff7f71bf01861500001a0043c27f713f01041800000000f29fc09fffffffff30c28615ffffe3ff7f71bf01861500001d0043c27f713f01041800000000f29fc09fffffffff30c28615ffffe0ff7f71bf0186150000200043c27f713f01041800000000f29fc09fffffffff30c28615ffffddff7f71bf0186150000230043c27f713f01041800000000f29fc09fffffffff30c2089cf607089c7707089cf806089c7906089cfa05089c7b05089cfc04089c7d04871500004300fe4d3f0e3f083f34011901008715fffff8ff7f713f0a84150000010051997f713f0a84150000020053997f713f0a8415000003007e598202401678c267cb089dfd00089dfc01089dfb0222060000000014c231c2089dfa013e0600000000010f803f000003100000000088011315089cfa0015c2089dfa00089cfb013f6c82d230119301510314c258c215cb089df90122060000000014c23cc29301130515c2089df8003e0600000000010f803f000034c258c288013526089cfd0235c29301630588011523089cf80013c2089df800089cfc013f6c82c2301193015103089cf9028801531101c2871500000800fe4d3f0e3f083f34011901008715ffffcdff089d7d04089dfc04089d7b05089dfa05089d7906089df806089d7707089df607089d7502089d7404089d73067f713f0a8415000001005399089df2017f713f0a8415000002005399089df1017f713f0a8415000003005399089df001089cf40105100000000035cb020600000000031000000000089df401089cf401050f803e000035cb020600000000030f003f0000089df3013e0600000000089cf301089cf402060f004000009301560737cb220600000000089cf401050f0040000093013506089d73033e0600000000089cf301050f803f0000060f00400000089cf403930167098801592636cb040600000000030f803f0000050f00400000089c74039301560788013725089df302089cf501850f100080013516089cf401089cf0028615ffffedff7f71bf03861500001300089d570246c2089d560483c2089d5506c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f140080013516089cf301089cf0028615ffffeaff7f71bf0386150000160046c283c2c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f180080013516089cf201089cf0028615ffffe7ff7f71bf0386150000190046c283c2c5c217c27f713f01041800000000f29fc09fffffffff089cf501850f0400800135167f703f0a5399089de6018615ffffedff7f71bf018615000013008615ffffeaff7f71bf028615000016008615ffffe7ff7f713f03861500001900089dd401089dd302089d5203089cf001850f010080013526089d7003850f000035c3000600000000089ce601089de501830f0000089de601089cd40143c293c27f713f01041800000000f29fc09fffffffff30c2089de401089cd30143c2a3c27f713f01041800000000f29fc09fffffffff30c2089de301089cd20143c2b3c27f713f01041800000000f29fc09fffffffff30c2089de101050f803f000063c288015623089de0013f6c8219501676c263c20d0f004000008c01604e93016e0f8801df2fefcf93016e0f8801df2fefcfd7c27ecf9301670f8801df2ffecf7fc867c2089d5f0365c275c253c28801752356c263c2030f004000008c0160479301670d88013d2d7dcf9301670d88013d2d7dcf35c257cf9301650d88013d2dd7cf5dc835c2089dde01089cf5013f703f8a5599089c6403880156173f703f8a7799089cf501850f0c00800135167f703f0a5399850f000035c3089dd404089d5305089dd205200600000000089cf5013f703f8a5399089ce30235cb020600000000089cdf01089cde0288013516089ce40193016305089c610393015607089ddd03051000000000060f803f000088015617089ce30288017526089ce00393016709089ddc04089c75037f703f0a7e59020350178801672a089c7503870f08008001671bbf703f8a7e59020350178801672563c2880156135ac263c2030f004000008c0160479301670a88013a2a7acf9301670a88013a2a7acf35c257cf9301650a88013a2aa7cf5ac835c2089ddb013f6c822a901643c295c2a6c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089de501089ce601089cdc02089c5b0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089de601089ce501089cdd02089c5b0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089de501089ce601089cdd02089c5b0346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089de601830f0100089cf502860f0c00800156177f703f8a73993e0600000000089cf5013f703f8a5399050f803f000035cb020600000000089cf5013f703f8a5599060f803f0000880156273f703f8a7799089cdf01089cde0288013517089ce40193017305089ce10393015709089dda0405100000000076c288015716089ce00293016507089dd903089cf5027e703f8a7e598202301635c256c2060f004000008c0150499301590a88016a2a9acf9301590a88016a2a9acf63c239cf9301530a88016a2aa9cf3ac853c2089dd8023f6c8229701645c293c2a6c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089de501089ce601089cd902089c580346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019523089de601089ce501089cda02089c580346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089de501089ce601089cda02089c580346c293c2a5c27f713f01041800000000f29fc09fffffffff30c29301a30588019513089de601830f0000089cf502860f0c00800156177f703f8a7399089ce601089cf5027e703f8a5599089c6303089cdf03089cde04089c6105089ce005fb9ffa9ffe5f8284501486c2c7c293c27f713f01041800000000f29fc09fffffffff87150000030030c288019315089de602089ce301089cf502860f0800800156177f703f8a7399030f00400000089ce50293013506030f803f00008801632563c20310000000008801631735c257c2060f004000008c015047930157098801692979cf930157098801692979cf63c237cf930153098801692997cf39c853c2089cf101860f040080013617089df1033f703f8a75993e0600000000089ce601089cf502860f0400800156177f703f8a73998615ffffedff7f71bf0186150000130043c27f713f01041800000000f29fc09fffffffff30c28615ffffeaff7f71bf0186150000160043c27f713f01041800000000f29fc09fffffffff30c28615ffffe7ff7f71bf0186150000190043c27f713f01041800000000f29fc09fffffffff30c2089cf607089c7707089cf806089c7906089cfa05089c7b05089cfc04089c7d04871500003300fe4d3f0e3f083f340119010014c234c293011305010f40400000030f0040000093013407880117239301530101c2fe4d3f0e3f083f34011901008715fffff5ff089d7d04089dfc04089d7b02010f0340333334c293011305010f833f333388015123089dfb01010f80bf000053c251cb220600000000010f80bf0000089dfb003e0600000000089cfb00030f803f000013cb040600000000010f803f0000089dfb00089cfb00830f000013cb220600000000010f80bf000031c2089df8013e0600000000010f803f0000089cf80131c2089df801089cf800089dfa003f6c82d9101593013501030f7f405dfe93011305bf6c82da50118c0110d3bf6c82c95011089d770243c281c27f713f01041800000000f29fc09fffffffff10c288018123010f00000000089cf902860f0200a001560780011718be703f0a5199070f00000000880f010080015819a0019605800175167f703f0a7e598202101675c251c28801752143c286c291c27f713f01041800000000f29fc09fffffffff10c241c27f713f01041800000000f29fc09fffffffff10c29301910388018311089cfa019301130505c2089cfc04089c7d04871500000b00fe4d3f0e3f083f34011901008715fffff9ff089d7d04bf6c02e240187f713f01041800000000f29fc09fffffffff10c2089cfc00830f2800800113147f713f01041800000000f29fc09fffffffff010f803e0000089cfc01840f2800800134157e703f8a7199089cfc00830f5000800113147f713f01041800000000f29fc09fffffffff10c2089cfc00830f780080011314089d7b02810f00007e703f0a7199089cfb01840f0400800134157e703f8a7199030f003f0000089c7b02850f0800800145167f703f0a7399089c7b02850f0c00800145167f703f0a7199040f233c0ad7089cfb02860f1000800156177f703f8a7499089c7b02850f1400800145167f703f0a7399089cfb01840f1800800134157e703f8a7199089cfc01840f9400800134157e703f8a7199089cfc01840f9800800134157e703f8a7199089c7d04871500000700fe4d3f0e3f083f34011901008715ffffcdff089d7d04089dfc04089d7b05089dfa05089d7906089df806089d7707089d7602089d7504089d74067f713f0a8415000001005399089df3017f713f0a8415000002005399089df201089cf501850f0800800135167f703f0a5399089c7503800165177f703f8a559993013506089d7103089cf501850f0400800135167f703f0a5399089d590243c27f713f01041800000000f29fc09fffffffff30c2089df001089cf5013f703f8a539943c27f713f01041800000000f29fc09fffffffff30c2089def01089cf5013f703f8a5399089cf0028801351646c27f713f01041800000000f29fc09fffffffff30c2089dee01089cf5013f703f8a5399089cf102060f40420000930156078801371545c27f713f01041800000000f29fc09fffffffff30c2089ded01089cf5013f703f8a5399089cf00288013516089cf101050f40420000930135078801671343c27f713f01041800000000f29fc09fffffffff30c2089dec01089cf501850f0c00800135167f703f0a5399050fc03f000093013506089d6b03089ceb01850f000035cb220600000000830f0000089deb013e0600000000089ceb01050f803f000035cb040600000000030f803f0000089deb01030f003f0000089cf502860f0c00800156177f703f8a5599060f283fc3f588015627050fba3f48e19301750688013615089dea023f6c8252301656cb220600000000030f003f0000089dea013e0600000000089cea01050f7e3f52b835cb040600000000030f7e3f52b8089dea01089cf601089cef02089c6d03089cea03089ceb04089c7405089cf205fb9ffa9ff99ffe5f82833014089d580485c2089d5706c6c27f713f01041800000000f29fc09fffffffff87150000040030c2089cf601850f280080013516089cee01089cec02089cea03089ceb04089c7305089cf205fb9ffa9ff99ffe5f8283601483c2c5c27f713f01041800000000f29fc09fffffffff871500000400830f0000089de901089ce901089cf20235c3220600000000089cf301089ce902860f0200a0015607800137157e703f8a5399089cf402089ce903a0017609800159177f703f8a559988013527030f003f000093017305089cf301089ce903a0017609800139167f703f0a7599089ce901850f010080013516089d69033e0600000000030fa63f6666089cf502860f0800800156177f703f8a559993013506030f193e9a9988016325089de802089ce801050fa33b0ad735cb220600000000030fa33b0ad7089de8013e0600000000089ce801050f003f000035cb040600000000030f003f0000089de801089cf501850f0800800135167f703f0a5399050f003f000035cb220600000000830f000053c2089dd6023e0600000000089cf501850f0800800135167f703f0a5399060f003f000088013627089cf50180013519be703f8a7e59820160158801352693017603050f8040000093013506030f4042000093016305089cd60135c2089dd601089cd601089de701089cf501850f0800800135167f703f0a5399050f0041000093013506030f803f000046c283c27f713f01041800000000f29fc09fffffffff30c2089de601089cf501850f0c00800135167f703f0a5399050f003f000035cb220600000000089cf501850f0c00800135167f703f0a5399050f003f00008801351636c2089dd5013e0600000000030f803f0000089cf502860f0c00800156177f703f8a5599060f003f000088015627050f004000009301750688013625089cd50135c2089dd501089cd501089de501089ce501050f8c3fcdcc93013506089d6503089ce501050fa33b0ad735cb220600000000030fa33b0ad7089de5013e0600000000089ce501050f803f000035cb040600000000030f803f0000089de501030f20410000050fa8410000089c7503870f0c0080016719be703f8a56999301560788013725089de402089ce401850f000035cb220600000000830f0000089de4013e0600000000089ce401050f803f000035cb040600000000030f803f0000089de401030f00410000050f803f0000089c7503870f0c0080016719be703f8a56998801562793013705089de302089ce301050fa33c0ad735cb220600000000030fa33c0ad7089de3013e0600000000089ce301050f803f000035cb040600000000030f803f0000089de301089cf5013f703f8a5399089ce7028801351646c27f713f01041800000000f29fc09fffffffff30c2089de201089cf601850f500080013516089cef01089ce202089ce803090f803f0000089c76058b0f9c008001ab1d089c7205fa9ffd9ff99ffe5f8283601483c2c5c27f713f01041800000000f29fc09fffffffff87150000040030c2089cf601850f780080013516089cee01089ce502089ce403089cf404089c7205fa9ff99ffe5f8283601483c2c5c27f713f01041800000000f29fc09fffffffff871500000300030f803f0000089ce6023f6c021b501486c293c27f713f01041800000000f29fc09fffffffff30c259c263c2030f004000008c016047930167098801392979cf930167098801392979cf35c257cf930165098801392997cf59c835c2089de101089cf601850f940080013516089ce601050f993e9a9993013507089ce10193017305089cf2018615ffffdeff7f71bf0386150000220046c285c2c3c217c27f713f01041800000000f29fc09fffffffff089cf601850f980080013516089ce301050f003f000093013507089ce10193017305089cf2018615ffffdbff7f71bf0386150000250046c285c2c3c217c27f713f01041800000000f29fc09fffffffff830f0000089dda018615ffffdbff7f71bf018615000025008615ffffdeff7f71bf02861500002200089dd401089dd302089cda01089cf20235c3220600000000089cf401089cda02860f0200a0015607800137157e703f8a5399089cd40245c293c2a5c27f713f01041800000000f29fc09fffffffff30c293019305089cd30143c295c2b3c27f713f01041800000000f29fc09fffffffff3f6c82b20013860f9c0080015617089cda02860f0200a001560d80017d1eff703f0a57999301370d88019d13089cf403a0015609800179157e703f8a7399089cda01850f010080013516089d5a03089d5405089dd3053e06000000008615ffffdeff7f71bf0186150000220043c27f713f01041800000000f29fc09fffffffff30c28615ffffdbff7f71bf0186150000250043c27f713f01041800000000f29fc09fffffffff30c2089c7707089cf806089c7906089cfa05089c7b05089cfc04089c7d04871500003300fe4d3f0e3f083f34011901008715fffffdff800f0000089d7d00000c00402100000f0000000001acfffffdff030f000002003e01200013053e01000045113e70008a00007e590080000000acfffffdff010f000001003e010000011303adfffffdff800f0000810f0001800141133f703f8a7099871500000300fe4d3f0e3f083f34011901008715fffff4ff089dfd04089d7c05089dfb057f713f0a8415000001005099810f0001800141133f703f8a5199089df900810f0000089df800089d7400089c7800089cf400bf6c80a001a0220600000000800f0000089d7500089cf800830f0200a0011305800185113e703f8a5199089cf902a0015306800146133f703f8a7199089d7700000c00165d00000f0000000001acfffff7ff030f000002003e01200013053e01000005167f70000a00007e590000000005acfffff5ff06acfffff9ff3e0100006127090f00003f003e010400790a3e012000a3073e010000471abf70000a00007e59800300000a0f00002b003e0100006a2b3e010000b1163e010400690a3e012000a3063e01000046133f70008a00007e59820100163e01080073103e01130060033e010800531000adfffff5ff000f000001003e010000101303adfffff7ff089c7500810f0100089cf801a0013105830f0200a00153068001c6157e703f8a7099089c7900850f150080010526800f3f0084016005a0015306800146157e703f8a5599089c7803a001610780017116a00163078001c7133f703f8a7599089cf9018001311584015003089df901089c780080010113089df8013e0600000000089c7900810f0001800141133f703f8a7099089cfb05089c7c05089cfd04871500000c00fe4d3f0e3f083f3401190100",
+   "kind": "text",
+   "name": "seg_pmco",
+   "size": 13500
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__pl_frame",
+   "size": 32
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__pl_save",
+   "size": 16
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "bss",
+   "name": "pkbss__pl_stack",
+   "size": 4096
+  },
+  {
+   "align": 8,
+   "hex": "196eb0b6af69e437e21ea5b819093e392f67bfb900f22f3ab91297baeae2f53a10903fbbe2ee8f3b86d1d1bbd814153c516e4fbc02e88d3cd6cebfbc04c2003df2f02cbde7db6a3d5720a4bdfe82f43dad5554be9d8e223f23db193f000000000000803ecdcc4c3e00000000ec51e040f62840417b1498417b14c04100000000196eb0b6af69e437e21ea5b819093e392f67bfb900f22f3ab91297baeae2f53a10903fbbe2ee8f3b86d1d1bbd814153c516e4fbc02e88d3cd6cebfbc04c2003df2f02cbde7db6a3d5720a4bdfe82f43dad5554be9d8e223f040100002b000000",
+   "kind": "data",
+   "name": "seg_dmda",
+   "size": 224
+  },
+  {
+   "align": 8,
+   "hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001845213a08dc2a3af304353a87c83f3af52f4b3afd44573af011643abfa1713a0000803a7d9c873ad6ac8f3af037983a1845a13a08dcaa3af304b53a87c8bf3af52fcb3afd44d73af011e43abfa1f13a0000003b7d9c073bd6ac0f3bf037183b1845213b08dc2a3bf304353b87c83f3bf52f4b3bfd44573bf011643bbfa1713b0000803b7d9c873bd6ac8f3bf037983b1845a13b08dcaa3bf304b53b87c8bf3bf52fcb3bfd44d73bf011e43bbfa1f13b0000003c7d9c073cd6ac0f3cf037183c1845213c08dc2a3cf304353c87c83f3cf52f4b3cfd44573cf011643cbfa1713c0000803c7d9c873cd6ac8f3cf037983c1845a13c08dcaa3cf304b53c87c8bf3cf52fcb3cfd44d73cf011e43cbfa1f13c0000003d7d9c073dd6ac0f3df037183d1845213d08dc2a3df304353d87c83f3df52f4b3dfd44573df011643dbfa1713d0000803d7d9c873dd6ac8f3df037983d1845a13d08dcaa3df304b53d87c8bf3df52fcb3dfd44d73df011e43dbfa1f13d0000003e7d9c073ed6ac0f3ef037183e1845213e08dc2a3ef304353e87c83f3ef52f4b3efd44573ef011643ebfa1713e0000803e7d9c873ed6ac8f3ef037983e1845a13e08dcaa3ef304b53e87c8bf3ef52fcb3efd44d73ef011e43ebfa1f13e0000003f7d9c073fd6ac0f3ff037183f1845213f08dc2a3ff304353f87c83f3ff52f4b3ffd44573ff011643fbfa1713f0000803f7d9c873fd6ac8f3ff037983f1845a13f08dcaa3ff304b53f87c8bf3ff52fcb3ffd44d73ff011e43fbfa1f13f000000407d9c0740d6ac0f40f03718401845214008dc2a40f304354087c83f40f52f4b40fd445740f0116440bfa17140000080407d9c8740d6ac8f40f03798401845a14008dcaa40f304b54087c8bf40f52fcb40fd44d740f011e440bfa1f140000000417d9c0741d6ac0f41f03718411845214108dc2a41f304354187c83f41f52f4b41fd445741f0116441bfa17141000080417d9c8741d6ac8f41f03798411845a14108dcaa41f304b54187c8bf41f52fcb41fd44d741f011e441bfa1f141000000427d9c0742d6ac0f42f03718421845214208dc2a42f304354287c83f42f52f4b42fd445742f0116442bfa17142000080427d9c8742d6ac8f42f03798421845a14208dcaa42f304b54287c8bf42f52fcb42fd44d742f011e442bfa1f142000000437d9c0743d6ac0f43f03718431845214308dc2a43f304354387c83f43f52f4b43fd445743f0116443bfa17143000080437d9c8743d6ac8f43f03798431845a14308dcaa43f304b54387c8bf43f52fcb43fd44d743f011e443bfa1f143000000447d9c0744d6ac0f44f03718441845214408dc2a44f304354487c83f44f52f4b44fd445744f0116444bfa17144000080447d9c8744d6ac8f44f03798441845a14408dcaa44f304b54487c8bf440000803f6507803fca0e803f3016803f961d803ffd24803f642c803fcc33803f343b803f9c42803f054a803f6e51803fd858803f4260803fac67803f176f803f8376803fef7d803f5b85803fc88c803f3594803fa29b803f10a3803f7eaa803fedb1803f5db9803fccc0803f3cc8803fadcf803f1ed7803f8fde803f01e6803f73ed803fe6f4803f59fc803fcd03813f410b813fb512813f2a1a813f9f21813f1529813f8b30813f0238813f793f813ff046813f684e813fe055813f595d813fd264813f4c6c813fc673813f407b813fbb82813f368a813fb291813f2e99813faba0813f28a8813fa5af813f23b7813fa1be813f20c6813f9fcd813f1fd5813f9fdc813f20e4813fa1eb813f22f3813fa4fa813f2602823fa909823f2c11823faf18823f3320823fb827823f3c2f823fc236823f473e823fce45823f544d823fdb54823f635c823feb63823f736b823ffc72823f857a823f0e82823f9889823f2391823fae98823f39a0823fc5a7823f51af823fdeb6823f6bbe823ff9c5823f87cd823f15d5823fa4dc823f33e4823fc3eb823f53f3823fe4fa823f7502833f060a833f9811833f2a19833fbd20833f5028833fe42f833f7837833f0d3f833fa246833f374e833fcd55833f635d833ffa64833f916c833f2974833fc17b833f5983833ff28a833f8c92833f259a833fc0a1833f5aa9833ff5b0833f91b8833f2dc0833fc9c7833f66cf833f04d7833fa1de833f40e6833fdeed833f7df5833f1dfd833fbd04843f5d0c843ffe13843f9f1b843f4123843fe32a843f8632843f293a843fcc41843f7049843f1551843fb958843f5f60843f0468843faa6f843f5177843ff87e843f9f86843f478e843ff095843f989d843f42a5843febac843f95b4843f40bc843febc3843f96cb843f42d3843fefda843f9be2843f49ea843ff6f1843fa4f9843f5301853f0209853fb110853f6118853f1220853fc227853f742f853f2537853fd73e853f8a46853f3d4e853ff055853fa45d853f5865853f0d6d853fc274853f787c853f2e84853fe58b853f9c93853f539b853f0ba3853fc3aa853f7cb2853f35ba853fefc1853fa9c9853f64d1853f1fd9853fdae0853f96e8853f52f0853f0ff8853fccff853f8a07863f480f863f0717863fc61e863f8526863f452e863f0636863fc73d863f8845863f4a4d863f0c55863fce5c863f9164863f556c863f1974863fdd7b863fa283863f678b863f2d93863ff39a863fbaa2863f81aa863f49b2863f11ba863fd9c1863fa2c9863f6bd1863f35d9863fffe0863fcae8863f95f0863f61f8863f2d00873ff907873fc60f873f9417873f621f873f3027873fff2e873fce36873f9e3e873f6e46873f3e4e873f0f56873fe15d873fb365873f856d873f5875873f2b7d873fff84873fd38c873fa894873f",
+   "kind": "data",
+   "name": "seg_l2",
+   "size": 14592
+  }
+ ],
+ "source_sha256": "3a5b058414d8df9bfc637f6ff0b498bc3480e85718907807518a77e18372eabd",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".L_branch_ComputeDetuning_0",
+   "section": "seg_pmco",
+   "value": 4920
+  },
+  {
+   "global": false,
+   "name": ".L_branch_ComputeDetuning_1",
+   "section": "seg_pmco",
+   "value": 4934
+  },
+  {
+   "global": false,
+   "name": ".L_branch_ComputeDetuning_2",
+   "section": "seg_pmco",
+   "value": 4934
+  },
+  {
+   "global": false,
+   "name": ".L_branch_ComputeDetuning_3",
+   "section": "seg_pmco",
+   "value": 4951
+  },
+  {
+   "global": false,
+   "name": ".L_branch_ComputeDetuning_4",
+   "section": "seg_pmco",
+   "value": 4959
+  },
+  {
+   "global": false,
+   "name": ".L_branch_NoteToFrequency_0",
+   "section": "seg_pmco",
+   "value": 1760
+  },
+  {
+   "global": false,
+   "name": ".L_branch_NoteToFrequency_1",
+   "section": "seg_pmco",
+   "value": 1774
+  },
+  {
+   "global": false,
+   "name": ".L_branch_NoteToFrequency_2",
+   "section": "seg_pmco",
+   "value": 1774
+  },
+  {
+   "global": false,
+   "name": ".L_branch_hb_up2_0",
+   "section": "seg_pmco",
+   "value": 6530
+  },
+  {
+   "global": false,
+   "name": ".L_branch_hb_up2_2",
+   "section": "seg_pmco",
+   "value": 6726
+  },
+  {
+   "global": false,
+   "name": ".L_branch_maxf_0",
+   "section": "seg_pmco",
+   "value": 1446
+  },
+  {
+   "global": false,
+   "name": ".L_branch_maxf_1",
+   "section": "seg_pmco",
+   "value": 1454
+  },
+  {
+   "global": false,
+   "name": ".L_branch_minf_0",
+   "section": "seg_pmco",
+   "value": 1472
+  },
+  {
+   "global": false,
+   "name": ".L_branch_minf_1",
+   "section": "seg_pmco",
+   "value": 1480
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_dc_block_2",
+   "section": "seg_pmco",
+   "value": 459
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_render_0",
+   "section": "seg_pmco",
+   "value": 1112
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_render_1",
+   "section": "seg_pmco",
+   "value": 1225
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_render_2",
+   "section": "seg_pmco",
+   "value": 1157
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_render_3",
+   "section": "seg_pmco",
+   "value": 1169
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_render_5",
+   "section": "seg_pmco",
+   "value": 1203
+  },
+  {
+   "global": false,
+   "name": ".L_branch_plaits_render_6",
+   "section": "seg_pmco",
+   "value": 1311
+  },
+  {
+   "global": false,
+   "name": ".L_branch_render_va_0",
+   "section": "seg_pmco",
+   "value": 777
+  },
+  {
+   "global": false,
+   "name": ".L_branch_render_va_2",
+   "section": "seg_pmco",
+   "value": 942
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_naive_0",
+   "section": "seg_pmco",
+   "value": 3720
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_naive_1",
+   "section": "seg_pmco",
+   "value": 3733
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_naive_2",
+   "section": "seg_pmco",
+   "value": 3758
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_naive_3",
+   "section": "seg_pmco",
+   "value": 3777
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_0",
+   "section": "seg_pmco",
+   "value": 3861
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_1",
+   "section": "seg_pmco",
+   "value": 3878
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_10",
+   "section": "seg_pmco",
+   "value": 4655
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_2",
+   "section": "seg_pmco",
+   "value": 3935
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_3",
+   "section": "seg_pmco",
+   "value": 3903
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_4",
+   "section": "seg_pmco",
+   "value": 3935
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_5",
+   "section": "seg_pmco",
+   "value": 3935
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_6",
+   "section": "seg_pmco",
+   "value": 4075
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_7",
+   "section": "seg_pmco",
+   "value": 4766
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_8",
+   "section": "seg_pmco",
+   "value": 4459
+  },
+  {
+   "global": false,
+   "name": ".L_branch_saw_render_9",
+   "section": "seg_pmco",
+   "value": 4655
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_naive_0",
+   "section": "seg_pmco",
+   "value": 2042
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_naive_1",
+   "section": "seg_pmco",
+   "value": 2050
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_naive_2",
+   "section": "seg_pmco",
+   "value": 2086
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_naive_3",
+   "section": "seg_pmco",
+   "value": 2105
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_0",
+   "section": "seg_pmco",
+   "value": 2213
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_1",
+   "section": "seg_pmco",
+   "value": 2227
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_10",
+   "section": "seg_pmco",
+   "value": 2852
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_11",
+   "section": "seg_pmco",
+   "value": 2879
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_12",
+   "section": "seg_pmco",
+   "value": 2978
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_13",
+   "section": "seg_pmco",
+   "value": 3431
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_14",
+   "section": "seg_pmco",
+   "value": 2994
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_15",
+   "section": "seg_pmco",
+   "value": 3209
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_16",
+   "section": "seg_pmco",
+   "value": 3428
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_17",
+   "section": "seg_pmco",
+   "value": 3465
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_2",
+   "section": "seg_pmco",
+   "value": 2244
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_3",
+   "section": "seg_pmco",
+   "value": 2301
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_4",
+   "section": "seg_pmco",
+   "value": 2269
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_5",
+   "section": "seg_pmco",
+   "value": 2301
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_6",
+   "section": "seg_pmco",
+   "value": 2301
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_7",
+   "section": "seg_pmco",
+   "value": 2513
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_8",
+   "section": "seg_pmco",
+   "value": 3548
+  },
+  {
+   "global": false,
+   "name": ".L_branch_shape_render_9",
+   "section": "seg_pmco",
+   "value": 2962
+  },
+  {
+   "global": false,
+   "name": ".L_branch_unit_0",
+   "section": "seg_pmco",
+   "value": 336
+  },
+  {
+   "global": false,
+   "name": ".L_branch_unit_1",
+   "section": "seg_pmco",
+   "value": 350
+  },
+  {
+   "global": false,
+   "name": ".L_branch_unit_2",
+   "section": "seg_pmco",
+   "value": 350
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_0",
+   "section": "seg_pmco",
+   "value": 5452
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_1",
+   "section": "seg_pmco",
+   "value": 5466
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_10",
+   "section": "seg_pmco",
+   "value": 5715
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_11",
+   "section": "seg_pmco",
+   "value": 5715
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_12",
+   "section": "seg_pmco",
+   "value": 5739
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_13",
+   "section": "seg_pmco",
+   "value": 5781
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_14",
+   "section": "seg_pmco",
+   "value": 5852
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_15",
+   "section": "seg_pmco",
+   "value": 5881
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_16",
+   "section": "seg_pmco",
+   "value": 5911
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_17",
+   "section": "seg_pmco",
+   "value": 5925
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_18",
+   "section": "seg_pmco",
+   "value": 5925
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_19",
+   "section": "seg_pmco",
+   "value": 5961
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_2",
+   "section": "seg_pmco",
+   "value": 5466
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_20",
+   "section": "seg_pmco",
+   "value": 5975
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_21",
+   "section": "seg_pmco",
+   "value": 5975
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_22",
+   "section": "seg_pmco",
+   "value": 6013
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_23",
+   "section": "seg_pmco",
+   "value": 6027
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_24",
+   "section": "seg_pmco",
+   "value": 6027
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_25",
+   "section": "seg_pmco",
+   "value": 6280
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_27",
+   "section": "seg_pmco",
+   "value": 6378
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_3",
+   "section": "seg_pmco",
+   "value": 5507
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_4",
+   "section": "seg_pmco",
+   "value": 5521
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_5",
+   "section": "seg_pmco",
+   "value": 5521
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_6",
+   "section": "seg_pmco",
+   "value": 5602
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_8",
+   "section": "seg_pmco",
+   "value": 5663
+  },
+  {
+   "global": false,
+   "name": ".L_branch_va_render_9",
+   "section": "seg_pmco",
+   "value": 5701
+  },
+  {
+   "global": false,
+   "name": ".L_ret_ComputeDetuning_Squash_1",
+   "section": "seg_pmco",
+   "value": 5043
+  },
+  {
+   "global": false,
+   "name": ".L_ret_ComputeDetuning_Squash_2",
+   "section": "seg_pmco",
+   "value": 5054
+  },
+  {
+   "global": false,
+   "name": ".L_ret_ComputeDetuning_itof_nonneg_0",
+   "section": "seg_pmco",
+   "value": 4994
+  },
+  {
+   "global": false,
+   "name": ".L_ret_NoteToFrequency_ratio_0",
+   "section": "seg_pmco",
+   "value": 1792
+  },
+  {
+   "global": false,
+   "name": ".L_ret_ThisIntegratedBlepSample_NextIntegratedBlepSample_0",
+   "section": "seg_pmco",
+   "value": 1904
+  },
+  {
+   "global": false,
+   "name": ".L_ret_interp_itof_nonneg_0",
+   "section": "seg_pmco",
+   "value": 1534
+  },
+  {
+   "global": false,
+   "name": ".L_ret_note_on_hb_init_1",
+   "section": "seg_pmco",
+   "value": 602
+  },
+  {
+   "global": false,
+   "name": ".L_ret_note_on_va_init_0",
+   "section": "seg_pmco",
+   "value": 564
+  },
+  {
+   "global": false,
+   "name": ".L_ret_plaits_render_hb_up2_2",
+   "section": "seg_pmco",
+   "value": 1307
+  },
+  {
+   "global": false,
+   "name": ".L_ret_plaits_render_note_on_0",
+   "section": "seg_pmco",
+   "value": 1111
+  },
+  {
+   "global": false,
+   "name": ".L_ret_plaits_render_render_va_1",
+   "section": "seg_pmco",
+   "value": 1269
+  },
+  {
+   "global": false,
+   "name": ".L_ret_plaits_track_plaits_render_0",
+   "section": "seg_pmco",
+   "value": 1403
+  },
+  {
+   "global": false,
+   "name": ".L_ret_ratio_itof_nonneg_0",
+   "section": "seg_pmco",
+   "value": 1680
+  },
+  {
+   "global": false,
+   "name": ".L_ret_render_va_plaits_dc_block_5",
+   "section": "seg_pmco",
+   "value": 964
+  },
+  {
+   "global": false,
+   "name": ".L_ret_render_va_unit_0",
+   "section": "seg_pmco",
+   "value": 694
+  },
+  {
+   "global": false,
+   "name": ".L_ret_render_va_unit_1",
+   "section": "seg_pmco",
+   "value": 716
+  },
+  {
+   "global": false,
+   "name": ".L_ret_render_va_unit_2",
+   "section": "seg_pmco",
+   "value": 738
+  },
+  {
+   "global": false,
+   "name": ".L_ret_render_va_unit_3",
+   "section": "seg_pmco",
+   "value": 760
+  },
+  {
+   "global": false,
+   "name": ".L_ret_render_va_va_render_4",
+   "section": "seg_pmco",
+   "value": 823
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_NextBlepSample_11",
+   "section": "seg_pmco",
+   "value": 4587
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_NextBlepSample_7",
+   "section": "seg_pmco",
+   "value": 4388
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_NextIntegratedBlepSample_13",
+   "section": "seg_pmco",
+   "value": 4637
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_NextIntegratedBlepSample_9",
+   "section": "seg_pmco",
+   "value": 4438
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_ThisBlepSample_10",
+   "section": "seg_pmco",
+   "value": 4562
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_ThisBlepSample_6",
+   "section": "seg_pmco",
+   "value": 4363
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_ThisIntegratedBlepSample_12",
+   "section": "seg_pmco",
+   "value": 4612
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_ThisIntegratedBlepSample_8",
+   "section": "seg_pmco",
+   "value": 4413
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_commit_15",
+   "section": "seg_pmco",
+   "value": 4795
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_commit_16",
+   "section": "seg_pmco",
+   "value": 4814
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_commit_17",
+   "section": "seg_pmco",
+   "value": 4833
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_interp_0",
+   "section": "seg_pmco",
+   "value": 3972
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_interp_1",
+   "section": "seg_pmco",
+   "value": 4003
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_interp_2",
+   "section": "seg_pmco",
+   "value": 4034
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_next_3",
+   "section": "seg_pmco",
+   "value": 4110
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_next_4",
+   "section": "seg_pmco",
+   "value": 4126
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_next_5",
+   "section": "seg_pmco",
+   "value": 4142
+  },
+  {
+   "global": false,
+   "name": ".L_ret_saw_render_saw_naive_14",
+   "section": "seg_pmco",
+   "value": 4689
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_NextBlepSample_13",
+   "section": "seg_pmco",
+   "value": 2955
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_NextBlepSample_15",
+   "section": "seg_pmco",
+   "value": 3141
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_NextBlepSample_19",
+   "section": "seg_pmco",
+   "value": 3360
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_NextIntegratedBlepSample_17",
+   "section": "seg_pmco",
+   "value": 3191
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_NextIntegratedBlepSample_21",
+   "section": "seg_pmco",
+   "value": 3410
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_ThisBlepSample_12",
+   "section": "seg_pmco",
+   "value": 2930
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_ThisBlepSample_14",
+   "section": "seg_pmco",
+   "value": 3116
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_ThisBlepSample_18",
+   "section": "seg_pmco",
+   "value": 3330
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_ThisIntegratedBlepSample_16",
+   "section": "seg_pmco",
+   "value": 3166
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_ThisIntegratedBlepSample_20",
+   "section": "seg_pmco",
+   "value": 3385
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_commit_23",
+   "section": "seg_pmco",
+   "value": 3577
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_commit_24",
+   "section": "seg_pmco",
+   "value": 3596
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_commit_25",
+   "section": "seg_pmco",
+   "value": 3615
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_commit_26",
+   "section": "seg_pmco",
+   "value": 3634
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_commit_27",
+   "section": "seg_pmco",
+   "value": 3653
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_interp_0",
+   "section": "seg_pmco",
+   "value": 2338
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_interp_1",
+   "section": "seg_pmco",
+   "value": 2369
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_interp_2",
+   "section": "seg_pmco",
+   "value": 2400
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_interp_3",
+   "section": "seg_pmco",
+   "value": 2431
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_interp_4",
+   "section": "seg_pmco",
+   "value": 2462
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_maxf_10",
+   "section": "seg_pmco",
+   "value": 2655
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_maxf_9",
+   "section": "seg_pmco",
+   "value": 2624
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_next_5",
+   "section": "seg_pmco",
+   "value": 2554
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_next_6",
+   "section": "seg_pmco",
+   "value": 2570
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_next_7",
+   "section": "seg_pmco",
+   "value": 2586
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_next_8",
+   "section": "seg_pmco",
+   "value": 2602
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_shape_naive_11",
+   "section": "seg_pmco",
+   "value": 2907
+  },
+  {
+   "global": false,
+   "name": ".L_ret_shape_render_shape_naive_22",
+   "section": "seg_pmco",
+   "value": 3503
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_init_shape_init_0",
+   "section": "seg_pmco",
+   "value": 5094
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_init_shape_init_1",
+   "section": "seg_pmco",
+   "value": 5110
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_init_shape_init_2",
+   "section": "seg_pmco",
+   "value": 5137
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_ComputeDetuning_0",
+   "section": "seg_pmco",
+   "value": 5320
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_NoteToFrequency_1",
+   "section": "seg_pmco",
+   "value": 5338
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_NoteToFrequency_2",
+   "section": "seg_pmco",
+   "value": 5360
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_NoteToFrequency_3",
+   "section": "seg_pmco",
+   "value": 5387
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_NoteToFrequency_4",
+   "section": "seg_pmco",
+   "value": 5418
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_NoteToFrequency_8",
+   "section": "seg_pmco",
+   "value": 6046
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_commit_16",
+   "section": "seg_pmco",
+   "value": 6396
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_commit_17",
+   "section": "seg_pmco",
+   "value": 6415
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_interp_12",
+   "section": "seg_pmco",
+   "value": 6216
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_interp_13",
+   "section": "seg_pmco",
+   "value": 6256
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_maxf_11",
+   "section": "seg_pmco",
+   "value": 6147
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_minf_7",
+   "section": "seg_pmco",
+   "value": 5813
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_next_14",
+   "section": "seg_pmco",
+   "value": 6315
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_next_15",
+   "section": "seg_pmco",
+   "value": 6332
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_saw_render_10",
+   "section": "seg_pmco",
+   "value": 6125
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_shape_render_5",
+   "section": "seg_pmco",
+   "value": 5556
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_shape_render_6",
+   "section": "seg_pmco",
+   "value": 5595
+  },
+  {
+   "global": false,
+   "name": ".L_ret_va_render_shape_render_9",
+   "section": "seg_pmco",
+   "value": 6089
+  },
+  {
+   "global": false,
+   "name": "ComputeDetuning.",
+   "section": "seg_pmco",
+   "value": 4882
+  },
+  {
+   "global": false,
+   "name": "NextBlepSample.",
+   "section": "seg_pmco",
+   "value": 1823
+  },
+  {
+   "global": false,
+   "name": "NextIntegratedBlepSample.",
+   "section": "seg_pmco",
+   "value": 1845
+  },
+  {
+   "global": false,
+   "name": "NoteToFrequency.",
+   "section": "seg_pmco",
+   "value": 1729
+  },
+  {
+   "global": false,
+   "name": "Squash.",
+   "section": "seg_pmco",
+   "value": 4859
+  },
+  {
+   "global": false,
+   "name": "ThisBlepSample.",
+   "section": "seg_pmco",
+   "value": 1807
+  },
+  {
+   "global": false,
+   "name": "ThisIntegratedBlepSample.",
+   "section": "seg_pmco",
+   "value": 1883
+  },
+  {
+   "global": false,
+   "name": "_pl_back",
+   "section": "seg_pmco",
+   "value": 249
+  },
+  {
+   "global": false,
+   "name": "_pl_copy",
+   "section": "seg_pmco",
+   "value": 297
+  },
+  {
+   "global": false,
+   "name": "_pl_odd",
+   "section": "seg_pmco",
+   "value": 282
+  },
+  {
+   "global": true,
+   "name": "_pl_render",
+   "section": "seg_pmco",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_pl_return",
+   "section": "seg_pmco",
+   "value": 309
+  },
+  {
+   "global": false,
+   "name": "commit.",
+   "section": "seg_pmco",
+   "value": 1629
+  },
+  {
+   "global": true,
+   "name": "hb_init.",
+   "section": "seg_pmco",
+   "value": 6439
+  },
+  {
+   "global": true,
+   "name": "hb_up2.",
+   "section": "seg_pmco",
+   "value": 6500
+  },
+  {
+   "global": false,
+   "name": "interp.",
+   "section": "seg_pmco",
+   "value": 1496
+  },
+  {
+   "global": false,
+   "name": "itof_nonneg.",
+   "section": "seg_pmco",
+   "value": 1481
+  },
+  {
+   "global": false,
+   "name": "maxf.",
+   "section": "seg_pmco",
+   "value": 1429
+  },
+  {
+   "global": false,
+   "name": "minf.",
+   "section": "seg_pmco",
+   "value": 1455
+  },
+  {
+   "global": false,
+   "name": "next.",
+   "section": "seg_pmco",
+   "value": 1598
+  },
+  {
+   "global": false,
+   "name": "note_on.",
+   "section": "seg_pmco",
+   "value": 523
+  },
+  {
+   "global": true,
+   "name": "plaits_dc_block.",
+   "section": "seg_pmco",
+   "value": 362
+  },
+  {
+   "global": true,
+   "name": "plaits_render.",
+   "section": "seg_pmco",
+   "value": 1044
+  },
+  {
+   "global": true,
+   "name": "plaits_track.",
+   "section": "seg_pmco",
+   "value": 1333
+  },
+  {
+   "global": true,
+   "name": "plaits_voice_clear.",
+   "section": "seg_pmco",
+   "value": 485
+  },
+  {
+   "global": false,
+   "name": "ratio.",
+   "section": "seg_pmco",
+   "value": 1650
+  },
+  {
+   "global": false,
+   "name": "render_va.",
+   "section": "seg_pmco",
+   "value": 622
+  },
+  {
+   "global": false,
+   "name": "saw_naive.",
+   "section": "seg_pmco",
+   "value": 3679
+  },
+  {
+   "global": false,
+   "name": "saw_render.",
+   "section": "seg_pmco",
+   "value": 3798
+  },
+  {
+   "global": false,
+   "name": "shape_init.",
+   "section": "seg_pmco",
+   "value": 1913
+  },
+  {
+   "global": false,
+   "name": "shape_naive.",
+   "section": "seg_pmco",
+   "value": 1994
+  },
+  {
+   "global": false,
+   "name": "shape_render.",
+   "section": "seg_pmco",
+   "value": 2134
+  },
+  {
+   "global": false,
+   "name": "unit.",
+   "section": "seg_pmco",
+   "value": 312
+  },
+  {
+   "global": true,
+   "name": "va_init.",
+   "section": "seg_pmco",
+   "value": 5077
+  },
+  {
+   "global": true,
+   "name": "va_render.",
+   "section": "seg_pmco",
+   "value": 5240
+  },
+  {
+   "global": true,
+   "name": "_pl_frame",
+   "section": "pkdata__pl_frame",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_pl_save",
+   "section": "pkdata__pl_save",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_pl_stack",
+   "section": "pkbss__pl_stack",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "hb_coef_bits.",
+   "section": "seg_dmda",
+   "value": 128
+  },
+  {
+   "global": true,
+   "name": "hb_group_delay.",
+   "section": "seg_dmda",
+   "value": 220
+  },
+  {
+   "global": true,
+   "name": "hb_state_size.",
+   "section": "seg_dmda",
+   "value": 216
+  },
+  {
+   "global": false,
+   "name": "intervals.",
+   "section": "seg_dmda",
+   "value": 104
+  },
+  {
+   "global": false,
+   "name": "kMaxFrequency.",
+   "section": "seg_dmda",
+   "value": 96
+  },
+  {
+   "global": false,
+   "name": "kVariableSawNotchDepth.",
+   "section": "seg_dmda",
+   "value": 100
+  },
+  {
+   "global": false,
+   "name": "lut_pitch_ratio_high.",
+   "section": "seg_l2",
+   "value": 12544
+  },
+  {
+   "global": false,
+   "name": "lut_pitch_ratio_low.",
+   "section": "seg_l2",
+   "value": 13568
+  },
+  {
+   "global": true,
+   "name": "plaits_gain.",
+   "section": "seg_dmda",
+   "value": 88
+  },
+  {
+   "global": false,
+   "name": "plaits_voices.",
+   "section": "seg_l2",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_di_frame_hw",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_di_return_out",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_di_trig",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "instructions_redecoded": "3392",
+  "selache_rev": "2b26d3b75c53063575bc5c820fa0d38879335187",
+  "selas_sha256": "1aec06ba483afa08c9da6530276d2355c648d0bf139bfb0dd5223132d16054ca",
+  "selcc_sha256": "1de85aae367c09f9480670ef99940d505423c83625365dc3801c4e04b6931ff9",
+  "seldump_sha256": "98795ae38f941cf6be67f5483eab42d9009a6894195439b33069c4e5219ff6c1"
+ }
+}
