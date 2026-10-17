@@ -41,6 +41,9 @@ def test_proof(device, tmp_path):
             str(config.stock(syx)),
             "--modules",
             "fx/master-drive",
+            # Diagnostic image for an emulator proof: the encoding gate (1 unproven 2a_short shape in
+            # the stock-1.17 DT2 image) is off; the emulator cannot judge encodings anyway.
+            "--no-encoding-gate",
             "-o",
             str(patched),
         ],

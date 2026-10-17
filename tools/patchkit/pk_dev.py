@@ -83,6 +83,8 @@ class Dev:
                 str(self.session.syx),
                 "--modules",
                 ",".join(self.cell.modules),
+                # Developer-loop images go to the emulator, not the unit; the gate would stop DSP modules.
+                "--no-encoding-gate",
                 "-o",
                 str(self.out),
             ],

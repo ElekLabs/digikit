@@ -355,6 +355,8 @@ def patched_image(cell: Cell, syx: Path, dest: Path | None = None) -> Path:
             str(syx),
             "--modules",
             ",".join(cell.modules),
+            # Emulator smoke images are never flashed; cells with DSP code (pluck) fail the gate.
+            "--no-encoding-gate",
             "-o",
             str(out),
         ],

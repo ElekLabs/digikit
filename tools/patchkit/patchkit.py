@@ -183,11 +183,41 @@ def cmd_patch(args: list[str]) -> int:
         d.mkdir(parents=True, exist_ok=True)
         out = str(d / f"{Path(fw).stem}+{re.sub(r'[^A-Za-z0-9.-]+', '_', mods)}.syx")
     plan = flag(args, "--plan") or str(Path(out).with_suffix(".plan.json"))
-    rest = [a for a in args if a not in ("-o", out, "--plan", plan)]
+    gate = "--no-encoding-gate" not in args
+    rest = [
+        a for a in args if a not in ("-o", out, "--plan", plan, "--no-encoding-gate")
+    ]
     r = run(["apply", *rest, "-o", out, "--plan", plan])
     if r.returncode == 0:
         print(f"plan: {plan}")
+        return encoding_gate(Path(out), Path(plan), gate)
     return r.returncode
+
+
+def encoding_gate(out: Path, plan: Path, enforce: bool) -> int:
+    """Refuse (delete OUT, exit 1) a patched image whose added DSP code has an unproven encoding shape.
+
+    With enforce False (--no-encoding-gate, diagnostic images only) the violations are a warning."""
+    from tools.patchkit import pk_encoding_gate
+
+    found = pk_encoding_gate.check_image(out, plan)
+    if not found:
+        return 0
+    lines = "\n".join(pk_encoding_gate.format_violation(v) for v in found)
+    if enforce:
+        out.unlink(missing_ok=True)
+        print(
+            f"encoding gate: {len(found)} instruction(s) with an encoding shape that is in "
+            f"neither stock 1.17 DSP code nor encoding_proven.toml; {out} deleted\n{lines}",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"WARNING: --no-encoding-gate: {out} has {len(found)} unproven instruction(s); "
+        f"do not flash it\n{lines}",
+        file=sys.stderr,
+    )
+    return 0
 
 
 def cmd_inject(args: list[str]) -> int:
