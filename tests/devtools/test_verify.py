@@ -230,3 +230,20 @@ def test_explain_runs_nothing(
     monkeypatch.setattr(verify.digi_env, "run_dir", fail)
     assert verify.main(["--explain", "--only", "pins"]) == 0
     assert "pins" in capsys.readouterr().out
+
+
+def test_plaits_suite_runs_the_oracle_tests() -> None:
+    for changed in (
+        "modules/machines/plaits/src/dsp/engines/va.c",
+        "tests/plaits/oracle/va_oracle.cc",
+        "tests/support/plaits_host.py",
+    ):
+        plan = dict(verify.python_test_plan([changed], False))
+        assert plan.get("tests/plaits") == "plaits", changed
+        assert "python-tests" in verify.steps_for([changed])
+
+
+def test_python_tests_require_the_plaits_oracle_unless_told_otherwise() -> None:
+    assert verify.python_tests_env({})["PLAITS_ORACLE_REQUIRED"] == "1"
+    env = verify.python_tests_env({"PLAITS_ORACLE_REQUIRED": "0"})
+    assert env["PLAITS_ORACLE_REQUIRED"] == "0"

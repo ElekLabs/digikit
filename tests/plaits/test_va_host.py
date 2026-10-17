@@ -4,6 +4,7 @@ The oracle (tests/plaits/oracle/va_oracle.cc) links upstream's VirtualAnalogEngi
 tests/plaits/oracle/include earlier on the include path: its plaits/dsp/dsp.h is upstream's with kCorrectedSampleRate
 = 48000 (the Digitakt runs at exactly 48 kHz). Upstream's stmlib is a git submodule of ../eurorack (commit e3bd7c9);
 when that checkout is empty, set PLAITS_STMLIB to a directory holding a `stmlib/` checkout of the same commit.
+Without either the oracle tests skip; PLAITS_ORACLE_REQUIRED=1 makes that a failure.
 Both sides are built with the host compiler without floating-point contraction, so the results must be equal bit
 for bit."""
 
@@ -14,7 +15,7 @@ import math
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import numpy as np
 import pytest
@@ -32,6 +33,13 @@ def stmlib_root() -> Path | None:
         if cand and (Path(cand) / "stmlib" / "stmlib.h").exists():
             return Path(cand)
     return None
+
+
+def oracle_missing(why: str) -> NoReturn:
+    """Skip the oracle tests, or fail them under PLAITS_ORACLE_REQUIRED=1 (a gate that must run the oracle)."""
+    if os.environ.get("PLAITS_ORACLE_REQUIRED") == "1":
+        pytest.fail(f"PLAITS_ORACLE_REQUIRED=1: {why}")
+    pytest.skip(why)
 
 
 class Oracle:
@@ -74,11 +82,13 @@ def port(tmp_path_factory: pytest.TempPathFactory) -> Port:
 def oracle(tmp_path_factory: pytest.TempPathFactory) -> Oracle:
     stm = stmlib_root()
     if stm is None or not (EURORACK / "plaits" / "dsp" / "engine").exists():
-        pytest.skip(
+        why = (
             "BIT-EXACT ORACLE DISABLED: upstream stmlib not found (../eurorack/stmlib is empty). Enable it with "
+            "`git -C ../eurorack submodule update --init stmlib` (commit e3bd7c9) or "
             "PLAITS_STMLIB=<directory holding a stmlib/ checkout at e3bd7c9, the commit ../eurorack pins>, "
             "e.g. PLAITS_STMLIB=../mutable_instruments_eurorack; ../eurorack/plaits is needed too"
         )
+        oracle_missing(why)
     d = tmp_path_factory.mktemp("oracle")
     inc = d / "stm"
     inc.mkdir()
@@ -267,3 +277,12 @@ def test_wrapper_96k_is_the_48k_block_interpolated(port: Port) -> None:
         )
     # the odd 96 kHz samples are the 48 kHz samples delayed by the half-band's 21 input samples
     assert np.array_equal(o96[1::2][21:], o48[: len(o48) - 21])
+
+
+def test_missing_oracle_fails_when_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLAITS_ORACLE_REQUIRED", "1")
+    with pytest.raises(pytest.fail.Exception, match="PLAITS_ORACLE_REQUIRED=1"):
+        oracle_missing("no stmlib")
+    monkeypatch.delenv("PLAITS_ORACLE_REQUIRED")
+    with pytest.raises(pytest.skip.Exception):
+        oracle_missing("no stmlib")

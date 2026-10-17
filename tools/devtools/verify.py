@@ -89,6 +89,13 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
         ("tests/patchkit",),
     ),
     (
+        # the PLAITS host port, bit exact against upstream Plaits (the oracle needs ../eurorack/stmlib or
+        # PLAITS_STMLIB; python-tests sets PLAITS_ORACLE_REQUIRED=1, so a missing oracle fails instead of skipping)
+        "plaits",
+        ("modules/machines/plaits/", "tests/plaits/", "tests/support/plaits_"),
+        ("tests/plaits",),
+    ),
+    (
         "control-client",
         ("tools/control/digi_client.py", "packages/emulator/control/"),
         ("tests/control",),
@@ -397,6 +404,14 @@ def python_tests_passed(out_dir: Path) -> str | None:
         if len(cols) > 4 and cols[4].isdigit():
             passed += int(cols[4])
     return None if passed > 0 else "nothing passed (0 tests passed)"
+
+
+def python_tests_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """The python-tests environment: the PLAITS bit-exact oracle (tests/plaits) must run, not skip, unless the
+    caller sets PLAITS_ORACLE_REQUIRED=0 itself."""
+    env = dict(os.environ if base is None else base)
+    env.setdefault("PLAITS_ORACLE_REQUIRED", "1")
+    return env
 
 
 def python_tests_command(out: Path, files: list[str]) -> list[str]:
@@ -785,6 +800,7 @@ def run_step(gate: Gate, step: str) -> None:
         gate.run(
             "python-tests",
             python_tests_command(out, gate.py_tests),
+            env=python_tests_env(),
             check=lambda _text: python_tests_passed(out),
         )
     elif step == "rust-tests":
