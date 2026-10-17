@@ -44,11 +44,15 @@ TYPE_CACHE, FRAME, RECORDS, LATCH, OUT, TABLE, PROBE, STACK = (
 REC = 0x1D8
 MODE0, MODE1 = 8, 9  # the types the two test routines are registered for
 
+# Two test routines: each ends with a direct jump to one of the hook's return labels and leaves the opposite R0 of
+# the old return-mode contract, so a run that follows R0 instead of the label goes to the wrong continuation.
 ROUTINES = """
 .SECTION/PM seg_pmco;
 .GLOBAL _t_mode0;
 .GLOBAL _t_mode1;
 .EXTERN _t_probe;
+.EXTERN _di_return_work;
+.EXTERN _di_return_out;
 _t_mode0:
     I0 = _t_probe;
     DM(I0, M6) = R0;
@@ -65,8 +69,8 @@ _t_loop0:
     DM(I1, M6) = R3;
     R5 = R5 - 1;
     IF NE JUMP _t_loop0;
-    R0 = 0;
-    JUMP (M13, I13);
+    R0 = 1;
+    JUMP _di_return_work;
 _t_mode1:
     I0 = _t_probe;
     DM(I0, M6) = R0;
@@ -83,8 +87,8 @@ _t_loop1:
     DM(I2, M6) = R3;
     R5 = R5 - 1;
     IF NE JUMP _t_loop1;
-    R0 = 1;
-    JUMP (M13, I13);
+    R0 = 0;
+    JUMP _di_return_out;
 """
 
 
@@ -125,7 +129,15 @@ class Rig:
             pk_sharc.assemble(SRC.read_text()), CORE_BASE, externs
         )
         self.routines = pk_sharc.link(
-            pk_sharc.assemble(ROUTINES), ROUTINE_BASE, {"_t_probe": PROBE}
+            pk_sharc.assemble(ROUTINES),
+            ROUTINE_BASE,
+            {
+                "_t_probe": PROBE,
+                **{
+                    n: self.core.symbols[n]
+                    for n in ("_di_return_work", "_di_return_out")
+                },
+            },
         )
         tail = DISPLACED + sharc_jump(RESUME)
         self.tail = pk_sharc.Linked(TAIL_BASE, tail, tail, {})
@@ -229,6 +241,17 @@ def frame_slot(out: dict, n: int) -> int:
 def test_every_word_redecodes():
     rig = Rig()
     assert rig.core.checked > 70
+
+
+def test_hook_enters_with_the_stock_indirect_jump_and_never_jumps_through_i13():
+    obj = pk_sharc.assemble(SRC.read_text())
+    words = [raw for _, raw in obj.rows]
+    assert words.count("083f283f") == 1  # JUMP (M13, I12), the stock 32-bit word
+    assert "083f683f" not in words  # JUMP (M13, I13): absent from stock code
+    assert {"_di_return_work", "_di_return_out"} <= {
+        n for n, (_, glob) in obj.symbols.items() if glob
+    }
+    assert "_di_back" not in obj.symbols
 
 
 def test_unregistered_type_runs_displaced_and_returns_to_0x1c4f18():
@@ -419,6 +442,23 @@ from support.dsp_inline_image import (  # noqa: E402
 )
 
 
+def image_routines(doc: dict) -> pk_sharc.Linked:
+    """The test routines linked against the patched image's return labels (plan symbols)."""
+
+    def sym(name: str) -> int:
+        return next(a for k, a in doc["symbols"].items() if k.endswith(":" + name))
+
+    return pk_sharc.link(
+        pk_sharc.assemble(ROUTINES),
+        IMG_ROUTINES,
+        {
+            "_t_probe": IMG_PROBE,
+            "_di_return_work": sym("_di_return_work"),
+            "_di_return_out": sym("_di_return_out"),
+        },
+    )
+
+
 @needs_image
 def test_patched_image_without_rows_renders_an_idle_voice_as_stock(patched):
     stock, mem = image_memory(STOCK), image_memory(patched[0])
@@ -437,11 +477,9 @@ def test_patched_image_runs_a_registered_routine_and_returns_to_the_caller(
 ):
     import json
 
-    routines = pk_sharc.link(
-        pk_sharc.assemble(ROUTINES), IMG_ROUTINES, {"_t_probe": IMG_PROBE}
-    )
-    mem = image_memory(patched[0], routines)
     doc = json.loads(patched[1].read_text())
+    routines = image_routines(doc)
+    mem = image_memory(patched[0], routines)
     rows = next(
         a for k, a in doc["symbols"].items() if k.endswith(":inline_voices.rows")
     )
@@ -521,10 +559,8 @@ def test_patched_image_renders_an_active_voice_as_stock_with_a_non_matching_row(
 ):
     import json
 
-    routines = pk_sharc.link(
-        pk_sharc.assemble(ROUTINES), IMG_ROUTINES, {"_t_probe": IMG_PROBE}
-    )
     doc = json.loads(patched[1].read_text())
+    routines = image_routines(doc)
     rows = next(
         a for k, a in doc["symbols"].items() if k.endswith(":inline_voices.rows")
     )

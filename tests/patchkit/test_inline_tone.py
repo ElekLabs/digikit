@@ -4,7 +4,8 @@ The routine is assembled the way patch:build assembles the objects of test/inlin
 test/inline-tone-48k (TONE_MODE 1): the files of the object's `sources`, joined into one translation unit. It is run
 through the hook itself: core/dsp-inline is linked at a test base with its firmware addresses stood in by L2 test
 pages (as in test_dsp_inline.py), the routine is registered for the ITone type, and the run starts at `_di_entry` with
-the renderer's registers and frame. The hook's two continuations (SW 0x1c524a, 0x1c5264) are breakpoints.
+the renderer's registers and frame. The hook's two continuations (SW 0x1c524a, 0x1c5264) are breakpoints; the routine
+reaches them through the hook's return labels `_di_return_work` (96k) and `_di_return_out` (48k).
 
 The owner-image test patches stock 1.17 with each variant and runs the four checks an image must pass before it goes
 to the owner: the container checksums (../elektron-firmware-tool), the SHARC+ boot stream (sharc_bootcheck against
@@ -108,6 +109,8 @@ class Rig:
             {
                 "_di_frame_hw": self.core.symbols["_di_frame_hw"],
                 "_di_trig": self.core.symbols["_di_trig"],
+                "_di_return_work": self.core.symbols["_di_return_work"],
+                "_di_return_out": self.core.symbols["_di_return_out"],
                 "_it_phase": PHASE,
             },
         )
@@ -212,6 +215,26 @@ def assert_sine(samples: list[float], p0: int, inc: int) -> None:
     for k, y in enumerate(samples):
         want = 0.125 * math.sin(2 * math.pi * ((p0 + k * inc) & 0xFFFFFFFF) / 2**32)
         assert abs(y - want) < 2e-6, (k, y, want)
+
+
+@pytest.mark.parametrize("mode", [0, 1])
+def test_tone_returns_by_a_direct_jump_to_its_hook_label(mode):
+    from tools.patchkit import pk_encoding_gate as gate
+
+    obj = pk_sharc.assemble(variant_source(mode))
+    forms = [gate.decode_listing(raw).type_name for _, raw in obj.rows]
+    assert not set(forms) & gate.EXACT_FORMS, "no indirect jump or call in the routine"
+    want, other = (
+        ("_di_return_out", "_di_return_work")
+        if mode
+        else ("_di_return_work", "_di_return_out")
+    )
+    (ret,) = [r for r in obj.relocs if r.symbol in (want, other)]
+    assert ret.symbol == want
+    last_parcel, last_raw = obj.rows[-1]
+    assert ret.parcel == last_parcel and last_raw.startswith("063e"), (
+        "ends with JUMP label (type 8a)"
+    )
 
 
 @pytest.mark.parametrize("mode", [0, 1])

@@ -1,7 +1,7 @@
 # Inline tone, 96k (test)
 
 The sine routine of test/inline-tone (ITONE) for core/dsp-inline, in the build that renders 64 samples at 96 kHz into
-the voice's work buffer; the stock decimator halves them (core/dsp-inline return mode 0). Hardware image h1a.
+the voice's work buffer; the stock decimator halves them (it returns through core/dsp-inline's `_di_return_work`). Hardware image h1a.
 
 - Devices and firmware: Digitakt II 1.17.
 - Requires test/inline-tone (the machine) and core/dsp-inline; conflicts with the other build.

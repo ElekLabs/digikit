@@ -1,11 +1,11 @@
 // test/inline-tone: a sine routine for core/dsp-inline, the hardware probe of the hook's two return modes (H1).
 //
 // One source, two builds: the file that comes first in the object's sources defines TONE_MODE.
-//   TONE_MODE 0 (test/inline-tone-96k, image h1a): 64 samples at 96 kHz into the work buffer (I1), return R0 = 0;
-//                the stock decimator halves them.
+//   TONE_MODE 0 (test/inline-tone-96k, image h1a): 64 samples at 96 kHz into the work buffer (I1), return with
+//                `JUMP _di_return_work`; the stock decimator halves them.
 //   TONE_MODE 1 (test/inline-tone-48k, image h1b): 32 samples at 48 kHz straight into the voice's output (I2),
-//                return R0 = 1; the decimator is skipped.
-// A routine uses one mode only (core/dsp-inline ABI): the type always returns the same R0.
+//                return with `JUMP _di_return_out`; the decimator is skipped.
+// A routine uses one continuation only (core/dsp-inline ABI): the type always returns through the same label.
 //
 // Per block, for voice v of track t (ABI of modules/core/dsp-inline/src/dsp/dsp-inline.s: R0 = v, R2 = t):
 //   n   = pitch / 256 + (tune / 256 - 64)      pitch = frame halfword 1 + t (note << 8); tune = frame halfword
@@ -34,8 +34,10 @@
 .GLOBAL _it_render;
 .EXTERN _di_frame_hw;
 .EXTERN _di_trig;
+.EXTERN _di_return_work;
+.EXTERN _di_return_out;
 
-// Every instruction in its normal 48-bit form: no compressed (16- or 32-bit) encodings.
+// Every instruction in its normal 48-bit form: no compressed (16- or 32-bit) encodings, no indirect jumps.
 .NOCOMPRESS;
 
 _it_render:
@@ -138,16 +140,13 @@ _it_loop:
     IF NE JUMP _it_loop;
 
     DM(I3, M5) = R5;
+    // The return: a direct jump (type 8a) to the hook's continuation for this mode; no indirect jump (the routine
+    // ABI in modules/core/dsp-inline/src/dsp/dsp-inline.s, docs/findings/20-patch-toolchains.md).
 #if TONE_MODE == 1
-    R0 = 1;
+    JUMP _di_return_out;
 #else
-    R0 = 0;
+    JUMP _di_return_work;
 #endif
-    // The return in its 32-bit form (type 9b, a stock shape). Selache's 48-bit form of an indirect jump (type 9a,
-    // what .NOCOMPRESS gives) puts the delayed-branch flag and the I register in the wrong bits: the core would run
-    // it as `JUMP (M13, I8) (DB)` (docs/findings/20-patch-toolchains.md).
-.COMPRESS;
-    JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
 .PKDATA _it_phase, 128;                   // 32 voices, one phase word each

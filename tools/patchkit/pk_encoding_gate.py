@@ -14,6 +14,12 @@ addresses, condition codes or index/modify selectors. Compute fields keep their 
 (compute[22:12]; 2c keeps [11:8]); 6b_shiftimm keeps the shift op (bits 22:16), the sign of the 8-bit
 amount (bit 15) and data_hi (bits 30:27).
 
+Indirect jumps and calls (Types 9a and 9b: the target is PM(Ic, Md)) must match a stock word exactly, operands
+included, or a word listed in encoding_proven.toml (`word = "..."`): their shape masks the I/M registers, and two
+hazards pass at shape level. Selache's 48-bit `JUMP (M13, I12)` under .NOCOMPRESS is `JUMP (M13, I8) (DB)` by the PRM
+layout yet has the shape of stock `JUMP (M14, I12) (DB)`; and `JUMP (M13, I13)` (083f683f), with which every custom
+routine that stalled the owner's unit returned, never occurs in stock code (docs/findings/20-patch-toolchains.md).
+
 Code versus data: a plan lists, for every object placed in L2 ("place" writes), the byte ranges that
 are code ("code"); the rest of the object (tables, buffers) is data and is not decoded. Hook sites
 (`hooks[]` with cpu "sharc") are code too. Registries and sections are data.
@@ -70,6 +76,10 @@ MASKED = {
     "by",
     "toby",
 }
+
+
+# Forms whose fields name a PM I/M register as a jump/call target: matched by the whole word, not by shape.
+EXACT_FORMS = {"9a_abs", "9b_abs"}
 
 
 @dataclass(frozen=True)
@@ -150,23 +160,56 @@ def stock_shapes(db: Path) -> set[str]:
     return out
 
 
-def proven_shapes(path: Path = PROVEN) -> set[str]:
+def stock_control_words(db: Path) -> set[str]:
+    """The stock indirect jump/call words (EXACT_FORMS), in listing order, from real code (as stock_shapes)."""
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        marks = ",".join("?" * len(EXACT_FORMS))
+        rows = con.execute(
+            "SELECT DISTINCT width, raw FROM insn WHERE aligned = 1 AND confidence = 'confident' "
+            f"AND form IN ({marks})",
+            sorted(EXACT_FORMS),
+        ).fetchall()
+    finally:
+        con.close()
+    out: set[str] = set()
+    for width, raw in rows:
+        value = int(raw if isinstance(raw, str) else raw.hex(), 16)
+        out.add(f"{value:0{2 * width}x}")
+    return out
+
+
+def _proven(path: Path) -> list[dict]:
     doc = tomllib.loads(path.read_text())
-    out = set()
-    for e in doc.get("proven", []):
-        for key in ("shape", "evidence", "note"):
+    entries = doc.get("proven", [])
+    for e in entries:
+        if bool(e.get("shape")) == bool(e.get("word")):
+            raise SystemExit(
+                f"{path}: a [[proven]] entry needs one of 'shape' or 'word'"
+            )
+        for key in ("evidence", "note"):
             if not e.get(key):
                 raise SystemExit(f"{path}: a [[proven]] entry lacks {key!r}")
-        out.add(e["shape"])
-    return out
+    return entries
+
+
+def proven_shapes(path: Path = PROVEN) -> set[str]:
+    return {e["shape"] for e in _proven(path) if e.get("shape")}
+
+
+def proven_words(path: Path = PROVEN) -> set[str]:
+    """Whole instruction words (listing order, lower-case hex) executed in an image that passed on the unit."""
+    return {e["word"].lower() for e in _proven(path) if e.get("word")}
 
 
 def check_code(
     mem: sharc_disasm.ShortWordReader,
     ranges: list[tuple[int, int]],
     allowed: set[str],
+    exact: set[str] | frozenset[str] = frozenset(),
 ) -> list[Violation]:
-    """Decode each [start_sw, end_sw) range and report instructions whose shape is not allowed."""
+    """Decode each [start_sw, end_sw) range and report instructions whose shape is not allowed, and indirect
+    jumps/calls (EXACT_FORMS) whose whole word is not in `exact`."""
     out: list[Violation] = []
     for start, end in ranges:
         pc = start
@@ -179,7 +222,12 @@ def check_code(
                 pc += 1
                 continue
             s = shape(ins)
-            if s not in allowed:
+            if ins.type_name in EXACT_FORMS:
+                if raw_hex(ins) not in exact:
+                    out.append(
+                        Violation(pc, raw_hex(ins), f"{s} (exact word required)")
+                    )
+            elif s not in allowed:
                 out.append(Violation(pc, raw_hex(ins), s))
             pc += ins.length_bytes // 2
     return out
@@ -241,7 +289,12 @@ def check_image(syx: Path, plan: Path, db: Path | None = None) -> list[Violation
             "`uv run python -m tools.sharc_dev.sharcdb build out/sections/<image>/section_7_BLOB.bin`"
         )
     mem = LoadedMemory.from_stream(dsp_patch.section_blob(syx, 7))
-    return check_code(mem, ranges, stock_shapes(db) | proven_shapes())
+    return check_code(
+        mem,
+        ranges,
+        stock_shapes(db) | proven_shapes(),
+        stock_control_words(db) | proven_words(),
+    )
 
 
 def format_violation(v: Violation) -> str:

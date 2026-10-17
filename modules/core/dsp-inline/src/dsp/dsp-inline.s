@@ -11,34 +11,39 @@
 // `[[entry]]` rows of the machine modules) leaves through patchkit's tail _fw_stock: the two displaced instructions,
 // then `JUMP 0x1c4f18`, with R0 and I4 as they came in. A patched image with no row renders exactly the stock audio.
 //
-// Routine ABI. The routine is entered with JUMP (M13, I12) and returns with JUMP (M13, I13); it may CALL its own
-// subroutines (and the helpers below) and return from them with RTS.
+// Routine ABI. The routine is entered with JUMP (M13, I12) (the stock 32-bit word 083f283f) and returns with a
+// direct jump to one of the two return labels below; it may CALL its own subroutines (and the helpers below) and
+// return from them with RTS.
 //   in   R4 = voice record (0x1d8 bytes), R0 = voice index v (0..31), R2 = track v >> 1, R1 = type,
 //        I1 = record + 4 (the 96 kHz work buffer, 64 floats), I2 = the voice's final output (32 floats at 48 kHz,
-//        the pointer the renderer keeps at DM(-7, I6)), I13 = the return address.
-//   out  R0 = 0: the routine wrote 64 floats at 96 kHz to the work buffer; the stock decimator halves them into the
-//                output (continue at _fw_decimate, SW 0x1c524a).
-//        R0 = 1: the routine wrote the 32 output floats at 48 kHz itself; the decimator is skipped and its state
-//                (record +0x114..+0x14b) is left as it was (continue at _fw_after_decimate, SW 0x1c5264).
-//        Any other R0 is taken as 0.
-//        One mode per routine: a routine returns the same R0 in every block. Mode 1 leaves the decimator's state
-//        (its ring and filter words at record +0x114..+0x14b) as the last mode-0 block or the stock renderer left
-//        it; a routine that switched between modes would make the decimator start a mode-0 block from that stale
-//        state (a click or worse).
-//   return  `JUMP (M13, I13)` in its 32-bit form (type 9b; Selache emits it outside .NOCOMPRESS). Selache's 48-bit
-//        form of an indirect jump (type 9a, under .NOCOMPRESS) puts the delayed-branch flag and the I register in
-//        the wrong bits, so the core would run another jump (docs/findings/20-patch-toolchains.md).
+//        the pointer the renderer keeps at DM(-7, I6)).
+//   return  the label picks the continuation (no register carries a return mode):
+//        `JUMP _di_return_work;`  the routine wrote 64 floats at 96 kHz to the work buffer; the stock decimator
+//                halves them into the output (continue at _fw_decimate, SW 0x1c524a).
+//        `JUMP _di_return_out;`   the routine wrote the 32 output floats at 48 kHz itself; the decimator is skipped
+//                and its state (record +0x114..+0x14b) is left as it was (continue at _fw_after_decimate, SW
+//                0x1c5264).
+//        Both are the absolute 48-bit jump (type 8a), as in the images that ran on the unit. A routine never
+//        returns through an indirect jump: `JUMP (M13, I13)` (083f683f) does not occur in the stock code, and every
+//        custom routine that stalled the owner's unit returned with it; Selache's 48-bit indirect jump (type 9a,
+//        under .NOCOMPRESS) is mis-encoded (docs/findings/20-patch-toolchains.md). The encoding gate refuses both.
+//        One continuation per routine: a routine ends at the same label in every block. _di_return_out leaves the
+//        decimator's state (its ring and filter words at record +0x114..+0x14b) as the last _di_return_work block
+//        or the stock renderer left it; a routine that switched between them would make the decimator start a
+//        work-buffer block from that stale state (a click or worse).
 //   may clobber  R0-R15, I0-I5, M1-M4, I12 and the ALU/multiplier state; the renderer's epilogue restores what its
 //        caller needs.
-//   must keep  I6, I7 (and the frame below I6: DM(-4..-26, I6)), I13 or its value, M5-M7 (0, 1, -1),
-//        M13-M15 (0, 1, -1), the L registers (0), MODE1, and every register not in the clobber list (I8-I11,
-//        I14, I15, M0, M8-M12, B registers).
+//   must keep  I6, I7 (and the frame below I6: DM(-4..-26, I6)), M5-M7 (0, 1, -1), M13-M15 (0, 1, -1), the L
+//        registers (0), MODE1, and every register not in the clobber list (I8-I11, I13-I15, M0, M8-M12, B
+//        registers).
 //
 // Instruction shapes: only stock or silicon-proven shapes (the encoding gate checks the image); right shifts use a
 // negative amount in a register.
 
 .SECTION/PM seg_pmco;
 .GLOBAL _di_entry;
+.GLOBAL _di_return_work;
+.GLOBAL _di_return_out;
 .EXTERN _di_table;
 .EXTERN _fw_records;
 .EXTERN _fw_type_cache;
@@ -105,14 +110,12 @@ _di_scan:
     .COMPRESS;
     I1 = R3;                              // the work buffer
     I2 = DM(-7, I6);                      // the output
-    I13 = _di_back;
-    JUMP (M13, I12);
-_di_back:
-    R3 = 1;
-    COMP(R0, R3);
-    IF EQ JUMP _di_direct;
+    JUMP (M13, I12);                      // the 32-bit form, the stock word 083f283f
+
+// The routine's two continuations (the ABI above).
+_di_return_work:
     JUMP _fw_decimate;
-_di_direct:
+_di_return_out:
     // The state the decimator's call leaves at its return point: I7 two words below the renderer's (the caller's
     // stack slot and the CJUMP frame word); the delay slot of the stock jump there adds them back.
     MODIFY(I7, -2) (NW);

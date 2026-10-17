@@ -1,6 +1,7 @@
 # Instruction encoding shapes proven on the owner's Digitakt II, beyond the shapes in stock 1.17 DSP code.
-# One [[proven]] table per shape (the key pk_encoding_gate.shape() returns):
-#   shape    = the shape key
+# One [[proven]] table per shape (the key pk_encoding_gate.shape() returns) or per whole word:
+#   shape    = the shape key, or
+#   word     = an indirect jump/call word in listing order (Types 9a/9b are matched by the whole word)
 #   evidence = the image name and date, an image that executed this shape and passed on the unit
 #   note     = what the shape is
 # Add an entry only for a shape executed in an image that passed on the unit. The list starts empty.

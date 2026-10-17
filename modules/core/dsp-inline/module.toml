@@ -51,8 +51,10 @@ devices = ["dt2"]
 #     type = "machines.plaits.index"   # the machine type (a number, or the index of a machines entry)
 #     pc = "_pl_render"                # the routine's symbol in the module's DSP object
 #
-# The routine ABI is in src/dsp/dsp-inline.s. The scan ends at the zero row patchkit appends (terminator); at most 16
-# types.
+# The routine ABI is in src/dsp/dsp-inline.s: the hook enters `pc` with `JUMP (M13, I12)`; the routine ends with
+# `JUMP _di_return_work;` (work buffer, the stock decimator runs) or `JUMP _di_return_out;` (48 kHz output written,
+# decimator skipped), never with an indirect jump. The scan ends at the zero row patchkit appends (terminator); at most
+# 16 types.
 [[registry]]
 name = "inline_voices"
 first = "0"

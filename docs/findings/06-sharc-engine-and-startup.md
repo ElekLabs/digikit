@@ -5942,13 +5942,16 @@ voice in record order. The lab read `(DM(0x24f0cc) >> 8v) & 0xff` for v = 0 and 
   type = the 16-bit cache entry of the track at 0x255970 (aligned word, register-amount shift); registry
   `inline_voices` rows {type, pc}, max 16, terminator.
 - Routine ABI (modules/core/dsp-inline/src/dsp/dsp-inline.s): in R4 = record, R0 = v, R2 = track, R1 = type, I1 = record + 4, I2 = the output
-  (DM(-7, I6)); return R0 = 0 (64 floats at 96 kHz in the work buffer, continue at 0x1c524a) or R0 = 1 (32 floats at
-  48 kHz in the output, `I7 = MODIFY(I7, -2) (NW)`, continue at 0x1c5264). Helpers `_di_frame_hw(k)` and `_di_trig(v)`.
+  (DM(-7, I6)); entered with `JUMP (M13, I12)` (stock word `083f283f`). **[C]** (Task 5b, 2026-10-17) A routine returns
+  with a direct jump (type 8a) to a hook label, not with `JUMP (M13, I13)` and an R0 mode: `_di_return_work` (64 floats
+  at 96 kHz in the work buffer, continue at 0x1c524a) or `_di_return_out` (32 floats at 48 kHz in the output,
+  `I7 = MODIFY(I7, -2) (NW)`, continue at 0x1c5264); `JUMP (M13, I13)` never occurs in stock code (docs/findings/20).
+  Helpers `_di_frame_hw(k)` and `_di_trig(v)`.
 - New anchors: `dsp.inline.decimate` (0x1c524a), `dsp.inline.after_decimate` (0x1c5264), `dsp.inline.trig_latch`
   (literal 0x24f0ac at 0x1c33c9 plus 0x20; port_resolve's `sharc_literal` takes an `add`), `dsp.inline.frame_base`
   (0x2558dc), `dsp.inline.voice_records` (literal 0x2412cc at 0x1c14ab).
 - Patched 1.17 image (core/dsp-inline + core/machines) passes the encoding gate. In the patched image's own code on the
   concrete core, an idle voice renders as stock, and a registered test routine in both modes returns to the voice loop
   (0x1c6b06) with the caller's registers and frame restored (tests/patchkit/test_dsp_inline.py).
-- Open **[O]**: mode 1 (skipping the decimator) is not yet tried on the unit; its decimator state stays stale across a
-  switch back to mode 0 or to a stock type.
+- Open **[O]**: mode 1 (`_di_return_out`, skipping the decimator) is not yet tried on the unit; its decimator state
+  stays stale across a switch back to mode 0 or to a stock type.

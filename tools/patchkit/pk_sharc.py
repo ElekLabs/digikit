@@ -34,6 +34,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 from tools.patchkit import (  # noqa: E402
+    pk_crosscheck,  # noqa: E402
     pk_elf,  # noqa: E402
     pk_toolchains,  # noqa: E402
 )
@@ -113,7 +114,9 @@ def split_symbol(name: str) -> tuple[str, int]:
     return m.group(1), add
 
 
-def _object(obj: Path, source_sha: str, section: str | None) -> SharcObject:
+def _object(
+    obj: Path, source_sha: str, section: str | None, preprocessed: str | None = None
+) -> SharcObject:
     elf = pk_elf.parse(obj.read_bytes())
     if section is None:
         section = next(
@@ -133,6 +136,13 @@ def _object(obj: Path, source_sha: str, section: str | None) -> SharcObject:
     rows = sel.parse_listing(listing)
     if b"".join(r.raw for r in rows) != sec.data:
         raise PkSharcError("Selache listing bytes do not equal the section bytes")
+    stmts = pk_crosscheck.statements(preprocessed) if preprocessed is not None else None
+    mismatches = pk_crosscheck.check(obj.read_bytes(), section, sec.data, stmts)
+    if mismatches:
+        raise PkSharcError(
+            "Selache's listing and our decoder disagree on operands (tools/patchkit/pk_crosscheck.py):\n  "
+            + "\n  ".join(m.format() for m in mismatches)
+        )
     symbols = {
         s.name: (s.value, s.bind != "local")
         for s in elf.symbols
@@ -250,7 +260,10 @@ def _sw_prepare(source: str) -> tuple[str, list[tuple[str, bool]]]:
     def sub(m: re.Match) -> str:
         label = f"_pk_sw{len(marks)}"
         marks.append((label, m.group(4).upper() == "SWSE"))
-        return f"{m.group(1)}.GLOBAL {label};\n{m.group(1)}{label}:\n{m.group(1)}R{m.group(2)} = DM({m.group(3)});"
+        # one line: the statements keep their source line numbers (pk_crosscheck reports them)
+        return (
+            f"{m.group(1)}.GLOBAL {label}; {label}: R{m.group(2)} = DM({m.group(3)});"
+        )
 
     return _SW_LOAD.sub(sub, source), marks
 
@@ -317,7 +330,23 @@ def assemble(
         )
         if r.returncode:
             raise PkSharcError(f"selas failed:\n{r.stdout}{r.stderr}")
-        result = _object(obj, hashlib.sha256(original.encode()).hexdigest(), section)
+        pre = Path(d) / "m.i"
+        subprocess.run(
+            [
+                str(_tool("selas")),
+                "-proc",
+                PROCESSOR,
+                "--preprocess-only",
+                "-o",
+                str(pre),
+                str(src),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        result = _object(
+            obj, hashlib.sha256(original.encode()).hexdigest(), section, pre.read_text()
+        )
         _sw_apply(result, sw_marks)
         for name, size, is_bss in bss_decls:
             if size <= 0 or size % 4:

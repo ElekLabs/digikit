@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tempfile
 import tomllib
@@ -45,10 +46,30 @@ def canonical(obj: dict) -> str:
     return json.dumps(obj, sort_keys=True, indent=1, ensure_ascii=True) + "\n"
 
 
+def _tu_lines(sources: list[Path], texts: list[str], message: str) -> str:
+    """Rewrite `line N:` (a line of the concatenated translation unit) as `file:line:`."""
+    starts = []
+    first = 1
+    for p, t in zip(sources, texts, strict=True):
+        starts.append((first, p))
+        first += t.count("\n") + 1  # the "\n" joining the next file
+
+    def sub(m: re.Match) -> str:
+        n = int(m.group(1))
+        start, path = max((s for s in starts if s[0] <= n), key=lambda s: s[0])
+        return f"{path}:{n - start + 1}:"
+
+    return re.sub(r"\bline (\d+):", sub, message)
+
+
 def sharc_object(sources: list[Path]) -> dict:
     """One or more `.s` files, concatenated into one translation unit, to an object."""
-    text = "\n".join(p.read_text() for p in sources)
-    obj = pk_sharc.assemble(text)
+    texts = [p.read_text() for p in sources]
+    text = "\n".join(texts)
+    try:
+        obj = pk_sharc.assemble(text)
+    except pk_sharc.PkSharcError as e:
+        raise pk_sharc.PkSharcError(_tu_lines(sources, texts, str(e))) from e
     # ISA check: link at a placeholder base with placeholder externs; verify() re-decodes every instruction
     # and reads every relocated field back.
     undefined = sorted({r.symbol for r in obj.relocs} - set(obj.symbols))

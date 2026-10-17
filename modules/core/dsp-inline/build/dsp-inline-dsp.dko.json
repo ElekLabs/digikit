@@ -67,49 +67,35 @@
   },
   {
    "addend": 0,
-   "offset": 89,
-   "section": "seg_pmco",
-   "symbol": "_di_back",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 97,
-   "section": "seg_pmco",
-   "symbol": "_di_direct",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 100,
+   "offset": 91,
    "section": "seg_pmco",
    "symbol": "_fw_decimate",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 106,
+   "offset": 97,
    "section": "seg_pmco",
    "symbol": "_fw_after_decimate",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 111,
+   "offset": 102,
    "section": "seg_pmco",
    "symbol": "_fw_stock",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 121,
+   "offset": 112,
    "section": "seg_pmco",
    "symbol": "_fw_frame",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 153,
+   "offset": 144,
    "section": "seg_pmco",
    "symbol": "_fw_trig_latch",
    "type": "sharc.abs32"
@@ -118,26 +104,14 @@
  "sections": [
   {
    "align": 8,
-   "hex": "089d7b0024c2010f0000000021c1810f000021c3020600000000810f003b21c3220600000000800f0000810fd80121c302060000000021c100c53e0600000000830fffffa0010302810ffcff84010101030f000000003e01000013113e703f885191830f0100840123033e020000330482013023a0011301030f0000ffff13cc100f0000000093919c9133c200060000000031c3200600000000fe703f0e34c2850f04003e01000035133f70bf88089c79091d0f000000003f083f28830f010003c30006000000003e06000000008715fffffeff3e0600000000089c7b003e0600000000810ffeff840101013e0200001101020f000000003e01000012113e703f8a5199820f0100840102023e020000220482012022a0011200020f0000ffff3e0a0004000002cc0100810ffcff84010101020f000000003e01000012113e703f8a5199820f0300840102023e020000220382012022a0011200820fff003e0a0004000002cc0100",
+   "hex": "089d7b0024c2010f0000000021c1810f000021c3020600000000810f003b21c3220600000000800f0000810fd80121c302060000000021c100c53e0600000000830fffffa0010302810ffcff84010101030f000000003e01000013113e703f885191830f0100840123033e020000330482013023a0011301030f0000ffff13cc100f0000000093919c9133c200060000000031c3200600000000fe703f0e34c2850f04003e01000035133f70bf88089c79093f083f283e06000000008715fffffeff3e0600000000089c7b003e0600000000810ffeff840101013e0200001101020f000000003e01000012113e703f8a5199820f0100840102023e020000220482012022a0011200020f0000ffff3e0a0004000002cc0100810ffcff84010101020f000000003e01000012113e703f8a5199820f0300840102023e020000220382012022a0011200820fff003e0a0004000002cc0100",
    "kind": "text",
    "name": "seg_pmco",
-   "size": 360
+   "size": 342
   }
  ],
- "source_sha256": "3ecf22931fc2b2701a87120b08d55ac7aa403f2b30a0a4912782286c52a9924b",
+ "source_sha256": "b7ea9776672732468a2d929b88cc2024730aacf0e8d375d3e0134e22090ba6f1",
  "symbols": [
-  {
-   "global": false,
-   "name": "_di_back",
-   "section": "seg_pmco",
-   "value": 94
-  },
-  {
-   "global": false,
-   "name": "_di_direct",
-   "section": "seg_pmco",
-   "value": 103
-  },
   {
    "global": false,
    "name": "_di_div",
@@ -154,7 +128,19 @@
    "global": true,
    "name": "_di_frame_hw",
    "section": "seg_pmco",
-   "value": 114
+   "value": 105
+  },
+  {
+   "global": true,
+   "name": "_di_return_out",
+   "section": "seg_pmco",
+   "value": 94
+  },
+  {
+   "global": true,
+   "name": "_di_return_work",
+   "section": "seg_pmco",
+   "value": 91
   },
   {
    "global": false,
@@ -166,13 +152,13 @@
    "global": false,
    "name": "_di_stock",
    "section": "seg_pmco",
-   "value": 109
+   "value": 100
   },
   {
    "global": true,
    "name": "_di_trig",
    "section": "seg_pmco",
-   "value": 149
+   "value": 140
   },
   {
    "global": false,
@@ -230,7 +216,7 @@
   }
  ],
  "toolchain": {
-  "instructions_redecoded": "86",
+  "instructions_redecoded": "82",
   "selache_rev": "2b26d3b75c53063575bc5c820fa0d38879335187",
   "selas_sha256": "1aec06ba483afa08c9da6530276d2355c648d0bf139bfb0dd5223132d16054ca",
   "seldump_sha256": "98795ae38f941cf6be67f5483eab42d9009a6894195439b33069c4e5219ff6c1"

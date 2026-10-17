@@ -59,6 +59,70 @@ def test_short_and_fsub_forms_are_allowed(stock):
     assert run("01882710", stock) == []
 
 
+@pytest.fixture(scope="module")
+def stock_words() -> set[str]:
+    return gate.stock_control_words(STOCK_DB)
+
+
+def run_exact(
+    listing_hex: str, stock: set[str], words: set[str]
+) -> list[gate.Violation]:
+    mem = Words(listing_hex)
+    return gate.check_code(mem, [(0, len(mem.data) // 2)], stock, words)
+
+
+@needs_db
+def test_gate_rejects_jump_m13_i13(stock, stock_words):
+    # JUMP (M13, I13), 32-bit Type 9b: its shape is stock (I/M masked), the word is not: the stock code jumps
+    # indirectly only through I12 and, delayed, I13 (docs/findings/20).
+    assert (
+        gate.shape(gate.decode_listing("083f683f")) in stock
+    )  # the shape alone passes
+    got = run_exact("083f683f", stock, stock_words)
+    assert [(v.pc, v.raw) for v in got] == [(0, "083f683f")]
+    assert "exact" in got[0].shape
+
+
+@needs_db
+def test_gate_allows_stock_jump_m13_i12(stock, stock_words):
+    assert "083f283f" in stock_words
+    assert run_exact("083f283f", stock, stock_words) == []
+
+
+@needs_db
+def test_gate_rejects_48bit_9a_indirect_jump_from_nocompress(stock, stock_words):
+    # Selache's `.NOCOMPRESS; JUMP (M13, I12);` = 083e2c000000, by the PRM layout JUMP (M13, I8) (DB). Its shape
+    # equals stock JUMP (M14, I12) (DB), so only the exact rule catches it (docs/findings/20).
+    assert gate.shape(gate.decode_listing("083e2c000000")) in stock
+    got = run_exact("083e2c000000", stock, stock_words)
+    assert [(v.pc, v.raw) for v in got] == [(0, "083e2c000000")]
+
+
+def test_indirect_jumps_need_an_exact_word_even_with_their_shape_allowed():
+    ins = gate.decode_listing("083f283f")
+    assert ins.type_name in gate.EXACT_FORMS
+    assert run_exact("083f283f", {gate.shape(ins)}, set()) != []
+    assert run_exact("083f283f", set(), {"083f283f"}) == []
+
+
+def test_exact_forms_cover_every_indirect_jump_or_call_form():
+    from tools.sharc_dev.sharc_visa_tables import TYPES
+
+    for entry in TYPES:
+        bases = {k.split("[")[0] for k in entry["fields"]}
+        if {"pmi", "pmm", "j"} <= bases:
+            assert entry["name"] in gate.EXACT_FORMS, entry["name"]
+
+
+def test_proven_words_extend_the_exact_set(tmp_path):
+    f = tmp_path / "p.toml"
+    f.write_text(
+        '[[proven]]\nword = "083f683f"\nevidence = "img 2026-10-17"\nnote = "n"\n'
+    )
+    assert gate.proven_words(f) == {"083f683f"}
+    assert gate.proven_shapes(f) == set()
+
+
 def test_unknown_shape_reports_pc_and_raw():
     got = run("01840262" + "01882710", set())
     assert [(v.pc, v.raw) for v in got] == [(0, "01840262"), (2, "01882710")]

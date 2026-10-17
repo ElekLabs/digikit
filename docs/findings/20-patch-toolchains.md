@@ -151,3 +151,42 @@ One agent, met writing test/inline-tone (the H1 probe of core/dsp-inline); not c
   (`JUMP (M14, I12)` non-delayed, 64 times) and which our decoder, the core and Selache read alike. core/dsp-inline's
   `JUMP (M13, I12)` and test/inline-tone's return `JUMP (M13, I13)` are 9b. **[O]** A Selache patch, or a
   `pk_sharc` refusal of 48-bit 9a words whose bits disagree with their 9b form.
+- **Closed by two checks (Task 5b, 2026-10-17).** Selache is not patched; instead (1) `pk_sharc` cross-checks every
+  object it assembles or compiles (tools/patchkit/pk_crosscheck.py): seldump's text and our decoder must name the same
+  registers, immediates, condition and DB/CI/LA flags for every instruction, so `.NOCOMPRESS; JUMP (M13, I12);` stops
+  the build (`jump (m13,i12)` against our `JUMP (M13, I8) (DB)`) with its source line; and (2) the encoding gate
+  matches indirect jumps and calls (Types 9a, 9b) by the whole word against the stock code, so the word `083e2c000000`
+  is refused in an image even though its shape is stock. All committed module objects pass the cross-check unchanged.
+- **[D] Found by the cross-check (not on silicon).** (a) Selache drops the PM / DAG2 selection of a Type 3a transfer:
+  `PM(I12, M14) = R2` assembles to `59be81000000`, which is `DM(I4, M6) = R2`, and `PM(I9, M8) = R2` to `DM(I1, M0) = R2`;
+  seldump lists the DM form too, so only comparing with the source statement shows it (pk_crosscheck does: the
+  statement must name the registers the word holds). No module uses a PM data transfer. (b) seldump lists a Type 3a
+  transfer's M0-M3 as M4-M7, while the encoder writes the register the source names (our decoder, the stock code and
+  the concrete core read it that way). (c) seldump lists a 16-bit Type 3c transfer with M0-M3 as a 32-bit word;
+  the stock code has such 16-bit words (dmm 1-3, 10 in its instruction chains). (b) and (c) are accepted when the
+  source and our decoder agree.
+
+## The stock code never returns through `JUMP (M13, I13)` (2026-10-17) **[D]/[O]**
+
+One agent (Task 5b), from the 1.17 sharcdb (`aligned = 1`, `confidence = 'confident'`) and a byte search of the
+section-7 boot stream of firmware/Digitakt_II_OS1.17.syx and of the images in out/patch/.
+
+- **[D] Stock indirect jumps.** The 1.17 DSP code has 1,115 32-bit indirect jumps (Type 9b) in 9 distinct words:
+  `083f343f` `JUMP (M14, I12) (DB)` (the return, 1,001), `083f303f` `JUMP (M14, I12)` (64), `083f2c3f`
+  `JUMP (M13, I12) (DB)` (28), `083f283f` `JUMP (M13, I12)` (12; 15 byte matches in the stream), `083f6c3f`
+  `JUMP (M13, I13) (DB)` (5), `083f743f` `JUMP (M14, I13) (DB)` (1), and three conditional I12 forms. All 57 48-bit
+  ones (Type 9a) go through I12 as well. The non-delayed `JUMP (M13, I13)`, `083f683f`, occurs nowhere: not in the
+  database (aligned or not) and not as a byte pattern in the stream.
+- **[D] The images built so far.** Every image in out/patch/ with a custom DSP routine for core/dsp-voice adds
+  `083f683f` (PLUCK `pluck-1.17` and the diagnostics E, F, G, H, I: 2 or 3 each) and one `083f283f` (the entry); the
+  pre-5b H1 images add one of each. The lab-style images (diag-J..R xslice-labsine, diag-xslice, diag-D) add neither.
+- **[O] Correlation, not cause.** Per the owner's tests as relayed by the controller, every custom routine that stalled
+  the unit (PLUCK, F, H) returned with `083f683f`, and the lab-style images that worked used no indirect jump. Those
+  stalled images were also whole-renderer replacements (core/dsp-voice) and also contain the `083f283f` entry jump,
+  which the new H1 keeps, so the stall is not pinned to `083f683f`. Nothing executed `083f683f` on silicon in an image
+  that passed.
+- **Rule (since Task 5b).** The encoding gate requires the whole word of every indirect jump or call to occur in stock
+  code (or in encoding_proven.toml as `word = "..."`), so `083f683f` is refused. core/dsp-inline routines return with a
+  direct jump (Type 8a, as in the images that worked) to `_di_return_work` or `_di_return_out`; the hook enters them
+  with the stock `083f283f`. The pre-5b H1 images are kept as `out/patch/diag-h1-i13return-{96k,48k}-1.17.ungated.syx`
+  (optional diagnostic: they fail the new gate on exactly that word).

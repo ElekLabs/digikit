@@ -13,7 +13,7 @@ conflicts = ["test/inline-tone-48k"]
 "dt2-1.17" = "experimental"
 
 # One source for both modes (modules/test/inline-tone/src/dsp/tone.s); src/dsp/mode.s, listed first, defines
-# TONE_MODE 0: the routine fills the 64-sample work buffer (I1) and returns R0 = 0.
+# TONE_MODE 0: the routine fills the 64-sample work buffer (I1) and returns with `JUMP _di_return_work`.
 [[object]]
 path = "build/inline-tone-96k-dsp.dko.json"
 sources = ["src/dsp/mode.s", "../inline-tone/src/dsp/tone.s"]
