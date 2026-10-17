@@ -259,3 +259,22 @@ merged with the assembly entry shim by `pk_build`, tools/patchkit/pk_sharc.py `c
   about 60,200 instructions and 97,100 cycles per block at the high bound at 48 kHz (85,700 and 137,800 at 96 kHz),
   1.61 cycles per instruction at the high bound against the stock mix's 1.41. Two tracks at 48 kHz measure 73.4 % of
   the 666,667-cycle block (high), two at 96 kHz 85.6 %; 16 tracks do not fit without hand-written hot loops.
+
+## selcc lays out union members like struct members (2026-10-17) **[D]**
+
+One agent (PLAITS Task 7, the ASYM-TRI engine), from selcc's `-S` output and the concrete-core equivalence tests.
+
+- **What selcc does.** For a union in memory it gives each member the offset it would have in a struct: the first
+  member is at 0, the second after the first, and so on. `sizeof` of the union is right (the largest member). So
+  `typedef union { VA va; WS ws; } E;` with `E *e` compiles `&e->ws` to `e + sizeof(VA)` (`R3 = 0xFC; R5 = R1 + R3`
+  with sizeof(VA) = 252 bytes), and `u[i].f` of an array of `union { unsigned int u; float f; }` reads
+  `&u[i] + 4`, the next entry (`R1 = 0x4; R7 = R8 + R1`) while the array stride is 4. A union kept in registers (a
+  local such as `itof_nonneg`'s or `hb_up2`'s) is not affected: its members share the register.
+- **How it showed.** The PLAITS ASYM-TRI port read its tables through such a union array: every table read came from
+  the next entry (`Sine(0)` = `lut_sine[1]` = 0.01227), and the per-voice engine union put the waveshaping state
+  inside the voice's output buffers. The compiled engine differed from the host build by up to 1e7. The host build,
+  the encoding gate and the operand cross-check cannot see it; the concrete-core equivalence tests did.
+- **Rule.** In C built by selcc, never name a union member other than the first in memory. Use a pointer to the union
+  converted to the member's type (C99 6.7.2.1: it points to each member; modules/machines/plaits/src/dsp/plaits.h
+  `PL_VA`/`PL_WS`), or, for tables of bit patterns, a plain `unsigned int` array read through a `const float *`
+  (modules/machines/plaits/src/dsp/engines/ws_tables.h `WS_F`; the host build adds `-fno-strict-aliasing`).
