@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""patchkit proof: the PLAITS machine (VA model) end to end on Digitakt II 1.17, in the emulator, through the panel.
+"""patchkit proof: the PLAITS machine (models VA and ASYM-TRI) end to end on Digitakt II 1.17, in the emulator.
 
-    uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g] [--jobs N]
+    uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g,h] [--jobs N]
 
-Loads the owner image (default out/patch/plaits-va-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
+Loads the owner image (default out/patch/plaits-2models-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
 through the harness (`tools/patchkit/pk_harness.py` Session: panel inputs, health asserted after every input) and
 captures the main output (`pcm.tap`):
 
@@ -15,9 +15,12 @@ captures the main output (`pcm.tap`):
   c  stock     LEV (H) lowered acts through the level stage (a square) on PLAITS as on a stock sample; the filter (FLTR page, E) closed
                cuts the high band; the reverb send (FX page, F) adds the reverb's stereo return.
   d  two       PLAITS on tracks 1 and 2 (track 2 TUNE + 7): both notes sound together, at 261.6 and 392.0 Hz.
-  e  persist   save the project with edited PLAITS values, set track 1 to ONESHOT, load: type 11 and the values are
-               back. The card's writes over the STOCK 1.17 card: the project loads without a fault and track 1 comes
+  e  persist   save the project with edited PLAITS values (MODEL 1 among them), set track 1 to ONESHOT, load: type 11
+               and the values are back, MODEL included, and the track plays model 1 at note 60. The card's writes over the STOCK 1.17 card: the project loads without a fault and track 1 comes
                back as type 0 (ONESHOT): the stock loader keeps a type only when `(u8)(type + 1) < 8` (finding 02).
+  h  asym-tri  MODEL (B) turned to 1 (row value 0x100): slot and TX word; note 60 of model 1 within 1 cent; its
+               spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change model 1's spectrum; track 2's stock
+               sample (ONESHOT) still plays beside it.
   g  gain      the gain calibration: track 1's stock sample (its int16 data read from DSP memory for its peak) and then
                PLAITS default VA at note 60 on the same track and LEV: the RMS of the sample normalised to full scale
                against PLAITS' (Task 6 report, "Gain calibration").
@@ -61,7 +64,8 @@ HARM, TIMB, MORPH, LEV = (
     34,
 )  # engine slots (mirror indexes) of knobs C, E, F, H
 ENC = {HARM: "ENC C", TIMB: "ENC E", MORPH: "ENC F", LEV: "ENC H"}
-DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-va-48k-1.17.syx"
+MODEL = 26  # engine slot of knob B (MODEL: the model number << 8)
+DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-2models-48k-1.17.syx"
 
 
 def left_of(pcm: np.ndarray) -> np.ndarray:
@@ -149,6 +153,55 @@ class PlaitsProof(M.Proof):
         a += int(start_ms * FS / 1000)
         return x[a : a + int(ms * FS / 1000)]
 
+    def set_model(self, s: H.Session, n: int, track: int = 0) -> int:
+        """Turn MODEL (knob B) one detent at a time until the slot holds n << 8; returns the slot."""
+        for _ in range(60):
+            v = s.mirror(MODEL, track)
+            if v == n << 8:
+                break
+            s.turn_burst("ENC B", 1 if v < n << 8 else -1, 1, gap_ms=60)
+        return s.mirror(MODEL, track)
+
+    def pitch_check(self, x: np.ndarray, what: str) -> None:
+        seg = self.held(x, 100, 1000)
+        self.check(f"{what} sounds", rms(seg) > 1e-3, f"rms {rms(seg):.4f}")
+        if rms(seg) > 1e-3:
+            f = f0_fft(seg, NOTE60)
+            c = 1200 * math.log2(f / NOTE60)
+            self.results_extra[f"{what} Hz"] = f
+            self.check(
+                f"{what} within 1 cent of 261.6256 Hz",
+                abs(c) < 1.0,
+                f"{f:.4f} Hz, {c:+.3f} cent",
+            )
+
+    def knobs_change(self, s: H.Session, ref: np.ndarray, tag: str) -> None:
+        """HARMONICS, TIMBRE and MORPH each turned: the slot and TX word follow, the spectrum changes."""
+        href = harmonics_db(ref, NOTE60)
+        for idx, name, target in (
+            (HARM, "HARMONICS", 0x7000),
+            (TIMB, "TIMBRE", 0x7800),
+            (MORPH, "MORPH", 0x0800),
+        ):
+            before = s.mirror(idx)
+            s.turn_to(ENC[idx], idx, target)
+            after = s.mirror(idx)
+            x = self.held(self.play(s, f"{tag}{name.lower()}"))
+            tx = s.tx_word(idx)
+            h = harmonics_db(x, f0_fft(x, NOTE60) if rms(x) > 1e-3 else NOTE60)
+            d = float(np.mean(np.abs(h[:10] - href[:10])))
+            self.check(
+                f"{tag}{name} moves its slot and the TX word",
+                abs(after - target) <= 0x300 and abs(tx - after) <= 0x300,
+                f"slot {before:#x} -> {after:#x}, tx {tx:#x}",
+            )
+            self.check(
+                f"{tag}{name} changes the spectrum",
+                d > 1.5,
+                f"mean |d harmonic| {d:.2f} dB",
+            )
+            s.turn_to(ENC[idx], idx, before)
+
     def type_cache(self, s: H.Session) -> int:
         assert s.emu is not None
         raw = s.emu.dsp_peek(TYPE_CACHE, 4)["hex"]
@@ -201,30 +254,50 @@ class PlaitsProof(M.Proof):
         with self.session_plaits() as s:
             self.plaits(s)
             ref = self.held(self.play(s, "default"))
-            href = harmonics_db(ref, NOTE60)
-            for idx, name, target in (
-                (HARM, "HARMONICS", 0x7000),
-                (TIMB, "TIMBRE", 0x7800),
-                (MORPH, "MORPH", 0x0800),
-            ):
-                before = s.mirror(idx)
-                s.turn_to(ENC[idx], idx, target)
-                after = s.mirror(idx)
-                x = self.held(self.play(s, name.lower()))
-                tx = s.tx_word(idx)
-                h = harmonics_db(x, f0_fft(x, NOTE60) if rms(x) > 1e-3 else NOTE60)
-                d = float(np.mean(np.abs(h[:10] - href[:10])))
-                self.check(
-                    f"{name} moves its slot and the TX word",
-                    abs(after - target) <= 0x300 and abs(tx - after) <= 0x300,
-                    f"slot {before:#x} -> {after:#x}, tx {tx:#x}",
+            self.knobs_change(s, ref, "")
+
+    # -- h: model 1 (ASYM-TRI)
+    def part_h(self) -> None:
+        with self.session_plaits() as s:
+            self.plaits(s)
+            ref0 = self.held(self.play(s, "model0"))
+            m = self.set_model(s, 1)
+            s.run_ms(100)
+            tx = s.tx_word(MODEL)
+            self.check(
+                "MODEL knob reaches 1 (row value 0x100): slot and TX word",
+                m == 0x100 and tx == 0x100,
+                f"slot {m:#x}, tx {tx:#x}",
+            )
+            x = self.play(s, "model1-note60", hold=1200, total=1500)
+            tc = self.type_cache(s)
+            self.check("type 11 at the DSP", tc & 0xFFFF == PLAITS_TYPE, f"{tc:#010x}")
+            self.pitch_check(x, "model 1 (ASYM-TRI) note 60")
+            ref1 = self.held(self.play(s, "model1"))
+            d = float(
+                np.mean(
+                    np.abs(
+                        harmonics_db(ref1, NOTE60)[:10]
+                        - harmonics_db(ref0, NOTE60)[:10]
+                    )
                 )
-                self.check(
-                    f"{name} changes the spectrum",
-                    d > 1.5,
-                    f"mean |d harmonic| {d:.2f} dB",
-                )
-                s.turn_to(ENC[idx], idx, before)
+            )
+            self.check(
+                "model 1's spectrum differs from model 0's",
+                d > 1.5,
+                f"mean |d harmonic| {d:.2f} dB",
+            )
+            self.knobs_change(s, ref1, "model 1 ")
+            # track 2: the default project's stock sample (ONESHOT), beside PLAITS model 1 on track 1
+            x2 = self.held(
+                self.quiet_play(s, "track2-oneshot", keys=("TRIG 2",)), 5, 200
+            )
+            tc = self.type_cache(s)
+            self.check(
+                "track 2 ONESHOT still plays beside PLAITS model 1",
+                rms(x2) > 1e-3 and tc >> 16 == 0,
+                f"rms {rms(x2):.4f}, type cache {tc:#010x}",
+            )
 
     # -- c: LEV, filter, reverb send act as on a stock track
     def quiet_play(self, s: H.Session, name: str, **kw: Any) -> np.ndarray:
@@ -356,6 +429,8 @@ class PlaitsProof(M.Proof):
             s.run_ms(200)
             for idx, v in want.items():
                 s.turn_to(ENC[idx], idx, v)
+            m = self.set_model(s, 1)
+            self.check("MODEL set to 1 before the save", m == 0x100, f"{m:#x}")
             keep = {i: s.mirror(i) for i in (25, 26, 27, 31, 32, 33, 34)}
             self.save_project(s)
             self.select(s, 0, ups=PLAITS_DOWNS + 2)  # ONESHOT
@@ -379,9 +454,15 @@ class PlaitsProof(M.Proof):
                 back == keep,
                 f"{ {i: hex(v) for i, v in back.items()} }",
             )
-            x = self.held(self.play(s, "reloaded"), 60, 300)
             self.check(
-                "the reloaded PLAITS track sounds", rms(x) > 1e-3, f"rms {rms(x):.4f}"
+                "MODEL is back at 1 after the reload",
+                back.get(MODEL) == 0x100,
+                f"{back.get(MODEL, 0):#x}",
+            )
+            s.run_ms(2500)
+            self.pitch_check(
+                self.play(s, "reloaded", hold=1200, total=1500),
+                "the reloaded track (model 1) note 60",
             )
             assert s.emu is not None
             r = s.emu.call("card.overlay", path=str(overlay))
@@ -510,6 +591,13 @@ PARTS = [
         "e", "persistence (patched save and load, then stock load)", P.part_e, True, 250
     ),
     K.Part("g", "gain calibration against track 1's stock sample", P.part_g, True, 150),
+    K.Part(
+        "h",
+        "model 1 (ASYM-TRI): MODEL knob, note 60 within 1 cent, knobs, track 2 ONESHOT",
+        P.part_h,
+        True,
+        400,
+    ),
 ]
 
 
