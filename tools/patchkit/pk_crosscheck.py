@@ -20,8 +20,10 @@ the same data, index and modify registers (R/F, I, M) as our decoder reads in it
 listing quirks are accepted when the source and our decoder agree (`listing_quirk`): seldump prints a Type 3a
 transfer's M0-M3 as M4-M7, and lists a 16-bit Type 3c with M0-M3 as a 32-bit word.
 
-A disagreement, or a Selache line we cannot read, or a form we do not cross-check yet, fails the build with the
-source statement it came from.
+Most forms are compared as sets (registers, immediates) plus condition and flags; the forms in `STRICT_FORMS`
+(Types 16a/16b, `DM|PM(Ia, Mb) = data`, which Selache's C emits for every call) are compared operand by operand in
+their roles (memory, index, modify, immediate). A disagreement, or a Selache line we cannot read, or a form we do
+not cross-check yet, fails the build with the source statement it came from.
 
 seldump lists a section linearly and loses step after a width it misjudges (it lists a 48-bit Type 3a as 32 bits
 plus a stray parcel), and it replaces numbers equal to a symbol's address by the symbol's name. So the object is
@@ -423,11 +425,60 @@ def native_operands(form: str, raw_fields: dict[str, int]) -> NativeOperands:
     elif form == "18a":
         regs.add(USTAT1 + f["sreg"])
         imms.append((f["data"], 32))
+    elif form in STRICT_FORMS:
+        g = f.get("g", 0)
+        regs |= {_dag(f["i"], g), _mdag(f["m"], g)}
+        imms.append((f["data"], 32 if form == "16a" else 16))
     else:
         raise CrossCheckError(
             f"form {form} is not cross-checked yet (tools/patchkit/pk_crosscheck.py)"
         )
     return NativeOperands(frozenset(regs), tuple(imms), cond, frozenset(flags))
+
+
+# Forms compared operand by operand in their roles (`strict_check`), not as register and immediate sets: the listing
+# is parsed by the form's own pattern and every field is checked where it belongs. Each was added with a stock
+# example (tests/patchkit/test_pk_crosscheck.py).
+_STORE_IMM = re.compile(
+    r"(dm|pm)\s*\(\s*i(\d+)\s*,\s*m(\d+)\s*\)\s*=\s*(-?)\s*(0x[0-9a-f]+|\d+)"
+)
+
+
+def _strict_store_imm(form: str, f: dict[str, int], text: str) -> str | None:
+    """Type 16a (48 bits, 32-bit data) / 16b (32 bits, 16-bit data): `DM|PM(Ia, Mb) = data`, post-modify. g picks
+    the memory (0 = DM, DAG1 I0-I7/M0-M7; 1 = PM, DAG2 I8-I15/M8-M15); 16a's sl/by width bits must be clear (a
+    short-word or byte store is not cross-checked)."""
+    if f.get("sl") or f.get("by"):
+        raise CrossCheckError(
+            f"form {form} with width bits (sl/by) is not cross-checked yet"
+        )
+    m = _STORE_IMM.fullmatch(text.strip().lower())
+    if not m:
+        return "Selache's line is not `DM|PM(Ia, Mb) = data`"
+    space, i, mm, neg, num = m.groups()
+    g = f["g"]
+    if space != ("pm" if g else "dm"):
+        return f"memory {space} vs {'pm' if g else 'dm'}"
+    if int(i) != f["i"] + 8 * g:
+        return f"index register I{i} vs I{f['i'] + 8 * g}"
+    if int(mm) != f["m"] + 8 * g:
+        return f"modify register M{mm} vs M{f['m'] + 8 * g}"
+    bits = 32 if form == "16a" else 16
+    value = int(num, 0) * (-1 if neg else 1)
+    if value & ((1 << bits) - 1) != f["data"] & ((1 << bits) - 1):
+        return f"immediate {value:#x} vs {f['data']:#x}"
+    return None
+
+
+STRICT_FORMS = {"16a": _strict_store_imm, "16b": _strict_store_imm}
+
+
+def strict_check(form: str, raw_fields: dict[str, int], text: str) -> str | None:
+    """None when Selache's line names the same operands, in the same roles, as our decode of a STRICT_FORMS form."""
+    try:
+        return STRICT_FORMS[form](form, sharcinv.merge_fields(dict(raw_fields)), text)
+    except CrossCheckError as e:
+        return str(e)
 
 
 def _imms_match(sel_imms: tuple[int, ...], nat: tuple[tuple[int, int], ...]) -> bool:
@@ -656,7 +707,12 @@ def check(
                 if not text:
                     raise CrossCheckError("seldump lists no instruction here")
                 try:
-                    why = compare(selache_operands(text), n)
+                    if item.native_form_id in STRICT_FORMS:
+                        why = strict_check(
+                            item.native_form_id, dict(item.native_fields), text
+                        )
+                    else:
+                        why = compare(selache_operands(text), n)
                 except CrossCheckError as e:
                     why = str(e)
                 if (

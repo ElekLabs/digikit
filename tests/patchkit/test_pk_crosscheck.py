@@ -106,7 +106,7 @@ def _dsp_objects() -> list[tuple[Path, dict]]:
             srcs = o.get("sources") or []
             if (
                 srcs
-                and all(s.endswith(".s") for s in srcs)
+                and all(s.endswith((".s", ".c")) for s in srcs)
                 and any("dsp" in Path(s).parts for s in srcs)
             ):
                 out.append((manifest.parent, o))
@@ -148,3 +148,46 @@ def test_low_modify_registers_pass_despite_the_listing():
     src = ".SECTION/PM seg_pmco;\n_f:\n    F0 = F1 * F2, R3 = DM(I0, M1);\n    DM(I1, M2) = R2;\n"
     obj = pk_sharc.assemble(src)
     assert [raw for _, raw in obj.rows] == ["507e01930012", "92b2"]
+
+
+# ---- Type 16a/16b `DM|PM(Ia, Mb) = data`: compared role by role (Selache's C stores the return address of every call
+# with `DM(I7, M7) = label - 1`, the stock call sequence's 16a word)
+
+
+def _strict(raw: str, text: str) -> str | None:
+    from tools.patchkit import pk_encoding_gate as gate
+
+    ins = gate.decode_listing(raw)
+    assert ins.type_name in ("16a", "16b")
+    return pk_crosscheck.strict_check(ins.type_name, dict(ins.fields), text)
+
+
+def test_16a_stock_call_return_store_agrees():
+    # stock 1.17 SW 0x1c4b30: the second delay slot of `CALL 0x1c0d68 (DB)`
+    assert _strict("9fc0001c4b32", "dm (i7,m7)=0x1c4b32") is None
+    assert _strict("9fc0ffffffff", "dm (i7,m7)=0xffffffff") is None
+
+
+def test_16b_stock_store_agrees():
+    # stock 1.17 SW 0xb82223
+    assert _strict("9fc40020", "dm (i7,m7)=0x20") is None
+
+
+def test_16a_operands_are_compared_by_role():
+    assert "index" in (_strict("9fc0001c4b32", "dm (i6,m7)=0x1c4b32") or "")
+    assert "modify" in (_strict("9fc0001c4b32", "dm (i7,m6)=0x1c4b32") or "")
+    assert "immediate" in (_strict("9fc0001c4b32", "dm (i7,m7)=0x1c4b33") or "")
+    assert "memory" in (_strict("9fc0001c4b32", "pm (i15,m15)=0x1c4b32") or "")
+    # I and M swapped (a pre-modify spelling) is not the same instruction
+    assert _strict("9fc0001c4b32", "dm (m7,i7)=0x1c4b32") is not None
+
+
+def test_16b_where_seldump_reads_another_modify_register_is_refused():
+    # stock word 99840000: our decoder (PRM layout) DM(I4, M6) = 0; seldump lists M4
+    assert "modify" in (_strict("99840000", "dm (i4,m4)=0x0") or "")
+
+
+def test_16a_width_bits_fail_closed():
+    # sl/by set (a short-word or byte store): not cross-checked
+    raw = f"{int('9fc0001c4b32', 16) | (1 << 33):012x}"
+    assert "not cross-checked" in (_strict(raw, "dm (i7,m7)=0x1c4b32") or "")
