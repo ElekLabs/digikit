@@ -31,6 +31,7 @@
 
 #ifndef PLAITS_VA_H
 #define PLAITS_VA_H
+#include "engine.h"
 typedef struct {
  float master_phase_,slave_phase_,next_sample_,previous_pw_; int high_;
  float master_frequency_,slave_frequency_,pw_,waveshape_,phase_modulation_;
@@ -43,7 +44,6 @@ typedef struct {
  Shape primary_,auxiliary_,sync_; Saw variable_saw_;
  float auxiliary_amount_,xmod_amount_,temp_buffer_[24];  // 24 = kMaxBlockSize
 } VA;
-typedef struct { float note,harmonics,timbre,morph; } Params;  // EngineParameters without trigger/accent (unused by VA)
 #ifdef __cplusplus
 extern "C" {
 #endif

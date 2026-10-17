@@ -12,34 +12,25 @@ from __future__ import annotations
 
 import ctypes
 import math
-import os
-import subprocess
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any
 
 import numpy as np
 import pytest
-from support.plaits_host import FLAGS, FP, Frame, Port, build_port
+from support.plaits_host import (
+    EURORACK,
+    FP,
+    Frame,
+    Port,
+    build_oracle,
+    build_port,
+    oracle_missing,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = Path(__file__).resolve().parent / "oracle"
-EURORACK = ROOT.parent / "eurorack"
 FS = 48000.0
 Arr = Any
-
-
-def stmlib_root() -> Path | None:
-    for cand in (os.environ.get("PLAITS_STMLIB"), str(EURORACK)):
-        if cand and (Path(cand) / "stmlib" / "stmlib.h").exists():
-            return Path(cand)
-    return None
-
-
-def oracle_missing(why: str) -> NoReturn:
-    """Skip the oracle tests, or fail them under PLAITS_ORACLE_REQUIRED=1 (a gate that must run the oracle)."""
-    if os.environ.get("PLAITS_ORACLE_REQUIRED") == "1":
-        pytest.fail(f"PLAITS_ORACLE_REQUIRED=1: {why}")
-    pytest.skip(why)
 
 
 class Oracle:
@@ -80,40 +71,12 @@ def port(tmp_path_factory: pytest.TempPathFactory) -> Port:
 
 @pytest.fixture(scope="module")
 def oracle(tmp_path_factory: pytest.TempPathFactory) -> Oracle:
-    stm = stmlib_root()
-    if stm is None or not (EURORACK / "plaits" / "dsp" / "engine").exists():
-        why = (
-            "BIT-EXACT ORACLE DISABLED: upstream stmlib not found (../eurorack/stmlib is empty). Enable it with "
-            "`git -C ../eurorack submodule update --init stmlib` (commit e3bd7c9) or "
-            "PLAITS_STMLIB=<directory holding a stmlib/ checkout at e3bd7c9, the commit ../eurorack pins>, "
-            "e.g. PLAITS_STMLIB=../mutable_instruments_eurorack; ../eurorack/plaits is needed too"
-        )
-        oracle_missing(why)
     d = tmp_path_factory.mktemp("oracle")
-    inc = d / "stm"
-    inc.mkdir()
-    (inc / "stmlib").symlink_to(stm / "stmlib")
-    so = d / "libva_oracle.so"
-    srcs = [
+    sources = [
         ORACLE / "va_oracle.cc",
         EURORACK / "plaits" / "dsp" / "engine" / "virtual_analog_engine.cc",
-        stm / "stmlib" / "dsp" / "units.cc",
     ]
-    subprocess.run(
-        [
-            "c++",
-            "-std=c++14",
-            *FLAGS,
-            f"-I{ORACLE / 'include'}",
-            f"-I{EURORACK}",
-            f"-I{inc}",
-            "-o",
-            str(so),
-            *map(str, srcs),
-        ],
-        check=True,
-    )
-    return Oracle(so)
+    return Oracle(build_oracle(d, sources, "va_oracle"))
 
 
 SETS = [

@@ -4,8 +4,10 @@
  *   note      = pitch / 256 + (tune / 256 - 64)                 (the frame's note word and TUNE)
  *   harmonics, timbre, morph = word / 0x7f00, clamped to [0, 1]
  *   mix       = word / 0x7f00, clamped: out = OUT + mix (AUX - OUT)
- *   two va_render calls of 16 samples, then the DC blocker (one pole at 5 Hz) and the output gain.
- * Velocity is not used by VA. The model is latched at a note-on; a model without an engine renders silence.
+ *   two engine renders of 16 samples (va_render for model 0, ws_render for model 1), then the DC blocker (one pole
+ *   at 5 Hz) and the output gain.
+ * Velocity is not used by VA or ASYM-TRI. The model is latched at a note-on, which (re)initialises that model's
+ * engine; a model without an engine renders silence.
  */
 #include "plaits.h"
 #include "dsp_util.h"
@@ -66,15 +68,19 @@ void plaits_voice_clear(PlaitsVoice *v)
 static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
 {
     v->model = (int)(f->model * PL_INV_256);
-    va_init(&v->va);
+    if (v->model == PLAITS_MODEL_ASYM_TRI) {
+        ws_init(PL_WS(v));
+    } else {
+        va_init(PL_VA(v));
+    }
     v->dc.x1 = 0.0f;
     v->dc.y1 = 0.0f;
     hb_init(&v->hb);
     v->armed = 1;
 }
 
-/* 32 samples at 48 kHz of model VA into dst. */
-static void render_va(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
+/* 32 samples at 48 kHz of the latched model (VA or ASYM-TRI) into dst. */
+static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
 {
     Params p;
     float mix;
@@ -86,7 +92,11 @@ static void render_va(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
     p.morph = unit(f->morph);
     mix = unit(f->mix);
     for (s = 0; s < PLAITS_BLOCK; s += PLAITS_SUB) {
-        va_render(&v->va, &p, v->out, v->aux, PLAITS_SUB);
+        if (v->model == PLAITS_MODEL_ASYM_TRI) {
+            ws_render(PL_WS(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else {
+            va_render(PL_VA(v), &p, v->out, v->aux, PLAITS_SUB);
+        }
         for (i = 0; i < PLAITS_SUB; i++) {
             float o = v->out[i];
             dst[s + i] = o + mix * (v->aux[i] - o);
@@ -105,12 +115,12 @@ int plaits_render(PlaitsVoice *v, const PlaitsFrame *f, int trig, float *out, in
     if (trig) {
         note_on(v, f);
     }
-    if (!v->armed || !f->active || v->model != PLAITS_MODEL_VA) {
+    if (!v->armed || !f->active || (v->model != PLAITS_MODEL_VA && v->model != PLAITS_MODEL_ASYM_TRI)) {
         zeros(out, n);
         return 0;
     }
     dst = rate == 96000 ? v->buf48 : out;
-    render_va(v, f, dst);
+    render_engine(v, f, dst);
     if (rate == 96000) {
         hb_up2(&v->hb, v->buf48, out, PLAITS_BLOCK);
     }
