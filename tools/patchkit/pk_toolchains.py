@@ -37,6 +37,10 @@ M68K_PREFIX = TOOLS / "m68k-elf"
 SELACHE_URL = "https://github.com/js216/selache"
 SELACHE_REV = "2b26d3b75c53063575bc5c820fa0d38879335187"
 SELACHE_DIR = TOOLS / "selache"
+# Patches applied (sorted) on top of SELACHE_REV before the build; see tools/patchkit/selache_patches/.
+SELACHE_PATCHES = sorted(
+    (pathlib.Path(__file__).resolve().parent / "selache_patches").glob("*.patch")
+)
 
 
 def m68k_bin(name: str = "gcc") -> pathlib.Path | None:
@@ -155,6 +159,9 @@ def build_selache() -> None:
     if not (SELACHE_DIR / ".git").exists():
         run(["git", "clone", SELACHE_URL, str(SELACHE_DIR)])
     run(["git", "checkout", "-q", SELACHE_REV], cwd=SELACHE_DIR)
+    run(["git", "checkout", "--", "."], cwd=SELACHE_DIR)
+    for patch in SELACHE_PATCHES:
+        run(["git", "apply", str(patch)], cwd=SELACHE_DIR)
     run(["cargo", "build", "--release"], cwd=SELACHE_DIR)
 
 
@@ -176,6 +183,9 @@ def status() -> dict[str, object]:
             ["git", "rev-parse", "HEAD"], cwd=sel, capture_output=True, text=True
         ).stdout.strip()
         out["selache"] = rev
+        out["selache_patches"] = [
+            hashlib.sha256(p.read_bytes()).hexdigest() for p in SELACHE_PATCHES
+        ]
     return out
 
 

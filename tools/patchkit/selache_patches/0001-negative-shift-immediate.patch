@@ -1,0 +1,100 @@
+From f9ff900c89ec676c48b64805adcacaf66b30e34f Mon Sep 17 00:00:00 2001
+From: digikit <digikit@localhost>
+Date: Sat, 17 Oct 2026 14:59:27 +0200
+Subject: [PATCH] Encode negative shift immediates like the stock toolchain
+
+Set the data_hi bits (27-31) to 0xF for a negative LSHIFT/ASHIFT immediate
+and use the stock opcodes for ASHIFT (0x01) and the OR forms (0x08, 0x09),
+which were emitted as plain LSHIFT/0x20.
+---
+ selas/src/asmparse.rs  |  4 +++-
+ selinstr/src/disasm.rs | 13 ++++++++++---
+ selinstr/src/encode.rs | 26 +++++++++++++++++++++++++-
+ 3 files changed, 38 insertions(+), 5 deletions(-)
+
+diff --git a/selas/src/asmparse.rs b/selas/src/asmparse.rs
+index 6fc5f48..c59f003 100644
+--- a/selas/src/asmparse.rs
++++ b/selas/src/asmparse.rs
+@@ -3255,7 +3255,9 @@ fn try_parse_imm_shift(text: &str, line: u32) -> Result<Option<Instruction>> {
+             imm: imm_val as u8,
+             rn,
+             rx,
+-            data_hi: 0,
++            // The stock toolchain sets the data_hi bits (27-31) to 0xF on a
++            // negative LSHIFT/ASHIFT amount; the bit ops never carry them.
++            data_hi: if imm_val < 0 && shift_type != 3 { 0xF } else { 0 },
+             cond: 31,
+         }));
+     }
+diff --git a/selinstr/src/disasm.rs b/selinstr/src/disasm.rs
+index 65d7744..25855e4 100644
+--- a/selinstr/src/disasm.rs
++++ b/selinstr/src/disasm.rs
+@@ -1019,12 +1019,19 @@ fn decode_type6b(word: u64) -> String {
+ 
+     match shift_type {
+         0 => {
+-            // LSHIFT/ASHIFT with immediate
++            // LSHIFT/ASHIFT with immediate: opcode 0x00 LSHIFT, 0x01 ASHIFT,
++            // 0x08 OR LSHIFT, 0x09 OR ASHIFT
+             let imm = imm8 as i8;
++            let kw = if op_field & 1 != 0 { "ASHIFT" } else { "LSHIFT" };
++            let or = if op_field & 8 != 0 {
++                format!("R{rn} OR ")
++            } else {
++                String::new()
++            };
+             if imm < 0 {
+-                format!("R{rn}=LSHIFT R{rx} BY -0x{:X}", -(imm as i32))
++                format!("R{rn}={or}{kw} R{rx} BY -0x{:X}", -(imm as i32))
+             } else {
+-                format!("R{rn}=LSHIFT R{rx} BY 0x{imm:X}")
++                format!("R{rn}={or}{kw} R{rx} BY 0x{imm:X}")
+             }
+         }
+         1 => {
+diff --git a/selinstr/src/encode.rs b/selinstr/src/encode.rs
+index 3384ca3..770fdcf 100644
+--- a/selinstr/src/encode.rs
++++ b/selinstr/src/encode.rs
+@@ -1736,7 +1736,17 @@ fn encode_type6b(
+     data_hi: u8,
+     cond: u8,
+ ) -> Result<u64, EncodeError> {
+-    let op_field = ((shift_type as u64 & 0xF) << 4) | (sub_op as u64 & 3);
++    // LSHIFT/ASHIFT (shift_type 0/2) use the stock opcodes 0x00 LSHIFT, 0x01 ASHIFT,
++    // 0x08 OR LSHIFT, 0x09 OR ASHIFT (sub_op 4 marks the OR forms); the other
++    // shift types keep shift_type in bits 4-6 and sub_op in bits 0-1.
++    let op_field = match shift_type {
++        0 | 2 => {
++            let ashift = (shift_type == 2) as u64;
++            let or_form = if sub_op & 4 != 0 { 0x08u64 } else { 0 };
++            or_form | ashift
++        }
++        _ => ((shift_type as u64 & 0xF) << 4) | (sub_op as u64 & 3),
++    };
+     let word = (0x02u64 << 40)
+         | ((cond as u64 & 0x1F) << 33)
+         | ((data_hi as u64 & 0x1F) << 27)
+@@ -3033,6 +3043,20 @@ mod tests {
+         assert_eq!(text, "R2=ASHIFT R3 BY 0x8");
+     }
+ 
++    #[test]
++    fn imm_shift_negative_matches_stock_words() {
++        let enc = |shift_type, sub_op, imm: i8, rn, rx, data_hi| {
++            encode_type6b(shift_type, sub_op, imm as u8, rn, rx, data_hi, 31).unwrap()
++        };
++        // stock R2 = LSHIFT R15 BY -1 is 023e7800ff2f
++        assert_eq!(enc(0, 0, -1, 2, 15, 0xF), 0x023e_7800_ff2f);
++        // stock R7 = ASHIFT R6 BY -4 is 023e7801fc76
++        assert_eq!(enc(2, 0, -4, 7, 6, 0xF), 0x023e_7801_fc76);
++        // stock R1 = R1 OR LSHIFT R0 BY -8 is 023e7808f810
++        assert_eq!(enc(0, 4, -8, 1, 0, 0xF), 0x023e_7808_f810);
++        assert_eq!(enc(0, 0, 4, 1, 0, 0), 0x023e_0000_0410);
++    }
++
+     #[test]
+     fn roundtrip_imm_fext() {
+         // R0 = FEXT R1 BY 0x1F:0x1

@@ -154,6 +154,10 @@ def test_selcc_float_loop(selcc_module):
     assert [val(r[f"o{i}"][0]) for i in range(4)] == [v * 1.5 for v in vals]
 
 
-def test_known_encode_hazard_is_refused():
-    with pytest.raises(pk_sharc.PkSharcError, match="known Selache encode bug"):
-        pk_sharc.assemble(".SECTION/PM seg_pmco;\nR0 = LSHIFT R1 BY -3;\n")
+def test_negative_shift_hazard_follows_the_build():
+    src = ".SECTION/PM seg_pmco;\nR0 = LSHIFT R1 BY -3;\n"
+    if pk_sharc._negative_shift_patched(str(pk_sharc._tool("selas"))):
+        assert [raw for _, raw in pk_sharc.assemble(src).rows] == ["023e7800fd01"]
+    else:
+        with pytest.raises(pk_sharc.PkSharcError, match="known Selache encode bug"):
+            pk_sharc.assemble(src)

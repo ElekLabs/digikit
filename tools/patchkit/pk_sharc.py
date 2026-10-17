@@ -22,6 +22,7 @@ Both carry the symbol's short-word address; the addend is encoded in the symbol 
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import re
@@ -212,12 +213,25 @@ def _native_rows(
 
 # Selache encode bugs found against the firmware image (docs/findings/05-sharc-isa-and-decoding.md): the
 # re-decode below cannot see them when both decodes agree on a wrong immediate, so refuse the form.
+# The negative-shift hazard is fixed by tools/patchkit/selache_patches; it stays armed for an unpatched build.
 ENCODE_HAZARDS = [
     (
         re.compile(r"\blshift\b[^;]*\bby\s+-\s*\d", re.I),
         "LSHIFT ... BY -n clears the immediate's sign-extension nibble",
     ),
 ]
+_NEG_SHIFT_PROBE = ".SECTION/PM seg_pmco;\nR2 = LSHIFT R15 BY -1;\n"
+_NEG_SHIFT_WORD = "023e7800ff2f"
+
+
+@functools.cache
+def _negative_shift_patched(selas: str) -> bool:
+    """True when this selas encodes a negative shift immediate with the stock data_hi bits."""
+    try:
+        rows = assemble(_NEG_SHIFT_PROBE, _check_hazards=False).rows
+    except (PkSharcError, subprocess.CalledProcessError):
+        return False
+    return [raw for _, raw in rows] == [_NEG_SHIFT_WORD]
 
 
 # Selache ignores the (SW)/(SWSE) suffix of a direct load (it emits the normal-word form), so
@@ -281,8 +295,12 @@ def _bss_prepare(source: str) -> tuple[str, list[tuple[str, int, bool]]]:
     return _PKBSS.sub(sub, source), found
 
 
-def assemble(source: str, section: str | None = None) -> SharcObject:
-    for pat, why in ENCODE_HAZARDS:
+def assemble(
+    source: str, section: str | None = None, _check_hazards: bool = True
+) -> SharcObject:
+    if _check_hazards and _negative_shift_patched(str(_tool("selas"))):
+        _check_hazards = False
+    for pat, why in ENCODE_HAZARDS if _check_hazards else []:
         m = pat.search(source)
         if m:
             raise PkSharcError(f"known Selache encode bug ({why}): {m.group(0)!r}")
