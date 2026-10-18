@@ -907,8 +907,9 @@ MAX_BLOCK_INSTRUCTIONS_NEW = {
     4: {1: 101_500, 0: 128_500},
     # Task 9: WAVETABLE's extreme grid peaks at 41,168 (mode 1) / 64,705 (mode 0) instructions; CHORD's at 46,254 /
     # 69,791, but MORPH inside the crossfade (0x3c00..0x4600, outside the grid) costs more: 53,180 in set 0 of the
-    # equivalence test and up to 55,083 in a partial scan (note 63, TIMBRE 0x7f00, MORPH 0x3c00; out/runs/task9).
-    # Bounds: about 15 % over each, CHORD 12.5 % over the scan.
+    # equivalence test and up to 55,083 in a partial scan (note 63, TIMBRE 0x7f00, MORPH 0x3c00; out/runs/task9); Task
+    # 9b's full scan found 55,296 (MORPH 0x3c40, chord 0, effective note 66; finding 06, "PLAITS CHORD (model 6) at its
+    # worst knobs"). Bounds: about 15 % over each, CHORD 12 % over the scan.
     5: {1: 47_500, 0: 74_500},
     6: {1: 62_000, 0: 86_000},
 }

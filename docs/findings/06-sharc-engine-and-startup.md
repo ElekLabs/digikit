@@ -6118,3 +6118,36 @@ divide-down and wavetable voices, where both kinds of voice render: 51,800 on th
 - **Memory.** dsp.l2 use is 198,284 of 922,756 bytes (77,020 on H3b): the wave table as floats (101,376 bytes) and
   its map (1,024), the CHORD tables (492), the new code, and the per-voice union at 344 bytes (CHORD; +32 per voice).
   The boot stream is 515,276 bytes (limit 0xfffff).
+
+## PLAITS CHORD (model 6) at its worst knobs, and engines that run on between notes (Task 9b, 2026-10-18) **[D]**
+
+One agent. Task 9 measured CHORD at TIMBRE 0 and called it "worst knobs"; here the worst block is searched first on the
+concrete core (tests/support/plaits_rig.py, mode 1; scratch out/runs/task9b/chord_scan.py, chord_fine.py), then
+measured in the emulator with the method of the sections above (paired 500 / 2,500 ms windows, `SHARC_CYCMIX`,
+`sharc_cpi.cost_profile` against `sharcdb build --blocks 56,69,76,78,80,88,91,93,103,104,107` of the image).
+
+- **Search (concrete core).** TIMBRE 0x7f00, MORPH 0x3a00 to 0x4800 in steps of 0x100 (0x3b80 to 0x3d40 in steps of
+  0x40), the 11 chords (HARMONICS at each bin centre), effective notes 60 to 124 in steps of 2 (40 to 69 in steps of 1
+  for the fine MORPH values). The worst block is **55,296 instructions** (MORPH 0x3c40 or 0x3cc0, chord 0 (OCT),
+  effective note 66); 55,284 at MORPH 0x3c00. Cost rises slowly with the note (52,900 at note 40 to 55,300 at 66) and
+  falls off a cliff at note 67 (38,800): above it the top voice's divide-down oscillator is muted (`note_f0` reaches
+  0.125, `divide_down_gain` 0) and skipped. The windows of the five crossfades do not overlap, so at most one voice
+  renders both oscillators. The bound in tests/patchkit/test_plaits_module.py (62,000) stays 12 % above it.
+- **Emulator.** Image `out/patch/plaits-7models-names-splash-48k-1.17.syx` (H3d; ui/boot-splash + machines/plaits-48k).
+  Knobs read back: TUNE 0x4460 (effective note 64.4 for the C4 trig, two semitones under the cliff so that the
+  knob's tolerance cannot cross it; a first run at TUNE 0x4600 landed above the cliff and measured only +41,280 per
+  track, out/runs/task9b/cpu-first), MODEL 6, HARMONICS 0 (0x100 on the second track, the same chord), TIMBRE
+  0x7f00, MORPH 0x3c00.
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| plaits-7models-names-splash-48k, 1 track CHORD, worst knobs | `0x0000000b` | 267,786 | 284,494 / 317,308 / 402,576 | 42.7 / 47.6 / **60.4** |
+| plaits-7models-names-splash-48k, 2 tracks CHORD, worst knobs | `0x000b000b` | 322,507 | 340,628 / 380,352 / 472,821 | 51.1 / 57.1 / **70.9** |
+
+- Per track: +57,896 instructions (1 track; 54,900 on the core at note 64 plus the hook) and 65,900 / 79,191 /
+  107,457 cycles (1.86 per instruction at the high bound); from the 2-track run +56,308 (1.58). Task 9's figures
+  (60.2 % and 70.5 %, TIMBRE 0) were 0.2 to 0.4 points low. **Safety rule:** one track at 60.4 % is far under 85 %;
+  CHORD stays enabled, and the track rule (1 track, set by ADDITIVE) is unchanged.
+- **Engines run on between notes** (modules/machines/plaits/src/dsp/plaits.c `note_on`, Task 9b): a note-on that does
+  not change the model now skips the engine's init, so it costs a few instructions less in that block; no block costs
+  more. The emulated runs above include it.
