@@ -36,10 +36,13 @@
 //     32768.0f` is `WS_F(t)[i]`;
 //   - int-to-float conversions go through dsp_util.h `itof_nonneg` (exact; see there why), `itof_small` for the
 //     one index that may be negative;
-//   - three table indices are kept in range where upstream would read outside its tables (undefined behaviour; on
-//     the SHARC+ a wild read could fault): the waveshaper index beyond +-2^31 or NaN, the wavefolder index outside
-//     [0, 1] or NaN, the sine phase outside [0, 2^23) or NaN. Inside those ranges every result equals upstream's
-//     (for a sine phase >= 2^23 upstream's fractional part is 0 as here). Such values arise only from the slope
+//   - three table indices are clamped so that no read leaves its table (upstream reads outside its tables for some
+//     of these values, which is undefined behaviour; on the SHARC+ a wild read could fault): the waveshaper index
+//     beyond +-2^31 or NaN, the wavefolder index outside [0, 1] or NaN, the sine phase outside [0, 2^23) or NaN. The
+//     clamps are a little wider than the windows where upstream actually reads out of bounds: they may also change
+//     a few values upstream handles in bounds (e.g. a wavefolder index just outside [0, 1]). Inside the clamped
+//     ranges every result equals upstream's (for a sine phase >= 2^23 upstream's fractional part is 0 as here); the
+//     host test's grid of corners and sweeps never reaches a clamp. Such values arise only from the slope
 //     oscillator's polyblep when the pitch jumps by several octaves within a block without a note-on.
 // The host test tests/plaits/test_ws_host.py compares it bit for bit with upstream Plaits built at 48,000 Hz.
 #include "waveshaping.h"

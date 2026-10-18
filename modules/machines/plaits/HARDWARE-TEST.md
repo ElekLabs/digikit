@@ -61,6 +61,7 @@ interrupt-safe without a code change, so they equal the images of Task 6).
       state is then stale for that voice's first stock block.
    - **plaits-48k stalls or is silent** (with h1b passed, the hook works and the fault is in PLAITS): recover and
      report; optionally repeat 3.1 to 3.5 with plaits-96k, one track only (step 4).
+   - **plaits-48k passes:** go on to H3 (section "H3: model 1, ASYM-TRI" below), then step 6.
 4. **H2 with plaits-96k** (`f37e87a0…`; after h1a passed and h1b did not, or as the optional fallback of step 3), steps
    3.1 to 3.5 and 3.7 on track 1. **Never more than 1 track triggered as PLAITS since boot on this image** (the same
    rule: a track stops costing DSP only after a trig under another machine). Do not run step 3.6: two tracks on this
@@ -72,7 +73,7 @@ interrupt-safe without a code change, so they equal the images of Task 6).
      stock .syx with Transfer's legacy mode over MIDI DIN.**
    - If they stall while h1a/h1b passed, the stall is pinned on `083f683f`. If one passes, `word = "083f683f"` may be
      added to encoding_proven.toml with that evidence.
-6. Record every result in the design's hardware table, and the shapes or `word =` entries of each image that passed in
+6. Record every result (H1, H2 and H3) in the design's hardware table, and the shapes or `word =` entries of each image that passed in
    tools/patchkit/encoding_proven.toml. Decision for PLAITS: h1b passing keeps mode 1 (plaits-48k) as the default;
    otherwise mode 0 (plaits-96k).
 
@@ -93,8 +94,12 @@ Plaits' own order: 0 VA, 1 ASYM-TRI, 2 2FM, ... 23 SQUARE; 2 to 23 still play si
    - TIMBRE (E): the wavefolder amount (more folds, brighter and buzzier as it rises).
    - MORPH (F): the waveform's asymmetry (triangle to saw-like).
    - MIX (G) to the right: the AUX variant (a sine at TIMBRE 0, the second wavefolder as TIMBRE rises).
-4. MODEL p-lock: hold a trig and set MODEL to 1 on steps 1, 5, 9, 13, leave MODEL 0 on steps 3, 7, 11, 15, PLAY:
-   the two models alternate step by step. Also p-lock TUNE, HARMONICS, TIMBRE, MORPH on single steps of model 1.
+4. MODEL p-lock:
+   - set MODEL (knob B) back to 0 (the track's own value: the steps without a lock play it);
+   - place trigs on steps 1, 3, 5, 7, 9, 11, 13, 15;
+   - p-lock MODEL = 1 on steps 1, 5, 9, 13 (hold the step's trig, turn knob B to 1);
+   - PLAY: the notes alternate VA / ASYM-TRI (steps 1, 5, 9, 13 ASYM-TRI; 3, 7, 11, 15 VA).
+   Also p-lock TUNE, HARMONICS, TIMBRE, MORPH on single model-1 steps: only those steps change.
 5. Save the project, reboot, load it: MODEL and the knob values are back and model 1 plays.
 6. **Track rule (unchanged from H2): never more than 2 tracks triggered as PLAITS since boot on this image,** with
    any mix of models. Two ASYM-TRI tracks measure 71.5 % of the block at the high bound and 73.5 to 75.7 % at
