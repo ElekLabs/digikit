@@ -21,8 +21,9 @@ from support.plaits_host import Port, frame
 
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / "tests" / "plaits" / "vectors" / "model0_h2.json"
-# model -> the image whose sources recorded its digests: 1 at H3 (5931e47), 2..4 at H3b (Task 8 of the all-engines plan)
-RECORDED_AT = {1: "h3", 2: "h3b", 3: "h3b", 4: "h3b"}
+# model -> the image whose sources recorded its digests: 1 at H3 (5931e47), 2..4 at H3b (Task 8 of the all-engines plan),
+# 5 and 6 at H3c (Task 9)
+RECORDED_AT = {1: "h3", 2: "h3b", 3: "h3b", 4: "h3b", 5: "h3c", 6: "h3c"}
 
 
 def vectors(model: int) -> Path:

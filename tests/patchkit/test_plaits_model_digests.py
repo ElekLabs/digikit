@@ -4,7 +4,7 @@ enabled (model 0 has its own file and test, tests/patchkit/test_plaits_model0_h2
 tests/plaits/vectors/model<N>_<image>.json (tests/support/plaits_vectors.py `vectors`) holds SHA-256 digests of
 model N's output words for the fixed scenarios of tests/support/plaits_vectors.py: the compiled DSP object of each
 variant on the concrete core and the host build of the same C. Model 1 was recorded from the H3 sources (5931e47),
-models 2..4 from the H3b sources (Task 8). These tests render the same scenarios from the current sources and
+models 2..4 from the H3b sources (Task 8), models 5 and 6 from the H3c sources (Task 9). These tests render the same scenarios from the current sources and
 require equal digests. PLAITS_RECORD_MODEL=N rewrites model N's file, and only that one: run it only from the
 sources of the task that first enables model N."""
 
