@@ -28,7 +28,13 @@ sources = [
   "../plaits/src/dsp/engines/fm.c",
   "../plaits/src/dsp/engines/grain.c",
   "../plaits/src/dsp/engines/additive.c",
+  "../plaits/src/dsp/engines/wavetable.c",
+  "../plaits/src/dsp/engines/chord.c",
   "../plaits/src/dsp/lib/tables.c",
+  "../plaits/src/dsp/lib/waves.c",
+  "../plaits/src/dsp/lib/wavetable_oscillator.c",
+  "../plaits/src/dsp/lib/string_synth_oscillator.c",
+  "../plaits/src/dsp/lib/chord_bank.c",
   "../plaits/src/dsp/halfband.c",
 ]
 place = "dsp.l2"

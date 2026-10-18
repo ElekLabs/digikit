@@ -1,5 +1,5 @@
 """The PLAITS module's C sources (modules/machines/plaits/src/dsp) built for the host and driven through ctypes:
-the engines (va, ws, fm, grain, additive: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
+the engines (va, ws, fm, grain, additive, wavetable, chord: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
 build (tests/plaits/oracle). Used by tests/plaits/test_va_host.py and
 tests/patchkit/test_plaits_module.py (the reference for the compiled code on the concrete core)."""
 
@@ -53,7 +53,7 @@ class Port:
             FP,
             ctypes.c_int,
         ]
-        for name in ("fm", "grain", "additive"):
+        for name in ("fm", "grain", "additive", "wavetable", "chord"):
             setattr(self, f"{name}_size", getattr(self.lib, f"port_{name}_size")())
             getattr(self.lib, f"{name}_init").argtypes = [ctypes.c_void_p]
             getattr(self.lib, f"{name}_render").argtypes = [
@@ -163,7 +163,9 @@ def frame(
     )
 
 
-def build_port(d: Path) -> Port:
+def build_port(d: Path, defines: tuple[str, ...] = ()) -> Port:
+    """The module's C sources and tests/plaits/oracle/port_sizes.c as d/libplaits_port.so; `defines` are extra -D
+    macros (PL_INDEX_CHECK: the engines report their table indices to port_sizes.c's recorder)."""
     so = d / "libplaits_port.so"
     srcs = [
         DSP / "engines" / "va.c",
@@ -171,7 +173,13 @@ def build_port(d: Path) -> Port:
         DSP / "engines" / "fm.c",
         DSP / "engines" / "grain.c",
         DSP / "engines" / "additive.c",
+        DSP / "engines" / "wavetable.c",
+        DSP / "engines" / "chord.c",
         DSP / "lib" / "tables.c",
+        DSP / "lib" / "waves.c",
+        DSP / "lib" / "wavetable_oscillator.c",
+        DSP / "lib" / "string_synth_oscillator.c",
+        DSP / "lib" / "chord_bank.c",
         DSP / "plaits.c",
         DSP / "halfband.c",
         ORACLE / "port_sizes.c",
@@ -184,6 +192,7 @@ def build_port(d: Path) -> Port:
             "-std=c99",
             *FLAGS,
             "-fno-strict-aliasing",
+            *(f"-D{x}" for x in defines),
             f"-I{DSP}",
             "-o",
             str(so),

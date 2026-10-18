@@ -5,7 +5,8 @@
  *   harmonics, timbre, morph = word / 0x7f00, clamped to [0, 1]
  *   mix       = word / 0x7f00, clamped: out = OUT + mix (AUX - OUT)
  *   two engine renders of 16 samples (va_render for model 0, ws_render 1, fm_render 2, grain_render 3,
- *   additive_render 4), then the DC blocker (one pole at 5 Hz) and the output gain.
+ *   additive_render 4, wavetable_render 5, chord_render 6), then the DC blocker (one pole at 5 Hz) and the output
+ *   gain.
  * Velocity is not used by these models. The model is latched at a note-on, which (re)initialises that model's
  * engine; a model without an engine renders silence.
  */
@@ -76,6 +77,10 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
         grain_init(PL_GRAIN(v));
     } else if (v->model == PLAITS_MODEL_ADDITIVE) {
         additive_init(PL_ADD(v));
+    } else if (v->model == PLAITS_MODEL_WAVETABLE) {
+        wavetable_init(PL_WT(v));
+    } else if (v->model == PLAITS_MODEL_CHORD) {
+        chord_init(PL_CHORD(v));
     } else {
         va_init(PL_VA(v));
     }
@@ -85,7 +90,7 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
     v->armed = 1;
 }
 
-/* 32 samples at 48 kHz of the latched model (0..4) into dst. */
+/* 32 samples at 48 kHz of the latched model (0..6) into dst. */
 static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
 {
     Params p;
@@ -106,6 +111,10 @@ static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
             grain_render(PL_GRAIN(v), &p, v->out, v->aux, PLAITS_SUB);
         } else if (v->model == PLAITS_MODEL_ADDITIVE) {
             additive_render(PL_ADD(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else if (v->model == PLAITS_MODEL_WAVETABLE) {
+            wavetable_render(PL_WT(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else if (v->model == PLAITS_MODEL_CHORD) {
+            chord_render(PL_CHORD(v), &p, v->out, v->aux, PLAITS_SUB);
         } else {
             va_render(PL_VA(v), &p, v->out, v->aux, PLAITS_SUB);
         }
@@ -127,7 +136,7 @@ int plaits_render(PlaitsVoice *v, const PlaitsFrame *f, int trig, float *out, in
     if (trig) {
         note_on(v, f);
     }
-    if (!v->armed || !f->active || v->model < PLAITS_MODEL_VA || v->model > PLAITS_MODEL_ADDITIVE) {
+    if (!v->armed || !f->active || v->model < PLAITS_MODEL_VA || v->model > PLAITS_MODEL_CHORD) {
         zeros(out, n);
         return 0;
     }

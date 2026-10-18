@@ -91,6 +91,8 @@ TYPED = [
     "tools/patchkit/pk_cunion.py",
     "tests/patchkit/test_pk_cunion.py",
     "tests/plaits/test_fm_grain_additive_host.py",
+    "tests/plaits/test_wavetable_chord_host.py",
+    "modules/machines/plaits/src/dsp/lib/gen_wave_tables.py",
     "tests/patchkit/test_plaits_model_names.py",
 ]
 

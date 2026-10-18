@@ -238,8 +238,9 @@ def test_wrapper_model_change_takes_effect_at_the_next_note_on(port: Port) -> No
 
 
 def test_wrapper_unported_models_are_silent(port: Port) -> None:
-    # 2..4 are ported since Task 8 (test_fm_grain_additive_host.py)
-    for model in range(5, 24):
+    # 2..4 are ported since Task 8 (test_fm_grain_additive_host.py), 5 and 6 since Task 9
+    # (test_wavetable_chord_host.py)
+    for model in range(7, 24):
         v = port.voice()
         outs = [_render(port, v, frame(60, model=model), int(b == 0)) for b in range(3)]
         assert not any(o.any() for o in outs), model

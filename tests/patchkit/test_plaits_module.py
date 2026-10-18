@@ -1,4 +1,4 @@
-"""machines/plaits (models VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
+"""machines/plaits (models VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
 
 The rig (tests/support/plaits_rig.py) links core/dsp-inline at test addresses and the PLAITS object of
 machines/plaits-48k (mode 1, 48 kHz into the voice output) or machines/plaits-96k (mode 0, 96 kHz into the work
@@ -158,8 +158,8 @@ def test_compiled_asym_tri_96k_matches_host_on_concrete_core(
     assert max(instr) < MAX_BLOCK_INSTRUCTIONS_WS[0], max(instr)
 
 
-# Models 2..4 (Task 8 of the all-engines plan): 2FM, FORMANT (grain), ADDITIVE.
-NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE"}
+# Models 2..4 (Task 8 of the all-engines plan): 2FM, FORMANT (grain), ADDITIVE; 5, 6 (Task 9): WAVETABLE, CHORD.
+NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE", 5: "WAVETABLE", 6: "CHORD"}
 
 
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
@@ -212,6 +212,53 @@ def test_compiled_lib_tables_equal_host_bits(port: Port) -> None:
         assert got.tolist() == want.view(np.uint32).tolist(), name
 
 
+def test_compiled_wave_tables_equal_host_bits(port: Port) -> None:
+    """The tables of models 5 and 6 as selcc wrote them into the object: the wave table (negative floats, the selcc
+    hazard of finding 20) and the wave map (lib/waves.c) equal the host build's bits, which
+    tests/plaits/test_wavetable_chord_host.py checks against upstream."""
+    import ctypes
+
+    obj = PlaitsRig(1).obj
+    port.lib.port_wave.restype = ctypes.c_float
+    n = port.lib.port_wave_count()
+    sec, off, _g = obj.data_symbols["pl_wav_integrated_waves."]
+    got = np.frombuffer(obj.data[sec][0][off : off + 4 * n], dtype="<u4")
+    want = np.array([port.lib.port_wave(i) for i in range(n)], dtype=np.float32)
+    assert got.tolist() == want.view(np.uint32).tolist()
+    assert (want < 0).sum() > 1000
+    sec, off, _g = obj.data_symbols["pl_wavetable_map."]
+    got = np.frombuffer(obj.data[sec][0][off : off + 4 * 256], dtype="<i4")
+    assert got.tolist() == [port.lib.port_wave_map(i) for i in range(256)]
+
+
+def test_compiled_chord_tables_equal_host_bits() -> None:
+    """CHORD's static tables (engines/chord_tables.h, lib/chord_bank_tables.h) as selcc wrote them equal the generated
+    bit patterns."""
+    import re
+
+    obj = PlaitsRig(1).obj
+    dsp = ROOT / "modules/machines/plaits/src/dsp"
+    text = (dsp / "engines/chord_tables.h").read_text() + (
+        dsp / "lib/chord_bank_tables.h"
+    ).read_text()
+    found = 0
+    for name, body in re.findall(
+        r"static const (?:unsigned )?int (\w+)\[\d+\] = \{(.*?)\};", text, re.S
+    ):
+        want = [int(t.rstrip("u"), 0) for t in re.split(r"[\s,]+", body) if t]
+        syms = [
+            k
+            for k in obj.data_symbols
+            if k.rstrip(".") == name or k.startswith(name + ".")
+        ]
+        assert syms, (name, sorted(obj.data_symbols)[:40])
+        sec, off, _g = obj.data_symbols[syms[0]]
+        got = np.frombuffer(obj.data[sec][0][off : off + 4 * len(want)], dtype="<u4")
+        assert got.tolist() == want, name
+        found += 1
+    assert found == 5
+
+
 @pytest.mark.parametrize("mode", [1, 0])
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
 def test_model_switch_at_note_on_to_and_from_va(
@@ -235,20 +282,21 @@ def test_model_switch_at_note_on_to_and_from_va(
 
 
 def test_model_change_chain_va_fm_formant_additive_asym_tri_va() -> None:
-    """Review focus 1: one voice through every enabled model in turn (VA -> 2FM -> FORMANT -> ADDITIVE -> ASYM-TRI ->
-    VA), each change first without a note-on, then at one."""
+    """Review focus 1: one voice through every enabled model in turn (VA -> 2FM -> FORMANT -> ADDITIVE -> WAVETABLE ->
+    CHORD -> 2FM -> ASYM-TRI -> CHORD -> VA), each change first without a note-on, then at one."""
     rig = PlaitsRig(1)
-    chain = [0, 2, 3, 4, 2, 1, 0]
+    chain = [0, 2, 3, 4, 5, 6, 2, 1, 6, 0]
     for a, b in zip(chain, chain[1:], strict=False):
         assert_model_switch(rig, a, b, harmonics=0x5000, morph=0x2000)
 
 
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
 def test_new_model_c_stack_stays_inside_pl_stack(model: int) -> None:
-    """The deepest C frame of models 2..4 (ADDITIVE keeps 12 interpolators on the stack) stays inside the 4096-byte
-    _pl_stack with room to spare."""
+    """The deepest C frame of models 2..6 (ADDITIVE keeps 12 interpolators on the stack, CHORD calls the voices'
+    oscillators from its render) stays inside the 4096-byte _pl_stack with room to spare."""
     rig = PlaitsRig(1)
-    rig.controls(0, 60, model=model << 8, harmonics=0x7F00, timbre=0x7F00)
+    morph = 0x4400 if model == 6 else 0  # CHORD: MORPH where both kinds of voice render
+    rig.controls(0, 60, model=model << 8, harmonics=0x7F00, timbre=0x7F00, morph=morph)
     rig.active(0)
     rig.trig(0)
     lo = rig.symbols["_pl_stack"]
@@ -335,7 +383,7 @@ def test_model_switch_at_note_on_va_asym_tri_va(port: Port, mode: int) -> None:
 
 def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     """The MODEL row's range is 0 .. 0x1700 (UI 0 .. 23): row value N << 8 (UI N, the knob or a p-lock) is model N;
-    models 0..4 sound, each differently, and 5 (not ported yet) is silent."""
+    models 0..6 sound, each differently, and 7 (not ported yet) is silent."""
     import tomllib
 
     manifest = tomllib.loads((ROOT / "modules/machines/plaits/module.toml").read_text())
@@ -344,14 +392,14 @@ def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     rig = PlaitsRig(1)
     rig.active(0)
     outs = {}
-    for model in range(6):
+    for model in range(8):
         rig.controls(0, 60, model=model << 8)  # the row value: UI 1 is 0x100
         rig.trig(0, True)
         outs[model] = np.array(rig.block(0)["samples"], dtype=np.float32)
         rig.trig(0, False)
-    assert all(outs[m].any() for m in range(5)) and not outs[5].any()
-    for a in range(5):
-        for b in range(a + 1, 5):
+    assert all(outs[m].any() for m in range(7)) and not outs[7].any()
+    for a in range(7):
+        for b in range(a + 1, 7):
             assert not np.array_equal(outs[a], outs[b]), (a, b)
 
 
@@ -809,6 +857,11 @@ MAX_BLOCK_INSTRUCTIONS_NEW = {
     2: {1: 66_000, 0: 93_000},
     3: {1: 93_000, 0: 120_000},
     4: {1: 101_500, 0: 128_500},
+    # Task 9: WAVETABLE's extreme grid peaks at 41,168 (mode 1) / 64,705 (mode 0) instructions; CHORD's at 46,254 /
+    # 69,791, but MORPH inside the crossfade (0x3c00..0x4600, outside the grid) costs more: 53,180 in set 0 of the
+    # equivalence test, about 51,800 at steady settings (out/runs/task9). Bounds: about 15 % over each.
+    5: {1: 47_500, 0: 74_500},
+    6: {1: 62_000, 0: 86_000},
 }
 
 

@@ -1,18 +1,24 @@
-/* Host-only helper for tests/plaits (test_va_host.py, test_ws_host.py, test_fm_grain_additive_host.py): the sizes of
- * the port's structs, so ctypes can allocate them, and the port's tables (waveshaping, lib). Linked into the host
- * library with the module's C sources; not part of the DSP object. */
+/* Host-only helper for tests/plaits (test_va_host.py, test_ws_host.py, test_fm_grain_additive_host.py,
+ * test_wavetable_chord_host.py): the sizes of the port's structs, so ctypes can allocate them, the port's tables
+ * (waveshaping, lib, waves, chord) and the index recorder of a PL_INDEX_CHECK build. Linked into the host library with
+ * the module's C sources; not part of the DSP object. */
 #include "plaits.h"
 #include "engines/ws_tables.h"
 #include "engines/fm.h"
 #include "engines/grain.h"
 #include "engines/additive.h"
+#include "engines/wavetable.h"
+#include "engines/chord.h"
 #include "lib/tables.h"
+#include "lib/waves.h"
 
 int port_va_size(void) { return (int)sizeof(VA); }
 int port_ws_size(void) { return (int)sizeof(WS); }
 int port_fm_size(void) { return (int)sizeof(FM); }
 int port_grain_size(void) { return (int)sizeof(Grain); }
 int port_additive_size(void) { return (int)sizeof(Additive); }
+int port_wavetable_size(void) { return (int)sizeof(Wavetable); }
+int port_chord_size(void) { return (int)sizeof(Chord); }
 int port_engine_union_size(void) { return (int)sizeof(PlaitsEngine); }
 int port_voice_size(void) { return (int)sizeof(PlaitsVoice); }
 int port_frame_size(void) { return (int)sizeof(PlaitsFrame); }
@@ -34,3 +40,52 @@ static const unsigned int *const port_lib_luts[5] = {
 static const int port_lib_lut_sizes[5] = {641, 130, 4, 256, 256};
 float port_lib_lut(int k, int i) { return PL_F(port_lib_luts[k])[i]; }
 int port_lib_lut_size(int k) { return port_lib_lut_sizes[k]; }
+
+/* The wave table and the wave map of lib/waves.h, as the port reads them. */
+float port_wave(int i) { return PL_F(pl_wav_integrated_waves)[i]; }
+int port_wave_count(void) { return (int)(sizeof(pl_wav_integrated_waves) / sizeof(pl_wav_integrated_waves[0])); }
+int port_wave_map(int i) { return pl_wavetable_map[i]; }
+
+/* ChordBank's ratios (chord i, note j) and note counts, through lib/chord_bank.h with the chord selected the way
+ * upstream selects it (set_chord). */
+float port_chord_ratio(float parameter, int note) {
+    ChordBank b;
+    chord_bank_init(&b);
+    chord_bank_reset(&b);
+    chord_bank_set_chord(&b, parameter);
+    return chord_bank_ratio(&b, note);
+}
+int port_chord_num_notes(float parameter) {
+    ChordBank b;
+    chord_bank_init(&b);
+    chord_bank_set_chord(&b, parameter);
+    return chord_bank_num_notes(&b);
+}
+int port_chord_inversion(float parameter, float inversion, float *ratios, float *amplitudes, int *index) {
+    ChordBank b;
+    chord_bank_init(&b);
+    chord_bank_reset(&b);
+    chord_bank_set_chord(&b, parameter);
+    *index = chord_bank_chord_index(&b);
+    return chord_bank_compute_chord_inversion(&b, inversion, ratios, amplitudes);
+}
+
+/* The index recorder of a PL_INDEX_CHECK build (the engines call pl_index_check(table, index) before each table
+ * read): per table, the smallest and largest index seen and the count. Tables: 0 the WAVETABLE wave map index,
+ * 1 a WAVETABLE sample index within a wave (the last of the four Hermite reads), 2 a wavetable oscillator's wave
+ * index (CHORD's wave list), 3 its sample index, 4 CHORD's registration row, 5 ChordBank's ratio index, 6 a chord
+ * voice index. */
+#define PL_INDEX_TABLES 8
+static int idx_lo[PL_INDEX_TABLES], idx_hi[PL_INDEX_TABLES], idx_n[PL_INDEX_TABLES];
+void pl_index_check(int table, int index) {
+    if (idx_n[table] == 0 || index < idx_lo[table]) idx_lo[table] = index;
+    if (idx_n[table] == 0 || index > idx_hi[table]) idx_hi[table] = index;
+    idx_n[table]++;
+}
+void port_index_reset(void) {
+    int i;
+    for (i = 0; i < PL_INDEX_TABLES; i++) idx_n[i] = 0;
+}
+int port_index_lo(int table) { return idx_lo[table]; }
+int port_index_hi(int table) { return idx_hi[table]; }
+int port_index_n(int table) { return idx_n[table]; }

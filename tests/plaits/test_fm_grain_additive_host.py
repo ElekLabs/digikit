@@ -250,11 +250,12 @@ def test_wrapper_renders_the_model(port: Port, name: str) -> None:
 
 
 def test_engine_union_holds_every_engine(port: Port) -> None:
-    """The per-voice union is the size of its largest engine (Ruling B: each engine's state bytes)."""
+    """The per-voice union holds each of these engines (Ruling B: each engine's state bytes; the union's size against
+    every engine is in test_wavetable_chord_host.py)."""
     sizes = {
         n: getattr(port, f"{n}_size") for n in ("va", "ws", "fm", "grain", "additive")
     }
-    assert port.engine_union_size == max(sizes.values()), sizes
+    assert port.engine_union_size >= max(sizes.values()), sizes
     print("engine state bytes:", sizes, "union", port.engine_union_size)
 
 
@@ -304,8 +305,9 @@ def test_wrapper_model_change_chain(port: Port) -> None:
         ]
 
 
-def test_wrapper_models_5_to_23_are_silent(port: Port) -> None:
-    for model in range(5, 24):
+def test_wrapper_models_7_to_23_are_silent(port: Port) -> None:
+    """Models 5 and 6 sound since Task 9 (tests/plaits/test_wavetable_chord_host.py)."""
+    for model in range(7, 24):
         v = port.voice()
         outs = [_render(port, v, frame(60, model=model), int(b == 0)) for b in range(3)]
         assert not any(o.any() for o in outs), model

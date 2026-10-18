@@ -322,3 +322,12 @@ One agent (Task 9 of the PLAITS all-engines plan), from the Task 8 review.
   a tag, `__declspec` plus `_Alignas`), three more accepted (an attributed union read through its first member, a union
   returned by value, a qualified use) and three unparsed forms refused (23 tests). The PLAITS sources, models 5 and 6
   included, still pass.
+
+## selcc's integer multiply by 6 is an unproven encoding shape (2026-10-18) **[D]**
+
+`registration_integral * 6` (ChordEngine's registration table row, modules/machines/plaits/src/dsp/engines/chord.c)
+compiled to two Type 2a words `013e00170635` and `013e001703b5` (compute fields 0x170635 and 0x1703b5,
+at the multiply's place in the code; not decoded further here), a shape in neither the stock 1.17 DSP code nor encoding_proven.toml. The encoding gate refused
+the image (`plaits-7models-48k-1.17.syx` deleted). Multiplies by powers of two compile to shifts and pass. The row
+offset is now `(i << 2) + (i << 1)`; the image then passes with 0 violations. Integer multiplies by other constants
+in selcc C should be written as shifts and adds until the multiplier shape is proven on hardware.
