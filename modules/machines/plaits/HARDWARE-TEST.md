@@ -1,4 +1,4 @@
-# PLAITS on the unit: H1 (the hook), H2 (the machine) and H3 (a second model)
+# PLAITS on the unit: H1 (the hook), H2 (the machine), H3 (a second model) and H3b (models 2 to 4)
 
 One decision tree for the owner's hardware round on a Digitakt II with OS 1.17. H1 tests core/dsp-inline with a
 plain sine (test/inline-tone); H2 tests machines/plaits (the VA model) on the same hook. The images are firmware
@@ -22,7 +22,8 @@ reports 0 errors; `uv run python -m tools.patchkit.pk_encoding_gate X X.plan.jso
 | `out/patch/h1a-tone-96k-1.17.syx` | `bc6a3314170f013b5974cf35b8f001e76adcb000f6c843ae961648af2b8fb139` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules test/inline-tone-96k -o out/patch/h1a-tone-96k-1.17.syx` |
 | `out/patch/plaits-va-48k-1.17.syx` | `507434164c90e42f26c3111d9b5a366b8b2b36f6d7d100c4e519b80d5c3f7492` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-va-48k-1.17.syx` |
 | `out/patch/plaits-va-96k-1.17.syx` | `f37e87a0025ab07895c17275c5e0ee531e04125de34feafa0866781cc761c83f` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-96k -o out/patch/plaits-va-96k-1.17.syx` |
-| `out/patch/plaits-2models-48k-1.17.syx` (H3) | `68fee193f40a611a58613409b3e9c4a81fa242fcf3b09355fa7f073d75d236e4` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-2models-48k-1.17.syx` |
+| `out/patch/plaits-2models-48k-1.17.syx` (H3) | `68fee193f40a611a58613409b3e9c4a81fa242fcf3b09355fa7f073d75d236e4` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-2models-48k-1.17.syx` (at 3608a92) |
+| `out/patch/plaits-5models-48k-1.17.syx` (H3b) | `e768eb4823f708c976242805f90615586ca0ec7e9c247e7f203f8b1506fe70ec` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-5models-48k-1.17.syx` |
 | `out/patch/diag-h1-i13return-48k-1.17.ungated.syx` | `401ccf2be3f2814e4bb79c6aed1872912da4ee73f2010e93c5b387fbf4279cf3` | a copy of the pre-Task-5b h1b; not rebuildable from this branch |
 | `out/patch/diag-h1-i13return-96k-1.17.ungated.syx` | `02926b3f833ccdaa51172b98af3de83c4f65779999a3ea901d1a527c6796652c` | a copy of the pre-Task-5b h1a; not rebuildable from this branch |
 
@@ -61,7 +62,8 @@ interrupt-safe without a code change, so they equal the images of Task 6).
       state is then stale for that voice's first stock block.
    - **plaits-48k stalls or is silent** (with h1b passed, the hook works and the fault is in PLAITS): recover and
      report; optionally repeat 3.1 to 3.5 with plaits-96k, one track only (step 4).
-   - **plaits-48k passes:** go on to H3 (section "H3: model 1, ASYM-TRI" below), then step 6.
+   - **plaits-48k passes:** go on to H3 (section "H3: model 1, ASYM-TRI" below), then H3b (section "H3b: models 2 to
+     4"), then step 6.
 4. **H2 with plaits-96k** (`f37e87a0…`; after h1a passed and h1b did not, or as the optional fallback of step 3), steps
    3.1 to 3.5 and 3.7 on track 1. **Never more than 1 track triggered as PLAITS since boot on this image** (the same
    rule: a track stops costing DSP only after a trig under another machine). Do not run step 3.6: two tracks on this
@@ -73,7 +75,7 @@ interrupt-safe without a code change, so they equal the images of Task 6).
      stock .syx with Transfer's legacy mode over MIDI DIN.**
    - If they stall while h1a/h1b passed, the stall is pinned on `083f683f`. If one passes, `word = "083f683f"` may be
      added to encoding_proven.toml with that evidence.
-6. Record every result (H1, H2 and H3) in the design's hardware table, and the shapes or `word =` entries of each image that passed in
+6. Record every result (H1, H2, H3 and H3b) in the design's hardware table, and the shapes or `word =` entries of each image that passed in
    tools/patchkit/encoding_proven.toml. Decision for PLAITS: h1b passing keeps mode 1 (plaits-48k) as the default;
    otherwise mode 0 (plaits-96k).
 
@@ -108,6 +110,53 @@ Plaits' own order: 0 VA, 1 ASYM-TRI, 2 2FM, ... 23 SQUARE; 2 to 23 still play si
   `firmware/Digitakt_II_OS1.17.syx` with Transfer's legacy mode over MIDI DIN), go back to the H2 image
   (`plaits-va-48k-1.17.syx`, `50743416…`) and report which step failed.
 
+## H3b: models 2 to 4, 2FM, FORMANT and ADDITIVE (only after H3 passed)
+
+H3b (`out/patch/plaits-5models-48k-1.17.syx`, `e768eb48…`) is H3 plus models 2 (2FM, Plaits' two-operator FM), 3
+(FORMANT, Plaits' granular formant oscillator) and 4 (ADDITIVE, Plaits' harmonic oscillator). Models 0 and 1 render bit
+for bit as in H3 (tests/patchkit/test_plaits_model0_h2.py, test_plaits_model_digests.py); 5 to 23 still play silence.
+Flash it only after H3 passed; there is no 96k H3b image.
+
+1. Flash H3b. FUNC+SRC, 7 x DOWN (PLAITS, the 8th entry), YES on track 1. Check that track 2 still plays its sample.
+   Trig track 1 with MODEL 0, then MODEL 1 (a trig after each change): the H3 tones, unchanged.
+2. **2FM.** MODEL (knob B) to 2, trig. With HARMONICS (C) at 60 (a 2:1 ratio) note 60 is 261.6 Hz, an FM tone. Per the Plaits manual:
+   - HARMONICS (C): the frequency ratio between the two operators (quantised to musical ratios; between the steps it
+     glides through inharmonic ones).
+   - TIMBRE (E): the modulation index (0: a pure sine; up: brighter, then metallic).
+   - MORPH (F): feedback from the output into the modulator, none at the centre: to the right as phase modulation,
+     to the left as frequency modulation (both roughen the tone towards noise at the ends, each differently).
+   - MIX (G) to the right: AUX, the sub-oscillator (an octave below, phase-modulated by the carrier).
+3. **FORMANT.** MODEL to 3, trig. Note 60 at 261.6 Hz, a vocal or resonant buzz. Per the manual:
+   - HARMONICS (C): the frequency ratio between the two formants (the second formant above or below the first);
+     towards the left also more of the carrier itself.
+   - TIMBRE (E): the formant frequency (sweeps like a resonant filter or a vowel).
+   - MORPH (F): the formant width and shape (narrow and buzzy to wide and soft; its effect fades on high notes).
+   - MIX (G) to the right: AUX, windowed sines that imitate filtered waveforms (Braids' Z models): HARMONICS selects
+     the filter character (peaking, low-pass, band-pass, high-pass), MORPH the carrier shape, TIMBRE the cutoff.
+4. **ADDITIVE.** MODEL to 4, trig. Note 60 at 261.6 Hz, an organ-like tone. Per the manual:
+   - HARMONICS (C): the number of bumps in the spectrum (one smooth peak to several).
+   - TIMBRE (E): the index of the most prominent harmonic (the brightness: low harmonics to high ones).
+   - MORPH (F): the bump shape, from flat and wide to peaked and narrow.
+   - MIX (G) to the right: AUX, only the harmonics of a Hammond organ's drawbars (1, 2, 3, 4, 6, 8, 10, 12).
+   - A change of HARMONICS, TIMBRE or MORPH on this model glides into the new spectrum over about a third of a second
+     (Plaits smooths the harmonic amplitudes); that is expected.
+5. MODEL p-lock across the new models:
+   - set MODEL (knob B) back to 0;
+   - place trigs on steps 1, 3, 5, 7, 9, 11, 13, 15;
+   - p-lock MODEL = 2 on steps 3 and 11, 3 on steps 5 and 13, 4 on steps 7 and 15 (hold the step's trig, turn knob
+     B);
+   - PLAY: VA, 2FM, FORMANT, ADDITIVE, VA, 2FM, FORMANT, ADDITIVE; each note starts clean, with no click or leftover
+     of the previous model.
+   Also p-lock TUNE, HARMONICS, TIMBRE, MORPH on single steps of each new model: only those steps change.
+6. Save the project with MODEL 4 on track 1, reboot, load it: MODEL is back at 4 and model 4 plays.
+7. **Track rule (lower than H2 and H3): never more than 1 track triggered as PLAITS since boot on this image,** any
+   model. One ADDITIVE track at its worst settings measures 67.1 % of the DSP block at the high bound; two measure
+   86.6 %, over the 85 % budget (finding 06, "PLAITS models 2 to 4"). A track stops costing DSP only after it has
+   been triggered under another machine. Do not test two PLAITS tracks on this image.
+- **H3b stalls or is silent** while H3 passed: recover (hold FUNC at power-on, TRIG 4, send the stock
+  `firmware/Digitakt_II_OS1.17.syx` with Transfer's legacy mode over MIDI DIN), go back to the H3 image
+  (`plaits-2models-48k-1.17.syx`, `68fee193…`) and report which step and which model failed.
+
 ## Known, not faults
 
 - A triggered PLAITS voice keeps rendering until its track is triggered under another machine; the amp envelope
@@ -115,4 +164,5 @@ Plaits' own order: 0 VA, 1 ASYM-TRI, 2 2FM, ... 23 SQUARE; 2 to 23 still play si
 - A project saved with PLAITS loads on stock 1.17 without a fault, with that track as ONESHOT (type 0): the stock
   loader keeps only the stock machine types.
 - The track limits come from the DSP load measured in the emulator with the manual's stall rules (finding 06,
-  "PLAITS: measured DSP load per block"), kept at or under 85 % of the block at the worst-case parameters.
+  "PLAITS: measured DSP load per block" and the later model sections), kept at or under 85 % of the block at the
+  worst-case parameters: 2 tracks on H2 and H3, 1 track on H3b (ADDITIVE sets it).

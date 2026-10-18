@@ -6044,3 +6044,43 @@ their defaults (0x4000). Stock baseline: the section above's stock runs.
   heaviest pair (81.2 %, 85.1 % with the 1-track ratio, section above).
 - **Limit unchanged:** VA remains the heaviest ported model, so the 48k rule stays **at most 2 tracks triggered as
   PLAITS since boot**, any mix of models. No 96k image carries ASYM-TRI to the owner.
+
+## PLAITS models 2 to 4 (2FM, FORMANT, ADDITIVE): measured DSP load per block at worst-case knobs (Task 8, 2026-10-18) **[D]**
+
+One agent, emulator only, the method of the two sections above (paired 500 / 2,500 ms windows, `SHARC_CYCMIX`,
+`sharc_cpi.cost_profile` against `sharcdb build --blocks 56,69,76,78,80,88,91,93,103,104,107` of the patched image; the
+H3b image keeps those block indices, block 104 now 72,496 bytes). Image `out/patch/plaits-5models-48k-1.17.syx`
+(machines/plaits-48k with models 0 to 4). Unlike the earlier runs, each PLAITS track is set to the knobs of the model's
+worst block on the concrete core (tests/patchkit/test_plaits_module.py `test_extreme_parameters_compiled_core_new_models`,
+all at note 127 + TUNE 0x7f00): TUNE at its maximum 0x7c00 (note 60 + 60; the panel stops there) and 2FM HARMONICS,
+TIMBRE, MORPH 0 / 0 / 0, FORMANT 0x7f00 / 0x7f00 / 0, ADDITIVE 0 / 0x7f00 / 0x7f00, then the counted trig. Stock
+baseline: the stock runs of "PLAITS: measured DSP load per block".
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| plaits-5models-48k, 1 track 2FM, worst knobs | `0x0000000b` | 268,891 | 284,795 / 316,185 / 404,198 | 42.7 / 47.4 / 60.6 |
+| plaits-5models-48k, 1 track FORMANT, worst knobs | `0x0000000b` | 293,715 | 309,334 / 343,226 / 435,970 | 46.4 / 51.5 / 65.4 |
+| plaits-5models-48k, 1 track ADDITIVE, worst knobs | `0x0000000b` | 299,018 | 314,780 / 359,644 / 447,572 | 47.2 / 53.9 / 67.1 |
+| plaits-5models-48k, 2 tracks FORMANT, worst knobs | `0x000b000b` | 374,366 | 391,807 / 435,199 / 548,835 | 58.8 / 65.3 / 82.3 |
+| plaits-5models-48k, 2 tracks ADDITIVE, worst knobs | `0x000b000b` | 385,069 | 403,732 / 470,075 / 577,448 | 60.6 / 70.5 / **86.6** |
+
+- **Per track** (against stock; 1-track runs, which also carry the hook's own cost): 2FM +59,001 instructions and
+  66,201 / 78,068 / 109,078 cycles (1.85 cycles per instruction at the high bound); FORMANT +83,824 and 90,741 /
+  105,108 / 140,850 (1.68); ADDITIVE +89,128 and 96,186 / 121,526 / 152,452 (1.71). From the 2-track runs: FORMANT
+  +82,238 (1.54), ADDITIVE +87,589 (1.61). The emulated per-track counts agree with the concrete core's worst blocks
+  (57,442, 80,917, 88,288 instructions at 48 kHz) within 4 %.
+- **Safety rule (85 % of the block at the high bound):** one track of each model at its worst knobs is 60.6, 65.4 and
+  67.1 %, so all three are enabled. Two ADDITIVE tracks at worst knobs measure 86.6 % (87.0 % projected from the
+  concrete core's worst block), over the budget; two FORMANT tracks 82.3 %; two 2FM tracks project to 77.0 %. VA's
+  worst pair (81 to 85 %, the first section) is no longer the heaviest.
+- **Limit:** ADDITIVE is the heaviest enabled model, and two of its tracks exceed 85 %, so the rule on the H3b image is
+  **at most 1 track triggered as PLAITS since boot** (it was 2 on H2 and H3). Projected with the measured ratios,
+  a pair of tracks among VA, ASYM-TRI, 2FM and FORMANT stays at about 85 % or under at the high bound (VA's pair is
+  81 to 85 %, VA + FORMANT 81 to 84 %, with the 2-track and the 1-track ratios); a pair with ADDITIVE reaches
+  the budget or goes over it (VA + ADDITIVE 84 to 86 %, two ADDITIVE 86.6 % measured). The rule counts
+  tracks, not models, so the owner image takes the simple limit; a model-aware rule is the owner's call.
+- **Code shape.** Selache's C has no optimiser and no inlining, so the hot loops of 2FM and ADDITIVE are written out
+  (the interpolators' steps, the downsampler, SinePM's conversions, SineNoWrap) with the same float operations in the
+  same order as upstream; the host test stays bit exact. That took 2FM from 91,600 to 55,500 instructions per block
+  and ADDITIVE from 120,800 to 86,000 at one high setting; ADDITIVE's 36 harmonics x 32 samples still cost about 29
+  instructions each (every variable lives on the stack).
