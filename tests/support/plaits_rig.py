@@ -418,3 +418,48 @@ class ImageRig:
                 for n in (*CALLEE_SAVED, "I6", "I7")
             },
         }
+
+
+def model_blocks(
+    rig: PlaitsRig, steps: list[tuple[int, int]], note: int = 57, **slots: int
+) -> list[Any]:
+    """Voice 0 (track 0's even voice) of `rig`, one block per (model, trig) step: MODEL set to the model's row value
+    (model << 8) and the trigger latch to trig; the other rows from `slots` (defaults as `controls`)."""
+    import numpy as np
+
+    out = []
+    for model, trig in steps:
+        rig.controls(0, note, model=model << 8, **slots)
+        rig.trig(0, bool(trig))
+        out.append(np.array(rig.block(0)["samples"], dtype=np.float32))
+    return out
+
+
+def assert_model_switch(
+    rig: PlaitsRig, a: int, b: int, note: int = 57, **slots: int
+) -> list[tuple[int, int]]:
+    """A model change on one voice of `rig` (whatever it played before): a note-on of model a and 4 blocks; MODEL
+    turned to b without a note-on (2 blocks: a runs on, bit for bit as a fresh rig's voice of a that never saw the
+    change); a note-on of b and 5 blocks (bit for bit a fresh rig's voice of b: nothing of the previous engine's
+    state survives in the shared union). The new model must sound. Returns the (model, trig) steps it played, for a
+    comparison with the host. Used by tests/patchkit/test_plaits_module.py for every enabled model."""
+    import numpy as np
+
+    rig.active(0)
+    steps = [(a, int(k == 0)) for k in range(4)] + [(b, 0)] * 2
+    steps += [(b, int(k == 0)) for k in range(5)]
+    got = model_blocks(rig, steps, note, **slots)
+    ref = PlaitsRig(rig.mode)
+    ref.active(0)
+    want_a = model_blocks(ref, [(a, int(k == 0)) for k in range(6)], note, **slots)
+    assert all(np.array_equal(x, y) for x, y in zip(got[:6], want_a, strict=True)), (
+        f"model {a} did not run on through MODEL {b} without a note-on"
+    )
+    fresh = PlaitsRig(rig.mode)
+    fresh.active(0)
+    want_b = model_blocks(fresh, [(b, int(k == 0)) for k in range(5)], note, **slots)
+    assert all(np.array_equal(x, y) for x, y in zip(got[6:], want_b, strict=True)), (
+        f"model {b} after model {a} differs from a fresh voice of model {b}"
+    )
+    assert any(x.any() for x in want_b), f"model {b} is silent"
+    return steps

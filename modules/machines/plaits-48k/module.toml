@@ -15,7 +15,7 @@ conflicts = ["machines/plaits-96k"]
 # The PLAITS voice routine (modules/machines/plaits: the entry shim src/dsp/plaits_entry.s, the C voice wrapper and
 # engines) in mode 1: 32 samples at 48 kHz written straight into the voice output (the stock decimator is skipped;
 # core/dsp-inline `_di_return_out`). src/dsp/mode.s, listed first, defines PLAITS_MODE for the shim; the C sources are
-# the same in both builds (the shim passes the output rate). Images: out/patch/plaits-va-48k-1.17.syx (H2, VA), out/patch/plaits-2models-48k-1.17.syx (H3, VA and ASYM-TRI).
+# the same in both builds (the shim passes the output rate). Images: out/patch/plaits-va-48k-1.17.syx (H2, VA), out/patch/plaits-2models-48k-1.17.syx (H3, VA and ASYM-TRI), out/patch/plaits-5models-48k-1.17.syx (H3b, models 0 to 4).
 [[object]]
 path = "build/plaits-48k-dsp.dko.json"
 sources = [
@@ -24,6 +24,10 @@ sources = [
   "../plaits/src/dsp/plaits.c",
   "../plaits/src/dsp/engines/va.c",
   "../plaits/src/dsp/engines/waveshaping.c",
+  "../plaits/src/dsp/engines/fm.c",
+  "../plaits/src/dsp/engines/grain.c",
+  "../plaits/src/dsp/engines/additive.c",
+  "../plaits/src/dsp/lib/tables.c",
   "../plaits/src/dsp/halfband.c",
 ]
 place = "dsp.l2"

@@ -88,6 +88,9 @@ TYPED = [
     "tests/patchkit/test_plaits_model0_h2.py",
     "tests/plaits/test_ws_host.py",
     "tests/patchkit/test_plaits_model_digests.py",
+    "tools/patchkit/pk_cunion.py",
+    "tests/patchkit/test_pk_cunion.py",
+    "tests/plaits/test_fm_grain_additive_host.py",
 ]
 
 

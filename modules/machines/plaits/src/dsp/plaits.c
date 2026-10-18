@@ -4,9 +4,9 @@
  *   note      = pitch / 256 + (tune / 256 - 64)                 (the frame's note word and TUNE)
  *   harmonics, timbre, morph = word / 0x7f00, clamped to [0, 1]
  *   mix       = word / 0x7f00, clamped: out = OUT + mix (AUX - OUT)
- *   two engine renders of 16 samples (va_render for model 0, ws_render for model 1), then the DC blocker (one pole
- *   at 5 Hz) and the output gain.
- * Velocity is not used by VA or ASYM-TRI. The model is latched at a note-on, which (re)initialises that model's
+ *   two engine renders of 16 samples (va_render for model 0, ws_render 1, fm_render 2, grain_render 3,
+ *   additive_render 4), then the DC blocker (one pole at 5 Hz) and the output gain.
+ * Velocity is not used by these models. The model is latched at a note-on, which (re)initialises that model's
  * engine; a model without an engine renders silence.
  */
 #include "plaits.h"
@@ -70,6 +70,12 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
     v->model = (int)(f->model * PL_INV_256);
     if (v->model == PLAITS_MODEL_ASYM_TRI) {
         ws_init(PL_WS(v));
+    } else if (v->model == PLAITS_MODEL_2FM) {
+        fm_init(PL_FM(v));
+    } else if (v->model == PLAITS_MODEL_FORMANT) {
+        grain_init(PL_GRAIN(v));
+    } else if (v->model == PLAITS_MODEL_ADDITIVE) {
+        additive_init(PL_ADD(v));
     } else {
         va_init(PL_VA(v));
     }
@@ -79,7 +85,7 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
     v->armed = 1;
 }
 
-/* 32 samples at 48 kHz of the latched model (VA or ASYM-TRI) into dst. */
+/* 32 samples at 48 kHz of the latched model (0..4) into dst. */
 static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
 {
     Params p;
@@ -94,6 +100,12 @@ static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
     for (s = 0; s < PLAITS_BLOCK; s += PLAITS_SUB) {
         if (v->model == PLAITS_MODEL_ASYM_TRI) {
             ws_render(PL_WS(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else if (v->model == PLAITS_MODEL_2FM) {
+            fm_render(PL_FM(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else if (v->model == PLAITS_MODEL_FORMANT) {
+            grain_render(PL_GRAIN(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else if (v->model == PLAITS_MODEL_ADDITIVE) {
+            additive_render(PL_ADD(v), &p, v->out, v->aux, PLAITS_SUB);
         } else {
             va_render(PL_VA(v), &p, v->out, v->aux, PLAITS_SUB);
         }
@@ -115,7 +127,7 @@ int plaits_render(PlaitsVoice *v, const PlaitsFrame *f, int trig, float *out, in
     if (trig) {
         note_on(v, f);
     }
-    if (!v->armed || !f->active || (v->model != PLAITS_MODEL_VA && v->model != PLAITS_MODEL_ASYM_TRI)) {
+    if (!v->armed || !f->active || v->model < PLAITS_MODEL_VA || v->model > PLAITS_MODEL_ADDITIVE) {
         zeros(out, n);
         return 0;
     }

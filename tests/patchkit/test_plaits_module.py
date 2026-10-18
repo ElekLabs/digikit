@@ -1,9 +1,11 @@
-"""machines/plaits (models VA and ASYM-TRI) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
+"""machines/plaits (models VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
 
 The rig (tests/support/plaits_rig.py) links core/dsp-inline at test addresses and the PLAITS object of
 machines/plaits-48k (mode 1, 48 kHz into the voice output) or machines/plaits-96k (mode 0, 96 kHz into the work
 buffer), built as pk_build builds it (the entry shim plus the C voice wrapper, VA engine and half-band compiled by
-selcc), and runs `_di_entry` block after block on the same memory. The reference is the same C built for the host
+selcc), and runs `_di_entry` block after block on the same memory. Every model has the same tests: equivalence with
+the host build (both modes), the extreme grid with an instruction bound (slow), and a model switch at a note-on to and
+from VA (tests/support/plaits_rig.py `assert_model_switch`). The reference is the same C built for the host
 (tests/support/plaits_host.py), driven with the PlaitsFrame the shim reads from the frame words.
 
 The image tests patch stock 1.17 with each variant and run the four owner-image checks (container checksums, the
@@ -27,6 +29,7 @@ from support.plaits_rig import (
     DECIMATE,
     RESUME,
     PlaitsRig,
+    assert_model_switch,
     plaits_type,
 )
 
@@ -155,6 +158,115 @@ def test_compiled_asym_tri_96k_matches_host_on_concrete_core(
     assert max(instr) < MAX_BLOCK_INSTRUCTIONS_WS[0], max(instr)
 
 
+# Models 2..4 (Task 8 of the all-engines plan): 2FM, FORMANT (grain), ADDITIVE.
+NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE"}
+
+
+@pytest.mark.parametrize("model", sorted(NEW_MODELS))
+@pytest.mark.parametrize("k", range(len(SETTINGS)))
+def test_compiled_new_models_match_host_on_concrete_core(
+    port: Port, model: int, k: int
+) -> None:
+    """Models 2, 3 and 4 in mode 1: the compiled object against the host build."""
+    mx, rms, sig, instr = compare(port, 1, SETTINGS[k], 120, model=model)
+    assert sig > 0.02, "the setting sounds"
+    assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
+    assert max(instr) < MAX_BLOCK_INSTRUCTIONS_NEW[model][1], max(instr)
+    print(
+        f"{NEW_MODELS[model]} set {k}: max {mx:.3g} rms {rms:.3g} sig {sig:.3f} "
+        f"instr {min(instr)}..{max(instr)}"
+    )
+
+
+@pytest.mark.parametrize("model", sorted(NEW_MODELS))
+@pytest.mark.parametrize("k", range(len(SETTINGS)))
+def test_compiled_new_models_96k_match_host_on_concrete_core(
+    port: Port, model: int, k: int
+) -> None:
+    mx, rms, sig, instr = compare(port, 0, SETTINGS[k], 24, model=model)
+    assert sig > 0.02
+    assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
+    assert max(instr) < MAX_BLOCK_INSTRUCTIONS_NEW[model][0], max(instr)
+
+
+def test_compiled_lib_tables_equal_host_bits(port: Port) -> None:
+    """The shared tables of models 2..4 (lib/tables.c) as selcc wrote them into the object equal the host build's
+    float32 bits, which tests/plaits/test_fm_grain_additive_host.py checks against upstream (the negative values of
+    the FM ratio quantizer are the selcc hazard of finding 20)."""
+    obj = PlaitsRig(1).obj
+    names = [
+        "pl_lut_sine.",
+        "pl_lut_fm_frequency_quantizer.",
+        "pl_lut_4x_downsampler_fir.",
+        "pl_lut_pitch_ratio_high.",
+        "pl_lut_pitch_ratio_low.",
+    ]
+    for k, name in enumerate(names):
+        sec, off, _g = obj.data_symbols[name]
+        blob = obj.data[sec][0]
+        n = port.lib.port_lib_lut_size(k)
+        got = np.frombuffer(blob[off : off + 4 * n], dtype="<u4")
+        want = np.array(
+            [port.lib.port_lib_lut(k, i) for i in range(n)], dtype=np.float32
+        )
+        assert got.tolist() == want.view(np.uint32).tolist(), name
+
+
+@pytest.mark.parametrize("mode", [1, 0])
+@pytest.mark.parametrize("model", sorted(NEW_MODELS))
+def test_model_switch_at_note_on_to_and_from_va(
+    port: Port, mode: int, model: int
+) -> None:
+    """VA -> model -> VA on one voice (assert_model_switch twice on the same rig): each new model equals a fresh
+    voice of it after the note-on, the old one runs on through a MODEL change without one; and the whole run is
+    within MAX_ERR of the host."""
+    rig = PlaitsRig(mode)
+    slots = {"harmonics": 0x3000, "timbre": 0x5000}
+    steps = assert_model_switch(rig, 0, model, **slots)
+    steps += assert_model_switch(rig, model, 0, **slots)
+    hv = port.voice()
+    host = [port.render(hv, frame(57, model=m, **slots), t, mode) for m, t in steps]
+    rig2 = PlaitsRig(mode)
+    rig2.active(0)
+    from support.plaits_rig import model_blocks
+
+    got = model_blocks(rig2, steps, **slots)
+    assert float(np.abs(np.concatenate(got) - np.concatenate(host)).max()) <= MAX_ERR
+
+
+def test_model_change_chain_va_fm_formant_additive_asym_tri_va() -> None:
+    """Review focus 1: one voice through every enabled model in turn (VA -> 2FM -> FORMANT -> ADDITIVE -> ASYM-TRI ->
+    VA), each change first without a note-on, then at one."""
+    rig = PlaitsRig(1)
+    chain = [0, 2, 3, 4, 2, 1, 0]
+    for a, b in zip(chain, chain[1:], strict=False):
+        assert_model_switch(rig, a, b, harmonics=0x5000, morph=0x2000)
+
+
+@pytest.mark.parametrize("model", sorted(NEW_MODELS))
+def test_new_model_c_stack_stays_inside_pl_stack(model: int) -> None:
+    """The deepest C frame of models 2..4 (ADDITIVE keeps 12 interpolators on the stack) stays inside the 4096-byte
+    _pl_stack with room to spare."""
+    rig = PlaitsRig(1)
+    rig.controls(0, 60, model=model << 8, harmonics=0x7F00, timbre=0x7F00)
+    rig.active(0)
+    rig.trig(0)
+    lo = rig.symbols["_pl_stack"]
+    code = rig.st.UREG_CODES["I7"]
+    seen: list[int] = []
+
+    def watch(state: Any) -> None:
+        i7 = getattr(state.uregs.get(code), "value", None)
+        if i7 is not None and lo <= i7 < lo + 4096:
+            seen.append(i7)
+
+    rig.block(0, on_step=watch)
+    assert seen
+    used = lo + 4096 - min(seen)
+    assert used < 2048, used
+    print(f"model {model}: {used} bytes of _pl_stack")
+
+
 def test_compiled_ws_tables_equal_host_bits(port: Port) -> None:
     """The waveshaping tables as selcc wrote them into the object (data, which neither the encoding gate nor the
     cross-check sees; selcc mis-writes negative float initialisers, finding 20) equal the host build's float32 bits,
@@ -222,7 +334,8 @@ def test_model_switch_at_note_on_va_asym_tri_va(port: Port, mode: int) -> None:
 
 
 def test_model1_reaches_asym_tri_from_the_model_row() -> None:
-    """The MODEL row's range is 0 .. 0x1700 (UI 0 .. 23): row value 0x100 (UI 1, the knob or a p-lock) is model 1."""
+    """The MODEL row's range is 0 .. 0x1700 (UI 0 .. 23): row value N << 8 (UI N, the knob or a p-lock) is model N;
+    models 0..4 sound, each differently, and 5 (not ported yet) is silent."""
     import tomllib
 
     manifest = tomllib.loads((ROOT / "modules/machines/plaits/module.toml").read_text())
@@ -231,13 +344,15 @@ def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     rig = PlaitsRig(1)
     rig.active(0)
     outs = {}
-    for model in (0, 1, 2):
+    for model in range(6):
         rig.controls(0, 60, model=model << 8)  # the row value: UI 1 is 0x100
         rig.trig(0, True)
         outs[model] = np.array(rig.block(0)["samples"], dtype=np.float32)
         rig.trig(0, False)
-    assert outs[0].any() and outs[1].any() and not outs[2].any()
-    assert not np.array_equal(outs[0], outs[1])
+    assert all(outs[m].any() for m in range(5)) and not outs[5].any()
+    for a in range(5):
+        for b in range(a + 1, 5):
+            assert not np.array_equal(outs[a], outs[b]), (a, b)
 
 
 def f0_autocorr(x: Arr, lo: float, hi: float, fs: float = 48000.0) -> float:
@@ -687,6 +802,14 @@ MAX_BLOCK_INSTRUCTIONS = {1: 88_000, 0: 118_000}
 # (mode 0) at worst; the bounds leave about 15 % margin. (Model 0's worst case with the model dispatch: 76,249 and
 # 99,784, 13 instructions above H2's.)
 MAX_BLOCK_INSTRUCTIONS_WS = {1: 49_000, 0: 76_000}
+# Models 2..4 (Task 8): the worst blocks measured on the extreme grid (test_extreme_parameters_compiled_core_new_models)
+# are 2FM 57,442 (mode 1) / 80,979 (mode 0), FORMANT 80,917 / 104,454, ADDITIVE 88,288 / 111,825 instructions, all at
+# note 127 + TUNE 0x7f00; the bounds leave about 15 % margin. {model: {mode: bound}}.
+MAX_BLOCK_INSTRUCTIONS_NEW = {
+    2: {1: 66_000, 0: 93_000},
+    3: {1: 93_000, 0: 120_000},
+    4: {1: 101_500, 0: 128_500},
+}
 
 
 @pytest.mark.slow
@@ -704,10 +827,20 @@ def test_extreme_parameters_compiled_core_asym_tri(port: Port, mode: int) -> Non
     extremes(port, mode, 1, MAX_BLOCK_INSTRUCTIONS_WS[mode])
 
 
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", [1, 0])
+@pytest.mark.parametrize("model", sorted(NEW_MODELS))
+def test_extreme_parameters_compiled_core_new_models(
+    port: Port, model: int, mode: int
+) -> None:
+    """The same grid for models 2, 3 and 4."""
+    extremes(port, mode, model, MAX_BLOCK_INSTRUCTIONS_NEW[model][mode])
+
+
 def extremes(port: Port, mode: int, model: int, bound: int) -> None:
     rig = PlaitsRig(mode)
     rig.active(0)
-    worst = 0
+    worst, worst_at = 0, None
     for note in (0, 127):
         for tune in (0, 0x4000, 0x7F00):
             for h in (0, 0x7F00):
@@ -732,9 +865,10 @@ def extremes(port: Port, mode: int, model: int, bound: int) -> None:
                             where = (note, hex(tune), hex(h), hex(t), hex(m), b)
                             assert np.isfinite(got).all(), where
                             assert float(np.abs(got - want).max()) <= MAX_ERR, where
-                            worst = max(worst, rig.instructions[-1])
+                            if rig.instructions[-1] > worst:
+                                worst, worst_at = rig.instructions[-1], where
                             assert rig.instructions[-1] <= bound, (
                                 where,
                                 rig.instructions[-1],
                             )
-    print(f"mode {mode} model {model}: worst block {worst} instructions")
+    print(f"mode {mode} model {model}: worst block {worst} instructions at {worst_at}")

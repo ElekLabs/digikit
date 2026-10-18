@@ -1,5 +1,5 @@
 """The PLAITS module's C sources (modules/machines/plaits/src/dsp) built for the host and driven through ctypes:
-the engines (va_init/va_render, ws_init/ws_render) and the voice wrapper (plaits_render); and the upstream oracle
+the engines (va, ws, fm, grain, additive: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
 build (tests/plaits/oracle). Used by tests/plaits/test_va_host.py and
 tests/patchkit/test_plaits_module.py (the reference for the compiled code on the concrete core)."""
 
@@ -53,6 +53,18 @@ class Port:
             FP,
             ctypes.c_int,
         ]
+        for name in ("fm", "grain", "additive"):
+            setattr(self, f"{name}_size", getattr(self.lib, f"port_{name}_size")())
+            getattr(self.lib, f"{name}_init").argtypes = [ctypes.c_void_p]
+            getattr(self.lib, f"{name}_render").argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(Params),
+                FP,
+                FP,
+                ctypes.c_int,
+            ]
+        self.engine_union_size = self.lib.port_engine_union_size()
+        self.lib.port_lib_lut.restype = ctypes.c_float
         self.voice_size = self.lib.port_voice_size()
         assert self.lib.port_frame_size() == ctypes.sizeof(Frame)
         self.lib.va_init.argtypes = [ctypes.c_void_p]
@@ -156,12 +168,17 @@ def build_port(d: Path) -> Port:
     srcs = [
         DSP / "engines" / "va.c",
         DSP / "engines" / "waveshaping.c",
+        DSP / "engines" / "fm.c",
+        DSP / "engines" / "grain.c",
+        DSP / "engines" / "additive.c",
+        DSP / "lib" / "tables.c",
         DSP / "plaits.c",
         DSP / "halfband.c",
         ORACLE / "port_sizes.c",
     ]
     subprocess.run(
-        # -fno-strict-aliasing: waveshaping.c reads its bit-pattern tables through a float pointer (ws_tables.h)
+        # -fno-strict-aliasing: the engines read their bit-pattern tables through a float pointer (ws_tables.h,
+        # lib/tables.h), and itof_nonneg its union through one
         [
             "cc",
             "-std=c99",
