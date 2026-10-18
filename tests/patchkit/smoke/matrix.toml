@@ -36,6 +36,13 @@ device = "dt2"
 firmware = "1.17"
 modules = ["core/dsp-voice", "core/machines", "core/params", "machines/pluck"]
 
+# ui/boot-splash: only the intro changes. Its goldens equal stock's except play_stop/stopped: the 45-frame intro lets
+# the post-boot loading finish earlier, so the header's "Loading..." -> project-name slide is mid-way in that frame.
+[[cell]]
+device = "dt2"
+firmware = "1.17"
+modules = ["ui/boot-splash"]
+
 # The device on the desk runs DT2 1.16: the same sets there.
 [[cell]]
 device = "dt2"
