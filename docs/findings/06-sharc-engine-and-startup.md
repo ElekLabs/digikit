@@ -6084,3 +6084,37 @@ baseline: the stock runs of "PLAITS: measured DSP load per block".
   same order as upstream; the host test stays bit exact. That took 2FM from 91,600 to 55,500 instructions per block
   and ADDITIVE from 120,800 to 86,000 at one high setting; ADDITIVE's 36 harmonics x 32 samples still cost about 29
   instructions each (every variable lives on the stack).
+
+## PLAITS models 5 and 6 (WAVETABLE, CHORD): measured DSP load per block at worst-case knobs (Task 9, 2026-10-18) **[D]**
+
+One agent, emulator only, the method of the models 2 to 4 section (paired 500 / 2,500 ms windows, `SHARC_CYCMIX`,
+`sharc_cpi.cost_profile` against `sharcdb build --blocks 56,69,76,78,80,88,91,93,103,104,107` of the patched image;
+block 104 now 193,760 bytes, code and the PLAITS tables). Image `out/patch/plaits-7models-48k-1.17.syx` (H3c,
+machines/plaits-48k with models 0 to 6, sha256 09ac59c0…). TUNE at the panel maximum 0x7c00 for each track, then
+WAVETABLE HARMONICS / TIMBRE / MORPH 0x7f00 / 0x4000 / 0x4000 (the concrete core's worst block is flat across knobs:
+41,168 instructions at 48 kHz, note 127 + TUNE 0x7f00); CHORD 0 / 0 / 0x3c00 (MORPH inside the crossfade between its
+divide-down and wavetable voices, where both kinds of voice render: 51,800 on the core; a partial scan found up to
+55,083 at TIMBRE 0x7f00). Stock baseline: the stock runs of "PLAITS: measured DSP load per block".
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| plaits-7models-48k, 1 track WAVETABLE, worst knobs | `0x0000000b` | 253,300 | 277,165 / 316,029 / 449,313 | 41.6 / 47.4 / 67.4 |
+| plaits-7models-48k, 1 track CHORD, worst knobs | `0x0000000b` | 266,829 | 283,471 / 315,646 / 401,234 | 42.5 / 47.3 / 60.2 |
+| plaits-7models-48k, 2 tracks WAVETABLE, worst knobs | `0x000b000b` | 293,531 | 319,473 / 364,871 / 511,610 | 47.9 / 54.7 / 76.7 |
+| plaits-7models-48k, 2 tracks CHORD, worst knobs | `0x000b000b` | 320,607 | 338,599 / 376,997 / 470,073 | 50.8 / 56.5 / 70.5 |
+
+- **Per track** (against stock; 1-track runs carry the hook's own cost): WAVETABLE +43,409 instructions and 58,571 /
+  77,912 / 154,193 cycles, **3.55 cycles per instruction at the high bound** (the eight 4-point Hermite reads per
+  sample from a 101 KB table in L2: the high bound charges every L2 load its assumed latency); CHORD +56,938 and
+  64,878 / 77,528 / 106,115 (1.86). From the 2-track runs: WAVETABLE +41,820 (2.59), CHORD +55,358 (1.58). The
+  emulated counts agree with the concrete core (41,168 and 51,800 to 55,083 instructions) within 5 %.
+- **Safety rule (85 % at the high bound):** one track at worst knobs is 67.4 % (WAVETABLE) and 60.2 % (CHORD): both
+  are enabled. Two WAVETABLE tracks measure 76.7 % and two CHORD tracks 70.5 %, both under the budget. WAVETABLE's
+  1-track high bound (67.4 %) is now the highest single track, a hair above ADDITIVE's 67.1 %; its 2-track run is much
+  lower than the 1-track ratio projects (90.5 %), so its high-bound CPI is not additive per track.
+- **Limit:** two ADDITIVE tracks (86.6 %, the models 2 to 4 section) still exceed the budget and no new model lowers
+  it, so the rule on the H3c image stays **at most 1 track triggered as PLAITS since boot**. A model-aware rule (two
+  tracks when neither is ADDITIVE) remains the owner's call.
+- **Memory.** dsp.l2 use is 198,284 of 922,756 bytes (77,020 on H3b): the wave table as floats (101,376 bytes) and
+  its map (1,024), the CHORD tables (492), the new code, and the per-voice union at 344 bytes (CHORD; +32 per voice).
+  The boot stream is 515,276 bytes (limit 0xfffff).

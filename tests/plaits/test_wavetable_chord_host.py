@@ -341,9 +341,9 @@ def test_wavetable_indices_stay_inside_at_every_bank_row_column(
     assert (checked.lib.port_index_lo(0), checked.lib.port_index_hi(0)) == (0, 255)
     assert checked.lib.port_index_lo(1) >= 0 and checked.lib.port_index_hi(1) == 130
     for k in range(8):
-        corner = ((k >> 2) & 1, (k >> 1) & 1, k & 1)
+        corner = (float((k >> 2) & 1), float((k >> 1) & 1), float(k & 1))
         checked.lib.port_index_reset()
-        checked.engine("wavetable", [(60.0, *map(float, corner))] * 400, 16)
+        checked.engine("wavetable", [(60.0, corner[0], corner[1], corner[2])] * 400, 16)
         lo, hi = checked.lib.port_index_lo(0), checked.lib.port_index_hi(0)
         assert 0 <= lo <= hi <= 255, (corner, lo, hi)
 

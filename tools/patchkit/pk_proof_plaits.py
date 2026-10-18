@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patchkit proof: the PLAITS machine (models 0..4: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE) end to end on Digitakt II 1.17,
+"""patchkit proof: the PLAITS machine (models 0..6: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD) end to end on Digitakt II 1.17,
 in the emulator.
 
     uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g,h,i,j,k] [--jobs N]
@@ -22,10 +22,11 @@ captures the main output (`pcm.tap`):
   h  asym-tri  MODEL (B) turned to 1 (row value 0x100): slot and TX word; note 60 of model 1 within 1 cent; its
                spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change model 1's spectrum; track 2's stock
                sample (ONESHOT) still plays beside it.
-  i  models    MODEL (B) turned to 2, 3 and 4 (2FM, FORMANT, ADDITIVE): slot and TX word; note 60 of each within
-               1 cent (2FM with HARMONICS at 0x3c00, a ratio of exactly one octave, so the carrier is the
-               fundamental); each spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change each one's
-               spectrum.
+  i  models    MODEL (B) turned to 2..6 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD): slot and TX word; note 60 of
+               each within 1 cent (2FM with HARMONICS at 0x3c00, a ratio of exactly one octave, so the carrier is the
+               fundamental; CHORD with HARMONICS, TIMBRE and MORPH 0, the OCT chord in root position on the divide-down
+               voices, at upstream's 0.998 detune, 261.1024 Hz); each spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change
+               each one's spectrum.
   j  persist4  as e with MODEL 4 (ADDITIVE, TIMBRE 0x800 so the fundamental leads): saved, track set to ONESHOT,
                reloaded: MODEL is back at 0x400 and the track plays model 4 at note 60 within 1 cent (no stock-card
                step: e covers it).
@@ -77,8 +78,10 @@ HARM, TIMB, MORPH, LEV = (
 )  # engine slots (mirror indexes) of knobs C, E, F, H
 ENC = {HARM: "ENC C", TIMB: "ENC E", MORPH: "ENC F", LEV: "ENC H"}
 MODEL = 26  # engine slot of knob B (MODEL: the model number << 8)
-DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-5models-48k-1.17.syx"
-NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE"}
+DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-7models-48k-1.17.syx"
+NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE", 5: "WAVETABLE", 6: "CHORD"}
+# CHORD detunes its voices by 0.998 (upstream ChordEngine: f0 = NoteToFrequency(note) * 0.998)
+CHORD_DETUNE = 0.998
 
 
 def left_of(pcm: np.ndarray) -> np.ndarray:
@@ -175,15 +178,15 @@ class PlaitsProof(M.Proof):
             s.turn_burst("ENC B", 1 if v < n << 8 else -1, 1, gap_ms=60)
         return s.mirror(MODEL, track)
 
-    def pitch_check(self, x: np.ndarray, what: str) -> None:
+    def pitch_check(self, x: np.ndarray, what: str, want: float = NOTE60) -> None:
         seg = self.held(x, 100, 1000)
         self.check(f"{what} sounds", rms(seg) > 1e-3, f"rms {rms(seg):.4f}")
         if rms(seg) > 1e-3:
-            f = f0_fft(seg, NOTE60)
-            c = 1200 * math.log2(f / NOTE60)
+            f = f0_fft(seg, want)
+            c = 1200 * math.log2(f / want)
             self.results_extra[f"{what} Hz"] = f
             self.check(
-                f"{what} within 1 cent of 261.6256 Hz",
+                f"{what} within 1 cent of {want:.4f} Hz",
                 abs(c) < 1.0,
                 f"{f:.4f} Hz, {c:+.3f} cent",
             )
@@ -312,7 +315,7 @@ class PlaitsProof(M.Proof):
                 f"rms {rms(x2):.4f}, type cache {tc:#010x}",
             )
 
-    # -- i: models 2..4 (2FM, FORMANT, ADDITIVE)
+    # -- i: models 2..6 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD)
     def part_i(self) -> None:
         with self.session_plaits() as s:
             self.plaits(s)
@@ -326,11 +329,17 @@ class PlaitsProof(M.Proof):
                     m == model << 8 and tx == model << 8,
                     f"slot {m:#x}, tx {tx:#x}",
                 )
-                harm = s.mirror(HARM)
+                harm, timb, morph = s.mirror(HARM), s.mirror(TIMB), s.mirror(MORPH)
                 if (
                     model == 2
                 ):  # a modulator ratio of exactly one octave (lut_fm_frequency_quantizer 60..62)
                     s.turn_to(ENC[HARM], HARM, 0x3C00, tol=0x80)
+                if (
+                    model == 6
+                ):  # the OCT chord (HARMONICS 0) in root position (TIMBRE 0) on the divide-down voices (MORPH 0)
+                    s.turn_to(ENC[HARM], HARM, 0)
+                    s.turn_to(ENC[TIMB], TIMB, 0)
+                    s.turn_to(ENC[MORPH], MORPH, 0)
                 x = self.play(s, f"model{model}-note60", hold=1200, total=1500)
                 tc = self.type_cache(s)
                 self.check(
@@ -338,9 +347,16 @@ class PlaitsProof(M.Proof):
                     tc & 0xFFFF == PLAITS_TYPE,
                     f"{tc:#010x}",
                 )
-                self.pitch_check(x, f"model {model} ({name}) note 60")
-                if model == 2:
+                self.pitch_check(
+                    x,
+                    f"model {model} ({name}) note 60",
+                    NOTE60 * CHORD_DETUNE if model == 6 else NOTE60,
+                )
+                if model in (2, 6):
                     s.turn_to(ENC[HARM], HARM, harm)
+                if model == 6:
+                    s.turn_to(ENC[TIMB], TIMB, timb)
+                    s.turn_to(ENC[MORPH], MORPH, morph)
                 ref = self.held(self.play(s, f"model{model}"))
                 d = float(
                     np.mean(
@@ -773,10 +789,10 @@ PARTS = [
     ),
     K.Part(
         "i",
-        "models 2..4 (2FM, FORMANT, ADDITIVE): MODEL knob, note 60 within 1 cent, knobs",
+        "models 2..6 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD): MODEL knob, note 60 within 1 cent, knobs",
         P.part_i,
         True,
-        900,
+        1300,
     ),
     K.Part("j", "persistence with MODEL 4 (ADDITIVE)", P.part_j, True, 250),
     # k and l: KNOWN BROKEN in this setup, so neither tier runs them (only --only k / --only l): the harness's PLAY
