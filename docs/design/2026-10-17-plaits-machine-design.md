@@ -123,7 +123,10 @@ Conclusions:
   `a0 = (440/8) / kCorrectedSampleRate`. `kBlockSize = 12`, `kMaxBlockSize = 24`.
 - `dsp/voice.cc` registers 24 engine slots from 22 classes (`six_op_engine` three times, one per DX7 bank), with
   per-engine "already enveloped" flags and output/AUX gains.
-- Engines share one 16 KB arena per voice (`plaits.cc`); a model change re-initializes the engine.
+- Engines share one 16 KB arena per voice (`plaits.cc`). `voice.cc` calls every engine's `Init` once at power-up and,
+  at an engine change, only `LoadUserData` and `Reset`; a trigger never re-initialises the engine (it reaches it as
+  `EngineParameters.trigger`). The port follows this since Task 9b: init at a voice's first note-on and at a model
+  change, otherwise the engine runs on (`plaits.c` `note_on`).
 - Read-only data: `resources/waves.bin` (33 KB) and the tables in `resources.cc` (sizes to be measured).
 
 ## How the port adapts Plaits to the DT2

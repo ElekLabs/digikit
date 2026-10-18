@@ -4,9 +4,12 @@ enabled (model 0 has its own file and test, tests/patchkit/test_plaits_model0_h2
 tests/plaits/vectors/model<N>_<image>.json (tests/support/plaits_vectors.py `vectors`) holds SHA-256 digests of
 model N's output words for the fixed scenarios of tests/support/plaits_vectors.py: the compiled DSP object of each
 variant on the concrete core and the host build of the same C. Model 1 was recorded from the H3 sources (5931e47),
-models 2..4 from the H3b sources (Task 8), models 5 and 6 from the H3c sources (Task 9). These tests render the same scenarios from the current sources and
-require equal digests. PLAITS_RECORD_MODEL=N rewrites model N's file, and only that one: run it only from the
-sources of the task that first enables model N."""
+models 2..4 from the H3b sources (Task 8), models 5 and 6 from the H3c sources (Task 9); those digests (a note-on
+re-initialised the engine) are kept under `per_note_init`, and the pinned digests were re-recorded at Task 9b (the
+engine runs on from note to note; plaits_vectors.check also requires the old digest of the first note after init and
+every old digest when the voice is cleared at each note-on). PLAITS_RECORD_MODEL=N records model N's file for a newly
+enabled model (run it only from the sources of the task that first enables model N); PLAITS_RECORD_9B=1 re-records
+the pinned digests of the models already recorded."""
 
 from __future__ import annotations
 
@@ -24,10 +27,11 @@ MODELS = sorted(pv.RECORDED_AT)
 RECORD = os.environ.get("PLAITS_RECORD_MODEL", "")
 
 
-def _check(model: int, key: str, got: dict[str, str]) -> None:
+def _check(model: int, key: str, got: dict[str, str], fresh: dict[str, str]) -> None:
     path = pv.vectors(model)
-    data = json.loads(path.read_text()) if path.exists() else {}
     if str(model) == RECORD:
+        # a newly enabled model: no per-note initialisation to keep (both entries hold the run-on digests)
+        data = json.loads(path.read_text()) if path.exists() else {}
         rev = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
             capture_output=True,
@@ -36,13 +40,11 @@ def _check(model: int, key: str, got: dict[str, str]) -> None:
         ).stdout.strip()
         data.setdefault("recorded_from", rev)
         data[key] = got
+        data.setdefault(pv.PER_NOTE_INIT, {})[key] = fresh
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
         return
-    assert key in data, (
-        f"{path.name} has no {key}: record it with PLAITS_RECORD_MODEL={model}"
-    )
-    assert data[key] == got, (model, key)
+    pv.check(path, key, got, fresh)
 
 
 @pytest.fixture(scope="module")
@@ -53,7 +55,12 @@ def port(tmp_path_factory: pytest.TempPathFactory) -> Port:
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("mode", [1, 0])
 def test_model_host_wrapper_unchanged(port: Port, model: int, mode: int) -> None:
-    _check(model, f"host-mode{mode}", pv.render(mode, pv.host_block(port, mode, model)))
+    _check(
+        model,
+        f"host-mode{mode}",
+        pv.render(mode, pv.host_block(port, mode, model)),
+        pv.render(mode, pv.host_block_fresh(port, mode, model)),
+    )
 
 
 @pytest.mark.slow
@@ -64,5 +71,8 @@ def test_model_compiled_core_unchanged(model: int, mode: int) -> None:
     from support.plaits_rig import PlaitsRig
 
     _check(
-        model, f"core-mode{mode}", pv.render(mode, pv.rig_block(PlaitsRig(mode), model))
+        model,
+        f"core-mode{mode}",
+        pv.render(mode, pv.rig_block(PlaitsRig(mode), model)),
+        pv.render(mode, pv.rig_block_fresh(PlaitsRig(mode), model)),
     )

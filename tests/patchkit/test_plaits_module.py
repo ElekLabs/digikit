@@ -3,7 +3,8 @@
 The rig (tests/support/plaits_rig.py) links core/dsp-inline at test addresses and the PLAITS object of
 machines/plaits-48k (mode 1, 48 kHz into the voice output) or machines/plaits-96k (mode 0, 96 kHz into the work
 buffer), built as pk_build builds it (the entry shim plus the C voice wrapper, VA engine and half-band compiled by
-selcc), and runs `_di_entry` block after block on the same memory. Every model has the same tests: equivalence with
+selcc), and runs `_di_entry` block after block on the same memory. A voice's engine is initialised at its first note-on
+and at a note-on that changes the model, and runs on through other note-ons (Task 9b). Every model has the same tests: equivalence with
 the host build (both modes), the extreme grid with an instruction bound (slow), and a model switch at a note-on to and
 from VA (tests/support/plaits_rig.py `assert_model_switch`). The reference is the same C built for the host
 (tests/support/plaits_host.py), driven with the PlaitsFrame the shim reads from the frame words.
@@ -32,6 +33,7 @@ from support.plaits_rig import (
     assert_model_switch,
     plaits_type,
 )
+from support.plaits_streams import Block, as_frame, retrigger_stream, switch_stream
 
 from tools.patchkit import pk_toolchains
 
@@ -448,25 +450,63 @@ def test_two_voices_independent_state(port: Port, mode: int) -> None:
         assert abs(1200 * math.log2(f67 / 391.9954)) < 10, f67
 
 
-@pytest.mark.parametrize("mode", [1, 0])
-def test_retrigger_restarts_engine(mode: int) -> None:
+def run_stream(port: Port, blocks: list[Block], mode: int) -> tuple[Arr, Arr]:
+    """A control stream (tests/support/plaits_streams.py) on track 0's even voice: (compiled, host)."""
     rig = PlaitsRig(mode)
-    rig.controls(3, 55, harmonics=0x6000, timbre=0x3000)
-    rig.active(6)
-    first, again = [], []
-    for b in range(6):
-        rig.trig(6, b == 0)
-        first.append(rig.block(6)["samples"])
-    for _ in range(5):  # the engine runs on
-        rig.trig(6, False)
-        rig.block(6)
-    for b in range(
-        4
-    ):  # a new note-on: the engine (and DC blocker, interpolator) start over
-        rig.trig(6, b == 0)
-        again.append(rig.block(6)["samples"])
-    assert again == first[:4]
-    assert any(x != 0.0 for x in again[0])
+    rig.active(0)
+    hv = port.voice()
+    core, host = [], []
+    for s in blocks:
+        rig.controls(
+            0,
+            s["note"],
+            tune=s["tune"],
+            model=s["model"] << 8,
+            **{k: s[k] for k in ("harmonics", "timbre", "morph", "mix")},
+        )
+        rig.trig(0, bool(s["trig"]))
+        core.append(np.array(rig.block(0)["samples"], dtype=np.float32))
+        host.append(port.render(hv, as_frame(s), s["trig"], mode))
+    return np.concatenate(core), np.concatenate(host)
+
+
+@pytest.mark.parametrize("model", range(7))
+def test_compiled_run_on_across_retriggers_matches_host(port: Port, model: int) -> None:
+    """Task 9b: note-ons at different pitches with knob changes and no model change (the stream that equals upstream
+    rendered continuously on the host, tests/plaits/test_continuous_host.py), compiled against host within MAX_ERR."""
+    c, h = run_stream(port, retrigger_stream(model, 1, 96), 1)
+    assert float(np.abs(c - h).max()) <= MAX_ERR, model
+    assert float(np.abs(h).max()) > 0.01
+
+
+@pytest.mark.parametrize("mode", [1, 0])
+def test_compiled_model_changes_and_retriggers_match_host(
+    port: Port, mode: int
+) -> None:
+    """Task 9b: model changes at note-ons and between them, with retriggers of each model, compiled against host."""
+    c, h = run_stream(port, switch_stream(), mode)
+    assert float(np.abs(c - h).max()) <= MAX_ERR
+
+
+@pytest.mark.parametrize("mode", [1, 0])
+def test_retrigger_keeps_the_engine_running(mode: int) -> None:
+    """Task 9b: a note-on of the model the voice already runs leaves the engine, the DC blocker and the interpolator
+    running (as Plaits keeps its engine across triggers): the compiled output with a retrigger equals the same blocks
+    without it, bit for bit."""
+
+    def run(retrig: bool) -> list[list[float]]:
+        rig = PlaitsRig(mode)
+        rig.controls(3, 55, harmonics=0x6000, timbre=0x3000)
+        rig.active(6)
+        out = []
+        for b in range(15):
+            rig.trig(6, b == 0 or (retrig and b in (6, 7, 11)))
+            out.append(rig.block(6)["samples"])
+        return out
+
+    again, once = run(True), run(False)
+    assert again == once
+    assert any(x != 0.0 for x in again[6])
 
 
 @pytest.mark.parametrize("mode", [1, 0])
@@ -478,6 +518,13 @@ def test_switch_type_away_and_back_is_silent_until_trig(mode: int) -> None:
     rig.trig(0)
     played = rig.block(0)["samples"]
     assert any(played)
+    # the reference: the same voice playing on without the trip away (its engine is paused while it is not rendered)
+    ref = PlaitsRig(mode)
+    ref.controls(0, 60)
+    ref.active(0)
+    for k in range(3):
+        ref.trig(0, k == 0)
+        resumed = ref.block(0)["samples"]
     rig.trig(0, False)
     rig.block(0)
     # away: the track's type changes (SAMPLE); its voices take the stock path, and the stock renderer clears ACTIVE
@@ -492,11 +539,12 @@ def test_switch_type_away_and_back_is_silent_until_trig(mode: int) -> None:
         for v in (0, 1):
             out = rig.block(v)
             assert out["samples"] == [0.0] * (32 if mode else 64), v
-    # the next note-on (the trigger path sets ACTIVE again) plays from the start
+    # the next note-on (the trigger path sets ACTIVE again) of the same model plays on from where the engine stopped
+    # (Task 9b: no re-initialisation; the DSP does not see the type change, plaits.c note_on)
     rig.active(0)
     rig.active(1)
     rig.trig(0)
-    assert rig.block(0)["samples"] == played
+    assert rig.block(0)["samples"] == resumed
 
 
 def test_routine_keeps_the_hook_abi_registers() -> None:

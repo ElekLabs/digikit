@@ -507,11 +507,12 @@ def test_wrapper_extremes_finite(port: Port, name: str) -> None:
 
 
 def test_note_on_transients(port: Port) -> None:
-    """The size of upstream's cold-start transient that every note-on reproduces (the wrapper restarts the engine),
-    against the steady output, through the wrapper at default knobs (WAVETABLE) and MORPH 0x7f00 (CHORD's wavetable
-    voices). Equal to upstream's cold start (the engines are bit exact from init); recorded for the report: WAVETABLE's
-    first block peaks near 11.5 from note 24 up (20.9 at note 0) against a steady 0.45, CHORD's at up to 7.5
-    (note 0)."""
+    """The size of upstream's cold-start transient at a voice's first note-on (and at a note-on that changes the
+    model: the wrapper initialises the engine then, and only then since Task 9b; later note-ons leave it running,
+    tests/plaits/test_continuous_host.py), against the steady output, through the wrapper at default knobs (WAVETABLE)
+    and MORPH 0x7f00 (CHORD's wavetable voices). Equal to upstream's cold start (the engines are bit exact from init);
+    recorded for the report: WAVETABLE's first block peaks near 11.5 from note 24 up (20.9 at note 0) against a steady
+    0.45, CHORD's at up to 7.5 (note 0)."""
     for name, slots in (
         ("wavetable", {}),
         ("chord", {"morph": 0x7F00, "timbre": 0x7F00}),

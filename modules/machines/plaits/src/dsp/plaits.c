@@ -7,8 +7,9 @@
  *   two engine renders of 16 samples (va_render for model 0, ws_render 1, fm_render 2, grain_render 3,
  *   additive_render 4, wavetable_render 5, chord_render 6), then the DC blocker (one pole at 5 Hz) and the output
  *   gain.
- * Velocity is not used by these models. The model is latched at a note-on, which (re)initialises that model's
- * engine; a model without an engine renders silence.
+ * Velocity is not used by these models. The model is latched at a note-on; the engine is initialised at the
+ * voice's first note-on and when a note-on changes the model, and otherwise runs on from note to note (note_on). A
+ * model without an engine renders silence.
  */
 #include "plaits.h"
 #include "dsp_util.h"
@@ -66,20 +67,33 @@ void plaits_voice_clear(PlaitsVoice *v)
     v->dc.y1 = 0.0f;
 }
 
+/* A note-on latches the model. The engine is (re)initialised only when the voice has no running engine yet (armed is
+ * 0: the voice state is zero at load, plaits_voices below) or the latched model changes; every other note-on leaves
+ * the engine, the DC blocker and the interpolator running, as Plaits keeps its engine across triggers (voice.cc: Init
+ * at power-up, and at an engine change only LoadUserData and Reset). Here the engines share one union, so a model
+ * change cannot resume the new engine's old state as Plaits does: it starts from Plaits' Init + LoadUserData(NULL) +
+ * Reset (additive_init and chord_init include Reset, the other engines' Reset is empty; WAVETABLE's LoadUserData(NULL)
+ * is the static wave map of lib/waves.c), with the DC blocker and the interpolator cleared, as Plaits resets its
+ * post-processor. No engine of models 0..6 reads Plaits' trigger (EngineParameters.trigger), so Params carries
+ * none; the strike engines add it. */
 static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
 {
-    v->model = (int)(f->model * PL_INV_256);
-    if (v->model == PLAITS_MODEL_ASYM_TRI) {
+    int model = (int)(f->model * PL_INV_256);
+    if (v->armed && model == v->model) {
+        return;
+    }
+    v->model = model;
+    if (model == PLAITS_MODEL_ASYM_TRI) {
         ws_init(PL_WS(v));
-    } else if (v->model == PLAITS_MODEL_2FM) {
+    } else if (model == PLAITS_MODEL_2FM) {
         fm_init(PL_FM(v));
-    } else if (v->model == PLAITS_MODEL_FORMANT) {
+    } else if (model == PLAITS_MODEL_FORMANT) {
         grain_init(PL_GRAIN(v));
-    } else if (v->model == PLAITS_MODEL_ADDITIVE) {
+    } else if (model == PLAITS_MODEL_ADDITIVE) {
         additive_init(PL_ADD(v));
-    } else if (v->model == PLAITS_MODEL_WAVETABLE) {
+    } else if (model == PLAITS_MODEL_WAVETABLE) {
         wavetable_init(PL_WT(v));
-    } else if (v->model == PLAITS_MODEL_CHORD) {
+    } else if (model == PLAITS_MODEL_CHORD) {
         chord_init(PL_CHORD(v));
     } else {
         va_init(PL_VA(v));

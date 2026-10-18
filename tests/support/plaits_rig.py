@@ -38,6 +38,8 @@ TYPE_CACHE, FRAME, RECORDS, LATCH, OUT, TABLE, STACK = (
 )
 DATA_BASE = 0x200A0000
 REC = 0x1D8
+# sizeof(PlaitsVoice) (plaits.h; every member 4-byte, equal on the host: tests/support/plaits_host.py Port.voice_size)
+VOICE_BYTES = 876
 TUNE_REST = 0x4000
 
 
@@ -161,6 +163,9 @@ class PlaitsRig:
         self.poke(TABLE, self.type)
         self.poke(TABLE + 4, self.pl.symbols["_pl_render"])
         self.instructions: list[int] = []
+        # kept by model_blocks: voice 0's latched model and the steps since its engine was last initialised
+        self.latched: int | None = None
+        self.since_init: list[tuple[int, int, int, dict[str, int]]] = []
 
     # ---- memory
     def poke(self, addr: int, word: int) -> None:
@@ -213,6 +218,13 @@ class PlaitsRig:
         a = RECORDS + v * REC + 0x1B8
         w = self.peek(a)
         self.poke(a, (w & ~0xFF) | (1 if on else 0))
+
+    def clear_voice(self, track: int) -> None:
+        """Zero track's voice state (plaits_voices[track], PlaitsVoice, VOICE_BYTES each), as at load: never
+        triggered."""
+        base = self.symbols["plaits_voices."] + track * VOICE_BYTES
+        for k in range(VOICE_BYTES // 4):
+            self.poke(base + 4 * k, 0)
 
     # ---- one block
     def block(
@@ -424,11 +436,17 @@ def model_blocks(
     rig: PlaitsRig, steps: list[tuple[int, int]], note: int = 57, **slots: int
 ) -> list[Any]:
     """Voice 0 (track 0's even voice) of `rig`, one block per (model, trig) step: MODEL set to the model's row value
-    (model << 8) and the trigger latch to trig; the other rows from `slots` (defaults as `controls`)."""
+    (model << 8) and the trigger latch to trig; the other rows from `slots` (defaults as `controls`). Keeps
+    `rig.since_init`, the steps played since the voice's engine was last initialised (its first note-on, or a note-on
+    that changed the model: plaits.c note_on), which determine its state."""
     import numpy as np
 
     out = []
     for model, trig in steps:
+        if trig and rig.latched != model:
+            rig.latched = model
+            rig.since_init = []
+        rig.since_init.append((model, trig, note, dict(slots)))
         rig.controls(0, note, model=model << 8, **slots)
         rig.trig(0, bool(trig))
         out.append(np.array(rig.block(0)["samples"], dtype=np.float32))
@@ -438,19 +456,24 @@ def model_blocks(
 def assert_model_switch(
     rig: PlaitsRig, a: int, b: int, note: int = 57, **slots: int
 ) -> list[tuple[int, int]]:
-    """A model change on one voice of `rig` (whatever it played before): a note-on of model a and 4 blocks; MODEL
-    turned to b without a note-on (2 blocks: a runs on, bit for bit as a fresh rig's voice of a that never saw the
-    change); a note-on of b and 5 blocks (bit for bit a fresh rig's voice of b: nothing of the previous engine's
-    state survives in the shared union). The new model must sound. Returns the (model, trig) steps it played, for a
-    comparison with the host. Used by tests/patchkit/test_plaits_module.py for every enabled model."""
+    """A model change on one voice of `rig` (whatever it played before, through `model_blocks`): a note-on of model a
+    and 4 blocks; MODEL turned to b without a note-on (2 blocks: a runs on, bit for bit as a fresh rig's voice that
+    replays the steps since the voice's last initialisation and then plays a without the change: a note-on of the
+    model the voice already runs leaves its engine running); a note-on of b and 5 blocks (bit for bit a fresh rig's
+    voice of b: nothing of the previous engine's state survives in the shared union). The new model must sound.
+    Returns the (model, trig) steps it played, for a comparison with the host. Used by
+    tests/patchkit/test_plaits_module.py for every enabled model."""
     import numpy as np
 
     rig.active(0)
+    history = list(rig.since_init)
     steps = [(a, int(k == 0)) for k in range(4)] + [(b, 0)] * 2
     steps += [(b, int(k == 0)) for k in range(5)]
     got = model_blocks(rig, steps, note, **slots)
     ref = PlaitsRig(rig.mode)
     ref.active(0)
+    for m, t, n, sl in history:
+        model_blocks(ref, [(m, t)], n, **sl)
     want_a = model_blocks(ref, [(a, int(k == 0)) for k in range(6)], note, **slots)
     assert all(np.array_equal(x, y) for x, y in zip(got[:6], want_a, strict=True)), (
         f"model {a} did not run on through MODEL {b} without a note-on"

@@ -34,14 +34,19 @@ Pick it with FUNC+SRC (the 8th entry).
   (src/cf/model_fmt.s, `plaits_model_fmt`), which core/params' `formatter` field puts in MODEL's parameter row. The knob
   slot still draws LEV's fader (MODEL's template). Tests: tests/patchkit/test_plaits_model_names.py and the harness
   test tests/model_names.toml.
-- A note-on restarts the engine and latches MODEL: a MODEL change (knob or p-lock) takes effect at the next note-on,
-  which initialises that model's engine (the engines share one state per voice, 344 bytes, the size of CHORD's).
-  Velocity does nothing in these models. Model 0 renders bit for bit as in the H2 image (VA only), model 1 as in H3,
-  models 2 to 4 as recorded for H3b, models 5 and 6 as recorded for H3c (tests/plaits/vectors).
-- A note-on restarts the engine from Plaits' own power-up state, so WAVETABLE (and CHORD at a high MORPH and a low
-  note) starts each note with Plaits' cold-start transient: about 25 times the steady level for a few samples on
-  WAVETABLE (tests/plaits/test_wavetable_chord_host.py `test_note_on_transients`). The engines are bit exact against
-  upstream; whether to soften this is the owner's call.
+- The engine runs on from note to note, as in Plaits (Task 9b): a note-on latches MODEL, and initialises the engine
+  only at the voice's first note-on since boot and when MODEL changed (a knob or p-lock change takes effect at the
+  next note-on). Every other note-on leaves the engine, the DC blocker and the interpolator running; the Digitakt's
+  amp envelope shapes the note. The engines share one state per voice (344 bytes, the size of CHORD's), so a model
+  change starts the new engine from Plaits' Init + Reset rather than resuming its old state as Plaits would. The DSP
+  does not see a track's machine type change: a track switched away and back resumes its engine where it stopped
+  (the engine is paused while the voice is not rendered). Velocity does nothing in these models. Proof:
+  tests/plaits/test_continuous_host.py (bit exact against upstream rendered continuously, models 0 to 6).
+- The first note of a voice (and the first note after a model change) still starts from Plaits' power-up state, so
+  WAVETABLE (and CHORD at a high MORPH and a low note) plays Plaits' cold-start transient once: about 25 times the
+  steady level for a few samples on WAVETABLE (tests/plaits/test_wavetable_chord_host.py `test_note_on_transients`).
+  Later notes of the same model have none. The digests (tests/plaits/vectors) were re-recorded at Task 9b; the first
+  note after init renders as on H2 (model 0), H3 (1), H3b (2 to 4) and H3c (5, 6).
 - The engines are the Plaits C++ source translated to C (MIT, Emilie Gillet), rendered at exactly 48 kHz (Plaits'
   own pitch reference of 47,872.34 Hz is replaced by 48,000 Hz, so notes are in tune), in two sub-blocks of 16
   samples per Digitakt block, with a 5 Hz DC blocker. Plaits' internal envelope, low-pass gate and modulation
