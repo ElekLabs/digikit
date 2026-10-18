@@ -328,10 +328,20 @@ fn core_params_and_pluck_assign_codes_and_relocate_the_table() {
             (Some(0x113), Some(4))
         );
         assert_eq!(pr["entries"][0]["index"], 0x113);
-        assert_eq!(pr["row_size"], 28);
+        assert_eq!(pr["row_size"], 32, "seven fields and the formatter");
         let t = section(&p, "pf_table");
         assert_eq!(t["copied"], 0x113 * 60);
         assert_eq!(t["appended_rows"], 4);
+        // no `formatter`: each appended row keeps its template's (LEV 0xd1) formatter at +0x34
+        {
+            let main = Main::new(&a.syx, stock_len(file));
+            let t1 = t["from_addr"].as_u64().unwrap() as u32;
+            let lev = main.u32s(t1 + 60 * 0xd1, 15)[13];
+            let at = t["addr"].as_u64().unwrap() as u32 + 0x113 * 60;
+            for k in 0..4 {
+                assert_eq!(main.u32s(at + 60 * k, 15)[13], lev, "{file} row {k}");
+            }
+        }
         // 56 references repointed, 54 bounds raised
         let refs = a
             .plan
