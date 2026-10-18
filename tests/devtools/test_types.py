@@ -87,6 +87,7 @@ TYPED = [
     "tests/support/plaits_vectors.py",
     "tests/patchkit/test_plaits_model0_h2.py",
     "tests/plaits/test_ws_host.py",
+    "tests/patchkit/test_plaits_model_digests.py",
 ]
 
 
