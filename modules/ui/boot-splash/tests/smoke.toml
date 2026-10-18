@@ -1,0 +1,13 @@
+# ui/boot-splash: only the boot intro changes (45 frames of the splash instead of the stock animation). After the boot
+# the firmware must run as stock: the smoke tour's goldens for this module set must equal the stock cell's.
+[test]
+name = "boots"
+devices = ["dt2"]
+quick = true
+
+[[step]]
+wait_ms = 1000
+[[step]]
+expect_frame = "main"
+[[step]]
+expect_no_fault = true

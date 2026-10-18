@@ -1,0 +1,73 @@
+[module]
+id = "ui/boot-splash"
+version = "0.1.0"
+name = "Boot splash"
+category = "ui"
+status = "experimental"
+summary = "Shows your own 128x64 picture for 1.5 seconds at power-on instead of the stock intro animation."
+ports = ["dt2-1.17"]
+requires = []
+conflicts = []
+
+# Test status per firmware; patchkit does not read it.
+[targets]
+"dt2-1.17" = "experimental"
+
+# splash_draw (src/cf/splash.s) copies the 1024-byte splash_bits table (src/cf/splash_bits.s, generated from
+# art/abigor-128x64.png by tools/patchkit/pk_splash.py, inverted polarity by default) into the intro's frame
+# Bitmap. No firmware calls.
+[[object]]
+path = "build/boot-splash-cf.dko.json"
+sources = ["src/cf/splash.s", "src/cf/splash_bits.s"]
+place = "cf.expansion"
+
+# The stock intro's five scene lists (docs/findings/03-ui-and-panel.md, "The boot intro on DT2 1.17"): five 16-byte lists `{draw_fn, nframes}, {0, 0}`
+# at 0x00, 0x10, 0x20, 0x30, 0x40. The intro task picks one by rand(); each now draws splash_draw for 45 frames
+# (1.5 s at the intro's 30 Hz). Data writes only: the intro task, its timer, the flushes and the done semaphore the
+# app task waits on stay stock.
+[[op]]
+op = "write"
+anchor = "cf.intro.scenes"
+offset = 0x00
+hex = "000000000000002d"
+reloc = [{ offset = 0, type = "cf.32", symbol = "splash_draw" }]
+
+[[op]]
+op = "write"
+anchor = "cf.intro.scenes"
+offset = 0x10
+hex = "000000000000002d"
+reloc = [{ offset = 0, type = "cf.32", symbol = "splash_draw" }]
+
+[[op]]
+op = "write"
+anchor = "cf.intro.scenes"
+offset = 0x20
+hex = "000000000000002d"
+reloc = [{ offset = 0, type = "cf.32", symbol = "splash_draw" }]
+
+[[op]]
+op = "write"
+anchor = "cf.intro.scenes"
+offset = 0x30
+hex = "000000000000002d"
+reloc = [{ offset = 0, type = "cf.32", symbol = "splash_draw" }]
+
+[[op]]
+op = "write"
+anchor = "cf.intro.scenes"
+offset = 0x40
+hex = "000000000000002d"
+reloc = [{ offset = 0, type = "cf.32", symbol = "splash_draw" }]
+
+[[claim]]
+resource = "cf.intro.scenes"
+
+# The 80-byte scene-list block: five {draw_fn, nframes}, {0, 0} lists with the stock frame counts 175, 180, 180, 180,
+# 170. One match in the 1.17 MAIN OS (0x402a1b64); a firmware with other counts fails to resolve.
+[[anchor_rule]]
+name = "cf.intro.scenes"
+cpu = "cf"
+kind = "cf_words"
+words = ["*", 0xaf, 0, 0, "*", 0xb4, 0, 0, "*", 0xb4, 0, 0, "*", 0xb4, 0, 0, "*", 0xaa, 0, 0]
+mark = "D"

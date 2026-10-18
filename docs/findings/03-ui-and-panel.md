@@ -583,3 +583,30 @@ them the arpeggiator menu's MODE and RANGE, `0x40018ed2`..), and it is not stuck
 51 ARP, 52 PLUS, 53 STACK, 54 MINUS. The device profile maps 52..54 to channel 6 bits 5..7
 (not `code * ...`, which holds for 1..48 only). PLUS and MINUS transpose a held trig; they
 do not set a note. **[D]**
+
+## The boot intro on DT2 1.17: scene lists, draw contract, and which way up the framebuffer is (2026-10-18) **[D][C]**
+
+Read from the 1.17 MAIN OS bytes and measured in bounded emulator boots (`panel_drive`, captures of the OLED block
+sender); the module is `modules/ui/boot-splash`, its tests `tests/patchkit/test_boot_splash.py`.
+
+- `main()` calls `intro_start` (0x400d1448): an intro task (entry 0x400d1a12, prio 7) and PIT3 at 30 Hz. The task
+  picks one of five scene lists by `rand()`; the lists are one 80-byte block at 0x402a1b64, five `{draw_fn, nframes},
+  {0, 0}` pairs (frame counts 175, 180, 180, 180, 170). step() (0x400d18f0) builds a 128x64 Bitmap over the draw
+  buffer, calls `draw_fn(frame, nframes, &bitmap)` (0x400d1992, cdecl: bmp at 12(sp); the stock draw functions keep
+  d2/d3 and clobber d0/d1/a0/a1), then sends a full flush (0x40133b6c) on a scene's first frame and a diff flush
+  (0x40133bea) otherwise. Both send `(col, page, 8 bytes)` records through 0x40133b1c. The task posts the done
+  semaphore 0x43149550 when the list ends; only the app task waits for it (0x400337dc), before the loading screen
+  and project load. **[D]**
+- Bitmap (ctor 0x401124b6): +4 width, +8 height, +0xc words per column `(h + 31) >> 5`, +0x10 storage; setPixel
+  (0x401124fc) sets bit `0x80000000 >> (r & 31)` of word `x * stride + (r >> 5)`. **[D]**
+- **Bitmap row 0 is the bottom of the glass [C].** The stock full-screen intro image (the Bitmap the scene 0x400d11f0
+  blits, storage in the MAIN image) reads upright ("MORE IS MORE") only when Bitmap row r is drawn at screen row
+  63 - r, and the UI framebuffer reads upright under the emulator's panel model (frame byte `(7 - y/8) + 8x`, bit
+  `y % 8`, which is the framebuffer's memory as is) for the same reason. This corrects the research note ("MSB = top
+  row, y = 0 at the top"). The emulator's intro-frame tracker (`decode_intro_bitmap`, runtime.rs) maps Bitmap row 0
+  to the top, so the intro frames it publishes are upside down relative to its own panel frames **[O: not fixed]**.
+- Timing in the emulator runtime (`panel_drive`): stock (it picks the 175-frame list) intro_wait returns at 823.0 M
+  instructions, main UI at 831 M; with all lists at 45 frames (ui/boot-splash) at 250.9 M and 259 M, and the frame
+  after boot is identical to stock. main()'s own init does not hold the app task back once the intro is short. **[D]**
+- ui/boot-splash uses this: data writes to the five lists (draw function = its `splash_draw`, 45 frames), no code
+  hooks. **[D]**

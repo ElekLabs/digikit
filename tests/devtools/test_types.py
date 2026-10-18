@@ -94,6 +94,8 @@ TYPED = [
     "tests/plaits/test_wavetable_chord_host.py",
     "modules/machines/plaits/src/dsp/lib/gen_wave_tables.py",
     "tests/patchkit/test_plaits_model_names.py",
+    "tools/patchkit/pk_splash.py",
+    "tests/patchkit/test_boot_splash.py",
 ]
 
 

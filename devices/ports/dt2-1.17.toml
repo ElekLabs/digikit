@@ -39,6 +39,16 @@ excludes = [[0x200fa000, 0x200fe000]]
 mark = "D"
 
 [[anchor]]
+name = "cf.intro.scenes"
+cpu = "cf"
+kind = "data"
+addr = 0x402a1b64
+len = 80
+sha256 = "d89e9947df098bc849df63261d8366878119a67328bd7a8b6c651ab7ee699750"
+mark = "D"
+rule = "ui/boot-splash:cf_words"
+
+[[anchor]]
 name = "cf.machines.clone.0"
 cpu = "cf"
 kind = "code"
