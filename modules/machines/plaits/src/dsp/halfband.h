@@ -11,7 +11,7 @@
 #define HB_BUFSZ 64
 #define HB_GROUP_DELAY 43 /* in 96 kHz samples */
 
-/* h[2i] for i = 0..HB_PAIRS-1 as IEEE single bit patterns (hb_up2 reads them through a union); h[2(HB_HIST-1-i)]
+/* h[2i] for i = 0..HB_PAIRS-1 as IEEE single bit patterns (hb_up2 reads them through a const float *); h[2(HB_HIST-1-i)]
  * mirrors it. */
 static const unsigned int hb_coef_bits[HB_PAIRS] = {
     0xb6b06e19u /* -5.258025909e-06 */,

@@ -278,3 +278,27 @@ One agent (PLAITS Task 7, the ASYM-TRI engine), from selcc's `-S` output and the
   converted to the member's type (C99 6.7.2.1: it points to each member; modules/machines/plaits/src/dsp/plaits.h
   `PL_VA`/`PL_WS`), or, for tables of bit patterns, a plain `unsigned int` array read through a `const float *`
   (modules/machines/plaits/src/dsp/engines/ws_tables.h `WS_F`; the host build adds `-fno-strict-aliasing`).
+
+## The union rule is enforced at build time (2026-10-18) **[D]**
+
+One agent (PLAITS all-engines Task 8, controller ruling A), on the rule of the section above.
+
+- **The check.** `pk_sharc.compile_c` runs `tools/patchkit/pk_cunion.py` over every preprocessed translation unit
+  (selcc `-E`) before it compiles it, and refuses a unit that names a union member other than the first: `u.m`,
+  `p->m` or a designated initialiser `.m =`, where `m` is a member after the first of any union in the unit (a later
+  anonymous struct or union member contributes all its names). It works on tokens, not types, and fails closed: a
+  struct field that shares its name with a later union member is refused too. The error names each place with its
+  line. pk_build, the PLAITS rig and every other user of `compile_c` inherit it; nothing in the encoding gate or the
+  operand cross-check changed.
+- **Tests.** tests/patchkit/test_pk_cunion.py: six refused shapes (a local union, a pointer, an array element, a
+  designated initialiser, a later anonymous struct, a member reached through a nested struct), five accepted ones
+  (the first member, the `PL_WS` pointer cast, structs only, a union type used without its body, `.` in numbers and
+  strings), the line of a violation, the PLAITS sources, and `compile_c` itself refusing a unit and accepting the
+  pointer-cast form.
+- **What it found.** Two places in the PLAITS sources named a later member of a union kept in a register, where
+  selcc happens to compile it right (section above): `itof_nonneg` (`u.f`, modules/machines/plaits/src/dsp/dsp_util.h)
+  and `hb_up2` (`c.f`, halfband.c). Both now use the pointer-cast form: `*(float *)(void *)&u` and a
+  `const float *` over `hb_coef_bits`. Model 0 and model 1 output is unchanged bit for bit in both modes (the
+  recorded digests, tests/patchkit/test_plaits_model0_h2.py and test_plaits_model_digests.py, re-rendered from the
+  converted sources on the concrete core). Every other module's committed object still builds and is current
+  (`pk_build build-all --check`); the C of no other module names a union member.

@@ -35,6 +35,7 @@ HERE = Path(__file__).resolve().parent
 
 from tools.patchkit import (  # noqa: E402
     pk_crosscheck,  # noqa: E402
+    pk_cunion,  # noqa: E402
     pk_elf,  # noqa: E402
     pk_toolchains,  # noqa: E402
 )
@@ -394,12 +395,15 @@ def compile_c(
     section: str | None = None,
     include_dirs: tuple[Path, ...] | list[Path] = (),
     defines: tuple[str, ...] | list[str] = (),
+    name: str = "C source",
 ) -> SharcObject:
     """Selache's C compiler (selcc); evaluated in docs/findings/20-patch-toolchains.md.
 
     `include_dirs` go on the include path (`-I`), `defines` are `NAME` or `NAME=VALUE` (`-D`). The object's
     source_sha256 is the hash of the preprocessed translation unit, so a changed header changes it. selcc's code is
-    one section (`seg_swco`); a translation unit that it splits over several code sections is refused."""
+    one section (`seg_swco`); a translation unit that it splits over several code sections is refused, and so is
+    one that names a union member other than the first (selcc places union members like struct members;
+    tools/patchkit/pk_cunion.py). `name` labels the source in errors."""
     flags = [f"-I{p}" for p in include_dirs] + [f"-D{x}" for x in defines]
     with tempfile.TemporaryDirectory(prefix="pk-sharc-") as d:
         src, obj, pre = Path(d) / "m.c", Path(d) / "m.doj", Path(d) / "m.i"
@@ -420,6 +424,9 @@ def compile_c(
         )
         if r.returncode:
             raise PkSharcError(f"selcc failed:\n{r.stdout}{r.stderr}")
+        unions = pk_cunion.check(pre.read_text())
+        if unions:
+            raise PkSharcError(pk_cunion.message(unions, name))
         r = subprocess.run(
             [
                 str(_tool("selcc")),

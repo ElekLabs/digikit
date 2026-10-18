@@ -16,12 +16,15 @@ static float absf(float a) { return a < 0.0f ? -a : a; }
 
 /* (float)i for 0 <= i < 2^23, without a FLOAT instruction: 2^23 + i is exact in the mantissa, and subtracting 2^23
  * leaves i exactly. Selache compresses a register-to-register `Fn = FLOAT Rm` (n != m) into a 32-bit form the stock
- * DSP code never uses, which the encoding gate (tools/patchkit/pk_encoding_gate.py) refuses. */
+ * DSP code never uses, which the encoding gate (tools/patchkit/pk_encoding_gate.py) refuses. The float is read
+ * through a pointer to the union converted to `float *` (C99 6.7.2.1), never as `u.f`: selcc places union members
+ * like struct members (docs/findings/20-patch-toolchains.md), and pk_sharc.compile_c refuses a later member's name
+ * (tools/patchkit/pk_cunion.py). */
 static float itof_nonneg(int i)
 {
     union { int i; float f; } u;
     u.i = 0x4B000000 | i;
-    return u.f - 8388608.0f;
+    return *(float *)(void *)&u - 8388608.0f;
 }
 
 #endif
