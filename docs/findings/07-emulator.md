@@ -7010,3 +7010,23 @@ PLL writes are read statically, not executed (core 264 MHz rests on the measured
 stalls only between adjacent instructions; one dependent-register reading of the manual's stall text; misaligned-operand Table 3-12 and the EMAC saturation +1
 are not modelled. A second agent checked about 150 table cells against Tables 3-13 to 3-20: one error (a mispredicted Bcc
 cost 9 instead of 8 in total), corrected; no other cell mismatched.
+
+## PLAY in the patchkit harness does not drive the sequencer on stock 1.17 in this setup (2026-10-18) **[D]**
+
+One agent (PLAITS Task 8, chasing an owner report that PLAY fails on the unit), one run each. Harness Session from
+the ready state out/ready-pk-dt2-117 (`SHARC_GEN_DIR=out/native/shared-core/gen`), tools/patchkit/pk_proof_plaits.py
+parts k and l: reset, PTN + TRIG 2 (pattern A02), RECORD, TRIG 1, 3, ..., 15 tapped, RECORD, 1.5 s, then PLAY with
+the main output captured for 4.6 s, STOP; then the project saved, loaded and PLAY again.
+
+- **Stock control (part l: stock 1.17, track 1's stock machine, no p-locks):** one burst of five notes 0.2 s apart in
+  the first second, silence, one longer sound near 3.1 s; no second pass of the steps. The same envelope after the
+  save and load. So the harness's PLAY (or the RECORD/TRIG gesture before it) does not make the sequencer play the
+  recorded steps pass after pass here, on stock firmware too.
+- **The same steps with PLAITS** (part k, images plaits-2models (H3) and plaits-5models (H3b), MODEL p-locks on four
+  steps) give the same envelope as each other, bit for bit in the 25 ms RMS.
+- **Default project pattern:** PLAY on the default project (no RECORD) plays its demo pattern pass after pass on H3
+  and H3b with near-equal PCM (scratch out/runs/task8/play_repro.py).
+- Consequence: an emulator check of "PLAY advances on a PLAITS track" needs a harness gesture that is first shown to
+  work on stock (the DN2 proofs record with PLAY running and TRIG held, tools/patchkit/pk_proof_pluck_dn2.py part d; on
+  DT2 that recipe is not yet tried). Parts k and l stay in the tool, run only by `--only`, marked known broken. **[O]**
+  why the gesture fails (grid recording toggles, pattern length or tempo of A02, or the capture window).

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""patchkit proof: the PLAITS machine (models VA and ASYM-TRI) end to end on Digitakt II 1.17, in the emulator.
+"""patchkit proof: the PLAITS machine (models 0..4: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE) end to end on Digitakt II 1.17,
+in the emulator.
 
-    uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g,h] [--jobs N]
+    uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g,h,i,j,k] [--jobs N]
 
-Loads the owner image (default out/patch/plaits-2models-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
+Loads the owner image (default out/patch/plaits-5models-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
 through the harness (`tools/patchkit/pk_harness.py` Session: panel inputs, health asserted after every input) and
 captures the main output (`pcm.tap`):
 
@@ -21,6 +22,17 @@ captures the main output (`pcm.tap`):
   h  asym-tri  MODEL (B) turned to 1 (row value 0x100): slot and TX word; note 60 of model 1 within 1 cent; its
                spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change model 1's spectrum; track 2's stock
                sample (ONESHOT) still plays beside it.
+  i  models    MODEL (B) turned to 2, 3 and 4 (2FM, FORMANT, ADDITIVE): slot and TX word; note 60 of each within
+               1 cent (2FM with HARMONICS at 0x3c00, a ratio of exactly one octave, so the carrier is the
+               fundamental); each spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change each one's
+               spectrum.
+  j  persist4  as e with MODEL 4 (ADDITIVE, TIMBRE 0x800 so the fundamental leads): saved, track set to ONESHOT,
+               reloaded: MODEL is back at 0x400 and the track plays model 4 at note 60 within 1 cent (no stock-card
+               step: e covers it).
+  k  sequence  KNOWN BROKEN, run only by --only k: pattern A02, PLAITS on track 1, trigs on the odd steps, MODEL
+               p-locked to 1, 2, 3, 4 on steps 3, 5, 7, 9; PLAY: notes every 0.25 s over two passes; save, load, PLAY.
+  l  control   KNOWN BROKEN, run only by --only l: k on stock 1.17 with track 1's stock machine. It fails the same way
+               (one burst of notes, no second pass): the harness's PLAY does not drive the sequencer in this setup.
   g  gain      the gain calibration: track 1's stock sample (its int16 data read from DSP memory for its peak) and then
                PLAITS default VA at note 60 on the same track and LEV: the RMS of the sample normalised to full scale
                against PLAITS' (Task 6 report, "Gain calibration").
@@ -65,7 +77,8 @@ HARM, TIMB, MORPH, LEV = (
 )  # engine slots (mirror indexes) of knobs C, E, F, H
 ENC = {HARM: "ENC C", TIMB: "ENC E", MORPH: "ENC F", LEV: "ENC H"}
 MODEL = 26  # engine slot of knob B (MODEL: the model number << 8)
-DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-2models-48k-1.17.syx"
+DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-5models-48k-1.17.syx"
+NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE"}
 
 
 def left_of(pcm: np.ndarray) -> np.ndarray:
@@ -299,6 +312,154 @@ class PlaitsProof(M.Proof):
                 f"rms {rms(x2):.4f}, type cache {tc:#010x}",
             )
 
+    # -- i: models 2..4 (2FM, FORMANT, ADDITIVE)
+    def part_i(self) -> None:
+        with self.session_plaits() as s:
+            self.plaits(s)
+            ref0 = self.held(self.play(s, "model0"))
+            for model, name in NEW_MODELS.items():
+                m = self.set_model(s, model)
+                s.run_ms(100)
+                tx = s.tx_word(MODEL)
+                self.check(
+                    f"MODEL knob reaches {model} (row value {model << 8:#x}): slot and TX word",
+                    m == model << 8 and tx == model << 8,
+                    f"slot {m:#x}, tx {tx:#x}",
+                )
+                harm = s.mirror(HARM)
+                if (
+                    model == 2
+                ):  # a modulator ratio of exactly one octave (lut_fm_frequency_quantizer 60..62)
+                    s.turn_to(ENC[HARM], HARM, 0x3C00, tol=0x80)
+                x = self.play(s, f"model{model}-note60", hold=1200, total=1500)
+                tc = self.type_cache(s)
+                self.check(
+                    f"model {model}: type 11 at the DSP",
+                    tc & 0xFFFF == PLAITS_TYPE,
+                    f"{tc:#010x}",
+                )
+                self.pitch_check(x, f"model {model} ({name}) note 60")
+                if model == 2:
+                    s.turn_to(ENC[HARM], HARM, harm)
+                ref = self.held(self.play(s, f"model{model}"))
+                d = float(
+                    np.mean(
+                        np.abs(
+                            harmonics_db(ref, NOTE60)[:10]
+                            - harmonics_db(ref0, NOTE60)[:10]
+                        )
+                    )
+                )
+                self.check(
+                    f"model {model}'s spectrum differs from model 0's",
+                    d > 1.5,
+                    f"mean |d harmonic| {d:.2f} dB",
+                )
+                self.knobs_change(s, ref, f"model {model} ")
+
+    # -- k: the sequencer plays PLAITS steps with MODEL p-locks, before and after a save and load
+    SEQ_STEPS = (1, 3, 5, 7, 9, 11, 13, 15)
+    SEQ_LOCKS = {
+        3: 1,
+        5: 2,
+        7: 3,
+        9: 4,
+    }  # step -> p-locked MODEL (the others play the track's MODEL 0)
+
+    def seq_play(self, s: H.Session, name: str, ms: int = 4600) -> np.ndarray:
+        assert s.emu is not None
+        wav = self.out / f"{name}.wav"
+        s.emu.call("pcm.tap", action="capture", path=str(wav))
+        s.do_tap("PLAY")
+        s.run_ms(ms)
+        s.emu.call("pcm.tap", action="capture_stop")
+        s.do_tap("STOP")
+        s.run_ms(500)
+        s.health(f"sequence {name}")
+        return left_of(hook_ab.read_wav(wav))
+
+    def note_starts(self, x: np.ndarray) -> list[float]:
+        """Seconds of each note start: the 5 ms RMS rises above half its maximum after falling below a tenth."""
+        w = int(FS / 200)
+        n = len(x) // w
+        if not n:
+            return []
+        env = np.sqrt(np.mean(x[: n * w].reshape(n, w) ** 2, axis=1))
+        top = float(env.max())
+        out: list[float] = []
+        armed = True
+        for i, e in enumerate(env):
+            if armed and e > 0.5 * top:
+                out.append(i * w / FS)
+                armed = False
+            elif e < 0.1 * top:
+                armed = True
+        return out
+
+    def seq_check(self, x: np.ndarray, tag: str) -> None:
+        starts = self.note_starts(x)
+        self.results_extra[f"{tag} note starts s"] = [round(t, 3) for t in starts]
+        gaps = np.diff(starts) if len(starts) > 1 else np.array([])
+        # 120 BPM: a trig every 2 steps is 0.25 s; at least two passes of the 16 steps in the window
+        steady = int(np.sum(np.abs(gaps - 0.25) < 0.02))
+        self.check(
+            f"{tag}: the sequencer advances (notes 0.25 s apart over two passes)",
+            len(starts) >= 12 and steady >= 10,
+            f"{len(starts)} note starts, {steady} gaps of 0.25 s: {[round(t, 2) for t in starts[:20]]}",
+        )
+
+    def part_k(self) -> None:
+        with self.session_plaits("seq", pool=False) as s:
+            self.sequence_k(s, plaits=True)
+
+    def part_l(self) -> None:
+        """The control of k: the same steps on stock 1.17 with track 1's stock machine (no MODEL p-locks)."""
+        with self.session([], "seq-stock", pool=False) as s:
+            self.sequence_k(s, plaits=False)
+
+    def sequence_k(self, s: H.Session, plaits: bool) -> None:
+        if True:
+            self.fresh(s)
+            s.do_tap(["PTN", "TRIG 2"])  # pattern A02: empty in the default project
+            s.run_ms(500)
+            if plaits:
+                self.select(s, PLAITS_DOWNS)
+                s.do_tap("SRC")
+                s.run_ms(300)
+                m = self.set_model(s, 0)
+                self.check("track MODEL 0", m == 0, f"{m:#x}")
+            assert s.emu is not None
+            s.do_tap("RECORD")
+            s.run_ms(200)
+            for k in self.SEQ_STEPS:
+                s.do_tap(f"TRIG {k}")
+                s.run_ms(150)
+            for k, model in self.SEQ_LOCKS.items() if plaits else ():
+                s.emu.button(H.button(f"TRIG {k}"), True)
+                s.run_ms(150)
+                for _ in range(model):
+                    s.turn_burst("ENC B", 1, 1, gap_ms=80)
+                s.run_ms(150)
+                s.emu.button(H.button(f"TRIG {k}"), False)
+                s.run_ms(200)
+            s.do_tap("RECORD")
+            s.run_ms(300)
+            if plaits:
+                self.check(
+                    "the track's MODEL is still 0 after the p-locks",
+                    s.mirror(MODEL) == 0,
+                    f"{s.mirror(MODEL):#x}",
+                )
+            s.run_ms(1500)
+            self.seq_check(self.seq_play(s, "seq-live"), "live pattern")
+            self.save_project(s)
+            if plaits:
+                self.load_project(s, lambda: self.type_now(s) == PLAITS_TYPE)
+            else:
+                self.load_project(s)
+            s.run_ms(1500)
+            self.seq_check(self.seq_play(s, "seq-reloaded"), "after save and load")
+
     # -- c: LEV, filter, reverb send act as on a stock track
     def quiet_play(self, s: H.Session, name: str, **kw: Any) -> np.ndarray:
         """`play` after 2.5 s without a note: the default amp release of the last note has ended."""
@@ -421,16 +582,26 @@ class PlaitsProof(M.Proof):
 
     # -- e: persistence, then the saved project on stock
     def part_e(self) -> None:
-        overlay = self.out / "card.overlay"
-        want = {HARM: 0x1800, TIMB: 0x6000, MORPH: 0x2400}
-        with self.session_plaits("persist", pool=False) as s:
+        self.persist(1)
+
+    def part_j(self) -> None:
+        self.persist(4)
+
+    def persist(self, model: int) -> None:
+        """Save with MODEL = model and edited values, ONESHOT, reload; for model 1 also the stock-card load."""
+        overlay = self.out / f"card-m{model}.overlay"
+        # ADDITIVE: TIMBRE low (the most prominent harmonic is the fundamental), so the pitch check has one
+        want = {HARM: 0x1800, TIMB: 0x6000 if model == 1 else 0x0800, MORPH: 0x2400}
+        with self.session_plaits(f"persist{model}", pool=False) as s:
             self.plaits(s)
             s.do_hold("TRIG 1", 100)
             s.run_ms(200)
             for idx, v in want.items():
                 s.turn_to(ENC[idx], idx, v)
-            m = self.set_model(s, 1)
-            self.check("MODEL set to 1 before the save", m == 0x100, f"{m:#x}")
+            m = self.set_model(s, model)
+            self.check(
+                f"MODEL set to {model} before the save", m == model << 8, f"{m:#x}"
+            )
             keep = {i: s.mirror(i) for i in (25, 26, 27, 31, 32, 33, 34)}
             self.save_project(s)
             self.select(s, 0, ups=PLAITS_DOWNS + 2)  # ONESHOT
@@ -455,15 +626,17 @@ class PlaitsProof(M.Proof):
                 f"{ {i: hex(v) for i, v in back.items()} }",
             )
             self.check(
-                "MODEL is back at 1 after the reload",
-                back.get(MODEL) == 0x100,
+                f"MODEL is back at {model} after the reload",
+                back.get(MODEL) == model << 8,
                 f"{back.get(MODEL, 0):#x}",
             )
             s.run_ms(2500)
             self.pitch_check(
-                self.play(s, "reloaded", hold=1200, total=1500),
-                "the reloaded track (model 1) note 60",
+                self.play(s, f"reloaded-m{model}", hold=1200, total=1500),
+                f"the reloaded track (model {model}) note 60",
             )
+            if model != 1:
+                return
             assert s.emu is not None
             r = s.emu.call("card.overlay", path=str(overlay))
             self.check(
@@ -597,6 +770,33 @@ PARTS = [
         P.part_h,
         True,
         400,
+    ),
+    K.Part(
+        "i",
+        "models 2..4 (2FM, FORMANT, ADDITIVE): MODEL knob, note 60 within 1 cent, knobs",
+        P.part_i,
+        True,
+        900,
+    ),
+    K.Part("j", "persistence with MODEL 4 (ADDITIVE)", P.part_j, True, 250),
+    # k and l: KNOWN BROKEN in this setup, so neither tier runs them (only --only k / --only l): the harness's PLAY
+    # does not advance the sequencer even on stock 1.17 (l, the control; docs/findings/07-emulator.md, "PLAY in the
+    # patchkit harness"), so k is no evidence either way until the harness can drive the sequencer.
+    K.Part(
+        "k",
+        "KNOWN BROKEN (harness): the sequencer plays PLAITS steps with MODEL p-locks, before and after save and load",
+        P.part_k,
+        False,
+        300,
+        full=False,
+    ),
+    K.Part(
+        "l",
+        "KNOWN BROKEN (harness): control of k on stock 1.17 (track 1's stock machine)",
+        P.part_l,
+        False,
+        300,
+        full=False,
     ),
 ]
 
