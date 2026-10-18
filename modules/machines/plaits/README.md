@@ -15,6 +15,13 @@ Pick it with FUNC+SRC (the 8th entry).
   between the two oscillators; ASYM-TRI: the waveshaper's curve), E TIMBRE (VA: square width and sync; ASYM-TRI: the
   wavefolder amount), F MORPH (VA: saw shape; ASYM-TRI: the triangle's asymmetry), G MIX (OUT to AUX), H LEV. Knob D
   is unused. Every knob is a normal parameter row: p-lockable and an LFO destination.
+- MODEL shows the model's name, not its number, in the header while the knob is touched or turned (`Model=ASYM-TRI`).
+  The names, by value: 0 VA, 1 ASYM-TRI, 2 2FM, 3 FORMANT, 4 ADDITIVE, 5 WAVETABLE, 6 CHORD, 7 SPEECH, 8 SWARM,
+  9 NOISE, 10 DUST, 11 STRING, 12 RINGS, 13 KICK, 14 SNARE, 15 HIHAT, 16 VCF-VA, 17 PHASE-DIST, 18 DX7 1, 19 DX7 2,
+  20 DX7 3, 21 TERRAIN, 22 STRING MACH, 23 SQUARE. They come from a small ColdFire function of this module
+  (src/cf/model_fmt.s, `plaits_model_fmt`), which core/params' `formatter` field puts in MODEL's parameter row. The knob
+  slot still draws LEV's fader (MODEL's template). Tests: tests/patchkit/test_plaits_model_names.py and the harness
+  test tests/model_names.toml.
 - A note-on restarts the engine and latches MODEL: a MODEL change (knob or p-lock) takes effect at the next note-on,
   which initialises that model's engine (the engines share one state per voice). Velocity does nothing in either
   model. Model 0 renders bit for bit as in the H2 image (VA only).
