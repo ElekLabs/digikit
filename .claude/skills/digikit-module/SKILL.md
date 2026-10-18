@@ -81,7 +81,7 @@ framework, `[[entry]]` in a content module), copies of stock tables (`[[section]
 A module that adds a machine type needs no code for the ColdFire side: `requires = ["core/machines"]` and one
 `[[entry]] registry = "machines"` (`id`, `name`, `short`, `clone_of`, `position`, `f0` .. `f8` = the nine descriptor IDs,
 optional `own_dsp`). the type number is permanent: its row in `modules/core/machines/types.toml` (`mise run patch:new -- machines/NAME --machine` allocates the next free one per device); `machines.<id>.index` is the type number. Parameters: `requires = ["core/params"]` and `[[entry]] registry = "params"`
-(`name`, `short`, `template`, `slot`, `min`, `max`, `default`); a machine names one as `fN = "params.<id>.index"`. A DSP
+(`name`, `short`, `template`, `slot`, `min`, `max`, `default`, optional `formatter` = a ColdFire `fmt(int raw, char *buf)` symbol of the module for the value text); a machine names one as `fN = "params.<id>.index"`. A DSP
 object registers its routine with `[[entry]] registry = "voices"` (`type = "machines.<id>.index"`, `pc = "<symbol>"`).
 `modules/machines/pluck` is the worked example (machine, four parameters, voice). The sites, the routines and their tests:
 `modules/core/machines/src/cf/*/machines.s`, finding 02 ("core.machines ... as modules"), `tools/patchkit/pk_cfunit.py`. Proofs:

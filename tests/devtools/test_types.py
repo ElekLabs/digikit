@@ -91,6 +91,7 @@ TYPED = [
     "tools/patchkit/pk_cunion.py",
     "tests/patchkit/test_pk_cunion.py",
     "tests/plaits/test_fm_grain_additive_host.py",
+    "tests/patchkit/test_plaits_model_names.py",
 ]
 
 

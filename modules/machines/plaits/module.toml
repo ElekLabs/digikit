@@ -27,6 +27,16 @@ conflicts = []
 #   machines/plaits-48k   PLAITS_MODE 1: 32 samples at 48 kHz written to the voice's output (the default)
 #   machines/plaits-96k   PLAITS_MODE 0: 64 samples at 96 kHz (half-band interpolated) into the work buffer
 # Selected alone, the track plays as MANUAL SLICE.
+#
+# MODEL's value text is the model's name (`Model=ASYM-TRI` in the header): plaits_model_fmt (src/cf/model_fmt.s, in
+# cf.expansion, no firmware calls) is MODEL's formatter through core/params' `formatter` field. The template stays
+# 0xfe, so the knob slot draws LEV's fader (research-model-names.md).
+[[object]]
+path = "build/plaits-model-fmt.dko.json"
+sources = ["src/cf/model_fmt.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
 [[entry]]
 registry = "machines"
 id = "plaits"
@@ -54,6 +64,7 @@ slot = 1
 min = 0
 max = 0x1700
 default = 0
+formatter = "plaits_model_fmt"
 devices = ["dt2"]
 
 [[entry]]

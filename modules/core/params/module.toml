@@ -1,6 +1,6 @@
 [module]
 id = "core/params"
-version = "0.2.0"
+version = "0.3.0"
 name = "Parameter descriptors"
 category = "core"
 status = "experimental"
@@ -21,6 +21,8 @@ conflicts = []
 #     min = 0
 #     max = 0x7f00
 #     default = 0x4000
+#     formatter = "my_fmt"    # optional: a ColdFire function of the module, void my_fmt(int raw, char *buf), that writes
+#                             # the value text (the header `Name=value`); 0 or absent = the template's formatter
 #
 # The code of a parameter is `params.first + k` (symbol params.<id>.index); a machine's fields name it. Finding 02,
 # "core.params": the table is copied at patch time from the image (nothing of the firmware is stored here), the
@@ -67,6 +69,10 @@ kind = "u32"
 [[registry.field]]
 name = "default"
 kind = "u32"
+[[registry.field]]
+name = "formatter"          # ColdFire code address of the value formatter fmt(int raw, char *buf); 0 = the template's
+kind = "u32"
+default = 0
 
 [[registry]]
 name = "params"
@@ -98,9 +104,15 @@ kind = "u32"
 [[registry.field]]
 name = "default"
 kind = "u32"
+[[registry.field]]
+name = "formatter"          # ColdFire code address of the value formatter fmt(int raw, char *buf); 0 = the template's
+kind = "u32"
+default = 0
 
 # the parameter table, 60-byte rows: owner, mirror index, min, max, default, flag, (cc << 16 | kind), 0x80 + slot,
-# 2 words of the template, name, template word, short, template formatter, template word
+# 2 words of the template, name, template word, short, formatter, template word. The formatter (+0x34) is the entry's
+# `formatter` when non-zero, else the template's: the manifest language has no conditional, so the template's word is
+# masked with ~((f | -f) >> 62), which is 0 for any f != 0 and -1 for f = 0 (the values are 64-bit)
 [[section]]
 name = "pf_table"
 region = "cf.expansion"
@@ -120,7 +132,7 @@ append = { registry = "params", row = [
   "$name",
   "image.u32(cf.params.t1 + 60 * $template + 0x2c)",
   "$short",
-  "image.u32(cf.params.t1 + 60 * $template + 0x34)",
+  "$formatter | (image.u32(cf.params.t1 + 60 * $template + 0x34) & ~(($formatter | -$formatter) >> 62))",
   "image.u32(cf.params.t1 + 60 * $template + 0x38)",
 ] }
 
@@ -145,7 +157,7 @@ append = { registry = "params", row = [
   "$name",
   "image.u32(cf.params.t1 + 60 * $template + 0x2c)",
   "$short",
-  "image.u32(cf.params.t1 + 60 * $template + 0x34)",
+  "$formatter | (image.u32(cf.params.t1 + 60 * $template + 0x34) & ~(($formatter | -$formatter) >> 62))",
   "image.u32(cf.params.t1 + 60 * $template + 0x38)",
 ] }
 

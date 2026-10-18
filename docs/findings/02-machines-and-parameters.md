@@ -1242,6 +1242,52 @@ emulator (health asserted after every input; the numbers below are 1.17):
 - The new rows are outside the owner maps: the picker and CC/NRPN logic that enumerate by owner will not list them on any type but through the descriptor.
 - DN2: not supported (a different table, 321 rows, an FM engine; the parameter-page layer is unexplored, see the assessment above).
 
+### A row's own value formatter: the `formatter` field, and PLAITS' MODEL names (DT2 1.17, 2026-10-18) **[D]**
+
+One agent, static reads plus the emulator, nothing flashed. Research:
+`.superpowers/sdd/2026-10-17-plaits-all-engines/research-model-names.md`.
+
+- **Who formats a value [D].** Every place the firmware shows a parameter value as text calls the row's `+0x34` word:
+  - `param_value_text` `0x400c8952`: it clamps the code, calls `T1[code].fmt(value, 0x4293b818)` and returns that static
+    64-byte buffer. The knob-turn header `Name=value` (`sprintf("%s=%s", ...)` at `0x4006cec0`) uses it.
+  - `ParameterSet::vfunc_23` `0x4003a89a`: it tail-jumps to the row's formatter.
+
+  The formatter pointers occur nowhere in the image but in T1. The value-class object (T2) is not involved in the text.
+- **The formatter convention, read from the stock formatters' bytes [D].** Checked on `0x400e1588` (`%d`), `0x400e22d2`
+  (Filter Type) and `0x400e2338` (Euclid operator):
+  - `void fmt(int raw, char *buf)`, cdecl: `raw` at `4(sp)`, `buf` at `8(sp)`, no length argument.
+  - Each formatter does `asr.l #8` on `raw` itself: rows hold UI values in 8.8.
+  - d0/d1/a0/a1 are scratch. `rts` returns, and the caller pops the arguments.
+  - `0x400c8952` ignores d0 after the call, and stock formatters leave different things there: sprintf's count, or
+    strcpy's destination.
+  - Stock enum formatters hard-code their strings, so no stock formatter can be reused for new names.
+- **`core/params` 0.3.0.** Both registries (DT2 and DN2) have a last field, `formatter` (u32, default 0, row size 32).
+  - Row word 13 (`+0x34`) is `$formatter | (template's +0x34 & ~(($formatter | -$formatter) >> 62))`. That is the entry's
+    function when it is non-zero, else the template's. The manifest language has no conditional, and its values are
+    64-bit.
+  - With `formatter = 0` the appended rows are unchanged, apart from the name and short pointers. Those move by 4 bytes
+    per entry, because the registry's rows grew and its string pool follows them.
+  - Measured on the PLUCK and PLAITS images against images built before the change: every other word is identical, and
+    the strings are the same. Tests: `tests/patchkit/test_plaits_model_names.py` (the patched images),
+    `tests/patchkit/test_pk_params_fw.py` (the expressions, DT2 and DN2) and `packages/patchkit/tests/frameworks.rs`.
+- **PLAITS' MODEL.** `machines/plaits` places `plaits_model_fmt` in `cf.expansion`: `src/cf/model_fmt.s`, 12 instructions
+  and a 24-entry name table, with no firmware calls, no bss and no hook.
+  - The function writes the model's name, or `ERR` when `raw >> 8` is outside 0..23 (negative values included).
+  - MODEL's row names it with `formatter = "plaits_model_fmt"` and keeps template 0xfe, so the knob draws LEV's fader.
+  - On the emulated core it follows the convention: d2-d7/a2-a6 are preserved, and exactly the name and its NUL are
+    written, for 0, 1, 23, 24, negative values and every model.
+- **Emulator [D].** PLAITS selected, the SRC page open, MODEL turned: the header reads `Model=ASYM-TRI` (also
+  `Model=VA`, `Model=2FM` and `Model=WAVETABLE`). `0x4293b818` holds the same text.
+  - The harness test is `modules/machines/plaits/tests/model_names.toml`. It passes in the cell
+    `dt2-1.17: core/machines, core/params, core/dsp-inline, machines/plaits, machines/plaits-48k`.
+  - Single slow encoder events do not move MODEL. The step count of a burst is not monotonic in its length (3 events
+    gave 1 step, 4 events 0 steps, 6 events 2 steps), so the test turns down to 0 first and then uses a fixed 3-event
+    burst.
+  - On the full SRC page, after a turn, knob B's label showed the value (`VA`) in place of `MODEL`. Whether the page
+    draws the value under a knob that was just turned is **[O]**.
+- **[O]** P-lock header. Holding TRIG 1 on the SRC page and turning MODEL showed `Model=2FM` in the same header. On the
+  SRC page, though, the trig keys select sample slots, so this was not shown to be a p-lock.
+
 ## core.machines on Digitone II 1.12 (patchkit, lane fastweb) **[D]**
 
 Emulator only, nothing flashed, one agent, not checked by a second one: **[D]** unless marked. Code:
