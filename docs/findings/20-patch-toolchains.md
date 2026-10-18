@@ -302,3 +302,23 @@ One agent (PLAITS all-engines Task 8, controller ruling A), on the rule of the s
   recorded digests, tests/patchkit/test_plaits_model0_h2.py and test_plaits_model_digests.py, re-rendered from the
   converted sources on the concrete core). Every other module's committed object still builds and is current
   (`pk_build build-all --check`); the C of no other module names a union member.
+
+## The union check skips attributes and refuses what it cannot parse (2026-10-18) **[D]**
+
+One agent (Task 9 of the PLAITS all-engines plan), from the Task 8 review.
+
+- **The hole.** `later_members` took `union`, an optional tag and then required `{`. With an attribute specifier
+  between them (`union __attribute__((aligned(8))) U { int a; float b; }`, or no tag:
+  `union __attribute__((packed)) { ... } w;`) the next token was `(`, so the body was taken for a use of a union type
+  and its later members were never collected: `u->b` and `w.b` passed (fail open; the HEAD version at 119d75d
+  returns no violation for both).
+- **The fix** (tools/patchkit/pk_cunion.py `_union_body`). `__attribute__`, `__attribute`, `__declspec`, `_Alignas`
+  and `alignas` with their parenthesised argument are skipped between `union` and its tag or body. A union form the
+  check cannot tell is refused (fail closed) with its line: a body after more than one name (an unknown specifier,
+  `union PACKED U { ... }`), an attribute keyword without its argument, `union` with neither tag nor body. A use with
+  a qualifier (`union U const *p`) and a function returning a union by value (`union U make(void) { ... }`) are still
+  read as uses.
+- **Tests.** tests/patchkit/test_pk_cunion.py: three more refused shapes (attribute before the tag, attribute without
+  a tag, `__declspec` plus `_Alignas`), three more accepted (an attributed union read through its first member, a union
+  returned by value, a qualified use) and three unparsed forms refused (23 tests). The PLAITS sources, models 5 and 6
+  included, still pass.

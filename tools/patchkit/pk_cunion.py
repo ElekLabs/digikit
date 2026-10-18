@@ -12,7 +12,9 @@ patterns read through a `const float *` (modules/machines/plaits/src/dsp/engines
 The check works on tokens, not types. It collects every union body in the unit and the names of its members after
 the first (a later anonymous struct or union member contributes all its names); then it refuses every `.name` and
 `->name` with such a name, wherever it appears. It fails closed: a struct field that shares its name with a later
-union member is refused too (rename one of them)."""
+union member is refused too (rename one of them), and so is a union it cannot parse. Attribute specifiers between
+`union` and its tag or body (`__attribute__((...))`, `__declspec(...)`, `_Alignas(...)`) are skipped; a body after
+more than one name (an unknown specifier, `union PACKED U { ... }`) or a `union` with neither tag nor body is refused."""
 
 from __future__ import annotations
 
@@ -89,6 +91,8 @@ class Violation:
     text: str
 
     def __str__(self) -> str:
+        if self.member == UNPARSED:
+            return f"line {self.line}: `{self.text.strip()}`: a union this check cannot parse (refused)"
         return f"line {self.line}: `{self.text.strip()}` names union member `{self.member}`, not its first member"
 
 
@@ -194,16 +198,60 @@ def members(body: list[Tok]) -> list[list[str]]:
     return out
 
 
+# Specifiers that may stand between `union` and its tag or body, each with a parenthesised argument
+# (`union __attribute__((aligned(8))) U { ... }`): skipped with their parentheses.
+ATTRIBUTES = frozenset(
+    ["__attribute__", "__attribute", "__declspec", "_Alignas", "alignas"]
+)
+UNPARSED = "<union>"
+
+
+def _union_body(toks: list[Tok], i: int) -> int | None:
+    """For `union` at toks[i]: the index of its body's `{` when this is a definition, None when it is a use of a
+    union type (`union U *p`, `union U f(void)`, `(union U)`). Raises ValueError for a form it cannot tell (fail
+    closed): a body after more than one name (`union PACKED U { ... }`), or no tag and no body."""
+    names = 0
+    j = i + 1
+    while j < len(toks):
+        t = toks[j]
+        if t.kind == "id" and t.text in ATTRIBUTES:
+            if j + 1 < len(toks) and toks[j + 1].text == "(":
+                j = _close(toks, j + 1) + 1
+                continue
+            raise ValueError(
+                f"line {t.line}: `{t.text}` without its argument after `union`"
+            )
+        if t.kind == "id" and t.text not in KEYWORDS:
+            names += 1
+            j += 1
+            continue
+        if t.kind == "id":  # const, volatile, ...: a use (`union U const *p`)
+            break
+        if t.text == "{":
+            if names <= 1:
+                return j
+            raise ValueError(
+                f"line {t.line}: a union body after {names} names (an unknown specifier?)"
+            )
+        break
+    if names == 0:
+        raise ValueError(f"line {toks[i].line}: `union` with neither a tag nor a body")
+    return None
+
+
 def later_members(toks: list[Tok]) -> dict[str, int]:
-    """Every name that is a member after the first of some union in the unit -> the line of that union."""
+    """Every name that is a member after the first of some union in the unit -> the line of that union. A union
+    form _union_body cannot tell is reported as the name UNPARSED."""
     out: dict[str, int] = {}
     for i, t in enumerate(toks):
         if t.kind != "id" or t.text != "union":
             continue
-        j = i + 1
-        if j < len(toks) and toks[j].kind == "id":
-            j += 1
-        if j >= len(toks) or toks[j].text != "{":
+        try:
+            j = _union_body(toks, i)
+        except ValueError:
+            out.setdefault(UNPARSED, t.line)
+            continue
+        if j is None:
             continue  # a use of a union type, not its definition
         end = _close(toks, j)
         for names in members(toks[j + 1 : end])[1:]:
@@ -213,13 +261,19 @@ def later_members(toks: list[Tok]) -> dict[str, int]:
 
 
 def check(source: str) -> list[Violation]:
-    """The places in `source` (a preprocessed C translation unit) that name a union member other than the first."""
+    """The places in `source` (a preprocessed C translation unit) that name a union member other than the first,
+    and every union written in a form this check cannot parse (it fails closed)."""
     toks = tokens(source)
     later = later_members(toks)
     if not later:
         return []
     lines = source.split("\n")
     out = []
+    if UNPARSED in later:
+        line = later.pop(UNPARSED)
+        out.append(
+            Violation(line, UNPARSED, lines[line - 1] if line <= len(lines) else "")
+        )
     for a, b in zip(toks, toks[1:], strict=False):
         if (
             a.kind == "punct"

@@ -19,6 +19,15 @@ REFUSED = {
     "anonymous later struct": (
         "typedef union { int w; struct { float x, y; }; } A;\nfloat k(A *a) { return a->y; }"
     ),
+    "attribute before the tag": (
+        "union __attribute__((aligned(8))) U { int a; float b; };\nfloat n(union U *u) { return u->b; }"
+    ),
+    "attribute, no tag": (
+        "static union __attribute__((packed)) { int a; float b; } w;\nfloat q(void) { return w.b; }"
+    ),
+    "declspec and alignas": (
+        "union __declspec(align(8)) _Alignas(8) U { int a; float b; };\nfloat r(union U *u) { return u->b; }"
+    ),
     "nested member": (
         "typedef struct { float p; } S;\ntypedef union { int n; S s; } E;\n"
         "typedef struct { E e; } Voice;\nfloat m(Voice *v) { return v->e.s.p; }"
@@ -35,6 +44,20 @@ ACCEPTED = {
     "structs only": "typedef struct { int i; float f; } S;\nfloat h(S *s) { return s->f + 1.5f; }",
     "union type use": "union U;\nfloat k(union U *u) { return 0.0f; }",
     "floats and strings": 'const char *s = "u.f"; float z = 1.0f + .5f;',
+    "attribute, first member": (
+        "float f(int i) { union __attribute__((aligned(4))) { int i; float f; } u; u.i = i; return u.i; }"
+    ),
+    "union returned by value": (
+        "union U { int a; float b; };\nunion U make(void) { union U u; u.a = 1; return u; }"
+    ),
+    "qualified use": "union U;\nfloat k(union U const *u) { return 0.0f; }",
+}
+
+# Union forms the check cannot parse: refused even without a member access (fail closed).
+UNPARSED = {
+    "unknown specifier": "union PACKED U { int a; float b; } v;\nint f(void) { return v.a; }",
+    "attribute without argument": "union __attribute__ U { int a; float b; } v;",
+    "no tag, no body": "union;",
 }
 
 
@@ -48,6 +71,13 @@ def test_later_union_member_is_refused(name: str) -> None:
 @pytest.mark.parametrize("name", sorted(ACCEPTED))
 def test_first_member_and_pointer_casts_are_accepted(name: str) -> None:
     assert pk_cunion.check(ACCEPTED[name]) == [], name
+
+
+@pytest.mark.parametrize("name", sorted(UNPARSED))
+def test_unparsed_union_is_refused(name: str) -> None:
+    found = pk_cunion.check(UNPARSED[name])
+    assert [v.member for v in found][:1] == [pk_cunion.UNPARSED], (name, found)
+    assert "cannot parse" in str(found[0])
 
 
 def test_violation_reports_the_line() -> None:
