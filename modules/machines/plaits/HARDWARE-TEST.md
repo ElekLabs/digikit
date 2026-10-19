@@ -1,4 +1,4 @@
-# PLAITS on the unit: H1 (the hook), H2 (the machine), H3 (a second model), H3b (models 2 to 4), H3c (models 5 and 6), H3d (engines run on between notes) and H3e (model 7, SPEECH)
+# PLAITS on the unit: H1 (the hook), H2 (the machine), H3 (a second model), H3b (models 2 to 4), H3c (models 5 and 6), H3d (engines run on between notes), H3e (model 7, SPEECH) and H3f (output stage, velocity, RINGS and TERRAIN)
 
 One decision tree for the owner's hardware round on a Digitakt II with OS 1.17. H1 tests core/dsp-inline with a
 plain sine (test/inline-tone); H2 tests machines/plaits (the VA model) on the same hook. The images are firmware
@@ -28,6 +28,7 @@ reports 0 errors; `uv run python -m tools.patchkit.pk_encoding_gate X X.plan.jso
 | `out/patch/plaits-7models-48k-1.17.syx` (H3c) | `09ac59c0c1fb47460e39cd4639886f2fd0a8bbd733e71d318520f0637627b8a3` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-7models-48k-1.17.syx` (at 6bf06f1) |
 | `out/patch/plaits-7models-names-splash-48k-1.17.syx` (H3d: engines run on between notes, MODEL names, boot splash) | `8032d08653293d7fa322c4e7f68b20752342aee3542e3e182a50038324c2754d` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-7models-names-splash-48k-1.17.syx` (at ed36e25) |
 | `out/patch/plaits-8models-names-splash-48k-1.17.syx` (H3e: H3d plus model 7, SPEECH) | `8701a9bf5c73df271a20f4b0540230044903abdc09fa538ccec202e4a61d0e24` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-8models-names-splash-48k-1.17.syx` (at caba134) |
+| `out/patch/plaits-10models-names-splash-48k-1.17.syx` (H3f: Plaits' output stage, velocity, models 12 RINGS and 21 TERRAIN) | `b3797740adf014a5f189a4a19279bab22b07079b1e1d846ed59347268436a04e` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-10models-names-splash-48k-1.17.syx` (at 711a7f3) |
 | `out/patch/diag-h1-i13return-48k-1.17.ungated.syx` | `401ccf2be3f2814e4bb79c6aed1872912da4ee73f2010e93c5b387fbf4279cf3` | a copy of the pre-Task-5b h1b; not rebuildable from this branch |
 | `out/patch/diag-h1-i13return-96k-1.17.ungated.syx` | `02926b3f833ccdaa51172b98af3de83c4f65779999a3ea901d1a527c6796652c` | a copy of the pre-Task-5b h1a; not rebuildable from this branch |
 
@@ -314,6 +315,43 @@ image.
   `firmware/Digitakt_II_OS1.17.syx` with Transfer's legacy mode over MIDI DIN), go back to H3d
   (`plaits-7models-names-splash-48k-1.17.syx`, `8032d086…`) and report which step failed.
 
+## H3f: output stage, velocity, RINGS (12) and TERRAIN (21) (only after H3e passed)
+
+H3f (`out/patch/plaits-10models-names-splash-48k-1.17.syx`, `b3797740…`) is H3e plus Plaits' output stage (each
+model's own output level and SPEECH's limiter, as in Plaits), velocity, and models 12 RINGS and 21 TERRAIN. The other
+values from 8 to 23 still play silence.
+
+1. **Boot and a new project.** Flash H3f and power on: the splash, then the unit boots. Create a new project (an
+   older project may not play). FUNC+SRC, 7 x DOWN (PLAITS), YES on track 1. Make sure track 2 has a sample (if
+   trigging it is silent, load any sample onto track 2 first), then check that it plays.
+2. **Loudness across models.** At default knobs trig track 1 with MODEL 0 to 7: VA is as loud as on H3e; the others
+   are equal or up to about 3 dB quieter (Plaits' own balance: ASYM-TRI, FORMANT and TERRAIN -1.2 dB, 2FM and
+   WAVETABLE -2.5 dB, SPEECH -3.2 dB). **SPEECH is no longer much louder:** MODEL 7, HARMONICS 0, TIMBRE and MORPH
+   at the left, a high note (e.g. TUNE up): on H3e this peaked about 12 dB over VA; now it stays at about VA's
+   level (Plaits' limiter; a short peak at the first note after a model change is the limiter catching up).
+3. **RINGS: velocity.** MODEL to 12 (`RINGS`). Give the amp envelope a long decay. Trig with step velocities 127,
+   then 30 (or a velocity p-lock): 127 strikes louder and brighter and rings longer; 30 is soft and dull. The
+   default velocity 100 sounds like Plaits with nothing in its LEVEL input. HARMONICS (C) bends the partials
+   (around 38 harmonic, left and right inharmonic/bell-like), TIMBRE (E) the brightness, MORPH (F) the ring length.
+4. **RINGS: fast retriggers.** MORPH to the right (long ring), velocity 127, trigs on every step at a fast tempo
+   (or retrig 1/32): each trig strikes again on top of the ring, with no runaway loudness, no crackle and no
+   silence; the level settles. Then MORPH to the left: short plucks.
+5. **TERRAIN's knobs.** MODEL to 21 (`TERRAIN`). HARMONICS walks through eight terrains (smooth crossfades; the
+   last third are the wavetable data read as terrains, brighter and buzzier); TIMBRE widens the path (left a near
+   sine, right rich); MORPH moves the path's centre. MIX (G) to the right: AUX, a phase-modulated sine. After big
+   jumps (a high note with TIMBRE right, then a low note) TERRAIN can turn rougher and louder until the next big
+   change: Plaits does the same (its path leaves its terrain), clipped to full scale. Report it only if it
+   crackles or drops out.
+6. **First note after a MODEL change.** As on H3e it can tick once (WAVETABLE's is now clipped to full scale, as in
+   Plaits). Do not report a single tick.
+7. **Track rule (unchanged): never more than 1 track triggered as PLAITS since boot,** any model. One RINGS track
+   while it rings measures 73.1 % of the DSP block at the high bound (the heaviest model now), one TERRAIN track at
+   its worst knobs 65.0 % (finding 06, "PLAITS RINGS and TERRAIN"); two of either would exceed 85 %.
+8. Save the project with MODEL 12 on track 1, reboot, load it: MODEL is back at 12 and RINGS plays.
+- **H3f stalls or is silent** while H3e passed: recover (hold FUNC at power-on, TRIG 4, send the stock
+  `firmware/Digitakt_II_OS1.17.syx` with Transfer's legacy mode over MIDI DIN), go back to H3e
+  (`plaits-8models-names-splash-48k-1.17.syx`, `8701a9bf…`) and report which step failed.
+
 ## Known, not faults
 
 - A triggered PLAITS voice keeps rendering until its track is triggered under another machine; the amp envelope
@@ -322,4 +360,4 @@ image.
   loader keeps only the stock machine types.
 - The track limits come from the DSP load measured in the emulator with the manual's stall rules (finding 06,
   "PLAITS: measured DSP load per block" and the later model sections), kept at or under 85 % of the block at the
-  worst-case parameters: 2 tracks on H2 and H3, 1 track on H3b, H3c, H3d and H3e (ADDITIVE sets it).
+  worst-case parameters: 2 tracks on H2 and H3, 1 track on H3b, H3c, H3d, H3e (ADDITIVE sets it) and H3f (RINGS, TERRAIN and ADDITIVE).

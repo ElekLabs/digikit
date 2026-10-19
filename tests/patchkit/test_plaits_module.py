@@ -183,7 +183,8 @@ def test_compiled_new_models_match_host_on_concrete_core(
 ) -> None:
     """Models 2, 3 and 4 in mode 1: the compiled object against the host build."""
     mx, rms, sig, instr = compare(port, 1, SETTINGS[k], 120, model=model)
-    assert sig > 0.02, "the setting sounds"
+    # RINGS: one strike rings out within the 120 blocks (set 1, MORPH 0x2000: RMS 0.017)
+    assert sig > (0.005 if model == 12 else 0.02), "the setting sounds"
     assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
     assert max(instr) < MAX_BLOCK_INSTRUCTIONS_NEW[model][1], max(instr)
     print(

@@ -136,7 +136,8 @@ Conclusions:
    above.
 2. **Block size.** The DT2 needs 32 samples at 48 kHz per block: two 16-sample Plaits sub-blocks (builder may choose
    24 + 8). Control rate becomes 3 kHz instead of 4 kHz; stated in the verification tolerances.
-3. **Sample format.** Float throughout; Plaits' 16-bit DAC step is dropped. Scale chosen so a default PLAITS voice
+3. **Sample format.** Float throughout; Plaits' 16-bit DAC step is dropped except its saturation (Task 10b: the
+   output stage clips each channel to full scale, as Clip16 does). Scale chosen so a default PLAITS voice
    matches the RMS of a full-scale stock sample at the same level.
 4. **DC.** A one-pole DC blocker (about 5 Hz) at the voice output. *(Designer's call.)*
 5. **Gate and envelope (owner).** No internal decay envelope, LPG or attenuverters; DT2 envelopes and LFOs do that
@@ -149,8 +150,9 @@ Conclusions:
    edge (in Plaits only the DX7 engines do), so this is Plaits on a held gate and on a short one alike; never
    TRIGGER_UNPATCHED, which would make SPEECH free-run (`plaits.c` `TRIG_*`, tests/plaits/test_speech_host.py).
 6. **Pitch and velocity.** `note` from the frame's pitch and TUNE words; velocity to `accent`. *(Designer's call.)*
-   Not wired yet: the entry shim does not read the velocity word, and `accent` is 0.8 (Plaits' value with LEVEL
-   unpatched; read by SPEECH as the word banks' gain). The strike engines (Task 11) add the velocity read.
+   Task 10b: the shim reads the frame's velocity word (halfword 0x1a + t) and the wrapper latches accent =
+   velocity / 127 at each note-on (velocity 100 → 0.787, next to Plaits' 0.8 with LEVEL unpatched). Plaits' output
+   stage (per-engine OUT/AUX gains, the limiter for negative gains, Clip16 as a clamp) follows each engine render.
 7. **Per-voice state.** Engine objects plus a 16 KB arena per voice; 16 voices ≈ 16 × (16 KB + state). L2 first,
    external memory if it doesn't fit. The target is 16 voices (owner).
 8. **CPU.** Target: 16 voices of the heaviest v1 model at reference quality. Output-identical optimizations from the
