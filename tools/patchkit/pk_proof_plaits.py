@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""patchkit proof: the PLAITS machine (models 0..7: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH) end to end on Digitakt II 1.17,
+"""patchkit proof: the PLAITS machine (models 0..7: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH; 12 RINGS, 21 TERRAIN) end to end on Digitakt II 1.17,
 in the emulator.
 
     uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g,h,i,j,k] [--jobs N]
 
-Loads the owner image (default out/patch/plaits-8models-names-splash-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
+Loads the owner image (default out/patch/plaits-10models-names-splash-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
 through the harness (`tools/patchkit/pk_harness.py` Session: panel inputs, health asserted after every input) and
 captures the main output (`pcm.tap`):
 
@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -79,7 +80,7 @@ HARM, TIMB, MORPH, LEV = (
 )  # engine slots (mirror indexes) of knobs C, E, F, H
 ENC = {HARM: "ENC C", TIMB: "ENC E", MORPH: "ENC F", LEV: "ENC H"}
 MODEL = 26  # engine slot of knob B (MODEL: the model number << 8)
-DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-8models-names-splash-48k-1.17.syx"
+DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-10models-names-splash-48k-1.17.syx"
 NEW_MODELS = {
     2: "2FM",
     3: "FORMANT",
@@ -87,6 +88,8 @@ NEW_MODELS = {
     5: "WAVETABLE",
     6: "CHORD",
     7: "SPEECH",
+    12: "RINGS",
+    21: "TERRAIN",
 }
 # CHORD detunes its voices by 0.998 (upstream ChordEngine: f0 = NoteToFrequency(note) * 0.998)
 CHORD_DETUNE = 0.998
@@ -179,7 +182,7 @@ class PlaitsProof(M.Proof):
 
     def set_model(self, s: H.Session, n: int, track: int = 0) -> int:
         """Turn MODEL (knob B) one detent at a time until the slot holds n << 8; returns the slot."""
-        for _ in range(60):
+        for _ in range(120):
             v = s.mirror(MODEL, track)
             if v == n << 8:
                 break
@@ -328,7 +331,15 @@ class PlaitsProof(M.Proof):
         with self.session_plaits() as s:
             self.plaits(s)
             ref0 = self.held(self.play(s, "model0"))
+            # PLAITS_PROOF_MODELS=12,21: only those models (a bounded run)
+            only = {
+                int(x)
+                for x in os.environ.get("PLAITS_PROOF_MODELS", "").split(",")
+                if x
+            }
             for model, name in NEW_MODELS.items():
+                if only and model not in only:
+                    continue
                 m = self.set_model(s, model)
                 s.run_ms(100)
                 tx = s.tx_word(MODEL)
@@ -352,6 +363,10 @@ class PlaitsProof(M.Proof):
                     model == 7
                 ):  # the naive formant synth (HARMONICS 0): a sustained vowel at the note (the words play once per trig)
                     s.turn_to(ENC[HARM], HARM, 0)
+                if (
+                    model == 12
+                ):  # HARMONICS 0x2600 (structure 0.3: stiffness 0, the modes are harmonics of the note)
+                    s.turn_to(ENC[HARM], HARM, 0x2600, tol=0x80)
                 x = self.play(s, f"model{model}-note60", hold=1200, total=1500)
                 tc = self.type_cache(s)
                 self.check(
@@ -364,7 +379,7 @@ class PlaitsProof(M.Proof):
                     f"model {model} ({name}) note 60",
                     NOTE60 * CHORD_DETUNE if model == 6 else NOTE60,
                 )
-                if model in (2, 6):
+                if model in (2, 6, 12):
                     s.turn_to(ENC[HARM], HARM, harm)
                 if model == 6:
                     s.turn_to(ENC[TIMB], TIMB, timb)

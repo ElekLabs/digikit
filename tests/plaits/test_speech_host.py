@@ -30,6 +30,7 @@ from support.plaits_host import (
     build_port,
     frame,
     stmlib_root,
+    tail,
 )
 
 ORACLE = Path(__file__).resolve().parent / "oracle"
@@ -91,13 +92,15 @@ class Oracle:
         return out, aux
 
 
-def run_port(port: Port, steps: list[Step], size: int = 16) -> tuple[Arr, Arr]:
+def run_port(
+    port: Port, steps: list[Step], size: int = 16, accent: float = ACCENT
+) -> tuple[Arr, Arr]:
     st = ctypes.create_string_buffer(port.lib.port_speech_size())
     port.lib.speech_init(st)
     out = np.zeros(len(steps) * size, dtype=np.float32)
     aux = np.zeros_like(out)
     for k, (note, h, t, m, trig) in enumerate(steps):
-        p = Params(note, h, t, m, trig, ACCENT)
+        p = Params(note, h, t, m, trig, accent)
         port.lib.speech_render(
             st,
             ctypes.byref(p),
@@ -543,10 +546,11 @@ def wrapper_trigger(trig: int, sub: int) -> int:
 
 def test_wrapper_renders_the_model(port: Port) -> None:
     """MODEL 7 renders speech_render with Plaits' trigger as the wrapper builds it (RISING_EDGE | HIGH in a note-on's
-    first sub-block, HIGH after) and accent 0.8, then OUT + MIX (AUX - OUT), the DC blocker and the gain, bit for bit;
-    a retrigger reaches the engine without re-initialising it."""
+    first sub-block, HIGH after) and the accent of the note-on's velocity (frame() default 100: 0x6400 / 0x7f00), then
+    Plaits' output stage (OUT through the limiter at 0.7), OUT + MIX (AUX - OUT), the DC blocker and the gain, bit for
+    bit; a retrigger reaches the engine without re-initialising it."""
     inv = np.float32(3.0757874e-05)
-    gain, r = np.float32(0.601), np.float32(0.99934550)
+    accent = float(np.float32(np.float32(100 << 8) * inv))
     for hw in (0x0800, 0x2800, 0x4000, 0x7000):
         hv = float(np.float32(np.float32(hw) * inv))
         tv = float(np.float32(np.float32(0x3000) * inv))
@@ -557,7 +561,7 @@ def test_wrapper_renders_the_model(port: Port) -> None:
             for t in trigs
             for sub in range(2)
         ]
-        out, aux = run_port(port, steps)
+        out, aux = run_port(port, steps, accent=accent)
         for mix in (0, 0x2000, 0x7F00):
             m = min(np.float32(np.float32(mix) * inv), np.float32(1.0))
             v = port.voice()
@@ -579,13 +583,7 @@ def test_wrapper_renders_the_model(port: Port) -> None:
                     for t in trigs
                 ]
             )
-            eng = (out + m * (aux - out)).astype(np.float32)
-            x1 = y1 = np.float32(0.0)
-            want = np.zeros_like(eng)
-            for i, x in enumerate(eng):
-                y1 = np.float32(np.float32(x - x1) + np.float32(r * y1))
-                x1 = x
-                want[i] = np.float32(y1 * gain)
+            want = tail(MODEL, out, aux, m)
             assert same(got, want), (hw, mix)
             assert float(np.abs(got).max()) > 0.01
 
@@ -625,8 +623,8 @@ def test_wrapper_model_change_chain_through_speech(port: Port) -> None:
         assert any(x.any() for x in got), model
 
 
-def test_wrapper_models_8_to_23_are_silent(port: Port) -> None:
-    for model in range(8, 24):
+def test_wrapper_unported_models_8_to_23_are_silent(port: Port) -> None:
+    for model in (m for m in range(8, 24) if m not in (12, 21)):
         v = port.voice()
         outs = [
             port.render(v, frame(60, model=model), int(b == 0), 1) for b in range(3)

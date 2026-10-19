@@ -10,11 +10,18 @@ first enabled it (tests/patchkit/test_plaits_model_digests.py).
 
 Task 9b changed what a note-on does: the engine runs on from note to note and is initialised only at the voice's first
 note-on and at a model change (modules/machines/plaits/src/dsp/plaits.c note_on). The scenarios play one voice from
-scenario to scenario and retrigger it, so every model's digests were re-recorded (PLAITS_RECORD_9B=1, `record_9b`);
+scenario to scenario and retrigger it, so every model's digests were re-recorded (PLAITS_RECORD_9B=1, since retired);
 the digests of the per-note initialisation before it are kept in each file under PER_NOTE_INIT. Two checks prove that
 only the retrigger behaviour changed: scenario set0 (the voice's first note after init) is unchanged, and the
 per-note initialisation replayed on the current sources (a voice cleared at every note-on: `host_block_fresh`,
-`rig_block_fresh`) still gives every digest of PER_NOTE_INIT."""
+`rig_block_fresh`) still gives every digest of PER_NOTE_INIT.
+
+Task 10b added Plaits' output stage (per-model OUT and AUX gains, the limiter, the DAC step's clip; the output gain
+0.601 / 0.8) and the accent from the note-on's velocity (plaits.c), which changes every model's output; the digests
+pinned before it are kept under PRE_OUTPUT_STAGE (PLAITS_RECORD_10B=1, `record_10b`). Two checks (host) prove what
+changed: every scenario equals upstream rendered continuously with its output stage (the oracle,
+support.plaits_oracle.reference: `reference_digests`), and the host build without the output stage
+(PL_OUTPUT_STAGE_NEUTRAL: no post, gain 0.601, accent 0.8) still gives every PRE_OUTPUT_STAGE digest."""
 
 from __future__ import annotations
 
@@ -33,11 +40,23 @@ from support.plaits_host import Port, frame
 ROOT = Path(__file__).resolve().parents[2]
 VECTORS = ROOT / "tests" / "plaits" / "vectors" / "model0_h2.json"
 # model -> the image whose sources recorded its digests: 1 at H3 (5931e47), 2..4 at H3b (Task 8 of the all-engines plan),
-# 5 and 6 at H3c (Task 9), 7 at H3e (Task 10)
-RECORDED_AT = {1: "h3", 2: "h3b", 3: "h3b", 4: "h3b", 5: "h3c", 6: "h3c", 7: "h3e"}
+# 5 and 6 at H3c (Task 9), 7 at H3e (Task 10), 12 and 21 at H3f (Task 10b)
+RECORDED_AT = {
+    1: "h3",
+    2: "h3b",
+    3: "h3b",
+    4: "h3b",
+    5: "h3c",
+    6: "h3c",
+    7: "h3e",
+    12: "h3f",
+    21: "h3f",
+}
 # the key of each file's digests from before Task 9b (a note-on re-initialised the engine)
 PER_NOTE_INIT = "per_note_init"
-RECORD_9B = os.environ.get("PLAITS_RECORD_9B") == "1"
+# the key of the digests pinned before Task 10b's output stage
+PRE_OUTPUT_STAGE = "pre_output_stage"
+RECORD_10B = os.environ.get("PLAITS_RECORD_10B") == "1"
 
 
 def vectors(model: int) -> Path:
@@ -188,43 +207,91 @@ def rig_block_fresh(
 
 
 def check(
-    path: Path, key: str, got: dict[str, str], fresh: dict[str, str] | None
+    path: Path,
+    key: str,
+    got: dict[str, str],
+    neutral: dict[str, str] | None = None,
+    reference: dict[str, str] | None = None,
 ) -> None:
-    """Compare (or with PLAITS_RECORD_9B=1, record) the digests `got` under `key` of the file at `path`; `fresh` (the
-    scenarios replayed with the voice cleared at every note-on) must equal the file's PER_NOTE_INIT digests, and
-    scenario set0 must be the same in both."""
+    """Compare (or with PLAITS_RECORD_10B=1, re-record) the digests `got` under `key` of the file at `path`.
+    `reference`: the digests of upstream rendered continuously with its output stage, which must equal `got`;
+    `neutral`: the scenarios on the host build without the output stage, which must give the digests pinned before
+    Task 10b (the file's own before the re-record, PRE_OUTPUT_STAGE after it)."""
+    if reference is not None:
+        assert got == reference, (path.name, key, "upstream with its output stage")
     data = json.loads(path.read_text())
-    # before the re-record the file's own digests are the per-note initialisation's
-    old = data.get(PER_NOTE_INIT, data)
-    assert got["set0"] == old[key]["set0"], (path.name, key, "first note after init")
-    if fresh is not None:
-        assert fresh == old[key], (path.name, key, "per-note init replayed")
-    if RECORD_9B:
-        record_9b(path, data, key, got)
+    if neutral is not None:
+        old = data.get(PRE_OUTPUT_STAGE, data)
+        assert neutral == old[key], (path.name, key, "without the output stage")
+    if RECORD_10B:
+        record_10b(path, data, key, got)
         data = json.loads(path.read_text())
-    assert PER_NOTE_INIT in data, (
-        f"{path.name}: re-record it with PLAITS_RECORD_9B=1 (Task 9b)"
-    )
-    assert key in data, f"{path.name} has no {key}: record it with PLAITS_RECORD_9B=1"
+    assert key in data, f"{path.name} has no {key}"
     assert data[key] == got, (path.name, key)
 
 
-def record_9b(path: Path, data: dict[str, Any], key: str, got: dict[str, str]) -> None:
-    """Task 9b's re-record: the digests from before move under PER_NOTE_INIT once (with their recorded_from), the
-    new ones replace them, recorded_from is the current commit."""
-    if PER_NOTE_INIT not in data:
-        old = {k: v for k, v in data.items() if k.startswith(("host-", "core-"))}
-        old["recorded_from"] = data.get("recorded_from", "")
-        data = {PER_NOTE_INIT: old}
-    rev = subprocess.run(
+def _rev() -> str:
+    return subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"],
         capture_output=True,
         text=True,
         cwd=ROOT,
     ).stdout.strip()
-    data["recorded_from"] = rev
+
+
+def record_10b(path: Path, data: dict[str, Any], key: str, got: dict[str, str]) -> None:
+    """Task 10b's re-record: the pinned digests from before move under PRE_OUTPUT_STAGE once (with their
+    recorded_from), the new ones replace them, recorded_from is the current commit."""
+    if PRE_OUTPUT_STAGE not in data:
+        old = {k: v for k, v in data.items() if k.startswith(("host-", "core-"))}
+        old["recorded_from"] = data.get("recorded_from", "")
+        data[PRE_OUTPUT_STAGE] = old
+    data["recorded_from"] = _rev()
     data[key] = got
     path.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
+
+
+def scenario_blocks(
+    mode: int, model: int
+) -> tuple[list[dict[str, int]], list[tuple[str, int]]]:
+    """All scenarios of `scenarios(mode)` as one control stream of `model` (support.plaits_streams blocks, velocity
+    100 as frame()) and (name, block count) per scenario."""
+    blocks: list[dict[str, int]] = []
+    names: list[tuple[str, int]] = []
+    for name, steps in scenarios(mode):
+        for note, slots, trig in steps:
+            blocks.append(
+                {
+                    "note": note,
+                    "tune": slots.get("tune", 0x4000),
+                    "model": model,
+                    "trig": trig,
+                    "harmonics": slots.get("harmonics", 0x4000),
+                    "timbre": slots.get("timbre", 0x4000),
+                    "morph": slots.get("morph", 0x4000),
+                    "mix": slots.get("mix", 0),
+                    "velocity": 100,
+                }
+            )
+        names.append((name, len(steps)))
+    return blocks, names
+
+
+def reference_digests(oracle: Any, port: Port, mode: int, model: int) -> dict[str, str]:
+    """The digests of the scenarios rendered by upstream (support.plaits_oracle.reference, one voice through all of
+    them, as `render` plays them), at 96 kHz through the wrapper's half-band (mode 0)."""
+    from support.plaits_oracle import reference, up2
+
+    blocks, names = scenario_blocks(mode, model)
+    x = reference(oracle, blocks)
+    if not mode:
+        x = up2(port, x, blocks)
+    n = 32 if mode else 64
+    out, at = {}, 0
+    for name, count in names:
+        out[name] = digest(x[at : at + n * count])
+        at += n * count
+    return out
 
 
 def rig_block(rig: Any, model: int = 0) -> Callable[[int, dict[str, int], int], Any]:

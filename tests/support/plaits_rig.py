@@ -39,7 +39,7 @@ TYPE_CACHE, FRAME, RECORDS, LATCH, OUT, TABLE, STACK = (
 DATA_BASE = 0x200A0000
 REC = 0x1D8
 # sizeof(PlaitsVoice) (plaits.h; every member 4-byte, equal on the host: tests/support/plaits_host.py Port.voice_size)
-VOICE_BYTES = 904
+VOICE_BYTES = 916
 TUNE_REST = 0x4000
 
 
@@ -192,11 +192,18 @@ class PlaitsRig:
         self._set_half(FRAME + 4 * (k // 2), k % 2, value)
 
     def controls(
-        self, track: int, note: int, tune: int = TUNE_REST, **slots: int
+        self,
+        track: int,
+        note: int,
+        tune: int = TUNE_REST,
+        velocity: int = 100,
+        **slots: int,
     ) -> None:
-        """The track's type = PLAITS, its note and TUNE, and any of model/harmonics/timbre/morph/mix (row values)."""
+        """The track's type = PLAITS, its note, velocity (0..127; the frame word is velocity << 8 at halfword
+        0x1a + track, finding 06) and TUNE, and any of model/harmonics/timbre/morph/mix (row values)."""
         self.set_type(track, self.type)
         self.set_hw(1 + track, note << 8)
+        self.set_hw(0x1A + track, velocity << 8)
         self.set_hw(tune_hw(track), tune)
         defaults = {
             "model": 0,

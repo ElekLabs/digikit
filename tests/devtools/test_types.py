@@ -98,6 +98,9 @@ TYPED = [
     "modules/machines/plaits/src/dsp/lib/gen_speech_tables.py",
     "tests/plaits/test_speech_host.py",
     "tests/patchkit/test_plaits_model_names.py",
+    "tests/plaits/test_modal_host.py",
+    "tests/plaits/test_terrain_host.py",
+    "tests/support/plaits_oracle.py",
     "tools/patchkit/pk_splash.py",
     "tests/patchkit/test_boot_splash.py",
 ]

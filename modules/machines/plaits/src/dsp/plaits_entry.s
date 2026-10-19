@@ -16,7 +16,8 @@
 //   even v  reads the block's controls into _pl_frame (PlaitsFrame, plaits.h) - the frame copy's halfwords
 //           1 + t (pitch, note << 8) and 0x6d + 0x30 t + k for the machine slots k = 0 TUNE, 1 MODEL, 2 HARMONICS,
 //           6 TIMBRE, 7 MORPH, 8 MIX (byte 0xda + 0x60 t + 2 (mirror - 25); slot 3 is MANUAL SLICE's sample slot and
-//           unused), each converted to float, and the record's ACTIVE byte (+0x1b8) - and the trigger-latch byte
+//           unused) and halfword 0x1a + t (velocity << 8, byte 0x34 + 2t, finding 06), each converted to float, and
+//           the record's ACTIVE byte (+0x1b8) - and the trigger-latch byte
 //           (_di_trig), then calls the C function plaits_track(t, &_pl_frame, trig, out, n, rate) on a stack of its
 //           own (_pl_stack, L2), in the C calling convention: arguments R4, R8, R12 and three on the stack, the
 //           frame set up by CJUMP, the return address - 1 in the second delay slot (the stock call sequence).
@@ -94,6 +95,11 @@ _pl_render:
     DM(I5, M6) = R0;
     R1 = 8;
     R0 = R11 + R1;                        // MIX (mirror 33)
+    CALL _di_frame_hw;
+    F0 = FLOAT R0;
+    DM(I5, M6) = R0;
+    R1 = 0x1a;
+    R0 = R9 + R1;                         // halfword 0x1a + t: velocity << 8
     CALL _di_frame_hw;
     F0 = FLOAT R0;
     DM(I5, M6) = R0;
@@ -196,6 +202,6 @@ _pl_return:
 #endif
 
 .SECTION/DM seg_dmda;
-.PKDATA _pl_frame, 32;                    // PlaitsFrame: 7 floats and the ACTIVE word
+.PKDATA _pl_frame, 36;                    // PlaitsFrame: 8 floats and the ACTIVE word
 .PKDATA _pl_save, 16;                     // the renderer's I6, I7, L6 and L7 during the C call
 .PKBSS _pl_stack, 4096;                   // the C stack (written before it is read)

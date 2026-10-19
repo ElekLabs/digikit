@@ -1,4 +1,4 @@
-"""Generate lib/tables.c and lib/tables.h: the upstream tables the 2FM, FORMANT and ADDITIVE engines share, once for
+"""Generate lib/tables.c and lib/tables.h: the upstream tables the 2FM, FORMANT, ADDITIVE and RINGS engines share, once for
 the whole PLAITS object, from upstream plaits/resources.cc and stmlib/dsp/units.cc (MIT, Emilie Gillet).
 
 Run from the repo root (needs the upstream checkout, ../eurorack by default, with stmlib populated):
@@ -28,6 +28,7 @@ TABLES = [
     ("plaits/resources.cc", "lut_4x_downsampler_fir", 4),
     ("stmlib/dsp/units.cc", "lut_pitch_ratio_high", 256),
     ("stmlib/dsp/units.cc", "lut_pitch_ratio_low", 256),
+    ("plaits/resources.cc", "lut_stiffness", 65),
 ]
 
 

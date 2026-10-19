@@ -15,7 +15,15 @@ from typing import Any
 
 import numpy as np
 import pytest
-from support.plaits_host import EURORACK, FP, Port, build_oracle, build_port, frame
+from support.plaits_host import (
+    EURORACK,
+    FP,
+    Port,
+    build_oracle,
+    build_port,
+    frame,
+    tail,
+)
 
 ORACLE = Path(__file__).resolve().parent / "oracle"
 FS = 48000.0
@@ -183,10 +191,9 @@ def _render(port: Port, v: Any, f: Any, trig: int) -> Arr:
 
 
 def test_wrapper_model1_renders_asym_tri(port: Port) -> None:
-    """MODEL 1 renders ws_render: OUT + MIX (AUX - OUT), then the DC blocker and the gain, bit for bit (the wrapper's
+    """MODEL 1 renders ws_render: OUT + MIX (AUX - OUT), then the DC blocker and the gain, bit for bit (support.plaits_host.Tail: Plaits' output stage first) (the wrapper's
     arithmetic in float32: unit() is word * (1 / 0x7f00) clamped to [0, 1])."""
     inv = np.float32(3.0757874e-05)
-    gain, r = np.float32(0.601), np.float32(0.99934550)
     p = float(np.float32(16384.0) * inv)
     out, aux = port.ws([(60.0, p, p, p)] * 40, 16)
     for mix in (0, 0x2000, 0x7F00):
@@ -198,13 +205,7 @@ def test_wrapper_model1_renders_asym_tri(port: Port) -> None:
                 for b in range(20)
             ]
         )
-        eng = (out + m * (aux - out)).astype(np.float32)
-        x1 = y1 = np.float32(0.0)
-        want = np.zeros_like(eng)
-        for i, x in enumerate(eng):
-            y1 = np.float32(np.float32(x - x1) + np.float32(r * y1))
-            x1 = x
-            want[i] = np.float32(y1 * gain)
+        want = tail(ASYM_TRI, out, aux, m)
         assert got.view(np.uint32).tolist() == want.view(np.uint32).tolist(), mix
         assert float(np.abs(got).max()) > 0.05
 
@@ -240,7 +241,7 @@ def test_wrapper_model_change_takes_effect_at_the_next_note_on(port: Port) -> No
 def test_wrapper_unported_models_are_silent(port: Port) -> None:
     # 2..4 are ported since Task 8 (test_fm_grain_additive_host.py), 5 and 6 since Task 9
     # (test_wavetable_chord_host.py)
-    for model in range(8, 24):
+    for model in (m for m in range(8, 24) if m not in (12, 21)):
         v = port.voice()
         outs = [_render(port, v, frame(60, model=model), int(b == 0)) for b in range(3)]
         assert not any(o.any() for o in outs), model

@@ -2,11 +2,15 @@
 plaits.c) initialises a voice's engine only at its first note-on and when a note-on changes the model; every other
 note-on leaves the engine, the DC blocker and the interpolator running.
 
-The oracle (tests/plaits/oracle/run_oracle.cc) is upstream's engine of each model 0..7, selected as Plaits' Voice does
+The oracle (tests/plaits/oracle/run_oracle.cc) is upstream's engine of each model 0..7, 12 and 21, selected as Plaits' Voice does
 at an engine change (Init, LoadUserData(NULL), Reset) and then rendered continuously in sub-blocks of 16 with the
 wrapper's parameter stream; Plaits' trigger as the wrapper builds it (RISING_EDGE | HIGH in a note-on's first
 sub-block, HIGH after: the gate held from note-on to note-on, plaits.c) is passed through. SPEECH (7) reads the
-trigger, so its note-ons start consonants and words; models 0..6 do not read it.
+trigger, so its note-ons start consonants and words, and RINGS (12) strikes at each; models 0..6 and 21 do not read
+it.
+Plaits' output stage follows the engine as in Plaits' Voice: the model's OUT and AUX gains from upstream's voice.cc,
+a negative gain through upstream's stmlib::Limiter (run_oracle_post: both limiters initialised at the first note-on, the
+OUT one again at each model change). The accent is the note-on's velocity / 127, latched at the note-on.
 The wrapper's mix, DC blocker and gain are applied in float32 as plaits.c does. Through the wrapper the same stream
 must give the same output bit for bit: note-ons at different pitches with knob changes and no model change, and
 model changes at note-ons (the new engine as the oracle selects it, the DC blocker cleared)."""
@@ -14,46 +18,23 @@ model changes at note-ons (the new engine as the oracle selects it, the DC block
 from __future__ import annotations
 
 import ctypes
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
-from support.plaits_host import (
-    EURORACK,
-    FP,
-    Port,
-    build_oracle,
-    build_port,
-    stmlib_root,
-)
+from support.plaits_host import FP, Port, build_port, upstream_gains
+from support.plaits_oracle import Oracle, build, reference, same, up2
 from support.plaits_streams import Block, as_frame, retrigger_stream, switch_stream
 
-ORACLE = Path(__file__).resolve().parent / "oracle"
 Arr = Any
-# the run-on models: 0..7 against the oracle; a note-on of the latched model is silent to the audio for 0..6 (SPEECH
-# reads the trigger)
-MODELS = range(8)
-TRIGGERLESS = range(7)
+# the run-on models: 0..7, 12 and 21 against the oracle; a note-on of the latched model is silent to the audio for
+# 0..6 and 21 (SPEECH and RINGS read the trigger); those also do not read the accent
+MODELS = [*range(8), 12, 21]
+TRIGGERLESS = [*range(7), 21]
 INV_FULL, INV_256 = np.float32(3.0757874e-05), np.float32(0.00390625)
-DC_R, GAIN = np.float32(0.99934550), np.float32(0.601)
+DC_R = np.float32(0.99934550)
 RISING_HIGH, HIGH = 1 | 4, 4
 SUB = 16
-
-
-class Oracle:
-    def __init__(self, so: Path) -> None:
-        self.lib = ctypes.CDLL(str(so))
-        self.lib.run_oracle_select.argtypes = [ctypes.c_void_p, ctypes.c_int]
-        self.lib.run_oracle_render.argtypes = [
-            ctypes.c_void_p,
-            *[ctypes.c_float] * 4,
-            ctypes.c_int,
-            FP,
-            FP,
-            ctypes.c_int,
-        ]
-        self.size = self.lib.run_oracle_size()
 
 
 @pytest.fixture(scope="module")
@@ -66,37 +47,7 @@ def port(tmp_path_factory: pytest.TempPathFactory) -> Port:
 
 @pytest.fixture(scope="module")
 def oracle(tmp_path_factory: pytest.TempPathFactory) -> Oracle:
-    d = tmp_path_factory.mktemp("run-oracle")
-    plaits = EURORACK / "plaits"
-    engine = plaits / "dsp" / "engine"
-    sources = [
-        ORACLE / "run_oracle.cc",
-        engine / "virtual_analog_engine.cc",
-        engine / "waveshaping_engine.cc",
-        engine / "fm_engine.cc",
-        engine / "grain_engine.cc",
-        engine / "additive_engine.cc",
-        engine / "wavetable_engine.cc",
-        engine / "chord_engine.cc",
-        engine / "speech_engine.cc",
-        plaits / "dsp" / "chords" / "chord_bank.cc",
-        *(
-            plaits / "dsp" / "speech" / f"{n}.cc"
-            for n in (
-                "naive_speech_synth",
-                "sam_speech_synth",
-                "lpc_speech_synth",
-                "lpc_speech_synth_controller",
-                "lpc_speech_synth_phonemes",
-                "lpc_speech_synth_words",
-            )
-        ),
-        plaits / "resources.cc",
-    ]
-    stm = stmlib_root()
-    if stm is not None:
-        sources.append(stm / "stmlib" / "utils" / "random.cc")
-    return Oracle(build_oracle(d, sources, "run_oracle"))
+    return build(tmp_path_factory.mktemp("run-oracle"))
 
 
 # ---- the wrapper and the reference
@@ -118,80 +69,6 @@ def wrapper_fresh_at_each_note(port: Port, blocks: list[Block]) -> Arr:
             v = port.voice()
         out.append(port.render(v, as_frame(s), s["trig"], 1))
     return np.concatenate(out)
-
-
-def _unit(word: int) -> np.float32:
-    return np.float32(
-        min(
-            max(np.float32(np.float32(word) * INV_FULL), np.float32(0.0)),
-            np.float32(1.0),
-        )
-    )
-
-
-def reference(oracle: Oracle, blocks: list[Block]) -> Arr:
-    """Upstream's engine, selected at the first note-on and at each note-on that changes the model, rendered
-    continuously; then OUT + MIX (AUX - OUT), the DC blocker (cleared at each selection) and the gain, as plaits.c."""
-    st = ctypes.create_string_buffer(oracle.size)
-    out16 = np.zeros(SUB, dtype=np.float32)
-    aux16 = np.zeros(SUB, dtype=np.float32)
-    latched = -1
-    x1 = y1 = np.float32(0.0)
-    res = []
-    for s in blocks:
-        if s["trig"] and s["model"] != latched:
-            latched = s["model"]
-            oracle.lib.run_oracle_select(st, latched)
-            x1 = y1 = np.float32(0.0)
-        assert latched >= 0
-        note = np.float32(np.float32(s["note"] << 8) * INV_256) + np.float32(
-            np.float32(np.float32(s["tune"]) * INV_256) - np.float32(64.0)
-        )
-        h, t, m, mix = (_unit(s[k]) for k in ("harmonics", "timbre", "morph", "mix"))
-        blk = np.zeros(2 * SUB, dtype=np.float32)
-        for sub in range(2):
-            trig = RISING_HIGH if (s["trig"] and sub == 0) else HIGH
-            oracle.lib.run_oracle_render(
-                st,
-                float(note),
-                float(h),
-                float(t),
-                float(m),
-                trig,
-                out16.ctypes.data_as(FP),
-                aux16.ctypes.data_as(FP),
-                SUB,
-            )
-            blk[sub * SUB : (sub + 1) * SUB] = out16 + mix * (aux16 - out16)
-        for i in range(2 * SUB):
-            x = blk[i]
-            y1 = np.float32(np.float32(x - x1) + np.float32(DC_R * y1))
-            x1 = x
-            blk[i] = np.float32(y1 * GAIN)
-        res.append(blk)
-    return np.concatenate(res)
-
-
-def up2(port: Port, x48: Arr, blocks: list[Block]) -> Arr:
-    """The 96 kHz output from the 48 kHz one: hb_up2 per block, the interpolator cleared at each engine selection."""
-    hb = ctypes.create_string_buffer(4096)
-    out = []
-    latched = -1
-    for k, s in enumerate(blocks):
-        if s["trig"] and s["model"] != latched:
-            latched = s["model"]
-            port.lib.hb_init(hb)
-        src = np.ascontiguousarray(x48[32 * k : 32 * (k + 1)], dtype=np.float32)
-        dst = np.zeros(64, dtype=np.float32)
-        port.lib.hb_up2(hb, src.ctypes.data_as(FP), dst.ctypes.data_as(FP), 32)
-        out.append(dst)
-    return np.concatenate(out)
-
-
-def same(a: Arr, b: Arr) -> bool:
-    return bool(
-        np.array_equal(np.asarray(a).view(np.uint32), np.asarray(b).view(np.uint32))
-    )
 
 
 # ---- the oracle
@@ -326,3 +203,127 @@ def test_retrigger_does_not_sweep_from_the_defaults(port: Port, model: int) -> N
     assert same(a[win], b[win])
     old = wrapper_fresh_at_each_note(port, blocks)
     assert float(np.abs(old[win] - b[win]).max()) > 0.05
+
+
+# ---- Plaits' output stage and the accent (Task 10b)
+
+
+def test_output_gains_equal_upstream_voice_cc(port: Port) -> None:
+    """The wrapper's OUT and AUX gain of every model 0..23 is the float upstream's voice.cc registers for its engine
+    (model n = upstream engine (n + 8) mod 24); negative ones (SPEECH, SWARM, NOISE, DUST, STRING, RINGS) go through the
+    limiter."""
+    for n, (go, ga) in enumerate(upstream_gains()):
+        assert np.float32(port.lib.port_out_gain(n)) == go, n
+        assert np.float32(port.lib.port_aux_gain(n)) == ga, n
+
+
+def loud_speech_stream() -> list[Block]:
+    """SPEECH where its OUT is loudest (the naive formants at HARMONICS 0, TIMBRE and MORPH 0, high notes), with
+    retriggers and a MODEL change away and back: the OUT limiter engages, releases and is reset."""
+    out: list[Block] = []
+    for k, (model, note) in enumerate([(7, 84), (7, 96), (0, 60), (7, 96), (7, 72)]):
+        for b in range(60):
+            out.append(
+                {
+                    "note": note,
+                    "tune": 0x4000,
+                    "model": model,
+                    "trig": int(b in (0, 30)),
+                    "harmonics": 0 if b < 45 else 0x2A00,
+                    "timbre": 0,
+                    "morph": 0,
+                    "mix": 0x7F00 if (k == 4 and b >= 50) else 0,
+                    "velocity": 127,
+                }
+            )
+    return out
+
+
+def test_limiter_engages_and_equals_upstream(port: Port, oracle: Oracle) -> None:
+    """SPEECH's OUT limiter (gain -0.7) on its loudest settings: the wrapper equals upstream's engine through
+    upstream's stmlib::Limiter bit for bit, and the limiter engages there: the engine's OUT times 0.7 exceeds 1, and
+    the voice's RMS is under 0.8 x that of the same OUT through a plain gain of 0.7 (and the clip). The bit-exact
+    comparison is the proof; the RMS check only shows that the limiter engages."""
+    blocks = loud_speech_stream()
+    got = wrapper(port, blocks)
+    assert same(got, reference(oracle, blocks))
+    assert same(wrapper(port, blocks, 0), up2(port, reference(oracle, blocks), blocks))
+    # the engine's own OUT on the first note (upstream, no output stage)
+    st = ctypes.create_string_buffer(oracle.size)
+    oracle.lib.run_oracle_select(st, 7)
+    o, a = np.zeros(SUB, dtype=np.float32), np.zeros(SUB, dtype=np.float32)
+    peak = 0.0
+    for b in range(80):
+        oracle.lib.run_oracle_render(
+            st,
+            84.0,
+            0.0,
+            0.0,
+            0.0,
+            RISING_HIGH if b == 0 else HIGH,
+            1.0,
+            o.ctypes.data_as(FP),
+            a.ctypes.data_as(FP),
+            SUB,
+        )
+        peak = max(peak, float(np.abs(o).max()))
+    plain = upstream_gains()
+    plain[7] = (np.float32(0.7), plain[7][1])
+    unlimited = reference(oracle, blocks, plain)
+
+    def rms(x: Arr) -> float:
+        return float(np.sqrt(np.mean(x.astype(np.float64) ** 2)))
+
+    lim, unl = rms(got), rms(unlimited)
+    print(
+        f"SPEECH raw OUT peak {peak:.3f}; voice RMS limited {lim:.4f}, plain gain 0.7 (clipped) {unl:.4f}"
+    )
+    assert peak * 0.7 > 1.0
+    assert lim < 0.8 * unl
+
+
+@pytest.mark.parametrize("model", TRIGGERLESS)
+def test_velocity_changes_nothing_for_models_without_accent(
+    port: Port, model: int
+) -> None:
+    """Models 0..6 and 21 do not read Plaits' accent: the retrigger stream at velocity 0, 127 and its own mix of velocities
+    gives the same output bit for bit."""
+    blocks = retrigger_stream(model, 4, 120)
+    base = wrapper(port, blocks)
+    for vel in (0, 127):
+        assert same(wrapper(port, [{**s, "velocity": vel} for s in blocks]), base), (
+            model,
+            vel,
+        )
+
+
+def test_velocity_reaches_speech(port: Port, oracle: Oracle) -> None:
+    """SPEECH reads the accent (the LPC word gain): velocity changes its output, and every velocity equals upstream
+    with accent velocity / 127."""
+    blocks = [
+        {**s, "harmonics": 0x5800, "velocity": v}
+        for v in (127, 30)
+        for s in retrigger_stream(7, 5, 60)
+    ]
+    a = wrapper(port, blocks)
+    assert same(a, reference(oracle, blocks))
+    b = wrapper(port, [{**s, "velocity": 100} for s in blocks])
+    assert not same(a, b)
+
+
+@pytest.mark.parametrize("gain", [-0.7, 0.8])
+def test_output_stage_takes_nan_and_inf_as_zero(port: Port, gain: float) -> None:
+    """plaits_post: a NaN or infinite sample leaves the stage as 0 (as a 0 input would), the limiter's peak stays
+    finite, and the samples after it come out exactly as without the bad sample's state (the stage recovers on the
+    next sample)."""
+    port.lib.plaits_post.argtypes = [ctypes.c_void_p, ctypes.c_float, FP, ctypes.c_int]
+    good = np.array([0.5, 1.2, 0.0, -2.0, 0.3, 0.9], dtype=np.float32)
+    for bad in (np.nan, np.inf, -np.inf):
+        x = good.copy()
+        x[2] = bad
+        pk_a, pk_b = ctypes.c_float(0.5), ctypes.c_float(0.5)
+        y = good.copy()
+        port.lib.plaits_post(ctypes.byref(pk_a), gain, x.ctypes.data_as(FP), len(x))
+        port.lib.plaits_post(ctypes.byref(pk_b), gain, y.ctypes.data_as(FP), len(y))
+        assert np.isfinite(x).all() and np.isfinite(pk_a.value), bad
+        assert same(x, y) and pk_a.value == pk_b.value, bad

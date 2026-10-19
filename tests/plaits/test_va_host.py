@@ -176,6 +176,7 @@ def _frame(note: int, tune: int = 0x4000, model: int = 0, active: int = 1) -> Fr
         16384.0,
         16384.0,
         0.0,
+        float(100 << 8),
         active,
     )
 

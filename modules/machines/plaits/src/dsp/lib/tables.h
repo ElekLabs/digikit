@@ -39,6 +39,7 @@ extern const unsigned int pl_lut_fm_frequency_quantizer[130];
 extern const unsigned int pl_lut_4x_downsampler_fir[4];
 extern const unsigned int pl_lut_pitch_ratio_high[256];
 extern const unsigned int pl_lut_pitch_ratio_low[256];
+extern const unsigned int pl_lut_stiffness[65];
 
 /* The bytes of these tables (selcc wants code in every unit it compiles for patchkit: tables.c has this). */
 int pl_lib_tables_bytes(void);

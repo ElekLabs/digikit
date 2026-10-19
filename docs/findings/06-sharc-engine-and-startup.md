@@ -6186,3 +6186,38 @@ out/runs/task10/scan.py, fine.py), then measured in the emulator with the method
   20,096, boundaries 388, LPC code tables 1,032, vowel and consonant frames 720, naive phonemes 1,000, SAM phonemes
   432, excitation pulse 2,560, bank indices 80), its code, and the per-voice union at 372 bytes (SPEECH; +28 per
   voice). The boot stream (section 7) is 562,012 bytes (limit 0xfffff: 486,563 left; H3d 515,284).
+
+## PLAITS RINGS (model 12) and TERRAIN (model 21): worst block and measured DSP load (Task 10b, 2026-10-19) **[D]**
+
+One agent. Method as the SPEECH section: core scan (tests/support/plaits_rig.py; scratch out/runs/task10b/scan.py,
+probe.py), then the emulator (paired 500 / 2,500 ms windows, `SHARC_CYCMIX`, `sharc_cpi.cost_profile` against
+`sharcdb build --blocks 56,69,76,78,80,88,91,93,103,104,107` of the image; block 104, the PLAITS object, is 275,808
+bytes). Both engines run after Plaits' output stage (gains, limiter, clip), which the image adds for every model.
+
+- **Core (mode 1 / mode 0).** RINGS is nearly flat in its knobs: 121,700..122,500 instructions per block steady, the
+  block of a note-on that changes the model from VA 124,173 / 147,710 (the 24-mode resonator's init). TERRAIN: 57,700
+  ..70,264 steady (worst HARMONICS 0x0a00, the crossfade of terrains 0 and 1, TIMBRE 0x7f00), 71,204 / 94,741 in the
+  model-change block. Bounds in tests/patchkit/test_plaits_module.py: 143,000 / 170,000 and 82,000 / 109,000.
+- **Emulator.** Image `out/patch/plaits-10models-names-splash-48k-1.17.syx` (H3f). A RINGS voice stops rendering once
+  its strike has died out and the stock voice ends (a first run at MORPH 0x4000 measured only +3,595 per track: the
+  window started after the ring), so RINGS is measured ringing: MORPH 0x7f00, the other knobs at their defaults.
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| plaits-10models-names-splash-48k, 1 track RINGS, MORPH 0x7f00 (knobs read back: TUNE 0x4000, MODEL 0xc00, HARMONICS 0x4000, TIMBRE 0x4000, MORPH 0x7f00) | `0x0000000b` | 334,313 | 348,760 / 417,319 / 487,137 | 52.3 / 62.6 / **73.1** |
+| plaits-10models-names-splash-48k, 1 track TERRAIN, worst knobs (read back: HARMONICS 0xb00, TIMBRE 0x7f00, MORPH 0x4000) | `0x0000000b` | 282,859 | 299,582 / 333,503 / 433,364 | 44.9 / 50.0 / **65.0** |
+
+- Per track over the stock baseline: RINGS +124,422 instructions, +192,017 cycles at the high bound (1.54 per
+  instruction); TERRAIN +72,968, +138,244 (1.89). Two-track runs were not made; adding one more track's increment
+  gives about 102 % (RINGS) and 86 % (TERRAIN) at the high bound (an extrapolation, not a measurement).
+- **Safety rule:** one track of each is under 85 %; both are enabled. RINGS is now the heaviest single-track model.
+  The track rule stays at 1 track.
+- **TERRAIN after jumps.** The figures above are steady blocks at the worst knobs. After parameter jumps TERRAIN's path
+  leaves the unit square, where upstream reads outside its tables (undefined behaviour) and the port takes its guarded
+  path (engines/terrain.c, fix round 1): the slow compiled jump test (120 jumps between a high bright path and the
+  wavetable terrains) peaks at 71,415 / 94,952 instructions (mode 1 / 0), the block of the model change included, i.e.
+  at most +1,151 over the steady worst (about +0.3 % of the block at the high bound, from the measured 1.89 cycles per
+  instruction; not measured in the emulator).
+- **Memory.** Section 7 is 578,540 bytes (limit 0xfffff: 470,035 left; H3e 562,012), image H3f after fix round 1
+  (`a16f9ae2…`). New table: lut_stiffness 260 bytes. The per-voice union stays at 372
+  bytes (RINGS 304, TERRAIN 24); PlaitsVoice grows to 916 bytes (the two limiter peaks and the accent).
