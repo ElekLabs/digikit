@@ -35,24 +35,20 @@
 //     as upstream does for an index past its cases); float(num_terrains - 1.0001f) is written as the float it
 //     evaluates to, 6.99989986f (0x40dfff2e);
 //   - the temporary buffer (kMaxBlockSize * 4 floats of the arena upstream) is on the stack.
-// Reads outside upstream's tables, kept as upstream does them. The path's FastSineOscillator is renormalised only when
-// x^2 + y^2 leaves (0.5, 2), so after parameter jumps the path runs outside the unit square (|x|, |y| up to about
-// 1.45, measured), and upstream reads where its unguarded indices point:
-//   - TerrainLookupWT truncates negative coordinates toward zero and reads wav_integrated_waves up to about 1,300
-//     entries before its start and past its end (wave_at);
-//   - Sine of a negative AUX phase reads up to 511 floats before lut_sine (terrain_sine).
-// What lies there depends on the build; the port reads lib/terrain_memory.c, the memory the host oracle build of
-// upstream has around those tables (2,048 int16 entries on each side of the waves, 512 floats before the sine;
-// lib/gen_terrain_memory.py), so it equals that build bit for bit there too. Those values can be large (OUT up to
-// about 40, AUX up to 1e33 before the output stage); Plaits' output stage clips them to full scale (plaits.c post).
-// Index ranges (tests/plaits/test_terrain_host.py, PL_INDEX_CHECK): the terrain index z_integral is 0..6 (z <
-// 6.9999), so Terrain reads cases 0..7; the wave reads stay within the modelled memory (wave_at clamps beyond it,
-// never reached in the test's fuzzed jump sequences).
+// Undefined behaviour in upstream, guarded here (the only deviations from upstream's output). The path's
+// FastSineOscillator is renormalised only when x^2 + y^2 leaves (0.5, 2), so after parameter jumps the path runs
+// outside the unit square (|x|, |y| up to about 1.5, measured) and upstream's unguarded indices point outside its
+// tables: TerrainLookupWT before and past wav_integrated_waves (about 1,300 entries), and Sine of a negative phase
+// before lut_sine. What upstream returns there depends on its build's memory. The port wraps a negative Sine phase into
+// [0, 1) and guards the wave coordinates the way the wave table is laid out (terrain_sine, terrain_lookup_wt); inputs
+// inside the tables take upstream's arithmetic unchanged (bit exact against upstream, tests/plaits/test_terrain_host.py,
+// whose oracle applies the same guard only where upstream would read outside its tables).
+// Index ranges (PL_INDEX_CHECK): the terrain index z_integral is 0..6 (z < 6.9999), so Terrain reads cases 0..7; every
+// wave read is inside the 25,344 entries.
 #include "terrain.h"
 #include "../lib/units.h"
 #include "../lib/sine.h"
 #include "../lib/waves.h"
-#include "../lib/terrain_memory.h"
 
 #ifdef PL_INDEX_CHECK
 void pl_index_check(int table, int index);
@@ -75,87 +71,55 @@ static float itof(int i) {
   return i < 0 ? -itof_nonneg(-i) : itof_nonneg(i);
 }
 
-/* lut_sine[j] for j >= -PL_TERRAIN_SINE_APRON, the memory before the table included (lib/terrain_memory.h). */
-static float sine_at(int j) {
-  if (j < 0) {
-    PL_IDX(27, j)
-    return PL_F(pl_terrain_sine_before)[PL_TERRAIN_SINE_APRON + j];
-  }
-  return PL_F(pl_lut_sine)[j];
-}
-
-/* Sine (InterpolateWrap(lut_sine, phase, 512)) at any phase, as upstream computes it: for a negative phase the
- * truncations go toward zero, the wrapped index stays negative, and the reads land up to 511 floats before lut_sine.
- * Table 19 records whether the phase was negative. */
+/* Sine at any phase. A non-negative phase is upstream's Sine (InterpolateWrap) unchanged. A negative phase, where
+ * upstream's InterpolateWrap indexes below lut_sine (undefined behaviour), is first wrapped into [0, 1) (sine is
+ * periodic: the value an unbounded table would give). Table 19 records whether the phase was negative. */
 static float terrain_sine(float phase) {
-  float index, index_fractional, a, b;
-  int index_integral;
   PL_IDX(19, phase < 0.0f ? -1 : (int)(phase * 65536.0f))
-  if (phase >= 0.0f) {
-    return Sine(phase);
+  if (phase < 0.0f) {
+    phase = phase - itof((int)phase) + 1.0f;
+    if (phase >= 1.0f) phase -= 1.0f;
   }
-  index = phase - itof((int)phase);
-  index *= 512.0f;
-  index_integral = (int)index;
-  index_fractional = index - itof(index_integral);
-  a = sine_at(index_integral);
-  b = sine_at(index_integral + 1);
-  return a + (b - a) * index_fractional;
+  return Sine(phase);
 }
 
-/* wav_integrated_waves[i] for -PL_TERRAIN_WAVE_APRON <= i < 25344 + PL_TERRAIN_WAVE_APRON, the memory around the
- * table included (lib/terrain_memory.h). Outside that range (never reached: see the file header) the nearest modelled
- * entry is read. */
-static float wave_at(int i) {
-  if (i < 0) {
-    if (i < -PL_TERRAIN_WAVE_APRON) i = -PL_TERRAIN_WAVE_APRON;
-    return PL_F(pl_terrain_wave_before)[PL_TERRAIN_WAVE_APRON + i];
-  }
-  if (i >= 25344) {
-    if (i >= 25344 + PL_TERRAIN_WAVE_APRON) i = 25344 + PL_TERRAIN_WAVE_APRON - 1;
-    return PL_F(pl_terrain_wave_after)[i - 25344];
-  }
-  return PL_F(pl_wav_integrated_waves)[i];
-}
-
-/* InterpolateIntegratedWave at the absolute index i of wav_integrated_waves (reads i, i + 1, i + 2). Table 26
- * records i. */
+/* InterpolateIntegratedWave at the index i of wav_integrated_waves (reads i, i + 1, i + 2). Table 26 records i. */
 static float interpolate_integrated_wave(int i, float t) {
+  const float *table = PL_F(pl_wav_integrated_waves);
   float a, b, c;
   PL_IDX(26, i)
-  if (i >= 0 && i + 2 < 25344) {
-    const float *table = PL_F(pl_wav_integrated_waves);
-    a = table[i];
-    b = table[i + 1];
-    c = table[i + 2];
-  } else {
-    a = wave_at(i);
-    b = wave_at(i + 1);
-    c = wave_at(i + 2);
-  }
+  a = table[i];
+  b = table[i + 1];
+  c = table[i + 2];
   return (b - a) + (c - b - b + a) * t;
 }
 
-/* TerrainLookupWT: the wavetable data re-interpreted as a terrain (DIFFERENTIATE_WAVE_DATA). MAKE_INTEGRAL_FRACTIONAL
- * as upstream's static_cast<int32_t>, toward zero, also for the negative coordinates of a path outside the unit
- * square. */
+/* TerrainLookupWT: the wavetable data re-interpreted as a terrain (DIFFERENTIATE_WAVE_DATA). Upstream reads outside
+ * wav_integrated_waves (undefined behaviour) when the path leaves the unit square; only there the coordinates are
+ * guarded the way the table is laid out: a wave is periodic (128 samples plus 4 wrapped), so a sample coordinate below
+ * 0 or at 130 and above moves by 128; the wave coordinate is held in [0, 63], and at 63 only wave 63 is read (upstream
+ * multiplies the next wave by a zero fraction there). Inside the table this is upstream's arithmetic unchanged. */
 static float terrain_lookup_wt(float x, float y, int bank) {
   const int table_size_full = 132;
   const float value_scale = 0.0009765625f;  /* 1 / 1024 */
-  const float sample = (y + 1.0f) * 0.5f * 128.0f;
-  const float wt = (x + 1.0f) * 0.5f * 63.0f;
+  float sample = (y + 1.0f) * 0.5f * 128.0f;
+  float wt = (x + 1.0f) * 0.5f * 63.0f;
   int sample_integral, wt_integral, base;
   float sample_fractional, wt_fractional, xy0, xy1;
   PL_IDX(20, wt < 0.0f ? -1 : (int)wt)
   PL_IDX(21, sample < 0.0f ? -1 : (int)sample)
+  while (sample < 0.0f) sample += 128.0f;
+  while (sample >= 130.0f) sample -= 128.0f;
+  if (wt < 0.0f) wt = 0.0f;
+  if (wt > 63.0f) wt = 63.0f;
   sample_integral = (int)sample;
-  sample_fractional = sample - itof(sample_integral);
+  sample_fractional = sample - itof_nonneg(sample_integral);
   wt_integral = (int)wt;
-  wt_fractional = wt - itof(wt_integral);
+  wt_fractional = wt - itof_nonneg(wt_integral);
   base = bank * (64 * 132) + wt_integral * table_size_full + sample_integral;
-  PL_IDX(22, base + table_size_full + 2)
+  PL_IDX(22, base + (wt_integral >= 63 ? 0 : table_size_full) + 2)
   xy0 = interpolate_integrated_wave(base, sample_fractional);
-  xy1 = interpolate_integrated_wave(base + table_size_full, sample_fractional);
+  xy1 = wt_integral >= 63 ? xy0 : interpolate_integrated_wave(base + table_size_full, sample_fractional);
   return (xy0 + (xy1 - xy0) * wt_fractional) * value_scale;
 }
 

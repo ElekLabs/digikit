@@ -177,12 +177,19 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
  * does that work): a negative gain is stmlib's Limiter::Process(-gain) in place (peak_ is *peak;
  * SLOPE(peak_, fabsf(s), 0.05f, 0.00002f)), a positive one a plain gain; then the saturation of its DAC step,
  * Clip16(1 + (int)(x * gain * -32767)), in full-scale units: clamped to [-1, 1] (the step's 16-bit quantisation and
- * its one-LSB offset are not ported: float throughout). The clip bounds what an engine's unguarded reads can return
- * (TERRAIN, engines/terrain.c) as it does in Plaits. */
-static void post(float *peak, float gain, float *x, int n)
+ * its one-LSB offset are not ported: float throughout). The clip bounds any engine's overshoot, as in Plaits. A NaN or infinite input sample is taken as 0 first, so that
+ * nothing downstream (the limiter's peak, the DC blocker) can latch it (upstream's Clip16 collapses a NaN to a finite
+ * value too; its limiter would keep it). */
+void plaits_post(float *peak, float gain, float *x, int n)
 {
     int i;
     float y;
+    for (i = 0; i < n; i++) {
+        y = x[i];
+        if (!(y - y == 0.0f)) {
+            x[i] = 0.0f;
+        }
+    }
     if (gain < 0.0f) {
         float pre = -gain;
         float pk = *peak;
@@ -243,8 +250,8 @@ static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, int trig, float 
             va_render(PL_VA(v), &p, v->out, v->aux, PLAITS_SUB);
         }
 #ifndef PL_OUTPUT_STAGE_NEUTRAL
-        post(&v->out_peak, PL_F(plaits_out_gain)[v->model], v->out, PLAITS_SUB);
-        post(&v->aux_peak, PL_F(plaits_aux_gain)[v->model], v->aux, PLAITS_SUB);
+        plaits_post(&v->out_peak, PL_F(plaits_out_gain)[v->model], v->out, PLAITS_SUB);
+        plaits_post(&v->aux_peak, PL_F(plaits_aux_gain)[v->model], v->aux, PLAITS_SUB);
 #endif
         for (i = 0; i < PLAITS_SUB; i++) {
             float o = v->out[i];

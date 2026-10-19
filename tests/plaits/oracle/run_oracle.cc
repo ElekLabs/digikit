@@ -123,6 +123,9 @@ void run_oracle_post_init(void* memory) {
 void run_oracle_post_reset(void* memory) { static_cast<Post*>(memory)->out.Init(); }
 
 static void process(stmlib::Limiter* limiter, float gain, float* in, int size) {
+  for (int i = 0; i < size; ++i) {
+    if (!(in[i] - in[i] == 0.0f)) in[i] = 0.0f;  // a NaN or infinite sample as 0 (the port's guard, plaits.c)
+  }
   if (gain < 0.0f) {
     limiter->Process(-gain, in, static_cast<size_t>(size));
   }

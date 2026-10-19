@@ -45,7 +45,6 @@ sources = [
   "../plaits/src/dsp/lib/resonator.c",
   "../plaits/src/dsp/engines/terrain.c",
   "../plaits/src/dsp/lib/fast_sine_oscillator.c",
-  "../plaits/src/dsp/lib/terrain_memory.c",
   "../plaits/src/dsp/halfband.c",
 ]
 place = "dsp.l2"

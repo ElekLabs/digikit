@@ -82,11 +82,66 @@ class Oracle:
         return out, aux
 
 
+# Upstream's WaveTerrainEngine reads outside its tables when its path leaves the unit square (undefined behaviour:
+# below lut_sine for a negative Sine phase, before and past wav_integrated_waves). The port guards exactly those inputs
+# (engines/terrain.c); the oracle applies the same guard to upstream's own source, only there, and is otherwise
+# upstream unchanged. (pattern, replacement), each pattern exactly once.
+TERRAIN_GUARD = [
+    (
+        "const float sample = (y + 1.0f) * 0.5f * float(table_size);",
+        "float sample = (y + 1.0f) * 0.5f * float(table_size);\n"
+        "  while (sample < 0.0f) sample += 128.0f;\n"
+        "  while (sample >= 130.0f) sample -= 128.0f;",
+    ),
+    (
+        "const float wt = (x + 1.0f) * 0.5f * float(num_waves - 1);",
+        "float wt = (x + 1.0f) * 0.5f * float(num_waves - 1);\n"
+        "  if (wt < 0.0f) wt = 0.0f;\n"
+        "  if (wt > 63.0f) wt = 63.0f;",
+    ),
+    (
+        "xy[1] = InterpolateIntegratedWave(waves, sample_integral, sample_fractional);",
+        "xy[1] = wt_integral >= 63 ? xy[0] : InterpolateIntegratedWave(waves, sample_integral, sample_fractional);",
+    ),
+    (
+        '#include "plaits/dsp/oscillator/wavetable_oscillator.h"',
+        '#include "plaits/dsp/oscillator/wavetable_oscillator.h"\n'
+        "namespace plaits {\n"
+        "static inline float GuardedSine(float phase) {\n"
+        "  if (phase < 0.0f) {\n"
+        "    phase = phase - static_cast<float>(static_cast<int32_t>(phase)) + 1.0f;\n"
+        "    if (phase >= 1.0f) phase -= 1.0f;\n"
+        "  }\n"
+        "  return Sine(phase);\n"
+        "}\n"
+        "}  // namespace plaits",
+    ),
+]
+
+
+def guarded_wave_terrain(d: Path) -> Path:
+    """Upstream's wave_terrain_engine.cc with TERRAIN_GUARD applied and every Sine( call made GuardedSine(."""
+    import re
+
+    text = (
+        EURORACK / "plaits" / "dsp" / "engine2" / "wave_terrain_engine.cc"
+    ).read_text()
+    for pat, rep in TERRAIN_GUARD[:3]:
+        assert text.count(pat) == 1, pat
+        text = text.replace(pat, rep)
+    text, n = re.subn(r"(?<![A-Za-z_])Sine\(", "GuardedSine(", text)
+    assert n == 9, n
+    pat, rep = TERRAIN_GUARD[3]
+    assert text.count(pat) == 1, pat
+    text = text.replace(pat, rep)
+    out = d / "wave_terrain_engine_guarded.cc"
+    out.write_text(text)
+    return out
+
+
 def build(d: Path) -> Oracle:
     plaits = EURORACK / "plaits"
     engine = plaits / "dsp" / "engine"
-    # resources.cc comes before the speech sources: the linker lays out each file's constants in this order, so the
-    # memory after wav_integrated_waves holds upstream's LPC word data (TERRAIN reads there: see MEMORY_MODEL)
     sources = [
         ORACLE / "run_oracle.cc",
         engine / "virtual_analog_engine.cc",
@@ -98,7 +153,7 @@ def build(d: Path) -> Oracle:
         engine / "chord_engine.cc",
         engine / "speech_engine.cc",
         engine / "modal_engine.cc",
-        plaits / "dsp" / "engine2" / "wave_terrain_engine.cc",
+        guarded_wave_terrain(d),
         plaits / "dsp" / "chords" / "chord_bank.cc",
         plaits / "dsp" / "physical_modelling" / "modal_voice.cc",
         plaits / "dsp" / "physical_modelling" / "resonator.cc",

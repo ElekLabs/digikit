@@ -241,8 +241,9 @@ def loud_speech_stream() -> list[Block]:
 
 def test_limiter_engages_and_equals_upstream(port: Port, oracle: Oracle) -> None:
     """SPEECH's OUT limiter (gain -0.7) on its loudest settings: the wrapper equals upstream's engine through
-    upstream's stmlib::Limiter bit for bit, and the limiter does work there (the engine's OUT times 0.7 exceeds 1, and
-    the limited output stays within 0.8 of full scale times the gain)."""
+    upstream's stmlib::Limiter bit for bit, and the limiter engages there: the engine's OUT times 0.7 exceeds 1, and
+    the voice's RMS is under 0.8 x that of the same OUT through a plain gain of 0.7 (and the clip). The bit-exact
+    comparison is the proof; the RMS check only shows that the limiter engages."""
     blocks = loud_speech_stream()
     got = wrapper(port, blocks)
     assert same(got, reference(oracle, blocks))
@@ -308,3 +309,21 @@ def test_velocity_reaches_speech(port: Port, oracle: Oracle) -> None:
     assert same(a, reference(oracle, blocks))
     b = wrapper(port, [{**s, "velocity": 100} for s in blocks])
     assert not same(a, b)
+
+
+@pytest.mark.parametrize("gain", [-0.7, 0.8])
+def test_output_stage_takes_nan_and_inf_as_zero(port: Port, gain: float) -> None:
+    """plaits_post: a NaN or infinite sample leaves the stage as 0 (as a 0 input would), the limiter's peak stays
+    finite, and the samples after it come out exactly as without the bad sample's state (the stage recovers on the
+    next sample)."""
+    port.lib.plaits_post.argtypes = [ctypes.c_void_p, ctypes.c_float, FP, ctypes.c_int]
+    good = np.array([0.5, 1.2, 0.0, -2.0, 0.3, 0.9], dtype=np.float32)
+    for bad in (np.nan, np.inf, -np.inf):
+        x = good.copy()
+        x[2] = bad
+        pk_a, pk_b = ctypes.c_float(0.5), ctypes.c_float(0.5)
+        y = good.copy()
+        port.lib.plaits_post(ctypes.byref(pk_a), gain, x.ctypes.data_as(FP), len(x))
+        port.lib.plaits_post(ctypes.byref(pk_b), gain, y.ctypes.data_as(FP), len(y))
+        assert np.isfinite(x).all() and np.isfinite(pk_a.value), bad
+        assert same(x, y) and pk_a.value == pk_b.value, bad

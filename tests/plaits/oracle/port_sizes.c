@@ -15,7 +15,6 @@
 #include "lib/speech_tables.h"
 #include "engines/modal.h"
 #include "engines/terrain.h"
-#include "lib/terrain_memory.h"
 
 int port_va_size(void) { return (int)sizeof(VA); }
 int port_ws_size(void) { return (int)sizeof(WS); }
@@ -128,8 +127,3 @@ int port_index_lo(int table) { return idx_lo[table]; }
 int port_index_hi(int table) { return idx_hi[table]; }
 int port_index_n(int table) { return idx_n[table]; }
 
-/* TERRAIN's model of the memory around wav_integrated_waves and lut_sine (lib/terrain_memory.h): region k (0 the
- * waves' before, 1 after, 2 the sine's before), word i. */
-unsigned int port_terrain_memory(int k, int i) {
-    return k == 0 ? pl_terrain_wave_before[i] : k == 1 ? pl_terrain_wave_after[i] : pl_terrain_sine_before[i];
-}

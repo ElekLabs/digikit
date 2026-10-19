@@ -225,7 +225,6 @@ def build_port(d: Path, defines: tuple[str, ...] = ()) -> Port:
         DSP / "lib" / "speech_tables.c",
         DSP / "lib" / "resonator.c",
         DSP / "lib" / "fast_sine_oscillator.c",
-        DSP / "lib" / "terrain_memory.c",
         DSP / "plaits.c",
         DSP / "halfband.c",
         ORACLE / "port_sizes.c",
@@ -365,6 +364,7 @@ class Tail:
         res = []
         for which, g, x in (("out", go, out), ("aux", ga, aux)):
             x = np.asarray(x, dtype=np.float32)
+            x = np.where(np.isfinite(x), x, np.float32(0.0)).astype(np.float32)
             if g < 0:
                 pk, y = limiter(getattr(self, f"{which}_peak"), np.float32(-g), x)
                 setattr(self, f"{which}_peak", pk)

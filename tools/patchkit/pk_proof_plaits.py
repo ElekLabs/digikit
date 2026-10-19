@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -181,7 +182,7 @@ class PlaitsProof(M.Proof):
 
     def set_model(self, s: H.Session, n: int, track: int = 0) -> int:
         """Turn MODEL (knob B) one detent at a time until the slot holds n << 8; returns the slot."""
-        for _ in range(60):
+        for _ in range(120):
             v = s.mirror(MODEL, track)
             if v == n << 8:
                 break
@@ -330,7 +331,15 @@ class PlaitsProof(M.Proof):
         with self.session_plaits() as s:
             self.plaits(s)
             ref0 = self.held(self.play(s, "model0"))
+            # PLAITS_PROOF_MODELS=12,21: only those models (a bounded run)
+            only = {
+                int(x)
+                for x in os.environ.get("PLAITS_PROOF_MODELS", "").split(",")
+                if x
+            }
             for model, name in NEW_MODELS.items():
+                if only and model not in only:
+                    continue
                 m = self.set_model(s, model)
                 s.run_ms(100)
                 tx = s.tx_word(MODEL)

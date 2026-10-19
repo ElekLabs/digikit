@@ -5,23 +5,21 @@ MORPH corners, notes over the wrapper's whole range, sweeps of all four paramete
 indices upstream leaves unchecked stay in range (Sine's phase positive, the wavetable terrains inside their bank), the
 path is in tune, the output is finite at the extremes.
 
-Upstream reads outside two of its tables (the path leaves the unit square after parameter jumps; engines/terrain.c):
-before and past wav_integrated_waves, and before lut_sine. The port reads lib/terrain_memory.c there, the oracle
-build's own memory around those tables (lib/gen_terrain_memory.py); test_memory_model_is_the_oracles_memory checks it
-against the loaded oracle, and the fuzzed jump sequences check that the port then equals the oracle bit for bit and
-that the reads stay inside the modelled memory."""
+Upstream reads outside two of its tables when the path leaves the unit square after parameter jumps (undefined
+behaviour: before and past wav_integrated_waves, below lut_sine). The port guards exactly those inputs (engines/
+terrain.c: the Sine phase wrapped into [0, 1), the wave coordinates kept inside the table); the oracle applies the same
+guard to upstream's source only there (support.plaits_oracle.TERRAIN_GUARD), so the fuzzed jump sequences compare bit
+for bit and every read stays inside the tables."""
 
 from __future__ import annotations
 
 import ctypes
-import importlib.util
 import math
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
-from support.plaits_host import DSP, Port, build_port, frame
+from support.plaits_host import Port, build_port, frame
 from support.plaits_oracle import Oracle, Step, build, port_engine, same
 
 Arr = Any
@@ -178,10 +176,9 @@ def test_indices_in_range(checked: Port) -> None:
 def test_jumps_leave_the_tables_and_equal_upstream(
     port: Port, checked: Port, oracle: Oracle
 ) -> None:
-    """After jumps the path leaves the unit square and upstream reads before and past wav_integrated_waves and before
-    lut_sine: the port equals the oracle bit for bit there (it reads the oracle build's memory, lib/terrain_memory.c),
-    those reads do happen, and they stay inside the modelled 2,048 entries on each side of the waves and 512 floats
-    before the sine (measured reach: about 1,300 entries; |x|, |y| up to about 1.45)."""
+    """After jumps the path leaves the unit square (|x|, |y| up to about 1.5) where upstream would read outside its
+    tables: the guards engage (a negative Sine phase is seen) and the port equals the guarded oracle bit for bit; every
+    wave read stays inside the 25,344 entries."""
     checked.lib.port_index_reset()
     for seed in range(40):
         steps = jump_steps(seed)
@@ -194,31 +191,10 @@ def test_jumps_leave_the_tables_and_equal_upstream(
         rng[25],
         "wave reads",
         rng[26],
-        "sine reads below 0",
-        rng[27],
     )
     assert rng[19][0] == -1  # a negative Sine phase was seen
-    assert rng[26][0] < 0 and rng[26][1] + 2 >= 25344
-    assert rng[26][0] >= -2048 and rng[26][1] + 2 < 25344 + 2048
-    assert rng[27][0] >= -512
-
-
-def test_memory_model_is_the_oracles_memory(port: Port, oracle: Oracle) -> None:
-    """lib/terrain_memory.c holds exactly what the loaded oracle build has around wav_integrated_waves and lut_sine
-    (read through lib/gen_terrain_memory.py's `memory`)."""
-    spec = importlib.util.spec_from_file_location(
-        "gen_terrain_memory", DSP / "lib" / "gen_terrain_memory.py"
-    )
-    assert spec is not None and spec.loader is not None
-    gen = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gen)
-    want = gen.memory(Path(oracle.lib._name))
-    port.lib.port_terrain_memory.restype = ctypes.c_uint
-    for k, name in enumerate(
-        ("pl_terrain_wave_before", "pl_terrain_wave_after", "pl_terrain_sine_before")
-    ):
-        got = [port.lib.port_terrain_memory(k, i) for i in range(len(want[name]))]
-        assert got == want[name], name
+    assert min(rng[24][0], rng[25][0]) < -10000 or max(rng[24][1], rng[25][1]) > 10000
+    assert rng[26][0] >= 0 and rng[26][1] + 2 < 25344
 
 
 def test_path_in_tune(port: Port) -> None:

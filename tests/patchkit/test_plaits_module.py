@@ -278,25 +278,6 @@ def test_compiled_chord_tables_equal_host_bits() -> None:
     assert found == 5
 
 
-def test_compiled_terrain_memory_equals_host_bits() -> None:
-    """TERRAIN's model of the memory around the wave and sine tables (lib/terrain_memory.c: int16 values and arbitrary
-    float bit patterns, negative and huge ones included) as selcc wrote it equals the generated words."""
-    import re
-
-    obj = PlaitsRig(1).obj
-    text = (ROOT / "modules/machines/plaits/src/dsp/lib/terrain_memory.c").read_text()
-    found = 0
-    for name, body in re.findall(
-        r"^const unsigned int (\w+)\[\d+\] = \{(.*?)\};", text, re.S | re.M
-    ):
-        want = [int(t.rstrip("u"), 0) for t in re.split(r"[\s,]+", body) if t]
-        sec, off, _g = obj.data_symbols[name + "."]
-        got = np.frombuffer(obj.data[sec][0][off : off + 4 * len(want)], dtype="<u4")
-        assert got.tolist() == want, name
-        found += 1
-    assert found == 3
-
-
 def test_compiled_speech_tables_equal_host_bits() -> None:
     """SPEECH's tables (lib/speech_tables.c: phonemes, LPC code tables, decoded word frames and boundaries, excitation
     pulse, with negative floats, the selcc hazard of finding 20) as selcc wrote them equal the generated values, which
@@ -1174,8 +1155,8 @@ def test_extreme_parameters_compiled_core_rings_terrain(
 @pytest.mark.parametrize("mode", [1, 0])
 def test_terrain_out_of_table_reads_compiled_core(port: Port, mode: int) -> None:
     """TERRAIN after jumps between a high bright path and the wavetable terrains (HARMONICS 0x5a00..0x7f00): upstream
-    reads outside its tables there (the port: lib/terrain_memory.c); the compiled object matches the host within
-    MAX_ERR, every block within the instruction bound (the slow path of the wave reads)."""
+    reads outside its tables there (undefined behaviour; the port guards those reads, engines/terrain.c); the compiled
+    object matches the host within MAX_ERR, every block within the instruction bound."""
     rig = PlaitsRig(mode)
     rig.active(0)
     hv = port.voice()

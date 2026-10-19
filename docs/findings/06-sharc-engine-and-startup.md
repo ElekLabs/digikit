@@ -6212,6 +6212,12 @@ bytes). Both engines run after Plaits' output stage (gains, limiter, clip), whic
   gives about 102 % (RINGS) and 86 % (TERRAIN) at the high bound (an extrapolation, not a measurement).
 - **Safety rule:** one track of each is under 85 %; both are enabled. RINGS is now the heaviest single-track model.
   The track rule stays at 1 track.
-- **Memory.** Section 7 is 597,324 bytes (limit 0xfffff: 451,251 left; H3e 562,012). New tables: lut_stiffness 260
-  bytes, TERRAIN's model of the memory around the wave and sine tables 18,432 bytes. The per-voice union stays at 372
+- **TERRAIN after jumps.** The figures above are steady blocks at the worst knobs. After parameter jumps TERRAIN's path
+  leaves the unit square, where upstream reads outside its tables (undefined behaviour) and the port takes its guarded
+  path (engines/terrain.c, fix round 1): the slow compiled jump test (120 jumps between a high bright path and the
+  wavetable terrains) peaks at 71,415 / 94,952 instructions (mode 1 / 0), the block of the model change included, i.e.
+  at most +1,151 over the steady worst (about +0.3 % of the block at the high bound, from the measured 1.89 cycles per
+  instruction; not measured in the emulator).
+- **Memory.** Section 7 is 578,540 bytes (limit 0xfffff: 470,035 left; H3e 562,012), image H3f after fix round 1
+  (`a16f9ae2…`). New table: lut_stiffness 260 bytes. The per-voice union stays at 372
   bytes (RINGS 304, TERRAIN 24); PlaitsVoice grows to 916 bytes (the two limiter peaks and the accent).

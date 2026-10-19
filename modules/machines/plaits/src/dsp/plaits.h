@@ -119,6 +119,9 @@ int plaits_track(int track, const PlaitsFrame *f, int trig, float *out, int n, i
 /* Clear a voice to its never-triggered state (silent until the next trigger). */
 void plaits_voice_clear(PlaitsVoice *v);
 
+/* Plaits' output stage on one channel of n samples in place (plaits.c; exported for the host test). */
+void plaits_post(float *peak, float gain, float *x, int n);
+
 /* The DC blocker over n samples in place (exported for the host test). */
 void plaits_dc_block(PlaitsDcBlock *s, float *x, int n);
 

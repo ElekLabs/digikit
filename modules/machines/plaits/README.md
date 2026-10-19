@@ -87,9 +87,10 @@ Pick it with FUNC+SRC (the 8th entry).
   and -1: through Plaits' limiter), then the clip of Plaits' 16-bit DAC step (full scale), then the mix, the DC
   blocker and the output gain 0.601 / 0.8, so default VA keeps the level calibrated against a stock sample and every
   other model keeps Plaits' own balance against it (per-model levels in the Task 10b report).
-- TERRAIN reads outside Plaits' tables after big parameter jumps, as Plaits does (its path leaves the unit square);
-  the port reads the same memory as the host build of upstream (lib/terrain_memory.c). The output there is louder
-  and rougher, clipped to full scale by the output stage.
+- TERRAIN after big parameter jumps: its path leaves the unit square, where Plaits' code reads outside its tables
+  (undefined behaviour, so what a Plaits module plays there depends on its build). The port guards those reads (the
+  sine phase wrapped, the wave coordinates kept inside the table: engines/terrain.c); everywhere else it is bit exact
+  with upstream.
 - Hardware test (the owner's H1/H2 decision tree, the image hashes and patch commands): HARDWARE-TEST.md.
 - A project saved with PLAITS loads on a stock 1.17 without a fault, but that track comes back as ONESHOT (type 0):
   the stock loader keeps only the stock machine types.
