@@ -41,6 +41,11 @@ sources = [
   "../plaits/src/dsp/lib/sam_speech_synth.c",
   "../plaits/src/dsp/lib/lpc_speech_synth.c",
   "../plaits/src/dsp/lib/speech_tables.c",
+  "../plaits/src/dsp/engines/modal.c",
+  "../plaits/src/dsp/lib/resonator.c",
+  "../plaits/src/dsp/engines/terrain.c",
+  "../plaits/src/dsp/lib/fast_sine_oscillator.c",
+  "../plaits/src/dsp/lib/terrain_memory.c",
   "../plaits/src/dsp/halfband.c",
 ]
 place = "dsp.l2"

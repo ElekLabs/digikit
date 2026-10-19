@@ -161,7 +161,7 @@ def test_compiled_asym_tri_96k_matches_host_on_concrete_core(
 
 
 # Models 2..4 (Task 8 of the all-engines plan): 2FM, FORMANT (grain), ADDITIVE; 5, 6 (Task 9): WAVETABLE, CHORD; 7
-# (Task 10): SPEECH.
+# (Task 10): SPEECH; 12 and 21 (Task 10b): RINGS, TERRAIN.
 NEW_MODELS = {
     2: "2FM",
     3: "FORMANT",
@@ -169,7 +169,11 @@ NEW_MODELS = {
     5: "WAVETABLE",
     6: "CHORD",
     7: "SPEECH",
+    12: "RINGS",
+    21: "TERRAIN",
 }
+# every model with an engine
+ENABLED = [*range(8), 12, 21]
 
 
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
@@ -213,6 +217,7 @@ def test_compiled_lib_tables_equal_host_bits(port: Port) -> None:
         "pl_lut_4x_downsampler_fir.",
         "pl_lut_pitch_ratio_high.",
         "pl_lut_pitch_ratio_low.",
+        "pl_lut_stiffness.",
     ]
     for k, name in enumerate(names):
         sec, off, _g = obj.data_symbols[name]
@@ -270,6 +275,25 @@ def test_compiled_chord_tables_equal_host_bits() -> None:
         assert got.tolist() == want, name
         found += 1
     assert found == 5
+
+
+def test_compiled_terrain_memory_equals_host_bits() -> None:
+    """TERRAIN's model of the memory around the wave and sine tables (lib/terrain_memory.c: int16 values and arbitrary
+    float bit patterns, negative and huge ones included) as selcc wrote it equals the generated words."""
+    import re
+
+    obj = PlaitsRig(1).obj
+    text = (ROOT / "modules/machines/plaits/src/dsp/lib/terrain_memory.c").read_text()
+    found = 0
+    for name, body in re.findall(
+        r"^const unsigned int (\w+)\[\d+\] = \{(.*?)\};", text, re.S | re.M
+    ):
+        want = [int(t.rstrip("u"), 0) for t in re.split(r"[\s,]+", body) if t]
+        sec, off, _g = obj.data_symbols[name + "."]
+        got = np.frombuffer(obj.data[sec][0][off : off + 4 * len(want)], dtype="<u4")
+        assert got.tolist() == want, name
+        found += 1
+    assert found == 3
 
 
 def test_compiled_speech_tables_equal_host_bits() -> None:
@@ -424,8 +448,9 @@ def test_model_switch_at_note_on_va_asym_tri_va(port: Port, mode: int) -> None:
 
 def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     """The MODEL row's range is 0 .. 0x1700 (UI 0 .. 23): row value N << 8 (UI N, the knob or a p-lock) is model N;
-    models 0..7 sound, each differently, and 8 (not ported yet) is silent. SPEECH plays with HARMONICS 0 (the naive
-    formant synth: at the default 0x4000 a word starts, whose first frames are silent)."""
+    models 0..7, 12 (RINGS) and 21 (TERRAIN) sound, each differently, and the others (not ported yet) are silent.
+    SPEECH plays with HARMONICS 0 (the naive formant synth: at the default 0x4000 a word starts, whose first frames are
+    silent)."""
     import tomllib
 
     manifest = tomllib.loads((ROOT / "modules/machines/plaits/module.toml").read_text())
@@ -434,15 +459,16 @@ def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     rig = PlaitsRig(1)
     rig.active(0)
     outs = {}
-    for model in range(9):
+    for model in range(24):
         # the row value: UI 1 is 0x100
         rig.controls(0, 60, model=model << 8, harmonics=0 if model == 7 else 0x4000)
         rig.trig(0, True)
         outs[model] = np.array(rig.block(0)["samples"], dtype=np.float32)
         rig.trig(0, False)
-    assert all(outs[m].any() for m in range(8)) and not outs[8].any()
-    for a in range(8):
-        for b in range(a + 1, 8):
+    assert all(outs[m].any() for m in ENABLED)
+    assert not any(outs[m].any() for m in range(24) if m not in ENABLED)
+    for i, a in enumerate(ENABLED):
+        for b in ENABLED[i + 1 :]:
             assert not np.array_equal(outs[a], outs[b]), (a, b)
 
 
@@ -502,6 +528,7 @@ def run_stream(port: Port, blocks: list[Block], mode: int) -> tuple[Arr, Arr]:
             0,
             s["note"],
             tune=s["tune"],
+            velocity=s.get("velocity", 100),
             model=s["model"] << 8,
             **{k: s[k] for k in ("harmonics", "timbre", "morph", "mix")},
         )
@@ -511,7 +538,7 @@ def run_stream(port: Port, blocks: list[Block], mode: int) -> tuple[Arr, Arr]:
     return np.concatenate(core), np.concatenate(host)
 
 
-@pytest.mark.parametrize("model", range(8))
+@pytest.mark.parametrize("model", ENABLED)
 def test_compiled_run_on_across_retriggers_matches_host(port: Port, model: int) -> None:
     """Task 9b: note-ons at different pitches with knob changes and no model change (the stream that equals upstream
     rendered continuously on the host, tests/plaits/test_continuous_host.py), compiled against host within MAX_ERR."""
@@ -959,6 +986,11 @@ MAX_BLOCK_INSTRUCTIONS_NEW = {
     # to SPEECH there (speech_init); the LPC vowels with SAM peak at 31,937, the word banks at 20,120. Bounds about 15 %
     # over.
     7: {1: 39_500, 0: 66_500},
+    # Task 10b: on the run-on grid of HARMONICS x TIMBRE x MORPH x pitch (out/runs/task10b/scan.py) both peak in the
+    # block of the note-on that changes the model from VA (the engine's init in it): RINGS 124,173 (mode 1) / 147,710
+    # (mode 0), TERRAIN 71,204 / 94,741 instructions. Bounds about 15 % over.
+    12: {1: 143_000, 0: 170_000},
+    21: {1: 82_000, 0: 109_000},
 }
 
 
@@ -1054,3 +1086,124 @@ def extremes(port: Port, mode: int, model: int, bound: int) -> None:
                                 rig.instructions[-1],
                             )
     print(f"mode {mode} model {model}: worst block {worst} instructions at {worst_at}")
+
+
+@pytest.mark.parametrize("mode", [1, 0])
+def test_compiled_velocity_reaches_rings(port: Port, mode: int) -> None:
+    """Task 10b: the shim reads the frame's velocity word (halfword 0x1a + t) and the wrapper latches it as Plaits'
+    accent at the note-on: RINGS struck at velocity 127, 30 and 100 matches the host (frame velocity) within MAX_ERR,
+    and the velocities differ from each other on the core."""
+    outs = []
+    for vel in (127, 30, 100):
+        rig = PlaitsRig(mode)
+        rig.active(0)
+        hv = port.voice()
+        core, host = [], []
+        for b in range(24):
+            trig = int(b in (0, 12))
+            rig.controls(0, 60, velocity=vel, model=12 << 8)
+            rig.trig(0, bool(trig))
+            core.append(np.array(rig.block(0)["samples"], dtype=np.float32))
+            host.append(port.render(hv, frame(60, model=12, velocity=vel), trig, mode))
+        c, h = np.concatenate(core), np.concatenate(host)
+        assert float(np.abs(c - h).max()) <= MAX_ERR, vel
+        outs.append(c)
+    assert not np.array_equal(outs[0], outs[1]) and not np.array_equal(outs[1], outs[2])
+
+
+def extremes_run_on(port: Port, mode: int, model: int, bound: int) -> int:
+    """The extreme grid of `extremes` on one voice that runs on through it (as the engines do since Task 9b), the host
+    voice likewise: finite output within MAX_ERR, every block within the instruction bound; returns the worst."""
+    rig = PlaitsRig(mode)
+    rig.active(0)
+    hv = port.voice()
+    worst, worst_at = 0, None
+    for note in (0, 127):
+        for tune in (0, 0x4000, 0x7F00):
+            for h in (0, 0x7F00):
+                for t in (0, 0x7F00):
+                    for m in (0, 0x7F00):
+                        slots = {
+                            "model": model,
+                            "harmonics": h,
+                            "timbre": t,
+                            "morph": m,
+                        }
+                        for b in range(3):
+                            rig.controls(
+                                0,
+                                note,
+                                tune=tune,
+                                velocity=127,
+                                **{**slots, "model": model << 8},
+                            )
+                            rig.trig(0, b == 0)
+                            got = np.array(rig.block(0)["samples"], dtype=np.float32)
+                            want = port.render(
+                                hv,
+                                frame(note, tune=tune, velocity=127, **slots),
+                                int(b == 0),
+                                mode,
+                            )
+                            where = (note, hex(tune), hex(h), hex(t), hex(m), b)
+                            assert np.isfinite(got).all(), where
+                            assert float(np.abs(got - want).max()) <= MAX_ERR, where
+                            if rig.instructions[-1] > worst:
+                                worst, worst_at = rig.instructions[-1], where
+                            assert rig.instructions[-1] <= bound, (
+                                where,
+                                rig.instructions[-1],
+                            )
+    print(f"mode {mode} model {model}: worst block {worst} instructions at {worst_at}")
+    return worst
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", [1, 0])
+@pytest.mark.parametrize("model", [12, 21])
+def test_extreme_parameters_compiled_core_rings_terrain(
+    port: Port, model: int, mode: int
+) -> None:
+    """Task 10b: the extreme grid for RINGS and TERRAIN, the voice running on through it (strikes accumulate in the
+    resonator; TERRAIN's path keeps its phase and drift)."""
+    extremes_run_on(port, mode, model, MAX_BLOCK_INSTRUCTIONS_NEW[model][mode])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", [1, 0])
+def test_terrain_out_of_table_reads_compiled_core(port: Port, mode: int) -> None:
+    """TERRAIN after jumps between a high bright path and the wavetable terrains (HARMONICS 0x5a00..0x7f00): upstream
+    reads outside its tables there (the port: lib/terrain_memory.c); the compiled object matches the host within
+    MAX_ERR, every block within the instruction bound (the slow path of the wave reads)."""
+    rig = PlaitsRig(mode)
+    rig.active(0)
+    hv = port.voice()
+    bound = MAX_BLOCK_INSTRUCTIONS_NEW[21][mode]
+    rng = np.random.default_rng(10)
+    worst = 0
+    for k in range(120):
+        if k % 2 == 0:
+            note, h, t, m = (
+                int(rng.integers(105, 128)),
+                int(rng.integers(0, 0x7F01)),
+                0x7F00,
+                0x4000,
+            )
+        else:
+            note, h = int(rng.integers(20, 70)), int(rng.integers(0x5A00, 0x7F01))
+            t, m = (
+                int(rng.choice([0x7F00, 0x5000])),
+                int(rng.choice([0, 0x4000, 0x7F00])),
+            )
+        slots = {"model": 21, "harmonics": h, "timbre": t, "morph": m, "mix": 0x4000}
+        for b in range(int(rng.integers(1, 4))):
+            trig = int(k == 0 and b == 0)
+            rig.controls(0, note, **{**slots, "model": 21 << 8})
+            rig.trig(0, bool(trig))
+            got = np.array(rig.block(0)["samples"], dtype=np.float32)
+            want = port.render(hv, frame(note, **slots), trig, mode)
+            assert np.isfinite(got).all()
+            assert float(np.abs(got - want).max()) <= MAX_ERR, (k, b)
+            worst = max(worst, rig.instructions[-1])
+            assert rig.instructions[-1] <= bound
+    print(f"mode {mode} TERRAIN jumps: worst block {worst} instructions")

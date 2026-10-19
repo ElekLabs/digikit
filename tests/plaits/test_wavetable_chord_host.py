@@ -19,7 +19,15 @@ from typing import Any
 
 import numpy as np
 import pytest
-from support.plaits_host import EURORACK, FP, Port, build_oracle, build_port, frame
+from support.plaits_host import (
+    EURORACK,
+    FP,
+    Port,
+    build_oracle,
+    build_port,
+    frame,
+    tail,
+)
 
 ORACLE = Path(__file__).resolve().parent / "oracle"
 FS = 48000.0
@@ -402,9 +410,8 @@ def _render(port: Port, v: Any, f: Any, trig: int) -> Arr:
 
 @pytest.mark.parametrize("name", sorted(ENGINES))
 def test_wrapper_renders_the_model(port: Port, name: str) -> None:
-    """MODEL 5/6 renders wavetable/chord: OUT + MIX (AUX - OUT), then the DC blocker and the gain, bit for bit."""
+    """MODEL 5/6 renders wavetable/chord: OUT + MIX (AUX - OUT), then the DC blocker and the gain, bit for bit (support.plaits_host.Tail: Plaits' output stage first)."""
     inv = np.float32(3.0757874e-05)
-    gain, r = np.float32(0.601), np.float32(0.99934550)
     p = float(np.float32(16384.0) * inv)
     out, aux = port.engine(name, [(60.0, p, p, p)] * 40, 16)
     for mix in (0, 0x2000, 0x7F00):
@@ -416,13 +423,7 @@ def test_wrapper_renders_the_model(port: Port, name: str) -> None:
                 for b in range(20)
             ]
         )
-        eng = (out + m * (aux - out)).astype(np.float32)
-        x1 = y1 = np.float32(0.0)
-        want = np.zeros_like(eng)
-        for i, x in enumerate(eng):
-            y1 = np.float32(np.float32(x - x1) + np.float32(r * y1))
-            x1 = x
-            want[i] = np.float32(y1 * gain)
+        want = tail(MODEL[name], out, aux, m)
         assert same(got, want), (name, mix)
         assert float(np.abs(got).max()) > 0.02
 
@@ -475,8 +476,8 @@ def test_wrapper_model_change_chain(port: Port) -> None:
         ]
 
 
-def test_wrapper_models_8_to_23_are_silent(port: Port) -> None:
-    for model in range(8, 24):
+def test_wrapper_unported_models_8_to_23_are_silent(port: Port) -> None:
+    for model in (m for m in range(8, 24) if m not in (12, 21)):
         v = port.voice()
         outs = [_render(port, v, frame(60, model=model), int(b == 0)) for b in range(3)]
         assert not any(o.any() for o in outs), model

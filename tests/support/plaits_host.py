@@ -1,5 +1,5 @@
 """The PLAITS module's C sources (modules/machines/plaits/src/dsp) built for the host and driven through ctypes:
-the engines (va, ws, fm, grain, additive, wavetable, chord, speech: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
+the engines (va, ws, fm, grain, additive, wavetable, chord, speech, modal, terrain: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
 build (tests/plaits/oracle). Used by tests/plaits/test_va_host.py and
 tests/patchkit/test_plaits_module.py (the reference for the compiled code on the concrete core)."""
 
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, NoReturn
@@ -24,8 +25,8 @@ FP = ctypes.POINTER(ctypes.c_float)
 
 
 class Params(ctypes.Structure):
-    """engines/engine.h Params: Plaits' EngineParameters (trigger and accent are read by SPEECH only; 0 when a
-    setting gives four values)."""
+    """engines/engine.h Params: Plaits' EngineParameters (trigger and accent are read by SPEECH and RINGS only; 0
+    when a setting gives four values)."""
 
     _fields_ = [
         *[(n, ctypes.c_float) for n in ("note", "harmonics", "timbre", "morph")],
@@ -38,7 +39,16 @@ class Frame(ctypes.Structure):
     _fields_ = [
         *[
             (n, ctypes.c_float)
-            for n in ("pitch", "tune", "model", "harmonics", "timbre", "morph", "mix")
+            for n in (
+                "pitch",
+                "tune",
+                "model",
+                "harmonics",
+                "timbre",
+                "morph",
+                "mix",
+                "velocity",
+            )
         ],
         ("active", ctypes.c_int),
     ]
@@ -46,6 +56,10 @@ class Frame(ctypes.Structure):
 
 class Port:
     """The module's C sources built for the host."""
+
+    # set from the library in __init__ (port_<name>_size) for the engines without a named method
+    modal_size: int
+    terrain_size: int
 
     def __init__(self, so: Path) -> None:
         self.lib = ctypes.CDLL(str(so))
@@ -60,7 +74,16 @@ class Port:
             FP,
             ctypes.c_int,
         ]
-        for name in ("fm", "grain", "additive", "wavetable", "chord", "speech"):
+        for name in (
+            "fm",
+            "grain",
+            "additive",
+            "wavetable",
+            "chord",
+            "speech",
+            "modal",
+            "terrain",
+        ):
             setattr(self, f"{name}_size", getattr(self.lib, f"port_{name}_size")())
             getattr(self.lib, f"{name}_init").argtypes = [ctypes.c_void_p]
             getattr(self.lib, f"{name}_render").argtypes = [
@@ -93,6 +116,8 @@ class Port:
         self.lib.plaits_render.restype = ctypes.c_int
         self.lib.plaits_voice_clear.argtypes = [ctypes.c_void_p]
         self.lib.plaits_dc_block.argtypes = [ctypes.c_void_p, FP, ctypes.c_int]
+        self.lib.port_out_gain.restype = ctypes.c_float
+        self.lib.port_aux_gain.restype = ctypes.c_float
 
     def va(
         self, settings: list[tuple[float, float, float, float]], size: int
@@ -156,8 +181,10 @@ def frame(
     morph: int = 0x4000,
     mix: int = 0,
     active: int = 1,
+    velocity: int = 100,
 ) -> Frame:
-    """A PlaitsFrame from the 16-bit row values, as the entry shim converts them."""
+    """A PlaitsFrame from the 16-bit row values, as the entry shim converts them (velocity: 0..127, the frame word is
+    velocity << 8; 100 is the Digitakt's default)."""
     return Frame(
         float(note << 8),
         float(tune),
@@ -166,6 +193,7 @@ def frame(
         float(timbre),
         float(morph),
         float(mix),
+        float(velocity << 8),
         active,
     )
 
@@ -183,6 +211,8 @@ def build_port(d: Path, defines: tuple[str, ...] = ()) -> Port:
         DSP / "engines" / "wavetable.c",
         DSP / "engines" / "chord.c",
         DSP / "engines" / "speech.c",
+        DSP / "engines" / "modal.c",
+        DSP / "engines" / "terrain.c",
         DSP / "lib" / "tables.c",
         DSP / "lib" / "waves.c",
         DSP / "lib" / "wavetable_oscillator.c",
@@ -193,6 +223,9 @@ def build_port(d: Path, defines: tuple[str, ...] = ()) -> Port:
         DSP / "lib" / "sam_speech_synth.c",
         DSP / "lib" / "lpc_speech_synth.c",
         DSP / "lib" / "speech_tables.c",
+        DSP / "lib" / "resonator.c",
+        DSP / "lib" / "fast_sine_oscillator.c",
+        DSP / "lib" / "terrain_memory.c",
         DSP / "plaits.c",
         DSP / "halfband.c",
         ORACLE / "port_sizes.c",
@@ -266,3 +299,93 @@ def build_oracle(d: Path, sources: list[Path], name: str) -> Path:
         check=True,
     )
     return so
+
+
+# ---- the wrapper's output stage in float32 (plaits.c post, the mix, the DC blocker and the gain)
+
+INV_FULL = np.float32(3.0757874e-05)
+DC_R = np.float32(0.99934550)
+# plaits.c plaits_gain: 0.601 (Task 6's calibration of default VA) / 0.8 (VA's OUT gain in Plaits)
+GAIN = np.float32(0.75125)
+# plaits.c post: Plaits' Clip16 of its DAC step, in full-scale units (Clip16(1 + (int)(x * gain * -32767)))
+CLIP_LO, CLIP_HI = np.float32(-1.0), np.float32(1.0)
+
+
+def upstream_gains() -> list[tuple[np.float32, np.float32]]:
+    """Plaits' OUT and AUX gains of each PLAITS model n, read from upstream's plaits/dsp/voice.cc (RegisterInstance in
+    registration order; model n is upstream's engine (n + 8) mod 24)."""
+    voice = EURORACK / "plaits" / "dsp" / "voice.cc"
+    if not voice.exists():
+        oracle_missing(ORACLE_MISSING)
+    regs = re.findall(
+        r"RegisterInstance\(&\w+?_, (?:true|false), (-?[\d.]+)f, (-?[\d.]+)f\)",
+        voice.read_text(),
+    )
+    assert len(regs) == 24, len(regs)
+    return [
+        (np.float32(regs[(n + 8) % 24][0]), np.float32(regs[(n + 8) % 24][1]))
+        for n in range(24)
+    ]
+
+
+def limiter(peak: np.float32, pre: np.float32, x: Arr) -> tuple[np.float32, Arr]:
+    """stmlib's Limiter::Process(pre, x) in float32: (peak_ after, output)."""
+    out = np.zeros(len(x), dtype=np.float32)
+    c_up, c_down, one, k = (
+        np.float32(0.05),
+        np.float32(0.00002),
+        np.float32(1.0),
+        np.float32(0.8),
+    )
+    for i, v in enumerate(np.asarray(x, dtype=np.float32)):
+        s = np.float32(v * pre)
+        error = np.float32(np.float32(abs(s)) - peak)
+        peak = np.float32(peak + np.float32((c_up if error > 0 else c_down) * error))
+        g = one if peak <= one else np.float32(one / peak)
+        out[i] = np.float32(np.float32(s * g) * k)
+    return peak, out
+
+
+class Tail:
+    """The wrapper after the engine for one voice: Plaits' output stage per model (both limiters initialised at the
+    first note-on, the OUT one again at each model change), OUT + MIX (AUX - OUT), the DC blocker and the gain."""
+
+    def __init__(self) -> None:
+        self.gains = upstream_gains()
+        self.out_peak = self.aux_peak = np.float32(0.5)
+        self.x1 = self.y1 = np.float32(0.0)
+
+    def select(self) -> None:
+        """A note-on that initialises the engine (the voice's first or a model change)."""
+        self.out_peak = np.float32(0.5)
+        self.x1 = self.y1 = np.float32(0.0)
+
+    def post(self, model: int, out: Arr, aux: Arr) -> tuple[Arr, Arr]:
+        go, ga = self.gains[model]
+        res = []
+        for which, g, x in (("out", go, out), ("aux", ga, aux)):
+            x = np.asarray(x, dtype=np.float32)
+            if g < 0:
+                pk, y = limiter(getattr(self, f"{which}_peak"), np.float32(-g), x)
+                setattr(self, f"{which}_peak", pk)
+            else:
+                y = (x * g).astype(np.float32)
+            res.append(np.clip(y, CLIP_LO, CLIP_HI).astype(np.float32))
+        return res[0], res[1]
+
+    def block(self, model: int, out: Arr, aux: Arr, mix: np.float32) -> Arr:
+        o, a = self.post(model, out, aux)
+        eng = (o + mix * (a - o)).astype(np.float32)
+        res = np.zeros_like(eng)
+        x1, y1 = self.x1, self.y1
+        for i, x in enumerate(eng):
+            y1 = np.float32(np.float32(x - x1) + np.float32(DC_R * y1))
+            x1 = x
+            res[i] = np.float32(y1 * GAIN)
+        self.x1, self.y1 = x1, y1
+        return res
+
+
+def tail(model: int, out: Arr, aux: Arr, mix: np.float32) -> Arr:
+    """A fresh voice's wrapper output for the engine output (out, aux) of `model` at a constant MIX `mix`."""
+    return Tail().block(model, out, aux, mix)
