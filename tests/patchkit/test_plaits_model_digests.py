@@ -4,7 +4,8 @@ enabled (model 0 has its own file and test, tests/patchkit/test_plaits_model0_h2
 tests/plaits/vectors/model<N>_<image>.json (tests/support/plaits_vectors.py `vectors`) holds SHA-256 digests of
 model N's output words for the fixed scenarios of tests/support/plaits_vectors.py: the compiled DSP object of each
 variant on the concrete core and the host build of the same C. Model 1 was recorded from the H3 sources (5931e47),
-models 2..4 from the H3b sources (Task 8), models 5 and 6 from the H3c sources (Task 9); those digests (a note-on
+models 2..4 from the H3b sources (Task 8), models 5 and 6 from the H3c sources (Task 9), model 7 from the H3e
+sources (Task 10, PLAITS_RECORD_MODEL=7 at caba134); those digests (a note-on
 re-initialised the engine) are kept under `per_note_init`, and the pinned digests were re-recorded at Task 9b (the
 engine runs on from note to note; plaits_vectors.check also requires the old digest of the first note after init and
 every old digest when the voice is cleared at each note-on). PLAITS_RECORD_MODEL=N records model N's file for a newly
