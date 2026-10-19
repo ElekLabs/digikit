@@ -6151,3 +6151,38 @@ measured in the emulator with the method of the sections above (paired 500 / 2,5
 - **Engines run on between notes** (modules/machines/plaits/src/dsp/plaits.c `note_on`, Task 9b): a note-on that does
   not change the model now skips the engine's init, so it costs a few instructions less in that block; no block costs
   more. The emulated runs above include it.
+
+## PLAITS SPEECH (model 7): worst block and measured DSP load (Task 10, 2026-10-19) **[D]**
+
+One agent. The worst block is searched first on the concrete core (tests/support/plaits_rig.py; scratch
+out/runs/task10/scan.py, fine.py), then measured in the emulator with the method of the sections above (paired 500 /
+2,500 ms windows, `SHARC_CYCMIX`, `sharc_cpi.cost_profile` against `sharcdb build --blocks
+56,69,76,78,80,88,91,93,103,104,107` of the image; block 104, the PLAITS object, is now 240,496 bytes).
+
+- **Search (concrete core, mode 1).** All of HARMONICS 0, 0x400, 0xa00, 0x1000, 0x1400, 0x1540, 0x1580, 0x1a00,
+  0x2000, 0x2600, 0x2a00, 0x2a80, 0x2b00, 0x3000, 0x4000, 0x5000, 0x6000, 0x7f00 (every region and both sides of each
+  crossfade edge) x TIMBRE 0, 0x2000, 0x4000, 0x6000, 0x7f00 x pitch (note 60, 96, 60 + TUNE 0x7c00, 127 + TUNE
+  0x7f00), 3 blocks each with a note-on in the first (360 settings). Cost by region: the naive formant synth crossfaded
+  with SAM (HARMONICS below 0x1540) **32,092 instructions** at the top pitch, nearly flat in TIMBRE and MORPH; the LPC
+  vowels with SAM 29,890 (31,937 with the controller back in scan mode after the consonant); the word banks 19,900 to
+  20,120 (scan mode included). The block of a note-on that changes the model to SPEECH adds speech_init:
+  **34,083** (mode 1) and **57,620** (mode 0, with the half-band). The init no longer decodes a word bank: the banks
+  are decoded tables (modules/machines/plaits/src/dsp/lib/lpc_speech_synth.c), where upstream decodes up to 926 frames
+  in the block of a bank change. Bounds in tests/patchkit/test_plaits_module.py: 39,500 / 66,500.
+- **Emulator.** Image `out/patch/plaits-8models-names-splash-48k-1.17.syx` (H3e). Knobs read back: TUNE 0x7c00 (the
+  panel's maximum, effective note 120 for the C4 trig), MODEL 7, HARMONICS 0x400 (0x500 on the second track, the same
+  region), TIMBRE 0x7f00, MORPH 0x4000.
+
+| configuration | DSP type cache | busy instructions / block | cycles / block, low / nominal / high | load %, low / nominal / high |
+|---|---|---:|---|---|
+| plaits-8models-names-splash-48k, 1 track SPEECH, worst knobs | `0x0000000b` | 244,687 | 259,182 / 289,102 / 361,764 | 38.9 / 43.4 / **54.3** |
+| plaits-8models-names-splash-48k, 2 tracks SPEECH, worst knobs | `0x000b000b` | 276,302 | 292,048 / 328,018 / 406,770 | 43.8 / 49.2 / **61.0** |
+
+- Per track: +34,796 instructions (1 track; 32,000 on the core plus the hook) and 40,589 / 50,984 / 66,645 cycles (1.92
+  per instruction at the high bound); from the 2-track run +33,206 (1.68). **Safety rule:** one track at 54.3 % is
+  under 85 %; SPEECH is enabled. It is the lightest model after ASYM-TRI; the track rule (1 track, set by two ADDITIVE
+  tracks at 86.6 %) is unchanged.
+- **Memory.** dsp.l2 use 245,020 of 922,756 bytes (H3d about 198,300): SPEECH's tables 26,308 bytes (word frames
+  20,096, boundaries 388, LPC code tables 1,032, vowel and consonant frames 720, naive phonemes 1,000, SAM phonemes
+  432, excitation pulse 2,560, bank indices 80), its code, and the per-voice union at 372 bytes (SPEECH; +28 per
+  voice). The boot stream (section 7) is 562,012 bytes (limit 0xfffff: 486,563 left; H3d 515,284).

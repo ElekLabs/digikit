@@ -142,8 +142,15 @@ Conclusions:
 5. **Gate and envelope (owner).** No internal decay envelope, LPG or attenuverters; DT2 envelopes and LFOs do that
    work. **Strike engines (STRING, RINGS, KICK) (owner):** every DT2 note-on (trigger latch, proven in image P) is
    sent as Plaits' trigger, so they keep their attack; ring length stays on MORPH. Plaits' untriggered sustained mode
-   is not used. A model change lands at the next note-on.
+   is not used. A model change lands at the next note-on. **Trigger-reading engines (Task 10, SPEECH first):** the
+   wrapper passes Plaits' patched trigger as its Voice builds it (`voice.cc`: RISING_EDGE | HIGH while the gate
+   rises, HIGH while it is high): RISING_EDGE | HIGH in a note-on's first sub-block and HIGH from then to the next
+   note-on (the voice routine sees the note-on only, not the note's end). No ported engine reads HIGH beyond the
+   edge (in Plaits only the DX7 engines do), so this is Plaits on a held gate and on a short one alike; never
+   TRIGGER_UNPATCHED, which would make SPEECH free-run (`plaits.c` `TRIG_*`, tests/plaits/test_speech_host.py).
 6. **Pitch and velocity.** `note` from the frame's pitch and TUNE words; velocity to `accent`. *(Designer's call.)*
+   Not wired yet: the entry shim does not read the velocity word, and `accent` is 0.8 (Plaits' value with LEVEL
+   unpatched; read by SPEECH as the word banks' gain). The strike engines (Task 11) add the velocity read.
 7. **Per-voice state.** Engine objects plus a 16 KB arena per voice; 16 voices ≈ 16 × (16 KB + state). L2 first,
    external memory if it doesn't fit. The target is 16 voices (owner).
 8. **CPU.** Target: 16 voices of the heaviest v1 model at reference quality. Output-identical optimizations from the
