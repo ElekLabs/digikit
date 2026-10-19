@@ -28,7 +28,7 @@ reports 0 errors; `uv run python -m tools.patchkit.pk_encoding_gate X X.plan.jso
 | `out/patch/plaits-7models-48k-1.17.syx` (H3c) | `09ac59c0c1fb47460e39cd4639886f2fd0a8bbd733e71d318520f0637627b8a3` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules machines/plaits-48k -o out/patch/plaits-7models-48k-1.17.syx` (at 6bf06f1) |
 | `out/patch/plaits-7models-names-splash-48k-1.17.syx` (H3d: engines run on between notes, MODEL names, boot splash) | `8032d08653293d7fa322c4e7f68b20752342aee3542e3e182a50038324c2754d` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-7models-names-splash-48k-1.17.syx` (at ed36e25) |
 | `out/patch/plaits-8models-names-splash-48k-1.17.syx` (H3e: H3d plus model 7, SPEECH) | `8701a9bf5c73df271a20f4b0540230044903abdc09fa538ccec202e4a61d0e24` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-8models-names-splash-48k-1.17.syx` (at caba134) |
-| `out/patch/plaits-10models-names-splash-48k-1.17.syx` (H3f: Plaits' output stage, velocity, models 12 RINGS and 21 TERRAIN) | `b3797740adf014a5f189a4a19279bab22b07079b1e1d846ed59347268436a04e` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-10models-names-splash-48k-1.17.syx` (at 711a7f3) |
+| `out/patch/plaits-10models-names-splash-48k-1.17.syx` (H3f: Plaits' output stage, velocity, models 12 RINGS and 21 TERRAIN) | `a16f9ae2e0ff56ec9b219b42001bb3bea4f5b0b0dc5bbf1cc125c837d7555f45` | `uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx --modules ui/boot-splash,machines/plaits-48k -o out/patch/plaits-10models-names-splash-48k-1.17.syx` (at ff6303a) |
 | `out/patch/diag-h1-i13return-48k-1.17.ungated.syx` | `401ccf2be3f2814e4bb79c6aed1872912da4ee73f2010e93c5b387fbf4279cf3` | a copy of the pre-Task-5b h1b; not rebuildable from this branch |
 | `out/patch/diag-h1-i13return-96k-1.17.ungated.syx` | `02926b3f833ccdaa51172b98af3de83c4f65779999a3ea901d1a527c6796652c` | a copy of the pre-Task-5b h1a; not rebuildable from this branch |
 
@@ -317,7 +317,7 @@ image.
 
 ## H3f: output stage, velocity, RINGS (12) and TERRAIN (21) (only after H3e passed)
 
-H3f (`out/patch/plaits-10models-names-splash-48k-1.17.syx`, `b3797740…`) is H3e plus Plaits' output stage (each
+H3f (`out/patch/plaits-10models-names-splash-48k-1.17.syx`, `a16f9ae2…`) is H3e plus Plaits' output stage (each
 model's own output level and SPEECH's limiter, as in Plaits), velocity, and models 12 RINGS and 21 TERRAIN. The other
 values from 8 to 23 still play silence.
 
@@ -339,9 +339,8 @@ values from 8 to 23 still play silence.
 5. **TERRAIN's knobs.** MODEL to 21 (`TERRAIN`). HARMONICS walks through eight terrains (smooth crossfades; the
    last third are the wavetable data read as terrains, brighter and buzzier); TIMBRE widens the path (left a near
    sine, right rich); MORPH moves the path's centre. MIX (G) to the right: AUX, a phase-modulated sine. After big
-   jumps (a high note with TIMBRE right, then a low note) TERRAIN can turn rougher and louder until the next big
-   change: Plaits does the same (its path leaves its terrain), clipped to full scale. Report it only if it
-   crackles or drops out.
+   jumps (a high note with TIMBRE right, then a low note) TERRAIN's path can stay wider than its terrain until the
+   next big change, which changes its colour. Report it only if it crackles or drops out.
 6. **First note after a MODEL change.** As on H3e it can tick once (WAVETABLE's is now clipped to full scale, as in
    Plaits). Do not report a single tick.
 7. **Track rule (unchanged): never more than 1 track triggered as PLAITS since boot,** any model. One RINGS track
