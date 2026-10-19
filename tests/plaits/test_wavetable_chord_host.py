@@ -429,7 +429,7 @@ def test_wrapper_renders_the_model(port: Port, name: str) -> None:
 
 def test_engine_union_holds_every_engine(port: Port) -> None:
     """The per-voice union is the size of its largest engine (Ruling B: each engine's state bytes)."""
-    names = ("va", "ws", "fm", "grain", "additive", "wavetable", "chord")
+    names = ("va", "ws", "fm", "grain", "additive", "wavetable", "chord", "speech")
     sizes = {n: getattr(port, f"{n}_size") for n in names}
     assert port.engine_union_size == max(sizes.values()), sizes
     print("engine state bytes:", sizes, "union", port.engine_union_size)
@@ -475,8 +475,8 @@ def test_wrapper_model_change_chain(port: Port) -> None:
         ]
 
 
-def test_wrapper_models_7_to_23_are_silent(port: Port) -> None:
-    for model in range(7, 24):
+def test_wrapper_models_8_to_23_are_silent(port: Port) -> None:
+    for model in range(8, 24):
         v = port.voice()
         outs = [_render(port, v, frame(60, model=model), int(b == 0)) for b in range(3)]
         assert not any(o.any() for o in outs), model

@@ -1,6 +1,6 @@
 /* Host-only helper for tests/plaits (test_va_host.py, test_ws_host.py, test_fm_grain_additive_host.py,
- * test_wavetable_chord_host.py): the sizes of the port's structs, so ctypes can allocate them, the port's tables
- * (waveshaping, lib, waves, chord) and the index recorder of a PL_INDEX_CHECK build. Linked into the host library with
+ * test_wavetable_chord_host.py, test_speech_host.py): the sizes of the port's structs, so ctypes can allocate them,
+ * the port's tables (waveshaping, lib, waves, chord, speech) and the index recorder of a PL_INDEX_CHECK build. Linked into the host library with
  * the module's C sources; not part of the DSP object. */
 #include "plaits.h"
 #include "engines/ws_tables.h"
@@ -11,6 +11,8 @@
 #include "engines/chord.h"
 #include "lib/tables.h"
 #include "lib/waves.h"
+#include "engines/speech.h"
+#include "lib/speech_tables.h"
 
 int port_va_size(void) { return (int)sizeof(VA); }
 int port_ws_size(void) { return (int)sizeof(WS); }
@@ -19,6 +21,7 @@ int port_grain_size(void) { return (int)sizeof(Grain); }
 int port_additive_size(void) { return (int)sizeof(Additive); }
 int port_wavetable_size(void) { return (int)sizeof(Wavetable); }
 int port_chord_size(void) { return (int)sizeof(Chord); }
+int port_speech_size(void) { return (int)sizeof(Speech); }
 int port_engine_union_size(void) { return (int)sizeof(PlaitsEngine); }
 int port_voice_size(void) { return (int)sizeof(PlaitsVoice); }
 int port_frame_size(void) { return (int)sizeof(PlaitsFrame); }
@@ -70,12 +73,35 @@ int port_chord_inversion(float parameter, float inversion, float *ratios, float 
     return chord_bank_compute_chord_inversion(&b, inversion, ratios, amplitudes);
 }
 
+/* SPEECH's tables as the port reads them: the naive phonemes (phoneme p, register r, formant i; k 0 frequency, 1
+ * amplitude), the SAM phonemes (p < 18, formant i; k 0 frequency, 1 amplitude), the LPC vowels and consonants (frame p,
+ * field k of PL_LPC_FRAME), a word bank's frame (bank b, frame i) as LPCFrame floats (12: 1 / period, energy, k0..k9),
+ * the banks' frame and word counts and boundaries, and the excitation pulse. */
+float port_naive_phoneme(int p, int r, int i, int k) { return PL_F(pl_naive_phonemes)[p * 50 + r * 10 + i * 2 + k]; }
+float port_sam_phoneme(int p, int i, int k) { return PL_F(pl_sam_phonemes)[p * 6 + i * 2 + k]; }
+float port_lpc_phoneme(int p, int k) { return PL_F(pl_lpc_phonemes)[p * PL_LPC_FRAME + k]; }
+void port_lpc_word_frame(int b, int i, float *out) {
+    LPCFrame f;
+    int j;
+    lpc_word_frame(b, i, &f);
+    out[0] = f.inv_period;
+    out[1] = f.energy;
+    for (j = 0; j < 10; j++) out[2 + j] = f.k[j];
+}
+int port_lpc_bank_num_frames(int b) { return pl_lpc_bank_num_frames[b]; }
+int port_lpc_bank_num_words(int b) { return pl_lpc_bank_num_words[b]; }
+int port_lpc_bank_boundary(int b, int i) { return pl_lpc_word_boundaries[pl_lpc_bank_boundary0[b] + i]; }
+float port_lpc_excitation_pulse(int i) { return PL_F(pl_lpc_excitation_pulse)[i]; }
+
 /* The index recorder of a PL_INDEX_CHECK build (the engines call pl_index_check(table, index) before each table
  * read): per table, the smallest and largest index seen and the count. Tables: 0 the WAVETABLE wave map index,
  * 1 a WAVETABLE sample index within a wave (the last of the four Hermite reads), 2 a wavetable oscillator's wave
  * index (CHORD's wave list), 3 its sample index, 4 CHORD's registration row, 5 ChordBank's ratio index, 6 a chord
- * voice index. */
-#define PL_INDEX_TABLES 8
+ * voice index; SPEECH (lib/naive_speech_synth.c, sam_speech_synth.c, lpc_speech_synth.c): 7 the naive phoneme row, 8 its
+ * register row, 9 the SAM phoneme, 10 a SAM formant's sine index, 11 the LPC excitation pulse index, 12 an LPC vowel
+ * or consonant frame, 13 a word bank frame, 14 the loaded bank's num_frames - 1 - that frame, 15 the word, 16 the word
+ * bank, 17 num_words - (word + 1). */
+#define PL_INDEX_TABLES 20
 static int idx_lo[PL_INDEX_TABLES], idx_hi[PL_INDEX_TABLES], idx_n[PL_INDEX_TABLES];
 void pl_index_check(int table, int index) {
     if (idx_n[table] == 0 || index < idx_lo[table]) idx_lo[table] = index;

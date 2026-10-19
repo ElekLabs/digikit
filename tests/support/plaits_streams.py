@@ -45,8 +45,9 @@ def retrigger_stream(model: int, seed: int, blocks: int = 240) -> list[Block]:
 def switch_stream() -> list[Block]:
     """Model changes on one voice, 9 blocks per note: note-ons at blocks 0 and 5 of each (a retrigger of the same model
     at 5); at block 8 the MODEL row already shows the next note's model without a note-on (the running engine goes
-    on); consecutive notes of one model (6 6, 5 5, 0 0) change nothing at the note-on."""
-    seq = [0, 5, 6, 6, 4, 6, 5, 5, 2, 3, 1, 6, 0, 0]
+    on); consecutive notes of one model (6 6, 5 5, 7 7, 0 0) do not re-initialise the engine at the note-on (SPEECH
+    reads it as Plaits' trigger)."""
+    seq = [0, 5, 6, 6, 4, 7, 6, 5, 5, 7, 7, 2, 3, 1, 6, 0, 0]
     out: list[Block] = []
     for k, model in enumerate(seq):
         for b in range(9):

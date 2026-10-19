@@ -95,6 +95,8 @@ TYPED = [
     "tests/plaits/test_continuous_host.py",
     "tests/support/plaits_streams.py",
     "modules/machines/plaits/src/dsp/lib/gen_wave_tables.py",
+    "modules/machines/plaits/src/dsp/lib/gen_speech_tables.py",
+    "tests/plaits/test_speech_host.py",
     "tests/patchkit/test_plaits_model_names.py",
     "tools/patchkit/pk_splash.py",
     "tests/patchkit/test_boot_splash.py",

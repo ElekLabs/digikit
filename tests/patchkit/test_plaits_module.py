@@ -1,4 +1,4 @@
-"""machines/plaits (models VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
+"""machines/plaits (models VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH) on core/dsp-inline: the compiled C on the concrete SHARC+ core and the images.
 
 The rig (tests/support/plaits_rig.py) links core/dsp-inline at test addresses and the PLAITS object of
 machines/plaits-48k (mode 1, 48 kHz into the voice output) or machines/plaits-96k (mode 0, 96 kHz into the work
@@ -160,8 +160,16 @@ def test_compiled_asym_tri_96k_matches_host_on_concrete_core(
     assert max(instr) < MAX_BLOCK_INSTRUCTIONS_WS[0], max(instr)
 
 
-# Models 2..4 (Task 8 of the all-engines plan): 2FM, FORMANT (grain), ADDITIVE; 5, 6 (Task 9): WAVETABLE, CHORD.
-NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE", 5: "WAVETABLE", 6: "CHORD"}
+# Models 2..4 (Task 8 of the all-engines plan): 2FM, FORMANT (grain), ADDITIVE; 5, 6 (Task 9): WAVETABLE, CHORD; 7
+# (Task 10): SPEECH.
+NEW_MODELS = {
+    2: "2FM",
+    3: "FORMANT",
+    4: "ADDITIVE",
+    5: "WAVETABLE",
+    6: "CHORD",
+    7: "SPEECH",
+}
 
 
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
@@ -185,7 +193,10 @@ def test_compiled_new_models_match_host_on_concrete_core(
 def test_compiled_new_models_96k_match_host_on_concrete_core(
     port: Port, model: int, k: int
 ) -> None:
-    mx, rms, sig, instr = compare(port, 0, SETTINGS[k], 24, model=model)
+    # SPEECH: set 0 (HARMONICS 0x4000) starts a word, whose first 25 ms frames are silent: 120 blocks, as mode 1
+    mx, rms, sig, instr = compare(
+        port, 0, SETTINGS[k], 120 if model == 7 else 24, model=model
+    )
     assert sig > 0.02
     assert mx <= MAX_ERR and rms <= RMS_ERR, (mx, rms)
     assert max(instr) < MAX_BLOCK_INSTRUCTIONS_NEW[model][0], max(instr)
@@ -261,6 +272,28 @@ def test_compiled_chord_tables_equal_host_bits() -> None:
     assert found == 5
 
 
+def test_compiled_speech_tables_equal_host_bits() -> None:
+    """SPEECH's tables (lib/speech_tables.c: phonemes, LPC code tables, decoded word frames and boundaries, excitation
+    pulse, with negative floats, the selcc hazard of finding 20) as selcc wrote them equal the generated values, which
+    tests/plaits/test_speech_host.py checks against upstream."""
+    import re
+
+    obj = PlaitsRig(1).obj
+    text = (ROOT / "modules/machines/plaits/src/dsp/lib/speech_tables.c").read_text()
+    found = 0
+    for name, body in re.findall(
+        r"^const (?:unsigned )?int (\w+)\[\d+\] = \{(.*?)\};", text, re.S | re.M
+    ):
+        want = [
+            int(t.rstrip("u"), 0) & 0xFFFFFFFF for t in re.split(r"[\s,]+", body) if t
+        ]
+        sec, off, _g = obj.data_symbols[name + "."]
+        got = np.frombuffer(obj.data[sec][0][off : off + 4 * len(want)], dtype="<u4")
+        assert got.tolist() == want, name
+        found += 1
+    assert found == 11
+
+
 @pytest.mark.parametrize("mode", [1, 0])
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
 def test_model_switch_at_note_on_to_and_from_va(
@@ -294,11 +327,17 @@ def test_model_change_chain_va_fm_formant_additive_asym_tri_va() -> None:
 
 @pytest.mark.parametrize("model", sorted(NEW_MODELS))
 def test_new_model_c_stack_stays_inside_pl_stack(model: int) -> None:
-    """The deepest C frame of models 2..6 (ADDITIVE keeps 12 interpolators on the stack, CHORD calls the voices'
-    oscillators from its render) stays inside the 4096-byte _pl_stack with room to spare."""
+    """The deepest C frame of models 2..7 (ADDITIVE keeps 12 interpolators on the stack, CHORD calls the voices'
+    oscillators from its render, SPEECH keeps the SAM crossfade's buffers and two LPC frames on it) stays inside the
+    4096-byte _pl_stack with room to spare."""
     rig = PlaitsRig(1)
     morph = 0x4400 if model == 6 else 0  # CHORD: MORPH where both kinds of voice render
-    rig.controls(0, 60, model=model << 8, harmonics=0x7F00, timbre=0x7F00, morph=morph)
+    harmonics = (
+        0x2000 if model == 7 else 0x7F00
+    )  # SPEECH: the LPC vowels crossfaded with SAM
+    rig.controls(
+        0, 60, model=model << 8, harmonics=harmonics, timbre=0x7F00, morph=morph
+    )
     rig.active(0)
     rig.trig(0)
     lo = rig.symbols["_pl_stack"]
@@ -385,7 +424,8 @@ def test_model_switch_at_note_on_va_asym_tri_va(port: Port, mode: int) -> None:
 
 def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     """The MODEL row's range is 0 .. 0x1700 (UI 0 .. 23): row value N << 8 (UI N, the knob or a p-lock) is model N;
-    models 0..6 sound, each differently, and 7 (not ported yet) is silent."""
+    models 0..7 sound, each differently, and 8 (not ported yet) is silent. SPEECH plays with HARMONICS 0 (the naive
+    formant synth: at the default 0x4000 a word starts, whose first frames are silent)."""
     import tomllib
 
     manifest = tomllib.loads((ROOT / "modules/machines/plaits/module.toml").read_text())
@@ -394,14 +434,15 @@ def test_model1_reaches_asym_tri_from_the_model_row() -> None:
     rig = PlaitsRig(1)
     rig.active(0)
     outs = {}
-    for model in range(8):
-        rig.controls(0, 60, model=model << 8)  # the row value: UI 1 is 0x100
+    for model in range(9):
+        # the row value: UI 1 is 0x100
+        rig.controls(0, 60, model=model << 8, harmonics=0 if model == 7 else 0x4000)
         rig.trig(0, True)
         outs[model] = np.array(rig.block(0)["samples"], dtype=np.float32)
         rig.trig(0, False)
-    assert all(outs[m].any() for m in range(7)) and not outs[7].any()
-    for a in range(7):
-        for b in range(a + 1, 7):
+    assert all(outs[m].any() for m in range(8)) and not outs[8].any()
+    for a in range(8):
+        for b in range(a + 1, 8):
             assert not np.array_equal(outs[a], outs[b]), (a, b)
 
 
@@ -470,7 +511,7 @@ def run_stream(port: Port, blocks: list[Block], mode: int) -> tuple[Arr, Arr]:
     return np.concatenate(core), np.concatenate(host)
 
 
-@pytest.mark.parametrize("model", range(7))
+@pytest.mark.parametrize("model", range(8))
 def test_compiled_run_on_across_retriggers_matches_host(port: Port, model: int) -> None:
     """Task 9b: note-ons at different pitches with knob changes and no model change (the stream that equals upstream
     rendered continuously on the host, tests/plaits/test_continuous_host.py), compiled against host within MAX_ERR."""
@@ -912,6 +953,12 @@ MAX_BLOCK_INSTRUCTIONS_NEW = {
     # worst knobs"). Bounds: about 15 % over each, CHORD 12 % over the scan.
     5: {1: 47_500, 0: 74_500},
     6: {1: 62_000, 0: 86_000},
+    # Task 10: SPEECH's worst block is the naive formant synth crossfaded with SAM (HARMONICS up to 0x1500) at the top
+    # pitch (note 127 + TUNE 0x7f00), 32,092 instructions (mode 1) / 55,588 (mode 0) in a full scan of HARMONICS x
+    # TIMBRE x pitch (out/runs/task10, finding 06), and 34,083 / 57,620 in the block of a note-on that changes the model
+    # to SPEECH there (speech_init); the LPC vowels with SAM peak at 31,937, the word banks at 20,120. Bounds about 15 %
+    # over.
+    7: {1: 39_500, 0: 66_500},
 }
 
 
@@ -938,6 +985,38 @@ def test_extreme_parameters_compiled_core_new_models(
 ) -> None:
     """The same grid for models 2, 3 and 4."""
     extremes(port, mode, model, MAX_BLOCK_INSTRUCTIONS_NEW[model][mode])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", [1, 0])
+def test_speech_worst_blocks_compiled_core(port: Port, mode: int) -> None:
+    """SPEECH's regions at their costliest (the extreme grid's HARMONICS 0 and 0x7f00 miss the crossfades): the naive
+    synth with SAM (HARMONICS 0x0400) and the LPC vowels with SAM (0x2000) at the top pitch and TIMBRE 0x7f00, each
+    after a note-on that changes the model from VA (speech_init in that block), then 44 blocks (the LPC controller
+    back in scan mode after the consonant); the word banks reached without a trig (scan mode) and then triggered:
+    within MAX_ERR of the host, every block within the instruction bound."""
+    bound = MAX_BLOCK_INSTRUCTIONS_NEW[7][mode]
+    worst = 0
+    for h in (0x0400, 0x2000):
+        rig = PlaitsRig(mode)
+        rig.active(0)
+        hv = port.voice()
+        steps = [(0, 1), (0, 0), (7, 1)] + [(7, 0)] * 44
+        if h == 0x2000:
+            steps += [(7, 0)] * 4 + [(7, 1)] + [(7, 0)] * 2
+        for k, (model, trig) in enumerate(steps):
+            hh = 0x7F00 if k >= 47 else h
+            slots = {"model": model, "harmonics": hh, "timbre": 0x7F00, "morph": 0x4000}
+            rig.controls(0, 127, tune=0x7F00, **{**slots, "model": model << 8})
+            rig.trig(0, bool(trig))
+            got = np.array(rig.block(0)["samples"], dtype=np.float32)
+            want = port.render(hv, frame(127, tune=0x7F00, **slots), trig, mode)
+            assert np.isfinite(got).all()
+            assert float(np.abs(got - want).max()) <= MAX_ERR, (h, k)
+            if model == 7:
+                worst = max(worst, rig.instructions[-1])
+                assert rig.instructions[-1] <= bound, (h, k, rig.instructions[-1])
+    print(f"mode {mode} SPEECH worst block {worst} instructions")
 
 
 def extremes(port: Port, mode: int, model: int, bound: int) -> None:

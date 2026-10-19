@@ -29,5 +29,7 @@
 
 #ifndef PLAITS_ENGINE_H
 #define PLAITS_ENGINE_H
-typedef struct { float note,harmonics,timbre,morph; } Params;  // EngineParameters without trigger/accent (unused by VA and ASYM-TRI)
+// EngineParameters. trigger: Plaits' TriggerState bits (0 LOW, 1 RISING_EDGE, 2 UNPATCHED, 4 HIGH), read by SPEECH
+// and the later trigger-reading engines; accent: read by SPEECH (and the strike engines). Models 0..6 read neither.
+typedef struct { float note,harmonics,timbre,morph; int trigger; float accent; } Params;
 #endif  // PLAITS_ENGINE_H

@@ -5,8 +5,11 @@
  *   harmonics, timbre, morph = word / 0x7f00, clamped to [0, 1]
  *   mix       = word / 0x7f00, clamped: out = OUT + mix (AUX - OUT)
  *   two engine renders of 16 samples (va_render for model 0, ws_render 1, fm_render 2, grain_render 3,
- *   additive_render 4, wavetable_render 5, chord_render 6), then the DC blocker (one pole at 5 Hz) and the output
- *   gain.
+ *   additive_render 4, wavetable_render 5, chord_render 6, speech_render 7), then the DC blocker (one pole at 5 Hz)
+ *   and the output gain.
+ *   Plaits' trigger (Params.trigger) as Plaits' Voice builds it with TRIG patched and the gate held high from the
+ *   note-on: RISING_EDGE | HIGH in the first sub-block of a note-on, HIGH in every other sub-block (see TRIG_*);
+ *   accent 0.8, Plaits' value with LEVEL unpatched. Only SPEECH (7) reads them.
  * Velocity is not used by these models. The model is latched at a note-on; the engine is initialised at the
  * voice's first note-on and when a note-on changes the model, and otherwise runs on from note to note (note_on). A
  * model without an engine renders silence.
@@ -74,8 +77,8 @@ void plaits_voice_clear(PlaitsVoice *v)
  * change cannot resume the new engine's old state as Plaits does: it starts from Plaits' Init + LoadUserData(NULL) +
  * Reset (additive_init and chord_init include Reset, the other engines' Reset is empty; WAVETABLE's LoadUserData(NULL)
  * is the static wave map of lib/waves.c), with the DC blocker and the interpolator cleared, as Plaits resets its
- * post-processor. No engine of models 0..6 reads Plaits' trigger (EngineParameters.trigger), so Params carries
- * none; the strike engines add it. */
+ * post-processor. A note-on of the latched model still reaches the engine as Plaits' trigger (render_engine): SPEECH
+ * starts its consonant or word there, as Plaits' engine does at a trigger without being re-initialised. */
 static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
 {
     int model = (int)(f->model * PL_INV_256);
@@ -95,6 +98,8 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
         wavetable_init(PL_WT(v));
     } else if (model == PLAITS_MODEL_CHORD) {
         chord_init(PL_CHORD(v));
+    } else if (model == PLAITS_MODEL_SPEECH) {
+        speech_init(PL_SPEECH(v));
     } else {
         va_init(PL_VA(v));
     }
@@ -104,8 +109,18 @@ static void note_on(PlaitsVoice *v, const PlaitsFrame *f)
     v->armed = 1;
 }
 
-/* 32 samples at 48 kHz of the latched model (0..6) into dst. */
-static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
+/* Plaits' trigger, as its Voice builds it with TRIG patched (plaits/dsp/voice.cc: (rising_edge ? RISING_EDGE : LOW)
+ * | (gate high ? HIGH : LOW)). The Digitakt gives the voice routine the note-on only (the trigger latch), not the
+ * note's end, so the gate is taken as high from a note-on to the next: RISING_EDGE | HIGH in the note-on's first
+ * sub-block, HIGH after. No ported engine reads HIGH apart from the rising edge (in Plaits only the DX7 engines,
+ * which are not ported, read it), so the choice of HIGH or LOW after the edge does not change SPEECH's output
+ * (tests/plaits/test_speech_host.py); HIGH with the edge does: SPEECH's naive and SAM synths compare the trigger with
+ * RISING_EDGE alone, which Plaits' patched trigger never equals. */
+#define TRIG_RISING_HIGH 5
+#define TRIG_HIGH 4
+
+/* 32 samples at 48 kHz of the latched model (0..7) into dst; trig: a note-on in this block. */
+static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, int trig, float *dst)
 {
     Params p;
     float mix;
@@ -116,7 +131,9 @@ static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
     p.timbre = unit(f->timbre);
     p.morph = unit(f->morph);
     mix = unit(f->mix);
+    p.accent = 0.8f;
     for (s = 0; s < PLAITS_BLOCK; s += PLAITS_SUB) {
+        p.trigger = (trig && s == 0) ? TRIG_RISING_HIGH : TRIG_HIGH;
         if (v->model == PLAITS_MODEL_ASYM_TRI) {
             ws_render(PL_WS(v), &p, v->out, v->aux, PLAITS_SUB);
         } else if (v->model == PLAITS_MODEL_2FM) {
@@ -129,6 +146,8 @@ static void render_engine(PlaitsVoice *v, const PlaitsFrame *f, float *dst)
             wavetable_render(PL_WT(v), &p, v->out, v->aux, PLAITS_SUB);
         } else if (v->model == PLAITS_MODEL_CHORD) {
             chord_render(PL_CHORD(v), &p, v->out, v->aux, PLAITS_SUB);
+        } else if (v->model == PLAITS_MODEL_SPEECH) {
+            speech_render(PL_SPEECH(v), &p, v->out, v->aux, PLAITS_SUB);
         } else {
             va_render(PL_VA(v), &p, v->out, v->aux, PLAITS_SUB);
         }
@@ -150,12 +169,12 @@ int plaits_render(PlaitsVoice *v, const PlaitsFrame *f, int trig, float *out, in
     if (trig) {
         note_on(v, f);
     }
-    if (!v->armed || !f->active || v->model < PLAITS_MODEL_VA || v->model > PLAITS_MODEL_CHORD) {
+    if (!v->armed || !f->active || v->model < PLAITS_MODEL_VA || v->model > PLAITS_MODEL_SPEECH) {
         zeros(out, n);
         return 0;
     }
     dst = rate == 96000 ? v->buf48 : out;
-    render_engine(v, f, dst);
+    render_engine(v, f, trig, dst);
     if (rate == 96000) {
         hb_up2(&v->hb, v->buf48, out, PLAITS_BLOCK);
     }

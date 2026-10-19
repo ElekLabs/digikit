@@ -39,7 +39,7 @@ TYPE_CACHE, FRAME, RECORDS, LATCH, OUT, TABLE, STACK = (
 DATA_BASE = 0x200A0000
 REC = 0x1D8
 # sizeof(PlaitsVoice) (plaits.h; every member 4-byte, equal on the host: tests/support/plaits_host.py Port.voice_size)
-VOICE_BYTES = 876
+VOICE_BYTES = 904
 TUNE_REST = 0x4000
 
 

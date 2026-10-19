@@ -305,9 +305,9 @@ def test_wrapper_model_change_chain(port: Port) -> None:
         ]
 
 
-def test_wrapper_models_7_to_23_are_silent(port: Port) -> None:
+def test_wrapper_models_8_to_23_are_silent(port: Port) -> None:
     """Models 5 and 6 sound since Task 9 (tests/plaits/test_wavetable_chord_host.py)."""
-    for model in range(7, 24):
+    for model in range(8, 24):
         v = port.voice()
         outs = [_render(port, v, frame(60, model=model), int(b == 0)) for b in range(3)]
         assert not any(o.any() for o in outs), model

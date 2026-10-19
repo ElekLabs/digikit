@@ -205,10 +205,10 @@ def test_wrapper_renders_va_after_a_trigger_only(port: Port) -> None:
     )
     assert not out.any()
     # a model without an engine is silent; the model is latched at the trigger
-    f7 = _frame(60, model=7)
+    f8 = _frame(60, model=8)
     assert (
         port.lib.plaits_render(
-            v, ctypes.byref(f7), 1, out.ctypes.data_as(FP), 32, 48000
+            v, ctypes.byref(f8), 1, out.ctypes.data_as(FP), 32, 48000
         )
         == 0
     )

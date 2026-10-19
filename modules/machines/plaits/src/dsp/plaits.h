@@ -14,6 +14,7 @@
 #include "engines/additive.h"
 #include "engines/wavetable.h"
 #include "engines/chord.h"
+#include "engines/speech.h"
 #include "halfband.h"
 
 /* Plaits sub-block: two per Digitakt block of 32 samples at 48 kHz (Plaits' own control rate is 4 kHz, here 3 kHz). */
@@ -24,7 +25,7 @@
  * owner's instruction of 2026-10-17): 0 VA, 1 ASYM-TRI (waveshaping), 2 2FM, 3 FORMANT (grain), 4 ADDITIVE,
  * 5 WAVETABLE, 6 CHORD, 7 SPEECH, 8 SWARM, 9 NOISE, 10 DUST (particle), 11 STRING, 12 RINGS (modal), 13 KICK,
  * 14 SNARE, 15 HIHAT, 16 VCF-VA, 17 PHASE-DIST, 18 DX7 1, 19 DX7 2, 20 DX7 3, 21 TERRAIN, 22 STRING MACHINE,
- * 23 SQUARE (chiptune). Ported: 0 to 6; the others render silence. */
+ * 23 SQUARE (chiptune). Ported: 0 to 7; the others render silence. */
 #define PLAITS_MODEL_VA 0
 #define PLAITS_MODEL_ASYM_TRI 1
 #define PLAITS_MODEL_2FM 2
@@ -32,6 +33,7 @@
 #define PLAITS_MODEL_ADDITIVE 4
 #define PLAITS_MODEL_WAVETABLE 5
 #define PLAITS_MODEL_CHORD 6
+#define PLAITS_MODEL_SPEECH 7
 
 /* One block's controls, as the entry shim reads them from the DSP's frame copy (16-bit row values converted to
  * float; the conversion is exact) and from the voice record. */
@@ -54,7 +56,7 @@ typedef struct {
 /* The engines of one voice share one state (Plaits shares one arena): the union is the size of the largest engine.
  * The engine of the model latched at the last note-on owns it; a note-on that changes the model initialises it for
  * the new model.
- * Access it only through PL_VA / PL_WS / PL_FM / PL_GRAIN / PL_ADD / PL_WT / PL_CHORD, a pointer to the union converted to the member's type (C99 6.7.2.1: it points
+ * Access it only through PL_VA / PL_WS / PL_FM / PL_GRAIN / PL_ADD / PL_WT / PL_CHORD / PL_SPEECH, a pointer to the union converted to the member's type (C99 6.7.2.1: it points
  * to each member), never as `engine.ws`: Selache's C compiler places each union member after the previous one, as in
  * a struct (docs/findings/20-patch-toolchains.md), so `&v->engine.ws` would be v + sizeof(VA), inside out[]. Its
  * sizeof of the union is right (the largest member). */
@@ -66,6 +68,7 @@ typedef union {
     Additive additive;
     Wavetable wavetable;
     Chord chord;
+    Speech speech;
 } PlaitsEngine;
 #define PL_VA(v) ((VA *)(void *)&(v)->engine)
 #define PL_WS(v) ((WS *)(void *)&(v)->engine)
@@ -74,6 +77,7 @@ typedef union {
 #define PL_ADD(v) ((Additive *)(void *)&(v)->engine)
 #define PL_WT(v) ((Wavetable *)(void *)&(v)->engine)
 #define PL_CHORD(v) ((Chord *)(void *)&(v)->engine)
+#define PL_SPEECH(v) ((Speech *)(void *)&(v)->engine)
 
 /* Per-voice state. */
 typedef struct {
@@ -92,7 +96,7 @@ typedef struct {
  * it latches the model, and initialises the engine only at the voice's first note-on or when the model changed
  * (otherwise the engine runs on, as in Plaits; plaits.c note_on). A voice renders only when it was triggered since its state was
  * last cleared and its ACTIVE byte is set, and only when its latched model has an engine (VA 0, ASYM-TRI 1, 2FM 2,
- * FORMANT 3, ADDITIVE 4, WAVETABLE 5, CHORD 6);
+ * FORMANT 3, ADDITIVE 4, WAVETABLE 5, CHORD 6, SPEECH 7);
  * otherwise the block is zeros.
  * Returns 1 when it rendered the engine, else 0. */
 int plaits_render(PlaitsVoice *v, const PlaitsFrame *f, int trig, float *out, int n, int rate);

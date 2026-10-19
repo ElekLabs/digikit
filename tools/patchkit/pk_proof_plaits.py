@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""patchkit proof: the PLAITS machine (models 0..6: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD) end to end on Digitakt II 1.17,
+"""patchkit proof: the PLAITS machine (models 0..7: VA, ASYM-TRI, 2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH) end to end on Digitakt II 1.17,
 in the emulator.
 
     uv run python -m tools.patchkit.pk_proof_plaits [--image OUT.syx] [--out DIR] [--only a,b,c,d,e,g,h,i,j,k] [--jobs N]
 
-Loads the owner image (default out/patch/plaits-5models-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
+Loads the owner image (default out/patch/plaits-8models-names-splash-48k-1.17.syx, gated; its plan next to it), drives coupled daemons
 through the harness (`tools/patchkit/pk_harness.py` Session: panel inputs, health asserted after every input) and
 captures the main output (`pcm.tap`):
 
@@ -22,11 +22,12 @@ captures the main output (`pcm.tap`):
   h  asym-tri  MODEL (B) turned to 1 (row value 0x100): slot and TX word; note 60 of model 1 within 1 cent; its
                spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change model 1's spectrum; track 2's stock
                sample (ONESHOT) still plays beside it.
-  i  models    MODEL (B) turned to 2..6 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD): slot and TX word; note 60 of
-               each within 1 cent (2FM with HARMONICS at 0x3c00, a ratio of exactly one octave, so the carrier is the
+  i  models    MODEL (B) turned to 2..7 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH): slot and TX word; note 60
+               of each within 1 cent (2FM with HARMONICS at 0x3c00, a ratio of exactly one octave, so the carrier is the
                fundamental; CHORD with HARMONICS, TIMBRE and MORPH 0, the OCT chord in root position on the divide-down
-               voices, at upstream's 0.998 detune, 261.1024 Hz); each spectrum differs from model 0's; HARMONICS, TIMBRE and MORPH change
-               each one's spectrum.
+               voices, at upstream's 0.998 detune, 261.1024 Hz; SPEECH with HARMONICS 0, the naive formant synth, a
+               sustained vowel, kept for its spectrum and knob checks); each spectrum differs from model 0's;
+               HARMONICS, TIMBRE and MORPH change each one's spectrum (SPEECH's HARMONICS turn reaches the word banks).
   j  persist4  as e with MODEL 4 (ADDITIVE, TIMBRE 0x800 so the fundamental leads): saved, track set to ONESHOT,
                reloaded: MODEL is back at 0x400 and the track plays model 4 at note 60 within 1 cent (no stock-card
                step: e covers it).
@@ -78,8 +79,15 @@ HARM, TIMB, MORPH, LEV = (
 )  # engine slots (mirror indexes) of knobs C, E, F, H
 ENC = {HARM: "ENC C", TIMB: "ENC E", MORPH: "ENC F", LEV: "ENC H"}
 MODEL = 26  # engine slot of knob B (MODEL: the model number << 8)
-DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-7models-48k-1.17.syx"
-NEW_MODELS = {2: "2FM", 3: "FORMANT", 4: "ADDITIVE", 5: "WAVETABLE", 6: "CHORD"}
+DEFAULT_IMAGE = ROOT / "out" / "patch" / "plaits-8models-names-splash-48k-1.17.syx"
+NEW_MODELS = {
+    2: "2FM",
+    3: "FORMANT",
+    4: "ADDITIVE",
+    5: "WAVETABLE",
+    6: "CHORD",
+    7: "SPEECH",
+}
 # CHORD detunes its voices by 0.998 (upstream ChordEngine: f0 = NoteToFrequency(note) * 0.998)
 CHORD_DETUNE = 0.998
 
@@ -315,7 +323,7 @@ class PlaitsProof(M.Proof):
                 f"rms {rms(x2):.4f}, type cache {tc:#010x}",
             )
 
-    # -- i: models 2..6 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD)
+    # -- i: models 2..7 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH)
     def part_i(self) -> None:
         with self.session_plaits() as s:
             self.plaits(s)
@@ -340,6 +348,10 @@ class PlaitsProof(M.Proof):
                     s.turn_to(ENC[HARM], HARM, 0)
                     s.turn_to(ENC[TIMB], TIMB, 0)
                     s.turn_to(ENC[MORPH], MORPH, 0)
+                if (
+                    model == 7
+                ):  # the naive formant synth (HARMONICS 0): a sustained vowel at the note (the words play once per trig)
+                    s.turn_to(ENC[HARM], HARM, 0)
                 x = self.play(s, f"model{model}-note60", hold=1200, total=1500)
                 tc = self.type_cache(s)
                 self.check(
@@ -372,6 +384,8 @@ class PlaitsProof(M.Proof):
                     f"mean |d harmonic| {d:.2f} dB",
                 )
                 self.knobs_change(s, ref, f"model {model} ")
+                if model == 7:
+                    s.turn_to(ENC[HARM], HARM, harm)
 
     # -- k: the sequencer plays PLAITS steps with MODEL p-locks, before and after a save and load
     SEQ_STEPS = (1, 3, 5, 7, 9, 11, 13, 15)
@@ -789,7 +803,7 @@ PARTS = [
     ),
     K.Part(
         "i",
-        "models 2..6 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD): MODEL knob, note 60 within 1 cent, knobs",
+        "models 2..7 (2FM, FORMANT, ADDITIVE, WAVETABLE, CHORD, SPEECH): MODEL knob, note 60 within 1 cent, knobs",
         P.part_i,
         True,
         1300,

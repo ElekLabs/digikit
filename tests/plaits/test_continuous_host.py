@@ -2,9 +2,11 @@
 plaits.c) initialises a voice's engine only at its first note-on and when a note-on changes the model; every other
 note-on leaves the engine, the DC blocker and the interpolator running.
 
-The oracle (tests/plaits/oracle/run_oracle.cc) is upstream's engine of each model 0..6, selected as Plaits' Voice does
+The oracle (tests/plaits/oracle/run_oracle.cc) is upstream's engine of each model 0..7, selected as Plaits' Voice does
 at an engine change (Init, LoadUserData(NULL), Reset) and then rendered continuously in sub-blocks of 16 with the
-wrapper's parameter stream; Plaits' trigger (RISING_EDGE | HIGH in a note-on's first sub-block) is passed through.
+wrapper's parameter stream; Plaits' trigger as the wrapper builds it (RISING_EDGE | HIGH in a note-on's first
+sub-block, HIGH after: the gate held from note-on to note-on, plaits.c) is passed through. SPEECH (7) reads the
+trigger, so its note-ons start consonants and words; models 0..6 do not read it.
 The wrapper's mix, DC blocker and gain are applied in float32 as plaits.c does. Through the wrapper the same stream
 must give the same output bit for bit: note-ons at different pitches with knob changes and no model change, and
 model changes at note-ons (the new engine as the oracle selects it, the DC blocker cleared)."""
@@ -17,15 +19,25 @@ from typing import Any
 
 import numpy as np
 import pytest
-from support.plaits_host import EURORACK, FP, Port, build_oracle, build_port
+from support.plaits_host import (
+    EURORACK,
+    FP,
+    Port,
+    build_oracle,
+    build_port,
+    stmlib_root,
+)
 from support.plaits_streams import Block, as_frame, retrigger_stream, switch_stream
 
 ORACLE = Path(__file__).resolve().parent / "oracle"
 Arr = Any
-MODELS = range(7)
+# the run-on models: 0..7 against the oracle; a note-on of the latched model is silent to the audio for 0..6 (SPEECH
+# reads the trigger)
+MODELS = range(8)
+TRIGGERLESS = range(7)
 INV_FULL, INV_256 = np.float32(3.0757874e-05), np.float32(0.00390625)
 DC_R, GAIN = np.float32(0.99934550), np.float32(0.601)
-RISING_HIGH, LOW = 1 | 4, 0
+RISING_HIGH, HIGH = 1 | 4, 4
 SUB = 16
 
 
@@ -66,9 +78,24 @@ def oracle(tmp_path_factory: pytest.TempPathFactory) -> Oracle:
         engine / "additive_engine.cc",
         engine / "wavetable_engine.cc",
         engine / "chord_engine.cc",
+        engine / "speech_engine.cc",
         plaits / "dsp" / "chords" / "chord_bank.cc",
+        *(
+            plaits / "dsp" / "speech" / f"{n}.cc"
+            for n in (
+                "naive_speech_synth",
+                "sam_speech_synth",
+                "lpc_speech_synth",
+                "lpc_speech_synth_controller",
+                "lpc_speech_synth_phonemes",
+                "lpc_speech_synth_words",
+            )
+        ),
         plaits / "resources.cc",
     ]
+    stm = stmlib_root()
+    if stm is not None:
+        sources.append(stm / "stmlib" / "utils" / "random.cc")
     return Oracle(build_oracle(d, sources, "run_oracle"))
 
 
@@ -123,7 +150,7 @@ def reference(oracle: Oracle, blocks: list[Block]) -> Arr:
         h, t, m, mix = (_unit(s[k]) for k in ("harmonics", "timbre", "morph", "mix"))
         blk = np.zeros(2 * SUB, dtype=np.float32)
         for sub in range(2):
-            trig = RISING_HIGH if (s["trig"] and sub == 0) else LOW
+            trig = RISING_HIGH if (s["trig"] and sub == 0) else HIGH
             oracle.lib.run_oracle_render(
                 st,
                 float(note),
@@ -202,7 +229,7 @@ def test_model_changes_equal_upstream_reselected(port: Port, oracle: Oracle) -> 
 # ---- a note-on of the latched model is a no-op for the audio
 
 
-@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("model", TRIGGERLESS)
 @pytest.mark.parametrize("mode", [1, 0])
 def test_note_on_of_the_latched_model_changes_nothing(
     port: Port, model: int, mode: int

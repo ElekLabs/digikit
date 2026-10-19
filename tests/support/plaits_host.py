@@ -1,5 +1,5 @@
 """The PLAITS module's C sources (modules/machines/plaits/src/dsp) built for the host and driven through ctypes:
-the engines (va, ws, fm, grain, additive, wavetable, chord: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
+the engines (va, ws, fm, grain, additive, wavetable, chord, speech: <name>_init/<name>_render) and the voice wrapper (plaits_render); and the upstream oracle
 build (tests/plaits/oracle). Used by tests/plaits/test_va_host.py and
 tests/patchkit/test_plaits_module.py (the reference for the compiled code on the concrete core)."""
 
@@ -24,7 +24,14 @@ FP = ctypes.POINTER(ctypes.c_float)
 
 
 class Params(ctypes.Structure):
-    _fields_ = [(n, ctypes.c_float) for n in ("note", "harmonics", "timbre", "morph")]
+    """engines/engine.h Params: Plaits' EngineParameters (trigger and accent are read by SPEECH only; 0 when a
+    setting gives four values)."""
+
+    _fields_ = [
+        *[(n, ctypes.c_float) for n in ("note", "harmonics", "timbre", "morph")],
+        ("trigger", ctypes.c_int),
+        ("accent", ctypes.c_float),
+    ]
 
 
 class Frame(ctypes.Structure):
@@ -53,7 +60,7 @@ class Port:
             FP,
             ctypes.c_int,
         ]
-        for name in ("fm", "grain", "additive", "wavetable", "chord"):
+        for name in ("fm", "grain", "additive", "wavetable", "chord", "speech"):
             setattr(self, f"{name}_size", getattr(self.lib, f"port_{name}_size")())
             getattr(self.lib, f"{name}_init").argtypes = [ctypes.c_void_p]
             getattr(self.lib, f"{name}_render").argtypes = [
@@ -175,11 +182,17 @@ def build_port(d: Path, defines: tuple[str, ...] = ()) -> Port:
         DSP / "engines" / "additive.c",
         DSP / "engines" / "wavetable.c",
         DSP / "engines" / "chord.c",
+        DSP / "engines" / "speech.c",
         DSP / "lib" / "tables.c",
         DSP / "lib" / "waves.c",
         DSP / "lib" / "wavetable_oscillator.c",
         DSP / "lib" / "string_synth_oscillator.c",
         DSP / "lib" / "chord_bank.c",
+        DSP / "lib" / "svf.c",
+        DSP / "lib" / "naive_speech_synth.c",
+        DSP / "lib" / "sam_speech_synth.c",
+        DSP / "lib" / "lpc_speech_synth.c",
+        DSP / "lib" / "speech_tables.c",
         DSP / "plaits.c",
         DSP / "halfband.c",
         ORACLE / "port_sizes.c",

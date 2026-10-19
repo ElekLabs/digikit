@@ -35,6 +35,12 @@ sources = [
   "../plaits/src/dsp/lib/wavetable_oscillator.c",
   "../plaits/src/dsp/lib/string_synth_oscillator.c",
   "../plaits/src/dsp/lib/chord_bank.c",
+  "../plaits/src/dsp/engines/speech.c",
+  "../plaits/src/dsp/lib/svf.c",
+  "../plaits/src/dsp/lib/naive_speech_synth.c",
+  "../plaits/src/dsp/lib/sam_speech_synth.c",
+  "../plaits/src/dsp/lib/lpc_speech_synth.c",
+  "../plaits/src/dsp/lib/speech_tables.c",
   "../plaits/src/dsp/halfband.c",
 ]
 place = "dsp.l2"
