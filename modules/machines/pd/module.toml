@@ -6,7 +6,7 @@ category = "machines"
 type = "machine"
 author = "fadedlimes"
 status = "experimental"
-summary = "Phase distortion in the Casio CZ line: saw, square and resonant curves warp a sine, on two detuned oscillators."
+summary = "One continuous slider warps the phase a sine is read through: saw, pulse, or a resonant formant."
 dynamic = false
 ports = ["dt2-1.16", "dt2-1.17"]
 requires = []
@@ -29,13 +29,14 @@ render = "_pd_render"
 note_on = "_pd_note_on"
 desc = "_pd_desc"
 
-# SAMPLE's TUNE (0xca) and LEV (0xd1) at the ends; the voice's own knobs on the three slots that deliver (1, 4, 6).
+# SAMPLE's TUNE (0xca) and LEV (0xd1) at the ends. Parameters take the first positions of the device's
+# param_slots list -- 1, 2 and 4 on the Digitakt II -- whatever positions are written here.
 [[machine]]
 id = "pd"
 name = "Phase Dist"
 short = "PD"
 clone_of = 0
-knobs = [0xca, "pd_amount", 0, 0, "pd_curve", 0, "pd_detune", 0xd1]
+knobs = [0xca, "pd_amount", "pd_curve", 0, "pd_detune", "pd_fold", 0, 0xd1]
 
 [[param]]
 id = "pd_amount"
@@ -63,3 +64,12 @@ template = 0xd1
 min = 0
 max = 0x7f00
 default = 0x2800
+
+[[param]]
+id = "pd_fold"
+name = "Fold"
+short = "FOLD"
+template = 0xd1
+min = 0
+max = 0x7f00
+default = 0x0000

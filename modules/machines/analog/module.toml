@@ -29,13 +29,13 @@ render = "_va_render"
 note_on = "_va_note_on"
 desc = "_va_desc"
 
-# SAMPLE's TUNE (0xca) and LEV (0xd1) rows; the voice's own knobs on 1, 2 and 4.
+# TUNE (0xca) and LEV (0xd1) rows; the machine's four knobs take the device list's first four positions: 1, 2, 4, 5.
 [[machine]]
 id = "analog"
 name = "Analog"
 short = "ANA"
 clone_of = 0
-knobs = [0xca, "analog_detune", "analog_wave", 0, "analog_sub", 0, 0, 0xd1]
+knobs = [0xca, "analog_detune", "analog_wave", 0, "analog_sub", "analog_fold", 0, 0xd1]
 
 [[param]]
 id = "analog_detune"
@@ -59,6 +59,15 @@ default = 0x0000
 id = "analog_sub"
 name = "Sub / Fold"
 short = "SUB"
+template = 0xd1
+min = 0
+max = 0x7f00
+default = 0x0000
+
+[[param]]
+id = "analog_fold"
+name = "Fold"
+short = "FOLD"
 template = 0xd1
 min = 0
 max = 0x7f00

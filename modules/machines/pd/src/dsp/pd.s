@@ -80,6 +80,20 @@ _pd_booted:
 
     // ---- DETUNE -> increment 2 = increment 1 x (1 + detune x 0.03) ----
     R1 = 0x38010204;
+    R0 = DM(3, I1);                       // FOLD, the fourth parameter
+    F0 = FLOAT R0;
+    F0 = F0 * F1;                         // 0 .. 1
+    R1 = 0x40400000;                      // 3.0
+    NOP;
+    F0 = F0 * F1;
+    R1 = 0x3f800000;                      // 1.0
+    NOP;
+    F0 = F0 + F1;                         // fold gain 1 .. 4
+    R1 = F0;
+    NOP;
+    DM(8, I3) = R1;                       // word 7 is the block counter; the gain lives in 8
+
+    R1 = 0x38010204;
     R0 = DM(2, I1);
     F0 = FLOAT R0;
     F0 = F0 * F1;                         // 0 .. 1
@@ -315,6 +329,15 @@ _pd_slewed:
     F3 = F5 + F2;
     NOP;
     F3 = F3 * F4;                        // x 0.5: the pair spans +-1
+    R0 = DM(8, I3);                       // fold gain
+    F0 = PASS R0;
+    NOP;
+    F3 = F3 * F0;
+    NOP;
+    F2 = MIN(F3, F11);
+    R0 = 0xbf800000;                      // -1
+    NOP;
+    F3 = MAX(F2, F0);
     NOP;
     F3 = F3 * F9;                        // level
 
@@ -348,7 +371,7 @@ _pd_note_on:
 .VAR _pd_desc1 = DK_MACHINE_V1;
 .VAR _pd_desc2 = 3;                       // n_params
 .VAR _pd_desc3 = DK_MAX_VOICES;
-.VAR _pd_desc4 = 28;                      // state bytes (7 words: 2 phases, spare, 3 curve numbers, magic)
+.VAR _pd_desc4 = 36;                      // state bytes (7 words: 2 phases, spare, 3 curve numbers, magic)
 .VAR _pd_desc5 = 8;                       // the two phases are zeroed at note-on (see _pd_note_on)
 .VAR _pd_desc6 = 1200;                    // max cycles per block
 .VAR _pd_desc7 = 200;

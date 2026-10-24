@@ -120,29 +120,20 @@ _va_booted:
 
     R0 = DM(2, I1);
     F0 = FLOAT R0;
-    F0 = F0 * F1;                         // s = 0 .. 1
-    R1 = 0x3f400000;                      // 0.75
+    F5 = F0 * F1;                         // SUB level, the whole range (v0.11 ended the 3/4 cap)
+
+    R0 = DM(3, I1);
+    F0 = FLOAT R0;
+    F0 = F0 * F1;                         // FOLD 0 .. 1
+    R1 = 0x40400000;                      // 3.0
     NOP;
-    F2 = MIN(F0, F1);                     // the sub part, capped at 3/4
-    R1 = 0x3faaaaab;                      // 4/3
-    NOP;
-    F5 = F2 * F1;                         // sub level 0 .. 1
-    R1 = 0x3f400000;                      // 0.75
-    NOP;
-    F2 = F0 - F1;                         // what is left above 3/4
-    NOP;
-    R1 = 0;                               // 0.0
-    NOP;
-    F2 = MAX(F2, F1);                     // 0 .. 0.25
-    R1 = 0x41000000;                      // 8.0 = 2 gain per unit of the fold range
-    NOP;
-    F2 = F2 * F1;                         // drive - 1, 0 .. 2
+    F0 = F0 * F1;
     R1 = 0x3f800000;                      // 1.0
     NOP;
-    F2 = F2 + F1;                         // drive 1 .. 3
-    R2 = F2;
+    F0 = F0 + F1;                         // fold drive 1 .. 4
+    R2 = F0;
     NOP;
-    DM(3, I3) = R2;                       // state word 3: the drive the loop reads
+    DM(3, I3) = R2;                       // state word 3: the drive the reflection folder reads
 
     R0 = DM(DK_IN_W_OUT, I2);
     I0 = R0;
@@ -298,6 +289,9 @@ _va_booted:
     F4 = F4 * F5;                         // sub level
     F3 = F3 + F4;
     NOP;
+    // (the fold itself is the reflection folder above, which already reads the gain from state word 3. This used to
+    // carry a second, clamping folder on top of it -- two folds on one signal, the second multiplying a value the first
+    // had consumed, which is why the knob appeared dead.)
     F3 = F3 * F9;                         // level
 
     // ---- advance the phases ----

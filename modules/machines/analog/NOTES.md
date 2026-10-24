@@ -57,3 +57,8 @@ detune into WAVE (detune open first, then shape) to free a slot, which costs ind
 4. **`patchkit patch` does not rebuild modules.** After `patchkit gen` (any `devices/*.toml` or manifest change) the
    affected core modules must be rebuilt with `pk_build`, or the image silently carries stale glue.
 5. **Parameter word order is knob-slot order**, not manifest declaration order.
+7. **A parameter can be offered and not arrive.** If a knob seems dead, capture the buffer at the top of `render`
+   (`R0 = DM(n, I1)` for n = 0..3) *before* reasoning about the engine: in this machine all four words held the
+   right values and the fault was a stale block from an earlier version that still derived the value from a
+   different knob. Two failures stacked — that block, and an insertion whose anchor had stopped existing, so the
+   read was never added at all. `str.replace` does not fail on a missing anchor; `edit_file` does.
