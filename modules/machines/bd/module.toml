@@ -1,0 +1,75 @@
+[module]
+id = "fadedlimes/bd"
+version = "0.1.0"
+name = "Bass Drum"
+category = "machines"
+type = "machine"
+author = "fadedlimes"
+status = "experimental"
+summary = "An FM bass drum: a decaying modulator index turns a clang into a sine, over a carrier that punches down."
+dynamic = false
+ports = ["dt2-1.16", "dt2-1.17"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.16" = "experimental"
+"dt2-1.17" = "experimental"
+"dn2-1.11" = "unsupported"
+"dn2-1.12" = "unsupported"
+
+[[object]]
+path = "build/bd-dsp.dko.json"
+sources = ["src/dsp/bd.s"]
+place = "dsp.l2"
+
+[[voice]]
+machine = "bd"
+render = "_bd_render"
+note_on = "_bd_note_on"
+desc = "_bd_desc"
+
+# TUNE (slot 0) is the kick's note. Parameters take the first positions of the device's param_slots list --
+# 1, 2 and 4 on the Digitakt II -- whatever positions are written here.
+[[machine]]
+id = "bd"
+name = "Bass Drum"
+short = "BD"
+clone_of = 0
+knobs = [0xca, "bd_bend", "bd_index", 0, "bd_ratio", "bd_noise", 0, 0xd1]
+
+[[param]]
+id = "bd_bend"
+name = "Bend"
+short = "BEND"
+template = 0xd1
+min = 0
+max = 0x7f00
+default = 0x4000
+
+[[param]]
+id = "bd_index"
+name = "FM Index"
+short = "INDEX"
+template = 0xd1
+min = 0
+max = 0x7f00
+default = 0x2000
+
+[[param]]
+id = "bd_ratio"
+name = "Ratio"
+short = "RATIO"
+template = 0xd1
+min = 0
+max = 0x7f00
+default = 0x0000
+
+[[param]]
+id = "bd_noise"
+name = "Noise"
+short = "NOISE"
+template = 0xd1
+min = 0
+max = 0x7f00
+default = 0x0000

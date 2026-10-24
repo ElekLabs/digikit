@@ -23,6 +23,7 @@ last = 23
 dynamic_first = 16
 
 [dt2.alloc]
+"fadedlimes/bd:bd" = 15
 "fadedlimes/pd:pd" = 14
 "fadedlimes/analog:analog" = 13
 "test/xslice:xslice" = 7
@@ -44,6 +45,7 @@ last = 23
 dynamic_first = 16
 
 [dn2.alloc]
+"fadedlimes/bd:bd" = 15
 "fadedlimes/pd:pd" = 14
 "fadedlimes/analog:analog" = 13
 "test/dn2-clone:fmclone" = 5

@@ -1,0 +1,148 @@
+{
+  "machines": [
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 25,
+              "stock": 202
+            },
+            {
+              "param": "bd_bend",
+              "slot": 26
+            },
+            null,
+            null,
+            {
+              "param": "bd_index",
+              "slot": 29
+            },
+            null,
+            {
+              "param": "bd_ratio",
+              "slot": 31
+            },
+            {
+              "slot": 32,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Bass Drum",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "BD",
+          "type": 15
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            {
+              "param": "bd_bend",
+              "slot": 1
+            },
+            null,
+            null,
+            {
+              "param": "bd_index",
+              "slot": 4
+            },
+            null,
+            {
+              "param": "bd_ratio",
+              "slot": 6
+            },
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Bass Drum",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "BD",
+          "type": 15
+        }
+      },
+      "id": "bd",
+      "name": "Bass Drum",
+      "short": "BD"
+    }
+  ],
+  "module": "fadedlimes/bd",
+  "params": {
+    "dn2": [
+      {
+        "default": 16384,
+        "id": "bd_bend",
+        "max": 32512,
+        "min": 0,
+        "name": "Bend",
+        "short": "BEND",
+        "slot": 26,
+        "template": 209
+      },
+      {
+        "default": 8192,
+        "id": "bd_index",
+        "max": 32512,
+        "min": 0,
+        "name": "FM Index",
+        "short": "INDEX",
+        "slot": 29,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "bd_ratio",
+        "max": 32512,
+        "min": 0,
+        "name": "Ratio",
+        "short": "RATIO",
+        "slot": 31,
+        "template": 209
+      }
+    ],
+    "dt2": [
+      {
+        "default": 16384,
+        "id": "bd_bend",
+        "max": 32512,
+        "min": 0,
+        "name": "Bend",
+        "short": "BEND",
+        "slot": 1,
+        "template": 209
+      },
+      {
+        "default": 8192,
+        "id": "bd_index",
+        "max": 32512,
+        "min": 0,
+        "name": "FM Index",
+        "short": "INDEX",
+        "slot": 4,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "bd_ratio",
+        "max": 32512,
+        "min": 0,
+        "name": "Ratio",
+        "short": "RATIO",
+        "slot": 6,
+        "template": 209
+      }
+    ]
+  }
+}
