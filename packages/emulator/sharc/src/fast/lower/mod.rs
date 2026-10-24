@@ -2080,6 +2080,17 @@ mod tests {
     }
 
     #[test]
+    fn combined_px_move_writes_both_halves() {
+        let mut l = Lower::new(env(), Plan::default(), 0);
+        let value = l.ci(0x1234_5678);
+        l.g_wr(crate::rt::UREG_PX as u32, value).unwrap();
+        assert_eq!(l.pending.writes.len(), 2);
+        assert_eq!(l.pending.writes[0].0, crate::rt::UREG_PX1 as u8);
+        assert_eq!(l.konst_of(l.pending.writes[0].1), Some(0));
+        assert_eq!(l.pending.writes[1], (crate::rt::UREG_PX2 as u8, value));
+    }
+
+    #[test]
     fn dynamic_and_static_windows_do_not_share_a_slot() {
         let mut l = Lower::new(env(), Plan::default(), 2);
         let addr = l.ci(0x20_0000);

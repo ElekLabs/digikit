@@ -13,6 +13,7 @@ use super::mem_addr::{Width, Xfer};
 use super::shift::shiftimm_field;
 use super::sysops::MODE1_CODE;
 use super::*;
+use crate::rt::{UREG_PX, UREG_PX1, UREG_PX2};
 
 /// MODE1's register-bank selection bits (`state._BANK_MASK`).
 const BANK_BITS: u32 = 0x4F8;
@@ -116,6 +117,12 @@ impl Lower {
     }
 
     pub fn g_wr(&mut self, code: u32, v: Val) -> LR<()> {
+        if code == UREG_PX as u32 {
+            // shortcut: the 32-bit fast path cannot represent Rn's low 8 bits.
+            let low = self.ci(0);
+            self.wr(UREG_PX1 as u32, low)?;
+            return self.wr(UREG_PX2 as u32, v);
+        }
         if code == MODE1_CODE {
             return self.g_wr_mode1(v);
         }

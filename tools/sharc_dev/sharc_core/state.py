@@ -688,6 +688,16 @@ def _write_ureg(state: State, code: int, value: Value) -> None:
     an empty-stack write has no effect. Opt-in PCSTKP truncation takes
     effect after the following instruction; stack growth fails closed.
     """
+    if code == UREG_CODES["PX"]:
+        # shortcut: Rn's low 8 bits are absent from this 32-bit model; upgrade with 40-bit Dregs.
+        # Concrete moves update the halves, not the placeholder combined slot.
+        if not isinstance(value, Const):
+            state.uregs[code] = value
+        state.uregs[UREG_CODES["PX1"]] = (
+            Const(0) if isinstance(value, Const) else Unknown("PX low 8 bits")
+        )
+        state.uregs[UREG_CODES["PX2"]] = value
+        return
     if state.stack_model and (
         code == UREG_CODES["LADDR"] or code == UREG_CODES["CURLCNTR"]
     ):

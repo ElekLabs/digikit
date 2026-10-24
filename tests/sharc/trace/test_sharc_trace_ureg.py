@@ -18,6 +18,50 @@ from support.sharc_trace_build import TraceRunMixin  # noqa: E402
 class TraceUregComputeTest(TraceRunMixin, unittest.TestCase):
     """Universal-register moves, computes and compares."""
 
+    def test_combined_px_copy_updates_halves_and_restores(self):
+        px = T.UREG_CODES["PX"]
+        px1 = T.UREG_CODES["PX1"]
+        px2 = T.UREG_CODES["PX2"]
+
+        def move(state, src, dst):
+            return self.run_one(
+                state,
+                insn(
+                    "5b_move",
+                    {
+                        "srcureghigh[4:0]": src >> 2,
+                        "srcureglow[1:1]": (src >> 1) & 1,
+                        "srcureglow[0:0]": src & 1,
+                        "dstureg[6:0]": dst,
+                        "cond[4:0]": 31,
+                    },
+                ),
+            )
+
+        state = T.State(
+            1,
+            {
+                0: T.Const(0x12345678),
+                2: T.Const(0x9ABC0000),
+                3: T.Const(0x87654321),
+                px: T.Const(0),
+                px1: T.Const(0x9ABC0000),
+                px2: T.Const(0x87654321),
+            },
+        )
+        state = move(state, 0, px)
+        self.assertEqual(
+            (state.uregs[px1], state.uregs[px2]), (T.Const(0), T.Const(0x12345678))
+        )
+        state = move(state, px, 1)
+        self.assertEqual(state.uregs[1], T.Const(0x12345678))
+        state = move(move(state, 2, px1), 3, px2)
+        self.assertEqual(
+            (state.uregs[px1], state.uregs[px2]),
+            (T.Const(0x9ABC0000), T.Const(0x87654321)),
+        )
+        self.assertEqual(state.uregs[px], T.Const(0))
+
     def test_ureg_copy_and_compute_rejection(self):
         f = {
             "srcureghigh[4:0]": 4,
