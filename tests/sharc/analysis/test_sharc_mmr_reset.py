@@ -27,6 +27,16 @@ def test_conflicting_reset_fact_is_an_error():
         )
 
 
+def test_a_second_register_at_one_address_keeps_the_first():
+    # HWR Rev 1.0 lists the write-side PKTE0_OUTBUF_DECR at the address of the readable
+    # PKTE0_OUTBUF_CNT; pdftotext from xpdf keeps both rows on one line each.
+    text = (
+        "0x310CD114 PKTE0_OUTBUF_CNT PKTE0 Packet Engine Output Buffer Count Register    0x00000000\n"
+        "0x310CD114 PKTE0_OUTBUF_DECR PKTE0 Packet Engine Output Buffer Count Decrement  0x0000001F\n"
+    )
+    assert parse_reset_tables(text) == {0x310CD114: (0, "PKTE0_OUTBUF_CNT")}
+
+
 def test_missing_reset_table_is_an_error():
     with pytest.raises(ValueError, match="no ADSP-2156x"):
         parse_reset_tables("not a reset register extraction")

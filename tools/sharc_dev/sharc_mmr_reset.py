@@ -22,6 +22,11 @@ def parse_reset_tables(text: str) -> dict[int, tuple[int, str]]:
             continue
         previous = registers.get(address)
         if previous is not None and previous[0] != reset:
+            if previous[1] != name:
+                # Two registers at one address: the HWR lists a write-side register after the
+                # readable one it shares an address with (Rev 1.0: PKTE0_OUTBUF_CNT, reset 0, then
+                # PKTE0_OUTBUF_DECR, 0x1F, both at 0x310CD114). A read returns the first one's.
+                continue
             raise ValueError(
                 f"conflicting reset values at {address:#x}: {previous[0]:#x} and {reset:#x}"
             )
