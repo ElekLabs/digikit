@@ -248,14 +248,12 @@ def test_changed_recursive_port_rejects_resume_and_status(setup, monkeypatch):
     config, frozen, out, calls, _ = setup
     # Exercise the real source hasher on a small tree with a nested port TOML.
     root = config.parent / "source"
-    port = root / "devices/ports/dt2/nested/anchors.toml"
+    port = root / "devices" / "ports" / "dt2" / "nested" / "anchors.toml"
     port.parent.mkdir(parents=True)
     port.write_text("anchor = 1\n")
     monkeypatch.setattr(matrix, "ROOT", root)
     monkeypatch.setattr(matrix, "tool_hashes", SOURCE_HASHES)
-    assert SOURCE_HASHES() == {
-        "devices/ports/dt2/nested/anchors.toml": matrix.digest(port)
-    }
+    assert SOURCE_HASHES() == {str(port.relative_to(root)): matrix.digest(port)}
     matrix.run(config, frozen, frozen, out, True)
     assert matrix.status(out)["status"] == "partial-pass"
     port.write_text("anchor = 2\n")
