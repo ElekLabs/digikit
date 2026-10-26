@@ -21,8 +21,9 @@ The user's October 27 scope decision supersedes the initial blanket rejection.
 Current runtime patches still cause substantial stock code to execute through
 the interpreter. Stock firmware has a different execution distribution.
 The recoverable **host time** of the whole converter remains unmeasured;
-instruction share is not a speedup ceiling. Investigate the `14d` continuation
-next; pending-transfer dispatch remains lower priority.
+instruction share is not a speedup ceiling. The `14d` continuation is now
+implemented and measured below. Re-profile the current runtime before choosing
+the next optimization; pending-transfer dispatch remains lower priority.
 
 Any accepted follow-up must enable its improvement in normal workbench
 launches, without experimental environment variables. Opt-in measurements
@@ -437,11 +438,12 @@ configuration are in `continuation-paired.json`. This additional root remains
 experimental; ordinary roots can intercept healthy AOT execution, so adding
 it globally would bypass the default policy's protection for stock firmware.
 
-**[O]** The measured continuation benefit justifies a bounded follow-up for
+**[D]** The measured continuation benefit justified a bounded follow-up for
 Type14d fast lowering. A narrow implementation can reuse the existing guarded
 short-word load and retain SISD/encoding restrictions without changing the
 generator. Broader forms, SIMD and exclusive-access semantics remain out of
-scope. Keep the DN2-overhead investigation separate from this DT2 opportunity.
+scope. This follow-up is completed in the Type14d section below. Keep the
+DN2-overhead investigation separate from this DT2 opportunity.
 
 ## Resumable DT2/DN2 validation workflow (2026-10-27)
 
@@ -544,3 +546,33 @@ summary and full outputs. Four candidate binaries built in 14.13, 4.10, 16.00 an
 matrix-test path literal was also corrected after pathcheck mistook it for a
 repository file; all 20 matrix tests passed. The full branch acceptance gate
 remains required before merge.
+
+## Next priorities after Type14d
+
+1. **[O]** Run the full routed branch acceptance gate before merging. The focused
+   tests and performance matrix do not replace that gate.
+2. **[O]** Re-profile the current DT2 patched runtime, with matched idle and active
+   workloads, to rank remaining interpreter exits, compiled-code cost and engine
+   overhead by host time. The earlier 47.65% interpreter share predates both
+   accepted improvements and must not be reused as today's opportunity ceiling.
+   Choose one bounded target from the new profile, estimate its removable cost,
+   then use the frozen DT2/DN2 matrix for exactness and paired timing acceptance.
+3. **[O]** Attribute the earlier V2 DN2 stock regression separately. Compare V2
+   against the pre-V2 baseline with focused profiling; the Type14d result only
+   establishes that the latest change adds no consistent DN2 regression. Shared
+   DSP hardware does not establish the cause of different firmware execution cost.
+4. **[O]** Reconsider the known pending-transfer zero-progress dispatch only if
+   fresh host-time attribution gives it a worthwhile ceiling. Do not prioritize
+   it from call counts alone or begin a broad generator rewrite.
+
+Firmware-specific TOML consolidation remains maintenance work, separate from the
+performance priorities. Longer active/audio workloads should broaden acceptance
+before describing short replay improvements as general device performance.
+
+Both accepted changes are on by default in a fresh workbench build of this branch.
+Use `mise run wb -- firmware/Digitakt_II_OS1.17.syx` for DT2 (plain `wb` can select
+DN2). The launcher builds current source and resolves fallback defaults for the
+stock firmware profile. An already-running process or separately launched old
+binary retains its old code. Explicit fast-tier environment overrides can suppress
+the defaults. The latest Type14d validation used native coupled/daemon binaries;
+it did not add a new GUI end-to-end proof or retrain PGO.
