@@ -1,8 +1,11 @@
 # SHARC runtime performance diagnosis, 2026-10-26
 
 **[D] [C]** DT2 OS 1.17, native host, base `d0a4d76d`. The initial diagnosis
-changed no emulator source. The follow-up below tests a small fast-tier load
-guard change; no generator, defaults or firmware patches were changed.
+changed no emulator source. The October 26 follow-up tested a small fast-tier
+load guard change. October 27 default-activation experiments found stock
+regressions; those experiments and the shared load change were withdrawn
+from the active source (see the final section). No generator or firmware
+patches changed.
 This updates the October 23 external performance plan and the historical
 patched-image section of [finding 18](18-dsp-performance.md). The narrower
 invalidation in `60aa71ba` already exists; do not repeat that implementation.
@@ -15,9 +18,14 @@ of stock code to execute through the interpreter. Stock firmware itself has a
 different distribution: most sampled DSP work is already compiled.
 
 No default activation is accepted. The follow-up demonstrates a useful load
-guard improvement with an explicitly enabled region, but the recoverable
+guard improvement with an explicitly enabled region, but stock regressions
+prevent accepting it for normal workbench launches. The recoverable
 **host time** of the whole region remains unmeasured; its instruction share
 is not a speedup ceiling. Pending-transfer dispatch remains lower priority.
+
+Any accepted follow-up must enable its improvement in normal workbench
+launches, without experimental environment variables. Opt-in measurements
+alone do not satisfy that requirement.
 
 ## Inputs and build cost
 
@@ -254,3 +262,77 @@ stock, runtime workflows, module loads and smoke checks. This broader gate
 used normal region configuration, not the experimental DT2 root override.
 Its runtime workflow suite dominated elapsed time (1,244 seconds); this
 should not be confused with the 16-second candidate compilation.
+
+## Default activation rejected, October 27
+
+**[D] [C]** The opportunity ceiling remains the broad 47.65% interpreter
+sample share above, not an exact removable-time bound. Runtime gains alone
+were insufficient to accept a shared-engine change as a workbench default.
+The October 26 shared load change has been reverted to `d0a4d76d` in the
+active source, alongside removal of the unaccepted activation experiments.
+The historical experiment results above remain valid for their binaries.
+
+The proposed policy registered DT2 1.17 root `0x1c2607` as fallback-only:
+code verification had to bar its actual generated entry before it could
+execute. Healthy stock AOT chains were retained. Launcher, coupled runner,
+PGO workload configuration and TypeScript test inputs supplied firmware-keyed
+defaults; explicit settings retained precedence. DN2 region lists were unchanged.
+No generator changes or regenerated cores were needed.
+
+Initial activation showed approximately 29% lower runtime DSP CPU, but also
+stock regressions. Subsequent experiments cached policy, skipped inactive
+tier work, reduced bitmap checks, specialized dispatch and finally restricted
+widened loads to fallback roots. None established acceptable performance on
+both stock devices. Correctness tests and source review did not predict these
+performance regressions. The final V6 candidate passed 67 focused Rust tests.
+
+One final alternating `coupled_ab.py` experiment used three pairs per
+scenario, three audio seconds per run, frozen inputs and fresh plain baseline
+builds from `d0a4d76d`:
+
+| Fixture / scenario | Baseline median DSP CPU/audio s | V6 median | Median paired change |
+| --- | ---: | ---: | ---: |
+| Runtime DT2 idle | 2.408 | 1.781 | -25.95% |
+| Runtime DT2 sample | 2.403 | 1.781 | -25.90% |
+| Stock DT2 idle | 1.040 | 1.106 | +6.32% |
+| Stock DT2 sample | 1.051 | 1.113 | +5.94% |
+| Stock DN2 idle | 1.083 | 1.107 | +2.60% |
+| Stock DN2 chord | 1.074 | 1.102 | +2.72% |
+
+All 36 runs exited successfully, passed health gates and matched their full
+baseline PCM hashes. Every stock pair was slower. Separate correctness runs
+matched all six complete SHRD state files byte for byte and matched DSP
+instruction boundaries: 3,000,001,500, except DN2 chord at 3,001,334,834.
+An independent evidence auditor reproduced these checks and all ratios.
+Raw PCM was not retained for independent rehashing; the PCM comparisons use
+full hashes emitted by the runner. Three short pairs do not characterize all
+workloads, and these measurements do not establish a cause for the slowdown.
+
+The new baseline DT2 build reproduced `coupled-run-1a3ab96cb008` exactly,
+resolving the earlier baseline build-provenance concern for these comparisons.
+Both device builds reused cached generated crates; V6 builds took about
+15 seconds each. This is not a refreshed-PGO or GUI end-to-end performance
+claim. The loaded/selected PLUCK proof and workbench candidate build were not
+run after the stock performance rejection. The helper must not be described
+as a currently enabled workbench speedup, and real-time DSP is not achieved.
+
+Artifacts are retained in `out/native/runs/20261027-sharc-default/`:
+`baseline-build.json`, `candidate-v6-build.json`, `v6-paired-summary.json`,
+`*-v6-paired.json`, `v6-correctness-summary.json`, and the original reports and
+state dumps. `unaccepted-v6-performance.patch` preserves the complete proposed
+performance diff against main; `rollback-manifest.json` records the source
+restoration. Earlier variants are retained there for comparison, not accepted
+as production alternatives.
+
+Rollback validation passed all 55 baseline no-gen Rust library tests. Fresh
+DT2 and DN2 coupled builds reproduced both main-baseline executable hashes
+exactly (`rollback-validation.json`); documentation path checks passed.
+No full routed gate was repeated, and the retained timing instrumentation
+still requires that gate before merge.
+
+**[O]** Keep workbench defaults unchanged. A follow-up should first isolate
+and profile the stock overhead with a bounded experiment, then establish
+stock neutrality, loaded/selected-module audio correctness and normal-launch
+activation together. More speculative dispatch variants are not justified
+by today's evidence. The separate test-suite timing result is recorded in
+[finding 69](69-runtime-test-timing.md); it changes no waits or boot isolation.

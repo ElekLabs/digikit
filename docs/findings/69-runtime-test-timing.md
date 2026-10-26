@@ -62,9 +62,46 @@ re-reviewed; regression types and scoped lint/format passed afterward.
 The live pilot checks actual phase output. The full routed gate has not been
 rerun for this instrumentation-only change; it is still required before merge.
 
-**[O]** Profile remote-input and input-adapter with these records next. If their
+The next step after the pilot was to profile remote-input and input-adapter
+with these records (results below). If their
 fixed waits dominate, investigate readiness predicates before shortening
 them. If startup dominates, split `Session.start` into measured preparation,
 launch and firmware-load phases before considering snapshot reuse. Preserve
 the identical fresh-boot comparison and restart/persistence coverage. This
 change adds evidence; it does not yet reduce test execution time.
+
+## Remote-input and input-adapter profile, October 27
+
+**[D]** Both files passed all six tests using the previous pinned daemons,
+the same prepared modules, normal pre-activation defaults and an exclusive
+benchmark lock. Eight independent sessions emitted 242 successful phase
+records. Total invocation time was 909.588 seconds.
+
+| Device / session | Startup s | Body s | Fixed waits within body s | Boot wait within body s |
+| --- | ---: | ---: | ---: | ---: |
+| DT2 remote keys | 29.722 | 75.096 | 53.019 | 13.315 |
+| DN2 remote keys | 6.034 | 108.492 | 86.021 | 11.111 |
+| DT2 remote switch | 30.162 | 111.517 | 82.642 | 13.158 |
+| DN2 remote switch | 5.997 | 144.264 | 115.644 | 11.102 |
+| DT2 adapter panel | 29.745 | 64.196 | 45.016 | 13.035 |
+| DT2 adapter probe | 30.339 | 64.489 | 45.017 | 13.224 |
+| DN2 adapter panel | 6.101 | 96.802 | 78.016 | 11.091 |
+| DN2 adapter probe | 6.016 | 97.817 | 78.018 | 11.073 |
+
+Fixed waits (`settle.*` and `input.hold`, sequential in these cases) total
+583.393 seconds, about 64.1% of the whole invocation. Aggregate startup totals
+144.117 seconds and post-restart boot waits total 97.109 seconds. Body time
+already includes fixed waits and boot waits; these columns must not all be
+added together. The remaining time includes preparation, RPC/assertion work,
+shutdown and runner overhead.
+
+This supports investigating fixed waits first, rather than attributing most
+suite cost to repeated boots. It does not establish that every wait is
+removable: input hold/pacing, UI readiness and stable boot-history conditions
+must remain equivalent. No waits or isolation rules were shortened.
+
+Artifacts: `out/native/runs/20261027-runtime-input-timing/` contains
+`invocation.json`, `baseline.log`, `baseline-phases.json` and
+`baseline-summary.json`. The source was `f6db6a56`; the daemons were the pinned
+October 26 gate binaries. This is an attribution run, not a paired claim of
+test-speed improvement.
