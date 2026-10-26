@@ -21,14 +21,20 @@ is recorded at every run (a quiet machine is not required, a flat one helps).
 from __future__ import annotations
 
 import argparse
+import contextlib
+import hashlib
 import json
+import math
 import os
 import pathlib
+import signal
 import statistics
+import struct
 import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.devtools import benchlock  # noqa: E402
@@ -44,6 +50,183 @@ PATCHES: dict[str, str] = {}
 ENV: dict[str, str] = {}
 
 
+class Invalid(ValueError):
+    """Invalid native sample or failed proof."""
+
+
+def emulation_key(key: str) -> bool:
+    return key.startswith(("SHARC_", "DIGI_", "DSP_", "DIGIKIT_")) or key in {
+        "OMP_NUM_THREADS",
+        "RAYON_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+    }
+
+
+def write(path: Path, data: dict) -> None:
+    partial = path.with_suffix(path.suffix + ".part")
+    partial.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    partial.replace(path)
+
+
+def process(argv: list[str], env: dict[str, str], folder: Path, timeout: float) -> None:
+    """Keep logs on failures too; kill only this child's process group on timeout."""
+    folder.mkdir(parents=True, exist_ok=True)
+    write(
+        folder / "command.json",
+        {
+            "argv": argv,
+            "env": {k: v for k, v in env.items() if emulation_key(k)},
+            "timeout": timeout,
+        },
+    )
+    with (
+        (folder / "stdout.log").open("wb") as stdout,
+        (folder / "stderr.log").open("wb") as stderr,
+        subprocess.Popen(
+            argv,
+            cwd=ROOT,
+            env=env,
+            stdout=stdout,
+            stderr=stderr,
+            start_new_session=True,
+        ) as proc,
+    ):
+        try:
+            code = proc.wait(timeout=timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            raise Invalid(f"interrupted or timed out: {folder}") from None
+    write(folder / "exit.json", {"exit_code": code})
+    if code:
+        raise Invalid(f"child exit {code}: {folder}")
+
+
+def wav_pcm(path: Path) -> tuple[str, float]:
+    data = path.read_bytes()
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        raise Invalid(f"invalid WAV: {path}")
+    offset, rate, align, pcm, encoding, bits = 12, 0, 0, None, 0, 0
+    while offset + 8 <= len(data):
+        tag, size = struct.unpack_from("<4sI", data, offset)
+        chunk = data[offset + 8 : offset + 8 + size]
+        if len(chunk) != size:
+            raise Invalid(f"truncated WAV: {path}")
+        if tag == b"fmt ":
+            encoding, _, rate, _, align, bits = struct.unpack_from("<HHIIHH", chunk)
+        elif tag == b"data":
+            pcm = chunk
+        offset += 8 + size + size % 2
+    if not pcm or not rate or not align or len(pcm) % align:
+        raise Invalid(f"empty or invalid PCM: {path}")
+    if encoding == 3:
+        if bits not in (32, 64) or len(pcm) % (bits // 8):
+            raise Invalid(f"invalid float PCM: {path}")
+        if any(
+            not math.isfinite(value)
+            for (value,) in struct.iter_unpack("<f" if bits == 32 else "<d", pcm)
+        ):
+            raise Invalid(f"nonfinite PCM: {path}")
+    elif encoding != 1:
+        raise Invalid(f"unsupported PCM encoding: {path}")
+    return hashlib.sha256(pcm).hexdigest(), len(pcm) / align / rate
+
+
+def artifact_run(
+    binary: str,
+    scenario: str,
+    scenarios: str,
+    *,
+    inputs: dict,
+    env: dict,
+    seconds: float | None,
+    folder: Path,
+    timeout: float,
+    card: str | None = None,
+    patch: str | None = None,
+) -> dict:
+    folder.mkdir(parents=True, exist_ok=True)
+    extra = [
+        "--scenarios",
+        str(coupled.scenario_path(scenarios)),
+        "--scenario",
+        scenario,
+        "--out",
+        str(folder / "report.json"),
+        "--wav",
+        str(folder / "audio.wav"),
+        "--dump-dsp",
+        str(folder / "dsp.bin"),
+    ]
+    if seconds is not None:
+        extra += ["--seconds", str(seconds)]
+    if card:
+        extra += ["--card-image", str(card)]
+    if patch:
+        extra += ["--dsp-patch", patch]
+    argv = coupled.run_args(
+        binary, {k: Path(v).resolve() for k, v in inputs.items()}, extra
+    )
+    load = os.getloadavg()[0]
+    process(argv, env, folder, timeout)
+    report = json.loads((folder / "report.json").read_text())
+    sc = next(s for s in report["scenarios"] if s["name"] == scenario)
+    gates = sc["gates"]
+    if (
+        len(report["scenarios"]) != 1
+        or gates["ok"] is not True
+        or gates["missing_blocks"] != 0
+        or gates["halted"] is not None
+        or gates["step_error"] is not None
+        or gates["pcm_non_finite"] != 0
+        or gates["guard_ok"] is not True
+    ):
+        raise Invalid(f"replay gates failed: {folder}")
+    pcm, duration = wav_pcm(folder / "audio.wav")
+    if pcm != sc["pcm"]["sha256"]:
+        raise Invalid(f"report/full WAV PCM hash mismatch: {folder}")
+    state = folder / f"dsp-{scenario}.bin"
+    if state.read_bytes()[:4] != b"SHRD":
+        raise Invalid(f"not a canonical SHRD state: {state}")
+    for value in (
+        duration,
+        sc["audio_seconds"],
+        sc["cpu"]["dsp_thread_per_audio_s"],
+        sc["cpu"]["cf_thread_per_audio_s"],
+    ):
+        if (
+            not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise Invalid(f"nonpositive/nonfinite duration or CPU: {folder}")
+    if (
+        seconds is not None and (duration < seconds - 0.002 or duration > seconds + 0.1)
+    ) or abs(sc["audio_seconds"] - duration) > 0.002:
+        raise Invalid(f"short or inconsistent audio duration: {folder}")
+    icount = sc["dsp_dump"]["dsp_icount"]
+    if not isinstance(icount, int) or icount <= 0:
+        raise Invalid(f"invalid DSP instruction count: {folder}")
+    return {
+        "pcm": pcm,
+        "state": hashlib.sha256(state.read_bytes()).hexdigest(),
+        "icount": icount,
+        "dsp_cpu": sc["cpu"]["dsp_thread_per_audio_s"],
+        "audio_s": duration,
+        "tiers": sc["dsp_instructions"],
+        "cf_cpu": sc["cpu"]["cf_thread_per_audio_s"],
+        "rtf": sc.get("real_time_factor"),
+        "ok": True,
+        "exit_code": 0,
+        "load": load,
+        **{
+            k: sc["dsp_instructions"].get(k)
+            for k in ("block_entries", "block_traps", "aot_block", "interpreter")
+        },
+    }
+
+
 def one_run(
     binary: str,
     scenario: str,
@@ -51,47 +234,23 @@ def one_run(
     device: str,
     patch: str | None = None,
 ) -> dict:
-    """One headless run; the scenario's numbers from its report."""
+    """One validated native sample; the matrix uses the same persistent helper."""
+    ins, card_args = CARD or (coupled.inputs(device), [])
+    card = card_args[card_args.index("--card-image") + 1] if card_args else None
+    scenarios = scenarios or str(ROOT / "tests" / "scenarios" / f"{device}.json")
     with tempfile.TemporaryDirectory() as tmp:
-        out = pathlib.Path(tmp) / "report.json"
-        extra = ["--scenario", scenario, "--out", str(out)]
-        if SECONDS:
-            extra += ["--seconds", SECONDS]
-        if patch:
-            extra += ["--dsp-patch", patch]
-        if scenarios:
-            extra = ["--scenarios", str(coupled.scenario_path(scenarios))] + extra
-        ins, card = CARD or (coupled.inputs(device), [])
-        argv = coupled.run_args(binary, ins, [*card, *extra])
-        load = os.getloadavg()[0]
-        done = subprocess.run(
-            argv,
-            cwd=ROOT,
+        return artifact_run(
+            binary,
+            scenario,
+            scenarios,
+            inputs=ins,
             env=coupled.run_env(ENV, syx=ins["firmware"]),
-            capture_output=True,
-            text=True,
+            seconds=float(SECONDS) if SECONDS else None,
+            folder=Path(tmp),
+            timeout=600,
+            card=card,
+            patch=patch,
         )
-        if not out.is_file():
-            sys.exit("no report from %s:\n%s" % (binary, done.stderr[-2000:]))
-        report = json.loads(out.read_text())
-    sc = next(s for s in report["scenarios"] if s["name"] == scenario)
-    d = sc["dsp_instructions"]
-    cpu = sc["cpu"]
-    pcm = sc.get("pcm") or {}
-    return {
-        "dsp_cpu": cpu["dsp_thread_per_audio_s"],
-        "cf_cpu": cpu["cf_thread_per_audio_s"],
-        "rtf": sc.get("real_time_factor"),
-        "pcm": pcm.get("sha256"),
-        "ok": (sc.get("gates") or {}).get("ok"),
-        "load": load,
-        "block_entries": d.get("block_entries"),
-        "block_traps": d.get("block_traps"),
-        "aot_block": d.get("aot_block"),
-        "interpreter": d.get("interpreter"),
-        "audio_s": d.get("audio_s") or sc.get("audio_seconds"),
-        "exit_code": done.returncode,
-    }
 
 
 def iqr(values: list[float]) -> float:

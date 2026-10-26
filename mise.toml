@@ -220,6 +220,10 @@ description = "All linters"
 run = "uv run python -m tools.devtools.perf"
 description = "Standard DSP performance report (coverage, CPU per audio s, PCM, calls, per-function cost ranking): mise run perf -- [--config NAME] [--seconds S] [--timed] [--calibrate]"
 
+[tasks."perf:matrix"]
+run = "uv run python -m tools.devtools.sharc_matrix"
+description = "Freeze binaries and resume correctness-first DT2/DN2 SHARC validation"
+
 [tasks."perf:cov"]
 run = "uv run python -m tools.devtools.fastcov"
 description = "DSP CPU, tier split and fast-tier refusals/exits per tier config: mise run perf:cov -- --config default --config fast-auto"

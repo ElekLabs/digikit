@@ -442,3 +442,49 @@ Type14d fast lowering. A narrow implementation can reuse the existing guarded
 short-word load and retain SISD/encoding restrictions without changing the
 generator. Broader forms, SIMD and exclusive-access semantics remain out of
 scope. Keep the DN2-overhead investigation separate from this DT2 opportunity.
+
+## Resumable DT2/DN2 validation workflow (2026-10-27)
+
+**[D]** The new `mise run perf:matrix` command separates explicit binary
+preparation from repeatable validation. `run` never builds emulator binaries;
+environment-only A/B experiments can use one frozen binary set for both labels.
+See [the configuration and commands](../TESTING.md#resumable-sharc-matrix).
+DSP patch experiments continue to use `coupled_ab.py --patch`; the matrix
+requires full-state equivalence. PLUCK still prepares its usual module artifacts.
+
+The initial same-binary pilot passed DT2 1.17 and DN2 1.12 stock and patched-runtime
+replays, plus PLUCK on both devices. It used one three-audio-second scenario per
+replay cell and one timing pair per cell. All replay pairs matched full PCM,
+complete SHRD state, instruction count and audio duration; PLUCK's retained
+reference and dynamic WAVs matched across labels. This validates the workflow,
+not a new performance improvement or broad workload coverage. Repeating the
+completed command took 3.68 seconds and preserved all 224 retained artifact mtimes.
+
+Pilot inputs and imported binaries are recorded in
+`out/native/runs/20261027-sharc-matrix-setup/`; outputs are in
+`out/native/runs/20261027-sharc-matrix-pilot/`. The setup includes a newly cold-booted
+DN2 runtime CF/DSP snapshot pair with recorded provenance. Existing coupled
+binaries and the DT2 daemon were reused; only the missing DN2 daemon was built,
+using the existing generated Rust. `matrix.json` in the setup directory contains
+the corresponding three-pair configuration for subsequent experiments.
+
+Independent review identified missing port-definition hashes. The final runner
+includes recursive port TOMLs and frozen manifests, and rechecks the full input
+identity before accepting completion. Twenty focused tests cover resumed pairs,
+artifact tampering, environment isolation, port/manifest edits and six classes of
+mid-run identity changes. These metadata safeguards landed after the full pilot;
+its checkpoint is intentionally not migrated to the changed runner.
+
+The final runner then passed a fresh stock replay on each device, explicitly
+marked `partial-pass` because runtime and PLUCK were omitted from this smaller
+probe. Its resume took 3.74 seconds with all 60 artifact mtimes unchanged. Outputs:
+`out/native/runs/20261027-sharc-matrix-resume-probe/`. The changed-file checks
+passed; the full branch acceptance gate remains required before merge.
+
+**[O]** Consolidate firmware-specific fast-tier defaults from
+`tools/emulator/fast_regions.json` into the corresponding version entries in
+`devices/digitakt-ii.toml` and `devices/digitone-ii.toml`. Preserve exact firmware
+hash matching, explicit override precedence and unknown-firmware behavior across
+Python, TypeScript and browser consumers. Keep experiment overrides in matrix
+configuration and resolved defaults in frozen manifests. This is a separate
+configuration migration, with no intended DSP behavior change.

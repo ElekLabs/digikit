@@ -343,3 +343,121 @@ Memory panel.
   DSP is wrong. See [tests/regression/scenarios/README.md](../tests/regression/scenarios/README.md).
 - `tests/sharc/generation/test_sharc_pcode_language.py::test_temporary_artifacts_match_in_tree_when_present`
   fails: the in-tree Ghidra `.slaspec` is stale versus the generator.
+
+## Resumable SHARC matrix
+
+`mise run perf:matrix` runs correctness before paired timings and resumes from
+saved artifacts. For an environment-only experiment, reuse the **same frozen
+executables** on A and B and put the differing settings in the configuration's
+`variants` object. `run` and `status` never build emulator binaries:
+
+```sh
+mise run perf:matrix -- run out/matrix/config.json --baseline out/matrix/frozen --candidate out/matrix/frozen --out out/matrix/results
+mise run perf:matrix -- status out/matrix/results
+```
+
+To freeze existing binaries without Cargo, use `freeze --import-manifest FILE` as
+described below. Source changes require an explicit build: freeze A before editing
+native sources, then freeze B after the change. Each destination must be new; the
+command never switches source revisions.
+
+```sh
+mise run perf:matrix -- freeze --out out/matrix/baseline
+# Make the candidate source change, then explicitly build and freeze it:
+mise run perf:matrix -- freeze --out out/matrix/candidate
+mise run perf:matrix -- run out/matrix/config.json --baseline out/matrix/baseline --candidate out/matrix/candidate --out out/matrix/results
+```
+
+Freeze builds the existing coupled-run and coupled daemon targets for both devices,
+under the shared benchlock and target build locks, then copies the executables into
+the destination. Generated cores and current stock firmware must already exist.
+For an existing build, `freeze --import-manifest FILE` avoids Cargo. The manifest is:
+
+```json
+{
+  "dt2": {"coupled": "/absolute/coupled-run-dt2", "daemon": "/absolute/digi-emud-dt2", "profile_firmware": "/absolute/stock-dt2-1.17.syx"},
+  "dn2": {"coupled": "/absolute/coupled-run-dn2", "daemon": "/absolute/digi-emud-dn2", "profile_firmware": "/absolute/stock-dn2-1.12.syx"}
+}
+```
+
+Imported executables have unknown source provenance; current sources are recorded
+as the freeze tooling identity, not claimed as their build inputs. Each device's
+fast-region defaults are resolved from `profile_firmware` at freeze time and stored
+with its hash. For a historical baseline, supply an optional `env` object on each
+manifest device to replace those defaults with its previously recorded values.
+Runtime replay images use these stock defaults even when their patched hash has no
+entry in the current fast-region table.
+
+The run configuration lists prepared replay cells; it creates no replay fixtures:
+
+```json
+{
+  "pairs": 3,
+  "seconds": 3,
+  "timeout": 300,
+  "instrument_timeout": 1800,
+  "instruments": ["dt2", "dn2"],
+  "env": {},
+  "variants": {"A": {}, "B": {}},
+  "cells": [{
+    "id": "dt2-stock",
+    "device": "dt2",
+    "kind": "stock",
+    "inputs": {
+      "firmware": "/absolute/stock-dt2-1.17.syx",
+      "DSP image": "/absolute/dsp.bin",
+      "DSP state": "/absolute/dsp.state",
+      "CF snapshot": "/absolute/cf.snap"
+    },
+    "card": "/absolute/card.img",
+    "scenarios": "tests/scenarios/dt2.json",
+    "names": ["dt2-sample-trig"],
+    "env": {},
+    "variants": {"A": {}, "B": {}}
+  }]
+}
+```
+
+Add cells for DT2 runtime, DN2 stock and DN2 runtime to complete replay coverage.
+`card` is optional; scenario sources may be JSON or executable TypeScript. IDs and
+scenario names must contain only letters, digits, underscores, dots and hyphens,
+starting with a letter or digit. Environment precedence is frozen device defaults,
+run `env`, cell `env`, run label overrides, then cell label overrides; a JSON null
+unsets a variable. Only emulator prefixes (`SHARC_`, `DIGI_`, `DSP_`, `DIGIKIT_`) and
+OMP/Rayon/OpenBLAS thread counts are accepted. Inherited values in those namespaces
+are removed before applying the recorded values. Values beginning with `@` name
+files whose full contents are included in the resume identity.
+
+The preflight checks all replay inputs and selected scenarios before starting a
+child. Each replay exports the full WAV and SHRD state. Every sample must exit
+successfully, pass report gates, produce finite positive audio duration and thread
+CPU, and match the report's full PCM hash. A/B must agree on full PCM, complete
+SHRD hash, final DSP instruction count and actual audio duration. Requested duration
+allows normal native runner frame overshoot. Both labels then run
+`equiv-dyn-pluck` on each selected device with their frozen daemon; the existing
+scenario gates must pass and both full `run.wav` and `ref.wav` PCM hashes must agree
+across labels. The PLUCK helper prepares its normal patch/module/card artifacts;
+only emulator binaries are frozen by this command.
+
+Any correctness failure stops before timings. Timing pairs alternate A/B then B/A
+under one exclusive benchlock, using the same validated sample helper as
+`coupled_ab.py`. Each timing sample must also match its earlier correctness result.
+The JSON summary records B/A ratios and tier counts; it makes no performance
+acceptance decision or automatic rollback. DSP patch experiments remain available
+through `coupled_ab.py --patch LABEL=FILE`. The matrix requires strict full-state
+equivalence and does not support arbitrary firmware patches that intentionally
+change the exported state.
+
+Repeating `run` resumes completed steps. Config, consumed inputs (including cards
+and environment files), binary hashes, effective environment, device tables,
+scenario documents and runner/source hashes must match. Reports, WAVs, SHRD dumps,
+argv, filtered environment, logs and kept instrument artifacts are retained;
+completed artifact hashes are rechecked, and checkpoints are atomic. A failed or
+interrupted pair restarts both sides. One process may write a run directory at a
+time. `status` validates the recorded artifacts before printing compact JSON.
+
+Full coverage requires declared stock and runtime cells plus PLUCK for **both**
+devices. A bounded pilot may use `--allow-partial` and `"instruments": []`; its
+successful status is always `partial-pass` with missing coverage listed. Such a
+result cannot stand in for full validation. Firmware and generated artifacts stay
+under ignored output directories and must never be committed.
