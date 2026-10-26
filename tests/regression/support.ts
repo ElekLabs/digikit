@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, expect } from 'vitest';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
 import { repoRoot, Session, type Device, type SessionOptions } from '@digi/test-support';
+import { setTimingContext, timePhase, timingContext } from './timing.ts';
 
 export interface SessionHandle {
   /** The session of this test file; valid inside tests and hooks. */
@@ -39,12 +41,20 @@ export interface PatchedSession {
 /** A fresh runtime daemon; protocol cancellation precedes daemon shutdown. No remote module is assumed installed. */
 export async function startPatchedSession(
   opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string },
+  scope = 'patched runtime',
 ): Promise<PatchedSession> {
-  const session = await Session.start({
-    ...opts,
-    dsp: 'sharc',
-    runtime: { patchSet: opts.patchSet },
-  });
+  const context = { scope, device: opts.device, session: randomUUID() };
+  const session = await timePhase(
+    'session.startup',
+    () =>
+      Session.start({
+        ...opts,
+        dsp: 'sharc',
+        runtime: { patchSet: opts.patchSet },
+      }),
+    context,
+  );
+  setTimingContext(session, context);
   try {
     const dk = new DkSession(new EmuUsbTransport((method, params) => session.client.call(method, params)));
     let closing: Promise<void> | undefined;
@@ -52,45 +62,58 @@ export async function startPatchedSession(
       session,
       dk,
       close() {
-        return (closing ??= (async () => {
-          dk.cancelPending();
-          await session.close();
-        })());
+        return (closing ??= timePhase(
+          'session.shutdown',
+          async () => {
+            dk.cancelPending();
+            await session.close();
+          },
+          context,
+        ));
       },
     };
   } catch (err) {
-    await session.close();
+    await timePhase('session.shutdown', () => session.close(), context);
     throw err;
   }
 }
 
 /** Boot identity and health only: runtime patch sets do not install remote-control modules. */
 export async function expectRuntimeBoot({ session, dk }: PatchedSession): Promise<void> {
-  const identity = session.loadResult.runtime;
-  expect(identity?.patched).toBe(true);
-  if (!identity?.patched) throw new Error('stock input did not produce a runtime patch identity');
-  expect(identity.set).toBe(session.options.runtime?.patchSet ?? 'emulator');
-  expect(identity.base_sha256).toMatch(/^[a-f0-9]{64}$/);
-  expect(identity.modules.length).toBeGreaterThan(0);
-  expect(identity.cache_file).toBeTruthy();
-  expect(session.loadResult.start_used).toBeTruthy();
-  await expect.poll(async () => (await session.status()).cf.ready, { timeout: 20_000 }).toBe(true);
-  const status = await session.status();
-  expect(status.mode).toBe('free');
-  expect(status.cf.ready).toBe(true);
-  expect(status.firmware?.runtime).toEqual(identity);
-  expect(dk.rpcChunk).toBe(16384);
-  await session.expectNoFault('runtime boot');
+  await timePhase(
+    'boot.validation',
+    async () => {
+      const identity = session.loadResult.runtime;
+      expect(identity?.patched).toBe(true);
+      if (!identity?.patched) throw new Error('stock input did not produce a runtime patch identity');
+      expect(identity.set).toBe(session.options.runtime?.patchSet ?? 'emulator');
+      expect(identity.base_sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(identity.modules.length).toBeGreaterThan(0);
+      expect(identity.cache_file).toBeTruthy();
+      expect(session.loadResult.start_used).toBeTruthy();
+      await expect.poll(async () => (await session.status()).cf.ready, { timeout: 20_000 }).toBe(true);
+      const status = await session.status();
+      expect(status.mode).toBe('free');
+      expect(status.cf.ready).toBe(true);
+      expect(status.firmware?.runtime).toEqual(identity);
+      expect(dk.rpcChunk).toBe(16384);
+      await session.expectNoFault('runtime boot');
+    },
+    timingContext(session),
+  );
 }
 
 /** No restart hook: every acceptance file owns a single fresh, free-running runtime. Vitest forbids `expect.poll` in
  * `beforeAll`, so each test calls `expectRuntimeBoot` itself. */
-export function withPatchedSession(opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string }): {
+export function withPatchedSession(
+  opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string },
+  scope?: string,
+): {
   readonly runtime: PatchedSession;
 } {
   let runtime: PatchedSession | undefined;
   beforeAll(async () => {
-    runtime = await startPatchedSession(opts);
+    runtime = await startPatchedSession(opts, scope);
   });
   afterAll(async () => {
     await runtime?.close();

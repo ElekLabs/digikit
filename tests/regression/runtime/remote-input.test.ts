@@ -3,6 +3,7 @@ import { SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { button, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
+import { timePhase } from '../timing.ts';
 import { runtimeTests, settleUi, tap as holdTap } from './live.ts';
 import { captureRemoteOled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from './remote.ts';
 import { openDigikitMenu, openRuntimeAbout, expectRuntimeAbout } from './runtime-menu.ts';
@@ -14,7 +15,7 @@ async function expectRemoteKeys(runtime: PatchedSession): Promise<void> {
   await settleUi(session);
   await withRemoteRelease(dk, async () => {
     const plan = await prepareRemote(runtime);
-    await delay(10_000);
+    await timePhase('settle.post-install', () => delay(10_000));
     expect((await dk.remoteState()).enabled).toBe(true);
     let shots = 0;
     const shot = (name: string) => captureRemoteOled(session, `${String(++shots).padStart(2, '0')}-${name}`);
@@ -58,7 +59,7 @@ async function expectRemoteControl(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
   await installRemote(runtime);
-  await delay(10_000);
+  await timePhase('settle.post-install', () => delay(10_000));
   const cmd = (command: number, body: number[] = []) => dk.request(command, Uint8Array.from(body));
   const state = async () => {
     const reply = await cmd(SERVICE_CMD.REMOTE_STATE);
@@ -92,7 +93,7 @@ async function expectRemoteControl(runtime: PatchedSession): Promise<void> {
     expect(immediate.body.length).toBe(1);
     // Adjacent host requests may span a firmware refill; exact timing is covered by the C pacing unit.
     expect([0, 30]).toContain(immediate.body[0]);
-    await delay(3000);
+    await timePhase('settle.remote-refill', () => delay(3000));
     const back = await cmd(SERVICE_CMD.REMOTE_TURN, [1, 156]);
     expect(back.status).toBe(0);
     expect(back.body.length).toBe(1);

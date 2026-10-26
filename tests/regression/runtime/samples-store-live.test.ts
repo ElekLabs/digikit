@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import type { PatchedSession } from '../support.ts';
+import { timePhase } from '../timing.ts';
 import { liveArtifacts, liveCheck as check, liveProtocol, runtimeTests, sampleWav, settleLive } from './live.ts';
 import { repoRoot } from '@digi/test-support';
 import { hexSha256 } from '@digi/dk-session';
@@ -107,17 +108,17 @@ async function expectSamplesStore({ session }: PatchedSession): Promise<void> {
     check('the space is the same as after the first upload', (await dev.space()).free === space1.free);
 
     // the store survives a restart: the guest's card writes are kept, the runtime finds its store again
-    await protocol.restart();
+    await timePhase('protocol.restart', () => protocol.restart());
     protocol.cancelPending();
     protocol = liveProtocol(session);
-    await protocol.waitForBoot();
+    await timePhase('protocol.waitForBoot', () => protocol.waitForBoot());
     dev = openSamples(storage, { session: protocol, hashOf: (b) => sample.hash(b) });
     let again: Awaited<ReturnType<typeof dev.list>> | undefined;
     for (let i = 0; i < 40 && !again; i++) {
       try {
         again = await dev.list('drums');
       } catch {
-        await new Promise((r) => setTimeout(r, 1000));
+        await timePhase('settle.sample-list-retry', () => new Promise((r) => setTimeout(r, 1000)));
       }
     }
     check(

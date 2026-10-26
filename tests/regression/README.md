@@ -81,6 +81,14 @@ Helpers in `support.ts`:
 - `expectRuntimeBoot`: checks patch identity, ready/free status and health.
 - `freeRegions`, `armFreeRegionGuard`, `expectNoGuardHits`: the free-region guard.
 
+Runtime diagnostics emit one JSON line per completed phase with `event: "runtime-phase"`, a device,
+scenario scope and unique session ID (including startup hooks), phase, outcome and monotonic `durationMs`.
+`session.startup` includes input/card/firmware preparation; `boot.validation` measures the subsequent checks.
+`scenario.body` includes its nested settle, upload/install, restart and boot-wait phases. CLI install with
+restart is measured as one aggregate operation. Each record has a unique `span` and optional `parentSpan`;
+all durations are inclusive, so do not sum a body or install span with its children. Shutdown records share
+the session ID even when they run outside the test body. Failed operations also emit a record.
+
 Stock restart and instruction-step waits are rejected for runtime sessions. Cleanup cancels protocol requests
 and closes the owned daemon.
 

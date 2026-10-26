@@ -22,6 +22,10 @@ Current SHARC follow-up: [native DT2 stock versus runtime diagnosis](findings/68
 (**[D] [C]**, 2026-10-26): patched parameter-conversion code remains a major
 interpreter workload; stock sampling is mostly compiled work. No optimization accepted.
 
+Runtime test follow-up: [phase timing and bounded DT2 pilot](findings/69-runtime-test-timing.md)
+(**[D] [C]**, 2026-10-27): startup, settling, restarts and scenario work are now
+measured separately; no waits or test isolation were changed.
+
 | file | covers |
 | --- | --- |
 | [`01-container-and-patching.md`](findings/01-container-and-patching.md) | Scope and the 2.01 firmwares, the ELE3 container format, integrity, packing, the version gate, recovery, what is patchable, the 1.16 rebuild, flash caves that survive a cold boot, cavefind, the RAM map and a ColdFire expansion region, the reset-path loader hook, the aPLib compressor |

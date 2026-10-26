@@ -6,6 +6,7 @@ import { DkSession, EmuUsbTransport } from '@digi/dk-session';
 import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { describe, expect, onTestFinished, test } from 'vitest';
 import { expectRuntimeBoot, withPatchedSession, type PatchedSession } from '../support.ts';
+import { timePhase, timingContext } from '../timing.ts';
 
 export const DEVICES = ['dt2', 'dn2'] as const;
 export const FIRMWARE = { dt2: '1.17', dn2: '1.12' } as const;
@@ -30,12 +31,12 @@ export function runtimeTests(
 ): void {
   for (const device of opts.devices ?? DEVICES) {
     describe(`${device.toUpperCase()} ${FIRMWARE[device]}`, () => {
-      const handle = withPatchedSession(liveOptions(device, opts));
+      const handle = withPatchedSession(liveOptions(device, opts), name);
       test(
         name,
         async () => {
           await expectRuntimeBoot(handle.runtime);
-          await body(handle.runtime);
+          await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
         },
         opts.timeout,
       );
@@ -44,7 +45,7 @@ export function runtimeTests(
 }
 
 export async function settleLive(session: Session, ms = 12_000): Promise<void> {
-  await delay(ms);
+  await timePhase('settle.live', () => delay(ms), { ...timingContext(session), detail: `settle ${ms} ms` });
   expect((await session.status()).mode, 'the daemon runs freely').toBe('free');
 }
 
@@ -61,7 +62,7 @@ export async function tap(send: (down: boolean) => Promise<unknown>, holdMs: num
   } finally {
     await send(false);
   }
-  await delay(settleMs);
+  await timePhase('settle.input', () => delay(settleMs));
 }
 
 export function record(dir: string, name: string, value: unknown): void {
@@ -78,16 +79,22 @@ export function moduleArtifact(device: Device, id: string): string {
 
 /** Native USB upload of a prepared module, one selected restart, then wait for its registration. */
 export async function installModule(dk: DkSession, id: string, artifact: string): Promise<void> {
-  const bytes = fs.readFileSync(artifact);
-  const storePath = `modules/${id.split('/').at(-1)}.dkm`;
-  await dk.put(storePath, bytes);
-  expect(await dk.verifyFile(storePath, bytes), 'fresh card read matches prepared module bytes').toBe(true);
-  await dk.select([storePath]);
-  await dk.restart();
-  await dk.waitForBoot();
-  await expect
-    .poll(async () => (await dk.modules()).map((entry) => entry.name), { timeout: 30_000, interval: 500 })
-    .toContain(id);
+  await timePhase(
+    'module.install',
+    async () => {
+      const bytes = fs.readFileSync(artifact);
+      const storePath = `modules/${id.split('/').at(-1)}.dkm`;
+      await timePhase('module.upload', () => dk.put(storePath, bytes));
+      expect(await dk.verifyFile(storePath, bytes), 'fresh card read matches prepared module bytes').toBe(true);
+      await dk.select([storePath]);
+      await timePhase('protocol.restart', () => dk.restart());
+      await timePhase('protocol.waitForBoot', () => dk.waitForBoot());
+      await expect
+        .poll(async () => (await dk.modules()).map((entry) => entry.name), { timeout: 30_000, interval: 500 })
+        .toContain(id);
+    },
+    { detail: id },
+  );
 }
 
 /** New protocol and USB receive state; deliberately retain the daemon/card/boot history. */
