@@ -1,6 +1,6 @@
 //! Data-memory transfers with an immediate: 4a, 4b, 4d (index plus a signed
 //! 6-bit offset, post- or pre-modify), 15a, 15b (pre-modify by a 32- or
-//! 7-bit immediate, no update), 14a (absolute address), and the
+//! 7-bit immediate, no update), 14a / 14d (absolute address), and the
 //! address-only immediate modifies 19a, 19a_scaled and 7b.
 //!
 //! Same address class as `mem_addr`: normal-word accesses through an index
@@ -132,6 +132,32 @@ impl Lower {
         }
         let addr = self.ci(a);
         self.mem_xfer(addr, Self::xfer_dir(d, ureg))
+    }
+
+    /// 14d: an absolute unsigned short-word load into an R register.
+    /// Direct byte addresses are unscaled and need no normal-word mapping
+    /// restriction (`memory._canonical_dm_address`). Other widths, stores
+    /// and exclusive accesses remain with the interpreter.
+    pub fn form_14d(&mut self, d: &Dec) -> LR<()> {
+        if d.field("d") != Some(0)
+            || d.field("ex") != Some(0)
+            || d.field("w") != Some(0)
+            || d.field("l") != Some(1)
+            || d.field("x") != Some(0)
+        {
+            return refuse("14d requires an unsigned short-word load");
+        }
+        let dreg = d.field("dreg").ok_or(Refuse("14d dreg".into()))? as u32;
+        let a = d.wide("addr").ok_or(Refuse("14d addr".into()))?;
+        let addr = self.ci(a);
+        self.mem_xfer_w(
+            addr,
+            Xfer::Load(dreg),
+            Width {
+                bytes: 2,
+                signed: false,
+            },
+        )
     }
 
     /// 19a / 19a_scaled: `Ia = MODIFY(Ib, imm32)`, scaled by the access

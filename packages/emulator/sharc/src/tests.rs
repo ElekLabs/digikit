@@ -2051,6 +2051,65 @@ fn fast_type_3d_matches_the_interpreter() {
     }
 }
 
+/// Absolute short-word loads use byte addresses, zero-extend high-bit data,
+/// and leave flags and DAG registers alone. Run only the load so the fast
+/// instruction count proves that this transfer itself ran in the kernel.
+#[cfg(sharc_gen)]
+#[test]
+fn fast_type_14d_matches_the_interpreter() {
+    for addr in [0x25_590cu32, LP_DATA + 1, 0x8_0000, 0x25_fffe] {
+        let code = [
+            0x1a46_0000_0000 | u64::from(addr), // R6 = DM(addr) (sw)
+            lp_jump(0x1f, 0),
+        ];
+        let setup = |e: &mut crate::Engine| {
+            lp_regs(
+                e,
+                &[
+                    (6, 0xdead_beef),
+                    (16, 0x1234),
+                    (32, 0xffff_ffff),
+                    (118, 0x55),
+                ],
+            );
+            let a = e.s.mem.canonical_of(addr);
+            e.s.mem.write_byte(a, 0x17);
+            e.s.mem.write_byte(a + 1, 0xe9);
+        };
+        assert_eq!(
+            lp_check(&format!("14d {addr:#x}"), &code, &[0], 1, &setup),
+            1
+        );
+        let mut fast = lp_engine(&code, &[0], true, &setup);
+        assert_eq!(fast.step(1), 1);
+        assert_eq!(fast.s.r[6], V::c(0xe917));
+        assert_eq!(fast.s.r[118], V::c(0x55));
+    }
+}
+
+/// A two-byte absolute window must decline at a page crossing or missing
+/// backing byte. The interpreter then executes the load with the same state
+/// and instruction boundary as a run without the fast tier.
+#[cfg(sharc_gen)]
+#[test]
+fn fast_type_14d_window_fallback_matches_the_interpreter() {
+    for (addr, complete) in [(0x25_ffffu32, true), (0x27_1000, false)] {
+        let code = [0x1a46_0000_0000 | u64::from(addr), lp_jump(0x1f, 0)];
+        let setup = |e: &mut crate::Engine| {
+            lp_regs(e, &[(6, 0xdead_beef), (16, 0x1234), (32, 7), (118, 0x55)]);
+            let a = e.s.mem.canonical_of(addr);
+            e.s.mem.write_byte(a, 0x17);
+            if complete {
+                e.s.mem.write_byte(a + 1, 0xe9);
+            }
+        };
+        assert_eq!(
+            lp_compare(&format!("14d fallback {addr:#x}"), &code, &[0], 1, &setup),
+            0,
+        );
+    }
+}
+
 // -- fast tier: a MODE1 write that enables interrupts ---------------------------------
 
 /// `MODE1 = set(MODE1, mask)` (Type 18a, BOP set).

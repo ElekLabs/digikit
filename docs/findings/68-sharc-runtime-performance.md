@@ -488,3 +488,59 @@ hash matching, explicit override precedence and unknown-firmware behavior across
 Python, TypeScript and browser consumers. Keep experiment overrides in matrix
 configuration and resolved defaults in frozen manifests. This is a separate
 configuration migration, with no intended DSP behavior change.
+
+## Type14d converter continuation enabled (2026-10-27)
+
+**[D]** The exact host-time ceiling remains unknown. The earlier continuation
+probe established an achievable approximately 7% reduction without lowering the
+load itself. A narrow handwritten fast-tier handler now lowers only the
+non-exclusive unsigned short-word Type14d load (`d=ex=w=x=0`, `l=1`) in SISD.
+It reuses guarded two-byte loads with direct, unscaled byte addresses. Other
+Type14d encodings and SIMD remain refused. No generated core or generator source
+changed. No additional roots or configuration overrides were enabled: the
+existing DT2 fallback root now compiles through the load and its continuation.
+
+Public manual cross-check: SHARC+ Core Programming Reference, locally extracted
+pages 384–386 (printed 15–4 through 15–6), specifies the encoding and zero-extension;
+page 187 (printed 6–3) specifies opcode-sized byte-address accesses. See
+[public SHARC sources](../sharc/SOURCES.md). Independent source review found no
+correctness issues. Three focused Rust tests passed against the cached DT2
+interpreter, covering all five encoding bits in SISD/SIMD, high-bit zero-extension,
+odd and mapped-looking byte addresses, page-end fit, page crossing and missing
+backing-byte fallback. The success test executes only the load and asserts one
+fast instruction; fallback cases assert none.
+
+The scripted matrix used the previous frozen baseline and newly frozen candidate
+binaries, with three alternating pairs per workload and the shared
+`coupled_ab.py` sample helper under an exclusive benchmark lock. Median paired
+ratios, rather than ratios of independently calculated medians, determine changes:
+
+| Workload | Baseline median DSP CPU/audio s | Candidate median | Median paired change |
+| --- | ---: | ---: | ---: |
+| DT2 runtime idle | 1.760 | 1.640 | −6.86% |
+| DT2 runtime sample trigger | 1.766 | 1.647 | −6.77% |
+| DT2 stock sample trigger | 1.099 | 1.099 | +0.12% |
+| DN2 stock chord | 1.132 | 1.132 | −0.03% |
+| DN2 runtime chord | 1.515 | 1.462 | −0.52% |
+
+DT2 runtime paired ratios ranged 0.9289–0.9326 at idle and 0.9296–0.9342 with
+sample triggering. DN2 runtime was noisier (0.9647–1.0046); its independent
+medians exaggerate the paired improvement, so do not claim a DN2 speedup.
+These short workloads do not establish broad workload coverage or real time:
+DT2 runtime still consumes about 1.64–1.65 DSP CPU seconds per audio second.
+
+All five correctness replays and every timing sample matched full PCM, complete
+SHRD state, final instruction count and audio duration. PLUCK passed for both
+labels on both devices with matching complete reference/dynamic PCM. The matrix
+finished with full coverage and 22 completed steps. DT2 idle fast-tier work grew
+from 32,974,397 to 40,174,047 instructions over three audio seconds, establishing
+that the continuation actually executes compiled. The behavior is active under
+the normal default fallback policy when this source is built by the workbench.
+
+Artifacts: `out/native/runs/20261027-sharc-type14d/` contains configuration,
+`candidate/frozen.json`, build and test logs, and `results/` with the checkpoint,
+summary and full outputs. Four candidate binaries built in 14.13, 4.10, 16.00 and
+4.23 seconds, reusing generated Rust. Changed-file checks passed. A temporary
+matrix-test path literal was also corrected after pathcheck mistook it for a
+repository file; all 20 matrix tests passed. The full branch acceptance gate
+remains required before merge.

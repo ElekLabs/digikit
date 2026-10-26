@@ -1758,6 +1758,7 @@ impl Lower {
             "15a" => self.form_15a(d)?,
             "15b" => self.form_15b(d)?,
             "14a" => self.form_14a(d)?,
+            "14d" => self.form_14d(d)?,
             "19a" | "19a_scaled" => self.form_19a(d)?,
             "7b" => self.form_7b(d)?,
             // The call and return sequence of the stack-model firmware, in
@@ -2088,6 +2089,26 @@ mod tests {
         assert_eq!(l.pending.writes[0].0, crate::rt::UREG_PX1 as u8);
         assert_eq!(l.konst_of(l.pending.writes[0].1), Some(0));
         assert_eq!(l.pending.writes[1], (crate::rt::UREG_PX2 as u8, value));
+    }
+
+    #[test]
+    fn type_14d_only_lowers_unsigned_short_loads_in_sisd() {
+        // Each combination of d/ex/l/w/x, decoded through the real table.
+        for bits in 0..32u64 {
+            let raw = 0x1a00_0000_0000 | (bits << 36) | (6 << 32) | 0x25_590c;
+            let d = Dec::from_decoded(&crate::decode::decode_isa(raw)).unwrap();
+            assert_eq!(d.form, "14d");
+            for simd in [false, true] {
+                let mut e = env();
+                e.mode1 = if simd { 1 << 21 } else { 0 };
+                let mut l = Lower::new(e, Plan::default(), 0);
+                assert_eq!(
+                    l.lower_insn(0, &d).is_ok(),
+                    bits == 4 && !simd,
+                    "opcode fields {bits:#07b}, SIMD {simd}"
+                );
+            }
+        }
     }
 
     #[test]
