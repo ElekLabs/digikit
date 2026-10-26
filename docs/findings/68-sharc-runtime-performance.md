@@ -1,7 +1,8 @@
 # SHARC runtime performance diagnosis, 2026-10-26
 
-**[D] [C]** DT2 OS 1.17, native host, base `d0a4d76d`. No emulator source,
-generator, defaults or firmware patches were changed during this investigation.
+**[D] [C]** DT2 OS 1.17, native host, base `d0a4d76d`. The initial diagnosis
+changed no emulator source. The follow-up below tests a small fast-tier load
+guard change; no generator, defaults or firmware patches were changed.
 This updates the October 23 external performance plan and the historical
 patched-image section of [finding 18](18-dsp-performance.md). The narrower
 invalidation in `60aa71ba` already exists; do not repeat that implementation.
@@ -13,9 +14,10 @@ Investigate compiled execution of the patched parameter-conversion region
 of stock code to execute through the interpreter. Stock firmware itself has a
 different distribution: most sampled DSP work is already compiled.
 
-No optimization is accepted. The recoverable **host time** of this region has
-not been measured; its instruction share is not a speedup ceiling. The small
-pending-transfer dispatch optimization below is lower priority.
+No default activation is accepted. The follow-up demonstrates a useful load
+guard improvement with an explicitly enabled region, but the recoverable
+**host time** of the whole region remains unmeasured; its instruction share
+is not a speedup ceiling. Pending-transfer dispatch remains lower priority.
 
 ## Inputs and build cost
 
@@ -147,7 +149,7 @@ comparable to the clean runtime number as a speedup measurement: logging,
 different ordering and no paired correctness gate remain. Do not ship the
 region list on this evidence. This probe required no Rust rebuild.
 
-**[O]** Next obtain dynamic exits/useful-work attribution for the patched
+The initial next step was to obtain dynamic exits/useful-work attribution for the patched
 converter and its continuation, plus a bounded runtime host profile. Choose
 between a narrowly supported run-time compilation improvement and splitting
 generated dependencies/entries around the patch. State the measured host-time
@@ -157,3 +159,98 @@ and one alternating `coupled_ab.py` comparison. Its current acceptance gaps
 (failed exits/gates/hashes are recorded but not rejected before ratios) must
 be addressed before relying on automated speed claims. Include audible
 transitions and the dynamically loaded/selected PLUCK case before acceptance.
+
+## Same-page load experiment, October 26
+
+**[D]** Opportunity ceiling first: the restored runtime's separate eight-audio-
+second host profile has 20,402 interpreter-ancestry samples out of 42,818
+running DSP-thread samples (47.65%) in trace-relative `[2,14)`. This is the
+broad interpreter opportunity, not an exact removable-time bound for this
+load or region. Compiled ancestry accounts for 35.46%, other engine ancestry
+16.39%, and unresolved samples 0.50%.
+
+The actual dynamic exit was `0x1c26b7`, at the flat-memory bitmap guard,
+before the static `14d` stop. Register captures show a four-byte SISD load
+at byte address `0x2559de`: offset 30 within a 32-bit presence-bitmap word.
+Subsequent addresses advance by `0x60`, alternating offsets 30 and 62 within
+a 64-bit bitmap word. The old guard rejected these even when all four bytes
+were present on the same page.
+
+The public [SHARC+ Core Programming Reference](../sharc/SOURCES.md), printed
+page 7–6 (PDF page 224, local extraction `out/refs/sc58x-2158x-prm/pages/p0224.txt`),
+allows all alignments for normal-word SISD accesses in byte space. It separately
+requires normal-word alignment for SIMD. The manual establishes that this
+captured load is legal; the bitmap restriction is an emulator implementation
+detail, not a SHARC alignment requirement.
+
+The experiment checks both affected 32-bit presence words for multibyte
+loads and requires the complete access to remain inside one page. Stores,
+page absence, MMIO, aliases and code-watch handling retain their guards.
+No instruction semantics, generated cores or default region lists changed.
+Focused tests cover 1/2/4-byte accesses, both bitmap boundaries, each missing
+byte, page ends/crossings, absent/MMIO pages, aliases and store guards through
+both the interpreter backend and native Cranelift. Both tests and
+`mise run test:changed` passed; an independent source review found no issue.
+
+Artifacts are under `out/native/runs/20261026-sharc-flat-crossing/`:
+`runtime-inputs.json`, `runtime-host-attribution.json`, `crossing-registers.csv`,
+`build.json`, `before-correctness.json`, `after-correctness.json`, `paired.json`
+and `paired-validated.json`. The replay restores a genuine current patched
+runtime boot, including its matching ColdFire and DSP snapshots and card.
+It contains no dynamically uploaded module. Each scenario runs three audio
+seconds, including restoration startup rather than only steady state.
+
+One alternating `coupled_ab.py` experiment used three pairs per scenario,
+the same frozen inputs and `SHARC_FAST_REGIONS=0x1c2607` on both binaries:
+
+| Scenario | Before median CPU/audio s | After median CPU/audio s | Median paired reduction |
+| --- | ---: | ---: | ---: |
+| No note | 2.304 | 1.734 | 24.76% |
+| Sample trigger | 2.353 | 1.745 | 25.59% |
+
+Paired ratios ranged 0.752–0.761 and 0.742–0.746 respectively. Every run had
+exit status zero, health gates true, and the same full 64-character PCM hash
+within its scenario. These were independently asserted after the tool returned,
+before interpreting its ratios; the tool's acceptance behavior itself is
+unchanged. Ignore its misleading total-CPU/interpreted-instruction statistic.
+The separate correctness reports also confirm finite audio, three-second
+duration, silence for no note, and nonzero sample-trigger output.
+
+The trigger moves from 77 to 229 fast instructions per call at 48,000 calls
+per audio second. Interpreted work falls from 58,619,406 to 36,731,406
+instructions per three-second run. This explains the measured direction
+without equating instruction counts with host time.
+The separate `after-coverage.log` records all 143,993 successful no-note
+kernel calls exiting at the static `0x1c2844` stop, rather than the old load
+guard. An independent evidence audit reproduced the profile counts, PCM
+equality, instruction movement and paired ratios.
+
+The candidate `coupled-run-7545ca71a8c7` built in 16.04 seconds (Cargo 15.95),
+reusing all four recorded generated/runtime rlibs unchanged in size and mtime.
+Focused test rebuilds took 17–19 seconds. The current plain Cargo fingerprints
+record empty Rust flags; the old frozen binary still lacks its original
+immutable build manifest. This is a local non-PGO experiment, not a claim
+about refreshed PGO, browser performance or stock firmware gains.
+
+**[O]** Before enabling the region by default, establish safe runtime-specific
+selection, check stock behavior and the uploaded/selected PLUCK workload,
+compare architectural state at matched boundaries, and measure under a
+consistent current PGO policy. Full PCM equality in two short probes is
+useful evidence, not general architectural equivalence. The helper fix alone
+does not activate this DT2 region in normal launches.
+Before merging the shared helper, measure DN2's existing default fast regions
+for overhead from the additional presence-bitmap check; correctness gates do
+not establish performance neutrality there.
+Static dispatch review confirms that a configured fast region runs before
+an available AOT entry. Adding this root to the default table would therefore
+also change healthy stock dispatch. There is no existing invalidation-only
+activation hook; the eligibility decision after AOT invalidation in
+`packages/emulator/sharc/src/lib.rs` is the narrow boundary to investigate.
+
+The routed `mise run verify -- --base main` gate passed in 1,531 seconds;
+logs are in `out/runs/verify/20261026-122921/`. It included 243 passing Rust
+tests (three skipped), all 17 tier-comparison scenarios equal, audio pins,
+stock, runtime workflows, module loads and smoke checks. This broader gate
+used normal region configuration, not the experimental DT2 root override.
+Its runtime workflow suite dominated elapsed time (1,244 seconds); this
+should not be confused with the 16-second candidate compilation.

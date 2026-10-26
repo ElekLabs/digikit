@@ -211,10 +211,10 @@ impl Lower {
     /// (`Mem::fast_read` / `fast_write` inline): the access leaves the kernel
     /// (before the instruction) unless the page exists, every byte is present
     /// (loads) or already an overlay byte (stores, which also need the page
-    /// not code-watched) and the access stays inside one 32-bit word of the
-    /// bitmaps. No address range is needed.
+    /// not code-watched). Loads must stay on one page; stores must stay inside
+    /// one 32-bit word of the bitmaps. No address range is needed.
     pub fn flat_access(&mut self, addr: Val, bytes: u8, write: bool) -> LR<(Val, Val)> {
-        use crate::mem::{PAGE_BITS, PAGE_DIRTY_OFF, PAGE_PRESENT_OFF};
+        use crate::mem::{PAGE_BITS, PAGE_DIRTY_OFF, PAGE_PRESENT_OFF, PAGE_SIZE};
         let ptr64 = std::mem::size_of::<usize>() == 8;
         let eff = self.emit(Ty::I64, Op::Ctx64(CTX_FLAT_EFF));
         let bits = self.ci(PAGE_BITS);
@@ -239,11 +239,16 @@ impl Lower {
         };
         let mask16 = self.ci((1 << PAGE_BITS) - 1);
         let o16 = self.bin(Bin::And, addr, mask16);
-        // Inside one 32-bit word of the bitmaps.
         let c31 = self.ci(31);
         let bit = self.bin(Bin::And, o16, c31);
-        let room = self.ci(32 - bytes as u32);
-        let fits = self.bin(Bin::LeU, bit, room);
+        let (offset, room) = if write || bytes == 1 {
+            // Keep stores inside one bitmap word.
+            (bit, 32 - bytes as u32)
+        } else {
+            (o16, PAGE_SIZE as u32 - bytes as u32)
+        };
+        let room = self.ci(room);
+        let fits = self.bin(Bin::LeU, offset, room);
         self.guard(fits);
         let c5 = self.ci(5);
         let word = self.bin(Bin::ShrU, o16, c5);
@@ -257,6 +262,32 @@ impl Lower {
         let have = self.bin(Bin::And, bm, mask);
         let ok = self.bin(Bin::Eq, have, mask);
         self.guard(ok);
+        if !write && bytes > 1 {
+            // The page guard keeps both bitmap reads in bounds. When the
+            // access crosses a bitmap word, check its remaining low bits in
+            // the last word; otherwise read the first word again with mask 0.
+            let extra = self.ci(bytes as u32 - 1);
+            let last = self.bin(Bin::Add, o16, extra);
+            let last_word = self.bin(Bin::ShrU, last, c5);
+            let last_word4 = self.bin(Bin::Shl, last_word, c2);
+            let last_moff = self.bin(Bin::Add, last_word4, map);
+            let last_bm = self.emit(
+                Ty::I32,
+                Op::Load32 {
+                    base: page,
+                    off: last_moff,
+                },
+            );
+            let c32 = self.ci(32);
+            let shift = self.bin(Bin::Sub, c32, bit);
+            let tail = self.bin(Bin::ShrU, ones, shift);
+            let crosses = self.bin(Bin::Ne, word, last_word);
+            let zero = self.ci(0);
+            let tail = self.emit(Ty::I32, Op::Select(crosses, tail, zero));
+            let have = self.bin(Bin::And, last_bm, tail);
+            let ok = self.bin(Bin::Eq, have, tail);
+            self.guard(ok);
+        }
         if write {
             let watch = self.emit(Ty::I64, Op::Ctx64(CTX_FLAT_WATCH));
             let w = self.emit(Ty::I32, Op::LoadN { base: watch, off: idx, bytes: 1 });
