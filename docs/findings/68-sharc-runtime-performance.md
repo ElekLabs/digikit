@@ -576,3 +576,48 @@ stock firmware profile. An already-running process or separately launched old
 binary retains its old code. Explicit fast-tier environment overrides can suppress
 the defaults. The latest Type14d validation used native coupled/daemon binaries;
 it did not add a new GUI end-to-end proof or retrain PGO.
+
+## Desktop firmware switching defaults (2026-10-27)
+
+**[C] [D]** Earlier workbench activation statements were incomplete: a normal
+single-core launch did not provide matching DSP inputs/core for switching to the
+other device through Choose File. Desktop launch now includes both available
+cores by default, so `mise run wb` needs no `DIGI_EMU_SECOND_CORE=1`. Explicit
+`DIGI_EMU_SECOND_CORE=0` preserves a single-core escape hatch; daemon launches
+remain single-core by default. Both firmware ready-input sets and generated cores
+must exist; missing inputs retain the existing diagnostic and single-core fallback.
+
+Defaults stay attached to the compiled core's firmware: a DN2-first process gets
+DN2 regular/block roots and DT2 fallback root `0x1c2607` in the second core's
+settings. Firmware load selects the matching audio inputs and engine. The
+handwritten Type14d handler is compiled into both engine instances. Neither this
+change nor firmware switching regenerates DSP Rust.
+
+Sixty-two focused launcher tests, changed-file checks and independent review
+passed. A fresh desktop launch without a second-core override ran DN2 with SHARC
+audio. Computer-use could not address the bare development executable, even after
+unlocking the screen; no literal file-picker click proof is claimed. The existing
+controller switch proof passed DN2 → DT2 → DN2 with runtime patching, matching
+core selection, advancing frames and no DSP halt at each phase. This exercises
+the firmware-load controller shared with the desktop UI.
+
+The full frozen-binary matrix passed all five exactness replays, both PLUCK
+proofs and all timing samples against the Type14d single-device binaries. Median
+paired combined/single CPU ratios were 1.0099 (DT2 runtime idle), 1.0017 (DT2
+runtime sample), 1.0128 (DT2 stock), 1.0153 (DN2 stock), and 0.9886 (DN2 runtime).
+These short timings were noisy, especially DN2 (stock range 0.9795–1.0717;
+runtime 0.8572–0.9909), with an interactive workbench also running. They establish
+no additional speedup or tight regression bound. The exactness results are
+independent of that timing noise.
+
+The combined desktop's first native build took 5m19s; both generated crates
+compiled, and the remaining DN2 compilation used about 15 CPU cores after DT2
+finished. That is a separate combined target cache, not regeneration. Subsequent
+validation runners reused it (14.70s coupled-run, 4.17s daemon). The combined
+build has no trained PGO profile; per-device PGO profiles are intentionally not
+applied. Comparison here is against the measured non-PGO binaries, not a freshly
+trained single-core PGO build.
+
+Artifacts: `out/native/runs/20261027-sharc-dual-default/` contains the frozen
+binaries, switch proof, matrix, and launcher checks. The initial branch gate was
+stopped when the user requested this new default; it is superseded, not a pass.

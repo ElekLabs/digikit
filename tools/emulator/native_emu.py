@@ -147,11 +147,17 @@ def pgo_trained_core(device: str) -> pathlib.Path | None:
 VALUE_OPTIONS = {"--card-image", "--card-folder", "--audio-buffer", "--mirror-dir"}
 
 
-def second_core(device: str) -> tuple[list[str], pathlib.Path | None]:
+def second_core(
+    device: str, *, enabled_by_default: bool = False
+) -> tuple[list[str], pathlib.Path | None]:
     """The other device's ready inputs for a binary with both generated cores (`--also-coupled`) and its generated core
-    (SHARC_GEN_DIR_2). Opt-in with DIGI_EMU_SECOND_CORE=1: that build has no PGO profile yet (the profiles are per
-    single-core binary). Nothing (a one-core launch) when it is off or the other device lacks a ready set or a core."""
-    if os.environ.get("DIGI_EMU_SECOND_CORE") != "1":
+    (SHARC_GEN_DIR_2). Desktop launches enable it by default; daemons opt in with DIGI_EMU_SECOND_CORE=1.
+    DIGI_EMU_SECOND_CORE=0 disables it. The build has no PGO profile yet (profiles are per single-core binary).
+    Nothing (a one-core launch) when it is off or the other device lacks a ready set or a core."""
+    if (
+        os.environ.get("DIGI_EMU_SECOND_CORE", "1" if enabled_by_default else "0")
+        != "1"
+    ):
         return [], None
     other = "dt2" if device == "dn2" else "dn2"
     paths = digi_env.ready_inputs(device=other)
@@ -180,7 +186,9 @@ def second_core(device: str) -> tuple[list[str], pathlib.Path | None]:
     ], gen
 
 
-def default_audio_args(args: list[str] | None = None) -> list[str]:
+def default_audio_args(
+    args: list[str] | None = None, *, second_core_by_default: bool = False
+) -> list[str]:
     """Add local ready audio inputs to a normal launcher command line."""
     args = [] if args is None else list(args)
     positional = next(
@@ -225,7 +233,7 @@ def default_audio_args(args: list[str] | None = None) -> list[str]:
     digi_env.check_generated(generated)
     os.environ.setdefault("SHARC_GEN_DIR", str(generated))
     print(f"native core: {generated} ({reason})", file=sys.stderr)
-    also, second = second_core(device)
+    also, second = second_core(device, enabled_by_default=second_core_by_default)
     if second is not None:
         os.environ["SHARC_GEN_DIR_2"] = str(second)
         args.extend(also)
@@ -762,7 +770,7 @@ def main(args: list[str] | None = None) -> None:
     if force_cf and ("--coupled" in args or "--auto-coupled" in args):
         raise SystemExit("--cf-only cannot be combined with coupled audio options")
     if not force_cf and "--coupled" not in args and "--auto-coupled" not in args:
-        args = default_audio_args(args)
+        args = default_audio_args(args, second_core_by_default=not daemon)
     if "--coupled" in args or "--auto-coupled" in args:
         generated = generated_core(args)
         if not generated.is_dir():

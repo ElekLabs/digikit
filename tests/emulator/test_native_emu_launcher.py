@@ -38,6 +38,14 @@ def _restore_sharc_gen_dir(monkeypatch):
     monkeypatch.delenv("SHARC_GEN_DIR")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_second_core(monkeypatch):
+    """Single-core tests must not discover local cores or inherit a dual build."""
+    monkeypatch.setenv("DIGI_EMU_SECOND_CORE", "0")
+    monkeypatch.setenv("SHARC_GEN_DIR_2", "x")
+    monkeypatch.delenv("SHARC_GEN_DIR_2")
+
+
 def launcher():
     return runpy.run_path(
         str(ROOT / "tools/emulator/native_emu.py"), run_name="launcher_test"
@@ -563,6 +571,123 @@ def test_main_daemon_builds_and_runs_digi_emud(monkeypatch):
     assert calls[0][:2] == ["cargo", "build"]
     assert calls[1][0].endswith("release/digi-emud")
     assert calls[1][1:] == ["x.syx"]
+
+
+def _dual_launch(monkeypatch, tmp_path, first):
+    scope, calls = _build_run_setup(monkeypatch)
+    inputs, cores = {}, {}
+    for device in ("dn2", "dt2"):
+        directory = tmp_path / device
+        directory.mkdir()
+        inputs[device] = {
+            label: directory / name
+            for label, name in (
+                ("firmware", "firmware.syx"),
+                ("DSP image", "image.bin"),
+                ("DSP state", "state.dsp"),
+                ("CF snapshot", "snapshot"),
+            )
+        }
+        for path in inputs[device].values():
+            path.touch()
+        cores[device] = directory / "generated"
+        cores[device].mkdir()
+    monkeypatch.delenv("DIGI_EMU_SECOND_CORE")
+    monkeypatch.setattr(
+        digi_env, "firmware", lambda environ=None: inputs[first]["firmware"]
+    )
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: Path(path).parent.name)
+    monkeypatch.setattr(
+        digi_env, "ready_inputs", lambda *, device: dict(inputs[device])
+    )
+    monkeypatch.setattr(
+        digi_env, "gen_for_image", lambda image: cores[Path(image).parent.name]
+    )
+    glob = scope["main"].__globals__
+    monkeypatch.setitem(glob, "pgo_trained_core", lambda device: None)
+    # Track all variables the launcher can set so no test leaks fast settings.
+    for suffix in ("", "_2"):
+        for name in (
+            "SHARC_FAST_REGIONS",
+            "SHARC_BLOCKTRANS",
+            "SHARC_FAST_FALLBACK_REGIONS",
+        ):
+            monkeypatch.setenv(name + suffix, "")
+            monkeypatch.delenv(name + suffix)
+    monkeypatch.delenv("DIGI_EMU_FAST", raising=False)
+    monkeypatch.delenv("SHARC_FAST_AUTO", raising=False)
+    for function, value in (
+        ("fast_regions_for", "regions"),
+        ("blocktrans_roots_for", "roots"),
+        ("fallback_regions_for", "fallback"),
+    ):
+        monkeypatch.setitem(
+            glob, function, lambda path, value=value: f"{path.parent.name}-{value}"
+        )
+    return scope, calls, inputs, cores
+
+
+@pytest.mark.parametrize("first", ["dn2", "dt2"])
+@pytest.mark.parametrize("positional", [False, True])
+def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
+    monkeypatch, tmp_path, capsys, first, positional
+):
+    scope, calls, inputs, cores = _dual_launch(monkeypatch, tmp_path, first)
+    other = "dt2" if first == "dn2" else "dn2"
+    scope["main"]([str(inputs[first]["firmware"])] if positional else [])
+    forwarded = calls[-1][1:]
+    assert forwarded[0] == str(inputs[first]["firmware"])
+    at = forwarded.index("--also-coupled")
+    assert forwarded[at + 1 : at + 5] == [
+        str(inputs[other][label])
+        for label in ("DSP image", "DSP state", "CF snapshot", "firmware")
+    ]
+    assert os.environ["SHARC_GEN_DIR"] == str(cores[first])
+    assert os.environ["SHARC_GEN_DIR_2"] == str(cores[other])
+    for suffix, device in (("", first), ("_2", other)):
+        for name, value in (
+            ("SHARC_FAST_REGIONS", "regions"),
+            ("SHARC_BLOCKTRANS", "roots"),
+            ("SHARC_FAST_FALLBACK_REGIONS", "fallback"),
+        ):
+            assert os.environ[name + suffix] == f"{device}-{value}"
+    assert "no PGO profile for a two-core build" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("daemon", "setting", "dual"),
+    [(False, "0", False), (True, None, False), (True, "0", False), (True, "1", True)],
+)
+def test_second_core_opt_out_and_daemon_opt_in(
+    monkeypatch, tmp_path, daemon, setting, dual
+):
+    scope, calls, _, _ = _dual_launch(monkeypatch, tmp_path, "dn2")
+    if setting is not None:
+        monkeypatch.setenv("DIGI_EMU_SECOND_CORE", setting)
+    scope["main"](["--daemon"] if daemon else [])
+    assert ("--also-coupled" in calls[-1]) is dual
+    assert ("SHARC_GEN_DIR_2" in os.environ) is dual
+
+
+@pytest.mark.parametrize(
+    "missing", ["firmware", "DSP image", "DSP state", "CF snapshot", "generated core"]
+)
+def test_desktop_missing_second_inputs_keeps_first_core(
+    monkeypatch, tmp_path, capsys, missing
+):
+    scope, calls, inputs, cores = _dual_launch(monkeypatch, tmp_path, "dn2")
+    if missing == "generated core":
+        cores["dt2"].rmdir()
+    else:
+        inputs["dt2"][missing].unlink()
+    scope["main"]([])
+    assert "--auto-coupled" in calls[-1]
+    assert "--also-coupled" not in calls[-1]
+    assert "SHARC_GEN_DIR_2" not in os.environ
+    assert (
+        f"second core: no DT2 inputs (missing {missing}); one core only"
+        in capsys.readouterr().err
+    )
 
 
 def _dt2_launch(monkeypatch, tmp_path, manifest_core):

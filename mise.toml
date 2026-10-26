@@ -29,7 +29,7 @@ description = "Install the Python and web dependencies"
 alias = "wb"
 depends = ["module:pack-all", "wasm:patchkit"]
 run = "uv run python -m tools.emulator.native_emu"
-description = "Build once and run the desktop emulator (DN2 audio when local inputs are ready); the digikit runtime is patched into a stock firmware unless `-- --no-runtime` (the header checkbox Boot with digikit runtime decides for Open and Reload); `-- --build-only` builds without launching. The +Drive is plus_drive/<device>/ when it exists (`-- --plus-drive DIR` picks another folder, `--samples DIR` is the same option; the firmware's changes are exported back to the folder on exit, `-- --no-sync` turns that off)"
+description = "Build once and run the desktop emulator (DN2 and DT2 audio when both local input sets are ready; DIGI_EMU_SECOND_CORE=0 selects one core); the digikit runtime is patched into a stock firmware unless `-- --no-runtime` (the header checkbox Boot with digikit runtime decides for Open and Reload); `-- --build-only` builds without launching. The +Drive is plus_drive/<device>/ when it exists (`-- --plus-drive DIR` picks another folder, `--samples DIR` is the same option; the firmware's changes are exported back to the folder on exit, `-- --no-sync` turns that off)"
 
 [tasks."emu:serve"]
 run = "uv run python -m tools.emulator.native_emu --daemon"

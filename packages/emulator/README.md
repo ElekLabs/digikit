@@ -113,15 +113,18 @@ The second instance has no C ABI symbols (cfg `sharc_second`) and reads its own 
 `--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX` (repeatable): a firmware load for that device then boots coupled
 (audio, DSP, restart) instead of ColdFire only. Without `SHARC_GEN_DIR_2` the `-2` packages are empty and every build
 is as before. Proof: `uv run python -m tools.devtools.dual_core_check` (the header names the build command). The
-launcher builds this with `DIGI_EMU_SECOND_CORE=1 mise run workbench` (no PGO profile for it yet).
+desktop launcher builds this by default with `mise run wb` when both devices' inputs are available
+(no PGO profile for it yet).
 
-Use (opt-in, `DIGI_EMU_SECOND_CORE=1`; the default launcher build is one core, unchanged):
+Use:
 
-- `DIGI_EMU_SECOND_CORE=1 mise run workbench` (the header `-- --build-only` builds without launching) builds with `second-core`
+- `mise run workbench` (alias `mise run wb`; `-- --build-only` builds without launching) builds with `second-core`
   and passes the other device's ready inputs and generated core. It needs both devices' ready inputs (DN2 and DT2) and both
   generated cores; without them the launcher says `second core: ... one core only` and builds one core. The two-core build has its
   own target directory (`out/native/target/<first key>+<second key>`, `tools/emulator/native_target.py`) and no PGO profile
-  (`perf:pgo` trains single-core binaries).
+  (`perf:pgo` trains single-core binaries). Choose File can then open either device with DSP audio. Set
+  `DIGI_EMU_SECOND_CORE=0` for a single-core desktop build. Daemon launches (`mise run emu:serve`) remain single-core
+  by default; set `DIGI_EMU_SECOND_CORE=1` to include the other core there.
 - The patched images (runtime, core/dynfx, core/fxpages, core/fx) differ from the image the generated blocks came from. Each
   engine instance checks its own loaded code against its own generated core (`Engine::verify_code`, `code_diff.rs`) and bars only
   the blocks with a changed instruction, so the AOT path works on the second core as on the first (`SHARC_CODE_LOG=1` prints the
