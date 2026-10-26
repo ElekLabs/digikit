@@ -61,7 +61,7 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
   const dn2 = Buffer.from('stock DN2 fixture');
   const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
   const table = JSON.stringify({
-    [sha(dt2)]: { fast_regions: 'dt2-regions', blocktrans: 'dt2-roots' },
+    [sha(dt2)]: { fast_regions: 'dt2-regions', blocktrans: 'dt2-roots', fallback_regions: 'dt2-fallback' },
     [sha(dn2)]: { fast_regions: 'dn2-regions', blocktrans: 'dn2-roots' },
   });
   const read = vi.spyOn(fs, 'readFileSync');
@@ -69,6 +69,33 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
   try {
     firmware(dt2);
     assert.deepEqual(coupledEnv('same-path.syx', {}), {
+      SHARC_FAST_REGIONS: 'dt2-regions',
+      SHARC_BLOCKTRANS: 'dt2-roots',
+      SHARC_FAST_FALLBACK_REGIONS: 'dt2-fallback',
+    });
+    for (const explicit of ['', 'ordinary-roots']) {
+      firmware(dt2);
+      assert.deepEqual(coupledEnv('dt2.syx', { SHARC_FAST_REGIONS: explicit }), {
+        SHARC_FAST_REGIONS: explicit,
+        SHARC_BLOCKTRANS: 'dt2-roots',
+      });
+    }
+    for (const fallback of ['', 'explicit-fallback']) {
+      firmware(dt2);
+      assert.deepEqual(
+        coupledEnv('dt2.syx', {
+          SHARC_FAST_REGIONS: '',
+          SHARC_FAST_FALLBACK_REGIONS: fallback,
+        }),
+        {
+          SHARC_FAST_REGIONS: '',
+          SHARC_BLOCKTRANS: 'dt2-roots',
+          SHARC_FAST_FALLBACK_REGIONS: fallback,
+        },
+      );
+    }
+    firmware(dt2);
+    assert.deepEqual(coupledEnv('dt2.syx', { SHARC_FAST_AUTO: '10,100' }), {
       SHARC_FAST_REGIONS: 'dt2-regions',
       SHARC_BLOCKTRANS: 'dt2-roots',
     });

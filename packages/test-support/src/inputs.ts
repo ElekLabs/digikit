@@ -76,11 +76,19 @@ export function validateRuntimeInputs(inputs: ReadyInputs): void {
 export function coupledEnv(syx: string, environ: NodeJS.ProcessEnv = process.env): Record<string, string> {
   if (environ.DIGI_EMU_FAST === '0') return {};
   const digest = createHash('sha256').update(fs.readFileSync(syx)).digest('hex');
-  const table: Record<string, { fast_regions?: string; blocktrans?: string }> = JSON.parse(
+  const table: Record<string, { fast_regions?: string; blocktrans?: string; fallback_regions?: string }> = JSON.parse(
     fs.readFileSync(path.join(repoRoot(), 'tools/emulator/fast_regions.json'), 'utf8'),
   );
   const entry = table[digest];
-  const defaults = { SHARC_FAST_REGIONS: entry?.fast_regions, SHARC_BLOCKTRANS: entry?.blocktrans };
+  const defaults = {
+    SHARC_FAST_REGIONS: entry?.fast_regions,
+    SHARC_BLOCKTRANS: entry?.blocktrans,
+    // Explicit ordinary regions or auto selection retain control of these roots.
+    SHARC_FAST_FALLBACK_REGIONS:
+      environ.SHARC_FAST_REGIONS === undefined && environ.SHARC_FAST_AUTO === undefined
+        ? entry?.fallback_regions
+        : undefined,
+  };
   const result: Record<string, string> = {};
   for (const [name, value] of Object.entries(defaults)) {
     if (environ[name] !== undefined) result[name] = environ[name];

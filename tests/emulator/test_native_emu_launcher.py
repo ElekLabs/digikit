@@ -777,3 +777,48 @@ def test_card_cache_key_follows_every_file(monkeypatch, tmp_path):
     assert card(folder, syx, {}, "dn2").name == "dn2.img"
     with pytest.raises(SystemExit):
         card(tmp_path / "missing", syx, {}, "dt2")
+
+
+def test_fallback_defaults_single_and_dual_core(monkeypatch, tmp_path):
+    scope = launcher()
+    first = _known_syx(tmp_path, scope, monkeypatch)
+    second = tmp_path / "second.syx"
+    second.write_bytes(b"second")
+    table = scope["FALLBACK_REGIONS"]
+    monkeypatch.setitem(table, __import__("hashlib").sha256(b"dn2").hexdigest(), "0x50")
+    monkeypatch.setitem(
+        table, __import__("hashlib").sha256(b"second").hexdigest(), "0x60"
+    )
+    args = [
+        "--audio-profile-syx",
+        str(first),
+        "--also-coupled",
+        "image",
+        "state",
+        "snapshot",
+        str(second),
+    ]
+    env = {}
+    scope["set_fast_regions"](args, env)
+    assert env["SHARC_FAST_FALLBACK_REGIONS"] == "0x50"
+    assert env["SHARC_FAST_FALLBACK_REGIONS_2"] == "0x60"
+    for explicit in ["", "0x99"]:
+        env = {"SHARC_FAST_REGIONS": explicit, "SHARC_FAST_FALLBACK_REGIONS_2": ""}
+        scope["set_fast_regions"](args, env)
+        assert "SHARC_FAST_FALLBACK_REGIONS" not in env
+        assert env["SHARC_FAST_FALLBACK_REGIONS_2"] == ""
+    env = {"SHARC_FAST_REGIONS": "", "SHARC_FAST_FALLBACK_REGIONS": "0x77"}
+    scope["set_fast_regions"](args, env)
+    assert env["SHARC_FAST_FALLBACK_REGIONS"] == "0x77"
+    env = {"SHARC_FAST_AUTO": "10,100"}
+    scope["set_fast_regions"](args, env)
+    assert "SHARC_FAST_FALLBACK_REGIONS" not in env
+    assert "SHARC_FAST_FALLBACK_REGIONS_2" not in env
+    env = {"DIGI_EMU_FAST": "0"}
+    scope["set_fast_regions"](args, env)
+    assert env == {"DIGI_EMU_FAST": "0"}
+    unknown = tmp_path / "unknown.syx"
+    unknown.write_bytes(b"unknown")
+    env = {}
+    scope["set_fast_regions"](["--audio-profile-syx", str(unknown)], env)
+    assert "SHARC_FAST_FALLBACK_REGIONS" not in env

@@ -2128,6 +2128,224 @@ mod tests {
         assert!(l.wins.is_empty());
     }
 
+    // Unit tests and the Cranelift dev-dependency use separate instances of
+    // sharc-native. Use the backend's public serialized-IR boundary between them.
+    #[cfg(not(target_family = "wasm"))]
+    struct FlatNativeKernel(*mut std::ffi::c_void);
+
+    #[cfg(not(target_family = "wasm"))]
+    impl Drop for FlatNativeKernel {
+        fn drop(&mut self) {
+            // SAFETY: this handle was compiled below and is freed exactly once.
+            unsafe { sharc_fast_cl::sharc_fast_free(self.0) }
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    impl CompiledKernel for FlatNativeKernel {
+        unsafe fn run(&self, ctx: *mut u8, st: *mut u8) -> u32 {
+            unsafe { sharc_fast_cl::sharc_fast_run2(self.0, ctx, st) }
+        }
+    }
+
+    fn flat_test_kernels(bytes: u8, write: bool) -> Vec<Box<dyn CompiledKernel>> {
+        let mut l = Lower::new(env(), Plan::default(), 2);
+        let addr = l.emit(Ty::I32, Op::Ctx32(CTX_REGS_IN));
+        let (p, o) = l.flat_access(addr, bytes, write).unwrap();
+        if write {
+            let v = l.ci(0xa17c_39e5);
+            l.body.push(if bytes == 4 {
+                Inst::Store32 { base: p, off: o, v }
+            } else {
+                Inst::StoreN {
+                    base: p,
+                    off: o,
+                    v,
+                    bytes,
+                }
+            });
+        } else {
+            let op = if bytes == 4 {
+                Op::Load32 { base: p, off: o }
+            } else {
+                Op::LoadN {
+                    base: p,
+                    off: o,
+                    bytes,
+                }
+            };
+            let v = l.emit(Ty::I32, op);
+            l.body.push(Inst::StCtx32 {
+                off: CTX_REGS_OUT,
+                v,
+            });
+        }
+        let k = l.finish().unwrap().kernel;
+        let mut kernels = vec![super::super::interp::InterpBackend.compile(&k).unwrap()];
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let words = k.encode();
+            let mut err = [0i8; 512];
+            // SAFETY: valid serialized input and writable error buffer.
+            let h = unsafe {
+                sharc_fast_cl::sharc_fast_compile(
+                    words.as_ptr(),
+                    words.len(),
+                    err.as_mut_ptr(),
+                    err.len(),
+                )
+            };
+            assert!(!h.is_null(), "{}", unsafe {
+                std::ffi::CStr::from_ptr(err.as_ptr()).to_string_lossy()
+            });
+            kernels.push(Box::new(FlatNativeKernel(h)));
+        }
+        kernels
+    }
+
+    fn flat_test_run(k: &dyn CompiledKernel, mem: &mut crate::mem::Mem, addr: u32) -> (u32, u32) {
+        let mut ctx = super::super::glue::Ctx::default();
+        let (eff, watch) = mem.flat_tables();
+        ctx.set64(CTX_FLAT_EFF, eff as u64);
+        ctx.set64(CTX_FLAT_WATCH, watch as u64);
+        ctx.set32(CTX_ITERS, 1);
+        ctx.set32(CTX_REGS_IN, addr);
+        ctx.set32(CTX_REGS_OUT, 0xdead_beef);
+        ctx.set32(CTX_WIN_CHECK, 1);
+        // SAFETY: the tables remain live for the call, all memory operations
+        // are guarded, and this kernel never accesses engine state.
+        let result = unsafe { k.run(ctx.ptr(), std::ptr::null_mut()) };
+        (result, ctx.get32(CTX_REGS_OUT))
+    }
+
+    #[test]
+    fn flat_access_loads_across_presence_words() {
+        use crate::mem::{Mem, PAGE_SIZE};
+        const BASE: u32 = 0x20_0000;
+        const DATA: [u8; 4] = [0x83, 0x17, 0xe9, 0x46];
+        for bytes in [1, 2, 4] {
+            let kernels = flat_test_kernels(bytes, false);
+            let offsets = (28..=33)
+                .chain(60..=65)
+                .chain([PAGE_SIZE as u32 - bytes as u32, PAGE_SIZE as u32 - 1]);
+            for off in offsets {
+                for missing in 0..=bytes {
+                    let mut mem = Mem::new();
+                    for i in 0..bytes {
+                        if i != missing {
+                            mem.write_byte(BASE + off + i as u32, DATA[i as usize]);
+                        }
+                    }
+                    let accepted = missing == bytes && off + bytes as u32 <= PAGE_SIZE as u32;
+                    let value = match bytes {
+                        1 => DATA[0] as u32,
+                        2 => u16::from_le_bytes([DATA[0], DATA[1]]) as u32,
+                        4 => u32::from_le_bytes(DATA),
+                        _ => unreachable!(),
+                    };
+                    let expected = if accepted {
+                        (0, value)
+                    } else {
+                        (1, 0xdead_beef)
+                    };
+                    for (backend, k) in kernels.iter().enumerate() {
+                        assert_eq!(
+                            flat_test_run(&**k, &mut mem, BASE + off),
+                            expected,
+                            "backend {backend}, width {bytes}, offset {off}, missing {missing}"
+                        );
+                    }
+                }
+            }
+            // A missing page and a present MMR page must both side-exit.
+            let mut mem = Mem::new();
+            for k in &kernels {
+                assert_eq!(flat_test_run(&**k, &mut mem, BASE), (1, 0xdead_beef));
+            }
+            mem.load(BASE, &DATA);
+            mem.reset();
+            for k in &kernels {
+                let expected = mem.read_le(BASE, bytes as u32);
+                assert_eq!(flat_test_run(&**k, &mut mem, BASE), (0, expected));
+            }
+            let mut mmr = vec![false; 1 << 16];
+            mmr[(BASE >> 16) as usize] = true;
+            mem.set_mmr_pages(mmr);
+            for k in &kernels {
+                assert_eq!(flat_test_run(&**k, &mut mem, BASE), (1, 0xdead_beef));
+            }
+            // The low-address alias must use the canonical page's presence bits.
+            let mut mem = Mem::new();
+            for (i, b) in DATA.iter().enumerate() {
+                mem.write_byte(0x2800_0000 + BASE + 63 + i as u32, *b);
+            }
+            for k in &kernels {
+                let expected = mem.read_le(0x2800_0000 + BASE + 63, bytes as u32);
+                assert_eq!(flat_test_run(&**k, &mut mem, BASE + 63), (0, expected));
+            }
+        }
+    }
+
+    #[test]
+    fn flat_access_stores_keep_bitmap_and_watch_guards() {
+        use crate::mem::Mem;
+        const BASE: u32 = 0x20_0000;
+        for bytes in [1, 2, 4] {
+            let kernels = flat_test_kernels(bytes, true);
+            for k in &kernels {
+                for off in (28..=33)
+                    .chain(60..=65)
+                    .chain([65536 - bytes as u32, 65535])
+                {
+                    for missing in 0..=bytes {
+                        let mut mem = Mem::new();
+                        for i in 0..bytes {
+                            if i != missing {
+                                mem.write_byte(BASE + off + i as u32, 0x55);
+                            }
+                        }
+                        let accepted = missing == bytes && off % 32 + bytes as u32 <= 32;
+                        let before: Vec<_> = (0..bytes)
+                            .map(|i| mem.byte(BASE + off + i as u32))
+                            .collect();
+                        let result = flat_test_run(&**k, &mut mem, BASE + off).0;
+                        assert_eq!(
+                            result,
+                            if accepted { 0 } else { 1 },
+                            "width {bytes}, offset {off}, missing {missing}"
+                        );
+                        let after: Vec<_> = (0..bytes)
+                            .map(|i| mem.byte(BASE + off + i as u32))
+                            .collect();
+                        if accepted {
+                            assert_eq!(after, 0xa17c_39e5u32.to_le_bytes()[..bytes as usize]);
+                        } else {
+                            assert_eq!(after, before);
+                        }
+                    }
+                }
+                let mut mem = Mem::new();
+                mem.load(BASE, &[0x55; 4]);
+                mem.reset();
+                assert_eq!(flat_test_run(&**k, &mut mem, BASE).0, 1); // present, not dirty
+                for i in 0..bytes {
+                    mem.write_byte(BASE + i as u32, 0x55);
+                }
+                mem.watch_code(BASE, BASE + 4);
+                assert_eq!(flat_test_run(&**k, &mut mem, BASE).0, 1);
+                assert_eq!(
+                    mem.read_le(BASE, bytes as u32),
+                    match bytes {
+                        1 => 0x55,
+                        2 => 0x5555,
+                        4 => 0x5555_5555,
+                        _ => unreachable!(),
+                    }
+                );
+            }
+        }
+    }
+
     #[test]
     fn a_negative_constant_range_is_a_high_address() {
         // `ci` sign-extends: 0x8052d790 is the range -2142053488, the address

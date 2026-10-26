@@ -30,6 +30,9 @@ from tools.emulator import digi_env  # noqa: E402
 # (SHARC_BLOCKTRANS), keyed by the SHA-256 of the DN2 .syx. The data lives in
 # tools/emulator/fast_regions.json.
 FAST_REGIONS = {k: v.get("fast_regions", "") for k, v in digi_env.fast_table().items()}
+FALLBACK_REGIONS = {
+    k: v.get("fallback_regions", "") for k, v in digi_env.fast_table().items()
+}
 BLOCKTRANS_ROOTS = {
     k: v.get("blocktrans", "") for k, v in digi_env.fast_table().items()
 }
@@ -55,6 +58,11 @@ def fast_regions_for(syx: pathlib.Path) -> str:
     return _lookup(FAST_REGIONS, syx)
 
 
+def fallback_regions_for(syx: pathlib.Path) -> str:
+    """Runtime fallback roots for this firmware, or empty if unknown."""
+    return _lookup(FALLBACK_REGIONS, syx)
+
+
 def blocktrans_roots_for(syx: pathlib.Path) -> str:
     """The verified block-translator cluster roots for this firmware, or ""."""
     return _lookup(BLOCKTRANS_ROOTS, syx)
@@ -65,8 +73,8 @@ def set_fast_regions(
 ) -> None:
     """Enable the fast tier for a coupled run unless the user chose otherwise.
 
-    SHARC_FAST_REGIONS (and SHARC_BLOCKTRANS) set by the user win;
-    DIGI_EMU_FAST=0 leaves both off.
+    Explicit lists win; DIGI_EMU_FAST=0 suppresses defaults. Explicit regular
+    regions or auto selection suppress fallback defaults for that core.
     """
     if environ.get("DIGI_EMU_FAST") == "0":
         return
@@ -83,6 +91,15 @@ def set_fast_regions(
     ):
         lists.append(("_2", pathlib.Path(args[at])))
     for suffix, firmware in lists:
+        # Check explicit fast settings before installing the regular default.
+        fallback_name = f"SHARC_FAST_FALLBACK_REGIONS{suffix}"
+        if (
+            fallback_name not in environ
+            and f"SHARC_FAST_REGIONS{suffix}" not in environ
+            and "SHARC_FAST_AUTO" not in environ
+            and (fallback := fallback_regions_for(firmware))
+        ):
+            environ[fallback_name] = fallback
         if f"SHARC_FAST_REGIONS{suffix}" not in environ:
             regions = fast_regions_for(firmware)
             if regions:

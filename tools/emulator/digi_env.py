@@ -303,22 +303,39 @@ def fast_regions_for(syx: pathlib.Path) -> str:
     return _entry(syx).get("fast_regions", "")
 
 
+def fallback_regions_for(syx: pathlib.Path) -> str:
+    """Runtime fallback roots for invalidated generated entries, or empty."""
+    return _entry(syx).get("fallback_regions", "")
+
+
 def blocktrans_roots_for(syx: pathlib.Path) -> str:
     """The verified block-translator cluster roots for this firmware, or ""."""
     return _entry(syx).get("blocktrans", "")
 
 
-def fast_env(environ: Environ | None = None) -> dict[str, str]:
-    """SHARC_FAST_REGIONS / SHARC_BLOCKTRANS for a coupled run.
+def fast_env(
+    environ: Environ | None = None, *, syx: pathlib.Path | None = None
+) -> dict[str, str]:
+    """Fast regions, fallback regions and cluster roots for a coupled run.
 
-    User-set values win; DIGI_EMU_FAST=0 leaves both off; otherwise the table
-    entry for the firmware. Keys with nothing to set are left out.
+    User-set values win; DIGI_EMU_FAST=0 suppresses defaults; otherwise use
+    the firmware table. Explicit regular regions or auto selection suppress
+    fallback defaults. Keys with nothing to set are left out.
     """
     environ = os.environ if environ is None else environ
     out: dict[str, str] = {}
     if environ.get("DIGI_EMU_FAST") == "0":
         return out
-    syx = firmware(environ)
+    syx = firmware(environ) if syx is None else syx
+    if "SHARC_FAST_FALLBACK_REGIONS" in environ:
+        out["SHARC_FAST_FALLBACK_REGIONS"] = environ["SHARC_FAST_FALLBACK_REGIONS"]
+    # Explicit auto selection must still be able to arm these as ordinary roots.
+    elif (
+        "SHARC_FAST_REGIONS" not in environ
+        and "SHARC_FAST_AUTO" not in environ
+        and (fallback := fallback_regions_for(syx))
+    ):
+        out["SHARC_FAST_FALLBACK_REGIONS"] = fallback
     for name, lookup in (
         ("SHARC_FAST_REGIONS", fast_regions_for),
         ("SHARC_BLOCKTRANS", blocktrans_roots_for),

@@ -221,6 +221,7 @@ Read at start-up; defaults are what `tools/emulator/digi_env.py` and the shipped
 |---|---|
 | `SHARC_AOT=0`, `SHARC_AOT_DENY` | generated block tier off / blocks denied |
 | `SHARC_FAST_REGIONS`, `SHARC_BLOCKTRANS` | fast region entries, block-translator roots (`@FILE` allowed) |
+| `SHARC_FAST_FALLBACK_REGIONS` | fast roots eligible only when code verification bars their generated entry; DT2 1.17 defaults to `0x1c2607`; an explicit empty value disables the default (`_2` selects the second core) |
 | `SHARC_FAST_AUTO=a,b`, `SHARC_FAST_FOLLOW`, `SHARC_FAST_ONLY` | run-time region selection, extra entries, restrict to listed |
 | `SHARC_FAST_GEN` | generated lowering; default on; `0` = hand lowering only |
 | `SHARC_FAST_HELPER` | generated helper calls |

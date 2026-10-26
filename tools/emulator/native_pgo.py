@@ -268,6 +268,20 @@ def fast_regions(environ: dict[str, str] | os._Environ[str] | None = None) -> st
     return digi_env.fast_regions_for(digi_env.firmware(environ))
 
 
+def fallback_regions(environ: dict[str, str] | os._Environ[str] | None = None) -> str:
+    """Runtime fallback list, respecting explicit fast-region diagnostics."""
+    environ = os.environ if environ is None else environ
+    if "SHARC_FAST_FALLBACK_REGIONS" in environ:
+        return environ["SHARC_FAST_FALLBACK_REGIONS"]
+    if (
+        environ.get("DIGI_EMU_FAST") == "0"
+        or "SHARC_FAST_REGIONS" in environ
+        or "SHARC_FAST_AUTO" in environ
+    ):
+        return ""
+    return digi_env.fallback_regions_for(digi_env.firmware(environ))
+
+
 def blocktrans_roots(environ: dict[str, str] | os._Environ[str] | None = None) -> str:
     """The SHARC_BLOCKTRANS cluster roots a coupled run uses ("" when none).
 
@@ -694,6 +708,7 @@ def run_env(deps_dir: pathlib.Path) -> dict[str, str]:
         "DIGI_COUPLED_FIXTURES": os.environ.get("DIGI_COUPLED_FIXTURES", str(READY)),
         "DIGI_COUPLED_SYX": str(digi_env.firmware()),
         "DN2_PROFILE_LINK": "1",
+        "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
     }
 
 
@@ -775,6 +790,9 @@ def run_workload(
 ) -> Result:
     """Run the workload under /usr/bin/time and enforce the gates."""
     env_pairs = {**run_env(binary.parent), **(extra_env or {})}
+    env_pairs["SHARC_FAST_FALLBACK_REGIONS"] = fallback_regions(
+        {**os.environ, **(extra_env or {})}
+    )
     command = [
         "/usr/bin/time",
         "-lp",
@@ -885,6 +903,7 @@ def cmd_train(args: argparse.Namespace) -> None:
                 {
                     "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
                     "SHARC_FAST_REGIONS": fast,
+                    "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
                     "SHARC_BLOCKTRANS": blocktrans,
                 },
                 app=True,
@@ -916,6 +935,7 @@ def cmd_train(args: argparse.Namespace) -> None:
         "packages": packages,
         "desktop_sha256": desktop,
         "generated_dir": str(gen),
+        "fallback_regions": fallback_regions(),
         "fast_regions": fast,
         "blocktrans": blocktrans,
         "file_count": nfiles,
@@ -950,6 +970,7 @@ def cmd_check(_: argparse.Namespace) -> int:
     manifest = read_manifest() or {}
     fast_changed = status == "ok" and (
         manifest.get("fast_regions", "") != fast_regions()
+        or manifest.get("fallback_regions", "") != fallback_regions()
         or manifest.get("blocktrans", "") != blocktrans_roots()
     )
     if status == "ok" and desktop:
@@ -986,6 +1007,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     environ = {
         **os.environ,
         "SHARC_FAST_REGIONS": fast_regions(),
+        "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
         "SHARC_BLOCKTRANS": blocktrans_roots(),
     }
     if args.device == "dt2" and not environ.get("SHARC_GEN_DIR"):
@@ -1082,11 +1104,12 @@ def run_dt2_workload(
             *(x for n in names for x in ("--scenario", n)),
             "--out", str(report),
         ]  # fmt: skip
-        argv = coupled.run_args(binary, coupled.inputs("dt2"), extra)
+        actual_inputs = coupled.inputs("dt2")
+        argv = coupled.run_args(binary, actual_inputs, extra)
         done = subprocess.run(
             argv,
             cwd=ROOT,
-            env=coupled.run_env(extra_env),
+            env=coupled.run_env(extra_env, syx=actual_inputs["firmware"]),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
@@ -1153,6 +1176,13 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
         "components": components,
         "packages": packages,
         "generated_dir": str(gen),
+        "fast_env": {
+            key: value
+            for key, value in coupled_module()
+            .run_env(syx=coupled_module().inputs("dt2")["firmware"])
+            .items()
+            if key.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
+        },
         "file_count": nfiles,
         "rustc_vV": rustc_version(),
         "triple": TRIPLE,
@@ -1268,10 +1298,15 @@ def cmd_bench(args: argparse.Namespace) -> None:
         {
             "binary_sha256": hashes,
             "profdata": detail,
+            "fallback_regions": fallback_regions(),
             "fast_regions": fast,
             "blocktrans": blocktrans,
         },
-        {"SHARC_FAST_REGIONS": fast, "SHARC_BLOCKTRANS": blocktrans},
+        {
+            "SHARC_FAST_REGIONS": fast,
+            "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
+            "SHARC_BLOCKTRANS": blocktrans,
+        },
     )
 
 

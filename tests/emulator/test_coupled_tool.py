@@ -130,3 +130,97 @@ def test_check_generated_refuses_stale_core_before_any_binary_or_render(monkeypa
     )
     with pytest.raises(SystemExit, match="stale core"):
         coupled.cmd_scenario(args)
+
+
+def test_fallback_env_defaults_and_override_precedence(monkeypatch, tmp_path):
+    import hashlib
+    import json
+
+    from tools.emulator import digi_env
+
+    syx = tmp_path / "firmware.syx"
+    syx.write_bytes(b"fixture")
+    table = tmp_path / "fast.json"
+    table.write_text(
+        json.dumps(
+            {
+                hashlib.sha256(b"fixture").hexdigest(): {
+                    "fast_regions": "0x1",
+                    "fallback_regions": "0x2",
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(digi_env, "FAST_TABLE", table)
+    base = {"DIGI_EMU_SYX": str(syx)}
+    assert digi_env.fast_env(base)["SHARC_FAST_FALLBACK_REGIONS"] == "0x2"
+    for explicit in ["", "0x9"]:
+        env = {**base, "SHARC_FAST_REGIONS": explicit}
+        assert "SHARC_FAST_FALLBACK_REGIONS" not in digi_env.fast_env(env)
+        for fallback in ["", "0x8"]:
+            env["SHARC_FAST_FALLBACK_REGIONS"] = fallback
+            assert digi_env.fast_env(env)["SHARC_FAST_FALLBACK_REGIONS"] == fallback
+    assert digi_env.fast_env({**base, "DIGI_EMU_FAST": "0"}) == {}
+    # Explicit auto selection must retain the chance to arm ordinary roots.
+    auto = {**base, "SHARC_FAST_AUTO": "10,100"}
+    assert "SHARC_FAST_FALLBACK_REGIONS" not in digi_env.fast_env(auto)
+    assert (
+        digi_env.fast_env({**auto, "SHARC_FAST_FALLBACK_REGIONS": "0x8"})[
+            "SHARC_FAST_FALLBACK_REGIONS"
+        ]
+        == "0x8"
+    )
+    monkeypatch.setattr(coupled.os, "environ", base)
+    assert coupled.run_env()["SHARC_FAST_FALLBACK_REGIONS"] == "0x2"
+    assert "SHARC_FAST_FALLBACK_REGIONS" not in coupled.run_env(
+        {"SHARC_FAST_REGIONS": ""}
+    )
+    assert (
+        coupled.run_env({"SHARC_FAST_FALLBACK_REGIONS": ""})[
+            "SHARC_FAST_FALLBACK_REGIONS"
+        ]
+        == ""
+    )
+    assert "SHARC_FAST_FALLBACK_REGIONS" not in coupled.run_env({"DIGI_EMU_FAST": "0"})
+    unknown = tmp_path / "unknown.syx"
+    unknown.write_bytes(b"unknown")
+    assert digi_env.fast_env({"DIGI_EMU_SYX": str(unknown)}) == {}
+
+
+def test_run_env_uses_actual_firmware_without_mutating_selectors(monkeypatch, tmp_path):
+    import hashlib
+    import json
+
+    from tools.emulator import digi_env
+
+    dn2, dt2, patched = [
+        tmp_path / name for name in ["dn2.syx", "dt2.syx", "patched.syx"]
+    ]
+    for syx in [dn2, dt2, patched]:
+        syx.write_bytes(syx.name.encode())
+    table = tmp_path / "fast.json"
+    table.write_text(
+        json.dumps(
+            {
+                hashlib.sha256(dn2.read_bytes()).hexdigest(): {"fast_regions": "dn2"},
+                hashlib.sha256(dt2.read_bytes()).hexdigest(): {
+                    "fallback_regions": "dt2"
+                },
+            }
+        )
+    )
+    monkeypatch.setattr(digi_env, "FAST_TABLE", table)
+    selectors = {"DIGI_EMU_SYX": str(dn2)}
+    monkeypatch.setattr(coupled.os, "environ", selectors)
+    env = coupled.run_env(syx=dt2)
+    assert env["DIGI_EMU_SYX"] == str(dn2)
+    assert env["SHARC_FAST_FALLBACK_REGIONS"] == "dt2"
+    assert "SHARC_FAST_REGIONS" not in env
+    assert coupled.run_env(syx=patched) == selectors
+    assert (
+        coupled.run_env({"SHARC_FAST_FALLBACK_REGIONS": "explicit"}, syx=patched)[
+            "SHARC_FAST_FALLBACK_REGIONS"
+        ]
+        == "explicit"
+    )
+    assert selectors == {"DIGI_EMU_SYX": str(dn2)}

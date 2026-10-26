@@ -241,9 +241,11 @@ def ensure_binary(no_build: bool, device: str = "dn2", image=None) -> pathlib.Pa
     return binary
 
 
-def run_env(overrides: dict[str, str] | None = None) -> dict[str, str]:
-    env = {**os.environ, **digi_env.fast_env()}
-    env.update(overrides or {})
+def run_env(
+    overrides: dict[str, str] | None = None, *, syx: pathlib.Path | None = None
+) -> dict[str, str]:
+    env = {**os.environ, **(overrides or {})}
+    env.update(digi_env.fast_env(env, syx=syx))
     return env
 
 
@@ -310,8 +312,9 @@ def run_and_report(binary: pathlib.Path, selection: list[str], args) -> int:
         extra += ["--peek", spec]
     if getattr(args, "dump_dsp", False):
         extra += ["--dump-dsp", str(out.parent / "dsp.bin")]
-    argv = run_args(binary, inputs(device), extra)
-    env = run_env(digi_env.diag_env(diag, out.parent))
+    actual_inputs = inputs(device)
+    argv = run_args(binary, actual_inputs, extra)
+    env = run_env(digi_env.diag_env(diag, out.parent), syx=actual_inputs["firmware"])
     if digi_env.diag_stderr(diag):
         with (out.parent / "logs" / "stderr.log").open("wb") as err:
             done = subprocess.run(argv, cwd=ROOT, env=env, stderr=err, check=False)
@@ -495,7 +498,11 @@ def run_batch(
     if use_cache:
         base = run_args(binary, inputs(device), [])
         context = render_cache.context_key(
-            binary, base[1:], run_env(), device, list(peeks)
+            binary,
+            base[1:],
+            run_env(syx=inputs(device)["firmware"]),
+            device,
+            list(peeks),
         )
         with pathlib.Path(scn).open() as handle:
             objs = {sc["name"]: sc for sc in json.load(handle)["scenarios"]}
@@ -538,8 +545,13 @@ def run_batch(
         extra += ["--out", str(d / "report.json"), "--wav", str(d / "audio.wav")]
         for spec in peeks:
             extra += ["--peek", spec]
-        argv = run_args(binary, inputs(device), extra)
-        return _run_one(argv, run_env(digi_env.diag_env(parsed, d)), d)
+        actual_inputs = inputs(device)
+        argv = run_args(binary, actual_inputs, extra)
+        return _run_one(
+            argv,
+            run_env(digi_env.diag_env(parsed, d), syx=actual_inputs["firmware"]),
+            d,
+        )
 
     rendered: list[dict] = []
     entries: dict[str, dict] = {}
@@ -725,10 +737,11 @@ def bisect_run_to(binary, name, seconds, out, overrides) -> pathlib.Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
         out.unlink()
+    actual_inputs = inputs()
     done = subprocess.run(
-        run_args(binary, inputs(), extra),
+        run_args(binary, actual_inputs, extra),
         cwd=ROOT,
-        env=run_env(overrides),
+        env=run_env(overrides, syx=actual_inputs["firmware"]),
         check=False,
     )
     if done.returncode == 1 or not out.is_file():

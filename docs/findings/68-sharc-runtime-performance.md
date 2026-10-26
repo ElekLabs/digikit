@@ -3,8 +3,9 @@
 **[D] [C]** DT2 OS 1.17, native host, base `d0a4d76d`. The initial diagnosis
 changed no emulator source. The October 26 follow-up tested a small fast-tier
 load guard change. October 27 default-activation experiments found stock
-regressions; those experiments and the shared load change were withdrawn
-from the active source (see the final section). No generator or firmware
+regressions and were initially withdrawn. The earlier V2 candidate was then
+restored for DT2 default use after explicitly separating the remaining DN2
+overhead investigation (see the final sections). No generator or firmware
 patches changed.
 This updates the October 23 external performance plan and the historical
 patched-image section of [finding 18](18-dsp-performance.md). The narrower
@@ -12,16 +13,16 @@ invalidation in `60aa71ba` already exists; do not repeat that implementation.
 
 ## Decision
 
-Investigate compiled execution of the patched parameter-conversion region
-`0x1c2607..0x1c28b5` first. Current runtime patches still cause a large amount
-of stock code to execute through the interpreter. Stock firmware itself has a
-different distribution: most sampled DSP work is already compiled.
+Retain V2's measured DT2 runtime improvement and activate `0x1c2607` by
+default only when code verification bars its generated entry. Track the
+measured DN2 overhead separately; it is not a reason to discard the DT2 gain.
+The user's October 27 scope decision supersedes the initial blanket rejection.
 
-No default activation is accepted. The follow-up demonstrates a useful load
-guard improvement with an explicitly enabled region, but stock regressions
-prevent accepting it for normal workbench launches. The recoverable
-**host time** of the whole region remains unmeasured; its instruction share
-is not a speedup ceiling. Pending-transfer dispatch remains lower priority.
+Current runtime patches still cause substantial stock code to execute through
+the interpreter. Stock firmware has a different execution distribution.
+The recoverable **host time** of the whole converter remains unmeasured;
+instruction share is not a speedup ceiling. Investigate the `14d` continuation
+next; pending-transfer dispatch remains lower priority.
 
 Any accepted follow-up must enable its improvement in normal workbench
 launches, without experimental environment variables. Opt-in measurements
@@ -240,7 +241,7 @@ record empty Rust flags; the old frozen binary still lacks its original
 immutable build manifest. This is a local non-PGO experiment, not a claim
 about refreshed PGO, browser performance or stock firmware gains.
 
-**[O]** Before enabling the region by default, establish safe runtime-specific
+**Historical acceptance checklist:** Before enabling the region by default, establish safe runtime-specific
 selection, check stock behavior and the uploaded/selected PLUCK workload,
 compare architectural state at matched boundaries, and measure under a
 consistent current PGO policy. Full PCM equality in two short probes is
@@ -251,7 +252,7 @@ for overhead from the additional presence-bitmap check; correctness gates do
 not establish performance neutrality there.
 Static dispatch review confirms that a configured fast region runs before
 an available AOT entry. Adding this root to the default table would therefore
-also change healthy stock dispatch. There is no existing invalidation-only
+also change healthy stock dispatch. At that point there was no invalidation-only
 activation hook; the eligibility decision after AOT invalidation in
 `packages/emulator/sharc/src/lib.rs` is the narrow boundary to investigate.
 
@@ -263,13 +264,13 @@ used normal region configuration, not the experimental DT2 root override.
 Its runtime workflow suite dominated elapsed time (1,244 seconds); this
 should not be confused with the 16-second candidate compilation.
 
-## Default activation rejected, October 27
+## Default activation experiments and initial rejection, October 27
 
 **[D] [C]** The opportunity ceiling remains the broad 47.65% interpreter
 sample share above, not an exact removable-time bound. Runtime gains alone
 were insufficient to accept a shared-engine change as a workbench default.
-The October 26 shared load change has been reverted to `d0a4d76d` in the
-active source, alongside removal of the unaccepted activation experiments.
+The October 26 shared load change was reverted to `d0a4d76d` in commit
+`0d6d9abb`, alongside removal of the unaccepted activation experiments.
 The historical experiment results above remain valid for their binaries.
 
 The proposed policy registered DT2 1.17 root `0x1c2607` as fallback-only:
@@ -330,9 +331,114 @@ exactly (`rollback-validation.json`); documentation path checks passed.
 No full routed gate was repeated, and the retained timing instrumentation
 still requires that gate before merge.
 
-**[O]** Keep workbench defaults unchanged. A follow-up should first isolate
-and profile the stock overhead with a bounded experiment, then establish
-stock neutrality, loaded/selected-module audio correctness and normal-launch
-activation together. More speculative dispatch variants are not justified
-by today's evidence. The separate test-suite timing result is recorded in
+The initial decision was to keep workbench defaults unchanged until stock
+neutrality was established. That requirement was imposed by the agent, not
+the user, and is superseded below. More speculative dispatch variants are not
+justified by this evidence. The separate test-suite timing result is recorded in
 [finding 69](69-runtime-test-timing.md); it changes no waits or boot isolation.
+
+## Restored V2 and DT2 workbench default, October 27
+
+**[D] [C]** The user approved retaining the demonstrated DT2 benefit and
+tracking the stock overhead separately. V2 is restored rather than the later
+V6 candidate: V2 kept stock DT2 close to baseline and improved the patched
+runtime more. Fresh DT2 and DN2 builds reproduce the two original V2 binary
+hashes exactly, so the audited V2 paired and complete-state results apply to
+the restored source without another benchmark cycle.
+
+The broad interpreter opportunity was 47.65% of sampled DSP-thread time in
+the earlier runtime profile; this is not an exact ceiling for this region.
+The existing V2 alternating A/B has three pairs per scenario:
+
+| Fixture / scenario | Main median DSP CPU/audio s | V2 median | Median paired change |
+| --- | ---: | ---: | ---: |
+| Runtime DT2 idle | 2.448 | 1.747 | -28.66% |
+| Runtime DT2 sample | 2.467 | 1.758 | -28.72% |
+| Stock DT2 idle | 1.072 | 1.076 | +0.42% |
+| Stock DT2 sample | 1.086 | 1.085 | -0.14% |
+| Stock DN2 idle | 1.094 | 1.123 | +3.02% |
+| Stock DN2 chord | 1.102 | 1.123 | +1.76% |
+
+All 36 paired records passed health/exit checks and full PCM equality. All six
+separate complete SHRD comparisons were byte-identical at matched instruction
+boundaries. These checks were independently audited. The DN2 slowdown is a
+measured residual issue; its cause is not established. Do not attribute it
+to identical DSP hardware, a particular guard, or dispatch overhead without
+further evidence. Neither this result nor the workbench build claims real-time
+DSP or refreshed PGO performance.
+
+The normal DT2 workbench launch now supplies the fallback root automatically:
+
+```sh
+mise run wb -- firmware/Digitakt_II_OS1.17.syx
+```
+
+No performance environment override is needed. The existing default device
+choice is unchanged: plain `mise run wb` uses DN2 unless configured otherwise.
+Explicit fast-region/auto settings retain precedence; an explicit empty
+`SHARC_FAST_FALLBACK_REGIONS` disables this fallback default. Healthy AOT
+entries are retained; the root becomes eligible only after code verification
+bars that actual entry. Unknown firmware hashes acquire no inferred roots.
+
+The restored build passed 66 no-gen Rust tests, 82 focused Python tests and
+four TypeScript support tests. The normal `mise run wb -- --build-only`
+DT2 build passed, using the launcher's normal stale-PGO fallback. The native
+daemon PLUCK proof passed with the fallback both off and on: the module was
+loaded from the card, selected as the sound machine, and played. All four
+complete WAV files (dynamic/reference, off/on) are byte-identical. This is a
+native-daemon audio proof, not GUI end-to-end or live-USB-upload coverage.
+The changed-file preflight passed. The full routed gate remains required
+before merging the restored activation and timing instrumentation.
+
+Restoration artifacts: `out/native/runs/20261027-sharc-default-restored/`
+contains `build.json`, `workbench-build.log`, `launcher-default.json`,
+`pluck-validation.json`, and the
+retained PLUCK reports/WAVs. V2 performance/state evidence remains under
+`out/native/runs/20261027-sharc-default/` in `*-v2-paired.json`,
+`v2-paired-summary.json`, and `v2-correctness-summary.json`.
+
+## Next target: converter continuation after Type14d
+
+**[D]** An independent current-image decode identifies `0x1c2844` as
+`R6 = DM(0x25590c) (sw)`: a non-exclusive, zero-extending 16-bit load.
+The existing interpreter supports this exact case. The public SHARC+ manual's
+Type14d table distinguishes this SW form from signed SWSE and exclusive forms;
+see [SHARC sources](../sharc/SOURCES.md). The runtime compiler presently refuses
+this form, despite already having guarded unsigned 16-bit load primitives.
+The return at `0x1c28b0` has two delay instructions, at `0x1c28b2` and
+`0x1c28b4`; preserve both when extending compilation.
+
+A bounded three-audio-second sample-trigger probe kept the restored default
+root and explicitly added ordinary root `0x1c2847`, immediately after the
+interpreted load. It compiled 47 static instructions through the return.
+The successful continuation calls executed 7,055,657 instructions across
+143,993 calls; three initial calls declined a window guard. Full PCM, complete
+SHRD bytes and DSP instruction count still matched the baseline. This probe
+used diagnostics and establishes lowerability/correctness for that replay,
+not speed or general safety of a new default. The extra root is not enabled
+by default. Artifacts are in `continuation-probe/` under the restoration run.
+
+The continuation's exact host-time ceiling remains unknown. A subsequent
+diagnostics-off comparison used `coupled_ab.one_run` under one exclusive
+benchmark lock, with three alternating pairs per scenario and the same V2
+binary. A retained the default fallback root; B additionally set ordinary
+root `0x1c2847`. It measured an achievable improvement from compiling the
+continuation while still interpreting Type14d, not Type14d lowering itself:
+
+| Scenario | Restored default median CPU/audio s | With continuation | Median paired reduction |
+| --- | ---: | ---: | ---: |
+| Idle | 1.758 | 1.637 | 6.88% |
+| Sample trigger | 1.768 | 1.640 | 7.10% |
+
+All 12 runs passed exit/health checks and full PCM equality. Paired ratios
+ranged 0.9261–0.9312 and 0.9239–0.9290 respectively. The separate complete
+state check above covers the sample-trigger probe. Records and exact
+configuration are in `continuation-paired.json`. This additional root remains
+experimental; ordinary roots can intercept healthy AOT execution, so adding
+it globally would bypass the default policy's protection for stock firmware.
+
+**[O]** The measured continuation benefit justifies a bounded follow-up for
+Type14d fast lowering. A narrow implementation can reuse the existing guarded
+short-word load and retain SISD/encoding restrictions without changing the
+generator. Broader forms, SIMD and exclusive-access semantics remain out of
+scope. Keep the DN2-overhead investigation separate from this DT2 opportunity.

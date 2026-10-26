@@ -258,6 +258,19 @@ pub struct WinSpec {
 pub trait FastTier: Send {
     /// Is PC an entry the tier handles?
     fn wants(&self, pc: u32) -> bool;
+    /// This entry is reserved for generated code invalidated by a patch.
+    fn fallback_only(&self, _pc: u32) -> bool {
+        false
+    }
+    /// Whether any roots can return true from `fallback_only`; this policy is
+    /// cached when the tier is installed in an engine.
+    fn has_fallback(&self) -> bool {
+        false
+    }
+    /// Only fallback roots, with no ordinary roots, auto selection or following.
+    fn exclusively_fallback(&self) -> bool {
+        false
+    }
     /// Run the region at PC if it applies. `Some(exit code)` only when at
     /// least one instruction completed; `None` leaves the state untouched.
     fn run(&mut self, s: &mut St, pc: u32) -> Option<u32>;
@@ -499,6 +512,7 @@ pub struct FastEngine {
     /// the PCs so `wants` (asked at every block boundary) is one test, and
     /// `lookup` maps a PC to its index for the few that pass it.
     pcs: Vec<u32>,
+    fallback: Vec<u32>,
     slots: Vec<Slot>,
     bloom: Box<[u64]>,
     bloom_stale: u32,
@@ -620,6 +634,7 @@ impl FastEngine {
         list.dedup();
         let mut fe = FastEngine {
             backend,
+            fallback: Vec::new(),
             bloom: vec![0u64; BLOOM_WORDS].into_boxed_slice(),
             bloom_stale: 0,
             lookup: Default::default(),
@@ -689,6 +704,10 @@ impl FastEngine {
     /// entries): CFG regions with the cluster lowering (`Env::guarded_dyn`).
     pub fn with_clusters(mut self, roots: &[u32]) -> FastEngine {
         for &pc in roots {
+            if self.fallback.binary_search(&pc).is_ok() {
+                self.fallback.retain(|&fallback| fallback != pc);
+                self.stops_new.push(pc);
+            }
             if self.index(pc).is_none() {
                 self.lookup.insert(pc, self.pcs.len());
                 self.pcs.push(pc);
@@ -704,12 +723,30 @@ impl FastEngine {
         self
     }
 
+    /// Register fallback roots without intercepting healthy generated chains.
+    /// Entries explicitly registered as regular regions or clusters take priority.
+    pub fn with_fallback(mut self, roots: &[u32]) -> FastEngine {
+        for &pc in roots {
+            if self.index(pc).is_none() {
+                self.lookup.insert(pc, self.pcs.len());
+                self.pcs.push(pc);
+                self.slots.push(Slot::default());
+                self.fallback.push(pc);
+                let (w, m) = Self::bit(pc);
+                self.bloom[w] |= m;
+            }
+        }
+        self.fallback.sort_unstable();
+        self.fallback.dedup();
+        self
+    }
+
     /// Also pick regions at run time (see `Auto`).
     pub fn with_auto(mut self, threshold: u32, min_insns: u64, blocks: bool) -> FastEngine {
         self.auto = Some(Auto::new(threshold, min_insns, blocks));
-        if !blocks && self.pcs.is_empty() {
-            // Only interpreter boundaries are noted and no entry is fixed in
-            // advance: generated blocks may keep chaining.
+        if !blocks && self.pcs.len() == self.fallback.len() {
+            // Only interpreter boundaries are noted and no ordinary entry is
+            // fixed in advance: fallback roots do not intercept healthy chains.
             self.cap_chain = false;
         }
         self
@@ -1610,6 +1647,21 @@ impl FastTier for FastEngine {
         self.index(pc).is_some()
     }
 
+    fn fallback_only(&self, pc: u32) -> bool {
+        self.fallback.binary_search(&pc).is_ok()
+    }
+
+    fn has_fallback(&self) -> bool {
+        !self.fallback.is_empty()
+    }
+
+    fn exclusively_fallback(&self) -> bool {
+        !self.fallback.is_empty()
+            && self.pcs.len() == self.fallback.len()
+            && self.auto.is_none()
+            && !self.follow
+    }
+
     fn run(&mut self, s: &mut St, pc: u32) -> Option<u32> {
         self.run_inner(s, pc, false)
     }
@@ -1722,15 +1774,17 @@ const fn region_env(first: &'static str, second: &'static str) -> &'static str {
 
 /// `SHARC_BLOCKTRANS=0xb8276c,...` (hex cluster roots).
 pub fn blocktrans_roots() -> Vec<u32> {
-    let name = region_env("SHARC_BLOCKTRANS", "SHARC_BLOCKTRANS_2");
+    parse_regions(region_env("SHARC_BLOCKTRANS", "SHARC_BLOCKTRANS_2"))
+}
+
+fn parse_regions(name: &str) -> Vec<u32> {
     let mut text = std::env::var(name).unwrap_or_default();
     if let Some(path) = text.strip_prefix('@') {
         text = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("{name}=@{path}: {e}"))
             .replace(char::is_whitespace, ",");
     }
-    text
-        .split(',')
+    text.split(',')
         .filter(|x| !x.trim().is_empty())
         .filter_map(|x| u32::from_str_radix(x.trim().trim_start_matches("0x"), 16).ok())
         .collect()
@@ -1755,10 +1809,16 @@ pub fn from_env() -> Option<FastEngine> {
         .collect();
     let auto = auto_config();
     let roots = blocktrans_roots();
-    if pcs.is_empty() && auto.is_none() && roots.is_empty() {
+    let fallback = parse_regions(region_env(
+        "SHARC_FAST_FALLBACK_REGIONS",
+        "SHARC_FAST_FALLBACK_REGIONS_2",
+    ));
+    if pcs.is_empty() && auto.is_none() && roots.is_empty() && fallback.is_empty() {
         return None;
     }
-    let f = FastEngine::new(default_backend(), &pcs).with_clusters(&roots);
+    let f = FastEngine::new(default_backend(), &pcs)
+        .with_clusters(&roots)
+        .with_fallback(&fallback);
     Some(match auto {
         Some((t, m, b)) => f.with_auto(t, m, b),
         None => f,

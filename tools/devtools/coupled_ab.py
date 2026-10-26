@@ -65,7 +65,11 @@ def one_run(
         argv = coupled.run_args(binary, ins, [*card, *extra])
         load = os.getloadavg()[0]
         done = subprocess.run(
-            argv, cwd=ROOT, env=coupled.run_env(ENV), capture_output=True, text=True
+            argv,
+            cwd=ROOT,
+            env=coupled.run_env(ENV, syx=ins["firmware"]),
+            capture_output=True,
+            text=True,
         )
         if not out.is_file():
             sys.exit("no report from %s:\n%s" % (binary, done.stderr[-2000:]))

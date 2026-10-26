@@ -312,6 +312,9 @@ pub struct Engine {
     fast_auto: bool,
     /// ... and also at generated-block dispatches.
     fast_auto_dispatch: bool,
+    /// Static tier policy, cached by `set_fast` to keep ordinary dispatch cheap.
+    fast_has_fallback: bool,
+    fast_exclusively_fallback: bool,
     /// SHARC_FAST_HIST: interpreted instructions per PC (diagnostics).
     hist: Option<Box<std::collections::HashMap<u32, u64>>>,
     /// Opt-in raw generated-block call snapshots.  It is configured wholly
@@ -343,6 +346,8 @@ pub struct CodeCheck {
 /// advance afterwards.
 struct BlockPlan {
     limit: u64,
+    /// Healthy fallback-only tiers do not participate in this dispatch or chain.
+    fast_active: bool,
     models: bool,
     timer_count: Option<u32>,
     /// A bank selection completed ahead of the block (its pending mask): it
@@ -658,6 +663,8 @@ impl Engine {
             fast: None,
             fast_auto: false,
             fast_auto_dispatch: false,
+            fast_has_fallback: false,
+            fast_exclusively_fallback: false,
             hist: std::env::var_os("SHARC_FAST_HIST")
                 .map(|_| Box::<std::collections::HashMap<u32, u64>>::default()),
             live_capture: live_capture::LiveCapture::from_env(),
@@ -737,6 +744,8 @@ impl Engine {
 
     /// Install (or remove) the fast tier.
     pub fn set_fast(&mut self, fast: Option<Box<dyn fast::FastTier>>) {
+        self.fast_has_fallback = fast.as_ref().is_some_and(|f| f.has_fallback());
+        self.fast_exclusively_fallback = fast.as_ref().is_some_and(|f| f.exclusively_fallback());
         self.fast_auto = fast.as_ref().is_some_and(|f| f.auto());
         self.fast_auto_dispatch = fast.as_ref().is_some_and(|f| f.auto_dispatch());
         self.fast = fast;
@@ -1339,6 +1348,26 @@ impl Engine {
         Some(candidates != 0)
     }
 
+    /// Fallback-only regions replace actual AOT entries barred by code verification.
+    /// Recheck freshness here because a preceding kernel may have stored code.
+    fn fast_allowed(&mut self, pc: u32) -> bool {
+        if !self.fast_has_fallback {
+            return self.fast.is_some();
+        }
+        if !self.fast_exclusively_fallback
+            && self.fast.as_ref().is_some_and(|f| !f.fallback_only(pc))
+        {
+            return true;
+        }
+        self.use_blocks
+            && self.dispatch.get_entry(pc as Int).is_some()
+            && !self.blocks_code_ok()
+            && self
+                .code_barred
+                .as_ref()
+                .is_none_or(|barred| barred.binary_search(&pc).is_ok())
+    }
+
     /// The block to run at the current PC and its plan, or None to
     /// interpret one instruction. Without a model on, any block runs. With
     /// one, a model-safe block runs only while nothing the models update
@@ -1388,15 +1417,19 @@ impl Engine {
             entry = None;
             self.model_stats.code_mismatch += 1;
         }
-        let fast_pc = self
-            .fast
-            .as_ref()
-            .is_some_and(|f| f.wants(self.s.pc_sw as u32));
+        let fast_active = self.fast.is_some() && !(self.fast_exclusively_fallback && code_ok);
+        let fast_pc = fast_active
+            && self
+                .fast
+                .as_ref()
+                .is_some_and(|f| f.wants(self.s.pc_sw as u32))
+            && self.fast_allowed(self.s.pc_sw as u32);
         if entry.is_none() && !fast_pc {
             return None;
         }
         let mut plan = BlockPlan {
             limit,
+            fast_active,
             models: false,
             timer_count: None,
             bank_pre: None,
@@ -1537,7 +1570,10 @@ impl Engine {
             {
                 break;
             }
-            if self.fast.as_ref().is_none_or(|f| !f.wants(pc as u32)) {
+            if (self.fast_exclusively_fallback && self.blocks_code_ok())
+                || self.fast.as_ref().is_none_or(|f| !f.wants(pc as u32))
+                || !self.fast_allowed(pc as u32)
+            {
                 break;
             }
             if self.models_active() {
@@ -1812,8 +1848,12 @@ impl Engine {
                     }
                     self.s.in_block = plan.models;
                     let mut code = None;
-                    if let Some(f) = self.fast.as_mut().filter(|_| !plan.stop_loop_empty)
-                    {
+                    // Ordinary tiers may flush followed entries even before `wants`
+                    // sees them; only fallback policy may suppress this call.
+                    let fast_eligible = plan.fast_active
+                        && !plan.stop_loop_empty
+                        && self.fast_allowed(entry_pc);
+                    if let Some(f) = self.fast.as_mut().filter(|_| fast_eligible) {
                         #[cfg(feature = "region-profile")]
                         {
                             let profile_start =
@@ -1850,7 +1890,8 @@ impl Engine {
                         {
                             let profile_start =
                                 self.region_profile.as_ref().map(|_| Instant::now());
-                            if let Some(f) = self.fast.as_mut()
+                            if plan.fast_active
+                                && let Some(f) = self.fast.as_mut()
                                 && !f.sync_chain_stops(&mut self.s)
                             {
                                 // The tier needs every dispatch: end the chain at
@@ -1890,7 +1931,8 @@ impl Engine {
                         }
                         #[cfg(not(feature = "region-profile"))]
                         {
-                            if let Some(f) = self.fast.as_mut()
+                            if plan.fast_active
+                                && let Some(f) = self.fast.as_mut()
                                 && !f.sync_chain_stops(&mut self.s)
                             {
                                 // The tier needs every dispatch: end the chain at

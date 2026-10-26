@@ -296,3 +296,48 @@ def test_crate_mismatches_reports_only_disjoint_crates():
     assert native_pgo.crate_mismatches(profile, other) == [
         "MISMATCH crate sharc_gen: profile ['BBB222'] binary ['NEW']"
     ]
+
+
+def test_fallback_regions_follow_explicit_fast_optout_and_table(monkeypatch, tmp_path):
+    syx = tmp_path / "fw.syx"
+    syx.write_bytes(b"fw")
+    table = tmp_path / "fast.json"
+    table.write_text(
+        json.dumps({hashlib.sha256(b"fw").hexdigest(): {"fallback_regions": "0x2"}})
+    )
+    monkeypatch.setattr(digi_env, "FAST_TABLE", table)
+    base = {"DIGI_EMU_SYX": str(syx)}
+    assert native_pgo.fallback_regions(base) == "0x2"
+    assert native_pgo.fallback_regions({**base, "SHARC_FAST_REGIONS": ""}) == ""
+    assert native_pgo.fallback_regions({**base, "DIGI_EMU_FAST": "0"}) == ""
+    assert native_pgo.fallback_regions({**base, "SHARC_FAST_AUTO": "10,100"}) == ""
+    assert (
+        native_pgo.fallback_regions(
+            {**base, "SHARC_FAST_AUTO": "10,100", "SHARC_FAST_FALLBACK_REGIONS": "0x3"}
+        )
+        == "0x3"
+    )
+    assert (
+        native_pgo.fallback_regions(
+            {**base, "SHARC_FAST_REGIONS": "", "SHARC_FAST_FALLBACK_REGIONS": "0x3"}
+        )
+        == "0x3"
+    )
+    assert (
+        native_pgo.fallback_regions({**base, "SHARC_FAST_FALLBACK_REGIONS": ""}) == ""
+    )
+
+
+def test_fallback_configuration_reports_change_without_invalidating_profile(
+    tree, monkeypatch, capsys
+):
+    monkeypatch.setenv("SHARC_FAST_FALLBACK_REGIONS", "0x2")
+    monkeypatch.setattr(native_pgo, "fast_regions", lambda: "")
+    monkeypatch.setattr(native_pgo, "blocktrans_roots", lambda: "")
+    monkeypatch.setattr(native_pgo, "generated_dir", lambda environ=None: tree / "gen")
+    assert state(tree)[0] == "ok"
+    assert native_pgo.cmd_check(None) == 0
+    assert (
+        "fast regions changed since training; the profile still applies"
+        in capsys.readouterr().out
+    )
