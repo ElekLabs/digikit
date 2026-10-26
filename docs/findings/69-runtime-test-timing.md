@@ -105,3 +105,47 @@ Artifacts: `out/native/runs/20261027-runtime-input-timing/` contains
 `baseline-summary.json`. The source was `f6db6a56`; the daemons were the pinned
 October 26 gate binaries. This is an attribution run, not a paired claim of
 test-speed improvement.
+
+## Gate-selection fan-out (2026-10-27)
+
+**[D]** The SHARC/workbench branch's merge gate selected the long Python debug,
+FX-route and frequency-shifter scenarios through transitive Python imports.
+`tools/devtools/changed_tests.py` (`gate_tests` / `deep_tests`) follows every
+import chain, not which changed functions a test executes. Confirmed examples:
+
+- `tools.emulator.native_emu` ← `tools.patchkit.pk_harness` ←
+  `tools.patchkit.pk_digikit_scen` ← `tests.digikit.scen_cases` ←
+  `tests.digikit.test_debug_dn2` (also `test_fxshift_dt2`).
+- `tools.emulator.digi_env` ← `tools.patchkit.pk_dkrt` ←
+  `tests.digikit.scen_cases` ← those same tests.
+- `tools.emulator.coupled` reaches them through `tools.patchkit.hook_ab` and
+  `tools.patchkit.pk_dkrt_machine`; `native_pgo` reaches them through `native_emu`.
+
+This explains selection; it does not prove these scenarios are dispensable for
+this branch, which also changes SHARC memory/compiler behavior. The normal
+routed merge gate remains required before merge, not before opening a PR.
+
+**[D]** Implemented a bounded routing contract for the four exact launcher
+modules above: retain all direct/test-helper importers and other deep consumers,
+but replace their deep legacy `tests/digikit.scen_cases` scenario fan-out with
+focused owner/consumer tests and the existing full cross-device smoke matrix.
+This is a coverage policy, not proof that those scenarios cannot be affected.
+Filtering is per changed source; changing a runtime, harness or dispatcher
+helper alongside a launcher restores its scenario consumers. Missing scenario
+helper metadata and neighboring modules keep conservative selection.
+
+Routing regression tests cover mixed changes, explicit tests, full mode, missing
+helper metadata, benchmark/matrix tooling and preserved SHARC acceptance steps.
+The worker's 259 focused tests passed; an added matrix-tool case then passed in
+the 44-test routing suite. Independent review found no issues. The raw import
+graph union for the four launchers falls from 71 to 44 files (27 legacy scenarios
+removed). The actual branch gate plan falls from 72 to 49 Python files; these
+counts include other changed sources and explicit suites. All native SHARC gate
+steps and the full smoke matrix remain selected. This is not a measured wall-time
+speedup. Plans are saved under `out/native/runs/20261027-sharc-dual-default/`
+and `out/native/runs/20261027-sharc-routing/`.
+
+**[O]** Attribute selected tests to complete import chains and estimated cost in
+explain output. Consider separating desktop launch policy from shared build/input
+helpers. Handle execution-cost reductions (readiness waits, boot reuse, duplicate
+proofs) separately from selection correctness.

@@ -173,6 +173,16 @@ dt2-tier-sweep.
   `tests/patchkit/test_pk_current.py` (module and port staleness), then the selected test files, one
   process per file. Selected files are the tests that reach a changed module in the import graph
   (`changed_tests.gate_tests`), the files changed, and the `PY_SUITES` the change triggers.
+  The exact launcher modules `tools.emulator.coupled`, `tools.emulator.digi_env`,
+  `tools.emulator.native_emu` and `tools.emulator.native_pgo` retain every direct/test-helper
+  importer and every deep consumer except legacy `tests/digikit` scenarios downstream of
+  `tests.digikit.scen_cases`. Their focused `launcher` suite and other consumer tests, plus
+  the existing full cross-device smoke matrix, replace that broad legacy feature selection.
+  This is a bounded routing contract, not symbol-aware analysis or proof of no behavioral impact.
+  Filtering applies per changed source: changing a scenario dispatcher, runtime or harness helper
+  alongside a launcher restores its scenario consumers. Changed tests and full-mode declared
+  suites still run; neighboring modules keep conservative graph selection. Each launcher alone
+  still selects `build`, `pins`, `python-tests` and the full `smoke` matrix.
   Framework modules (`FRAMEWORK` in `verify_route.py`) select all of `tests/patchkit` and `tests/digikit`.
 - `stock` runs the DT2 zero-DSP goldens. A changed case selects its file; configuration and shared
   session code select all files. It gives no audio coverage.

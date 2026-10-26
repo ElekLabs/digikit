@@ -71,6 +71,163 @@ def test_pk_sharc_selects_the_routine_tests_and_no_sharc_semantics() -> None:
     assert not any(t.startswith("tests/sharc/") for t in tests)
 
 
+LAUNCHER_PATHS = [
+    f"tools/emulator/{name}.py"
+    for name in ("coupled", "digi_env", "native_emu", "native_pgo")
+]
+
+
+@pytest.mark.parametrize("files", [[p] for p in LAUNCHER_PATHS] + [LAUNCHER_PATHS])
+def test_bounded_launchers_keep_owners_consumers_and_full_smoke(
+    files: list[str],
+) -> None:
+    tests, _ = changed_tests.gate_tests(files)
+    for path in files:
+        module = changed_tests.module_of(path)
+        assert set(changed_tests.importing_tests(module)) <= set(tests)
+    assert {
+        "tests/devtools/test_verify.py",  # graph cycle downstream of scen_cases
+        "tests/devtools/test_sharc_matrix.py",
+        "tests/emulator/test_coupled_patched.py",
+        "tests/patchkit/test_dyn_fx.py",
+    } <= set(tests)
+    assert not any(
+        p.startswith("tests/digikit/") and Path(p).name.startswith("test_fx")
+        for p in tests
+    )
+    assert "tests/digikit/test_menu_dt2.py" not in tests
+    legacy = {
+        changed_tests.path_of(m)
+        for m in changed_tests.graph().find_downstream_modules(
+            "tests.digikit.scen_cases"
+        )
+        if m.startswith("tests.digikit.test_")
+    }
+    assert not legacy & set(tests)
+    plan = set(changed_tests.verify.python_tests(files, False))
+    assert {
+        "tests/emulator/test_coupled_tool.py",
+        "tests/emulator/test_native_emu_launcher.py",
+        "tests/emulator/test_native_pgo.py",
+        "tests/emulator/test_native_target.py",
+        "tests/emulator/test_gen_fingerprint.py",
+    } <= plan
+    assert {"build", "pins", "python-tests", "smoke"} <= set(
+        changed_tests.verify.steps_for(files)
+    )
+    assert changed_tests.verify.smoke_cells(files) is None
+
+
+def test_bounded_launcher_keeps_digikit_units() -> None:
+    tests, _ = changed_tests.gate_tests(["tools/emulator/digi_env.py"])
+    assert {"tests/digikit/test_dkrun.py", "tests/digikit/test_dktransfer.py"} <= set(
+        tests
+    )
+
+
+def test_bounded_launcher_never_filters_direct_scenario_importers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    importing = changed_tests.importing_tests
+    scenario = "tests/digikit/test_fx_dt2.py"
+
+    def with_scenario(module: str) -> dict[str, str]:
+        return {**importing(module), scenario: "imports launcher directly"}
+
+    monkeypatch.setattr(changed_tests, "importing_tests", with_scenario)
+    tests, _ = changed_tests.gate_tests(LAUNCHER_PATHS)
+    assert tests[scenario] == "imports launcher directly"
+
+
+@pytest.mark.parametrize(
+    "helper",
+    [
+        "tools/patchkit/pk_digikit_scen.py",
+        "tools/patchkit/pk_dkrt.py",
+        "tools/patchkit/pk_harness.py",
+        "tests/digikit/scen_cases.py",
+    ],
+)
+@pytest.mark.parametrize("launchers", [[], LAUNCHER_PATHS])
+def test_scenario_helpers_restore_scenarios_per_source(
+    helper: str, launchers: list[str]
+) -> None:
+    tests, _ = changed_tests.gate_tests([*launchers, helper])
+    assert {
+        "tests/digikit/test_fx_dt2.py",
+        "tests/digikit/test_fx_dn2.py",
+        "tests/digikit/test_menu_dt2.py",
+        "tests/digikit/test_upload_dn2.py",
+    } <= set(tests)
+
+
+def test_explicit_scenario_and_full_suites_remain_selected() -> None:
+    scenario = "tests/digikit/test_fx_dt2.py"
+    assert scenario in changed_tests.verify.python_tests(
+        [*LAUNCHER_PATHS, scenario], False
+    )
+    full = set(changed_tests.verify.python_tests(LAUNCHER_PATHS, True))
+    for _, _, paths in changed_tests.verify.PY_SUITES:
+        assert set(changed_tests.verify.resolve_tests(paths)) <= full
+
+
+def test_neighboring_launcher_keeps_conservative_scenario_selection() -> None:
+    tests, _ = changed_tests.gate_tests(["tools/emulator/native_target.py"])
+    assert "tests/digikit/test_fx_dt2.py" in tests
+    assert "tests/digikit/test_upload_dn2.py" in tests
+
+
+def test_missing_scenario_helper_keeps_conservative_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graph = Mock(wraps=changed_tests.graph())
+    graph.modules = set(changed_tests.graph().modules) - {"tests.digikit.scen_cases"}
+    monkeypatch.setattr(changed_tests, "graph", lambda: graph)
+    tests, _ = changed_tests.gate_tests(LAUNCHER_PATHS)
+    assert "tests/digikit/test_fx_dt2.py" in tests
+    assert "tests.digikit.scen_cases" not in {
+        call.args[0] for call in graph.find_downstream_modules.call_args_list
+    }
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tools/devtools/coupled_ab.py",
+        "tools/devtools/sharc_regionbench.py",
+        "tools/devtools/sharc_matrix.py",
+    ],
+)
+def test_benchmark_tools_have_no_legacy_scenario_fanout(path: str) -> None:
+    tests, _ = changed_tests.gate_tests([path])
+    assert not any(p.startswith("tests/digikit/") for p in tests)
+
+
+def test_sharc_memory_keeps_native_acceptance_steps() -> None:
+    path = "packages/emulator/sharc-rt/src/mem.rs"
+    assert set(changed_tests.verify.steps_for([path])) == {
+        "build",
+        "desktop",
+        "host",
+        "web",
+        "stock",
+        "runtime-fixture",
+        "module-load",
+        "pins",
+        "check",
+        "check-no-aot",
+        "tier-quick",
+        "python-tests",
+        "rust-tests",
+        "card",
+        "smoke",
+        "dt2-tone",
+        "dt2-check",
+        "dt2-tier-quick",
+    }
+    assert changed_tests.verify.smoke_cells([path]) is None
+
+
 @pytest.mark.parametrize(
     "path, own_reason",
     [
