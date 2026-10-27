@@ -139,6 +139,40 @@ fn hw_cimr_clears_imr_bits() {
 }
 
 #[test]
+fn hw_simr_cimr_decode_all_sources_without_touching_other_masks() {
+    for base in BASES {
+        let mut intc = IntcBank::new();
+        for source in 0..64u8 {
+            intc.hw_apply_simr_cimr(base + 0x1d, 0x40); // CALL
+            assert!(intc.hw_apply_simr_cimr(base + 0x1c, source));
+            let (offset, bit) = if source < 32 {
+                (0x0c, 1u32 << source)
+            } else {
+                (0x08, 1u32 << (source - 32))
+            };
+            assert_eq!(intc.read(base + offset, 4), Some(bit), "source {source}");
+            assert_eq!(intc.read(base + (offset ^ 4), 4), Some(0));
+            intc.hw_apply_simr_cimr(base + 0x1c, 0x40); // SALL
+            assert!(intc.hw_apply_simr_cimr(base + 0x1d, source));
+            assert_eq!(intc.read(base + offset, 4), Some(!bit), "source {source}");
+            assert_eq!(intc.read(base + (offset ^ 4), 4), Some(u32::MAX));
+            for other in BASES.into_iter().filter(|other| *other != base) {
+                assert_eq!(intc.read(other + 0x08, 4), Some(u32::MAX));
+                assert_eq!(intc.read(other + 0x0c, 4), Some(u32::MAX));
+            }
+        }
+    }
+}
+
+#[test]
+fn oracle_simr_cimr_writes_remain_plain_ram() {
+    let mut intc = IntcBank::new();
+    intc.write(BASES[1] + 0x1d, 1, 28);
+    assert_eq!(intc.read(BASES[1] + 0x1d, 1), Some(28));
+    assert_eq!(intc.read(BASES[1] + 0x0c, 4), Some(u32::MAX));
+}
+
+#[test]
 fn hw_intfrc_asserts_ipr_independent_of_mask() {
     // RM SS17.2.3 (p.339): "The assertion of an interrupt request via the
     // interrupt force register is not affected by the interrupt mask

@@ -2,7 +2,8 @@
 //!
 //! This deliberately composes the peripheral banks rather than interpreting
 //! their registers itself. `PitBank` owns PIT timing, pending-state, and PIF
-//! write-one-to-clear; `IntcBank` owns oracle register passthrough and masking;
+//! write-one-to-clear; `IntcBank` owns register passthrough and masking, with
+//! hardware SIMR/CIMR commands applied by this native seam;
 //! and `SrTracker` is updated by `PitBank::service` when an interrupt is taken.
 
 use periph::{
@@ -211,6 +212,9 @@ impl Time {
     /// slot-local access.
     pub fn read(&self, addr: u32, size: u8) -> Option<u32> {
         Self::owns_access(addr, size).then(|| {
+            if size == 1 && matches!(addr & 0x3fff, 0x1c | 0x1d) && IntcBank::owns(addr) {
+                return Some(0); // RM 17.2.5/6: both command registers read as zero.
+            }
             self.pit
                 .read(addr, size)
                 .or_else(|| self.dtim.read(addr, size))
@@ -225,6 +229,7 @@ impl Time {
         Self::owns_access(addr, size)
             && (self.pit.write(addr, size, value)
                 || self.dtim.write(addr, size, value)
+                || (size == 1 && self.intc.hw_apply_simr_cimr(addr, value as u8))
                 || self.intc.write(addr, size, value))
     }
 
