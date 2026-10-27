@@ -40,7 +40,8 @@
 //! and [`IntcBank::hw_iack`] implement SIMR/CIMR actually mutating IMR, IPR
 //! reading as the OR of forced and asserted sources, and IACK vector
 //! determination, all exactly as the manual specifies. A caller building the
-//! eventual whole-machine INTC composes these; the oracle replay does not
+//! whole-machine INTC composes these (native `Time` uses the mask commands);
+//! the oracle replay does not
 //! call them, because the Python model's masking decisions are based on the
 //! stale IMR SIMR/CIMR never touched.
 
@@ -175,35 +176,24 @@ impl IntcBank {
         let Some((i, off)) = Self::locate(addr) else {
             return false;
         };
-        let off = off as usize;
+        let set = match off as usize {
+            SIMR => true,
+            CIMR => false,
+            _ => return false,
+        };
         let c = &mut self.ctrl[i];
-        match off {
-            SIMR => {
-                if value & 0x40 != 0 {
-                    c.set_u32_at(IMRL, IMR_RESET);
-                    c.set_u32_at(IMRH, IMR_RESET);
-                } else {
-                    let bits = 1u32 << (value & 0x3F).min(31);
-                    if value & 0x3F < 32 {
-                        c.set_u32_at(IMRL, c.u32_at(IMRL) | bits);
-                    }
-                }
-                true
-            }
-            CIMR => {
-                if value & 0x40 != 0 {
-                    c.set_u32_at(IMRL, 0);
-                    c.set_u32_at(IMRH, 0);
-                } else {
-                    let bits = 1u32 << (value & 0x3F).min(31);
-                    if value & 0x3F < 32 {
-                        c.set_u32_at(IMRL, c.u32_at(IMRL) & !bits);
-                    }
-                }
-                true
-            }
-            _ => false,
+        if value & 0x40 != 0 {
+            let mask = if set { IMR_RESET } else { 0 };
+            c.set_u32_at(IMRL, mask);
+            c.set_u32_at(IMRH, mask);
+        } else {
+            let source = value & 0x3f;
+            let offset = if source < 32 { IMRL } else { IMRH };
+            let bit = 1u32 << (source & 31);
+            let mask = c.u32_at(offset);
+            c.set_u32_at(offset, if set { mask | bit } else { mask & !bit });
         }
+        true
     }
 
     /// MCF5441XRM SS17.2.1/17.2.3 (p.336, 339): IPR is the logical OR of the
