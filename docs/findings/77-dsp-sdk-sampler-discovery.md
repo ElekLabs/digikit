@@ -180,3 +180,31 @@ DT2 hash above. The auditor also checked the transport arithmetic, public ABI an
 The raw instruction bytes were not independently decoded; all observations remain [D]/[O]. DN2 raw
 image provenance and instruction-byte cross-checks remain open. No resident capacity outside the configured runtime
 area, safe stock-slot retention, live-load behavior, or hardware performance is proved by this pass.
+
+## First SDK implementation checkpoint
+
+**[D]** Exact extractions now live in `sdk/dsp/noise.inc` and `sdk/dsp/oscillator.inc`. BD, PD and
+pluck use the macros. Complete assembly comparison to `177bec02` preserved executable bytes,
+relocations, symbols and data: BD 1,056 PM bytes, PD 1,446, pluck 1,328. The sine polynomial is
+16 instructions; noise retains both the six-instruction preloaded-shift and seven-instruction
+inline-shift-load schedules. Noise scaling/seeds and oscillator folding remain with the caller.
+
+**[D]** `sdk/dsp/sample.inc` adds a five-instruction split-cursor step and bounded mono float32
+linear reader. Six integer state words hold start/end/index/fraction/Q16.16 rate/done. It reads only
+inside the half-open interval, clamps the interpolation neighbor and zeros the output after completion.
+Resources, file loading, stereo, playback looping, boundary fades and anti-alias filtering are not supplied.
+The caller must provide a valid mapped immutable source view; numerical index bounds alone do not prove
+a SHARC memory mapping. This choice does not prescribe the stored PCM representation.
+
+Parent verification: the two new test files and existing `tests/patchkit/test_dsp_kernels.py` total
+**81 passing tests**. Numerical sampler tests cover exact integer-position oracle comparisons, reverse
+fractional rates, large mapped sparse indices, zero/extreme rates, two-block continuation, source-read guards
+and preserved registers. Module owner checks pass for BD (15 passed/7 skipped), PD (22/5), pluck (42/5),
+with successful packaging/fit on both target devices. These are not new full firmware-device or hardware proofs.
+Python lint and formatting pass; repository-wide changed-file checks retain the unrelated baseline path failures
+documented in the plan. An independent source reviewer found no concrete issues in the two patches.
+
+Instruction ceiling for the sample block routine including three caller argument loads: 1,380;
+the two-call test harness measured 557–2,231 against its 2,761 ceiling. This is a sequential correctness
+implementation and a concrete-core instruction count, not measured hardware cycles or an optimization claim.
+Detailed contracts and usage: `sdk/dsp/README.md`. Raw firmware/core semantics were not changed.

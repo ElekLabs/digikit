@@ -10,9 +10,10 @@ resource/lifetime ABI changes and the product sampler remain proposals requiring
   Keep Claude's original checkout on its cleanup branch untouched.
 - Read this plan, then [finding 77](../findings/77-dsp-sdk-sampler-discovery.md). Check git status and the
   cleanup checkpoint before implementation; the module inventory is pinned to `219570ca`, not final cleanup.
-- Next approved work: extract the exact integer xorshift recurrence and matching BD/PD sine-polynomial operation;
-  add numerical sampler cursor/interpolation primitives and boundary references. Preserve float operation order,
-  noise conversions and PCM pins. Do not infer approval for new sample transport, stereo ABI or hardware work.
+- First approved implementation is now integrated: exact xorshift and BD/PD sine-polynomial SDK macros with
+  consumer replacements; split cursor and bounded mono linear-reader kernel with numerical references/tests.
+  Read the implementation checkpoint below for verification status. Sample transport, stereo ABI and hardware
+  work are still unapproved; settle the next scope with Em after this milestone.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -20,7 +21,8 @@ resource/lifetime ABI changes and the product sampler remain proposals requiring
 - Shared symlinks are input databases/manuals and `.venv`; local `out/cache/` and run outputs are isolated.
   Use `UV_NO_SYNC=1`, worktree-local `UV_CACHE_DIR`, and local `MISE_STATE_DIR` as needed. Never rebuild shared DBs
   implicitly with `sharc.load()`; use read-only queries.
-- Only documentation has changed so far. Validation and known baseline failures are recorded at the end.
+- Documentation and the first approved SDK implementation are now present. Validation and known baseline failures
+  are recorded below; do not mistake the numerical sample reader for a complete sampling machine.
   Em explicitly requested this documentation checkpoint commit; no push or merge was requested.
 
 ## Objective and scope
@@ -132,8 +134,8 @@ checking what the module adapter already provides.
 
 ## Phase 4 — implementation (first milestone approved)
 
-- [ ] Implement exact reusable DSP extractions with reference/equivalence checks (approved).
-- [ ] Implement numerical sampler cursor/interpolation primitives with boundary tests (approved).
+- [x] Implement exact reusable DSP extractions with reference/equivalence checks (approved).
+- [x] Implement numerical sampler cursor/interpolation primitives with boundary tests (approved).
 
 - [ ] Implement the smallest sample-service/adaptor changes and test ownership/failure behavior.
 - [ ] Add minimum sampler primitives with independent numerical references and meaningful boundary tests.
@@ -236,6 +238,32 @@ ownership/coherency protocol. Hoist conversions/coefficient work out of sample l
 
 ## Evidence and progress log
 
+### 2026-10-29 — first implementation checkpoint
+
+- Two workers used isolated writer worktrees based on `177bec02`; the parent integrated their scoped changes.
+  Original cleanup checkout remained at `219570ca` when checked; final cleanup reconciliation remains pending.
+- `sdk/dsp/noise.inc`: 6-instruction preloaded-shift and 7-instruction inline-load xorshift schedules.
+  BD and pluck now use these macros without changing seeds, conversion or surrounding instructions.
+- `sdk/dsp/oscillator.inc`: exact 16-instruction folded-phase polynomial, used by BD and PD. The preliminary
+  spoken estimate of 17 instructions was corrected by counting the actual sequence. Phase folding/warping stays
+  in the consumer. All register aliases and clobbers are explicit.
+- Complete assembly comparison against `177bec02` found identical executable bytes, relocations, symbols and DM
+  for BD (1,056 PM bytes), PD (1,446) and pluck (1,328). Local proof: `out/runs/dsp-extract-proof/`.
+- `sdk/dsp/sample.inc`: 5-instruction integer cursor update plus bounded 32-sample mono float32 reader. State is
+  start/end/index/fraction/signed Q16.16 rate/done. It clamps the interpolation neighbor, never reads an exhausted
+  interval, zeros the output tail, and carries exact split position across calls. This is not a storage/resource ABI.
+- Numerical limitations: quantized Q16.16 rates, mono immutable float32 view, mapped source interval, no overlap,
+  no playback looping/fades/anti-alias filter. Large indices beyond float32 integer precision are tested using
+  sparse valid mapped addresses; a maximum-range cursor case stays reference-only because SHARC address windows
+  are segmented. A numeric base+end bound alone does not establish a valid memory mapping.
+- Workers ran 13 oscillator/noise tests and 45 sampler tests successfully. Sampler coverage includes independent
+  combined-position arithmetic, reverse/zero/extreme rates, two-block continuation, done/tail behavior, source-read
+  guards and callee-saved registers. Pure reference tests run even without an assembler.
+- Sample-reader test ceiling: 1,380 instructions including caller argument loads; the two-call harness measured
+  557–2,231 against its 2,761 ceiling. No hardware cycle, throughput or speedup claim.
+- Independent read-only review found no concrete issues in either patch. Parent integration checks and module
+  owner checks are recorded in the validation section below; a reviewer inspection does not replace them.
+
 ### 2026-10-29 — parallel discovery and independent audit
 
 - [x] Run three disjoint read-only investigations: DT2 stock sample path, DN2 delivery/memory, and general DSP on both.
@@ -321,12 +349,26 @@ Keep symbol-name matches as candidates until their actual behavior is establishe
 
 ## Plan maintenance
 
-Validation (2026-10-29, after parallel discovery): targeted pathcheck for the plan, finding 77 and findings index,
-and `git diff --check HEAD` pass. `mise run test:changed`
-passes layercheck but fails the repository-wide pathcheck on 10 pre-existing references in five unchanged files
-(DSP recipes and web transfer/test files). No unrelated fixes were made; reconcile these with the cleanup session.
-No implementation, module build, device run or performance measurement has occurred. Em requested a documentation
-checkpoint commit containing this plan, finding 77 and its index entry; find it in this branch's git log.
+Validation (2026-10-29, first SDK implementation):
+
+- Parent integrated suite: `uv run python -m pytest -q tests/patchkit/test_dsp_osc_kernels.py
+  tests/patchkit/test_dsp_sample_kernels.py tests/patchkit/test_dsp_kernels.py`: **81 passed**.
+- `mise run module:check -- fadedlimes/bd`: **15 passed, 7 skipped**; package/fit passes DT2 and DN2.
+- `mise run module:check -- fadedlimes/pd`: **22 passed, 5 skipped**; package/fit passes DT2 and DN2.
+- `mise run module:check -- digikit/pluck`: **42 passed, 5 skipped**; package/fit passes DT2 and DN2.
+  Five skipped cases are the suite's unselected negative fixtures; BD also has two skipped equivalence scenarios.
+  These results are not a new all-module load or full firmware-device proof.
+- `mise run lint:py` passes (lint and formatting). Targeted changed-document/include pathcheck and
+  `git diff --check HEAD` pass.
+- `mise run test:changed` passes changed Python lint/format and layercheck, but the repository-wide pathcheck
+  retains 10 pre-existing references in five unchanged files (DSP recipes and web transfer/test files). No unrelated
+  fixes were made; reconcile these with the cleanup session. Local logs: `out/runs/dsp-sdk-checks/`.
+- Independent reviewer found no concrete issues. Full routed merge gate is still required before merging;
+  it was not run for this implementation checkpoint. No hardware run or cycle/speedup measurement.
+
+Documentation checkpoint: `177bec02`. The first SDK implementation is checkpointed separately on this branch;
+use git log for its commit. Module source instruction/data identity and numerical tests support this scoped
+checkpoint; sample transport/lifetime, product controls and stereo remain open.
 
 Check an item only when its acceptance criterion is met; record evidence and residual uncertainty alongside it.
 Do not mark a proposal implemented or a historical finding current. Update this plan after each meaningful
