@@ -1,0 +1,31 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "202f0004e080048000000040226f00084a806c0612fc002d44800c800000000a6d1280fc000a220006800000003012c04841200106800000003012c042114e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 64
+  }
+ ],
+ "source_sha256": "66f347968403ab6d8823a2098a0820c9e444a2805dd5503516177968e88dee05",
+ "symbols": [
+  {
+   "global": true,
+   "name": "para_bip_fmt",
+   "section": ".text",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "20",
+  "isa_check": "5b4f356449c22c9b58fcded6e452b97810eb8dabe25fb18adad6259b42f3feaf",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

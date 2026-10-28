@@ -1,0 +1,96 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 60,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "202f0004e080048000000040226f0008664c41f90000000012d866fc4e75202f0004e080048000000040226f00086d2e41f9000000006710538041f900000000670612fc002b601612d866fc4e75202f0004e080048000000040226f00084a806c0612fc002d44800c800000000a6d1280fc000a220006800000003012c04841200106800000003012c042114e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 142
+  },
+  {
+   "align": 1,
+   "hex": "4f464600554e4900",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 8
+  }
+ ],
+ "source_sha256": "d90a0e4a01da9e40d9e16ef83d45e2822f21aaf0825b6c6a6804174824e2c315",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..rodata",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ch_num",
+   "section": ".text",
+   "value": 94
+  },
+  {
+   "global": false,
+   "name": "ch_off",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ch_uni",
+   "section": ".rodata",
+   "value": 4
+  },
+  {
+   "global": true,
+   "name": "chord_bip_fmt",
+   "section": ".text",
+   "value": 78
+  },
+  {
+   "global": true,
+   "name": "chord_int_fmt",
+   "section": ".text",
+   "value": 30
+  },
+  {
+   "global": true,
+   "name": "chord_loop_fmt",
+   "section": ".text",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "44",
+  "isa_check": "bfd00383917add83b9d6495d56562e30b09fe6779d0416642db83181c8f81038",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

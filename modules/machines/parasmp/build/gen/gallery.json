@@ -1,0 +1,226 @@
+{
+  "machines": [
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 25,
+              "stock": 202
+            },
+            {
+              "param": "ps_loop",
+              "slot": 26
+            },
+            {
+              "param": "ps_dtun",
+              "slot": 27
+            },
+            {
+              "slot": 28,
+              "stock": 205
+            },
+            {
+              "param": "ps_atk",
+              "slot": 29
+            },
+            {
+              "param": "ps_dec",
+              "slot": 30
+            },
+            {
+              "param": "ps_strt",
+              "slot": 31
+            },
+            {
+              "param": "ps_sprd",
+              "slot": 32
+            }
+          ],
+          "level": 10,
+          "name": "Para",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "PARA",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            {
+              "param": "ps_loop",
+              "slot": 1
+            },
+            {
+              "param": "ps_dtun",
+              "slot": 2
+            },
+            {
+              "slot": 3,
+              "stock": 205
+            },
+            {
+              "param": "ps_atk",
+              "slot": 4
+            },
+            {
+              "param": "ps_dec",
+              "slot": 5
+            },
+            {
+              "param": "ps_strt",
+              "slot": 6
+            },
+            {
+              "param": "ps_sprd",
+              "slot": 7
+            }
+          ],
+          "level": 10,
+          "name": "Para",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "PARA",
+          "type": 22
+        }
+      },
+      "id": "parasmp",
+      "name": "Para",
+      "short": "PARA"
+    }
+  ],
+  "module": "tom/parasmp",
+  "params": {
+    "dn2": [
+      {
+        "default": 16384,
+        "id": "ps_loop",
+        "max": 32512,
+        "min": 0,
+        "name": "Loop",
+        "short": "LOOP",
+        "slot": 26,
+        "template": 209
+      },
+      {
+        "default": 16384,
+        "id": "ps_dtun",
+        "max": 32512,
+        "min": 0,
+        "name": "Detune",
+        "short": "DTUN",
+        "slot": 27,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "ps_atk",
+        "max": 32512,
+        "min": 0,
+        "name": "Attack",
+        "short": "ATK",
+        "slot": 29,
+        "template": 209
+      },
+      {
+        "default": 16384,
+        "id": "ps_dec",
+        "max": 32512,
+        "min": 0,
+        "name": "Decay",
+        "short": "DEC",
+        "slot": 30,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "ps_strt",
+        "max": 32512,
+        "min": 0,
+        "name": "Start",
+        "short": "STRT",
+        "slot": 31,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "ps_sprd",
+        "max": 32512,
+        "min": 0,
+        "name": "Stereo Spread",
+        "short": "SPRD",
+        "slot": 32,
+        "template": 209
+      }
+    ],
+    "dt2": [
+      {
+        "default": 16384,
+        "id": "ps_loop",
+        "max": 32512,
+        "min": 0,
+        "name": "Loop",
+        "short": "LOOP",
+        "slot": 1,
+        "template": 209
+      },
+      {
+        "default": 16384,
+        "id": "ps_dtun",
+        "max": 32512,
+        "min": 0,
+        "name": "Detune",
+        "short": "DTUN",
+        "slot": 2,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "ps_atk",
+        "max": 32512,
+        "min": 0,
+        "name": "Attack",
+        "short": "ATK",
+        "slot": 4,
+        "template": 209
+      },
+      {
+        "default": 16384,
+        "id": "ps_dec",
+        "max": 32512,
+        "min": 0,
+        "name": "Decay",
+        "short": "DEC",
+        "slot": 5,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "ps_strt",
+        "max": 32512,
+        "min": 0,
+        "name": "Start",
+        "short": "STRT",
+        "slot": 6,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "ps_sprd",
+        "max": 32512,
+        "min": 0,
+        "name": "Stereo Spread",
+        "short": "SPRD",
+        "slot": 7,
+        "template": 209
+      }
+    ]
+  }
+}

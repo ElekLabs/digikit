@@ -1,0 +1,73 @@
+# Para is the 8th entry of the machine list (the only machine this cell adds); YES commits type 22, the SRC page opens, a trig sounds and the DSP's type
+# cache (DM 0x255970) holds 22. Track 1 plays sample slot 1 of the card (1-sine220.wav, 48000 frames): voice 0's record (DM 0x2412cc)
+# holds its length at +0x188, where the machine reads it.
+
+[test]
+name = "select_parasmp"
+devices = ["dt2"]
+quick = true
+
+[[step]]
+wait_ms = 1500
+[[step]]
+tap = ["FUNC", "SRC"]
+[[step]]
+wait_ms = 200
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 80
+[[step]]
+expect_frame = "list"
+[[step]]
+tap = "YES"
+[[step]]
+wait_ms = 300
+[[step]]
+expect_mem = { addr = 0x4265338c, mask = 0xff00, eq = 0x1600 }
+[[step]]
+tap = "YES"
+[[step]]
+wait_ms = 300
+[[step]]
+tap = "SRC"
+[[step]]
+wait_ms = 300
+[[step]]
+expect_frame = "src_page"
+[[step]]
+tap = "TRIG 1"
+[[step]]
+wait_ms = 500
+[[step]]
+expect_pcm_db = { min = -60, max = -3 }
+[[step]]
+expect_dsp = { addr = 0x255970, hex = "16" }
+[[step]]
+expect_dsp = { addr = 0x241454, hex = "80bb0000" }
+[[step]]
+expect_no_fault = true

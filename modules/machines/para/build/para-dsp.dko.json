@@ -1,0 +1,437 @@
+{
+ "arch": "sharc",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": "seg_pmco",
+   "symbol": "_pa_k",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 25,
+   "section": "seg_pmco",
+   "symbol": "_dkstate_para",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": "seg_pmco",
+   "symbol": "_fw_release_latch",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 67,
+   "section": "seg_pmco",
+   "symbol": "_pa_held",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 85,
+   "section": "seg_pmco",
+   "symbol": "_pa_rset",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 91,
+   "section": "seg_pmco",
+   "symbol": "_pa_relnext",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": "seg_pmco",
+   "symbol": "_pa_rel",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 16,
+   "offset": 105,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 116,
+   "section": "seg_pmco",
+   "symbol": "_pa_out",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 122,
+   "section": "seg_pmco",
+   "symbol": "_pa_out",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 130,
+   "section": "seg_pmco",
+   "symbol": "_pa_one",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 230,
+   "section": "seg_pmco",
+   "symbol": "_pa_vnext",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 239,
+   "section": "seg_pmco",
+   "symbol": "_pa_wu",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 243,
+   "section": "seg_pmco",
+   "symbol": "_pa_wd",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 247,
+   "section": "seg_pmco",
+   "symbol": "_pa_wok",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 251,
+   "section": "seg_pmco",
+   "symbol": "_pa_wu",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 290,
+   "section": "seg_pmco",
+   "symbol": "_pa_p0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 314,
+   "section": "seg_pmco",
+   "symbol": "_dv_exp2",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 351,
+   "section": "seg_pmco",
+   "symbol": "_pa_pan",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 388,
+   "section": "seg_pmco",
+   "symbol": "_pa_vk",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 399,
+   "section": "seg_pmco",
+   "symbol": "_pa_atk",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 417,
+   "section": "seg_pmco",
+   "symbol": "_pa_dec",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 453,
+   "section": "seg_pmco",
+   "symbol": "_pa_rnext",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 484,
+   "section": "seg_pmco",
+   "symbol": "_pa_ed",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 489,
+   "section": "seg_pmco",
+   "symbol": "_pa_es",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 496,
+   "section": "seg_pmco",
+   "symbol": "_pa_es",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 502,
+   "section": "seg_pmco",
+   "symbol": "_pa_es",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 507,
+   "section": "seg_pmco",
+   "symbol": "_pa_es",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 516,
+   "section": "seg_pmco",
+   "symbol": "_pa_e",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 755,
+   "section": "seg_pmco",
+   "symbol": "_pa_rk",
+   "type": "sharc.abs24"
+  }
+ ],
+ "sections": [
+  {
+   "align": 8,
+   "hex": "7e70bf09be703f09fe70bf0a000f000000003e70bf0808940300089729003e703f08810f0000000c00400300be5180800000000f000000003f71bf80800110223e02100802093e0200000001810ffcff84010102030f00000000800123113e703f8a08988000820f0300840102033e020000230382012023a0011302810fff008401210000c2000600000000840f00003e02000004023f71bf8001c03e703f0a08980800810f010001c3000600000000810f020001c3200600000000810f03000899880044c5800f040040c30206000000000010000000003e703f0a089880070ea800006200ffc2000600000000800f0400e0c3020600000000810f0100800f0008e0c30206000000003e0200781ef5e0c20897a800089726073e0210000f4108972700820ffcff8401f20d089a00008c0100a00892070102cf089200018e01021011c68c0110a202cf8c0100dc8c01c0a202c908972500089a04053e020078aaf8800f4000a0c1089a0100810f004001c18c0100a00892880001cf089280008e010110089281008e0101209301000101cf089289009301010b089a05008c0100a008928a0001cf0892820001c88c0100d8840f00003e02000004023f71bf8001c03e703f080890080000c20006000000000896a80297014a000cc005c302060000000005c13e060000000000c222060000000005c03e060000000010c525c686011211089626013e0200002201970102000dc008911c00970112011dc00891a0003e0210000440089280000892010100c22001020020118a0110193e021000044100c20006000000000892820091cf08900c008c0100a09301b90101c80892840001cf089285008e010110810f00008e010120be06000000000892830001cf0892860001cf0896a6008c0110a101cf0891100018c23e02007838ff3e021000044100c22001020030113e021000044000c2200102001021820f800012c0030f000000003e020000010203c03e703f0a0898000008920b0102cf08911400820f0001800121213e020000010203c03e703f0a0898000008920b0102cf0891180044c5800f040040c3020600000000089a02003e02007800f83e0200000002010f0000000001c03e703f0a0898000008972a00089a03003e02007800f83e0200000002010f0000000001c03e703f0a0898000008972b0008920c0008972c00089626078c01e0ad0896a7070b0fffff00008c0f00003e0200000c023f71bf8001c03e70bf080892080000c2000600000000089204010896aa0108962b02050f803f000008962c033f71bf808a0f30003e020000aa021ac03e703f8a3e703f898a0f2000810f010001c320060000000023c825cb0206000000008a015012800f02003e0600000000810f030001c320060000000024cf26cb220600000000820f0000800f0000b299aac6200600000000089308000893040108921c030892a003089280049dcb220100009929089629003e703f08810f800001c03e70bf0a000c0020cc003e010c0090d03e010c0000a13e01080091213e01020000923e0100002ea02201000022223e0100000f103e0100002f123e02100030403e02320033003e02000033043e02100042403e02320044003e02000044043e02007800ff3e02000000023e02007822ff3e02000022023e01000060157e70008a000005a8000000003e01200053053e0104005b053e010c0050a53e0100006218be70000a000008a8000000003e01200084083e0104008b083e010c0080a83e01080085283e01130081083e01080058153e010000701abf70000a00000aa8000000003e012000a30a3e010400ab0a3e010c00a0aa3e0100007218be70000a000008a8000000003e01200084083e0104008b083e010c0080a83e0108008a283e01130081083e010800a81a3e010800a52a08a6000025003e011300a80a3e0108005a15be55000400003e011300580508a2000014003e011300580800a0000000003e0108000810be510080000008a2000018003e011300580800aa000000003e0108000810be5b0080000008a2000010003e01080098193e0108009da0220108009d2908938004ccc5800f0400c0c3020600000000800f0100089688000896090112cd08960a0112cd08960b0112cd11c22001000000203f083f68800f00003f083f687e70bf09be703f090896240010c5820f030012cc0897a4003e02000000023f71bf8001c03e703f0a0894000008990c00800f010008990800800f000008990000800f00003f083f68",
+   "kind": "text",
+   "name": "seg_pmco",
+   "size": 1634
+  },
+  {
+   "align": 8,
+   "hex": "414d4b440100000006000000100000000002000000000000c83200003c0000000200000000000000",
+   "kind": "data",
+   "name": "seg_dmda",
+   "size": 40
+  },
+  {
+   "align": 4,
+   "hex": "0000803f000080bf0000003f13d00241abaaaa39333333413ec3ae370402013821088238000080430402813b0000003017b7d138",
+   "kind": "data",
+   "name": "pkdata__pa_k",
+   "size": 52
+  },
+  {
+   "align": 4,
+   "hex": "0000803fc4fe7f3f11fb7f3fe6f47f3f43ec7f3f29e17f3f97d37f3f8fc37f3f0fb17f3f189c7f3fab847f3fc76a7f3f6d4e7f3f9d2f7f3f580e7f3f9dea7e3f6dc47e3fc99b7e3fb0707e3f23437e3f24137e3fb1e07d3fccab7d3f74747d3fac3a7d3f73fe7c3fc9bf7c3fb07e7c3f283b7c3f31f57b3fcdac7b3ffc617b3fbe147b3f16c57a3f02737a3f841e7a3f9dc7793f4e6e793f9812793f7bb4783ff853783f10f1773fc58b773f1724773f07ba763f974d763fc6de753f976d753f0bfa743f2284743fdd0b743f3f91733f4714733ff894723f5213723f578f713f0809713f6680703f73f56f3f30686f3f9ed86e3fbe466e3f93b26d3f1d1c6d3f5e836c3f58e86b3f0c4b6b3f7bab6a3fa7096a3f9165693f3cbf683fa816683fd86b673fccbe663f880f663f0b5e653f59aa643f73f4633f5a3c633f1082623f98c5613ff206613f2146603f27835f3f05be5e3fbef65d3f532d5d3fc7615c3f1a945b3f50c45a3f6af2593f6a1e593f5348583f2670573fe595563f93b9553f31db543fc3fa533f4918533fc633523f3d4d513faf64503f1f7a4f3f908d4e3f029f4d3f79ae4c3ff8bb4b3f7fc74a3f12d1493fb3d8483f65de473f2ae2463f03e4453ff5e3443f00e2433f29de423f70d8413fdad0403f67c73f3f1bbc3e3ff9ae3d3f03a03c3f3b8f3b3fa47c3a3f4268393f1652383f233a373f6c20363ff304353fbce7333fc9c8323f1da8313fbb85303fa5612f3fde3b2e3f69142d3f4aeb2b3f82c02a3f1594293f0566283f5636273f0a05263f25d2243fa99d233f9967223ff92f213fcbf61f3f12bc1e3fd17f1d3f0c421c3fc6021b3f00c2193fc07f183f073c173fd9f6153f39b0143f2a68133fb01e123fcdd3103f84870f3fda390e3fd0ea0c3f6b9a0b3fad480a3f9bf5083f36a1073f824b063f84f4043f3d9c033fb142023fe4e7003fb217ff3e275dfc3e2da0f93ecbe0f63e071ff43eea5af13e7994ee3ebbcbeb3eb700e93e7533e63efa63e33e4f92e03e79bedd3e80e8da3e6b10d83e4136d53e095ad23eca7bcf3e8b9bcc3e53b9c93e29d5c63e15efc33e1e07c13e4a1dbe3ea031bb3e2a44b83eec54b53eef63b23e3a71af3ed47cac3ec486a93e128fa63ec595a33ee59aa03e789e9d3e86a09a3e17a1973e31a0943edd9d913e229a8e3e07958b3e938e883ece86853ec07d823ee1e67e3ecccf783e51b6723e7f9a6c3e667c663e135c603e97395a3e0115543e60ee4d3ec2c5473e379b413ecf6e3b3e9840353ea2102f3efcde283eb6ab223ede761c3e8340163eb708103e86cf093e0295033e73b2fa3d7638ee3d2ebce13db93dd53d36bdc83dc33abc3d80b6af3d8c30a33d05a9963d0a208a3d742b7b3d6914623d30fb483d07e02f3d2cc3163dba49fb3cb00ac93cb6c9963c900e493c880fc93b32318d24",
+   "kind": "data",
+   "name": "pkdata__pa_pan",
+   "size": 1028
+  },
+  {
+   "align": 4,
+   "hex": "0000803fe0d89f3cacb6953cef388c3c3a55833c9503763cf56a663c72cf573c01214a3c9a503d3c2a50313c8112263c468b1b3ce8ae113c9472083c4598ff3b2764ef3b0337e03b2c00d23b04b0c43bec37b83b328aac3b009aa13b545b973bebc28d3b3dc6843bd0b6783b5ef2683bd12d5a3bef584c3b87643f3b5d42333b1fe5273b4f401d3b3d48133bf5f1093b3633013bc704f23afface23a374ed43aa7d8c63a873dba3afc6eae3a0e60a33a9904993a3b518f3a4c3b863aa2717b3ae3806b3ad7925c3a18974e3a497e413a093a353adcbc293a24fa1e3a10e6143a8c750b3a3a9e023ac9acf439e429e539bca2d6395c07c939cf48bc391859b039192ba53989b29a39eae3903973b487391f347e3996166e3997fe5e398edb5039f39d43393b373739c7992b39d3b820396d88163963fd0c393a0d0439415cf738c7ade738cefdd838323ccb38d759be389548b2382dfba63832659c38047b9238be3189382f7f80388cb37038257161386326533895c34538053a3938ed7b2d38697c2238622f183888890e38428005384513fa37bc38ea377e5fdb373b77cd37ac70c037833db43759d0a8379f1c9e379616943739b38a3739e88137db57733793ea6337a97755373eef473774423b375f632f37f3442437fbda1937061a10375cf70637ead1fc36d5caec36dec7dd3688b8cf36608dc236f037b636abaaaa36",
+   "kind": "data",
+   "name": "pkdata__pa_atk",
+   "size": 512
+  },
+  {
+   "align": 4,
+   "hex": "9cbc783f7e27793f508c793f68eb793f15457a3fa7997a3f65e97a3f95347b3f787b7b3f4cbe7b3f4bfd7b3fad387c3fa6707c3f67a57c3f1fd77c3ffb057d3f23327d3fc05b7d3ff7827d3feaa77d3fbbca7d3f88eb7d3f710a7e3f90277e3fff427e3fd85c7e3f32757e3f228c7e3fbea17e3f1ab67e3f48c97e3f58db7e3f5dec7e3f64fc7e3f7d0b7f3fb6197f3f1c277f3fba337f3f9d3f7f3fcf4a7f3f5a557f3f495f7f3fa3687f3f73717f3fbf797f3f90817f3fec887f3fdb8f7f3f62967f3f899c7f3f53a27f3fc8a77f3febac7f3fc1b17f3f50b67f3f9bba7f3fa5be7f3f74c27f3f09c67f3f6ac97f3f98cc7f3f96cf7f3f68d27f3f10d57f3f90d77f3febd97f3f23dc7f3f3ade7f3f32e07f3f0ce27f3fcbe37f3f6fe57f3ffce67f3f71e87f3fd0e97f3f1beb7f3f53ec7f3f78ed7f3f8dee7f3f91ef7f3f86f07f3f6df17f3f46f27f3f13f37f3fd4f37f3f89f47f3f34f57f3fd5f57f3f6df67f3ffcf67f3f82f77f3f01f87f3f78f87f3fe9f87f3f52f97f3fb6f97f3f14fa7f3f6cfa7f3fbffa7f3f0efb7f3f57fb7f3f9dfb7f3fdefb7f3f1cfc7f3f56fc7f3f8dfc7f3fc0fc7f3ff1fc7f3f1efd7f3f49fd7f3f72fd7f3f98fd7f3fbcfd7f3fdefd7f3ffdfd7f3f1bfe7f3f38fe7f3f52fe7f3f6bfe7f3f83fe7f3f99fe7f3faefe7f3fc2fe7f3fd4fe7f3fe6fe7f3ff6fe7f3f06ff7f3f14ff7f3f",
+   "kind": "data",
+   "name": "pkdata__pa_dec",
+   "size": 512
+  }
+ ],
+ "source_sha256": "8e2499b7f5a5372c3533e089518684fc0f5cbcdb7ac0a70cdb2ee232d3f0ea50",
+ "symbols": [
+  {
+   "global": false,
+   "name": "_pa_e",
+   "section": "seg_pmco",
+   "value": 481
+  },
+  {
+   "global": false,
+   "name": "_pa_ed",
+   "section": "seg_pmco",
+   "value": 499
+  },
+  {
+   "global": false,
+   "name": "_pa_es",
+   "section": "seg_pmco",
+   "value": 514
+  },
+  {
+   "global": false,
+   "name": "_pa_held",
+   "section": "seg_pmco",
+   "value": 105
+  },
+  {
+   "global": true,
+   "name": "_pa_note_on",
+   "section": "seg_pmco",
+   "value": 781
+  },
+  {
+   "global": false,
+   "name": "_pa_one",
+   "section": "seg_pmco",
+   "value": 137
+  },
+  {
+   "global": false,
+   "name": "_pa_out",
+   "section": "seg_pmco",
+   "value": 777
+  },
+  {
+   "global": false,
+   "name": "_pa_p0",
+   "section": "seg_pmco",
+   "value": 296
+  },
+  {
+   "global": false,
+   "name": "_pa_rel",
+   "section": "seg_pmco",
+   "value": 72
+  },
+  {
+   "global": false,
+   "name": "_pa_relnext",
+   "section": "seg_pmco",
+   "value": 98
+  },
+  {
+   "global": true,
+   "name": "_pa_render",
+   "section": "seg_pmco",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_pa_rk",
+   "section": "seg_pmco",
+   "value": 442
+  },
+  {
+   "global": false,
+   "name": "_pa_rnext",
+   "section": "seg_pmco",
+   "value": 751
+  },
+  {
+   "global": false,
+   "name": "_pa_rset",
+   "section": "seg_pmco",
+   "value": 94
+  },
+  {
+   "global": false,
+   "name": "_pa_vk",
+   "section": "seg_pmco",
+   "value": 219
+  },
+  {
+   "global": false,
+   "name": "_pa_vnext",
+   "section": "seg_pmco",
+   "value": 384
+  },
+  {
+   "global": false,
+   "name": "_pa_wd",
+   "section": "seg_pmco",
+   "value": 238
+  },
+  {
+   "global": false,
+   "name": "_pa_wok",
+   "section": "seg_pmco",
+   "value": 254
+  },
+  {
+   "global": false,
+   "name": "_pa_wu",
+   "section": "seg_pmco",
+   "value": 246
+  },
+  {
+   "global": true,
+   "name": "_pa_atk",
+   "section": "pkdata__pa_atk",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_pa_dec",
+   "section": "pkdata__pa_dec",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_pa_desc",
+   "section": "seg_dmda",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_pa_k",
+   "section": "pkdata__pa_k",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_pa_pan",
+   "section": "pkdata__pa_pan",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dkstate_para",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_exp2",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_g",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_fw_release_latch",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "instructions_redecoded": "379",
+  "selache_rev": "2b26d3b75c53063575bc5c820fa0d38879335187",
+  "selas_sha256": "ef587e56301169b4d351b070426b2dd3e71e6d45d1cbc49f4faffe913c35fc22",
+  "seldump_sha256": "0247c303012361577600e4a00fa2cc741c99436d75d3909e19697a7636a4fb61"
+ }
+}

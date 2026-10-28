@@ -37,6 +37,12 @@ before it goes near the device.
 | [Master gain](modules/fx/master-gain/README.md) | Scales the master output by a set gain | Digitakt II, Digitone II | not yet |
 | [Master drive](modules/fx/master-drive/README.md) | Soft-clip saturation on the master output | Digitakt II, Digitone II | not yet |
 | [XSLICE](tests/fixtures/modules/xslice/README.md) | A copy of MANUAL SLICE under its own name (a demonstration) | Digitakt II | not yet |
+| [TB303](modules/machines/tb303/README.md) | Open303: the 303 saw or square through its filter, filter and amp envelopes; accent amount on knob H, overlapping notes slide. Patched in | Digitakt II | Digitakt II (OS 1.17) |
+| [Overdrive](modules/fx/overdrive/README.md) | Seven more curves for the tracks' overdrive (OVR TYPE on the FX page), and more drive at the top of the knob. Patched in | Digitakt II | Digitakt II (OS 1.17) |
+| [ChordWT](modules/machines/wtstack/README.md) | The track's sample as a Serum wavetable played by up to four voices at set intervals, with detune and stereo spread. Patched in | Digitakt II | Digitakt II (OS 1.17) |
+| [ParaWT](modules/machines/para/README.md) | The same wavetable played paraphonically: each trig takes the next of four voices, with its own attack and decay (held for the trig). Patched in | Digitakt II | Digitakt II (OS 1.17) |
+| [Chord](modules/machines/chord/README.md) | The track's sample as a one-shot played by up to four voices at set intervals; forward or ping-pong loop. Patched in | Digitakt II | not yet |
+| [Para](modules/machines/parasmp/README.md) | The one-shot played paraphonically, four voices with their own envelopes; loop and start point. Patched in | Digitakt II | not yet |
 
 Supported firmware: **Digitakt II OS 1.17** and **Digitone II OS 1.12**. Download them from Elektron's support site and
 put them in `firmware/` (`Digitakt_II_OS1.17.syx`, `Digitone_II_OS1.12.syx`). Device work so far is on the Digitakt II.

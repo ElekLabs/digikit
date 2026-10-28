@@ -1,0 +1,70 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "202f0004e080048000000040226f0008661c41f90000000012d866fc4e75202f0004e080048000000040226f00084a806c0612fc002d44800c800000000a6d1280fc000a220006800000003012c04841200106800000003012c042114e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 94
+  },
+  {
+   "align": 1,
+   "hex": "4f464600",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 4
+  }
+ ],
+ "source_sha256": "43a21b1d4f28dca7d5dc804c3dbb97139c418a66a0a43b38e76d8e392cf32cad",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..rodata",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "parasmp_bip_fmt",
+   "section": ".text",
+   "value": 30
+  },
+  {
+   "global": true,
+   "name": "parasmp_loop_fmt",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ps_num",
+   "section": ".text",
+   "value": 46
+  },
+  {
+   "global": false,
+   "name": "ps_off",
+   "section": ".rodata",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "29",
+  "isa_check": "84fe710e05365096f8f9b8adf6d2650d9d89b9210bcc20cce2dae30a587bee53",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

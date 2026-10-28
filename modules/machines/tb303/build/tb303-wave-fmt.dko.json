@@ -1,0 +1,71 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 24,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "202f0004226f000841f9000000000c80000000806d0641f90000000012d866fc4e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 34
+  },
+  {
+   "align": 1,
+   "hex": "5341570053515200",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 8
+  }
+ ],
+ "source_sha256": "80307700f5161bcc1e10b9fc771dc064e8ade89df0530b398be7eb66632b0859",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..rodata",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tb303_wave_fmt",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "tw_saw",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "tw_sqr",
+   "section": ".rodata",
+   "value": 4
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "9",
+  "isa_check": "480b886c590fb4d9b4d29c09d31d5b39b224c1d01f379ddcd6cad552302751f5",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}
