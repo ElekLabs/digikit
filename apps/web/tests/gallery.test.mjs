@@ -84,7 +84,14 @@ test('bundle equals tools/patchkit/patchkit.py bundle', { skip: !existsSync(join
 test('the shipped modules: the .dkm files equal what module:pack-all writes, the index describes them, the sources hold no build output', () => {
   const out = mkdtempSync(join(tmpdir(), 'ship-'));
   const { modules } = shipModules(out, root);
-  assert.deepEqual(modules.map((m) => m.id).sort(), ['digikit/freqshift', 'digikit/pluck', 'digikit/remote']);
+  assert.deepEqual(modules.map((m) => m.id).sort(), [
+    'digikit/freqshift',
+    'digikit/pluck',
+    'digikit/remote',
+    'fadedlimes/analog',
+    'fadedlimes/bd',
+    'fadedlimes/pd',
+  ]);
   assert.deepEqual(JSON.parse(readFileSync(join(out, 'index.json'), 'utf8')).modules, modules);
   for (const m of modules) {
     assert.ok(m.source.includes('module.toml') && m.source.includes('README.md'), m.id);
@@ -106,10 +113,7 @@ test('the shipped modules: the .dkm files equal what module:pack-all writes, the
 });
 
 test('patched file names', () => {
-  assert.equal(
-    patchedFileName('Digitakt II', '1.17', ['core/fx']),
-    'Digitakt_II_OS1.17+core-fx.syx',
-  );
+  assert.equal(patchedFileName('Digitakt II', '1.17', ['core/fx']), 'Digitakt_II_OS1.17+core-fx.syx');
 });
 
 test('worker core: check and apply equal the command line (core/fx)', { skip: !have }, async () => {

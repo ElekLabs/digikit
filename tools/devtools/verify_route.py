@@ -93,9 +93,9 @@ CONFORMANCE_WRAPPERS = frozenset({"core/dsp-voice"})
 FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
 # a path built from parts: ROOT / "modules" / "machines" / "pluck"
 SPLIT_ID_RE = re.compile(
-    r"""["'](core|digikit|fx|machines|test)["']\s*[/,]\s*["']([a-z0-9][a-z0-9-]*)["']"""
+    r"""["'](core|digikit|fadedlimes|fx|machines|test)["']\s*[/,]\s*["']([a-z0-9][a-z0-9-]*)["']"""
 )
-ID_RE = re.compile(r"\b(?:core|digikit|fx|machines|test)/[a-z0-9][a-z0-9-]*")
+ID_RE = re.compile(r"\b(?:core|digikit|fadedlimes|fx|machines|test)/[a-z0-9][a-z0-9-]*")
 
 
 @dataclass(frozen=True)

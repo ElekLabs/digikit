@@ -688,8 +688,12 @@ def test_digikit_test_files_and_scenarios() -> None:
 def test_module_leaf_selects_the_tests_that_name_it() -> None:
     src = "modules/machines/bd/src/module.c"
     assert verify.steps_for([src]) == ("python-tests", "rust-tests", "smoke")
-    # no test names bd: only the machine conformance suite runs beyond the gate files
-    assert selected(src) == {"tests/modules/test_machine_conformance.py"}
+    # no test file names bd: the machine conformance suite and the test files of the scenario (equiv-dyn-bd) that names it
+    assert selected(src) == {
+        "tests/modules/test_machine_conformance.py",
+        "tests/digikit/test_equiv_dt2.py",
+        "tests/digikit/test_equiv_dn2.py",
+    }
     # a module that tests name selects those tests, not whole directories
     named = selected("modules/fx/freqshift/src/module.c")
     assert "tests/patchkit/test_freqshift.py" in named

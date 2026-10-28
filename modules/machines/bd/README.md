@@ -1,5 +1,7 @@
 # Bass Drum
 
+**Category:** machines  **Devices:** Digitakt II 1.17; Digitone II 1.12  **Status:** experimental (emulator only)  **Kind:** run-time module (`.dkm`, loaded from the card; the runtime gives it its machine type)
+
 An FM kick drum. A carrier sine is phase-modulated by a second sine. The modulation depth (the index) starts high and
 falls fast, so the strike has a burst of sidebands that settles into a plain sine. The carrier pitch also starts high
 and falls to the note. The amplitude decay is the track's AMP envelope, so shape the body and the tail there: the

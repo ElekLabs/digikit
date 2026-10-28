@@ -253,7 +253,7 @@ first `mise run web` in a fresh tree compiles the browser cores and takes severa
 |---|---|---|
 | Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `devices/ports/dt2-1.17.toml` |
 | Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
-| Content module | Own code and declarative registry entries. No addresses. | `test/patched-pluck`, `fadedlimes/bd` |
+| Content module | Own code and declarative registry entries. No addresses. | `test/patched-pluck` |
 
 Device, board and firmware facts are data (`devices/*.toml`, `devices/ports/*.toml`, `modules/core/adapters/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 

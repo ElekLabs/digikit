@@ -31,7 +31,7 @@
           },
           "position": null,
           "short": "BD",
-          "type": 15
+          "type": null
         },
         "dt2": {
           "clone_of": 0,
@@ -69,7 +69,7 @@
           "page": null,
           "position": null,
           "short": "BD",
-          "type": 15
+          "type": null
         }
       },
       "id": "bd",

@@ -4,7 +4,7 @@ A subtractive voice for the Digitakt II: two oscillators on one continuous wave 
 detune, a reflection wave folder and a sub. It runs before the track's FLTR and AMP, so the DT2 does the shaping;
 that is the whole design idea — a usable synth voice without loading single-cycle waveforms into the sampler.
 
-## Panel (DT2 1.17, machine type 13)
+## Panel (DT2 1.17)
 
 | slot | knob | range |
 |---|---|---|

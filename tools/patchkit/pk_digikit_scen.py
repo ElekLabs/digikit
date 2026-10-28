@@ -25,8 +25,10 @@ Kinds:
              by parameter name; the type numbers and the pointers differ by construction), and the same PCM for a note when
              the set has a sound (`play`). A set without a twin (`twin = ""`) must leave every table as a boot with no module.
              `pcm_sha256` (with `play`) replaces the PCM compare when no twin has the sound: the SHA-256 of the run-time note from its onset over
-             `pcm_samples` (default 24000) interleaved float32 samples; "record" fails and prints the hash. `ignore_run_machines` drops a run-time
-             machine (with its parameters and pages) that the twin has no counterpart of.
+             `pcm_samples` (default 24000) interleaved float32 samples; "record" fails and prints the hash. `env_run` and `env_ref` set environment variables of the run-time and the reference boot (`SHARC_UNINIT` for a machine that
+             reads voice state beyond its cleared bytes: the run-time state is uninitialised L2). `ignore_run_machines` drops a run-time
+             machine (with its parameters and pages) that the twin has no counterpart of. `play_module` and `play_machine` (default digikit/pluck and
+             pluck) name the run-time machine the note is played with.
   roundtrip  a project with the run-time machine on tracks, parameter values, p-locks and a sound lock is saved under set A,
              loaded and saved under set B (machine absent) and under A again: the project slot's sound records, the sequencer
              data and the sound locks are byte-identical to the first save; the track keeps its type while its machine is absent.
@@ -604,8 +606,9 @@ def run_equiv(c: Ctx) -> None:
     empty = c.card(None)
     play = t.get("play", "")
     trig = t.get("trig_frame", M.TRIG_FRAME if c.dt2 else M.TRIG_FRAME_DN2)
-    env_ref: dict[str, str] = {}
-    env_run: dict[str, str] = {}
+    # e.g. SHARC_UNINIT: a machine that keeps state beyond its cleared bytes reads uninitialised L2 at its first call, as on the device
+    env_ref: dict[str, str] = dict(t.get("env_ref", {}))
+    env_run: dict[str, str] = dict(t.get("env_run", {}))
     pin = t.get(
         "pcm_sha256", ""
     )  # the run-time note is compared with this hash, not with a twin's note
@@ -619,9 +622,8 @@ def run_equiv(c: Ctx) -> None:
     def select(rig: Any, hint_key: str) -> None:
         if c.dt2:
             return
-        if play in (
-            "pluck",
-            "sine",
+        if (
+            play in ("pluck", "sine") or "play_machine" in t
         ):  # DN2: the machine list position (finding 33); the sound proves the type
             rig.select(t[hint_key] if hint_key in t else t["hint"])
 
@@ -695,7 +697,10 @@ def run_equiv(c: Ctx) -> None:
             if play:
                 if c.dt2:
                     rig.select_type(
-                        rig.dyn_type(M.MODULE, "pluck"),
+                        rig.dyn_type(
+                            t.get("play_module", M.MODULE),
+                            t.get("play_machine", "pluck"),
+                        ),
                         t.get("hint_run", t.get("hint", 7)),
                     )
                 select(rig, "hint_run")
