@@ -18,6 +18,10 @@ Constants (0.5, 1.5, 2.0, 1/32) are passed in registers that the caller loads be
 `;` after a macro call. A macro is several instructions separated by `;`, so a loop-end label must never be on the
 first line of a macro expansion: put the label on a trailing instruction (usually the store).
 
+The exact oscillator/noise extractions below retain inline fixed constants where the existing machine schedule
+loads them. Their destination registers are explicit arguments; they do not hide any register use. Integer and
+floating-point register names alias the same storage: pass the matching R aliases required by the sine macro.
+
 Rules that apply to the loop around a macro (style.md 5a):
 
 - A block loop has 4 or more instructions.
@@ -39,9 +43,19 @@ Rules that apply to the loop around a macro (style.md 5a):
 | `recip.inc` | `DK_RECIP(OUT, IN1, TWO, TMP)` | 7 | 1 / x, 2 Newton steps |
 | `recip.inc` | `DK_DIV(QUO, NUM, DEN, TWO, TMP, TMP2)` | 8 | n / d |
 | `recip.inc` | `DK_RSQRT(OUT, IN1, HALF, K15, TMP, TMP2)` | 16 | 1 / sqrt(x), 3 Newton steps |
+| `noise.inc` | `DK_XORSHIFT32_STEP(STATE, TMP, RIGHT)` | 6 | unsigned xorshift32; RIGHT holds -17 |
+| `noise.inc` | `DK_XORSHIFT32_LOAD_STEP(STATE, TMP)` | 7 | same recurrence, retains BD's inline shift load |
+| `oscillator.inc` | `DK_SINE_POLY_STEP(OUT, X, SQUARE, COEF, OUT_BITS, COEF_BITS)` | 16 | BD/PD polynomial on already folded phase, -0.25 to +0.25 |
+| `sample.inc` | `DK_SAMPLE_CURSOR_STEP(INDEX, FRAC, HI, LO, MASK, TMP, CARRY)` | 5 | exact split integer/fraction update for signed Q16.16 rate |
 
 Each file has a header with the maths, the arguments, the instruction count and the accuracy. The float32 reference
 models are in `tools/patchkit/dsp_ref.py`; the tests are in `tests/patchkit/test_dsp_kernels.py`.
+
+The extracted noise/sine references and tests are `tools/patchkit/dsp_osc_ref.py` and
+`tests/patchkit/test_dsp_osc_kernels.py`. Noise seeds, state storage and float conversion remain caller-owned;
+zero is an absorbing state. The sine macro approximates `-sin(2*pi*x)` on its folded input domain, with separate
+float32 rounding at each operation; phase wrapping, folding and modulation remain in the machine. These macros
+replace the corresponding code in BD, PD and pluck while preserving the assembled instructions and data.
 
 ## Speed
 
@@ -68,6 +82,28 @@ and `selcc`-compiled C call it the same way. `call.inc` has the macros and the f
 | `biquad.inc` | `_dk_biquad` | 5 | 203 | transposed direct form II; R12 = 7 words b0, b1, b2, a1, a2, s1, s2; in place allowed; reads only the input block |
 | `delay.inc` | `_dk_delay` | 4 | 175 | linearly interpolated delay, hardware circular ring; R12 = 4 words ring base, ring length L (>= 34), write offset w, delay d (float, 1 <= d <= L - 2); in place allowed; L1 and L2 are 0 on return |
 | `halfband.inc` | `_dk_halfband_down` | 20 per output (2 inputs) | 701 | 2x decimator, 23-tap half-band (Kaiser window), 64 inputs to 32 outputs; R12 = 2 words history ring base (32 words), offset (unchanged by a call); coefficient table 2 c_j in DM (`.SECTION/DM`); L1 is 0 on return |
+| `sample.inc` | `_dk_sample_linear` | path-dependent | ceiling 1,380 including three argument loads | bounded mono float32 view; split cursor, clamped linear interpolation, zero tail and completion |
 
-The counts are by reading until `tests/patchkit/test_dsp_kernels.py` measures them. The assembler spelling of `CJUMP`,
-`DM(I7, M7) = PC`, multifunction instructions with a memory access, and the `dk_<name>.` symbol are unconfirmed.
+For the older block kernels, consult their headers and `tests/patchkit/test_dsp_kernels.py` for the distinction
+between static instruction counts and measured counts. The sample reader's measured evidence is described below.
+
+## Numerical sample reader
+
+`sample.inc` provides numerical playback only: it does not load files, allocate sample memory or define a sample
+resource ABI. Include `dsp/call.inc` first. Pass normal-word DM addresses in R4 (source), R8 (32-float output) and
+R12 (six integer state words): `start`, exclusive `end`, `index`, `fraction`, signed Q16.16 `rate`, `done`.
+Initialize forward playback at `(start, 0)`, reverse at `(end - 1, 0)`, and clear `done`. A zero rate holds position.
+
+The source, state, output and stack must not overlap. The source view is immutable and its entire interval must
+be mapped/addressable; see the include for integer range and register preconditions. The reader interpolates
+`a + fraction/65536 * (b - a)` with separate float32 rounding and clamps the neighbor to `end - 1`. An empty or
+finished interval reads no source and writes silence. Completion is recorded even when it occurs on the final
+sample of a block; subsequent calls stay silent until the caller resets the state. Only index, fraction and done
+are written back. The cursor uses integer arithmetic, so large frame positions do not lose fractional precision.
+
+The reference and tests are `tools/patchkit/dsp_sample_ref.py` and `tests/patchkit/test_dsp_sample_kernels.py`.
+Tests compare against an independent combined-position oracle and watch for out-of-interval reads. The two-call
+harness measured 557–2,231 instructions across its cases, below its 2,761-instruction ceiling. These are concrete-core
+instruction counts, not hardware cycles or a speedup claim. This first implementation is sequential and has no
+anti-alias filter, playback looping or boundary fades. Float32 input is a numerical view, not a decision to store
+all transferred PCM as float32. Resource ownership and stereo playback remain separate work.
