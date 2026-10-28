@@ -45,9 +45,9 @@ const view: TransferView = {
   device: 'dt2',
   runtime: '0.2.4',
   free_bytes: 1000,
-  loaded: ['digikit/pluck', 'someone/effect'],
+  loaded: ['someone/machine', 'someone/effect'],
   modules: [
-    row('digikit/pluck', 'Machines', { loaded: true, on_card: 'yes' }),
+    row('someone/machine', 'Machines', { loaded: true, on_card: 'yes' }),
     row('test/sine', 'Machines'),
     row('test/dyn-demo', 'Tools', { warnings: ['arena: needs 5, largest free 1'], fits: false }),
   ],
@@ -60,7 +60,7 @@ const view: TransferView = {
 test('the lists: on device is every card file, available is the repo in three groups', () => {
   assert.deepEqual(
     onDevice(view).map((r) => r.path),
-    ['modules/effect.dkm', 'modules/junk.dkm', 'modules/pluck.dkm'],
+    ['modules/effect.dkm', 'modules/junk.dkm', 'modules/machine.dkm'],
   );
   const a = available(view, false);
   assert.deepEqual(
@@ -69,7 +69,7 @@ test('the lists: on device is every card file, available is the repo in three gr
   );
   assert.deepEqual(
     a[0].rows.map((r) => r.id),
-    ['digikit/pluck'],
+    ['someone/machine'],
   );
   assert.equal(a[1].rows.length, 0); // Effects: no run-time effects yet
   assert.equal(a[2].rows.length, 0); // the test module is hidden
@@ -79,7 +79,7 @@ test('the lists: on device is every card file, available is the repo in three gr
 
 test('ticks mean install: only ticked repo modules, in list order, none to start with', () => {
   assert.deepEqual(installModules(view, new Set()), []);
-  assert.deepEqual(installModules(view, new Set(['test/sine', 'digikit/pluck'])), ['digikit/pluck', 'test/sine']);
+  assert.deepEqual(installModules(view, new Set(['test/sine', 'someone/machine'])), ['someone/machine', 'test/sine']);
   // a card-only path is never an install
   assert.deepEqual(installModules(view, new Set(['modules/effect.dkm'])), []);
 });
@@ -157,7 +157,7 @@ test('a file row: upload bar, verifying, then verified or failed; a pending row 
   assert.ok(pending);
   assert.equal(pending.id, 'test/sine');
   assert.equal(pending.file_size, 700);
-  assert.equal(rows.filter((r) => r.path === 'modules/pluck.dkm').length, 1); // no double rows
+  assert.equal(rows.filter((r) => r.path === 'modules/machine.dkm').length, 1); // no double rows
   p = applyEvent(p, { event: 'progress', id: 'test/sine', sent: 350, bytes: 700 });
   assert.deepEqual(rowStatus(p, {}, 'modules/sine.dkm'), { kind: 'uploading', sent: 350, bytes: 700 });
   p = applyEvent(p, { event: 'progress', id: 'test/sine', sent: 700, bytes: 700 });
@@ -165,10 +165,10 @@ test('a file row: upload bar, verifying, then verified or failed; a pending row 
   p = applyEvent(p, { event: 'verify', id: 'test/sine', path: 'modules/sine.dkm', ok: true });
   assert.deepEqual(rowStatus(p, {}, 'modules/sine.dkm'), { kind: 'ok' });
   // the file that is already on the card gets its bar in its own row (no pending row)
-  p = startProgress(['digikit/pluck'], false);
-  p = applyEvent(p, { event: 'upload', id: 'digikit/pluck', path: 'modules/pluck.dkm', bytes: 100 });
+  p = startProgress(['someone/machine'], false);
+  p = applyEvent(p, { event: 'upload', id: 'someone/machine', path: 'modules/machine.dkm', bytes: 100 });
   assert.equal(onDeviceWithPending(view, p).length, onDevice(view).length);
-  assert.equal(rowStatus(p, {}, 'modules/pluck.dkm')!.kind, 'uploading');
+  assert.equal(rowStatus(p, {}, 'modules/machine.dkm')!.kind, 'uploading');
   // without an install: the last VERIFY
   assert.deepEqual(rowStatus(undefined, { 'modules/x.dkm': 'failed' }, 'modules/x.dkm'), { kind: 'failed' });
 });
@@ -200,9 +200,9 @@ test('verify results are kept by path', () => {
 test('delete: the ticked card files, the button label, the done text', () => {
   // repo modules that are on the card and card-only files are both rows of the On device pane, keyed by path
   assert.deepEqual(deletePaths(view, new Set()), []);
-  assert.deepEqual(deletePaths(view, new Set(['modules/pluck.dkm', 'modules/junk.dkm'])), [
+  assert.deepEqual(deletePaths(view, new Set(['modules/machine.dkm', 'modules/junk.dkm'])), [
     'modules/junk.dkm',
-    'modules/pluck.dkm',
+    'modules/machine.dkm',
   ]);
   // a file that is not on the card (an Available row) or gone since is dropped
   assert.deepEqual(deletePaths(view, new Set(['modules/sine.dkm', 'modules/gone.dkm'])), []);
@@ -211,10 +211,10 @@ test('delete: the ticked card files, the button label, the done text', () => {
   assert.equal(deleteLabel(2, true), 'Confirm delete (2)');
   assert.equal(deleteLabel(0, true), 'Delete', 'nothing ticked: no count and nothing to confirm');
   assert.equal(deleteDoneText(view, ['modules/junk.dkm']), 'Deleted 1 file.');
-  // pluck is loaded: it stays loaded until the restart
+  // machine is loaded: it stays loaded until the restart
   assert.equal(
-    deleteDoneText(view, ['modules/pluck.dkm', 'modules/junk.dkm']),
-    'Deleted 2 files. digikit/pluck: deleted; unloads at restart.',
+    deleteDoneText(view, ['modules/machine.dkm', 'modules/junk.dkm']),
+    'Deleted 2 files. someone/machine: deleted; unloads at restart.',
   );
 });
 
@@ -243,7 +243,7 @@ test('the delete progress: one step per path, active then done, text from the ev
 });
 
 test('the tags: only what says something; the usual state has none', () => {
-  const [pluck, sine0] = view.modules;
+  const [machine, sine0] = view.modules;
   const sine = { ...sine0, test: false };
   const texts = (tags: RowTag[]) => tags.map((t) => t.text);
   // On your computer: what the device holds of a module, a test build, a fit warning
@@ -264,7 +264,7 @@ test('the tags: only what says something; the usual state has none', () => {
     'a loaded one says nothing of fit',
   );
   // On device: loaded first, then how the file stands against the library
-  assert.deepEqual(texts(deviceTags(pluck)), ['loaded'], 'the same as the library is not said');
+  assert.deepEqual(texts(deviceTags(machine)), ['loaded'], 'the same as the library is not said');
   assert.deepEqual(texts(deviceTags({ ...sine, on_card: 'yes' })), []);
   assert.deepEqual(texts(deviceTags({ ...sine, on_card: 'other version' })), ['differs']);
   assert.deepEqual(texts(deviceTags(view.card_only[1])), ['not in library']);
@@ -332,7 +332,7 @@ test('the ticked modules together: the sum rule against the device limits, in li
 });
 
 test('the storage line of Modules mode: files on the card, their size and the free space; no memory wording', () => {
-  // three files of 100 bytes on the card (pluck, effect, junk), 1000 bytes free
+  // three files of 100 bytes on the card (machine, effect, junk), 1000 bytes free
   assert.equal(storageLine(view), 'Modules: 3 files, 300 B · 1000 B free');
   assert.equal(
     storageLine({ ...view, modules: [], card_only: [view.card_only[0]], free_bytes: 3.5 * 2 ** 30 }),

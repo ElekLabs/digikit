@@ -240,9 +240,13 @@ child processes.
 
 ### Phase 7: migrate the rest
 
-- [ ] bd, analog, pd, master-gain, master-drive.
-- [ ] Remove the typed `module.toml` sections and the legacy Python build tools.
-- [ ] Proof: byte-identical patched images.
+- [x] bd, analog, pd: declared in C since phase 2.
+- [x] master-gain and master-drive deleted (Em, 2026-10-29: the devices have master overdrive; freqshift is the
+      master-route example). The typed `module.toml` sections are gone from every manifest. The refusal of an old
+      `[[fx]]`, `[[machine]]`, `[[param]]`, `[[page]]` or `[[voice]]` section stays in `module.rs` (the manifest parser
+      ignores unknown keys, so a deleted stub would drop the section without a word). `tools/patchkit/pk_expr.py` stays:
+      two Python tests of the `[[section]]` row expressions import it.
+- [x] Proof: every remaining .dkm and patched image byte-identical to main.
 
 ### Dev loop
 

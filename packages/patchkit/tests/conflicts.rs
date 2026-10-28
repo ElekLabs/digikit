@@ -35,7 +35,7 @@ fn registry() -> Registry {
     Registry::from_dir(&root().join("devices/ports")).unwrap()
 }
 
-/// The real library (core/expansion, digikit/master-gain, ...) plus synthetic modules.
+/// The real library (core/expansion, core/fx, ...) plus synthetic modules.
 fn library(extra: Vec<Module>) -> Library {
     // without the toolchain the content modules are left out; the tests that need one start with `need_toolchain!()`
     let mut lib = Library::scan_repo_or_skip(&root())
@@ -182,13 +182,13 @@ fn an_anchor_hash_mismatch_is_refused() {
         for a in p
             .anchor
             .iter_mut()
-            .filter(|a| a.name == "dsp.master.site.q31_converter.call")
+            .filter(|a| a.name == "dsp.fx.fn.entry")
         {
             a.sha256 = "ab".repeat(32);
         }
     }
     let lib = library(vec![]);
-    expect_err(run_with(&reg, &lib, &["digikit/master-gain"]), "bytes hash");
+    expect_err(run_with(&reg, &lib, &["core/fx"]), "bytes hash");
 }
 
 #[test]
@@ -212,7 +212,7 @@ fn the_container_cap_is_enforced() {
         p.limits.container_max = 1_000_000;
     }
     let lib = library(vec![]);
-    expect_err(run_with(&reg, &lib, &["digikit/master-gain"]), "over the");
+    expect_err(run_with(&reg, &lib, &["core/fx"]), "over the");
 }
 
 #[test]
@@ -229,13 +229,13 @@ fn sections_2_4_and_8_can_never_change() {
 fn a_patched_image_has_no_port() {
     need_image!();
     need_toolchain!();
-    let out = run(&library(vec![]), &["digikit/master-gain"]).unwrap();
+    let out = run(&library(vec![]), &["core/fx"]).unwrap();
     let lib = library(vec![]);
     let again = apply::apply(
         &out.syx,
         &registry(),
         &lib,
-        &["digikit/master-gain".to_string()],
+        &["core/fx".to_string()],
     );
     expect_err(again, "no port for firmware");
 }

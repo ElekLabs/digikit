@@ -7,10 +7,9 @@ was = ["dsp.master.q31_converter"]
 cpu = "sharc"
 rule = { kind = "sharc_func", reloc_hash = "83fba5710c2b395cbd54e3cd583b1e205915fa6d1905d7285c3535203e52d05b", offset = 0x0, len = 6 }
 mark = "D"
-users = ["digikit/master-drive", "digikit/master-gain"]
 doc = "The Q31 converter of the master block, called once by the block handler (arguments in r4/r8); its `I3` literal holds the master float buffer address."
 
-# Anchors. The hook anchors are the ones of digikit/master-gain (same rules, same device-independent hashes).
+# Anchors for the master block handler (same rules, same device-independent hashes on DT2 and DN2).
 # The block handler's one call of the Q31 converter, the converter's entry, and the master float buffer (the
 # constant the converter loads into I3). The same relocation-insensitive function hashes match on DT2 and DN2.
 [[site]]
@@ -19,7 +18,6 @@ was = ["dsp.master.q31_call", "dsp.master.site.q31_call"]
 cpu = "sharc"
 rule = { kind = "sharc_func", reloc_hash = "65c7ebdfe23c9a760bc6077a912e16c0474c182ee9849925cb0c10af0689f984", offset = 0x15c, len = 6 }
 mark = "D"
-users = ["digikit/master-drive", "digikit/master-gain"]
 doc = "Anchors."
 
 [[value]]
@@ -28,7 +26,7 @@ was = ["dsp.master.float_buf", "dsp.master.value.float_buf"]
 cpu = "sharc"
 rule = { kind = "sharc_literal", reloc_hash = "83fba5710c2b395cbd54e3cd583b1e205915fa6d1905d7285c3535203e52d05b", offset = 0xf }
 mark = "D"
-users = ["core/fx", "digikit/master-drive", "digikit/master-gain"]
+users = ["core/fx"]
 doc = "The master float buffer: the literal `I3 = 0x25f180` (Digitakt II) or `0x268438` (Digitone II) of the Q31 converter."
 
 [[hook]]
@@ -39,5 +37,4 @@ mode = "retarget"
 regs = { in = [], clobbers = ["r0-r3", "i4", "astat"], modes = { m5 = 0, m6 = 1, simd = false } }   # no DO loop is active
 devices = ["dt2", "dn2"]
 mark = "D"
-users = ["digikit/master-drive", "digikit/master-gain"]
 doc = "The master block handler's one CALL of the Q31 converter (64 planar floats in the master buffer; arguments in r4/r8); the hook point for processing the master block in place."

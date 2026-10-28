@@ -316,7 +316,7 @@ export class PatchKit {
   }
 }
 
-/** The file name of a patched image: `Digitakt_II_OS1.17+digikit-master-gain.syx`. */
+/** The file name of a patched image: `Digitakt_II_OS1.17+core-fx.syx`. */
 export function patchedFileName(deviceName: string, version: string, ids: string[]): string {
   const base = `${deviceName.replace(/\s+/g, '_')}_OS${version}`;
   return `${base}+${ids.map((id) => id.replace(/\//g, '-')).join('+')}.syx`;

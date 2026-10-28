@@ -1,0 +1,17 @@
+# The parameter pages of a machine chosen on track 1 (SRC, SRC again, a few encoder turns): the run-time digikit/pluck draws the same frames
+# as test/patched-pluck patched in (finding 50). Frames go to out/runs/lanes/r1-pages/.
+[scenario]
+name = "pages-dyn-pluck"
+kind = "pages"
+devices = ["dt2"]
+images = ["dt2-1.17"]
+tier = "quick"
+
+[pages]
+modules = ["digikit/pluck"]
+twin = "test/patched-pluck"
+static_type = 9
+play_module = "digikit/pluck"
+play_machine = "pluck"
+hint = 7
+stock_downs = [0, 1, 2, 3, 4, 5, 6]

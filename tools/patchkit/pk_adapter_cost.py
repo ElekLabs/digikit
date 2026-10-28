@@ -42,7 +42,7 @@ def measure(module: str, device: str) -> dict[str, int]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("module", nargs="?", default="digikit/pluck")
+    ap.add_argument("module", nargs="?", default="test/sine")
     ap.add_argument("--device", choices=pk_conform.DEVICES, action="append")
     a = ap.parse_args()
     for dev in a.device or pk_conform.DEVICES:

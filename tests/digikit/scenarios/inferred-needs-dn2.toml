@@ -9,5 +9,5 @@ tier = "quick"
 
 [debug]
 part = "inferred-needs"
-static = ["core/input", "core/dynfx", "core/fxpages"]   # core/dynfx: the effect rows that test/dyn-fx-gain and digikit/freqshift take, core/fxpages: their pages
+static = ["core/input", "core/dynfx", "core/fxpages"]   # core/dynfx: the effect rows that every run-time effect and test/dyn-fx-gain take, core/fxpages: their pages
 exclude = ["test/dyn-crash", "test/dyn-fault", "test/dyn-fault-late"]

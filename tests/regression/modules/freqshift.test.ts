@@ -1,4 +1,4 @@
-import { runtimeModules } from './acceptance.ts';
+import { runtimeModuleOf } from './acceptance.ts';
 import { moduleLoadTests } from './suite.ts';
 
-moduleLoadTests(runtimeModules[1]);
+moduleLoadTests(runtimeModuleOf(import.meta.url));

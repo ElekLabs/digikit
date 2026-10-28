@@ -69,7 +69,7 @@ mod tests {
     fn round_trip() {
         let r = Record {
             base_sha256: "ab".repeat(32),
-            modules: vec!["digikit/master-gain@0.1.0".into(), "x/y@1".into()],
+            modules: vec!["core/fx@0.1.0".into(), "x/y@1".into()],
         };
         let e = r.encode();
         assert_eq!(e.len() % 4, 0);

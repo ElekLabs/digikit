@@ -39,7 +39,7 @@ from tools.firmware import config  # noqa: E402
 from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
-from tools.patchkit.pk_proof_drive import aligned_equal, analyse  # noqa: E402
+from tools.patchkit.pk_proofkit import aligned_equal, analyse  # noqa: E402
 
 MIRROR = 0x8000487C  # the audio side's copy of track 1's sound at +0xde: the type is the first byte
 TX_TYPE = 0x80005E60 + 0x94  # TX frame type word: track 1 in the high half

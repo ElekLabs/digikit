@@ -24,12 +24,10 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
-from tools.patchkit import (  # noqa: E402
-    hook_ab,  # noqa: E402
-    pluck_ref,  # noqa: E402
-)
+from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
+from tools.patchkit.pitch import f0_from_crossings  # noqa: E402
 
 READY = ROOT / "out" / "ready-fastweb-dn2"  # Digitone II 1.12 (intc_force false)
 TX = 0x80005E60
@@ -54,7 +52,7 @@ def onset(left: np.ndarray, thresh: float = 1e-4) -> int:
 
 
 def f0_of(left: np.ndarray, start: int, want_hz: float, n: int = 30000) -> float:
-    return pluck_ref.f0_from_crossings(left[start + 300 : start + 300 + n], want_hz)
+    return f0_from_crossings(left[start + 300 : start + 300 + n], want_hz)
 
 
 def db_slope(left: np.ndarray, start: int, a: float = 0.03, b: float = 0.15) -> float:

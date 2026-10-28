@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import { runtimeModules } from './acceptance.ts';
+import { runtimeModuleOf } from './acceptance.ts';
 import { moduleLoadTests } from './suite.ts';
 
-moduleLoadTests(runtimeModules[2]);
+moduleLoadTests(runtimeModuleOf(import.meta.url));
 
 test('remote pacing unit uses the C handler with a controlled block clock', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-pacing-'));

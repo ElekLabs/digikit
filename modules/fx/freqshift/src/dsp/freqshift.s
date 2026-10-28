@@ -1,6 +1,6 @@
 // digikit/freqshift: a frequency shifter, an effect of the FX contract (<dk/fx.h>), loaded at run time on the Digitakt II (docs/findings/55-fx-adapter.md,
 // 61-fx-pages.md). It moves every frequency of the master up or down by the same number of Hz (single sideband modulation, not a pitch shift). The float32
-// reference, which defines the arithmetic operation for operation, is tools/patchkit/freqshift_ref.py; the notes below say what the routine does.
+// reference, which defines the arithmetic operation for operation, is modules/fx/freqshift/tests/freqshift_ref.py; the notes below say what the routine does.
 //
 // SHIFT, the one knob (p0, a float from -64 to +63), is mapped once per block: f = sign(v) 0.63 (2^(|v| / 5.5) - 1) Hz (about 0.08 Hz at |v| = 1, 35 Hz at 32,
 // 2 kHz at 64). The increment of a 32-bit phase accumulator (2^32 is a turn) is f 2^32 / 48000, truncated to an integer. The increment goes from the last block's

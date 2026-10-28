@@ -313,7 +313,7 @@ description = "Build and pack every run-time module for every device into out/mo
 
 [tasks."module:pack"]
 run = "uv run python -m tools.patchkit.patchkit pack"
-description = "Build the stale objects and pack a run-time module as a .dkm in one command: mise run module:pack -- digikit/pluck --device dt2 [-o FILE] (default out/patch/<name>-<device>.dkm)"
+description = "Build the stale objects and pack a run-time module as a .dkm in one command: mise run module:pack -- <author/name> --device dt2 [-o FILE] (default out/patch/<name>-<device>.dkm)"
 
 [tasks."module:export"]
 run = "uv run python -m tools.patchkit.pk_package export"
@@ -358,11 +358,11 @@ description = "Site-by-site account of a patch (disassembly before and after, al
 
 [tasks."patch:mem"]
 run = "uv run python -m tools.patchkit.pk_mem"
-description = "Patch memory per region (size, used by each module, free; also the runtime's own bytes), refused when the modules do not fit: mise run patch:mem -- digikit/master-gain digikit/master-drive [--device dt2|dn2] [--firmware VER] [--json]"
+description = "Patch memory per region (size, used by each module, free; also the runtime's own bytes), refused when the modules do not fit: mise run patch:mem -- core/machines test/patched-pluck [--device dt2|dn2] [--firmware VER] [--json]"
 
 [tasks."patch:test"]
 run = "uv run python -m tools.patchkit.pk_harness run"
-description = "Smoke tour and module tests over the matrix (tests/patchkit/smoke/matrix.toml): mise run patch:test [-- --matrix FILE | --cell dt2-1.17:digikit/master-gain | --update]; one PASS/FAIL line per cell, logs in out/runs/patchkit/"
+description = "Smoke tour and module tests over the matrix (tests/patchkit/smoke/matrix.toml): mise run patch:test [-- --matrix FILE | --cell dt2-1.17:core/fx,test/fx-gain | --update]; one PASS/FAIL line per cell, logs in out/runs/patchkit/"
 
 [tasks."patch:runtime-proof"]
 run = "uv run python -m tools.patchkit.pk_dkrt proof"
@@ -370,7 +370,7 @@ description = "digikit runtime in the emulator: patch core/runtime, boot with a 
 
 [tasks."patch:proofs"]
 run = "uv run python -m tools.patchkit.pk_proofs"
-description = "Every emulator proof on its quick tier, in sequence (DT2: gain, drive, voice, machines, pluck; DN2: gain, voice, machines, pages, pluck; drive runs on DT2 only): mise run patch:proofs [-- --only pluck,machines --jobs N]; one PASS/FAIL line per tool and a total, logs in out/runs/proofs"
+description = "Every emulator proof on its quick tier, in sequence (DT2: fx, voice, machines, pluck; DN2: fx, voice, machines, pages, pluck): mise run patch:proofs [-- --only pluck,machines --jobs N]; one PASS/FAIL line per tool and a total, logs in out/runs/proofs"
 
 [tasks."patch:port"]
 run = "uv run python -m tools.patchkit.port_resolve"
@@ -380,7 +380,7 @@ description = "Resolve the anchors and regions of a firmware into devices/ports/
 
 [tasks."dk:run"]
 run = "uv run --with python-rtmidi python -m tools.device.dkrun"
-description = "Build, pack, upload, select, restart and follow the log of a run-time module on a device with runtime 0.0.4 or newer or the emulator: mise run dk:run -- digikit/pluck --port Digitakt [--seconds 30] (the target is --emu or --port NAME)"
+description = "Build, pack, upload, select, restart and follow the log of a run-time module on a device with runtime 0.0.4 or newer or the emulator: mise run dk:run -- <author/name> --port Digitakt [--seconds 30] (the target is --emu or --port NAME)"
 
 [tasks."dk:log"]
 run = "uv run --with python-rtmidi python -m tools.device.dklog"
@@ -392,7 +392,7 @@ description = "Screenshot of the device or emulator display as PNG: mise run dk:
 
 [tasks.transfer]
 run = "uv run --with python-rtmidi python -m tools.device.dktransfer"
-description = "The repo's run-time modules on a target and their install: mise run transfer -- list --emu [--json] | install digikit/pluck [MOD ...] [--keep PATH ...] (or --port NAME; a paused emulator is refused, --step lets the tool step it)"
+description = "The repo's run-time modules on a target and their install: mise run transfer -- list --emu [--json] | install <author/name> [MOD ...] [--keep PATH ...] (or --port NAME; a paused emulator is refused, --step lets the tool step it)"
 
 [tasks."dk:store"]
 run = "uv run --with python-rtmidi python -m tools.device.dkupload"

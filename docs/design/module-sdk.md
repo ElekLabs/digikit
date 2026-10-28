@@ -17,7 +17,7 @@ Note (2026-10-27): this document is history for the manifest sections. Machines 
 | Kind | Example | What it is | Loaded how |
 | --- | --- | --- | --- |
 | framework | `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/machines`, `core/params` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
-| content, patched in | `test/patched-pluck`, `test/xslice`, `digikit/master-gain` | machine rows and a DSP routine, placed by patchkit | patched into the image |
+| content, patched in | `test/patched-pluck`, `test/xslice` | machine rows and a DSP routine, placed by patchkit | patched into the image |
 | content, run time | `digikit/pluck`, `test/dyn-xslice` | the same machine as a `.dkm` (`dynamic = true`) | `dkrt_load` at boot (`docs/design/digikit-runtime.md:161-183`) |
 | ColdFire service | `test/c-demo`, `test/rust-demo` | `dkm_init`, `dkm_fini`, `dkm_slot_n` | `.dkm` (`docs/design/digikit-dkm.md:73-75`) |
 | fixture | `test/dyn-guard-nan`, `dyn-dsp-hang`, `dyn-fault`, `dyn-crash`, `twin-*`, `dn2-*` | framework tests, today beside real modules | both ways |
@@ -144,7 +144,6 @@ modules/
   core/<fw>/                 framework modules, as today (runtime, dynreg, dyndsp, dsp-link, machines, params, ...)
   core/adapter-machine/      the Machine adapter: src/dsp/dt2.s, src/dsp/dn2.s (from core/dsp-voice), generated profile constants
   digikit/pluck/            content: module.toml, src/dsp/pluck.s (one source), tests/, gallery/
-  digikit/master-gain/            content
 tests/fixtures/modules/      framework fixtures (dyn-guard-nan, dyn-dsp-hang, dyn-fault, dyn-crash, c-demo, ...), same layout, not selectable by name from `module:*`
 devices/<dev>.toml           device profile; gains [adapter.*] and [limits] tables (sections 5, 6, 7)
 ```
@@ -553,7 +552,7 @@ a step that would move a pin stops and asks.
 | 5. Manifest v2 and profile fields | section 7 | pluck rebuilt from the v2 manifest produces rows equal to today's `plan.json` rows for the same firmware (the test of finding 27, `27-module-schema.md:23-40`, with the new inputs); `patchkit gen --check` |
 | 6. Build-time checks | section 8 | each check has a negative fixture that must fail with the named message (as `pk_conform.NEGATIVE`, `:58-61`) |
 | 7. Fixtures | `dyn-guard-nan`, `dyn-dsp-hang`, `dyn-fault`, `dyn-fault-late`, `dyn-crash`, `c-demo`, `rust-demo`, `dn2-*`, `twin-*`, `registry-demo`, `dyn-demo`, `dyn-params`, `dyn-sine-dn2` move to `tests/fixtures/modules/`; scenarios and `types.toml` keys are renamed | the scenarios' PCM and log results unchanged; `tools/devtools/pathcheck.py` clean |
-| 8. Retire patched-in content | delete `digikit/pluck` as patched-in and `test/dyn-pluck`; one `digikit/pluck`, always run time; same for `xslice` and `master-gain` if they fit a contract | see 10.3 |
+| 8. Retire patched-in content | delete `digikit/pluck` as patched-in and `test/dyn-pluck`; one `digikit/pluck`, always run time; same for `xslice` if it fits a contract (`master-gain` is deleted) | see 10.3 |
 | 9. Tooling and guide | `module:new`, `module:check` extensions, Target, the guide | `module:new machine demo` then `module:check demo` passes on both devices, in CI |
 
 ### 10.2 Pluck first: what is compared
@@ -582,7 +581,7 @@ Patched-in `test/patched-pluck` (before 2026-10-21: `digikit/pluck`) has type 9;
 firmware-side map; not built). Recommendation: (a), after Em confirms. **[O]**
 
 `xslice` clones SLICE and needs the sample renderer, not a synthesized voice: it is not a Machine-contract module. It either stays patched in as a framework-adjacent module until a "sample machine"
-type exists, or it is dropped from the SDK scope. **[O]** `digikit/master-gain` and `master-drive` patch the master chain: they wait for the FX contract.
+type exists, or it is dropped from the SDK scope. **[C]** `digikit/master-gain` and `master-drive` are deleted (Em, 2026-10-29): the devices have master overdrive, and `digikit/freqshift` is the example of an effect on the master route.
 
 ### 10.4 Committed `.dko.json` versus CI-built
 

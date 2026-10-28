@@ -15,7 +15,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The patched-in twin of digikit/pluck (the run-time machine of modules/machines/pluck): the same DSP source and the same declaration,
+# A patched-in machine with plucked-string DSP, a copy of a run-time machine's source kept here so that this fixture reads nothing outside its folder: the same declaration,
 # type 9 of core/machines. The DSP routines render the permanent type number of this machine, one body for both devices: a machine of
 # the SDK contract (<dk/machine.h>), `desc` holds its voices, state and clear bytes.
 [[object]]
@@ -25,5 +25,5 @@ place = "cf.expansion"
 
 [[object]]
 path = "build/pluck-dsp.dko.json"
-sources = ["../../../../modules/machines/pluck/src/dsp/pluck.s"]
+sources = ["src/dsp/pluck.s"]
 place = "dsp.l2"

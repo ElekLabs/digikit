@@ -6,9 +6,9 @@ runs it, restarts it and goes back. Each phase must report `status.dsp == "sharc
 report's `dsp_core` of that device, advancing DSP frames, no DSP halt and (with `--pcm`) a PCM tap.
 
     DIGI_EMUD=out/native/target-wt/NAME/dual/release/digi-emud \\
-        uv run python -m tools.devtools.dual_core_check [--runtime] [--steps N] [--pcm] [--module digikit/pluck [--play]]
+        uv run python -m tools.devtools.dual_core_check [--runtime] [--steps N] [--pcm] [--module <author/name> [--play]]
         uv run python -m tools.devtools.dual_core_check --bench dt2 --binary second=BIN_A --binary first=BIN_B --pairs 3
-        uv run python -m tools.devtools.dual_core_check --menu digikit/pluck --menu digikit/freqshift [--shots DIR]
+        uv run python -m tools.devtools.dual_core_check --menu <machine id> --menu <effect id> [--shots DIR]
 
 The binary comes from `cargo build --release -p digi-control --features second-core --bin digi-emud`
 with SHARC_GEN_DIR (DN2) and SHARC_GEN_DIR_2 (DT2) set. It stops its daemon on exit.
@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ from tools.control.digi_client import ROOT, Emu
 from tools.device import dkrun
 from tools.device import dkupload as D
 from tools.emulator import digi_env
+from tools.patchkit import modroots
 from tools.patchkit import pk_harness as H
 
 STEP = 40_000_000  # ColdFire instructions per run slice (about 450 DSP frames)
@@ -119,8 +121,14 @@ def run_module(emu: Emu, run_dir: str, module: str) -> dict[str, Any]:
     return facts
 
 
-def play_pluck(emu: Emu, downs: int = 7) -> dict[str, Any]:
-    """PLUCK on track 1 (FUNC+SRC, DOWN, YES) and TRIG 1 held with a PCM tap: the note must be audible."""
+def module_type(mid: str) -> str:
+    """The `type` of a module in its manifest (machine, fx, service): what the check does with it."""
+    toml = modroots.module_dir(mid) / "module.toml"
+    return tomllib.loads(toml.read_text(encoding="utf-8"))["module"]["type"]
+
+
+def play_machine(emu: Emu, downs: int = 7) -> dict[str, Any]:
+    """The run-time machine on track 1 (FUNC+SRC, DOWN, YES) and TRIG 1 held with a PCM tap: the note must be audible."""
     chord(emu, ["FUNC", "SRC"])
     for _ in range(downs):
         chord(emu, ["DOWN"], 1_000_000)
@@ -132,7 +140,7 @@ def play_pluck(emu: Emu, downs: int = 7) -> dict[str, Any]:
     emu.button(H.button("TRIG 1"), False)
     emu.step(10_000_000)
     report = emu.pcm_report()
-    facts = {"pluck_rms": report.get("rms"), "pluck_peak": report.get("peak")}
+    facts = {"machine_rms": report.get("rms"), "machine_peak": report.get("peak")}
     facts["ok"] = bool((report.get("peak") or 0) > 1e-4)
     print(json.dumps(facts), flush=True)
     return facts
@@ -166,8 +174,8 @@ class Panel:
         return str(path)
 
 
-def pluck_audio(emu: Emu) -> dict[str, Any]:
-    """TRIG 1 held with a PCM tap: the level of the note (the track must already play PLUCK)."""
+def machine_audio(emu: Emu) -> dict[str, Any]:
+    """TRIG 1 held with a PCM tap: the level of the note (the track must already play the machine)."""
     emu.pcm_start()
     emu.button(H.button("TRIG 1"), True)
     emu.step(60_000_000)
@@ -182,8 +190,9 @@ def menu_path(
 ) -> list[dict[str, Any]]:
     """The on-device path of plan item 11 on the device just opened with the runtime: upload the modules to the store, SETTINGS >
     DIGIKIT > MODULES, check them all (the list is sorted by name), NO and YES on APPLY & RESTART?, wait for the boot, read the
-    boot's module results, play PLUCK on track 1 and look at the SEND FX pages. Screenshots go to SHOTS."""
+    boot's module results, play a machine on track 1 and look at the SEND FX pages. Screenshots go to SHOTS."""
     panel = Panel(emu, shots, f"{device}-menu")
+    kinds = {module_type(m) for m in modules}
     results: list[dict[str, Any]] = []
     emu.subscribe()
     up = D.Uploader(D.EmuTransport(emu))
@@ -240,26 +249,26 @@ def menu_path(
     )
     print(json.dumps(facts), flush=True)
     results.append(facts)
-    if device == "dt2" and "digikit/pluck" in modules:
+    if device == "dt2" and "machine" in kinds:
         panel.chord(["FUNC", "SRC"])
         for _ in range(7):
             panel.chord(["DOWN"], 200)
         panel.shot("8-machine-choice")
         for _ in range(2):
             panel.chord(["YES"])
-        panel.shot("9-pluck-on-track-1")
-        audio = pluck_audio(emu)
+        panel.shot("9-machine-on-track-1")
+        audio = machine_audio(emu)
         audio["ok"] = bool((audio["peak"] or 0) > 1e-4)
-        print(json.dumps({"pluck": audio}), flush=True)
+        print(json.dumps({"machine": audio}), flush=True)
         results.append(audio)
-    if "digikit/freqshift" in modules:
+    if "fx" in kinds:
         panel.chord(
             ["FUNC", "FX"], 600
         )  # the SEND FX pages: DEL, REV, CHO, then the effect
         panel.shot("10-send-fx-page-1")
         for _ in range(3):
             panel.tap("DOWN", 400)
-        page = panel.shot("11-send-fx-freqshift-page")
+        page = panel.shot("11-send-fx-effect-page")
         results.append({"fx_page_shot": page, "ok": True})
     return results
 
@@ -415,7 +424,7 @@ def main() -> int:
     ap.add_argument(
         "--play",
         action="store_true",
-        help="with --module digikit/pluck: choose PLUCK on DT2 track 1 and hold a note (the PCM must not be silent)",
+        help="with a machine --module: choose it on DT2 track 1 and hold a note (the PCM must not be silent)",
     )
     ap.add_argument(
         "--start",
@@ -427,7 +436,7 @@ def main() -> int:
         "--menu",
         action="append",
         metavar="MODULE",
-        help="on the other device (the second core when starting on DN2): upload MODULE (repeatable), then the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, with screenshots (implies --runtime; digikit/pluck also plays a note, digikit/freqshift looks at its FX page)",
+        help="on the other device (the second core when starting on DN2): upload MODULE (repeatable), then the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, with screenshots (implies --runtime; a machine also plays a note, an effect: its FX page)",
     )
     ap.add_argument(
         "--shots",
@@ -552,7 +561,7 @@ def main() -> int:
                     )
                 )
                 if args.play and device == "dt2":
-                    results.append(play_pluck(emu))
+                    results.append(play_machine(emu))
     ok = all(r["ok"] for r in results)
     print("DUAL CORE OK" if ok else "DUAL CORE FAILED")
     return 0 if ok else 1

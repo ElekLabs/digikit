@@ -46,6 +46,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
@@ -76,6 +78,51 @@ class CheckResult:
     name: str
     ok: bool
     detail: str = ""
+
+
+def analyse(pcm: np.ndarray) -> dict:
+    """RMS and peak of the active part, crest factor, spectral shares, largest sample-to-sample step."""
+    ch = [pcm[0::2].astype(np.float64), pcm[1::2].astype(np.float64)]
+    act = np.flatnonzero(np.abs(ch[0]) > 1e-6)
+    if len(act) < 2000:
+        return {"active_samples": int(len(act)), "silent": True}
+    lo, hi = act[0], act[-1]
+    seg = ch[0][lo:hi]
+    rms = float(np.sqrt(np.mean(seg**2)))
+    peak = float(np.max(np.abs(seg)))
+    n = 1 << int(np.floor(np.log2(len(seg))))
+    spec = np.abs(np.fft.rfft(seg[len(seg) // 2 - n // 2 :][:n] * np.hanning(n))) ** 2
+    k = int(np.argmax(spec))
+    tot = float(spec.sum())
+    core = float(spec[max(0, k - 3) : k + 4].sum())
+    freqs = np.fft.rfftfreq(n, 1 / 48000)
+    return {
+        "active_samples": int(len(act)),
+        "silent": False,
+        "rms": rms,
+        "peak": peak,
+        "crest_db": 20 * np.log10(peak / rms),
+        "peak_hz": float(freqs[k]),
+        "non_fundamental": 1
+        - core / tot,  # power outside the strongest partial (a sine: harmonic content)
+        "hf_share": float(spec[freqs > 2000].sum() / tot),
+        "max_step": max(float(np.max(np.abs(np.diff(c[lo:hi])))) for c in ch),
+    }
+
+
+def aligned_equal(
+    ref: np.ndarray, test: np.ndarray, max_shift: int = 512
+) -> tuple[bool, int | None]:
+    """Is TEST equal to REF over REF's active part, possibly shifted by whole stereo frames? The cold-booted
+    patched ready state can sit one DSP block (64 samples) away from the stock one: a capture phase, not audio."""
+    for k in sorted(range(-max_shift, max_shift + 1, 2), key=abs):
+        x, y = (ref[k:], test) if k >= 0 else (ref, test[-k:])
+        n = min(len(x), len(y))
+        x, y = x[:n], y[:n]
+        act = np.flatnonzero(np.abs(x) > 1e-6)
+        if len(act) > 1000 and np.array_equal(x[act[0] : act[-1]], y[act[0] : act[-1]]):
+            return True, k
+    return False, None
 
 
 def slug(text: str) -> str:

@@ -60,7 +60,7 @@ export interface HeaderInfo {
 /** A built module of the library folder: its header fields, its needs (none when the loader would refuse the file), its hash and its bytes. */
 export interface LibraryModule extends HeaderInfo {
   needs: Needs | null;
-  /** The module id (the header's name: `digikit/pluck`). */
+  /** The module id (the header's name: `<author/name>`). */
   id: string;
   label: string;
   test: boolean;

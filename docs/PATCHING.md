@@ -40,10 +40,10 @@ installed versions.
 ### Patch a firmware
 
 ```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules digikit/master-gain -o out/patch/mg.syx
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx -o out/patch/fx.syx
 ```
 
-This writes `out/patch/mg.syx` and `out/patch/mg.plan.json` (every write with its owner, diffable). Without `-o` the
+This writes `out/patch/fx.syx` and `out/patch/fx.plan.json` (every write with its owner, diffable). Without `-o` the
 name is `out/patch/<firmware>+<modules>.syx`. The command verifies the result before it reports success. Notes:
 
 - Without `--modules` the device's patch set is applied: `device` by default, `--set NAME` for another (`devices/*.toml`
@@ -67,11 +67,11 @@ mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules test/patc
 
 ```sh
 uv run python -m tools.patchkit.patchkit list                                   # modules and ports
-uv run python -m tools.patchkit.patchkit inspect out/patch/mg.syx               # device, sha256, port, patch record, sections
+uv run python -m tools.patchkit.patchkit inspect out/patch/fx.syx               # device, sha256, port, patch record, sections
 uv run python -m tools.patchkit.patchkit check --firmware firmware/Digitakt_II_OS1.17.syx           # which modules fit this firmware
-uv run python -m tools.patchkit.patchkit verify out/patch/mg.syx --base firmware/Digitakt_II_OS1.17.syx   # re-decode and check
-mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules digikit/master-gain
-mise run patch:mem -- digikit/master-gain digikit/master-drive --device dt2 --firmware 1.17    # bytes used and free per region
+uv run python -m tools.patchkit.patchkit verify out/patch/fx.syx --base firmware/Digitakt_II_OS1.17.syx   # re-decode and check
+mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
+mise run patch:mem -- core/machines test/patched-pluck --device dt2 --firmware 1.17    # bytes used and free per region
 ```
 
 - `check` prints `ok` or `refused` plus the reason for every module (for example "built for dn2-1.12").
@@ -91,8 +91,8 @@ mise run patch:mem -- digikit/master-gain digikit/master-drive --device dt2 --fi
 ```sh
 mise run workbench            # desktop emulator, or:
 mise run emu:serve -- ...     # headless daemon on the control socket (see below)
-mise run patch:inject -- out/patch/mg.syx
-mise run patch:inject -- out/patch/mg.syx --hot
+mise run patch:inject -- out/patch/fx.syx
+mise run patch:inject -- out/patch/fx.syx --hot
 ```
 
 `inject` loads the image into the running emulator through the control socket (`firmware.load`). Without an
@@ -165,8 +165,8 @@ has RELEASE ALL KEYS (`modules/tools/remote/README.md`). From a terminal: `uv ru
 ### Developer loop
 
 ```sh
-mise run module:dev -- --modules digikit/master-gain [--device dt2|dn2] [--firmware 1.17]
-mise run module:dev -- --modules digikit/master-gain --once      # one iteration, then exit
+mise run module:dev -- --modules core/fx [--device dt2|dn2] [--firmware 1.17]
+mise run module:dev -- --modules core/fx --once      # one iteration, then exit
 ```
 
 One daemon stays up on the stock firmware. Each time a file under the module's `src/` or its `module.toml` changes,
@@ -184,7 +184,7 @@ MAIN hash). The daemon takes 1 to 2 minutes to start.
 
 ```sh
 mise run patch:test                                                    # the whole matrix (about 1 minute per cell)
-mise run patch:test -- --cell "dt2-1.17:digikit/master-gain,test/cf-demo"   # one cell; modules joined with a comma
+mise run patch:test -- --cell "dt2-1.17:core/fx,test/cf-demo"   # one cell; modules joined with a comma
 mise run patch:test -- --cell "..." --update                           # record frame goldens for a new module set
 uv run python -m tools.patchkit.pk_harness list                                 # the cells of tests/patchkit/smoke/matrix.toml
 cargo test -p patchkit                                                 # the patching library
@@ -253,7 +253,7 @@ first `mise run web` in a fresh tree compiles the browser cores and takes severa
 |---|---|---|
 | Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `devices/ports/dt2-1.17.toml` |
 | Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
-| Content module | Own code and declarative registry entries. No addresses. | `digikit/master-gain`, `digikit/master-drive` |
+| Content module | Own code and declarative registry entries. No addresses. | `test/patched-pluck` |
 
 Device, board and firmware facts are data (`devices/*.toml`, `devices/ports/*.toml`, `modules/core/adapters/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 

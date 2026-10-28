@@ -20,8 +20,8 @@ conflicts = []
 # declaration in src/module.c (DK_MACHINE, DK_PARAM, DK_PAGE) into the `register` records and links the DSP object into the `.dkm` DSP
 # section; the digikit runtime sends the code to the DSP and publishes the voice row (type 18 on the Digitakt II, 17 on the Digitone II)
 # and the machine row.
-# The patched-in twin test/patched-pluck (tests/fixtures/modules) builds from the same DSP source file (one body for both devices), so the
-# routine that runs is the same in both.
+# The patched-in twin test/patched-pluck (tests/fixtures/modules) has its own copy of this DSP source. The equiv-dyn-pluck scenario
+# compares the two, so a change of the sound here needs the same change in the copy.
 [[object]]
 path = "build/pluck-cf.dko.json"
 sources = ["src/module.c"]

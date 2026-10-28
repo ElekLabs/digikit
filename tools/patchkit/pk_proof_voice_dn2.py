@@ -33,10 +33,11 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
-from tools.patchkit import hook_ab, pluck_ref  # noqa: E402
+from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
-from tools.patchkit.pk_proof_drive import aligned_equal, analyse  # noqa: E402
+from tools.patchkit.pitch import f0_from_crossings  # noqa: E402
+from tools.patchkit.pk_proofkit import aligned_equal, analyse  # noqa: E402
 
 
 def release_phase_equal(
@@ -166,7 +167,7 @@ class Proof(K.Proof):
             act = np.flatnonzero(np.abs(x) > 1e-5)
             seg = x[act[0] + 2000 : act[0] + 26000] if len(act) > 30000 else x[:0]
             want = semitone_hz(note)
-            f = pluck_ref.f0_from_crossings(seg, want) if len(seg) else 0.0
+            f = f0_from_crossings(seg, want) if len(seg) else 0.0
             cents = 1200 * math.log2(f / want) if f else 99.0
             self.check(
                 f"PLUCK note {note}: {want:.2f} Hz",

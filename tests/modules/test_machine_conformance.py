@@ -6,7 +6,7 @@ modulation, long notes and retriggers. Each case runs the module's DSP routine o
 finite and bounded, and the instruction count is within the budget. A module's own tests stay with the module.
 
 One worker process per (module, device) runs all cases (tests/support/conform_worker.py, PyPy when uv can start it); the tests below
-read its report, one test per case group. Select with DIGI_CONFORM_MODULES=digikit/pluck,... and DIGI_CONFORM_DEVICE=dt2|dn2
+read its report, one test per case group. Select with DIGI_CONFORM_MODULES=<author/name>,... and DIGI_CONFORM_DEVICE=dt2|dn2
 (`mise run module:check NAME` sets them). Reports go to out/runs/conformance/ (never committed).
 """
 

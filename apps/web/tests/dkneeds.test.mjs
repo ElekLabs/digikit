@@ -18,7 +18,7 @@ const py = (...args) =>
     env: { ...process.env, PYTHONPATH: root },
     encoding: 'utf8',
   });
-const MODULES = ['digikit/pluck', 'digikit/remote', 'test/dyn-params', 'test/dyn-demo'];
+const MODULES = ['test/sine', 'digikit/remote', 'test/dyn-params', 'test/dyn-demo'];
 
 test(
   'the wasm reader and the command line give the same needs for packed modules',
@@ -41,10 +41,10 @@ test(
       seen[id] = n;
     }
     // what the modules are: a machine with DSP code takes a DSP range, a block for its relocated image, a voice row and a machine row
-    const pluck = seen['digikit/pluck'];
-    assert.ok(pluck.DSP_AREA > 0 && pluck.DSP_AREA % 64 === 0, 'the DSP range is whole granules');
-    assert.ok(pluck.ARENA_XFER > 0 && pluck.VOICE_ROWS >= 1 && pluck.MACHINE_ROWS >= 1);
-    assert.equal(pluck.ARENA % 16, 0);
+    const sine = seen['test/sine'];
+    assert.ok(sine.DSP_AREA > 0 && sine.DSP_AREA % 64 === 0, 'the DSP range is whole granules');
+    assert.ok(sine.ARENA_XFER > 0 && sine.VOICE_ROWS >= 1 && sine.MACHINE_ROWS >= 1);
+    assert.equal(sine.ARENA % 16, 0);
     // a tool with no DSP code and no records takes the arena block only
     const remote = seen['digikit/remote'];
     assert.deepEqual([remote.DSP_AREA, remote.ARENA_XFER, remote.VOICE_ROWS, remote.MACHINE_ROWS], [0, 0, 0, 0]);

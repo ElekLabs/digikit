@@ -663,11 +663,12 @@ def run_debug(c: Any) -> None:
 
 
 def part_modules(c: Any, img: Any) -> None:
-    """MODULES (protocol command 3, docs/design/digikit-upload.md): after a boot with two modules with DSP code (pluck and sine),
+    """MODULES (protocol command 3, docs/design/digikit-upload.md): after a boot with two modules with DSP code (dyn-params and sine),
     the reply lists both with ranges inside the arena and the DSP area, the contract bytes and version of the file, the assigned machine types and
     the voice rows; paging by start index; it is not logged as an UPLOAD event."""
     files = {
-        m: c.pack(m, m.split("/")[-1] + ".dkm") for m in ("digikit/pluck", "test/sine")
+        m: c.pack(m, m.split("/")[-1] + ".dkm")
+        for m in ("test/dyn-params", "test/sine")
     }
     card = c.card(list(files.values()))
     with c.rig(img, card, "modules") as rig:
@@ -681,7 +682,7 @@ def part_modules(c: Any, img: Any) -> None:
         n_up = len(events(rig, "UPLOAD"))
         m = up.modules()
         names = [x["name"] for x in m["modules"]]
-        pl = next(x for x in m["modules"] if x["name"] == "digikit/pluck")
+        pl = next(x for x in m["modules"] if x["name"] == "test/dyn-params")
         xs = next(x for x in m["modules"] if x["name"] == "test/sine")
         st = M.sym(rig.plan, "core/runtime", "DKRT_STATE")
         arena_lo, arena_hi = rig.w(st + 28), rig.w(st + 32)
@@ -697,7 +698,7 @@ def part_modules(c: Any, img: Any) -> None:
         c.check(
             "MODULES lists the two loaded modules by record index, with the file's version and contract bytes",
             m["total"] == 2
-            and names == ["digikit/pluck", "test/sine"]
+            and names == ["test/dyn-params", "test/sine"]
             and [x["index"] for x in m["modules"]] == [0, 1]
             and all(
                 x["version"] == hdr(x["name"])[0]
@@ -724,7 +725,7 @@ def part_modules(c: Any, img: Any) -> None:
             f"arena {arena_lo:#x}..{arena_hi:#x}, {m['arena_free']} free, {[(hex(x['cf_base']), x['cf_size']) for x in m['modules']]}",
         )
         c.check(
-            "the DSP part: pluck and sine each have a range inside the DSP area (and the free figure leaves room), the ranges do not overlap",
+            "the DSP part: dyn-params and sine each have a range inside the DSP area (and the free figure leaves room), the ranges do not overlap",
             pl["dsp_len"] > 0
             and xs["dsp_len"] > 0
             and m["dsp_free"] > 0
@@ -733,15 +734,15 @@ def part_modules(c: Any, img: Any) -> None:
                 pl["dsp_off"] + pl["dsp_len"] <= xs["dsp_off"]
                 or xs["dsp_off"] + xs["dsp_len"] <= pl["dsp_off"]
             ),
-            f"dsp free {m['dsp_free']}, pluck {pl['dsp_off']:#x}+{pl['dsp_len']:#x}, sine {xs['dsp_off']:#x}+{xs['dsp_len']:#x}",
+            f"dsp free {m['dsp_free']}, dyn-params {pl['dsp_off']:#x}+{pl['dsp_len']:#x}, sine {xs['dsp_off']:#x}+{xs['dsp_len']:#x}",
         )
-        t_pl = rig.dyn_type("digikit/pluck", "pluck")
+        t_pl = rig.dyn_type("test/dyn-params", "dynp")
         t_xs = rig.dyn_type("test/sine", "sine")
         rows = {k: r[0] for k, r in enumerate(rig.voice_rows())}
         pl_rows = [k for k in range(8) if pl["rows"] >> k & 1]
         xs_rows = [k for k in range(8) if xs["rows"] >> k & 1]
         c.check(
-            "the assigned machine types are the ones in the boot's table; pluck and sine each own one voice row, with their type",
+            "the assigned machine types are the ones in the boot's table; dyn-params and sine each own one voice row, with their type",
             pl["types"] == [t_pl]
             and xs["types"] == [t_xs]
             and (t_pl, t_xs) == (16, 17)  # lowest free, in load order
@@ -825,15 +826,15 @@ def key_of(module: str, machine: str) -> int:
 def run_sticky(c: Any) -> None:
     """Sticky machine type numbers (docs/design/module-sdk.md 11.5 D7): the runtime gives a run-time machine a number in 16..23 at the boot load and the card
     remembers it in the selection record's map (8 entries of hash24 << 8 | type). Without a map entry a machine takes the lowest free number that no
-    other machine's entry references (docs/findings/52-sticky-machine-ids.md). On ColdFire-only rigs, one boot after the other on the card the previous boot left: (1) pluck and
+    other machine's entry references (docs/findings/52-sticky-machine-ids.md). On ColdFire-only rigs, one boot after the other on the card the previous boot left: (1) nan and
     sine: 16 and 17, written; (2) only sine: it keeps its number, nothing is written; (3) sine and params: the new machine takes the lowest number
-    no entry references, not the number of the absent pluck; (4) the same set again: the map survived; (5) a forged full map: the new machine drops the lowest entry of a machine that
-    is not in this boot, and the entry of a machine that is in it is safe; (6) the same with the entry in slot 0 protected; (7) a fresh card: pluck gets
+    no entry references, not the number of the absent nan; (4) the same set again: the map survived; (5) a forged full map: the new machine drops the lowest entry of a machine that
+    is not in this boot, and the entry of a machine that is in it is safe; (6) the same with the entry in slot 0 protected; (7) a fresh card: nan gets
     16; (8) another machine's entry holds 16..: the lowest unreferenced number; (9) its own entry wins."""
     from tools.patchkit.pk_digikit_project import card_after, export
 
     PL, XS, PA = (
-        ("digikit/pluck", "pluck"),
+        ("test/dyn-guard-nan", "guardnan"),
         ("test/sine", "sine"),  # sine has a DSP section; the rigs are cf_only
         ("test/dyn-params", "dynp"),
     )
@@ -875,7 +876,7 @@ def run_sticky(c: Any) -> None:
     got, (m, tb), asg, _ev, after1 = boot(card1, "st1", [PL, XS])
     a, b = got[PL], got[XS]
     c.check(
-        "boot 1 (pluck, sine): they take the lowest free numbers in load order (16, 17), the events say rule 0, and the map on the card holds both entries",
+        "boot 1 (nan, sine): they take the lowest free numbers in load order (16, 17), the events say rule 0, and the map on the card holds both entries",
         (a, b) == (16, 17)
         and m[:2] == [key_of(*PL) | a, key_of(*XS) | b]
         and m[2:] == [0] * 6
@@ -894,11 +895,11 @@ def run_sticky(c: Any) -> None:
         and [x[:3] for x in asg] == [(h(XS), b, 1)],
         f"types {got}, map {[hex(x) for x in m2]}, events {asg}",
     )
-    # 3: add params: it must not take pluck's number (16), which no loaded module has but the card still remembers
+    # 3: add params: it must not take the nan machine's number (16), which no loaded module has but the card still remembers
     card3 = c.card([files[XS[0]], files[PA[0]]], base=after2)
     got, (m3, tb), asg, _ev, after3 = boot(card3, "st3", [XS, PA])
     c.check(
-        "boot 3 (sine, params): params takes the lowest number no entry references (18), not pluck's remembered number (16); sine keeps its own",
+        "boot 3 (sine, params): params takes the lowest number no entry references (18), not the nan machine's remembered number (16); sine keeps its own",
         got[XS] == b
         and got[PA] == 18
         and a not in got.values()
@@ -906,11 +907,11 @@ def run_sticky(c: Any) -> None:
         and m3[:3] == [key_of(*PL) | a, key_of(*XS) | b, key_of(*PA) | 18],
         f"types {got}, map {[hex(x) for x in m3]}",
     )
-    # 4: the same set again (the map written by boot 3 is on the card), then pluck back: it gets its own number again
+    # 4: the same set again (the map written by boot 3 is on the card), then nan back: it gets its own number again
     card4 = c.card([files[PA[0]], files[PL[0]], files[XS[0]]], base=after3)
     got, (m4, tb), asg, _ev, _after4 = boot(card4, "st4", [PA, PL, XS])
     c.check(
-        "boot 4 (params, pluck, sine): every machine has the number the card remembered, whatever the load order; nothing is rewritten",
+        "boot 4 (params, nan, sine): every machine has the number the card remembered, whatever the load order; nothing is rewritten",
         (got[PA], got[PL], got[XS]) == (18, a, b)
         and tb["dirty"] == 0
         and m4 == m3
@@ -926,7 +927,7 @@ def run_sticky(c: Any) -> None:
     got, (m5, tb), asg, ev, _after5 = boot(card5, "st5", [PL, XS])
     want_ev = [(fakes[0] >> 8, 16)]
     c.check(
-        "boot 5 (a full map): sine keeps its entry's number (18); pluck drops the lowest entry of a machine that is not in this boot (slot 0, logged as an error event), takes its number and records its own entry there",
+        "boot 5 (a full map): sine keeps its entry's number (18); nan drops the lowest entry of a machine that is not in this boot (slot 0, logged as an error event), takes its number and records its own entry there",
         got[XS] == 18
         and got[PL] == 16
         and [tuple(e[4][:2]) for e in ev] == want_ev
@@ -943,7 +944,7 @@ def run_sticky(c: Any) -> None:
     card6 = c.card(None, recs=(rec, rec))
     got, (m6, tb), asg, ev, _after6 = boot(card6, "st6", [PL, XS])
     c.check(
-        "boot 6 (a full map, sine in slot 0): the entry of a machine that loads in this boot is never the one dropped: slot 1 goes and pluck takes its number (17)",
+        "boot 6 (a full map, sine in slot 0): the entry of a machine that loads in this boot is never the one dropped: slot 1 goes and nan takes its number (17)",
         got[XS] == 16
         and got[PL] == 17
         and [tuple(e[4][:2]) for e in ev] == [(fakes[1] >> 8, 17)]
@@ -951,34 +952,34 @@ def run_sticky(c: Any) -> None:
         and m6[1] == key_of(*PL) | 17,
         f"types {got}, map {[hex(x) for x in m6]}, evicted {[e[4][:2] for e in ev]}",
     )
-    # 7: a fresh card, pluck alone: the lowest number (16), recorded
+    # 7: a fresh card, nan alone: the lowest number (16), recorded
     card7 = c.card([files[PL[0]]])
     got, (m7, tb), asg, _ev, _after7 = boot(card7, "st7", [PL])
     c.check(
-        "boot 7 (fresh card, pluck): pluck gets the lowest number 16 by rule 0 and the entry is written",
+        "boot 7 (fresh card, nan): nan gets the lowest number 16 by rule 0 and the entry is written",
         got[PL] == 16
         and [x[:4] for x in asg] == [(h(PL), 16, 0, 0)]
         and m7 == [key_of(*PL) | 16, *[0] * 7]
         and tb["dirty"] == 1,
         f"types {got}, map {[hex(x) for x in m7]}, events {asg}",
     )
-    # 8: 16 is the number of sine's entry (sine is not in this boot): pluck takes the lowest number no entry references
+    # 8: 16 is the number of sine's entry (sine is not in this boot): nan takes the lowest number no entry references
     rec = B.make_record([files[PL[0]]], 1, 0, 0, 0, [key_of(*XS) | 16] + [0] * 7)
     card8 = c.card(None, recs=(rec, rec))
     got, (m8, tb), asg, _ev, _after8 = boot(card8, "st8", [PL])
     c.check(
-        "boot 8 (sine's entry holds 16): pluck takes the lowest unreferenced number (17), by rule 0; sine's entry stays",
+        "boot 8 (sine's entry holds 16): nan takes the lowest unreferenced number (17), by rule 0; sine's entry stays",
         got[PL] == 17
         and [x[:4] for x in asg] == [(h(PL), 17, 0, 0)]
         and m8[:2] == [key_of(*XS) | 16, key_of(*PL) | 17],
         f"types {got}, map {[hex(x) for x in m8]}, events {asg}",
     )
-    # 9: pluck's own entry (20) beats the lowest free number (16)
+    # 9: the nan machine's own entry (20) beats the lowest free number (16)
     rec = B.make_record([files[PL[0]]], 1, 0, 0, 0, [key_of(*PL) | 20] + [0] * 7)
     card9 = c.card(None, recs=(rec, rec))
     got, (m9, tb), asg, _ev, _after9 = boot(card9, "st9", [PL])
     c.check(
-        "boot 9 (pluck's own entry holds 20): the map beats the lowest free number: pluck gets 20 (rule 1) and nothing is rewritten",
+        "boot 9 (the nan machine's own entry holds 20): the map beats the lowest free number: nan gets 20 (rule 1) and nothing is rewritten",
         got[PL] == 20
         and [x[:4] for x in asg] == [(h(PL), 20, 1, 1)]
         and m9[0] == key_of(*PL) | 20
@@ -988,13 +989,11 @@ def run_sticky(c: Any) -> None:
     c.common_checks_upload(project_writes_ok=True)
 
 
-# list positions of the two run-time machines in the guard scenario (the pluck is the first entry of the run-time machines, the fixture the second);
-# their type numbers are the ones the boot assigned (card order: pluck, then the fixture)
-GUARD_DN2_HINT = (
-    5  # Digitone II: the run-time machine follows MIDI (as in equiv-dyn-pluck)
-)
+# list positions of the two run-time machines in the guard scenario (the nan is the first entry of the run-time machines, the fixture the second);
+# their type numbers are the ones the boot assigned (card order: nan, then the fixture)
+GUARD_DN2_HINT = 5  # Digitone II: the run-time machine follows MIDI (as in the equivalence scenarios)
 GUARD_NAN_HINT = 8
-GUARD_PLUCK_HINT = 7
+GUARD_SINE_HINT = 7
 
 
 def run_guard_dn2(c: Any) -> None:
@@ -1085,10 +1084,10 @@ def run_guard_dn2(c: Any) -> None:
 
 
 def run_guard(c: Any) -> None:
-    """The runtime guard of core/dsp-voice (docs/findings/51-pluck-tune-guard.md), on the coupled emulator. A run-time pluck on track 1 and the NaN
+    """The runtime guard of core/dsp-voice (docs/findings/51-pluck-tune-guard.md), on the coupled emulator. A run-time sine on track 1 and the NaN
     fixture (test/dyn-guard-nan) on track 2, whose delay send is up: the fixture's block is NaN while its voice is active, which without the
     guard reaches the send FX and silences every track. Ten TRIG 2 presses in a second: the guard zeroes each block, counts it, logs MACHINE_FAULT
-    and switches the type off after the 8th (MACHINE_DISABLED); the pluck on track 1 stays audible and finite, and the master output holds no
+    and switches the type off after the 8th (MACHINE_DISABLED); the sine on track 1 stays audible and finite, and the master output holds no
     NaN or Inf. (The stock sample machine has no sample on this card, so the audible track is a second run-time machine; the guard treats both alike.)"""
     import numpy as np
 
@@ -1097,7 +1096,7 @@ def run_guard(c: Any) -> None:
     if not c.dt2:
         return run_guard_dn2(c)
     nan = c.pack("test/dyn-guard-nan", "nan.dkm")
-    plk = c.pack("digikit/pluck", "pluck.dkm")
+    plk = c.pack("test/sine", "sine.dkm")
     img = c.image_for(B.RT, "guard")
     card = c.card([plk, nan])
     with c.rig(img, card, "guard") as rig:
@@ -1131,9 +1130,9 @@ def run_guard(c: Any) -> None:
                     return
             raise M.Fail(f"no list position gives type {want} on track {track}")
 
-        t_pluck = rig.dyn_type("digikit/pluck", "pluck")
+        t_sine = rig.dyn_type("test/sine", "sine")
         t_nan = rig.dyn_type("test/dyn-guard-nan", "guardnan")
-        pick(1, t_pluck, GUARD_PLUCK_HINT)
+        pick(1, t_sine, GUARD_SINE_HINT)
         pick(2, t_nan, GUARD_NAN_HINT)
         # track 2's delay send up: FX page, encoder E (docs/findings: the panel of the DT2 FX pages)
         rig.s.do_tap("FX")
@@ -1141,7 +1140,7 @@ def run_guard(c: Any) -> None:
         rig.s.turn_burst("ENC E", 4, 30)
         wav = c.work / "guard.wav"
         rig.emu.call("pcm.tap", action="capture", path=str(wav))
-        rig.emu.button(H.button("TRIG 1"), True)  # the pluck, held
+        rig.emu.button(H.button("TRIG 1"), True)  # the sine, held
         rig.s.run_ms(400)
         for _ in range(10):  # ten presses of the NaN machine in about a second
             rig.s.do_tap("TRIG 2")
@@ -1196,7 +1195,7 @@ def run_guard(c: Any) -> None:
             f"{len(pcm)} samples",
         )
         c.check(
-            "the pluck on track 1 stays audible while the fixture faults (every 100 ms window of the first 1.1 s above -70 dBFS: the string decays about 3 dB per window)",
+            "the sine on track 1 stays audible while the fixture faults (every 100 ms window of the first 1.1 s above -70 dBFS)",
             len(rms) >= 20 and min(rms[0:11]) > 10 ** (-70 / 20),
             f"{[round(20 * np.log10(max(r, 1e-9)), 1) for r in rms[:24]]}",
         )

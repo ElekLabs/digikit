@@ -2,7 +2,7 @@
 
 Every block below is copied from a source that passes its tests. Change constants and state words only; do not write new
 assembly when a recipe fits. Contract, registers and entry: docs/MODULE-AUTHORING.md, section 7.1. Lines are `file:line`.
-P = `modules/machines/pluck/src/dsp/pluck.s` (conformance, `test_pluck*.py`, ran on the device). D = `modules/fx/master-drive/src/dsp/master_drive.s`.
+P = `modules/machines/pluck/src/dsp/pluck.s` (conformance, `test_pluck*.py`, ran on the device). D = `3b385ad6:modules/fx/master-drive/src/dsp/master_drive.s` (deleted; the quoted code stays, the D line numbers refer to the file on main at 3b385ad6).
 Cost numbers are the ones the sources state or a count of instruction lines in the quoted loop. No other numbers are measured.
 `#include "dk_machine.inc"` gives `DK_OK`, `DK_DONE`, `DK_BLOCK` (32), `DK_IN_W_PITCH`, `DK_IN_W_VELOCITY`, `DK_IN_W_OUT`, `DK_MAGIC`, `DK_MACHINE_V1`.
 

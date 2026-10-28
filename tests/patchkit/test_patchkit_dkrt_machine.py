@@ -2,7 +2,7 @@
 
 Static checks: the committed objects are current, the DSP section is deterministic, its relocation agrees in three places
 (the Rust reference loader behind `patchkit dkm-dsp-image`, this file's own, and the loader's checks), and the two sides of the
-DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (tests/digikit, equiv-dyn-pluck and equiv-dn2-set: a selected
+DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (tests/digikit, equiv-dyn-* and equiv-dn2-set: a selected
 module against the patched-in one, PCM sample for sample); the hot-load proof that was here is archived."""
 
 import re
@@ -31,7 +31,7 @@ needs_selache = pytest.mark.skipif(
 @needs_selache
 @pytest.mark.parametrize(
     "mod",
-    ["core/dsp-link", "core/dyndsp", "digikit/pluck", "test/sine"],
+    ["core/dsp-link", "core/dyndsp", "test/sine"],
 )
 def test_committed_objects_are_current(mod):
     front_end.build_module(modroots.module_dir(mod), check=True)
@@ -66,18 +66,17 @@ def test_dsp_section_is_deterministic_and_relocates_like_the_reference(tmp_path)
     tools = pk_dkrt.Tools()
     a, b = tmp_path / "a.dkm", tmp_path / "b.dkm"
     for out in (a, b):
-        tools.patchkit_run("pack", "digikit/pluck", "--device", "dt2", "-o", out)
+        tools.patchkit_run("pack", "test/sine", "--device", "dt2", "-o", out)
     assert a.read_bytes() == b.read_bytes()
     info = tools.patchkit_run("dkm-info", a)
-    # the voice names its machine by key: the 24-bit hash of "digikit/pluck:pluck" above a zero type byte
-    h = pk_dkrt_machine.machine_hash("digikit/pluck", "pluck")
+    # the voice names its machine by key: the 24-bit hash of "test/sine:sine" above a zero type byte
+    h = pk_dkrt_machine.machine_hash("test/sine", "sine")
     assert (
-        f"voice type h{h:06x} entry +0x3ce note_on +0x1fa state 16x16512 clear 16512"
-        in info
+        f"voice type h{h:06x} entry +0x0 note_on +0x14a state 16x8 clear 8" in info
         and "imports _dv_exp2" in info
     )
-    # the guard's ranges: DECAY, PICK, BRIGHT, COLOR (knobs 1, 2, 4, 5) declare 0 .. 0x7f00; TUNE and LEV are stock rows (undeclared)
-    assert "ranges [0, 7f000000, 7f000000, 0, 7f000000, 7f000000, 0, 0]" in info
+    # the guard's ranges: LEVEL (knob 1) declares 0 .. 0x7f00; TUNE and LEV are stock rows (undeclared)
+    assert "ranges [0, 7f000000, 0, 0, 0, 0, 0, 0]" in info
     assert (
         f"runtime   >= {'.'.join(map(str, RUNTIME_VERSION))}" in info
     )  # DSP sections of version 2 (voices with knob ranges) need runtime 5

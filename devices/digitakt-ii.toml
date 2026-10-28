@@ -362,7 +362,7 @@ settings_sectors = 32      # the 32 sectors before them: the settings record, co
 header_b_sector = 0x2e19fdd  # store header copy B: the sector before the settings record; the store's files end before it
 
 # How a module's machines map onto this device (packages/patchkit/src/typed.rs lowers the typed sections of a
-# module.toml with it; `patchkit gen` writes the constants a DSP routine needs). Finding 02; modules/machines/pluck/src/dsp.
+# module.toml with it; `patchkit gen` writes the constants a DSP routine needs). Finding 02; a module's src/dsp.
 # The knobs of a machine are descriptor fields f0..f7 of its machine row (engine slots 0..7) and the level is f8.
 [modules.knobs]
 count = 8

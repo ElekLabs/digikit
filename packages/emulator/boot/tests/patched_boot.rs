@@ -33,7 +33,7 @@ fn a_patched_image_with_a_changed_main_boots_from_its_record() {
 
 #[test]
 fn a_patched_dsp_only_image_boots() {
-    let Some(syx) = patched("Digitone_II_OS1.12.syx", &["digikit/master-drive"]) else {
+    let Some(syx) = patched("Digitone_II_OS1.12.syx", &["core/fx"]) else {
         return;
     };
     Emulator::new(&syx, None).expect("the patched image boots");

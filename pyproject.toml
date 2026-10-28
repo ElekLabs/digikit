@@ -27,7 +27,7 @@ package = false
 
 # Pinned here so ruff gives the same answer on every machine, whatever the
 # user-level ruff configuration says. `ruff check` and `ruff format --check` without
-# paths cover exactly `include` (every tracked Python file of tests/ and tools/).
+# paths cover exactly `include` (every tracked Python file of tests/, tools/ and the modules' own tests/).
 [tool.ruff]
 line-length = 88
 target-version = "py312"
@@ -36,6 +36,7 @@ src = ["."]
 include = [
     "tests/**/*.py",
     "tools/**/*.py",
+    "modules/*/*/tests/**/*.py",
 ]
 
 [tool.ruff.lint]
@@ -68,7 +69,7 @@ files = [
     "tools/patchkit/pk_digikit_fxpersist.py",
     "tools/patchkit/pk_digikit_fxshift.py",
     "tools/patchkit/pk_idx65_poke.py",
-    "tools/patchkit/freqshift_ref.py",
+    "modules/*/*/tests/freqshift_ref.py",
     "tools/device/dkfit.py",
     "tools/device/dksettings.py",
     "tools/device/dkneeds.py",

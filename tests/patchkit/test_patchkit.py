@@ -102,10 +102,10 @@ def test_dn2_master_half_equals_dsp_patch_py(patchkit, tmp_path):
 
 
 @pytest.mark.parametrize("fw", [DT2_117, DN2_112])
-def test_master_gain_applies_and_verifies(patchkit, tmp_path, fw):
+def test_core_fx_applies_and_verifies(patchkit, tmp_path, fw):
     from tools.firmware import roundtrip
 
-    out, plan = apply(patchkit, tmp_path, fw, "digikit/master-gain")
+    out, plan = apply(patchkit, tmp_path, fw, "core/fx")
     v = patchkit("verify", out, "--base", fw)
     assert "record: base" in v.stdout
     assert roundtrip.check_authenticity(out.read_bytes(), str(out))
@@ -113,40 +113,5 @@ def test_master_gain_applies_and_verifies(patchkit, tmp_path, fw):
     secs, stock = port_resolve.sections_of(out), port_resolve.sections_of(fw)
     assert all(secs[k] == stock[k] for k in (2, 3, 4, 5, 8))
     # a patched image is never patched again
-    again = patchkit(
-        "apply", "--firmware", out, "--modules", "digikit/master-gain", check=False
-    )
+    again = patchkit("apply", "--firmware", out, "--modules", "core/fx", check=False)
     assert again.returncode != 0 and "no port" in again.stderr
-
-
-@pytest.mark.parametrize("fw,image", [(DT2_117, "dt2-1.17"), (DN2_112, "dn2-1.12")])
-def test_rust_linker_equals_python_linker(patchkit, tmp_path, fw, image):
-    """The block patchkit appends is what tools/patchkit/pk_sharc.py's linker makes for the same bases and externs."""
-    from tools.patchkit import dsp_patch, pk_sharc
-
-    out, plan = apply(patchkit, tmp_path, fw, "digikit/master-gain")
-    port = (ROOT / "devices" / "ports" / f"{image}.toml").read_text()
-    anchors = {}
-    for block in port.split("[[anchor]]")[1:]:
-        kv = dict(
-            line.split(" = ", 1) for line in block.strip().splitlines() if " = " in line
-        )
-        anchors[kv["name"].strip('"')] = (
-            int(kv["pm"], 0) if "pm" in kv else int(kv["addr"], 0)
-        )
-    place = next(w for w in plan["writes"] if w["kind"] == "place")
-    base_pc = 0xB80000 + (place["addr"] - 0x20000000) // 2
-    gain = next(v for k, v in plan["symbols"].items() if k.endswith(":_mg_gain"))
-    obj = pk_sharc.assemble(
-        (ROOT / "modules/fx/master-gain/src/dsp/master_gain.s").read_text()
-    )
-    linked = pk_sharc.link(
-        obj,
-        base_pc,
-        {"_fw_q31_convert": anchors["dsp.master.fn.q31_converter"], "_fw_master_buf": anchors["dsp.master.value.q31_converter.float_buf"],
-         "_mg_gain": gain},
-    )  # fmt: skip
-    stream = dsp_patch.Stream(port_resolve.sections_of(out)[7])
-    got = stream.read(place["addr"], len(linked.code_boot))
-    assert got == linked.code_boot
-    assert stream.read(gain, 4) == (0x3F800000).to_bytes(4, "little")

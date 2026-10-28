@@ -34,8 +34,6 @@ before it goes near the device.
 | [digikit runtime](modules/core/runtime/README.md) | Menu, module loading, upload, debug log | Digitakt II, Digitone II | Digitakt II (OS 1.17) |
 | [PLUCK](modules/machines/pluck/README.md) | Plucked-string synth: decay, pick position, brightness, colour. A run-time module: load it with `mise run dk:run` | Digitakt II, Digitone II | Digitakt II (OS 1.17) |
 | [Frequency shifter](modules/fx/freqshift/README.md) | Moves every frequency up or down by the same number of Hz (an FX page with SHIFT and MIX). A run-time module; a send effect by default, or a master insert | Digitakt II, Digitone II | not yet |
-| [Master gain](modules/fx/master-gain/README.md) | Scales the master output by a set gain | Digitakt II, Digitone II | not yet |
-| [Master drive](modules/fx/master-drive/README.md) | Soft-clip saturation on the master output | Digitakt II, Digitone II | not yet |
 
 Supported firmware: **Digitakt II OS 1.17** and **Digitone II OS 1.12**. Download them from Elektron's support site and
 put them in `firmware/` (`Digitakt_II_OS1.17.syx`, `Digitone_II_OS1.12.syx`). Device work so far is on the Digitakt II.

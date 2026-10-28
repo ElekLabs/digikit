@@ -85,7 +85,7 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
   const dev = new FakeDevice();
   for (const [i, n] of ['modules/a.dkm', 'modules/b.dkm', 'modules/c.dkm'].entries())
     dev.files.set(n, dkm(`x/${i}`, { salt: i }));
-  dev.loaded = ['digikit/pluck'];
+  dev.loaded = ['someone/machine'];
   const s = session(dev);
   const info = await s.info();
   assert.deepEqual(
@@ -104,7 +104,7 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
   assert.equal(ls[0].sha256, hex(sha(dev.files.get('modules/a.dkm'))));
   assert.deepEqual(
     (await s.modules()).map((m) => [m.name, m.types, m.contracts[1]]),
-    [['digikit/pluck', [17], [1, 0]]],
+    [['someone/machine', [17], [1, 0]]],
   );
   assert.deepEqual(await s.capacity(), {
     MODULES: { limit: 8, used: 1, largest: 0 },
@@ -171,25 +171,25 @@ test('restarted(): the log of the old boot holds the RESTART request, the new bo
 });
 
 test('header, library module, the merged list', async () => {
-  const pluck = dkm('digikit/pluck', { machine: 1, dsp: 64, size: 900 });
+  const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
   const sine = dkm('test/sine', { machine: 1, dsp: 400, size: 800 });
-  const tool = dkm('digikit/tool', { service: 1, size: 500 });
-  assert.deepEqual([headerInfo(pluck).group, headerInfo(pluck).version], ['Machines', '0.1.2']);
+  const tool = dkm('someone/tool', { service: 1, size: 500 });
+  assert.deepEqual([headerInfo(mach).group, headerInfo(mach).version], ['Machines', '0.1.2']);
   assert.equal(headerInfo(dkm('a', { fx: 1 })).group, 'Effects');
   assert.equal(headerInfo(tool).group, 'Tools');
   assert.equal(headerInfo(new Uint8Array(300)), null);
   assert.equal(await libraryModule(new Uint8Array(300)), null);
-  const lm = await libraryModule(pluck, needsOf);
+  const lm = await libraryModule(mach, needsOf);
   assert.deepEqual(
     [lm.id, lm.label, lm.test, lm.path, lm.file_size, lm.sha256],
-    ['digikit/pluck', 'pluck', false, 'modules/pluck.dkm', 900, hex(sha(pluck))],
+    ['someone/machine', 'machine', false, 'modules/machine.dkm', 900, hex(sha(mach))],
   );
   assert.deepEqual([lm.needs.ARENA, lm.needs.DSP_AREA, lm.needs.file_size], [120, 64, 900]);
   // no reader, or a file the reader says the loader would refuse: no needs, so no fit verdict (the device still refuses what does not load)
-  assert.equal((await libraryModule(pluck)).needs, null);
-  assert.equal((await libraryModule(pluck, () => null)).needs, null);
+  assert.equal((await libraryModule(mach)).needs, null);
+  assert.equal((await libraryModule(mach, () => null)).needs, null);
   const unknown = mergeView(
-    [await libraryModule(pluck, () => null)],
+    [await libraryModule(mach, () => null)],
     [],
     [],
     { MODULES: { limit: 8, used: 8, largest: 0 } },
@@ -199,7 +199,7 @@ test('header, library module, the merged list', async () => {
 
   const library = [await libraryModule(sine, needsOf), lm, await libraryModule(tool, needsOf)];
   const card = [
-    { path: 'modules/pluck.dkm', size: 900, sha256: hex(sha(pluck)) }, // same file
+    { path: 'modules/machine.dkm', size: 900, sha256: hex(sha(mach)) }, // same file
     { path: 'modules/tool.dkm', size: 500, sha256: 'ff' }, // same path, other bytes
     { path: 'modules/other.dkm', size: 700, sha256: 'aa' }, // not from the library
     { path: 'modules/junk.dkm', size: 9, sha256: 'bb' },
@@ -211,17 +211,17 @@ test('header, library module, the merged list', async () => {
     ARENA: { limit: 1000, used: 0, largest: 300 },
     DSP_AREA: { limit: 1000, used: 0, largest: 50 },
   };
-  const v = mergeView(library, card, ['digikit/pluck', 'someone/effect'], cap, headers);
+  const v = mergeView(library, card, ['someone/machine', 'someone/effect'], cap, headers);
   assert.deepEqual(
     v.modules.map((r) => r.id),
-    ['digikit/pluck', 'test/sine', 'digikit/tool'],
+    ['someone/machine', 'test/sine', 'someone/tool'],
   ); // group, test last, id
   const by = Object.fromEntries(v.modules.map((r) => [r.id, r]));
   assert.deepEqual(
-    [by['digikit/pluck'].on_card, by['digikit/pluck'].loaded, by['digikit/pluck'].fits],
+    [by['someone/machine'].on_card, by['someone/machine'].loaded, by['someone/machine'].fits],
     ['yes', true, true],
   );
-  assert.equal(by['digikit/tool'].on_card, 'other version');
+  assert.equal(by['someone/tool'].on_card, 'other version');
   assert.deepEqual([by['test/sine'].on_card, by['test/sine'].fits, by['test/sine'].test], ['no', false, true]); // DSP 400 > largest 50
   assert.match(
     by['test/sine'].warnings[0],
@@ -246,14 +246,14 @@ test('header, library module, the merged list', async () => {
 
 test('buildView reads the device: INFO, LIST, MODULES, CAPACITY and the headers of the card-only files by READ', async () => {
   const dev = new FakeDevice();
-  const pluck = dkm('digikit/pluck', { machine: 1, dsp: 64, size: 900 });
-  dev.files.set('modules/pluck.dkm', pluck);
+  const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
+  dev.files.set('modules/machine.dkm', mach);
   dev.files.set('modules/other.dkm', dkm('someone/effect', { fx: 1, size: 700 }));
-  dev.loaded = ['digikit/pluck'];
-  const view = await buildView(session(dev), [await libraryModule(pluck, needsOf)]);
+  dev.loaded = ['someone/machine'];
+  const view = await buildView(session(dev), [await libraryModule(mach, needsOf)]);
   assert.deepEqual(
     [view.device, view.runtime, view.free_bytes, view.loaded],
-    ['dt2', '0.2.4', 1 << 20, ['digikit/pluck']],
+    ['dt2', '0.2.4', 1 << 20, ['someone/machine']],
   );
   assert.equal(view.modules[0].on_card, 'yes');
   assert.deepEqual([view.card_only[0].group, view.card_only[0].version], ['Effects', '0.1.2']);
@@ -261,10 +261,10 @@ test('buildView reads the device: INFO, LIST, MODULES, CAPACITY and the headers 
 });
 
 test('Modules mode lists the modules/ folder only: the samples/ of a version 3 store stay out (with and without FOLDERS)', async () => {
-  const pluck = dkm('digikit/pluck', { machine: 1, dsp: 64, size: 900 });
+  const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
   const withSamples = () => {
     const dev = new FakeDevice();
-    dev.files.set('modules/pluck.dkm', pluck);
+    dev.files.set('modules/machine.dkm', mach);
     dev.files.set('modules/other.dkm', dkm('someone/effect', { fx: 1, size: 700 }));
     dev.files.set('samples/01', new Uint8Array(3000).fill(7));
     dev.files.set('samples/ff_ht_bass_drop_A#', new Uint8Array(500).fill(9));
@@ -272,12 +272,12 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
     dev.dirs.add('samples/empty');
     return dev;
   };
-  const lib = [await libraryModule(pluck, needsOf)];
+  const lib = [await libraryModule(mach, needsOf)];
   const rows = (v) => [...v.modules, ...v.card_only].map((r) => r.path ?? r.id).sort();
   // FOLDERS: the device filters by the LIST prefix, and the host does not read the other files' headers
   const dev = withSamples();
   const view = await buildView(session(dev), lib);
-  assert.deepEqual(rows(view), ['modules/other.dkm', 'modules/pluck.dkm'].sort());
+  assert.deepEqual(rows(view), ['modules/other.dkm', 'modules/machine.dkm'].sort());
   assert.deepEqual(
     view.card_only.map((r) => r.name),
     ['someone/effect'],
@@ -285,10 +285,10 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
   // a runtime without FOLDERS answers every entry to a LIST: the host filters
   const old = withSamples();
   old.caps = Object.values(CAP).reduce((a, bit) => a | (1 << bit), 0) & ~(1 << CAP.FOLDERS);
-  assert.deepEqual(rows(await buildView(session(old), lib)), ['modules/other.dkm', 'modules/pluck.dkm'].sort());
+  assert.deepEqual(rows(await buildView(session(old), lib)), ['modules/other.dkm', 'modules/machine.dkm'].sort());
   // install compares with the modules/ entries too, and leaves the samples alone
   const events = [];
-  await install(session(dev), ['digikit/pluck'], lib, (e) => events.push(e));
+  await install(session(dev), ['someone/machine'], lib, (e) => events.push(e));
   assert.ok(events.some((e) => e.event === 'skip'));
   assert.equal(dev.files.size, 5);
 });
@@ -312,14 +312,14 @@ test('free space above 4 GiB: INFO saturates at 2^32 - 1, CAPACITY STORE (KiB) d
 
 test('install: skip the same sha256, upload the rest with capped progress, VERIFY each, no SELECT', async () => {
   const dev = new FakeDevice();
-  const pluck = dkm('digikit/pluck', { machine: 1, size: 900 });
+  const mach = dkm('someone/machine', { machine: 1, size: 900 });
   const big = dkm('test/big', { size: 20000 });
-  dev.files.set('modules/pluck.dkm', pluck); // already on the card
+  dev.files.set('modules/machine.dkm', mach); // already on the card
   const events = [];
   const out = await install(
     session(dev, { chunk: 512 }),
-    ['digikit/pluck', 'test/big'],
-    [await libraryModule(pluck, needsOf), await libraryModule(big, needsOf)],
+    ['someone/machine', 'test/big'],
+    [await libraryModule(mach, needsOf), await libraryModule(big, needsOf)],
     (e) => events.push(e),
   );
   assert.deepEqual(out, { uploaded: ['test/big'], selected: [], restarted: false });
@@ -339,7 +339,7 @@ test('install: skip the same sha256, upload the rest with capped progress, VERIF
     [true, true],
   );
   await assert.rejects(
-    install(session(dev), ['digikit/none'], [await libraryModule(pluck, needsOf)]),
+    install(session(dev), ['someone/none'], [await libraryModule(mach, needsOf)]),
     /not a run-time module/,
   );
 });
@@ -347,13 +347,13 @@ test('install: skip the same sha256, upload the rest with capped progress, VERIF
 test('install: a VERIFY that does not match is an error', async () => {
   const dev = new FakeDevice();
   dev.corrupt = true;
-  const m = dkm('digikit/pluck', { machine: 1 });
+  const m = dkm('someone/machine', { machine: 1 });
   const events = [];
   await assert.rejects(
-    install(session(dev), ['digikit/pluck'], [await libraryModule(m, needsOf)], (e) => events.push(e)),
+    install(session(dev), ['someone/machine'], [await libraryModule(m, needsOf)], (e) => events.push(e)),
     /did not keep the file/,
   );
-  assert.deepEqual(events.at(-1), { event: 'verify', id: 'digikit/pluck', path: 'modules/pluck.dkm', ok: false });
+  assert.deepEqual(events.at(-1), { event: 'verify', id: 'someone/machine', path: 'modules/machine.dkm', ok: false });
 });
 
 test('the upload progress callback: at most a tenth apart, always the last', () => {
@@ -403,15 +403,15 @@ test('delete: one DELETE per path, confirmed by LIST; a path that is not on the 
 
 test('restart: RESTART, wait for the new boot in the log, then report what MODULES lists', async () => {
   const dev = new FakeDevice();
-  dev.selection = ['modules/pluck.dkm'];
+  dev.selection = ['modules/machine.dkm'];
   const events = [];
   const out = await restartDevice(session(dev, { timeoutMs: 5, retries: 0 }), (e) => events.push(e), sleep);
-  assert.deepEqual(out, { loaded: ['mod:modules/pluck.dkm'], missing: [] });
+  assert.deepEqual(out, { loaded: ['mod:modules/machine.dkm'], missing: [] });
   assert.deepEqual(
     events.map((e) => e.event),
     ['restart', 'wait', 'done'],
   );
-  assert.deepEqual(events.at(-1), { event: 'done', restarted: true, loaded: ['mod:modules/pluck.dkm'], missing: [] });
+  assert.deepEqual(events.at(-1), { event: 'done', restarted: true, loaded: ['mod:modules/machine.dkm'], missing: [] });
   // the old boot's log (with the RESTART request) answered first, then two requests got nothing, then the new boot
   assert.ok(dev.seen.filter((c) => c === 'LOG').length >= 2);
   assert.equal(dev.log.length, 1);

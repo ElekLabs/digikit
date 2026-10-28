@@ -32,7 +32,7 @@ STORE = [
     "test/dyn-demo",
     "test/dyn-fx-gain-send*",
     "test/dyn-fx-gain-sendonly",
-    "digikit/pluck",
+    "test/sine",
 ]
 HUGE, TOOL, SEND_FX, SENDONLY_FX, MACHINE = range(5)
 

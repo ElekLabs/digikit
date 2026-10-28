@@ -7,14 +7,14 @@ type = "machine"
 author = "fadedlimes"
 status = "experimental"
 summary = "One continuous slider warps the phase a sine is read through: saw, pulse, or a resonant formant."
-dynamic = false
-ports = ["dt2-1.17"]
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
 
 [targets]
 "dt2-1.17" = "experimental"
-"dn2-1.12" = "unsupported"
+"dn2-1.12" = "experimental"
 
 # The machine declaration (DK_MACHINE and DK_PARAM in src/module.c). It holds only .dk.desc records.
 [[object]]
