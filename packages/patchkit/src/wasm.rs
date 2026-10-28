@@ -402,6 +402,112 @@ pub extern "C" fn pk_sender_free(handle: u32) {
     });
 }
 
+// ---- the RPC flash machine ----------------------------------------------------------------------------------------------------
+
+thread_local! {
+    static RPC: RefCell<Vec<Option<crate::flash_rpc::RpcFlash>>> = const { RefCell::new(Vec::new()) };
+}
+
+fn rpc_with<R>(h: u32, f: impl FnOnce(&mut crate::flash_rpc::RpcFlash) -> R) -> Option<R> {
+    RPC.with(|r| match r.borrow_mut().get_mut(h as usize) {
+        Some(Some(m)) => Some(f(m)),
+        _ => None,
+    })
+}
+
+/// A flash machine (`flash_rpc::RpcFlash`) for the `.syx` image at `image` (it is copied); `chunk` is the stream bytes per Write (0: the
+/// default). Its handle.
+///
+/// # Safety
+/// `image..image+image_len` must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_rpc_new(image: *const u8, image_len: usize, chunk: usize) -> u32 {
+    let m = crate::flash_rpc::RpcFlash::new(unsafe { slice(image, image_len) }.to_vec(), chunk);
+    RPC.with(|r| {
+        let mut r = r.borrow_mut();
+        match r.iter().position(Option::is_none) {
+            Some(i) => {
+                r[i] = Some(m);
+                i as u32
+            }
+            None => {
+                r.push(Some(m));
+                r.len() as u32 - 1
+            }
+        }
+    })
+}
+
+/// What to do next. The message to send is in `pk_out_*`; `pk_plan_*` holds `{"kind": "send"|"ask"|"reboot"|"done"|"failed", "timeout_ms",
+/// "code", "message", "taken"}`. Returns 0, or 1 for an unknown handle.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_rpc_next(h: u32) -> i32 {
+    use crate::flash_rpc::Action;
+    let Some(a) = rpc_with(h, |m| m.next()) else {
+        return 1;
+    };
+    let (bytes, j) = match a {
+        Action::Send { bytes, timeout_ms } => (
+            bytes,
+            serde_json::json!({"kind": "send", "timeout_ms": timeout_ms}),
+        ),
+        Action::AskConfirm => (vec![], serde_json::json!({"kind": "ask"})),
+        Action::WaitReboot => (vec![], serde_json::json!({"kind": "reboot"})),
+        Action::Done => (vec![], serde_json::json!({"kind": "done"})),
+        Action::Failed(f) => (
+            vec![],
+            serde_json::json!({"kind": "failed", "code": f.code.name(), "message": f.message, "taken": f.taken}),
+        ),
+    };
+    set(Ok((bytes, j.to_string())));
+    0
+}
+
+/// A message from the device: 1 when it was the reply the machine waits for, 0 when not (keep waiting), -1 for an unknown handle.
+///
+/// # Safety
+/// `msg..msg+len` must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_rpc_reply(h: u32, msg: *const u8, len: usize) -> i32 {
+    let msg = unsafe { slice(msg, len) };
+    match rpc_with(h, |m| m.on_reply(msg)) {
+        Some(true) => 1,
+        Some(false) => 0,
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_rpc_timeout(h: u32) {
+    rpc_with(h, |m| m.on_timeout());
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_rpc_confirm(h: u32, yes: i32) {
+    rpc_with(h, |m| m.confirm(yes != 0));
+}
+
+/// 1 when the cancel took effect (End with commit 0 follows), 0 when it is too late.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_rpc_cancel(h: u32) -> i32 {
+    rpc_with(h, |m| m.cancel()).map_or(0, i32::from)
+}
+
+/// Bytes of the image the device has acknowledged.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_rpc_taken(h: u32) -> usize {
+    rpc_with(h, |m| m.taken()).unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_rpc_free(h: u32) {
+    RPC.with(|r| {
+        if let Some(slot) = r.borrow_mut().get_mut(h as usize) {
+            *slot = None;
+        }
+    });
+}
+
 macro_rules! getter {
     ($ptr:ident, $len:ident, $field:ident) => {
         #[unsafe(no_mangle)]

@@ -114,6 +114,31 @@ export interface FlashSender {
   free(): void;
 }
 
+/** What the RPC flash machine wants next (`flash_rpc::Action`). */
+export type RpcAction =
+  | { kind: 'send'; bytes: Uint8Array; timeoutMs: number }
+  | { kind: 'ask' }
+  | { kind: 'reboot' }
+  | { kind: 'done' }
+  | { kind: 'failed'; code: RpcFailCode; message: string; taken: number };
+export type RpcFailCode = 'refused' | 'crc' | 'timeout' | 'device' | 'protocol' | 'incomplete' | 'cancelled';
+/** `flash_rpc::RpcFlash` in the wasm module: the one state machine of the RPC flash route (Start, Writes, End). */
+export interface RpcMachine {
+  /** The next step. Call it first and after each `reply`, `timeout`, `confirm` and `cancel`. */
+  next(): RpcAction;
+  /** A message from the device; false when it is not the reply awaited (keep waiting). */
+  reply(msg: Uint8Array): boolean;
+  /** No reply came within the action's `timeoutMs`. */
+  timeout(): void;
+  /** The answer to `ask`: yes sends End with commit 1, no sends End with commit 0. */
+  confirm(yes: boolean): void;
+  /** True when the cancel took effect (End with commit 0 follows); false when it is too late. */
+  cancel(): boolean;
+  /** Bytes of the image the device has acknowledged. */
+  taken(): number;
+  free(): void;
+}
+
 interface Exports {
   memory: WebAssembly.Memory;
   pk_alloc(n: number): number;
@@ -127,6 +152,14 @@ interface Exports {
   pk_sender_fail(handle: number): void;
   pk_sender_sent(handle: number): number;
   pk_sender_free(handle: number): void;
+  pk_rpc_new(image: number, len: number, chunk: number): number;
+  pk_rpc_next(h: number): number;
+  pk_rpc_reply(h: number, msg: number, len: number): number;
+  pk_rpc_timeout(h: number): void;
+  pk_rpc_confirm(h: number, yes: number): void;
+  pk_rpc_cancel(h: number): number;
+  pk_rpc_taken(h: number): number;
+  pk_rpc_free(h: number): void;
   pk_out_ptr(): number;
   pk_out_len(): number;
   pk_plan_ptr(): number;
@@ -211,6 +244,54 @@ export class PatchKit {
       fail: () => x.pk_sender_fail(h),
       sent: () => x.pk_sender_sent(h),
       free: () => x.pk_sender_free(h),
+    };
+  }
+
+  /** The RPC flash machine for the `.syx` stream `image` (copied into the module); `chunk` is the stream bytes per Write (0: the default). Call `free` when done. */
+  rpcFlash(image: Uint8Array, chunk = 0): RpcMachine {
+    const x = this.x;
+    const m = this.put(image);
+    let h: number;
+    try {
+      h = x.pk_rpc_new(m[0], m[1], chunk);
+    } finally {
+      this.free([m]);
+    }
+    const read = (): RpcAction => {
+      if (x.pk_rpc_next(h) !== 0) throw new Error('The flash machine is gone.');
+      const j = JSON.parse(this.plan()) as {
+        kind: string;
+        timeout_ms?: number;
+        code?: RpcFailCode;
+        message?: string;
+        taken?: number;
+      };
+      switch (j.kind) {
+        case 'send':
+          return { kind: 'send', bytes: this.get(x.pk_out_ptr(), x.pk_out_len()), timeoutMs: j.timeout_ms ?? 0 };
+        case 'ask':
+        case 'reboot':
+        case 'done':
+          return { kind: j.kind };
+        default:
+          return { kind: 'failed', code: j.code ?? 'protocol', message: j.message ?? '', taken: j.taken ?? 0 };
+      }
+    };
+    return {
+      next: read,
+      reply: (msg) => {
+        const b = this.put(msg);
+        try {
+          return x.pk_rpc_reply(h, b[0], b[1]) === 1;
+        } finally {
+          this.free([b]);
+        }
+      },
+      timeout: () => x.pk_rpc_timeout(h),
+      confirm: (yes) => x.pk_rpc_confirm(h, yes ? 1 : 0),
+      cancel: () => x.pk_rpc_cancel(h) === 1,
+      taken: () => x.pk_rpc_taken(h),
+      free: () => x.pk_rpc_free(h),
     };
   }
 

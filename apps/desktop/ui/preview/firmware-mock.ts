@@ -1,11 +1,13 @@
 // The Firmware page in the preview (`?page=firmware`): the Tauri commands it calls, answered here. Patching and checking are the real Rust code,
 // patchkit.wasm with the site's module bundle (the page's `firmware_prepare` answer has the format of src-tauri/src/firmware.rs); the MIDI port is
 // a fake device that speaks the two protocols the page uses (SoftwareVersion of the stock firmware, INFO of the runtime), takes the OS UPGRADE
-// stream, and restarts after the last message: its port goes away and comes back with the runtime and the image id of the stream.
-// State from the address: fwdev=dt2|dn2 (the device; default dn2), fwstate=stock|runtime|noreply|none, fwos=1.12.
+// stream and the RPC flash route (Start, Write, End; apps/web/tests/fakeflash.mjs), and restarts after the last message: its port goes away and comes back with the runtime and the image id of the stream.
+// State from the address: fwdev=dt2|dn2 (the device; default dn2), fwstate=stock|runtime|noreply|none, fwos=1.12; the RPC route: fwwrite=ms per Write
+// (default 0), fwerror=0..1 (the Write at this fraction of the image gets a device error).
 import { decode8in7, encode8in7 } from '@digi/dk-session';
 import { CMD } from '@digi/dk-session/gen_proto';
 import { PatchKit } from '../../../web/src/patch/patchkit-core';
+import { FakeUpgrade } from '../../../web/tests/fakeflash.mjs';
 import bundleUrl from '../../../web/public/modules/bundle.json?url';
 import wasmUrl from '../../../web/public/patchkit.wasm?url';
 
@@ -23,6 +25,11 @@ export const fw = {
   saved: [] as { name: string; size: number }[],
 };
 const PORT = fw.dev === 'dt2' ? 'Elektron Digitakt II' : 'Elektron Digitone II';
+
+const upgrade = new FakeUpgrade({
+  writeMs: Number(q.get('fwwrite') ?? 0),
+  errorAt: q.get('fwerror') === null ? null : Number(q.get('fwerror')),
+});
 
 let runtime: { version: string; imageId: string | null } | null =
   fw.state === 'runtime' ? { version: '0.5.2', imageId: null } : null;
@@ -55,8 +62,17 @@ function onMessage(msg: Uint8Array) {
     else if (msg[6] === 0x7e) fw.sent++;
     else if (msg[6] === 0x7f && msg[7] === 2) restart();
     if (msg[6] === 0x7e || msg[6] === 0x7f) return;
-    // a stock MidiRpc request: only SoftwareVersion (type 2) is answered
+    // a stock MidiRpc request: SoftwareVersion (type 2), or the RPC flash route (0x50 to 0x52)
     const body = decode8in7(msg.subarray(6, msg.length - 1));
+    if (body[4] >= 0x50 && body[4] <= 0x52) {
+      const r = upgrade.handle(msg);
+      if (!r) return;
+      setTimeout(() => {
+        push(r.message);
+        if (r.commit === 1) restart();
+      }, r.delayMs);
+      return;
+    }
     if (body[4] !== 2) return;
     const seq = body.subarray(0, 2);
     push(

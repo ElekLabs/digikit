@@ -76,6 +76,9 @@ export const webFirmwareEnv: FirmwareEnv = {
   async sender(total) {
     return (await kit()).sender(total);
   },
+  async rpc(image, chunk) {
+    return (await kit()).rpcFlash(image, chunk);
+  },
   async saveImage(name, bytes) {
     const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: 'application/octet-stream' }));
     const a = document.createElement('a');

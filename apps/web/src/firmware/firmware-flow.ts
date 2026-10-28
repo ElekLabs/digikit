@@ -2,7 +2,7 @@
 // over Web MIDI, in the desktop app over midir, and run headless against the emulator). Rust paces it: `flash::Sender` (through patchkit.wasm)
 // says when the next message goes out. The device sends no reply while it receives (finding 75), so the verdict comes from the restart:
 // the port goes away and comes back, then INFO (runtime and image id) or, for a restore, SoftwareVersion.
-import type { FlashSender, PreparedFlash } from '../patch/patchkit-core';
+import type { FlashSender, PreparedFlash, RpcMachine } from '../patch/patchkit-core';
 import {
   CANCEL_TEXT,
   NO_ANSWER_TEXT,
@@ -106,11 +106,29 @@ export async function runFlash(
   } finally {
     sender.free();
   }
+  return afterSend(ops, p, signal, set, limits, false);
+}
 
+/**
+ * The device checks and writes by itself; its port goes away and comes back, then the device is asked. Shared by both routes (`rpc`: the
+ * device accepted End with commit 1; menu: the last message was sent).
+ */
+async function afterSend(
+  ops: Pick<FlowOps, 'now' | 'sleep' | 'release' | 'portPresent' | 'ask'>,
+  p: PreparedFlash,
+  signal: AbortSignal,
+  set: (s: FlashState) => void,
+  limits: FlowLimits,
+  rpc: boolean,
+): Promise<FlashState> {
+  const done = (s: FlashState): FlashState => {
+    set(s);
+    return s;
+  };
   // The device checks and writes by itself; its port goes away and comes back.
   const since = ops.now();
   const stage = (s: 'leaving' | 'returning' | 'asking') =>
-    set({ phase: 'rebooting', stage: s, sinceMs: since, nowMs: ops.now() });
+    set({ phase: 'rebooting', stage: s, sinceMs: since, nowMs: ops.now(), ...(rpc ? { rpc: true as const } : {}) });
   stage('leaving');
   await ops.release();
   const wait = async (present: boolean, within: number, s: 'leaving' | 'returning'): Promise<boolean> => {
@@ -167,4 +185,121 @@ export async function runFlash(
     code: 'no-answer',
     message: signal.aborted ? 'You stopped waiting.' : NO_ANSWER_TEXT,
   });
+}
+
+// ---- the RPC route ---------------------------------------------------------------------------------------------------------------
+
+/** The operations of the RPC route: the state machine (Rust, `flash_rpc::RpcFlash`) and a port that sends one message and reads the next. */
+export interface RpcOps extends Pick<FlowOps, 'send' | 'now' | 'sleep' | 'release' | 'portPresent' | 'ask'> {
+  machine(image: Uint8Array, chunk: number): Promise<RpcMachine>;
+  /** The next message the device sent within `timeoutMs`, or null; ends early (null) when `signal` aborts. */
+  recv(timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array | null>;
+  /** The question "Flash now?": the user's answer. The page shows the buttons; the promise ends with false when `signal` aborts. */
+  confirm(signal: AbortSignal): Promise<boolean>;
+}
+
+/**
+ * Send the image through the RPC route, ask, and wait for the restart. All decisions (what to send, how often to repeat a chunk, when a
+ * run has failed) are the Rust machine's; this loop moves bytes and the clock. `signal` aborts: before End with commit 1 the device gets
+ * End with commit 0 and keeps its flash. `chunk` 0 is the default size.
+ */
+export async function runRpcFlash(
+  ops: RpcOps,
+  p: PreparedFlash,
+  signal: AbortSignal,
+  set: (s: FlashState) => void,
+  limits: FlowLimits = LIMITS,
+  chunk = 0,
+): Promise<FlashState> {
+  const done = (s: FlashState): FlashState => {
+    set(s);
+    return s;
+  };
+  const total = p.image.length;
+  const m = await ops.machine(p.image, chunk);
+  const startedMs = ops.now();
+  let rebooting = false;
+  try {
+    let shown = Number.NEGATIVE_INFINITY;
+    let cancelled = false;
+    let portError = '';
+    const progress = (checking: boolean) => {
+      const now = ops.now();
+      if (checking || now - shown >= UI_MS || m.taken() === total) {
+        shown = now;
+        set({
+          phase: 'sending',
+          sent: m.taken(),
+          total,
+          startedMs,
+          nowMs: now,
+          unit: 'bytes',
+          ...(checking ? { checking: true } : {}),
+        });
+      }
+    };
+    set({ phase: 'sending', sent: 0, total, startedMs, nowMs: startedMs, unit: 'bytes' });
+    for (;;) {
+      if (signal.aborted && !cancelled) {
+        cancelled = true;
+        m.cancel();
+      }
+      const a = m.next();
+      if (a.kind === 'send') {
+        // the long timeout is the last Write: the device checks the whole image before it answers
+        if (a.timeoutMs >= 10_000 && !cancelled) progress(true);
+        try {
+          await ops.send(a.bytes);
+        } catch (e) {
+          // a port that refuses the message cannot be asked for anything else: end the exchange as a timeout
+          portError = text(e);
+          m.timeout();
+          continue;
+        }
+        const end = ops.now() + a.timeoutMs;
+        // wait for the reply to this request: the message is ours (the machine says so), or the time is up, or the user aborts
+        const wait = async (sig: AbortSignal | undefined): Promise<'got' | 'timeout' | 'aborted'> => {
+          for (let left = end - ops.now(); left > 0; left = end - ops.now()) {
+            const r = await ops.recv(left, sig);
+            if (r && m.reply(r)) return 'got';
+            if (!r && sig?.aborted) return 'aborted';
+          }
+          return 'timeout';
+        };
+        let r = await wait(cancelled ? undefined : signal);
+        if (r === 'aborted') {
+          cancelled = true;
+          // End with commit 0 follows. When it is too late (End with commit 1 is in flight) the reply is still awaited.
+          if (m.cancel()) continue;
+          r = await wait(undefined);
+        }
+        if (r === 'timeout') m.timeout();
+        if (r === 'got') progress(false);
+      } else if (a.kind === 'ask') {
+        set({ phase: 'confirm', total });
+        const yes = await ops.confirm(signal);
+        m.confirm(yes && !signal.aborted);
+      } else if (a.kind === 'reboot') {
+        rebooting = true;
+        break;
+      } else if (a.kind === 'done') {
+        break;
+      } else {
+        const reason = a.code === 'cancelled' ? 'cancelled' : 'error';
+        return done({
+          phase: 'stopped',
+          reason,
+          sent: a.taken,
+          total,
+          unit: 'bytes',
+          message: portError && reason === 'error' ? `${a.message} (${portError})` : a.message,
+        });
+      }
+    }
+  } finally {
+    m.free();
+  }
+  return rebooting
+    ? afterSend(ops, p, signal, set, limits, true)
+    : done({ phase: 'failed', code: 'send', message: 'The device did not start the flash.' });
 }

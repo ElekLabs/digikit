@@ -15,11 +15,12 @@ import {
   running,
   type DeviceFacts,
   type DeviceState,
+  type FlashRoute,
   type FlashState,
   type PrepareState,
 } from './firmware-core';
-import { runFlash } from './firmware-flow';
-import { askDevice, portOps } from './firmware-ops';
+import { runFlash, runRpcFlash } from './firmware-flow';
+import { askDevice, portOps, rpcPortOps } from './firmware-ops';
 
 const MAX_BYTES = 16 * 1024 * 1024;
 
@@ -29,6 +30,28 @@ export const [device, setDevice] = createSignal<DeviceState>({ kind: 'checking' 
 export const [ack, setAck] = createSignal(false);
 export const [run, setRun] = createSignal<FlashState>(IDLE);
 export const [notice, setNotice] = createSignal('');
+/** How the image gets to the device: the MidiRpc route (default), or the old OS UPGRADE menu route (a small fallback on the page). */
+export const [route, setRouteSignal] = createSignal<FlashRoute>('rpc');
+
+export function setRoute(next: FlashRoute): void {
+  if (running(run())) return;
+  setRouteSignal(next);
+  setRun(IDLE);
+  setAck(false);
+}
+
+/** The user's answer to "Flash now?" while the run waits for it. */
+let answer: ((yes: boolean) => void) | undefined;
+export function answerConfirm(yes: boolean): void {
+  const a = answer;
+  answer = undefined;
+  a?.(yes);
+}
+const askConfirm = (signal: AbortSignal): Promise<boolean> =>
+  new Promise<boolean>((resolve) => {
+    answer = resolve;
+    signal.addEventListener('abort', () => resolve(false), { once: true });
+  });
 
 let file: { name: string; bytes: Uint8Array } | undefined;
 let preparing = 0;
@@ -133,11 +156,17 @@ export async function startFlash(): Promise<void> {
   const log = firmwareEnv().log;
   controller = new AbortController();
   const what = p.restore ? 'restore' : 'flash';
-  log({ level: 'info', text: `${what} ${p.device} OS ${p.os} to ${t.port}: ${p.ends.length} messages` });
+  const rpc = route() === 'rpc';
+  log({
+    level: 'info',
+    text: `${what} ${p.device} OS ${p.os} to ${t.port}: ${rpc ? `${p.image.length} bytes (MidiRpc)` : `${p.ends.length} messages (OS UPGRADE menu)`}`,
+  });
   setNotice('');
   let final: FlashState = IDLE;
   try {
-    final = await runFlash(portOps(), p, controller.signal, setRun);
+    final = rpc
+      ? await runRpcFlash(rpcPortOps(askConfirm), p, controller.signal, setRun)
+      : await runFlash(portOps(), p, controller.signal, setRun);
   } catch (e) {
     final = { phase: 'failed', code: 'send', message: e instanceof Error ? e.message : String(e) };
     setRun(final);
@@ -150,7 +179,7 @@ export async function startFlash(): Promise<void> {
   else if (final.phase === 'stopped')
     log({
       level: final.reason === 'error' ? 'error' : 'info',
-      text: `${what} stopped after ${final.sent} of ${final.total} messages`,
+      text: `${what} stopped after ${final.sent} of ${final.total} ${final.unit ?? 'messages'}`,
       detail: final.message,
     });
   else if (final.phase === 'failed') log({ level: 'error', text: `${what} failed: ${final.message}` });

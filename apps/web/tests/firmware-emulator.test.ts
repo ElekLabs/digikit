@@ -3,14 +3,16 @@
 // instructions a millisecond), so the sender's 2 ms are guest milliseconds; the port "goes away" while the guest flashes and resets, and "comes
 // back" with the `firmware.loaded` event. Skips unless DIGI_FW_EMU_SOCKET names a control socket; `tools/emulator/os_upgrade_rig.py ... --exec`
 // opens OS UPGRADE and runs it (DIGI_FW_EMU_FIRMWARE: the stock file, DIGI_FW_EMU_RESTORE=1: send the stock file itself).
+// The default is the RPC route (`runRpcFlash`: the rig run with `--rpc --exec`, the device stays on its main screen). DIGI_FW_EMU_ROUTE=menu runs the
+// OS UPGRADE menu route (`runFlash`); DIGI_FW_EMU_CONFIRM=no answers the question "Flash now?" with Cancel and checks that the flash is unchanged.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { connect } from '../../../packages/control-client/src/client.ts';
-import { DkSession, EmuUsbTransport, decode8in7 } from '@digi/dk-session';
+import { DkSession, EmuUsbTransport, decode8in7, splitMessages } from '@digi/dk-session';
 import { askSession } from '../src/firmware/firmware-ask.ts';
-import { runFlash, type FlowOps } from '../src/firmware/firmware-flow.ts';
+import { runFlash, runRpcFlash, type FlowOps, type RpcOps } from '../src/firmware/firmware-flow.ts';
 import type { FlashState } from '../src/firmware/firmware-core.ts';
 import { PatchKit, type PreparedFlash } from '../src/patch/patchkit-core.ts';
 
@@ -124,15 +126,74 @@ test.skipIf(!socket)(
       },
     };
 
+    const menu = process.env.DIGI_FW_EMU_ROUTE === 'menu';
+    const cancelAtQuestion = process.env.DIGI_FW_EMU_CONFIRM === 'no';
+    // the RPC route: one request out through the USB model, the next message the guest sends in, in guest time
+    let rx: Uint8Array = new Uint8Array();
+    const ready: Uint8Array[] = [];
+    const rpcOps: RpcOps = {
+      machine: async (image, chunk) => kit.rpcFlash(image, chunk),
+      async send(m) {
+        await call('midi.usb.in', { bytes: hex(m), chunk: 384, period: 16_500 });
+      },
+      async recv(ms) {
+        const end = used + ms * INSTR_PER_MS;
+        for (;;) {
+          const m = ready.shift();
+          if (m) return m;
+          const { hex: got } = await call<{ hex?: string }>('midi.usb.out');
+          if (got) {
+            const joined = new Uint8Array(rx.length + got.length / 2);
+            joined.set(rx);
+            joined.set(bytesOf(got), rx.length);
+            const split = splitMessages(joined);
+            rx = split.rest;
+            ready.push(...split.messages);
+            continue;
+          }
+          if (used >= end) return null;
+          await step(400_000);
+        }
+      },
+      async confirm() {
+        const st = await call<{ erases: number; programs: number }>('flash.status');
+        console.info(`question "Flash now?": flash so far ${st.erases} erases, ${st.programs} programs`);
+        return !cancelAtQuestion;
+      },
+      now: ops.now,
+      sleep: ops.sleep,
+      release: ops.release,
+      portPresent: ops.portPresent,
+      ask: ops.ask,
+    };
+    const flashAtStart = await call<{ erases: number; programs: number }>('flash.status');
     const states: FlashState[] = [];
-    const final = await runFlash(ops, p, new AbortController().signal, (s) => {
+    const record = (s: FlashState) => {
       if (states.at(-1)?.phase !== s.phase)
         console.info(`firmware page: ${s.phase}${'stage' in s ? ` (${s.stage})` : ''}`);
       states.push(s);
-    });
+    };
+    if (!menu && cancelAtQuestion) {
+      const end = await runRpcFlash(rpcOps, p, new AbortController().signal, record);
+      console.info(`final: ${JSON.stringify(end)}`);
+      assert.equal(end.phase === 'stopped' && end.reason, 'cancelled', JSON.stringify(end));
+      await step(300_000_000);
+      const st = await call<{ erases: number; programs: number }>('flash.status');
+      assert.deepEqual(
+        st,
+        { ...st, erases: flashAtStart.erases, programs: flashAtStart.programs },
+        'the flash is unchanged',
+      );
+      console.info(`cancel at the question: flash unchanged (${st.erases} erases, ${st.programs} programs)`);
+      client.close();
+      return;
+    }
+    const final = await (menu
+      ? runFlash(ops, p, new AbortController().signal, record)
+      : runRpcFlash(rpcOps, p, new AbortController().signal, record));
     console.info(`final: ${JSON.stringify(final)}`);
     console.info(
-      `image id the patch made: ${p.imageId}; sent ${sendTotal} messages, guest ${Math.round(used / INSTR_PER_MS)} ms`,
+      `image id the patch made: ${p.imageId}; sent ${menu ? `${sendTotal} messages` : `${p.image.length} bytes`}, guest ${Math.round(used / INSTR_PER_MS)} ms`,
     );
     client.close();
     assert.equal(final.phase, 'done', JSON.stringify(final));

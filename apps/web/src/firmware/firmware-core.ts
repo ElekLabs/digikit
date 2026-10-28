@@ -127,18 +127,34 @@ export function matchView(p: PreparedFlash | undefined, dev: DeviceState): Match
 export type FailCode =
   'send' | 'no-restart' | 'no-return' | 'no-answer' | 'runtime' | 'image-id' | 'os' | 'still-runtime' | 'not-sent';
 
+/** How the image gets to the device: `rpc` is the MidiRpc route (the device acknowledges every Write, the page asks before the flash); `menu` is the old
+ * route into the device's OS UPGRADE screen (no reply, paced). */
+export type FlashRoute = 'rpc' | 'menu';
+
 export type FlashState =
   | { phase: 'idle' }
-  | { phase: 'sending'; sent: number; total: number; startedMs: number; nowMs: number }
-  | { phase: 'stopped'; reason: 'cancelled' | 'error'; sent: number; total: number; message: string }
-  | { phase: 'rebooting'; stage: 'leaving' | 'returning' | 'asking'; sinceMs: number; nowMs: number }
+  // `unit: 'bytes'` (rpc): `sent` and `total` are bytes the device has taken; otherwise messages. `checking`: the last Write is in, the device checks the image.
+  | {
+      phase: 'sending';
+      sent: number;
+      total: number;
+      startedMs: number;
+      nowMs: number;
+      unit?: 'bytes';
+      checking?: boolean;
+    }
+  // rpc: the device has the whole image and accepted it; the page waits for the user's Flash now or Cancel.
+  | { phase: 'confirm'; total: number }
+  | { phase: 'stopped'; reason: 'cancelled' | 'error'; sent: number; total: number; message: string; unit?: 'bytes' }
+  | { phase: 'rebooting'; stage: 'leaving' | 'returning' | 'asking'; sinceMs: number; nowMs: number; rpc?: true }
   | { phase: 'done'; message: string; lines: string[] }
   | { phase: 'failed'; code: FailCode; message: string };
 
 export const IDLE: FlashState = { phase: 'idle' };
 
 /** A run is in progress (Cancel is shown; nothing else may start). */
-export const running = (s: FlashState): boolean => s.phase === 'sending' || s.phase === 'rebooting';
+export const running = (s: FlashState): boolean =>
+  s.phase === 'sending' || s.phase === 'confirm' || s.phase === 'rebooting';
 
 const THIN = ' ';
 /** 9812 as "9 812" (a thin space). */
@@ -161,7 +177,19 @@ export interface ProgressView {
   text: string;
 }
 
+/** 1531152 as "1.53 MB" (decimal megabytes, as file sizes are shown). */
+export const fmtMB = (n: number): string => `${(n / 1e6).toFixed(2)} MB`;
+
 export function progressView(s: Extract<FlashState, { phase: 'sending' }>): ProgressView {
+  if (s.unit === 'bytes') {
+    const left = timeLeft(s.sent, s.total, s.startedMs, s.nowMs);
+    return {
+      fraction: s.total ? s.sent / s.total : 0,
+      text: s.checking
+        ? `received ${fmtMB(s.sent)} · the device is checking the image…`
+        : [`received ${fmtMB(s.sent)} of ${fmtMB(s.total)}`, left].filter(Boolean).join(' · '),
+    };
+  }
   const left = timeLeft(s.sent, s.total, s.startedMs, s.nowMs);
   return {
     fraction: s.total ? s.sent / s.total : 0,
@@ -174,6 +202,7 @@ export function rebootText(s: Extract<FlashState, { phase: 'rebooting' }>): stri
   const secs = Math.max(0, Math.round((s.nowMs - s.sinceMs) / 1000));
   switch (s.stage) {
     case 'leaving':
+      if (s.rpc) return `The device erases and writes its flash (${secs} s). Do not touch it or the cable.`;
       return `All messages sent. The device checks the image and writes its flash (${secs} s). Do not touch it or the cable.`;
     case 'returning':
       return `The device is restarting (${secs} s). Keep the cable in.`;
@@ -259,9 +288,10 @@ export const NO_ANSWER_TEXT =
 export interface FlashInputs {
   prepare: PrepareState;
   device: DeviceState;
-  /** The box "The device shows WAITING FOR SYSEX". */
+  /** The box "The device shows WAITING FOR SYSEX" (menu route only). */
   ack: boolean;
   run: FlashState;
+  route: FlashRoute;
 }
 
 /** Flash is on when every check passed, the device is the image's model, and the box is ticked; otherwise the reason, in one line. */
@@ -277,7 +307,8 @@ export function canFlash(i: FlashInputs): { ok: boolean; reason: string } {
   if (i.device.kind === 'lost') return { ok: false, reason: 'The device is not connected.' };
   const m = matchView(p, i.device);
   if (m.state !== 'match') return { ok: false, reason: m.text };
-  if (!i.ack) return { ok: false, reason: 'Tick the box when the device shows WAITING FOR SYSEX.' };
+  if (i.route === 'menu' && !i.ack)
+    return { ok: false, reason: 'Tick the box when the device shows WAITING FOR SYSEX.' };
   return { ok: true, reason: '' };
 }
 
@@ -285,6 +316,35 @@ export function canFlash(i: FlashInputs): { ok: boolean; reason: string } {
 export type StepMark = 'done' | 'now' | 'later' | 'bad';
 
 export function stepMarks(i: FlashInputs): StepMark[] {
+  return i.route === 'rpc' ? stepMarksRpc(i) : stepMarksMenu(i);
+}
+
+/** The RPC route has seven steps: file, checks, device, prepare, send, confirm, done. */
+function stepMarksRpc(i: FlashInputs): StepMark[] {
+  if (i.run.phase === 'done') return Array<StepMark>(7).fill('done');
+  const ready = i.prepare.kind === 'ready' ? i.prepare.p : undefined;
+  const checksOk = ready?.ok === true;
+  const match = matchView(ready, i.device).state === 'match';
+  const r = i.run;
+  const sendMark: StepMark = !match
+    ? 'later'
+    : r.phase === 'confirm' || r.phase === 'rebooting' || r.phase === 'failed'
+      ? 'done'
+      : r.phase === 'stopped' && r.reason === 'error'
+        ? 'bad'
+        : 'now';
+  return [
+    ready ? 'done' : i.prepare.kind === 'error' ? 'bad' : 'now',
+    !ready ? 'later' : checksOk ? 'done' : 'bad',
+    !checksOk ? 'later' : match ? 'done' : i.device.kind === 'connected' ? 'bad' : 'now',
+    !match ? 'later' : 'done',
+    sendMark,
+    r.phase === 'confirm' ? 'now' : r.phase === 'rebooting' || r.phase === 'failed' ? 'done' : 'later',
+    r.phase === 'rebooting' ? 'now' : r.phase === 'failed' ? 'bad' : 'later',
+  ];
+}
+
+function stepMarksMenu(i: FlashInputs): StepMark[] {
   // a finished run: every step was done
   if (i.run.phase === 'done') return ['done', 'done', 'done', 'done', 'done', 'done'];
   const ready = i.prepare.kind === 'ready' ? i.prepare.p : undefined;
@@ -311,11 +371,23 @@ export const RECOVERY_STEPS: string[] = [
   'If the device shows UPGRADE ABORTED, nothing was written: send again.',
 ];
 
+/** The Prepare step of the RPC route: the device needs no menu. */
+export const PREPARE_STEPS_RPC: string[] = [
+  'Connect the power adapter.',
+  'Keep the USB cable in until the device has restarted. The device does not need to be in any menu.',
+];
+
 export const PREPARE_STEPS: string[] = [
   'On the device open SETTINGS > SYSTEM > OS UPGRADE. It shows WAITING FOR SYSEX.',
   'Connect the power adapter.',
   'Keep the USB cable in until the device has restarted.',
 ];
+
+/** What the Confirm step says: the device has the image and accepted it. */
+export function confirmText(p: PreparedFlash): string {
+  const name = DEVICE_NAMES[p.device as DeviceId] ?? p.device;
+  return `The ${name} has the ${p.restore ? 'stock' : 'new'} firmware and accepted it.`;
+}
 
 /** The seconds a send takes (the pace of the sender), for the line above the button. */
 export function sendSeconds(p: PreparedFlash): number {

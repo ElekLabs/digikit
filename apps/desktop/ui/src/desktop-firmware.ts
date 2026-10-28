@@ -1,5 +1,5 @@
 // The desktop workbench's side of the Firmware page (apps/web/src/firmware/env.ts): patchkit in process through the Tauri command
-// `firmware_prepare` (the checkout's modules, ports and device files), the Rust sender through patchkit.wasm (the same code the site runs),
+// `firmware_prepare` (the checkout's modules, ports and device files), the Rust sender and the RPC flash machine through patchkit.wasm (the same code the site runs),
 // the system's save dialog, and the Log panel. The MIDI port is the Transfer pane's (desktop-env.ts).
 import { invoke } from '@tauri-apps/api/core';
 import { setFirmwareEnv, type FirmwareEnv } from '../../../web/src/firmware/env';
@@ -38,6 +38,10 @@ export const desktopFirmwareEnv: FirmwareEnv = {
   },
   async sender(total) {
     return (await kit()).sender(total);
+  },
+  // the same state machine as the site, from the same wasm (the desktop app moves the bytes over midir)
+  async rpc(image, chunk) {
+    return (await kit()).rpcFlash(image, chunk);
   },
   async saveImage(name, bytes) {
     return (

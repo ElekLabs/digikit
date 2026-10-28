@@ -2,7 +2,7 @@
 // device running the new image. Step by step, nothing is sent until the checks have passed, the device is the image's model, and the user
 // has said that the device shows WAITING FOR SYSEX. The rules are in firmware-core.ts, the run in firmware-flow.ts, the state in
 // firmware-state.ts. The MIDI port, the connection indicator and the target selector are the Transfer pane's.
-import { For, Match, Show, Switch, createSignal, onMount, type JSX } from 'solid-js';
+import { For, Match, Show, Switch, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import AutoRefresh from '../transfer/AutoRefresh';
 import ConnectionBadge from '../transfer/ConnectionBadge';
 import TargetSelect from '../transfer/TargetSelect';
@@ -11,6 +11,9 @@ import { firmwareEnv } from './env';
 import { createEffectOn } from './on-change';
 import {
   PREPARE_STEPS,
+  PREPARE_STEPS_RPC,
+  confirmText,
+  fmtMB,
   RECOVERY_STEPS,
   canFlash,
   checkRows,
@@ -26,6 +29,7 @@ import {
 } from './firmware-core';
 import {
   ack,
+  answerConfirm,
   cancelFlash,
   chooseFile,
   device,
@@ -36,10 +40,12 @@ import {
   probeDevice,
   resetRun,
   restore,
+  route,
   runInEmulator,
   run,
   setAck,
   setRestore,
+  setRoute,
   startFlash,
 } from './firmware-state';
 import './firmware-page.css';
@@ -81,13 +87,23 @@ export default function FirmwarePage(): JSX.Element {
     }
   };
   onMount(() => void read());
+  // Leaving the page while the image is sent or the question is open: the device gets End with commit 0 and keeps its flash.
+  const leave = () => {
+    const r = run().phase;
+    if (r === 'sending' || r === 'confirm') cancelFlash();
+  };
+  onMount(() => window.addEventListener('pagehide', leave));
+  onCleanup(() => {
+    window.removeEventListener('pagehide', leave);
+    leave();
+  });
   // another port: the old reading is not shown
   createEffectOn(target, () => {
     forgetDevice();
     void read();
   });
 
-  const inputs = () => ({ prepare: prepared(), device: device(), ack: ack(), run: run() });
+  const inputs = () => ({ prepare: prepared(), device: device(), ack: ack(), run: run(), route: route() });
   const marks = () => stepMarks(inputs());
   const flash = () => canFlash(inputs());
   const ready = () => {
@@ -114,6 +130,11 @@ export default function FirmwarePage(): JSX.Element {
   const sending = () => {
     const r = run();
     return r.phase === 'sending' ? r : undefined;
+  };
+  /** rpc: the device has the image, the question is asked or answered and the flash is under way. */
+  const afterSend = () => {
+    const r = run();
+    return route() === 'rpc' && (r.phase === 'confirm' || r.phase === 'rebooting') ? r : undefined;
   };
   const rebooting = () => {
     const r = run();
@@ -274,8 +295,9 @@ export default function FirmwarePage(): JSX.Element {
                 </ul>
                 <p class="dim">
                   {r().p.restore ? 'Stock image' : `Patched image with digikit runtime ${r().p.runtime}`} ·{' '}
-                  {groups(r().p.image.length)} bytes · {groups(r().p.ends.length)} messages · about {sendSeconds(r().p)}{' '}
-                  s to send
+                  {groups(r().p.image.length)} bytes
+                  {route() === 'menu' &&
+                    ` · ${groups(r().p.ends.length)} messages · about ${sendSeconds(r().p)} s to send`}
                 </p>
                 <Show when={notice()}>
                   <p class="dim" role="status">
@@ -308,29 +330,41 @@ export default function FirmwarePage(): JSX.Element {
 
         {/* 4 */}
         <Step n={4} title="Prepare the device" mark={marks()[3]!}>
-          <ol class="plain">
-            <For each={PREPARE_STEPS}>{(s) => <li>{s}</li>}</For>
-          </ol>
-          <details class="recovery">
-            <summary>Recovery steps</summary>
-            <p class="dim">If the device does not start again after a flash:</p>
+          <Show
+            when={route() === 'rpc'}
+            fallback={
+              <>
+                <ol class="plain">
+                  <For each={PREPARE_STEPS}>{(s) => <li>{s}</li>}</For>
+                </ol>
+                <RecoveryNote />
+                <label class="tick">
+                  <input
+                    type="checkbox"
+                    checked={ack()}
+                    disabled={running(run())}
+                    onChange={(e) => setAck(e.currentTarget.checked)}
+                  />
+                  <span>The device shows WAITING FOR SYSEX</span>
+                </label>
+                <button type="button" class="linkbtn" disabled={running(run())} onClick={() => setRoute('rpc')}>
+                  Send directly instead (no menu on the device)
+                </button>
+              </>
+            }
+          >
             <ol class="plain">
-              <For each={RECOVERY_STEPS}>{(s) => <li>{s}</li>}</For>
+              <For each={PREPARE_STEPS_RPC}>{(s) => <li>{s}</li>}</For>
             </ol>
-          </details>
-          <label class="tick">
-            <input
-              type="checkbox"
-              checked={ack()}
-              disabled={running(run())}
-              onChange={(e) => setAck(e.currentTarget.checked)}
-            />
-            <span>The device shows WAITING FOR SYSEX</span>
-          </label>
+            <RecoveryNote />
+            <button type="button" class="linkbtn" disabled={running(run())} onClick={() => setRoute('menu')}>
+              Use the OS UPGRADE menu instead
+            </button>
+          </Show>
         </Step>
 
         {/* 5 */}
-        <Step n={5} title={restore() ? 'Restore' : 'Flash'} mark={marks()[4]!}>
+        <Step n={5} title={route() === 'rpc' ? 'Send' : restore() ? 'Restore' : 'Flash'} mark={marks()[4]!}>
           <Switch>
             <Match when={sending()}>
               {(s) => (
@@ -350,6 +384,16 @@ export default function FirmwarePage(): JSX.Element {
                   </button>
                 </div>
               )}
+            </Match>
+            <Match when={afterSend()}>
+              <div class="flashing">
+                <div class="progress ok" role="progressbar" aria-valuenow={100} aria-valuemin={0} aria-valuemax={100}>
+                  <i style={{ width: '100%' }} />
+                </div>
+                <span class="ptext okt">
+                  received {fmtMB(ready()?.p.image.length ?? 0)} · the device checked the image ✓
+                </span>
+              </div>
             </Match>
             <Match when={rebooting()}>
               {(s) => (
@@ -374,21 +418,28 @@ export default function FirmwarePage(): JSX.Element {
             <Match when={true}>
               <div class="flashrow">
                 <button type="button" class="act primary" disabled={!flash().ok} onClick={() => void startFlash()}>
-                  {restore() ? 'Restore stock' : 'Flash'}
+                  {route() === 'rpc'
+                    ? restore()
+                      ? 'Send stock firmware'
+                      : 'Send'
+                    : restore()
+                      ? 'Restore stock'
+                      : 'Flash'}
                 </button>
                 <Show when={!flash().ok}>
                   <span class="dim">{flash().reason}</span>
                 </Show>
                 <Show when={flash().ok && ready()}>
                   <span class="dim">
-                    Sends {groups(ready()!.p.ends.length)} messages, about {sendSeconds(ready()!.p)} s. The device then
-                    writes its flash and restarts.
+                    {route() === 'rpc'
+                      ? `Sends ${fmtMB(ready()!.p.image.length)} and lets the device check it. Nothing is flashed until you say so.`
+                      : `Sends ${groups(ready()!.p.ends.length)} messages, about ${sendSeconds(ready()!.p)} s. The device then writes its flash and restarts.`}
                   </span>
                 </Show>
               </div>
               <Show when={stopped()}>
                 {(s) => (
-                  <p class="warn" role="alert">
+                  <p class={s().reason === 'cancelled' ? 'warn' : 'bad'} role="alert">
                     {s().message}
                   </p>
                 )}
@@ -397,8 +448,34 @@ export default function FirmwarePage(): JSX.Element {
           </Switch>
         </Step>
 
-        {/* 6 */}
-        <Step n={6} title="Done" mark={marks()[5]!}>
+        {/* 6, the RPC route only: the question the device does not ask */}
+        <Show when={route() === 'rpc'}>
+          <Step n={6} title="Confirm" mark={marks()[5]!}>
+            <Switch>
+              <Match when={run().phase === 'confirm'}>
+                <p>{ready() ? confirmText(ready()!.p) : ''} Flash now?</p>
+                <div class="flashrow">
+                  <button type="button" class="act primary" onClick={() => answerConfirm(true)}>
+                    Flash now
+                  </button>
+                  <button type="button" class="act" onClick={() => answerConfirm(false)}>
+                    Cancel
+                  </button>
+                </div>
+                <p class="dim">Cancel leaves the device as it was.</p>
+              </Match>
+              <Match when={run().phase === 'rebooting' || run().phase === 'done' || run().phase === 'failed'}>
+                <p class="dim">You said yes. The device flashed itself.</p>
+              </Match>
+              <Match when={true}>
+                <p class="dim">When the device has checked the image, you decide here whether it is flashed.</p>
+              </Match>
+            </Switch>
+          </Step>
+        </Show>
+
+        {/* last */}
+        <Step n={route() === 'rpc' ? 7 : 6} title="Done" mark={marks()[route() === 'rpc' ? 6 : 5]!}>
           <Switch>
             <Match when={finished()}>
               {(s) => (
@@ -422,6 +499,16 @@ export default function FirmwarePage(): JSX.Element {
                 </>
               )}
             </Match>
+            <Match when={route() === 'rpc' && rebooting()}>
+              {(s) => (
+                <>
+                  <p class="dim">{rebootText(s())}</p>
+                  <button type="button" class="act small" onClick={cancelFlash}>
+                    Stop waiting
+                  </button>
+                </>
+              )}
+            </Match>
             <Match when={true}>
               <p class="dim">After the restart the page asks the device which image it runs.</p>
             </Match>
@@ -429,5 +516,18 @@ export default function FirmwarePage(): JSX.Element {
         </Step>
       </div>
     </section>
+  );
+}
+
+/** The recovery steps, folded away. */
+function RecoveryNote(): JSX.Element {
+  return (
+    <details class="recovery">
+      <summary>Recovery steps</summary>
+      <p class="dim">If the device does not start again after a flash:</p>
+      <ol class="plain">
+        <For each={RECOVERY_STEPS}>{(s) => <li>{s}</li>}</For>
+      </ol>
+    </details>
   );
 }

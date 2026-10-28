@@ -463,29 +463,37 @@ device.
 - Rung C: the module list of rung B, built again (the DSP wrapper and the debug log changed since rung B, finding 48), plus the test module
   uploaded over USB at run time. The whole procedure is the section "Rung C" below.
 
-**Flashing with `patchkit flash`** (built 2026-10-28; proof in the emulator only, [finding 75](findings/75-os-upgrade-receive.md)). One command
+**Flashing with `patchkit flash`** (built 2026-10-28, RPC route 2026-10-29; proof in the emulator only, [finding 75](findings/75-os-upgrade-receive.md)). One command
 patches the stock file with the device's patch set, checks the image and the exact messages it will send the way the device's receiver does
-(checksums, HMAC, the DT2 build floor, the product byte, the container limits, an image id), sends them over USB MIDI one every 2 ms, waits for the
-restart and reads INFO: the runtime version and the image id must match.
+(checksums, HMAC, the DT2 build floor, the product byte, the container limits, an image id), sends it to the device, waits for the restart and reads
+INFO: the runtime version and the image id must match. The default route is **MidiRpc** (`--route rpc`): the device needs no menu step, takes the image in
+chunks of 2048 bytes, answers every chunk, and checks the whole image. The program then asks `Flash now? [y/N]`; only `y` (or `--yes`) lets the device erase
+and write its flash. `n` leaves the device as it was.
 
 ```sh
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --dry-run     # patch and check, send nothing (--save F keeps the image)
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt --restore   # the stock file back
+uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt --route menu   # the OS UPGRADE menu route (below)
 ```
 
-It prints the checks, then the steps for the device (power adapter, SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX, the cable stays in) and
-waits for the word `flash`. The OS UPGRADE screen asks no YES (finding 75). The section 7 ISA scan (`packages/patchkit/src/dspscan.rs`) is one of the checks
-(the same scan `patchkit preflight` runs; `patchkit isa-scan X.syx` lists what it finds).
+`--chunk N` sets the stream bytes per chunk (the largest size a real device takes is not known). It prints the checks and the steps for the device (power
+adapter, the cable stays in), sends, and asks. With `--route menu` it prints the old steps (SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX),
+waits for the word `flash`, and sends the plain stream one message every 2 ms (no reply exists on that route). The OS UPGRADE screen asks no YES on either
+route (finding 75). The section 7 ISA scan (`packages/patchkit/src/dspscan.rs`) is one of the checks (the same scan `patchkit preflight` runs;
+`patchkit isa-scan X.syx` lists what it finds).
 
-**The Firmware page** (the site's `/firmware/` and the Firmware item of the workbench) is the same flash in six steps: the stock file, the checks, the
-device (the MIDI port, its model and OS), what to do on the device (with the recovery steps), Flash with a progress bar and Cancel, and the verdict after
-the restart (runtime and image id, or for "Restore stock" the stock OS and no runtime). Flash is on only when every check passed, the device is the
-image's model, and the box "The device shows WAITING FOR SYSEX" is ticked. The page code is `apps/web/src/firmware/` (rules in `firmware-core.ts`, the run
-in `firmware-flow.ts`); the checks and the 2 ms sender are the Rust ones (`patchkit.wasm` in the browser, `patchkit::flash` in process in the app).
-Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.test.ts`, `firmware-kit.test.mjs` (the wasm image equals `patchkit flash --save`), and
-`firmware-emulator.test.ts`, which runs the page's flash against an emulated device (`tools/emulator/os_upgrade_rig.py ... --exec`, finding 75).
-Screenshots of both apps: `node tools/devtools/firmware_shots.mjs --app web|desktop`.
+**The Firmware page** (the site's `/firmware/` and the Firmware item of the workbench) is the same flash in seven steps: the stock file, the checks, the
+device (the MIDI port, its model and OS), the device's needs (power adapter, cable in; no menu), Send with a progress bar and Cancel, Confirm, and the
+verdict after the restart (runtime and image id, or for "Restore stock" the stock OS and no runtime). The page sends the image over MidiRpc and the device
+checks it ("received 1.53 MB, the device checked the image"). Then the page asks: "The Digitakt II has the new firmware and accepted it. Flash now?" **Flash
+now** lets the device erase and write; **Cancel** (or leaving the page) leaves the device as it was ("Nothing was written"). Send is on only when every check
+passed and the device is the image's model. A small link, "Use the OS UPGRADE menu instead", brings back the old flow (the box "The device shows WAITING FOR
+SYSEX", paced sending, six steps). The page code is `apps/web/src/firmware/` (rules in `firmware-core.ts`, the runs in `firmware-flow.ts`); the checks, the
+2 ms sender and the RPC state machine (`patchkit::flash_rpc::RpcFlash`) are the Rust ones (`patchkit.wasm` in the browser and in the workbench).
+Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.test.ts`, `firmware-rpc-flow.test.ts`, `firmware-kit.test.mjs` (the wasm image equals `patchkit flash --save`), the
+state machine's tests in `packages/patchkit/src/flash_rpc.rs`, and `firmware-emulator.test.ts`, which runs the page's flash against an emulated device
+(`tools/emulator/os_upgrade_rig.py ... --rpc --exec`, finding 75). Screenshots of both apps: `node tools/devtools/firmware_shots.mjs --app web|desktop`.
 
 **Flashing with Transfer** (Em's description of the Transfer route; the screens were not checked here):
 

@@ -219,6 +219,18 @@ child processes.
             the shared sender into the emulated DT2 and DN2 (tools/emulator/os_upgrade_rig.py), the
             flash compared with the image, the emulator boots the patched runtime and INFO's id
             matches; screenshots. The Python dkflash design (device-bridge.md section 3) is replaced.
+      - [x] RPC route (finding 75, "The RPC route"): one reply-driven state machine in Rust
+            (`patchkit::flash_rpc::RpcFlash`: Start, Write in order, End; CRC retry, timeouts, End 0 on
+            failure or cancel) for the CLI, the workbench and the site (wasm). Default route; the menu
+            route stays as the fallback (`--route menu`, a link on the page).
+      - [x] The device does not ask "UPGRADE OS NOW?" on this route: the CLI and the Firmware page ask
+            "Flash now?" before End with commit 1; Cancel or leaving the page sends End with commit 0.
+      - [x] The Firmware page without the menu step and its box: Send, Confirm, Done; errors in plain
+            words (CRC retries used up, timeout, the device's message, "Nothing was written").
+      - [x] Proof in the emulator through the page's own code path: DT2 1.17 and DN2 1.12, patch and
+            restore (flash equals the container, INFO runtime and image id), Cancel at Confirm leaves
+            the flash unchanged; the CLI once with `--yes`. Open: the real device (largest Write,
+            timing).
 - [ ] Later: compile in the browser (a dropped `.dkmod`, or an edited source): gcc `cc1`/`as`/`ld` in
       wasm (finding 74) in a worker, SHARC+ already in `patchkit.wasm`.
 - [ ] Optional: a `.dkmod` carries the expected `.dkm` hash per device so a receiver can

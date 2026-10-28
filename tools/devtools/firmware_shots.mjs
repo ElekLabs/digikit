@@ -15,6 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { closeTab, connect, evaluate, launchChrome, sleep } from './cdp.mjs';
 import { FakeDevice, be32, concat, cs } from '../../apps/web/tests/fakedevice.mjs';
+import { FakeUpgrade } from '../../apps/web/tests/fakeflash.mjs';
 import { PatchKit } from '../../apps/web/src/patch/patchkit-core.ts';
 import { CAP, CMD } from '../../packages/dk-session/src/gen_proto.ts';
 
@@ -48,27 +49,12 @@ const tick = (label) =>
 const click = (text) =>
   `(() => { const b = [...document.querySelectorAll('button')].find((e) => e.textContent.trim() === ${JSON.stringify(text)}); if (!b) throw new Error('no button ' + ${JSON.stringify(text)}); b.click(); })()`;
 
+const menuLink = click('Use the OS UPGRADE menu instead');
 const SCENES = [
   { name: 'step1-empty', size: WIDE, dev: 'dn2', file: null, wait: 'Connected' },
   { name: 'step2-checks', size: WIDE, dev: 'dn2', file: 'dn2', wait: 'Connected', ready: true },
-  {
-    name: 'step4-ready',
-    size: WIDE,
-    dev: 'dn2',
-    file: 'dn2',
-    wait: 'Connected',
-    ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX')],
-  },
-  {
-    name: 'dt2-ready',
-    size: WIDE,
-    dev: 'dt2',
-    file: 'dt2',
-    wait: 'Connected',
-    ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX')],
-  },
+  { name: 'step4-ready', size: WIDE, dev: 'dn2', file: 'dn2', wait: 'Connected', ready: true },
+  { name: 'dt2-ready', size: WIDE, dev: 'dt2', file: 'dt2', wait: 'Connected', ready: true },
   { name: 'file-refused', size: WIDE, dev: 'dn2', file: 'junk', wait: 'Connected', after: 800 },
   {
     name: 'failed-check',
@@ -81,16 +67,52 @@ const SCENES = [
     query: 'fwfail=1',
   },
   { name: 'no-device', size: WIDE, dev: 'dn2', file: 'dn2', state: 'none', wait: 'Not connected', ready: true },
+  { name: 'mismatch', size: WIDE, dev: 'dt2', file: 'dn2', wait: 'Connected', ready: true },
+  // the RPC route (default): Send, the device checks, the page asks, the device flashes
   {
-    name: 'mismatch',
-    size: WIDE,
-    dev: 'dt2',
+    name: 'send',
+    size: TALL,
+    dev: 'dn2',
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX')],
+    fake: { writeMs: 12 },
+    steps: [click('Send')],
+    after: 4500,
   },
-  { name: 'unticked', size: WIDE, dev: 'dn2', file: 'dn2', wait: 'Connected', ready: true },
+  {
+    name: 'send-dt2',
+    size: TALL,
+    dev: 'dt2',
+    file: 'dt2',
+    wait: 'Connected',
+    ready: true,
+    fake: { writeMs: 12 },
+    steps: [click('Send')],
+    after: 4500,
+  },
+  {
+    name: 'confirm',
+    size: TALL,
+    dev: 'dn2',
+    file: 'dn2',
+    wait: 'Connected',
+    ready: true,
+    steps: [click('Send')],
+    until: 'accepted it',
+    after: 400,
+  },
+  {
+    name: 'confirm-cancelled',
+    size: TALL,
+    dev: 'dn2',
+    file: 'dn2',
+    wait: 'Connected',
+    ready: true,
+    steps: [click('Send'), 'wait:accepted it', click('Cancel')],
+    until: 'Nothing was written',
+    after: 400,
+  },
   {
     name: 'flashing',
     size: TALL,
@@ -98,18 +120,8 @@ const SCENES = [
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX'), click('Flash')],
-    after: 7000,
-  },
-  {
-    name: 'cancelled',
-    size: TALL,
-    dev: 'dn2',
-    file: 'dn2',
-    wait: 'Connected',
-    ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX'), click('Flash'), 'sleep:4000', click('Cancel')],
-    after: 600,
+    steps: [click('Send'), 'wait:accepted it', click('Flash now')],
+    after: 1200,
   },
   {
     name: 'done',
@@ -118,9 +130,33 @@ const SCENES = [
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX'), click('Flash')],
+    steps: [click('Send'), 'wait:accepted it', click('Flash now')],
     until: 'Restarted',
     within: 240_000,
+  },
+  {
+    name: 'error',
+    size: TALL,
+    dev: 'dn2',
+    file: 'dn2',
+    wait: 'Connected',
+    ready: true,
+    fake: { errorAt: 0.4 },
+    steps: [click('Send')],
+    until: 'Checksum error',
+    after: 400,
+  },
+  {
+    name: 'cancelled',
+    size: TALL,
+    dev: 'dn2',
+    file: 'dn2',
+    wait: 'Connected',
+    ready: true,
+    fake: { writeMs: 12 },
+    steps: [click('Send'), 'sleep:3000', click('Cancel')],
+    until: 'Nothing was written',
+    after: 400,
   },
   {
     name: 'restore-ready',
@@ -131,7 +167,7 @@ const SCENES = [
     state: 'runtime',
     wait: 'Connected',
     ready: true,
-    steps: [tick('Restore stock'), 'wait:Stock image', tick('The device shows WAITING FOR SYSEX')],
+    steps: [tick('Restore stock'), 'wait:Stock image'],
   },
   {
     name: 'restore-done',
@@ -145,31 +181,57 @@ const SCENES = [
     steps: [
       tick('Restore stock'),
       'wait:Stock image',
-      tick('The device shows WAITING FOR SYSEX'),
-      click('Restore stock'),
+      click('Send stock firmware'),
+      'wait:accepted it',
+      click('Flash now'),
     ],
     until: 'stock OS',
     within: 240_000,
   },
-  { name: 'narrow-empty', size: NARROW, dev: 'dn2', file: null, wait: 'Connected' },
+  // the OS UPGRADE menu route, kept as a fallback
+  { name: 'menu-ready', size: WIDE, dev: 'dn2', file: 'dn2', wait: 'Connected', ready: true, steps: [menuLink] },
   {
-    name: 'narrow-ready',
-    size: NARROW_TALL,
+    name: 'menu-ready-ticked',
+    size: WIDE,
     dev: 'dn2',
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX')],
+    steps: [menuLink, tick('The device shows WAITING FOR SYSEX')],
   },
   {
-    name: 'narrow-flashing',
+    name: 'menu-flashing',
+    size: TALL,
+    dev: 'dn2',
+    file: 'dn2',
+    wait: 'Connected',
+    ready: true,
+    steps: [menuLink, tick('The device shows WAITING FOR SYSEX'), click('Flash')],
+    after: 7000,
+  },
+  { name: 'narrow-empty', size: NARROW, dev: 'dn2', file: null, wait: 'Connected' },
+  { name: 'narrow-ready', size: NARROW_TALL, dev: 'dn2', file: 'dn2', wait: 'Connected', ready: true },
+  {
+    name: 'narrow-send',
     size: NARROW_TALL,
     dev: 'dn2',
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [tick('The device shows WAITING FOR SYSEX'), click('Flash')],
-    after: 6000,
+    fake: { writeMs: 12 },
+    steps: [click('Send')],
+    after: 4000,
+  },
+  {
+    name: 'narrow-confirm',
+    size: NARROW_TALL,
+    dev: 'dn2',
+    file: 'dn2',
+    wait: 'Connected',
+    ready: true,
+    steps: [click('Send')],
+    until: 'accepted it',
+    after: 400,
   },
 ];
 
@@ -292,36 +354,47 @@ try {
       let draining = false;
       const flashAfter = 2500;
       const goneFor = 3500;
+      const upgrade = new FakeUpgrade(scene.fake ?? {});
+      const restartAfter = async () => {
+        const k = await patchKit();
+        const p = k.prepare(new Uint8Array(fs.readFileSync(fwPath(scene.file))), Boolean(scene.restore));
+        setTimeout(async () => {
+          await cdp.send('Runtime.evaluate', { expression: 'window.__unplug()' }).catch(() => {});
+          setTimeout(async () => {
+            dev.runtime = !p.restore;
+            dev.imageId = p.imageId;
+            await cdp.send('Runtime.evaluate', { expression: 'window.__replug()' }).catch(() => {});
+          }, goneFor);
+        }, flashAfter);
+      };
+      const deliver = (r) =>
+        cdp.send('Runtime.evaluate', {
+          expression: `window.__midiRecv(${JSON.stringify(Buffer.from(r).toString('base64'))})`,
+        });
       cdp.ws.addEventListener('message', async (m) => {
         const msg = JSON.parse(m.data);
         if (msg.method !== 'Runtime.bindingCalled' || msg.params.name !== '__midiSend') return;
         const bytes = Uint8Array.from(Buffer.from(msg.params.payload, 'base64'));
+        // the RPC flash route (0x50 to 0x52): the fake answers after its delay; End with commit 1 starts the restart
+        if (FakeUpgrade.is(bytes)) {
+          const r = upgrade.handle(bytes);
+          if (!r) return;
+          setTimeout(async () => {
+            await deliver(r.message).catch(() => {});
+            if (r.commit === 1) await restartAfter();
+          }, r.delayMs);
+          return;
+        }
         // the OS UPGRADE stream (F0 00 20 3C <id> 00 7E|7F): counted; the footer starts the restart
         if (bytes[1] === 0x00 && bytes[2] === 0x20 && bytes[5] === 0x00 && (bytes[6] === 0x7e || bytes[6] === 0x7f)) {
-          if (bytes[6] === 0x7f && bytes[7] === 2) {
-            const k = await patchKit();
-            const p = k.prepare(new Uint8Array(fs.readFileSync(fwPath(scene.file))), Boolean(scene.restore));
-            setTimeout(async () => {
-              await cdp.send('Runtime.evaluate', { expression: 'window.__unplug()' }).catch(() => {});
-              setTimeout(async () => {
-                dev.runtime = !p.restore;
-                dev.imageId = p.imageId;
-                await cdp.send('Runtime.evaluate', { expression: 'window.__replug()' }).catch(() => {});
-              }, goneFor);
-            }, flashAfter);
-          }
+          if (bytes[6] === 0x7f && bytes[7] === 2) await restartAfter();
           return;
         }
         dev.send(bytes);
         if (draining) return;
         draining = true;
         try {
-          while (dev.queue.length) {
-            const r = dev.queue.shift();
-            await cdp.send('Runtime.evaluate', {
-              expression: `window.__midiRecv(${JSON.stringify(Buffer.from(r).toString('base64'))})`,
-            });
-          }
+          while (dev.queue.length) await deliver(dev.queue.shift());
         } finally {
           draining = false;
         }
@@ -340,6 +413,8 @@ try {
         fwflash: '2500',
         fwgone: '3500',
       });
+      if (scene.fake?.writeMs !== undefined) q.set('fwwrite', String(scene.fake.writeMs));
+      if (scene.fake?.errorAt !== undefined) q.set('fwerror', String(scene.fake.errorAt));
       if (scene.query) for (const [k, v] of new URLSearchParams(scene.query)) q.set(k, v);
       // the desktop keeps the chosen target in localStorage: start on the MIDI port
       await cdp.send('Page.addScriptToEvaluateOnNewDocument', {

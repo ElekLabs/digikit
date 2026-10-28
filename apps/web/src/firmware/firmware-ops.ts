@@ -5,7 +5,7 @@ import { portTransport, releasePort, session, target } from '../transfer/target'
 import { firmwareEnv } from './env';
 import { askSession } from './firmware-ask';
 import type { Answer } from './firmware-core';
-import type { FlowOps } from './firmware-flow';
+import type { FlowOps, RpcOps } from './firmware-flow';
 import { pause } from './pause';
 
 /** What the device on the selected port says (see firmware-ask.ts). */
@@ -38,5 +38,26 @@ export function portOps(): FlowOps {
       const { os, runtime, imageId } = await askDevice();
       return { os, runtime, imageId };
     },
+  };
+}
+
+/** The operations of the RPC route for the selected MIDI port: the machine, and the port's transport for one message out and the next one in. */
+export function rpcPortOps(confirm: RpcOps['confirm']): RpcOps {
+  const base = portOps();
+  let link: ReturnType<typeof portTransport> | undefined;
+  const transport = () => (link ??= portTransport());
+  return {
+    machine: (image, chunk) => firmwareEnv().rpc(image, chunk),
+    send: async (m) => (await transport()).send(m),
+    recv: async (ms, signal) => (await transport()).recv(ms, signal),
+    confirm,
+    now: base.now,
+    sleep: base.sleep,
+    release: async () => {
+      link = undefined;
+      await base.release();
+    },
+    portPresent: base.portPresent,
+    ask: base.ask,
   };
 }

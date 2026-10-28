@@ -5,6 +5,7 @@
 use dkupload::{Info, Session, Transport};
 use patchkit::error::{Error, Result};
 use patchkit::flash::{self, Prepared, Sender, Step};
+use patchkit::flash_rpc::{Action, RpcFlash};
 use patchkit::module::Library;
 use patchkit::port::Registry;
 use serde_json::{Value, json};
@@ -12,15 +13,18 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
-pub const USAGE: &str = "usage: patchkit flash STOCK.syx (--port NAME | --emulator SOCKET) [--restore] [--set NAME] [--dry-run] [--save OUT.syx] [--yes]
+pub const USAGE: &str = "usage: patchkit flash STOCK.syx (--port NAME | --emulator SOCKET) [--route rpc|menu] [--chunk N] [--restore] [--set NAME] [--dry-run] [--save OUT.syx] [--yes]
   STOCK.syx   the stock firmware file of the device (it is identified by its SHA-256; a patched file is refused)
   --port      the MIDI port of the device (part of its name; USB MIDI)
-  --emulator  the control socket of a running emulator that shows OS UPGRADE (tools/emulator/os_upgrade_rig.py)
+  --emulator  the control socket of a running emulator (with --route menu: one that shows OS UPGRADE, tools/emulator/os_upgrade_rig.py)
+  --route     rpc (default): MidiRpc Start, Write, End; the device checks the image, you answer \"Flash now?\", no menu on the device.
+              menu: the plain stream into the device's SETTINGS > SYSTEM > OS UPGRADE screen, paced, no reply
+  --chunk N   rpc route: stream bytes per Write (default 2048)
   --restore   send the stock file itself (the way back from a patched image)
   --set       the device file's patch set to apply (default: device)
   --dry-run   patch and check; print the checks and stop
   --save F    also write the image that is checked and sent to F (for `mise run patch:preflight`, the section 7 ISA scan)
-  --yes       do not wait for the word \"flash\"";
+  --yes       do not ask: rpc route \"Flash now? [y/N]\", menu route the word \"flash\"";
 
 fn flag(rest: &[String], name: &str) -> Option<String> {
     rest.iter()
@@ -48,6 +52,19 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
             "give exactly one of --port and --emulator (or --dry-run)\n{USAGE}"
         )));
     }
+    let rpc = match flag(rest, "--route").as_deref() {
+        None | Some("rpc") => true,
+        Some("menu") => false,
+        Some(r) => return Err(Error(format!("--route is rpc or menu, not {r:?}"))),
+    };
+    let chunk = match flag(rest, "--chunk") {
+        None => 0,
+        Some(n) => n
+            .parse::<usize>()
+            .ok()
+            .filter(|&n| n > 0)
+            .ok_or_else(|| Error(format!("--chunk wants a number of bytes, not {n:?}")))?,
+    };
     let t0 = Instant::now();
     let p = if restore {
         flash::restore(&stock, reg)?
@@ -73,13 +90,17 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
     }
     let secs = p.messages.len() as f64 * flash::PACE_MS as f64 / 1000.0;
     println!(
-        "{} {} {}: {} messages, {} bytes, about {:.0} s to send{}",
+        "{} {} {}: {} messages, {} bytes{}{}",
         if p.restore { "restore" } else { "flash" },
         p.device,
         p.os,
         p.messages.len(),
         p.image.len(),
-        secs,
+        if rpc {
+            String::new()
+        } else {
+            format!(", about {secs:.0} s to send")
+        },
         p.image_id_hex()
             .map_or(String::new(), |i| format!(", image id {i}"))
     );
@@ -87,9 +108,12 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
         return Ok(());
     }
     if let Some(sock) = emu {
-        return emulator(&p, &sock);
+        return emulator(&p, &sock, rpc.then_some(chunk), yes);
     }
     let name = port.unwrap();
+    if rpc {
+        return device_rpc(&p, &name, chunk, yes);
+    }
     println!("{}", instructions(&p, secs));
     if !yes {
         print!("Type \"flash\" and press Return to send (anything else stops): ");
@@ -301,11 +325,105 @@ fn device(p: &Prepared, want: &str) -> Result<()> {
         t0.elapsed().as_secs_f64()
     );
     drop(link);
+    after_device_flash(p, &name, t0)
+}
+
+/// The RPC route on a MIDI port: Start, Writes, the question, End.
+fn device_rpc(p: &Prepared, want: &str, chunk: usize, yes: bool) -> Result<()> {
+    let name = find_port(&out_names()?, want)?;
+    println!("port {name:?}");
+    println!("{}", rpc_instructions(p));
+    let mut link = open(&name)?;
+    let t0 = Instant::now();
+    run_rpc(p, chunk, &mut link, yes)?;
+    println!(
+        "the device took the image and flashes now ({:.1} s)",
+        t0.elapsed().as_secs_f64()
+    );
+    drop(link);
+    after_device_flash(p, &name, t0)
+}
+
+fn rpc_instructions(p: &Prepared) -> String {
+    let what = if p.restore {
+        format!("the stock {} {} firmware", p.device, p.os)
+    } else {
+        format!("a patched {} {} firmware", p.device, p.os)
+    };
+    format!(
+        "About to send {what} over MidiRpc. The device needs no menu step; nothing is flashed until you answer \"Flash now?\".
+  1. Connect the power adapter. Keep the USB cable in until the device has restarted.
+  2. The device checks the image itself. If it does not accept it, it says so and nothing is written.
+If a flash is cut or the device does not start again: power off, hold FUNC while powering on, press TRIG 4 (OS UPGRADE), and send the
+stock file over a DIN MIDI interface (docs/PATCHING.md, Recovery). Keep the stock file of the installed version."
+    )
+}
+
+/// The RPC machine driven over `link`: the same state machine the browser runs (`patchkit::flash_rpc`). Returns when the device has
+/// accepted End with commit 1 (it flashes and restarts by itself), or with the machine's failure text.
+fn run_rpc(p: &Prepared, chunk: usize, link: &mut impl Transport, yes: bool) -> Result<()> {
+    let mut m = RpcFlash::new(p.image.clone(), chunk);
+    let t0 = Instant::now();
+    let mut shown = 0usize;
+    loop {
+        match m.next() {
+            Action::Send { bytes, timeout_ms } => {
+                link.send(&bytes)
+                    .map_err(|e| Error(format!("sending to the device failed: {e}")))?;
+                let end = Instant::now() + Duration::from_millis(timeout_ms as u64);
+                loop {
+                    let left = end.saturating_duration_since(Instant::now());
+                    match link
+                        .recv(left)
+                        .map_err(|e| Error(format!("reading from the device failed: {e}")))?
+                    {
+                        Some(r) if m.on_reply(&r) => break,
+                        Some(_) => continue,
+                        None => {
+                            m.on_timeout();
+                            break;
+                        }
+                    }
+                }
+                let pct = m.taken() * 20 / m.total().max(1);
+                if pct != shown {
+                    shown = pct;
+                    println!(
+                        "sent {} of {} bytes ({:.0} s)",
+                        m.taken(),
+                        m.total(),
+                        t0.elapsed().as_secs_f64()
+                    );
+                }
+            }
+            Action::AskConfirm => {
+                println!(
+                    "The device has all {} bytes and accepted the image ({:.1} s).",
+                    m.total(),
+                    t0.elapsed().as_secs_f64()
+                );
+                let go = yes || {
+                    print!("Flash now? [y/N] ");
+                    std::io::stdout().flush().ok();
+                    let mut line = String::new();
+                    std::io::stdin().lock().read_line(&mut line).ok();
+                    matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
+                };
+                m.confirm(go);
+            }
+            Action::WaitReboot => return Ok(()),
+            Action::Done => return Ok(()),
+            Action::Failed(f) => return Err(Error(f.message)),
+        }
+    }
+}
+
+fn after_device_flash(p: &Prepared, name: &str, t0: Instant) -> Result<()> {
     // the device restarts: its port goes away and comes back
-    wait_port(&name, false, Duration::from_secs(240))
+    wait_port(name, false, Duration::from_secs(240))
         .map_err(|e| Error(format!("{e}: look at the device screen; it still runs the old image unless it shows the flash running")))?;
     println!("port gone after {:.0} s", t0.elapsed().as_secs_f64());
-    wait_port(&name, true, Duration::from_secs(240))?;
+    wait_port(name, true, Duration::from_secs(240))?;
     println!("port back after {:.0} s", t0.elapsed().as_secs_f64());
     if p.restore {
         println!("stock firmware restored (it has no digikit runtime to ask)");
@@ -315,7 +433,7 @@ fn device(p: &Prepared, want: &str) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
         std::thread::sleep(Duration::from_secs(2));
-        let r = open(&name).and_then(|l| {
+        let r = open(name).and_then(|l| {
             let mut s = Session::new(l);
             s.timeout = Duration::from_secs(2);
             s.retries = 1;
@@ -436,6 +554,14 @@ impl Emu {
         self.used += n;
         Ok(r)
     }
+    /// A long message in the high-speed model: 384 bytes per microframe (16,500 instructions).
+    fn usb_in_framed(&mut self, bytes: &[u8]) -> Result<()> {
+        self.call(
+            "midi.usb.in",
+            json!({"bytes": patchkit::error::hex(bytes), "chunk": 384, "period": 16_500}),
+        )?;
+        Ok(())
+    }
     fn usb_in(&mut self, bytes: &[u8]) -> Result<()> {
         // one call per message: all of it in one chunk (a chunk is at most 384 bytes)
         self.call(
@@ -486,10 +612,66 @@ impl Transport for EmuLink<'_> {
     }
 }
 
-fn emulator(p: &Prepared, sock: &str) -> Result<()> {
+/// The RPC route over the emulated USB: time passes in the guest, so a timeout is a number of guest instructions.
+struct EmuRpcLink<'a> {
+    emu: &'a mut Emu,
+    buf: Vec<u8>,
+}
+
+impl EmuRpcLink<'_> {
+    fn take(&mut self) -> Option<Vec<u8>> {
+        let end = self.buf.iter().position(|&b| b == 0xf7)?;
+        let start = self.buf[..end]
+            .iter()
+            .rposition(|&b| b == 0xf0)
+            .unwrap_or(0);
+        let m = self.buf[start..=end].to_vec();
+        self.buf.drain(..=end);
+        Some(m)
+    }
+}
+
+impl Transport for EmuRpcLink<'_> {
+    fn send(&mut self, msg: &[u8]) -> std::result::Result<(), String> {
+        self.emu.usb_in_framed(msg).map_err(|e| e.0)
+    }
+    fn recv(&mut self, timeout: Duration) -> std::result::Result<Option<Vec<u8>>, String> {
+        const SLICE: u64 = 200_000;
+        let budget = timeout.as_millis() as u64 * INSTR_PER_MS;
+        let mut spent = 0;
+        loop {
+            if let Some(m) = self.take() {
+                return Ok(Some(m));
+            }
+            if spent >= budget {
+                return Ok(None);
+            }
+            self.emu.step(SLICE).map_err(|e| e.0)?;
+            spent += SLICE;
+            let got = self.emu.usb_out().map_err(|e| e.0)?;
+            self.buf.extend(got);
+        }
+    }
+}
+
+/// `rpc`: the chunk size of the RPC route (0: the default); `None`: the menu route (the emulator shows OS UPGRADE).
+fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>, yes: bool) -> Result<()> {
     let mut emu = Emu::connect(sock)?;
     let t0 = Instant::now();
     emu.call("midi.usb.out", json!({}))?; // starts the USB capture
+    if let Some(chunk) = rpc {
+        let mut link = EmuRpcLink {
+            emu: &mut emu,
+            buf: vec![],
+        };
+        run_rpc(p, chunk, &mut link, yes)?;
+        println!(
+            "the device took the image ({:.1} s wall, {} ms guest)",
+            t0.elapsed().as_secs_f64(),
+            emu.used / INSTR_PER_MS
+        );
+        return emulator_after(p, &mut emu, t0);
+    }
     // The sender runs on the emulated clock: a step of the guest is a pause of the sender.
     let mut s = Sender::new(p.messages.len());
     loop {
@@ -520,6 +702,11 @@ fn emulator(p: &Prepared, sock: &str) -> Result<()> {
         t0.elapsed().as_secs_f64(),
         emu.used / INSTR_PER_MS
     );
+    emulator_after(p, &mut emu, t0)
+}
+
+/// After the last byte (menu) or End with commit 1 (rpc): the device erases and programs, then restarts.
+fn emulator_after(p: &Prepared, emu: &mut Emu, t0: Instant) -> Result<()> {
     // The device validates, then erases and programs the container area. Run until the programming stops, then compare.
     let want = flash::container_of(&p.image)?;
     let t1 = Instant::now();
@@ -606,10 +793,7 @@ fn emulator(p: &Prepared, sock: &str) -> Result<()> {
     let mut last_err = String::new();
     for _ in 0..40 {
         emu.step(200_000_000)?;
-        let mut s = Session::new(EmuLink {
-            emu: &mut emu,
-            buf: vec![],
-        });
+        let mut s = Session::new(EmuLink { emu, buf: vec![] });
         s.timeout = Duration::from_secs(1);
         s.retries = 0;
         match s.info() {

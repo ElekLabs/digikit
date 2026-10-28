@@ -252,6 +252,12 @@
 .firmware-page .progress.full i {
   opacity: 0.35;
 }
+.firmware-page .progress.ok i {
+  background: #7be3a1;
+}
+.firmware-page .ptext.okt {
+  color: #7be3a1;
+}
 .firmware-page .ptext {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -298,4 +304,20 @@
   .firmware-page .stepb {
     padding-left: 0;
   }
+}
+.firmware-page .linkbtn {
+  display: block;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2, #a9adb4);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.firmware-page .linkbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
