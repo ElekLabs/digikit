@@ -192,7 +192,7 @@ child processes.
 - [x] 6b. Spike, at most one day: gcc `cc1` and `as` for `wasm32-wasi`. If it fails, plan an own
       C compiler for ColdFire in Rust. Result: gcc `cc1` and `as` build for wasm32-wasip1 and give
       byte-identical output on 32 module sources (finding 74); ship them. `ld` for wasm is next (6c).
-- [ ] 6c. Transfer in the site (decided 2026-10-28): the workbench's Transfer pane moves to shared code
+- [x] 6c. Transfer in the site (decided 2026-10-28): the workbench's Transfer pane moves to shared code
       (`apps/web/src/transfer/`, a `TransferEnv` for library, targets and desktop-only extras) and
       becomes the web Transfer page. The site ships each module's prebuilt `.dkm` per device (built at
       site-build time, the same bytes as `module:pack-all`), an index and the sources (read-only source
@@ -201,8 +201,8 @@ child processes.
       in the shared pane. WebMIDI: cancel, disconnect detection, clear messages without WebMIDI or
       SysEx permission. Proof: desktop Transfer unchanged; web tests; Em's test in Chrome on the device.
       Status: built (shared pane, site assets, web Transfer page, WebMIDI hardening, badge with OS
-      version); Em's device test waits for 6d (the device needs a flashed runtime first).
-- [ ] 6d. Patch and flash, one path for the CLI, the workbench and the web (finding 75: the OS UPGRADE
+      version). Em's test (2026-10-29): freqshift installed from the site in Chrome and loaded on the DT2.
+- [x] 6d. Patch and flash, one path for the CLI, the workbench and the web (finding 75: the OS UPGRADE
       screen takes the plain `.syx` stream, sends no replies, validates checksum, HMAC and on DT2 the
       build floor "0060" after the last message, erases nothing on failure, asks no YES).
       - [x] Core `patchkit::flash`: `prepare` (stock by SHA-256, patch the `device` set, preflight,
@@ -231,8 +231,8 @@ child processes.
             words (CRC retries used up, timeout, the device's message, "Nothing was written").
       - [x] Proof in the emulator through the page's own code path: DT2 1.17 and DN2 1.12, patch and
             restore (flash equals the container, INFO runtime and image id), Cancel before the commit leaves
-            the flash unchanged; the CLI once with `--yes`. Open: the real device (largest Write,
-            timing).
+            the flash unchanged; the CLI once with `--yes`. Em's DT2 (2026-10-29): patch from the workbench, restore and
+            patch from the site in Chrome. Open: the largest Write, DN2 on hardware.
 - [ ] Later: compile in the browser (a dropped `.dkmod`, or an edited source): gcc `cc1`/`as`/`ld` in
       wasm (finding 74) in a worker, SHARC+ already in `patchkit.wasm`.
 - [ ] Optional: a `.dkmod` carries the expected `.dkm` hash per device so a receiver can
@@ -268,4 +268,5 @@ runtime sets of both devices); Em approved the new goldens. Phase 3 done. Then c
 (`adapters/`, `apps/`, `role` in module.toml), docs/ARCHITECTURE.md and `mise run check:layers`. Phase 4 done (module UI through runtime imports,
 `DK_MENU`, REMOTE switch removed). Phase 5 done (`patchkit build` in Rust, content objects only cached, Reload
 modules builds first). 6a done (SHARC built in Rust with Selache as a
-library, natively and in wasm); 6b done (gcc in wasm, finding 74). Next: 6c.
+library, natively and in wasm); 6b done (gcc in wasm, finding 74). 6c and 6d done (Transfer and Firmware in the site; flash over
+MidiRpc, tested on Em's DT2). Next: phase 7.
