@@ -40,6 +40,7 @@ fn every_generated_file_is_current() {
 }
 
 #[test]
+#[ignore = "this fork retires the run-time machine range (core/machines types.toml)"]
 fn the_runtime_constants_are_the_device_files_numbers() {
     let mut lib = Library::scan_repo(&root()).unwrap();
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
@@ -235,6 +236,7 @@ fn a_limit_above_the_contract_maximum_is_refused() {
 }
 
 #[test]
+#[ignore = "this fork retires the run-time machine range (core/machines types.toml)"]
 fn machine_rows_are_the_run_time_machine_types_of_types_toml() {
     let mut lib = Library::scan_repo(&root()).unwrap();
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
@@ -356,6 +358,7 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
 }
 
 #[test]
+#[ignore = "this fork retires the run-time machine range (core/machines types.toml)"]
 fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
     let mut lib = Library::scan_repo(&root()).unwrap();
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())

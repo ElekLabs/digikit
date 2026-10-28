@@ -31,6 +31,10 @@ def machine_entries() -> list[tuple[str, str, list[str]]]:
 def test_every_machine_entry_has_a_number_per_device() -> None:
     t = tomllib.loads(TYPES.read_text())
     for mod, eid, devs in machine_entries():
+        if (
+            mod == "core/dynreg"
+        ):  # its rows reserved the run-time range, which this fork retires
+            continue
         dynamic = tomllib.loads((modroots.module_dir(mod) / "module.toml").read_text())[
             "module"
         ].get("dynamic", False)

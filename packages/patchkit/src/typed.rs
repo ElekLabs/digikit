@@ -182,6 +182,8 @@ pub struct ParamDef {
     pub min: Option<i64>,
     pub max: Option<i64>,
     pub default: Option<i64>,
+    /// A ColdFire function of the module that writes the value text (core/params `formatter`, Digitakt II); absent: the template's.
+    pub formatter: Option<String>,
     #[serde(default)]
     pub devices: Vec<String>,
     /// `[param.<device>]` overrides.
@@ -198,6 +200,7 @@ struct ParamOver {
     min: Option<i64>,
     max: Option<i64>,
     default: Option<i64>,
+    formatter: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -261,6 +264,18 @@ pub struct VoiceDef {
     /// The `dk_machine_desc` data symbol (contract voices): voices, state and clear bytes come from it.
     #[serde(default)]
     pub desc: Option<String>,
+    /// A patched-in voice's state is loaded as zeros at boot instead of reserved: for a routine that keeps state across notes
+    /// (`state_clear_bytes` 0) and must not read unwritten memory. It costs its bytes in the boot stream.
+    #[serde(default)]
+    pub state_zero: bool,
+    /// The render writes both voices of its track: 32 floats for the even voice (left), then 32 for the odd voice (right),
+    /// whose buffer follows; the adapter then skips its copy of the even voice's block.
+    #[serde(default)]
+    pub stereo: bool,
+    /// The level word the voice chain reads in place of knob H on the voice's tracks (DT2: 0x6400 is 100), so knob H can carry
+    /// a machine parameter; 0: knob H is the stock LEV.
+    #[serde(default)]
+    pub lev: u32,
     #[serde(default)]
     pub devices: Vec<String>,
 }
@@ -353,6 +368,7 @@ pub struct RParam {
     pub min: i64,
     pub max: i64,
     pub default: i64,
+    pub formatter: Option<String>,
     /// Knob position, slot (`slot_base + knob`), halfword offset in the frame, parameter-table mirror index.
     pub knob: usize,
     pub slot: i64,
@@ -379,6 +395,8 @@ pub struct RVoice {
     pub desc: Option<String>,
     /// A patched-in contract voice: the state block `Library::lower` reserved for it (`desc` read from the object).
     pub state: Option<VoiceState>,
+    pub stereo: bool,
+    pub lev: u32,
 }
 
 /// The state of a patched-in contract voice (`dk_machine_desc`): the global bss symbol that `Library::lower` added to the module's DSP object
@@ -582,6 +600,7 @@ pub fn resolve(m: &Manifest, models: &Models) -> Result<Vec<DevResolved>> {
                 min: need(who, &what, "min", &o.min.or(d.min))?,
                 max: need(who, &what, "max", &o.max.or(d.max))?,
                 default: need(who, &what, "default", &o.default.or(d.default))?,
+                formatter: o.formatter.or(d.formatter.clone()),
                 knob,
                 slot: kn.slot_base + knob as i64,
                 frame_off: model.frame_offset(knob),
@@ -654,6 +673,8 @@ pub fn resolve(m: &Manifest, models: &Models) -> Result<Vec<DevResolved>> {
                 note_on: v.note_on.clone(),
                 desc: v.desc.clone(),
                 state: m.voice_state.get(&v.machine).cloned(),
+                stereo: v.stereo,
+                lev: v.lev,
             });
         }
         if machines.is_empty() && params.is_empty() && pages.is_empty() && voices.is_empty() {
@@ -755,6 +776,12 @@ pub fn entries(resolved: &[DevResolved]) -> Vec<EntryDef> {
                 f.push(kv("stride", int(st.stride as i64)));
                 f.push(kv("clear", int(st.clear as i64)));
             }
+            if v.stereo {
+                f.push(kv("stereo", int(1)));
+            }
+            if v.lev != 0 {
+                f.push(kv("lev", int(v.lev as i64)));
+            }
             out.push(ent(&v.machine, "voices", dev, f));
         }
         for m in &r.machines {
@@ -781,20 +808,19 @@ pub fn entries(resolved: &[DevResolved]) -> Vec<EntryDef> {
             out.push(ent(&m.id, "machines", dev, f));
         }
         for p in &r.params {
-            out.push(ent(
-                &p.id,
-                "params",
-                dev,
-                vec![
-                    kv("name", s(&p.name)),
-                    kv("short", s(&p.short)),
-                    kv("template", int(p.template)),
-                    kv("slot", int(p.slot)),
-                    kv("min", int(p.min)),
-                    kv("max", int(p.max)),
-                    kv("default", int(p.default)),
-                ],
-            ));
+            let mut f = vec![
+                kv("name", s(&p.name)),
+                kv("short", s(&p.short)),
+                kv("template", int(p.template)),
+                kv("slot", int(p.slot)),
+                kv("min", int(p.min)),
+                kv("max", int(p.max)),
+                kv("default", int(p.default)),
+            ];
+            if let Some(fm) = &p.formatter {
+                f.push(kv("formatter", s(fm)));
+            }
+            out.push(ent(&p.id, "params", dev, f));
         }
         for g in &r.pages {
             let mut f = vec![
@@ -917,6 +943,7 @@ template = 0xd1
 min = 0
 max = 100
 default = 1
+formatter = "t_fmt"
 
 [[machine]]
 id = "t"
@@ -975,6 +1002,8 @@ entry = "_t_render"
         assert_eq!(field(p[0], "slot"), Some(&int(1)));
         assert_eq!(field(p[0], "template"), Some(&int(0xd1)));
         assert_eq!(field(p[1], "slot"), Some(&int(4)));
+        assert!(field(p[0], "formatter").is_none());
+        assert_eq!(field(p[1], "formatter"), Some(&s("t_fmt")));
         assert!(on("dt2", "pages").is_empty());
         let v = on("dt2", "voices");
         assert_eq!(field(v[0], "type"), Some(&s("machines.t.index")));

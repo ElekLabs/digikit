@@ -36,12 +36,12 @@ fn digest_without_dsp(syx: &[u8]) -> String {
     sha256_hex(&buf)
 }
 
-/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with digikit/pluck -> test/patched-pluck (P3e-1): patch record only
+/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with digikit/pluck -> test/patched-pluck (P3e-1): patch record only; 2026-10-26 with core/params' formatter word (a params row is 32 bytes) and its param_edits registry
 const PINS: &[(&str, &str, &str)] = &[
     (
         "Digitakt_II_OS1.17.syx",
         "test/patched-pluck",
-        "5c4a69710cc8ca3012e251c1c50380b11b4856bafe6597de75aa500b5c5e7c3e",
+        "b01548f45dea574150b044cc281aabcfb63e07c104e90f664a2ca5916475ad9a",
     ),
     (
         "Digitakt_II_OS1.17.syx",
@@ -51,12 +51,12 @@ const PINS: &[(&str, &str, &str)] = &[
     (
         "Digitakt_II_OS1.17.syx",
         "test/patched-pluck,test/xslice",
-        "e3ded375a517f7262e37f435f50ad1df1913da1b7f82d17fb4a389f054d9a0c1",
+        "9b3144e28575f2c78613add357af74b77ed137528f03cf30d3fb114f3685f423",
     ),
     (
         "Digitone_II_OS1.12.syx",
         "test/patched-pluck",
-        "01e1d441c6e9bdfd5bb82eb5d3f2f39493d6ce4f16c61d121622dfc0da74ea40",
+        "4551666bf28ff4c393b20da71984267bc66db1c05dc5f9a41cf23e6c1e1a6787",
     ),
 ];
 

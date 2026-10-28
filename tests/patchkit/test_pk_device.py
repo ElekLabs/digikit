@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import tomllib
 
+import pytest
 from support.paths import REPO_ROOT
 
 from tools.device import dkproto
@@ -43,6 +44,9 @@ def test_the_store_geometry_is_the_device_files() -> None:
     assert pk_device.store_of("dt2").first != pk_device.store_of("dn2").first
 
 
+@pytest.mark.skip(
+    reason="this fork retires the run-time machine range (core/machines types.toml)"
+)
 def test_dynreg_reserves_one_machine_row_per_run_time_type() -> None:
     d = module("core/dynreg")
     for dev in pk_device.digikit_devices():
@@ -59,6 +63,9 @@ def test_dynreg_reserves_one_machine_row_per_run_time_type() -> None:
             assert t["alloc"][f"core/dynreg:dyn{n}"] == n
 
 
+@pytest.mark.skip(
+    reason="this fork retires the run-time machine range (core/machines types.toml)"
+)
 def test_dyndsp_reserves_one_voice_row_per_run_time_type() -> None:
     rows = [e for e in module("core/dyndsp")["entry"] if e["registry"] == "voices"]
     for dev in pk_device.digikit_devices():

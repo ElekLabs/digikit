@@ -327,7 +327,7 @@ fn core_params_and_pluck_assign_codes_and_relocate_the_table() {
             (Some(0x113), Some(4))
         );
         assert_eq!(pr["entries"][0]["index"], 0x113);
-        assert_eq!(pr["row_size"], 28);
+        assert_eq!(pr["row_size"], 32);
         let t = section(&p, "pf_table");
         assert_eq!(t["copied"], 0x113 * 60);
         assert_eq!(t["appended_rows"], 4);

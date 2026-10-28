@@ -2,6 +2,8 @@
 
 The stock-image cases skip when the firmware is absent."""
 
+import json
+
 import pytest
 
 from tools.firmware import config
@@ -39,3 +41,17 @@ def test_a_stock_image_has_no_excluded_store(name):
     if not syx.exists():
         pytest.skip(f"{name} not present")
     assert pk_isacheck.scan(pk_isacheck.section7(syx)) == []
+
+
+def test_the_plan_gives_the_code_ranges_of_the_placed_sharc_objects(tmp_path):
+    syx = tmp_path / "img.syx"
+    assert pk_isacheck.plan_code_ranges(syx) is None
+    plan = {
+        "writes": [
+            {"cpu": "sharc", "kind": "place", "code": [[0x2001AB80, 0x2001B83E]]},
+            {"cpu": "sharc", "kind": "patch"},
+            {"cpu": "coldfire", "kind": "place", "code": [[0x47E80000, 0x47E80100]]},
+        ]
+    }
+    (tmp_path / "img.plan.json").write_text(json.dumps(plan))
+    assert pk_isacheck.plan_code_ranges(syx) == [(0x2001AB80, 0x2001B83E)]

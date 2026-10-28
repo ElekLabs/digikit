@@ -29,6 +29,8 @@ _dv_table = "voices.rows"
 _fw_type_cache = "dsp.voice.type_cache"
 _fw_render_next = "dsp.voice.render_next"
 _fw_frame = "dsp.voice.frame_base"
+_fw_vparams = "dsp.voice.params"
+_fw_unpack = "dsp.voice.unpack"
 
 # Digitone II: the render hook of the FM engine's host (docs/findings/06, "Per-voice hook on DN2"); another object, the
 # same registration table and claim.
@@ -58,6 +60,20 @@ to = "_dv_entry"
 displaced = "drop"
 devices = ["dt2", "dn2"]
 
+# The block driver FUN_1c2b24's two calls of the per-voice frame unpack FUN_1c24e9 (voices 2t and 2t + 1) go to _dv_unpack,
+# which gives the tracks of a row with `lev` a fixed level before the stock unpack.
+[[op]]
+op = "retarget"
+anchor = "dsp.voice.unpack.a"
+to = "_dv_unpack"
+devices = ["dt2"]
+
+[[op]]
+op = "retarget"
+anchor = "dsp.voice.unpack.b"
+to = "_dv_unpack"
+devices = ["dt2"]
+
 # Machine modules add rows {type, routine pc} with `[[entry]] registry = "voices"`:
 #
 #     [[entry]]
@@ -78,7 +94,7 @@ terminator = true
 #   0 type, 1 pc, 2 to 9 the declared range of machine knob 0 to 7 (min | max << 16, from the machine's [[param]]; 0: undeclared, the
 #   guard clamps to 0 .. 0x7f00), 10 the type this row's faults disabled, 11 the block of the fault window's start, 12 faults in the
 #   window, 13 faults since the start, 14 and 15 spare, 16 to 23 the contract words (note_on, state_base, stride, clear, gen, level,
-#   2 spare; below). The ranges come from the typed `[[voice]]` of the machine module (patchkit
+#   stereo, lev; below). The ranges come from the typed `[[voice]]` of the machine module (patchkit
 #   fills them), or from the voice record of a `.dkm`'s DSP section; the guard words are the DSP's.
 [[registry.field]]
 name = "type"
@@ -172,12 +188,15 @@ default = 0
 name = "level"
 kind = "u32"
 default = 0
+# 22 stereo: the render wrote the odd voice's block too (DT2: the even voice is the left channel, the odd the right); no copy
 [[registry.field]]
-name = "spare2"
+name = "stereo"
 kind = "u32"
 default = 0
+# 23 lev: the level word the voice chain reads in place of knob H on this type's tracks (_dv_unpack; DT2: 0x6400 is 100), so knob H
+# carries a machine parameter; 0: knob H is the stock LEV
 [[registry.field]]
-name = "spare3"
+name = "lev"
 kind = "u32"
 default = 0
 
@@ -212,6 +231,59 @@ cpu = "sharc"
 kind = "sharc_literal"
 reloc_hash = "d2c02a587786f9ee328897985095c271ff1c5b65f289224e435968ea4b5d3f00"
 offset = 0x1e5
+mark = "D"
+
+[[anchor_rule]]
+name = "dsp.voice.unpack.a"
+devices = ["dt2"]
+cpu = "sharc"
+kind = "sharc_func"
+reloc_hash = "55a5d8458350a1b67249f5aca8d49a4692d9ab5886fd12d95c259479f83ce780"
+offset = 0x176
+len = 6
+mark = "D"
+
+[[anchor_rule]]
+name = "dsp.voice.unpack.b"
+devices = ["dt2"]
+cpu = "sharc"
+kind = "sharc_func"
+reloc_hash = "55a5d8458350a1b67249f5aca8d49a4692d9ab5886fd12d95c259479f83ce780"
+offset = 0x185
+len = 6
+mark = "D"
+
+[[anchor_rule]]
+name = "dsp.voice.unpack"
+devices = ["dt2"]
+cpu = "sharc"
+kind = "sharc_func"
+reloc_hash = "d2c02a587786f9ee328897985095c271ff1c5b65f289224e435968ea4b5d3f00"
+offset = 0
+len = 6
+mark = "D"
+
+# The per-voice parameter records the unpack writes (0xdc bytes per voice): the literal of `I5 = MODIFY(I4, 0x2506ec)`. Word 52 is
+# the voice's pan (0 .. 1) that the mix stage reads; a stereo row's two voices are moved apart there (_dv_spread).
+[[anchor_rule]]
+name = "dsp.voice.params"
+devices = ["dt2"]
+cpu = "sharc"
+kind = "sharc_literal"
+reloc_hash = "d2c02a587786f9ee328897985095c271ff1c5b65f289224e435968ea4b5d3f00"
+offset = 0xe1
+mark = "D"
+
+# The stock release latch: byte v is 1 from voice v's note-off to its next note-on (the release path stores 1, the trigger path 0;
+# digikit-spacejam core/dsp-inline). Read by machines that follow the gate (tom/tb303 slide).
+[[anchor_rule]]
+name = "dsp.voice.release_latch"
+devices = ["dt2"]
+cpu = "sharc"
+kind = "sharc_literal"
+reloc_hash = "75588fd22204b80ad6a84264f64407bf3d19d78c73b0595d832a2b3d34f74b68"
+offset = 0x140
+add = 0x40
 mark = "D"
 
 # The DSP's copy of the ColdFire frame: the literal `I5 = 0x2558dc` of the per-block copy.

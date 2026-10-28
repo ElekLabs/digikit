@@ -106,7 +106,7 @@ peek = [[0x40000000, 0x47e30000], [0x47e8b000, 0x47fe1000]]
 # The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime's device.rs.
 [limits]
 modules = 8
-machine_rows = 8
+machine_rows = 0   # the run-time range is retired in this fork (core/machines types.toml)
 arena_bytes = 524288
 stage_bytes = 65536
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)
@@ -402,5 +402,5 @@ record_mark     = 0x1b9                   # byte +0x1b9: the note-on mark
 note_on         = "record"                # ACTIVE != 0 and mark == 0; DN2: "trig-edge"
 pair            = "copy-even"             # the odd voice copies the even block; DN2: "none"
 tune_slot       = 0                       # the stock tune is knob 0 of the track (a frame halfword; pluck.s "0 TUNE"), folded into `pitch`
-param_slots     = [1, 2, 4, 5]            # knob positions for module parameters, in order (a saved project stores values by slot)
+param_slots     = [1, 2, 4, 5, 6, 7]      # knob positions for module parameters, in order (a saved project stores values by slot); 6 and 7 appended so 1, 2, 4, 5 keep their indexes
 reserved_slots  = [3]                     # knob 3 is the sample slot of a SAMPLE clone (module-sdk.md D1)

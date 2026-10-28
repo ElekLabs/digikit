@@ -5,17 +5,21 @@
 
 A store through an index register (Types 3a, 3b, 3d, 15a, 15b) cannot take a source register of the same DAG: `DM(x, Ia) = Ureg` not a
 DAG1 register, `PM(x, Ic) = Ureg` not a DAG2 register (finding 49 section 10; the rule is `pk_sharc.ureg_class_problems`, the same one
-`pk_build` fails a module build on). The stock images have none. `mise run patch:preflight` runs this scan after the Rust checks.
+`pk_build` fails a module build on). The stock images have none. In patched code it also refuses an indirect jump or call with (CI)
+(`pk_sharc.ci_problem`): selas emits one for a 48-bit `JUMP (Md, Ic)`. `mise run patch:preflight` runs this scan after the Rust checks.
 
 The scan decodes the code blocks of the boot stream with the aligned decoder that built the sharcdb databases (`sharcflow.aligned`):
 the stock code blocks (`sharcinv.CODE_BLOCKS`, the layout of the DT2 images; the Digitone II list of `sharcdb.schema.KNOWN_CODE_BLOCKS`)
 and the blocks a patch appended at the end of the stream (the run of blocks below 0x80000000 before the final block). Data blocks are not
-scanned: decoded as code they give false stores (finding 49 section 10.2, 105 on DN2 1.12).
+scanned: decoded as code they give false stores (finding 49 section 10.2, 105 on DN2 1.12). With the image's plan
+(`IMAGE.plan.json`, written by `patchkit patch`) an appended block is decoded only inside the code ranges it places: a module's tables
+share blocks with code and give false stores too.
 Exit status 1 when a store is found.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -52,6 +56,20 @@ def section7(syx: Path) -> bytes:
     raise SystemExit(f"{syx}: no section 7")
 
 
+def plan_code_ranges(syx: Path) -> list[tuple[int, int]] | None:
+    """Byte ranges of the code the image's plan placed on the SHARC; None without a plan."""
+    plan = syx.with_suffix(".plan.json")
+    if not plan.exists():
+        return None
+    writes = json.loads(plan.read_text())["writes"]
+    return [
+        (lo, hi)
+        for w in writes
+        if w["cpu"] == "sharc"
+        for lo, hi in w.get("code") or ()
+    ]
+
+
 def code_blocks(blocks: list[dict]) -> list[int]:
     """Indices of the blocks to scan: stock code by target address, then the appended run before the final block."""
     out = [
@@ -72,8 +90,9 @@ def code_blocks(blocks: list[dict]) -> list[int]:
     return sorted(out)
 
 
-def scan(blob: bytes) -> list[str]:
-    """One message per excluded store in the code blocks of the boot stream `blob`."""
+def scan(blob: bytes, code: list[tuple[int, int]] | None = None) -> list[str]:
+    """One message per excluded store in the code blocks of the boot stream `blob`. With `code` (the plan's code ranges), an
+    appended block is decoded only inside them: a module's data in the same block, decoded as code, gives false stores."""
     blocks = sharcldr.parse_blocks(blob)
     mem = sharcldr.LoadedMemory.from_stream(blob, blocks)
     by = {b["index"]: b for b in blocks}
@@ -82,10 +101,21 @@ def scan(blob: bytes) -> list[str]:
         r = sharcinv.analyze_block(mem, by, idx, 8)
         if r is None:
             continue
+        at = by[idx]["target_address"]
+        stock = at in DN2_CODE_TARGETS
         for off, ins in r["insns"]:
+            if (
+                code is not None
+                and not stock
+                and not any(lo <= at + off < hi for lo, hi in code)
+            ):
+                continue
             for msg in pk_sharc.ureg_class_problems(ins.fields, "", ins.type_name):
                 sw = r["base_sw"] + off // 2
                 found.append(f"block {idx} pc {sw:#x}{msg}")
+            ci = pk_sharc.ci_problem(ins.fields, ins.type_name)
+            if ci and not stock:
+                found.append(f"block {idx} pc {r['base_sw'] + off // 2:#x}: {ci}")
     return found
 
 
@@ -93,10 +123,10 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1:
         print(__doc__)
         return 2
-    found = scan(section7(Path(argv[0])))
+    found = scan(section7(Path(argv[0])), plan_code_ranges(Path(argv[0])))
     if found:
         print(
-            f"ISA check: FAIL {len(found)} store(s) the ISA does not allow in section 7 (finding 49 section 10)"
+            f"ISA check: FAIL {len(found)} instruction(s) the ISA does not allow in section 7 (finding 49 section 10)"
         )
         for f in found:
             print("  " + f)

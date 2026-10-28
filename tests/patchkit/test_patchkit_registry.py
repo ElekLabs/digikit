@@ -8,6 +8,7 @@ refuse, unload, the panel frames) are archived with hot reload (tag digikit-hot-
 
 import json
 
+import pytest
 from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -28,6 +29,9 @@ def test_committed_objects_are_current_and_plain_coldfire():
         pk_build.build_module(RUNTIME, check=True)
 
 
+@pytest.mark.skip(
+    reason="this fork retires the run-time machine range (core/machines types.toml)"
+)
 def test_pack_lowers_the_typed_sections_deterministically(tmp_path):
     tools = pk_dkrt.Tools()
     a, b = tmp_path / "a.dkm", tmp_path / "b.dkm"

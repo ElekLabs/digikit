@@ -180,6 +180,19 @@ def test_misencoded_shift_immediates_are_refused(line):
         pk_sharc.assemble(".SECTION/PM seg_pmco;\n" + line + "\n")
 
 
+@pytest.mark.parametrize("line", ["R1 = _x + 0xec;", "I4 = _x - 8;"])
+def test_symbol_addends_in_immediate_loads_are_refused(line):
+    with pytest.raises(pk_sharc.PkSharcError, match="addend of a symbol"):
+        pk_sharc.assemble(".SECTION/PM seg_pmco;\n.EXTERN _x;\n" + line + "\n")
+
+
+def test_constant_and_register_sums_and_addressed_addends_pass():
+    obj = pk_sharc.assemble(
+        ".SECTION/PM seg_pmco;\n#define K 4\n.EXTERN _x;\nR3 = K + 1;\nR0 = R0 + R1;\nR2 = DM(_x + 8);\n"
+    )
+    assert [r.addend for r in obj.relocs] == [8]
+
+
 def test_register_shift_counts_and_comments_pass():
     obj = pk_sharc.assemble(
         ".SECTION/PM seg_pmco;\nR0 = ASHIFT R11 BY R1;  // not ASHIFT R0 BY -3\nR0 = FEXT R11 BY 4:8;\n"
@@ -243,3 +256,37 @@ def test_a_16_bit_compute_is_accepted_at_the_assemblers_width():
     ok = pk_sharc.assemble(TIE.replace("R0 = R0 + R1", "R0 = R1 + R2"))
     assert len(ok.rows[0][1]) == 8
     assert pk_sharc.link(ok, BASE, {}).checked == len(ok.rows)
+
+
+def test_pkhex_is_a_loaded_data_section_with_its_bytes():
+    src = """
+.SECTION/PM seg_pmco;
+.GLOBAL _f;
+_f:
+    R2 = _tab;
+    I4 = R2;
+    R0 = DM(1, I4);
+    RTS;
+.PKHEX _tab, 0000803f00000040;
+"""
+    obj = pk_sharc.assemble(src)
+    assert obj.data["pkdata__tab"] == (bytes.fromhex("0000803f00000040"), 4, False)
+    assert obj.data_symbols["_tab"] == ("pkdata__tab", 0, True)
+    assert "_tab" in {r.symbol for r in obj.relocs}
+
+
+@pytest.mark.parametrize("hexs", ["0000803", "000080"])
+def test_pkhex_refuses_odd_digits_and_partial_words(hexs):
+    with pytest.raises(pk_sharc.PkSharcError):
+        pk_sharc.assemble(f".SECTION/PM seg_pmco;\n_f: RTS;\n.PKHEX _tab, {hexs};\n")
+
+
+def test_a_48_bit_indirect_jump_with_ci_is_refused():
+    """selas's 48-bit `JUMP (M13, I13)` decodes as `JUMP (M13, I8) (CI)`; the compressed form is right."""
+    good = pk_sharc.assemble(".SECTION/PM seg_pmco;\nR0 = 0;\nJUMP (M13, I13);\n")
+    pk_sharc.link(good, BASE, {})
+    bad = pk_sharc.assemble(
+        ".SECTION/PM seg_pmco;\n.NOCOMPRESS;\nR0 = 0;\nJUMP (M13, I13);\n"
+    )
+    with pytest.raises(pk_sharc.PkSharcError, match=r"\(CI\) on an indirect transfer"):
+        pk_sharc.link(bad, BASE, {})

@@ -6,9 +6,9 @@
     .equ STORE_HEADER_B, 0x28fdd    /* [card.store] header_b_sector - first_sector (store header copy B, relative to the store) */
     .equ STORE_SEL_A, 0x2e19ffe    /* [card.store] end_sector - 2 (selection record copy A, absolute) */
     .equ STORE_SEL_B, 0x2e19fff    /* [card.store] end_sector - 1 (selection record copy B, absolute) */
-    .equ DYN_TYPE_FIRST, 0x10    /* core/machines types.toml dynamic_first */
+    .equ DYN_TYPE_FIRST, 0x18    /* core/machines types.toml dynamic_first */
     .equ DYN_TYPE_LAST, 0x17    /* core/machines types.toml last */
-    .equ DYN_TYPES, 0x8    /* run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each */
+    .equ DYN_TYPES, 0x0    /* run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each */
     .equ CONSOLE_UART_BASE, 0xec070000    /* [board] console_uart_base */
     .equ DDR_CACHED_BASE, 0x40000000    /* [board] ddr_cached_base */
     .equ DDR_BYTES, 0x8000000    /* [board] ddr_bytes */
@@ -23,7 +23,7 @@
     .equ KEEP_BASE, 0x47fe0000    /* [digikit] keep_base (RAM a soft reset is assumed to keep: the crash record) */
     .equ KEEP_BYTES, 0x1000    /* [digikit] keep_bytes */
     .equ LIMIT_MODULES, 0x8    /* [limits] modules (module records) */
-    .equ LIMIT_MACHINE_ROWS, 0x8    /* [limits] machine_rows (run-time machine and voice rows) */
+    .equ LIMIT_MACHINE_ROWS, 0x0    /* [limits] machine_rows (run-time machine and voice rows) */
     .equ LIMIT_ARENA_BYTES, 0x80000    /* [limits] arena_bytes (the module arena) */
     .equ LIMIT_FX_SLOTS, 0x3    /* [limits] fx_slots (effects in the chain: CAPACITY's limit and the free effect rows of core/dynfx) */
     .equ LIMIT_STAGE_BYTES, 0x10000    /* [limits] stage_bytes (the staging buffer of a .dkm file) */

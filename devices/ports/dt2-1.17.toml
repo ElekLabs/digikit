@@ -2265,6 +2265,28 @@ mark = "D"
 rule = "core/dsp-voice:sharc_literal"
 
 [[anchor]]
+name = "dsp.voice.params"
+cpu = "sharc"
+kind = "value"
+addr = 0x2506ec
+src = 0x28384b94
+len = 6
+sha256 = "0b4adf80f1be42cd7ebed4e841e4f271b877027772fb38ac047411f6906f66ba"
+mark = "D"
+rule = "core/dsp-voice:sharc_literal"
+
+[[anchor]]
+name = "dsp.voice.release_latch"
+cpu = "sharc"
+kind = "value"
+addr = 0x24f0ec
+src = 0x28386792
+len = 6
+sha256 = "be53cd57e9a3a7ea11cc5615c4a511192b6241728c2c49370804157624980e04"
+mark = "D"
+rule = "core/dsp-voice:sharc_literal"
+
+[[anchor]]
 name = "dsp.voice.render_entry"
 cpu = "sharc"
 kind = "code"
@@ -2296,6 +2318,39 @@ len = 6
 sha256 = "aa85dee071b926c095ed94ee8bad29cc5add87caf86276bf2c85bd0e565feee4"
 mark = "D"
 rule = "core/dsp-voice:sharc_literal"
+
+[[anchor]]
+name = "dsp.voice.unpack"
+cpu = "sharc"
+kind = "code"
+addr = 0x283849d2
+pm = 0x1c24e9
+len = 6
+sha256 = "0456aa583198a743a20404878b8f87ae307b390b8766b644bef6dad36d85757a"
+mark = "D"
+rule = "core/dsp-voice:sharc_func"
+
+[[anchor]]
+name = "dsp.voice.unpack.a"
+cpu = "sharc"
+kind = "code"
+addr = 0x28385934
+pm = 0x1c2c9a
+len = 6
+sha256 = "8ddca64190d6f5d21f20af61f3c7ea0df3a031b8cd570ad9f49b2692d2b85580"
+mark = "D"
+rule = "core/dsp-voice:sharc_func"
+
+[[anchor]]
+name = "dsp.voice.unpack.b"
+cpu = "sharc"
+kind = "code"
+addr = 0x28385952
+pm = 0x1c2ca9
+len = 6
+sha256 = "8ddca64190d6f5d21f20af61f3c7ea0df3a031b8cd570ad9f49b2692d2b85580"
+mark = "D"
+rule = "core/dsp-voice:sharc_func"
 
 [[anchor]]
 name = "health.fw.create_main"
@@ -2407,6 +2462,61 @@ len = 4
 sha256 = "3cabd0a8df07ca318cf51a7b9dd449e9f5110f7a3ce012a96f8910ccf8df50fd"
 mark = "D"
 rule = "core/input:cf_func"
+
+[[anchor]]
+name = "od.call.a"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838d8b2
+pm = 0x1c6c59
+len = 6
+sha256 = "ead911922ff1703b831da1855c07b2a0e3a5df797bab5da5b5b1c13a368955e8"
+mark = "D"
+rule = "tom/overdrive:sharc_func"
+
+[[anchor]]
+name = "od.call.b"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838e70e
+pm = 0x1c7387
+len = 6
+sha256 = "ead911922ff1703b831da1855c07b2a0e3a5df797bab5da5b5b1c13a368955e8"
+mark = "D"
+rule = "tom/overdrive:sharc_func"
+
+[[anchor]]
+name = "od.saturator"
+cpu = "sharc"
+kind = "code"
+addr = 0x283967b0
+pm = 0x1cb3d8
+len = 6
+sha256 = "3b689aef9289a5bd701a790dfe26349a8c5a4f201033a3c4299b372ed4a0f151"
+mark = "D"
+rule = "tom/overdrive:sharc_func"
+
+[[anchor]]
+name = "od.split"
+cpu = "sharc"
+kind = "code"
+addr = 0x28385910
+pm = 0x1c2c88
+len = 6
+sha256 = "8ccc1d93012ef813461249ca35f2d7e295dd1a656895e1f8467c9d81aaad1b2e"
+mark = "D"
+rule = "tom/overdrive:sharc_func"
+
+[[anchor]]
+name = "od.split2"
+cpu = "sharc"
+kind = "code"
+addr = 0x283860f4
+pm = 0x1c307a
+len = 6
+sha256 = "6d15dc4b9ab911972e51f457ab45587ce586bd83cc3279cd313f79d9ab7c5276"
+mark = "D"
+rule = "tom/overdrive:sharc_func"
 
 [[anchor]]
 name = "test.demo.kit_setter"

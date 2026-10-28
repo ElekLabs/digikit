@@ -197,6 +197,14 @@ SHIFT_IMM_OPCODES = frozenset(
 SIGNED_SHIFT_OPCODES = frozenset({0x00, 0x01, 0x08, 0x09})
 
 
+def ci_problem(fields: dict[str, int], form: str) -> str | None:
+    """An indirect jump or call with (CI) set: no patch routine returns from an interrupt, and selas's 48-bit
+    `JUMP (M13, I13)` comes out as `JUMP (M13, I8) (CI)` (the 16-bit form is right)."""
+    if form.startswith("9") and fields.get("ci"):
+        return "(CI) on an indirect transfer (selas's 48-bit JUMP (Md, Ic): assemble it compressed)"
+    return None
+
+
 def shift_imm_problem(fields: dict[str, int], form: str) -> str | None:
     """Why a decoded shift-immediate instruction is wrong for the silicon, or None."""
     if form not in SHIFT_IMM_FORMS:
@@ -318,12 +326,27 @@ ENCODE_HAZARDS = [
 ]
 
 
+# Selache drops the addend of a symbol in a register's immediate load (`R1 = _x + 0xec;` relocates as `_x`; `DM(_x + 0xec)` keeps
+# it). A name that the source #defines is a constant, which it evaluates correctly.
+_SYM_ADDEND = re.compile(
+    r"\b[RIMBL]\d{1,2}\s*=\s*([A-Za-z_.$][\w.$]*)\s*[-+]\s*[\w.$]+\s*;", re.I
+)
+_REGISTER = re.compile(r"[RFIMBLS]\d{1,2}", re.I)
+_DEFINED = re.compile(r"^[ \t]*#define[ \t]+([A-Za-z_]\w*)", re.M)
+
+
 def _hazards(source: str) -> None:
     code = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
     for pat, why in ENCODE_HAZARDS:
         m = pat.search(code)
         if m:
             raise PkSharcError(f"known Selache encode bug ({why}): {m.group(0)!r}")
+    defined = set(_DEFINED.findall(code))
+    for m in _SYM_ADDEND.finditer(code):
+        if m.group(1) not in defined and not _REGISTER.fullmatch(m.group(1)):
+            raise PkSharcError(
+                f"known Selache encode bug (the addend of a symbol in an immediate load is dropped): {m.group(0)!r}"
+            )
 
 
 # Selache ignores the (SW)/(SWSE) suffix of a direct load (it emits the normal-word form), so
@@ -370,7 +393,12 @@ def _sw_apply(obj: SharcObject, marks: list[tuple[str, bool]]) -> None:
 # `.PKDATA name, bytes;` (loaded zeros, part of the boot-stream block) or `.PKBSS name, bytes;` (reserved memory the
 # stream does not load: the program must write it before it reads it) instead: the line is removed before
 # assembly, `name` becomes an extern of the source and the object gets a data or bss section of that size with a
-# global data symbol `name` (the linker allocates it).
+# global data symbol `name` (the linker allocates it). `.PKHEX name, HEX;` is the same with loaded contents: HEX is the
+# section's bytes as they sit in memory (little-endian words), for tables a generator writes.
+_PKHEX = re.compile(
+    r"^[ \t]*\.PKHEX[ \t]+([A-Za-z_.$][\w.$]*)[ \t]*,[ \t]*([0-9a-fA-F]+)[ \t]*;[^\n]*$",
+    re.M,
+)
 _PKBSS = re.compile(
     r"^[ \t]*\.PK(BSS|DATA)[ \t]+([A-Za-z_.$][\w.$]*)[ \t]*,[ \t]*(0x[0-9a-fA-F]+|\d+|[A-Za-z_]\w*)[ \t]*;[^\n]*$",
     re.M,
@@ -381,8 +409,17 @@ _DEFINE = re.compile(
 )
 
 
-def _bss_prepare(source: str) -> tuple[str, list[tuple[str, int, bool]]]:
-    found: list[tuple[str, int, bool]] = []
+def _bss_prepare(source: str) -> tuple[str, list[tuple[str, int, bool, bytes | None]]]:
+    found: list[tuple[str, int, bool, bytes | None]] = []
+
+    def hexsub(m: re.Match) -> str:
+        if len(m.group(2)) % 2:
+            raise PkSharcError(f".PKHEX {m.group(1)}: an odd number of hex digits")
+        blob = bytes.fromhex(m.group(2))
+        found.append((m.group(1), len(blob), False, blob))
+        return f".EXTERN {m.group(1)};"
+
+    source = _PKHEX.sub(hexsub, source)
     # the size may be a macro defined as a plain number in the same source (the generated device includes of `patchkit gen`)
     defines = {m.group(1): int(m.group(2), 0) for m in _DEFINE.finditer(source)}
 
@@ -397,6 +434,7 @@ def _bss_prepare(source: str) -> tuple[str, list[tuple[str, int, bool]]]:
                 m.group(2),
                 defines[size] if size in defines else int(size, 0),
                 m.group(1) == "BSS",
+                None,
             )
         )
         return f".EXTERN {m.group(2)};"
@@ -421,13 +459,13 @@ def assemble(source: str, section: str | None = None) -> SharcObject:
             raise PkSharcError(f"selas failed:\n{r.stdout}{r.stderr}")
         result = _object(obj, hashlib.sha256(original.encode()).hexdigest(), section)
         _sw_apply(result, sw_marks)
-        for name, size, is_bss in bss_decls:
+        for name, size, is_bss, blob in bss_decls:
             if size <= 0 or size % 4:
                 raise PkSharcError(
-                    f".PKBSS/.PKDATA {name}: size {size} is not a positive multiple of 4"
+                    f".PKBSS/.PKDATA/.PKHEX {name}: size {size} is not a positive multiple of 4"
                 )
             sec = f"pkbss_{name}" if is_bss else f"pkdata_{name}"
-            result.data[sec] = (bytes(size), 4, is_bss)
+            result.data[sec] = (blob if blob is not None else bytes(size), 4, is_bss)
             result.data_symbols[name] = (sec, 0, True)
         return result
 
@@ -561,7 +599,9 @@ def verify(obj: SharcObject, linked: Linked, externs: dict[str, int]) -> None:
             f"parcel {item.external.parcel_address:#x}",
             item.native_form_id or "",
         )
-        shift = shift_imm_problem(dict(item.native_fields), item.native_form_id or "")
+        shift = shift_imm_problem(
+            dict(item.native_fields), item.native_form_id or ""
+        ) or ci_problem(dict(item.native_fields), item.native_form_id or "")
         if shift:
             problems.append(
                 f"parcel {item.external.parcel_address:#x} {item.external.raw.hex()}: {shift}"

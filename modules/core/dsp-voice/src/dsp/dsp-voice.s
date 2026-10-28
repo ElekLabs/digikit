@@ -13,7 +13,8 @@
 //
 // A registered type (a row {type, pc} of the registry `voices` = _dv_table, filled by `[[entry]]` rows of the machine modules) is rendered by
 // calling its routine once per track, on the even voice; the odd voice receives a copy of the even voice's block
-// (a synthesised machine is mono; the engine's later stages pan and mix both voices as for a mono sample).
+// (a synthesised machine is mono; the engine's later stages pan and mix both voices as for a mono sample), unless the row
+// is stereo (word 22): its routine wrote the odd voice's block (the right channel, 0x80 bytes after its own) as well.
 //
 // Routine ABI (entered with JUMP (M13, I12); I13 holds the return address, the routine ends with JUMP (M13, I13).
 // The simulator's tracer does not follow an indirect CALL, and the firmware has none; the routine may use ordinary
@@ -54,10 +55,57 @@
 
 .SECTION/PM seg_pmco;
 .GLOBAL _dv_entry;
+.GLOBAL _dv_unpack;
 .EXTERN _fw_type_cache;
 .EXTERN _fw_render_next;
 .EXTERN _fw_frame;
+.EXTERN _fw_vparams;
+.EXTERN _fw_unpack;
 .EXTERN _dv_table;
+
+// The block driver's two calls of the per-voice frame unpack (FUN_1c24e9, R12 = track, R8 = voice) come here. The unpack turns
+// knob H's frame halfword (0x76 + 48 t: the low half of the word at byte 0xec + 0x60 t) into the voice chain's level; on a track
+// whose type has a row with `lev` (word 23) it reads that word there instead. The per-block frame copy after the unpack writes the
+// knob back before the voices render, so the routine still gets knob H as a parameter. R0-R2 and I4 are free here (the unpack
+// sets them before it reads them; L4 is 0 in this context); the flags are dead.
+_dv_unpack:
+    R0 = FEXT R12 BY 1:3;
+    R0 = LSHIFT R0 BY 2;
+    R1 = _fw_type_cache;
+    R0 = R0 + R1;
+    I4 = R0;
+    R1 = DM(0, I4);
+    R0 = FEXT R12 BY 0:1;
+    R0 = LSHIFT R0 BY 4;
+    R2 = 0x400;
+    R0 = R0 OR R2;
+    R1 = FEXT R1 BY R0;                   // cache[t]
+    I4 = _dv_table;
+_dv_uscan:
+    R0 = DM(0, I4);
+    R0 = PASS R0;
+    IF EQ JUMP _fw_unpack;
+    COMP(R0, R1);
+    IF EQ JUMP _dv_ulev;
+    MODIFY(I4, 24) (NW);
+    JUMP _dv_uscan;
+_dv_ulev:
+    R2 = DM(23, I4);
+    R2 = PASS R2;
+    IF EQ JUMP _fw_unpack;
+    R0 = 0x60;
+    R0 = R12 * R0 (SSI);
+    R1 = _fw_frame;
+    R0 = R0 + R1;
+    R1 = 0xec;
+    R0 = R0 + R1;
+    I4 = R0;
+    R1 = DM(0, I4);
+    R0 = 0xffff0000;
+    R1 = R1 AND R0;
+    R1 = R1 OR R2;
+    DM(0, I4) = R1;
+    JUMP _fw_unpack;
 
 _dv_entry:
     R0 = L4;
@@ -847,12 +895,44 @@ _dv_back:
 #endif
     JUMP _dv_gcheck;
 _dv_odd:
+    R3 = DM(_dv_g + 0);
+    I1 = R3;
+    R3 = DM(-2, I1);                      // row word 22: stereo, the routine wrote this block
+    R3 = PASS R3;
+    IF NE JUMP _dv_spread;
     I1 = R8;
     MODIFY(I1, -128);
     I0 = R8;
     LCNTR = 32, DO _dv_copy UNTIL LCE;
         R0 = DM(I1, M6);
 _dv_copy: DM(I0, M6) = R0;
+    JUMP _dv_odd_done;
+    // A stereo row: the mix stage pans each voice by word 52 of its parameter record (0 .. 1, equal power), which the unpack
+    // rewrites every block with the track's pan. The even voice (left) goes to pan - 1/2, the odd voice (right) to pan + 1/2.
+_dv_spread:
+    R3 = LSHIFT R1 BY 8;
+    R5 = LSHIFT R1 BY 5;
+    R3 = R3 - R5;
+    R5 = LSHIFT R1 BY 2;
+    R3 = R3 - R5;                         // 0xdc v
+    R5 = _fw_vparams;
+    R3 = R3 + R5;
+    I1 = R3;                              // the odd voice's record
+    R5 = 0xdc;
+    R3 = R3 - R5;
+    I0 = R3;                              // the even voice's
+    R5 = 0x3f000000;
+    R6 = 0x3f800000;
+    R7 = 0;
+    R0 = DM(52, I1);
+    F0 = F0 + F5;
+    F0 = MIN(F0, F6);
+    DM(52, I1) = R0;
+    R0 = DM(52, I0);
+    F0 = F0 - F5;
+    F0 = MAX(F0, F7);
+    DM(52, I0) = R0;
+_dv_odd_done:
     R3 = 6;
 #ifdef DV_C3_DB
     CALL _dv_crumb (DB);
@@ -919,11 +999,12 @@ _dv_done:
 // silent and the routine is not called). The parameter words the routine saw, the type, the voice and the counts go into the diagnostic words
 // 15 to 21 (dl_diag words 17 to 23). Registers: everything is free here (the epilogue reloads them), I13 and the context are restored below.
 _dv_gcheck:
+    CALL _dv_blkn;
     R8 = DM(_dv_g + 20);
     I0 = R8;
     R13 = 0;
     R9 = 0x7fffffff;
-    LCNTR = 32, DO _dv_gchk UNTIL LCE;
+    LCNTR = R4, DO _dv_gchk UNTIL LCE;
         R0 = DM(I0, M6);
         R0 = R0 AND R9;
 _dv_gchk: R13 = MAX(R13, R0);
@@ -1003,10 +1084,11 @@ _dv_gpack:
     IF EQ JUMP _dv_gnr;
     CALL _dv_grestore;
 _dv_gnr:
+    CALL _dv_blkn;
     R8 = DM(_dv_g + 20);
     I0 = R8;
     R3 = 0;
-    LCNTR = 32, DO _dv_gz UNTIL LCE;
+    LCNTR = R4, DO _dv_gz UNTIL LCE;
 _dv_gz: DM(I0, M6) = R3;
     R4 = DM(_dv_g + 16);
     I1 = R4;
@@ -1067,9 +1149,10 @@ _dv_gnd:
 
 // A disabled type: a silent block.
 _dv_gdis:
+    CALL _dv_blkn;
     I0 = R8;
     R3 = 0;
-    LCNTR = 32, DO _dv_gdz UNTIL LCE;
+    LCNTR = R4, DO _dv_gdz UNTIL LCE;
 _dv_gdz: DM(I0, M6) = R3;
     R0 = DM(_dv_g + 4);
     R1 = DM(_dv_g + 8);
@@ -1294,6 +1377,18 @@ _dv_rdone:
 _dv_nfault:
     R12 = 3;
     JUMP _dv_gfaultk;
+// R4 = the samples of the even voice's block: 32, or 64 for a stereo row (its routine writes the odd voice's block, which
+// follows; the guard and the silent paths cover both). Only the even voice gets here. Clobbers R3, I4.
+_dv_blkn:
+    R3 = DM(_dv_g + 0);
+    I4 = R3;
+    R4 = DM(-2, I4);                      // row word 22: stereo
+    R3 = 32;
+    R4 = PASS R4;
+    IF NE R3 = R3 + R3;
+    R4 = PASS R3;
+    RTS;
+
 // An idle voice (ACTIVE clear): the mark is cleared (a stopped voice), the block is silent.
 _dv_cidle:
     R0 = 0xff00;

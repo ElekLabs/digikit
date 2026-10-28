@@ -130,6 +130,9 @@ class MachineSpec:
         None  # a contract voice (docs/design/module-sdk.md 4.1): the note_on routine's symbol and the `dk_machine_desc` symbol
     )
     desc: str | None = None
+    state_zero: bool = False  # the voices' state is loaded zeros (`[[voice]] state_zero`), not unwritten memory
+    stereo: bool = False  # the render writes the odd voice's block too (`[[voice]] stereo`; DT2: left, then right)
+    lev: int = 0  # the fixed level word of the machine's tracks (`[[voice]] lev`); 0: knob H is the stock LEV
 
     @property
     def label(self) -> str:
@@ -224,7 +227,8 @@ def _params(man: dict, device: str) -> tuple[Param, ...]:
 
 
 def spec(mid: str, device: str) -> MachineSpec | None:
-    """The spec of module MID on DEVICE, or None when the module is no machine with a DSP object for that device."""
+    """The spec of module MID on DEVICE, or None when the module is no machine with a DSP object for that device, or when one of
+    its DSP objects is committed without sources (the rig assembles sources only; a module may run a prebuilt object)."""
     if mid.split("/")[0] == "core":  # the framework renders no machine of its own
         return None
     if mid in NEGATIVE_VARIANTS:
@@ -246,7 +250,11 @@ def spec(mid: str, device: str) -> MachineSpec | None:
     if row is None:
         return None
     sources = _dsp_sources(man, moddir, device)
-    if not sources:
+    if not sources or any(
+        o.get("place", "").startswith("dsp") and not o.get("sources")
+        for o in man.get("object", [])
+        if device in o.get("devices", DEVICES)
+    ):
         return None
     f = pk_device.load(device)["modules"]["frame"]
     frame = Frame(f["base"], f["stride"], f.get("group", 0), f.get("gap", 0))
@@ -261,6 +269,9 @@ def spec(mid: str, device: str) -> MachineSpec | None:
         frame,
         dict(man.get("conformance", {})),
         *_contract(man),
+        any(v.get("state_zero", False) for v in man.get("voice", [])),
+        any(v.get("stereo", False) for v in man.get("voice", [])),
+        max((int(v.get("lev", 0)) for v in man.get("voice", [])), default=0),
     )
 
 

@@ -2,11 +2,11 @@
 // Only constants that every device file agrees on; the runtime is one image for all devices.
 
 /// core/machines types.toml dynamic_first
-pub const DYN_TYPE_FIRST: u32 = 0x10;
+pub const DYN_TYPE_FIRST: u32 = 0x18;
 /// core/machines types.toml last
 pub const DYN_TYPE_LAST: u32 = 0x17;
 /// run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each
-pub const DYN_TYPES: u32 = 0x8;
+pub const DYN_TYPES: u32 = 0x0;
 /// [board] console_uart_base
 pub const CONSOLE_UART_BASE: u32 = 0xec070000;
 /// [board] ddr_cached_base
@@ -28,7 +28,7 @@ pub const KEEP_BYTES: u32 = 0x1000;
 /// [limits] modules (module records)
 pub const LIMIT_MODULES: u32 = 0x8;
 /// [limits] machine_rows (run-time machine and voice rows)
-pub const LIMIT_MACHINE_ROWS: u32 = 0x8;
+pub const LIMIT_MACHINE_ROWS: u32 = 0x0;
 /// [limits] arena_bytes (the module arena)
 pub const LIMIT_ARENA_BYTES: u32 = 0x80000;
 /// [limits] stage_bytes (the staging buffer of a .dkm file)

@@ -13,6 +13,7 @@ SINE = ROOT / "tests" / "support" / "raw_sine.s"
 CORE_BASE, SINE_BASE = 0xB90000, 0xB92000
 STOCK_BP = 0xB9F000  # stands in for the stock renderer's second instruction
 RETURN_SW = 0xB9F100  # the caller's return point
+UNPACK_BP = 0xB9F010  # stands in for the stock frame unpack (FUN_1c24e9), where tom/tb303's level hook continues
 # byte addresses of the stand-ins (L2), one 4 KiB page each
 TYPE_CACHE, FRAME, RECORDS, OUT, TABLE, STATE, STACK, DIAG = (
     0x20091000,
@@ -27,6 +28,9 @@ TYPE_CACHE, FRAME, RECORDS, OUT, TABLE, STATE, STACK, DIAG = (
 SV_L4 = DIAG + 0x100  # the wrapper's data symbols (the build places them in free L2)
 SV3, SV5, BCW, REC_PTRS = DIAG + 0x104, DIAG + 0x108, DIAG + 0x10C, DIAG + 0x110
 GUARD = DIAG + 0x200  # the guard's scalars and arrays (_dv_g, 128 bytes)
+RELEASE = (
+    DIAG + 0x800
+)  # the stock release latch (dsp.voice.release_latch): byte v is 1 from voice v's note-off to its next note-on
 # the contract adapter's data (`_dv_in` 16 bytes, `_dv_params` 32, `_dv_blk` 64, `_dv_c` 64): zero, and not used by a row of the old form
 ADAPTER = {
     "_dv_in": DIAG + 0x300,
@@ -40,6 +44,7 @@ RING_A, RING_B = (
     0x200A0000,
     0x200A2000,
 )  # stand-ins for the two reply records (the breadcrumbs are written into both)
+VPARAMS = 0x200A4000  # the per-voice parameter records (dsp.voice.params), 0xdc bytes per voice; word 52 the pan
 REC = 0x1D8
 TYPE = 8
 
@@ -53,6 +58,8 @@ def core_externs() -> dict[str, int]:
         "_fw_type_cache": TYPE_CACHE,
         "_fw_render_next": STOCK_BP,
         "_fw_frame": FRAME,
+        "_fw_vparams": VPARAMS,
+        "_fw_unpack": UNPACK_BP,
         "_dv_table": TABLE,
         "_dv_diag": DIAG,
         "_dv_sv_l4": SV_L4,
@@ -172,6 +179,10 @@ class Rig:
             )
         for k in range(32 * REC // 4):
             self.dm[nw(RECORDS) + k] = 0
+        for k in range(32 * 0xDC // 4):
+            self.dm[nw(VPARAMS) + k] = (
+                0x3F000000  # every word 0.5 (word 52: the pan at the centre)
+            )
         self.dm[nw(TABLE)] = TYPE
         self.dm[nw(TABLE) + 1] = self.render_pc
         for k in range(2):

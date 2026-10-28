@@ -15,11 +15,11 @@
 // [card.store] end_sector - 1 (selection record copy B, absolute)
 #define STORE_SEL_B 48340991
 // core/machines types.toml dynamic_first
-#define DYN_TYPE_FIRST 16
+#define DYN_TYPE_FIRST 24
 // core/machines types.toml last
 #define DYN_TYPE_LAST 23
 // run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each
-#define DYN_TYPES 8
+#define DYN_TYPES 0
 // [board] console_uart_base
 #define CONSOLE_UART_BASE 3959881728
 // [board] ddr_cached_base
@@ -49,7 +49,7 @@
 // [limits] modules (module records)
 #define LIMIT_MODULES 8
 // [limits] machine_rows (run-time machine and voice rows)
-#define LIMIT_MACHINE_ROWS 8
+#define LIMIT_MACHINE_ROWS 0
 // [limits] arena_bytes (the module arena)
 #define LIMIT_ARENA_BYTES 524288
 // [limits] fx_slots (effects in the chain: CAPACITY's limit and the free effect rows of core/dynfx)

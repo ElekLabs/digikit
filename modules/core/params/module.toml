@@ -23,6 +23,8 @@ conflicts = []
 #     min = 0
 #     max = 0x7f00
 #     default = 0x4000
+#     formatter = "my_fmt"    # Digitakt II, optional: a ColdFire function of the module, void my_fmt(int raw, char *buf),
+#                             # that writes the value text; absent = the template's formatter
 #
 # The code of a parameter is `params.first + k` (symbol params.<id>.index); a machine's fields name it. Finding 02,
 # "core.params": the table is copied at patch time from the image (nothing of the firmware is stored here), the
@@ -69,6 +71,10 @@ kind = "u32"
 [[registry.field]]
 name = "default"
 kind = "u32"
+[[registry.field]]
+name = "formatter"          # ColdFire code address of the value formatter fmt(int raw, char *buf); 0 = the template's
+kind = "u32"
+default = 0
 
 [[registry]]
 name = "params"
@@ -102,7 +108,8 @@ name = "default"
 kind = "u32"
 
 # the parameter table, 60-byte rows: owner, mirror index, min, max, default, flag, (cc << 16 | kind), 0x80 + slot,
-# 2 words of the template, name, template word, short, template formatter, template word
+# 2 words of the template, name, template word, short, formatter, template word. The formatter (+0x34) is the entry's
+# `formatter` when non-zero, else the template's: ~((f | -f) >> 62) is 0 for any f != 0 and -1 for f = 0 (64-bit values)
 [[section]]
 name = "pf_table"
 region = "cf.expansion"
@@ -122,9 +129,56 @@ append = { registry = "params", row = [
   "$name",
   "image.u32(cf.params.t1 + 60 * $template + 0x2c)",
   "$short",
-  "image.u32(cf.params.t1 + 60 * $template + 0x34)",
+  "$formatter | (image.u32(cf.params.t1 + 60 * $template + 0x34) & ~(($formatter | -$formatter) >> 62))",
   "image.u32(cf.params.t1 + 60 * $template + 0x38)",
 ] }
+edit = { registry = "param_edits", at = "60 * $code", fields = [
+  { offset = 0x0c, value = "$max" },
+  { offset = 0x28, value = "$name" },
+  { offset = 0x30, value = "$short" },
+  { offset = 0x34, value = "$formatter" },
+] }
+
+# Edits of stock rows (Digitakt II): a content module changes a stock parameter's range, formatter and names with
+#
+#     [[entry]]
+#     registry = "param_edits"
+#     id = "ovr_type"
+#     code = 0x103            # the stock parameter code (its row in the copied table)
+#     max = 0xf00
+#     formatter = "my_fmt"
+#     name = "OVR Type"
+#     short = "OD.TY"
+#     class = 0xd1            # optional: draw its knob cell as this code's (here the formatter's text); 0 = its own
+# The registry is declared on the Digitone II too (no edit there) so both devices' accessor hook links the same source.
+[[registry]]
+name = "param_edits"
+devices = ["dt2", "dn2"]
+first = "0"
+max = 16
+region = "cf.expansion"
+
+[[registry.field]]
+name = "code"
+kind = "u32"
+[[registry.field]]
+name = "max"
+kind = "u32"
+[[registry.field]]
+name = "formatter"
+kind = "u32"
+[[registry.field]]
+name = "name"
+kind = "cstr"
+max_len = 31
+[[registry.field]]
+name = "short"
+kind = "cstr"
+max_len = 15
+[[registry.field]]
+name = "class"              # a code whose value-class object the UI uses for this one (its knob cell); 0 = its own
+kind = "u32"
+default = 0
 
 # Digitone II: the same 60-byte rows; the slot is the sound-array slot itself (25 .. 64) and the template supplies the
 # MIDI CC word and the key (the lookup maps are built from the stock rows only)
@@ -162,6 +216,9 @@ _pf_first = "params.first"
 _pf_count = "params.count"
 _pf_rows = "params.rows"
 _pf_rowsize = "params.row_size"
+_pe_count = "param_edits.count"
+_pe_rows = "param_edits.rows"
+_pe_rowsize = "param_edits.row_size"
 _pf_t_t2 = "hook.cf.params.t2.4.tail"
 
 [[object]]
@@ -175,6 +232,9 @@ _pf_first = "params.first"
 _pf_count = "params.count"
 _pf_rows = "params.rows"
 _pf_rowsize = "params.row_size"
+_pe_count = "param_edits.count"
+_pe_rows = "param_edits.rows"
+_pe_rowsize = "param_edits.row_size"
 _pf_t_t2 = "hook.cf.params.t2.4.tail"
 
 # the second per-code table's accessor: `move.l 4(sp),D0; cmpi.l #count,D0`; hook the compare

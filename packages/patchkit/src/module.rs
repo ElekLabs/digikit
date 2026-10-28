@@ -94,6 +94,26 @@ pub struct SectionDef {
     pub from: SectionFrom,
     #[serde(default)]
     pub append: Option<SectionAppend>,
+    #[serde(default)]
+    pub edit: Option<SectionEdit>,
+}
+
+/// Rewrites of the copied bytes, one per entry of a registry: an entry names the copied row (`at`) and new values for
+/// some of its words (a content module changes a stock row of a framework's table).
+#[derive(Clone, Debug, Deserialize)]
+pub struct SectionEdit {
+    pub registry: String,
+    /// Byte offset of the edited row in the copied bytes (expression; the entry's fields are `$name`).
+    pub at: ExprSrc,
+    pub fields: Vec<SectionEditField>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SectionEditField {
+    /// Byte offset in the row.
+    pub offset: u64,
+    /// The new value; `u8:EXPR` and `u16:EXPR` as in `append.row`.
+    pub value: ExprSrc,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -363,15 +383,16 @@ pub struct Module {
 /// A patched-in contract voice (`[[voice]]` with `desc`) needs memory for the state of its voices, which a `.dkm` gets from the runtime at load
 /// (`dkmdsp.rs`). Here the module's DSP object gets a bss section `dk.state.<machine>` of `voices` x `stride` bytes and the global symbol
 /// `_dkstate_<machine>`, which the voice row names as its state base; the patch linker places it with the rest of the object. `desc` is read
-/// from the object's data (`dk_machine_desc`, little endian: voices at word 3, state_bytes at 4, state_clear_bytes at 5).
+/// from the object's data (`dk_machine_desc`, little endian: voices at word 3, state_bytes at 4, state_clear_bytes at 5). With `state_zero`
+/// the section is loaded zeros instead of bss.
 fn reserve_voice_state(m: &mut Module) -> Result<()> {
-    let voices: Vec<(String, String)> = m
+    let voices: Vec<(String, String, bool)> = m
         .manifest
         .voice
         .iter()
-        .filter_map(|v| v.desc.clone().map(|d| (v.machine.clone(), d)))
+        .filter_map(|v| v.desc.clone().map(|d| (v.machine.clone(), d, v.state_zero)))
         .collect();
-    for (machine, desc) in voices {
+    for (machine, desc, zero) in voices {
         if m.manifest.voice_state.contains_key(&machine) {
             continue;
         }
@@ -422,12 +443,13 @@ fn reserve_voice_state(m: &mut Module) -> Result<()> {
         let stride = state.div_ceil(8) * 8;
         let name = format!("dk.state.{machine}");
         let symbol = format!("_dkstate_{machine}");
+        let size = voices_n * stride;
         o.sections.push(crate::dko::DkoSection {
             name: name.clone(),
-            kind: "bss".into(),
+            kind: if zero { "data" } else { "bss" }.into(),
             align: 8,
-            size: voices_n * stride,
-            hex: String::new(),
+            size,
+            hex: if zero { "00".repeat(size as usize) } else { String::new() },
         });
         o.symbols.push(crate::dko::DkoSymbol {
             name: symbol.clone(),

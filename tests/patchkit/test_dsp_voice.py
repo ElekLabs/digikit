@@ -32,7 +32,9 @@ from support.dsp_voice_rig import (  # noqa: E402
     STACK,
     STATE,
     STOCK_BP,
+    TABLE,
     TYPE,
+    VPARAMS,
     Rig,
     draw_context,
     nw,
@@ -142,6 +144,33 @@ def test_the_odd_voice_copies_the_even_voices_block(rig_cls):
     odd = rig.call(1)
     assert stops_at(odd, RETURN_SW)
     assert odd["out"] == even["out"]
+
+
+@pytest.mark.parametrize(
+    ("pan_l", "pan_r", "want_l", "want_r"),
+    [(0.5, 0.5, 0.0, 1.0), (0.75, 0.75, 0.25, 1.0), (0.1, 0.3, 0.0, 0.8)],
+)
+def test_a_stereo_row_pans_its_voices_apart_and_copies_nothing(
+    rig_cls, pan_l, pan_r, want_l, want_r
+):
+    rig = rig_cls()
+    rig.dm[nw(TABLE) + 22] = 1
+    rig.set_type(1, TYPE)
+    rig.dm[nw(VPARAMS + 2 * 0xDC) + 52] = bits(pan_l)
+    rig.dm[nw(VPARAMS + 3 * 0xDC) + 52] = bits(pan_r)
+    for k in range(32):
+        rig.dm[nw(OUT) + 32 * 3 + k] = 0x3E000000 + k
+    pans = {
+        "pan_l": (nw(VPARAMS + 2 * 0xDC) + 52, 1),
+        "pan_r": (nw(VPARAMS + 3 * 0xDC) + 52, 1),
+    }
+    out = rig.call(3, extra_reads=pans)
+    assert stops_at(out, RETURN_SW)
+    assert out["out"] == [0x3E000000 + k for k in range(32)]
+    assert (val(out["pan_l"][0]), val(out["pan_r"][0])) == pytest.approx(
+        (want_l, want_r), abs=1e-7
+    )
+    context_intact(out)
 
 
 def voice_call(rig, v: int, ctx):

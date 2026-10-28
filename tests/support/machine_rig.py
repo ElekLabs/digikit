@@ -64,6 +64,9 @@ class Block:
     foreign: list[str] = field(
         default_factory=list
     )  # stores of the module's code outside the memory it may write (rig with record_stores), one text each
+    right: tuple[
+        float, ...
+    ] = ()  # a stereo voice's odd block (the right channel), 32 values
 
 
 @dataclass
@@ -102,6 +105,9 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_fw_type_cache": dv.TYPE_CACHE,
         "_fw_render_next": dv.STOCK_BP,
         "_fw_frame": dv.FRAME,
+        "_fw_vparams": dv.VPARAMS,
+        "_fw_release_latch": dv.RELEASE,
+        "_fw_unpack": dv.UNPACK_BP,
         "_dv_table": dv.TABLE,
     }
 
@@ -162,7 +168,12 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
         clear = desc[5]
         addr = (addr + 7) & ~7
         state = addr
-        inits.append((addr, bytes(desc[3] * stride), True))
+        inits.append((addr, bytes(desc[3] * stride), not sp.state_zero))
+        # `_dkstate_<machine>`, the state block patchkit reserves (packages/patchkit/src/module.rs reserve_voice_state)
+        for o in objs:
+            for r in o.relocs:
+                if r.symbol.startswith("_dkstate_"):
+                    data[r.symbol] = state
         addr += desc[3] * stride
     if addr > DATA_END:
         raise pk_conform.ConformError(
@@ -232,7 +243,9 @@ class MachineRig:
     def reset(self) -> None:
         """A fresh core: zeroed stand-ins, initialised data, params at their defaults, the voice idle."""
         b = self.built
-        self.sess = pk_sharc.CallSession(b.linked, dv.RETURN_SW, breaks=(dv.STOCK_BP,))
+        self.sess = pk_sharc.CallSession(
+            b.linked, dv.RETURN_SW, breaks=(dv.STOCK_BP, dv.UNPACK_BP)
+        )
         if b.base:  # the static memory is the same for every rig of this module: copy it instead of poking 64k words again
             self.sess.runner.state.overlay.update(b.base)
         else:
@@ -241,6 +254,7 @@ class MachineRig:
                 poke(nw(dv.FRAME) + k, 0)
             for k in range(8):
                 poke(nw(dv.TYPE_CACHE) + k, 0)
+                poke(nw(dv.RELEASE) + k, 0)
             for k in range(32 * dv.REC // 4):
                 poke(nw(dv.RECORDS) + k, 0)
             for k in range(2 * ROW_WORDS):
@@ -257,6 +271,10 @@ class MachineRig:
                 poke(nw(dv.TABLE) + 17, b.state)
                 poke(nw(dv.TABLE) + 18, b.stride)
                 poke(nw(dv.TABLE) + 19, b.clear)
+            if self.spec.stereo:
+                poke(nw(dv.TABLE) + 22, 1)
+            if self.spec.lev:
+                poke(nw(dv.TABLE) + 23, self.spec.lev)
             for addr, raw, is_bss in b.inits:
                 for k in range(len(raw) // 4):
                     w = (
@@ -278,6 +296,7 @@ class MachineRig:
             self.set_param(p.id, p.default)
         self.set_note(60, 100)
         self._trig = False
+        self._release = False
 
     def use(self, track: int) -> None:
         """Make `track` the voice of the following calls (state and memory stay: several voices run on one core)."""
@@ -337,8 +356,19 @@ class MachineRig:
         self.hw(0x1A + (self.track if self.device == "dt2" else v), vel << 8)
 
     def trigger(self) -> None:
-        """A new note at the next block (DT2: the arm routine's store; DN2: the trig bit, one block)."""
+        """A new note at the next block (DT2: the arm routine's store; DN2: the trig bit, one block). Clears the voice's release latch."""
         self._trig = True
+        self._latch(0)
+
+    def release(self) -> None:
+        """A note-off at the next block: the voice's release latch byte is 1 for that block (the firmware's pulse)."""
+        self._release = True
+
+    def _latch(self, value: int) -> None:
+        addr = nw(dv.RELEASE) + self.voice // 4
+        sh = 8 * (self.voice % 4)
+        cur = self.sess.peek(addr) or 0
+        self.sess.poke(addr, (cur & ~(0xFF << sh) & 0xFFFFFFFF) | (value << sh))
 
     # -- a block -----------------------------------------------------------------------------------------------------------
     def _regs(self, ctx: dict[str, int]) -> tuple[dict, int]:
@@ -380,8 +410,10 @@ class MachineRig:
             else:
                 cur = self._hw_get(0x11)
                 self.hw(0x11, cur | (1 << v))
+        if self._release:
+            self._latch(1)
         regs, out_addr = self._regs(ctx)
-        for k in range(32):
+        for k in range(64 if self.spec.stereo else 32):
             self.sess.poke(nw(out_addr) + k, NAN)
         self.sess.poke(nw(dv.STACK) - 1, dv.RETURN_SW - 1)
         self.sess.poke(nw(dv.STACK), 0x20000FF0)
@@ -393,7 +425,9 @@ class MachineRig:
         )
         if self._trig and self.device == "dn2":
             self.hw(0x11, self._hw_get(0x11) & ~(1 << v))
-        self._trig = False
+        if self._release:
+            self._latch(0)
+        self._trig = self._release = False
         stop = dv.RETURN_SW if self.device == "dt2" else dv.STOCK_BP
         halt = res["halt"]
         returned = halt["reason"] == "breakpoint" and res["final_pc_sw"] == stop
@@ -406,6 +440,12 @@ class MachineRig:
             for n in dv.CONTEXT_REGS
             if (res["regs"][n] or 0) & 0xFFFFFFFF != ctx[n] & 0xFFFFFFFF
         ]
+        right = ()
+        if self.spec.stereo:
+            words = [self.sess.peek(nw(out_addr) + 32 + k) for k in range(32)]
+            right = struct.unpack(
+                "<32f", struct.pack("<32I", *[NAN if w is None else w for w in words])
+            )
         faults = self.sess.peek(nw(dv.TABLE) + 13) or 0
         foreign = self._foreign_stores(out_addr) if self.record_stores else []
         return Block(
@@ -417,6 +457,7 @@ class MachineRig:
             res,
             faults & 0xFFFF,
             foreign,
+            right,
         )
 
     # -- the write set -----------------------------------------------------------------------------------------------------
@@ -425,7 +466,7 @@ class MachineRig:
         the output block, the voice's own state block (base + stride * track, `state_bytes`), its data stack and its own data and bss (shared by all voices) (`stack_bytes` words' worth, below the adapter's frame: the adapter lowers I7 by its frame before it calls the
         module). A routine without a description (the raw form) has no state; it gets DEFAULT_STACK_BYTES of stack."""
         b = self.built
-        out = [(out_addr, 4 * 32, "output block")]
+        out = [(out_addr, 4 * (64 if self.spec.stereo else 32), "output block")]
         if b.desc:
             out.append(
                 (

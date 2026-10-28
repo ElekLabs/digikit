@@ -24,7 +24,7 @@ SRC = ROOT / "modules" / "core" / "params" / "src" / "cf" / "dt2" / "params.s"
 MANIFEST = ROOT / "modules" / "core" / "params" / "module.toml"
 FIRST = 0x113
 ROWS = 0x47EC0000
-ROWSIZE = 28  # name, short, template, slot, min, max, default
+ROWSIZE = 32  # name, short, template, slot, min, max, default, formatter
 
 needs = [
     pytest.mark.skipif(
@@ -65,7 +65,7 @@ def rust_row(table, d, slot_mirror=(25, 26, 27, 28, 31, 32, 33, 34)):
         d["name"],
         word(t, 0x2C),
         d["short"],
-        word(t, 0x34),
+        d["formatter"] or word(t, 0x34),
         word(t, 0x38),
     ]
 
@@ -80,22 +80,27 @@ def test_table_row_expressions_match_the_rust_row_builder():
         assert addr >= T1 and addr + n <= T1 + len(table)
         return table[addr - T1 : addr - T1 + n]
 
-    for template in (0x00, 0xD1, 0x112):
-        for slot in range(8):
-            d = dict(
-                template=template,
-                slot=slot,
-                min=0,
-                max=0x7F00,
-                default=0x4000,
-                name=0x47F00010,
-                short=0x47F00020,
-            )
-            got = [
-                eval_expr(e, {"cf.params.t1": T1}, d, image) & 0xFFFFFFFF
-                for e in sec["append"]["row"]
-            ]
-            assert got == rust_row(table, d), (template, slot)
+    for template, slot, formatter in [
+        (t, s, f)
+        for t in (0x00, 0xD1, 0x112)
+        for s in range(8)
+        for f in (0, 0x400F1234)
+    ]:
+        d = dict(
+            template=template,
+            slot=slot,
+            min=0,
+            max=0x7F00,
+            default=0x4000,
+            name=0x47F00010,
+            short=0x47F00020,
+            formatter=formatter,
+        )
+        got = [
+            eval_expr(e, {"cf.params.t1": T1}, d, image) & 0xFFFFFFFF
+            for e in sec["append"]["row"]
+        ]
+        assert got == rust_row(table, d), (template, slot, formatter)
     assert (
         eval_expr(
             sec["from"]["len"],
@@ -136,7 +141,15 @@ def unit():
         SYX,
         [SRC],
         ["_pf_t_t2"],
-        {"_pf_first": FIRST, "_pf_count": 3, "_pf_rows": ROWS, "_pf_rowsize": ROWSIZE},
+        {
+            "_pf_first": FIRST,
+            "_pf_count": 3,
+            "_pf_rows": ROWS,
+            "_pf_rowsize": ROWSIZE,
+            "_pe_count": 0,
+            "_pe_rows": ROWS + 0x1000,
+            "_pe_rowsize": 24,
+        },
         ["pf_t2"],
     )
 
@@ -147,7 +160,7 @@ def unit():
 def test_added_codes_become_their_template(unit):
     templates = [0xD1, 0x20, 0x112]
     rows = b"".join(
-        (0).to_bytes(4, "big") * 2 + t.to_bytes(4, "big") + (0).to_bytes(4, "big") * 4
+        (0).to_bytes(4, "big") * 2 + t.to_bytes(4, "big") + (0).to_bytes(4, "big") * 5
         for t in templates
     )
     codes = [0, 0x112, FIRST, FIRST + 1, FIRST + 2, FIRST + 3, 0x1000]

@@ -100,7 +100,7 @@ peek = [[0x40000000, 0x466c0000], [0x46712000, 0x47fe1000]]
 # The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime's device.rs.
 [limits]
 modules = 8
-machine_rows = 8
+machine_rows = 0   # the run-time range is retired in this fork (core/machines types.toml)
 arena_bytes = 524288
 stage_bytes = 65536
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)

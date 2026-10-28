@@ -106,6 +106,7 @@ fn the_run_time_type_range_is_checked() {
 /// The framework reserves 8 machine types (16 .. 23) and 16 parameter codes, with the runtime's table of addresses; the
 /// runtime alone still patches (its link to the table is optional).
 #[test]
+#[ignore = "this fork retires the run-time machine range (core/machines types.toml)"]
 fn dynreg_reserves_rows_and_the_runtime_links_optionally() {
     let lib = library();
     let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
