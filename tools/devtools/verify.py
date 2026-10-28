@@ -309,6 +309,7 @@ UI_ONLY: tuple[str, ...] = (
     "apps/desktop/ui/*",
     "apps/web/src/components/*",
     "apps/web/src/styles/*",
+    "apps/web/src/transfer/*",
     "apps/web/tests/*.mjs",
     "docs/*",
     "*.md",
@@ -393,6 +394,8 @@ RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ),
         ("web",),
     ),
+    # The Transfer pane is shared code: the desktop app builds and type-checks it too.
+    (("apps/web/src/transfer/",), ("desktop", "web")),
     (("apps/web/",), ("web",)),
     # The mixed web samples suite still imports these desktop sources.
     (

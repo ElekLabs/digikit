@@ -1,12 +1,15 @@
-// The target selector: the emulator, or a MIDI port with a device on it (Rust midir, midi_port.rs). Used in the headers of the Transfer and the
-// Remote pages. The list of ports is read when the page opens and with the rescan button (a page with its own Refresh passes `reload`: the
+// The target selector: the emulator (where the app has one), or a MIDI port with a device on it (env.ts). Used in the Transfer page and, in the
+// desktop app, the Remote page. The list of ports is read when the page opens and with the rescan button (a page with its own Refresh passes `reload`: the
 // list is read again when that number changes, and the button is left out); the port in use stays in the list.
 import { For, Show, createEffect, createSignal, on, onMount, type JSX } from 'solid-js';
-import { errorLine } from '@web/modules/backend';
-import { listMidiPorts } from './midi-transport';
+import { errorLine } from '../modules/backend';
+import { noteConnection } from './connection-state';
+import { transferEnv } from './env';
 import { selectTarget, target, targetLabel, type Target } from './target';
+import './target-select.css';
 
 const VALUE_EMU = 'emulator';
+const VALUE_NONE = '';
 
 export default function TargetSelect(props: {
   disabled?: boolean;
@@ -16,7 +19,11 @@ export default function TargetSelect(props: {
   const [ports, setPorts] = createSignal<string[]>([]);
   const rescan = async () => {
     try {
-      setPorts(await listMidiPorts());
+      const names = await transferEnv().targets.ports();
+      setPorts(names);
+      // the port of the target is not listed any more: the device was unplugged
+      const t = target();
+      if (t.kind === 'midi' && !names.includes(t.port)) noteConnection({ type: 'closed' });
     } catch (e) {
       props.onError?.(errorLine(e));
     }
@@ -34,8 +41,17 @@ export default function TargetSelect(props: {
     const names = ports();
     return t.kind === 'midi' && !names.includes(t.port) ? [t.port, ...names] : names;
   };
+  const selectValue = () => {
+    const t = target();
+    return t.kind === 'emulator' ? VALUE_EMU : t.kind === 'none' ? VALUE_NONE : t.port;
+  };
   const pick = async (value: string) => {
-    const next: Target = value === VALUE_EMU ? { kind: 'emulator' } : { kind: 'midi', port: value };
+    const next: Target =
+      value === VALUE_EMU
+        ? { kind: 'emulator' }
+        : value === VALUE_NONE
+          ? { kind: 'none' }
+          : { kind: 'midi', port: value };
     try {
       await selectTarget(next);
     } catch (e) {
@@ -49,10 +65,15 @@ export default function TargetSelect(props: {
         <select
           aria-label="Target"
           disabled={props.disabled}
-          value={target().kind === 'emulator' ? VALUE_EMU : (target() as { port: string }).port}
+          value={selectValue()}
           onChange={(e) => void pick(e.currentTarget.value)}
         >
-          <option value={VALUE_EMU}>Emulator</option>
+          <Show when={target().kind === 'none'}>
+            <option value={VALUE_NONE}>{options().length ? 'Pick a MIDI port' : 'No MIDI port found'}</option>
+          </Show>
+          <Show when={transferEnv().targets.emulator}>
+            <option value={VALUE_EMU}>Emulator</option>
+          </Show>
           <For each={options()}>
             {(name) => <option value={name}>{targetLabel({ kind: 'midi', port: name })}</option>}
           </For>
@@ -69,7 +90,7 @@ export default function TargetSelect(props: {
           Rescan
         </button>
       </Show>
-      <Show when={target().kind === 'midi'}>
+      <Show when={transferEnv().targets.emulator && target().kind === 'midi'}>
         <span class="dim">a real device</span>
       </Show>
     </span>

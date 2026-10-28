@@ -1,5 +1,14 @@
-/* The Transfer page (TransferPage.tsx, ModulesMode.tsx, SamplesMode.tsx): fills the content area next to the sidebar. Tokens from the site (apps/web/src/styles/site.css). */
+/* The Transfer page (TransferPage.tsx, ModulesMode.tsx, and in the desktop app SamplesMode.tsx): fills the content area next to the sidebar. Tokens from the site (apps/web/src/styles/site.css). */
 .transfer-page {
+  /* surfaces of the page; the site maps them to its tokens (transfer-site.css) */
+  --tp-bg: #0f1012;
+  --tp-border: #2c2f35;
+  --tp-inset: #101214;
+  --tp-bar: #121316;
+  --tp-wait: #16181c;
+  --tp-bar-line: #222428;
+  --tp-track: #1d1f23;
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -7,7 +16,7 @@
   gap: 12px;
   padding: 16px 20px 0;
   overflow: hidden;
-  background: #0f1012;
+  background: var(--tp-bg);
   color: var(--ink, #eceae5);
   font-size: 13px;
 }
@@ -78,6 +87,40 @@
   font-size: 11.5px;
   color: var(--ink-3, #868b94);
 }
+/* the connection indicator in the header (ConnectionBadge.tsx) */
+.transfer-page .conn {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3, #868b94);
+}
+.transfer-page .conn .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #868b94;
+}
+.transfer-page .conn .word {
+  color: var(--ink-2, #a9adb4);
+}
+.transfer-page .conn.connected .dot {
+  background: #7be3a1;
+}
+.transfer-page .conn.connected .word {
+  color: #7be3a1;
+}
+.transfer-page .conn.disconnected .dot {
+  background: #ff8b82;
+}
+.transfer-page .conn.disconnected .word {
+  color: #ffb4ab;
+}
+.transfer-page .conn.connecting .dot {
+  background: var(--amber, #f3b52c);
+}
 .transfer-page .colhead {
   /* the header stays at the top of its pane while the rows scroll under it */
   position: sticky;
@@ -89,7 +132,7 @@
   gap: 6px 12px;
   padding-bottom: 8px;
   margin-bottom: 0;
-  background: #0f1012;
+  background: var(--tp-bg);
 }
 .transfer-page .colhead h3 {
   margin: 0;
@@ -192,6 +235,7 @@
 .transfer-page .rows .name {
   flex: 1 1 0;
   min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -291,7 +335,7 @@
   padding: 6px 10px;
   border-radius: 8px;
   color: var(--ink-2, #a9adb4);
-  background: #16181c;
+  background: var(--tp-wait);
   font-family: var(--font-mono);
   font-size: 11.5px;
 }
@@ -305,7 +349,7 @@
 }
 .transfer-page .act,
 .transfer-page .mini {
-  border: 1px solid #2c2f35;
+  border: 1px solid var(--tp-border);
   background: #1a1c20;
   color: var(--ink, #eceae5);
   border-radius: 7px;
@@ -352,8 +396,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #121316;
-  border-top: 1px solid #222428;
+  background: var(--tp-bar);
+  border-top: 1px solid var(--tp-bar-line);
 }
 .transfer-page .barline {
   display: flex;
@@ -378,12 +422,12 @@
 .transfer-page progress {
   appearance: none;
   border: 0;
-  background: #1d1f23;
+  background: var(--tp-track);
   border-radius: 6px;
   overflow: hidden;
 }
 .transfer-page progress::-webkit-progress-bar {
-  background: #1d1f23;
+  background: var(--tp-track);
 }
 .transfer-page progress::-webkit-progress-value {
   background: var(--amber, #f3b52c);
@@ -428,7 +472,7 @@
 }
 .transfer-page .check.idle {
   color: var(--ink-2, #a9adb4);
-  background: #1d1f23;
+  background: var(--tp-track);
 }
 .transfer-page .log {
   margin: 0;
@@ -436,7 +480,7 @@
   max-height: 140px;
   overflow-y: auto;
   border-radius: 8px;
-  background: #101214;
+  background: var(--tp-inset);
   color: var(--ink-2, #a9adb4);
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -478,9 +522,9 @@
   flex: 1;
   height: 26px;
   padding-inline: 8px;
-  border: 1px solid #2c2f35;
+  border: 1px solid var(--tp-border);
   border-radius: 7px;
-  background: #101214;
+  background: var(--tp-inset);
   color: var(--ink, #eceae5);
   font: inherit;
 }
@@ -515,5 +559,96 @@
   }
   .transfer-page .rows .nm {
     min-width: 7ch;
+  }
+}
+
+/* a small link-like button in a row ("Source") */
+.transfer-page .rowlink {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-2, #a9adb4);
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.transfer-page .rowlink:hover {
+  color: var(--amber, #f3b52c);
+}
+/* the source panel (SourcePanel.tsx): over the right side of the page; the whole page when it is narrow */
+.transfer-page .source {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 100%);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--tp-bg);
+  border-left: 1px solid var(--tp-border);
+  box-shadow: -12px 0 24px rgba(0, 0, 0, 0.35);
+}
+.transfer-page .sourcehead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.transfer-page .sourcehead h3 {
+  margin: 0;
+}
+.transfer-page .sourcefiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.transfer-page .sourcefiles button {
+  padding: 2px 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2, #a9adb4);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.transfer-page .sourcefiles button.on {
+  color: var(--amber-ink, #1d1403);
+  background: var(--amber, #f3b52c);
+  border-color: var(--amber, #f3b52c);
+}
+.transfer-page .sourcetext {
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--tp-inset);
+  color: var(--ink, #eceae5);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
+}
+
+/* a narrow window: the connection badge takes its own line under the title, its parts wrap from the left (it would push the title up and the columns down at random) */
+@media (max-width: 760px) {
+  .transfer-page .head .sp {
+    display: none;
+  }
+  .transfer-page .head .conn {
+    order: 5;
+    flex: 1 1 100%;
+    min-width: 0;
   }
 }

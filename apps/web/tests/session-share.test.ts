@@ -1,9 +1,9 @@
-// One session per target (apps/desktop/ui/src/session-core.ts): every page and panel that talks to the emulator or to a MIDI port gets the SAME
+// One session per target (apps/web/src/transfer/session-core.ts): every page and panel that talks to the emulator or to a MIDI port gets the SAME
 // DkSession, so their requests take turns on the one reply stream instead of stealing each other's replies.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, DkSession, frame } from '@digi/dk-session';
-import { createSessions, targetKey } from '../src/session-core.ts';
+import { createSessions, targetKey } from '../src/transfer/session-core.ts';
 
 /** A device behind one reply stream, like the emulator's USB capture: any session that polls takes the next reply. It answers a request after a
  * moment, and counts how many requests were on the wire at once (sent, not yet answered). */

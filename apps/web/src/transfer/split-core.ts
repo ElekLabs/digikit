@@ -1,5 +1,5 @@
 // The pure part of the split pane (SplitPane.tsx): the position is a fraction of the width, kept between two minimum widths.
-// Host tests: apps/desktop/ui/tests/split-pane.test.ts.
+// Host tests: apps/web/tests/split-pane.test.ts.
 
 export const SPLIT_DEFAULT = 0.55;
 /** Width of the divider's grab area, in px (the visible line is 1 px in its middle). */

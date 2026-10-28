@@ -1,16 +1,16 @@
-// The gallery's build step (scripts/gen-modules.mjs), the selection rules and the patch worker's core.
+// The gallery's build step (scripts/gen-modules.mjs), the shipped modules and the patch worker's core.
 // The apply tests compare with the patchkit command line and skip when the wasm or a stock image is absent.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'smol-toml';
-import { buildModuleData } from '../scripts/gen-modules.mjs';
+import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
 import { PatchKit, patchedFileName } from '../src/patch/patchkit-core.ts';
-import { clash, selectionProblems, withRequired, withoutDependents } from '../src/patch/selection.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const wasmPath = join(root, 'apps/web/public/patchkit.wasm');
@@ -81,27 +81,28 @@ test('bundle equals tools/patchkit/patchkit.py bundle', { skip: !existsSync(join
   assert.deepEqual(buildModuleData(root).bundle, JSON.parse(readFileSync(out, 'utf8')));
 });
 
-test('selection: requires are added, dependents removed, clashes explained', () => {
-  const c = (id, extra = {}) => ({ id, name: id, requires: [], conflicts: [], claims: [], ...extra });
-  const cards = [
-    c('a', { requires: ['b'] }),
-    c('b', { requires: ['d'] }),
-    c('d'),
-    c('x', { claims: ['hook'] }),
-    c('y', { claims: ['hook'] }),
-    c('z', { conflicts: ['d'] }),
-  ];
-  assert.deepEqual(withRequired(cards, [], 'a'), ['a', 'b', 'd']);
-  assert.deepEqual(withoutDependents(cards, ['a', 'b', 'd'], 'd'), []);
-  assert.deepEqual(withoutDependents(cards, ['a', 'b', 'd', 'x'], 'b'), ['d', 'x']);
-  assert.match(clash(cards[3], cards[4]), /both use "hook"/);
-  assert.match(clash(cards[5], cards[2]), /conflicts/);
-  const p = selectionProblems(cards, ['x']);
-  assert.deepEqual(p.conflicts, []);
-  assert.match(p.blockers.get('y'), /hook/);
-  assert.equal(p.blockers.has('a'), false);
-  assert.match(selectionProblems(cards, ['d']).blockers.get('z'), /conflicts/);
-  assert.equal(selectionProblems(cards, ['x', 'y']).conflicts.length, 1);
+test('the shipped modules: the .dkm files equal what module:pack-all writes, the index describes them, the sources hold no build output', () => {
+  const out = mkdtempSync(join(tmpdir(), 'ship-'));
+  const { modules } = shipModules(out, root);
+  assert.deepEqual(modules.map((m) => m.id).sort(), ['digikit/freqshift', 'digikit/pluck', 'digikit/remote']);
+  assert.deepEqual(JSON.parse(readFileSync(join(out, 'index.json'), 'utf8')).modules, modules);
+  for (const m of modules) {
+    assert.ok(m.source.includes('module.toml') && m.source.includes('README.md'), m.id);
+    assert.ok(
+      m.source.every((f) => /^(module\.toml|README\.md|src\/)/.test(f)),
+      m.id,
+    );
+    for (const f of m.source) assert.ok(existsSync(join(out, 'src', m.id, f)), `${m.id}/${f}`);
+    assert.ok(!existsSync(join(out, 'src', m.id, 'build')));
+    for (const [dev, d] of Object.entries(m.devices)) {
+      const bytes = readFileSync(join(out, d.file));
+      assert.equal(bytes.length, d.size);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), d.sha256);
+      const packed = join(root, 'out', 'modules', dev, `${m.id}.dkm`);
+      if (existsSync(packed))
+        assert.deepEqual(bytes, readFileSync(packed), `${dev}/${m.id} differs from module:pack-all`);
+    }
+  }
 });
 
 test('patched file names', () => {
@@ -132,6 +133,29 @@ test('worker core: check and apply equal the command line (digikit/master-gain)'
     assert.throws(() => kit.apply(r.syx, ['digikit/master-gain']), /./);
   }
 });
+
+test(
+  'the runtime set of each device file patches the stock image, byte for byte as the command line does',
+  { skip: !have },
+  async () => {
+    const work = mkdtempSync(join(tmpdir(), 'gal-'));
+    const { bundle } = buildModuleData(root);
+    const kit = await PatchKit.create(readFileSync(wasmPath), JSON.stringify(bundle));
+    const files = { dt2: 'digitakt-ii', dn2: 'digitone-ii' };
+    for (const [name, path] of Object.entries(images)) {
+      const set = parse(readFileSync(join(root, 'devices', `${files[name]}.toml`), 'utf8')).patch_sets.device;
+      const fw = new Uint8Array(readFileSync(path));
+      const checked = kit.check(fw);
+      assert.ok(
+        set.every((id) => checked.modules.find((m) => m.id === id)?.ok === true),
+        `${name}: the set fits`,
+      );
+      const out = join(work, `${name}-runtime.syx`);
+      py('tools.patchkit.patchkit', 'patch', '--firmware', path, '-o', out); // no --modules: the `device` set
+      assert.ok(Buffer.from(kit.apply(fw, set).syx).equals(readFileSync(out)), `${name}: differs from the CLI`);
+    }
+  },
+);
 
 test('worker core: a firmware of the other device, and garbage, are refused', { skip: !have }, async () => {
   const { bundle } = buildModuleData(root);

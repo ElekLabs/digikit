@@ -4,9 +4,9 @@
 import type { SampleEntry } from '@digi/dk-session/samples';
 import type { Caps, Needs } from '@web/modules/dkfit';
 import { fitWarnings } from '@web/modules/dktransfer';
-import { noteActivity } from '../src/activity';
+import { noteActivity } from '@web/transfer/activity';
 import type { LocalEntry } from '../src/samples-core';
-import type { TransferRow, TransferView } from '../src/transfer-core';
+import type { TransferRow, TransferView } from '@web/transfer/transfer-core';
 
 /** dev: ok (answers), empty (nothing stored), noreply (never answers: the wait notice), error (every read fails), slow (2.5 s per read).
  *  folder: files (the samples folder of ~20 WAVs), empty, none (no folder chosen yet). speed: MiB/s of an upload. */
@@ -39,7 +39,7 @@ export async function deviceRead(): Promise<void> {
   switch (sim.dev) {
     case 'noreply': {
       // a real session over the mocked emulator capture, which never answers: the request waits, Cancel works, a timeout follows
-      const { session } = await import('../src/target');
+      const { session } = await import('@web/transfer/target');
       await (await session()).info();
       return;
     }

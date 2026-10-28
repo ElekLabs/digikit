@@ -2,6 +2,7 @@
 // gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.mjs checks what an icon may contain).
 import { parse } from 'smol-toml';
 import type { DeviceId } from './device-profiles';
+import { isShipped } from './shipped.mjs';
 
 const manifests = import.meta.glob('../../../../modules/**/module.toml', {
   query: '?raw',
@@ -79,6 +80,8 @@ export interface ModuleInfo {
   machines: GalleryMachine[];
   /** A run-time module (`dynamic = true`): it is loaded from the card by the digikit runtime and cannot be patched into a firmware. */
   dynamic: boolean;
+  /** The site ships its prebuilt .dkm files (the Transfer page installs them): see shipped.mjs. */
+  shipped: boolean;
 }
 
 export const CATEGORY_LABEL: Record<Category, string> = {
@@ -89,9 +92,6 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   ui: 'Interface',
   tools: 'Tool',
 };
-
-/** Categories the gallery hides unless asked: framework modules are added by what needs them. */
-export const HIDDEN_CATEGORIES = new Set<Category>(['core', 'test']);
 
 export const DEVICE_SHORT: Record<DeviceId, string> = { dt2: 'DT2', dn2: 'DN2' };
 
@@ -106,6 +106,7 @@ type Manifest = {
     status: string;
     summary: string;
     dynamic?: boolean;
+    type?: string;
     requires?: string[];
     conflicts?: string[];
   };
@@ -133,12 +134,10 @@ export const modules: ModuleInfo[] = Object.entries(manifests)
       icon: icons[path.replace(/module\.toml$/, 'gallery/icon.svg')] ?? FRAMEWORK_ICON,
       machines: galleryMachines(galleries[path.replace(/module\.toml$/, 'build/gen/gallery.json')]),
       dynamic: m.dynamic ?? false,
+      shipped: isShipped(parse(text), path.replace(/^(\.\.\/)+/, '').replace(/\/module\.toml$/, '')),
     };
   })
   .sort((a, b) => a.id.localeCompare(b.id));
 
-/** The modules a visitor patches into a firmware: no run-time modules (those are uploaded to the device). */
-export const patchableModules = modules.filter((m) => !m.dynamic);
-
-/** The modules a visitor picks from (no framework or test modules). */
-export const publicModules = patchableModules.filter((m) => !HIDDEN_CATEGORIES.has(m.category));
+/** The modules the home page shows and the Transfer page installs: the run-time content modules the site ships. */
+export const shippedModules = modules.filter((m) => m.shipped);

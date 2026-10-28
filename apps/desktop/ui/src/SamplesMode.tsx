@@ -42,15 +42,15 @@ import {
   writing,
   droppedFiles,
   type PageCtx,
-} from './TransferParts';
-import { createPaneSelect } from './pane-select';
-import { ROWS_TYPE, dropFolder } from './select-core';
-import { noteActivity } from './activity';
-import { countLabel } from './transfer-core';
-import SplitPane from './SplitPane';
+} from '@web/transfer/TransferParts';
+import { createPaneSelect } from '@web/transfer/pane-select';
+import { ROWS_TYPE, dropFolder } from '@web/transfer/select-core';
+import { noteActivity } from '@web/transfer/activity';
+import { countLabel } from '@web/transfer/transfer-core';
+import SplitPane from '@web/transfer/SplitPane';
+import { deviceInfo } from '@web/transfer/transfer-state';
 import {
   addedFiles,
-  deviceInfo,
   localEntries,
   localFolder,
   localKinds,
@@ -69,7 +69,7 @@ import {
   setUploadBase,
   setUploads,
   uploads,
-} from './transfer-state';
+} from './samples-state';
 
 export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
   const { busy, run, setError } = props.ctx;

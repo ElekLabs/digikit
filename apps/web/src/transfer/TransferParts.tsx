@@ -2,11 +2,10 @@
 // progress bar or verified/failed chip, the breadcrumb, and the two-click Delete button.
 import { For, Show, createEffect, createSignal, type JSX } from 'solid-js';
 import TargetSelect from './TargetSelect';
-import { target, targetLabel } from './target';
 import { fmtRate } from './rate-core';
 import type { PaneSelect } from './pane-select';
 import { dragKind, selectState, toggleAll } from './select-core';
-import { deleteLabel, infoLine, type RowTag } from './transfer-core';
+import { deleteLabel, freeLine, type RowTag } from './transfer-core';
 import { deviceInfo, liveRate } from './transfer-state';
 
 /** What the page gives each mode: the one busy action, and the error line. */
@@ -95,6 +94,8 @@ export interface ListRowProps {
   /** The size, right-aligned. */
   size?: string;
   status?: ChipStatus;
+  /** A small link-like button after the name ("Source"). */
+  action?: { label: string; title: string; onClick: () => void };
 }
 
 /** The folder of the device that a drag is over (a folder row, or the Up row), or undefined; the row shows it as the drop target. */
@@ -135,6 +136,13 @@ export function ListRow(props: ListRowProps): JSX.Element {
         </span>
         <For each={props.tags ?? []}>{(t) => <Tag tag={t} />}</For>
       </span>
+      <Show when={props.action}>
+        {(a) => (
+          <button type="button" class="rowlink" title={a().title} onClick={a().onClick}>
+            {a().label}
+          </button>
+        )}
+      </Show>
       <Show when={props.version}>
         <span class="vers">{props.version}</span>
       </Show>
@@ -413,7 +421,9 @@ export function DevicePane(props: {
         <Show when={deviceInfo()}>
           {(d) => (
             <>
-              <span class="meta">{infoLine(targetLabel(target()), d().name, d().runtime, d().free)}</span>
+              <Show when={d().free !== undefined}>
+                <span class="meta">{freeLine(d().free)}</span>
+              </Show>
               <Show when={d().storage}>
                 <span class="meta storage">{d().storage}</span>
               </Show>

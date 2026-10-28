@@ -37,19 +37,6 @@
     0 1px 0 rgba(255, 255, 255, 0.04) inset,
     0 16px 34px rgba(0, 0, 0, 0.35);
 }
-.card.on {
-  border-color: rgba(243, 181, 44, 0.7);
-  background: linear-gradient(180deg, #1d1a12, #15140f);
-  box-shadow: 0 0 0 3px var(--amber-soft);
-}
-.card.off {
-  opacity: 0.55;
-}
-.card.off:hover {
-  transform: none;
-  box-shadow: none;
-  border-color: var(--line);
-}
 .card-top {
   display: flex;
   justify-content: space-between;
@@ -74,8 +61,7 @@
   width: 34px;
   height: 34px;
 }
-.card:hover .tile,
-.card.on .tile {
+.card:hover .tile {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.08) inset,
     0 0 0 1px #0e0f11,
@@ -127,26 +113,6 @@
   border-radius: 6px;
   padding: 1px 7px;
 }
-.fit {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.fit svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-.fit.ok {
-  color: var(--ok);
-}
-.fit.no,
-.fit.info {
-  color: var(--ink-3);
-}
-.fit.warn {
-  color: var(--warn);
-}
 .card-foot {
   display: flex;
   align-items: center;
@@ -187,19 +153,4 @@
   color: var(--ink);
   background: var(--panel-3);
   border-color: #4a4e56;
-}
-.add svg {
-  width: 13px;
-  height: 13px;
-}
-.add[aria-pressed='true'] {
-  background: var(--amber);
-  border-color: var(--amber);
-  color: var(--amber-ink);
-}
-.add:disabled {
-  color: var(--ink-3);
-  border-color: var(--line);
-  background: transparent;
-  cursor: not-allowed;
 }

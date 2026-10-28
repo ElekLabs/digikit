@@ -1,5 +1,5 @@
-// What the pages say while a device has not answered, and after it did not. Pure, so host tests can run it (apps/desktop/ui/tests/wait-core.test.ts).
-import { errorLine, isCancelled, isTimeout } from '../../../web/src/modules/backend.ts';
+// What the pages say while a device has not answered, and after it did not. Pure, so host tests can run it (apps/web/tests/wait-core.test.ts).
+import { errorLine, isCancelled, isTimeout } from '../modules/backend.ts';
 
 /** How long a request waits with nothing arriving (no reply, no progress) before the page shows "Waiting for ..." (a quick answer or a
  * running upload shows nothing). */

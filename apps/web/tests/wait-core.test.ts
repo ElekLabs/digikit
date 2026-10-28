@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError } from '@digi/dk-session';
-import { WAIT_QUIET_MS, failureLine, waitingLine } from '../src/wait-core.ts';
+import { WAIT_QUIET_MS, failureLine, waitingLine } from '../src/transfer/wait-core.ts';
 
 test('the lines for waiting, no reply and cancel', () => {
   assert.equal(waitingLine('MIDI: IAC Driver Bus 1'), 'Waiting for MIDI: IAC Driver Bus 1…');

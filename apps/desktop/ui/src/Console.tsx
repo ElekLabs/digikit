@@ -33,8 +33,8 @@ import {
 import { clearLog, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import SidePanels from './SidePanels';
 import RemotePage from './RemotePage';
-import { emulatorSession, target } from './target';
-import TransferPage from './TransferPage';
+import { emulatorSession, target } from '@web/transfer/target';
+import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
 

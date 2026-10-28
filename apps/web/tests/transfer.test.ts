@@ -1,5 +1,5 @@
-import type { Group, RowTag, TransferEvent, TransferRow, TransferView } from '../src/transfer-core.ts';
-// The pure logic of the desktop Transfer page (apps/desktop/ui/src/transfer-core.ts).
+import type { Group, RowTag, TransferEvent, TransferRow, TransferView } from '../src/transfer/transfer-core.ts';
+// The pure logic of the Transfer page (apps/web/src/transfer/transfer-core.ts).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -20,14 +20,14 @@ import {
   startProgress,
   deviceTags,
   freeText,
-  infoLine,
+  freeLine,
   localTags,
   MODES,
   parseMode,
   storageLine,
   tickedFit,
   warningText,
-} from '../src/transfer-core.ts';
+} from '../src/transfer/transfer-core.ts';
 
 const row = (id: string | null, group: Group, extra: Partial<TransferRow> = {}): TransferRow => ({
   id,
@@ -294,11 +294,8 @@ test('the device line: the free space in GiB from 1 GiB up, the same line for bo
   assert.equal(freeText(2 ** 30), '1.00 GiB');
   assert.equal(freeText(19508 * 1024 * 1024), '19.05 GiB');
   assert.equal(freeText(2 ** 32 - 1 + 1), '4.00 GiB');
-  assert.equal(
-    infoLine('Emulator', 'Digitone II', '0.4.1', 19508 * 1024 * 1024),
-    'Emulator · Digitone II · runtime 0.4.1 · 19.05 GiB free',
-  );
-  assert.equal(infoLine('Emulator', 'Digitakt II', '0.4.1', undefined), 'Emulator · Digitakt II · runtime 0.4.1');
+  assert.equal(freeLine(19508 * 1024 * 1024), '19.05 GiB free');
+  assert.equal(freeLine(undefined), '');
 });
 
 test('the ticked modules together: the sum rule against the device limits, in list order', () => {
@@ -347,5 +344,5 @@ test('the storage line of Modules mode: files on the card, their size and the fr
   );
   assert.doesNotMatch(storageLine(view), /arena|memory|DSP|RAM/i);
   // free space is in the storage line, not in the device line, in Modules mode
-  assert.equal(infoLine('Emulator', 'Digitakt II', '0.4.1', undefined), 'Emulator · Digitakt II · runtime 0.4.1');
+  assert.equal(freeLine(undefined), '');
 });

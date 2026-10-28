@@ -192,8 +192,28 @@ child processes.
 - [x] 6b. Spike, at most one day: gcc `cc1` and `as` for `wasm32-wasi`. If it fails, plan an own
       C compiler for ColdFire in Rust. Result: gcc `cc1` and `as` build for wasm32-wasip1 and give
       byte-identical output on 32 module sources (finding 74); ship them. `ld` for wasm is next (6c).
-- [ ] 6c. `pk_build` and `pk_pack` in `patchkit.wasm`. One Transfer flow for desktop and web:
-      drop a `.dkmod`, compile, pack, send.
+- [ ] 6c. Transfer in the site (decided 2026-10-28): the workbench's Transfer pane moves to shared code
+      (`apps/web/src/transfer/`, a `TransferEnv` for library, targets and desktop-only extras) and
+      becomes the web Transfer page. The site ships each module's prebuilt `.dkm` per device (built at
+      site-build time, the same bytes as `module:pack-all`), an index and the sources (read-only source
+      view). The Upload page folds into Transfer ("Add .dkm files"); the Patch page patches the runtime
+      set only. A connection indicator (connected, connecting, not connected; device, OS, runtime, id)
+      in the shared pane. WebMIDI: cancel, disconnect detection, clear messages without WebMIDI or
+      SysEx permission. Proof: desktop Transfer unchanged; web tests; Em's test in Chrome on the device.
+      Status: built (shared pane, site assets, web Transfer page, WebMIDI hardening, badge with OS
+      version); Em's device test waits for 6d (the device needs a flashed runtime first).
+- [ ] 6d. Patch and flash, one path for the CLI, the workbench and the web: a `flash` core in patchkit
+      (stock check by SHA-256, patch, preflight: sections 2, 4, 5 and 8 byte-identical to stock,
+      verify: checksums and HMAC, the message stream decoded back before sending, device and product
+      match, pacing), an emulator boot of the exact image before flashing (desktop and CLI), recovery
+      steps shown first, YES on the device stays human, INFO checked after the reboot. Senders:
+      `patchkit flash --port` (midir), the desktop (midir), the web (`patchkit.wasm` + WebMIDI); one
+      shared step UI. First settle statically and in the emulator: the OS UPGRADE receive route (the
+      `.syx` stream or MidiRpc 0x50-0x52), acks and pacing, the 1.17/1.12 validator's build floor,
+      what a cut transfer leaves. Proof: a full flash into the emulated device, which reboots into the
+      new image.
+- [ ] Later: compile in the browser (a dropped `.dkmod`, or an edited source): gcc `cc1`/`as`/`ld` in
+      wasm (finding 74) in a worker, SHARC+ already in `patchkit.wasm`.
 - [ ] Optional: a `.dkmod` carries the expected `.dkm` hash per device so a receiver can
       compare builds.
 

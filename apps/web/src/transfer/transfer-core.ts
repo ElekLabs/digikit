@@ -1,12 +1,12 @@
 // The pure logic of the Transfer page (no DOM, no Tauri): the two lists, the install request, the progress bar and the texts.
-// Host tests: apps/desktop/ui/tests/transfer.test.ts.
+// Host tests: apps/web/tests/transfer.test.ts.
 //
 // The page only puts files on the card (upload and verify) and restarts the device. Which modules the device loads is its own
 // selection, made in SETTINGS > DIGIKIT > MODULES on the device and applied there.
 
-import { formatBytes } from '../../../web/src/modules/backend.ts';
-import { describeShort, emptyCaps, fitsSet } from '../../../web/src/modules/dkfit.ts';
-import type { Group, TransferEvent, TransferRow, TransferView } from '../../../web/src/modules/dktransfer.ts';
+import { formatBytes } from '../modules/backend.ts';
+import { describeShort, emptyCaps, fitsSet } from '../modules/dkfit.ts';
+import type { Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
 export const GROUPS: Group[] = ['Machines', 'Effects', 'Tools'];
 
@@ -25,9 +25,9 @@ export function freeText(bytes: number): string {
   return bytes >= 2 ** 30 ? `${(bytes / 2 ** 30).toFixed(2)} GiB` : formatBytes(bytes);
 }
 
-/** The line of the On device column, the same in both modes: the target, the device, its runtime and the free space (left out when unknown). */
-export function infoLine(target: string, device: string, runtime: string, free: number | undefined): string {
-  return [target, device, `runtime ${runtime}`, ...(free === undefined ? [] : [`${freeText(free)} free`])].join(' · ');
+/** The free space of the device, for the On device column in Samples mode (the target, device and runtime are in the connection badge); '' when unknown. */
+export function freeLine(free: number | undefined): string {
+  return free === undefined ? '' : `${freeText(free)} free`;
 }
 
 /** The storage line of Modules mode, under the device line: the module files on the card (the rows of the list) and the free space of the store. Storage only: no memory. */

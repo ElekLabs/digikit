@@ -1,63 +1,45 @@
-// The Transfer page (desktop only): one page, two modes. A dropdown picks Modules (the built modules of the library folder and the card's
-// module store) or Samples (a folder of samples and the device's sample folders). The left column is always "On your computer", the right
+// The Transfer page, shared by the desktop workbench and the site (the app gives its parts in env.ts): one page, up to two modes. A dropdown
+// picks Modules (the built modules of the library and the card's module store) or, in the desktop app, Samples (a folder of samples and the
+// device's sample folders). The left column is always "On your computer", the right
 // column "On device"; each column carries its own controls (ModulesMode.tsx, SamplesMode.tsx; the shared parts are in TransferParts.tsx).
 // This file holds what the modes share: the top bar (title, mode), the one busy action, the error line, and the progress bar along the bottom.
 // There is no Refresh button: the page reads by itself (AutoRefresh.tsx, refresh-core.ts). The page speaks the upload protocol itself, in
 // TypeScript, over the controller's USB capture; no process is started and nothing is built.
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, onMount, type JSX } from 'solid-js';
-import { isCancelled, isTimeout } from '@web/modules/backend';
+import { Dynamic } from 'solid-js/web';
+import { isCancelled, isTimeout } from '../modules/backend';
 import { noteActivity } from './activity';
 import AutoRefresh from './AutoRefresh';
-import { bumpCardRefresh } from './card-state';
-import { logInput } from './log-state';
-import { transferEntry } from './log-core';
+import ConnectionBadge from './ConnectionBadge';
+import { transferEnv } from './env';
 import ModulesMode from './ModulesMode';
-import SamplesMode from './SamplesMode';
-import { deviceStorage, readLocal, readSamples } from './samples-backend';
 import { target, targetLabel } from './target';
+import SourcePanel from './SourcePanel';
 import { transferBackend } from './transfer-backend';
-import { samplesBar } from './samples-core';
 import TransferBar from './TransferBar';
 import { MODES, modulesBar, parseMode, storageLine } from './transfer-core';
 import { writing, type PageCtx } from './TransferParts';
 import {
+  activeMode,
   log,
-  mode,
   progress,
   setDelTicks,
   setDeviceInfo,
   setLastView,
   setMode,
-  setSampleEntries,
-  setSampleFolder,
-  setSampleTicks,
   setTicks,
-  setUploads,
-  uploadBase,
-  uploads,
 } from './transfer-state';
 import WaitNotice from './WaitNotice';
 import { failureLine } from './wait-core';
 import './transfer-page.css';
 
-/** Read what the mode shows, both sides: the device and the computer (the library folder, or the chosen samples folder). */
+/** Read what the mode shows, both sides: the device and the computer (the library, or the chosen samples folder). */
 async function read(): Promise<void> {
-  if (mode() === 'samples') {
-    // the device and the folder fail apart: both are read, the errors are shown together
-    const errors: string[] = [];
-    for (const step of [readSamples, readLocal])
-      try {
-        await step();
-      } catch (e) {
-        errors.push(failureLine(e, targetLabel(target())));
-      }
-    if (errors.length) throw new Error(errors.join('\n'));
-    return;
-  }
+  const env = transferEnv();
+  if (activeMode() === 'samples' && env.extras?.samples) return env.extras.samples.read();
   const v = await transferBackend.list();
   setLastView(v);
-  const { name, samples } = await deviceStorage(v.device);
-  setDeviceInfo({ name, samples, runtime: v.runtime, storage: storageLine(v), canMkdir: false });
+  setDeviceInfo({ name: await env.deviceName(v.device), runtime: v.runtime, storage: storageLine(v) });
 }
 
 export default function TransferPage(): JSX.Element {
@@ -80,18 +62,16 @@ export default function TransferPage(): JSX.Element {
     // a read is not logged (the page reads by itself); every other run is, with its result
     const logRun = (failure?: unknown) => {
       if (what === 'Reading') return;
-      const modules = mode() === 'modules';
-      logInput(
-        transferEntry({
-          what,
-          target: targetLabel(target()),
-          lines: modules ? log() : [],
-          message: modules ? progress()?.message : undefined,
-          ...(failure === undefined
-            ? {}
-            : { error: failureLine(failure, targetLabel(target())), cancelled: isCancelled(failure) }),
-        }),
-      );
+      const modules = activeMode() === 'modules';
+      transferEnv().logRun({
+        what,
+        target: targetLabel(target()),
+        lines: modules ? log() : [],
+        message: modules ? progress()?.message : undefined,
+        ...(failure === undefined
+          ? {}
+          : { error: failureLine(failure, targetLabel(target())), cancelled: isCancelled(failure) }),
+      });
     };
     try {
       await f();
@@ -112,9 +92,7 @@ export default function TransferPage(): JSX.Element {
         readAgain = false;
         void run('Reading', async () => {});
       }
-      // the Card panel reads the folder now and again after the emulator's quiet period (the folder follows the card about 2 s later)
-      bumpCardRefresh();
-      window.setTimeout(bumpCardRefresh, 2500);
+      transferEnv().extras?.onJobEnd?.();
     }
   };
   const ctx: PageCtx = { busy, run, setError, reload };
@@ -130,10 +108,7 @@ export default function TransferPage(): JSX.Element {
         setDeviceInfo(undefined);
         setTicks(new Set<string>());
         setDelTicks(new Set<string>());
-        setSampleEntries(undefined);
-        setSampleFolder('');
-        setSampleTicks(new Set<string>());
-        setUploads({});
+        transferEnv().extras?.samples?.reset();
         void run('Reading', async () => {});
       },
       { defer: true },
@@ -149,30 +124,33 @@ export default function TransferPage(): JSX.Element {
 
   // the bar along the bottom, for the install, delete or restart of Modules and the upload of Samples
   const bar = createMemo(() => {
-    if (mode() === 'modules') {
+    if (activeMode() === 'modules') {
       const p = progress();
-      return p ? modulesBar(p) : undefined;
+      return p ? { info: modulesBar(p), running: writing(busy()) } : undefined;
     }
-    return samplesBar(uploads(), uploadBase(), busy() === 'Uploading');
+    return transferEnv().extras?.samples?.bar(busy());
   });
-  const barRunning = () => (mode() === 'modules' ? writing(busy()) : busy() === 'Uploading');
+  const samples = () => transferEnv().extras?.samples;
 
   return (
     <section class="transfer-page" aria-label="Transfer">
       <header class="head">
         <h2>Transfer</h2>
-        <label class="target-select">
-          <span class="dim">Mode</span>{' '}
-          <select
-            aria-label="Mode"
-            disabled={writing(busy())}
-            value={mode()}
-            onChange={(e) => changeMode(e.currentTarget.value)}
-          >
-            <For each={MODES}>{(m) => <option value={m.id}>{m.label}</option>}</For>
-          </select>
-        </label>
+        <Show when={samples()}>
+          <label class="target-select">
+            <span class="dim">Mode</span>{' '}
+            <select
+              aria-label="Mode"
+              disabled={writing(busy())}
+              value={activeMode()}
+              onChange={(e) => changeMode(e.currentTarget.value)}
+            >
+              <For each={MODES}>{(m) => <option value={m.id}>{m.label}</option>}</For>
+            </select>
+          </label>
+        </Show>
         <span class="sp" />
+        <ConnectionBadge />
         <Show when={busy() === 'Reading'}>
           <span class="meta">reading…</span>
         </Show>
@@ -191,18 +169,19 @@ export default function TransferPage(): JSX.Element {
       </Show>
 
       <Switch>
-        <Match when={mode() === 'modules'}>
+        <Match when={activeMode() === 'modules'}>
           <ModulesMode ctx={ctx} />
         </Match>
-        <Match when={mode() === 'samples'}>
-          <SamplesMode ctx={ctx} />
+        <Match when={activeMode() === 'samples' && samples()}>
+          {(slot) => <Dynamic component={slot().Mode} ctx={ctx} />}
         </Match>
       </Switch>
 
-      <Show when={bar()}>{(b) => <TransferBar bar={b()} running={barRunning()} />}</Show>
-      <Show when={mode() === 'modules' && log().length && !bar()}>
+      <Show when={bar()}>{(b) => <TransferBar bar={b().info} running={b().running} />}</Show>
+      <Show when={activeMode() === 'modules' && log().length && !bar()}>
         <pre class="log">{log().join('\n')}</pre>
       </Show>
+      <SourcePanel />
     </section>
   );
 }

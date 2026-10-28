@@ -1,6 +1,7 @@
 // The pure logic of the workbench Log drawer (no DOM, no Tauri): the entries and their cap, the filter, the badge, the copy text, the
 // rule that opens the drawer by itself, and the one-line texts of the events the app logs. Host tests: apps/desktop/ui/tests/log.test.ts.
 import type { ReloadReport } from '../../../web/src/runtime/reload.ts';
+import type { TransferRun } from '../../../web/src/transfer/env.ts';
 import type { CardFolder } from './card-core.ts';
 import { shortFolder } from './card-core.ts';
 
@@ -177,19 +178,6 @@ const PAST: Record<string, string> = {
   Deleting: 'deleted',
   Creating: 'created a folder',
 };
-
-export interface TransferRun {
-  /** The page's busy label: Installing, Restarting, Uploading, Deleting, Creating. */
-  what: string;
-  target: string;
-  /** The error text of a failed run. */
-  error?: string;
-  cancelled?: boolean;
-  /** The text the progress bar ended with. */
-  message?: string;
-  /** The events of the run (Modules mode), one line each. */
-  lines: string[];
-}
 
 /** One log entry for a run of the Transfer page: files sent and skipped, the end text; the event lines are the detail. */
 export function transferEntry(run: TransferRun): LogInput {

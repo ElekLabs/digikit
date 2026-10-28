@@ -13,13 +13,14 @@ import '@fontsource/jetbrains-mono/500.css';
 import '@web/styles/site.css';
 import '../src/console.css';
 import '../src/native.css';
+import '../src/desktop-env';
 import { installNativeFeel } from '../src/native';
 import LivePanel from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import RemotePage from '../src/RemotePage';
 import SidePanels from '../src/SidePanels';
-import { emulatorSession } from '../src/target';
-import TransferPage from '../src/TransferPage';
+import { emulatorSession } from '@web/transfer/target';
+import TransferPage from '@web/transfer/TransferPage';
 
 type Page = 'emulator' | 'transfer' | 'remote';
 const query = new URLSearchParams(location.search);

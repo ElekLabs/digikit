@@ -147,51 +147,7 @@
   }
 }
 
-/* Step 2: filters and notes */
-.filters {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.chip {
-  height: 34px;
-  padding-inline: 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line-2);
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 500;
-}
-.chip:hover {
-  color: var(--ink);
-  border-color: #4a4e56;
-}
-.chip[aria-pressed='true'] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--ground);
-}
-.sep {
-  width: 1px;
-  height: 22px;
-  background: var(--line-2);
-  margin-inline: 6px;
-}
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.check input {
-  accent-color: var(--amber);
-  width: 16px;
-  height: 16px;
-}
+/* Step 2: notes */
 .callout {
   display: flex;
   gap: 10px;
@@ -286,28 +242,6 @@ kbd {
   display: flex;
   align-items: center;
   gap: 14px;
-}
-.stack {
-  display: flex;
-  flex-shrink: 0;
-}
-.stack span {
-  --icon-accent: var(--amber);
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  background: var(--panel-3);
-  box-shadow: 0 0 0 2px var(--ground);
-  color: var(--ink);
-}
-.stack span + span {
-  margin-left: -8px;
-}
-.stack svg {
-  width: 20px;
-  height: 20px;
 }
 .bar-text {
   min-width: 0;
@@ -461,4 +395,21 @@ kbd {
   .checks {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.runtime-set {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 12px 0 0;
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+.runtime-set code {
+  padding: 1px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  color: var(--ink-2);
 }

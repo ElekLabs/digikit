@@ -1,15 +1,13 @@
-// The patch page: drop a stock .syx, pick modules from the gallery, patch in a worker (patchkit.wasm), then
-// download the result or boot it in the emulator. The firmware never leaves this tab.
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+// The patch page: drop a stock .syx, patch the digikit runtime into it in a worker (patchkit.wasm), then download the result or boot it in the
+// emulator. The patch adds the runtime set only; machines, effects and tools are installed over USB on the Transfer page. The firmware never leaves this tab.
+import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import type { CheckResult, PatchPlan, VerifyReport } from '../patch/patchkit-core';
 import { patchedFileName } from '../patch/patchkit-core';
 import { putHandoff } from '../patch/handoff';
 import { identify, deviceName, type Identity } from '../patch/identify';
-import { clash, selectionProblems, withRequired, withoutDependents } from '../patch/selection';
-import { HIDDEN_CATEGORIES, type Category, type ModuleInfo } from '../data/modules';
+import { runtimeSets } from '../data/runtime-sets';
 import { panels } from '../data/faceplates';
 import type { DeviceId } from '../data/device-profiles';
-import ModuleCard, { type CardState } from './ModuleCard';
 import PanelArt from './PanelArt';
 import SyxFile from './SyxFile';
 import './patch.css';
@@ -38,17 +36,11 @@ type Reply = {
 };
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+/** The name the patched file and the result dialog give to the runtime set. */
+const RUNTIME_ID = 'digikit/runtime';
 const MAX_BYTES = 16 * 1024 * 1024;
-const FILTERS: { id: Category | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'fx', label: 'Effects' },
-  { id: 'machines', label: 'Machines' },
-];
 const isDevice = (d: string): d is DeviceId => d === 'dt2' || d === 'dn2';
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-/** Module ids the user picked: patchkit lists `id@version` and adds framework modules itself. */
-const userModules = (tags: string[]) => tags.map((t) => t.split('@')[0]).filter((id) => !id.startsWith('core/'));
 
 function Glyph(props: { d: string; width?: string }) {
   return (
@@ -71,17 +63,13 @@ const DOWNLOAD = 'M8 2.5V10.5M4.5 7L8 10.5L11.5 7M3 13.5H13';
 const PLAY = 'M4.5 2.5L12.5 8L4.5 13.5Z';
 const CLOSE = 'M4 4L12 12M12 4L4 12';
 
-export default function PatchGallery(props: { modules: ModuleInfo[] }) {
-  const cards = () => props.modules;
+export default function PatchGallery() {
   const [loadError, setLoadError] = createSignal('');
   const [ready, setReady] = createSignal(false);
   const [file, setFile] = createSignal<{ name: string; bytes: ArrayBuffer }>();
   const [check, setCheck] = createSignal<CheckResult>();
   const [identity, setIdentity] = createSignal<Identity>();
   const [fileError, setFileError] = createSignal('');
-  const [selected, setSelected] = createSignal<string[]>([]);
-  const [category, setCategory] = createSignal<Category | 'all'>('all');
-  const [showFramework, setShowFramework] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [patchError, setPatchError] = createSignal('');
   const [result, setResult] = createSignal<PatchRun>();
@@ -122,9 +110,6 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
     };
     worker.onerror = (event) => setLoadError(`The patch tool failed to start: ${event.message}`);
     worker.postMessage({ type: 'init', wasmUrl: `${base}patchkit.wasm`, bundleUrl: `${base}modules/bundle.json` });
-    // A module card on the home page links here with ?add=<id>.
-    const add = new URLSearchParams(location.search).get('add');
-    if (add && cards().some((c) => c.id === add)) setSelected(withRequired(cards(), [], add));
     window.addEventListener('keydown', onKey);
   });
   onCleanup(() => {
@@ -133,66 +118,21 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
     window.removeEventListener('keydown', onKey);
   });
 
-  const byId = createMemo(() => new Map(cards().map((c) => [c.id, c])));
-  const visible = createMemo(() =>
-    cards().filter((c) => {
-      const hidden = HIDDEN_CATEGORIES.has(c.category);
-      if (hidden) return showFramework() || selected().includes(c.id);
-      return category() === 'all' || c.category === category();
-    }),
-  );
+  /** The runtime set of the device of the loaded firmware. */
+  const runtime = () => {
+    const d = check()?.device;
+    return d && isDevice(d) ? runtimeSets[d] : [];
+  };
   const compat = (id: string) => check()?.modules.find((m) => m.id === id);
-  const problems = createMemo(() => selectionProblems(cards(), selected()));
-  /** Framework modules a module brings with it (transitively). */
-  const needs = (id: string) =>
-    withRequired(cards(), [], id).filter((r) => r !== id && HIDDEN_CATEGORIES.has(byId().get(r)!.category)).length;
+  /** Every module of the runtime set works on this firmware (patchkit's read-only check). */
+  const runtimeFits = () => runtime().length > 0 && runtime().every((id) => compat(id)?.ok === true);
   const firmwareName = () => {
     const c = check(),
       i = identity();
     if (!c) return '';
     return i ? `${i.deviceName} ${i.version}` : deviceName(c.device);
   };
-  const cardState = (m: ModuleInfo): { state: CardState; note?: string } => {
-    const c = check();
-    const fit = compat(m.id);
-    if (c && fit && !fit.ok) {
-      const onlyOn = m.devices.length > 0 && isDevice(c.device) && !m.devices.includes(c.device);
-      return {
-        state: 'no',
-        note: onlyOn ? `${m.devices.map(deviceName).join(' and ')} only` : 'Not for this firmware',
-      };
-    }
-    const blocker = selected().includes(m.id) ? undefined : problems().blockers.get(m.id);
-    if (blocker) {
-      // Name the chosen module it clashes with; the full reason is long for a card.
-      const other = selected()
-        .map((id) => byId().get(id)!)
-        .find((s) => !HIDDEN_CATEGORIES.has(s.category) && clash(m, s));
-      return { state: 'conflict', note: other ? `Conflicts with ${other.name}` : blocker };
-    }
-    if (c && fit?.ok) return { state: 'ok', note: `Works with ${firmwareName()}` };
-    return { state: 'browse' };
-  };
-  const chosen = createMemo(() =>
-    selected()
-      .map((id) => byId().get(id)!)
-      .filter((m) => !HIDDEN_CATEGORIES.has(m.category) && (!check() || compat(m.id)?.ok !== false)),
-  );
-  const framework = () => selected().filter((id) => HIDDEN_CATEGORIES.has(byId().get(id)!.category)).length;
-  const canPatch = () =>
-    ready() &&
-    !busy() &&
-    Boolean(file()) &&
-    Boolean(check()?.port) &&
-    chosen().length > 0 &&
-    problems().conflicts.length === 0;
-
-  const toggle = (m: ModuleInfo) => {
-    setResult(undefined);
-    setPatchError('');
-    const on = selected().includes(m.id);
-    setSelected(on ? withoutDependents(cards(), selected(), m.id) : withRequired(cards(), selected(), m.id));
-  };
+  const canPatch = () => ready() && !busy() && Boolean(file()) && Boolean(check()?.port) && runtimeFits();
 
   const loadFile = async (picked?: File) => {
     if (!picked) return;
@@ -213,11 +153,6 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
       const found = reply.result!;
       setCheck(found);
       setIdentity(identify(found.sha256));
-      // Drop selections that do not work on this firmware, with whatever needed them.
-      let keep = selected();
-      for (const id of keep)
-        if (found.modules.find((m) => m.id === id)?.ok === false) keep = withoutDependents(cards(), keep, id);
-      setSelected(keep);
     } catch (error) {
       setFile(undefined);
       setFileError(`This is not an Elektron firmware update file: ${message(error)}`);
@@ -232,7 +167,7 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
     setPatchError('');
     setResult(undefined);
     try {
-      const reply = await send({ type: 'apply', firmware: f.bytes.slice(0), modules: selected() });
+      const reply = await send({ type: 'apply', firmware: f.bytes.slice(0), modules: runtime() });
       const plan = reply.plan!;
       const syx = reply.syx!;
       if (resultUrl) URL.revokeObjectURL(resultUrl);
@@ -242,13 +177,13 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
       setResult({
         name,
         version,
-        ids: userModules(plan.modules),
+        ids: [RUNTIME_ID],
         plan,
         verify: reply.verify!,
         sha256: reply.sha256!,
         bytes: syx,
         url: resultUrl,
-        file: patchedFileName(name, version, userModules(plan.modules)),
+        file: patchedFileName(name, version, [RUNTIME_ID]),
         device: c.device,
       });
       setDialogOpen(true);
@@ -271,20 +206,11 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
     }
   };
 
-  const barTitle = () => {
-    const n = chosen().length;
-    if (n === 0) return 'No modules chosen';
-    return `${n} module${n === 1 ? '' : 's'}: ${chosen()
-      .map((m) => m.name)
-      .join(', ')}`;
-  };
   const barNote = () => {
     if (!file()) return 'Add your firmware in step 1 to patch.';
     if (!check()) return 'Checking your firmware…';
     if (!check()!.port) return 'This firmware version cannot be patched.';
-    if (problems().conflicts.length > 0) return problems().conflicts[0];
-    if (framework() > 0)
-      return `Plus ${framework()} framework module${framework() === 1 ? '' : 's'}, added automatically.`;
+    if (!runtimeFits()) return 'The runtime does not fit this firmware.';
     return `Ready to patch ${firmwareName()}.`;
   };
 
@@ -294,8 +220,8 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
         <header class="page-head">
           <h1>Patch your firmware</h1>
           <p>
-            Add modules to your own Digitakt II or Digitone II firmware. Your file stays in this browser tab; nothing is
-            uploaded.
+            Add the digikit runtime to your own Digitakt II or Digitone II firmware. Your file stays in this browser
+            tab; nothing is uploaded.
           </p>
         </header>
 
@@ -406,64 +332,31 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
         <section class="stage" aria-labelledby="st2">
           <div class="stage-head">
             <div class="stage-title">
-              <span class="trigkey small" classList={{ lit: chosen().length > 0 }} aria-hidden="true">
+              <span class="trigkey small" classList={{ lit: runtimeFits() }} aria-hidden="true">
                 2<i />
               </span>
-              <h2 id="st2">Choose modules</h2>
-            </div>
-            <div class="filters" role="group" aria-label="Show">
-              <For each={FILTERS}>
-                {(f) => (
-                  <button
-                    type="button"
-                    class="chip"
-                    aria-pressed={category() === f.id}
-                    onClick={() => setCategory(f.id)}
-                  >
-                    {f.label}
-                  </button>
-                )}
-              </For>
-              <span class="sep" aria-hidden="true" />
-              <label class="check" for="show-framework">
-                <input
-                  id="show-framework"
-                  type="checkbox"
-                  checked={showFramework()}
-                  onChange={(e) => setShowFramework(e.currentTarget.checked)}
-                />
-                Framework modules
-              </label>
+              <h2 id="st2">What is added</h2>
             </div>
           </div>
           <p class="callout">
             <Glyph d={INFO} />
-            Every module is experimental. Try the patched firmware in the emulator before you flash it.
+            <span>
+              The patch adds the digikit runtime: the DIGIKIT menu and the loader for modules. Machines, effects and
+              tools are not patched in. After you flash, install them over USB on the{' '}
+              <a href={`${base}transfer/`}>Transfer</a> page.
+            </span>
           </p>
           <Show when={loadError()}>
             <p class="callout bad" role="alert">
               {loadError()}
             </p>
           </Show>
-          <ul class="cards">
-            <For each={visible()}>
-              {(m) => {
-                const st = () => cardState(m);
-                return (
-                  <li>
-                    <ModuleCard
-                      module={m}
-                      state={st().state}
-                      note={st().note}
-                      needs={needs(m.id)}
-                      selected={selected().includes(m.id)}
-                      onToggle={() => toggle(m)}
-                    />
-                  </li>
-                );
-              }}
-            </For>
-          </ul>
+          <Show when={runtime().length}>
+            <p class="runtime-set">
+              <span>Runtime modules for {firmwareName()}</span>
+              <For each={runtime()}>{(id) => <code>{id}</code>}</For>
+            </p>
+          </Show>
         </section>
 
         <section class="safety" aria-labelledby="safe-title">
@@ -495,15 +388,9 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
             3<i />
           </span>
           <div class="bar-sel">
-            <div class="stack" aria-hidden="true">
-              {/* oxlint-disable-next-line solid/no-innerhtml -- repository SVGs, checked by apps/web/tests/icons.test.mjs */}
-              <For each={chosen().slice(0, 4)}>{(m) => <span innerHTML={m.icon} />}</For>
-            </div>
             <div class="bar-text">
-              <div class="bar-title">{barTitle()}</div>
-              <div class="bar-note" classList={{ bad: problems().conflicts.length > 0 }}>
-                {barNote()}
-              </div>
+              <div class="bar-title">digikit runtime</div>
+              <div class="bar-note">{barNote()}</div>
             </div>
           </div>
           <Show when={result() && !dialogOpen()}>
@@ -551,11 +438,7 @@ export default function PatchGallery(props: { modules: ModuleInfo[] }) {
               <div>
                 <h2 id="done-title">Your firmware is ready</h2>
                 <p>
-                  {r().name} OS {r().version} with{' '}
-                  {r()
-                    .ids.map((id) => byId().get(id)?.name ?? id)
-                    .join(' and ')}
-                  . Patched and checked in this browser.
+                  {r().name} OS {r().version} with the digikit runtime. Patched and checked in this browser.
                 </p>
               </div>
               <ul class="checks">

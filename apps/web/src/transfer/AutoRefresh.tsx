@@ -1,9 +1,9 @@
 // The page reads by itself (refresh-core.ts says when): when the window is shown or gets the focus, every few seconds for the folder on the
 // computer (a cheap listing), and the MIDI ports are listed again with each tick. Nothing here starts while a job runs. No visible parts.
 import { onCleanup, onMount, type JSX } from 'solid-js';
-import { listLocalNow } from './samples-backend';
-import { canAutoRefresh, focusReadDue, listingChanged, POLL_MS } from './refresh-core';
-import { localEntries, localFolder, mode } from './transfer-state';
+import { transferEnv } from './env';
+import { canAutoRefresh, focusReadDue, POLL_MS } from './refresh-core';
+import { activeMode } from './transfer-state';
 
 export default function AutoRefresh(props: {
   busy: () => string;
@@ -28,10 +28,11 @@ export default function AutoRefresh(props: {
     polling = true;
     try {
       props.rescanPorts();
-      if (mode() !== 'samples' || !localFolder()) return;
-      const now = await listLocalNow();
+      const samples = transferEnv().extras?.samples;
+      if (activeMode() !== 'samples' || !samples) return;
+      const changed = await samples.localChanged();
       // a job may have started while the listing ran: leave it alone
-      if (now && canAutoRefresh(visible(), props.busy()) && listingChanged(localEntries(), now)) props.read();
+      if (changed && canAutoRefresh(visible(), props.busy())) props.read();
     } finally {
       polling = false;
     }

@@ -5,7 +5,7 @@
 // in MODULES on the device, then applies and restarts there. Restart only restarts the device and reports what loaded. Delete removes the
 // ticked files from the card; a loaded module stays loaded until the restart.
 import { For, Show, type JSX } from 'solid-js';
-import { errorLine, formatBytes } from '@web/modules/backend';
+import { errorLine, formatBytes } from '../modules/backend';
 import {
   ListRow,
   LocalPane,
@@ -18,6 +18,7 @@ import {
   type PageCtx,
 } from './TransferParts';
 import { noteActivity } from './activity';
+import { transferEnv } from './env';
 import { createPaneSelect } from './pane-select';
 import SplitPane from './SplitPane';
 import { transferBackend } from './transfer-backend';
@@ -49,6 +50,7 @@ import {
   setLog,
   setProgress,
   setShowTests,
+  setSourceId,
   setTicks,
   setVerified,
   showTests,
@@ -111,8 +113,10 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
       }
       setVerified({});
     });
+  // the site keeps added files in the list (to install from there); the desktop puts them on the card at once
+  const addToList = () => transferEnv().library.addFiles;
   const addFiles = (files: File[]) =>
-    run('Uploading', async () => {
+    run(addToList() ? 'Adding' : 'Uploading', async () => {
       const picked = files.filter((f) => /\.dkm$/i.test(f.name));
       if (!picked.length) {
         setError('Only .dkm files can be added.');
@@ -121,7 +125,8 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
       const data = await Promise.all(
         picked.map(async (f) => ({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })),
       );
-      setLog(await transferBackend.add(data));
+      const add = addToList();
+      setLog(add ? await add(data) : await transferBackend.add(data));
     });
 
   const confirm = createConfirm();
@@ -141,6 +146,14 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
       );
       setDelTicks(new Set<string>());
     });
+  /** The Source link of a library row, where the site has the module's source. */
+  const sourceAction = (r: TransferRow) => {
+    const id = r.id;
+    const src = transferEnv().source;
+    return id && src?.files(id).length
+      ? { label: 'Source', title: `Show the source of ${id}`, onClick: () => setSourceId(id) }
+      : undefined;
+  };
   const label = (r: TransferRow) => r.label ?? r.name;
   const ticked = () => {
     const v = lastView();
@@ -212,16 +225,22 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
               type="button"
               class="act small"
               disabled={!!busy()}
-              title="Put a module from outside the library on the device"
+              title={
+                addToList()
+                  ? 'Add module files from your computer to this list, then install them'
+                  : 'Put a module from outside the library on the device'
+              }
               onClick={() => input?.click()}
             >
               Add .dkm…
             </button>
             <span class="drop">or drop files</span>
-            <label class="tests">
-              <input type="checkbox" checked={showTests()} onChange={(e) => setShowTests(e.currentTarget.checked)} />{' '}
-              show test modules
-            </label>
+            <Show when={lastView()?.modules.some((r) => r.test)}>
+              <label class="tests">
+                <input type="checkbox" checked={showTests()} onChange={(e) => setShowTests(e.currentTarget.checked)} />{' '}
+                show test modules
+              </label>
+            </Show>
             <button
               type="button"
               class="act primary"
@@ -278,6 +297,7 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
                               tags={localTags(r)}
                               version={r.version ?? ''}
                               size={formatBytes(r.file_size)}
+                              action={sourceAction(r)}
                             />
                           )}
                         </For>
