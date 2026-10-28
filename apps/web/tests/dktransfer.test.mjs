@@ -93,6 +93,9 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
     ['dt2', 0x204, 32768, false, false],
   );
   assert.ok(info.caps !== null);
+  assert.equal(info.image_id, null, 'a runtime before 0.5.2 sends no image id');
+  dev.imageId = '281e6b9b1a0a9b83';
+  assert.equal((await s.info()).image_id, '281e6b9b1a0a9b83');
   const ls = await s.list();
   assert.deepEqual(
     ls.map((e) => e.path),

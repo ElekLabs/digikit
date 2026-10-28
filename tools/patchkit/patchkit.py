@@ -460,6 +460,7 @@ def main(argv: list[str]) -> int:
         "check",
         "verify",
         "apply",
+        "flash",
         "rebuild",
         "gen",
         "reference",

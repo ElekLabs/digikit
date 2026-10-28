@@ -496,6 +496,8 @@ export interface DkInfoFull extends DkInfo {
   runtime: number;
   caps: number | null;
   card_read_only: boolean;
+  /** The id of the flashed image as 16 hex digits (runtime 0.5.2 and later; patchkit stamps it), or null when the reply has none. */
+  image_id: string | null;
 }
 
 export interface DkModule {
@@ -703,15 +705,21 @@ export class DkSession {
     const flags = b[at + 8]!;
     // appended by later runtimes: the log range (8 bytes), then the packed runtime version and the capability bits
     let caps: number | null = null;
+    let imageId: string | null = null;
     if (b.length >= at + 9 + 8 + 8) {
       runtime = u32(b, at + 9 + 8);
       caps = u32(b, at + 9 + 12);
+      // then the id of the flashed image (8 bytes, runtime 0.5.2)
+      if (b.length >= at + 9 + 16 + 8) {
+        imageId = Array.from(b.subarray(at + 9 + 16, at + 9 + 24), (x) => x.toString(16).padStart(2, '0')).join('');
+      }
     }
     return {
       protocol,
       runtime_version: u16(b, 2),
       runtime,
       caps,
+      image_id: imageId,
       port,
       free_bytes: free,
       max_chunk: maxChunk,

@@ -13,7 +13,9 @@ pub mod aplib;
 pub mod devdata;
 pub mod devgen;
 pub mod firmware;
+pub mod flash;
 pub mod fwgen;
+pub mod imageid;
 pub mod syx;
 
 pub use error::{Error, Result};

@@ -1,12 +1,12 @@
-# Device bridge and `dkflash`
+# Device bridge and flashing
 
 > **Deferred (Em, 2026-10-19).** Phase 10 now starts with the module loop (`dk run`), the firmware's own Screenshot command (MidiRpc 0x04,
 > docs/MIDI-SYSEX-RPC.md), verify speed and DSP debugging. Known since this draft: Transfer sends a 1.9 MB image in about 20 s and the device asks
 > YES after the data. Kept for later.
 
-Status: design, 2026-10-19 (plan `docs/plans/digikit-runtime.md` Phase 10 item 1). Nothing here is built. Marks: **[V]** read in the
+Status: design, 2026-10-19 (plan `docs/plans/digikit-runtime.md` Phase 10 item 1). Nothing in sections 1, 2 and 4 to 8 is built; section 3 (flashing) was replaced by `patchkit flash` on 2026-10-28. Marks: **[V]** read in the
 code or a finding for this design, **[D]** measured once elsewhere, **[O]** open. No device command was sent and no emulator was run to
-write this file.
+write this file (section 3 was rewritten after `patchkit flash` was built and run in the emulator).
 
 ## 1. Goals, non-goals, guardrails
 
@@ -14,7 +14,7 @@ Goal: tools, scenarios and agents address "a device" (the emulator, or Em's Digi
 address string. The set of facts about the device (peek ranges, store, panel codes) comes from `devices/*.toml`
 (`docs/design/device-data.md`), not from the bridge's code.
 
-Non-goals: no card or flash write except the OS update through the vendor path (`dkflash`); no sample transfer (Phase "Later");
+Non-goals: no card or flash write except the OS update through the vendor path (`patchkit flash`); no sample transfer (Phase "Later");
 no DSP peek, tracepoints or PC sampler (Phase 10 items 3 and 4); no GDB bridge (item 6); no remote access (local socket only); no
 change to the stock MidiRpc route.
 
@@ -22,8 +22,8 @@ change to the stock MidiRpc route.
 |---|---|
 | Read-only by default | The device backend offers INFO, LIST, LOG, PEEK, SCREEN and raw notes. Every other method is refused with `E_READONLY` before a byte is sent. |
 | Writes need DEBUG and the remote module | KEY (and a later POKE) are accepted only when the debug log is ON **and** `digikit/remote` is loaded (checked in SETTINGS > DIGIKIT > MODULES, applied at the next restart). The per-boot REMOTE CONTROL switch was removed in phase 4 of docs/plans/sdk-api.md: a host that can upload and select modules could already load any module that calls `input_key`, so the switch was not a boundary against the host. |
-| No card or flash writes except the OS update | The bridge never calls BEGIN, DATA, END, DELETE or CLEAR unless the client asked for `store.*`; `store.*` is the upload protocol, which writes only store sectors and is already guarded by the runtime ("Card safety", `docs/design/digikit-upload.md:100`). The OS update goes only through `dkflash`. |
-| YES on the device stays human | No command presses YES at the OS-update prompt. The runtime cannot tell which prompt is on screen, so KEY refuses YES (code 10) and NO (12) always; Em presses them. [O] whether this is too strict for tests (open question 3). |
+| No card or flash writes except the OS update | The bridge never calls BEGIN, DATA, END, DELETE or CLEAR unless the client asked for `store.*`; `store.*` is the upload protocol, which writes only store sectors and is already guarded by the runtime ("Card safety", `docs/design/digikit-upload.md:100`). The OS update goes only through `patchkit flash`. |
+| Dialogs stay human | The OS-update screen asks no YES (finding 75), so `patchkit flash` has nothing to press. The runtime cannot tell which prompt is on screen, so KEY refuses YES (code 10) and NO (12) always; Em presses them. [O] whether this is too strict for tests (open question 3). |
 | Rate limits | Bridge side: one request in flight per command class; SCREEN at most 10 per second, KEY at most 20 per second, LOG poll 1 per second by default. Runtime side: a mailbox of 8 key slots, a full mailbox answers `E_BUSY`; every reply keeps the TX-ring guard (`digikit-upload.md:15`). |
 | Nothing in interrupt context allocates | The runtime handles SysEx in the firmware's MIDI task, not in an interrupt (`digikit-upload.md` "Where the device handles it"). KEY only writes a mailbox slot there; the key is posted to the UI queue from the UI loop hook (`modules/core/runtime/src/rs/src/lib.rs:776`, task context), as the module mailbox is polled today. SCREEN copies 512 bytes into the static reply buffer. No heap use. |
 
@@ -44,93 +44,55 @@ change to the stock MidiRpc route.
 On the device today (runtime 3, finding 47): INFO, LIST, LOG, PEEK work over USB MIDI through `RtMidiTransport` **[D]**
 (`docs/findings/47-dt2-device-rungs.md:3-4,10-18`). So the read-only half of the bridge needs no flash.
 
-## 3. `dkflash`
+## 3. Flashing: `patchkit flash`
 
-`uv run python -m tools.device.dkflash IMAGE.syx --device dt2:Digitakt [--yes-prompt-timeout S]`. It never opens a port in tests; the
-tests use the fake and emulator transports of section 6.
+Built on 2026-10-28 (plan `docs/plans/sdk-api.md`, step 6d). It replaces the Python `dkflash` of the earlier draft: one Rust core,
+`packages/patchkit/src/flash.rs`, with no I/O, for the command line, the desktop app and the browser. The device side is
+[finding 75](../findings/75-os-upgrade-receive.md): OS UPGRADE takes the plain `.syx` stream, sends no reply, validates after the last
+message (content checksum, on DT2 the build floor "0060", HMAC) and erases nothing when the validation fails. It asks no YES.
 
 ### 3.1 Steps
 
+`patchkit flash STOCK.syx --port NAME [--restore] [--set device] [--dry-run]` (`--emulator SOCKET` sends through the control daemon's
+`midi.usb.in` instead).
+
 | # | Step | Refuses when |
 |---|---|---|
-| 1 | Run `patchkit preflight IMAGE` as a subprocess (`[sys.executable, "-m", "tools.patchkit.patchkit", "preflight", IMAGE]`). Read stdout for `PREFLIGHT OK: IMAGE`. | Exit status not 0, or the `OK` line is missing. The ISA scan is part of this command (`patchkit.py:308-313`), so "PREFLIGHT OK and ISA ok" is one check. No `--force`. |
-| 2 | Identify the target: open the port, send INFO. Record `device id`, `RUNTIME_VERSION`, flags, `log_newest`. | INFO fails when the device runs stock firmware (no runtime); that is allowed only with `--stock-ok`. Otherwise the image's device (`dt2`/`dn2`, from the `.syx` header byte `syx_id`, `devices/*.toml` `[device]`) must equal INFO's device id. |
-| 3 | Tell Em what to do: "On the device: SETTINGS > SYSTEM > OS UPGRADE (it shows OS UPGRADE WAITING FOR SYSEX)". Wait for Em to confirm with Enter. | No confirmation within 120 s: exit 2, nothing sent. |
-| 4 | Send the `.syx` as a stream of its 128-byte SysEx messages (`F0 00 20 3C 14 00 ...`, about 14,700 for a 1.88 MB image; `01-container-and-patching.md:47`), paced per section 3.2. | A send error, or a port that disappears before the last message: stop, print how many messages went out. |
-| 5 | Print "press YES on the device when it asks". Poll for the end: the port disappears (USB disconnect while the device writes and reboots). | No port change within the timeout (default 300 s): print the state, exit 3. dkflash never sends anything more. |
-| 6 | Wait for the port to come back (poll the port list once a second, 180 s). | Timeout: exit 4 with the recovery note (3.4). |
-| 7 | Send INFO; compare with the image's identity (3.3). Then `dklog --once` into `out/runs/device-logs/`. | Mismatch: exit 5 with both identities. |
-
-Where the YES prompt appears (before the data, or after the last message) is **[O]**: Em's description of the Transfer route says only
-"drop the file, wait for the device to finish" (`docs/PATCHING.md:441-445`, "the screens were not checked here"). dkflash does not depend on
-it: it sends everything it was given, then waits for the port to disappear.
+| 1 | `prepare`: the stock file is identified by SHA-256 against the ports; patch with the device file's patch set; preflight (sections 2, 4, 5, 8 identical to stock); verify (packet checksums, framing, content checksum, HMAC, limits, record); product byte; build floor; the image id; the message list run through a model of the device's receiver. `--restore` takes the stock file through the same checks without a patch. | A patched or unknown file, or any failed check: the checks are printed, nothing is sent. `--dry-run` stops here. |
+| 2 | Print the instructions (power adapter, cable stays in, SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX, the recovery steps). Wait for the word `flash` on the keyboard. | Anything else: nothing is sent. |
+| 3 | Send the messages with the `Sender` state machine: one message every 2 ms, about 30 s (DT2) or 40 s (DN2). | A MIDI error: the run stops (no resume). A new run starts from the header. The device never validates a cut stream. |
+| 4 | Wait for the port to disappear (the device flashes and restarts) and to come back. | No change within 240 s: the screen tells what happened. |
+| 5 | Send INFO: the runtime version and the image id must be those of the image that was sent. `--restore` has no runtime to ask. | A mismatch or no answer: exit 1 with both values. |
 
 ### 3.2 Pacing
 
-What is known **[V]**: the image is a stream of 128-byte messages, each with a per-message checksum; a message that fails it makes the
-receiver reset silently, so the transfer never completes (`01-container-and-patching.md:281-286`, bootstrap DIN path). The MAIN OS path used at
-the main screen is a different state machine (validator `0x400d9e4c` on 1.16, `01:140-166`); its per-message behaviour (acknowledges? queue depth?
-pool?) is not documented in the findings **[O]**. The MIDI task's SysEx gather holds about 150 KiB and drops a message over 128 KiB
-(`digikit-upload.md:14`), so 128-byte messages do not stress it. The USB bulk endpoint is 512 bytes (`42-usb-transfer-routes.md:29`).
-What Transfer's rate is: unknown **[O]**; no capture exists in the repository.
-
-Safe determination without a device experiment, in this order:
-
-1. **Read the MAIN OS receive path** (the state machine that calls the validator; static, on 1.17: `cf.load("dt2-1.17-emac")`, the 1.16 validator
-   address found again there by hash): does the device answer each message, and where are messages stored? If it answers, dkflash is acknowledgement-paced (send the
-   next after the reply) and no rate guess is needed.
-2. **Run the update in the emulator**, USB path: `midi.in` and `midi.usb.in` exist; the emulator takes the stock image over DIN end to end
-   (`01:407-413`). Feed the image through `midi.usb.in` at the main-screen OS UPGRADE and record what `midi.usb.out` returns per message and
-   how many messages the firmware consumes per emulated millisecond. This gives correctness (no message lost at 64 bytes per USB frame, i.e.
-   the slowest model) and the reply pattern, not the real timing.
-3. **Default when neither gives an answer:** a fixed gap of 2 ms per message (about 30 s for 14,700 messages), with the rate as a flag. The
-   reasoning: USB MIDI moves 64-byte packets per 1 ms frame at full speed, so one 128-byte message per 2 ms is slower than the wire and below
-   the 3.2 MB/s the bulk pipe could carry. This is a safe floor, not a measured limit; the first device use is Em watching (section 7, rung D2).
-
-A fast rate is a risk only for the transfer, not for the flash: the flash writes happen after the receive completes and the checksum and HMAC
-pass.
-
-What a cut transfer does. **Known [V], emulated bootstrap on the DIN path:** the receive path stages each message at `0x40000000 + seq*101`;
-the erase and write loop runs only after the message count is reached and the content checksum and HMAC pass; a bad content checksum or HMAC ends in
-UPGRADE ABORTED with a spin loop and "nothing erased or written"; a flipped transport byte makes the receiver reset and "the transfer never
-completes", and "in all three nothing is erased or written" (`01:255-290`, `01:407-413`). **Not known:** (a) that a transfer which simply stops
-(fewer messages than the framing message announced) writes nothing is an inference from that structure, not a test: the finding tests flipped bytes,
-not truncation **[O]**; (b) all of this was traced in the bootstrap's DIN receive path; the MAIN OS main-screen path (`0x4013a978`, which "only erases and
-writes from 0x80000", `01:426`) is a separate implementation, read only for the validator, not for a truncated stream **[O]**; (c) nothing was
-tested on hardware. dkflash therefore treats a cut as "state unknown", not "safe": it prints that, tells Em to power-cycle and check the main
-screen, and never retries on its own. Step 1 of section 7 checks (a) and (b) in the emulator by truncating a stream.
+The device sends nothing back, so the sender paces by time: 128-byte messages, 2 ms apart (finding 75: 12 times slower than the rate the emulated
+receiver keeps up with, below the USB frame limit). The flash starts only after the last message, so no pause is needed for it. The real rate
+is not measured on a device **[O]**.
 
 ### 3.3 Identifying the running image
 
-INFO today reports protocol, `RUNTIME_VERSION`, device id, free bytes, flags and the log range (`digikit-upload.md:59`; `upload.rs:468-492`).
-**It does not identify the image**: two images with the same runtime version look equal, and the DIGIKIT > ABOUT page shows the runtime
-version only. The runtime has no build identity today **[V]** (no field in `cmd_info`, `RUNTIME_VERSION` is a constant `3`).
-
-Needed: an `image_id`, 8 bytes, appended to the INFO body after `log_newest` (runtime 2 -> 3 already grew INFO by appending, so an old host
-ignores the tail). Definition: the first 8 bytes of sha256 over the patch record, that is the base firmware sha256 followed by the sorted
-(module name, module object sha256) list that patchkit linked, plus the DSP patch hashes. The whole `.syx` hash cannot be embedded, because it
-contains the id. patchkit already knows these inputs when it builds the runtime object; it writes the 8 bytes into a data word of
-`core/runtime` (a patch-time constant, like `dkrt_device_id`), and prints the same id on `preflight` and `pack` output so dkflash compares
-two values it can both get without the device. Cost on the device: 8 bytes of data and about 20 instructions in `cmd_info`.
-
-Until runtime 4 is on the device, dkflash falls back to: INFO says `RUNTIME_VERSION` and the set of loaded modules from LIST/LOG
-(`BOOT_START`, module load events) match what the image should contain. This is weaker and is printed as "image id not available".
+INFO ends with an 8-byte image id (runtime 0.5.2; an older runtime sends nothing there, a client reads the field only when it is present).
+patchkit stamps it into the runtime's device object (`dkrt_image_id`, after the marker `DKIMGID1`) when it makes the image. Definition: the first
+8 bytes of SHA-256 over `"DKIMG1"`, the stock base's SHA-256, then the decoded MAIN OS section and the decoded DSP section, each as a 32-bit
+length and the bytes, with the 8 id bytes set to zero (`packages/patchkit/src/imageid.rs`). The other sections of a patched image are the
+stock base's, so these inputs fix the whole container. The packed container cannot be hashed, because repacking changes it once the id is in
+it; the decoded sections have a fixed layout. `prepare` re-reads the id from the finished image by its marker and checks it against the sections.
 
 ### 3.4 Failure modes and recovery
 
 | What the user sees | Meaning | Action |
 |---|---|---|
-| `PREFLIGHT FAILED` | The image is not a known-safe patch of a known stock image | Fix the build; dkflash does nothing. |
-| Port not found | Cable, USB mode (USB MIDI must be enabled in SETTINGS > SYSTEM > USB CONFIG) | Fix; nothing sent. |
-| Sent all, no port change in 300 s | No YES pressed, or the device refused (the validator returns 1..6: checksum, HMAC, downgrade floor `build >= 0060`, `01:140-175`) | Look at the OLED; the device still runs the old image. |
-| Port back, INFO has the old image id | The update was not applied | Retry from step 3. |
-| Port back, INFO times out | The new image does not reach the runtime (boot loop, safe mode, a broken hook) | Power-cycle; read the OLED; step to recovery. |
-| Port never comes back | The new image faults or hangs before USB | Recovery. |
+| `FAILED` checks | The image is not a known-safe patch of a known stock image | Fix the build; nothing is sent. |
+| Port not found | Cable, or USB MIDI is off (SETTINGS > SYSTEM > USB CONFIG) | Fix; nothing is sent. |
+| Sent all, the port does not go away | The device refused the stream (a checksum, HMAC or build-floor error on its screen) and kept the old image | Read the screen; start again. |
+| Port back, INFO shows another image id | The update was not applied | Start again. |
+| Port back, INFO times out | The new image does not reach the runtime (boot loop, safe mode, a broken hook) | Power-cycle, read the screen, recovery. |
+| Port never comes back | The new image faults before USB | Recovery. |
 
 Recovery **[V in the emulator, not on hardware]**: hold FUNC while powering on; the bootstrap's STARTUP menu comes up (patchkit never changes
-section 2); TRIG 4 selects OS UPGRADE; it receives over **MIDI DIN only**, so Em needs a DIN interface; send the stock `.syx` of the installed
-version (`docs/PATCHING.md:376-384`, finding 01 "Recovery"). dkflash gets a `--din PORT` mode for exactly this, with the same pacing code; it
-prints the recovery text on every failure above and does not run it unattended.
+section 2); TRIG 4 selects OS UPGRADE; it receives over **MIDI DIN only**, so a DIN interface is needed; send the stock `.syx` of the
+installed version (`docs/PATCHING.md`, "Recovery"). A DIN mode of `patchkit flash` is not built.
 
 ## 4. The bridge
 
@@ -168,7 +130,7 @@ the bridge socket client the other. Scenarios and agents write `Device("dt2:Digi
 | `input.turn` | same | KEY with an encoder record | emulator yes; device new, **[O]** |
 | `midi.usb.in` / `midi.usb.out` | same | raw bytes to and from the port (notes); dk replies are taken out of the stream by the bridge | emulator yes; device new, no runtime change |
 | `store.ls`, `store.put`, `store.rm`, `store.clear` | the Uploader over `EmuTransport` | the Uploader over the port | tool yes (`dkupload.py`); bridge methods new |
-| `flash` | `firmware.load` (the emulator's flash is a load) | `dkflash` steps 4-7 after the human steps | device new |
+| `flash` | `firmware.load` (the emulator's flash is a load) | `patchkit flash` steps 3-5 after the human steps | device new |
 | `events.subscribe` | emulator kinds | `log` events, `port.up`, `port.down`, `reboot` | emulator yes; device new |
 | `restart`, `step`, `run.mode`, `state.*`, `dsp.*`, `guard.*`, `pcm.tap`, `leds.get` | yes | `E_NOT_ON_DEVICE` | emulator yes |
 
@@ -223,7 +185,7 @@ limits.
 | Change | Where | Cost on the device |
 |---|---|---|
 | `RUNTIME_VERSION` 3 -> 4 | `modules/core/runtime/sdk/src/lib.rs:13` | none |
-| INFO tail: `image_id[8]`, `caps u8` | `upload.rs` `cmd_info`; patchkit stamps the id | 9 bytes data, about 20 instructions per INFO |
+| INFO tail: `image_id[8]` after the capability bits (built in runtime 0.5.2) | `upload.rs` `cmd_info`; patchkit stamps the id | 8 bytes data, about 20 instructions per INFO |
 | SCREEN 0x22 `u8 part` (route B) | `upload.rs`, anchor `dkrt.fw.oled` | about 100 bytes code; runs only when asked, 512-byte copy in the MIDI task |
 | KEY 0x30 `u8 code, u8 flags` | `upload.rs` plus the UI loop hook | mailbox of 8 slots (64 bytes); the hook adds one load and compare per UI pass when empty |
 | REMOTE CONTROL row | DIGIKIT menu (`core/digikit-menu`) | one more row; one RAM flag, not stored |
@@ -244,10 +206,10 @@ code). The emulator does not model USB timing, enumeration, the 4 KiB TX ring ti
 | Bridge framing, rate limits, refusals, reconnect | A fake `rtmidi` loopback driven by a reference decoder of the protocol; port vanishes and returns | `test_bridge_fake.py` (new) |
 | Same commands on both addresses | `emu` and `emu-usb:` give equal results for `info`, `mem.cf.peek` (inside the ranges), `log.follow`, `store.ls` | `test_bridge_emu.py` (new) |
 | Log streaming | Events from `emu-usb:` equal `dklog --emu` output (existing `tests/digikit/test_dklog.py` pattern) | same |
-| `dkflash` refusals | Failing preflight, wrong device id, no confirmation: nothing is sent (fake transport records zero bytes) | `test_dkflash.py` (new) |
-| `dkflash` happy path | Emulator: the update streamed through `midi.usb.in` at the main-screen OS UPGRADE; `status` shows the new image after `restart`; INFO `image_id` equals patchkit's. Depends on step 1 below | `pk_proof_flash.py` under `tools/patchkit/` |
+| `patchkit flash` refusals | Failing checks, a tampered image, a wrong product byte or build word, a damaged message list: nothing is sent | `packages/patchkit/src/flash.rs` and `packages/patchkit/tests/flash.rs` (built) |
+| `patchkit flash` happy path | Emulator: the update streamed through `midi.usb.in` at OS UPGRADE; the flash equals the image; the emulator boots it; INFO `image_id` equals patchkit's (built, finding 75) | `tools/emulator/os_upgrade_rig.py --patchkit` |
 | Cut transfer | Emulator: truncate the stream at N messages; assert the flash model is unchanged and the old image boots (answers 3.2 (a), (b)) | same |
-| Image id | Build, inject, INFO equals; stock image gives none | `test_image_id.py` (new) |
+| Image id | Build, flash in the emulator, INFO equals; a stock image has no marker and gives none | `imageid.rs` and `packages/patchkit/tests/flash.rs` (built) |
 | SCREEN | Emulator: SCREEN bytes equal `framebuffer.get` data for the same frame (hash compare) once the emulator exposes the Bitmap object to the runtime; layout test on the Bitmap object for 1.17 | `tests/digikit/scenarios` case |
 | KEY | Emulator: RC off refuses; RC on, KEY(code) gives the same frame hash after N instructions as `input.tap(code)`; YES/NO refused | scenario case |
 | Existing pins | PCM pins and stock MidiRpc byte equality do not change (a stock image has no runtime) | `mise run verify` routed |
@@ -258,14 +220,14 @@ Hardware is not needed for any of these. A proof that the device accepts the pac
 
 Estimates are agent time, not calendar time. Payoff: one interface for emulator and hardware removes the hand-run `dklog`/`dkupload` commands,
 makes the flash step checked (preflight, image id) and is the base of the device-versus-emulator diff (Phase 10 item 5). Confidence: high for
-bridge, log, peek, upload, notes and `dkflash` on the emulator; medium for SCREEN (layout of the 1.17 Bitmap object unknown); medium-low
+bridge, log, peek, upload, notes and flashing on the emulator; medium for SCREEN (layout of the 1.17 Bitmap object unknown); medium-low
 for KEY (anchor and encoder record). About 4 days in total, as the plan says.
 
 | # | Step | Estimate | Output |
 |---|---|---|---|
 | 1 | Static read of the MAIN OS update receive path (ack, storage, truncated stream) and an emulator run of the USB update, with a truncated stream | 3 h | finding with [V]/[O] marks; pacing decision |
 | 2 | `device.py`, `dkbridge.py` (log, info, peek, store, notes), `LiveEmuTransport`, fake-port tests | 4 h | `emu-usb:` and fake proofs |
-| 3 | `dkflash` (steps 1-7, refusals, `--din`), emulator proof of the happy path and the cut | 3 h | tests |
+| 3 | `patchkit flash` (built 2026-10-28; `--din` is not built) | done | tests |
 | 4 | Runtime 4: INFO tail with `image_id` and `caps`, patchkit stamp, `preflight` prints the id | 3 h | emulator proof |
 | 5 | Find the 1.17 Bitmap object; PEEK-based screen (route A) in the bridge; SCREEN (route B) if the layout is simple | 4 h | frame equals `framebuffer.get` |
 | 6 | REMOTE CONTROL row, KEY, anchor `ui_post_key`, emulator proof | 6 h | key proofs |
@@ -273,7 +235,7 @@ for KEY (anchor and encoder record). About 4 days in total, as the plan says.
 
 First device rung (**D1**, no flash): with the runtime 3 image already on the device (rung C4, finding 47), run the bridge read-only: INFO, LOG
 follow, PEEK inside the ranges, LIST, notes. It proves the port handling and the JSON-lines stream on silicon and needs only Em to plug in the
-cable. D2: Em flashes the runtime 4 image with `dkflash` at 2 ms per message, watching the OLED and pressing YES; this is also the first
+cable. D2: Em flashes the runtime 4 image with `patchkit flash` at 2 ms per message, watching the OLED (no YES is asked); this is also the first
 real-device test of the pacing and the image id. D3: SCREEN. D4: REMOTE CONTROL and KEY, with Em setting the row by hand.
 
 ## 8. Open questions for Em

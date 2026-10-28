@@ -310,12 +310,17 @@ class Uploader:
         )
         # appended after the log range: the packed runtime version (u32) and the capability bits (u32)
         caps = None
+        image_id = None
         if len(b) >= end + 26:
             runtime, caps = struct.unpack_from(">II", b, end + 18)
+        # runtime 0.5.2 appends the id of the flashed image (8 bytes, patchkit stamps it) after the capability bits
+        if caps is not None and len(b) >= end + 34:
+            image_id = b[end + 26 : end + 34].hex()
         return {
             "protocol": proto,
             "runtime": runtime,
             "caps": caps,
+            "image_id": image_id,
             "port": port,
             "free_bytes": free,
             "max_chunk": max_chunk,

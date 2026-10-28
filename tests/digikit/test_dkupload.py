@@ -153,6 +153,10 @@ def test_info_short_and_long_replies_and_has_cap():
     new = _info_of(0x0002, log + struct.pack(">II", 0x000200, caps))
     assert new["runtime"] == 0x000200 and new["caps"] == caps
     assert D.has_cap(new, "MODULES") and not D.has_cap(new, "PEEK")
+    # runtime 0.5.2 appends the image id after the capability bits; an older reply has none
+    assert old["image_id"] is None and new["image_id"] is None
+    with_id = _info_of(0x0002, log + struct.pack(">II", 0x000502, caps) + bytes(range(1, 9)))
+    assert with_id["image_id"] == "0102030405060708" and with_id["caps"] == caps
 
 
 def test_modules_pages_by_start_index_and_decodes_the_records():

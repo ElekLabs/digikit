@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_arch = "wasm32"))]
 mod build_cli;
 #[cfg(not(target_arch = "wasm32"))]
+mod flash_cli;
+#[cfg(not(target_arch = "wasm32"))]
 mod storedump;
 
 const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
@@ -55,6 +57,10 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          object placed at a short-word address and verified, the shift-immediate rule on hex words
   cf-link SRC... --base HEX [--sym NAME=HEX]... [-I DIR]... [--bin OUT] [--json OUT]
                                          compile, link at BASE against the symbols, ISA-check (unit tests of C routines)
+  flash   STOCK.syx (--port NAME | --emulator SOCKET) [--restore] [--set NAME] [--dry-run] [--save OUT.syx] [--yes]
+                                         patch the stock file with the device's patch set, check the image and the messages the way the
+                                         device's OS UPGRADE receiver does, then send it (USB MIDI) and read INFO after the restart;
+                                         --restore sends the stock file itself; --dry-run only checks (docs/PATCHING.md, \"Flashing\")
   list                                   modules under modules/ and ports under devices/ports/
   gen [--check] [--modules a,b]          write (or check) build/gen/ of modules with typed sections: Rust constants,
                                          a SHARC include per device, gallery JSON
@@ -287,6 +293,12 @@ fn run(a: Args) -> Result<()> {
                     o.container_bytes
                 );
             }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        "flash" => {
+            let reg = registry(&a.root)?;
+            let lib = library(&a.root, rest)?;
+            flash_cli::run(&reg, &lib, rest)?;
         }
         "gen" => {
             // the generated files are inputs of the build: nothing is built here

@@ -29,6 +29,7 @@ export class FakeDevice {
     this.free = 1 << 20; // INFO's u32 free_bytes
     this.storeKib = null; // CAPACITY's STORE limit in KiB (null: the entry is left out); 1024 KiB are used
     this.caps = null; // INFO's capability word (null: every capability)
+    this.imageId = null; // INFO's image id as 16 hex digits (null: the runtime before 0.5.2, which sends none)
     this.arenaLimit = 1000; // CAPACITY's ARENA and DSP_AREA limits (bytes)
     this.dspLimit = 1000;
     this.arenaLargest = 300; // the largest free block of each
@@ -93,6 +94,7 @@ export class FakeDevice {
             be32(this.log.length),
             be32(0x000204),
             be32(this.caps ?? Object.values(CAP).reduce((a, bit) => a | (1 << bit), 0)),
+            this.imageId ? Uint8Array.from(Buffer.from(this.imageId, 'hex')) : [],
           ),
         );
       }

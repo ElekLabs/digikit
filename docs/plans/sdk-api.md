@@ -202,16 +202,23 @@ child processes.
       SysEx permission. Proof: desktop Transfer unchanged; web tests; Em's test in Chrome on the device.
       Status: built (shared pane, site assets, web Transfer page, WebMIDI hardening, badge with OS
       version); Em's device test waits for 6d (the device needs a flashed runtime first).
-- [ ] 6d. Patch and flash, one path for the CLI, the workbench and the web: a `flash` core in patchkit
-      (stock check by SHA-256, patch, preflight: sections 2, 4, 5 and 8 byte-identical to stock,
-      verify: checksums and HMAC, the message stream decoded back before sending, device and product
-      match, pacing), an emulator boot of the exact image before flashing (desktop and CLI), recovery
-      steps shown first, YES on the device stays human, INFO checked after the reboot. Senders:
-      `patchkit flash --port` (midir), the desktop (midir), the web (`patchkit.wasm` + WebMIDI); one
-      shared step UI. First settle statically and in the emulator: the OS UPGRADE receive route (the
-      `.syx` stream or MidiRpc 0x50-0x52), acks and pacing, the 1.17/1.12 validator's build floor,
-      what a cut transfer leaves. Proof: a full flash into the emulated device, which reboots into the
-      new image.
+- [ ] 6d. Patch and flash, one path for the CLI, the workbench and the web (finding 75: the OS UPGRADE
+      screen takes the plain `.syx` stream, sends no replies, validates checksum, HMAC and on DT2 the
+      build floor "0060" after the last message, erases nothing on failure, asks no YES).
+      - [x] Core `patchkit::flash`: `prepare` (stock by SHA-256, patch the `device` set, preflight,
+            verify, DT2 build floor, product byte, the outgoing message list decoded back and compared
+            with the image); restore stock through the same checks; a `Sender` with 2 ms pacing that
+            stops on any error (start again from the header). CLI `patchkit flash STOCK.syx --port`
+            and `--restore`. USB only for now.
+      - [x] Image id: the runtime's INFO reports an id of the flashed image (set by patchkit), checked
+            after the reboot.
+      - [ ] One step UI (Firmware page) for the desktop (midir) and the web (`patchkit.wasm` + WebMIDI);
+            the web Patch page becomes Firmware. Recovery steps shown first; device match before
+            flashing. No emulator boot before flashing (decided 2026-10-28).
+      - [ ] Proof: unit tests of every check (tampered, wrong device, oversize); a full flash through
+            the shared sender into the emulated DT2 and DN2 (tools/emulator/os_upgrade_rig.py), the
+            flash compared with the image, the emulator boots the patched runtime and INFO's id
+            matches; screenshots. The Python dkflash design (device-bridge.md section 3) is replaced.
 - [ ] Later: compile in the browser (a dropped `.dkmod`, or an edited source): gcc `cc1`/`as`/`ld` in
       wasm (finding 74) in a worker, SHARC+ already in `patchkit.wasm`.
 - [ ] Optional: a `.dkmod` carries the expected `.dkm` hash per device so a receiver can

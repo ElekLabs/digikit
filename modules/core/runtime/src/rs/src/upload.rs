@@ -429,7 +429,14 @@ unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     // appended after the log range: the whole packed runtime version (bytes 2-3 keep its low 16 bits) and the capability bits
     wr32(rb.add(25), RUNTIME_VERSION);
     wr32(rb.add(29), CAP_LOG | CAP_PEEK | CAP_LOGCFG | CAP_SELECT | CAP_RESTART | CAP_MODULES | CAP_CAPACITY | CAP_READ | CAP_VERIFY | CAP_SERVICE_CMDS | CAP_FOLDERS | CAP_SETTINGS);
-    reply(CMD_INFO, seq, OK, 33)
+    // appended after the capability bits: the id of the flashed image (patchkit stamps it; zeros when there is none)
+    let id = crate::image_id();
+    let mut i = 0;
+    while i < 8 {
+        *rb.add(33 + i) = id[i];
+        i += 1;
+    }
+    reply(CMD_INFO, seq, OK, 41)
 }
 
 /// MODULES: the loaded modules and what they hold. Body: `u8 start` (a module record index). Reply: `u32 arena_free, arena_largest, dsp_free,

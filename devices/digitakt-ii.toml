@@ -160,6 +160,10 @@ container_max = 0x300000
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
+# The OS UPGRADE receiver (finding 75): the stream id byte of the header message; a header with another id is refused.
+stream_id = 0x0f
+# The build floor: the validator refuses a container whose build word (stream offset 0x10, container +8) is below it.
+build_floor = "0060"
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`).
 main_dest = 0x40000400
 dsp_l2_lo = 0x20000000

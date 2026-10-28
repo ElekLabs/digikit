@@ -4,7 +4,8 @@ patchkit applies modules (new machines, parameters, master-bus effects) to a sto
 `.syx` that the device's updater accepts. A module holds our own code and a manifest. It never holds firmware
 bytes. The tool runs on the command line (`mise run patch`) and in the browser (the `/patch` page).
 
-**No patched image from this repository has been flashed to a device.** Every result here comes from the emulator.
+**Patched images from this repository were flashed to one Digitakt II (OS 1.17) only, rungs A to C4 in October 2026
+([finding 47](findings/47-dt2-device-rungs.md)); no Digitone II has run one.** Every other result here comes from the emulator.
 Read [Safety and hardware](#safety-and-hardware) before you flash anything.
 
 New to modules? Start with [MODULE-AUTHORING.md](MODULE-AUTHORING.md): the short path from an empty module to a
@@ -421,14 +422,14 @@ The full table of 14 risks, with evidence and mitigation, is in [docs/plans/patc
    the idle instructions per block) and listen for clicks at the first run.
 3. **Digitone II patches cannot be tested on hardware** (no device available). They are emulator-tested only.
 4. **Level.** A gain or drive module can raise the output. Start at the neutral setting with the monitor volume low.
-5. The MAIN OS image validator and the real flash writer were not run in the emulator. The bootstrap's own checks were.
+5. The MAIN OS image validator and the real flash writer were run in the emulator only (finding 75); the emulated flash has no erase time and the flash writer's return codes are ignored by the firmware. The bootstrap's own checks were run too.
 
 ### Flashing a Digitakt II, rung by rung
 
 Phase 9 of `docs/plans/digikit-runtime.md`. Each rung is a patched image of the stock 1.17 firmware that adds one kind of risk to
 the one before. Flash one rung, look at the checks, and only then take the next. Stock `firmware/Digitakt_II_OS1.17.syx` is the way
-back from every rung. Nothing has been flashed yet; the module sets below were built and checked by `mise run patch:preflight` on 2026-10-18
-(lane r1), the device steps are a plan.
+back from every rung. Rungs A to C4 were flashed on Em's device (finding 47); the module sets below were built and checked by
+`mise run patch:preflight` on 2026-10-18 (lane r1), and the device steps are the plan they followed.
 
 **Before each flash** (the patch needs the stock file in `firmware/` and the module objects built, `mise run module:build`):
 
@@ -462,7 +463,22 @@ device.
 - Rung C: the module list of rung B, built again (the DSP wrapper and the debug log changed since rung B, finding 48), plus the test module
   uploaded over USB at run time. The whole procedure is the section "Rung C" below.
 
-**Flashing** (Em's description of the Transfer route; the screens were not checked here):
+**Flashing with `patchkit flash`** (built 2026-10-28; proof in the emulator only, [finding 75](findings/75-os-upgrade-receive.md)). One command
+patches the stock file with the device's patch set, checks the image and the exact messages it will send the way the device's receiver does
+(checksums, HMAC, the DT2 build floor, the product byte, the container limits, an image id), sends them over USB MIDI one every 2 ms, waits for the
+restart and reads INFO: the runtime version and the image id must match.
+
+```sh
+uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --dry-run     # patch and check, send nothing (--save F keeps the image)
+uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt
+uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt --restore   # the stock file back
+```
+
+It prints the checks, then the steps for the device (power adapter, SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX, the cable stays in) and
+waits for the word `flash`. The OS UPGRADE screen asks no YES (finding 75). The section 7 ISA scan of `patch:preflight` is not part of it: write the
+image with `--save` and run `mise run patch:preflight` on it first. The browser and the desktop app will use the same core (plan step 6d).
+
+**Flashing with Transfer** (Em's description of the Transfer route; the screens were not checked here):
 
 1. Back up the card and the projects with Transfer. Keep the stock `.syx` at hand. Check the output volume is low.
 2. On the device: SETTINGS > SYSTEM > OS UPGRADE. The device waits for a firmware file.
@@ -824,5 +840,5 @@ there should be **no** `MACHINE_FAULT` (the clamp in the routine prevents the ca
 
 ### Status
 
-No patched image has been flashed to a device. Whether and when to flash is the maintainer's decision, every time.
-The device on the desk is a Digitakt II on 1.17, so a first hardware step would use the DT2 1.17 port.
+Patched images were flashed to one Digitakt II (finding 47). Whether and when to flash again is the maintainer's decision, every time.
+The device on the desk is a Digitakt II on 1.17: the DT2 1.17 port is the one that has been run on hardware.
