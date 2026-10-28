@@ -74,6 +74,16 @@
       "reason": "English contrast with native, not a path"
     },
     {
+      "file": "apps/web/tests/web-library.test.ts",
+      "pattern": "dt2/sine\\.dkm",
+      "reason": "a shipped-library path in a unit test, not a repo path"
+    },
+    {
+      "file": "tools/devtools/web_transfer_shots.mjs",
+      "pattern": "dt2/pluck\\.dkm",
+      "reason": "a path in the built site's public tree, not a repo path"
+    },
+    {
       "pattern": "dt2/dn2",
       "reason": "prose DT2/DN2"
     },

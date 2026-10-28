@@ -1,6 +1,6 @@
-"""A long run of digikit/freqshift on the concrete SHARC+ core (plain Python, so that it also runs under PyPy), printed as JSON.
+"""A long run of the frequency shifter on the concrete SHARC+ core (plain Python, so that it also runs under PyPy), printed as JSON.
 
-    PYTHONPATH=<repo>:<repo>/tests python -m support.freqshift_long [--blocks N] [--v SHIFT] [--hz F]
+    PYTHONPATH=<repo>:<repo>/tests python <this file> [--blocks N] [--v SHIFT] [--hz F]
 
 A sine of F Hz (amplitude 0.5) goes through the effect behind core/fx for N blocks. The shift of the oscillator is exactly known from the increment
 the routine derives (the integer `inc`), so the output is a tone at F + inc 48000 / 2^32. For eight windows spread over the run the worker
@@ -14,11 +14,11 @@ import argparse
 import cmath
 import json
 import math
+from pathlib import Path
 
 from support.fx_rig import FxRig, Row, f2w, w2f
-from support.paths import REPO_ROOT
 
-SRC = REPO_ROOT / "modules/fx/freqshift/src/dsp/freqshift.s"
+SRC = Path(__file__).resolve().parents[1] / "src/dsp/freqshift.s"
 FS = 48000.0
 WINDOW = 400  # blocks per window: 12,800 samples
 STATE_PHASE = 0  # state word 0 of the effect (freqshift.s)

@@ -6,5 +6,6 @@ devices = ["dt2"]
 tier = "quick"
 
 [fxshift]
+module = "digikit/freqshift"
 hint = 7            # the sine's position in the machine list (the same as fx-pages-dt2)
 trig_frame = 7500

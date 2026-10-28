@@ -50,9 +50,20 @@ const ATTRIBUTES = new Set([
 const COLOUR = /^(none|currentColor)$/;
 const STYLE = /^(\s*(stroke|fill)\s*:\s*var\(--icon-accent\)\s*;?)+\s*$/;
 
-test('every public module has an icon', () => {
-  for (const id of ['fx/freqshift', 'machines/pluck']) {
-    assert.ok(fs.existsSync(path.join(modules, id, 'gallery', 'icon.svg')), `${id} has no gallery/icon.svg`);
+// A module that has a gallery folder has its icon there.
+test('every public module with a gallery folder has an icon', () => {
+  const dirs = ['machines', 'fx', 'tools'].flatMap((category) =>
+    fs.existsSync(path.join(modules, category))
+      ? fs.readdirSync(path.join(modules, category)).map((name) => path.join(modules, category, name))
+      : [],
+  );
+  const withGallery = dirs.filter((dir) => fs.existsSync(path.join(dir, 'gallery')));
+  assert.ok(withGallery.length > 0, 'no module has a gallery folder');
+  for (const dir of withGallery) {
+    assert.ok(
+      fs.existsSync(path.join(dir, 'gallery', 'icon.svg')),
+      `${path.relative(root, dir)} has no gallery/icon.svg`,
+    );
   }
 });
 

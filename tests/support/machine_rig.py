@@ -1,6 +1,6 @@
 """A rig for any machine module: its DSP routine on the concrete SHARC+ core, through core/dsp-voice, block by block as the engine calls it.
 
-    rig = MachineRig("digikit/pluck", "dt2")
+    rig = MachineRig("<author/name>", "dt2")
     rig.set_params({"pluck_decay": 0x7F00})       # parameter words by manifest id
     rig.set_note(60, vel=100); rig.trigger()
     b = rig.block()                                 # b.samples (32 floats), b.instructions, b.returned, b.context_bad

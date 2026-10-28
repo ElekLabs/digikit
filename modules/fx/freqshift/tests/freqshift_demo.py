@@ -1,6 +1,6 @@
-"""A demo render of digikit/freqshift for listening: the real DSP routine behind core/fx on the concrete SHARC+ core (plain Python, so that it also runs under PyPy).
+"""A demo render of the frequency shifter for listening: the real DSP routine behind core/fx on the concrete SHARC+ core (plain Python, so that it also runs under PyPy).
 
-    PYTHONPATH=<repo>:<repo>/tests uv run --no-project --python pypy3.11 python -m support.freqshift_demo --out FILE.wav [--seconds-per-part 2]
+    PYTHONPATH=<repo>:<repo>/tests uv run --no-project --python pypy3.11 python <this file> --out FILE.wav [--seconds-per-part 2]
 
 The input is a loop made here: a plucked-string arpeggio (Karplus-Strong), a kick and a hat on every beat, 100 BPM, stereo. The effect runs through its parts, each
 `--seconds-per-part` long (the shift is set the way the knob does it: the SHIFT word of the row, a float from -64 to +63; MIX is the row's mix word):
@@ -30,14 +30,13 @@ import wave
 from pathlib import Path
 
 from support.fx_rig import MIX, P0, ROUTE_SEND, FxRig, Row, f2w, w2f
-from support.paths import REPO_ROOT
 
-SRC = REPO_ROOT / "modules/fx/freqshift/src/dsp/freqshift.s"
+SRC = Path(__file__).resolve().parents[1] / "src/dsp/freqshift.s"
 FS = 48000
 SPAN, KHZ = (
     5.5,
     0.63,
-)  # the mapping of tools/patchkit/freqshift_ref.py (a number copied here: this file is plain Python)
+)  # the mapping of freqshift_ref.py (a number copied here: this file is plain Python)
 MIX64 = 0x4000 / 0x7F00  # MIX 64 on the knob
 
 

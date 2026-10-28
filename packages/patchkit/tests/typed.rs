@@ -34,7 +34,7 @@ fn digest_without_dsp(syx: &[u8]) -> String {
     sha256_hex(&buf)
 }
 
-/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with digikit/pluck -> test/patched-pluck (P3e-1): patch record only
+/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with the move of a plucked-string machine to test/patched-pluck (P3e-1): patch record only
 const PINS: &[(&str, &str, &str)] = &[
     (
         "Digitakt_II_OS1.17.syx",

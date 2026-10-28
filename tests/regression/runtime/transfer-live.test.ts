@@ -17,7 +17,7 @@ interface FolderResult {
 async function expectTransferLive({ session, dk }: PatchedSession): Promise<void> {
   const artifacts = liveArtifacts(session, 'transfer-live');
   const mirror = path.join(session.runDir, 'mirror');
-  const modulePath = 'modules/pluck.dkm';
+  const modulePath = 'modules/sine.dkm';
   const mirrored = path.join(mirror, 'digikit', modulePath);
   const sha256 = async () => (fs.existsSync(mirrored) ? await hexSha256(fs.readFileSync(mirrored)) : null);
 
@@ -25,7 +25,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   await settleLive(session);
   const epoch = (await session.status()).epoch;
   if (typeof epoch !== 'number') throw new Error('daemon status must report a numeric epoch');
-  await cliInstall(session, 'digikit/pluck', artifacts, 300_000);
+  await cliInstall(session, 'test/sine', artifacts, 300_000);
   expect((await session.status()).epoch, 'CLI RESTART boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);

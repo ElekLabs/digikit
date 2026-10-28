@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from support.pluck_rig import SKIP_NO_SELACHE, PluckRig, run_blocks
+from pluck_rig import SKIP_NO_SELACHE, PluckRig, run_blocks
 
 pytestmark = SKIP_NO_SELACHE
 

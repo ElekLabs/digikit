@@ -362,7 +362,7 @@ def cmd_pack(args: list[str]) -> int:
         None,
     )
     if module is None:
-        raise SystemExit("pack needs a module id, e.g. pack digikit/pluck --device dt2")
+        raise SystemExit("pack needs a module id, e.g. pack <author/name> --device dt2")
     out = flag(args, "-o")
     if out is None:
         d = ROOT / "out" / "patch"

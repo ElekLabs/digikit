@@ -27,9 +27,9 @@ export function parseIndex(text: string): ShippedModule[] {
 }
 
 export interface Fetchers {
-  /** The bytes of a file under the site's modules folder (`dt2/pluck.dkm`, `index.json`). */
+  /** The bytes of a file under the site's modules folder (`dt2/<name>.dkm`, `index.json`). */
   bytes(path: string): Promise<Uint8Array>;
-  /** The text of a file under it (`src/digikit/pluck/src/module.c`). */
+  /** The text of a file under it (`src/<author/name>/src/module.c`). */
   text(path: string): Promise<string>;
 }
 

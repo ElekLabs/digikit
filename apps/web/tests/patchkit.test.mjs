@@ -57,18 +57,7 @@ test('wasm and CLI produce byte-identical output for core/fx', { skip: !need }, 
     const fw = readFileSync(path);
     const out = join(work, `${name}.syx`);
     const plan = join(work, `${name}.plan.json`);
-    py(
-      'tools.patchkit.patchkit',
-      'patch',
-      '--firmware',
-      path,
-      '--modules',
-      'core/fx',
-      '-o',
-      out,
-      '--plan',
-      plan,
-    );
+    py('tools.patchkit.patchkit', 'patch', '--firmware', path, '--modules', 'core/fx', '-o', out, '--plan', plan);
     const [fp, fl] = put(fw);
     const [bp, bl] = put(bundle);
     const [ip, il] = put(Buffer.from('core/fx'));
@@ -252,14 +241,14 @@ test('wasm refuses what the CLI refuses', { skip: !need }, async () => {
 
 // The SHARC+ build runs in the page: the sources of a module as texts in, the `.dko.json` text out, the bytes `patchkit build` writes.
 test(
-  'wasm and CLI build byte-identical SHARC+ objects (freqshift, pluck)',
+  'wasm and CLI build byte-identical SHARC+ objects (a machine and an effect)',
   { skip: !existsSync(wasmPath) },
   async () => {
     const { x, put, text } = await load();
     const work = mkdtempSync(join(tmpdir(), 'pk-wasm-sharc-'));
     const modules = [
-      ['modules/fx/freqshift', 'build/freqshift-dsp.dko.json', 'src/dsp/freqshift.s'],
-      ['modules/machines/pluck', 'build/pluck-dsp.dko.json', 'src/dsp/pluck.s'],
+      ['tests/fixtures/modules/dyn-fx-gain', 'build/dyn-fx-gain-dsp.dko.json', 'src/dsp/dyn_fx_gain.s'],
+      ['tests/fixtures/modules/sine', 'build/sine-dsp.dko.json', 'src/dsp/sine.s'],
     ];
     for (const [mod, object, source] of modules) {
       py('tools.patchkit.patchkit', 'build', join(root, mod), '--force', '--out', work);

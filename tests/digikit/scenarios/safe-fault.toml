@@ -7,5 +7,5 @@ tier = "full"
 
 [safe]
 fault = "test/dyn-fault"
-dt2 = { modules = ["digikit/pluck"] }
+dt2 = { modules = ["test/sine"] }
 dn2 = { modules = ["test/dyn-dn2"] }

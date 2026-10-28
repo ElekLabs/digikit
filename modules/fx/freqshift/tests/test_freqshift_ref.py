@@ -1,11 +1,10 @@
-"""The float32 model of digikit/freqshift (tools/patchkit/freqshift_ref.py): the SHIFT mapping, the Hilbert pair, the oscillator and the shifter on tones.
+"""The float32 model of the frequency shifter (freqshift_ref.py): the SHIFT mapping, the Hilbert pair, the oscillator and the shifter on tones.
 
-No assembler needed: this is the specification that tests/patchkit/test_freqshift.py holds the DSP routine to."""
+No assembler needed: this is the specification that test_freqshift.py holds the DSP routine to."""
 
+import freqshift_ref as R
 import numpy as np
 import pytest
-
-from tools.patchkit import freqshift_ref as R
 
 FS = R.FS
 

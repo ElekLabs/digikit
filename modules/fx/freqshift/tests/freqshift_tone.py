@@ -1,4 +1,4 @@
-"""Tone analysis for the digikit/freqshift tests (plain numpy)."""
+"""Tone analysis for the the frequency shifter tests (plain numpy)."""
 
 import numpy as np
 

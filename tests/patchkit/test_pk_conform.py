@@ -2,31 +2,21 @@
 
 import tomllib
 
+import pytest
+
 from tools.patchkit import pk_conform as c
 
 
-def test_pluck_parameters_come_from_the_manifest_and_the_device_frame():
-    dt2 = c.spec("digikit/pluck", "dt2")
-    dn2 = c.spec("digikit/pluck", "dn2")
+def test_machine_parameters_come_from_the_manifest_and_the_device_frame():
+    dt2 = c.spec("test/sine", "dt2")
+    dn2 = c.spec("test/sine", "dn2")
     assert dt2 is not None and dn2 is not None
-    # Digitakt II: TUNE is the stock row 0xca on knob 0; knobs 1, 2, 4, 5 are the module's; the frame skips two halfwords per group of four
-    assert [(p.id, p.knob) for p in dt2.params] == [
-        ("tune", 0),
-        ("pluck_decay", 1),
-        ("pluck_pick", 2),
-        ("pluck_bright", 4),
-        ("pluck_color", 5),
-    ]
-    assert [dt2.frame.hw(0, p.knob) - dt2.frame.base for p in dt2.params] == [
-        0,
-        1,
-        2,
-        6,
-        7,
-    ]
-    assert [(p.id, p.knob) for p in dn2.params] == [
-        (f"pluck_{n}", k) for k, n in enumerate(("decay", "pick", "bright", "color"))
-    ]
+    # Digitakt II: TUNE is the stock row 0xca on knob 0; the module's parameters follow from knob 1
+    assert [(p.id, p.knob) for p in dt2.params] == [("tune", 0), ("sine_level", 1)]
+    assert [dt2.frame.hw(0, p.knob) - dt2.frame.base for p in dt2.params] == [0, 1]
+    # the frame skips two halfwords per group of four knobs
+    assert [dt2.frame.hw(0, k) - dt2.frame.base for k in (3, 4, 5)] == [3, 6, 7]
+    assert [(p.id, p.knob) for p in dn2.params] == [("sine_level", 0)]
     assert dn2.frame.hw(3, 1) == dn2.frame.base + 3 * dn2.frame.stride + 1
     # a run-time machine has no fixed number: the rig takes the first number of the run-time range of the device (core/machines types.toml)
     types = tomllib.loads(
@@ -34,14 +24,12 @@ def test_pluck_parameters_come_from_the_manifest_and_the_device_frame():
     )
     assert dt2.machine_type == types["dt2"]["dynamic_first"]
     assert dn2.machine_type == types["dn2"]["dynamic_first"]
-    assert [p.default for p in dn2.params] == [0x4000, 0x2000, 0x5000, 0x2800]
+    assert [p.default for p in dn2.params] == [32512]
 
 
 def test_machines_are_found_and_the_framework_is_not():
     labels = {s.label for s in c.machine_specs()}
     assert {
-        "digikit/pluck@dt2",
-        "digikit/pluck@dn2",
         "test/sine@dt2",
         "test/sine@dn2",
     } <= labels
@@ -59,7 +47,7 @@ def test_the_budget_follows_the_headroom_of_the_device():
 
 
 def test_the_cases_cover_the_groups_and_are_deterministic():
-    sp = c.spec("digikit/pluck", "dt2")
+    sp = c.spec("test/sine", "dt2")
     assert sp is not None
     cases = c.cases(sp)
     assert cases == c.cases(sp)
@@ -93,7 +81,7 @@ def test_fx_specs_find_the_fixtures_and_keep_the_negative_apart():
     assert [s.module for s in c.fx_specs(negative=True)] == ["test/fx-nan"]
     assert "test/fx-nan" not in [s.module for s in c.fx_specs()]
     assert c.fx_spec("core/fx") is None  # a framework renders no effect of its own
-    assert c.fx_spec("digikit/pluck") is None  # a machine is no effect
+    assert c.fx_spec("test/sine") is None  # a machine is no effect
     assert not c.is_machine_module("test/fx-gain")
 
 
@@ -101,18 +89,18 @@ def test_fx_specs_include_run_time_effects_and_turn_case_values_into_knob_floats
     """A `DK_FX` record (a run-time effect: no state symbol, the page's knobs give the floats of the words) is an effect spec too."""
     import struct
 
-    s = c.fx_spec("digikit/freqshift")
+    s = c.fx_spec("test/dyn-fx-gain")
     assert s is not None
-    assert (s.process, s.desc, s.state) == ("_fs_process", "_fs_desc", "")
-    assert s.knobs == ((-64.0, 63.0),)
+    assert (s.process, s.desc, s.state) == ("_dg_process", "_dg_desc", "")
+    assert s.knobs == ((0.0, pytest.approx(1.27)),)
 
     def bits(x: float) -> int:
         return struct.unpack("<I", struct.pack("<f", x))[0]
 
-    assert c.fx_word(s, 0, 0) == bits(-64.0)
-    assert c.fx_word(s, 0, c.FX_PARAM_MAX) == bits(63.0)
+    assert c.fx_word(s, 0, 0) == bits(0.0)
+    assert c.fx_word(s, 0, c.FX_PARAM_MAX) == bits(1.27)
     mid = struct.unpack("<f", struct.pack("<I", c.fx_word(s, 0, 0x4000)))[0]
-    assert abs(mid) < 1e-4  # the middle of the bipolar knob
+    assert abs(mid - 1.27 * 0x4000 / c.FX_PARAM_MAX) < 1e-3  # the middle of the knob
     assert c.fx_word(s, 1, 5) == 5  # a word without a knob stays the raw case value
     assert "test/dyn-fx-gain" in [x.module for x in c.fx_specs()]
 

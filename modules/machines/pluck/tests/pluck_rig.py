@@ -1,4 +1,4 @@
-"""The rig of the digikit/pluck tests (test_pluck.py, test_pluck_tune.py, test_pluck_tune_low.py): the routine on the concrete SHARC+ core.
+"""The rig of the digikit/pluck tests (test_pluck.py, test_pluck_range.py, test_pluck_tune.py): the routine on the concrete SHARC+ core.
 
 The wrapper (core/dsp-voice) and the routine are assembled from the module sources and run block by block the way
 the engine calls them (see tests/patchkit/test_dsp_voice.py). The generic machine rig keeps the core's memory (the routine's
@@ -7,14 +7,12 @@ delay line, reserved unloaded L2 on the device) from call to call. Skips when Se
 import struct
 
 import numpy as np
+import pluck_ref
 import pytest
-
 from support.machine_rig import MachineRig, nw
 from support.paths import REPO_ROOT
-from tools.patchkit import (
-    pk_toolchains,
-    pluck_ref,
-)
+
+from tools.patchkit import pk_toolchains
 
 ROOT = REPO_ROOT
 

@@ -2,6 +2,7 @@
 
 import hashlib
 import struct
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -25,10 +26,10 @@ def header(
 
 
 def test_header_groups():
-    m = T.header_info(header("digikit/pluck", machine=(1, 0), service=(1, 0), dsp=64))
+    m = T.header_info(header("acme/synth", machine=(1, 0), service=(1, 0), dsp=64))
     assert (m["group"], m["name"], m["version"], m["arena"], m["dsp"]) == (
         "Machines",
-        "digikit/pluck",
+        "acme/synth",
         "0.1.2",
         120,
         64,
@@ -52,19 +53,19 @@ def test_repo_rows_carry_the_needs_inferred_from_the_packed_file(tmp_path):
         r["id"]: r
         for r in T.repo_rows(
             "dt2",
-            ["digikit/pluck", "digikit/remote"],
+            ["test/sine", "digikit/remote"],
             pack=pack,
             status=lambda m: "unchanged",
         )
     }
-    pluck, remote = rows["digikit/pluck"], rows["digikit/remote"]
+    sine, remote = rows["test/sine"], rows["digikit/remote"]
     # the machine with DSP code takes a DSP range and a voice row; the row's arena and dsp are what a load takes, from the same needs
-    assert pluck["needs"]["DSP_AREA"] > 0 and pluck["needs"]["VOICE_ROWS"] >= 1
-    assert (pluck["arena"], pluck["dsp"]) == (
-        pluck["needs"]["ARENA"],
-        pluck["needs"]["DSP_AREA"],
+    assert sine["needs"]["DSP_AREA"] > 0 and sine["needs"]["VOICE_ROWS"] >= 1
+    assert (sine["arena"], sine["dsp"]) == (
+        sine["needs"]["ARENA"],
+        sine["needs"]["DSP_AREA"],
     )
-    assert pluck["needs"]["file_size"] == pluck["file_size"]
+    assert sine["needs"]["file_size"] == sine["file_size"]
     assert remote["needs"]["DSP_AREA"] == 0 and remote["needs"]["ARENA"] > 0
 
 
@@ -89,11 +90,11 @@ CAP = {
 def test_merge_state_groups_and_fit():
     rows = [
         row("test/sine", sha="s1"),
-        row("digikit/pluck", sha="p1"),
-        row("digikit/tool", group="Tools", dsp=0, sha="t1"),
+        row("acme/synth", sha="p1"),
+        row("someone/tool", group="Tools", dsp=0, sha="t1"),
     ]
     card = [
-        ("modules/pluck.dkm", 500, "p1"),  # same file
+        ("modules/synth.dkm", 500, "p1"),  # same file
         ("modules/tool.dkm", 500, "OLD"),  # same path, other bytes
         ("modules/other.dkm", 700, "zz"),  # not from the repo
         ("modules/junk.dkm", 9, "yy"),  # no readable header
@@ -102,25 +103,24 @@ def test_merge_state_groups_and_fit():
         "modules/other.dkm": header("someone/effect", fx=(1, 0), size=700),
         "modules/junk.dkm": None,
     }
-    v = T.merge(rows, card, ["digikit/pluck", "someone/effect"], CAP, headers)
+    v = T.merge(rows, card, ["acme/synth", "someone/effect"], CAP, headers)
     ids = [r["id"] for r in v["modules"]]
     assert (
-        ids == ["digikit/pluck", "test/sine", "digikit/tool"][:0]
-        or ids[0] == "digikit/pluck"
+        ids == ["acme/synth", "test/sine", "someone/tool"][:0] or ids[0] == "acme/synth"
     )
     assert [r["group"] for r in v["modules"]] == ["Machines", "Machines", "Tools"]
     by = {r["id"]: r for r in v["modules"]}
-    assert by["digikit/pluck"]["on_card"] == "yes" and by["digikit/pluck"]["loaded"]
-    assert by["digikit/tool"]["on_card"] == "other version"
+    assert by["acme/synth"]["on_card"] == "yes" and by["acme/synth"]["loaded"]
+    assert by["someone/tool"]["on_card"] == "other version"
     assert by["test/sine"]["on_card"] == "no" and by["test/sine"]["test"]
     # a loaded module fits by definition; the others are checked against CAPACITY (dsp 64 > largest 50), and the warning says whether the
     # module fits the device alone (the next boot starts empty)
-    assert by["digikit/pluck"]["fits"] is True
+    assert by["acme/synth"]["fits"] is True
     assert by["test/sine"]["fits"] is False
     assert by["test/sine"]["warnings"] == [
         "DSP memory 64 bytes needed, 50 bytes free; fits when the modules loaded now are not selected"
     ]
-    assert by["digikit/tool"]["fits"] is True
+    assert by["someone/tool"]["fits"] is True
     extra = {r["path"]: r for r in v["card_only"]}
     assert (
         extra["modules/other.dkm"]["group"] == "Effects"
@@ -139,26 +139,26 @@ def test_merge_state_groups_and_fit():
 
 def test_plan_build_upload_select():
     rows = [
-        row("digikit/pluck", sha="p1"),
+        row("acme/synth", sha="p1"),
         row("test/sine", build="needs build", sha="s1"),
     ]
-    card = [("modules/pluck.dkm", 500, "p1")]
-    p = T.plan_install(rows, ["digikit/pluck", "test/sine"], card, ["modules/old.dkm"])
+    card = [("modules/synth.dkm", 500, "p1")]
+    p = T.plan_install(rows, ["acme/synth", "test/sine"], card, ["modules/old.dkm"])
     assert p == {
         "build": ["test/sine"],
         "upload": ["test/sine"],
-        "select": ["modules/pluck.dkm", "modules/sine.dkm", "modules/old.dkm"],
+        "select": ["modules/synth.dkm", "modules/sine.dkm", "modules/old.dkm"],
     }
     with pytest.raises(T.TransferError, match="not a run-time module"):
         T.plan_install(rows, ["digikit/nothing"], card)
     with pytest.raises(T.TransferError, match="at most 8"):
         T.plan_install(
-            rows, ["digikit/pluck"], card, [f"modules/k{i}.dkm" for i in range(8)]
+            rows, ["acme/synth"], card, [f"modules/k{i}.dkm" for i in range(8)]
         )
     # the same path in the wanted set and in --keep is selected once
-    assert T.plan_install(rows, ["digikit/pluck"], card, ["modules/pluck.dkm"])[
+    assert T.plan_install(rows, ["acme/synth"], card, ["modules/synth.dkm"])[
         "select"
-    ] == ["modules/pluck.dkm"]
+    ] == ["modules/synth.dkm"]
 
 
 class MockUp:
@@ -218,19 +218,19 @@ class MockUp:
 
 
 def _two_rows(tmp_path):
-    pl = tmp_path / "pluck.dkm"
+    pl = tmp_path / "synth.dkm"
     pl.write_bytes(b"P" * 600)
     sn = tmp_path / "sine.dkm"
     sn.write_bytes(b"S" * 700)
     sha = lambda b: hashlib.sha256(b).hexdigest()  # noqa: E731
     rows = [
-        {**row("digikit/pluck", sha=sha(b"P" * 600), size=600), "dkm": str(pl)},
+        {**row("acme/synth", sha=sha(b"P" * 600), size=600), "dkm": str(pl)},
         {**row("test/sine", build="needs build", sha="stale", size=1), "dkm": str(sn)},
     ]
     fresh = lambda device, ids, pack: [  # noqa: E731
         {**row(ids[0], sha=sha(b"S" * 700), size=700), "dkm": str(sn)}
     ]
-    card = [("modules/pluck.dkm", 600, sha(b"P" * 600))]
+    card = [("modules/synth.dkm", 600, sha(b"P" * 600))]
     return rows, fresh, card
 
 
@@ -240,10 +240,10 @@ def test_install_uploads_and_verifies_and_leaves_the_selection_alone(
     rows, fresh, card = _two_rows(tmp_path)
     monkeypatch.setattr(T, "repo_rows", fresh)
     built, events = [], []
-    up = MockUp(card, ["digikit/pluck", "test/sine"])
+    up = MockUp(card, ["acme/synth", "test/sine"])
     out = T.install(
         up,
-        ["digikit/pluck", "test/sine"],
+        ["acme/synth", "test/sine"],
         None,
         events.append,
         rows=rows,
@@ -252,8 +252,8 @@ def test_install_uploads_and_verifies_and_leaves_the_selection_alone(
     assert built == ["test/sine"]  # only the changed one is built
     assert (
         up.calls
-        == [  # per module in order: upload (pluck is on the card: skipped), verify; no SELECT, no RESTART
-            ("verify", "modules/pluck.dkm"),
+        == [  # per module in order: upload (synth is on the card: skipped), verify; no SELECT, no RESTART
+            ("verify", "modules/synth.dkm"),
             ("put", "modules/sine.dkm"),
             ("verify", "modules/sine.dkm"),
         ]
@@ -275,14 +275,14 @@ def test_install_with_select_sends_one_select_and_no_restart(tmp_path, monkeypat
     up = MockUp(card, [])
     out = T.install(
         up,
-        ["digikit/pluck", "test/sine"],
+        ["acme/synth", "test/sine"],
         ["modules/loaded.dkm"],
         events.append,
         rows=rows,
         build=lambda m: None,
         select=True,
     )
-    want = ["modules/pluck.dkm", "modules/sine.dkm", "modules/loaded.dkm"]
+    want = ["modules/synth.dkm", "modules/sine.dkm", "modules/loaded.dkm"]
     assert up.calls[-1] == ("select", want) and ("restart",) not in up.calls
     assert out["selected"] == want and out["restarted"] is False
     assert [e["event"] for e in events][-2:] == ["select", "done"]
@@ -308,16 +308,16 @@ def test_install_with_restart_waits_for_modules(tmp_path, monkeypatch):
     monkeypatch.setattr(T, "repo_rows", fresh)
     monkeypatch.setattr(R, "restart_and_wait", lambda up, *a: (up.restart(), up)[1])
     events = []
-    up = MockUp(card, ["digikit/pluck", "test/sine"])
+    up = MockUp(card, ["acme/synth", "test/sine"])
     out = T.install(
-        up, ["digikit/pluck", "test/sine"], None, events.append, rows=rows,
+        up, ["acme/synth", "test/sine"], None, events.append, rows=rows,
         build=lambda m: None, restart=True,
     )  # fmt: skip
     assert up.calls[-2:] == [
-        ("select", ["modules/pluck.dkm", "modules/sine.dkm"]),
+        ("select", ["modules/synth.dkm", "modules/sine.dkm"]),
         ("restart",),
     ]
-    assert out["restarted"] and out["loaded"] == ["digikit/pluck", "test/sine"]
+    assert out["restarted"] and out["loaded"] == ["acme/synth", "test/sine"]
     assert [e["event"] for e in events][-3:] == ["restart", "wait", "done"]
 
 
@@ -340,17 +340,17 @@ def test_restart_reports_loaded_and_missing_with_the_reason(monkeypatch):
     from tools.device import dkrun as R
 
     monkeypatch.setattr(R, "restart_and_wait", lambda up, *a: (up.restart(), up)[1])
-    up = MockUp([], ["digikit/pluck"])
+    up = MockUp([], ["acme/synth"])
     t = {"v": 0.0}
     events = []
     out = T.restart_device(
-        up, ["digikit/pluck", "test/sine"], events.append,
+        up, ["acme/synth", "test/sine"], events.append,
         sleep=lambda s: t.__setitem__("v", t["v"] + s), now=lambda: t["v"],
-        paths=["modules/pluck.dkm", "modules/sine.dkm"],
+        paths=["modules/synth.dkm", "modules/sine.dkm"],
     )  # fmt: skip
-    assert out["loaded"] == ["digikit/pluck"] and out["missing"] == ["test/sine"]
+    assert out["loaded"] == ["acme/synth"] and out["missing"] == ["test/sine"]
     # the store is empty after the restart: the reason is said
-    assert out["not_on_card"] == ["modules/pluck.dkm", "modules/sine.dkm"]
+    assert out["not_on_card"] == ["modules/synth.dkm", "modules/sine.dkm"]
     assert events[-1]["event"] == "done" and events[-1]["missing"] == ["test/sine"]
 
 
@@ -372,7 +372,7 @@ def test_install_with_restart_says_when_the_restart_lost_the_files(
     t = {"v": 0.0}
     with pytest.raises(T.TransferError, match="restart lost the card's writes"):
         T.install(
-            up, ["digikit/pluck"], None, rows=rows, build=lambda m: None, restart=True,
+            up, ["acme/synth"], None, rows=rows, build=lambda m: None, restart=True,
             sleep=lambda s: t.__setitem__("v", t["v"] + s), now=lambda: t["v"],
         )  # fmt: skip
 
@@ -442,7 +442,18 @@ def test_candidates_are_the_run_time_modules_and_pack_to_a_dkm(tmp_path):
     from tools.device import dkrun as R
 
     ids = T.candidates()
-    assert "digikit/remote" in ids and "digikit/pluck" in ids and "test/svc-echo" in ids
+    from tools.patchkit import modroots
+
+    shipped = {
+        mid
+        for mid, d in modroots.manifests().items()
+        if d.is_relative_to(modroots.ROOT / "modules")
+        and tomllib.loads((d / "module.toml").read_text())["module"].get("dynamic")
+    }
+    assert shipped and shipped <= set(
+        ids
+    )  # every shipped run-time module is a candidate
+    assert "digikit/remote" in ids and "test/svc-echo" in ids
     assert not [i for i in ids if i.startswith("core/")]
     # the packer is the truth: digikit/remote packs and its header has the service contract (group Tools)
     rows = T.repo_rows(
@@ -483,7 +494,7 @@ def test_upload_progress_events_are_capped_and_end_at_the_file_size(
     events = []
     T.install(
         up,
-        ["test/big", "digikit/pluck"],
+        ["test/big", "acme/synth"],
         None,
         events.append,
         rows=[row_big, small[0]],
@@ -492,7 +503,7 @@ def test_upload_progress_events_are_capped_and_end_at_the_file_size(
     prog = [e for e in events if e["event"] == "progress"]
     assert all(
         e["id"] == "test/big" for e in prog
-    )  # pluck was on the card: skipped, no progress
+    )  # synth was on the card: skipped, no progress
     assert 1 < len(prog) <= T.PROGRESS_EVENTS + 1, len(prog)
     sent = [e["sent"] for e in prog]
     assert sent == sorted(sent) and len(set(sent)) == len(sent)

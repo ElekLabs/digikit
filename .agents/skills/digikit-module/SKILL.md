@@ -30,7 +30,7 @@ The guide is `docs/MODULE-AUTHORING.md`. Read the section you need there; this f
    A manifest with `[[voice]]`, `[[machine]]`, `[[param]]`, `[[page]]` or `[[fx]]` is refused.
 3. After a change to `module.toml`, `src/module.c`, `devices/*.toml` or `sdk/sdk.toml`: `mise run gen:modules` (`-- --check` lists stale files). Never edit `build/gen/`.
 4. Build: `mise run module:build -- PATH [--check]` (`patchkit build`; the objects go to `out/cache/dko/<id>/`, `patchkit dko show FILE` shows one). Pack and `dk:run` build what is stale, so this step is optional.
-5. Check, no emulator: `mise run module:check -- AUTHOR/NAME [--device dt2|dn2]` (guide 8).
+5. Check, no emulator: `mise run module:check -- AUTHOR/NAME [--device dt2|dn2]` (guide 8). The module's own tests live in its `tests/` (`test_<name>_*.py` with a unique basename, `*.test.ts`, `scenarios/*.toml`); no list names them. Code outside the module folder never names the module (`check:layers`, rule `self-contained`; `host = true` exempts a host-protocol module); shared tests use `tests/fixtures/modules`.
 6. Pack: `mise run module:pack -- AUTHOR/NAME --device dt2|dn2 [-o FILE.dkm]`.
 7. Run: start `mise run workbench` in another shell, then `mise run dk:run -- AUTHOR/NAME --emu --seconds 10`. On a device with the runtime:
    `mise run dk:run -- AUTHOR/NAME --port Digitakt`. Hardware is Em's decision every time; never flash anything.

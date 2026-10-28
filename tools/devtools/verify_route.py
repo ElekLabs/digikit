@@ -7,6 +7,9 @@ functions read the working tree (module manifests, test files, scenario TOMLs); 
 
 Rules (docs/TESTING.md "What verify runs"):
 
+- a module's own tests live in `modules/<group>/<name>/tests/` (test_*.py, scenarios/*.toml, TypeScript *.test.ts): found by globbing,
+  selected by any change in the module (and by a change in a module it requires); a change in that tests/ directory alone selects
+  only python-tests. Module ids come from the module.toml files, not from a list of authors.
 - a file of a module under modules/ or tests/fixtures/modules/: python-tests and rust-tests; web only for the files the web
   gallery bundle reads (module.toml, build/, gallery/, registry tables, not src/, sdk/, tests/).
   Framework modules (FRAMEWORK: every patched image includes them) select all of tests/patchkit
@@ -91,11 +94,9 @@ ALL_SUITES = ("tests/patchkit", "tests/digikit")
 CONFORMANCE = "tests/modules/test_machine_conformance.py"
 CONFORMANCE_WRAPPERS = frozenset({"core/dsp-voice"})
 FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
-# a path built from parts: ROOT / "modules" / "machines" / "pluck"
-SPLIT_ID_RE = re.compile(
-    r"""["'](core|digikit|fadedlimes|fx|machines|test)["']\s*[/,]\s*["']([a-z0-9][a-z0-9-]*)["']"""
+MODULE_TESTS_GLOB = (
+    "modules/*/*/tests"  # a module's own tests: test_*.py, scenarios/*.toml, *.test.ts
 )
-ID_RE = re.compile(r"\b(?:core|digikit|fadedlimes|fx|machines|test)/[a-z0-9][a-z0-9-]*")
 
 
 @dataclass(frozen=True)
@@ -138,12 +139,30 @@ def dependents(ids: set[str]) -> set[str]:
     return found
 
 
+def _production_uploads() -> dict[str, str]:
+    """Module id -> its coupled lifecycle acceptance file, for the shipped modules (under `modules/`) that are run-time
+    uploads: `dynamic`, a service or a `host` module. The file is `tests/regression/modules/<leaf>.test.ts`, `<leaf>` being
+    the last part of the id; a module without that file has no lifecycle cell. tests/regression/modules/acceptance.ts
+    scans the manifests by the same rule."""
+    out: dict[str, str] = {}
+    for mid, moddir in sorted(modroots.manifests().items()):
+        if not moddir.is_relative_to(ROOT / "modules"):
+            continue
+        meta = tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8")).get(
+            "module", {}
+        )
+        if not (
+            meta.get("dynamic") or meta.get("host") or meta.get("type") == "service"
+        ):
+            continue
+        rel = f"tests/regression/modules/{mid.split('/')[-1]}.test.ts"
+        if (ROOT / rel).is_file():
+            out[mid] = rel
+    return out
+
+
 # These production uploads have coupled lifecycle acceptance, in addition to their static owners.
-RUNTIME_UPLOADS = {
-    "digikit/pluck": "tests/regression/modules/pluck.test.ts",
-    "digikit/freqshift": "tests/regression/modules/freqshift.test.ts",
-    "digikit/remote": "tests/regression/modules/remote.test.ts",
-}
+RUNTIME_UPLOADS = _production_uploads()
 ACCEPTANCE_DIRS = {
     "stock": "dt2",
     "runtime-fixture": "runtime",
@@ -325,13 +344,27 @@ def _ids_by_dir() -> dict[str, str]:
     return out
 
 
+@cache
+def _id_patterns() -> tuple[re.Pattern[str], re.Pattern[str]]:
+    """(ID_RE, SPLIT_ID_RE) built from the module manifests: the ids and the `category/name` directory forms.
+    No author or category is named here; a new module is found by its module.toml."""
+    names = set(manifests()) | set(_ids_by_dir())
+    names = {n for n in names if "/" in n}
+    firsts = sorted({n.split("/", 1)[0] for n in names})
+    alt = "|".join(re.escape(n) for n in sorted(names, key=lambda n: (-len(n), n)))
+    first = "|".join(re.escape(f) for f in firsts) or "(?!)"
+    # a path built from parts: ROOT / "modules" / "machines" / "pluck"
+    split = re.compile(rf"""["']({first})["']\s*[/,]\s*["']([a-z0-9][a-z0-9-]*)["']""")
+    full = re.compile(rf"(?<![\w-])(?:{alt})(?![\w-])" if alt else "(?!)")
+    return full, split
+
+
 def refs(text: str) -> set[str]:
     """Module ids named in TEXT (comment lines of a TOML file are not read)."""
     lines = (line for line in text.splitlines() if not line.lstrip().startswith("#"))
     body = "\n".join(lines)
-    found = set(ID_RE.findall(body)) | {
-        f"{a}/{b}" for a, b in SPLIT_ID_RE.findall(body)
-    }
+    id_re, split_re = _id_patterns()
+    found = set(id_re.findall(body)) | {f"{a}/{b}" for a, b in split_re.findall(body)}
     ids = manifests()
     by_dir = _ids_by_dir()
     return {m if m in ids else by_dir[m] for m in found if m in ids or m in by_dir}
@@ -398,14 +431,37 @@ def runner_kinds(hit: set[str]) -> set[str]:
     return kinds
 
 
+def module_test_files(mid: str | None = None) -> list[str]:
+    """The pytest files of the modules' own tests (`modules/<group>/<name>/tests/**/test_*.py`), repo-relative:
+    those of module MID, or of every module. Found by globbing; no list names them."""
+    base = modroots.module_dir(mid) / "tests" if mid else None
+    found = (
+        sorted(base.rglob("test_*.py"))
+        if base is not None
+        else sorted(ROOT.glob(f"{MODULE_TESTS_GLOB}/**/test_*.py"))
+    )
+    return [
+        p.relative_to(ROOT).as_posix() for p in found if "node_modules" not in p.parts
+    ]
+
+
+def module_scenario_files(mid: str) -> list[str]:
+    """The scenario files of module MID (`tests/scenarios/*.toml` in its directory), repo-relative."""
+    base = modroots.module_dir(mid) / "tests/scenarios"
+    return [p.relative_to(ROOT).as_posix() for p in sorted(base.glob("*.toml"))]
+
+
 @cache
 def test_files() -> tuple[str, ...]:
-    """Every tests/**/test_*.py, repo-relative (node_modules skipped)."""
+    """Every tests/**/test_*.py and every module-owned test_*.py, repo-relative (node_modules skipped)."""
     return tuple(
         rel
         for rel in (
-            p.relative_to(ROOT).as_posix()
-            for p in sorted((ROOT / "tests").rglob("test_*.py"))
+            *(
+                p.relative_to(ROOT).as_posix()
+                for p in sorted((ROOT / "tests").rglob("test_*.py"))
+            ),
+            *module_test_files(),
         )
         if "node_modules" not in rel
     )
@@ -442,12 +498,21 @@ def kind_files() -> dict[str, tuple[str, ...]]:
 
 @cache
 def scenario_refs() -> dict[str, tuple[str, frozenset[str]]]:
-    """Scenario file -> (kind, module ids it names)."""
+    """Scenario file -> (kind, module ids it names). A module's own scenarios (modules/*/*/tests/scenarios) belong to
+    their module whether or not the file names it."""
     out: dict[str, tuple[str, frozenset[str]]] = {}
-    for path in sorted((ROOT / "tests/digikit/scenarios").glob("*.toml")):
+    paths = [
+        *sorted((ROOT / "tests/digikit/scenarios").glob("*.toml")),
+        *sorted(ROOT.glob(f"{MODULE_TESTS_GLOB}/scenarios/*.toml")),
+    ]
+    for path in paths:
         text = path.read_text(encoding="utf-8")
         kind = tomllib.loads(text).get("scenario", {}).get("kind", "")
-        out[path.relative_to(ROOT).as_posix()] = (kind, frozenset(refs(text)))
+        ids = refs(text)
+        owner = modroots.module_id(path)
+        if owner is not None and path.is_relative_to(ROOT / "modules"):
+            ids.add(owner)
+        out[path.relative_to(ROOT).as_posix()] = (kind, frozenset(ids))
     return out
 
 
@@ -457,12 +522,29 @@ def scenario_tests(kinds: set[str]) -> list[str]:
     return sorted(files)
 
 
+def own_module_tests(mid: str) -> list[str]:
+    """Pytest paths of the tests inside module MID's directory: its test_*.py and the digikit test files that run
+    the kinds of its scenarios."""
+    kinds = {
+        scenario_refs()[f][0]
+        for f in module_scenario_files(mid)
+        if f in scenario_refs()
+    }
+    return [*module_test_files(mid), *scenario_tests(kinds)]
+
+
 def module_tests(mid: str) -> list[str]:
     """Pytest paths for a change in module MID (see the module docstring)."""
     hit = dependents({mid})
     if hit & FRAMEWORK:
-        return [*ALL_SUITES, *([CONFORMANCE] if mid in CONFORMANCE_WRAPPERS else [])]
-    tests = [t for t, ids in test_refs().items() if ids & hit]
+        return [
+            *ALL_SUITES,
+            *module_test_files(),
+            *([CONFORMANCE] if mid in CONFORMANCE_WRAPPERS else []),
+        ]
+    # the module's own tests (and those of the modules that depend on it), then the tests that name it
+    tests = list(dict.fromkeys(t for m in sorted(hit) for t in own_module_tests(m)))
+    tests += [t for t, ids in test_refs().items() if ids & hit and t not in tests]
     if any(pk_conform.is_machine_module(m) for m in hit) and CONFORMANCE not in tests:
         tests.append(CONFORMANCE)
     if any(pk_conform.is_fx_module(m) for m in hit) and FX_CONFORMANCE not in tests:
@@ -488,6 +570,11 @@ def module_fine(path: str) -> Fine | None:
     if path.endswith(".md"):
         return Fine("modules docs", (), ())
     mid = modroots.module_id(path)
+    inside = (ROOT / path).relative_to(modroots.module_dir(mid)).parts if mid else ()
+    if inside[:1] == ("tests",):
+        # a module's own test or scenario: only the tests read it (no Rust, no web bundle)
+        steps = ("python-tests", "host") if path.endswith(".ts") else ("python-tests",)
+        return Fine(f"module {mid} tests", steps, tuple(own_module_tests(mid)))
     if mid is None:
         # a file outside any module, or a module that is gone: stay broad
         return Fine(

@@ -1,6 +1,6 @@
 // A fake digikit device that speaks the SysEx protocol of docs/design/digikit-upload.md byte for byte (framing included), as a `DkTransport` for
 // `DkSession`: files, a selection, a log, modules, and a RESTART that is silent for a while and then boots again. Shared by dktransfer.test.mjs and
-// the screenshot run of the site's Transfer page (apps/web/tests/transfer-shots.mjs).
+// the screenshot run of the site's Transfer page (tools/devtools/web_transfer_shots.mjs).
 import { createHash } from 'node:crypto';
 import { decode8in7, encode8in7 } from '@digi/dk-session';
 import { CAP, CAPACITY_KINDS, CMD, LOG_KIND } from '@digi/dk-session/gen_proto';

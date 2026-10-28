@@ -7,11 +7,11 @@ built modules from out/modules/<device>/ (`mise run module:pack-all`, tools/devi
 dev tooling; the app starts no process.
 
     uv run python -m tools.device.dktransfer list --emu [--json]
-    uv run python -m tools.device.dktransfer install digikit/pluck [MOD ...] --emu [--select [--keep PATH ...]] [--restart] [--json]
+    uv run python -m tools.device.dktransfer install <author/name> [MOD ...] --emu [--select [--keep PATH ...]] [--restart] [--json]
     uv run python -m tools.device.dktransfer restart --emu [--json]
-    uv run python -m tools.device.dktransfer delete modules/pluck.dkm [PATH ...] --emu [--json]
+    uv run python -m tools.device.dktransfer delete modules/<name>.dkm [PATH ...] --emu [--json]
     mise run transfer -- list --emu --json
-    mise run transfer -- install digikit/pluck --port Digitakt
+    mise run transfer -- install <author/name> --port Digitakt
 
 `list` is one merged view for the target's device (INFO): the repo's run-time modules that pack for it (never `core/*`; `test/` ones are
 marked), with group (machine, fx or service contract in the packed header: Machines, Effects, Tools), version, sizes, build state
@@ -697,7 +697,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
     p = sub.add_parser("install")
-    p.add_argument("modules", nargs="+", help="module ids, e.g. digikit/pluck")
+    p.add_argument("modules", nargs="+", help="module ids, e.g. <author/name>")
     p.add_argument(
         "--select",
         action="store_true",
@@ -718,7 +718,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser(
         "delete", help="delete files from the card (the selection is not touched)"
     )
-    p.add_argument("paths", nargs="+", help="store paths, e.g. modules/pluck.dkm")
+    p.add_argument("paths", nargs="+", help="store paths, e.g. modules/<name>.dkm")
     p = sub.add_parser(
         "restart", help="RESTART, wait for the boot, report which modules loaded"
     )

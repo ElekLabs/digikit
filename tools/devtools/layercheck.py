@@ -18,6 +18,11 @@ Rules:
             dk_app_* or the SHARC externs the SDK documents. A symbol never names a firmware anchor, and `[object.externs]`
             never maps one to an anchor.
   apps      An app has no `[[op]]` and no `[[claim]]`: it never patches the firmware.
+  self-contained
+            No tracked file outside a user content module's own directory (modules/machines|fx|tools) names its id
+            (`AUTHOR/NAME`) or its path (`machines/NAME`). Allowed: docs/**, any *.md, .agents/**, the fixtures
+            (tests/fixtures/modules) and a module with `host = true` in [module] (the workbench speaks
+            its protocol).
   imports   Every function of <dk/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -29,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -493,6 +499,92 @@ def check_imports(root: Path) -> list[Violation]:
     return out
 
 
+USER_MODULE_ROOTS = ("modules/machines/", "modules/fx/", "modules/tools/")
+# Files that may name any module: documentation, agent notes and the fixtures.
+SC_ALLOWED_PREFIXES = (
+    "docs/",
+    ".agents/",
+    "tests/fixtures/modules/",
+)
+SC_SKIP_DIRS = {".git", "out", "node_modules", "target", "firmware", ".venv", "dist"}
+SC_HINT = (
+    "move the test or model into the module's tests/ directory, use a fixture module (tests/fixtures/modules), "
+    "or write a placeholder (<author/name>) in help text"
+)
+
+
+def tracked_files(root: Path) -> list[str]:
+    """Tracked files (`git ls-files`); outside a git repository, every file except build output."""
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+        )
+        names = [n for n in done.stdout.decode("utf-8", "replace").split("\0") if n]
+        if names:
+            return [n for n in names if (root / n).is_file()]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    out = []
+    for p in sorted(root.rglob("*")):
+        r = p.relative_to(root)
+        if p.is_file() and not SC_SKIP_DIRS & set(r.parts):
+            out.append(r.as_posix())
+    return out
+
+
+def user_modules(root: Path, mods: list[Module]) -> list[tuple[Module, str]]:
+    """(module, relative directory) of every user content module that is not a `host` module."""
+    out = []
+    for m in mods:
+        r = rel(root, m.dir)
+        if r.startswith(USER_MODULE_ROOTS) and not m.mod.get("host", False):
+            out.append((m, r))
+    return out
+
+
+def sc_hits(root: Path, mods: list[Module]) -> list[tuple[str, int, Module, str]]:
+    """(file, line, module, module dir) for every mention of a user module outside its directory."""
+    users = user_modules(root, mods)
+    pats = []
+    for m, d in users:
+        names = {m.id, d.removeprefix("modules/")}
+        pats.append(
+            (
+                m,
+                d,
+                re.compile(
+                    r"(?<![\w.-])(?:"
+                    + "|".join(re.escape(n) for n in sorted(names))
+                    + r")(?![\w-])"
+                ),
+            )
+        )
+    out = []
+    for f in tracked_files(root):
+        if f.endswith(".md") or f.startswith(SC_ALLOWED_PREFIXES):
+            continue
+        data = (root / f).read_bytes()
+        if b"\0" in data[:4096]:
+            continue
+        text = data.decode("utf-8", "replace")
+        for m, d, pat in pats:
+            if f.startswith(d + "/"):
+                continue
+            for n, line in enumerate(text.splitlines(), 1):
+                if pat.search(line):
+                    out.append((f, n, m, d))
+    return out
+
+
+def check_self_contained(root: Path, mods: list[Module]) -> list[Violation]:
+    return [
+        Violation(f"{f}:{n}", "self-contained", f"{m.id} named outside {d}", SC_HINT)
+        for f, n, m, d in sc_hits(root, mods)
+    ]
+
+
 def check(root: Path = ROOT) -> list[Violation]:
     mods = load_modules(root)
     return [
@@ -502,6 +594,7 @@ def check(root: Path = ROOT) -> list[Violation]:
         *check_objects(root, mods),
         *check_apps(root, mods),
         *check_imports(root),
+        *check_self_contained(root, mods),
     ]
 
 

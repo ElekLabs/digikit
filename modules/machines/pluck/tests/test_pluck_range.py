@@ -8,10 +8,9 @@ and a. This file checks it three ways: the coefficients of the float32 model ove
 (concrete SHARC+ core) on the corners, against the model. Skips the routine part when Selache is not built."""
 
 import numpy as np
+import pluck_ref
 import pytest
-from support.pluck_rig import SKIP_NO_SELACHE, PluckRig, model_blocks, val
-
-from tools.patchkit import pluck_ref
+from pluck_rig import SKIP_NO_SELACHE, PluckRig, model_blocks, val
 
 TUNES = (0, 0x1000, 0x4000, 0x7C00, 0x7F00, 0xFFFF)
 BOUND = 2.0  # the excitation peaks near 1.5 at velocity 127, color 0x7f00; a string only loses energy

@@ -295,3 +295,38 @@ def test_ui_functions_must_be_imports_the_runtime_links(tree: Path) -> None:
     module(tree, "modules/core/runtime", "core/runtime", "core", "runtime")
     (v,) = layercheck.check(tree)
     assert v.rule == "imports" and "optional list" in v.message
+
+
+def sc(root: Path) -> list[layercheck.Violation]:
+    return [v for v in layercheck.check(root) if v.rule == "self-contained"]
+
+
+def test_self_contained_names_of_a_module_outside_it_are_hits(tree: Path) -> None:
+    write(tree, "modules/fx/gain/tests/own.py", 'ID = "digikit/gain"\n')  # inside: fine
+    write(tree, "tests/other.py", "ok = 1\nuse('digikit/gain')\n")
+    write(tree, "tools/path.sh", "build modules/fx/gain\n")
+    write(tree, "tools/near.sh", "digikit/gain-like fx/gainer\n")  # other names
+    got = {v.where: v for v in sc(tree)}
+    assert set(got) == {"tests/other.py:2", "tools/path.sh:1"}
+    v = got["tests/other.py:2"]
+    assert "digikit/gain named outside modules/fx/gain" in v.message
+    assert "tests/" in v.instead and "placeholder" in v.instead
+
+
+def test_self_contained_docs_agents_and_fixtures_may_name_modules(tree: Path) -> None:
+    for f in (
+        "docs/findings/x.txt",
+        "notes/readme.md",
+        ".agents/skill/a.txt",
+        "tests/fixtures/modules/f/src.c",
+    ):
+        write(tree, f, "digikit/gain\n")
+    assert sc(tree) == []
+
+
+def test_self_contained_a_host_module_is_exempt(tree: Path) -> None:
+    write(tree, "apps/page.ts", "'digikit/gain'\n")
+    assert len(sc(tree)) == 1
+    module(tree, "modules/fx/gain", "digikit/gain", "fx", None, "host = true\n")
+    # `host` must sit in [module]: the extra text lands there because the manifest has no later table
+    assert sc(tree) == []

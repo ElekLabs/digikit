@@ -6,10 +6,11 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'smol-toml';
 import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
+import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
 import { PatchKit, patchedFileName } from '../src/patch/patchkit-core.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -51,17 +52,17 @@ test('bundle carries the device knob models and the gallery JSON of typed module
   const { bundle } = buildModuleData(root);
   assert.equal(bundle.devices.length, 2);
   assert.ok(bundle.devices.every((t) => 'modules' in parse(t)));
-  const pluck = bundle.modules.find((m) => m.manifest.includes('id = "digikit/pluck"'));
-  assert.ok(!pluck.manifest.includes('[[entry]]'));
-  const g = JSON.parse(pluck.files['build/gen/gallery.json']);
-  assert.equal(g.module, 'digikit/pluck');
+  const sine = bundle.modules.find((m) => m.manifest.includes('id = "test/sine"'));
+  assert.ok(!sine.manifest.includes('[[entry]]'));
+  const g = JSON.parse(sine.files['build/gen/gallery.json']);
+  assert.equal(g.module, 'test/sine');
   const m = g.machines[0];
   assert.deepEqual(Object.keys(m.devices).sort(), ['dn2', 'dt2']);
-  assert.equal(m.devices.dt2.knobs[1].param, 'pluck_decay');
+  assert.equal(m.devices.dt2.knobs[1].param, 'sine_level');
   assert.equal(m.devices.dn2.knobs[0].slot, 25);
   assert.deepEqual(
     g.params.dt2.map((p) => p.short),
-    ['DECAY', 'PICK', 'BRIGHT', 'COLOR'],
+    ['LEVEL'],
   );
   for (const p of g.params.dt2) assert.ok(p.min <= p.default && p.default <= p.max, p.id);
 });
@@ -84,14 +85,17 @@ test('bundle equals tools/patchkit/patchkit.py bundle', { skip: !existsSync(join
 test('the shipped modules: the .dkm files equal what module:pack-all writes, the index describes them, the sources hold no build output', () => {
   const out = mkdtempSync(join(tmpdir(), 'ship-'));
   const { modules } = shipModules(out, root);
-  assert.deepEqual(modules.map((m) => m.id).sort(), [
-    'digikit/freqshift',
-    'digikit/pluck',
-    'digikit/remote',
-    'fadedlimes/analog',
-    'fadedlimes/bd',
-    'fadedlimes/pd',
-  ]);
+  // what ships is the rule of isShipped over the manifests of modules/{machines,fx,tools} (a device-less module is left out)
+  const expected = ['machines', 'fx', 'tools']
+    .flatMap((r) => manifestFiles(join(root, 'modules', r)))
+    .map((file) => ({ file, d: parse(readFileSync(file, 'utf8')) }))
+    .filter(
+      ({ file, d }) => isShipped(d, relative(root, dirname(file)).split(sep).join('/')) && shippedDevices(d).length,
+    )
+    .map(({ d }) => d.module.id)
+    .sort();
+  assert.ok(expected.length > 0);
+  assert.deepEqual(modules.map((m) => m.id).sort(), expected);
   assert.deepEqual(JSON.parse(readFileSync(join(out, 'index.json'), 'utf8')).modules, modules);
   for (const m of modules) {
     assert.ok(m.source.includes('module.toml') && m.source.includes('README.md'), m.id);

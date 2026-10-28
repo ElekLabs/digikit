@@ -4,7 +4,8 @@
     uv run python -m tools.patchkit.pk_digikit_scen list
     uv run python -m tools.patchkit.pk_digikit_scen run [NAME ...] [--image dt2-1.17] [--tier quick|full] [--keep DIR]
 
-A scenario is a TOML file in `tests/digikit/scenarios/`:
+A scenario is a TOML file in `tests/digikit/scenarios/` or in a module's own `modules/<group>/<name>/tests/scenarios/` (found by
+globbing; no list names them; the names are unique across both places):
 
     [scenario]
     name = "equiv-dyn-pluck"       # the file's stem
@@ -27,8 +28,7 @@ Kinds:
              `pcm_sha256` (with `play`) replaces the PCM compare when no twin has the sound: the SHA-256 of the run-time note from its onset over
              `pcm_samples` (default 24000) interleaved float32 samples; "record" fails and prints the hash. `env_run` and `env_ref` set environment variables of the run-time and the reference boot (`SHARC_UNINIT` for a machine that
              reads voice state beyond its cleared bytes: the run-time state is uninitialised L2). `ignore_run_machines` drops a run-time
-             machine (with its parameters and pages) that the twin has no counterpart of. `play_module` and `play_machine` (default digikit/pluck and
-             pluck) name the run-time machine the note is played with.
+             machine (with its parameters and pages) that the twin has no counterpart of. `play_module` and `play_machine` (default: the machine of `tools/patchkit/pk_dkrt_machine.py`, a sine) name the run-time machine the note is played with.
   roundtrip  a project with the run-time machine on tracks, parameter values, p-locks and a sound lock is saved under set A,
              loaded and saved under set B (machine absent) and under A again: the project slot's sound records, the sequencer
              data and the sound locks are byte-identical to the first save; the track keeps its type while its machine is absent.
@@ -65,7 +65,7 @@ Kinds:
   fxpersist  the values of run-time effects are saved with the kit (`core/fxpages` hooks on the kit loader, saver and initialiser; Digitakt II and Digitone II): Save Kit and Load Kit restore them to the
              same effect (kit array, DSP row, PCM, pages) and give another effect, an empty row or a stock kit the defaults, never a zero on the way to the DSP; a project; another
              pattern's kit; tools/patchkit/pk_digikit_fxpersist.py.
-  fxshift    the frequency shifter `digikit/freqshift` (Digitakt II and Digitone II; the manifest says send, MIX 127): its page (tab FSH, title Freq Shifter, SHIFT bipolar, MIX default 127), on the master route (stored `master` on
+  fxshift    the frequency shifter (`[fxshift] module` names it; Digitakt II and Digitone II; the manifest says send, MIX 127): its page (tab FSH, title Freq Shifter, SHIFT bipolar, MIX default 127), on the master route (stored `master` on
              the Digitakt II, the fallback on the Digitone II, which has no send cells) MIX 0 leaves the PCM bit for bit as it was, MIX 127 and SHIFT 0 keeps the sine, turning SHIFT moves the sine by the shift of the routine's
              mapping in either direction with the image 40 dB down, Save Kit and Load Kit give SHIFT back; on the Digitakt II also the send route (the default): an amount on track 1 gives a return of amount^2 x MIX x the shifted
              track (compared with the float32 model), an amount on another track adds nothing; tools/patchkit/pk_digikit_fxshift.py.
@@ -106,7 +106,8 @@ from tools.patchkit import pk_dkrt_boot as B  # noqa: E402
 from tools.patchkit import pk_dkrt_machine as M  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
-SCENARIOS = ROOT / "tests" / "digikit" / "scenarios"
+# a module's own scenarios: modules/<group>/<name>/tests/scenarios/*.toml
+MODULE_SCENARIOS = "modules/*/*/tests/scenarios"
 CACHE = ROOT / "out" / "cache" / "digikit"
 # every device with a module store and its newest image that has a port (`port = true` in the device file)
 QUICK_IMAGES = {d: pk_device.port_images(d)[-1] for d in pk_device.digikit_devices()}
@@ -167,9 +168,21 @@ class Scenario:
         return [QUICK_IMAGES[dev] for dev in self.devices]
 
 
-def load_scenarios(root: Path = SCENARIOS) -> list[Scenario]:
-    out = []
-    for f in sorted(root.glob("*.toml")):
+def scenario_files(root: Path = ROOT) -> list[Path]:
+    """Every scenario file below ROOT: tests/digikit/scenarios/ first, then the modules' own, sorted by name."""
+    own = sorted(root.glob(f"{MODULE_SCENARIOS}/*.toml"), key=lambda p: p.name)
+    return [*sorted((root / "tests/digikit/scenarios").glob("*.toml")), *own]
+
+
+def load_scenarios(root: Path = ROOT) -> list[Scenario]:
+    out: list[Scenario] = []
+    names: dict[str, Path] = {}
+    for f in scenario_files(root):
+        if f.stem in names:
+            raise Fail(
+                f"{f}: the scenario name {f.stem} is also used by {names[f.stem]}"
+            )
+        names[f.stem] = f
         d = tomllib.loads(f.read_text())
         s = d["scenario"]
         if s["name"] != f.stem:
@@ -699,7 +712,7 @@ def run_equiv(c: Ctx) -> None:
                     rig.select_type(
                         rig.dyn_type(
                             t.get("play_module", M.MODULE),
-                            t.get("play_machine", "pluck"),
+                            t.get("play_machine", M.MACHINE),
                         ),
                         t.get("hint_run", t.get("hint", 7)),
                     )
@@ -1313,7 +1326,10 @@ def run_menu(c: Ctx) -> None:
         c.check("voice row claimed", len(used) == t.get("voices", 1), str(used))
         if c.dt2:
             rig.select_type(
-                rig.dyn_type(M.MODULE, "pluck"), t.get("hint_run", t.get("hint", 7))
+                rig.dyn_type(
+                    t.get("play_module", M.MODULE), t.get("play_machine", M.MACHINE)
+                ),
+                t.get("hint_run", t.get("hint", 7)),
             )
         else:
             rig.select(t.get("hint_run", t["hint"]))

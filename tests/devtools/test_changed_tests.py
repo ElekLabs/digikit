@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import Mock
@@ -40,9 +41,40 @@ def test_framework_module_selects_conformance_not_a_directory() -> None:
 def test_graph_links_support_imports() -> None:
     # tests import helpers as `support.x`; the graph links them to tests.support.x
     g = changed_tests.graph()
-    assert "tests.support.pluck_rig" in g.find_modules_directly_imported_by(
-        "tests.patchkit.test_pluck"
+    assert "tests.support.paths" in g.find_modules_directly_imported_by(
+        "tests.devtools.test_changed_tests"
     )
+
+
+def _module_test_imports(text: str) -> set[str]:
+    """The names a module test file imports."""
+    out: set[str] = set()
+    for n in ast.walk(ast.parse(text)):
+        if isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+            out.add(n.module)
+        elif isinstance(n, ast.Import):
+            out |= {a.name for a in n.names}
+    return out
+
+
+def test_graph_links_module_tests_to_their_local_helpers_and_tools() -> None:
+    # a file in modules/<kind>/<name>/tests/ imports a sibling by plain name, or a tools module
+    g = changed_tests.graph()
+    siblings = linked_tools = 0
+    for f in changed_tests.module_test_files():
+        mod = changed_tests.module_of(f)
+        assert mod in g.modules, f
+        here = (ROOT / f).parent
+        for name in _module_test_imports((ROOT / f).read_text(encoding="utf-8")):
+            if (here / f"{name}.py").is_file():
+                assert f"{mod.rsplit('.', 1)[0]}.{name}" in (
+                    g.find_modules_directly_imported_by(mod)
+                ), (f, name)
+                siblings += 1
+            elif name.startswith("tools.") and name in g.modules:
+                assert name in g.find_modules_directly_imported_by(mod), (f, name)
+                linked_tools += 1
+    assert siblings and linked_tools
 
 
 def test_graph_links_a_module_run_by_name() -> None:
@@ -61,14 +93,65 @@ def test_graph_drops_imports_inside_functions_of_tools() -> None:
     )
 
 
+def _module_tests_reaching(*markers: str) -> set[str]:
+    """The module test files whose text, or the text of a sibling helper they import, contains one of MARKERS."""
+    found: set[str] = set()
+    for f in changed_tests.module_test_files():
+        if not changed_tests.is_test_file(f):
+            continue
+        here = (ROOT / f).parent
+        texts = [(ROOT / f).read_text(encoding="utf-8")]
+        texts += [
+            (here / f"{name}.py").read_text(encoding="utf-8")
+            for name in _module_test_imports(texts[0])
+            if (here / f"{name}.py").is_file()
+        ]
+        if any(m in t for m in markers for t in texts):
+            found.add(f)
+    return found
+
+
 def test_pk_sharc_selects_the_routine_tests_and_no_sharc_semantics() -> None:
     tests, _ = changed_tests.gate_tests(["tools/patchkit/pk_sharc.py"])
-    assert {
-        verify_route.CONFORMANCE,
-        "tests/patchkit/test_pluck.py",
-        "tests/patchkit/test_sine.py",
-    } <= set(tests)
+    assert verify_route.CONFORMANCE in tests
+    assert "tests/patchkit/test_sine.py" in tests
+    # the module-owned tests that import pk_sharc, directly or through a local helper
+    rigs = [
+        f"support.{q.stem}"
+        for q in (ROOT / "tests/support").glob("*.py")
+        if "pk_sharc" in q.read_text(encoding="utf-8")
+    ]
+    reaching = _module_tests_reaching(*rigs)
+    assert reaching and reaching <= set(tests)
     assert not any(t.startswith("tests/sharc/") for t in tests)
+
+
+def test_a_shared_test_helper_selects_the_module_tests_that_import_it() -> None:
+    tests, _ = changed_tests.gate_tests(["tests/support/machine_rig.py"])
+    reaching = _module_tests_reaching("support.machine_rig")
+    assert reaching and reaching <= set(tests)
+
+
+def test_a_module_test_helper_selects_the_tests_that_import_it() -> None:
+    helpers = [
+        f
+        for f in changed_tests.module_test_files()
+        if not changed_tests.is_test_file(f) and "/scenarios/" not in f
+    ]
+    for helper in helpers:
+        stem = Path(helper).stem
+        users = {
+            f
+            for f in changed_tests.module_test_files()
+            if changed_tests.is_test_file(f)
+            and Path(f).parent == Path(helper).parent
+            and stem in _module_test_imports((ROOT / f).read_text(encoding="utf-8"))
+        }
+        if users:
+            tests, _ = changed_tests.gate_tests([helper])
+            assert users <= set(tests), helper
+            return
+    pytest.fail("no module test helper imported by a module test")
 
 
 LAUNCHER_PATHS = [
@@ -356,13 +439,13 @@ def test_fast_plan_runs_only_selected_audited_units(
         lambda *args: changed_tests.Selection(
             tests={
                 "tests/devtools/test_verify.py": "changed",
-                "tests/patchkit/test_pluck.py": "imports",
+                "tests/patchkit/test_dyn_fx.py": "imports",
             }
         ),
     )
     commands = {n: c for n, c, _ in changed_tests.plan([], Path("OUT"))}
     assert "tests/devtools/test_verify.py" in commands["python-tests"]
-    assert "tests/patchkit/test_pluck.py" not in commands["python-tests"]
+    assert "tests/patchkit/test_dyn_fx.py" not in commands["python-tests"]
 
 
 def test_host_selection_uses_native_related_for_sources_tests_and_assets() -> None:
@@ -396,10 +479,10 @@ def test_deferred_output_names_python_crates_and_changed_files(
     monkeypatch.setattr(changed_tests.verify, "rust_scope", lambda _: ["digi-control"])
     changed_tests.print_deferred(
         ["modules/core/adapters/dsp-voice/module.toml"],
-        changed_tests.Selection(tests={"tests/patchkit/test_pluck.py": "imports"}),
+        changed_tests.Selection(tests={"tests/patchkit/test_dyn_fx.py": "imports"}),
     )
     output = capsys.readouterr().out
-    assert "Python: tests/patchkit/test_pluck.py" in output
+    assert "Python: tests/patchkit/test_dyn_fx.py" in output
     assert "Rust crates: digi-control" in output
     assert "Full gate coverage: modules/core/adapters/dsp-voice/module.toml" in output
 

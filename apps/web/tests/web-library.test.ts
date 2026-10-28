@@ -12,16 +12,16 @@ function dkm(name: string): Uint8Array {
   b.set(new TextEncoder().encode(name), 0x40);
   return b;
 }
-const PLUCK = dkm('digikit/pluck');
+const SINE = dkm('test/sine');
 const index = {
   modules: [
     {
-      id: 'digikit/pluck',
-      name: 'PLUCK',
+      id: 'test/sine',
+      name: 'SINE',
       summary: 's',
       kind: 'machines',
       version: '0.1.0',
-      devices: { dt2: { file: 'dt2/pluck.dkm', size: PLUCK.length, sha256: sha(PLUCK) } },
+      devices: { dt2: { file: 'dt2/sine.dkm', size: SINE.length, sha256: sha(SINE) } },
       source: ['module.toml', 'src/module.c'],
     },
   ],
@@ -32,7 +32,7 @@ function setup(overrides: Record<string, Uint8Array> = {}) {
   const lib = createWebLibrary({
     bytes: async (p) => {
       asked.push(p);
-      const b = overrides[p] ?? (p === 'dt2/pluck.dkm' ? PLUCK : undefined);
+      const b = overrides[p] ?? (p === 'dt2/sine.dkm' ? SINE : undefined);
       if (!b) throw new Error(`${p}: 404`);
       return b;
     },
@@ -43,34 +43,34 @@ function setup(overrides: Record<string, Uint8Array> = {}) {
 
 test('the library lists the shipped files of the device and reads them', async () => {
   const { library } = setup();
-  assert.deepEqual(await library.scan('dt2'), [{ path: 'dt2/pluck.dkm', size: PLUCK.length }]);
+  assert.deepEqual(await library.scan('dt2'), [{ path: 'dt2/sine.dkm', size: SINE.length }]);
   assert.deepEqual(await library.scan('dn2'), []);
-  assert.deepEqual(await library.read('dt2', 'dt2/pluck.dkm'), PLUCK);
+  assert.deepEqual(await library.read('dt2', 'dt2/sine.dkm'), SINE);
 });
 
 test('a shipped file that does not match the index is refused', async () => {
-  const { library } = setup({ 'dt2/pluck.dkm': dkm('digikit/other') });
+  const { library } = setup({ 'dt2/sine.dkm': dkm('digikit/other') });
   await library.scan('dt2');
-  await assert.rejects(library.read('dt2', 'dt2/pluck.dkm'), /does not match/);
+  await assert.rejects(library.read('dt2', 'dt2/sine.dkm'), /does not match/);
 });
 
 test('added files join the list; one with the same module id replaces the shipped file; a non-module is refused', async () => {
   const { library } = setup();
-  const lines = await library.addFiles!([{ name: 'mine.dkm', data: dkm('digikit/pluck') }]);
-  assert.match(lines[0], /Added mine\.dkm \(digikit\/pluck/);
+  const lines = await library.addFiles!([{ name: 'mine.dkm', data: dkm('test/sine') }]);
+  assert.match(lines[0], /Added mine\.dkm \(test\/sine/);
   const files = await library.scan('dt2');
   assert.deepEqual(
     files.map((f) => f.path),
     ['added/mine.dkm'],
   );
-  assert.deepEqual(await library.read('dt2', 'added/mine.dkm'), dkm('digikit/pluck'));
+  assert.deepEqual(await library.read('dt2', 'added/mine.dkm'), dkm('test/sine'));
   await assert.rejects(library.addFiles!([{ name: 'x.dkm', data: new Uint8Array(10) }]), /not a \.dkm/);
 });
 
 test('the sources are known after a scan and read from the site', async () => {
   const { library, source } = setup();
-  assert.deepEqual(source.files('digikit/pluck'), []);
+  assert.deepEqual(source.files('test/sine'), []);
   await library.scan('dt2');
-  assert.deepEqual(source.files('digikit/pluck'), ['module.toml', 'src/module.c']);
-  assert.equal(await source.read('digikit/pluck', 'src/module.c'), 'text of src/digikit/pluck/src/module.c');
+  assert.deepEqual(source.files('test/sine'), ['module.toml', 'src/module.c']);
+  assert.equal(await source.read('test/sine', 'src/module.c'), 'text of src/test/sine/src/module.c');
 });

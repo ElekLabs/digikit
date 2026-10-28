@@ -9,12 +9,14 @@ from tools.patchkit import pk_digikit_scen as S
 from tools.patchkit.pk_dkrt import DEVICE_SYX
 
 TIER = os.environ.get("DIGIKIT_TIER", "quick")
+# `mise run module:check` runs only the scenarios of the module (comma-separated names)
+ONLY = {n for n in os.environ.get("DIGIKIT_SCENARIOS", "").split(",") if n}
 
 
 def cases(kinds: tuple[str, ...], device: str | None = None):
     out = []
     for scen in S.selected(TIER):
-        if scen.kind not in kinds:
+        if scen.kind not in kinds or (ONLY and scen.name not in ONLY):
             continue
         for image in scen.images(TIER):
             if device and image[:3] != device:

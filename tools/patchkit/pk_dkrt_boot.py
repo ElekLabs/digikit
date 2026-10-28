@@ -22,12 +22,12 @@ Python API for the scenario suite (lane C builds on it; everything below is impo
     from tools.patchkit import pk_dkrt_boot as B
     env = B.Env("dt2-1.17", work_dir)                  # the files of one image: folder, cards, binaries
     img = env.build_image("core/runtime,core/dynreg,core/dyndsp")   # a patched firmware for the static module set S -> Img
-    env.pack("digikit/pluck", "pluck-d.dkm")           # a .dkm into the card folder (digikit/modules/)
-    card = env.card(["modules/pluck-d.dkm"], counter=0, seq=1)      # a card image holding that selection record
+    env.pack("test/sine", "sine-d.dkm")           # a .dkm into the card folder (digikit/modules/)
+    card = env.card(["modules/sine-d.dkm"], counter=0, seq=1)      # a card image holding that selection record
     with env.boot(img, card, tag="a") as rig:           # a coupled daemon, cold-booted on that card: the boot hook has run
         rig.boot_info()        # dict: safe, reason, counter, seq, copy, count, loaded, results[], ui_reached, dsp_wait
         rig.voice_rows()       # [(type, pc)] of the DSP voice registry (type 0xffffffff: free)
-        rig.dyn_type("digikit/pluck", "pluck")   # the type the runtime assigned at this boot (from DKRT_ASSIGN)
+        rig.dyn_type("test/sine", "sine")   # the type the runtime assigned at this boot (from DKRT_ASSIGN)
         rig.machine_listed(16) # is the machine row of that type named
         rig.sel_records()      # the two record copies as the card holds them now: [dict|None, dict|None]
         rig.set_selection(["modules/x.dkm"])   # dkrt_selection_set through the mailbox (returns its result)
@@ -801,7 +801,6 @@ class Proof:
         self.dt2 = image.startswith("dt2")
         self.watch_totals = {"emulators": 0, "write_events": 0, "flush_hits": 0}
         self.store_writes: set[int] = set()
-        self.static = ""
         self.mods: list[str] = []
         self.run_img: Img | None = None
 
@@ -827,8 +826,7 @@ class Proof:
     def setup(self) -> None:
         e = self.env
         if self.dt2:
-            e.pack("digikit/pluck", "m1.dkm")
-            self.static = RT + ",test/patched-pluck"
+            e.pack(M.MODULE, "m1.dkm")
             self.mods = ["modules/m1.dkm"]
         else:
             e.pack("test/dyn-dn2", "m0.dkm")
@@ -851,17 +849,6 @@ class Proof:
     def equiv(self) -> None:
         e = self.env
         trig = M.TRIG_FRAME if self.dt2 else M.TRIG_FRAME_DN2
-        ref_pcm: Any = None
-        if self.dt2:  # the Digitone II has no patched-in twin of test/sine: its note is checked for sound only
-            ref_img = e.build_image(self.static, "ref")
-            with self.rig(ref_img, e.card(None, tag="ref"), "ref") as ref:
-                ref.select_type(M.PLUCK_STATIC_TYPE, 7)
-                ref_pcm = ref.note(self.work / "ref.wav", trig)
-                peak = float(abs(ref_pcm).max())
-                self.check(
-                    "the reference note is audible", peak > 0.01, f"peak {peak:.3f}"
-                )
-                self.finish(ref)
         card = e.card(self.mods, tag="equiv")
         with self.rig(self.run_img, card, "equiv") as run:
             n = len(self.mods)
@@ -883,9 +870,9 @@ class Proof:
                 str(rec),
             )
             used = [r for r in run.voice_rows() if r[0] != FREE_TYPE]
-            # DT2: the pluck's machine type, assigned at load; DN2: the voice row is test/sine's (the other machine has none)
+            # DT2: the machine type of test/sine, assigned at load; DN2: the voice row is test/sine's (the other machine has none)
             mach = (
-                run.dyn_type("digikit/pluck", "pluck")
+                run.dyn_type(M.MODULE, M.MACHINE)
                 if self.dt2
                 else run.dyn_type("test/dyn-dn2", "dyn_pluck")
             )
@@ -919,13 +906,8 @@ class Proof:
             if not self.dt2:  # the sine machine follows MIDI and the first run-time machine in the list
                 run.select(6)
             pcm = run.note(self.work / "run.wav", trig)
-            if self.dt2:
-                M.pcm_check(run, ref_pcm, pcm, self.report, "machine")
-            else:
-                peak = float(abs(pcm).max())
-                self.check(
-                    "the run-time note is audible", peak > 0.01, f"peak {peak:.3f}"
-                )
+            peak = float(abs(pcm).max())
+            self.check("the run-time note is audible", peak > 0.01, f"peak {peak:.3f}")
             self.finish(run)
 
     def restart(self) -> None:

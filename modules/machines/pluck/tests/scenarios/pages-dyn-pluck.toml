@@ -11,5 +11,7 @@ tier = "quick"
 modules = ["digikit/pluck"]
 twin = "test/patched-pluck"
 static_type = 9
+play_module = "digikit/pluck"
+play_machine = "pluck"
 hint = 7
 stock_downs = [0, 1, 2, 3, 4, 5, 6]

@@ -1,8 +1,8 @@
-"""digikit/freqshift on the concrete SHARC+ core behind core/fx (tests/support/fx_rig.py), held to the float32 model of tools/patchkit/freqshift_ref.py.
+"""The frequency shifter on the concrete SHARC+ core behind core/fx (tests/support/fx_rig.py), held to the float32 model of freqshift_ref.py.
 
 The routine and its model do the same float32 operations in the same order: the output of the routine (`rig.scratch()`, the effect's block before the adapter's mix) is the model's output
 to the last bit. Tones through the routine show what the effect does: a 1 kHz sine moves by the shift, the image is 40 dB down. A long run (PyPy through uv when it can start, as the
-conformance suite does) shows that the oscillator does not drift. The emulator proof of the page and the knob is tests/digikit/scenarios/fx-freqshift-dt2.toml.
+conformance suite does) shows that the oscillator does not drift. The emulator proof of the page and the knob is scenarios/fx-freqshift-dt2.toml.
 Skips when Selache is not built."""
 
 import json
@@ -11,15 +11,16 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from pathlib import Path
 
+import freqshift_ref as R
 import numpy as np
 import pytest
-from support.freqshift_tone import FS, amplitude, sine_blocks
+from freqshift_tone import FS, amplitude, sine_blocks
 from support.fx_rig import NFAULT, ONE, P0, FxRig, Row, f2w
 from support.paths import REPO_ROOT
 
 from tools import python_env
-from tools.patchkit import freqshift_ref as R
 from tools.patchkit import pk_conform, pk_toolchains
 
 pytestmark = pytest.mark.skipif(
@@ -27,7 +28,7 @@ pytestmark = pytest.mark.skipif(
     reason="selache not built (tools/patchkit/pk_toolchains.py selache)",
 )
 
-MODULE = REPO_ROOT / "modules/fx/freqshift"
+MODULE = Path(__file__).resolve().parents[1]
 SRC = MODULE / "src/dsp/freqshift.s"
 NFAULT_WORD = 17
 
@@ -198,7 +199,12 @@ def long_run(blocks: int, timeout: int) -> dict:
     env = python_env()
     env["PYTHONPATH"] = os.pathsep.join([env["PYTHONPATH"], str(REPO_ROOT / "tests")])
     r = subprocess.run(
-        [*_python(), "-m", "support.freqshift_long", "--blocks", str(blocks)],
+        [
+            *_python(),
+            str(Path(__file__).with_name("freqshift_long.py")),
+            "--blocks",
+            str(blocks),
+        ],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -236,10 +242,9 @@ def test_the_oscillator_does_not_drift_in_a_run_of_a_minute():
 
 def test_the_module_declares_the_page_and_the_knob():
     man = tomllib.loads((MODULE / "module.toml").read_text())
-    assert man["module"]["id"] == "digikit/freqshift"
     assert len(man["module"]["summary"]) < 120
     assert "fx" not in man  # the effect is declared in src/module.c
-    (fx,) = pk_conform.fx_records("digikit/freqshift")
+    (fx,) = pk_conform.fx_records(man["module"]["id"])
     assert (fx["id"], fx["tab"], fx["title"], fx["mix"]) == (
         "fshift",
         "FSH",

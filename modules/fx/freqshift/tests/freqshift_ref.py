@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Float32 reference of digikit/freqshift (modules/fx/freqshift/src/dsp/freqshift.s), its tables and its design search.
+"""Float32 reference of the frequency shifter (src/dsp/freqshift.s of this module), its tables and its design search.
 
-    uv run python -m tools.patchkit.freqshift_ref table
-    uv run python -m tools.patchkit.freqshift_ref rejection [--shift HZ] [--blocks N]
-    uv run python -m tools.patchkit.freqshift_ref design [--seed N] [--starts N]
+    python <this file> table
+    python <this file> rejection [--shift HZ] [--blocks N]
+    python <this file> design [--seed N] [--starts N]
 
 `Shifter` mirrors the DSP routine operation for operation in numpy float32 (one rounding per SHARC+ operation, no fused
 multiply-add) and in 32-bit integers where the routine uses integers, so the routine on the concrete core and this model agree
