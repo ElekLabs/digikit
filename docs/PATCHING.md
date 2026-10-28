@@ -467,8 +467,7 @@ device.
 patches the stock file with the device's patch set, checks the image and the exact messages it will send the way the device's receiver does
 (checksums, HMAC, the DT2 build floor, the product byte, the container limits, an image id), sends it to the device, waits for the restart and reads
 INFO: the runtime version and the image id must match. The default route is **MidiRpc** (`--route rpc`): the device needs no menu step, takes the image in
-chunks of 2048 bytes, answers every chunk, and checks the whole image. The program then asks `Flash now? [y/N]`; only `y` (or `--yes`) lets the device erase
-and write its flash. `n` leaves the device as it was.
+chunks of 2048 bytes, answers every chunk, and checks the whole image. The program asks once, before it sends anything: `Flash Digitakt II OS 1.17 (stock) now? [y/N]` (for a patch: `... OS 1.17 with digikit runtime 0.5.2 now?`); only `y` (or `--yes`) starts. When the device has checked the whole image, the program commits at once and the device erases and writes its flash. `n` sends nothing.
 
 ```sh
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --dry-run     # patch and check, send nothing (--save F keeps the image)
@@ -478,16 +477,17 @@ uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx -
 ```
 
 `--chunk N` sets the stream bytes per chunk (the largest size a real device takes is not known). It prints the checks and the steps for the device (power
-adapter, the cable stays in), sends, and asks. With `--route menu` it prints the old steps (SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX),
+adapter, the cable stays in), asks once, and sends. With `--route menu` it prints the old steps (SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX),
 waits for the word `flash`, and sends the plain stream one message every 2 ms (no reply exists on that route). The OS UPGRADE screen asks no YES on either
 route (finding 75). The section 7 ISA scan (`packages/patchkit/src/dspscan.rs`) is one of the checks (the same scan `patchkit preflight` runs;
 `patchkit isa-scan X.syx` lists what it finds).
 
-**The Firmware page** (the site's `/firmware/` and the Firmware item of the workbench) is the same flash in seven steps: the stock file, the checks, the
-device (the MIDI port, its model and OS), the device's needs (power adapter, cable in; no menu), Send with a progress bar and Cancel, Confirm, and the
-verdict after the restart (runtime and image id, or for "Restore stock" the stock OS and no runtime). The page sends the image over MidiRpc and the device
-checks it ("received 1.53 MB, the device checked the image"). Then the page asks: "The Digitakt II has the new firmware and accepted it. Flash now?" **Flash
-now** lets the device erase and write; **Cancel** (or leaving the page) leaves the device as it was ("Nothing was written"). Send is on only when every check
+**The Firmware page** (the site's `/firmware/` and the Firmware item of the workbench) is the same flash in six steps: the stock file, the checks, the
+device (the MIDI port, its model and OS), the device's needs (power adapter, cable in; no menu), Flash with a progress bar and Cancel, and the
+verdict after the restart (runtime and image id, or for "Restore stock" the stock OS and no runtime). One **Flash** button does all of it: the page sends the image over MidiRpc ("sending 0.68 of 1.88 MB · 12 s left"), the device checks it ("the device is
+checking the image…"), and when the device accepts it the page commits at once ("the device checked the image ✓ · flashing, do not unplug"). The click is the
+yes; there is no second question. **Cancel** (or leaving the page) works until the device has accepted the image and leaves it as it was ("Nothing was written");
+after that the button is gone. Flash is on only when every check
 passed and the device is the image's model. A small link, "Use the OS UPGRADE menu instead", brings back the old flow (the box "The device shows WAITING FOR
 SYSEX", paced sending, six steps). The page code is `apps/web/src/firmware/` (rules in `firmware-core.ts`, the runs in `firmware-flow.ts`); the checks, the
 2 ms sender and the RPC state machine (`patchkit::flash_rpc::RpcFlash`) are the Rust ones (`patchkit.wasm` in the browser and in the workbench).

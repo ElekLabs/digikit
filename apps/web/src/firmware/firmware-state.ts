@@ -40,19 +40,6 @@ export function setRoute(next: FlashRoute): void {
   setAck(false);
 }
 
-/** The user's answer to "Flash now?" while the run waits for it. */
-let answer: ((yes: boolean) => void) | undefined;
-export function answerConfirm(yes: boolean): void {
-  const a = answer;
-  answer = undefined;
-  a?.(yes);
-}
-const askConfirm = (signal: AbortSignal): Promise<boolean> =>
-  new Promise<boolean>((resolve) => {
-    answer = resolve;
-    signal.addEventListener('abort', () => resolve(false), { once: true });
-  });
-
 let file: { name: string; bytes: Uint8Array } | undefined;
 let preparing = 0;
 
@@ -165,7 +152,7 @@ export async function startFlash(): Promise<void> {
   let final: FlashState = IDLE;
   try {
     final = rpc
-      ? await runRpcFlash(rpcPortOps(askConfirm), p, controller.signal, setRun)
+      ? await runRpcFlash(rpcPortOps(), p, controller.signal, setRun)
       : await runFlash(portOps(), p, controller.signal, setRun);
   } catch (e) {
     final = { phase: 'failed', code: 'send', message: e instanceof Error ? e.message : String(e) };

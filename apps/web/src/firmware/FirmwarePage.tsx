@@ -10,9 +10,11 @@ import { target } from '../transfer/target';
 import { firmwareEnv } from './env';
 import { createEffectOn } from './on-change';
 import {
+  DEVICE_NAMES,
   PREPARE_STEPS,
+  isDeviceId,
+  type DeviceId,
   PREPARE_STEPS_RPC,
-  confirmText,
   fmtMB,
   RECOVERY_STEPS,
   canFlash,
@@ -29,7 +31,6 @@ import {
 } from './firmware-core';
 import {
   ack,
-  answerConfirm,
   cancelFlash,
   chooseFile,
   device,
@@ -87,10 +88,10 @@ export default function FirmwarePage(): JSX.Element {
     }
   };
   onMount(() => void read());
-  // Leaving the page while the image is sent or the question is open: the device gets End with commit 0 and keeps its flash.
+  // Leaving the page while the image is sent: the device gets End with commit 0 and keeps its flash.
   const leave = () => {
-    const r = run().phase;
-    if (r === 'sending' || r === 'confirm') cancelFlash();
+    const r = run();
+    if (r.phase === 'sending' && !r.flashing) cancelFlash();
   };
   onMount(() => window.addEventListener('pagehide', leave));
   onCleanup(() => {
@@ -131,11 +132,6 @@ export default function FirmwarePage(): JSX.Element {
     const r = run();
     return r.phase === 'sending' ? r : undefined;
   };
-  /** rpc: the device has the image, the question is asked or answered and the flash is under way. */
-  const afterSend = () => {
-    const r = run();
-    return route() === 'rpc' && (r.phase === 'confirm' || r.phase === 'rebooting') ? r : undefined;
-  };
   const rebooting = () => {
     const r = run();
     return r.phase === 'rebooting' ? r : undefined;
@@ -147,6 +143,13 @@ export default function FirmwarePage(): JSX.Element {
   const finished = () => {
     const r = run();
     return r.phase === 'done' || r.phase === 'failed' ? r : undefined;
+  };
+  /** The name of the connected device (else the image's device). */
+  const deviceName = () => {
+    const d = device();
+    const id = d.kind === 'connected' ? d.d.model : undefined;
+    const p = ready()?.p.device;
+    return DEVICE_NAMES[id ?? (isDeviceId(p ?? '') ? (p as DeviceId) : 'dt2')];
   };
   const shortName = (d: string) => d.toUpperCase();
 
@@ -364,7 +367,7 @@ export default function FirmwarePage(): JSX.Element {
         </Step>
 
         {/* 5 */}
-        <Step n={5} title={route() === 'rpc' ? 'Send' : restore() ? 'Restore' : 'Flash'} mark={marks()[4]!}>
+        <Step n={5} title={restore() ? 'Restore' : 'Flash'} mark={marks()[4]!}>
           <Switch>
             <Match when={sending()}>
               {(s) => (
@@ -378,22 +381,16 @@ export default function FirmwarePage(): JSX.Element {
                   >
                     <i style={{ width: `${progressView(s()).fraction * 100}%` }} />
                   </div>
-                  <span class="ptext">{progressView(s()).text}</span>
-                  <button type="button" class="act" onClick={cancelFlash}>
-                    Cancel
-                  </button>
+                  <span class="ptext" classList={{ okt: s().flashing }}>
+                    {progressView(s()).text}
+                  </span>
+                  <Show when={!s().flashing}>
+                    <button type="button" class="act" onClick={cancelFlash}>
+                      Cancel
+                    </button>
+                  </Show>
                 </div>
               )}
-            </Match>
-            <Match when={afterSend()}>
-              <div class="flashing">
-                <div class="progress ok" role="progressbar" aria-valuenow={100} aria-valuemin={0} aria-valuemax={100}>
-                  <i style={{ width: '100%' }} />
-                </div>
-                <span class="ptext okt">
-                  received {fmtMB(ready()?.p.image.length ?? 0)} · the device checked the image ✓
-                </span>
-              </div>
             </Match>
             <Match when={rebooting()}>
               {(s) => (
@@ -418,13 +415,7 @@ export default function FirmwarePage(): JSX.Element {
             <Match when={true}>
               <div class="flashrow">
                 <button type="button" class="act primary" disabled={!flash().ok} onClick={() => void startFlash()}>
-                  {route() === 'rpc'
-                    ? restore()
-                      ? 'Send stock firmware'
-                      : 'Send'
-                    : restore()
-                      ? 'Restore stock'
-                      : 'Flash'}
+                  {restore() ? 'Restore stock' : 'Flash'}
                 </button>
                 <Show when={!flash().ok}>
                   <span class="dim">{flash().reason}</span>
@@ -432,7 +423,7 @@ export default function FirmwarePage(): JSX.Element {
                 <Show when={flash().ok && ready()}>
                   <span class="dim">
                     {route() === 'rpc'
-                      ? `Sends ${fmtMB(ready()!.p.image.length)} and lets the device check it. Nothing is flashed until you say so.`
+                      ? `Sends ${fmtMB(ready()!.p.image.length)} to your ${deviceName()}; the device checks it, then flashes and restarts.`
                       : `Sends ${groups(ready()!.p.ends.length)} messages, about ${sendSeconds(ready()!.p)} s. The device then writes its flash and restarts.`}
                   </span>
                 </Show>
@@ -448,34 +439,8 @@ export default function FirmwarePage(): JSX.Element {
           </Switch>
         </Step>
 
-        {/* 6, the RPC route only: the question the device does not ask */}
-        <Show when={route() === 'rpc'}>
-          <Step n={6} title="Confirm" mark={marks()[5]!}>
-            <Switch>
-              <Match when={run().phase === 'confirm'}>
-                <p>{ready() ? confirmText(ready()!.p) : ''} Flash now?</p>
-                <div class="flashrow">
-                  <button type="button" class="act primary" onClick={() => answerConfirm(true)}>
-                    Flash now
-                  </button>
-                  <button type="button" class="act" onClick={() => answerConfirm(false)}>
-                    Cancel
-                  </button>
-                </div>
-                <p class="dim">Cancel leaves the device as it was.</p>
-              </Match>
-              <Match when={run().phase === 'rebooting' || run().phase === 'done' || run().phase === 'failed'}>
-                <p class="dim">You said yes. The device flashed itself.</p>
-              </Match>
-              <Match when={true}>
-                <p class="dim">When the device has checked the image, you decide here whether it is flashed.</p>
-              </Match>
-            </Switch>
-          </Step>
-        </Show>
-
         {/* last */}
-        <Step n={route() === 'rpc' ? 7 : 6} title="Done" mark={marks()[route() === 'rpc' ? 6 : 5]!}>
+        <Step n={6} title="Done" mark={marks()[5]!}>
           <Switch>
             <Match when={finished()}>
               {(s) => (

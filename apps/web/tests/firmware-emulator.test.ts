@@ -4,7 +4,7 @@
 // back" with the `firmware.loaded` event. Skips unless DIGI_FW_EMU_SOCKET names a control socket; `tools/emulator/os_upgrade_rig.py ... --exec`
 // opens OS UPGRADE and runs it (DIGI_FW_EMU_FIRMWARE: the stock file, DIGI_FW_EMU_RESTORE=1: send the stock file itself).
 // The default is the RPC route (`runRpcFlash`: the rig run with `--rpc --exec`, the device stays on its main screen). DIGI_FW_EMU_ROUTE=menu runs the
-// OS UPGRADE menu route (`runFlash`); DIGI_FW_EMU_CONFIRM=no answers the question "Flash now?" with Cancel and checks that the flash is unchanged.
+// OS UPGRADE menu route (`runFlash`);
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -127,7 +127,6 @@ test.skipIf(!socket)(
     };
 
     const menu = process.env.DIGI_FW_EMU_ROUTE === 'menu';
-    const cancelAtQuestion = process.env.DIGI_FW_EMU_CONFIRM === 'no';
     // the RPC route: one request out through the USB model, the next message the guest sends in, in guest time
     let rx: Uint8Array = new Uint8Array();
     const ready: Uint8Array[] = [];
@@ -155,39 +154,18 @@ test.skipIf(!socket)(
           await step(400_000);
         }
       },
-      async confirm() {
-        const st = await call<{ erases: number; programs: number }>('flash.status');
-        console.info(`question "Flash now?": flash so far ${st.erases} erases, ${st.programs} programs`);
-        return !cancelAtQuestion;
-      },
       now: ops.now,
       sleep: ops.sleep,
       release: ops.release,
       portPresent: ops.portPresent,
       ask: ops.ask,
     };
-    const flashAtStart = await call<{ erases: number; programs: number }>('flash.status');
     const states: FlashState[] = [];
     const record = (s: FlashState) => {
       if (states.at(-1)?.phase !== s.phase)
         console.info(`firmware page: ${s.phase}${'stage' in s ? ` (${s.stage})` : ''}`);
       states.push(s);
     };
-    if (!menu && cancelAtQuestion) {
-      const end = await runRpcFlash(rpcOps, p, new AbortController().signal, record);
-      console.info(`final: ${JSON.stringify(end)}`);
-      assert.equal(end.phase === 'stopped' && end.reason, 'cancelled', JSON.stringify(end));
-      await step(300_000_000);
-      const st = await call<{ erases: number; programs: number }>('flash.status');
-      assert.deepEqual(
-        st,
-        { ...st, erases: flashAtStart.erases, programs: flashAtStart.programs },
-        'the flash is unchanged',
-      );
-      console.info(`cancel at the question: flash unchanged (${st.erases} erases, ${st.programs} programs)`);
-      client.close();
-      return;
-    }
     const final = await (menu
       ? runFlash(ops, p, new AbortController().signal, record)
       : runRpcFlash(rpcOps, p, new AbortController().signal, record));

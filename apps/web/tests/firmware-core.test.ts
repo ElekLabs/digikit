@@ -6,7 +6,6 @@ import type { PreparedFlash } from '../src/patch/patchkit-core.ts';
 import {
   IDLE,
   canFlash,
-  confirmText,
   checkRows,
   groups,
   imageFileName,
@@ -202,16 +201,14 @@ test('a refused file gets a lead-in unless patchkit already says which file it w
   );
 });
 
-test('the RPC route needs no box, and its seven steps follow the run', () => {
+test('the RPC route needs no box, and its six steps follow the run', () => {
   assert.deepEqual(canFlash(inputs({ route: 'rpc', ack: false })), { ok: true, reason: '' });
   assert.match(canFlash(inputs({ route: 'menu', ack: false })).reason, /WAITING FOR SYSEX/);
   const at = (run: FlashState) => stepMarks(inputs({ route: 'rpc', ack: false, run }));
-  assert.deepEqual(at(IDLE), ['done', 'done', 'done', 'done', 'now', 'later', 'later']);
+  assert.deepEqual(at(IDLE), ['done', 'done', 'done', 'done', 'now', 'later']);
   const sending: FlashState = { phase: 'sending', sent: 1, total: 2, startedMs: 0, nowMs: 1, unit: 'bytes' };
-  assert.deepEqual(at(sending), ['done', 'done', 'done', 'done', 'now', 'later', 'later']);
-  assert.deepEqual(at({ phase: 'confirm', total: 2 }), ['done', 'done', 'done', 'done', 'done', 'now', 'later']);
+  assert.deepEqual(at(sending), ['done', 'done', 'done', 'done', 'now', 'later']);
   assert.deepEqual(at({ phase: 'rebooting', stage: 'leaving', sinceMs: 0, nowMs: 1, rpc: true }), [
-    'done',
     'done',
     'done',
     'done',
@@ -222,22 +219,22 @@ test('the RPC route needs no box, and its seven steps follow the run', () => {
   assert.deepEqual(at({ phase: 'stopped', reason: 'error', sent: 1, total: 2, message: 'm', unit: 'bytes' }).slice(4), [
     'bad',
     'later',
-    'later',
   ]);
   assert.deepEqual(at({ phase: 'stopped', reason: 'cancelled', sent: 1, total: 2, message: 'm' }).slice(4), [
     'now',
     'later',
-    'later',
   ]);
-  assert.deepEqual(at({ phase: 'done', message: 'm', lines: [] }), Array(7).fill('done'));
-  // the question is part of a running flash: nothing else may start
-  assert.equal(canFlash(inputs({ route: 'rpc', run: { phase: 'confirm', total: 2 } })).ok, false);
+  assert.deepEqual(at({ phase: 'done', message: 'm', lines: [] }), Array(6).fill('done'));
+  // nothing else may start while the flash is committed
+  assert.equal(canFlash(inputs({ route: 'rpc', run: { ...sending, flashing: true } })).ok, false);
 });
 
-test('the RPC progress reads in megabytes, and says when the device checks the image', () => {
+test('the RPC progress reads in megabytes, and says when the device checks and flashes', () => {
   const s = { phase: 'sending', sent: 1_531_152, total: 1_531_152, startedMs: 0, nowMs: 5000, unit: 'bytes' } as const;
-  assert.match(progressView({ ...s, sent: 765_576 }).text, /^received 0\.77 MB of 1\.53 MB/);
-  assert.equal(progressView({ ...s, checking: true }).text, 'received 1.53 MB · the device is checking the image…');
-  assert.equal(confirmText(prepared()), 'The Digitone II has the new firmware and accepted it.');
-  assert.equal(confirmText(prepared({ restore: true })), 'The Digitone II has the stock firmware and accepted it.');
+  assert.match(progressView({ ...s, sent: 765_576 }).text, /^sending 0\.77 of 1\.53 MB/);
+  assert.equal(progressView({ ...s, checking: true }).text, 'the device is checking the image…');
+  assert.equal(
+    progressView({ ...s, checking: true, flashing: true }).text,
+    'the device checked the image ✓ · flashing, do not unplug',
+  );
 });

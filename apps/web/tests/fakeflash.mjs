@@ -26,10 +26,11 @@ const cstr = (s) => [...new TextEncoder().encode(s), 0];
 
 export class FakeUpgrade {
   /**
-   * `writeMs`: how long each Write takes to answer; `checkMs`: the last Write (the device checks the image); `errorAt`: a fraction of the image
+   * `writeMs`: how long each Write takes to answer; `checkMs`: the last Write (the device checks the image); `endMs`: End; `errorAt`: a fraction of the image
    * at which a Write is answered with a device error (null: never).
    */
-  constructor({ writeMs = 0, checkMs = 1200, errorAt = null } = {}) {
+  constructor({ writeMs = 0, checkMs = 1200, endMs = 40, errorAt = null } = {}) {
+    this.endMs = endMs;
     this.writeMs = writeMs;
     this.checkMs = checkMs;
     this.errorAt = errorAt;
@@ -77,7 +78,7 @@ export class FakeUpgrade {
     if (ty === RPC_END) {
       const commit = p[0];
       this.ends.push(commit);
-      return { message: this.reply(seq, ty, [commit ? 0 : 2, 0]), delayMs: 40, commit };
+      return { message: this.reply(seq, ty, [commit ? 0 : 2, 0]), delayMs: this.endMs, commit };
     }
     return null;
   }

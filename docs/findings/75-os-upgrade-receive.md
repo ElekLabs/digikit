@@ -111,11 +111,11 @@ Run with `uv run python -m tools.emulator.os_upgrade_rig dt2|dn2 ... --rpc [--sy
 
 **Timing (guest instructions, 132 M per second; the emulator's USB takes 384 bytes per 16,500 instructions).** Start to reply 14.4 M. A Write of 2048 data bytes 0.3 to 0.4 M (about 3 ms) with its USB hand-over; 16,384 bytes 3.0 M; 65,536 bytes 17.5 M; the emulator took all sizes, the largest size a real device takes is **[O]** (the stock file writes use 2048). One flash by DT2 patched: 948 Writes of 2048 bytes, 6.3 s wall, then 24 erases and 5,982 programs. End reply 0.1 M; erase and program follow after End (not before: the data stays in RAM until End).
 
-**Open.** Real device: the largest Write, the 3 s after "SUCCESS", what Transfer sends (Start flag, chunk size); the confirm question is a host UI matter here, not the device's.
+**Open.** Real device: the largest Write, the 3 s after "SUCCESS", what Transfer sends (Start flag, chunk size); the host decides before it sends End; the device asks nothing.
 
 ### The host side of the RPC route (2026-10-29) **[D]**
 
-One state machine, `patchkit::flash_rpc::RpcFlash` (sans-io: `next`, `on_reply`, `on_timeout`, `confirm`, `cancel`), is used by the command line (`patchkit flash`, default `--route rpc`, `--chunk N`), the Firmware page on the site and in the workbench (the same machine through `patchkit.wasm`; the workbench sends the bytes with midir through its Tauri MIDI commands) and the tests. The page only moves bytes and the clock (`apps/web/src/firmware/firmware-flow.ts`, `runRpcFlash`). The menu route (`Sender`, 2 ms pacing) stays as the fallback.
+One state machine, `patchkit::flash_rpc::RpcFlash` (sans-io: `next`, `on_reply`, `on_timeout`, `confirm`, `cancel`), is used by the command line (`patchkit flash`, default `--route rpc`, `--chunk N`), the Firmware page on the site and in the workbench (the same machine through `patchkit.wasm`; the workbench sends the bytes with midir through its Tauri MIDI commands) and the tests. The question "Flash ... now?" is asked once, before Start: the CLI prompts (`--yes` skips it), the page has one Flash button whose click is the yes. At AskConfirm (the device's own check passed) both answer yes with no second question. The page only moves bytes and the clock (`apps/web/src/firmware/firmware-flow.ts`, `runRpcFlash`). The menu route (`Sender`, 2 ms pacing) stays as the fallback.
 
 What the machine does:
 
@@ -123,21 +123,21 @@ What the machine does:
 | --- | --- | --- | --- |
 | Start | `0x50`, stream length, `sysex\0`, flag 0 | 5 s | status 0 goes on; else fail with the device's text, then End 0 (clears "already in progress") |
 | Write, each chunk of 2048 bytes (`--chunk`) | `0x51`, CRC, length, offset, data, in order, one in flight | 2 s; the last Write 15 s (the validation takes 1.8 to 2.3 s here) | status 0 or 1 and `taken` = offset + length; status 2: send the same chunk again, at most 3 times, then fail; status 3: fail with the device's text; any other status or `taken`: fail |
-| After the last Write | - | - | only status 1 asks the user; status 0 fails ("did not report the image complete") |
-| Question | the host asks "Flash now?" | - | yes: End 1; no: End 0, "Nothing was written" |
+| After the last Write | - | - | only status 1 means the device validated the image (the machine reports AskConfirm); status 0 fails ("did not report the image complete") |
+| Commit | the host answers AskConfirm | - | the CLI and the page asked before Start (the Flash click, `Flash ... now? [y/N]`), so both answer yes at once: End 1. Cancel before AskConfirm sends End 0, "Nothing was written" |
 | End | `0x52`, commit 1 or 0 | 5 s | commit 1 status 0: the device flashes and restarts; End 0 status 2 is the normal answer |
 
 Every failure and every cancel before End 1 sends End 0, so the device returns to the main screen and a new Start works. **A timeout is a failure; a Write is not sent again.** The device acknowledges a Write whose offset is below the bytes taken and ignores it (section above), so a resend after a lost reply would be safe in the emulator. It was not chosen: the real device may behave otherwise, the last Write has a 2 s validation whose duplicate answer was not tried, and a failed run costs only a new Start (nothing is written before End 1). With End 1 sent nothing can be cancelled, and an End 1 without a reply is reported as "look at the screen".
 
 **Reply layout [C].** A reply is `counter16 seq16 (type | 0x80) payload` after the 8-in-7 unpacking: the request's seq is echoed in bytes 2 and 3; bytes 0 and 1 are a counter of the device's own (2, 3, ... after a boot). A first version of the machine read the seq from bytes 0 and 1: it worked on a freshly booted emulator (counter and seq both start at 1) and lost every reply after the patched image had answered other requests. Found by the second flash in one emulator session (the page's restore after its patch). `parse_reply` reads bytes 2 and 3 and a unit test pins it.
 
-**Proofs, emulator (DT2 1.17 and DN2 1.12), through the page's code path** (`apps/web/tests/firmware-emulator.test.ts`, started by `os_upgrade_rig ... --rpc --exec`; the device stays on its main screen): patch and restore on both devices: the flash equals the container (DT2 patched 1,531,152 bytes, 24 erases, 5,982 programs; DT2 restore 1,484,992 bytes, 23 and 5,801; DN2 patched 1,947,984 bytes, 30 and 7,610; DN2 restore 1,886,016 bytes, 29 and 7,368), INFO after the restart shows runtime 0.5.2 with the image id the patch made (`281e6b9b1a0a9b83`, `c5d8ccb27e139cbc`), and after a restore the stock OS answers and no runtime. Cancel at the question (DN2 patched): End 0, 0 erases and 0 programs. `patchkit flash STOCK --emulator SOCKET --yes` ran DT2 patch and restore the same way. Wall times in the debug build: the Send 6 to 9 s, the flash phase 4 to 7 s.
+**Proofs, emulator (DT2 1.17 and DN2 1.12), through the page's code path** (`apps/web/tests/firmware-emulator.test.ts`, started by `os_upgrade_rig ... --rpc --exec`; the device stays on its main screen): patch and restore on both devices: the flash equals the container (DT2 patched 1,531,152 bytes, 24 erases, 5,982 programs; DT2 restore 1,484,992 bytes, 23 and 5,801; DN2 patched 1,947,984 bytes, 30 and 7,610; DN2 restore 1,886,016 bytes, 29 and 7,368), INFO after the restart shows runtime 0.5.2 with the image id the patch made (`281e6b9b1a0a9b83`, `c5d8ccb27e139cbc`), and after a restore the stock OS answers and no runtime. An earlier page version asked after the check; Cancel there (DN2 patched) gave End 0, 0 erases and 0 programs (the same End 0 as a Cancel during the send). `patchkit flash STOCK --emulator SOCKET --yes` ran DT2 patch and restore the same way. Wall times in the debug build: the Send 6 to 9 s, the flash phase 4 to 7 s.
 
 **Open on a real device [O].** The largest Write the device takes (the chunk is 2048; the emulator took 65,536), the validation time and the 15 s timeout, how a real USB MIDI stack delivers a 2.8 KB SysEx, and whether the real device acknowledges every Write as the emulated firmware does.
 
 ## Open
 
-- RPC route on a real device (largest Write, Start flag used by Transfer); no on-device confirm exists on either route in the emulator.
+- RPC route on a real device (largest Write, Start flag used by Transfer); no on-device confirm exists on either route in the emulator; the host commits after the device's own check.
 - Staging buffer size and the MIDI queue overrun behaviour; the `--chunk 384 --period 16500` stall.
 - Bootstrap behaviour with an erased container table and no FUNC.
 - A real device: the 2 ms pace, the validator's screens, how long the flash phase takes (nothing of `patchkit flash` has run on hardware).

@@ -28,6 +28,8 @@ const PORT = fw.dev === 'dt2' ? 'Elektron Digitakt II' : 'Elektron Digitone II';
 
 const upgrade = new FakeUpgrade({
   writeMs: Number(q.get('fwwrite') ?? 0),
+  checkMs: Number(q.get('fwcheck') ?? 1200),
+  endMs: Number(q.get('fwend') ?? 40),
   errorAt: q.get('fwerror') === null ? null : Number(q.get('fwerror')),
 });
 

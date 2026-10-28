@@ -17,14 +17,14 @@ pub const USAGE: &str = "usage: patchkit flash STOCK.syx (--port NAME | --emulat
   STOCK.syx   the stock firmware file of the device (it is identified by its SHA-256; a patched file is refused)
   --port      the MIDI port of the device (part of its name; USB MIDI)
   --emulator  the control socket of a running emulator (with --route menu: one that shows OS UPGRADE, tools/emulator/os_upgrade_rig.py)
-  --route     rpc (default): MidiRpc Start, Write, End; the device checks the image, you answer \"Flash now?\", no menu on the device.
+  --route     rpc (default): MidiRpc Start, Write, End; the device checks the image and flashes it, no menu on the device.
               menu: the plain stream into the device's SETTINGS > SYSTEM > OS UPGRADE screen, paced, no reply
   --chunk N   rpc route: stream bytes per Write (default 2048)
   --restore   send the stock file itself (the way back from a patched image)
   --set       the device file's patch set to apply (default: device)
   --dry-run   patch and check; print the checks and stop
   --save F    also write the image that is checked and sent to F (for `mise run patch:preflight`, the section 7 ISA scan)
-  --yes       do not ask: rpc route \"Flash now? [y/N]\", menu route the word \"flash\"";
+  --yes       do not ask: rpc route \"Flash ... now? [y/N]\" (asked once, before anything is sent), menu route the word \"flash\"";
 
 fn flag(rest: &[String], name: &str) -> Option<String> {
     rest.iter()
@@ -108,7 +108,10 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
         return Ok(());
     }
     if let Some(sock) = emu {
-        return emulator(&p, &sock, rpc.then_some(chunk), yes);
+        if rpc {
+            ask_flash(&p, device_name(&p, ""), yes)?;
+        }
+        return emulator(&p, &sock, rpc.then_some(chunk));
     }
     let name = port.unwrap();
     if rpc {
@@ -125,6 +128,48 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
         }
     }
     device(&p, &name)
+}
+
+/// The name of the device: from the MIDI port when it says so, else from the image.
+fn device_name(p: &Prepared, port: &str) -> &'static str {
+    let port = port.to_lowercase();
+    if port.contains("digitakt") {
+        "Digitakt II"
+    } else if port.contains("digitone") {
+        "Digitone II"
+    } else if p.device == "dt2" {
+        "Digitakt II"
+    } else {
+        "Digitone II"
+    }
+}
+
+/// The one question of the rpc route, asked before anything is sent: "Flash Digitakt II OS 1.17 (stock) now? [y/N]".
+fn flash_question(p: &Prepared, name: &str) -> String {
+    let what = if p.restore {
+        "(stock)".to_string()
+    } else {
+        format!(
+            "with digikit runtime {}",
+            patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version())
+        )
+    };
+    format!("Flash {name} OS {} {what} now? [y/N] ", p.os)
+}
+
+fn ask_flash(p: &Prepared, name: &str, yes: bool) -> Result<()> {
+    if yes {
+        return Ok(());
+    }
+    print!("{}", flash_question(p, name));
+    std::io::stdout().flush().ok();
+    let mut line = String::new();
+    std::io::stdin().lock().read_line(&mut line).ok();
+    if matches!(line.trim().to_lowercase().as_str(), "y" | "yes") {
+        Ok(())
+    } else {
+        Err(Error("stopped: nothing was sent".into()))
+    }
 }
 
 fn print_checks(p: &Prepared) {
@@ -328,14 +373,15 @@ fn device(p: &Prepared, want: &str) -> Result<()> {
     after_device_flash(p, &name, t0)
 }
 
-/// The RPC route on a MIDI port: Start, Writes, the question, End.
+/// The RPC route on a MIDI port: the question, Start, Writes, End.
 fn device_rpc(p: &Prepared, want: &str, chunk: usize, yes: bool) -> Result<()> {
     let name = find_port(&out_names()?, want)?;
     println!("port {name:?}");
     println!("{}", rpc_instructions(p));
+    ask_flash(p, device_name(p, &name), yes)?;
     let mut link = open(&name)?;
     let t0 = Instant::now();
-    run_rpc(p, chunk, &mut link, yes)?;
+    run_rpc(p, chunk, &mut link)?;
     println!(
         "the device took the image and flashes now ({:.1} s)",
         t0.elapsed().as_secs_f64()
@@ -351,7 +397,7 @@ fn rpc_instructions(p: &Prepared) -> String {
         format!("a patched {} {} firmware", p.device, p.os)
     };
     format!(
-        "About to send {what} over MidiRpc. The device needs no menu step; nothing is flashed until you answer \"Flash now?\".
+        "About to send {what} over MidiRpc. The device needs no menu step; it flashes after its own check of the image, when you have said yes.
   1. Connect the power adapter. Keep the USB cable in until the device has restarted.
   2. The device checks the image itself. If it does not accept it, it says so and nothing is written.
 If a flash is cut or the device does not start again: power off, hold FUNC while powering on, press TRIG 4 (OS UPGRADE), and send the
@@ -361,7 +407,7 @@ stock file over a DIN MIDI interface (docs/PATCHING.md, Recovery). Keep the stoc
 
 /// The RPC machine driven over `link`: the same state machine the browser runs (`patchkit::flash_rpc`). Returns when the device has
 /// accepted End with commit 1 (it flashes and restarts by itself), or with the machine's failure text.
-fn run_rpc(p: &Prepared, chunk: usize, link: &mut impl Transport, yes: bool) -> Result<()> {
+fn run_rpc(p: &Prepared, chunk: usize, link: &mut impl Transport) -> Result<()> {
     let mut m = RpcFlash::new(p.image.clone(), chunk);
     let t0 = Instant::now();
     let mut shown = 0usize;
@@ -398,18 +444,12 @@ fn run_rpc(p: &Prepared, chunk: usize, link: &mut impl Transport, yes: bool) -> 
             }
             Action::AskConfirm => {
                 println!(
-                    "The device has all {} bytes and accepted the image ({:.1} s).",
+                    "The device has all {} bytes and accepted the image ({:.1} s); flashing, do not unplug.",
                     m.total(),
                     t0.elapsed().as_secs_f64()
                 );
-                let go = yes || {
-                    print!("Flash now? [y/N] ");
-                    std::io::stdout().flush().ok();
-                    let mut line = String::new();
-                    std::io::stdin().lock().read_line(&mut line).ok();
-                    matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
-                };
-                m.confirm(go);
+                // the question was asked before Start: the device's own check passed, so the commit follows
+                m.confirm(true);
             }
             Action::WaitReboot => return Ok(()),
             Action::Done => return Ok(()),
@@ -655,7 +695,7 @@ impl Transport for EmuRpcLink<'_> {
 }
 
 /// `rpc`: the chunk size of the RPC route (0: the default); `None`: the menu route (the emulator shows OS UPGRADE).
-fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>, yes: bool) -> Result<()> {
+fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>) -> Result<()> {
     let mut emu = Emu::connect(sock)?;
     let t0 = Instant::now();
     emu.call("midi.usb.out", json!({}))?; // starts the USB capture
@@ -664,7 +704,7 @@ fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>, yes: bool) -> Result<(
             emu: &mut emu,
             buf: vec![],
         };
-        run_rpc(p, chunk, &mut link, yes)?;
+        run_rpc(p, chunk, &mut link)?;
         println!(
             "the device took the image ({:.1} s wall, {} ms guest)",
             t0.elapsed().as_secs_f64(),
@@ -804,4 +844,32 @@ fn emulator_after(p: &Prepared, emu: &mut Emu, t0: Instant) -> Result<()> {
     Err(Error(format!(
         "INFO did not answer after the restart: {last_err}"
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn prepared(restore: bool) -> Prepared {
+        Prepared {
+            image: vec![],
+            messages: vec![],
+            checks: vec![],
+            device: "dt2".into(),
+            os: "1.17".into(),
+            image_id: None,
+            sha_stock: String::new(),
+            sha_image: String::new(),
+            restore,
+        }
+    }
+
+    #[test]
+    fn the_question_names_the_device_the_os_and_what_is_flashed() {
+        let q = flash_question(&prepared(true), device_name(&prepared(true), "Elektron Digitakt II"));
+        assert_eq!(q, "Flash Digitakt II OS 1.17 (stock) now? [y/N] ");
+        let q = flash_question(&prepared(false), "Digitakt II");
+        assert!(q.starts_with("Flash Digitakt II OS 1.17 with digikit runtime "), "{q}");
+        assert!(q.ends_with(" now? [y/N] "), "{q}");
+    }
 }

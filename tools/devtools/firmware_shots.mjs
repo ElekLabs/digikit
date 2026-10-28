@@ -68,7 +68,7 @@ const SCENES = [
   },
   { name: 'no-device', size: WIDE, dev: 'dn2', file: 'dn2', state: 'none', wait: 'Not connected', ready: true },
   { name: 'mismatch', size: WIDE, dev: 'dt2', file: 'dn2', wait: 'Connected', ready: true },
-  // the RPC route (default): Send, the device checks, the page asks, the device flashes
+  // the RPC route (default): Flash sends the image, the device checks it, the page commits at once, the device flashes
   {
     name: 'send',
     size: TALL,
@@ -77,8 +77,7 @@ const SCENES = [
     wait: 'Connected',
     ready: true,
     fake: { writeMs: 12 },
-    steps: [click('Send')],
-    after: 4500,
+    steps: [click('Flash')],
   },
   {
     name: 'send-dt2',
@@ -88,29 +87,19 @@ const SCENES = [
     wait: 'Connected',
     ready: true,
     fake: { writeMs: 12 },
-    steps: [click('Send')],
+    steps: [click('Flash')],
     after: 4500,
   },
   {
-    name: 'confirm',
+    name: 'checking',
     size: TALL,
     dev: 'dn2',
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [click('Send')],
-    until: 'accepted it',
-    after: 400,
-  },
-  {
-    name: 'confirm-cancelled',
-    size: TALL,
-    dev: 'dn2',
-    file: 'dn2',
-    wait: 'Connected',
-    ready: true,
-    steps: [click('Send'), 'wait:accepted it', click('Cancel')],
-    until: 'Nothing was written',
+    fake: { writeMs: 3, checkMs: 60_000 },
+    steps: [click('Flash')],
+    until: 'is checking the image',
     after: 400,
   },
   {
@@ -120,8 +109,10 @@ const SCENES = [
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [click('Send'), 'wait:accepted it', click('Flash now')],
-    after: 1200,
+    fake: { writeMs: 3, endMs: 60_000 },
+    steps: [click('Flash')],
+    until: 'do not unplug',
+    after: 400,
   },
   {
     name: 'done',
@@ -130,7 +121,7 @@ const SCENES = [
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [click('Send'), 'wait:accepted it', click('Flash now')],
+    steps: [click('Flash')],
     until: 'Restarted',
     within: 240_000,
   },
@@ -142,7 +133,7 @@ const SCENES = [
     wait: 'Connected',
     ready: true,
     fake: { errorAt: 0.4 },
-    steps: [click('Send')],
+    steps: [click('Flash')],
     until: 'Checksum error',
     after: 400,
   },
@@ -154,7 +145,7 @@ const SCENES = [
     wait: 'Connected',
     ready: true,
     fake: { writeMs: 12 },
-    steps: [click('Send'), 'sleep:3000', click('Cancel')],
+    steps: [click('Flash'), 'sleep:3000', click('Cancel')],
     until: 'Nothing was written',
     after: 400,
   },
@@ -178,13 +169,7 @@ const SCENES = [
     state: 'runtime',
     wait: 'Connected',
     ready: true,
-    steps: [
-      tick('Restore stock'),
-      'wait:Stock image',
-      click('Send stock firmware'),
-      'wait:accepted it',
-      click('Flash now'),
-    ],
+    steps: [tick('Restore stock'), 'wait:Stock image', click('Restore stock')],
     until: 'stock OS',
     within: 240_000,
   },
@@ -219,18 +204,19 @@ const SCENES = [
     wait: 'Connected',
     ready: true,
     fake: { writeMs: 12 },
-    steps: [click('Send')],
+    steps: [click('Flash')],
     after: 4000,
   },
   {
-    name: 'narrow-confirm',
+    name: 'narrow-flashing',
     size: NARROW_TALL,
     dev: 'dn2',
     file: 'dn2',
     wait: 'Connected',
     ready: true,
-    steps: [click('Send')],
-    until: 'accepted it',
+    fake: { writeMs: 3, endMs: 60_000 },
+    steps: [click('Flash')],
+    until: 'do not unplug',
     after: 400,
   },
 ];
@@ -414,6 +400,8 @@ try {
         fwgone: '3500',
       });
       if (scene.fake?.writeMs !== undefined) q.set('fwwrite', String(scene.fake.writeMs));
+      if (scene.fake?.checkMs !== undefined) q.set('fwcheck', String(scene.fake.checkMs));
+      if (scene.fake?.endMs !== undefined) q.set('fwend', String(scene.fake.endMs));
       if (scene.fake?.errorAt !== undefined) q.set('fwerror', String(scene.fake.errorAt));
       if (scene.query) for (const [k, v] of new URLSearchParams(scene.query)) q.set(k, v);
       // the desktop keeps the chosen target in localStorage: start on the MIDI port

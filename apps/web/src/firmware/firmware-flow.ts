@@ -194,12 +194,10 @@ export interface RpcOps extends Pick<FlowOps, 'send' | 'now' | 'sleep' | 'releas
   machine(image: Uint8Array, chunk: number): Promise<RpcMachine>;
   /** The next message the device sent within `timeoutMs`, or null; ends early (null) when `signal` aborts. */
   recv(timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array | null>;
-  /** The question "Flash now?": the user's answer. The page shows the buttons; the promise ends with false when `signal` aborts. */
-  confirm(signal: AbortSignal): Promise<boolean>;
 }
 
 /**
- * Send the image through the RPC route, ask, and wait for the restart. All decisions (what to send, how often to repeat a chunk, when a
+ * Send the image through the RPC route, commit when the device has checked it, and wait for the restart. All decisions (what to send, how often to repeat a chunk, when a
  * run has failed) are the Rust machine's; this loop moves bytes and the clock. `signal` aborts: before End with commit 1 the device gets
  * End with commit 0 and keeps its flash. `chunk` 0 is the default size.
  */
@@ -276,9 +274,9 @@ export async function runRpcFlash(
         if (r === 'timeout') m.timeout();
         if (r === 'got') progress(false);
       } else if (a.kind === 'ask') {
-        set({ phase: 'confirm', total });
-        const yes = await ops.confirm(signal);
-        m.confirm(yes && !signal.aborted);
+        // the Flash click was the yes: the device validated the image, so the commit follows at once (a cancel that arrived until now still wins)
+        set({ phase: 'sending', sent: m.taken(), total, startedMs, nowMs: ops.now(), unit: 'bytes', flashing: true });
+        m.confirm(!signal.aborted);
       } else if (a.kind === 'reboot') {
         rebooting = true;
         break;

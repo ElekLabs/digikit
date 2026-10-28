@@ -112,7 +112,6 @@ function fake(opts: Opts = {}) {
       t.ms += ms;
       return null;
     },
-    confirm: async () => true,
     now: () => t.ms,
     sleep: async (ms) => {
       t.ms += ms;
@@ -138,40 +137,36 @@ const run = (
 };
 const message = (s: FlashState) => ('message' in s ? s.message : '');
 
-test('the image goes over in order, the user is asked, then End 1 and the restart check', { skip: !have }, async () => {
-  const f = fake();
-  const p = prepared();
-  const { end, states } = await run(f, {
-    confirm: async () => {
-      // nothing has been committed when the question is open
-      assert.ok(!f.log.some((l) => l.startsWith('end')));
-      return true;
-    },
-  });
-  assert.equal(end.phase, 'done');
-  assert.deepEqual(f.log, ['start', 'write', 'write', 'write', 'end 1']);
-  assert.deepEqual(Buffer.from(f.stream), Buffer.from(p.image));
-  const phases = [...new Set(states.map((s) => (s.phase === 'rebooting' ? `rebooting:${s.stage}` : s.phase)))];
-  assert.deepEqual(phases, [
-    'sending',
-    'confirm',
-    'rebooting:leaving',
-    'rebooting:returning',
-    'rebooting:asking',
-    'done',
-  ]);
-  const last = states.filter((s) => s.phase === 'sending').at(-1);
-  assert.deepEqual(last?.phase === 'sending' && [last.sent, last.total, last.unit], [SIZE, SIZE, 'bytes']);
-  assert.ok(
-    states.some((s) => s.phase === 'sending' && s.checking),
-    'the page says the device checks the image',
-  );
-  assert.match(message(end), /runtime 0\.5\.2 · image id c5d8ccb27e139cbc matches/);
-});
+test(
+  'the image goes over in order, then End 1 follows at once and the restart is checked',
+  { skip: !have },
+  async () => {
+    const f = fake();
+    const p = prepared();
+    const { end, states } = await run(f);
+    assert.equal(end.phase, 'done');
+    assert.deepEqual(f.log, ['start', 'write', 'write', 'write', 'end 1']);
+    assert.deepEqual(Buffer.from(f.stream), Buffer.from(p.image));
+    const phases = [...new Set(states.map((s) => (s.phase === 'rebooting' ? `rebooting:${s.stage}` : s.phase)))];
+    assert.deepEqual(phases, ['sending', 'rebooting:leaving', 'rebooting:returning', 'rebooting:asking', 'done']);
+    const last = states.filter((s) => s.phase === 'sending').at(-1);
+    assert.deepEqual(last?.phase === 'sending' && [last.sent, last.total, last.unit], [SIZE, SIZE, 'bytes']);
+    assert.ok(
+      states.some((s) => s.phase === 'sending' && s.checking),
+      'the page says the device checks the image',
+    );
+    assert.ok(
+      states.some((s) => s.phase === 'sending' && s.flashing),
+      'the page says the device accepted it and the flash follows',
+    );
+    assert.match(message(end), /runtime 0\.5\.2 · image id c5d8ccb27e139cbc matches/);
+  },
+);
 
-test('Cancel at the question sends End 0 and says nothing was written', { skip: !have }, async () => {
-  const f = fake();
-  const { end } = await run(f, { confirm: async () => false });
+test('Cancel while the device checks the image sends End 0 and says nothing was written', { skip: !have }, async () => {
+  const ctl = new AbortController();
+  const f = fake({ onWrite: (n) => n === 3 && ctl.abort() });
+  const { end } = await run(f, {}, ctl.signal);
   assert.deepEqual(end.phase === 'stopped' && [end.reason, end.unit], ['cancelled', 'bytes']);
   assert.match(message(end), /Nothing was written/);
   assert.deepEqual(f.log.slice(-1), ['end 0']);

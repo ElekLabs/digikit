@@ -223,12 +223,14 @@ child processes.
             (`patchkit::flash_rpc::RpcFlash`: Start, Write in order, End; CRC retry, timeouts, End 0 on
             failure or cancel) for the CLI, the workbench and the site (wasm). Default route; the menu
             route stays as the fallback (`--route menu`, a link on the page).
-      - [x] The device does not ask "UPGRADE OS NOW?" on this route: the CLI and the Firmware page ask
-            "Flash now?" before End with commit 1; Cancel or leaving the page sends End with commit 0.
-      - [x] The Firmware page without the menu step and its box: Send, Confirm, Done; errors in plain
+      - [x] The device does not ask "UPGRADE OS NOW?" on this route: the CLI asks once before Start
+            ("Flash Digitakt II OS 1.17 ... now? [y/N]") and the Firmware page has one Flash button; both
+            commit (End 1) as soon as the device has checked the image. Cancel or leaving the page before
+            that sends End with commit 0.
+      - [x] The Firmware page without the menu step and its box: one Flash button for send, check and flash, then Done; errors in plain
             words (CRC retries used up, timeout, the device's message, "Nothing was written").
       - [x] Proof in the emulator through the page's own code path: DT2 1.17 and DN2 1.12, patch and
-            restore (flash equals the container, INFO runtime and image id), Cancel at Confirm leaves
+            restore (flash equals the container, INFO runtime and image id), Cancel before the commit leaves
             the flash unchanged; the CLI once with `--yes`. Open: the real device (largest Write,
             timing).
 - [ ] Later: compile in the browser (a dropped `.dkmod`, or an edited source): gcc `cc1`/`as`/`ld` in

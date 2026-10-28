@@ -42,7 +42,7 @@ export function portOps(): FlowOps {
 }
 
 /** The operations of the RPC route for the selected MIDI port: the machine, and the port's transport for one message out and the next one in. */
-export function rpcPortOps(confirm: RpcOps['confirm']): RpcOps {
+export function rpcPortOps(): RpcOps {
   const base = portOps();
   let link: ReturnType<typeof portTransport> | undefined;
   const transport = () => (link ??= portTransport());
@@ -50,7 +50,6 @@ export function rpcPortOps(confirm: RpcOps['confirm']): RpcOps {
     machine: (image, chunk) => firmwareEnv().rpc(image, chunk),
     send: async (m) => (await transport()).send(m),
     recv: async (ms, signal) => (await transport()).recv(ms, signal),
-    confirm,
     now: base.now,
     sleep: base.sleep,
     release: async () => {
