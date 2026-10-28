@@ -195,8 +195,18 @@ def test_audited_upload_without_matrix_consumers_skips_smoke(mid: str) -> None:
     assert "no dependent cells" in verify.smoke_reason(files)
 
 
-def test_pluck_leaf_selects_existing_dependent_cells_on_both_devices() -> None:
+def test_a_production_leaf_with_no_cell_skips_the_smoke_matrix() -> None:
+    # the matrix cells hold the patched-in fixture, which has its own DSP copy: a change of pluck reaches no cell
     files = [f"{mpath('digikit/pluck')}/module.toml", "docs/TESTING.md"]
+    assert verify.smoke_cells(files) == []
+    assert "no dependent cells" in verify.smoke_reason(files)
+
+
+def test_a_production_leaf_selects_existing_dependent_cells_on_both_devices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(verify_route.RUNTIME_UPLOADS, "test/patched-pluck", "x.test.ts")
+    files = [f"{mpath('test/patched-pluck')}/module.toml", "docs/TESTING.md"]
     cells = verify.smoke_cells(files)
     assert cells is not None
     assert {cell.partition(":")[0] for cell in cells} == {"dt2-1.17", "dn2-1.12"}
@@ -229,9 +239,10 @@ def test_smoke_forwards_native_cell_filters(
 
 
 def test_smoke_explain_names_affected_cells_and_empty_selection(
-    capsys: pytest.CaptureFixture[str],
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    files = [f"{mpath('digikit/pluck')}/module.toml"]
+    monkeypatch.setitem(verify_route.RUNTIME_UPLOADS, "test/patched-pluck", "x.test.ts")
+    files = [f"{mpath('test/patched-pluck')}/module.toml"]
     verify.explain(verify.steps_for(files), files, [], per_file=True)
     out = capsys.readouterr().out
     assert "selected dependent matrix cells" in out
@@ -367,6 +378,10 @@ def test_full_and_empty() -> None:
 def test_every_suite_entry_resolves() -> None:
     for name, _, paths in verify.PY_SUITES:
         for path in paths:
+            if path.startswith(
+                "modules/"
+            ):  # module-owned tests: none until a module has one
+                continue
             assert verify.resolve_tests((path,)), (name, path)
 
 
@@ -831,7 +846,9 @@ def test_module_change_drops_no_test_that_names_a_dependent() -> None:
 
 def test_dependents_follow_requires_and_shared_sources() -> None:
     assert "test/patched-pluck" in verify_route.dependents({"core/machines"})
-    assert "test/patched-pluck" in verify_route.dependents({"digikit/pluck"})
+    # test/dyn-params builds from the DSP source of test/sine; the patched-in test/patched-pluck has its own copy
+    assert "test/dyn-params" in verify_route.dependents({"test/sine"})
+    assert verify_route.dependents({"digikit/pluck"}) == {"digikit/pluck"}
     assert verify_route.dependents({"fadedlimes/bd"}) == {"fadedlimes/bd"}
 
 
@@ -1399,3 +1416,42 @@ def test_fx_gate_tiers_override_ambient_selection(monkeypatch, full, all_no_aot)
         for key, value in verify.no_aot_env().items()
         if key not in {"DIGI_FX_SWEEP", "DIGI_FX_NO_AOT_SUBSET"}
     )
+
+
+def test_module_ids_come_from_the_manifests_not_a_list_of_authors() -> None:
+    verify_route._id_patterns.cache_clear()
+    text = 'run("test/dyn-demo"); ROOT / "tests" / "digikit" / "test_x.py"; test/no-such-module'
+    assert verify_route.refs(text) == {"test/dyn-demo"}
+    # a name that only starts like an id is no reference
+    assert verify_route.refs("test/dyn-demo-stray2 test/dyn-demo_x") == set()
+
+
+def test_a_modules_own_scenario_is_found_and_selected_by_a_change_in_the_module() -> (
+    None
+):
+    scen = "modules/machines/bd/tests/scenarios/equiv-dyn-bd.toml"
+    refs_ = verify_route.scenario_refs()
+    assert refs_[scen][0] == "equiv"
+    assert "fadedlimes/bd" in refs_[scen][1]
+    # a change inside the module's tests/ runs python-tests only, with the test files of the kind
+    fine = verify_route.fine(scen)
+    assert fine is not None and fine.steps == ("python-tests",)
+    assert "tests/digikit/test_equiv_dt2.py" in fine.tests
+    # a change in the module's sources selects the same scenario tests
+    src = verify_route.fine("modules/machines/bd/module.toml")
+    assert src is not None and "tests/digikit/test_equiv_dt2.py" in src.tests
+
+
+def test_module_owned_python_tests_are_found_by_globbing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    test = tmp_path / "modules/machines/m/tests/sub/test_m.py"
+    test.parent.mkdir(parents=True)
+    test.write_text("")
+    (tmp_path / "modules/machines/m/tests/helper.py").write_text("")
+    monkeypatch.setattr(verify_route, "ROOT", tmp_path)
+    assert verify_route.module_test_files() == [
+        "modules/machines/m/tests/sub/test_m.py"
+    ]
+    assert verify.is_module_test_dir("modules/machines/m/tests/sub/test_m.py")
+    assert not verify.is_module_test_dir("modules/machines/m/src/test_m.py")

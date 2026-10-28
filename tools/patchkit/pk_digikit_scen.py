@@ -4,7 +4,8 @@
     uv run python -m tools.patchkit.pk_digikit_scen list
     uv run python -m tools.patchkit.pk_digikit_scen run [NAME ...] [--image dt2-1.17] [--tier quick|full] [--keep DIR]
 
-A scenario is a TOML file in `tests/digikit/scenarios/`:
+A scenario is a TOML file in `tests/digikit/scenarios/` or in a module's own `modules/<group>/<name>/tests/scenarios/` (found by
+globbing; no list names them; the names are unique across both places):
 
     [scenario]
     name = "equiv-dyn-pluck"       # the file's stem
@@ -106,7 +107,8 @@ from tools.patchkit import pk_dkrt_boot as B  # noqa: E402
 from tools.patchkit import pk_dkrt_machine as M  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
-SCENARIOS = ROOT / "tests" / "digikit" / "scenarios"
+# a module's own scenarios: modules/<group>/<name>/tests/scenarios/*.toml
+MODULE_SCENARIOS = "modules/*/*/tests/scenarios"
 CACHE = ROOT / "out" / "cache" / "digikit"
 # every device with a module store and its newest image that has a port (`port = true` in the device file)
 QUICK_IMAGES = {d: pk_device.port_images(d)[-1] for d in pk_device.digikit_devices()}
@@ -167,9 +169,21 @@ class Scenario:
         return [QUICK_IMAGES[dev] for dev in self.devices]
 
 
-def load_scenarios(root: Path = SCENARIOS) -> list[Scenario]:
-    out = []
-    for f in sorted(root.glob("*.toml")):
+def scenario_files(root: Path = ROOT) -> list[Path]:
+    """Every scenario file below ROOT: tests/digikit/scenarios/ first, then the modules' own, sorted by name."""
+    own = sorted(root.glob(f"{MODULE_SCENARIOS}/*.toml"), key=lambda p: p.name)
+    return [*sorted((root / "tests/digikit/scenarios").glob("*.toml")), *own]
+
+
+def load_scenarios(root: Path = ROOT) -> list[Scenario]:
+    out: list[Scenario] = []
+    names: dict[str, Path] = {}
+    for f in scenario_files(root):
+        if f.stem in names:
+            raise Fail(
+                f"{f}: the scenario name {f.stem} is also used by {names[f.stem]}"
+            )
+        names[f.stem] = f
         d = tomllib.loads(f.read_text())
         s = d["scenario"]
         if s["name"] != f.stem:

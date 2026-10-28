@@ -421,7 +421,7 @@ def plan(
         f
         for f in files
         if f.endswith(".py")
-        and f.startswith(("tests/", "tools/"))
+        and (f.startswith(("tests/", "tools/")) or verify.is_module_test_dir(f))
         and (ROOT / f).is_file()
     ]
     typed = [

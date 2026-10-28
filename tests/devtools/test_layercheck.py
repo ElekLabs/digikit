@@ -295,3 +295,55 @@ def test_ui_functions_must_be_imports_the_runtime_links(tree: Path) -> None:
     module(tree, "modules/core/runtime", "core/runtime", "core", "runtime")
     (v,) = layercheck.check(tree)
     assert v.rule == "imports" and "optional list" in v.message
+
+
+def sc(root: Path) -> list[layercheck.Violation]:
+    return [v for v in layercheck.check(root) if v.rule == "self-contained"]
+
+
+def test_self_contained_names_of_a_module_outside_it_are_hits(tree: Path) -> None:
+    write(tree, "modules/fx/gain/tests/own.py", 'ID = "digikit/gain"\n')  # inside: fine
+    write(tree, "tests/other.py", "ok = 1\nuse('digikit/gain')\n")
+    write(tree, "tools/path.sh", "build modules/fx/gain\n")
+    write(tree, "tools/near.sh", "digikit/gain-like fx/gainer\n")  # other names
+    got = {v.where: v for v in sc(tree)}
+    assert set(got) == {"tests/other.py:2", "tools/path.sh:1"}
+    v = got["tests/other.py:2"]
+    assert "digikit/gain named outside modules/fx/gain" in v.message
+    assert "tests/" in v.instead and "placeholder" in v.instead
+
+
+def test_self_contained_docs_agents_and_fixtures_may_name_modules(tree: Path) -> None:
+    for f in (
+        "docs/findings/x.txt",
+        "notes/readme.md",
+        ".agents/skill/a.txt",
+        "tests/fixtures/modules/f/src.c",
+    ):
+        write(tree, f, "digikit/gain\n")
+    assert sc(tree) == []
+
+
+def test_self_contained_a_host_module_is_exempt(tree: Path) -> None:
+    write(tree, "apps/page.ts", "'digikit/gain'\n")
+    assert len(sc(tree)) == 1
+    module(tree, "modules/fx/gain", "digikit/gain", "fx", None, "host = true\n")
+    # `host` must sit in [module]: the extra text lands there because the manifest has no later table
+    assert sc(tree) == []
+
+
+def test_self_contained_baseline_allows_old_hits_and_can_only_shrink(
+    tree: Path,
+) -> None:
+    write(tree, "tests/old.py", "x = 'digikit/gain'\n")
+    write(tree, layercheck.SC_BASELINE, "# old\ntests/old.py  digikit/gain\n")
+    assert sc(tree) == []
+    # a new file is a violation
+    write(tree, "tests/new.py", "x = 'digikit/gain'\n")
+    (v,) = sc(tree)
+    assert v.where == "tests/new.py:1"
+    # an entry that no longer occurs is a violation too
+    write(tree, "tests/old.py", "x = 1\n")
+    (gone,) = [v for v in sc(tree) if v.where.startswith(layercheck.SC_BASELINE)]
+    assert gone.where == f"{layercheck.SC_BASELINE}:2"
+    assert "remove it from the baseline" in gone.instead

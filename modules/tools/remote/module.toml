@@ -7,6 +7,8 @@ type = "service"
 author = "digikit"
 status = "experimental"
 summary = "Presses keys and turns encoders from a computer over USB MIDI."
+# the workbench's Remote page, dk-session and the SDK speak its protocol
+host = true
 ports = ["dt2-1.17", "dn2-1.12"]
 requires = ["core/input"]
 conflicts = []

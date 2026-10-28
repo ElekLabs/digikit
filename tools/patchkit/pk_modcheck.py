@@ -4,7 +4,7 @@
     uv run python -m tools.patchkit.pk_modcheck NAME [--device dt2|dn2]      (mise run module:check NAME)
 
 NAME is a module id (`digikit/pluck`) or its last part (`pluck`). An effect module runs tests/modules/test_fx_conformance.py. A machine module (tools/patchkit/pk_conform.py) runs the conformance
-suite, tests/modules/test_machine_conformance.py, for its devices (docs/TESTING.md "Machine conformance"). The same process includes the module's own tests: `modules/<group>/<name>/tests/test_*.py`, and until the tests move there, the test files under tests/ whose file name carries the
+suite, tests/modules/test_machine_conformance.py, for its devices (docs/TESTING.md "Machine conformance"). The same process includes the module's own tests: `modules/<group>/<name>/tests/**/test_*.py` and its scenarios in `tests/scenarios/*.toml` (only those run, at every tier), and until the tests move there, the test files under tests/ whose file name carries the
 module's name (`pluck` -> tests/patchkit/test_pluck*.py). One pytest process runs all of them; the exit code is pytest's.
 Own tests may build or launch an emulator. A service/raw module with no own tests has its objects checked against their sources, then gets the size and fit lines; it returns success. This command does not prove every module loads in patched firmware.
 """
@@ -40,7 +40,7 @@ def resolve(name: str) -> str:
 
 def own_tests(mid: str) -> list[str]:
     """Test files of the module: its tests/ directory, then the files under tests/ named after it."""
-    found = sorted((modroots.module_dir(mid) / "tests").glob("test_*.py"))
+    found = sorted((modroots.module_dir(mid) / "tests").rglob("test_*.py"))
     stem = mid.split("/", 1)[1].replace("-", "_")
     found += [
         p
@@ -63,6 +63,20 @@ def plan(mid: str, device: str | None) -> tuple[list[str], dict[str, str]]:
         paths.append(FX_CONFORMANCE)
         env["DIGI_CONFORM_MODULES"] = mid
     paths += own_tests(mid)
+    # the module's own scenarios (tests/scenarios/*.toml): the digikit test files of their kinds, limited to them, all tiers
+    scen = sorted(
+        p.stem for p in (modroots.module_dir(mid) / "tests/scenarios").glob("*.toml")
+    )
+    if scen:
+        from tools.devtools import verify_route
+
+        kinds = {
+            verify_route.scenario_refs()[f][0]
+            for f in verify_route.module_scenario_files(mid)
+        }
+        paths += [t for t in verify_route.scenario_tests(kinds) if t not in paths]
+        env["DIGIKIT_SCENARIOS"] = ",".join(scen)
+        env["DIGIKIT_TIER"] = "full"
     return paths, env
 
 
