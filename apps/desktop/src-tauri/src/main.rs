@@ -12,6 +12,7 @@ use digi_control::{
 };
 use elektron_native_boot::Snapshot;
 mod desktop_runtime;
+mod firmware;
 mod library;
 mod local;
 mod midi_port;
@@ -549,6 +550,8 @@ fn main() {
             emu_card_stage,
             emu_card_load,
             card_open_folder,
+            firmware::firmware_prepare,
+            firmware::firmware_save,
             library::lib_scan,
             library::lib_read,
             library::sample_wasm,

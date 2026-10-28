@@ -27,6 +27,7 @@ emmc-card = { path = "../../../packages/emulator/card" }
 digi-coupled = { path = "../../../packages/emulator/coupled" }
 digi-control = { path = "../../../packages/emulator/control" }
 device-profile = { path = "../../../packages/emulator/device-profile" }
+patchkit = { path = "../../../packages/patchkit" }
 
 [dev-dependencies]
 sha2 = "0.10"

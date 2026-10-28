@@ -76,6 +76,19 @@ The emulator did not model the flash writes: erase and program went to an unmode
 
 The receiver took every message at the 2 ms pace (no stall at this pace, as in the earlier runs); after the last message the flash writer needed about 5 s wall. The tests of the checks themselves (tampered images, a wrong product byte, a DT2 build word below the floor, an oversize container, a message list with one message dropped, reordered or altered) are in `packages/patchkit/src/flash.rs` and `packages/patchkit/tests/flash.rs`.
 
+### The Firmware page's flash in the emulator (2026-10-28) **[D]**
+
+The page's own flash logic (`apps/web/src/firmware/firmware-flow.ts`: the Rust sender through `patchkit.wasm`, the pacing on the guest clock, the wait for the port to go away and
+come back, then SoftwareVersion and INFO through `DkSession`) was run headless against the emulated devices at OS UPGRADE (`apps/web/tests/firmware-emulator.test.ts`, started by `os_upgrade_rig.py --exec`). The emulated flash equals the image's container in every run, as with the command line. The
+image id INFO reports equals the id `prepare` made, and after the restore the stock firmware answers SoftwareVersion with its OS and INFO does not answer.
+
+| Run | Messages | Flash writes | Container equals the image | Verdict of the page |
+| --- | --- | --- | --- | --- |
+| DT2 1.17, patch | 15,162 | 24 erases, 5,982 programs | 1,531,152 bytes | runtime 0.5.2, image id `281e6b9b1a0a9b83` matches |
+| DT2 1.17, restore | 14,705 | 23 erases, 5,801 programs | 1,484,992 bytes | stock OS 1.17, no runtime |
+| DN2 1.12, patch | 19,290 | 30 erases, 7,610 programs | 1,947,984 bytes | runtime 0.5.2, image id `c5d8ccb27e139cbc` matches |
+| DN2 1.12, restore | 18,676 | 29 erases, 7,368 programs | 1,886,016 bytes | stock OS 1.12, no runtime |
+
 Not modelled: real USB framing, real flash timing, the flash probe (sector and page size are the writer's defaults), erase failures. The programming model copies the page; a real chip ANDs it with the erased bytes, which is the same after an erase.
 
 ## Open

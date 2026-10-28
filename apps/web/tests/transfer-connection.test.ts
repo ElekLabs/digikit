@@ -42,6 +42,13 @@ test('a cancel ends "connecting", and leaves a device that had answered', () => 
   assert.equal(step(connected, { type: 'cancelled' }), connected);
 });
 
+test('a device with no runtime (the stock firmware, on the Firmware page) shows its OS and says so', () => {
+  const stock: Connection = { state: 'connected', device: { id: 'dn2', name: 'Digitone II', os: '1.12' } };
+  const v = connectionView(stock, 'MIDI: Elektron Digitone II');
+  assert.deepEqual(v.parts, ['Digitone II', 'OS 1.12', 'no runtime', 'MIDI: Elektron Digitone II']);
+  assert.match(v.title, /no runtime/);
+});
+
 test('no reply, a closed port and a paused emulator are lost; a device error and a cancel are not', () => {
   assert.equal(isLost(new DkError({ error: 'no reply from the device', kind: 'timeout' })), true);
   assert.equal(isLost(new Error('The MIDI port is closed')), true);

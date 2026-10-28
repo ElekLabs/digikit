@@ -8,6 +8,7 @@ import {
   clearEntries,
   copyText,
   emptyLog,
+  flashEntry,
   filterEntries,
   formatTime,
   healthChanges,
@@ -142,4 +143,21 @@ test('a fault, a stall and a DSP halt are logged once, when they start', () => {
   assert.deepEqual(step({ halted: 'bad opcode', error: 'GUEST_FAULT at 0x4011' }), []);
   // a reading that leaves a field out does not clear it
   assert.equal(h.error, 'GUEST_FAULT at 0x4011');
+});
+
+test('a flash of the Firmware page is logged as the firmware source, an error as an error', () => {
+  assert.deepEqual(flashEntry({ level: 'info', text: 'flash dn2 OS 1.12 to Elektron Digitone II: 19290 messages' }), {
+    source: 'firmware',
+    level: 'info',
+    text: 'flash dn2 OS 1.12 to Elektron Digitone II: 19290 messages',
+  });
+  const done = flashEntry({
+    level: 'info',
+    text: 'flash done: Restarted',
+    detail: 'Runtime 0.5.2\nImage id c5d8ccb27e139cbc',
+  });
+  assert.equal(done.detail, 'Runtime 0.5.2\nImage id c5d8ccb27e139cbc');
+  const failed = flashEntry({ level: 'error', text: 'flash failed: the image id differs' });
+  assert.equal(failed.level, 'error');
+  assert.equal(autoOpens(failed), false); // the Firmware page shows its own error; the Log does not open by itself
 });

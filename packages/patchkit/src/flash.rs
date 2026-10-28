@@ -68,6 +68,28 @@ impl Prepared {
     }
 }
 
+impl Prepared {
+    /// What a user interface shows and the sender needs, without the image itself: the checks, the facts, and the end offset of
+    /// each message in `image` (message `i` is `image[ends[i-1]..ends[i]]`, the first from 0). The browser and the desktop app read it.
+    pub fn summary_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "ok": self.ok(),
+            "restore": self.restore,
+            "device": self.device,
+            "os": self.os,
+            "sha_stock": self.sha_stock,
+            "sha_image": self.sha_image,
+            "image_id": self.image_id_hex(),
+            // the runtime version the patch carries (a restore has none)
+            "runtime": (!self.restore).then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version())),
+            "pace_ms": PACE_MS,
+            "bytes": self.image.len(),
+            "ends": self.messages.iter().map(|m| m.end).collect::<Vec<_>>(),
+            "checks": self.checks.iter().map(|c| serde_json::json!({"name": c.name, "ok": c.ok, "detail": c.detail})).collect::<Vec<_>>(),
+        })
+    }
+}
+
 struct Checks(Vec<Check>);
 
 impl Checks {
@@ -188,6 +210,27 @@ pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result
     Ok(p)
 }
 
+/// `prepare` or `restore` for a checkout: the registry, the module library and the device files are read from `root` (the desktop app).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn prepare_in_repo(
+    root: &std::path::Path,
+    stock: &[u8],
+    restore_stock: bool,
+    set: &str,
+) -> Result<Prepared> {
+    let reg = Registry::from_dir(&root.join("devices/ports"))?;
+    if restore_stock {
+        return restore(stock, &reg);
+    }
+    // the patch set is `core/*` modules: their objects are committed, no content module is built
+    let fw = Firmware::parse(stock)?;
+    let device = known_port(&fw, stock, &reg)?.port.device.clone();
+    let roots = info_of(&device)?.patch_set(set)?.to_vec();
+    let mut lib = Library::scan_repo_for(root, false, Some(&roots))?;
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    prepare(stock, &reg, &lib, set)
+}
+
 /// The stock file itself, through the same checks (a way back from a patched image). It needs no patch and carries no record.
 pub fn restore(stock: &[u8], reg: &Registry) -> Result<Prepared> {
     let sfw = Firmware::parse(stock)?;
@@ -254,6 +297,7 @@ fn finish(image: Vec<u8>, reg: &Registry, mut cs: Checks, restore: bool) -> Resu
     }
     cs.run("product", product_check(&image, info));
     cs.run("build floor", floor_check(&image, info));
+    cs.run("DSP scan", dsp_scan(&image));
     let rt = cs.run("round trip", round_trip(&image, info));
     if rt.is_some() {
         messages = split(&image)?;
@@ -354,6 +398,15 @@ fn floor_of(word: [u8; 4], info: &DeviceInfo) -> Result<String> {
         )),
         None => Ok(format!("build {w:?}; {} has no build floor", info.short)),
     }
+}
+
+/// The DSP section (7) holds no store the SHARC+ ISA excludes (`dspscan`; the stock images have none).
+pub fn dsp_scan(image: &[u8]) -> Result<((), String)> {
+    let fw = Firmware::parse(image)?;
+    let dsp = fw
+        .section(7)
+        .ok_or_else(|| err!("the image has no DSP section (7)"))?;
+    Ok(((), crate::dspscan::check_section7(&dsp.data)?))
 }
 
 /// The device's build floor (`[patch] build_floor`), on the image's container.

@@ -84,6 +84,7 @@ fn a_dt2_patch_is_prepared_with_every_check_and_an_image_id() {
             "verify",
             "product",
             "build floor",
+            "DSP scan",
             "round trip",
             "image id"
         ]
@@ -143,7 +144,14 @@ fn a_stock_file_is_restored_through_the_same_checks() {
         let n: Vec<&str> = r.checks.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
             n,
-            ["stock", "verify", "product", "build floor", "round trip"]
+            [
+                "stock",
+                "verify",
+                "product",
+                "build floor",
+                "DSP scan",
+                "round trip"
+            ]
         );
     }
 }
@@ -297,4 +305,82 @@ fn a_container_read_back_from_flash_makes_the_image_again() {
         flash::image_from_flash(&in_flash, &p.image).unwrap(),
         p.image
     );
+}
+
+/// A same-DAG store (`DM(-16, I6) = I0`) after ten NOPs, as boot-stream bytes: the ISA does not have it, the silicon does not run it.
+fn bad_store_code() -> Vec<u8> {
+    let nops = "    NOP;\n".repeat(10);
+    patchkit::build::sharc_obj::boot_bytes_unchecked_for_tests(&format!(
+        ".SECTION/PM seg_pmco;\n_x:\n{nops}    DM(-16, I6) = I0;\n    RTS;\n"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_dsp_section_with_a_store_the_isa_does_not_have_is_refused() {
+    for f in [DT2, DN2] {
+        let Some(s) = stock(f) else { continue };
+        let clean = flash::check_image(s.clone(), reg()).unwrap();
+        let scan = clean.checks.iter().find(|c| c.name == "DSP scan").unwrap();
+        assert!(scan.ok, "{f}: {}", scan.detail);
+        let mut fw = Firmware::parse(&s).unwrap();
+        let mut dsp = patchkit::dsp::Stream::parse(fw.section(7).unwrap().data.clone()).unwrap();
+        // the first free address
+        let code = bad_store_code();
+        let mut last = None;
+        for a in (0x2001_0000..patchkit::dsp::L2_BOOT_LIMIT).step_by(0x1000) {
+            match dsp.append_block(a, &code) {
+                Ok(()) => {
+                    last = None;
+                    break;
+                }
+                Err(e) => last = Some(e),
+            }
+        }
+        if let Some(e) = last {
+            panic!("no free address in L2: {e}");
+        }
+        fw.replace(7, dsp.blob).unwrap();
+        let p = flash::check_image(fw.build(None).unwrap(), reg()).unwrap();
+        assert!(!p.ok());
+        let c = p.checks.iter().find(|c| c.name == "DSP scan").unwrap();
+        assert!(
+            !c.ok && c.detail.contains("DM store of I0 (DAG1)"),
+            "{f}: {}",
+            c.detail
+        );
+        assert!(p.messages.is_empty() || !p.ok());
+    }
+}
+
+#[test]
+fn the_summary_tiles_the_image_and_a_checkout_prepare_makes_the_same_image() {
+    let (Some(p), Some(s)) = (patched_dt2(), stock(DT2)) else {
+        return;
+    };
+    let j = p.summary_json();
+    assert_eq!(j["ok"], true);
+    assert_eq!(j["restore"], false);
+    assert_eq!(j["image_id"], p.image_id_hex().unwrap());
+    assert_eq!(
+        j["runtime"],
+        patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version())
+    );
+    // the message ends are the message ranges: a header, 128-byte data messages, a footer
+    let ends: Vec<usize> = j["ends"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e.as_u64().unwrap() as usize)
+        .collect();
+    assert_eq!(ends, p.messages.iter().map(|m| m.end).collect::<Vec<_>>());
+    assert_eq!((ends[0], *ends.last().unwrap()), (16, p.image.len()));
+    // the desktop app's entry reads the checkout and gives the image `prepare` gives
+    let r = flash::prepare_in_repo(&root(), &s, false, "device").unwrap();
+    assert_eq!(r.image, p.image);
+    assert_eq!(r.image_id, p.image_id);
+    let back = flash::prepare_in_repo(&root(), &s, true, "device").unwrap();
+    assert!(back.restore && back.ok());
+    assert_eq!(back.image, s);
+    assert_eq!(back.summary_json()["image_id"], serde_json::Value::Null);
 }

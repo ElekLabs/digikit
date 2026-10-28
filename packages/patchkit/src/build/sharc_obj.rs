@@ -677,7 +677,7 @@ const INDEXED_MEMORY_FORMS: [&str; 5] = ["3a", "3b", "3d", "15a", "15b"];
 /// be from the same DAG as Ia/Mb or Ic/Md"). Types 3a, 3b, 3d, 15a, 15b are checked; Type 14a, the direct-address store, is exempt, as is
 /// every other form. Loads take every register. The stock DSP image has not one store of the excluded kind (finding 49 section 10). The
 /// assembler and the emulator accept them; the silicon does not run them as written.
-fn ureg_class_problems(d: &Decoded, where_: &str) -> Vec<String> {
+pub(crate) fn ureg_class_problems(d: &Decoded, where_: &str) -> Vec<String> {
     if !INDEXED_MEMORY_FORMS.contains(&d.type_name) {
         return vec![];
     }
@@ -903,6 +903,11 @@ pub fn assemble(source: &str) -> Result<Obj> {
         obj.data_symbols.put(name, (sec, 0, true));
     }
     Ok(obj)
+}
+
+/// The boot-stream bytes of assembled `source`, whatever the ISA rules say (a test makes the stores the scan must find).
+pub fn boot_bytes_unchecked_for_tests(source: &str) -> Result<Vec<u8>> {
+    Ok(swap_parcels(&assemble(source)?.section))
 }
 
 /// The `.dko.json` object of an expanded source text: assembled, linked at a placeholder base with placeholder externs, every

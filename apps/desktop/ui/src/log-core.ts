@@ -1,6 +1,7 @@
 // The pure logic of the workbench Log drawer (no DOM, no Tauri): the entries and their cap, the filter, the badge, the copy text, the
 // rule that opens the drawer by itself, and the one-line texts of the events the app logs. Host tests: apps/desktop/ui/tests/log.test.ts.
 import type { ReloadReport } from '../../../web/src/runtime/reload.ts';
+import type { FirmwareRun } from '../../../web/src/firmware/env.ts';
 import type { TransferRun } from '../../../web/src/transfer/env.ts';
 import type { CardFolder } from './card-core.ts';
 import { shortFolder } from './card-core.ts';
@@ -154,6 +155,14 @@ export function firmwareEntry(f: FirmwareLoad): LogInput {
     text: `loaded ${f.name} · ${f.device} ${f.version} · ${runtime} · boot ${duration(f.ms)}`,
   };
 }
+
+/** One log entry for the Firmware page: a flash, a restore or a saved image (the result in the text, the end message as the detail). */
+export const flashEntry = (run: FirmwareRun): LogInput => ({
+  source: 'firmware',
+  level: run.level,
+  text: run.text,
+  ...(run.detail ? { detail: run.detail } : {}),
+});
 
 export const failureEntry = (source: LogSource, what: string, error: string): LogInput => ({
   source,

@@ -16,6 +16,11 @@ With `--patchkit BIN` the rig does not send the stream itself: after the panel s
 the patched image through the shared sender, compares the emulated flash with the image, waits for the restart and reads INFO. `--restore-after`
 then opens OS UPGRADE again on the patched image and runs `patchkit flash --restore` (the stock file back).
 
+With `--exec CMD` the rig runs CMD instead (arguments split like a shell, `{socket}` replaced by the control socket, `DIGI_FW_EMU_SOCKET` set), for
+example the Firmware page's own flash logic headless: the Vitest file apps/web/tests/firmware-emulator.test.ts, which reads the socket from
+`DIGI_FW_EMU_SOCKET` (`pnpm --filter @digi/web exec vitest run --root . --config ../../vitest.host.config.ts --project web-transfer FILE`).
+`--exec-restore CMD` then opens OS UPGRADE again and runs that.
+
 State words (MAIN OS receive state, finding 75): byte 0 = state (0 idle, 1 header seen, 2 receiving, 3 complete),
 +8 = announced message count, +0xc = messages taken, +0x10 = next sequence number.
 """
@@ -24,7 +29,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
+import shlex
 import subprocess
 import sys
 import time
@@ -140,6 +147,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="with --patchkit: after the flash, restore the stock file the same way",
     )
+    p.add_argument(
+        "--exec",
+        dest="exec_cmd",
+        help="command to run at the OS UPGRADE screen instead of sending the stream here; {socket} is the control socket",
+    )
+    p.add_argument(
+        "--exec-restore",
+        dest="exec_restore",
+        help="with --exec: open OS UPGRADE again after it and run this command",
+    )
     a = p.parse_args(argv)
 
     syx = pathlib.Path(a.syx or ROOT / "firmware" / SYX[a.device])
@@ -170,6 +187,32 @@ def main(argv: list[str] | None = None) -> int:
         if not a.no_open:
             rig.open_os_upgrade()
         print("waiting screen", rig.frame("1-waiting"), rig.state())
+        if a.exec_cmd:
+            runs = [("exec", a.exec_cmd)] + (
+                [("exec-restore", a.exec_restore)] if a.exec_restore else []
+            )
+            env = {**os.environ, "DIGI_FW_EMU_SOCKET": emu.path}
+            for n, (name, command) in enumerate(runs):
+                if n:
+                    rig.open_os_upgrade()
+                    print("waiting screen", rig.frame(f"{n + 1}-waiting-{name}"))
+                argv_run = [
+                    part.format(socket=emu.path) for part in shlex.split(command)
+                ]
+                t1 = time.monotonic()
+                done = subprocess.run(argv_run, cwd=ROOT, env=env)
+                print(
+                    name,
+                    "exit",
+                    done.returncode,
+                    "wall",
+                    round(time.monotonic() - t1, 1),
+                    "s",
+                )
+                print("after", name, rig.frame(f"{n + 1}-after-{name}"))
+                if done.returncode:
+                    return done.returncode
+            return 0
         if a.patchkit:
             stock = ROOT / "firmware" / SYX[a.device]
             runs = [("flash", [])] + (

@@ -29,6 +29,7 @@ pub mod dkmsynth;
 pub mod desc;
 pub mod dko;
 pub mod dsp;
+pub mod dspscan;
 pub mod explain;
 pub mod expr;
 pub mod link;

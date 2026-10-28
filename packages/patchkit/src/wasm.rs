@@ -133,6 +133,29 @@ pub fn sharc_object_json(input: &[u8]) -> Result<String> {
     crate::build::to_text(&crate::build::sharc::sharc_object(&text)?)
 }
 
+/// `flash::prepare` (the bundle's runtime set) or, with `restore`, `flash::restore`: the image to send and the summary JSON
+/// (`Prepared::summary_json`). A failed check is in the summary, not an error; the error is a file that is no known stock image.
+pub fn prepare_bundle(
+    stock: &[u8],
+    bundle: &[u8],
+    set: &str,
+    restore: bool,
+) -> Result<(Vec<u8>, String)> {
+    let (reg, lib) = load(bundle)?;
+    let p = if restore {
+        crate::flash::restore(stock, &reg)?
+    } else {
+        crate::flash::prepare(
+            stock,
+            &reg,
+            &lib,
+            if set.is_empty() { "device" } else { set },
+        )?
+    };
+    let json = p.summary_json().to_string();
+    Ok((p.image, json))
+}
+
 fn set(r: Result<(Vec<u8>, String)>) -> i32 {
     OUT.with(|o| {
         let mut o = o.borrow_mut();
@@ -283,6 +306,100 @@ pub unsafe extern "C" fn pk_verify(
         Ok((vec![], serde_json::to_string(&rep)?))
     });
     set(r)
+}
+
+/// Prepare a flash (see `prepare_bundle`): the image is in `pk_out_*`, the summary JSON in `pk_plan_*`. `set` names the patch set (empty:
+/// `device`); `restore` is 0 or 1.
+///
+/// # Safety
+/// The three ranges must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_prepare(
+    stock: *const u8,
+    stock_len: usize,
+    bundle: *const u8,
+    bundle_len: usize,
+    set: *const u8,
+    set_len: usize,
+    restore: i32,
+) -> i32 {
+    let (stock, bundle, set) = unsafe {
+        (
+            slice(stock, stock_len),
+            slice(bundle, bundle_len),
+            slice(set, set_len),
+        )
+    };
+    let set = String::from_utf8_lossy(set).to_string();
+    self::set(prepare_bundle(stock, bundle, &set, restore != 0))
+}
+
+// ---- the sender -------------------------------------------------------------------------------------------------------------
+
+thread_local! {
+    static SENDERS: RefCell<Vec<Option<crate::flash::Sender>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A sender for `total` messages (`flash::Sender`, the 2 ms pacing); its handle, to give to `pk_sender_next` and `pk_sender_free`.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_sender_new(total: usize) -> u32 {
+    SENDERS.with(|s| {
+        let mut s = s.borrow_mut();
+        let sender = crate::flash::Sender::new(total);
+        match s.iter().position(Option::is_none) {
+            Some(i) => {
+                s[i] = Some(sender);
+                i as u32
+            }
+            None => {
+                s.push(Some(sender));
+                s.len() as u32 - 1
+            }
+        }
+    })
+}
+
+/// The next step at the millisecond clock `now_ms` (any monotonic clock; it wraps at 2^32 ms): 0 or more is `Send(i)` (message `i`
+/// goes out now), `-1` is `Done`, `-2` is `Aborted` (also an unknown handle), and `-3 - ms` is `Wait(ms)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_sender_next(handle: u32, now_ms: f64) -> i32 {
+    SENDERS.with(|s| match s.borrow_mut().get_mut(handle as usize) {
+        Some(Some(sender)) => match sender.next(now_ms as u64) {
+            crate::flash::Step::Send(i) => i as i32,
+            crate::flash::Step::Done => -1,
+            crate::flash::Step::Aborted => -2,
+            crate::flash::Step::Wait(ms) => -3 - ms.min(1 << 20) as i32,
+        },
+        _ => -2,
+    })
+}
+
+/// An output error: the sender stops for good (every later `pk_sender_next` is `-2`).
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_sender_fail(handle: u32) {
+    SENDERS.with(|s| {
+        if let Some(Some(sender)) = s.borrow_mut().get_mut(handle as usize) {
+            sender.fail();
+        }
+    });
+}
+
+/// Messages handed out so far.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_sender_sent(handle: u32) -> usize {
+    SENDERS.with(|s| match s.borrow().get(handle as usize) {
+        Some(Some(sender)) => sender.sent(),
+        _ => 0,
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_sender_free(handle: u32) {
+    SENDERS.with(|s| {
+        if let Some(slot) = s.borrow_mut().get_mut(handle as usize) {
+            *slot = None;
+        }
+    });
 }
 
 macro_rules! getter {

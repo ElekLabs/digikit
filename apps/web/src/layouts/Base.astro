@@ -9,7 +9,7 @@ import '../styles/site.css';
 interface Props {
   title: string;
   description?: string;
-  active?: 'home' | 'patch' | 'emulator' | 'transfer';
+  active?: 'home' | 'firmware' | 'emulator' | 'transfer';
   /** The page fills the window instead of scrolling (the emulator). */
   fill?: boolean;
 }
@@ -42,8 +42,8 @@ const current = (page: Props['active']) => (active === page ? 'page' : undefined
           digikit
         </a>
         <nav class="nav-links" aria-label="Main">
-          <a href={`${base}patch/`} aria-current={current('patch')}>
-            Patch
+          <a href={`${base}firmware/`} aria-current={current('firmware')}>
+            Firmware
           </a>
           <a href={`${base}emulator/`} aria-current={current('emulator')}>
             Emulator

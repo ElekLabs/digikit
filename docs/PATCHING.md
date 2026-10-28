@@ -234,13 +234,13 @@ that is how a new firmware shows which rules need work. A firmware without a por
 ### Web gallery
 
 ```sh
-mise run web          # builds the browser core and patchkit.wasm, generates the module bundle, serves http://localhost:4321 (home; the emulator is /emulator/, patching /patch/)
+mise run web          # builds the browser core and patchkit.wasm, generates the module bundle, serves http://localhost:4321 (home; the emulator is /emulator/, patching and flashing /firmware/, modules /transfer/)
 ```
 
-Open `/patch`. Drop your own `.syx` on the page (it is read in the browser and never uploaded), pick modules, patch,
-check the result and download it. Required modules are added automatically; conflicts and incompatible firmware are
-explained with patchkit's own error text. "Boot in emulator" starts the patched image in the browser core (screen and
-controls, no DSP audio yet). The page reads module.toml and `gallery/icon.svg` at build time. `patchkit.wasm` reads
+Open `/firmware/`. Choose your own stock `.syx` (it is read in the browser and never uploaded): the page patches the runtime set
+in, checks the image and offers it as a download, flashes it over Web MIDI, or restores the stock file. "Run in emulator"
+starts the patched image in the browser core (screen and controls, no DSP audio yet). Machines and effects are installed over USB on
+`/transfer/`. The page reads module.toml at build time. `patchkit.wasm` reads
 `public/modules/bundle.json`, which `apps/web/scripts/gen-modules.mjs` generates from the committed `modules/` and
 `devices/ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.test.mjs`). The
 first `mise run web` in a fresh tree compiles the browser cores and takes several minutes.
@@ -475,8 +475,17 @@ uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx -
 ```
 
 It prints the checks, then the steps for the device (power adapter, SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX, the cable stays in) and
-waits for the word `flash`. The OS UPGRADE screen asks no YES (finding 75). The section 7 ISA scan of `patch:preflight` is not part of it: write the
-image with `--save` and run `mise run patch:preflight` on it first. The browser and the desktop app will use the same core (plan step 6d).
+waits for the word `flash`. The OS UPGRADE screen asks no YES (finding 75). The section 7 ISA scan (`packages/patchkit/src/dspscan.rs`) is one of the checks
+(the same scan `patchkit preflight` runs; `patchkit isa-scan X.syx` lists what it finds).
+
+**The Firmware page** (the site's `/firmware/` and the Firmware item of the workbench) is the same flash in six steps: the stock file, the checks, the
+device (the MIDI port, its model and OS), what to do on the device (with the recovery steps), Flash with a progress bar and Cancel, and the verdict after
+the restart (runtime and image id, or for "Restore stock" the stock OS and no runtime). Flash is on only when every check passed, the device is the
+image's model, and the box "The device shows WAITING FOR SYSEX" is ticked. The page code is `apps/web/src/firmware/` (rules in `firmware-core.ts`, the run
+in `firmware-flow.ts`); the checks and the 2 ms sender are the Rust ones (`patchkit.wasm` in the browser, `patchkit::flash` in process in the app).
+Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.test.ts`, `firmware-kit.test.mjs` (the wasm image equals `patchkit flash --save`), and
+`firmware-emulator.test.ts`, which runs the page's flash against an emulated device (`tools/emulator/os_upgrade_rig.py ... --exec`, finding 75).
+Screenshots of both apps: `node tools/devtools/firmware_shots.mjs --app web|desktop`.
 
 **Flashing with Transfer** (Em's description of the Transfer route; the screens were not checked here):
 
@@ -712,7 +721,7 @@ All three `PREFLIGHT OK` (sections 3 and 7 differ from stock, nothing else); 1,8
 Emulator (scenarios `rung-c3d1`, `rung-c3d2`, `rung-c3d3`, full tier): see "Emulator proof" below. The emulator accepts the excluded stores, so d1 does not halt there; a pass in the emulator says the
 variants keep the path working, not that the cause is found.
 
-**Build** (a module build with a store the ISA does not allow fails, and `mise run patch:preflight` scans section 7 for them: `tools/patchkit/pk_isacheck.py`; d1 can no longer be built, the old image shows 17):
+**Build** (a module build with a store the ISA does not allow fails, and `patchkit preflight` and every `patchkit flash` check scan section 7 for them: `packages/patchkit/src/dspscan.rs`; d1 can no longer be built, the old image shows 17):
 
 ```sh
 for v in d2:DV_C3_FINE d3:DV_C3_FINE,DV_C3_DEEP; do

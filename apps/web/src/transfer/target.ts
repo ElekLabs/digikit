@@ -121,3 +121,22 @@ export function resetSession(): void {
 export function cancelPending(): void {
   sessions.cancel(targetKey(target()));
 }
+
+/**
+ * The transport of the selected MIDI port, opened if it is not (the Firmware page sends its messages through it, one by one, without the
+ * session). The port is the target's: a request of the session in the meantime would mix its reply with the page's.
+ */
+export async function portTransport(): Promise<DkTransport> {
+  const t = target();
+  if (t.kind !== 'midi') throw new Error('No MIDI port is selected.');
+  await sessionOf(t);
+  return transports.get(targetKey(t)) as DkTransport;
+}
+
+/** Let go of the selected MIDI port (the device restarts): the next request opens it again, and fails while it is not there. */
+export async function releasePort(): Promise<void> {
+  const t = target();
+  if (t.kind !== 'midi') return;
+  await transferEnv().targets.close?.(t);
+  portLost(t.port);
+}

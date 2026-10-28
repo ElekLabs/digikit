@@ -346,7 +346,7 @@ description = "Apply modules to a stock firmware: mise run patch -- --firmware X
 
 [tasks."patch:preflight"]
 run = "uv run python -m tools.patchkit.patchkit preflight"
-description = "Before flashing: mise run patch:preflight -- out/patch/X.syx (known stock base, sections 2/4/5/8 identical, checksum, HMAC, limits; exit 1 on failure)"
+description = "Before flashing: mise run patch:preflight -- out/patch/X.syx (known stock base, sections 2/4/5/8 identical, checksum, HMAC, limits, DSP section scan; exit 1 on failure)"
 
 [tasks."patch:inject"]
 run = "uv run python -m tools.patchkit.patchkit inject"

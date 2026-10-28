@@ -42,6 +42,78 @@ export interface PatchResult {
   sha256: string;
 }
 
+/** One check of a flash (`flash::Check`): `name` is the id the interface labels. */
+export interface FlashCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+/** `flash::Prepared::summary_json` and the image: what is checked and what would be sent. */
+export interface PreparedFlash {
+  /** Every check passed and there is something to send. */
+  ok: boolean;
+  restore: boolean;
+  /** `dt2` or `dn2`. */
+  device: string;
+  /** The OS version of the stock image (`1.17`). */
+  os: string;
+  shaStock: string;
+  shaImage: string;
+  /** The id the runtime's INFO reports after the flash (16 hex digits); null for a restore. */
+  imageId: string | null;
+  /** The runtime version the patch carries (`0.5.2`); null for a restore. */
+  runtime: string | null;
+  paceMs: number;
+  checks: FlashCheck[];
+  /** End offset of each message in `image` (the first message starts at 0). */
+  ends: number[];
+  image: Uint8Array;
+}
+/** `flash::Prepared::summary_json`, as the Rust side writes it (the desktop app gets the same JSON from its Tauri command). */
+export interface FlashSummary {
+  ok: boolean;
+  restore: boolean;
+  device: string;
+  os: string;
+  sha_stock: string;
+  sha_image: string;
+  image_id: string | null;
+  runtime: string | null;
+  pace_ms: number;
+  ends: number[];
+  checks: FlashCheck[];
+}
+
+export function preparedFromSummary(j: FlashSummary, image: Uint8Array): PreparedFlash {
+  return {
+    ok: j.ok,
+    restore: j.restore,
+    device: j.device,
+    os: j.os,
+    shaStock: j.sha_stock,
+    shaImage: j.sha_image,
+    imageId: j.image_id,
+    runtime: j.runtime,
+    paceMs: j.pace_ms,
+    checks: j.checks,
+    ends: j.ends,
+    image,
+  };
+}
+
+/** What the sender wants next (`flash::Step`). */
+export type SenderStep =
+  { kind: 'send'; index: number } | { kind: 'wait'; ms: number } | { kind: 'done' } | { kind: 'aborted' };
+/** `flash::Sender` (the 2 ms pacing), in the wasm module. */
+export interface FlashSender {
+  /** The next step at the millisecond clock `nowMs` (any monotonic clock). `send` counts the message as sent. */
+  next(nowMs: number): SenderStep;
+  /** An output error: the sender stops for good. */
+  fail(): void;
+  sent(): number;
+  free(): void;
+}
+
 interface Exports {
   memory: WebAssembly.Memory;
   pk_alloc(n: number): number;
@@ -49,6 +121,12 @@ interface Exports {
   pk_apply(...a: number[]): number;
   pk_check(...a: number[]): number;
   pk_verify(...a: number[]): number;
+  pk_prepare(...a: number[]): number;
+  pk_sender_new(total: number): number;
+  pk_sender_next(handle: number, nowMs: number): number;
+  pk_sender_fail(handle: number): void;
+  pk_sender_sent(handle: number): number;
+  pk_sender_free(handle: number): void;
   pk_out_ptr(): number;
   pk_out_len(): number;
   pk_plan_ptr(): number;
@@ -101,6 +179,39 @@ export class PatchKit {
     } finally {
       this.free(m);
     }
+  }
+
+  /**
+   * `flash::prepare` (the bundle's patch set, `device` by default) or, with `restore`, `flash::restore`: the checked image and the facts the
+   * Firmware page shows. A failed check is in `checks` (and `ok` is false). Throws patchkit's text for a file that is no known stock image.
+   */
+  prepare(stock: Uint8Array, restore: boolean, set = ''): PreparedFlash {
+    const m = [this.put(stock), this.put(this.bundle), this.put(new TextEncoder().encode(set))];
+    try {
+      if (this.x.pk_prepare(m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1], restore ? 1 : 0) !== 0) this.fail();
+      const image = this.get(this.x.pk_out_ptr(), this.x.pk_out_len());
+      return preparedFromSummary(JSON.parse(this.plan()), image);
+    } finally {
+      this.free(m);
+    }
+  }
+
+  /** A sender for `total` messages: the Rust `flash::Sender`, so the pacing has one source of truth. Call `free` when done. */
+  sender(total: number): FlashSender {
+    const x = this.x;
+    const h = x.pk_sender_new(total);
+    return {
+      next(nowMs) {
+        const r = x.pk_sender_next(h, nowMs);
+        if (r >= 0) return { kind: 'send', index: r };
+        if (r === -1) return { kind: 'done' };
+        if (r === -2) return { kind: 'aborted' };
+        return { kind: 'wait', ms: -3 - r };
+      },
+      fail: () => x.pk_sender_fail(h),
+      sent: () => x.pk_sender_sent(h),
+      free: () => x.pk_sender_free(h),
+    };
   }
 
   /** Apply the modules (patchkit orders them) and verify the result against the stock image. Throws patchkit's error text. */

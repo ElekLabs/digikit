@@ -5,6 +5,7 @@ import { listingChanged } from '../../../web/src/transfer/refresh-core';
 import { setTransferEnv, type SamplesSlot, type TransferEnv } from '../../../web/src/transfer/env';
 import { target, targetLabel, type Target } from '../../../web/src/transfer/target';
 import { failureLine } from '../../../web/src/transfer/wait-core';
+import './desktop-firmware';
 import { bumpCardRefresh } from './card-state';
 import { EmuUsbTransport, emulatorMode } from './desktop-transport';
 import { logInput } from './log-state';

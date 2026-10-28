@@ -4,6 +4,7 @@ import { For, type JSX } from 'solid-js';
 import { connectionView } from './connection-core';
 import { connection } from './connection-state';
 import { target, targetLabel } from './target';
+import './connection-badge.css';
 
 export default function ConnectionBadge(): JSX.Element {
   const view = () => connectionView(connection(), targetLabel(target()));

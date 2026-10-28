@@ -12,8 +12,8 @@ export interface DeviceFacts {
   name: string;
   /** The firmware version, when the app knows it (INFO does not carry it). */
   os?: string;
-  /** The runtime version, `0.5.2`. */
-  runtime: string;
+  /** The runtime version, `0.5.2`; left out for a device that has no runtime (the stock firmware: the Firmware page). */
+  runtime?: string;
 }
 
 export type Connection =
@@ -90,8 +90,14 @@ export interface ConnectionView {
 export function connectionView(c: Connection, port: string): ConnectionView {
   if (c.state === 'connected') {
     const d = c.device;
-    const parts = [d.name, ...(d.os ? [`OS ${d.os}`] : []), `runtime ${d.runtime}`, `id ${shortId(d.id)}`, port];
-    const full = [d.name, ...(d.os ? [`OS ${d.os}`] : []), `runtime ${d.runtime}`, `id ${d.id}`, port];
+    const os = d.os ? [`OS ${d.os}`] : [];
+    const parts = [
+      d.name,
+      ...os,
+      ...(d.runtime ? [`runtime ${d.runtime}`, `id ${shortId(d.id)}`] : ['no runtime']),
+      port,
+    ];
+    const full = [d.name, ...os, ...(d.runtime ? [`runtime ${d.runtime}`, `id ${d.id}`] : ['no runtime']), port];
     return { state: c.state, label: 'Connected', parts, title: full.join(' · ') };
   }
   if (c.state === 'connecting') {

@@ -26,6 +26,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   verify  OUT.syx [--base X.syx]         re-decode and check an image
   preflight OUT.syx                      before flashing: known stock base, sections 2/4/5/8 identical, checksum, HMAC, limits;
                                          exit 1 on any failure (stock files are looked up in firmware/ by sha256)
+  isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
   pack    MODULE_ID -o OUT.dkm [--name N] [--runtime-min V] [--device SHORT]   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
@@ -500,6 +501,27 @@ plan.json {}",
                 std::process::exit(1);
             }
             println!("PREFLIGHT OK: {path}");
+        }
+        "isa-scan" => {
+            let fw = Firmware::parse(&read(need(rest)?)?)?;
+            let dsp = fw
+                .section(7)
+                .ok_or_else(|| Error("the image has no DSP section (7)".into()))?;
+            if rest.iter().any(|a| a == "--list") {
+                // every scanned instruction (comparison aid)
+                for l in patchkit::dspscan::list(&dsp.data)? {
+                    println!("{l}");
+                }
+                return Ok(());
+            }
+            let found = patchkit::dspscan::scan(&dsp.data)?;
+            for f in &found {
+                println!("{f}");
+            }
+            println!("{} store(s)", found.len());
+            if !found.is_empty() {
+                std::process::exit(1);
+            }
         }
         "rebuild" => {
             let fw = Firmware::parse(&read(need(rest)?)?)?;

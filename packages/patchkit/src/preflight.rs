@@ -284,6 +284,13 @@ pub fn preflight(
         }
         Err(e) => o.fail(format!("verify: {e}")),
     }
+    match fw.section(7) {
+        Some(dsp) => match crate::dspscan::check_section7(&dsp.data) {
+            Ok(t) => o.ok(format!("ISA check: {t}")),
+            Err(e) => o.fail(format!("ISA check: {e}")),
+        },
+        None => o.fail("ISA check: the image has no DSP section (7)"),
+    }
     o.ok(format!("sha256 patched {}", fw.syx_sha256));
     o.ok(format!("sha256 base    {}", base.syx_sha256));
     o

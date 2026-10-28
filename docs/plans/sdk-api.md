@@ -212,10 +212,10 @@ child processes.
             and `--restore`. USB only for now.
       - [x] Image id: the runtime's INFO reports an id of the flashed image (set by patchkit), checked
             after the reboot.
-      - [ ] One step UI (Firmware page) for the desktop (midir) and the web (`patchkit.wasm` + WebMIDI);
+      - [x] One step UI (Firmware page) for the desktop (midir) and the web (`patchkit.wasm` + WebMIDI);
             the web Patch page becomes Firmware. Recovery steps shown first; device match before
             flashing. No emulator boot before flashing (decided 2026-10-28).
-      - [ ] Proof: unit tests of every check (tampered, wrong device, oversize); a full flash through
+      - [x] Proof: unit tests of every check (tampered, wrong device, oversize); a full flash through
             the shared sender into the emulated DT2 and DN2 (tools/emulator/os_upgrade_rig.py), the
             flash compared with the image, the emulator boots the patched runtime and INFO's id
             matches; screenshots. The Python dkflash design (device-bridge.md section 3) is replaced.
