@@ -134,6 +134,9 @@ BI_FIELDS = [
     "loaded",
     "ui_reached",
 ]
+# The stable period the proof's records carry (DSP blocks of 64 samples at 48 kHz; the runtime's default is 30 s): short, so that the
+# UI loop clears the boot counter within the settle time.
+STABLE_BLOCKS = 300
 SETTLE_MS = int(
     os.environ.get("DIGIKIT_SETTLE_MS", "1500")
 )  # emulated ms the first UI-loop passes run before a scenario looks (wait_dsp then waits for a module's DSP part)
@@ -802,6 +805,8 @@ class Proof:
         self.watch_totals = {"emulators": 0, "write_events": 0, "flush_hits": 0}
         self.store_writes: set[int] = set()
         self.mods: list[str] = []
+        # DSP voice rows: test/sine; on DN2 also test/dyn-dn2 (it carries the DSP of test/sine)
+        self.voices = 1 if self.dt2 else 2
         self.run_img: Img | None = None
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
@@ -849,7 +854,7 @@ class Proof:
     def equiv(self) -> None:
         e = self.env
         trig = M.TRIG_FRAME if self.dt2 else M.TRIG_FRAME_DN2
-        card = e.card(self.mods, tag="equiv")
+        card = e.card(self.mods, tag="equiv", stable_blocks=STABLE_BLOCKS)
         with self.rig(self.run_img, card, "equiv") as run:
             n = len(self.mods)
             info = run.boot_info()
@@ -870,16 +875,17 @@ class Proof:
                 str(rec),
             )
             used = [r for r in run.voice_rows() if r[0] != FREE_TYPE]
-            # DT2: the machine type of test/sine, assigned at load; DN2: the voice row is test/sine's (the other machine has none)
+            # DT2: the machine type of test/sine, assigned at load; DN2: a voice row for each of test/dyn-dn2 and test/sine
             mach = (
                 run.dyn_type(M.MODULE, M.MACHINE)
                 if self.dt2
                 else run.dyn_type("test/dyn-dn2", "dyn_pluck")
             )
             vtype = mach if self.dt2 else run.dyn_type("test/sine", "sine")
+            want_types = {mach} if self.dt2 else {mach, vtype}
             self.check(
-                "the voice row of the DSP module is claimed",
-                len(used) == 1 and used[0][0] == vtype,
+                "the voice rows of the DSP modules are claimed",
+                len(used) == self.voices and {r[0] for r in used} == want_types,
                 str([(hex(a), hex(b)) for a, b in used]),
             )
             idx = self.mods.index("modules/m1.dkm")
@@ -913,14 +919,18 @@ class Proof:
     def restart(self) -> None:
         e = self.env
         n = len(self.mods)
-        with self.rig(self.run_img, e.card(None, tag="restart"), "restart") as rig:
+        with self.rig(
+            self.run_img,
+            e.card([], tag="restart", stable_blocks=STABLE_BLOCKS),
+            "restart",
+        ) as rig:
             b0 = rig.boot_info()
             self.check(
-                "a card with no record boots with no module",
+                "a card with an empty selection boots with no module",
                 b0["count"] == 0
                 and b0["loaded"] == 0
                 and b0["safe"] == 0
-                and b0["seq"] == 0,
+                and b0["seq"] == 1,
             )
             self.check(
                 "the mailbox selection answers 0", rig.set_selection(self.mods) == 0
@@ -931,7 +941,7 @@ class Proof:
                 recs[0] == recs[1]
                 and recs[0] is not None
                 and recs[0]["paths"] == self.mods
-                and recs[0]["seq"] == 1,
+                and recs[0]["seq"] == 2,
                 str(recs),
             )
             rig.restart()
@@ -939,11 +949,13 @@ class Proof:
             self.report["restart_boot"] = b1
             self.check(
                 "the next boot loads it",
-                b1["loaded"] == n and b1["results"] == [0] * n and b1["seq"] == 1,
+                b1["loaded"] == n and b1["results"] == [0] * n and b1["seq"] == 2,
                 str(b1["results"]),
             )
             rows = [r for r in rig.voice_rows() if r[0] != FREE_TYPE]
-            self.check("its voice row is claimed", len(rows) == 1, str(rows))
+            self.check(
+                "its voice rows are claimed", len(rows) == self.voices, str(rows)
+            )
             rec = current(rig.sel_records())
             self.check(
                 "the UI loop of the new boot cleared the counter",
