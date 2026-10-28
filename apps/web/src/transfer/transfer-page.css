@@ -1,0 +1,620 @@
+/* The Transfer page (TransferPage.tsx, ModulesMode.tsx, and in the desktop app SamplesMode.tsx): fills the content area next to the sidebar. Tokens from the site (apps/web/src/styles/site.css). */
+.transfer-page {
+  /* surfaces of the page; the site maps them to its tokens (transfer-site.css) */
+  --tp-bg: #0f1012;
+  --tp-border: #2c2f35;
+  --tp-inset: #101214;
+  --tp-bar: #121316;
+  --tp-wait: #16181c;
+  --tp-bar-line: #222428;
+  --tp-track: #1d1f23;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 0;
+  overflow: hidden;
+  background: var(--tp-bg);
+  color: var(--ink, #eceae5);
+  font-size: 13px;
+}
+/* a pane is an explorer list: it takes the keys (Cmd+A, Esc, arrows), the marquee is drawn in it, and the rows that are dragged to it light it up */
+.transfer-page .col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  /* the frame of a drop target is the pane's own border: an outline would pass under the sticky header */
+  border: 2px dashed transparent;
+  border-radius: 8px;
+  margin: -2px;
+}
+.transfer-page .col > * {
+  flex: none;
+}
+/* the list fills the rest of the pane, so that there is always empty space to start a marquee in */
+.transfer-page .col > .listarea {
+  flex: 1 0 auto;
+  min-height: 120px;
+  padding-bottom: 32px;
+}
+.transfer-page .col.over {
+  border-color: var(--amber, #f3b52c);
+  background: rgba(243, 181, 44, 0.05);
+}
+.transfer-page .col.over .colhead {
+  background: #1a1813;
+}
+.transfer-page .marquee {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid var(--amber, #f3b52c);
+  background: rgba(243, 181, 44, 0.13);
+}
+.transfer-page .head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.transfer-page h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.transfer-page h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2, #a9adb4);
+}
+.transfer-page h4 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--ink-2, #a9adb4);
+}
+.transfer-page .sp {
+  flex: 1;
+}
+.transfer-page .meta,
+.transfer-page .dim,
+.transfer-page .drop,
+.transfer-page .tests {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3, #868b94);
+}
+.transfer-page .colhead {
+  /* the header stays at the top of its pane while the rows scroll under it */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding-bottom: 8px;
+  margin-bottom: 0;
+  background: var(--tp-bg);
+}
+.transfer-page .colhead h3 {
+  margin: 0;
+}
+/* the heading with its select-all box stays together at the top left; the buttons wrap as a group, right-aligned */
+.transfer-page .colhead .hl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+}
+.transfer-page .colhead .acts {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 12px;
+}
+.transfer-page input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--amber, #f3b52c);
+}
+.transfer-page .empty {
+  margin: 0;
+  color: var(--ink-3, #868b94);
+}
+.transfer-page .rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-block: 1px solid var(--line, #24262b);
+}
+.transfer-page .rows li {
+  /* always one line: tick, name with its tags (the name gives way), version, state, size */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--line, #24262b);
+  scroll-margin-top: 44px;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+  container-type: inline-size;
+}
+.transfer-page .rows li:last-child {
+  border-bottom: 0;
+}
+/* a selected row (the tick is the selection); grey when the pane does not have the keyboard */
+.transfer-page .rows li.sel {
+  background: rgba(243, 181, 44, 0.16);
+}
+.transfer-page .col:not(:focus-within) .rows li.sel {
+  background: rgba(255, 255, 255, 0.08);
+}
+/* a folder that the dragged rows would land in */
+.transfer-page .rows li.dropon {
+  background: rgba(243, 181, 44, 0.3);
+  box-shadow: inset 0 0 0 2px var(--amber, #f3b52c);
+}
+.transfer-page .rows li[draggable='true'] {
+  -webkit-user-drag: element;
+}
+.transfer-page .rows.uprows {
+  border-bottom: 0;
+}
+.transfer-page .rows li.uprow {
+  cursor: pointer;
+  color: var(--ink-2, #a9adb4);
+}
+.transfer-page .rows .upbtn {
+  color: inherit;
+  cursor: pointer;
+}
+.transfer-page .rows li.uprow:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+/* the picture that follows the pointer while rows are dragged (an element of the page body, set by pane-select.ts) */
+.dragchip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: #f3b52c;
+  color: #1d1403;
+  font: 500 12px var(--font-mono, monospace);
+}
+.transfer-page .rows .tick {
+  width: 14px;
+  flex: none;
+}
+.transfer-page .rows .name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.transfer-page .rows .nm {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transfer-page .rows .vers {
+  flex: none;
+  min-width: 6ch;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--ink-3, #868b94);
+}
+.transfer-page .rows .size {
+  flex: none;
+  min-width: 9ch;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--ink-3, #868b94);
+  font-variant-numeric: tabular-nums;
+}
+/* the small labels after a name */
+.transfer-page .rtag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--ink-3, #868b94);
+  background: #1a1c20;
+}
+.transfer-page .rtag.ok {
+  color: #7be3a1;
+  background: #0f2418;
+}
+.transfer-page .rtag.warn {
+  color: #f0b35a;
+  background: #2a2010;
+}
+.transfer-page .fitline {
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--ink-3, #868b94);
+  background: #1a1c20;
+}
+.transfer-page .fitline.ok {
+  color: #7be3a1;
+  background: #0f2418;
+}
+.transfer-page .fitline.warn {
+  color: #f0b35a;
+  background: #2a2010;
+}
+.transfer-page .check {
+  flex: none;
+  font-size: 10.5px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.transfer-page .check.ok {
+  color: #7be3a1;
+  background: #0f2418;
+}
+.transfer-page .check.bad {
+  color: #ffb4ab;
+  background: #2a1210;
+}
+.transfer-page .err {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #ffc1bc;
+  background: rgba(255, 139, 130, 0.12);
+}
+/* "Waiting for <target>…" with Cancel (WaitNotice.tsx) */
+.transfer-page .wait {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--ink-2, #a9adb4);
+  background: var(--tp-wait);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.transfer-page .err .msg {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre-line;
+}
+.transfer-page .act,
+.transfer-page .mini {
+  border: 1px solid var(--tp-border);
+  background: #1a1c20;
+  color: var(--ink, #eceae5);
+  border-radius: 7px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.transfer-page .act {
+  height: 30px;
+  padding-inline: 12px;
+}
+.transfer-page .act.small {
+  height: 26px;
+  font-size: 12px;
+}
+.transfer-page .mini {
+  height: 24px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.transfer-page .act.primary {
+  background: var(--amber, #f3b52c);
+  border-color: var(--amber, #f3b52c);
+  color: var(--amber-ink, #1d1403);
+}
+.transfer-page .act:hover:not(:disabled),
+.transfer-page .mini:hover:not(:disabled) {
+  background: #23262b;
+}
+.transfer-page .act.primary:hover:not(:disabled) {
+  background: var(--amber-hover, #ffc444);
+}
+.transfer-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* the progress bar along the bottom: a line (what is going on; percent, speed, time left) over a thick track */
+.transfer-page .bar {
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  margin: auto -20px 0;
+  padding: 10px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--tp-bar);
+  border-top: 1px solid var(--tp-bar-line);
+}
+.transfer-page .barline {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.transfer-page .barline .msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink, #eceae5);
+}
+.transfer-page .barline .stats {
+  flex: none;
+  color: var(--ink-2, #a9adb4);
+  font-variant-numeric: tabular-nums;
+}
+.transfer-page progress {
+  appearance: none;
+  border: 0;
+  background: var(--tp-track);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.transfer-page progress::-webkit-progress-bar {
+  background: var(--tp-track);
+}
+.transfer-page progress::-webkit-progress-value {
+  background: var(--amber, #f3b52c);
+  transition: width 0.15s ease;
+}
+.transfer-page progress.global {
+  width: 100%;
+  height: 12px;
+}
+.transfer-page progress.global::-webkit-progress-value {
+  background: #35c47a;
+}
+.transfer-page progress.global.failed::-webkit-progress-value {
+  background: #e5594d;
+}
+/* a file's upload bar, inline in its row (the speed shows when the row is wide, else in the tooltip) */
+.transfer-page .up {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-2, #a9adb4);
+}
+.transfer-page .up progress {
+  width: 90px;
+  height: 8px;
+}
+.transfer-page .up .pct {
+  min-width: 4ch;
+  text-align: right;
+}
+.transfer-page .up .rate {
+  display: none;
+  min-width: 8ch;
+  color: var(--ink-3, #868b94);
+}
+@container (min-width: 520px) {
+  .transfer-page .up .rate {
+    display: inline;
+  }
+}
+.transfer-page .check.idle {
+  color: var(--ink-2, #a9adb4);
+  background: var(--tp-track);
+}
+.transfer-page .log {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 140px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: var(--tp-inset);
+  color: var(--ink-2, #a9adb4);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+.transfer-page .act.danger {
+  background: #4a1713;
+  border-color: #e5594d;
+  color: #ffb4ab;
+}
+/* the device line under the On device heading, and the folder paths */
+.transfer-page .devhead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+/* Modules mode: the storage line takes a line of its own under the device line */
+.transfer-page .devhead .storage {
+  flex-basis: 100%;
+}
+.transfer-page .crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.transfer-page .crumbs .mini[aria-current] {
+  color: var(--amber, #f3b52c);
+}
+.transfer-page .newfolder {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.transfer-page .newfolder input {
+  flex: 1;
+  height: 26px;
+  padding-inline: 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 7px;
+  background: var(--tp-inset);
+  color: var(--ink, #eceae5);
+  font: inherit;
+}
+.transfer-page .rows .nm.dir {
+  color: var(--amber, #f3b52c);
+}
+.transfer-page .tests {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.transfer-page .note {
+  margin-top: 8px;
+  font-size: 12px;
+}
+/* a narrow pane (the window at its minimum): the version and the grey tags give way so that names stay readable; a bar shrinks */
+@container (max-width: 430px) {
+  .transfer-page .rows .vers,
+  .transfer-page .rows .rtag.dim {
+    display: none;
+  }
+  .transfer-page .up progress {
+    width: 44px;
+  }
+  .transfer-page .rows li:has(.up, .check) .size {
+    display: none;
+  }
+  .transfer-page .rows .rtag {
+    max-width: 11ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .transfer-page .rows .nm {
+    min-width: 7ch;
+  }
+}
+
+/* a small link-like button in a row ("Source") */
+.transfer-page .rowlink {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-2, #a9adb4);
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.transfer-page .rowlink:hover {
+  color: var(--amber, #f3b52c);
+}
+/* the source panel (SourcePanel.tsx): over the right side of the page; the whole page when it is narrow */
+.transfer-page .source {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 100%);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--tp-bg);
+  border-left: 1px solid var(--tp-border);
+  box-shadow: -12px 0 24px rgba(0, 0, 0, 0.35);
+}
+.transfer-page .sourcehead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.transfer-page .sourcehead h3 {
+  margin: 0;
+}
+.transfer-page .sourcefiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.transfer-page .sourcefiles button {
+  padding: 2px 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2, #a9adb4);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.transfer-page .sourcefiles button.on {
+  color: var(--amber-ink, #1d1403);
+  background: var(--amber, #f3b52c);
+  border-color: var(--amber, #f3b52c);
+}
+.transfer-page .sourcetext {
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--tp-inset);
+  color: var(--ink, #eceae5);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
+}
+
+/* a narrow window: the connection badge takes its own line under the title, its parts wrap from the left (it would push the title up and the columns down at random) */
+@media (max-width: 760px) {
+  .transfer-page .head .sp {
+    display: none;
+  }
+  .transfer-page .head .conn {
+    order: 5;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

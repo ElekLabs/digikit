@@ -8,9 +8,9 @@ import { panels } from '@web/data/faceplates';
 import type { DkSession, RemoteState } from '@digi/dk-session';
 import { deviceOfPort, remoteNotice, remoteRuntime } from './remote-core';
 import SidePanels from './SidePanels';
-import TargetSelect from './TargetSelect';
-import { cancelPending, resetSession, session, target, targetLabel } from './target';
-import { failureLine } from './wait-core';
+import TargetSelect from '@web/transfer/TargetSelect';
+import { cancelPending, resetSession, session, target, targetLabel } from '@web/transfer/target';
+import { failureLine } from '@web/transfer/wait-core';
 import './remote-page.css';
 
 const SCREEN_MS = { emulator: 250, midi: 400 };
@@ -39,7 +39,7 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
         const shot = await s.screen();
         live?.showFrame(shot);
         setScreenError('');
-        await new Promise((r) => setTimeout(r, SCREEN_MS[t.kind]));
+        await new Promise((r) => setTimeout(r, SCREEN_MS[t.kind === 'midi' ? 'midi' : 'emulator']));
       } catch (e) {
         setScreenError(failureLine(e, targetLabel(target())));
         resetSession();

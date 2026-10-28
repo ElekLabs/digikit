@@ -369,6 +369,12 @@ Type checks do not show a misaligned row. `mise run ui:preview` serves the deskt
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at
 1440x900 and at 700 px wide (`--list` lists scenes). Look at the pictures before and after a UI change.
 
+The Firmware page (`?page=firmware&fwdev=dt2|dn2&fwstate=stock|runtime|noreply|none`) runs the real patchkit checks (`patchkit.wasm`) over a fake
+device that restarts after the last message. `node tools/devtools/firmware_shots.mjs --app desktop|web [--url URL] [--out DIR] [scene ...]` takes its
+pictures for the workbench (this preview) and for the site (`astro dev` or `astro preview`, with a fake Web MIDI port); it needs the stock files in
+`firmware/` and `mise run wasm:patchkit` and `web:build` (or the site's `gen-modules`) for `patchkit.wasm` and the module bundle.
+The same flash against an emulated device at OS UPGRADE: `os_upgrade_rig.py ... --exec` runs `apps/web/tests/firmware-emulator.test.ts` (finding 75).
+
 To test pages against a running emulator, `uv run python -m tools.devtools.emu_live --device dn2 --run-dir DIR`
 starts a daemon, `apps/desktop/ui/preview/live.vite.config.ts` serves the pages over it
 (`DIGI_LIVE_SOCKET=SOCKET`), and `node tools/devtools/memory_live.mjs SOCKET [--check]` measures the

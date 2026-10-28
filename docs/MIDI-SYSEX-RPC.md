@@ -235,6 +235,8 @@ same content the offline `.syx` container carries (`tools/firmware/build.py`,
 `tools/firmware/roundtrip.py`), delivered over MIDI instead of as a file. It is the
 natural target for pushing a rebuilt image to hardware.
 
+Checked in the emulator on DT2 1.17 and DN2 1.12 (finding 75, "The RPC route"): Start `{u32 length, "sysex\0", flag}`, Write `{u32 CRC-32 (init 0xffffffff), u32 length, u32 offset, data}`, End `{commit}`; each is answered, no menu is needed, and the device flashes after End with commit, with no on-device confirm. **[D]**
+
 Nothing sent over **USB** can reach the irreversible bootstrap upgrade: the
 bootstrap's STARTUP-menu upgrade path is **MIDI DIN only** (`README.md`,
 `docs/FINDINGS.md` "Recovery"), and on 1.16 the bootstrap version gate no longer
@@ -329,7 +331,7 @@ reply:    F0 00 20 3C 10 00 24 <dev16>  ......... <seq_hi> <seq_lo> <type> <payl
   `+0x04` jump-table ptr `0x402b40f8`, `+0x08/+0x0c` cmd range `0..0x7f`).
 - **[C] (2026-10-18, finding 42 section 2.5; emulator, not hardware) The whole body after `10 00` is 8-in-7 packed**, request and reply.
   Byte 6 is the first *collector*, not a `cmd`: one collector per up to seven data bytes, data byte j (0-based) takes bit 7 from
-  collector bit (6-j). The unpacked request is `seq_hi seq_lo 00 00 type payload...`; the unpacked reply is `seq_hi seq_lo seq_hi seq_lo (type|0x80) payload...`
+  collector bit (6-j). The unpacked request is `seq_hi seq_lo 00 00 type payload...`; the unpacked reply is `counter_hi counter_lo seq_hi seq_lo (type|0x80) payload...` (**[C] 2026-10-29, emulator:** the first pair is a counter of the device's own, not the request's seq: after a boot it counts 1, 2, 3, ..., so it equals the seq only while the host also counts from 1; the echoed seq is the second pair. A client that matches replies by the first pair works after a fresh boot and then loses every reply)
   (the response bit is there; it was hidden by the collector). The raw-body statements below ("`cmd` is ignored", "no 8-in-7 packing", "raw
   NUL-terminated string") hold only while every byte is under 0x80 and the body is at most seven bytes: a Ping, SoftwareVersion, DeviceUID,
   StorageSpace and `ReadDir /` are the same on the wire either way. A longer payload was cut into wrong groups: `ReadDir /factory`,

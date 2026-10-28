@@ -7,17 +7,18 @@ import { errorLine } from '@web/modules/backend';
 import { fmtVersion, type DkSession } from '@digi/dk-session';
 import { Sample, prepareUpload, sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples, type SamplesBackend } from '@digi/dk-session/samples';
-import { session as running } from './target';
+import { asked, noteConnection } from '@web/transfer/connection-state';
+import { session as running } from '@web/transfer/target';
 import { joinPath, type LocalEntry, type Prepare } from './samples-core';
+import { setDeviceInfo } from '@web/transfer/transfer-state';
 import {
   localFolder,
   localPath,
   sampleFolder,
-  setDeviceInfo,
   setLocalEntries,
   setLocalKinds,
   setSampleEntries,
-} from './transfer-state';
+} from './samples-state';
 
 /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
 const storages = new Map<string, Promise<{ name: string; samples: string }>>();
@@ -56,10 +57,14 @@ let last: { s: DkSession; opened: OpenedSamples } | undefined;
 
 /** The samples backend of the device on the target. One per session: the backend keeps what INFO said. */
 export async function openDeviceSamples(): Promise<OpenedSamples> {
-  const s = await running();
+  const s = await asked(running);
   if (last?.s === s) return last.opened;
-  const info = await s.info();
+  const info = await asked(() => s.info());
   const storage = await deviceStorage(info.port);
+  noteConnection({
+    type: 'answered',
+    device: { id: info.port, name: storage.name, runtime: fmtVersion(info.runtime) },
+  });
   const conv = await converter();
   const opened: OpenedSamples = {
     name: storage.name,

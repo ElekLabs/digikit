@@ -138,7 +138,7 @@ def test_explain_states_why_host_tests_skip_smoke(
     assert "smoke: skipped, host-only test change" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("name", ["session-share", "remote-page", "wait-core", "new"])
+@pytest.mark.parametrize("name", ["remote-page", "new"])
 def test_desktop_host_tests_select_only_host(name: str) -> None:
     assert verify.steps_for([f"apps/desktop/ui/tests/{name}.test.ts"]) == ("host",)
 
@@ -146,9 +146,7 @@ def test_desktop_host_tests_select_only_host(name: str) -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        "apps/desktop/ui/src/session-core.ts",
         "apps/desktop/ui/src/remote-core.ts",
-        "apps/desktop/ui/src/wait-core.ts",
         "apps/desktop/package.json",
         "apps/desktop/ui/tsconfig.json",
         "apps/desktop/src-tauri/src/main.rs",
@@ -158,6 +156,12 @@ def test_desktop_host_sources_keep_app_checks(path: str) -> None:
     steps = set(verify.steps_for([path]))
     assert {"desktop", "host"} <= steps
     assert "web" not in steps
+
+
+@pytest.mark.parametrize("name", ["session-core", "wait-core"])
+def test_shared_transfer_sources_keep_desktop_and_web_checks(name: str) -> None:
+    steps = verify.steps_for([f"apps/web/src/transfer/{name}.ts"])
+    assert steps == ("desktop", "host", "web")
 
 
 @pytest.mark.parametrize("name", ["card-core", "samples-core"])

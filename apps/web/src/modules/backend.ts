@@ -1,19 +1,5 @@
-// What the Modules panel needs from a transport. The desktop app implements it with the native commands (the running
-// emulator), the site with Web MIDI (a device). Written without TS-only runtime syntax so node can import it.
-
-import type { DkEntry, DkInfo, DkProgress } from '@digi/dk-session';
-
-export interface ModuleBackend {
-  /** "Emulator", "Digitakt II (USB)". */
-  label: string;
-  /** `quick`: one short INFO, no retries (is a runtime there?); it fails with kind "timeout" when nothing answers. */
-  info(quick?: boolean): Promise<DkInfo>;
-  list(): Promise<DkEntry[]>;
-  /** Upload one file; `onProgress` returns false to cancel. */
-  put(path: string, data: Uint8Array, onProgress: (p: DkProgress) => boolean | void): Promise<void>;
-  remove(path: string): Promise<void>;
-  clear(): Promise<void>;
-}
+// Helpers for errors and sizes shared by the Transfer pane and its backend (errors from the native commands and from the TypeScript
+// protocol client). Written without TS-only runtime syntax so node can import it.
 
 /** A readable line for an error from either backend: the status name first, then its meaning. */
 export function errorLine(e: unknown): string {

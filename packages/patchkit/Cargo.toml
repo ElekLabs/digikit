@@ -40,7 +40,8 @@ regex-lite = "0.1"
 # The settings record's decoder (the code the runtime uses); no_std, builds for every target.
 dkrt-sdk = { path = "../../modules/core/runtime/sdk" }
 
-# `patchkit store dump` reads card images: the binary only (not wasm32).
+# `patchkit store dump` reads card images, `patchkit flash` sends to a MIDI port: the binary only (not wasm32).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+midir = "0.11"
 plusdrive-format = { path = "../emulator/plusdrive" }
 emmc-card = { path = "../emulator/card" }

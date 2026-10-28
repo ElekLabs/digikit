@@ -33,8 +33,9 @@ import {
 import { clearLog, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import SidePanels from './SidePanels';
 import RemotePage from './RemotePage';
-import { emulatorSession, target } from './target';
-import TransferPage from './TransferPage';
+import { emulatorSession, target } from '@web/transfer/target';
+import FirmwarePage from '@web/firmware/FirmwarePage';
+import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
 
@@ -118,6 +119,9 @@ const CHART = 'M2 12.5L5.5 7.5L8.5 10L13.5 3.5M10.5 3.5H13.5V6.5';
 const SPEAKER = 'M2.5 6H5L8.5 3V13L5 10H2.5ZM11 5.5a3.5 3.5 0 0 1 0 5';
 const UP = 'M4 10L8 6L12 10';
 const REMOTE = 'M2.5 3.5H13.5V10.5H2.5ZM6 13H10M8 10.5V13';
+// a chip with pins
+const FIRMWARE =
+  'M4.5 4.5H11.5V11.5H4.5ZM6.5 2.5V4.5M9.5 2.5V4.5M6.5 11.5V13.5M9.5 11.5V13.5M2.5 6.5H4.5M2.5 9.5H4.5M11.5 6.5H13.5M11.5 9.5H13.5';
 const MODULES = 'M2.5 5L8 2.5L13.5 5V11L8 13.5L2.5 11ZM2.5 5L8 7.5L13.5 5M8 7.5V13.5';
 const DOWN = 'M4 6L8 10L12 6';
 
@@ -157,7 +161,7 @@ export default function Console() {
   const [dockSaved, setDockSaved] = createSignal(readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
-  const [page, setPage] = createSignal<'emulator' | 'transfer' | 'remote'>('emulator');
+  const [page, setPage] = createSignal<'emulator' | 'transfer' | 'remote' | 'firmware'>('emulator');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [cardBusy, setCardBusy] = createSignal(false);
@@ -709,6 +713,17 @@ export default function Console() {
             <Icon d={REMOTE} />
             <span>Remote</span>
           </button>
+          <button
+            type="button"
+            class="side"
+            classList={{ on: page() === 'firmware' }}
+            aria-current={page() === 'firmware' ? 'page' : undefined}
+            title="Patch the stock firmware and flash it to a device over MIDI, or go back to stock"
+            onClick={() => setPage('firmware')}
+          >
+            <Icon d={FIRMWARE} />
+            <span>Firmware</span>
+          </button>
         </nav>
         <div class="content">
           {/* The faceplate stays mounted behind the Transfer and Remote pages: the emulator, its audio and the snapshot pump run on. */}
@@ -731,6 +746,9 @@ export default function Console() {
           </Show>
           <Show when={page() === 'remote'}>
             <RemotePage fallbackDevice={device()} />
+          </Show>
+          <Show when={page() === 'firmware'}>
+            <FirmwarePage />
           </Show>
         </div>
       </div>

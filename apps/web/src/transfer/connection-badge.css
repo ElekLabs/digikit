@@ -1,0 +1,34 @@
+/* The connection indicator (ConnectionBadge.tsx), in the header of the Transfer page and the Firmware page. */
+.conn {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3, #868b94);
+}
+.conn .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #868b94;
+}
+.conn .word {
+  color: var(--ink-2, #a9adb4);
+}
+.conn.connected .dot {
+  background: #7be3a1;
+}
+.conn.connected .word {
+  color: #7be3a1;
+}
+.conn.disconnected .dot {
+  background: #ff8b82;
+}
+.conn.disconnected .word {
+  color: #ffb4ab;
+}
+.conn.connecting .dot {
+  background: var(--amber, #f3b52c);
+}

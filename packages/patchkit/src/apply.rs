@@ -73,6 +73,8 @@ pub struct PlanOutput {
 pub struct Applied {
     pub syx: Vec<u8>,
     pub plan: Plan,
+    /// The image id stamped into the runtime (`imageid`), `None` when the patch has no runtime.
+    pub image_id: Option<[u8; 8]>,
 }
 
 fn anchor_value(a: &Anchor) -> u64 {
@@ -1516,6 +1518,7 @@ pub fn apply_with(
             code: vec![],
         });
     }
+    let mut image_id = None;
     if in_expansion {
         if !mem.main.len().is_multiple_of(4) {
             return Err(err!(
@@ -1523,15 +1526,40 @@ pub fn apply_with(
                 mem.main.len()
             ));
         }
+        // where the id field lies in MAIN OS once the segments are appended (its symbol's address inside a segment payload)
+        let id_addr = globals.get(crate::imageid::SYMBOL).copied();
+        let mut id_at = None;
         for (dest, payload, bss) in &segs {
             mem.main
                 .extend_from_slice(&(payload.len() as u32).to_be_bytes());
             mem.main.extend_from_slice(&(*dest as u32).to_be_bytes());
             mem.main.extend_from_slice(&(*bss as u32).to_be_bytes());
+            if let Some(a) = id_addr
+                && (*dest..*dest + payload.len() as u64).contains(&a)
+            {
+                id_at = Some(mem.main.len() + (a - dest) as usize);
+            }
             mem.main.extend_from_slice(payload);
         }
         mem.main.extend_from_slice(&u32::MAX.to_be_bytes());
         mem.main_dirty = true;
+        if let Some(at) = id_at {
+            if at < crate::imageid::MARKER.len()
+                || &mem.main[at - crate::imageid::MARKER.len()..at] != crate::imageid::MARKER
+                || mem.main[at..at + 8] != [0u8; 8]
+            {
+                return Err(err!(
+                    "{}: the id field is not the marker and 8 zero bytes",
+                    crate::imageid::SYMBOL
+                ));
+            }
+            if crate::imageid::locate(&mem.main)? != Some(at) {
+                return Err(err!("the image id marker is not unique in MAIN OS"));
+            }
+            let id = crate::imageid::compute(&unhex(&fw.syx_sha256)?, &mem.main, &mem.stream.blob);
+            mem.main[at..at + 8].copy_from_slice(&id);
+            image_id = Some(id);
+        }
     }
 
     // Limits, repack, build.
@@ -1584,7 +1612,11 @@ pub fn apply_with(
         record: rec,
         output: None,
     };
-    let mut applied = Applied { syx, plan };
+    let mut applied = Applied {
+        syx,
+        plan,
+        image_id,
+    };
     let report = crate::verify::verify(&applied.syx, Some(reg), Some(fw_bytes))?;
     applied.plan.output = Some(PlanOutput {
         syx_sha256: sha256_hex(&applied.syx),

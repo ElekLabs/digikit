@@ -1,8 +1,9 @@
 // The Modules backend of the preview (replaces ../src/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
 // and a restart emit the same events as dktransfer.ts, paced by `sim.speed`.
 import type { TransferEvent, TransferView } from '@web/modules/dktransfer';
-import { noteActivity } from '../src/activity';
-import { PAUSED } from '../src/target';
+import { noteActivity } from '@web/transfer/activity';
+import { asked, noteConnection } from '@web/transfer/connection-state';
+import { PAUSED } from '../src/desktop-env';
 import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, view, control } from './sim';
 
 export { PAUSED };
@@ -21,7 +22,8 @@ async function pace(bytes: number, emit: (sent: number) => void): Promise<void> 
 export const transferBackend = {
   async list(): Promise<TransferView> {
     control.counts.deviceRead++;
-    await deviceRead();
+    await asked(deviceRead);
+    noteConnection({ type: 'answered', device: { id: 'dt2', name: 'Digitakt II', runtime: '0.5.2' } });
     return view();
   },
   async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<void> {

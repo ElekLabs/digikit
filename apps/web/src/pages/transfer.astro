@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import WebTransfer from '../transfer/WebTransfer';
+---
+
+<Base
+  title="Transfer modules · digikit"
+  description="Install digikit modules on your Digitakt II or Digitone II over USB MIDI, from your browser."
+  active="transfer"
+  fill
+>
+  <WebTransfer client:only="solid-js" />
+</Base>

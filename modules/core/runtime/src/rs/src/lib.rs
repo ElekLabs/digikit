@@ -123,6 +123,8 @@ extern "C" {
     /// INFO reply gives (`[digikit] name`: 3 characters and a NUL, as a big-endian word).
     static dkrt_device_id: u32;
     static dkrt_device_name: u32;
+    /// The image id patchkit stamps into the image (`src/cf/<dev>/device.s`; `packages/patchkit/src/imageid.rs`): 8 bytes, zero in an object.
+    static dkrt_image_id: [u8; 8];
     /// `cpushl` over a byte range (both caches), `src/cf/tramp.s`.
     fn dkrt_flush(start: u32, len: u32);
     /// `src/cf/tramp.s`: mask interrupts (returns the old status register), restore it, and the soft reset.
@@ -159,6 +161,18 @@ pub fn fx_slots() -> u32 {
 /// The device's short name as the INFO reply gives it: 3 characters and a NUL.
 pub fn device_name() -> u32 {
     unsafe { read_volatile(addr_of!(dkrt_device_name)) }
+}
+
+/// The 8-byte id of this image, as patchkit stamped it (zeros when the object was not patched in by it).
+pub fn image_id() -> [u8; 8] {
+    let p = addr_of!(dkrt_image_id) as *const u8;
+    let mut o = [0u8; 8];
+    let mut i = 0;
+    while i < 8 {
+        o[i] = unsafe { read_volatile(p.add(i)) };
+        i += 1;
+    }
+    o
 }
 
 /// The word a firmware code literal points to, when the literal is a DDR address (a misplaced anchor reads nothing).

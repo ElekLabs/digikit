@@ -774,6 +774,21 @@ impl Actor {
     /// The guest asked for a soft reset (RCM.RCR): boot the same patched firmware again from the reset entry, on the card as the
     /// guest left it (its writes laid over the image), with coupled DSP audio when available.
     fn soft_reset(&mut self) {
+        // The guest rewrote the flash container (the OS upgrade): the bootstrap boots what it wrote, so the emulator does too.
+        let flashed = self.runtime.as_ref().and_then(|r| {
+            (r.flash_writes().programs > 0).then(|| r.flash_bytes(0x80000, 0x300000).map(<[u8]>::to_vec)).flatten()
+        });
+        if let (Some(flash), Some(loaded)) = (flashed, self.loaded.as_mut()) {
+            match patchkit::flash::image_from_flash(&flash, &loaded.current) {
+                Ok(image) => {
+                    let sha = firmware::sha256_hex(&image);
+                    loaded.current = image;
+                    loaded.current_analysis = None;
+                    self.emit("flash.booted", json!({"sha256": sha}));
+                }
+                Err(e) => self.emit("flash.invalid", json!({"reason": e.to_string()})),
+            }
+        }
         // A firmware given on the command line is loaded as stock, without an analysis: make it here.
         let analysed = match self.loaded.as_mut() {
             Some(loaded) => loaded.find_base().and_then(|()| loaded.ensure_analysis()),
@@ -1750,6 +1765,8 @@ impl Actor {
             "leds.get" => self.rpc_leds().map(Some),
             "mem.cf.peek" => self.rpc_mem_peek(&p).map(Some),
             "mem.cf.poke" => self.rpc_mem_poke(&p).map(Some),
+            "flash.status" => self.rpc_flash_status().map(Some),
+            "flash.read" => self.rpc_flash_read(&p).map(Some),
             "mem.cf.write" => self.rpc_mem_write(&p).map(Some),
             "dev.reload" => self.rpc_dev_reload(&p, &reply),
             "guard.set" => self.rpc_guard_set(&p).map(Some),
@@ -2365,6 +2382,28 @@ impl Actor {
             Ok(())
         })?;
         Ok(json!({"protect": ranges, "allow_pc": allowed}))
+    }
+
+    /// `flash.status`: what the guest wrote to the container area of the flash since the boot (the OS upgrade): `{erases, programs, bytes}`.
+    fn rpc_flash_status(&mut self) -> RpcResult {
+        let w = self.with_runtime(|r| Ok(r.flash_writes()))?;
+        Ok(json!({"erases": w.erases, "programs": w.programs, "bytes": w.bytes}))
+    }
+
+    /// `flash.read {offset, length}`: bytes of the model's flash as a hex string (the container is at 0x80000; at most 4 MiB per call).
+    fn rpc_flash_read(&mut self, p: &Params) -> RpcResult {
+        let offset = usize::try_from(p.u64("offset")?).map_err(|_| RpcError::bad_params("offset"))?;
+        let length = usize::try_from(p.u64("length")?).map_err(|_| RpcError::bad_params("length"))?;
+        if length > 4 << 20 {
+            return Err(RpcError::bad_params("length is at most 4 MiB"));
+        }
+        let bytes = self.with_runtime(|r| {
+            r.flash_bytes(offset, length)
+                .map(<[u8]>::to_vec)
+                .ok_or_else(|| RpcError::bad_params("the range is outside the 16 MiB flash"))
+        })?;
+        let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+        Ok(json!({"offset": offset, "length": length, "hex": hex}))
     }
 
     fn rpc_mem_poke(&mut self, p: &Params) -> RpcResult {
