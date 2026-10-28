@@ -51,7 +51,7 @@ const COLOUR = /^(none|currentColor)$/;
 const STYLE = /^(\s*(stroke|fill)\s*:\s*var\(--icon-accent\)\s*;?)+\s*$/;
 
 test('every public module has an icon', () => {
-  for (const id of ['fx/master-drive', 'fx/master-gain', 'machines/pluck']) {
+  for (const id of ['fx/freqshift', 'machines/pluck']) {
     assert.ok(fs.existsSync(path.join(modules, id, 'gallery', 'icon.svg')), `${id} has no gallery/icon.svg`);
   }
 });

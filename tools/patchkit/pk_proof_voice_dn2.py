@@ -36,7 +36,7 @@ ROOT = HERE.parent.parent
 from tools.patchkit import hook_ab, pluck_ref  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
-from tools.patchkit.pk_proof_drive import aligned_equal, analyse  # noqa: E402
+from tools.patchkit.pk_proofkit import aligned_equal, analyse  # noqa: E402
 
 
 def release_phase_equal(

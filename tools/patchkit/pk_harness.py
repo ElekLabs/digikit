@@ -239,7 +239,7 @@ class Cell:
 
 
 def parse_cell(text: str) -> Cell:
-    """`dt2-1.17:digikit/master-gain,test/cf-demo` (no module part: stock)."""
+    """`dt2-1.17:core/fx,test/cf-demo` (no module part: stock)."""
     head, _, mods = text.partition(":")
     device, _, firmware = head.partition("-")
     return Cell(device, firmware, [m for m in mods.split(",") if m and m != "stock"])

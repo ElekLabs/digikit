@@ -358,11 +358,11 @@ description = "Site-by-site account of a patch (disassembly before and after, al
 
 [tasks."patch:mem"]
 run = "uv run python -m tools.patchkit.pk_mem"
-description = "Patch memory per region (size, used by each module, free; also the runtime's own bytes), refused when the modules do not fit: mise run patch:mem -- digikit/master-gain digikit/master-drive [--device dt2|dn2] [--firmware VER] [--json]"
+description = "Patch memory per region (size, used by each module, free; also the runtime's own bytes), refused when the modules do not fit: mise run patch:mem -- core/machines test/patched-pluck [--device dt2|dn2] [--firmware VER] [--json]"
 
 [tasks."patch:test"]
 run = "uv run python -m tools.patchkit.pk_harness run"
-description = "Smoke tour and module tests over the matrix (tests/patchkit/smoke/matrix.toml): mise run patch:test [-- --matrix FILE | --cell dt2-1.17:digikit/master-gain | --update]; one PASS/FAIL line per cell, logs in out/runs/patchkit/"
+description = "Smoke tour and module tests over the matrix (tests/patchkit/smoke/matrix.toml): mise run patch:test [-- --matrix FILE | --cell dt2-1.17:core/fx,test/fx-gain | --update]; one PASS/FAIL line per cell, logs in out/runs/patchkit/"
 
 [tasks."patch:runtime-proof"]
 run = "uv run python -m tools.patchkit.pk_dkrt proof"
@@ -370,7 +370,7 @@ description = "digikit runtime in the emulator: patch core/runtime, boot with a 
 
 [tasks."patch:proofs"]
 run = "uv run python -m tools.patchkit.pk_proofs"
-description = "Every emulator proof on its quick tier, in sequence (DT2: gain, drive, voice, machines, pluck; DN2: gain, voice, machines, pages, pluck; drive runs on DT2 only): mise run patch:proofs [-- --only pluck,machines --jobs N]; one PASS/FAIL line per tool and a total, logs in out/runs/proofs"
+description = "Every emulator proof on its quick tier, in sequence (DT2: fx, voice, machines, pluck; DN2: fx, voice, machines, pages, pluck): mise run patch:proofs [-- --only pluck,machines --jobs N]; one PASS/FAIL line per tool and a total, logs in out/runs/proofs"
 
 [tasks."patch:port"]
 run = "uv run python -m tools.patchkit.port_resolve"

@@ -70,7 +70,7 @@ Device tasks never build a daemon or the emulator themselves. Prerequisites are 
 | `mise run build:plusdrive` | Builds the plusdrive CLI into `out/native/target/nogen`. |
 | `mise run module:check ID` | Machine or effect conformance and the module's own tests in one pytest process. Own tests may build or launch an emulator. Not an all-module load proof. |
 | `mise run module:audit NAME` | ColdFire memory audit of one run-time module. |
-| `mise run patch:test` | Smoke tour over `tests/patchkit/smoke/matrix.toml` (`-- --cell dt2-1.17:digikit/master-gain`, `-- --update`). |
+| `mise run patch:test` | Smoke tour over `tests/patchkit/smoke/matrix.toml` (`-- --cell dt2-1.17:core/fx`, `-- --update`). |
 | `mise run patch:proofs` | Every emulator proof on its quick tier. |
 | `mise run dev:plusdrive-check` | The firmware's own view of an image built from a folder (about 1 min). |
 | `mise run scenario NAME` | Replays one headless scenario. |

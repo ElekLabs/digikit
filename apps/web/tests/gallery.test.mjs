@@ -38,7 +38,7 @@ test('bundle lists the committed modules and ports', () => {
     bundle.modules.length,
     manifestFiles().length + manifestFiles(join(root, 'tests/fixtures/modules')).length,
   );
-  assert.ok(bundle.modules.some((m) => m.manifest.includes('id = "digikit/master-gain"')));
+  assert.ok(bundle.modules.some((m) => m.manifest.includes('id = "core/fx"')));
   assert.equal(bundle.ports.length, readdirSync(join(root, 'devices/ports')).length);
   // committed content only: nothing generated under out/ and no firmware-sized blobs (a firmware section is several MiB;
   // the bundle is 2.2 MB since the settings store and the send route, 1.9 MB before)
@@ -107,12 +107,12 @@ test('the shipped modules: the .dkm files equal what module:pack-all writes, the
 
 test('patched file names', () => {
   assert.equal(
-    patchedFileName('Digitakt II', '1.17', ['digikit/master-gain']),
-    'Digitakt_II_OS1.17+digikit-master-gain.syx',
+    patchedFileName('Digitakt II', '1.17', ['core/fx']),
+    'Digitakt_II_OS1.17+core-fx.syx',
   );
 });
 
-test('worker core: check and apply equal the command line (digikit/master-gain)', { skip: !have }, async () => {
+test('worker core: check and apply equal the command line (core/fx)', { skip: !have }, async () => {
   const work = mkdtempSync(join(tmpdir(), 'gal-'));
   const { bundle } = buildModuleData(root);
   const kit = await PatchKit.create(readFileSync(wasmPath), JSON.stringify(bundle));
@@ -121,16 +121,16 @@ test('worker core: check and apply equal the command line (digikit/master-gain)'
     const checked = kit.check(fw);
     assert.equal(checked.device, name);
     assert.ok(checked.port?.startsWith(name));
-    assert.equal(checked.modules.find((m) => m.id === 'digikit/master-gain').ok, true);
+    assert.equal(checked.modules.find((m) => m.id === 'core/fx').ok, true);
     const out = join(work, `${name}.syx`);
-    py('tools.patchkit.patchkit', 'patch', '--firmware', path, '--modules', 'digikit/master-gain', '-o', out);
-    const r = kit.apply(fw, ['digikit/master-gain']);
+    py('tools.patchkit.patchkit', 'patch', '--firmware', path, '--modules', 'core/fx', '-o', out);
+    const r = kit.apply(fw, ['core/fx']);
     assert.ok(Buffer.from(r.syx).equals(readFileSync(out)), `${name}: output differs from the CLI`);
-    assert.equal(r.plan.record.modules[0].split('@')[0], 'digikit/master-gain');
+    assert.equal(r.plan.record.modules[0].split('@')[0], 'core/fx');
     assert.ok(r.verify.checks.length > 0);
     assert.equal(r.sha256.length, 64);
     // always from stock: an already patched image is refused with patchkit's text
-    assert.throws(() => kit.apply(r.syx, ['digikit/master-gain']), /./);
+    assert.throws(() => kit.apply(r.syx, ['core/fx']), /./);
   }
 });
 

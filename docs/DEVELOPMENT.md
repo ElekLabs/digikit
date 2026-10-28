@@ -168,8 +168,8 @@ patchkit applies modules (new machines, parameters, master-bus effects) to your 
 
 ```sh
 mise run patch:toolchains   # once: pinned ColdFire and SHARC+ toolchains for building modules
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules digikit/master-gain -o out/patch/mg.syx
-mise run patch:inject -- out/patch/mg.syx   # into a running emulator (mise run workbench, or emu:serve)
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx -o out/patch/fx.syx
+mise run patch:inject -- out/patch/fx.syx   # into a running emulator (mise run workbench, or emu:serve)
 mise run web                            # the gallery at /patch: patch in the browser, nothing is uploaded
 ```
 

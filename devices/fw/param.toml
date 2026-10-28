@@ -17,7 +17,6 @@ was = ["cf.param.data.master_sidechain_filter", "cf.param.master_sidechain_filte
 cpu = "cf"
 rule = { kind = "cf_words", words = ["*", 0x42, 0x0, 0x7f00, 0x5000, 0x0, 0x75ffff, 0x116, "*", 0x0, "*", "*", "*", "*", "*"] }
 mark = "D"
-users = ["digikit/master-drive"]
 doc = "The descriptor row (60 bytes) of that parameter: mirror index 66, range 0..0x7f00, default 0x5000."
 
 [[fn]]

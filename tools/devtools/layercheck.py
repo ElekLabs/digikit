@@ -54,12 +54,8 @@ FOLDER_ROLES = {
     "expansion": "installer",
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
-# examples of a patched-in effect and a hook). They are exempt from the objects and apps rules.
-FIRMWARE_PATCH_MODULES = {
-    "digikit/master-gain",
-    "digikit/master-drive",
-    "test/registry-demo",
-}
+# example of a hook). They are exempt from the objects and apps rules.
+FIRMWARE_PATCH_MODULES = {"test/registry-demo"}
 # Test fixtures that stand in for an app (they use core/ui like core/digikit-menu does): app include rights.
 APP_LIKE = {"test/ui-demo"}
 # Headers of the core layers an app may include.

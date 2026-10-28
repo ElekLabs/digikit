@@ -63,7 +63,7 @@ candidate on both devices and confirm callers with `tools/coldfire/refscan.py`. 
 
 ## References
 
-- `references/dsp-recipes.md`: tested assembly from pluck and master-drive (parameter to float, block loop, noise, one-pole, all-pass, delay line, comb, silence, ramp).
+- `references/dsp-recipes.md`: tested assembly from pluck and the deleted master-drive (parameter to float, block loop, noise, one-pole, all-pass, delay line, comb, silence, ramp).
 - `references/selas-pitfalls.md`: assembler forms that are wrong on the silicon and what to write instead.
 - `references/devices.md`: Digitakt II against Digitone II (budget, voices, parameters, memory, loader limits, effects).
 - `references/patched-in.md`: patched-in modules (anchors, claims, `patch`, `module:dev`, `patch:test`).

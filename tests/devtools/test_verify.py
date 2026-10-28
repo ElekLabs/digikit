@@ -85,7 +85,7 @@ HOST_TEST_FILES = [
         ),
         ([*HOST_TEST_FILES, "unknown/file.txt"], {"host"}, True, None),
         (
-            [*HOST_TEST_FILES, "modules/fx/master-gain/src/cf/gain.s"],
+            [*HOST_TEST_FILES, "modules/machines/bd/src/module.c"],
             {"host"},
             True,
             None,
@@ -111,7 +111,7 @@ HOST_TEST_FILES = [
         ),
         ([*SMOKE_EXEMPT_FILES, "unknown/file.txt"], {"python-tests"}, True, None),
         (
-            ["tools/devtools/pathcheck.py", "modules/fx/master-gain/src/cf/gain.s"],
+            ["tools/devtools/pathcheck.py", "modules/machines/bd/src/module.c"],
             {"python-tests"},
             True,
             None,
@@ -266,7 +266,7 @@ def test_docs_only_stays_empty() -> None:
 
 
 def test_representative_module_runtime_and_core_routes_stay_conservative() -> None:
-    assert verify.steps_for(["modules/fx/master-gain/src/cf/gain.s"]) == (
+    assert verify.steps_for(["modules/machines/bd/src/module.c"]) == (
         "python-tests",
         "rust-tests",
         "smoke",
@@ -686,19 +686,18 @@ def test_digikit_test_files_and_scenarios() -> None:
 
 
 def test_module_leaf_selects_the_tests_that_name_it() -> None:
-    src = "modules/fx/master-gain/src/cf/gain.s"
+    src = "modules/machines/bd/src/module.c"
     assert verify.steps_for([src]) == ("python-tests", "rust-tests", "smoke")
-    # test_patchkit.py (a gate file) and the tests that use a tool that builds master-gain
-    assert "tests/patchkit/test_patchkit.py" in verify.python_tests([src], False)
-    assert "tests/patchkit/test_pk_mem.py" in selected(src)
-    assert "tests/patchkit/test_pk_cf.py" not in selected(src)
-    assert not [t for t in selected(src) if t.startswith("tests/digikit/test_e")]
-    assert "tests/patchkit" not in selected(src)
+    # no test names bd: only the machine conformance suite runs beyond the gate files
+    assert selected(src) == {"tests/modules/test_machine_conformance.py"}
+    # a module that tests name selects those tests, not whole directories
+    named = selected("modules/fx/freqshift/src/module.c")
+    assert "tests/patchkit/test_freqshift.py" in named
+    assert "tests/patchkit/test_pk_cf.py" not in named
+    assert "tests/patchkit" not in named
     # the object and the manifest are read by the web gallery
-    assert "web" in verify.steps_for(["modules/fx/master-gain/module.toml"])
-    assert "web" in verify.steps_for(
-        ["modules/fx/master-gain/build/master-gain.dko.json"]
-    )
+    assert "web" in verify.steps_for(["modules/machines/bd/module.toml"])
+    assert "web" in verify.steps_for(["modules/machines/bd/build/bd-cf.dko.json"])
     assert "web" not in verify.steps_for(["modules/core/runtime/sdk/src/lib.rs"])
     assert verify.steps_for(["modules/core/runtime/README.md"]) == ()
 
@@ -747,7 +746,7 @@ def test_a_machine_change_selects_the_conformance_suite(path: str) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["modules/fx/master-gain/module.toml", "modules/core/adapters/params/module.toml"],
+    ["modules/tools/remote/module.toml", "modules/core/adapters/params/module.toml"],
 )
 def test_other_modules_do_not_select_the_conformance_suite(path: str) -> None:
     assert CONFORMANCE not in selected(path)
@@ -829,7 +828,7 @@ def test_module_change_drops_no_test_that_names_a_dependent() -> None:
 def test_dependents_follow_requires_and_shared_sources() -> None:
     assert "test/patched-pluck" in verify_route.dependents({"core/machines"})
     assert "test/patched-pluck" in verify_route.dependents({"digikit/pluck"})
-    assert verify_route.dependents({"digikit/master-gain"}) == {"digikit/master-gain"}
+    assert verify_route.dependents({"fadedlimes/bd"}) == {"fadedlimes/bd"}
 
 
 def test_unknown_module_path_stays_broad() -> None:
@@ -923,7 +922,7 @@ def test_routing_changes_select_everything() -> None:
 
 def test_gate_files_always_run() -> None:
     for path in (
-        "modules/fx/master-gain/src/cf/gain.s",
+        "modules/machines/bd/src/module.c",
         "tools/device/mmon.py",
         "tests/digikit/scenarios/upload-quick.toml",
     ):
@@ -963,8 +962,8 @@ def test_rust_scope(monkeypatch: pytest.MonkeyPatch) -> None:
         return ["patchkit"]
 
     monkeypatch.setattr(verify.rust_ws, "affected_packages", fake, raising=False)
-    assert verify.rust_scope(["modules/fx/master-gain/module.toml"]) == ["patchkit"]
-    assert seen == [["modules/fx/master-gain/module.toml"]]
+    assert verify.rust_scope(["modules/machines/bd/module.toml"]) == ["patchkit"]
+    assert seen == [["modules/machines/bd/module.toml"]]
     # a broad mise.toml change and a routing change keep the whole workspace
     assert verify.rust_scope(["mise.toml"]) is None
     assert verify.rust_scope(["tools/devtools/verify.py"]) is None
@@ -1053,7 +1052,7 @@ def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
             {"runtime-fixture", "module-load"},
         ),
         ("modules/machines/pluck/src/dsp/pluck.s", {"module-load"}),
-        ("modules/fx/master-gain/src/cf/gain.s", set()),
+        ("modules/machines/bd/src/module.c", set()),
         ("modules/no/such/module.toml", {"runtime-fixture", "module-load"}),
         ("tools/device/dkupload.py", {"runtime-fixture"}),
         ("tools/device/dkscreen.py", set()),
@@ -1093,7 +1092,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
             ["modules/freqshift.test.ts"],
         ),
         ("module-load", "modules/tools/remote/module.toml", ["modules/remote.test.ts"]),
-        ("module-load", "modules/fx/master-gain/module.toml", []),
+        ("module-load", "modules/machines/bd/module.toml", []),
         (
             "module-load",
             "tests/regression/modules/pluck.test.ts",
@@ -1109,7 +1108,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "modules/tools/remote/module.toml",
             ["runtime/remote-input.test.ts"],
         ),
-        ("runtime-fixture", "modules/fx/master-gain/module.toml", []),
+        ("runtime-fixture", "modules/machines/bd/module.toml", []),
         ("stock", "tests/regression/dt2/transport.test.ts", ["dt2/transport.test.ts"]),
     ],
 )

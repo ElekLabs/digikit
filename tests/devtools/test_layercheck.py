@@ -234,14 +234,14 @@ def test_app_has_no_ops_and_no_claims(tree: Path) -> None:
 def test_listed_firmware_patch_modules_keep_their_anchors(tree: Path) -> None:
     module(
         tree,
-        "modules/fx/patch",
-        "digikit/master-gain",
-        "fx",
+        "tests/fixtures/modules/registry-demo",
+        "test/registry-demo",
+        "test",
         None,
         '\n[[object]]\npath = "build/p.dko.json"\nplace = "dsp.l2"\n'
         '\n[object.externs]\n_q = "dsp.master.fn.q31"\n',
     )
-    dko(tree, "out/cache/dko/digikit/master-gain/build/p.dko.json", ["_q"])
+    dko(tree, "out/cache/dko/test/registry-demo/build/p.dko.json", ["_q"])
     assert layercheck.check(tree) == []
 
 
