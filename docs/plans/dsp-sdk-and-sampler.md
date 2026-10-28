@@ -14,6 +14,9 @@ resource/lifetime ABI changes and the product sampler remain proposals requiring
   consumer replacements; split cursor and bounded mono linear-reader kernel with numerical references/tests.
   Read the implementation checkpoint below for verification status. Sample transport, stereo ABI and hardware
   work are still unapproved; settle the next scope with Em after this milestone.
+- SDK checkpoint: `4cd29a3c`. The resumed loading/lifetime investigation is in
+  [finding 78](../findings/78-sample-loading-lifetime.md). Read the next proof proposal below before changing runtime
+  code. It preserves Transfer destinations and uses a module-owned, session-pinned DSP bank.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -21,6 +24,7 @@ resource/lifetime ABI changes and the product sampler remain proposals requiring
 - Shared symlinks are input databases/manuals and `.venv`; local `out/cache/` and run outputs are isolated.
   Use `UV_NO_SYNC=1`, worktree-local `UV_CACHE_DIR`, and local `MISE_STATE_DIR` as needed. Never rebuild shared DBs
   implicitly with `sharc.load()`; use read-only queries.
+  The resumed source investigation also links the existing `out/ghidra/` dump directory read-only.
 - Documentation and the first approved SDK implementation are now present. Validation and known baseline failures
   are recorded below; do not mistake the numerical sample reader for a complete sampling machine.
   Em explicitly requested this documentation checkpoint commit; no push or merge was requested.
@@ -107,8 +111,8 @@ Acceptance: a traceable sample lifecycle on each device, or precise unresolved b
 
 ## Phase 3 — SDK proposal and decision gate
 
-- [ ] Propose a sample resource API: stable identity, metadata, prepare/readiness, retain/release and failure.
-- [ ] Separate resource management on ColdFire from bounded DSP consumption; no file I/O or allocation in render.
+- [x] Propose a bounded sample-bank resource API and explicit readiness/failure/lifetime policy below; general eviction remains deferred.
+- [x] Specify ColdFire source/transfer jobs separately from DSP consumption; no file I/O or allocation in render.
 - [ ] Specify playback cursor precision, signed rate, frame/channel units, start/end convention and completion.
 - [ ] Specify interpolation guard reads, out-of-range behavior, gain/fades, PCM conversion and channel policy.
 - [ ] Decide how selection and precise start/end editing fit the current four-word, single-page machine contract.
@@ -173,7 +177,7 @@ The approved DSP work in milestone 1 and the numerical part of 2 can run indepen
 Runtime sample transport and voice binding share contracts, so settle those contracts here before assigning
 implementation. Run builds/gates serially under the repository's CPU budget; parallel static work is already cheap.
 
-### Sample API sketch for review
+### Earlier general sample API sketch (future direction)
 
 Names below are conceptual, not new exported ABI commitments:
 
@@ -217,6 +221,65 @@ Names below are conceptual, not new exported ABI commitments:
 - Report instruction ceilings and one paired A/B for any speed claim. Hardware performance/cache coherence remains
   unproved until an explicitly authorized device test. No new absolute CPU budget or sample-length promise yet.
 
+## Next proof proposal — loading and lifetime (awaiting agreement)
+
+The current proposal is a bounded bank API, narrower than the earlier general prepare/bind/release sketch.
+Evidence and exact current-image mappings are in finding 78. No runtime implementation is authorized by the
+read-only resume request alone; the first SDK milestone remains complete at `4cd29a3c`.
+
+**Scope:** prove an actual transferred mono sample can reach the existing numerical reader on both devices,
+with correct ownership and failure behavior. Preserve the current Transfer destinations. No stock-pointer
+borrowing, new transport, stereo ABI, eviction, or new sample browser in this proof.
+
+**Resource declaration:** a versioned SDK sample-bank declaration associates a module-local bank id with
+its DSP BSS capacity and initialized descriptor symbol. The packer resolves and validates offsets within the
+owning module's DSP data/BSS; runtime accounts the capacity in that module's existing allocation. Modules do
+not submit arbitrary DSP addresses. Exact record encoding/version compatibility is an implementation design
+task within this scope, to be reviewed before the packer and runtime workers diverge.
+
+**Control interface:** conceptual `dk_sample_load(bank, path)` requests one job and `dk_sample_status(bank)`
+reports queued/loading/ready/error. The bank declaration identifies the owner, which must already be fully
+loaded. Calls marshal into the UI task; they do not mutate the DSP queue from a MIDI callback. The path uses
+the device source adapter (DT2 +Drive, DN2 digikit store). Missing support reports a capability/error result.
+Only an unused bank accepts a request; repeated or concurrent requests report BUSY/ALREADY_LOADED instead of
+overwriting an active view. Once a transfer starts, no destination reuse in this proof, even after failure.
+
+**Lifetime:** one job, one module-owned bank, pinned until restart. Retriggers/voice stealing reset only voice
+cursors. A failing sample job must not invoke module-load rollback. READY starts zero in initialized DSP data;
+bytes transfer first, immutable descriptor fields next, READY last, each phase acknowledged. A lost final
+acknowledgement may mean publication already occurred, so pin the bank regardless of the control-side error.
+Never reclaim the retained ColdFire transfer buffer until the link is demonstrably quiescent. After timeout or
+cancel, report failure but keep that source quarantined if necessary. Shared transport cleanup changes are in
+scope only where the new lifecycle tests demonstrate they are needed.
+
+**Proof limit:** one 32 KiB float32 bank = 8,192 mono frames at 48 kHz (~171 ms); code, descriptor and voice state
+are additional. Input native file at that frame limit is 16,464 bytes including header/trailer. This keeps the
+proof below the existing whole-file cap and uses the already-tested reader. The declaration is capacity-based;
+this is a proof configuration, not a universal SDK or product length limit. Fit must include other modules.
+Reject stereo and oversize input explicitly. Final packed PCM format and longer clips remain separate decisions.
+
+**Source copy:** lookup/read/validate the complete native file into private ColdFire storage before asynchronous
+delivery; do not retain shared staging. On DN2 require stable metadata plus matching content hash; missing
+fingerprints or exhausted retries fail closed. On DT2 open only in read mode, use size(entry id), verify counts
+and format, and close every successfully opened handle. First emulator proofs exclude simultaneous Transfer
+writes; do not claim concurrent DT2 overwrite/delete support until its handle behavior is tested or an enforceable
+exclusion exists. Bound work per UI pass; synchronous read latency must still be measured.
+
+**Work after approval:**
+
+- [ ] Agree declaration/record and status contracts here, then assign disjoint SDK/packer and DT2 source-adapter
+  tasks to workers in separate worktrees. One worker owns shared runtime queue/lifetime integration.
+- [ ] Add host tests for declaration ownership/bounds, private snapshot consistency and fake-link state transitions.
+- [ ] Add current-image DT2 read-only filesystem bindings/wrapper and DN2 snapshot reader.
+- [ ] Add module-owned bank job and immutable descriptor publication, serialized with existing module/registry work.
+- [ ] Add a minimal proof consumer on both devices using actual transferred data; bound emulator runs and test PCM,
+  silence-before-ready, failure, full-memory and retrigger behavior. No user sample audio committed.
+- [ ] Report latency, memory and instructions; review product sample length, stereo and editing scope separately.
+
+Independent evidence audit supports the source constraints, including UI task placement, conditional early-free
+risk, private-snapshot requirement and per-operation filesystem locking. It does not establish hardware cache
+coherence, file read latency, concurrent DT2 replacement safety or the adverse timeout schedule on hardware.
+
 ## Validation and performance
 
 The current audio contract is 32 frames at 48 kHz: approximately 667 microseconds for the entire audio block.
@@ -237,6 +300,19 @@ alignment, bank/bus access and state placement. Cache/prefetch/DMA changes requi
 ownership/coherency protocol. Hoist conversions/coefficient work out of sample loops where semantics allow it.
 
 ## Evidence and progress log
+
+### 2026-10-29 — resumed source/lifetime discovery
+
+- [x] Resume from `4cd29a3c`; preserve clean implementation checkpoint and isolated worktree.
+- [x] Run disjoint read-only scouts for DT2 source acquisition and runtime/store lifecycle.
+- [x] Port DT2 filesystem candidates by strict function hashes, then read current Ghidra dossiers. Correct the
+  initial mistaken nearby-address inference and worktree input-link gap; record only the actual mapped entries.
+- [x] Inspect UI job context, source snapshots, allocator ownership, transport source retention and READY ordering.
+- [x] Obtain independent evidence audit; record caveats and the bounded next implementation proposal in finding 78.
+- [ ] Em agrees to the loading/lifetime proof scope above before core runtime/adapter or packaging edits.
+
+This continuation changes documentation only. It does not implement a sample API or fix the conditional transfer
+cleanup risk. Existing numerical kernels and module binaries remain unchanged.
 
 ### 2026-10-29 — first implementation checkpoint
 
@@ -348,6 +424,13 @@ Keep symbol-name matches as candidates until their actual behavior is establishe
   newly verified, and no build/emulator/hardware run has been performed for this discovery.
 
 ## Plan maintenance
+
+Validation (2026-10-29, resumed discovery documentation):
+
+- Targeted pathcheck for the plan, finding 78 and findings index passes; `git diff --check HEAD` passes.
+- `mise run test:changed` passes layercheck and fails only on the same 10 stale references in five
+  unchanged baseline files recorded below. No code, firmware or hardware checks were needed for this
+  documentation-only checkpoint. The runtime proof remains awaiting agreement.
 
 Validation (2026-10-29, first SDK implementation):
 
