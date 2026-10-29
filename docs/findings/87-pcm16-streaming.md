@@ -79,3 +79,32 @@ coexistence. No reply slot is newly claimed by this parser work.
 stale references in five unchanged files fail. Scoped changed-path checks and
 Rust formatting pass. Log: `out/runs/pcm-stream/changed.log`. No clean merge gate
 or device integration result is claimed.
+
+
+## Bounded DN2 store source
+
+**[D]** `modules/core/runtime/sdk/src/store/stream.rs` now provides `FileStream`.
+It retains a verified entry, header fingerprint and byte offset, without retaining
+a table buffer or allocating the whole file. Initial lookup uses existing verified
+store opening and redundant-copy fallback between matching fingerprints. Each
+read checks the generation before and after bounded sector I/O. Returned lengths
+exclude final-sector padding; no read exceeds the caller buffer or 128 sectors.
+Errors are sticky and invalidate every previously staged byte.
+
+**[D]** Exact EOF does not authorize publication. `finish` also checks the final
+fingerprint and the caller's incremental SHA-256 against the retained entry's
+digest. The caller must hash exactly the returned source bytes, before PCM packing,
+and must wait for both source and native-parser completion before READY. Fingerprints
+are commit detectors, not leases or protection against ABA; digest verification
+checks the retained content. Once completed, the cursor returns its cached result
+without reading the source again. This does not authorize rereading its old extent.
+
+**[D]** Malformed-size testing exposed overflow in the shared sector-rounding
+helper. Division plus remainder now replaces `bytes + 511`, preserving ordinary
+results while allowing verified table bounds to reject an oversized extent.
+The six added tests exercise multichunk reads and padding with the existing runtime
+SHA implementation, replacement before/between/during reads, lookup changes,
+read failures, late corruption, premature completion and sticky errors. The shared
+SDK suite passes 59 tests; host no_std compilation and the named owner pytest pass.
+Independent review found no issues. Production source loading and firmware objects
+are unchanged; integration into the serialized sample job is still required.
