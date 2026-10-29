@@ -182,3 +182,50 @@ interrupts disabled: saved IRPTEN is set at `0x1c02bb`, status restored at
 **[O]** Exact nesting constraints and a callable cache-maintenance contract
 remain open. STOP ownership does not establish physical cache coherence,
 production pool ownership or a production close/drain protocol.
+
+
+## L1 staging option and allocator failure
+
+**[D]** Independent original-byte inspection of DN2 1.12 allocator `0xb89c9c`
+shows R4 is a **byte count**: add an eight-byte header, then round to eight bytes.
+Success returns R0=`block + 8`, an eight-byte-aligned private L1 byte pointer;
+contents are uninitialized. The known arena is `[0x2d08b8,0x2dd0b0)`,
+51,192 bytes, not measured free capacity. Calls `0xb87b3b` before and
+`0xb88089` after allocation suspend/resume the scheduler and may process work:
+this is a task/init-context seam, not an IRQ allocator.
+
+**[D]** Failure with R11=0 follows
+`0xb89d59 → 0xb89d96 → 0x1cd95c` (disables IRQs) → `0xb8b538 → 0x1c1430`.
+The last path has unresolved parcel `0x0081` at `0x1c1431`, followed by raw
+unconditional, non-delayed JUMP `0x063e001c1431` at `0x1c1432`, looping back to
+`0x1c1431`. This does not provide a recoverable NULL result. Do not expose this
+as an SDK allocator or use it as the proposed L1 staging shortcut. The bounded
+adjacent check found `0xb89c86` empty, `0xb89c8c` minimum-free getter and
+`0xb89c94` free getter, with no adjacent nonfatal allocator identified; this
+is not a global absence claim.
+
+**[D]** Helper `0x1c0776` maps private byte pointer p to DMA/completer alias
+`p + 0x28000000` using plain arithmetic. Helper `0x1c0790` reverses that mapping
+with arithmetic and bounds checks; neither uses ACONV. The public
+[ADSP-2156x datasheet](../sharc/SOURCES.md), Tables 2/4, supports the L1 block-1
+private SRAM/completer alias, subject to live protection configuration.
+An owned L1 RX could avoid the L2 RX cache issue without limiting PCM length:
+only roughly 4.3 KiB staging would move, while large PCM remains in DDR. However,
+the fatal OOM behavior rules out this allocator-based route **as proposed**.
+No allocation, free-capacity measurement or hardware check was performed.
+
+**[C]** Moving RX to L1 would not eliminate maintenance-helper execution.
+Nested submit invokes existing maintenance entry `0x1c07e4` through `0xb8e259`
+at call `0xb8e334`, with descriptor flush at `0xb8e5c1`. The bounded successful
+STOP callback inspection at `0x1cad20` establishes reset and normalization
+before callback; it does not establish universal maintenance absence or full
+RX coherence. The cache contract remains unresolved.
+
+**[D]** Existing SDK/port inspection found no exposed SHARC L1 allocator or owned
+L1 code region. `sdk.alloc` is a CF arena and `fw_alloc` a CF heap; current
+ports expose `dsp.l2` placement only. **[O]** An L1 maintenance helper needs an
+owned placement proof; the existing heap is not implicitly free. No export,
+new API or production route is selected. Retain the aligned L2 private proof
+while investigating checked production reservation, cache maintenance and real
+CF/DSP transport integration. The completed logical close/ACK proof is
+independent of this cache question.

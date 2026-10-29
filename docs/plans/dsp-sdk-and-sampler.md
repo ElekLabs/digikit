@@ -150,6 +150,20 @@ unresolved: official ADI PRM Rev 1.5 and Rev 1.4 repeat the figure ambiguity; no
 official erratum or encoded conditional W2B example was found. Do not repeat a
 broad search or declare a confirmed core bug from that evidence.
 
+**[D]/[C] L1 staging investigated:** the DN2 allocator takes byte counts and
+returns private L1 byte pointers, with a plain-arithmetic DMA/completer alias.
+Its OOM path disables IRQs and enters a fatal loop, rather than returning NULL;
+that allocator-based staging route is rejected **as proposed**. Roughly 4.3 KiB
+of L1 RX staging would not cap the large DDR PCM bank, but no available L1
+capacity was measured or allocated. Existing SDK allocators are CF-side; no
+owned SHARC L1 code region or nonfatal allocator is exposed. Moving RX alone
+also leaves stock submit's existing maintenance-helper dependency. See
+[finding 95](../findings/95-dn2-cache-and-lp0-staging.md#l1-staging-option-and-allocator-failure).
+Retain aligned L2 private fixture 0.2.1; no hardware/core changes or new API are
+selected. Next work remains checked production reservation/cache maintenance
+and real CF/DSP transport integration. The 22-case logical close/ACK proof is
+complete and independent of cache encoding and production backing ownership.
+
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.
 The initial ordering and reader strategy are recorded in
