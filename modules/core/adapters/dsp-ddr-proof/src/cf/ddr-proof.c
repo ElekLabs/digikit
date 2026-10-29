@@ -27,6 +27,22 @@ static u32 frame_word(u32 i)
     return (u32)dd_frame[2u * i] | ((u32)dd_frame[2u * i + 1u] << 16);
 }
 
+/* Only this complete, checksummed terminal control may interrupt held notes.
+ * DATA/INIT/COMMIT still require two consecutive quiet stock frames. */
+static u32 retirement_frame(void)
+{
+    u32 s1 = 0, s2 = 0, i;
+    if (frame_word(0) != 4 || frame_word(1) != DD_MAGIC ||
+        frame_word(2) == 0 || frame_word(3) != 377 ||
+        frame_word(4) != 4 || frame_word(5) != 0 || frame_word(6) != 0)
+        return 0;
+    for (i = 0; i < 7; ++i) {
+        s1 += frame_word(i);
+        s2 += s1;
+    }
+    return frame_word(7) == (s1 ^ s2);
+}
+
 static void fail(u32 err)
 {
     dd_failed = 1;
@@ -36,11 +52,12 @@ static void fail(u32 err)
 
 void dd_frame_hook(int len, const u16 *src, int reclen, const volatile u16 *rec)
 {
-    u32 quiet = len == 0xa80 && reclen == 0xabc && src &&
-        src[0] == 3 && src[1] == 0 &&
+    u32 normal_frame = len == 0xa80 && reclen == 0xabc && src && src[0] == 3;
+    u32 quiet = normal_frame && src[1] == 0 &&
         (src[17] | src[18] | src[19] | src[20]) == 0;
     u32 safe = quiet && dd_previous_quiet;
     u32 state = dd_mail.state;
+    u32 retire = retirement_frame();
     dd_previous_quiet = quiet;
     if (dd_failed) {
         dd_mail.state = DD_ERROR;
@@ -51,7 +68,7 @@ void dd_frame_hook(int len, const u16 *src, int reclen, const volatile u16 *rec)
             dd_mail.sent = 0;
             dd_mail.state = DD_BUSY;
             if (frame_word(0) != 4 || frame_word(1) != DD_MAGIC ||
-                frame_word(2) == 0 || frame_word(3) > 376 ||
+                frame_word(2) == 0 || (frame_word(3) > 376 && !retire) ||
                 frame_word(6) > 640) {
                 fail(101);
             }
@@ -61,16 +78,19 @@ void dd_frame_hook(int len, const u16 *src, int reclen, const volatile u16 *rec)
             u32 token = (u32)rec[0x64 / 2] | ((u32)rec[0x64 / 2 + 1] << 16);
             if (token == frame_word(2) && ((ack >> 16) & 511u) == frame_word(3)) {
                 u32 status = ack >> 25;
-                if (status >= 2u) fail(status);
-                else {
-                    dd_mail.err = status; /* 1 = READY; 0 = accepted */
+                if (retire && status == 6u) {
+                    /* PENDING: retain staging, return control and poll boundedly. */
+                } else if ((retire && status == 5u) || (!retire && status < 2u)) {
+                    dd_mail.err = status;
                     dd_mail.state = DD_DONE;
-                }
+                } else if (status >= 2u && status <= 4u) fail(status);
+                else fail(102);
+
             }
         }
         if (!dd_failed && dd_mail.state == DD_BUSY) {
             if (++dd_mail.stall > DD_TIMEOUT) fail(100);
-            else if (safe) {
+            else if (safe || (retire && normal_frame)) {
                 ++dd_mail.sent;
                 dd_stock_send(0xa80, (const u16 *)dd_frame, reclen, rec);
                 return;

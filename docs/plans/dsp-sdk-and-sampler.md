@@ -6,19 +6,50 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
-**Current checkpoint (2026-10-29): the isolated DN2 emulator capacity and ten-second
-playback milestone is complete.** Full 960,000-byte transport and both 4 KiB canary bands
-pass; duplicate, out-of-range, partial checksum and stale-token/watchdog cases pass.
-The final coupled run resolves actual type 11, completes cursor 480000/DONE in exactly
-15,000 renders, observes advancing normal frames, and captures finite, audible known
-200 Hz content in early and late windows (552,992 stereo WAV frames). Eighteen focused
-checks pass. The observer-only SHORT16 correction is included; exact proof word 4 remains.
-Final artifacts: `out/runs/ddr-proof/11723539-7f66-4fce-b663-45cd9ea3d3da`,
-log: `out/runs/ddr-proof/transport-playback-fixed.log`.
-**Next:** prove consumer retirement before backing overwrite, preserving Em's choice to
-stop old notes on selection. Keep delayed-event handling and transfer-writer quiescence
-explicit in that design. Production sample APIs, Transfer UI integration, DT2 ten-second
-backing and hardware cache/coexistence remain separate design/proof steps.
+**Current checkpoint (2026-10-29): the isolated DN2 terminal retirement proof passes.**
+All five coupled cases pass: full 960,000-byte transport and ten-second playback,
+three fresh-boot failure cases, and terminal retirement during progressing playback.
+Log: `out/runs/ddr-proof/terminal-retirement-suite.log`; its 121.38-second wall time is
+not a performance measurement. Normal playback artifacts:
+`out/runs/ddr-proof/6f65ad4c-3cf6-4553-8500-15eadd79bc51`. Terminal artifacts:
+`out/runs/ddr-proof/ff8f8057-0a9f-4030-95ff-83143b7ac2a5`.
+
+The terminal request observed cursor 49664/DONE=0. Exact RETIRED then reported
+READY/open=0, closed=1, admitted=0, fault=0 and 1,572 source-kernel calls, below natural
+completion at 15,000. Only after that ACK did the test poison all 960,000 backing bytes.
+Both full canary bands retained the expected pattern. Source-kernel calls remained 1,572
+while the original trigger stayed held, after an actual fresh note-on, and after duplicate
+RETIRE. Normal frames progressed after poison; callbacks returned DONE and no fault.
+[Finding 83](../findings/83-sample-retirement-design.md) retains hashes and observation limits.
+
+The private terminal contract opens admission only at the first complete COMMIT.
+RETIRE (op 4, seq 377, exact bank token, zero offset/count) permanently closes admission
+and READY. Status 6 means PENDING while an admitted callback remains; only exact status
+5 means RETIRED. CF retains one immutable staged request and retries boundedly; timeout
+never permits backing reuse. Admission, final-read release and closure use short
+IRPTEN-masked sections, two conservative NOPs after clear/restore and exact incoming
+MODE1 restoration. The numerical reader runs with incoming interrupt state restored.
+Assumptions remain one core, serialized adapter/hook paths and maskable accesses;
+no universal firmware/NMI exclusion is claimed. Corrupt bookkeeping fails closed.
+
+Raw first/latest MODE1, ASTATX, I6/I7/I13 and active markers are bounded, asynchronous
+observations. MODE1 was `0x39011cf8`; ASTATX is not a definitive task/IRQ identity.
+Tail entry/exit reads (35355/35358) straddle execution and are not a coherent counter
+snapshot. Zero observed tail overlap does not establish global exclusion.
+
+Validation: 36 focused assembled diagnostic/CF checks pass, including preserved-reader
+interleavings before first read, mid-reader and after kernel return. These test the
+protocol against shared DM, not physical IRQ dispatch. Rebuilt objects re-decode 264 CF /
+813 DSP instructions. Host checks pass 193 with 16 skipped
+(`out/runs/ddr-proof/terminal-host-checks.log`); direct lint/format, regression TypeScript
+and scoped path/diff checks pass. `test:changed` retains ten known path-reference failures
+and the pnpm launcher failure (`out/runs/ddr-proof/terminal-changed-checks.log`); this is
+not a passed routed integration gate.
+
+**Next:** design opening a new generation, strict stale-event fencing and serialized
+backing writers while preserving “Stop old notes on selection.” The terminal bank never
+reopens. Product sample APIs, Transfer UI integration, external DT2 mutation interception,
+DT2 ten-second backing and hardware ownership/cache/coexistence remain separate work.
 
 - Worktree: `/private/tmp/digikit-dsp-sampler`; branch: `refs/heads/sdk/dsp-sampler-discovery`.
   Keep Claude's original checkout on its cleanup branch untouched.
@@ -66,39 +97,16 @@ backing and hardware cache/coexistence remain separate design/proof steps.
   address while exact backing bytes change; cleared slot metadata is not retirement. Next design requires explicit consumer retirement
   before overwrite/release, stale-note generation guards, and coverage of external slot replacement/project reset.
   No borrowed-view API is implemented or safe to expose yet; preserve the current immutable-bank proof.
-- [Finding 83](../findings/83-sample-retirement-design.md) records the checked retirement design discovery:
-  candidate DT2 pre-mutation hooks, close/drain/invalidate/RETIRED/mutate/publish sequencing, held-trigger and
-  delayed-event hazards, and exact-token failure rules. These are [D]/[O], not an approved ABI or implementation.
-  Both current CF builders conditionally submit the existing frame before traversing the event queue and
-  constructing the next frame; a selection fence must cover the pending prior frame and queue. Guard/DMA
-  timing is unresolved, so this is not a fixed one-block latency claim. DN2 timestamp insertion has multiple
-  observed producers, with no established resource/generation binding. The DT2 static chain reaches the voice
-  through `0x1c75d8` → `0x1c2b24` → `0x1c642a` → `0x1c4ecf`; its link-tail anchor belongs to the separate
-  `0x1c74cd`, called later at `0x1c7756` by the same parent, with conditional/loop control still to resolve.
-  DN2 now has the same-parent static relation too: `0x1c9e76` calls dispatcher `0x1c2712` at `0x1c9fbc`,
-  then conditionally calls tail function `0x1c9d6b` at `0x1c9ff4`; the branch and loop remain relevant.
-  Its external caller is unresolved, but is not needed to establish those callsites. The candidate dynamic
-  jump uses PM(I4,M5), so an adjacent I12 load does not establish its target. Full current-section-3 absolute
-  scans found only each guard's recorded builder read/write pair; computed initialization is not excluded.
-  DN2 send copies into DMA staging; EOQF completion and SERQ channel enable are not reader retirement.
-  These static reads do not prove every-path ordering or interrupt exclusion. Next resolve dynamic callback/IRQ
-  atomicity, guard initialization, DMA completion and every queue producer with a bounded diagnostic trace
-  before coding an asynchronous owned-bank retirement proof on both devices.
-  Existing `SHARC_IRQ_PROBE` and `SHARC_PCDUMP` cover some interpreter-boundary tests; they do not create
-  pending DMA/SEC sources or variable peripheral timing, and PCDUMP may miss AOT stock PCs. No such test
-  ran in this discovery update. That proof is
-  independent of larger backing for the ten-second target; external DT2 mutation and DN2 capacity remain separate proofs.
-  A proposed owned-bank proof may separate pointer safety from strict UI-time event-age rejection: every admitted
-  consumer must resolve the current descriptor, and all cached old pointers must drain/invalidate before reuse.
-  The delayed-old-event policy remains open. Exact-token acknowledgments also require serialized backing writes:
-  an obsolete transfer must finish or cancel quiescently before a later generation can publish. These are proof
-  obligations, not a scope change, passed proof or code approval.
-- A separate source survey supplies a concrete candidate for DN2 larger-DDR backing and full-frame delivery;
-  its review draft is preserved at `out/runs/sampler-crossport-discovery/backing-draft.md` while citation-policy
-  clarification is pending. It is ignored run output, not an indexed finding or adopted backend. The next capacity
-  proof design runs alongside owned-bank retirement: establish current DN2 1.12 hooks and ownership before any
-  write, then specify a guarded 960,000-byte known-PCM16 delivery/playback proof. No production address, ABI,
-  source-copying decision or code approval follows; preserve the existing immutable bank.
+- [Finding 83](../findings/83-sample-retirement-design.md) records the retirement discovery,
+  corrected AudioTask roots, explicit IRQ/admission assumptions and passing terminal DN2 result.
+  Both CF builders submit the prior frame before queue traversal/reconstruction; strict UI-time
+  generation binding remains unresolved. The actual AudioTask entries lie inside merged database
+  function extents; earlier same-parent voice/tail shorthand is corrected in finding 83.
+  The private terminal bank proof closes/drains before reuse but never opens a new generation.
+  Current DN2 960,000-byte backing/delivery and ten-second playback are established only for the
+  isolated emulator diagnostic. Earlier source-survey drafts are historical; external DT2 mutation,
+  hardware ownership/cache/coexistence, strict stale-event fencing and serialized next-generation
+  writers remain separate design/proof obligations.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -175,17 +183,16 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
   OneShot UI; broader CF/lifecycle audit and controlled parameter/boundary semantics remain open.
 - [x] Capture current stock OneShot slot binding and the unique ten-second a → b active replacement transition
   on the original DT2 1.17 image; retain exact source bytes, active/cursor state and PCM (finding 82).
-- [x] Persist retirement protocol discovery and review of adapter/trigger hazards in finding 83; no ABI or protocol code approved.
+- [x] Persist retirement discovery and adapter/trigger review in finding 83; the private terminal DN2 diagnostic is now implemented and passes, without a public ABI.
 - [x] Read both current CF builders' prior-frame submission order, DN2 timestamp queue/reuse helpers and
   both-device same-parent static voice/tail chains, submit-guard absolute references and DN2 staging/register
   semantics; record existing diagnostic capabilities and limits in finding 83.
-- [ ] Prove callback scheduling/interrupt atomicity and upstream generation capture or an event-order fence before
-  implementing retirement. Then prove owned-bank retirement on both devices, followed separately by external DT2
-  replace/unload/project reset coverage before borrowed-view exposure. Start/end/reverse captures remain open.
+- [x] Prove terminal DN2 owned-bank retirement under explicit one-core, serialized adapter/hook and maskable-access assumptions, with assembled interleavings and coupled held/retriggered coverage.
+- [ ] Design reopen/new-generation publication, strict upstream stale-event fencing and serialized writers; prove DT2 retirement separately and cover external replace/unload/project reset before borrowed-view exposure. Start/end/reverse captures remain open.
 - [ ] Map DT2 dependencies against DN2 1.12's working voice seam and source acquisition; identify missing larger
   backing ownership/delivery without assuming DT2's pool or LP0, or restarting playback feasibility from scratch.
 - [x] Establish transferred-file format/rate and the implemented bounded float32 delivery path; the proposed
-  packed-PCM16 reader is separate and unimplemented.
+  packed-PCM16 reader is separately implemented and tested in the fixed DN2 diagnostic.
 - [ ] Establish placement, capacity, alignment, address representation, ownership, retention and eviction.
 - [ ] Establish ready/failure/unavailable behavior and synchronization for sample replacement and active voices.
 - [ ] Check retriggering, voice stealing, reverse boundary access and parameter changes during playback.
@@ -370,14 +377,13 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 - [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
 - [x] Record the confirmed target: approximately ten-second one-shots; stop old notes on selection.
 - [ ] Prove DT2 1.17 stock DSP-pool slot ownership, external mutation interception, lifetime/reclaim and cache rules
-  before borrowing stock backing. The next retirement candidate is an independent owned-bank proof on both devices.
+  before borrowing stock backing. The terminal DN2 owned-bank proof does not establish stock backing ownership.
 - [x] Prove bounded DN2 emulator backing/delivery for 960,000 packed PCM16 bytes and full ten-second playback,
   with exact payload, complete canaries, failure cases, actual dispatch, end cursor and early/late PCM evidence.
 - [ ] Establish hardware ownership/cache/coexistence and general capacity beyond that isolated emulator range.
 - [x] Record proposed retirement sequencing and source-survey/review results in finding 83; transport ACK is not a reader barrier.
-- [ ] Resolve scheduling and CF producer/frame fence evidence before protocol code; then agree the owned-bank proof
-  contract and stop scope. Prove note_on/render drain, armed/held/delayed starts, stale ACK/completion, rapid A/B/C,
-  load failure and timeout. Product stop granularity and ABI remain open.
+- [x] Implement and prove the scoped terminal DN2 retirement contract: guarded note_on/render admission/drain, closed cached/delayed callbacks, held/retriggered starts, exact/stale ACKs, pending retries and timeout.
+- [ ] Design reopening/new generations, strict producer/event fencing and serialized writer quiescence; then prove rapid A/B/C and replacement failure. Product stop granularity and public ABI remain open.
 - [x] Prove the packed PCM16 reader and fixed resident diagnostic consumer numerically and on coupled DN2.
 - [ ] Measure paired cost before a performance/adoption claim; product sample-picker scope remains open.
 

@@ -18,6 +18,45 @@ _dd_hook:
     DM(_dd_svl2) = R0;
     R0 = L3;
     DM(_dd_svl3) = R0;
+    // Raw context before observer arithmetic; ASTATX low 12 is retained raw.
+    R0 = ASTATX;
+    DM(_dd_obs_tail_last_astatx) = R0;
+    R0 = MODE1;
+    DM(_dd_obs_tail_last) = R0;
+    R0 = I6;
+    DM(_dd_obs_tail_last_i6) = R0;
+    R0 = I7;
+    DM(_dd_obs_tail_last_i7) = R0;
+    R0 = I13;
+    DM(_dd_obs_tail_last_i13) = R0;
+    R0 = DM(_dd_obs_active);
+    DM(_dd_obs_tail_last_active) = R0;
+    R0 = DM(_dd_obs_tail_entries);
+    R0 = PASS R0;
+    IF NE JUMP _dd_obs_tail_seen;
+    R0 = DM(_dd_obs_tail_last);
+    DM(_dd_obs_tail_first) = R0;
+    R0 = DM(_dd_obs_tail_last_astatx);
+    DM(_dd_obs_tail_first_astatx) = R0;
+    R0 = DM(_dd_obs_tail_last_i6);
+    DM(_dd_obs_tail_first_i6) = R0;
+    R0 = DM(_dd_obs_tail_last_i7);
+    DM(_dd_obs_tail_first_i7) = R0;
+    R0 = DM(_dd_obs_tail_last_i13);
+    DM(_dd_obs_tail_first_i13) = R0;
+    R0 = DM(_dd_obs_tail_last_active);
+    DM(_dd_obs_tail_first_active) = R0;
+_dd_obs_tail_seen:
+    R0 = DM(_dd_obs_tail_entries);
+    R0 = R0 + 1;
+    DM(_dd_obs_tail_entries) = R0;
+    R0 = DM(_dd_obs_active);
+    R0 = PASS R0;
+    IF EQ JUMP _dd_obs_tail_quiet;
+    R0 = DM(_dd_obs_tail_active);
+    R0 = R0 + 1;
+    DM(_dd_obs_tail_active) = R0;
+_dd_obs_tail_quiet:
     M5 = 0;
     M6 = 1;
     L2 = 0;
@@ -37,7 +76,11 @@ _dd_hook:
     R3 = DM(_dd_status);
     R4 = 2;
     COMP(R3, R4);
-    IF GE JUMP _dd_ack; // poison persists even before token adoption
+    IF LT JUMP _dd_header;
+    R4 = 4;
+    COMP(R3, R4);
+    IF LE JUMP _dd_ack; // only errors 2..4 are sticky poison
+_dd_header:
     R10 = DM(I3, M6); // exact token
     R11 = DM(I3, M6); // sequence
     R13 = DM(I3, M6); // operation
@@ -54,7 +97,10 @@ _dd_hook:
     R3 = DM(_dd_status);
     R4 = 2;
     COMP(R3, R4);
-    IF GE JUMP _dd_ack; // sticky failure
+    IF LT JUMP _dd_bounds;
+    R4 = 4;
+    COMP(R3, R4);
+    IF LE JUMP _dd_ack; // terminal statuses 5/6 may recheck retirement
     JUMP _dd_bounds;
 _dd_initial:
     R10 = PASS R10;
@@ -112,6 +158,12 @@ _dd_sumdone:
     R3 = DM(_dd_token);
     R3 = PASS R3;
     IF EQ JUMP _dd_init;
+    R3 = 4;
+    COMP(R13, R3);
+    IF EQ JUMP _dd_retire;
+    R3 = DM(_dd_retire_closed);
+    R3 = PASS R3;
+    IF NE JUMP _dd_ack; // terminal: never write or reopen this bank
     // A duplicate may only repeat the immediately preceding accepted frame.
     R3 = DM(_dd_seq);
     COMP(R11, R3);
@@ -194,8 +246,53 @@ _dd_accepted:
     R4 = 1;
     COMP(R3, R4);
     IF NE JUMP _dd_ack;
-    DM(_dd_ready) = R4; // READY is published last, only by complete COMMIT
+    // Publication is paired with callback admission under the same local mask.
+    R6 = MODE1;
+    BIT CLR MODE1 0x1000;
+    NOP; NOP;
+    DM(_dd_admission_open) = R4;
+    DM(_dd_ready) = R4; // complete COMMIT is the only opening
+    MODE1 = R6;
+    NOP; NOP;
     JUMP _dd_ack;
+// RETIRE uses the exact completed bank token and fixed terminal sequence.
+// Serialized hook + one core + maskable access are proof assumptions; this
+// local mask does not establish universal firmware exclusion or NMI safety.
+_dd_retire:
+    R3 = 377;
+    COMP(R11, R3);
+    IF NE JUMP _dd_protocol;
+    R3 = R14 OR R15;
+    IF NE JUMP _dd_protocol;
+    R3 = DM(_dd_seq);
+    R4 = 376;
+    COMP(R3, R4);
+    IF LT JUMP _dd_protocol;
+    R3 = DM(_dd_status);
+    R4 = 1;
+    COMP(R3, R4);
+    IF LT JUMP _dd_protocol;
+    R6 = MODE1;
+    BIT CLR MODE1 0x1000;
+    NOP; NOP;
+    R3 = 0;
+    DM(_dd_admission_open) = R3;
+    DM(_dd_ready) = R3;
+    R3 = 1;
+    DM(_dd_retire_closed) = R3;
+    R3 = DM(_dd_admitted);
+    R4 = DM(_dd_admit_fault);
+    R3 = R3 OR R4;
+    IF NE JUMP _dd_retire_pending;
+    R3 = 5;
+    JUMP _dd_retire_status;
+_dd_retire_pending:
+    R3 = 6;
+_dd_retire_status:
+    DM(_dd_status) = R3;
+    MODE1 = R6;
+    NOP; NOP;
+    JUMP _dd_accepted;
 _dd_badcheck:
     R3 = 2;
     JUMP _dd_error;
@@ -208,6 +305,7 @@ _dd_error:
     DM(_dd_status) = R3;
     R3 = 0;
     DM(_dd_ready) = R3;
+    DM(_dd_admission_open) = R3;
     JUMP _dd_ack;
 _dd_normal:
     // The stock dispatch reads unsigned SHORT16; the adjacent high half holds
@@ -238,6 +336,9 @@ _dd_ack:
     DM(I2, M6) = R4;
     DM(I2, M6) = R3;
 _dd_out:
+    R0 = DM(_dd_obs_tail_exits);
+    R0 = R0 + 1;
+    DM(_dd_obs_tail_exits) = R0;
     R0 = DM(_dd_svm5);
     M5 = R0;
     R0 = DM(_dd_svm6);
@@ -295,3 +396,80 @@ _dd_out:
 
 .GLOBAL _dd_normal_frames;
 .VAR _dd_normal_frames = 0;
+
+// Fixed storage only: no trace buffer and no retirement/admission semantics.
+// The active marker is a non-atomic read/modify/write observation. Missed
+// preemption, another bank/core, or counter wrap can hide nesting. A zero
+// overlap count is not proof of exclusion. First/latest snapshots can tear
+// when inspected live; ASTATX is not a task identity.
+.SECTION/DM seg_dmda;
+.GLOBAL _dd_obs_active;
+.VAR _dd_obs_active = 0;
+.GLOBAL _dd_obs_tail_active;
+.VAR _dd_obs_tail_active = 0;
+.GLOBAL _dd_obs_note_entries;
+.VAR _dd_obs_note_entries = 0;
+.GLOBAL _dd_obs_note_exits;
+.VAR _dd_obs_note_exits = 0;
+.GLOBAL _dd_obs_note_first;
+.VAR _dd_obs_note_first = 0;
+.VAR _dd_obs_note_first_astatx = 0;
+.VAR _dd_obs_note_first_i6 = 0;
+.VAR _dd_obs_note_first_i7 = 0;
+.VAR _dd_obs_note_first_i13 = 0;
+.VAR _dd_obs_note_first_active = 0;
+.GLOBAL _dd_obs_note_last;
+.VAR _dd_obs_note_last = 0;
+.VAR _dd_obs_note_last_astatx = 0;
+.VAR _dd_obs_note_last_i6 = 0;
+.VAR _dd_obs_note_last_i7 = 0;
+.VAR _dd_obs_note_last_i13 = 0;
+.VAR _dd_obs_note_last_active = 0;
+.GLOBAL _dd_obs_render_entries;
+.VAR _dd_obs_render_entries = 0;
+.GLOBAL _dd_obs_render_exits;
+.VAR _dd_obs_render_exits = 0;
+.GLOBAL _dd_obs_render_first;
+.VAR _dd_obs_render_first = 0;
+.VAR _dd_obs_render_first_astatx = 0;
+.VAR _dd_obs_render_first_i6 = 0;
+.VAR _dd_obs_render_first_i7 = 0;
+.VAR _dd_obs_render_first_i13 = 0;
+.VAR _dd_obs_render_first_active = 0;
+.GLOBAL _dd_obs_render_last;
+.VAR _dd_obs_render_last = 0;
+.VAR _dd_obs_render_last_astatx = 0;
+.VAR _dd_obs_render_last_i6 = 0;
+.VAR _dd_obs_render_last_i7 = 0;
+.VAR _dd_obs_render_last_i13 = 0;
+.VAR _dd_obs_render_last_active = 0;
+.GLOBAL _dd_obs_tail_entries;
+.VAR _dd_obs_tail_entries = 0;
+.GLOBAL _dd_obs_tail_exits;
+.VAR _dd_obs_tail_exits = 0;
+.GLOBAL _dd_obs_tail_first;
+.VAR _dd_obs_tail_first = 0;
+.VAR _dd_obs_tail_first_astatx = 0;
+.VAR _dd_obs_tail_first_i6 = 0;
+.VAR _dd_obs_tail_first_i7 = 0;
+.VAR _dd_obs_tail_first_i13 = 0;
+.VAR _dd_obs_tail_first_active = 0;
+.GLOBAL _dd_obs_tail_last;
+.VAR _dd_obs_tail_last = 0;
+.VAR _dd_obs_tail_last_astatx = 0;
+.VAR _dd_obs_tail_last_i6 = 0;
+.VAR _dd_obs_tail_last_i7 = 0;
+.VAR _dd_obs_tail_last_i13 = 0;
+.VAR _dd_obs_tail_last_active = 0;
+
+.GLOBAL _dd_admission_open;
+.VAR _dd_admission_open = 0;
+
+.GLOBAL _dd_admitted;
+.VAR _dd_admitted = 0;
+
+.GLOBAL _dd_retire_closed;
+.VAR _dd_retire_closed = 0;
+
+.GLOBAL _dd_admit_fault;
+.VAR _dd_admit_fault = 0;

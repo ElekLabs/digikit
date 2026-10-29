@@ -13,7 +13,22 @@ from tools.patchkit import pk_sharc
 
 HERE = REPO_ROOT / "modules/core/adapters/dsp-ddr-proof/src/dsp"
 STATE, INPUT, PARAMS, OUT, READY, OBSERVE = [0x08020000 + n * 0x100 for n in range(6)]
+CONTROL = {
+    name: 0x08022000 + i
+    for i, name in enumerate(
+        ("admission_open", "admitted", "retire_closed", "admit_fault")
+    )
+}
 SOURCE = 0x10200000
+# Snapshot words: MODE1, raw ASTATX, I6, I7, I13, active-before-entry.
+FIELDS = ("", "_astatx", "_i6", "_i7", "_i13", "_active")
+TRACE_NAMES = ["active", "tail_active"]
+for _kind in ("note", "render", "tail"):
+    TRACE_NAMES += [f"{_kind}_entries", f"{_kind}_exits"]
+    TRACE_NAMES += [
+        f"{_kind}_{which}{field}" for which in ("first", "last") for field in FIELDS
+    ]
+TRACE = {name: 0x08021000 + i for i, name in enumerate(TRACE_NAMES)}
 RETURN = 0xB9F000
 REGS = {
     **{f"I{i}": 0x20098000 + i * 64 for i in range(8, 16)},
@@ -65,9 +80,13 @@ def consumer():
     externs.update(
         {
             f"_dd_play_{name}": OBSERVE + i
-            for i, name in enumerate(("state", "notes", "blocks", "done", "output"))
+            for i, name in enumerate(
+                ("state", "notes", "blocks", "done", "output", "reads")
+            )
         }
     )
+    externs.update({f"_dd_obs_{name}": addr for name, addr in TRACE.items()})
+    externs.update({f"_dd_{name}": addr for name, addr in CONTROL.items()})
     return pk_sharc.build(
         pk_sharc.expand_includes(
             text, [REPO_ROOT / "sdk/asm", REPO_ROOT / "sdk", HERE]
@@ -86,19 +105,26 @@ def voice(consumer, ready=1, reverse=False):
     sess.poke(READY, ready)
     sess.poke(PARAMS, 256 if reverse else 0)
     sess.poke(INPUT + 3, OUT)
-    for i in range(5):
+    for i in range(6):
         sess.poke(OBSERVE + i, 0)
+    for addr in TRACE.values():
+        sess.poke(addr, 0)
+    for addr in CONTROL.values():
+        sess.poke(addr, 0)
+    sess.poke(CONTROL["admission_open"], int(ready == 1))
     sess.proof_seeded = False
     return sess
 
 
-def call(sess, entry):
+def call(sess, entry, context=None):
     # The DN2 adapter enters with I7==I6, an exclusive boundary. Keep a guard
     # there; the bridge must reserve space before the kernel's postmodify pushes.
     sess.poke(REGS["I7"] // 4, 0xABCD1234)
     regs = REGS if not sess.proof_seeded else {}
     r = sess.call(
-        entry, {**regs, "R4": STATE, "R8": INPUT, "R12": PARAMS}, read_regs=KEEP
+        entry,
+        {**regs, **(context or {}), "R4": STATE, "R8": INPUT, "R12": PARAMS},
+        read_regs=KEEP,
     )
     sess.proof_seeded = True
     assert r["halt"]["reason"] == "breakpoint", r["halt"]
@@ -148,3 +174,74 @@ def test_full_view_direction_final_block_done_and_retrigger(consumer, reverse):
         assert [sess.peek(OUT + i) for i in range(32)] == [0] * 32
         sess.poke(READY, 1)
         sess.poke(PARAMS, 256 if reverse else 0)
+
+
+def test_observer_keeps_first_and_latest_context_without_changing_playback(consumer):
+    sess = voice(consumer)
+    first_astat = 0x12345000
+    last_astat = 0x23456000
+    call(sess, "_dd_play_note_on", {"ASTATX": first_astat})
+    call(sess, "_dd_play_note_on", {"ASTATX": last_astat})
+    expected = [REGS["MODE1"], first_astat, REGS["I6"], REGS["I7"], RETURN, 0]
+    assert [sess.peek(TRACE[f"note_first{f}"]) for f in FIELDS] == expected
+    expected[1] = last_astat
+    assert [sess.peek(TRACE[f"note_last{f}"]) for f in FIELDS] == expected
+    assert sess.peek(TRACE["note_entries"]) == 2
+    assert sess.peek(TRACE["note_exits"]) == 2
+    # Seed an observed outer consumer; this tests marker bookkeeping only,
+    # without claiming that a native run has actually preempted a callback.
+    sess.poke(TRACE["active"], 1)
+    call(sess, "_dd_play_render", {"ASTATX": first_astat})
+    assert sess.peek(TRACE["render_last_active"]) == 1
+    assert sess.peek(TRACE["active"]) == 1
+    assert sess.peek(TRACE["render_entries"]) == 1
+    assert sess.peek(TRACE["render_exits"]) == 1
+    assert [sess.peek(OUT + i) for i in range(32)] == [bits(i) for i in range(32)]
+
+
+@pytest.mark.parametrize("mode", [0x8000, 0x9000])
+def test_terminal_closed_callbacks_have_no_source_reads_and_keep_incoming_mode(
+    consumer, mode
+):
+    sess = voice(consumer)
+    call(sess, "_dd_play_note_on")
+    call(sess, "_dd_play_render")
+    sess.poke(CONTROL["admission_open"], 0)
+    sess.poke(CONTROL["retire_closed"], 1)
+    sess.poke(READY, 0)
+    sess.record_reads(SOURCE, 240000)
+    # A cached active render, delayed note, held/retriggered note and armed-like
+    # late render all pass the same terminal admission check.
+    for entry in (
+        "_dd_play_render",
+        "_dd_play_note_on",
+        "_dd_play_render",
+        "_dd_play_note_on",
+        "_dd_play_render",
+    ):
+        r = sess.call(
+            entry,
+            {**REGS, "MODE1": mode, "R4": STATE, "R8": INPUT, "R12": PARAMS},
+            read_regs=KEEP,
+        )
+        assert r["halt"]["reason"] == "breakpoint"
+        assert r["regs"]["MODE1"] == mode
+        assert all(r["regs"][n] == REGS[n] for n in KEEP if n != "MODE1")
+        assert not sess.stores
+        assert sess.peek(STATE + 1) == 0
+        assert sess.peek(STATE + 5) == 1
+        assert sess.peek(CONTROL["admitted"]) == 0
+    assert [sess.peek(OUT + i) for i in range(32)] == [0] * 32
+    assert sess.peek(OBSERVE + 5) == 1
+
+
+def test_counter_corruption_fails_closed_without_wrapping_to_drained(consumer):
+    sess = voice(consumer)
+    sess.poke(CONTROL["admitted"], 0xFFFFFFFF)
+    sess.record_reads(SOURCE, 240000)
+    call(sess, "_dd_play_render")
+    assert not sess.stores
+    assert sess.peek(CONTROL["admitted"]) == 0xFFFFFFFF
+    assert sess.peek(CONTROL["retire_closed"]) == 1
+    assert sess.peek(CONTROL["admit_fault"]) == 1
+    assert sess.peek(CONTROL["admission_open"]) == 0
