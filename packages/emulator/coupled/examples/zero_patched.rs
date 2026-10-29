@@ -1,22 +1,46 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-//! A patched build in digikit's emulator with the DSP side answering zeros, so the frame interrupt (vector 191) runs:
-//! the daemon refuses a build it does not know at start, and loads a patched one ColdFire-only, where no frame runs.
-//! Build it as an example of digikit's `digi-coupled` crate, with `plusdrive-format` as its dev-dependency
-//! (tests/emu/README.md):
+//! A patched build (a mod's OS file) with the DSP side answering zeros, so the frame interrupt (vector 191) and the UI
+//! run as on a unit, driven line by line from another program (docs/INSTRUMENTATION.md, "Scripted patched runs").
+//! The daemon refuses a build it does not know and runs a patched one ColdFire-only, where no frame runs.
 //!
+//!     cargo build --release -p digi-coupled --example zero_patched
 //!     zero_patched STOCK.syx BUILD.syx CF_STATE [CARD_SECTORS]
 //!
-//! CF_STATE is the build's ColdFire state at the main screen; when the file does not exist the runner makes it first (a
-//! ColdFire-only cold boot with the SSI diagnostic on, as zero-DSP mode needs). Commands, one per line on stdin, each
-//! answered by one line on stdout:
-//!   step N | down CODE | up CODE | turn ENCODER DETENTS | peek ADDR (a long, hex) | poke ADDR HEXBYTES | leds | frame PATH
-//!   | card-save PATH (every sector the guest wrote: a big-endian u64 sector and its 512 bytes each) | quit
-//! CARD_SECTORS is such a file: the card starts with those sectors, as after a restart of the unit.
+//! BUILD.syx may be the stock file itself. CF_STATE is the build's ColdFire state at the main screen; when the file
+//! does not exist the runner makes it first (a ColdFire-only cold boot with the SSI diagnostic on, as zero-DSP mode
+//! needs). CARD_SECTORS is a `card-save` file: the card starts with those sectors over an empty +Drive, as after a
+//! restart of the unit.
+//!
+//! Commands, one per line on stdin, each answered by one line on stdout; addresses and byte counts are hex:
+//!   step N                      run N instructions (decimal)            -> ok ICOUNT
+//!   down CODE | up CODE         a panel key (decimal code)              -> ok
+//!   turn ENCODER DETENTS        an encoder (decimal)                    -> ok
+//!   peek ADDR                   a long                                  -> 8 hex digits
+//!   poke ADDR HEXBYTES          write guest memory                      -> ok
+//!   dump ADDR LEN PATH          LEN bytes of guest memory to a file     -> ok LEN
+//!   regs                        D0-D7 A0-A7 PC SR                       -> 18 words
+//!   leds | frame PATH           the key LEDs (hex) / the OLED bytes to a file
+//!   card-save PATH              every sector the guest wrote: a big-endian u64 sector and its 512 bytes each
+//!   probe PC..                  count executions of these PCs from now on (added to those asked before)
+//!   probes                      -> PC:COUNT ..
+//!   regs-at PC..                a breakpoint that logs and goes on: registers and the stack top at these PCs
+//!   reglog PATH                 the log as JSON lines (pc, icount, d, a, stack: the caller is stack[0] on a
+//!                               function's first instruction)  -> ok HITS DROPPED
+//!   guard LO-HI[,..]            report CPU stores into these ranges (HI exclusive), with the storing PC; the bus
+//!                               single-steps while armed. "guard off" disarms.
+//!   guards                      -> TOTAL then PC:ADDR:SIZE .. (the first 64 hits)
+//!   run-until PC MAX            step until PC is reached (at most MAX instructions, decimal) -> ok|timeout ICOUNT
+//!   quit
 use std::io::{BufRead, Write};
 
 use digi_coupled::{AudioMode, AudioOptions, CoupledRuntime};
+use elektron_native_boot::{Emulator, GuardRange, parse_ranges};
 use emmc_card::{Card, CardIdentity};
 use sha2::{Digest, Sha256};
+
+fn hex(text: &str) -> u32 {
+    u32::from_str_radix(text.trim_start_matches("0x"), 16).expect("hex number")
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -31,11 +55,18 @@ fn main() {
         let path = args.get(4)?;
         let bytes = std::fs::read(path).expect("CARD_SECTORS");
         // the card the emulator boots with when it is given none (an empty +Drive), with the sectors written over it
-        let image = plusdrive_format::build_sample_image(Vec::new()).expect("empty +Drive").image;
-        let mut card = Card::with_backing(CardIdentity::from_env().expect("identity"), Some(Box::new(image))).expect("card");
+        let image = plusdrive_format::build_sample_image(Vec::new())
+            .expect("empty +Drive")
+            .image;
+        let mut card = Card::with_backing(
+            CardIdentity::from_env().expect("identity"),
+            Some(Box::new(image)),
+        )
+        .expect("card");
         for record in bytes.chunks(8 + 512) {
             let sector = u64::from_be_bytes(record[..8].try_into().expect("sector")) as u32;
-            card.write_data(25, sector, &record[8..]).expect("card write");
+            card.write_data(25, sector, &record[8..])
+                .expect("card write");
         }
         Some(card)
     };
@@ -64,7 +95,8 @@ fn main() {
         dsp_patch: None,
         zero: true,
     };
-    let mut rt = CoupledRuntime::new_patched_audio(&build, card(), &base, &options).expect("runtime");
+    let mut rt =
+        CoupledRuntime::new_patched_audio(&build, card(), &base, &options).expect("runtime");
     let mut leds = String::new();
     let mut frame: Vec<u8> = Vec::new();
     let stdin = std::io::stdin();
@@ -95,8 +127,14 @@ fn main() {
                 }
                 format!("ok {}", rt.elapsed_instructions())
             }
-            ["down", c] => rt.button(c.parse().expect("code"), true).map(|_| "ok".into()).unwrap_or_else(|e| e),
-            ["up", c] => rt.button(c.parse().expect("code"), false).map(|_| "ok".into()).unwrap_or_else(|e| e),
+            ["down", c] => rt
+                .button(c.parse().expect("code"), true)
+                .map(|_| "ok".into())
+                .unwrap_or_else(|e| e),
+            ["up", c] => rt
+                .button(c.parse().expect("code"), false)
+                .map(|_| "ok".into())
+                .unwrap_or_else(|e| e),
             ["turn", e, d] => rt
                 .turn(e.parse().expect("encoder"), d.parse().expect("detents"))
                 .map(|_| "ok".into())
@@ -113,19 +151,105 @@ fn main() {
                 let bytes: Vec<u8> = (0..hex.len() / 2)
                     .map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).expect("hex bytes"))
                     .collect();
-                rt.write_ram(addr, &bytes).map(|_| "ok".into()).unwrap_or_else(|e| e)
+                rt.write_ram(addr, &bytes)
+                    .map(|_| "ok".into())
+                    .unwrap_or_else(|e| e)
             }
-            ["dump", a, n, path] => {
-                let addr = u32::from_str_radix(a.trim_start_matches("0x"), 16).expect("address");
-                let len = u32::from_str_radix(n.trim_start_matches("0x"), 16).expect("length");
-                let mut out = Vec::with_capacity(len as usize);
-                for k in (0..len).step_by(4) {
-                    out.extend_from_slice(&rt.peek32(addr + k).unwrap_or(0).to_be_bytes());
-                }
-                match std::fs::write(path, &out) {
-                    Ok(()) => format!("ok {}", out.len()),
+            // the emulator's memory peek; CoupledRuntime::peek is a snapshot
+            ["dump", a, n, path] => match Emulator::peek(&mut rt, hex(a), hex(n) as usize) {
+                Ok(bytes) => match std::fs::write(path, &bytes) {
+                    Ok(()) => format!("ok {:x}", bytes.len()),
+                    Err(e) => e.to_string(),
+                },
+                Err(e) => e,
+            },
+            ["regs"] => {
+                let (d, a, pc, sr) = rt.cpu_regs();
+                let words: Vec<String> = d
+                    .iter()
+                    .chain(a.iter())
+                    .map(|v| format!("{v:08x}"))
+                    .collect();
+                format!("{} {pc:08x} {sr:04x}", words.join(" "))
+            }
+            ["probe", pcs @ ..] if !pcs.is_empty() => {
+                let pcs: Vec<u32> = pcs.iter().map(|p| hex(p)).collect();
+                rt.probe_pcs(&pcs);
+                "ok".into()
+            }
+            ["probes"] => {
+                let mut hits = rt.probe_hits();
+                hits.sort();
+                hits.iter()
+                    .map(|(pc, n)| format!("{pc:08x}:{n}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            }
+            ["regs-at", pcs @ ..] => {
+                let pcs: Vec<u32> = pcs.iter().map(|p| hex(p)).collect();
+                rt.record_regs_at(&pcs);
+                "ok".into()
+            }
+            ["reglog", path] => {
+                let (log, dropped) = rt.reg_log();
+                let words = |v: &[u32]| {
+                    v.iter()
+                        .map(|x| format!("\"{x:#010x}\""))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                };
+                let text: String = log
+                    .iter()
+                    .map(|h| {
+                        format!(
+                            "{{\"pc\":\"{:#010x}\",\"icount\":{},\"d\":[{}],\"a\":[{}],\"stack\":[{}]}}\n",
+                            h.pc,
+                            h.icount,
+                            words(&h.d),
+                            words(&h.a),
+                            words(&h.stack)
+                        )
+                    })
+                    .collect();
+                let n = log.len();
+                match std::fs::write(path, text) {
+                    Ok(()) => format!("ok {n} {dropped}"),
                     Err(e) => e.to_string(),
                 }
+            }
+            ["guard", "off"] => {
+                rt.set_write_guards(Vec::new(), Vec::new());
+                "ok".into()
+            }
+            ["guard", ranges] => match parse_ranges(ranges) {
+                Ok(r) => {
+                    let protect = r
+                        .into_iter()
+                        .map(|(lo, hi)| GuardRange {
+                            lo,
+                            hi,
+                            label: format!("{lo:#x}..{hi:#x}"),
+                        })
+                        .collect();
+                    rt.set_write_guards(protect, Vec::new());
+                    "ok".into()
+                }
+                Err(e) => e,
+            },
+            ["guards"] => {
+                let report = rt.guard_report();
+                let hits: Vec<String> = report
+                    .hits
+                    .iter()
+                    .map(|h| format!("{:08x}:{:08x}:{}", h.pc, h.addr, h.size))
+                    .collect();
+                format!("{} {}", report.total, hits.join(" "))
+                    .trim_end()
+                    .to_string()
+            }
+            ["run-until", pc, max] => {
+                let reached = rt.run_until_pc(hex(pc), max.parse().expect("count"));
+                format!("{} {}", if reached { "ok" } else { "timeout" }, rt.icount())
             }
             ["leds"] => leds.clone(),
             ["frame", path] => match std::fs::write(path, &frame) {
