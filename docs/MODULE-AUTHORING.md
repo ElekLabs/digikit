@@ -372,12 +372,16 @@ The headers are the reference. This section lists what you need to know before y
 | `render(state, in, params)` | Once per block of `DK_BLOCK` (32) samples while the voice runs. | `DK_OK`, or `DK_DONE` when the voice has ended. |
 | `desc` | A `dk_machine_desc` in read-only data: magic, contract version, parameter count, voices, state bytes, bytes cleared at note-on, cycle budgets. | Read by the adapter. |
 
-`render` writes `DK_BLOCK` floats to `in->out`. `in` also holds `pitch` (semitones shifted left by 8, the tune included), `velocity` and `block`.
+`render` writes `DK_BLOCK` floats to `in->out`. `in` also holds `pitch` (semitones shifted left by 8, the tune included), `velocity`, `block` and the source `track`.
 `params` holds `DK_MAX_PARAMS` words. The words after your parameters are 0.
 
 The adapter enters your routine with `I13` = return address and `JUMP (M13, I12)`. The arguments are `R4` = state, `R8` = `dk_voice_in`,
 `R12` = `params`. The result is in `R0`. In `dk_voice_in` the words are: 0 `pitch`, 1 `velocity` (0 to 127, shifted left by 8), 2 `block`
-(blocks since the note-on), 3 `out` (pointer to 32 floats). `render` also runs on the note-on block, after `note_on`.
+(blocks since the note-on), 3 `out` (pointer to 32 floats), 4 `track` (0 to 15, latched at note-on).
+`track` requires machine contract 1.1; the first four offsets and the V1 descriptor are unchanged. On Digitone II it identifies the source
+track independently of the physical voice slot, and stays latched until retrigger. The first trigger-edge block remains silent; the owner is
+latched on the following note-on block. An invalid owner ends only that slot without calling the module.
+`render` also runs on the note-on block, after `note_on`.
 Do not place `note_on` at offset 0 of the image: an offset of 0 reads as "no note_on".
 
 The `dk_machine_desc` has 10 words: magic, contract, parameter count, voices (1 to 16), state bytes per voice (a multiple of 4), bytes cleared at

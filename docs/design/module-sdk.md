@@ -192,8 +192,10 @@ typedef enum {                         /* parameter kinds: decide the formatter 
 typedef struct dk_voice_in {            /* per call, built by the adapter                                         */
     int32_t  pitch;                     /* semitones << 8, MIDI note 60 = 60 << 8, tune already added            */
     int32_t  velocity;                  /* 0 .. 127 << 8                                                          */
-    uint32_t block;                     /* blocks since note-on, 0 on the note-on block; wraps at 2^32            */
-} dk_voice_in;
+    uint32_t block;                     /* byte 8: blocks since note-on, 0 on the note-on block; wraps at 2^32    */
+    float   *out;                       /* byte 12: render writes DK_BLOCK floats here                            */
+    uint32_t track;                     /* byte 16: source track 0 .. 15, latched at note_on (machine 1.1)        */
+} dk_voice_in;                          /* 20 bytes on SHARC; pitch at byte 0, velocity at byte 4                 */
 
 /* Static description, one per module, in the read-only data section; the packer reads it by the symbol `dk_machine_desc`. */
 typedef struct dk_machine_desc {

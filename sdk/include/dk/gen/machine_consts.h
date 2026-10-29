@@ -38,12 +38,14 @@ typedef enum {
 #define DK_IN_VELOCITY 4
 #define DK_IN_BLOCK 8
 #define DK_IN_OUT 12
-#define DK_IN_BYTES 16
+#define DK_IN_TRACK 16
+#define DK_IN_BYTES 20
 #define DK_IN_W_PITCH 0
 #define DK_IN_W_VELOCITY 1
 #define DK_IN_W_BLOCK 2
 #define DK_IN_W_OUT 3
-#define DK_IN_WORDS 4
+#define DK_IN_W_TRACK 4
+#define DK_IN_WORDS 5
 #define DK_DESC_MAGIC 0
 #define DK_DESC_CONTRACT 4
 #define DK_DESC_N_PARAMS 8

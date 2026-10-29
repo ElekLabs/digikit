@@ -1173,6 +1173,8 @@ _dv_contract:
     DM(I1, M5) = R9;
 _dv_cmarked:
     DM(_dv_c + 0) = R11;
+    R2 = DM(_dv_g + 12);                  // actual source track, fixed for this DT2 voice
+    DM(_dv_in + DK_IN_TRACK) = R2;
     // pitch = frame word ADM_PITCH_HW + t, the tune knob's word (clamped to the row's range) folded in as (word - 0x4000)
     R0 = ADM_PITCH_HW;
     R0 = R0 + R2;
@@ -1542,7 +1544,7 @@ _dv_frame_sw:
 .PKDATA _dv_rec, 8;
 // The contract adapter's data: the `dk_voice_in` it hands to the module, the parameter words (8), the blocks since the note-on per track (16), its scalars
 // (see `_dv_contract`) and the knob positions of the module's parameters in order (ADM_PARAM_SLOT0 .. 7; 255: none).
-.PKDATA _dv_in, 16;
+.PKDATA _dv_in, 20;
 .PKDATA _dv_params, 32;
 .PKDATA _dv_blk, 64;
 .PKDATA _dv_c, 64;

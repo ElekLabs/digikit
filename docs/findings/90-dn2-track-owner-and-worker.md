@@ -30,11 +30,36 @@ current frame. The candidate for new note binding is the current frame halfword
 The source track must be latched for the note rather than reread as its bank owner
 each render block.
 
-**[O]** Extend the SDK input through its existing machine minor-version gate,
-keep the four existing input offsets and descriptor V1, and test physical slot
-versus track, reassignment, invalid owners and the delayed note-on edge. New
-modules must be rejected by runtimes that supply only the old four-word input.
-No ABI change is implemented by this finding.
+## Implemented source-track input
+
+**[D]** Runtime 0.5.3 supplies machine contract 1.1. `track` is appended at byte
+16 of `dk_voice_in`; the original four offsets and ten-word V1 descriptor remain
+unchanged. DT2 supplies the actual track. DN2 reads current frame halfword
+`0x52d + slot` at the existing delayed note-on, rejects values at least 16, and
+caches the owner in its per-slot adapter record. Every subsequent render sees
+that cached track until retrigger. Invalid owners end only the slot, without
+calling the module or incrementing its type-fault count.
+
+**[D]** Seventeen assembled guard/track tests pass, including physical slot versus
+track, owner changes during the silent arm block, cached ownership across render,
+retrigger, invalid owners including 0xffff, other-slot recovery and DT2 tracks
+0, 3 and 15. Eight focused adapter regression tests also pass. Existing four-field
+fixtures keep working. Independent code review found no issue. Generation and
+both adapter-object checks pass; rebuilt patchkit packs machine contract 1.1 and
+runtime 0.5.3 into a new module. Logs: `out/track-guard-tests.log`,
+`out/track-adapter-regression.log`, `out/track-release-checks.log` and
+`out/track-patchkit-build-status.log`.
+
+**[D]** Existing runtime loader and boot scanner reject declared machine minors
+above the supported minor. This provides the compatibility gate for old runtimes;
+new runtimes still accept older module minors. No new old-runtime coupled rejection
+run was performed; the evidence here is the unchanged gate and actual packed
+header. Adapter objects intentionally change to populate the appended field;
+no SHARC core regeneration or PCM-pin change occurred.
+
+**[O]** This input exposes identity, not a sample bank. Per-track bank generations,
+selection/loading/publication and a coupled voice-reassignment proof remain
+integration work. No hardware or complete sampler claim follows from these tests.
 
 ## Background-worker correction
 
@@ -60,3 +85,10 @@ prove the absence of sample-loading code.
 The SHARC audit used section-7 SHA-256
 `336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`.
 No firmware bytes or derived binary artifacts are committed.
+
+
+Checkpoint checks: direct host tests pass 195 with 16 skipped across the initial
+run and permission-corrected rerun of six local-socket tests (initial EPERM).
+Scoped Python lint, generated-object formatting, document path checks and diff
+whitespace pass. Routed `test:changed` retains baseline pathcheck and pnpm launcher
+failures; no full integration gate or coupled playback proof is claimed.

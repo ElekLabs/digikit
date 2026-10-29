@@ -14,6 +14,7 @@ typedef struct dk_voice_in {
     int32_t velocity;                   /* 0 .. 127 << 8 */
     uint32_t block;                     /* blocks since note-on, 0 on the note-on block */
     float *out;                         /* render writes DK_BLOCK floats here */
+    uint32_t track;                     /* source track 0 .. 15, latched at note_on; machine contract 1.1 */
 } dk_voice_in;
 
 /* One per module in read-only data, found by the manifest's symbol. No function pointers: the manifest names the entry symbols. */
