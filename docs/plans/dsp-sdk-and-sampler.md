@@ -6,7 +6,34 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
-**Latest checkpoint: DN2 native bulk transfer with stock audio passes (2026-10-29).**
+**Latest checkpoint: private device-side completion proof passes (2026-10-29).**
+Diagnostic 0.2 changes both boot-time wire counts from `0xabc` to `0xacc`, keeps
+the stock `0xabc` copy, and carries a coherent completion snapshot in the new
+16 bytes. CF sends each retained request once and waits for the exact DSP ACK.
+First-page and full-bank held-stock-audio proofs pass: 235 CF acknowledgements,
+960,000 exact bytes, intact guards, terminal DMA inactive, finite non-silent PCM
+before/during/after, and no silent window in 415 measured transfer segments.
+
+- [x] Implement the private 0.2 reply extension.
+- [x] Complete 31 focused tests, scoped static checks and independent review.
+- [x] Prepare a private cold-idle from pre-init state; verify all four counts
+  `0x566` before any CF exchange, without live DMA edits or core regeneration.
+- [x] Run the first-page and full-bank audio proofs and independently audit artifacts.
+- [x] Run direct host checks: 195 passed, 16 skipped. Routed checks retain the
+  ten baseline stale references and linked-package launcher failures; no merge gate claimed.
+- [ ] Resolve first-release UX: per-track Workbench assignment with machine
+  start/end/reverse controls (recommended), or an on-device picker immediately.
+  The question is pending with Em; do not infer an answer from elapsed time.
+- [ ] Design the production binding/loading API and owned backing after that choice.
+
+Evidence and fixture-selection correction: [finding 88](../findings/88-dn2-reply-ownership.md).
+The first 0.2 run selected the old cold-idle through a canonicalized image symlink;
+a physical private image copy and explicit preflight guard fix this. No firmware
+or emulator-core correction was needed. Production pool ownership, cache behavior,
+bounded production transport and generation replacement remain open; no hardware
+operation or public completion contract is claimed.
+
+**Earlier payload checkpoint: DN2 native bulk transfer with stock audio (0.1).**
 The private LP0 adapter uses the existing CF sender and SHARC driver. The
 first-page proof passes, then the separately selected full-bank proof passes:
 235 packets, 960,000 exact bytes, final 1,536-byte clamp, intact 4 KiB guards,
@@ -23,8 +50,8 @@ See [finding 92](../findings/92-dn2-native-bulk-seam.md) for artifacts and limit
 - [x] Prove finite non-silent stock DN2 playback before/during/after transfer;
   record per-window metrics without claiming dropout-free hardware audio.
 - [ ] Bound stock fixed DDR object access before choosing production reservation.
-- [ ] Establish a device-side completion channel preserving stock reply data;
-  header and trailer candidates both have stock accessors (finding 88).
+- [x] Prove a private device-side completion channel preserving stock reply data;
+  production ownership and integration remain separate (finding 88).
 - [ ] Integrate per-track loading/publication and prove both devices.
 
 Ownership audit: fixed FX object rooted at `0x8005912c` has bounded ring indices
@@ -35,8 +62,8 @@ no general reservable DDR arena has been established. Keep the experimental bank
 private and unpublished to voices until ownership is resolved.
 The following smaller ring object is also locally bounded; a lookup index is
 bounded by a signed-halfword load, correcting the initial unbounded-word reading
-(finding 91). Completion research now evaluates an explicit reply extension:
-verify actual CF/DSP buffer extents and all DMA/copy counts before any mutation.
+(finding 91). The explicit reply extension is now proved in the private diagnostic,
+with boot-time counts and unchanged stock-copy bounds.
 No stock header/trailer bytes are approved for reuse.
 
 

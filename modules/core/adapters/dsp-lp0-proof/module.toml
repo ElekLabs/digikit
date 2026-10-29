@@ -1,6 +1,6 @@
 [module]
 id = "core/dsp-lp0-proof"
-version = "0.1.0"
+version = "0.2.0"
 name = "Private LP0 receive proof"
 category = "core"
 role = "adapter"
@@ -24,6 +24,7 @@ devices = ["dn2"]
 [object.externs]
 lp_stock_send = "cf.link.fn.bulk_send"
 lp_queue_pop = "cf.rtos.fn.queue_pop"
+lp_stock_copy = "cf.link.fn.reply_copy"
 
 [[object]]
 path = "build/lp0-proof-dsp.dko.json"
@@ -53,3 +54,28 @@ resource = "cf.view.site.ui_loop"
 
 [[claim]]
 resource = "dsp.link.site.block_tail"
+
+# Both wire counts are boot-only. The stock caller's 0xabc copy remains intact.
+[[op]]
+op = "hook"
+hook = "cf.link.hook.boot_wire_size"
+to = "lp_wire_size"
+
+[[op]]
+op = "hook"
+hook = "cf.link.hook.reply_copy"
+to = "lp_copy_reply"
+
+[[op]]
+op = "write"
+anchor = "dsp.link.site.boot_wire_size"
+hex = "840fcc0a"
+
+[[claim]]
+resource = "cf.link.site.boot_wire_size"
+
+[[claim]]
+resource = "cf.link.site.reply_copy"
+
+[[claim]]
+resource = "dsp.link.site.boot_wire_size"

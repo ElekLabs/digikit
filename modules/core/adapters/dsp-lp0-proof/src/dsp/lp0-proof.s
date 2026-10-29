@@ -1,4 +1,5 @@
 #include "dsp/call.inc"
+#include "dsp/sample_bank.inc"
 // DN2 1.12 emulator-only, private LP0 receive diagnostic. No ACK or voice publication.
 .SECTION/PM seg_pmco;
 .GLOBAL _lp_hook;
@@ -233,6 +234,31 @@ _lp_init_error:
     R0 = 4;
     DM(_lp_status) = R0;
 _lp_restore:
+    // Publish a coherent CPU snapshot only after init/arm/callback has returned.
+    // The current stock reply belongs to this AudioTask construction path.
+    // IRQ masking does not grant general DMA ownership of the diagnostic gap.
+    DK_SAMPLE_BANK_LOCK(R8);
+    BIT CLR MODE1 0x200000;               // scalar stores; keep bank selectors
+    NOP; NOP;
+    M6 = 1;
+    L4 = 0;
+    R3 = 0x00014c50;                     // numeric halves: magic, version
+    R4 = DM(_lp_status);
+    R5 = DM(_lp_error);
+    R5 = LSHIFT R5 BY 16;
+    R4 = R4 OR R5;                       // numeric halves: status, error
+    R5 = DM(_lp_pages);
+    R6 = DM(_lp_bytes);
+    R0 = DM(_lp_save + 80);              // incoming I4: current reply byte pointer
+    R1 = 0xabc;
+    R0 = R0 + R1;
+    I4 = R0;
+    NOP; NOP; NOP;
+    DM(I4, M6) = R3;
+    DM(I4, M6) = R4;
+    DM(I4, M6) = R5;
+    DM(I4, M6) = R6;
+    DK_SAMPLE_BANK_UNLOCK(R8);
     // A B write also loads its I register: restore all bases before indices.
     R0 = DM(_lp_save + 128);
     M0 = R0;

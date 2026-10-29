@@ -18,37 +18,121 @@
   },
   {
    "addend": 0,
-   "offset": 2,
+   "offset": 28,
+   "section": ".text.lp_copy_reply",
+   "symbol": "lp_stock_copy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 170,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_bad_reply",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 176,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 184,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 192,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 200,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 208,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 216,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 224,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 230,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 236,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 242,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 248,
+   "section": ".text.lp_copy_reply",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
    "section": ".text.lp_tick",
    "symbol": ".sec..bss.lp_failed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 12,
+   "offset": 20,
    "section": ".text.lp_tick",
    "symbol": ".sec..bss.lp_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 22,
+   "offset": 36,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_mail",
+   "symbol": ".sec..bss.lp_bad_reply",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 30,
+   "offset": 48,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_next",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 44,
-   "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_mail",
+   "symbol": ".sec..bss.lp_failed",
    "type": "cf.32"
   },
   {
@@ -62,56 +146,49 @@
    "addend": 0,
    "offset": 62,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_failed",
+   "symbol": ".sec..bss.lp_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 68,
+   "offset": 70,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_mail",
+   "symbol": ".sec..bss.lp_sent",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 82,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_staging",
+   "symbol": ".sec..bss.lp_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 90,
    "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 104,
+   "section": ".text.lp_tick",
    "symbol": ".sec..bss.lp_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 96,
-   "section": ".text.lp_tick",
-   "symbol": "lp_stock_send",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 106,
-   "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_next",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
    "offset": 114,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_mail",
+   "symbol": ".sec..bss.lp_failed",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 4,
    "offset": 120,
    "section": ".text.lp_tick",
-   "symbol": ".sec..bss.lp_next",
+   "symbol": ".sec..bss.lp_mail",
    "type": "cf.32"
   },
   {
@@ -119,6 +196,139 @@
    "offset": 128,
    "section": ".text.lp_tick",
    "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 136,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 150,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 156,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 162,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 172,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 178,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_ack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 218,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 276,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 282,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 298,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_staging",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 308,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 314,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_sent",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 320,
+   "section": ".text.lp_tick",
+   "symbol": "lp_stock_send",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 330,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 338,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 388,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 412,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 420,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_sent",
    "type": "cf.32"
   }
  ],
@@ -132,16 +342,44 @@
   },
   {
    "align": 2,
-   "hex": "4ab900000000670a700423c0000000004e757201b2b90000000066f42039000000000c80000000ea6208b0b90000000067187001720423c00000000023c00000000023c10000000060c64878000172024879000000002f0023c1000000004eb9000000004fef000c203900000000528023c00000000023c000000000700323c000000000608a",
+   "hex": "203c00000acc4e75",
+   "kind": "text",
+   "name": ".text.lp_wire_size",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe848d7043c262f0024246f0020242f001c2f032f0a2f024eb9000000004fef000c0c8300000abc6600011c4a8a670001164a8267000112322a0abc326a0abe75ea0ac077ea0ac22042342a0ac43f410014322a0ac6382a0ac875c2484142417bc479ef00148282342a0aca4842424284850c8400004c50660000d87bc953854a85661c0c81000000eb621467782a01780ce9ad2245b3c266067a04ba88646e327c0002780123c400000000b3f9000000006620b1f9000000006618b6b9000000006610b2b9000000006608b4b900000000672845f900000000529223c90000000023c80000000023c30000000023c10000000023c20000000052924cd7043c4fef00184e75227c000ea60060887801b888650e4a8166884a836684327c0001608a7a02ba8866300c81000000eb66e86000ff6e307c00044a836700ff64327c00016000ff6042824281428391c86000ff5093c96000ff567a03ba8866d60c81000000eb6600ff3a60ae",
+   "kind": "text",
+   "name": ".text.lp_copy_reply",
+   "size": 364
+  },
+  {
+   "align": 2,
+   "hex": "4fefffec48d7041c4ab9000000006712700423c0000000004cd7041c4fef00144e754ab900000000671a7201740223c100000000760423c20000000023c30000000060d42439000000004a82660a7801b8b90000000066c02039000000000c80000000ea6208b0b9000000006718700123c00000000023c000000000720423c100000000609245f90000000028120804000066842639000000002239000000002079000000002f480010207900000000227900000000b8926600ff5e4a836700ff5853834a83660c4aaf001066067604b681660c7801700223c40000000060964a826676b1c06500ff307401b4816400ff28b1c066102400760ce7aab489660655814a81671c7001720323c000000000740423c10000000023c2000000006000fef848780001760248790000000078012f0023c30000000023c4000000004eb9000000004fef000c207900000000528823c8000000006000fec05280b1c06500feb8661a0c80000000eb672075c0760ce7aab4896608307c0002b288671c7801700323c4000000006000feecb3fc000ea60066ea307c000360e023c000000000740342b9000000006000ff6e",
    "kind": "text",
    "name": ".text.lp_tick",
-   "size": 134
+   "size": 428
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.lp_sent",
+   "size": 4
   },
   {
    "align": 2,
    "hex": "",
    "kind": "bss",
    "name": ".bss.lp_next",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.lp_bad_reply",
    "size": 4
   },
   {
@@ -162,12 +400,31 @@
    "align": 16,
    "hex": "",
    "kind": "bss",
+   "name": ".bss.lp_ack",
+   "size": 24
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
    "name": ".bss.lp_mail",
    "size": 16
   }
  ],
- "source_sha256": "b0a150a7fcc7203e87fc4207d4883b42b56276d45d29ee63f0da49730ac3c359",
+ "source_sha256": "d882764b83da0162e97becf7f96e50add53637309326f19ea8d12067a35fe872",
  "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.lp_ack",
+   "section": ".bss.lp_ack",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.lp_bad_reply",
+   "section": ".bss.lp_bad_reply",
+   "value": 0
+  },
   {
    "global": false,
    "name": ".sec..bss.lp_failed",
@@ -188,8 +445,32 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.lp_sent",
+   "section": ".bss.lp_sent",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.lp_staging",
    "section": ".bss.lp_staging",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_ack",
+   "section": ".bss.lp_ack",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "lp_bad_reply",
+   "section": ".bss.lp_bad_reply",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_copy_reply",
+   "section": ".text.lp_copy_reply",
    "value": 0
   },
   {
@@ -223,9 +504,21 @@
    "value": 0
   },
   {
+   "global": false,
+   "name": "lp_sent",
+   "section": ".bss.lp_sent",
+   "value": 0
+  },
+  {
    "global": true,
    "name": "lp_staging",
    "section": ".bss.lp_staging",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_stock_copy",
+   "section": null,
    "value": 0
   },
   {
@@ -239,14 +532,20 @@
    "name": "lp_tick",
    "section": ".text.lp_tick",
    "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_wire_size",
+   "section": ".text.lp_wire_size",
+   "value": 0
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "39",
-  "isa_check": "30e3044c6baeb305cf372d9d13ab438f7e53100b0e6f4d5167c16133564e8065",
+  "instructions_redecoded": "244",
+  "isa_check": "e40431a3db4457fe9bcfb8aa45327b02a058135062ed4613bb7ed835b49612cb",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

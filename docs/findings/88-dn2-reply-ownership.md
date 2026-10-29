@@ -108,7 +108,8 @@ incomplete. Finding 31's categorical claim that no stock code writes header word
 bounded feasibility question is an explicitly owned extension beyond the stock
 reply, preserving all original bytes and consumers. It must account for both
 DMA counts, actual buffer extents, clocking and CF copy lengths; spacing between
-buffers alone does not authorize enlargement. No protocol extension is implemented.
+buffers alone does not authorize enlargement. These observations alone do not
+establish a usable completion channel.
 
 ## Explicit extension feasibility
 
@@ -138,6 +139,71 @@ bytes between a proposed `0xacc` main extent and the next auxiliary buffer.
 exclusive ownership of every intervening byte. Boot counts must agree before
 DMA starts; resizing armed descriptors is excluded. Private-buffer redirection
 seams exist at CF RX DADDR and staging memcpy source, and DSP ADDRSTART/selector
-initializers, if ownership requires separate allocations. The next step is a
-read-only implementation assessment of an isolated boot-time diagnostic; no
-production wire-format change or extension proof has been implemented.
+initializers, if ownership requires separate allocations. These findings motivated
+the isolated boot-time diagnostic below; they establish no production wire contract.
+
+## Private 0.2 completion proof
+
+**[D]** `core/dsp-lp0-proof` 0.2 implements the isolated extension. Only the CF
+boot getter call is retargeted; the original getter and stock copy remain `0xabc`.
+The DSP boot literal is `0xacc`. The memcpy-call wrapper preserves the original
+arguments and return value, then reads the extension from staging before rearm.
+The eight numeric halfwords are magic `0x4c50`, version 1, status, error, page
+count low/high, and byte count low/high. DSP snapshots under a local interrupt
+mask with scalar stores and restores context. CF publishes through a seqlock,
+suppressing identical snapshots so observation can stabilize between packets.
+
+CF retains each START, waits for exact pre-send progress, sends once, then waits
+for exact post-send progress. Intermediate completion requires status 2; final
+completion requires status 3, pages 235 and bytes 960,000. Missing/old replies
+remain pending; malformed valid-tag replies and errors fail closed. DONE now
+means DSP acknowledgement rather than sender return. The stock send itself is
+still unbounded, and this private single-boot proof adds no public epoch protocol.
+
+**[D]** The original cold-idle already has four queued `0x55e` descriptors,
+although its live DMA XCNT registers are still zero. Pre-init `cold.state` has
+PC `0x1c12e2`, an empty memory overlay and uninitialized SPI2 DMA. Its SHA-256 is
+`6c071edf7eb12f359197fbc453ce96f916dd8bffff660102a83a5cd9ebe585e7`.
+The parent built only `dsp_cold` against the cached core, applied the patch before
+execution, and reached idle PC `0xb88a5d` at 563,750,000 instructions within an
+800-million-instruction/120-second bound. All four descriptor XCNT fields are
+known `0x566` before CF exchange. There were no live descriptor edits or core
+regeneration. Exact commands, hashes and counts are retained in
+`out/runs/lp0-reply-fixture/provenance.json`; new cold-idle SHA-256:
+`ad6429f7a19dee6e1f14696fcdb074cb54adbbf39cc543271d0ff132ed00d248`.
+
+**[C]** The first native attempt failed with a legitimate frame-length mismatch:
+the daemon canonicalizes the DSP image path and selects its sibling cold-idle.
+A private image symlink therefore selected the old stock directory. A physical,
+byte-identical private image copy fixes selection; native preflight now checks
+the canonical parent. Original inputs remain untouched. This was a fixture error,
+not evidence of an emulator or firmware defect.
+
+**[D]** Corrected first-page proof passes in
+`out/runs/lp0-proof/8c974a38-73d6-42d5-967c-bf678ecf566d`.
+Full-bank held-stock-audio proof passes in
+`out/runs/lp0-proof/5e0b6f2a-84ac-4814-bc6e-57794f493b38`:
+235 coherent CF ACKs, 960,000 exact known bytes (SHA-256
+`0eb5375f0383e6dc3422abcf93926ebdff4632af0c1c6bc06598ecbbb00d4a72`),
+unchanged known guards, final ACK sequence 476/status 3/pages 235/bytes 960,000,
+and zero terminal DMA configuration/count/status after subsequent frames.
+Live CF wire length is `0xacc`; both SPI2 DMA counts are `0x566`.
+
+PCM is finite and non-silent before, during and after. Measured RMS values are
+0.031389, 0.028748 and 0.028757, with zero silent windows among 415 transfer
+segments (100 ms, except the final partial segment). WAV SHA-256:
+`d5f82b77aaf920aa9430e081a27a9a835ac550632655f41bb46aab20a6cb3969`.
+The unchanged daemon SHA is recorded in finding 92. Patched image SHA-256:
+`f3598294ae81c7c1e4d06d5783888597b415f7e8bedf45c11b42adfde6de5d56`.
+Independent review and artifact reconstruction found no discrepancies.
+
+Validation: 31 focused tests, object/generation checks, scoped lint/types/format
+and 195 host tests pass (16 skipped). Routed checks retain baseline path and
+package-launcher failures (`out/lp0-v02-changed.log`); direct host evidence is
+`out/lp0-v02-host.log`. Native logs are `out/lp0-v02-native-first-page-corrected.log`
+and `out/lp0-v02-native-stock-audio.log`. No full merge gate is claimed.
+
+**[O]** Exclusive buffer-gap and DMA-bank ownership, cache coherency, bounded
+production send/recovery, generations and hardware timing remain open. Finite,
+non-silent measured PCM does not prove sample-exact equivalence or glitch-free
+hardware operation. The extension remains an explicitly opted-in diagnostic.
