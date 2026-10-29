@@ -94,3 +94,13 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/dsp-link"]
 doc = "The jsr abs.l with which the block interrupt handler calls the stock frame driver (four arguments on the stack); the hook point for the DSP link's per-block sender."
+
+[[fn]]
+name = "cf.link.fn.bulk_send"
+cpu = "cf"
+devices = ["dn2"]
+rule = { kind = "cf_func", hash = "9a4120e12f9b5eb84887e090794f55b7", offset = 0x0, len = 4 }
+sig = "void (u32 tag, const u32 *source, u32 format)"
+mark = "D"
+users = ["core/dsp-lp0-proof"]
+doc = "DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first."

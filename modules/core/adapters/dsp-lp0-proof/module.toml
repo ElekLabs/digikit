@@ -1,0 +1,55 @@
+[module]
+id = "core/dsp-lp0-proof"
+version = "0.1.0"
+name = "Private LP0 receive proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Emulator-only DN2 1.12 LP0 setup, callback and rearm diagnostic; explicit opt-in."
+ports = ["dn2-1.12"]
+requires = ["core/expansion"]
+conflicts = ["core/dsp-link", "core/runtime", "core/dsp-ddr-proof"]
+
+[targets]
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/lp0-proof-cf.dko.json"
+sources = ["src/cf/lp0-proof.c", "src/cf/tramp.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[object.externs]
+lp_stock_send = "cf.link.fn.bulk_send"
+lp_queue_pop = "cf.rtos.fn.queue_pop"
+
+[[object]]
+path = "build/lp0-proof-dsp.dko.json"
+sources = ["src/dsp/lp0-proof.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
+[object.externs]
+_lp_back = "hook.dsp.link.site.block_tail.tail"
+_lp_open = "dsp.link.fn.lp0_open"
+_lp_set_callback = "dsp.link.fn.lp0_set_callback"
+_lp_submit = "dsp.link.fn.lp0_submit"
+_lp_port_record = "dsp.link.value.lp0_record"
+
+[[op]]
+op = "hook"
+hook = "cf.view.hook.ui_loop"
+to = "lp_loop_hook"
+
+[[op]]
+op = "hook"
+hook = "dsp.link.hook.block_tail"
+to = "_lp_hook"
+
+[[claim]]
+resource = "cf.view.site.ui_loop"
+
+[[claim]]
+resource = "dsp.link.site.block_tail"
