@@ -7,6 +7,45 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 ## Resume here
 
 
+**Current checkpoint (2026-10-29): shared lifecycle primitives extracted.**
+Em approved implementation and parallel independent agent work. The SDK now
+provides `sdk/dsp/sample_bank.inc`: caller-bound mask/restore, admission checks,
+fresh/cached generation handling, acquire/release, fail-closed bookkeeping,
+close/drain and publication. Both diagnostic producer and consumer use it.
+Wire validation, exact successor policy, state storage and transport remain
+caller-owned. The six-word numerical cursor and public pinned float32 bank ABI
+are unchanged; no general allocator or public selection API was added.
+
+Validation: 99 focused assembled tests pass (84 existing + 15 independently
+bound SDK cases). Independent review finds no issues. The DSP object still has
+912 instructions; only its source fingerprint changed. Code/data sections,
+relocations and symbols are identical to `e5c274d6`. Parent rebuilt complete
+patched DT2 1.17 and DN2 1.12 images with the existing CLI and verified exact
+identity with the previously passing images. Evidence:
+`out/runs/sample-bank-extraction/image-identity.json` and
+[finding 86](../findings/86-sample-bank-sdk.md). Direct host checks pass 195 with 16 skipped; scoped path checks pass. Routed
+checks retain baseline reference and pnpm launcher failures (finding 86). No
+emulator/core regeneration or coupled rerun is needed for unchanged firmware bytes. Instruction identity
+preserves the schedule; it is not a hardware performance measurement.
+
+- [x] Map consumer/producer lifecycle and existing runtime upload ownership.
+- [x] Choose parameterized, instruction-identical primitives and caller-owned policy.
+- [x] Implement SDK include and refactor both diagnostic paths.
+- [x] Test alternate state/register/label bindings and lifecycle failure behavior.
+- [x] Independently review contracts and compare complete patched image identity.
+- [x] Record the extraction evidence and runtime integration boundary.
+- [ ] Next: integrate a runtime-owned replaceable packed-PCM16 bank and sample selection.
+
+Runtime integration must reuse existing source snapshots and `sample_job::Job`
+source-retention behavior instead of creating a parallel loader. Its current
+pinned mono-float32 ABI has neither generations nor replacement and cannot be
+silently changed. The larger backing still needs an explicit owner/reservation,
+a packed-PCM16 source/transfer path, and serialized select/retire/load/open state.
+The SDK now supplies the DSP building blocks; production ownership, device
+transport and UI integration remain separate tasks. Preserve stop-old-notes and
+late-note/current-generation policy; uncertain transfer completion never permits
+reuse. Hardware reservation/cache/coexistence are still open.
+
 **Current checkpoint (2026-10-29): DT2 lifecycle port is implemented and all six
 cases per device pass across the initial and corrected runs.**
 DT2 uses normal frame length `0x802`, DN2 `0xa80`; both retain the diagnostic
@@ -39,7 +78,7 @@ failure remain in routed changed checks; no clean integration gate is claimed.
 - [x] Review and correct live-menu lookup and device-specific dispatch observation.
 - [x] Complete all six coupled cases per device; audit retained DT2 playback/lifecycle evidence.
 - [x] Record validation and independent audits in this plan and finding 85.
-- [ ] Next: agree the shared SDK/runtime contract from both-device evidence, then extract it.
+- [x] Extract shared DSP lifecycle primitives and document runtime ownership boundaries (finding 86).
 
 The next extraction should separate numerical reader/cursor operations from bank
 publication, reader admission/retirement and device transport. Keep the proven

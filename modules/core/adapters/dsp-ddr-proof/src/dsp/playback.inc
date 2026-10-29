@@ -1,3 +1,4 @@
+#include "dsp/sample_bank.inc"
 // Six SDK cursor words followed by a private admitted-generation token.
 // Machine-adapter entry is JUMP. Preserve I12/I13 across the kernel's CJUMP ABI.
 .SECTION/PM seg_pmco;
@@ -42,45 +43,18 @@ _dd_obs_render_seen:
     R1 = R1 + 1;
     DM(_dd_obs_active) = R1;
     // Save exact incoming mask/bank context; never enable interrupts blindly.
-    R2 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
-    R1 = DM(_dd_admission_open);
-    R1 = PASS R1;
-    IF EQ JUMP _dd_render_denied_masked;
-    R1 = DM(_dd_retire_closed);
-    R1 = PASS R1;
-    IF NE JUMP _dd_render_denied_masked;
-    R1 = DM(_dd_admitted);
-    R1 = PASS R1;
-    IF LT JUMP _dd_render_fault_masked;
-    R0 = 0x7fffffff;
-    COMP(R1, R0);
-    IF GE JUMP _dd_render_fault_masked;
+    DK_SAMPLE_BANK_LOCK(R2);
+    DK_SAMPLE_BANK_CHECK_ADMISSION(_dd_admission_open, _dd_retire_closed, _dd_admitted, R1, R0, _dd_render_denied_masked, _dd_render_fault_masked);
     // Compare the cached generation in the same masked admission section.
     I3 = R4;
-    R0 = DM(6, I3);
-    R0 = PASS R0;
-    IF EQ JUMP _dd_render_denied_masked;
-    R1 = DM(_dd_token);
-    COMP(R0, R1);
-    IF NE JUMP _dd_render_denied_masked;
-    R1 = DM(_dd_admitted);
-    R1 = R1 + 1;
-    DM(_dd_admitted) = R1;
-    MODE1 = R2;
-    NOP; NOP;
+    DK_SAMPLE_BANK_CHECK_EPOCH(_dd_token, I3, 6, R0, R1, _dd_render_denied_masked);
+    DK_SAMPLE_BANK_ACQUIRE(_dd_admitted, R1);
+    DK_SAMPLE_BANK_UNLOCK(R2);
     JUMP _dd_render_admitted;
 _dd_render_fault_masked:
-    R1 = 1;
-    DM(_dd_admit_fault) = R1;
-    DM(_dd_retire_closed) = R1;
-    R1 = 0;
-    DM(_dd_admission_open) = R1;
-    DM(_dd_ready) = R1;
+    DK_SAMPLE_BANK_FAIL_CLOSED(_dd_admit_fault, _dd_retire_closed, _dd_admission_open, _dd_ready, R1);
 _dd_render_denied_masked:
-    MODE1 = R2;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R2);
     JUMP _dd_render_silent;
 _dd_render_admitted:
     R3 = I12;
@@ -104,27 +78,13 @@ _dd_render_admitted:
     I12 = R3;
     I13 = R5;
     // Last possible backing read is before this guarded release.
-    R2 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
-    R1 = DM(_dd_admitted);
-    R1 = PASS R1;
-    IF LE JUMP _dd_render_release_fault;
-    R1 = R1 - 1;
-    DM(_dd_admitted) = R1;
-    JUMP _dd_render_released;
+    DK_SAMPLE_BANK_LOCK(R2);
+    DK_SAMPLE_BANK_RELEASE(_dd_admitted, R1, _dd_render_release_fault, _dd_render_released);
 _dd_render_release_fault:
-    R1 = 1;
-    DM(_dd_admit_fault) = R1;
-    DM(_dd_retire_closed) = R1;
-    R1 = 0;
-    DM(_dd_admission_open) = R1;
-    DM(_dd_ready) = R1;
-    R1 = 0x7fffffff; // never let corrupt bookkeeping claim a drain
-    DM(_dd_admitted) = R1;
+    DK_SAMPLE_BANK_FAIL_CLOSED(_dd_admit_fault, _dd_retire_closed, _dd_admission_open, _dd_ready, R1);
+    DK_SAMPLE_BANK_POISON_COUNT(_dd_admitted, R1);
 _dd_render_released:
-    MODE1 = R2;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R2);
     R1 = DM(_dd_obs_active);
     R1 = R1 - 1;
     DM(_dd_obs_active) = R1;
@@ -189,46 +149,17 @@ _dd_obs_note_seen:
     R0 = 65536;
     DM(4, I3) = R0;
     // Save exact incoming mask/bank context; never enable interrupts blindly.
-    R2 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
-    R1 = DM(_dd_admission_open);
-    R1 = PASS R1;
-    IF EQ JUMP _dd_note_denied_masked;
-    R1 = DM(_dd_retire_closed);
-    R1 = PASS R1;
-    IF NE JUMP _dd_note_denied_masked;
-    R1 = DM(_dd_admitted);
-    R1 = PASS R1;
-    IF LT JUMP _dd_note_fault_masked;
-    R0 = 0x7fffffff;
-    COMP(R1, R0);
-    IF GE JUMP _dd_note_fault_masked;
+    DK_SAMPLE_BANK_LOCK(R2);
+    DK_SAMPLE_BANK_CHECK_ADMISSION(_dd_admission_open, _dd_retire_closed, _dd_admitted, R1, R0, _dd_note_denied_masked, _dd_note_fault_masked);
     // Only a fresh accepted note can bind this voice to the current bank.
-    R0 = DM(_dd_ready);
-    R1 = 1;
-    COMP(R0, R1);
-    IF NE JUMP _dd_note_denied_masked;
-    R0 = DM(_dd_token);
-    R0 = PASS R0;
-    IF EQ JUMP _dd_note_denied_masked;
-    DM(6, I3) = R0;
-    R1 = DM(_dd_admitted);
-    R1 = R1 + 1;
-    DM(_dd_admitted) = R1;
-    MODE1 = R2;
-    NOP; NOP;
+    DK_SAMPLE_BANK_LATCH_EPOCH(_dd_ready, _dd_token, I3, 6, R0, R1, _dd_note_denied_masked);
+    DK_SAMPLE_BANK_ACQUIRE(_dd_admitted, R1);
+    DK_SAMPLE_BANK_UNLOCK(R2);
     JUMP _dd_note_admitted;
 _dd_note_fault_masked:
-    R1 = 1;
-    DM(_dd_admit_fault) = R1;
-    DM(_dd_retire_closed) = R1;
-    R1 = 0;
-    DM(_dd_admission_open) = R1;
-    DM(_dd_ready) = R1;
+    DK_SAMPLE_BANK_FAIL_CLOSED(_dd_admit_fault, _dd_retire_closed, _dd_admission_open, _dd_ready, R1);
 _dd_note_denied_masked:
-    MODE1 = R2;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R2);
     JUMP _dd_play_note_observer_return;
 _dd_note_admitted:
     R0 = DM(_dd_ready);
@@ -249,27 +180,13 @@ _dd_note_admitted:
     DM(4, I3) = R0;
 _dd_play_note_return:
     // Last possible backing read is before this guarded release.
-    R2 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
-    R1 = DM(_dd_admitted);
-    R1 = PASS R1;
-    IF LE JUMP _dd_note_release_fault;
-    R1 = R1 - 1;
-    DM(_dd_admitted) = R1;
-    JUMP _dd_note_released;
+    DK_SAMPLE_BANK_LOCK(R2);
+    DK_SAMPLE_BANK_RELEASE(_dd_admitted, R1, _dd_note_release_fault, _dd_note_released);
 _dd_note_release_fault:
-    R1 = 1;
-    DM(_dd_admit_fault) = R1;
-    DM(_dd_retire_closed) = R1;
-    R1 = 0;
-    DM(_dd_admission_open) = R1;
-    DM(_dd_ready) = R1;
-    R1 = 0x7fffffff; // never let corrupt bookkeeping claim a drain
-    DM(_dd_admitted) = R1;
+    DK_SAMPLE_BANK_FAIL_CLOSED(_dd_admit_fault, _dd_retire_closed, _dd_admission_open, _dd_ready, R1);
+    DK_SAMPLE_BANK_POISON_COUNT(_dd_admitted, R1);
 _dd_note_released:
-    MODE1 = R2;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R2);
 _dd_play_note_observer_return:
     R1 = DM(_dd_obs_active);
     R1 = R1 - 1;

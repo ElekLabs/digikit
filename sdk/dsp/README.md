@@ -139,3 +139,63 @@ contract. The numerical tests exercise packed transport bytes, signed extrema,
 odd boundaries, extreme rates, repeated calls, preserved registers and stack
 boundaries, guarded source reads and completion immediately after output 31.
 The ceiling above counts instructions, not hardware cycles.
+
+## Sample-bank lifecycle
+
+`sample_bank.inc` supplies small inline lifecycle operations with no storage,
+labels or externs. Every state address, state offset, R/I register and branch
+target is a caller operand; the caller retains control-flow order. Its include
+guard permits multiple consumers in one translation unit. It defines no sample
+capacity, backing layout, allocation, firmware address or transfer protocol.
+The numerical sample readers and their six-word public state remain unchanged.
+
+| Operation (`DK_SAMPLE_BANK_` prefix) | Effect | Instructions |
+| --- | --- | --- |
+| `LOCK`, `UNLOCK` | Save exact MODE1, clear IRPTEN, restore exact MODE1; two conservative NOPs after each change | 4, 3 |
+| `CHECK_ADMISSION` | Reject closed admission; fault on negative or saturated reader count | 12 |
+| `CHECK_EPOCH` | Reject zero or mismatched cached generation | 6 |
+| `LATCH_EPOCH` | Require READY exactly one and nonzero generation; store a fresh voice's generation | 8 |
+| `ACQUIRE` | Increment a validated reader count | 3 |
+| `RELEASE` | Decrement a positive count, or branch to caller's fault handler | 6 |
+| `FAIL_CLOSED`, `POISON_COUNT` | Set sticky fault/closed, clear open/READY; prevent a corrupt release from claiming drain | 6, 2 |
+| `CLOSE` | Clear open/READY, set closed | 5 |
+| `CHECK_DRAIN` | Branch if any reader remains or a fault is recorded | 4 |
+| `PUBLISH` | Set open/READY after caller's generation initialization | 3 |
+
+Every check and update requires the caller's local interrupt mask held. Keep
+admission check, epoch check/latch and acquire in one short masked scope. Restore
+incoming MODE1 on every success, denied and fault branch; no backing read is
+allowed before acquire. Acquire protects immutable backing
+until a separately masked release after the final possible read. A failed release
+must fail closed and poison the count; faults never authorize backing reuse.
+CLOSE followed by a successful exact drain permits the serialized producer to
+reuse backing. Initialize the next generation, including its closed flag, before
+publication, with closed initialized to zero only for that successor, fault zero
+and a nonzero token. The caller validates the successor and never reopens a
+retired generation. PUBLISH itself does not reset closed or erase faults.
+CHECK_ADMISSION does not read the sticky fault: callers must maintain the
+invariant that any fault implies closed is nonzero and open/READY are zero.
+
+Only a fresh note may latch the current nonzero generation. Cached voices compare
+their saved generation and cannot adopt a replacement. Token succession,
+operation validation, stop-old-notes policy and the source snapshot lifetime are
+runtime responsibilities. The existing runtime `sample_job::Job` retains its
+source through transfer completion and publishes descriptor READY last; these
+macros do not change that ownership or the public float32 ABI.
+
+All named R temporaries and arithmetic flags are clobbered; state I registers are
+read only and must already satisfy DAG latency. Distinct register operands are
+required within each macro, counting R/F aliases as the same register. Control
+words and cached epoch storage must not overlap one another or backing/output.
+The saved MODE1 register must stay live, distinct
+from every register mutated throughout the masked region, and readable in the
+incoming selected register bank: do not switch banks inside that scope. LOCK and
+UNLOCK change no arithmetic flags. See the include header for exact operands and
+preconditions; caller supplies each trailing semicolon and branch label.
+
+The contract assumes one core, maskable participants and one serialized producer.
+Local IRPTEN masking establishes neither universal firmware/NMI exclusion nor
+hardware memory ownership, cache coherence or a production allocator. The counts
+above describe instructions, not hardware cycles. The standalone assembled fixture
+in `tests/patchkit/test_dsp_sample_bank.py` shows complete admission, denied,
+fault, release and producer paths with two independently bound banks.
