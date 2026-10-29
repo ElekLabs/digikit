@@ -42,6 +42,10 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   runtime owns selection/loading/lifetime and stock downstream envelope/filter remains. Mono first is a proposal.
   DN2 already plays samples through the working voice seam/source acquisition; investigate its missing larger
   backing/delivery against DT2's dependencies, not playback feasibility from scratch. No new backend is implemented.
+  Finding 83's independent DN2 1.12 raw-byte audit withdraws finding 80's external-read leads at `0x1c8ef7`
+  and `0x1c8f00`: the former is not an instruction boundary and the latter is a register move. Larger backing
+  remains unresolved; next trace initialization, allocation/ownership and cross-port delivery. Missing exact
+  address literals do not establish absence, and module reservations do not establish hardware memory limits.
 - [Finding 82](../findings/82-stock-sampler-lifetime.md) records the executed slot/lifetime discovery and exact
   image provenance. Stock OneShot selection and ten-second acquisition are established. Both the identified
   patched-image trial and the passing unpatched DT2 1.17 critical reproduction retain a progressing active voice
@@ -51,8 +55,20 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 - [Finding 83](../findings/83-sample-retirement-design.md) records the checked retirement design discovery:
   candidate DT2 pre-mutation hooks, close/drain/invalidate/RETIRED/mutate/publish sequencing, held-trigger and
   delayed-event hazards, and exact-token failure rules. These are [D]/[O], not an approved ABI or implementation.
-  Next resolve current-image callback/IRQ scheduling and CF producer/frame generation fencing with a bounded
-  diagnostic trace before coding an asynchronous owned-bank retirement proof on both devices. That proof is
+  Both current CF builders conditionally submit the existing frame before traversing the event queue and
+  constructing the next frame; a selection fence must cover the pending prior frame and queue. Guard/DMA
+  timing is unresolved, so this is not a fixed one-block latency claim. DN2 timestamp insertion has multiple
+  observed producers, with no established resource/generation binding. The DT2 static chain reaches the voice
+  through `0x1c75d8` → `0x1c2b24` → `0x1c642a` → `0x1c4ecf`; its link-tail anchor belongs to the separate
+  `0x1c74cd`, called later at `0x1c7756` by the same parent, with conditional/loop control still to resolve.
+  DN2's voice chain and tail parent are located, but the tail parent's external caller remains unresolved;
+  the candidate dynamic jump uses PM(I4,M5), so an adjacent I12 load does not establish its target.
+  These static reads do not prove every-path ordering or interrupt exclusion. Next resolve DN2 tail/render
+  order, callback/IRQ atomicity, submit guards/DMA and every queue producer with a
+  bounded diagnostic trace before coding an asynchronous owned-bank retirement proof on both devices.
+  Existing `SHARC_IRQ_PROBE` and `SHARC_PCDUMP` cover some interpreter-boundary tests; they do not create
+  pending DMA/SEC sources or variable peripheral timing, and PCDUMP may miss AOT stock PCs. No such test
+  ran in this discovery update. That proof is
   independent of larger backing for the ten-second target; external DT2 mutation and DN2 capacity remain separate proofs.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
@@ -131,6 +147,8 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 - [x] Capture current stock OneShot slot binding and the unique ten-second a → b active replacement transition
   on the original DT2 1.17 image; retain exact source bytes, active/cursor state and PCM (finding 82).
 - [x] Persist retirement protocol discovery and review of adapter/trigger hazards in finding 83; no ABI or protocol code approved.
+- [x] Read both current CF builders' prior-frame submission order, DN2 timestamp queue/reuse helpers and the
+  DT2 static voice call chain; record existing diagnostic capabilities and limits in finding 83.
 - [ ] Prove callback scheduling/interrupt atomicity and upstream generation capture or an event-order fence before
   implementing retirement. Then prove owned-bank retirement on both devices, followed separately by external DT2
   replace/unload/project reset coverage before borrowed-view exposure. Start/end/reverse captures remain open.

@@ -72,11 +72,25 @@ generation binding or a stale-event fence. Parameters and triggers sharing a fra
 
 | Image | Producer/frame observations | Remaining ordering proof |
 | --- | --- | --- |
-| DT2 1.17 | Builder `0x4002dd0c` processes an event queue, populates SPI frame `0x80005348`, then sends through `0x400cd420`. | Capture generation before queue admission or prove an explicit producer/frame fence. |
-| DN2 1.12 | Builder `0x40025e36` populates frame `0x80005e60`, masks at `0x80005e82/84/86/88` and per-voice `0x92`-byte blocks; helper `0x400cf922` copies/configures DMA. | Full queue-to-parameter ordering and generation binding remain unresolved. |
+| DT2 1.17 | Builder `0x4002dd0c` conditionally submits existing SPI frame `0x80005348` through `0x400cd420` at entry, guarded by `0x402a19c8`; queue traversal starts at decompiler line 166 and next-frame construction at line 638. | Fence both the pending prior frame and the queue before publication; establish guard and DMA completion semantics. |
+| DN2 1.12 | Builder `0x40025e36` conditionally submits existing frame `0x80005e60` through `0x400cf922` at entry, guarded by `0x40287c38`; queue traversal starts at line 181 and next-frame construction at line 953. The frame contains masks at `0x80005e82/84/86/88` and per-voice `0x92`-byte blocks. | Fence both the pending prior frame and the queue; resolve queue-to-parameter ordering and generation binding. |
 
-Reproduce focused reads with `uv run python -m tools.coldfire.fw dossier ADDRESS -i IMAGE --decomp 80`
-using the image and function addresses above. These are [D] decompiler observations, not original-byte audits.
+**[C][D]** The earlier DT2 shorthand described queue processing, frame population and submission as if they
+occurred in that order in one invocation. Both current decompilations instead submit an existing frame before
+traversing the queue and reconstructing the next frame. This does not prove a fixed one-block latency:
+the submit guards and DMA timing remain unresolved. A selection fence must account for the pending prior
+frame as well as queued events.
+
+**[D]** DN2 `0x40138e3c` inserts into a timestamp-sorted timeline rooted at `0x44645228`, linked through
+`node[4]`. `node[1]` holds the timestamp; an exact timestamp match replaces `node[3]`. Observed callers include
+both builder `0x40025e36` and `0x400d7d76`, so the builder is not established as the exclusive producer.
+`0x40138cb6` pops a reusable event from `0x44645234`, and `0x40138cec` returns one. Resource identity and
+generation semantics of these nodes remain unproved.
+
+Reproduce full builder reads with `UV_NO_SYNC=1 UV_CACHE_DIR=out/cache/uv uv run python -m tools.coldfire.fw
+decomp ADDRESS -i IMAGE --max 0`; use `dossier ADDRESS -i IMAGE --decomp 80 --max 0` for focused context or
+`batch FILE` for the image/address pairs above. Line numbers refer to the full decompiler body. These are [D]
+decompiler observations, not original-byte audits.
 
 **[D]** [Prior voice-context observations](45-dsp-voice-context.md) record MODE1 `0x39011cf8` on both target
 images, including IRPTEN/NESTM in a software-interrupt voice context. **[O]** This does not exclude nested
@@ -84,11 +98,53 @@ callbacks. An in-flight counter needs a proven atomic admission/drain protocol a
 block-tail hook alone guarantees neither callback quiescence nor event fencing; ordinary render-before-tail
 ordering must not be inferred solely from the anchor description.
 
+**[D]** The current DT2 static call chain reaches the voice: callsite `0x1c771e` in function `0x1c75d8`
+calls `0x1c2b24`, whose callsite `0x1c3083` reaches `0x1c642a`; callsite `0x1c6b00` there reaches voice
+`0x1c4ecf`. The link-tail anchor `0x1c75c1` belongs to a different function, `0x1c74cd`, but parent
+`0x1c75d8` directly calls that function at `0x1c7756`, after its voice-dispatch call at `0x1c771e`.
+The conditional branch at `0x1c7753` skips to `0x1c775d`, and a loop runs from `0x1c775d` to `0x1c7749`.
+These ordered static callsites do not establish every-path execution or a global interrupt-order guarantee.
+
+**[D]** DN2 voice `0xb8251b` is called at `0x1c9459` in `0x1c8ef1`, which is called at `0x1c3044` in
+`0x1c2712`. Link-tail `0x1c9e5f` is in `0x1c9d6b`, called at `0x1c9ff4` in `0x1c9e76`; the external
+caller of `0x1c9e76` remains unresolved. A candidate dynamic jump at `0x1c29aa` follows loading I12 from
+DM at base `0x25d968` plus M4, but the jump is `JUMP PM(I4,M5)` after I4 = M9. I12 must not be equated
+with that branch target; the table is only a candidate. An empty static caller result does not establish
+runtime absence. Reproduce these static chains with `fw disasm ADDRESS -i IMAGE --max 0` and function/caller
+queries on the current images; no shared DN2 tail/voice scheduling chain is yet established.
+
+**[D]** Existing diagnostics can support part of the bounded trace without new instrumentation:
+[`SHARC_IRQ_PROBE`](../INSTRUMENTATION.md) can inject the kernel tick (`0x400000`) or SFT3 context-switch
+request (`0x80000000`) at interpreter instruction boundaries; `SHARC_PCDUMP` records selected PCs.
+[Finding 49, section 9.3](49-dt2-type-sites-and-uninit-model.md)
+records the existing probe and its limits. Injection does not create a pending DMA/SEC source or variable
+peripheral event timing; interpreter-only PCDUMP may miss stock PCs executed through AOT. No diagnostic run
+was executed for this discovery update.
+
+## DN2 backing-lead correction and provenance
+
+**[C]** An independent raw-byte audit withdraws the external-read leads previously recorded in
+[finding 80](80-sampler-capacity-and-replacement.md). Direct unpack of section 7 from the current DN2 1.12
+SysEx matches `out/sections/dn2-1.12/section_7_BLOB.bin`: 836,956 bytes, SHA-256
+`336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`.
+`LoadedMemory` plus `decode_confident_loaded`, starting at `0x1c8ef1`, decodes `0x1c8ef6` as form 15b
+`DM(I6-57) = R2`; `0x1c8ef7` is its second shortword, not an instruction boundary.
+At `0x1c8f00`, the instruction decodes as form `5b_move`, `R2 = M3`. These are loader block 83 offsets
+`0x6d698` and `0x6d6ac`. Neither site establishes the previously claimed external memory read.
+This audit used the repository decoder; it is not an independent manual audit of general ISA semantics or
+a hardware memory-access proof. No firmware or binary artifact is added to the repository.
+
+**[O]** No larger DN2 sample backing or delivery path follows from those withdrawn leads. Next trace memory
+initialization, allocation/ownership and cross-port delivery from the working voice/source seam. Failure to
+find an exact address literal is not proof that a range is absent or unreachable, and the module reservation
+is not a hardware memory limit.
+
 ## Proof checklist and decision gate
 
 - [x] Record the stock replacement counterexample and preserve the immutable-bank proof (finding 82).
 - [x] Survey candidate DT2 release/reset boundaries and both device adapters; review the held-trigger and delayed-event hazards.
 - [x] Separate transport delivery from logical consumer retirement and persist the proposed sequencing.
+- [x] Trace both CF builders' prior-frame submission order, DN2 timestamp insertion/reuse helpers and the DT2 static voice call chain.
 - [ ] Resolve callback scheduling, interrupt nesting/atomicity and safe admission/drain points before coding the protocol.
 - [ ] Resolve generation capture or an upstream event-order fence before coding stale-note rejection.
 - [ ] Agree a bounded owned-bank asynchronous proof contract and explicit stop scope; no product ABI follows automatically.
@@ -98,16 +154,24 @@ ordering must not be inferred solely from the anchor description.
 - [ ] Separately prove external DT2 replace/unload/project reset coverage before borrowing stock project backing.
 - [ ] Separately establish DN2 larger backing/delivery and both-device capacity for the ten-second target.
 
-Next perform a bounded diagnostic scheduling trace plus current-image IRQ-path analysis, and trace the CF
-producer/frame fence. Current static reads do not establish tail/render caller ordering or nested-interrupt
-exclusion. Only then propose the concrete owned-bank
+Next resolve DN2's tail caller and order relative to the voice, then perform a bounded diagnostic
+scheduling trace plus current-image IRQ-path analysis. Trace both CF submit guards, DMA completion and every
+queue producer to define the pending-frame/queue fence. Current static reads do not establish global dynamic
+ordering, callback atomicity or nested-interrupt exclusion. Only then propose the concrete owned-bank
 proof implementation for approval; preserve existing proof behavior until that decision. This document records
 design progress, not execution of the checklist's open proofs or product implementation approval.
 
 ## Checkpoint validation
 
-Scoped pathcheck for this finding, the findings index and the sampler plan passes; `git diff --check` passes.
+For this discovery update, scoped pathcheck for findings 80 and 83 and the sampler plan passes;
+`git diff --check` passes. No diagnostic or device test, build or full merge gate ran.
+The parent ran `mise run test:changed -- --files` for those three documents: layercheck passes;
+the aggregate fails only on the same ten stale references in five unchanged files.
+
+At prior checkpoint `f4d22575`, scoped pathcheck for this finding, the findings index and the sampler plan passed;
+`git diff --check` passed.
 The parent's `mise run test:changed -- --files docs/findings/83-sample-retirement-design.md docs/FINDINGS.md
-docs/plans/dsp-sdk-and-sampler.md` passes layercheck and fails only on the ten baseline stale references in
-five unchanged files. An independent design reviewer found no issues in this document; that review is not
-image-byte verification. No device proof, build or full merge gate ran for this documentation checkpoint.
+docs/plans/dsp-sdk-and-sampler.md` passed layercheck and failed only on the ten baseline stale references in
+five unchanged files. An independent design reviewer found no issues at that checkpoint; that review does
+not cover today's expanded text and is not image-byte verification. No device proof, build or full merge
+gate ran for that documentation checkpoint.
