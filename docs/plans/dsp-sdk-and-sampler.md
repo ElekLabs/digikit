@@ -14,6 +14,12 @@ side panels and dialogs rather than introducing a separate UI framework.
 
 - [x] Resolve the on-device-versus-Workbench selection decision.
 - [x] Locate existing `DK_UI_LIST`, fill/refresh callbacks and module menu entry.
+- [x] Confirm listing belongs in the reusable SDK for a later file manager,
+  not inside the sampler (Em, 2026-10-30).
+- [x] Implement the generic DN2 store catalogue backend with bounded pages,
+  owned full paths/metadata and sticky stale-generation errors; focused checks pass.
+- [x] Independently audit the DT2 directory iterator's plain-data state/output ABI.
+- [ ] Prove DT2 iterator execution and complete path/type/size/hash mapping.
 - [ ] Map existing DN2 store and DT2 +Drive catalogue providers and stable identities.
 - [ ] Define SDK catalogue and per-track selection/binding contracts, preserving
   the existing pinned-bank proof API until a versioned replacement is available.
@@ -27,8 +33,30 @@ loading, and publishes the new generation only after validation and DSP completi
 Keep callback context in persistent module memory, page catalogue rows, and use
 stable sample identity rather than a truncated display name or volatile row index.
 Keep storage reads and decoding out of fill/action callbacks. Start/end/reverse
-remain machine-page controls. The exact device entry point and selected-track
-SDK access still need mapping; the UI widgets themselves already exist.
+remain machine-page controls. The initial entry point below uses an explicit
+track choice; a selected-track shortcut remains future work.
+
+**Reusable listing requirement (2026-10-30):** expose file and directory browsing
+through a shared SDK service usable by both the sampler and a later file manager.
+The sampler owns sample-format filtering, preview and per-track binding. The
+listing service owns provider/root selection, directory traversal, bounded page
+requests, full names/paths, entry type and size, provider identity metadata,
+completion/error states and stale-result rejection. Keep display truncation in
+the UI. Do not promise that the DT2 hash and DN2 SHA have identical semantics or
+that either listing pins file contents. Revalidate a selected identity when opening
+it for loading. File mutation operations are a later extension to this service.
+
+The first backend is `modules/core/runtime/sdk/src/store/catalog.rs`: verified
+open once, then one bounded table read per page, with header checks before and
+after. It enumerates raw entries without sample filtering or prefix-total scans;
+the adapter will form directory pages. Its initial full-table verification still
+needs scheduling outside UI callbacks. This is internal Rust plumbing, not yet
+an exported C SDK contract. Finalize that common contract after the DT2 iterator
+ABI and ownership audit, then add the runtime service and SDK bindings.
+The byte audit now identifies a caller-owned 16-byte state and `0x114`-byte
+entry; the initial C++ name-ownership inference was incorrect. Its locking and
+sequential scan still require task-context scheduling. Details, validation and
+remaining adapter gaps: [finding 93](../findings/93-sdk-file-catalogue.md).
 
 **Initial integration route:** use the existing `DK_MENU` entry with a track list,
 then a reusable `DK_UI_LIST` browser for that explicitly chosen track. This makes

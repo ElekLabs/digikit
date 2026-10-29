@@ -596,6 +596,9 @@ pub unsafe fn snapshot<F: FnMut(&[u8]) -> [u8; 32]>(
 /// Bounded file reads with explicit digest completion.
 pub mod stream;
 
+/// Internal bounded metadata enumeration; no public C SDK contract.
+pub mod catalog;
+
 // ---- free space -------------------------------------------------------------------------------------------------------------
 
 const FIXED_MAX: usize = 6;
