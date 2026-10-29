@@ -39,8 +39,9 @@ side panels and dialogs rather than introducing a separate UI framework.
   pinned-bank proof API until a versioned replacement is available.
 - [x] Specify per-track selection ordering and per-callback reader retirement;
   independent design review passes. No new public binding ABI is exported.
-- [ ] Prove a private two-track descriptor/retirement boundary before integrating
-  production backing and publishing ready bindings.
+- [x] Prove a private two-track descriptor/retirement boundary in the assembled
+  consumer: 15 focused tests and independent review pass. Physical IRQ/DMA and
+  production transport/backing remain separate obligations.
 - [x] Implement bounded catalogue access with focused tests.
 - [ ] Implement per-track binding with focused tests.
 - [ ] Build the on-device picker using SDK UI components, with loading/error states.
@@ -76,15 +77,24 @@ Both runs pass independent artifact review. Direct host checks pass 195 tests
 (16 skipped); routed checks retain baseline stale references and the linked
 pnpm launcher failure. No merge gate, hardware run or performance claim is made.
 
-**Resume next:** define per-track binding/retirement independently of listing.
+**Resume next:** connect the proved reader lifetime to owned backing and a
+device-side close/drain acknowledgement before exporting per-track bindings.
 The initial ordering and reader strategy are recorded in
 [the binding design](../design/sample-binding.md); public ABI and production
 backing remain unimplemented.
+The private two-track consumer now passes all 15 focused cases: A can close,
+drain and replace while B retains exact PCM; old A voices and mismatched cached
+track identities cannot read replacement backing. Separate simulated stacks and
+saved-frame checks correct an initial harness flaw. See
+[finding 94](../findings/94-sample-binding-lifetime.md). This is a scheduler-model
+proof, not physical interrupt dispatch, DMA/cache or a native device scenario.
 The DN2 output-pointer table initializer is now resolved and independently
 checked against original bytes: sixteen 128-byte output buffers at
 `0x804acf90..0x804ad790`. This narrows provenance; it does not establish a free
-pool. Next audit the apparent later writer `0x1c9118` with actual I2 provenance,
-then consumer bounds; see finding 91. Do not repeat the initializer investigation.
+pool. The apparent later writer `0x1c9118 → 0x254a84` is now corrected on its
+audited first-pass path: byte-width addressing writes `0x254ab4`, outside the
+table. Other callees/loop paths and consumer bounds still need tracing; see
+finding 91. Do not repeat the initializer or this bounded width correction.
 The old sample API still owns one nonreplaceable 8,192-frame bank per module;
 it cannot implement this product by changing a path alone. Existing
 `sdk/dsp/sample_bank.inc` supplies admission, epoch and reader-drain primitives.
