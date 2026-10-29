@@ -23,6 +23,8 @@ See [finding 92](../findings/92-dn2-native-bulk-seam.md) for artifacts and limit
 - [x] Prove finite non-silent stock DN2 playback before/during/after transfer;
   record per-window metrics without claiming dropout-free hardware audio.
 - [ ] Bound stock fixed DDR object access before choosing production reservation.
+- [ ] Establish a device-side completion channel preserving stock reply data;
+  header and trailer candidates both have stock accessors (finding 88).
 - [ ] Integrate per-track loading/publication and prove both devices.
 
 Ownership audit: fixed FX object rooted at `0x8005912c` has bounded ring indices
@@ -31,6 +33,11 @@ live frame count. Continue with the next fixed roots and output-pointer provenan
 Existing small allocation entry is an L1 heap;
 no general reservable DDR arena has been established. Keep the experimental bank
 private and unpublished to voices until ownership is resolved.
+The following smaller ring object is also locally bounded; a lookup index is
+bounded by a signed-halfword load, correcting the initial unbounded-word reading
+(finding 91). Completion research now evaluates an explicit reply extension:
+verify actual CF/DSP buffer extents and all DMA/copy counts before any mutation.
+No stock header/trailer bytes are approved for reuse.
 
 
 **Confirmed (2026-10-29): independent per-track sampling.**

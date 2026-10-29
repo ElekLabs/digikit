@@ -82,8 +82,8 @@ this next object's layout:
 | Control tail | `0x80459230..0x80459388` |
 
 The next boot object begins at `0x80459388`. The initializer clears both rings
-using `0x40000` iterations of two SIMD pair stores (`0xb84571/74`), then 32
-SIMD pair stores clear the 256-byte workspace. Reset `0xb8439b` has its highest
+using `0x40000` iterations of two SIMD pair stores (`0xb84571/74`); before that,
+32 SIMD pair stores (`0xb84521..5f`) clear the 256-byte workspace. Reset `0xb8439b` has its highest
 explicit control store at `0xb8440a`, ending at that next root. Ring index masks
 at `0xb846ce/d6`, `0xb8431b` and `0xb84071/77` are 19-bit masks, bounding
 valid-state accesses within the two 2 MiB rings. Render entry is reached through
@@ -102,3 +102,40 @@ output-pointer table rooted at `0x254a60`. Switch-table entry 1 reaches
 reloaded pointer. This is not positive evidence of a frame-count write. The
 pointer table is loader-zero and its populated values still need tracing; no
 universal no-alias claim follows.
+
+**[D]** The next root `0x80459388` is bound by boot `0x1c168f/95` to
+initializer `0xb84f51` and by frame code `0x1c1bd5/e1` to renderer `0xb84d5c`.
+It has a four-byte header, two 2,048-byte rings
+`[0x8045938c,0x80459b8c)` and `[0x80459b8c,0x8045a38c)`, two 128-byte work
+buffers ending at `0x8045a48c`, and checked control accesses ending at
+`0x8045a6c4`. The next root is `0x8045a6c8`: the four-byte remainder is not
+claimed free. Ring clear count 256 and SIMD stores at `0xb84f39/3c` match the
+ring extents; workspace stores at `0xb84e1a..58` clear 256 bytes. Nine-bit masks
+at `0xb84ba1/ac/b2/b8` and `0xb84bef/f2` bound initialized, serialized read/write
+indices to 0..511. Highest checked reset store `0xb84edf` ends at object offset
+`0x133c`. Work-buffer bounds again depend on live frame count ≤32; caller
+output-pointer arrays remain a separate obligation.
+
+**[D]** The following data root `0x8045a6c8` is read at `0x1c297d` as
+`base + 512 * group + 4 * index`. The signed selector loaded at `0x1c293a`
+is clamped to group 0..4 at `0x1c2947/4c`. **[C]** The separate per-track load
+at `0x1c2940` was initially described as an unbounded packed word. Raw Type3b
+fields `l=1,w=0,x=1` instead establish a sign-extended 16-bit load, advancing
+I5 by two bytes. Arithmetic right shift by eight at `0x1c2942` therefore bounds
+the index to -128..127 regardless of CF validation. All resulting four-byte
+reads lie within `[0x8045a4c8,0x8045b0c8)`. The source is frame halfword offset
+`0x34 + 2 * track`, not a word in the `0x92`-stride parameter block.
+The raw loop trip count at `0x1c2937` is 16. CF writer `0x40027510` copies
+the halfword from `0x8000dd40 + 2 * track` into frame location
+`0x80005e94 + 2 * track`; the upstream value producer is not needed for the
+signed-load bound and remains unaudited.
+**[O]** A nonnegative 0..127 range still needs the producer contract, but is not
+needed to exclude arbitrary high-DDR addresses from this particular lookup.
+Loader block 89 covers `[0x8045a6c8,0x80467cd0)`, which proves loaded extent,
+not a runtime access maximum or free space.
+
+**[C]** Pointer propagation also needs packed-access width handling. Original
+instruction `0xb84597` has raw fields `l/w/x=0/0/0`, a byte access. Its `0xd3`
+post-modifier advances from object offset `0x400119` to `0x4001ec`. Applying
+blanket four-byte scaling would invent an overrun; raw access semantics control
+the bound, not the pointer table's estimate.
