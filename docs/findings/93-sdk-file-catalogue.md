@@ -83,3 +83,80 @@ against stock ReadDir, and exercise end/error cases. Path-to-directory resolutio
 type decoding, per-entry size/hash lookup, concurrent mutations and storage-error
 handling still need adapter evidence. No firmware declaration or on-device execution
 is claimed by this static audit.
+
+## Path opening and stock metadata follow-up
+
+**[D]** An independent original-byte audit resolves a plain path opener:
+`0x401572a0(const char *path, u32 state[4])`, returning 0 on success and -1 on
+failure. It checks filesystem readiness, null arguments and path length at most
+255, holds the filesystem mutex while traversing components, accepts a directory
+result only, and initializes all four state words. Root `/` resolves to ID 2.
+Missing paths and file-as-directory inputs are rejected. It uses shared component
+scratch internally; callers must not add an outer filesystem lock.
+
+**[D]** Existing declared `cf.storage.fn.path.size` resolves to `0x4015bcfe(id)`
+and reads node +4 under its own lock, returning `0xffffffff` on failure. Stock
+ReadDir's producer instead uses locked metadata getter
+`0x4015aec2(id, u32 out[4])`: 0 succeeds with `{id, node[+0xc], node[+4], node[+0x10]}`;
+-1 means unavailable/invalid data. The getter requires the low bit of node +0xc.
+The RPC producer passes that stored odd hash unchanged; it does not recompute it.
+RPC size is `max(raw_size - 16, 0)`. Getter failure falls back to zero hash/size.
+This does not prove every directory necessarily takes that fallback.
+
+**[D]** Dirent type 1 maps to `D`, all other values to `F` in the stock RPC.
+The final row loop filters exact `.` and `..`, with no general hidden-name filter.
+The preceding `FileSystemDirectory` wrapper consumes two leading raw records.
+Their names must be observed in a live listing; position alone does not establish
+that they are dot records. The diagnostic retains all raw rows before comparison.
+
+**[D]** `core/file-catalog-proof` adds DT2-only hashed anchors for directory open
+and next and a private guarded OPEN/NEXT/SIZE mailbox. It invokes at most one
+firmware call per request from the actual UI-loop hook, preserving the original
+queue-pop ABI. It conflicts with the runtime and changes no DSP code/counts.
+The opt-in `tests/regression/runtime/file-catalog.test.ts` uses explicit prebuilt
+binaries/card, stock RPC fixtures, bounded waits and owned-daemon cleanup.
+CF object build/check, generation, layering, TypeScript checks and independent
+review pass. This supersedes the earlier declaration gap; native execution,
+concurrent mutation and storage-error robustness remain separate checks.
+
+## Live DT2 directory proof
+
+**[D]** The named opt-in Vitest case passes on DT2 1.17, with a second agent
+checking the saved plan, image hash, raw buffers and observations independently.
+Run: `out/runs/file-catalog/808e86fa-814f-4b46-92a0-660fc9c20162`;
+log: `out/file-catalog-live.log`. The patch contains only `core/expansion` and
+`core/file-catalog-proof`; section 3 changes, DSP sections remain stock. Patched
+SYX SHA-256: `d5b1642d4a65809130fc4dbbe9a10931bed160e9cced5288178f29807312b2f3`.
+
+The explicit prebuilt card is a generated three-sample fixture with the current
+firmware hash. It is opened read-only and writes stay in the owned daemon's
+overlay. Stock RPC creates `/catalog-proof/item.bin` with 257 deterministic bytes.
+
+- Raw root records start with `.` and `..`, then `catalog-proof`, `factory`,
+  `1-sine220`, `2-sine880`, `3-noise`. The child starts with `.` and `..`, then
+  `item.bin`. Removing only the dot entries matches stock names and types.
+- Raw directories have type 1 and the observed files type 0. Sample sizes are
+  96,080 physical bytes versus 96,064 in ReadDir; the child is 273 versus 257.
+- The 27 mailbox operations invoke 20 firmware calls, at most one per request.
+  Repeated EOF performs no extra firmware call. Unopened NEXT, an unterminated
+  path, missing path and file-as-directory are rejected. Failed OPEN invalidates
+  the iterator, and subsequent NEXT invokes no firmware call.
+- All four canaries remain unchanged throughout and in the final buffers.
+  CF reports DT2 1.17 ready, filesystem verified, no error, no heartbeat stall
+  and zero guard hits.
+
+The prebuilt daemon reports its cached DSP profile as DN2 1.11 while running the
+current DT2 image with instruction guards/fallback. This is a ColdFire directory
+ABI proof, not an audio, hardware or timing claim; no generated-core change was
+needed. The locked metadata/hash getter has static byte evidence only, not a
+call in this diagnostic. Concurrent mutations and storage failures remain open.
+The generic public SDK service, DN2 implied-folder projection and picker remain
+implementation work.
+
+Checkpoint checks: the named live test passes, as do 195 direct host tests
+(16 skipped), scoped TypeScript types/lint/format, object/generation checks,
+layering and changed-document path checks. Routed `test:changed` still fails
+the ten pre-existing stale references and the workspace pnpm launcher before
+its host/lint/format/types commands run. Direct checks cover those code checks;
+logs are `out/file-catalog-{live,host,changed,types,lint,format}.log`.
+No merge gate or hardware run is claimed.

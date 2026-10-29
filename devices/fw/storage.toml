@@ -76,3 +76,24 @@ rule = { kind = "cf_func", hash = "b37e8567dc53892b5fe3ddba277e1a9c", offset = 0
 mark = "D"
 users = ["core/runtime"]
 doc = "File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 78)."
+
+# Private DT2 UI-task directory diagnostic; plain caller-owned data, finding 93.
+[[fn]]
+name = "cf.storage.fn.directory.open"
+cpu = "cf"
+sig = "i32 (const u8 *path, u32 *state)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "570eb9f42d27913a3ea63d6043d901bd", offset = 0, len = 4 }
+mark = "D"
+users = ["core/file-catalog-proof"]
+doc = "DT2 1.17 read-only path directory open, 0 success/-1 failure; caller-owned four-word state. Task context; may block under filesystem locking (finding 93)."
+
+[[fn]]
+name = "cf.storage.fn.directory.next"
+cpu = "cf"
+sig = "i32 (u32 *state, u8 *output)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "3541efc67bfb00c8131ae96c343288d3", offset = 0, len = 4 }
+mark = "D"
+users = ["core/file-catalog-proof"]
+doc = "DT2 1.17 read-only directory next, 1 entry/0 EOF/-1 failure. Caller zeros private 0x114-byte output; ID +0, u16 type +4, directory ID +8, page/offset +12/+16, NUL name[256] +20. Task context; no latency bound (finding 93)."

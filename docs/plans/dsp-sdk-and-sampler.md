@@ -19,10 +19,13 @@ side panels and dialogs rather than introducing a separate UI framework.
 - [x] Implement the generic DN2 store catalogue backend with bounded pages,
   owned full paths/metadata and sticky stale-generation errors; focused checks pass.
 - [x] Independently audit the DT2 directory iterator's plain-data state/output ABI.
-- [ ] Prove DT2 iterator execution and complete path/type/size/hash mapping.
-- [ ] Map existing DN2 store and DT2 +Drive catalogue providers and stable identities.
-- [ ] Define SDK catalogue and per-track selection/binding contracts, preserving
-  the existing pinned-bank proof API until a versioned replacement is available.
+- [x] Prove DT2 path opening, iteration, type/size mapping, EOF and errors in the
+  live emulator; independently audit the stock metadata/hash getter.
+- [x] Map DN2 store and DT2 +Drive catalogue providers and identity metadata;
+  neither listing establishes an immutable file lease.
+- [ ] Define/export the reusable SDK file/directory listing contract and adapters.
+- [ ] Define per-track selection/binding separately, preserving the existing
+  pinned-bank proof API until a versioned replacement is available.
 - [ ] Implement bounded catalogue access and binding with focused tests.
 - [ ] Build the on-device picker using SDK UI components, with loading/error states.
 - [ ] Integrate owned backing and prove selection/replacement/playback on both devices.
@@ -57,6 +60,23 @@ The byte audit now identifies a caller-owned 16-byte state and `0x114`-byte
 entry; the initial C++ name-ownership inference was incorrect. Its locking and
 sequential scan still require task-context scheduling. Details, validation and
 remaining adapter gaps: [finding 93](../findings/93-sdk-file-catalogue.md).
+
+**Latest checkpoint:** DN2 backend is committed/pushed as `81d235b7`. The DT2
+private UI-task diagnostic now passes its live test and independent artifact
+review: root and child listings match stock ReadDir, dot entries are observed,
+physical sizes differ by the documented 16-byte trailer, invalid paths and EOF
+behave correctly, and guards remain intact. Run:
+`out/runs/file-catalog/808e86fa-814f-4b46-92a0-660fc9c20162`.
+No exported SDK listing calls or picker are claimed yet.
+
+Next implementation boundary: specify the shared read-only directory request,
+page/result and close/cancel lifecycle before exposing C imports. Full path and
+provider metadata must survive display truncation; late results from a previous
+folder/request must be rejected. DN2 needs bounded directory projection over its
+flat table, including implied folders and deduplication; zero matches in a raw
+chunk must not be mistaken for EOF. DT2 can wrap the proved iterator in task
+context; its stored hash/size metadata and file mutation behavior need explicit
+semantics. Keep source validation and sample ownership out of the listing API.
 
 **Initial integration route:** use the existing `DK_MENU` entry with a track list,
 then a reusable `DK_UI_LIST` browser for that explicitly chosen track. This makes
