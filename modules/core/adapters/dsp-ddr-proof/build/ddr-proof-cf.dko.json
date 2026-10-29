@@ -39,174 +39,167 @@
   },
   {
    "addend": 0,
-   "offset": 98,
+   "offset": 108,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_previous_quiet",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 114,
+   "offset": 124,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 120,
+   "offset": 130,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_op",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 126,
+   "offset": 136,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_previous_quiet",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 132,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_failed",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 142,
    "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 190,
+   "offset": 200,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_failed",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 200,
+   "offset": 210,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 246,
+   "offset": 256,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.frame_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 336,
+   "offset": 346,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..rodata.CSWTCH.33",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 354,
+   "offset": 364,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.frame_word",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 552,
+   "offset": 562,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 8,
-   "offset": 560,
+   "offset": 570,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 566,
+   "offset": 576,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 572,
+   "offset": 582,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_op",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 578,
+   "offset": 588,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 594,
+   "offset": 604,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.fail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 734,
+   "offset": 744,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_retired_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 740,
+   "offset": 750,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_opened_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 746,
+   "offset": 756,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 752,
+   "offset": 762,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_loading_token",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 758,
+   "offset": 768,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 766,
+   "offset": 776,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 774,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
    "offset": 784,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
@@ -214,156 +207,156 @@
   },
   {
    "addend": 8,
-   "offset": 792,
+   "offset": 794,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 802,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 812,
+   "offset": 822,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.fail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 830,
+   "offset": 840,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_loading_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 836,
+   "offset": 846,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_opened_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 842,
+   "offset": 852,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 848,
+   "offset": 858,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_retired_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 862,
+   "offset": 872,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 868,
+   "offset": 878,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_retired_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 882,
+   "offset": 892,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_opened_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 888,
+   "offset": 898,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 894,
+   "offset": 904,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_loading_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 906,
+   "offset": 916,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.fail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 924,
+   "offset": 934,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_failed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 964,
+   "offset": 974,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.frame_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 988,
+   "offset": 998,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_loading_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 996,
+   "offset": 1006,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_retired_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1022,
+   "offset": 1032,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_frame",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 1034,
+   "offset": 1044,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1064,
+   "offset": 1076,
    "section": ".text.dd_frame_hook",
    "symbol": "dd_stock_send",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1084,
+   "offset": 1096,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1092,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_opened_token",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 1104,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_loading_token",
+   "symbol": ".sec..bss.dd_opened_token",
    "type": "cf.32"
   },
   {
@@ -375,7 +368,14 @@
   },
   {
    "addend": 0,
-   "offset": 1124,
+   "offset": 1128,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1136,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
@@ -398,10 +398,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffcc222f003848d77cfc266f003c2a6f0040286f00442f4100300c8100000a80660cbbfc00000abc66044a8b6608428042874284603871d357804a8066f04a6b00026662322b0024302b00228081322b00268081322b002880814a4066484ab90000000056c470017e017904448422390000000024390000000023c0000000004ab9000000006724700323c0000000002f4c00442f4d00402f4b003c2f6f003000386000037842807e0160867004b081670000a853814a8166d62a39000000004a8566cc4ab900000000670002344a8c6700022e71ec00600c800000a6dd66000220322c00603c2c0062302c0064362c006645f9000000003f41002e4878000271c04843424386804e92588fb680660001f04846424671ef002e487800038c804e92588f2206424148410281000001ffb081660001cc70197204e0aeb2826600017a7006b086670001b8700141f9000000007bb008006000016e4878000445f9000000004e924878000324004e92487800052c004e924878000626004e9242a72a004e924fef001459804a806706428260000092487800014e92588f0c80ddf4a60166ea487800024e92588f4a8067de0c850000028062d60c830003a98062ce203c0003a9809083b08565c27001b082660c8686868566b69dce4286601a7202b282667653860c860000017662a04a85679c9dce428642832f034e925283588f7207dc80ddc6b28366ee4283b68566000096487800074e92588f220eb386bc806600ff6c42b900000000700142b90000000042b90000000023c20000000023c0000000004a826600fe72487800654eb900000000588f6000fe627003b082661e0c86000001786600ff260c830003a9806600ff1c4a856700ff7a6000ff1220025980e2886600ff087004b0826610203c00000179b0866600fef66000ff38203c0000017a60ee20435283486800204e92588fdc80ddc66000ff54200272025780b2806400fe88bc85660000b8487800024e92588f7204b282665a23c00000000042b90000000042b90000000042b90000000023c600000000700223c0000000007001b0b9000000006600fd86203900000000528023c0000000000c80000003846300008a487800644eb900000000588f6000fd5e7201b282661a23c00000000042b90000000042b90000000042b900000000609e7203b282660e23c00000000042b90000000060847205b282668423c00000000042b90000000042b90000000060ca2006720241f9000000005580b28065142f064e90588f4ab9000000006700ff606000fcec4878006660e84a84664a4a876700fcdc4a826700fcd6487800024eb900000000588f7203b2826700008a655853824a826674b0b900000000671a22390000000074fd20415388b4886500fca05281b2806600fc9841f900000000203c00000a8052b9000000002f4c00442f4d00402f48003c2f4000384cd77cfc4fef00344ef9000000007204b28267ca5b824a826600fc5ab0b90000000067bab0b9000000006600fc4860aeb0b9000000006600fc3c60a2b0b900000000679ab0b9000000006600fc28608e",
+   "hex": "4fefffcc48d77cfc2a6f0038266f003c286f00442f6f0040002ebbfc000008026708bbfc00000a806610242f002e0c8200000abc66044a8b6608428042874284603871d357804a8066f04a6b00026662322b0024302b00228081322b00268081322b002880814a4066484ab90000000056c470017e017904448422390000000024390000000023c0000000004ab9000000006724700323c0000000002f4c00442f6f002e00402f4b003c2f4d00386000037a42807e0160867004b081670000a853814a8166d62a39000000004a8566cc4ab900000000670002344a8c6700022e71ec00600c800000a6dd66000220322c00603c2c0062302c0064362c006645f9000000003f4100324878000271c04843424386804e92588fb680660001f04846424671ef0032487800038c804e92588f2206424148410281000001ffb081660001cc70197204e0aeb2826600017a7006b086670001b8700141f9000000007bb008006000016e4878000445f9000000004e924878000324004e92487800052c004e924878000626004e9242a72a004e924fef001459804a806706428260000092487800014e92588f0c80ddf4a60166ea487800024e92588f4a8067de0c850000028062d60c830003a98062ce203c0003a9809083b08565c27001b082660c8686868566b69dce4286601a7202b282667653860c860000017662a04a85679c9dce428642832f034e925283588f7207dc80ddc6b28366ee4283b68566000096487800074e92588f220eb386bc806600ff6c42b900000000700142b90000000042b90000000023c20000000023c0000000004a826600fe72487800654eb900000000588f6000fe627003b082661e0c86000001786600ff260c830003a9806600ff1c4a856700ff7a6000ff1220025980e2886600ff087004b0826610203c00000179b0866600fef66000ff38203c0000017a60ee20435283486800204e92588fdc80ddc66000ff54200272025780b2806400fe88bc85660000b8487800024e92588f7204b282665a23c00000000042b90000000042b90000000042b90000000023c600000000700223c0000000007001b0b9000000006600fd86203900000000528023c0000000000c80000003846300008a487800644eb900000000588f6000fd5e7201b282661a23c00000000042b90000000042b90000000042b900000000609e7203b282660e23c00000000042b90000000060847205b282668423c00000000042b90000000042b90000000060ca2006720241f9000000005580b28065142f064e90588f4ab9000000006700ff606000fcec4878006660e84a84664a4a876700fcdc4a826700fcd6487800024eb900000000588f7203b2826700008c655a53824a826676b0b900000000671a22390000000074fd20415388b4886500fca05281b2806600fc98203c00000000223c00000a8052b9000000002f4c00442f6f002e00402f40003c2f4100384cd77cfc4fef00344ef9000000007204b28267c85b824a826600fc58b0b90000000067b8b0b9000000006600fc4660acb0b9000000006600fc3a60a0b0b9000000006798b0b9000000006600fc26608c",
    "kind": "text",
    "name": ".text.dd_frame_hook",
-   "size": 1134
+   "size": 1146
   },
   {
    "align": 1,
@@ -481,7 +481,7 @@
    "size": 448
   }
  ],
- "source_sha256": "8d9462e49ee88d18d24583cebbfeacc152ce041401026b1ddda2caab0e165f39",
+ "source_sha256": "24ab0de8de37fa76c9f73e91493195578c5fa0f0186769f65e096a34de20bf2b",
  "symbols": [
   {
    "global": false,
@@ -662,8 +662,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "370",
-  "isa_check": "584d5ae102f6ce2e57a227fde8217bd779aa34e7bf342313d6a35751b9540e17",
+  "instructions_redecoded": "372",
+  "isa_check": "31287d75533a355b3a8acd95691bbac165b821cb0278a8e85bfdd0cc21273f86",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

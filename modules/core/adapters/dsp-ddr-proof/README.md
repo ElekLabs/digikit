@@ -1,6 +1,6 @@
-# Isolated DN2 DDR transport diagnostic
+# Isolated DDR transport diagnostic
 
-Experimental, DN2 OS 1.12 only. Patch explicitly with
+Experimental, DT2 OS 1.17 and DN2 OS 1.12. Patch explicitly with
 `apply --modules core/dsp-ddr-proof`; it conflicts with `core/dsp-link` and is
 absent from default patch sets. The acceptance test loads that prepatched image
 through the existing stock session's `firmware.load` API, using prebuilt binaries.
@@ -13,7 +13,7 @@ START=4. Do not touch staging while BUSY. Errors are sticky until boot. Staging
 remains allocated after errors. This is a host test aid, without a runtime API.
 
 The CF wrapper passes the original arguments to the stock sender while idle.
-Initial INIT substitution requires stock command 3, lengths 0xa80/0xabc and zero
+Initial INIT substitution requires stock command 3, data length 0x802 (DT2) or 0xa80 (DN2), reply length 0xabc and zero
 masks at source halfwords 17..20 in both this and the prior ISR sample. Each
 START validates and caches the complete staging header, bounds and checksum;
 BUSY retries reuse that result while staging remains immutable.
@@ -76,12 +76,14 @@ never authorizes backing reuse. DSP errors retain the last accepted ACK sequence
 a rejected owned ordering request can therefore end as CF timeout rather than a
 matching error ACK. Both outcomes are sticky and prohibit further writes.
 The private host writer serializes whole load transactions and retains rejection
-even when callers catch it, so no queued C can continue after uncertain B completion. This adapter owns that region exclusively through its conflict
-with the normal link adapter.
+even when callers catch it, so no queued C can continue after uncertain B completion. The conflict with the normal link adapter prevents competing use of the hook;
+it does not establish exclusive ownership of the DDR range. Boot-stream gaps and
+bounded emulator results are not a hardware reservation or coexistence proof.
 
 Focused tests: `tests/patchkit/test_dsp_ddr_proof.py`. The coupled acceptance test
 is `tests/regression/runtime/sample-ddr-transfer.test.ts`; run only after review,
-with an explicitly supplied prebuilt DN2 daemon. It captures the baseline,
+with explicitly supplied prebuilt device daemons (`DIGI_EMUD_DT2` and/or
+`DIGI_EMUD_DN2`) and `DIGI_PATCHKIT_BIN`. It captures the baseline,
 checks the entire payload and both complete canary bands through bounded reads,
 and uses fresh boots for sticky failure cases. No hardware cache/coexistence,
 product sampler or general live-audio loading result follows from it. The separate
@@ -92,7 +94,8 @@ terminal case below establishes only its bounded owned-bank lifetime behavior.
 
 The same isolated adapter declares the patched-in `DDR proof` machine and its
 `DDRPROOF` page, with a Reverse knob (0..1, default forward). Its diagnostic-only
-permanent DN2 type is reserved in `core/machines/types.toml`; defaults still do
+permanent type 11 on each device is reserved in
+`modules/core/adapters/machines/types.toml`; defaults still do
 not include the adapter. The closure adds `core/machines`, `core/params` and
 `core/dsp-voice`, without the conflicting DSP-link adapter.
 

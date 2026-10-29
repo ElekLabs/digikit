@@ -183,7 +183,8 @@ void dd_test_ack(unsigned short *p, unsigned int token, unsigned int seq, unsign
     return patchkit.cf_link([MOD / "src/cf/ddr-proof.c", stub], 0x47E80000, {})
 
 
-def test_cf_quiet_gate_ack_and_watchdog(cf):
+@pytest.mark.parametrize("normal_len", [0x802, 0xA80])
+def test_cf_quiet_gate_ack_and_watchdog(cf, normal_len):
     syx = config.stock("Digitakt_II_OS1.17.syx")
     if not syx.exists():
         pytest.skip("CF test setup firmware absent")
@@ -201,7 +202,7 @@ def test_cf_quiet_gate_ack_and_watchdog(cf):
     def call(p=0):
         return {
             "pc": cf.symbols["dd_frame_hook"],
-            "args": [0xA80, src, 0xABC, p],
+            "args": [normal_len, src, 0xABC, p],
             "reads": reads,
         }
 
@@ -214,8 +215,8 @@ def test_cf_quiet_gate_ack_and_watchdog(cf):
     }
     r = machine.run(pokes, [call(), call()])
     assert all(x.ok and not x.clobbered for x in r)
-    assert struct.unpack(">4I", r[0].reads[1])[1] == src
-    assert struct.unpack(">4I", r[1].reads[1])[1] == stage
+    assert struct.unpack(">4I", r[0].reads[1]) == (normal_len, src, 0xABC, 0)
+    assert struct.unpack(">4I", r[1].reads[1]) == (0xA80, stage, 0xABC, 0)
     ack = bytearray(0xABC)
     struct.pack_into(">4H", ack, 0x60, 0xA6DD, 0, TOKEN & 65535, TOKEN >> 16)
     r = machine.run({**pokes, rec: bytes(ack)}, [call(), call(), call(rec)])
@@ -242,6 +243,49 @@ def test_cf_quiet_gate_ack_and_watchdog(cf):
         assert all(x.ok and not x.clobbered for x in r)
         assert struct.unpack(">4I", r[-1].reads[0])[:2] == (3, 100)
         assert all(struct.unpack(">4I", x.reads[1])[1] == src for x in r)
+
+
+@pytest.mark.parametrize("normal_len", [0, 0x800, 0x801, 0x803, 0xA7E, 0xA82, 0xABC])
+@pytest.mark.parametrize("held", [False, True])
+def test_cf_unsupported_frame_lengths_never_substitute(cf, normal_len, held):
+    syx = config.stock("Digitakt_II_OS1.17.syx")
+    if not syx.exists():
+        pytest.skip("CF test setup firmware absent")
+    state = os.environ.get("DIGI_DDR_PROOF_CF_STATE")
+    machine = CfMachine(syx, state=Path(state) if state else None)
+    src, rec = 0x47EC0000, 0x47ED0000
+    normal = bytearray(0xABC)
+    struct.pack_into(">H", normal, 0, 3)
+    struct.pack_into(">H", normal, 34, int(held))
+    # RETIRE is eligible for a held-note grant, but only on a supported frame.
+    staging = b"".join(
+        struct.pack(">HH", word & 65535, word >> 16) for word in packet(377, 4)
+    )
+    mail, stage, capture = (
+        cf.symbols[name] for name in ("dd_mail", "dd_frame", "dd_capture")
+    )
+    results = machine.run(
+        {
+            cf.base: cf.image,
+            cf.base + len(cf.image): bytes(cf.bss_size),
+            src: bytes(normal),
+            rec: bytes(0xABC),
+            stage: staging,
+            mail: struct.pack(">4I", 4, 0, 0, 0),
+        },
+        [
+            {
+                "pc": cf.symbols["dd_frame_hook"],
+                "args": [normal_len, src, 0xABC, rec],
+                "reads": [(mail, 16), (capture, 16)],
+            }
+        ]
+        * 3,
+    )
+    assert all(result.ok and not result.clobbered for result in results)
+    for index, result in enumerate(results):
+        assert struct.unpack(">4I", result.reads[0]) == (1, 0, index + 1, 0)
+        assert struct.unpack(">4I", result.reads[1]) == (normal_len, src, 0xABC, rec)
 
 
 @pytest.mark.parametrize("kind", ["checksum", "range", "token", "operation"])
@@ -640,7 +684,8 @@ def test_open_requires_exact_sealed_control(dsp, kind):
     assert value(sess, syms, "admission_open") == 0
 
 
-def test_cf_closed_bank_grants_require_exact_ack_and_expire_at_open(cf):
+@pytest.mark.parametrize("normal_len", [0x802, 0xA80])
+def test_cf_closed_bank_grants_require_exact_ack_and_expire_at_open(cf, normal_len):
     syx = config.stock("Digitakt_II_OS1.17.syx")
     if not syx.exists():
         pytest.skip("CF test setup firmware absent")
@@ -679,7 +724,7 @@ def test_cf_closed_bank_grants_require_exact_ack_and_expire_at_open(cf):
         calls.append(
             {
                 "pc": cf.symbols["dd_frame_hook"],
-                "args": [0xA80, src, 0xABC, rec],
+                "args": [normal_len, src, 0xABC, rec],
                 "reads": reads,
             }
         )

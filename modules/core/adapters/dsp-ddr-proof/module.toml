@@ -7,12 +7,13 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Diagnostic-only quiet full-frame transfer into an isolated DN2 DDR range."
-ports = ["dn2-1.12"]
+summary = "Diagnostic-only quiet full-frame transfer into an isolated DDR range."
+ports = ["dt2-1.17", "dn2-1.12"]
 requires = ["core/machines", "core/params", "core/dsp-voice"]
 conflicts = ["core/dsp-link"]
 
 [targets]
+"dt2-1.17" = "untested"
 "dn2-1.12" = "untested"
 
 [[object]]
@@ -27,7 +28,7 @@ dd_stock_send = "cf.link.fn.frame"
 path = "build/ddr-proof-dsp.dko.json"
 sources = ["src/dsp/ddr-proof.s", "src/dsp/playback.s"]
 place = "dsp.l2"
-devices = ["dn2"]
+devices = ["dt2", "dn2"]
 
 [object.externs]
 _dd_back = "hook.dsp.link.site.block_tail.tail"

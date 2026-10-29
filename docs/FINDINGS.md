@@ -141,3 +141,6 @@ DSP block path: [wider model-safe blocks and cheaper boundaries](findings/07-emu
 Desktop noise and WASM parity: [desktop noise is output starvation; tap scenarios; WASM parity](findings/07-emulator.md#2026-10-06-desktop-noise-is-output-starvation-tap-scenarios-wasm-parity) (**[V] [O]**; headless tap renders are a clean 262 Hz tone, the browser core matches native PCM byte for byte, the fast-region ceiling is about 6 % of DSP CPU).
 
 DSP follow-up: [unknown-value loop fallback](findings/07-emulator.md#unknown-value-dsp-loop-fallback-measured-cpu-saving-2026-10-03) (**[O]**; seven paired replays preserve PCM/state/instruction gates and save 21.6% measured DSP CPU; exact native coupled audio remains about 2.4x too slow).
+
+Sampler follow-up: [DT2 sample lifecycle port](findings/85-dt2-sample-lifecycle.md)
+records current-image transport and candidate-bank audits, port validation and limits.

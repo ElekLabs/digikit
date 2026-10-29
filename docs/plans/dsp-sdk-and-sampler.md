@@ -6,6 +6,48 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
+
+**Current checkpoint (2026-10-29): DT2 lifecycle port is implemented and all six
+cases per device pass across the initial and corrected runs.**
+DT2 uses normal frame length `0x802`, DN2 `0xa80`; both retain the diagnostic
+`0xa80` send and `0xabc` reply. The DSP object and SDK reader are unchanged.
+Independent original-image audits establish the transport and a boot-stream gap
+for the bounded emulator bank; they do not establish runtime/hardware ownership.
+DT2 diagnostic type 11 preserves retired type 10 (historical XSLICe).
+
+Validation: 84 focused assembled CF/DSP tests; 195 host passes/16 skips;
+scoped lint/types/object/path checks. Initial suite: nine passes and three DT2
+playback-setup failures due to treating append insertion value 255 as a menu row.
+The corrected test verifies the live menu membership and selects the observed row;
+it also reads the correct per-device dispatched-type diagnostic. All six affected
+playback/lifecycle cases pass on both devices in
+`out/runs/ddr-proof/dt2-port-playback-corrected.log` (443.42-second wall time,
+not a performance measurement). The six rejection cases passed in
+`out/runs/ddr-proof/dt2-port-suite.log` and were not unnecessarily repeated.
+
+DT2 full playback artifact: `out/runs/ddr-proof/dt2/a3273fdd-d212-4cb8-98ce-025ed8d6c427`.
+Terminal retirement: `out/runs/ddr-proof/dt2/4f054e94-6ff7-4483-91b3-22164872ea6f`.
+A → B sealed skip → C: `out/runs/ddr-proof/dt2/efe92f48-b20f-4b3c-9526-fa462c245b34`.
+[Finding 85](../findings/85-dt2-sample-lifecycle.md) records raw-image provenance,
+independent audits, hashes/audio and limits. The existing prebuilt DT2 emulator
+reports generated DSP core `dt2-1.16` while executing DT2 1.17 firmware; no core
+regeneration was performed. Ten baseline stale references and the pnpm launcher
+failure remain in routed changed checks; no clean integration gate is claimed.
+
+- [x] Independently audit DT2 transport and candidate bank against original bytes.
+- [x] Port private diagnostic and per-device tests; preserve retired type numbers.
+- [x] Review and correct live-menu lookup and device-specific dispatch observation.
+- [x] Complete all six coupled cases per device; audit retained DT2 playback/lifecycle evidence.
+- [x] Record validation and independent audits in this plan and finding 85.
+- [ ] Next: agree the shared SDK/runtime contract from both-device evidence, then extract it.
+
+The next extraction should separate numerical reader/cursor operations from bank
+publication, reader admission/retirement and device transport. Keep the proven
+stop-old-notes policy and exact successor generations. Public sample selection,
+Transfer integration and hardware reservation/cache/coexistence remain separate
+work; do not expose this hardcoded diagnostic bank as a general allocator.
+
+**Prior DN2 checkpoint:**
 **Current checkpoint (2026-10-29): private generation reopening is implemented and all six coupled cases pass.**
 The user selected: stop currently playing notes on selection; queued notes starting
 after new READY play the new bank. Exact successor tokens, sealed COMMIT, explicit

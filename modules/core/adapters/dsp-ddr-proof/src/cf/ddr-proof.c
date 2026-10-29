@@ -1,4 +1,4 @@
-/* DN2 1.12 diagnostic only. Host publishes dd_mail.state last; staging is
+/* DT2 1.17 / DN2 1.12 diagnostic only. Host publishes dd_mail.state last; staging is
  * immutable until DONE. ERROR is sticky until boot. No allocation or runtime API.
  * The stock sender consumes staging synchronously into its SPI queue. Staging
  * remains statically allocated even after an error; no timed retirement rule. */
@@ -104,7 +104,9 @@ static void fail(u32 err)
 __attribute__((optimize("no-jump-tables")))
 void dd_frame_hook(int len, const u16 *src, int reclen, const volatile u16 *rec)
 {
-    u32 normal_frame = len == 0xa80 && reclen == 0xabc && src && src[0] == 3;
+    /* Exact supported stock lengths; diagnostic capacity remains 0xa80. */
+    u32 normal_frame = (len == 0x802 || len == 0xa80) &&
+        reclen == 0xabc && src && src[0] == 3;
     u32 quiet = normal_frame && src[1] == 0 &&
         (src[17] | src[18] | src[19] | src[20]) == 0;
     u32 safe = quiet && dd_previous_quiet;
