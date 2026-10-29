@@ -317,7 +317,7 @@ _dv_mk1:
 // Entered with JUMP (M13, I12) from the code above, the context pinned: R0 = type, R2 = v, R4 = the voice buffer, DM(_dv_row) = the row's end
 // (word k of the row is DM(k - 24, end)). The adapter's scalars are _dv_c: 0 type, 1 v, 2 buffer, 3 slot record, 4 note-on, 5 parameter index,
 // 6 knob slot, 7 state, 8 status, 9 fault kind, 10 faults so far, 11 types disabled. The slot's record (_dv_cst + 16 v): 0 phase (0 silent,
-// 1 armed by the edge, 2 running), 1 previous trig bit, 2 blocks since the note-on.
+// 1 armed by the edge, 2 running), 1 previous trig bit, 2 blocks since the note-on, 3 latched source track.
 _dv_contract:
     DM(_dv_c + 0) = R0;
     DM(_dv_c + 4) = R2;
@@ -354,6 +354,23 @@ _dv_contract:
     R1 = 2;
     DM(0, I3) = R1;
     DM(_dv_c + 16) = R11;
+    // Latch the source track at the delayed note_on, not the silent edge.
+    // The unsigned frame halfword is zero-extended by _dv_frame_hw; no masking
+    // can turn an invalid owner into a valid track (finding 90).
+    R11 = PASS R11;
+    IF EQ JUMP _dv_cowner;
+    R2 = DM(_dv_c + 4);
+    R0 = 0x52d;
+    R0 = R0 + R2;
+    CALL _dv_frame_hw;
+    R1 = 16;
+    COMP(R0, R1);
+    IF GE JUMP _dv_cbadowner;
+    DM(3, I3) = R0;
+_dv_cowner:
+    R0 = DM(3, I3);
+    DM(_dv_in + DK_IN_TRACK) = R0;
+    R11 = DM(_dv_c + 16);
     // the dk_voice_in: blocks since the note-on, pitch, velocity, the output block
     R0 = DM(2, I3);
     R1 = 0;
@@ -565,6 +582,11 @@ _dv_gnd:
     R0 = R0 OR R3;
     DM(_dv_diag + 64) = R0;               // type | voice << 16
     JUMP _dv_back;
+// An invalid source owner ends only this slot, without callbacks or a type fault.
+_dv_cbadowner:
+    R0 = 0;
+    DM(0, I3) = R0;
+    JUMP _dv_cz;
 // The rising edge: the slot is armed, this block is silent; the next block runs note_on and render.
 _dv_cedge:
     R1 = 1;
@@ -664,7 +686,7 @@ _dv_frame_sw:
 .PKDATA _dv_row, 4;
 // The contract adapter's data: the `dk_voice_in` it hands to the module, the parameter words (8), its scalars (see `_dv_contract`), the slots'
 // records (4 words each) and the knob positions of the module's parameters in order (ADM_PARAM_SLOT0 .. 7; 255: none).
-.PKDATA _dv_in, 16;
+.PKDATA _dv_in, 20;
 .PKDATA _dv_params, 32;
 .PKDATA _dv_c, 64;
 .PKDATA _dv_cst, 256;

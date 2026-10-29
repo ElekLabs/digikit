@@ -10,7 +10,7 @@ version = "0.5.3"   # 0.x: MINOR may break (contract major, store format, SysEx 
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
                     # An appended Api function is a minor bump; a changed or removed one is a major bump.
 api = [1, 3]        # the ColdFire Api table (every module, `raw` included); minor 1: `log_lv` appended; minor 2: `register_cmds` appended; minor 3: sample bank API appended
-machine = [1, 0]
+machine = [1, 1]    # minor 1: source track appended to voice_in, latched at note_on
 fx = [1, 0]         # run-time effects (sdk/include/dk/gen/fx.h, DSP section version 4 of a .dkm); 0.4.0; effect pages (register kind 4) 0.5.0
 service = [1, 0]
 
@@ -66,7 +66,7 @@ consts = [
     { name = "DK_LEVEL_BOUND_BITS", value = 1090519040, doc = "|sample| above DK_LEVEL_BOUND is a fault (+18 dB over full scale)." },  # 8.0f
     { name = "DK_MAGIC", value = 1145785665, doc = "'DKMA', the first word of dk_machine_desc." },             # 'DKMA' = 0x444b4d41
 ]
-voice_in = ["pitch", "velocity", "block", "out"]           # struct dk_voice_in, DK_IN_*
+voice_in = ["pitch", "velocity", "block", "out", "track"]           # struct dk_voice_in, DK_IN_*
 desc = [
     "magic", "contract", "n_params", "voices", "state_bytes",
     "state_clear_bytes", "max_cycles_block", "max_cycles_note_on", "max_call_depth", "stack_bytes",
@@ -86,6 +86,7 @@ voice_in = [
     "i32 velocity // 0 .. 127 << 8",
     "u32 block // blocks since note-on, 0 on the note-on block",
     "float *out // render writes DK_BLOCK floats here",
+    "u32 track // source track 0 .. 15, latched at note_on; machine contract 1.1",
 ]
 desc = [
     "u32 magic // DK_MAGIC",

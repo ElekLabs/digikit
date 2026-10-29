@@ -10,8 +10,8 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 **Confirmed (2026-10-29): independent per-track sampling.**
 Changing a track's sample stops that track's old notes; unrelated tracks keep
 playing. Em confirmed this interpretation and asked us to continue until a real
-decision is needed. Parser checkpoint `db3514f7` and audit checkpoint `bc7ad3a6`
-are pushed. The existing spare-frame channel has a theoretical 72,000-byte/second
+decision is needed. Parser checkpoint `db3514f7`, audit checkpoint `bc7ad3a6` and bounded source
+checkpoint `3b402543` are pushed. The existing spare-frame channel has a theoretical 72,000-byte/second
 ceiling on DN2; 960,000 bytes require at least 13.33 seconds before overhead.
 This is not measured loading time. The diagnostic's global mute is unsuitable
 for runtime integration.
@@ -25,11 +25,21 @@ Current parallel work (source cursor reviewed; 59 SDK tests, no_std and owner py
 - [x] Add bounded DN2 store reads with generation checks and mandatory digest completion ([finding 87](../findings/87-pcm16-streaming.md)).
 - [x] Audit DN2 DDR configuration: 512 MiB configured geometry, stock scratch beyond loaded extent ([finding 91](../findings/91-dn2-ddr-configuration.md)).
 - [ ] Establish explicit DN2 pool reservation from runtime pointer origins/bounds; configuration is not ownership.
+- [x] Implement machine contract 1.1 source-track input (runtime 0.5.3), with DN2
+  delayed-note latching and invalid-owner isolation; 17 focused + 8 adapter tests,
+  generation/object/header checks and independent review pass (finding 90).
 - [ ] Integrate owned backing, per-track generation binding and live transport.
+- [ ] Audit newly found DN2 generic 4 KiB FlexBus sender `0x400cfb0e` and DSP
+  LP0 receiver setup as a bulk-delivery alternative; unmatched DT2 functions did
+  not mean the sender was absent.
 
-Checkpoint checks: changed-document pathcheck and diff whitespace pass. Routed
-`test:changed` passes layercheck and fails only on the known ten stale references
-in five unchanged files. No full merge gate or hardware run is claimed.
+Checkpoint checks: changed-document pathcheck, diff whitespace and direct generated
+JSON formatting pass. Routed `test:changed` passes scoped Python/layer checks but
+retains ten baseline stale references and the pnpm linked-node_modules launcher
+failure for host/format/types. Direct host tests pass 195 with 16 skipped across
+the initial run and the six socket tests rerun with local-socket permission; the
+initial six failures were EPERM. Logs: `out/track-changed.log`, `out/track-host.log`,
+`out/track-host-sockets.log`. No full merge gate or hardware run is claimed.
 
 Completed static audits:
 - [x] [Finding 88](../findings/88-dn2-reply-ownership.md): current DN2 1.12 ACK/diagnostic row bytes reach outgoing records. Header +0x08 is only a candidate and has a stock DMA-buffer accessor of unresolved reachability. No safe eight-byte reply slot is established.

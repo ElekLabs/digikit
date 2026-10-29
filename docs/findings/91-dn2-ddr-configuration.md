@@ -36,3 +36,27 @@ No DT2 project-pool or waveform-workspace addresses were transplanted to DN2.
 `336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`.
 No emulator run, hardware contact, binary changes or firmware bytes are part of
 this finding.
+
+
+## Bounded runtime-pointer follow-up
+
+**[D]** Original-byte inspection bounds the audited scratch loops to
+`[0x8052fbe0,0x80530be4)`, 4,100 bytes: 512 SIMD pair stores at eight-byte stride,
+then one word. Reusers at `0x1c4745`, `0x1c4875` and `0x1c4999` share the window;
+normalizer `0x1c45de` operates on its first 4,096 bytes. The recorded startup
+call path is `0x1ca76b → 0x1c1445 → 0x1c8e1c → 0x1c8e67 → 0x1c463b`.
+Missing direct audio-task edges do not exclude indirect use.
+
+**[D]** In-memory graph analysis of current database edges and store sites found
+3,229 stores in the audio-task direct graph, 729 resolved addresses, and 1,136
+unresolved stores after excluding obvious stack accesses. Those unresolved sites
+are provenance gaps, not evidence of high-DDR writes. The pointer table can also
+retain stale values through floating-point index arithmetic: an apparent high
+address at `0xb811a5` resolves on instruction inspection to a table at `0x8052dbe0`
+with index clamped to 0..1023. Neither pointer-table absence nor a raw address-shaped
+literal is sufficient to reserve a pool.
+
+**[O]** Candidate high DDR `[0x9e000000,0x9f000000)` is within configured geometry,
+but no reservation is established. A bounded experiment would need an explicit
+owner/extent, checked destinations and stock CPU/DMA access guards; production
+ownership still requires the remaining provenance/lifetime account.

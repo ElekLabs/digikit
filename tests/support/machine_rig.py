@@ -276,6 +276,7 @@ class MachineRig:
             self._set_type_dt2(t, self.spec.machine_type)
         else:
             self.hw(74 + v, self.spec.machine_type)
+            self.set_owner(t)
         for p in self.spec.params:
             self.set_param(p.id, p.default)
         self.set_note(60, 100)
@@ -295,6 +296,7 @@ class MachineRig:
             self._set_type_dt2(track, self.spec.machine_type)
         else:
             self.hw(74 + self.voice, self.spec.machine_type)
+            self.set_owner(track)
         for p in self.spec.params:
             self.set_param(p.id, p.default)
         self.set_note(60, 100)
@@ -320,6 +322,12 @@ class MachineRig:
         return self.sess.peek(nw(dv.RECORDS + v * dv.REC + off)) or 0
 
     # -- the engine's inputs -----------------------------------------------------------------------------------------------
+    def set_owner(self, track: int) -> None:
+        """Set DN2's current frame owner independently of the physical voice slot."""
+        if self.device != "dn2":
+            raise ValueError("only DN2 slots have a separate frame owner")
+        self.hw(0x52D + self.voice, track)
+
     def set_param(self, pid: str, word: int) -> None:
         p = self.by_id[pid]
         self.hw(
