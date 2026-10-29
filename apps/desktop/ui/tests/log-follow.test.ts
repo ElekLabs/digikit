@@ -1,10 +1,12 @@
 // Following a runtime log (apps/desktop/ui/src/log-follow-core.ts): what a poll turns into log entries, with a fake ring in place of a device.
 import assert from 'node:assert/strict';
+import { createRoot, createSignal } from 'solid-js';
 import { test } from 'vitest';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { DkLogEvent, Fault } from '@digi/dk-session';
 import type { LogInput } from '../src/log-core.ts';
 import { FROZEN_MS, LogFollower, type FollowSession, type OriginStatus } from '../src/log-follow-core.ts';
+import { createLogFollow } from '../src/log-follow.ts';
 
 const word = (s: string) => {
   let n = 0;
@@ -248,4 +250,40 @@ test('a firmware flash pauses the follower once, and the resume starts again fro
   d.ring.push(ev(2, 'MENU'));
   await t.follower.tick();
   assert.equal(t.entries.filter((e) => e.rt?.event).length, 2);
+});
+
+test('flash progress does not restart the loop: one pause note, and polling goes on after the flash', async () => {
+  const d = new Device();
+  d.ring = [ev(1, 'MENU')];
+  let infos = 0;
+  const info = d.info.bind(d);
+  d.info = async () => (infos++, info());
+  const [progress, setProgress] = createSignal(0);
+  const [flashing, setFlashing] = createSignal(true);
+  const entries: LogInput[] = [];
+  const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const dispose = createRoot((dispose) => {
+    createLogFollow({
+      follow: () => true,
+      flashing: () => (progress(), flashing()),
+      emulator: { running: () => false, session: async () => d },
+      device: { port: () => 'Digitakt', session: async () => d, present: async () => true },
+      push: (inputs) => entries.push(...inputs),
+      now: () => 0,
+      sleep: () => wait(2),
+    });
+    return dispose;
+  });
+  await wait(10);
+  for (let i = 1; i <= 20; i++) {
+    setProgress(i);
+    await wait(1);
+  }
+  await wait(10);
+  assert.equal(entries.filter((e) => e.text === 'paused during the firmware flash').length, 1);
+  assert.equal(infos, 0);
+  setFlashing(false);
+  await wait(20);
+  assert.ok(infos > 0);
+  dispose();
 });

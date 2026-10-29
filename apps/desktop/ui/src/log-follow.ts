@@ -1,7 +1,7 @@
 // Follows the runtime log of the emulator and of the device on the MIDI port chosen last, and puts what it finds in the workbench log.
 // One poll loop per origin, once a second (log-follow-core.ts has the rules). Both read through the shared sessions of
 // apps/web/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
-import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { readFault, type DkSession } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';
 import { LogFollower, POLL_MS, type FollowSession, type OriginStatus } from './log-follow-core.ts';
@@ -81,17 +81,20 @@ export function createLogFollow(env: FollowEnv): LogFollow {
       onCleanup(() => {
         stopped = true;
       });
-      void (async () => {
-        while (!stopped) {
-          let wait = POLL_MS;
-          if (origin === 'device' && env.flashing()) f.pause();
-          else {
-            if (f.paused) f.resume();
-            wait = await f.tick();
+      // untracked: the first reads of the loop run inside the effect and must not restart it
+      untrack(() => {
+        void (async () => {
+          while (!stopped) {
+            let wait = POLL_MS;
+            if (origin === 'device' && env.flashing()) f.pause();
+            else {
+              if (f.paused) f.resume();
+              wait = await f.tick();
+            }
+            if (!stopped) await sleep(wait);
           }
-          if (!stopped) await sleep(wait);
-        }
-      })();
+        })();
+      });
     });
   };
 
