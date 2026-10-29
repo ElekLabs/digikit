@@ -204,3 +204,22 @@ indirect paths and other writers remain outside this bounded check. The local
 subtract/postincrement suggests one-byte progression when every pass takes this
 path and preserves I2; it is not a universal lifetime proof. This correction
 removes a false positive, without declaring the table immutable or DDR free.
+
+## Per-track initialization extent
+
+**[D]** Further independent original-byte inspection of the same DN2 1.12
+section-7 image follows `0x1c8d70/73` (per-track record) → `0xb80575` →
+`0xb80546`, called at `0xb80593`. At `0xb80551`, I5 loads record word 16
+(offset `0x40`). The helper sets I12 to zero at `0xb8054f`, enables SIMD at
+`0xb80553`, sets M4=2 at `0xb80556`, and uses literal DO count 4096 at
+`0xb80558`. The SIMD pair of 32-bit stores at `0xb8055b` advances eight bytes.
+This clears 32,768 bytes at each pointer `0x804ad790 + 0x8000 * track`,
+track 0..15: combined initialization extent `[0x804ad790,0x8052d790)`, 512 KiB.
+Public semantics: [Programming Reference](../sharc/SOURCES.md), Rev 1.5,
+printed pp. 14-12–15 and 15-23.
+
+**[C]** The pointer values previously established only provenance; this call
+path adds a positive initialization extent. It does not prove all runtime
+bounds, a usable sample allocation or free space. No explicit 8,192-word length
+or ring mask has been established in the descriptor. **[O]** Adjacent helpers
+`0xb80e48`/`0xb80e82` and runtime consumers remain to be audited.

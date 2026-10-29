@@ -158,7 +158,8 @@ and [DT2 waveform workspace](findings/89-dt2-waveform-workspace.md) record concr
 occupied regions and the remaining production ownership questions.
 
 | [`90-dn2-track-owner-and-worker.md`](findings/90-dn2-track-owner-and-worker.md) | Current DN2 source-track frame producer and computed assignment; delayed SHARC map; corrected queued-worker entry and unresolved sample allocator |
-| [`91-dn2-ddr-configuration.md`](findings/91-dn2-ddr-configuration.md) | Current DN2 configures 512 MiB DDR geometry; stock scratch extends beyond loaded memory; production reservation remains open |
+| [`91-dn2-ddr-configuration.md`](findings/91-dn2-ddr-configuration.md) | Current DN2 configures 512 MiB DDR geometry; fixed initialization extents include sixteen 32 KiB track buffers; runtime bounds and production reservation remain open |
 | [`92-dn2-native-bulk-seam.md`](findings/92-dn2-native-bulk-seam.md) | DN2 4 KiB FlexBus/LP0 diagnostic, exact payload and completion proofs with stock audio; production ownership remains open |
 | [`93-sdk-file-catalogue.md`](findings/93-sdk-file-catalogue.md) | API 1.4 reusable listing, bounded store pages, DT2 directory/metadata adapter and public C boundary proofs on both devices |
 | [`94-sample-binding-lifetime.md`](findings/94-sample-binding-lifetime.md) | Two-track assembled PCM16 reader retirement and replacement; unaffected-track audio, cached ownership, preserved stack frames and remaining production boundaries |
+| [`95-dn2-cache-and-lp0-staging.md`](findings/95-dn2-cache-and-lp0-staging.md) | DN2 conditional cache setup, LP0 RX whole-line ownership gap, stock maintenance helper limits and unresolved Type 7a/7d conversion encoding; no hardware coherence or core-fix claim |
