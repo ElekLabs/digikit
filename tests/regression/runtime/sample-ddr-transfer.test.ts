@@ -10,10 +10,12 @@ import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { DdrWriter } from './sample-ddr-writer.ts';
 
 const root = repoRoot();
-const binary = process.env.DIGI_EMUD_DN2;
 const patchkit = process.env.DIGI_PATCHKIT_BIN;
 // Explicit diagnostic opt-in. Generic runtime suites skip this file without preflighted binaries.
-const preflighted = Boolean(binary && patchkit);
+const devices = [
+  { device: 'dn2', firmware: '1.12', binary: process.env.DIGI_EMUD_DN2 },
+  { device: 'dt2', firmware: '1.17', binary: process.env.DIGI_EMUD_DT2 },
+] as const;
 const MAGIC = 0xddf4a601;
 const TOKEN = 0x81234567;
 const BASE = 0x80800000;
@@ -77,6 +79,9 @@ async function peek(session: Session, addr: number, length: number): Promise<Buf
 }
 
 async function prepare(session: Session) {
+  const profile = devices.find(({ device }) => device === session.options.device);
+  if (!profile) throw new Error(`unsupported DDR proof device: ${session.options.device}`);
+  const inputs = resolveInputs(profile.device, profile.firmware);
   const output = path.join(session.runDir, 'ddr-proof.syx');
   const planFile = path.join(session.runDir, 'ddr-proof.plan.json');
   // Explicit prebuilt CLI: this diagnostic must never trigger a Cargo/daemon build.
@@ -87,7 +92,7 @@ async function prepare(session: Session) {
       root,
       'apply',
       '--firmware',
-      resolveInputs('dn2', '1.12').syx,
+      inputs.syx,
       '--modules',
       'core/dsp-ddr-proof',
       '-o',
@@ -98,12 +103,10 @@ async function prepare(session: Session) {
     { cwd: root, timeout: 30000, maxBuffer: 4 * 1024 * 1024 },
   );
   const plan: RuntimePlan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
-  const stockSha = createHash('sha256')
-    .update(fs.readFileSync(resolveInputs('dn2', '1.12').syx))
-    .digest('hex');
+  const stockSha = createHash('sha256').update(fs.readFileSync(inputs.syx)).digest('hex');
   expect(plan.output?.syx_sha256).toMatch(/^[a-f0-9]{64}$/);
-  expect(plan.base.device).toBe('dn2');
-  expect(plan.base.version).toBe('1.12');
+  expect(plan.base.device).toBe(profile.device);
+  expect(plan.base.version).toBe(profile.firmware);
   expect(plan.base.syx_sha256).toBe(stockSha);
   expect(plan.modules.map((module) => module.split('@')[0]).sort()).toEqual([
     'core/dsp-ddr-proof',
@@ -177,37 +180,44 @@ async function prepare(session: Session) {
 }
 
 function quietProof(name: string, body: (session: Session) => Promise<void>) {
-  describe.skipIf(!preflighted)(name, () => {
-    const runDir = path.join(root, 'out/runs/ddr-proof', randomUUID());
-    if (preflighted) fs.mkdirSync(runDir, { recursive: true });
-    const handle = withSession({
-      runDir,
-      device: 'dn2',
-      firmware: '1.12',
-      dsp: 'sharc',
-      binary,
-      restart: false,
+  for (const { device, firmware, binary } of devices) {
+    const preflighted = Boolean(binary && patchkit);
+    const deviceName = `${device} ${firmware}: ${name}`;
+    describe.skipIf(!preflighted)(deviceName, () => {
+      const runDir = path.join(root, 'out/runs/ddr-proof', device, randomUUID());
+      if (preflighted) fs.mkdirSync(runDir, { recursive: true });
+      const handle = withSession({
+        runDir,
+        device,
+        firmware,
+        dsp: 'sharc',
+        binary,
+        restart: false,
+      });
+      test(
+        deviceName,
+        async () => {
+          await expect.poll(async () => (await handle.session.status()).cf.ready, { timeout: 30000 }).toBe(true);
+          fs.writeFileSync(path.join(runDir, 'identity.json'), JSON.stringify(handle.session.loadResult, null, 2));
+          try {
+            await body(handle.session);
+            await handle.session.expectNoFault(deviceName);
+            fs.writeFileSync(
+              path.join(runDir, 'result.json'),
+              JSON.stringify({ name: deviceName, device, firmware, passed: true }),
+            );
+          } catch (error) {
+            fs.writeFileSync(
+              path.join(runDir, 'result.json'),
+              JSON.stringify({ name: deviceName, device, firmware, passed: false, error: String(error) }),
+            );
+            throw error;
+          }
+        },
+        360000,
+      );
     });
-    test(
-      name,
-      async () => {
-        await expect.poll(async () => (await handle.session.status()).cf.ready, { timeout: 30000 }).toBe(true);
-        fs.writeFileSync(path.join(runDir, 'identity.json'), JSON.stringify(handle.session.loadResult, null, 2));
-        try {
-          await body(handle.session);
-          await handle.session.expectNoFault(name);
-          fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify({ name, passed: true }));
-        } catch (error) {
-          fs.writeFileSync(
-            path.join(runDir, 'result.json'),
-            JSON.stringify({ name, passed: false, error: String(error) }),
-          );
-          throw error;
-        }
-      },
-      360000,
-    );
-  });
+  }
 }
 
 interface Registry {
@@ -236,10 +246,10 @@ async function playbackProof(
     if (offset === undefined) throw new Error(`missing ${registry.name}.${name}`);
     return registry.addr + (index - registry.first) * registry.row_size + offset;
   };
-  const position = await session.client.memPeek(field(machines, machine.index, 'position'));
-  expect(typeof position).toBe('number');
-  expect(position).toBeGreaterThanOrEqual(0);
-  expect(position).toBeLessThan(16);
+  const insertionPosition = await session.client.memPeek(field(machines, machine.index, 'position'));
+  expect(typeof insertionPosition).toBe('number');
+  expect(insertionPosition).toBeGreaterThanOrEqual(0);
+  expect(insertionPosition, 'diagnostic is listed rather than a gap row').not.toBe(0xffffffff);
   const word = async (addr: number) => (await peek(session, addr, 4)).readUInt32LE();
   expect(await word(field(voices, voice.index, 'type'))).toBe(machine.index);
   expect(await word(field(voices, voice.index, 'pc'))).toBe(planSymbol(plan, '_dd_play_render'));
@@ -252,7 +262,7 @@ async function playbackProof(
     JSON.stringify(
       {
         machine,
-        position,
+        insertionPosition,
         voice,
         descriptorWords,
         descriptorHex: descriptor.toString('hex'),
@@ -283,6 +293,16 @@ async function playbackProof(
     await until(reply.release_at + 5 * 132000);
   };
   await tap('NO');
+  if (session.options.device === 'dt2') {
+    await session.client.inputButton(button('TRK'), true);
+    try {
+      await settle(5);
+      await tap('TRIG 1');
+    } finally {
+      await session.client.inputButton(button('TRK'), false);
+    }
+    await settle(100);
+  }
   await session.client.inputButton(button('FUNC'), true);
   try {
     await settle(5);
@@ -291,11 +311,39 @@ async function playbackProof(
     await session.client.inputButton(button('FUNC'), false);
   }
   await settle(200);
+  // Both machine adapters build this exported buffer on menu entry. The shared
+  // manifest's list.alloc/list.operands use first + entries, excluding gap rows.
+  const listLength = machines.first + machines.entries.length;
+  expect(listLength).toBeGreaterThan(0);
+  expect(listLength).toBeLessThanOrEqual(16);
+  const listAddress = planSymbol(plan, 'mf_list_buf');
+  const menuTypes: number[] = [];
+  for (let i = 0; i < listLength; i++) {
+    const type = await session.client.memPeek(listAddress + i * 4);
+    expect(typeof type, 'live menu type is mapped').toBe('number');
+    menuTypes.push(type!);
+  }
+  const expectedTypes = [
+    ...Array.from({ length: machines.first }, (_, type) => type),
+    ...machines.entries.map((entry) => entry.index),
+  ];
+  const position = menuTypes.indexOf(machine.index);
+  fs.writeFileSync(
+    path.join(session.runDir, 'machine-menu.json'),
+    JSON.stringify({ insertionPosition, listAddress, listLength, menuTypes, expectedTypes, position }, null, 2),
+  );
+  expect([...menuTypes].sort((a, b) => a - b)).toEqual(expectedTypes.sort((a, b) => a - b));
+  expect(
+    menuTypes.filter((type) => type === machine.index),
+    'diagnostic occurs once in the live menu',
+  ).toHaveLength(1);
+  expect(position).toBeGreaterThanOrEqual(0);
+  expect(position).toBeLessThan(listLength);
   for (let i = 0; i < 16; i++) {
     await tap('UP');
     await settle(40);
   }
-  for (let i = 0; i < position!; i++) {
+  for (let i = 0; i < position; i++) {
     await tap('DOWN');
     await settle(80);
   }
@@ -543,7 +591,10 @@ async function playbackProof(
   }
   if (retire) return;
   const final = snapshots.at(-1)!;
-  const dispatchedType = await word(planSymbol(plan, '_dv_c'));
+  // Adapter diagnostics differ: DT2 guard word 1 is type; DN2 contract word 0 is type.
+  const dispatchedTypeAddress =
+    session.options.device === 'dt2' ? planSymbol(plan, '_dv_g') + 4 : planSymbol(plan, '_dv_c');
+  const dispatchedType = await word(dispatchedTypeAddress);
   const output = await word(planSymbol(plan, '_dd_play_output'));
   const completedOutput = await peek(session, output, 128);
   // This is the stock engine's workspace, which may be reused downstream.
