@@ -166,6 +166,8 @@ pub struct Info {
     pub runtime32: Option<u32>,
     /// The capability bits (`CAP_*`), when the reply carries them.
     pub caps: Option<u32>,
+    /// The id of the flashed image, when the reply carries it (runtime 0.5.2 and later; all zero when patchkit stamped none).
+    pub image_id: Option<[u8; 8]>,
 }
 impl Info {
     /// The packed runtime version: the 32-bit field when present, else the 16-bit one.
@@ -267,6 +269,11 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
     } else {
         (None, None)
     };
+    let image_id = if caps.is_some() && c.0.len() >= 8 {
+        Some(c.take(8)?.try_into().expect("8 bytes"))
+    } else {
+        None
+    };
     Ok(Info {
         protocol,
         runtime_version,
@@ -278,6 +285,7 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
         log_newest,
         runtime32,
         caps,
+        image_id,
     })
 }
 
@@ -442,6 +450,12 @@ mod tests {
             (Some(0x0002_0000), 0x0002_0000)
         );
         assert!(new.has_cap(CAP_LOG) && new.has_cap(CAP_MODULES) && !new.has_cap(CAP_PEEK));
+        assert_eq!(new.image_id, None);
+        // runtime 0.5.2 appends the image id after the capability bits
+        tail.extend([1, 2, 3, 4, 5, 6, 7, 8]);
+        let with_id = parse_info(&info_body(0, &tail)).unwrap();
+        assert_eq!(with_id.image_id, Some([1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(with_id.caps, new.caps);
     }
 
     #[test]

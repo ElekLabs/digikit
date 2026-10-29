@@ -160,6 +160,10 @@ container_max = 0x300000
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
+# The OS UPGRADE receiver (finding 75): the stream id byte of the header message; a header with another id is refused.
+stream_id = 0x0f
+# The build floor: the validator refuses a container whose build word (stream offset 0x10, container +8) is below it.
+build_floor = "0060"
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`).
 main_dest = 0x40000400
 dsp_l2_lo = 0x20000000
@@ -358,7 +362,7 @@ settings_sectors = 32      # the 32 sectors before them: the settings record, co
 header_b_sector = 0x2e19fdd  # store header copy B: the sector before the settings record; the store's files end before it
 
 # How a module's machines map onto this device (packages/patchkit/src/typed.rs lowers the typed sections of a
-# module.toml with it; `patchkit gen` writes the constants a DSP routine needs). Finding 02; modules/machines/pluck/src/dsp.
+# module.toml with it; `patchkit gen` writes the constants a DSP routine needs). Finding 02; a module's src/dsp.
 # The knobs of a machine are descriptor fields f0..f7 of its machine row (engine slots 0..7) and the level is f8.
 [modules.knobs]
 count = 8

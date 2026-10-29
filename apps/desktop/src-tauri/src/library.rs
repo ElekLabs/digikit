@@ -11,7 +11,7 @@ const LIBRARY_DIR: &str = "out/modules";
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct LibFile {
-    /// Relative to the device's folder, `/` separated (`digikit/pluck.dkm`).
+    /// Relative to the device's folder, `/` separated (`<author/name>.dkm`).
     pub path: String,
     pub size: u64,
 }
@@ -143,9 +143,9 @@ mod tests {
         let root = std::env::temp_dir().join(format!("digi-library-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join(LIBRARY_DIR).join("dt2");
-        std::fs::create_dir_all(dir.join("digikit")).unwrap();
+        std::fs::create_dir_all(dir.join("acme")).unwrap();
         std::fs::create_dir_all(dir.join("test")).unwrap();
-        std::fs::write(dir.join("digikit/pluck.dkm"), b"PLUCK").unwrap();
+        std::fs::write(dir.join("acme/synth.dkm"), b"SYNTH").unwrap();
         std::fs::write(dir.join("test/sine.dkm"), b"SINE!!").unwrap();
         std::fs::write(dir.join("notes.txt"), b"not a module").unwrap();
         root
@@ -157,13 +157,13 @@ mod tests {
         assert_eq!(
             scan(&root, "dt2").unwrap(),
             vec![
-                LibFile { path: "digikit/pluck.dkm".into(), size: 5 },
+                LibFile { path: "acme/synth.dkm".into(), size: 5 },
                 LibFile { path: "test/sine.dkm".into(), size: 6 }
             ]
         );
         assert_eq!(scan(&root, "dn2").unwrap(), vec![]);
         assert!(scan(&root, "../x").is_err());
-        assert_eq!(read(&root, "dt2", "digikit/pluck.dkm").unwrap(), b"PLUCK");
+        assert_eq!(read(&root, "dt2", "acme/synth.dkm").unwrap(), b"SYNTH");
         let _ = std::fs::remove_dir_all(&root);
     }
 

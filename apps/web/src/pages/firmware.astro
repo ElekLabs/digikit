@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import WebFirmware from '../firmware/WebFirmware';
+---
+
+<Base
+  title="Firmware · digikit"
+  description="Patch your own Digitakt II or Digitone II firmware with the digikit runtime and flash it over USB MIDI, or go back to stock, in your browser."
+  active="firmware"
+  fill
+>
+  <WebFirmware client:only="solid-js" />
+</Base>

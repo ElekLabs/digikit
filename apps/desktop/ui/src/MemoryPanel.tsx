@@ -17,8 +17,8 @@ import { deviceOfPort } from './remote-core';
 import { freeTitle, segmentTitle, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
-import { focusReadDue } from './refresh-core';
-import { failureLine } from './wait-core';
+import { focusReadDue } from '@web/transfer/refresh-core';
+import { failureLine } from '@web/transfer/wait-core';
 import './card-panel.css';
 import './memory-panel.css';
 

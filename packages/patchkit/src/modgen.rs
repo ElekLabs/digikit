@@ -106,6 +106,23 @@ pub fn generate(lib: &Library, models: &Models, module: &str) -> Result<Vec<GenF
     )])
 }
 
+/// The generated files of several modules, with their full paths. The library must hold the objects of these modules: a content
+/// module declares its machines in its objects, so without them it has no typed sections and generates nothing.
+pub fn generate_many(
+    lib: &Library,
+    models: &Models,
+    modules: &[String],
+) -> Result<Vec<(std::path::PathBuf, String)>> {
+    let mut out = vec![];
+    for id in modules {
+        let m = lib.get(id).ok_or_else(|| err!("unknown module {id}"))?;
+        for (rel, text) in generate(lib, models, id)? {
+            out.push((m.dir.join(rel), text));
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

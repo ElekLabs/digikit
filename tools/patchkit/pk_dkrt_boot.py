@@ -22,12 +22,12 @@ Python API for the scenario suite (lane C builds on it; everything below is impo
     from tools.patchkit import pk_dkrt_boot as B
     env = B.Env("dt2-1.17", work_dir)                  # the files of one image: folder, cards, binaries
     img = env.build_image("core/runtime,core/dynreg,core/dyndsp")   # a patched firmware for the static module set S -> Img
-    env.pack("digikit/pluck", "pluck-d.dkm")           # a .dkm into the card folder (digikit/modules/)
-    card = env.card(["modules/pluck-d.dkm"], counter=0, seq=1)      # a card image holding that selection record
+    env.pack("test/sine", "sine-d.dkm")           # a .dkm into the card folder (digikit/modules/)
+    card = env.card(["modules/sine-d.dkm"], counter=0, seq=1)      # a card image holding that selection record
     with env.boot(img, card, tag="a") as rig:           # a coupled daemon, cold-booted on that card: the boot hook has run
         rig.boot_info()        # dict: safe, reason, counter, seq, copy, count, loaded, results[], ui_reached, dsp_wait
         rig.voice_rows()       # [(type, pc)] of the DSP voice registry (type 0xffffffff: free)
-        rig.dyn_type("digikit/pluck", "pluck")   # the type the runtime assigned at this boot (from DKRT_ASSIGN)
+        rig.dyn_type("test/sine", "sine")   # the type the runtime assigned at this boot (from DKRT_ASSIGN)
         rig.machine_listed(16) # is the machine row of that type named
         rig.sel_records()      # the two record copies as the card holds them now: [dict|None, dict|None]
         rig.set_selection(["modules/x.dkm"])   # dkrt_selection_set through the mailbox (returns its result)
@@ -134,6 +134,9 @@ BI_FIELDS = [
     "loaded",
     "ui_reached",
 ]
+# The stable period the proof's records carry (DSP blocks of 64 samples at 48 kHz; the runtime's default is 30 s): short, so that the
+# UI loop clears the boot counter within the settle time.
+STABLE_BLOCKS = 300
 SETTLE_MS = int(
     os.environ.get("DIGIKIT_SETTLE_MS", "1500")
 )  # emulated ms the first UI-loop passes run before a scenario looks (wait_dsp then waits for a module's DSP part)
@@ -801,8 +804,9 @@ class Proof:
         self.dt2 = image.startswith("dt2")
         self.watch_totals = {"emulators": 0, "write_events": 0, "flush_hits": 0}
         self.store_writes: set[int] = set()
-        self.static = ""
         self.mods: list[str] = []
+        # DSP voice rows: test/sine; on DN2 also test/dyn-dn2 (it carries the DSP of test/sine)
+        self.voices = 1 if self.dt2 else 2
         self.run_img: Img | None = None
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
@@ -827,8 +831,7 @@ class Proof:
     def setup(self) -> None:
         e = self.env
         if self.dt2:
-            e.pack("digikit/pluck", "m1.dkm")
-            self.static = RT + ",test/patched-pluck"
+            e.pack(M.MODULE, "m1.dkm")
             self.mods = ["modules/m1.dkm"]
         else:
             e.pack("test/dyn-dn2", "m0.dkm")
@@ -851,18 +854,7 @@ class Proof:
     def equiv(self) -> None:
         e = self.env
         trig = M.TRIG_FRAME if self.dt2 else M.TRIG_FRAME_DN2
-        ref_pcm: Any = None
-        if self.dt2:  # the Digitone II has no patched-in twin of test/sine: its note is checked for sound only
-            ref_img = e.build_image(self.static, "ref")
-            with self.rig(ref_img, e.card(None, tag="ref"), "ref") as ref:
-                ref.select_type(M.PLUCK_STATIC_TYPE, 7)
-                ref_pcm = ref.note(self.work / "ref.wav", trig)
-                peak = float(abs(ref_pcm).max())
-                self.check(
-                    "the reference note is audible", peak > 0.01, f"peak {peak:.3f}"
-                )
-                self.finish(ref)
-        card = e.card(self.mods, tag="equiv")
+        card = e.card(self.mods, tag="equiv", stable_blocks=STABLE_BLOCKS)
         with self.rig(self.run_img, card, "equiv") as run:
             n = len(self.mods)
             info = run.boot_info()
@@ -883,16 +875,17 @@ class Proof:
                 str(rec),
             )
             used = [r for r in run.voice_rows() if r[0] != FREE_TYPE]
-            # DT2: the pluck's machine type, assigned at load; DN2: the voice row is test/sine's (the other machine has none)
+            # DT2: the machine type of test/sine, assigned at load; DN2: a voice row for each of test/dyn-dn2 and test/sine
             mach = (
-                run.dyn_type("digikit/pluck", "pluck")
+                run.dyn_type(M.MODULE, M.MACHINE)
                 if self.dt2
                 else run.dyn_type("test/dyn-dn2", "dyn_pluck")
             )
             vtype = mach if self.dt2 else run.dyn_type("test/sine", "sine")
+            want_types = {mach} if self.dt2 else {mach, vtype}
             self.check(
-                "the voice row of the DSP module is claimed",
-                len(used) == 1 and used[0][0] == vtype,
+                "the voice rows of the DSP modules are claimed",
+                len(used) == self.voices and {r[0] for r in used} == want_types,
                 str([(hex(a), hex(b)) for a, b in used]),
             )
             idx = self.mods.index("modules/m1.dkm")
@@ -919,26 +912,25 @@ class Proof:
             if not self.dt2:  # the sine machine follows MIDI and the first run-time machine in the list
                 run.select(6)
             pcm = run.note(self.work / "run.wav", trig)
-            if self.dt2:
-                M.pcm_check(run, ref_pcm, pcm, self.report, "machine")
-            else:
-                peak = float(abs(pcm).max())
-                self.check(
-                    "the run-time note is audible", peak > 0.01, f"peak {peak:.3f}"
-                )
+            peak = float(abs(pcm).max())
+            self.check("the run-time note is audible", peak > 0.01, f"peak {peak:.3f}")
             self.finish(run)
 
     def restart(self) -> None:
         e = self.env
         n = len(self.mods)
-        with self.rig(self.run_img, e.card(None, tag="restart"), "restart") as rig:
+        with self.rig(
+            self.run_img,
+            e.card([], tag="restart", stable_blocks=STABLE_BLOCKS),
+            "restart",
+        ) as rig:
             b0 = rig.boot_info()
             self.check(
-                "a card with no record boots with no module",
+                "a card with an empty selection boots with no module",
                 b0["count"] == 0
                 and b0["loaded"] == 0
                 and b0["safe"] == 0
-                and b0["seq"] == 0,
+                and b0["seq"] == 1,
             )
             self.check(
                 "the mailbox selection answers 0", rig.set_selection(self.mods) == 0
@@ -949,7 +941,7 @@ class Proof:
                 recs[0] == recs[1]
                 and recs[0] is not None
                 and recs[0]["paths"] == self.mods
-                and recs[0]["seq"] == 1,
+                and recs[0]["seq"] == 2,
                 str(recs),
             )
             rig.restart()
@@ -957,11 +949,13 @@ class Proof:
             self.report["restart_boot"] = b1
             self.check(
                 "the next boot loads it",
-                b1["loaded"] == n and b1["results"] == [0] * n and b1["seq"] == 1,
+                b1["loaded"] == n and b1["results"] == [0] * n and b1["seq"] == 2,
                 str(b1["results"]),
             )
             rows = [r for r in rig.voice_rows() if r[0] != FREE_TYPE]
-            self.check("its voice row is claimed", len(rows) == 1, str(rows))
+            self.check(
+                "its voice rows are claimed", len(rows) == self.voices, str(rows)
+            )
             rec = current(rig.sel_records())
             self.check(
                 "the UI loop of the new boot cleared the counter",

@@ -4,7 +4,7 @@
 import { errorLine } from '../../../web/src/modules/backend.ts';
 import type { Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry, SamplesBackend } from '@digi/dk-session/samples';
-import type { BarInfo, RowStatus, RowTag } from './transfer-core.ts';
+import type { BarInfo, RowStatus, RowTag } from '../../../web/src/transfer/transfer-core.ts';
 
 // ---- folders ----------------------------------------------------------------------------------------------------------------------
 

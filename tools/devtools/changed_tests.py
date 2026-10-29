@@ -102,12 +102,55 @@ def graph() -> grimp.ImportGraph:
                 }
         for dst in sorted(targets & mods - {mod}):
             g.add_import(importer=mod, imported=dst)
+    _add_module_tests(g, mods)
     return g
 
 
+def module_test_files() -> list[str]:
+    """Every .py file in a module's own tests/ directory (modules/<kind>/<name>/tests/), tests and helpers."""
+    return sorted(
+        p.relative_to(ROOT).as_posix()
+        for p in (ROOT / "modules").glob("*/*/tests/**/*.py")
+        if "__pycache__" not in p.parts
+    )
+
+
+def _add_module_tests(g: grimp.ImportGraph, mods: set[str]) -> None:
+    """Add the module-owned test files as nodes (grimp reads only tools/ and tests/). pytest puts a test's
+    own directory and tests/ on the path, so an import resolves to tools.x, tests.support.x, or a sibling
+    file of the same tests/ directory (`from some_rig import x`); a whole string naming a tools module
+    is an edge as for tests/."""
+    files = {m: f for f in module_test_files() if (m := module_of(f))}
+    for mod in files:
+        g.add_module(mod)
+    for mod, f in files.items():
+        here = mod.rsplit(".", 1)[0]
+        try:
+            nodes = list(ast.walk(ast.parse((ROOT / f).read_text(encoding="utf-8"))))
+        except (OSError, SyntaxError):
+            continue
+        names: set[str] = set()
+        for n in nodes:
+            if isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+                names |= {n.module, *(f"{n.module}.{a.name}" for a in n.names)}
+            elif isinstance(n, ast.Import):
+                names |= {a.name for a in n.names}
+            elif (
+                isinstance(n, ast.Constant)
+                and isinstance(n.value, str)
+                and _RUN_NAME.fullmatch(n.value)
+            ):
+                names.add(_named_module(n.value) or "")
+        targets = names | {f"tests.{x}" for x in names} | {f"{here}.{x}" for x in names}
+        for dst in sorted(targets & (mods | set(files)) - {mod}):
+            g.add_import(importer=mod, imported=dst)
+
+
 def module_of(path: str) -> str | None:
-    """The dotted module of a .py file under tools/ or tests/."""
-    if not path.endswith(".py") or not path.startswith(("tools/", "tests/")):
+    """The dotted module of a .py file under tools/ or tests/, or in a module's own tests/ directory."""
+    if not path.endswith(".py") or not (
+        path.startswith(("tools/", "tests/")) or verify.is_module_test_dir(path)
+    ):
         return None
     parts = path.removesuffix(".py").split("/")
     if parts[-1] == "__init__":
@@ -122,7 +165,7 @@ def path_of(module: str) -> str:
 
 def is_test_file(path: str) -> bool:
     return (
-        path.startswith("tests/")
+        (path.startswith("tests/") or verify.is_module_test_dir(path))
         and path.rsplit("/", 1)[-1].startswith("test_")
         and (path.endswith(".py"))
     )
@@ -137,11 +180,13 @@ def conftest_tests(conftest_path: str) -> list[str]:
 
 @cache
 def test_texts() -> dict[str, str]:
+    found = [
+        q.relative_to(ROOT).as_posix() for q in (ROOT / "tests").rglob("test_*.py")
+    ]
+    found += [p for p in module_test_files() if is_test_file(p)]
     return {
         p: (ROOT / p).read_text(encoding="utf-8")
-        for p in sorted(
-            q.relative_to(ROOT).as_posix() for q in (ROOT / "tests").rglob("test_*.py")
-        )
+        for p in sorted(found)
         if "node_modules" not in p
     }
 
@@ -158,7 +203,7 @@ def importing_tests(module: str) -> dict[str, str]:
         cur = todo.pop(0)
         via = "" if cur == module else f" via {cur}"
         for imp in sorted(g.find_modules_that_directly_import(cur)):
-            if imp in seen or not imp.startswith("tests."):
+            if imp in seen or not imp.startswith(("tests.", "modules.")):
                 continue
             seen.add(imp)
             path = path_of(imp)
@@ -421,7 +466,7 @@ def plan(
         f
         for f in files
         if f.endswith(".py")
-        and f.startswith(("tests/", "tools/"))
+        and (f.startswith(("tests/", "tools/")) or verify.is_module_test_dir(f))
         and (ROOT / f).is_file()
     ]
     typed = [

@@ -28,6 +28,7 @@ Exit 0 only when every check passes.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import math
 import sys
 from pathlib import Path
@@ -38,13 +39,19 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
 from tools.emulator import card_overlay  # noqa: E402
-from tools.patchkit import (  # noqa: E402
-    hook_ab,  # noqa: E402
-    pluck_ref,  # noqa: E402
-)
+from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_dn2_common as C  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
+from tools.patchkit.pitch import f0_from_crossings  # noqa: E402
+
+# The float32 model of the fixture's routine lives next to the fixture (its own copy, like the DSP source).
+_spec = importlib.util.spec_from_file_location(
+    "pluck_ref", ROOT / "tests/fixtures/modules/patched-pluck/tests/pluck_ref.py"
+)
+assert _spec and _spec.loader
+pluck_ref = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(pluck_ref)
 
 MODS = ["core/machines", "core/params", "core/dsp-voice", "test/patched-pluck"]
 PLUCK_DOWNS = 4  # FM TONE, FM DRUM, WAVETONE, SWARMER, PLUCK (before MIDI)
@@ -77,7 +84,7 @@ class PluckProof(C.Dn2Proof):
 
     def excitation_equals_model(self, s: H.Session, label: str) -> bool:
         """Press TRIG 1 and compare the excitation the DSP wrote into the slot's delay line (the last N + 1 samples, which
-        the loop does not touch for 80 ms) with the numpy model of the routine (tools/patchkit/pluck_ref.py) seeded with the DSP's
+        the loop does not touch for 80 ms) with the numpy model of the routine (pluck_ref.py in the tests folder of the fixture) seeded with the DSP's
         noise state before the note: the pick comb, the colour filter, the amplitude, the mean removal and N."""
         s.run_ms(500)  # the knob's words settle (a smoother follows the sound array)
         rng = int(self.dsp_words(s, self.dsp_sym(s, "_pk_rng"), 1)[0])
@@ -356,7 +363,7 @@ class PluckProof(C.Dn2Proof):
                         seg = left[st + 300 : st + 300 + 6000]
                         if len(seg) < 3000:
                             continue
-                        f = pluck_ref.f0_from_crossings(seg, C.semitone_hz(60))
+                        f = f0_from_crossings(seg, C.semitone_hz(60))
                         if abs(self.cents(f, 60)) > 10:
                             bad += 1
                     self.check(

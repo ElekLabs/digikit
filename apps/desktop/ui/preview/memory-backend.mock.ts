@@ -7,7 +7,7 @@
 // The figures go through the app's own `buildBars`, so the picture is what a device with these modules shows.
 import type { Caps } from '@web/modules/dkfit';
 import { buildBars, type KnownModule } from '../src/memory-core';
-import { PAUSED } from '../src/target';
+import { PAUSED } from '../src/desktop-env';
 import { LIBRARY } from './sim';
 
 export { PAUSED };

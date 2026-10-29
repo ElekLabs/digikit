@@ -3,7 +3,7 @@
 // started. The preview replaces this module (preview/memory-backend.mock.ts).
 import { DkError, hasCap, type DkSession } from '@digi/dk-session';
 import { buildBars, type Bar, type KnownModule } from './memory-core';
-import { loadLibrary } from './transfer-backend';
+import { loadLibrary } from '@web/transfer/transfer-backend';
 
 export interface MemoryReading {
   /** The device the session talks to: the INFO port name (`dt2-1.17`). */

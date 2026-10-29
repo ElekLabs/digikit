@@ -1,0 +1,28 @@
+# fadedlimes/pd loaded at boot as a run-time machine: voice row claimed, the note plays. The module has no patched-in twin any more, so the PCM
+# of a note (from its onset, DT2 1.17 and DN2 1.12) is pinned by SHA-256. "record" fails and prints the hash.
+# Before the twin was removed, the DT2 note equalled the patched-in machine's (finding 76).
+[scenario]
+name = "equiv-dyn-pd"
+kind = "equiv"
+devices = ["dt2", "dn2"]
+tier = "quick"
+
+[equiv]
+modules = ["fadedlimes/pd"]
+play = "pd"
+play_module = "fadedlimes/pd"
+play_machine = "pd"
+hint = 7
+voices = 1
+ignore_run_machines = ["Phase Dist"]
+pcm_sha256 = "0e0c6778ad7684ae018ecc87755aeb8bf5ec8b3237121f015f95713fdfe3dd33"   # onset 258, 24000 samples (DT2 1.17, note 60); approved by Em 2026-10-29
+
+# the voice state is uninitialised L2 (a run-time module gets no zeroed state): read the model of the device, not zeros
+[equiv.env_run]
+SHARC_UNINIT = "5eed1234"
+
+[equiv.dn2]
+pcm_sha256 = "1c5cc2f1712f861e989cd0f335cbfb6e6c094183145e13634b4f20bdd2a8a5bc"   # onset 208, 24000 samples (DN2 1.12, note 60)
+hint = 4
+hint_run = 5    # the run-time machine follows MIDI
+trig_frame = 7000

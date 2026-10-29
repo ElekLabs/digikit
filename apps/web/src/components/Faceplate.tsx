@@ -359,7 +359,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
             </label>
           </div>
           <p class="emu-alt">
-            Want new machines first? <a href={`${base}patch/`}>Patch your firmware</a>, then run it here.
+            Want new machines first? <a href={`${base}firmware/`}>Patch your firmware</a>, then run it here.
           </p>
         </div>
       </Show>

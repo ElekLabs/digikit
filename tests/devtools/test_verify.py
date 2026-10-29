@@ -85,7 +85,7 @@ HOST_TEST_FILES = [
         ),
         ([*HOST_TEST_FILES, "unknown/file.txt"], {"host"}, True, None),
         (
-            [*HOST_TEST_FILES, "modules/fx/master-gain/src/cf/gain.s"],
+            [*HOST_TEST_FILES, "tests/fixtures/modules/sine/src/module.c"],
             {"host"},
             True,
             None,
@@ -111,7 +111,7 @@ HOST_TEST_FILES = [
         ),
         ([*SMOKE_EXEMPT_FILES, "unknown/file.txt"], {"python-tests"}, True, None),
         (
-            ["tools/devtools/pathcheck.py", "modules/fx/master-gain/src/cf/gain.s"],
+            ["tools/devtools/pathcheck.py", "tests/fixtures/modules/sine/src/module.c"],
             {"python-tests"},
             True,
             None,
@@ -138,7 +138,7 @@ def test_explain_states_why_host_tests_skip_smoke(
     assert "smoke: skipped, host-only test change" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("name", ["session-share", "remote-page", "wait-core", "new"])
+@pytest.mark.parametrize("name", ["remote-page", "new"])
 def test_desktop_host_tests_select_only_host(name: str) -> None:
     assert verify.steps_for([f"apps/desktop/ui/tests/{name}.test.ts"]) == ("host",)
 
@@ -146,9 +146,7 @@ def test_desktop_host_tests_select_only_host(name: str) -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        "apps/desktop/ui/src/session-core.ts",
         "apps/desktop/ui/src/remote-core.ts",
-        "apps/desktop/ui/src/wait-core.ts",
         "apps/desktop/package.json",
         "apps/desktop/ui/tsconfig.json",
         "apps/desktop/src-tauri/src/main.rs",
@@ -158,6 +156,12 @@ def test_desktop_host_sources_keep_app_checks(path: str) -> None:
     steps = set(verify.steps_for([path]))
     assert {"desktop", "host"} <= steps
     assert "web" not in steps
+
+
+@pytest.mark.parametrize("name", ["session-core", "wait-core"])
+def test_shared_transfer_sources_keep_desktop_and_web_checks(name: str) -> None:
+    steps = verify.steps_for([f"apps/web/src/transfer/{name}.ts"])
+    assert steps == ("desktop", "host", "web")
 
 
 @pytest.mark.parametrize("name", ["card-core", "samples-core"])
@@ -182,7 +186,17 @@ def test_exact_maintenance_paths_skip_smoke_but_keep_python_coverage() -> None:
     )
 
 
-@pytest.mark.parametrize("mid", ["digikit/freqshift", "digikit/remote"])
+@pytest.fixture(autouse=True)
+def _a_fixture_upload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped modules are not fixed here: one fixture stands for a run-time upload with a lifecycle cell."""
+    monkeypatch.setitem(
+        verify_route.RUNTIME_UPLOADS,
+        "test/dyn-fx-gain",
+        "tests/regression/modules/gain.test.ts",
+    )
+
+
+@pytest.mark.parametrize("mid", ["test/dyn-fx-gain", "digikit/remote"])
 def test_audited_upload_without_matrix_consumers_skips_smoke(mid: str) -> None:
     files = [f"{mpath(mid)}/module.toml", *UI_FILES, "tools/devtools/pathcheck.py"]
     assert verify.smoke_cells(files) == []
@@ -191,8 +205,18 @@ def test_audited_upload_without_matrix_consumers_skips_smoke(mid: str) -> None:
     assert "no dependent cells" in verify.smoke_reason(files)
 
 
-def test_pluck_leaf_selects_existing_dependent_cells_on_both_devices() -> None:
-    files = [f"{mpath('digikit/pluck')}/module.toml", "docs/TESTING.md"]
+def test_a_production_leaf_with_no_cell_skips_the_smoke_matrix() -> None:
+    # the matrix cells hold the patched-in fixture, which has its own DSP copy: a change of an upload reaches no cell
+    files = [f"{mpath('test/dyn-fx-gain')}/module.toml", "docs/TESTING.md"]
+    assert verify.smoke_cells(files) == []
+    assert "no dependent cells" in verify.smoke_reason(files)
+
+
+def test_a_production_leaf_selects_existing_dependent_cells_on_both_devices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(verify_route.RUNTIME_UPLOADS, "test/patched-pluck", "x.test.ts")
+    files = [f"{mpath('test/patched-pluck')}/module.toml", "docs/TESTING.md"]
     cells = verify.smoke_cells(files)
     assert cells is not None
     assert {cell.partition(":")[0] for cell in cells} == {"dt2-1.17", "dn2-1.12"}
@@ -225,9 +249,10 @@ def test_smoke_forwards_native_cell_filters(
 
 
 def test_smoke_explain_names_affected_cells_and_empty_selection(
-    capsys: pytest.CaptureFixture[str],
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    files = [f"{mpath('digikit/pluck')}/module.toml"]
+    monkeypatch.setitem(verify_route.RUNTIME_UPLOADS, "test/patched-pluck", "x.test.ts")
+    files = [f"{mpath('test/patched-pluck')}/module.toml"]
     verify.explain(verify.steps_for(files), files, [], per_file=True)
     out = capsys.readouterr().out
     assert "selected dependent matrix cells" in out
@@ -262,7 +287,7 @@ def test_docs_only_stays_empty() -> None:
 
 
 def test_representative_module_runtime_and_core_routes_stay_conservative() -> None:
-    assert verify.steps_for(["modules/fx/master-gain/src/cf/gain.s"]) == (
+    assert verify.steps_for(["tests/fixtures/modules/sine/src/module.c"]) == (
         "python-tests",
         "rust-tests",
         "smoke",
@@ -363,6 +388,10 @@ def test_full_and_empty() -> None:
 def test_every_suite_entry_resolves() -> None:
     for name, _, paths in verify.PY_SUITES:
         for path in paths:
+            if path.startswith(
+                "modules/"
+            ):  # module-owned tests: none until a module has one
+                continue
             assert verify.resolve_tests((path,)), (name, path)
 
 
@@ -663,11 +692,11 @@ def test_digikit_test_files_and_scenarios() -> None:
         assert verify_route.digikit_fine(deleted) is None
         assert deleted not in verify.python_tests([deleted], False)
         assert "python-tests" in verify.steps_for([deleted])
-    assert selected("tests/digikit/scenarios/menu-dkrun-pluck.toml") == {
-        "tests/digikit/test_menu_dn2.py",
-        "tests/digikit/test_menu_dt2.py",
+    assert selected("tests/digikit/scenarios/menu-open-dt2.toml") == {
+        "tests/digikit/test_debug_dn2.py",
+        "tests/digikit/test_debug_dt2.py",
     }
-    assert verify.steps_for(["tests/digikit/scenarios/menu-dkrun-pluck.toml"]) == (
+    assert verify.steps_for(["tests/digikit/scenarios/menu-open-dt2.toml"]) == (
         "python-tests",
         "smoke",
     )
@@ -682,25 +711,25 @@ def test_digikit_test_files_and_scenarios() -> None:
 
 
 def test_module_leaf_selects_the_tests_that_name_it() -> None:
-    src = "modules/fx/master-gain/src/cf/gain.s"
+    src = "tests/fixtures/modules/sine/src/module.c"
     assert verify.steps_for([src]) == ("python-tests", "rust-tests", "smoke")
-    # test_patchkit.py (a gate file) and the tests that use a tool that builds master-gain
-    assert "tests/patchkit/test_patchkit.py" in verify.python_tests([src], False)
-    assert "tests/patchkit/test_pk_mem.py" in selected(src)
-    assert "tests/patchkit/test_pk_cf.py" not in selected(src)
-    assert not [t for t in selected(src) if t.startswith("tests/digikit/test_e")]
-    assert "tests/patchkit" not in selected(src)
+    # a module that tests name selects those tests, not whole directories
+    named = selected(src)
+    assert "tests/modules/test_machine_conformance.py" in named
+    assert "tests/patchkit/test_patchkit_dkrt_machine.py" in named
+    assert "tests/patchkit/test_pk_cf.py" not in named
+    assert "tests/patchkit" not in named
     # the object and the manifest are read by the web gallery
-    assert "web" in verify.steps_for(["modules/fx/master-gain/module.toml"])
+    assert "web" in verify.steps_for(["tests/fixtures/modules/sine/module.toml"])
     assert "web" in verify.steps_for(
-        ["modules/fx/master-gain/build/master-gain.dko.json"]
+        ["tests/fixtures/modules/sine/build/sine-cf.dko.json"]
     )
     assert "web" not in verify.steps_for(["modules/core/runtime/sdk/src/lib.rs"])
     assert verify.steps_for(["modules/core/runtime/README.md"]) == ()
 
 
 def test_module_scenario_modules_select_their_scenarios() -> None:
-    got = selected("modules/machines/pluck/module.toml")
+    got = selected("tests/fixtures/modules/sine/module.toml")
     for name in (
         "test_equiv_dn2",
         "test_equiv_dt2",
@@ -714,13 +743,6 @@ def test_module_scenario_modules_select_their_scenarios() -> None:
     ):
         assert f"tests/digikit/{name}.py" in got, name
     assert "tests/patchkit/test_patchkit_dkrt_machine.py" in got
-    # digikit/pluck is the source of test/patched-pluck's DSP: the patched-in twin's tests follow
-    assert "tests/digikit/test_menu_dt2.py" in selected(
-        "modules/machines/pluck/src/dsp/pluck.s"
-    )
-    assert "tests/patchkit/test_pluck.py" in selected(
-        "modules/machines/pluck/src/dsp/pluck.s"
-    )
 
 
 CONFORMANCE = "tests/modules/test_machine_conformance.py"
@@ -729,8 +751,6 @@ CONFORMANCE = "tests/modules/test_machine_conformance.py"
 @pytest.mark.parametrize(
     "path",
     [
-        "modules/machines/pluck/module.toml",
-        "modules/machines/pluck/src/dsp/pluck.s",
         "tests/fixtures/modules/sine/src/dsp/sine.s",
         "tests/fixtures/modules/sine/module.toml",
         "modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dn2.s",
@@ -743,7 +763,7 @@ def test_a_machine_change_selects_the_conformance_suite(path: str) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["modules/fx/master-gain/module.toml", "modules/core/adapters/params/module.toml"],
+    ["modules/tools/remote/module.toml", "modules/core/adapters/params/module.toml"],
 )
 def test_other_modules_do_not_select_the_conformance_suite(path: str) -> None:
     assert CONFORMANCE not in selected(path)
@@ -780,7 +800,10 @@ def test_an_effect_change_selects_the_fx_conformance_suite(path: str) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["modules/machines/pluck/module.toml", "modules/core/adapters/params/module.toml"],
+    [
+        "tests/fixtures/modules/sine/module.toml",
+        "modules/core/adapters/params/module.toml",
+    ],
 )
 def test_other_modules_do_not_select_the_fx_conformance_suite(path: str) -> None:
     assert verify_route.FX_CONFORMANCE not in selected(path)
@@ -824,8 +847,9 @@ def test_module_change_drops_no_test_that_names_a_dependent() -> None:
 
 def test_dependents_follow_requires_and_shared_sources() -> None:
     assert "test/patched-pluck" in verify_route.dependents({"core/machines"})
-    assert "test/patched-pluck" in verify_route.dependents({"digikit/pluck"})
-    assert verify_route.dependents({"digikit/master-gain"}) == {"digikit/master-gain"}
+    # test/dyn-params builds from the DSP source of test/sine; the patched-in test/patched-pluck has its own copy
+    assert "test/dyn-params" in verify_route.dependents({"test/sine"})
+    assert verify_route.dependents({"test/dyn-fx-gain"}) == {"test/dyn-fx-gain"}
 
 
 def test_unknown_module_path_stays_broad() -> None:
@@ -919,7 +943,7 @@ def test_routing_changes_select_everything() -> None:
 
 def test_gate_files_always_run() -> None:
     for path in (
-        "modules/fx/master-gain/src/cf/gain.s",
+        "tests/fixtures/modules/sine/src/module.c",
         "tools/device/mmon.py",
         "tests/digikit/scenarios/upload-quick.toml",
     ):
@@ -934,7 +958,7 @@ def test_runtime4_merge_runs_no_pcm_step() -> None:
         "modules/core/runtime/build/runtime.dko.json",
         "modules/core/runtime/src/rs/src/upload.rs",
         "tests/fixtures/modules/dyn-demo/build/dyn-demo.dko.json",
-        "tests/digikit/scenarios/menu-dkrun-pluck.toml",
+        "tests/digikit/scenarios/menu-open-dt2.toml",
         "tests/digikit/test_dkrun.py",
         "tools/device/dkrun.py",  # the mise.toml dk:run task
         "tools/patchkit/pk_digikit_scen.py",
@@ -959,8 +983,10 @@ def test_rust_scope(monkeypatch: pytest.MonkeyPatch) -> None:
         return ["patchkit"]
 
     monkeypatch.setattr(verify.rust_ws, "affected_packages", fake, raising=False)
-    assert verify.rust_scope(["modules/fx/master-gain/module.toml"]) == ["patchkit"]
-    assert seen == [["modules/fx/master-gain/module.toml"]]
+    assert verify.rust_scope(["tests/fixtures/modules/sine/module.toml"]) == [
+        "patchkit"
+    ]
+    assert seen == [["tests/fixtures/modules/sine/module.toml"]]
     # a broad mise.toml change and a routing change keep the whole workspace
     assert verify.rust_scope(["mise.toml"]) is None
     assert verify.rust_scope(["tools/devtools/verify.py"]) is None
@@ -1048,12 +1074,12 @@ def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
             "modules/core/runtime/src/rs/src/upload.rs",
             {"runtime-fixture", "module-load"},
         ),
-        ("modules/machines/pluck/src/dsp/pluck.s", {"module-load"}),
-        ("modules/fx/master-gain/src/cf/gain.s", set()),
+        ("tests/fixtures/modules/dyn-fx-gain/src/dsp/dyn_fx_gain.s", {"module-load"}),
+        ("tests/fixtures/modules/sine/src/module.c", set()),
         ("modules/no/such/module.toml", {"runtime-fixture", "module-load"}),
         ("tools/device/dkupload.py", {"runtime-fixture"}),
         ("tools/device/dkscreen.py", set()),
-        ("tools/patchkit/freqshift_ref.py", set()),
+        ("tools/patchkit/pk_digikit_fxshift.py", set()),
         ("devices/digitakt-ii-leds.toml", set()),
         ("devices/digitone-ii-leds.toml", set()),
         ("tools/patchkit/patchkit.py", {"runtime-fixture", "module-load"}),
@@ -1080,20 +1106,15 @@ def test_relevant_native_acceptance_retains_existing_owners(
     [
         (
             "module-load",
-            "modules/machines/pluck/src/dsp/pluck.s",
-            ["modules/pluck.test.ts"],
-        ),
-        (
-            "module-load",
-            "modules/fx/freqshift/module.toml",
-            ["modules/freqshift.test.ts"],
+            "tests/fixtures/modules/dyn-fx-gain/src/dsp/dyn_fx_gain.s",
+            ["modules/gain.test.ts"],
         ),
         ("module-load", "modules/tools/remote/module.toml", ["modules/remote.test.ts"]),
-        ("module-load", "modules/fx/master-gain/module.toml", []),
+        ("module-load", "tests/fixtures/modules/sine/module.toml", []),
         (
             "module-load",
-            "tests/regression/modules/pluck.test.ts",
-            ["modules/pluck.test.ts"],
+            "tests/regression/modules/remote.test.ts",
+            ["modules/remote.test.ts"],
         ),
         (
             "runtime-fixture",
@@ -1105,7 +1126,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "modules/tools/remote/module.toml",
             ["runtime/remote-input.test.ts"],
         ),
-        ("runtime-fixture", "modules/fx/master-gain/module.toml", []),
+        ("runtime-fixture", "tests/fixtures/modules/sine/module.toml", []),
         ("stock", "tests/regression/dt2/transport.test.ts", ["dt2/transport.test.ts"]),
     ],
 )
@@ -1116,7 +1137,10 @@ def test_acceptance_filters_native_files(
 
 
 def test_broad_change_is_not_narrowed_by_a_module_leaf() -> None:
-    paths = ["tools/devtools/verify.py", "modules/machines/pluck/module.toml"]
+    paths = [
+        "tools/devtools/verify.py",
+        "tests/fixtures/modules/dyn-fx-gain/module.toml",
+    ]
     assert verify.acceptance_plan("module-load", paths) == []  # all native module files
 
 
@@ -1148,9 +1172,8 @@ def test_shared_abi_and_unknown_modules_keep_cross_device_acceptance(
     files = verify_route.acceptance_files(step, [path])
     if step == "module-load":
         assert set(files) == {
-            "modules/pluck.test.ts",
-            "modules/freqshift.test.ts",
-            "modules/remote.test.ts",
+            p.relative_to(ROOT / "tests/regression").as_posix()
+            for p in (ROOT / "tests/regression/modules").glob("*.test.ts")
         }
     else:
         assert "runtime/remote-input.test.ts" in files
@@ -1392,3 +1415,68 @@ def test_fx_gate_tiers_override_ambient_selection(monkeypatch, full, all_no_aot)
         for key, value in verify.no_aot_env().items()
         if key not in {"DIGI_FX_SWEEP", "DIGI_FX_NO_AOT_SUBSET"}
     )
+
+
+def test_module_ids_come_from_the_manifests_not_a_list_of_authors() -> None:
+    verify_route._id_patterns.cache_clear()
+    text = 'run("test/dyn-demo"); ROOT / "tests" / "digikit" / "test_x.py"; test/no-such-module'
+    assert verify_route.refs(text) == {"test/dyn-demo"}
+    # a name that only starts like an id is no reference
+    assert verify_route.refs("test/dyn-demo-stray2 test/dyn-demo_x") == set()
+
+
+def _clear_route_caches() -> None:
+    for obj in vars(verify_route).values():
+        if hasattr(obj, "cache_clear"):
+            obj.cache_clear()
+    modroots._cache.clear()
+
+
+def test_a_modules_own_scenario_is_found_and_selected_by_a_change_in_the_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A made-up module in a tmp tree: its tests/scenarios belong to it, with or without naming it."""
+    mod = tmp_path / "modules/tools/demo"
+    (mod / "tests/scenarios").mkdir(parents=True)
+    (mod / "module.toml").write_text('[module]\nid = "acme/demo"\ntype = "service"\n')
+    scen_file = mod / "tests/scenarios/equiv-demo.toml"
+    scen_file.write_text('[scenario]\nkind = "equiv"\n')
+    monkeypatch.setattr(verify_route, "ROOT", tmp_path)
+    monkeypatch.setattr(modroots, "ROOT", tmp_path)
+    monkeypatch.setenv("PATCHKIT_MODULES", "")
+    _clear_route_caches()
+    monkeypatch.setattr(
+        verify_route,
+        "kind_files",
+        lambda: {"equiv": ("tests/digikit/test_equiv_dt2.py",)},
+    )
+    try:
+        scen = "modules/tools/demo/tests/scenarios/equiv-demo.toml"
+        refs_ = verify_route.scenario_refs()
+        assert refs_[scen][0] == "equiv"
+        assert "acme/demo" in refs_[scen][1]
+        # a change inside the module's tests/ runs python-tests only, with the test files of the kind
+        fine = verify_route.fine(scen)
+        assert fine is not None and fine.steps == ("python-tests",)
+        assert "tests/digikit/test_equiv_dt2.py" in fine.tests
+        # a change in the module's sources selects the same scenario tests
+        src = verify_route.fine("modules/tools/demo/module.toml")
+        assert src is not None and "tests/digikit/test_equiv_dt2.py" in src.tests
+    finally:
+        monkeypatch.undo()
+        _clear_route_caches()
+
+
+def test_module_owned_python_tests_are_found_by_globbing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    test = tmp_path / "modules/machines/m/tests/sub/test_m.py"
+    test.parent.mkdir(parents=True)
+    test.write_text("")
+    (tmp_path / "modules/machines/m/tests/helper.py").write_text("")
+    monkeypatch.setattr(verify_route, "ROOT", tmp_path)
+    assert verify_route.module_test_files() == [
+        "modules/machines/m/tests/sub/test_m.py"
+    ]
+    assert verify.is_module_test_dir("modules/machines/m/tests/sub/test_m.py")
+    assert not verify.is_module_test_dir("modules/machines/m/src/test_m.py")

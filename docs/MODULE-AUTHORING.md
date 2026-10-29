@@ -93,7 +93,7 @@ module.toml        the manifest
 src/module.c       the declaration of the machine or effect (DK_MACHINE, DK_FX, ...)
 src/dsp/NAME.s     SHARC+ assembly (machine, effect)
 src/c/NAME.c       ColdFire C (service)
-tests/             the module's own tests: test_*.py
+tests/             the module's own tests: test_*.py, *.test.ts, scenarios/*.toml (below)
 README.md          for a player: what the module does, in one or two sentences
 gallery/icon.svg   optional card icon
 build/gen/         the generated gallery.json (section 6)
@@ -521,7 +521,21 @@ Every task takes `-- --help`. Hardware is a deliberate step: do not flash a devi
 | `machine` | `tests/modules/test_machine_conformance.py` on both devices, or on one with `--device`. Every parameter at its limits, many notes, modulation, long notes and retriggers. The write-set check is part of it. |
 | `fx` | `tests/modules/test_fx_conformance.py`: signals, parameter limits, modulation, switching and a long run. It checks returns, registers, the write set and the instruction budget. |
 | `service`, `raw` | No conformance suite. It checks the objects against their sources. |
-| all | The module's own tests: `modules/<group>/<name>/tests/test_*.py`. These may build or launch an emulator. |
+| all | The module's own tests: `tests/**/test_*.py` of the module, and the digikit test files of the kinds of its `tests/scenarios/*.toml`, limited to those scenarios. These may build or launch an emulator. |
+
+A module owns its tests. They live in the module folder and nothing else lists them:
+
+| File | Found by |
+| --- | --- |
+| `tests/test_*.py` (also in subfolders) | `module:check`, `verify`, `test:changed`, `python-tests --full`. The basename must be unique in the repository (no `__init__.py`): start it with the module name, for example `test_hello_range.py`. A helper next to the test is imported by its name. The repository root and `tests/` are on `sys.path` (`tools.*`, `support.*`). Use `Path(__file__).parents[1]` for the module folder. |
+| `tests/*.test.ts` | The Vitest project `module-tests` (`mise run test:host`). |
+| `tests/scenarios/*.toml` | The digikit scenario runner (`pk_digikit_scen list\|run NAME`) and the tiers, next to `tests/digikit/scenarios/`. Scenario names are unique across both places. |
+
+A change in a module selects the module's own tests and those of the modules that depend on it. A change only in `tests/` runs the tests and no
+build. A PCM pin of a module stays in that module's `tests/scenarios`. Nothing outside the module folder names a user module: `mise run
+check:layers` (rule `self-contained`) fails on a module id or path in code or tests. Docs and `*.md` files may name modules. A module with
+`host = true` in `[module]` is exempt: the workbench speaks its protocol (the remote control service). Tests of shared tools use the fixtures in
+`tests/fixtures/modules` (`test/sine` is the small dynamic machine, `test/dyn-fx-gain` the effect), or a made-up id such as `acme/demo`.
 
 After the tests pass, `module:check` packs the module for each device. It prints a `size` line and two more lines, `needs` and `fits`.
 

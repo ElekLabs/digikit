@@ -192,16 +192,61 @@ child processes.
 - [x] 6b. Spike, at most one day: gcc `cc1` and `as` for `wasm32-wasi`. If it fails, plan an own
       C compiler for ColdFire in Rust. Result: gcc `cc1` and `as` build for wasm32-wasip1 and give
       byte-identical output on 32 module sources (finding 74); ship them. `ld` for wasm is next (6c).
-- [ ] 6c. `pk_build` and `pk_pack` in `patchkit.wasm`. One Transfer flow for desktop and web:
-      drop a `.dkmod`, compile, pack, send.
+- [x] 6c. Transfer in the site (decided 2026-10-28): the workbench's Transfer pane moves to shared code
+      (`apps/web/src/transfer/`, a `TransferEnv` for library, targets and desktop-only extras) and
+      becomes the web Transfer page. The site ships each module's prebuilt `.dkm` per device (built at
+      site-build time, the same bytes as `module:pack-all`), an index and the sources (read-only source
+      view). The Upload page folds into Transfer ("Add .dkm files"); the Patch page patches the runtime
+      set only. A connection indicator (connected, connecting, not connected; device, OS, runtime, id)
+      in the shared pane. WebMIDI: cancel, disconnect detection, clear messages without WebMIDI or
+      SysEx permission. Proof: desktop Transfer unchanged; web tests; Em's test in Chrome on the device.
+      Status: built (shared pane, site assets, web Transfer page, WebMIDI hardening, badge with OS
+      version). Em's test (2026-10-29): freqshift installed from the site in Chrome and loaded on the DT2.
+- [x] 6d. Patch and flash, one path for the CLI, the workbench and the web (finding 75: the OS UPGRADE
+      screen takes the plain `.syx` stream, sends no replies, validates checksum, HMAC and on DT2 the
+      build floor "0060" after the last message, erases nothing on failure, asks no YES).
+      - [x] Core `patchkit::flash`: `prepare` (stock by SHA-256, patch the `device` set, preflight,
+            verify, DT2 build floor, product byte, the outgoing message list decoded back and compared
+            with the image); restore stock through the same checks; a `Sender` with 2 ms pacing that
+            stops on any error (start again from the header). CLI `patchkit flash STOCK.syx --port`
+            and `--restore`. USB only for now.
+      - [x] Image id: the runtime's INFO reports an id of the flashed image (set by patchkit), checked
+            after the reboot.
+      - [x] One step UI (Firmware page) for the desktop (midir) and the web (`patchkit.wasm` + WebMIDI);
+            the web Patch page becomes Firmware. Recovery steps shown first; device match before
+            flashing. No emulator boot before flashing (decided 2026-10-28).
+      - [x] Proof: unit tests of every check (tampered, wrong device, oversize); a full flash through
+            the shared sender into the emulated DT2 and DN2 (tools/emulator/os_upgrade_rig.py), the
+            flash compared with the image, the emulator boots the patched runtime and INFO's id
+            matches; screenshots. The Python dkflash design (device-bridge.md section 3) is replaced.
+      - [x] RPC route (finding 75, "The RPC route"): one reply-driven state machine in Rust
+            (`patchkit::flash_rpc::RpcFlash`: Start, Write in order, End; CRC retry, timeouts, End 0 on
+            failure or cancel) for the CLI, the workbench and the site (wasm). Default route; the menu
+            route stays as the fallback (`--route menu`, a link on the page).
+      - [x] The device does not ask "UPGRADE OS NOW?" on this route: the CLI asks once before Start
+            ("Flash Digitakt II OS 1.17 ... now? [y/N]") and the Firmware page has one Flash button; both
+            commit (End 1) as soon as the device has checked the image. Cancel or leaving the page before
+            that sends End with commit 0.
+      - [x] The Firmware page without the menu step and its box: one Flash button for send, check and flash, then Done; errors in plain
+            words (CRC retries used up, timeout, the device's message, "Nothing was written").
+      - [x] Proof in the emulator through the page's own code path: DT2 1.17 and DN2 1.12, patch and
+            restore (flash equals the container, INFO runtime and image id), Cancel before the commit leaves
+            the flash unchanged; the CLI once with `--yes`. Em's DT2 (2026-10-29): patch from the workbench, restore and
+            patch from the site in Chrome. Open: the largest Write, DN2 on hardware.
+- [ ] Later: compile in the browser (a dropped `.dkmod`, or an edited source): gcc `cc1`/`as`/`ld` in
+      wasm (finding 74) in a worker, SHARC+ already in `patchkit.wasm`.
 - [ ] Optional: a `.dkmod` carries the expected `.dkm` hash per device so a receiver can
       compare builds.
 
 ### Phase 7: migrate the rest
 
-- [ ] bd, analog, pd, master-gain, master-drive.
-- [ ] Remove the typed `module.toml` sections and the legacy Python build tools.
-- [ ] Proof: byte-identical patched images.
+- [x] bd, analog, pd: declared in C since phase 2.
+- [x] master-gain and master-drive deleted (Em, 2026-10-29: the devices have master overdrive; freqshift is the
+      master-route example). The typed `module.toml` sections are gone from every manifest. The refusal of an old
+      `[[fx]]`, `[[machine]]`, `[[param]]`, `[[page]]` or `[[voice]]` section stays in `module.rs` (the manifest parser
+      ignores unknown keys, so a deleted stub would drop the section without a word). `tools/patchkit/pk_expr.py` stays:
+      two Python tests of the `[[section]]` row expressions import it.
+- [x] Proof: every remaining .dkm and patched image byte-identical to main.
 
 ### Dev loop
 
@@ -227,4 +272,5 @@ runtime sets of both devices); Em approved the new goldens. Phase 3 done. Then c
 (`adapters/`, `apps/`, `role` in module.toml), docs/ARCHITECTURE.md and `mise run check:layers`. Phase 4 done (module UI through runtime imports,
 `DK_MENU`, REMOTE switch removed). Phase 5 done (`patchkit build` in Rust, content objects only cached, Reload
 modules builds first). 6a done (SHARC built in Rust with Selache as a
-library, natively and in wasm); 6b done (gcc in wasm, finding 74). Next: 6c.
+library, natively and in wasm); 6b done (gcc in wasm, finding 74). 6c and 6d done (Transfer and Firmware in the site; flash over
+MidiRpc, tested on Em's DT2). Next: phase 7.

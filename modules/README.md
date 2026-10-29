@@ -33,12 +33,12 @@ Sources may sit in subfolders (`src/cf/dt2/`, `src/cf/dn2/`) when one module ser
 
 ## Conventions
 
-- **Module id**: `category/name`, lower case, hyphens (`digikit/master-gain`). The id need not equal the directory; patchkit
+- **Module id**: `category/name`, lower case, hyphens (`digikit/freqshift`). The id need not equal the directory; patchkit
   refuses two modules with one id. Module roots: `modules/`, `tests/fixtures/modules/` (test fixtures, ids `test/NAME`) and the
   extra roots of `--modules-dir` and `PATCHKIT_MODULES`.
 - **Categories**: `core` (frameworks other modules require), `fx`, `machines`, `ui`, `tools`, `test` (fixtures and
   research probes; they are not for users). `mise run module:new` makes run-time content modules only (`machine`, `fx` or `service`; guide section 3). A patched-in
-  module starts as a copy of a similar one, for example `modules/fx/master-gain`.
+  module starts as a copy of a similar one, for example `tests/fixtures/modules/patched-pluck`.
 - **Entry ids** (in `[[entry]]`): `[a-z][a-z0-9_]*`. They become symbols (`machines.pluck.index`).
 - **Symbols** in expressions: `[A-Za-z_.][A-Za-z0-9_.]*`.
 - **Version**: `major.minor.patch`; raise it when the module's behaviour or its interface to other modules changes.
@@ -48,7 +48,7 @@ Sources may sit in subfolders (`src/cf/dt2/`, `src/cf/dn2/`) when one module ser
   patchkit does not read it; the gallery shows it as a badge. Compatibility itself comes from the anchors: a module
   fits a firmware when all its anchors resolve there. Use `ports = [...]` to restrict a module to some firmware.
 - **Claims**: declare every scarce resource the module takes with `[[claim]]`, for example the one hook site that a
-  module takes (`dsp.master.hook`). Two modules with the same claim cannot be patched together, and the gallery
+  module takes (`dsp.fx.hook`). Two modules with the same claim cannot be patched together, and the gallery
   explains it. Registry entries claim themselves.
 - **Dependencies**: `requires` lists framework modules. The command line and the gallery add them for you (the
   command line prints `added by requires: ...`); a missing module or a `requires` cycle is refused.
@@ -86,14 +86,16 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 
 ```toml
 [module]
-id = "digikit/master-gain"
+id = "digikit/freqshift"
 version = "0.1.0"
-name = "Master gain"
+name = "Frequency shifter"
 category = "fx"
 type = "fx"
 author = "digikit"
 status = "experimental"
-summary = "Scales the master output by a set gain."
+summary = "Moves every frequency up or down by the same number of Hz."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
 ```
@@ -123,13 +125,14 @@ A built object that patchkit places in a region. One module may have several (fo
 
 ```toml
 [[object]]
-path = "build/master-gain.dko.json"
-sources = ["src/dsp/master_gain.s"]
+path = "build/fx-dsp.dko.json"       # core/fx
+sources = ["src/dsp/fx.s"]
 place = "dsp.l2"
 
 [object.externs]
-_fw_q31_convert = "dsp.master.fn.q31_converter"
-_fw_master_buf = "dsp.master.value.q31_converter.float_buf"
+_fx_table = "fx.rows"
+_fx_master = "dsp.master.value.q31_converter.float_buf"
+_fx_back = "hook.dsp.fx.fn.entry.tail"
 ```
 
 An object placed in `cf.expansion` makes patchkit add the built-in `core/expansion` module (loader, segment chain).
@@ -177,7 +180,7 @@ the register contract. `mode = "before"` runs the routine, then the displaced in
 
 | Key | Meaning |
 |---|---|
-| `hook` | the hook name, for example `dsp.master.hook.q31_converter.call` |
+| `hook` | the hook name, for example `dsp.fx.hook.entry` |
 | `to` | the routine (symbol or expression) |
 | `place` | region of the tail (default `cf.expansion` or `dsp.l2`); optional |
 | `expect_sha256` | optional; needed when the site reaches past the anchor |
@@ -188,8 +191,8 @@ exist.
 ```toml
 [[op]]
 op = "hook"
-hook = "dsp.master.hook.q31_converter.call"
-to = "_mg_hook"
+hook = "dsp.fx.hook.entry"   # core/fx
+to = "_fx_entry"
 ```
 
 On ColdFire a hook needs a site of whole instructions; `jmp.l` is 6 bytes and the rest is padded with NOPs. PC-relative
@@ -201,7 +204,7 @@ What registers are free at a hook site is the module's business: document it in 
 
 | Key | Meaning |
 |---|---|
-| `resource` | name of the resource, for example `dsp.master.hook` or `cf.rtos.fn.reset.init_calls` |
+| `resource` | name of the resource, for example `dsp.fx.hook` or `cf.rtos.fn.reset.init_calls` |
 | `devices` | optional device filter |
 
 ### Anchor rules (`devices/fw/`)
@@ -303,7 +306,7 @@ kind = "u32"
 
 ### `[[entry]]`
 
-(Machine modules use the typed sections below instead.) A patched-in module adds a row to a framework's registry. Keys: `registry`, `id`, `devices`, and one key per registry
+(Machine modules declare their rows in C; see "Machine rows" below.) A patched-in module adds a row to a framework's registry. Keys: `registry`, `id`, `devices`, and one key per registry
 field. Numbers, strings for `cstr` fields and expressions or symbols for `sym` and numeric fields.
 
 ```toml
@@ -318,23 +321,20 @@ devices = ["dt2"]
 patchkit refuses an entry for an unknown registry, an unknown or missing field, a value that does not fit, a
 `cstr` that is too long and an id used twice.
 
-### Typed sections: `[[machine]]`, `[[param]]`, `[[page]]`, `[[voice]]`
+### Machine rows (lowering of the C declarations)
 
-**Note.** Authors no longer write these sections. A machine is declared in C with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE`
-(`sdk/include/dk/machine.h`; see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 5.2). A manifest with `[[voice]]`,
-`[[machine]]`, `[[param]]` or `[[page]]` is refused, and the generated `consts.rs`, `dt2.inc`, `dn2.inc` and `module.h` are gone. The
-`test/xslice` fixtures are deleted. Patching a stock machine will become a separate module type. The text below describes the lowering
-into registry rows as it was; the rows are the same.
+**Note.** A machine is declared in C with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` (`sdk/include/dk/machine.h`; see
+[docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 5.2), not in the manifest. The manifest parser ignores unknown keys,
+so `patchkit` keeps a short refusal: a manifest with `[[fx]]`, `[[voice]]`, `[[machine]]`, `[[param]]` or `[[page]]` fails with the
+name of the C macro to use. The text below describes how the declarations are lowered into registry rows.
 
-The typed sections (`[[voice]]`, `[[machine]]`, `[[param]]`, `[[page]]`) were lowered per device into the rows of `core/machines`,
-`core/params` and `core/dsp-voice` (`packages/patchkit/src/typed.rs`; the lowering also runs in the browser).
+The declarations are lowered per device into the rows of `core/machines`, `core/params` and `core/dsp-voice`
+(`packages/patchkit/src/typed.rs`; the lowering also runs in the browser).
 
-- You write parameter names. The device profile places them (`[modules.knobs]`, `[modules.templates]` and `[modules.frame]` in
-  `devices/<device>.toml`). A device file that has no `[modules]` section takes no typed sections, and a new device is a new TOML file.
-- A `[[param]]` without `template` takes the profile's `plain` template. A numeric `template` is allowed only in a per-device table
-  (`[param.dt2]`, `[param.dn2]`).
-- `knobs` in a shared `[[machine]]` holds parameter names only. A per-device table may give an explicit layout with stock codes and `0`.
-- Parameter codes follow the order of the `[[param]]` sections (`params.<id>.index`). Type numbers stay permanent
+- You write parameters and knobs. The device profile places them (`[modules.knobs]`, `[modules.templates]` and `[modules.frame]` in
+  `devices/<device>.toml`). A device file that has no `[modules]` section takes no machine declarations, and a new device is a new TOML file.
+- A `DK_PARAM` takes the profile's `plain` template. The knobs of a `DK_PAGE` (`DK_KNOB(n)`) name parameters of the module.
+- Parameter codes follow the order of the `DK_PARAM` records (`params.<id>.index`). Type numbers stay permanent
   (`modules/core/adapters/machines/types.toml`); the lowering needs none.
 - Lowered rows, per device: `voices` (`type = machines.<id>.index`, `pc = render`), `machines`, `params`, `pages`.
   On a device whose knobs go to the machine row (`to = "machine"`: Digitakt II) the machine row gets `f0..f7` and the
@@ -342,7 +342,7 @@ The typed sections (`[[voice]]`, `[[machine]]`, `[[param]]`, `[[page]]`) were lo
   `s0..` and the level `c8`; a stock code on a page is refused.
 - A typo is an error: unknown keys of a device table, a device table for a device without a model, more knobs than
   the device has, a page on a device that keeps knobs in the machine row.
-- Hand-written `[[entry]]` rows still work, also next to typed sections (for example for a registry the typed form does not cover).
+- Hand-written `[[entry]]` rows still work, also next to declared machines (for example for a registry the typed form does not cover).
 
 The device model, from `devices/digitakt-ii.toml` (comments in the files):
 
@@ -358,7 +358,7 @@ table gives it the mirror index `mirror_base + j + (j / group) * gap`.
 #### Generated files (`patchkit gen`)
 
 `mise run gen:modules` (`uv run python -m tools.patchkit.patchkit gen`, or the binary; add `-- --check` to only report stale files) writes
-`modules/<id>/build/gen/` for every module with typed sections; `gen --check` fails when a committed file is
+`modules/<id>/build/gen/` for every module with a machine declaration; `gen --check` fails when a committed file is
 stale (`packages/patchkit/tests/typed.rs` runs it). The files hold no firmware bytes. The files and who includes them are in
 [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 6. In `<device>.inc` the values are in decimal (the assembler upper-cases macro text, so `0x` literals break after `+`).
 `gallery.json` is part of the web bundle (`files["build/gen/gallery.json"]`) and shown on the module card.
@@ -437,9 +437,9 @@ main-loop stall. The complete list is the docstring of `tools/patchkit/pk_harnes
 
 Workflow:
 
-1. Copy a similar patched-in module (`modules/fx/master-gain`) and fill in the manifest and the sources.
+1. Copy a similar patched-in module (`tests/fixtures/modules/patched-pluck`) and fill in the manifest and the sources.
 2. `mise run module:dev -- --modules category/name`: edit, see one summary line per save.
-3. Add module tests; a `smoke.toml` like the one of `modules/fx/master-gain` only checks that the patched firmware is audible and does not fault.
+3. Add module tests; a `smoke.toml` like the one of `modules/core/adapters/fx` only checks that the patched firmware is audible and does not fault.
 4. Add a cell to `tests/patchkit/smoke/matrix.toml` for each device and firmware you support, then
    `mise run patch:test -- --cell "dt2-1.17:category/name" --update` records the frame goldens (hashes only) once,
    and later runs compare against them. A change that is invisible on screen must give the stock frames.
@@ -447,32 +447,29 @@ Workflow:
    setting). The proofs are `tools/patchkit/pk_proof_*.py`; write one the same way and report numbers in a finding.
 6. `mise run module:build -- --check` must pass (the built objects equal fresh builds; only `core/*` objects are committed).
 
-## Worked example 1: `digikit/master-gain` (SHARC+ only, both devices)
+## Worked example 1: `core/fx` (SHARC+ only, both devices)
 
-`modules/fx/master-gain/` scales the 64 floats of the final stereo block by a gain word before the firmware converts
-them to the 24-bit output.
+`modules/core/adapters/fx/` runs the effect chain on the final stereo block: the master block (64 floats) goes through the chain
+before the firmware packs it for USB and converts it to the 24-bit output. With an empty chain the audio is the stock audio.
 
-- **Object.** `src/dsp/master_gain.s` is placed in `dsp.l2`. It has two undefined symbols, the firmware's Q31 converter
-  and the master float buffer. `[object.externs]` maps them to the anchors `dsp.master.fn.q31_converter` and
-  `dsp.master.value.q31_converter.float_buf`.
-- **Hook.** One `hook` op (`hook = "dsp.master.hook.q31_converter.call"`, whose declared mode is `retarget`) changes the converter's single `CALL` to `_mg_hook`. The
-  routine multiplies the block by the gain word and ends with a jump to the converter, so the converter's frame and
-  arguments stay as the firmware expects. The header of the source lists the registers that are free at this site
-  ([finding 06](../docs/findings/06-sharc-engine-and-startup.md), "Master hook").
-- **Claim.** `dsp.master.hook`, so that it cannot be combined with `digikit/master-drive`, which uses the same call.
-- **Anchor rules.** Three `sharc_func`/`sharc_literal` rules, found by the relocation-insensitive hash of two DSP
-  functions. These functions are identical on the Digitakt II and the Digitone II, so the same rules and the same
-  object serve both.
-- **Result.** Gain 1.0 (as built) is bit-identical to stock; a gain word of 0.5 gives -6.0206 dB
-  ([finding 21](../docs/findings/21-patchkit-core.md)).
-- **Test.** `tests/smoke.toml`: tap TRIG 1, expect audible output and no fault.
+- **Object.** `src/dsp/fx.s` is placed in `dsp.l2`. `[object.externs]` maps its undefined symbols: the rows of the `fx` registry
+  (`fx.rows`), the master float buffer (`dsp.master.value.q31_converter.float_buf`) and the tail of the hook
+  (`hook.dsp.fx.fn.entry.tail`).
+- **Hook.** One `hook` op (`hook = "dsp.fx.hook.entry"`, declared mode `before`) replaces the first instruction of the function that the
+  block orchestrator calls once per block with a jump to `_fx_entry`. The displaced instruction runs in the hook's tail, which
+  jumps back to the second instruction of the stock function. The header of the source lists the registers that are free at this site
+  ([finding 55](../docs/findings/55-fx-adapter.md)).
+- **Claim.** `dsp.fx.hook`, so that no other module can take the same site.
+- **Anchor rules.** One `sharc_func` rule per device (`devices/fw/dsp/fx.toml`), found by the relocation-insensitive hash of the
+  function. The object is the same on the Digitakt II and the Digitone II.
+- **Test.** `tests/smoke.toml`: expect audible output and no fault.
 
 ```sh
-mise run module:build -- modules/fx/master-gain --check
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules digikit/master-gain -o out/patch/mg.syx
-mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules digikit/master-gain
-mise run module:dev -- --modules digikit/master-gain
-mise run patch:test -- --cell "dt2-1.17:digikit/master-gain,test/cf-demo"
+mise run module:build -- modules/core/adapters/fx --check
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx -o out/patch/fx.syx
+mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
+mise run module:dev -- --modules core/fx
+mise run patch:test -- --cell "dt2-1.17:core/fx"
 ```
 
 ## Worked example 2: `test/patched-pluck` (both CPUs, built on frameworks)
@@ -480,15 +477,15 @@ mise run patch:test -- --cell "dt2-1.17:digikit/master-gain,test/cf-demo"
 `tests/fixtures/modules/patched-pluck/` adds a PLUCK machine (Karplus-Strong string) to the Digitakt II. It is the patched-in twin of the
 run-time module `digikit/pluck` (`modules/machines/pluck/`), which builds from the same DSP source. It needs no ColdFire code
 of its own: three frameworks do the firmware work, and the module only declares data.
-(The machine is now declared in C; see the note under "Typed sections" above. The text below uses the older section names.)
+The machine is declared in C (`src/module.c`: `DK_MACHINE`, `DK_PARAM`, `DK_PAGE`); see "Machine rows" above.
 
 - **`requires = ["core/dsp-voice", "core/machines", "core/params"]`** and `ports = ["dt2-1.17", "dn2-1.12"]`. Patch it
   with all four modules: `--modules core/dsp-voice,core/machines,core/params,test/patched-pluck`.
 - **The DSP voice.** `[[object]]` places `../../../../modules/machines/pluck/src/dsp/pluck.s` in `dsp.l2` (`devices = ["dt2"]`). An `[[entry]]` in the
   `voices` registry of `core/dsp-voice` gives the machine type (`machines.pluck.index`) and the routine (`_pk_render`).
   The framework hooks the sample renderer once; a track whose type is registered renders with the routine, every
-  other type renders as stock. (The module writes this as a `[[voice]]` section; the lowering produces the row.)
-- **The machine.** The `[[voice]]`, `[[machine]]`, `[[param]]` and `[[page]]` sections of the module (see "Typed sections" above) lower into
+  other type renders as stock. (`DK_MACHINE` names the routine; the lowering produces the row.)
+- **The machine.** The `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` records of the module (see "Machine rows" above) lower into
   these rows. The machine row in the `machines` registry of `core/machines` has `name` and `short` (list and page
   header), `clone_of = 0` (take SAMPLE's permission, per-type byte and DSP selector), and `f0` to `f8`, the nine
   descriptor fields that choose which parameter occupies each knob of the SRC page. Fields are stock descriptor ids

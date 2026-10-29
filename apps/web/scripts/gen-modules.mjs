@@ -4,14 +4,20 @@
 //
 // The objects of content modules (every module but category "core") are build output, not committed: `patchkit build` makes them
 // first (it needs the m68k-elf toolchain; nothing is built when they are current) and they are read from the cache out/cache/dko/<id>/.
+// It also writes what the Transfer page ships (see shipModules): per device the prebuilt .dkm of each run-time content module
+// (public/modules/<dev>/<leaf>.dkm, the bytes `mise run module:pack-all` writes), public/modules/index.json and the sources of the
+// modules (public/modules/src/<id>/: module.toml, README.md, src/**; nothing of build/ or out/).
+//
 // The objects of `core/*` modules are committed in the module. The browser never builds: patchkit.wasm packs from the bundle.
 //
 //   node scripts/gen-modules.mjs [--out DIR]
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, resolve, sep } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, statSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, dirname, resolve, sep, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
+import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = resolve(here, '../../..');
@@ -95,12 +101,97 @@ export function buildModuleData(root = repoRoot) {
   return { bundle: { ports, modules, devices } };
 }
 
+const SOURCE_MAX = 256 * 1024;
+
+/** The files of a module that the site shows: module.toml, README.md and src/** (text only), relative to the module, sorted. */
+function sourceFiles(dir) {
+  const out = ['module.toml', 'README.md'].filter((f) => existsSync(join(dir, f)));
+  const walkSrc = (d) => {
+    for (const e of readdirSync(join(dir, d), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const rel = `${d}/${e.name}`;
+      if (e.isDirectory()) walkSrc(rel);
+      else if (e.isFile()) out.push(rel);
+    }
+  };
+  if (existsSync(join(dir, 'src'))) walkSrc('src');
+  return out;
+}
+
+const sha256 = (b) => createHash('sha256').update(b).digest('hex');
+
+/** `patchkit pack` of one module for one device (the packer `mise run module:pack-all` uses); null when it does not pack for the device. */
+function pack(root, id, device, to) {
+  const env = { ...process.env, PYTHONPATH: root };
+  delete env.PATCHKIT_MODULES;
+  try {
+    execFileSync('python3', ['-m', 'tools.patchkit.patchkit', 'pack', id, '--device', device, '-o', to], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    return readFileSync(to);
+  } catch {
+    return null;
+  }
+}
+
+/** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
+export function shipModules(out, root = repoRoot) {
+  const scratch = join(root, 'out', 'cache', 'site-pack');
+  for (const sub of ['dt2', 'dn2', 'src']) rmSync(join(out, sub), { recursive: true, force: true });
+  const modules = [];
+  const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
+    walk(join(root, 'modules', r), 'module.toml').sort(byParts),
+  );
+  for (const file of manifests) {
+    const dir = dirname(file);
+    const d = parse(readFileSync(file, 'utf8'));
+    if (!isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
+    const m = d.module;
+    const leaf = m.id.split('/').pop();
+    const devices = {};
+    for (const dev of shippedDevices(d)) {
+      const tmp = join(scratch, dev, `${leaf}.dkm`);
+      mkdirSync(dirname(tmp), { recursive: true });
+      const bytes = pack(root, m.id, dev, tmp);
+      if (!bytes) continue;
+      mkdirSync(join(out, dev), { recursive: true });
+      writeFileSync(join(out, dev, `${leaf}.dkm`), bytes);
+      devices[dev] = { file: `${dev}/${leaf}.dkm`, size: bytes.length, sha256: sha256(bytes) };
+    }
+    if (!Object.keys(devices).length) continue;
+    const files = sourceFiles(dir);
+    for (const f of files) {
+      const bytes = readFileSync(join(dir, f));
+      if (bytes.length > SOURCE_MAX) throw new Error(`${m.id}/${f} is too large to show (${bytes.length} bytes)`);
+      const to = join(out, 'src', m.id, f);
+      mkdirSync(dirname(to), { recursive: true });
+      writeFileSync(to, bytes);
+    }
+    modules.push({
+      id: m.id,
+      name: m.name,
+      summary: m.summary,
+      kind: m.category,
+      version: m.version,
+      devices,
+      source: files,
+    });
+  }
+  const index = { modules };
+  writeFileSync(join(out, 'index.json'), JSON.stringify(index, null, 1));
+  return index;
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const i = process.argv.indexOf('--out');
   const out = i > 0 ? resolve(process.argv[i + 1]) : join(here, '..', 'public', 'modules');
   const { bundle } = buildModuleData();
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
+  const index = shipModules(out);
+  console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(
     `modules: ${bundle.modules.length} modules, ${bundle.ports.length} ports, bundle ${statSync(join(out, 'bundle.json')).size} bytes`,
   );

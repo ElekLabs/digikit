@@ -122,7 +122,13 @@ def run_pages(c: Any) -> None:
 
     def run_boot() -> None:
         with c.rig(run_img, card, "run") as rig:
-            sequence(rig, "run", rig.dyn_type(M.MODULE, "pluck"))
+            sequence(
+                rig,
+                "run",
+                rig.dyn_type(
+                    t.get("play_module", M.MODULE), t.get("play_machine", M.MACHINE)
+                ),
+            )
             # the same track, now a stock machine: its two pages come back (the hook cut the page vector for the added type)
             for downs in t.get("stock_downs", []):
                 pick(rig, downs)

@@ -6954,9 +6954,7 @@
         }
       },
       "subsystem": "param",
-      "users": [
-        "digikit/master-drive"
-      ],
+      "users": [],
       "was": [
         "cf.param.data.master_sidechain_filter",
         "cf.param.master_sidechain_filter"
@@ -11425,9 +11423,7 @@
         }
       },
       "subsystem": "fx",
-      "users": [
-        "digikit/master-drive"
-      ],
+      "users": [],
       "was": [
         "dsp.fx.sidechain_filter_word"
       ]
@@ -11644,10 +11640,7 @@
         }
       },
       "subsystem": "master",
-      "users": [
-        "digikit/master-drive",
-        "digikit/master-gain"
-      ],
+      "users": [],
       "was": [
         "dsp.master.q31_converter"
       ]
@@ -11699,10 +11692,7 @@
       },
       "site": "dsp.master.site.q31_converter.call",
       "subsystem": "master",
-      "users": [
-        "digikit/master-drive",
-        "digikit/master-gain"
-      ],
+      "users": [],
       "was": []
     },
     {
@@ -11748,10 +11738,7 @@
         }
       },
       "subsystem": "master",
-      "users": [
-        "digikit/master-drive",
-        "digikit/master-gain"
-      ],
+      "users": [],
       "was": [
         "dsp.master.q31_call",
         "dsp.master.site.q31_call"
@@ -11796,9 +11783,7 @@
       },
       "subsystem": "master",
       "users": [
-        "core/fx",
-        "digikit/master-drive",
-        "digikit/master-gain"
+        "core/fx"
       ],
       "was": [
         "dsp.master.float_buf",

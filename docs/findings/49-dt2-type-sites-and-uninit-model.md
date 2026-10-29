@@ -554,6 +554,6 @@ How the silicon reacts to them (10.6 item 4) stays **[O]**.
 
 Done since (commit 8c7c7c93): items 1 and 2 of 10.6. The R2 route and the B3-before-I3 epilogue are the default of `core/dsp-voice` (the options are gone; the
 default object equals the old `DV_C3_BFIRST,DV_C3_VIAR` build byte for byte), `dsp-voice-dn2.s` saves its 17 through R0/R3, `pk_sharc.ureg_class_problems` checks the
-index-register forms only (3a, 3b, 3d, 15a, 15b; Type 14a exempt) and fails the build, and preflight scans section 7 code blocks (`tools/patchkit/pk_isacheck.py`:
+index-register forms only (3a, 3b, 3d, 15a, 15b; Type 14a exempt) and fails the build, and preflight scans section 7 code blocks (`packages/patchkit/src/dspscan.rs`, the Rust port of the earlier Python scan, equal on the stock and patched images:
 stock DT2 1.17 and DN2 1.12 have 0, the old rung C image 17). Item 3 (the emulator) is still open; a check at decode time in `packages/emulator/sharc-rt`
 (`decoded_insn`, and the fast tier's `decode_one`) raising a native trap would not change `CORE_FINGERPRINT` (a scout's reading, not built).

@@ -1,5 +1,7 @@
 # Analog
 
+**Category:** machines  **Devices:** Digitakt II 1.17; Digitone II 1.12  **Status:** experimental (emulator only)  **Kind:** run-time module (`.dkm`, loaded from the card; the runtime gives it its machine type)
+
 A subtractive synth voice for the Digitakt II's tracks: two sawtooth oscillators through a wave-shaping slider, a
 detune that goes from unison all the way to a reese, a wave folder and a sub. It runs before the track's filter, so the
 FLTR and AMP pages do the shaping exactly as they would on a sample — no single-cycle waveforms to load.

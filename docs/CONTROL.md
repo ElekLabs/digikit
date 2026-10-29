@@ -77,6 +77,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `card.overlay`, `card.export`, `card.load`, `card.status`, `card.cancel`, `card.folder`, `card.sync` | | `call` |
 | `midi.in`, `midi.out` | `midi_in`, `midi_out` | `call` |
 | `midi.usb.in`, `midi.usb.out` | `usb_in`, `usb_out` | `call` |
+| `flash.status`, `flash.read {offset, length}` | | `call`; `patchkit flash --emulator` |
 | `watchdog.config` | `watchdog` | `call` |
 | `cpu.exceptions` | `cpu_exceptions` | `call` |
 | `diagnostics` | | `call` |
@@ -205,6 +206,12 @@ resolved (known: DT2 1.16 and 1.17, DN2 1.11 and 1.12). While the next call is n
 which the call is handed over (they ran one instruction at a time with any USB input queued, 135 ns an instruction; finding 43, "Upload speed"). The
 instruction at which each call is handed over, and the guest state, are the same (`state.digest {"arch": true}` equal at every checked point).
 The DIN input (`midi.in`) still keeps the one-instruction loop while bytes are queued.
+
+`flash.status` and `flash.read`: the OS UPGRADE of the firmware writes its container to the flash. The emulator takes over MAIN OS's sector erase and page program
+for the container area `0x80000..0x380000` (any other flash write runs the firmware's own code, as before) and keeps the result in a 16 MiB flash model that
+`hle_flash_read` also serves. `flash.status` is `{erases, programs, bytes}` since the boot; `flash.read` returns bytes of the model as hex (at most 4 MiB). At the
+soft reset after such a write the controller boots the container the guest wrote (`flash.booted` event, or `flash.invalid` when it does not read back as a
+firmware) instead of the image it had loaded. `patchkit flash STOCK.syx --emulator SOCKET` drives it (finding 75).
 
 `pcm.tap` needs the coupled-audio build and a DSP session. `capture` and `capture_stop` have no wrapper.
 

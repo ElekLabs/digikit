@@ -36,8 +36,9 @@ import sys
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-from tools.patchkit import hook_ab, pluck_ref  # noqa: E402
+from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
+from tools.patchkit.pitch import f0_from_crossings  # noqa: E402
 
 # Type 9 forced on the wire plus pluck's defaults in the frame words of the knobs it reads (DECAY, PICK, BRIGHT, COLOR on knobs 1, 2, 4, 5;
 # byte offset 2 (0x6d + knob + 2 (knob >> 2))): the sample machine the track really has leaves other values there.
@@ -121,7 +122,7 @@ def analyse_pluck(pcm: np.ndarray, note: int, start: int) -> dict:
     want = semitone_hz(note)
     period = 48000.0 / want
     seg = left[start + int(4 * period) : start + 36000]
-    got = pluck_ref.f0_from_crossings(seg, want)
+    got = f0_from_crossings(seg, want)
     blocks = [
         float(np.sqrt(np.mean(left[start + k : start + k + 2048] ** 2)))
         for k in range(2048, 40000, 2048)

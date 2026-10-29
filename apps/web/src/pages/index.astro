@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 import DeviceArt from '../components/DeviceArt.astro';
 import ModuleCard from '../components/ModuleCard';
-import { publicModules } from '../data/modules';
+import { shippedModules } from '../data/modules';
 import { deviceProfiles } from '../data/device-profiles';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
@@ -12,7 +12,6 @@ const supported = (['dt2', 'dn2'] as const).map((id) => ({
   name: deviceProfiles[id].name,
   versions: deviceProfiles[id].firmware.filter((f) => f.main_sha256).map((f) => f.version),
 }));
-const needs = (requires: string[]) => requires.length;
 ---
 
 <Base
@@ -27,11 +26,11 @@ const needs = (requires: string[]) => requires.length;
           <span class="eyebrow accent">Digitakt II · Digitone II</span>
           <h1>New machines and effects for your Elektron&nbsp;box.</h1>
           <p class="lede">
-            Add community modules to your own firmware, then play it in the emulator before you flash. It all runs in
-            this browser tab.
+            Patch the digikit runtime into your own firmware, try it in the emulator, then install machines and effects
+            over USB. It all runs in this browser tab.
           </p>
           <div class="hero-cta">
-            <a class="btn primary" href={`${base}patch/`}>
+            <a class="btn primary" href={`${base}firmware/`}>
               Patch your firmware
               <svg viewBox="0 0 16 16" aria-hidden="true">
                 <path
@@ -113,8 +112,8 @@ const needs = (requires: string[]) => requires.length;
               2<i></i>
             </span>
             <div>
-              <h3>Pick your modules</h3>
-              <p>New machines and effects. Only modules that fit your firmware can be added.</p>
+              <h3>Add the runtime</h3>
+              <p>The patch adds the digikit runtime. Machines and effects come later, over USB, from Transfer.</p>
             </div>
           </li>
           <li class="step">
@@ -137,14 +136,14 @@ const needs = (requires: string[]) => requires.length;
             <h2 id="mods" class="section-title">
               Modules
             </h2>
-            <p>Machines and effects written for the hardware's own DSP.</p>
+            <p>Machines, effects and tools you install on your device over USB. See the source of each in Transfer.</p>
           </div>
-          <a href={`${base}patch/`}>Browse all modules →</a>
+          <a href={`${base}transfer/`}>Open Transfer →</a>
         </div>
         <ul class="cards">
-          {publicModules.map((m) => (
+          {shippedModules.map((m) => (
             <li>
-              <ModuleCard module={m} needs={needs(m.requires)} href={`${base}patch/?add=${encodeURIComponent(m.id)}`} />
+              <ModuleCard module={m} href={`${base}transfer/`} />
             </li>
           ))}
         </ul>

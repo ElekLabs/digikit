@@ -1,0 +1,323 @@
+/* The Firmware page (FirmwarePage.tsx): six steps in one column, fills the content area next to the sidebar (desktop) or the page below the
+   site navigation. Surfaces are variables; the site maps them to its tokens (firmware-site.css). */
+.firmware-page {
+  --fp-bg: #0f1012;
+  --fp-card: #131418;
+  --fp-border: #2c2f35;
+  --fp-inset: #101214;
+  --fp-track: #1d1f23;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 24px;
+  overflow: auto;
+  background: var(--fp-bg);
+  color: var(--ink, #eceae5);
+  font-size: 13px;
+}
+.firmware-page .head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px 14px;
+  flex-wrap: wrap;
+  max-width: 920px;
+  width: 100%;
+  margin-inline: auto;
+}
+.firmware-page h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.firmware-page h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.firmware-page .sp {
+  flex: 1;
+}
+.firmware-page .dim {
+  color: var(--ink-3, #868b94);
+}
+.firmware-page .okt {
+  color: #7be3a1;
+}
+.firmware-page .bad {
+  color: #ffb4ab;
+}
+.firmware-page .warn {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #f0c27a;
+  background: rgba(243, 181, 44, 0.1);
+}
+.firmware-page .hidden {
+  display: none;
+}
+.firmware-page .steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 920px;
+  width: 100%;
+  margin-inline: auto;
+}
+.firmware-page .step {
+  border: 1px solid var(--fp-border);
+  border-radius: 10px;
+  background: var(--fp-card);
+  padding: 10px 14px 12px;
+}
+.firmware-page .step.later {
+  opacity: 0.62;
+}
+.firmware-page .steph {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-height: 28px;
+}
+.firmware-page .mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border: 1px solid var(--fp-border);
+  color: var(--ink-3, #868b94);
+}
+.firmware-page .step.now .mark {
+  border-color: var(--amber, #f3b52c);
+  color: var(--amber, #f3b52c);
+}
+.firmware-page .step.done .mark {
+  border-color: #3f8f62;
+  background: #0f2418;
+  color: #7be3a1;
+}
+.firmware-page .step.bad .mark {
+  border-color: #e5594d;
+  background: #2a1210;
+  color: #ffb4ab;
+}
+.firmware-page .stepb {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 0 32px;
+}
+.firmware-page .stepb > button {
+  align-self: flex-start;
+}
+.firmware-page .stepb p {
+  margin: 0;
+}
+.firmware-page .filerow {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px dashed var(--fp-border);
+  border-radius: 8px;
+  background: var(--fp-inset);
+}
+.firmware-page .filerow.dragging {
+  border-color: var(--amber, #f3b52c);
+  background: rgba(243, 181, 44, 0.06);
+}
+.firmware-page .fileinfo {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+}
+.firmware-page .fname {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.firmware-page .tick {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+.firmware-page .tick input,
+.firmware-page .tick span {
+  cursor: pointer;
+}
+.firmware-page input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--amber, #f3b52c);
+  transform: translateY(2px);
+}
+.firmware-page .checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+.firmware-page .checks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+}
+.firmware-page .checks .ic {
+  font-family: var(--font-mono);
+}
+/* a failed check has a line of its own, with its reason below */
+.firmware-page .checks li.bad {
+  flex-basis: 100%;
+}
+.firmware-page .checks .ok .ic {
+  color: #7be3a1;
+}
+.firmware-page .checks .bad .ic,
+.firmware-page .checks .bad .lb {
+  color: #ffb4ab;
+}
+.firmware-page .checks .why {
+  flex-basis: 100%;
+  padding-left: 18px;
+  color: #ffc1bc;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.firmware-page .devrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.firmware-page ol.plain,
+.firmware-page ul.plain {
+  margin: 0;
+  padding-left: 20px;
+}
+.firmware-page ol.plain li,
+.firmware-page ul.plain li {
+  margin: 2px 0;
+}
+.firmware-page .recovery summary {
+  cursor: pointer;
+  color: var(--ink-2, #a9adb4);
+  width: max-content;
+}
+.firmware-page .recovery[open] {
+  padding: 6px 10px 8px;
+  border-radius: 8px;
+  background: var(--fp-inset);
+}
+.firmware-page .flashrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.firmware-page .flashing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.firmware-page .progress {
+  flex: 1 1 220px;
+  min-width: 160px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--fp-track);
+  overflow: hidden;
+}
+.firmware-page .progress i {
+  display: block;
+  height: 100%;
+  background: var(--amber, #f3b52c);
+}
+.firmware-page .progress.full i {
+  opacity: 0.35;
+}
+.firmware-page .progress.ok i {
+  background: #7be3a1;
+}
+.firmware-page .ptext.okt {
+  color: #7be3a1;
+}
+.firmware-page .ptext {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2, #a9adb4);
+  flex: 1 1 260px;
+}
+.firmware-page .act {
+  border: 1px solid var(--fp-border);
+  background: #1a1c20;
+  color: var(--ink, #eceae5);
+  border-radius: 7px;
+  font: inherit;
+  font-weight: 500;
+  height: 30px;
+  padding-inline: 12px;
+  cursor: pointer;
+}
+.firmware-page .act.small {
+  height: 26px;
+  font-size: 12px;
+}
+.firmware-page .act.primary {
+  background: var(--amber, #f3b52c);
+  border-color: var(--amber, #f3b52c);
+  color: var(--amber-ink, #1d1403);
+}
+.firmware-page .act:hover:not(:disabled) {
+  background: #23262b;
+}
+.firmware-page .act.primary:hover:not(:disabled) {
+  background: var(--amber-hover, #ffc444);
+}
+.firmware-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.firmware-page .target-select select {
+  border-color: var(--fp-border);
+}
+@media (max-width: 760px) {
+  .firmware-page {
+    padding-inline: 12px;
+  }
+  .firmware-page .stepb {
+    padding-left: 0;
+  }
+}
+.firmware-page .linkbtn {
+  display: block;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2, #a9adb4);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.firmware-page .linkbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -23,9 +23,7 @@ last = 23
 dynamic_first = 16
 
 [dt2.alloc]
-"fadedlimes/bd:bd" = 15
-"fadedlimes/pd:pd" = 14
-"fadedlimes/analog:analog" = 13
+# 13, 14 and 15 are retired (analog, pd and bd are run-time modules now): gap rows, never reused.
 "test/machine-clone:xclone" = 8
 "test/patched-pluck:pluck" = 9
 "core/dynreg:dyn16" = 16
@@ -43,9 +41,7 @@ last = 23
 dynamic_first = 16
 
 [dn2.alloc]
-"fadedlimes/bd:bd" = 15
-"fadedlimes/pd:pd" = 14
-"fadedlimes/analog:analog" = 13
+# 13, 14 and 15 are retired (analog, pd and bd are run-time modules now): gap rows, never reused.
 "test/dn2-clone:fmclone" = 5
 "test/dn2-pages:pages" = 6
 # 7 and 8 are retired (test/dn2-sine and test/dn2-edge, removed): a gap row, never reused (the next free number is above 10).

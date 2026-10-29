@@ -46,7 +46,7 @@ A module never reaches past the layer under it. Everything that depends on the d
 3. **Objects.** The undefined symbols of the built objects of apps and content modules are SDK imports (`sdk/sdk.toml` `[[import]]`), `dkrt_*`, `dk_ui_*`, `dk_app_*` or the SHARC externs the SDK documents. They never name a firmware anchor (`cf.*`, `dsp.*`, `hook.*`, `pk.*`), and `[object.externs]` never maps a symbol to one.
 4. **Apps do not patch.** An app has no `[[op]]` and no `[[claim]]`. If an app needs a firmware hook, the adapter that owns that plug-in point installs the hook and calls the app through an optional symbol (`dk_app_*`).
 
-Exceptions are listed in `layercheck.py` with a reason: `digikit/master-gain`, `digikit/master-drive` and `test/registry-demo` patch the firmware themselves (they are patchkit's examples of a patched-in effect and a hook), and `test/ui-demo` stands in for an app.
+Exceptions are listed in `layercheck.py` with a reason: `test/registry-demo` patches the firmware itself (it is patchkit's example of a hook), and `test/ui-demo` stands in for an app.
 
 Run it:
 

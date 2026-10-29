@@ -167,11 +167,11 @@ fn a_machine_key_has_no_type_byte() {
         return;
     };
     let models = Models::from_dir(&root().join("devices")).unwrap();
-    let m = lib.get("digikit/pluck").unwrap();
+    let m = lib.get("test/sine").unwrap();
     let res = resolve(&m.manifest, &models).unwrap();
     let r = res.iter().find(|r| r.dev == "dt2").unwrap();
     assert_eq!(
-        Register::lower(r, "digikit/pluck").unwrap().machines[0].type_no,
-        machine_hash("digikit/pluck", "pluck") << 8
+        Register::lower(r, "test/sine").unwrap().machines[0].type_no,
+        machine_hash("test/sine", "sine") << 8
     );
 }

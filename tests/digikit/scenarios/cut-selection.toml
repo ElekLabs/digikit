@@ -7,7 +7,7 @@ tier = "full"
 
 [cut]
 quick_cases = 2   # the quick tier runs the first two cases and the runtime cut
-dt2 = { modules = ["digikit/pluck"] }
+dt2 = { modules = ["test/sine"] }
 dn2 = { modules = ["test/dyn-dn2", "test/sine"] }
 
 [[cut.case]]

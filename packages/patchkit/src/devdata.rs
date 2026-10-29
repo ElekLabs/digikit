@@ -23,6 +23,11 @@ pub struct DeviceInfo {
     pub dsp_stored_max: u64,
     pub dsp_depacked_max: u64,
     pub main_staged_max: u64,
+    /// `[patch] stream_id`: the id byte of the OS UPGRADE header message (0x0f DT2, 0x10 DN2).
+    pub stream_id: u8,
+    /// `[patch] build_floor`: the four ASCII characters the OS validator compares the container's build word with (DT2 "0060");
+    /// `None` when the OS has no floor (DN2).
+    pub build_floor: Option<[u8; 4]>,
     /// `[limits] fx_slots`: effects the device's chain takes (at most the contract's `DK_FX_MAX`).
     pub fx_slots: Option<u64>,
     /// `[patch_sets]`: named module sets as roots (the modules they require are added), e.g. `emulator` and `device`.
@@ -84,6 +89,8 @@ struct Patch {
     dsp_stored_max: u64,
     dsp_depacked_max: u64,
     main_staged_max: u64,
+    stream_id: u8,
+    build_floor: Option<String>,
 }
 
 fn parse(files: &[(&str, &str)]) -> Result<Vec<DeviceInfo>> {
@@ -115,6 +122,15 @@ fn parse(files: &[(&str, &str)]) -> Result<Vec<DeviceInfo>> {
             dsp_stored_max: p.dsp_stored_max,
             dsp_depacked_max: p.dsp_depacked_max,
             main_staged_max: p.main_staged_max,
+            stream_id: p.stream_id,
+            build_floor: match p.build_floor {
+                None => None,
+                Some(s) => {
+                    Some(<[u8; 4]>::try_from(s.as_bytes()).map_err(|_| {
+                        err!("devices/{n}: [patch] build_floor must be 4 characters")
+                    })?)
+                }
+            },
             fx_slots: f.limits.and_then(|l| l.fx_slots),
             patch_sets: f.patch_sets,
         });

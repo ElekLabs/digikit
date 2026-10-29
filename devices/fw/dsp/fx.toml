@@ -96,7 +96,6 @@ cpu = "sharc"
 rule.dt2 = { kind = "sharc_mem_addr", reloc_hash = "55a5d8458350a1b67249f5aca8d49a4692d9ab5886fd12d95c259479f83ce780", offset = 0x459 }
 rule.dn2 = { kind = "sharc_mem_addr", reloc_hash = "4cc8a46bca990a7bd883d1784307a9cd72aa828a1ae846977e337fbc5c54c010", offset = 0x87d }
 mark = "D"
-users = ["digikit/master-drive"]
 doc = "The Sidechain Filter word (fx[66]) in the DSP's copy of the frame: the address in the stock reader's short-word load (DT2 0x256008, DN2 0x25ced8; finding 04). The reading function differs per device."
 
 [[hook]]

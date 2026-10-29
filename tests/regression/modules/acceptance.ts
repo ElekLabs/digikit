@@ -7,13 +7,67 @@ import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { installModule, liveArtifacts, record, settleUi } from '../runtime/live.ts';
 
-/** Explicit production upload candidates; framework/static modules are firmware prerequisites. */
-export const runtimeModules = [
-  { id: 'digikit/pluck', contract: 1, dsp: true },
-  { id: 'digikit/freqshift', contract: 2, dsp: true },
-  { id: 'digikit/remote', contract: 3, dsp: false },
-] as const;
-export type RuntimeModule = (typeof runtimeModules)[number];
+export interface RuntimeModule {
+  id: string;
+  /** SDK contract slot the module fills: 1 machine, 2 effect, 3 service. */
+  contract: 1 | 2 | 3;
+  /** Whether the module carries a DSP image (a dynamic machine or effect). */
+  dsp: boolean;
+  type: 'machine' | 'fx' | 'service';
+}
+
+/** The `[module]` table of a module.toml as flat key -> raw value text (only the keys read below). */
+function moduleTable(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let inModule = false;
+  for (const line of text.split('\n')) {
+    const header = /^\s*\[+([^\]]+)\]+/.exec(line);
+    if (header) {
+      inModule = header[1] === 'module';
+      continue;
+    }
+    const pair = inModule ? /^(\w+)\s*=\s*(.*?)\s*(?:#.*)?$/.exec(line) : null;
+    if (pair) out.set(pair[1]!, pair[2]!);
+  }
+  return out;
+}
+
+/** Production upload candidates: the shipped modules (`modules/<kind>/<name>`) that are `dynamic`, a service or a
+ * `host` module. Same rule as RUNTIME_UPLOADS in tools/devtools/verify_route.py. Framework/static modules are
+ * firmware prerequisites. */
+export function scanRuntimeModules(root = path.join(import.meta.dirname, '../../../modules')): RuntimeModule[] {
+  const found: RuntimeModule[] = [];
+  for (const kind of fs.readdirSync(root).sort()) {
+    const kindDir = path.join(root, kind);
+    if (!fs.statSync(kindDir).isDirectory()) continue;
+    for (const name of fs.readdirSync(kindDir).sort()) {
+      const manifest = path.join(kindDir, name, 'module.toml');
+      if (!fs.existsSync(manifest)) continue;
+      const table = moduleTable(fs.readFileSync(manifest, 'utf8'));
+      const type = table.get('type')?.replaceAll('"', '');
+      const dynamic = table.get('dynamic') === 'true';
+      if (!(dynamic || table.get('host') === 'true' || type === 'service')) continue;
+      if (type !== 'machine' && type !== 'fx' && type !== 'service') continue;
+      found.push({
+        id: table.get('id')!.replaceAll('"', ''),
+        type,
+        contract: type === 'machine' ? 1 : type === 'fx' ? 2 : 3,
+        dsp: dynamic && type !== 'service',
+      });
+    }
+  }
+  return found;
+}
+
+export const runtimeModules: readonly RuntimeModule[] = scanRuntimeModules();
+
+/** The module whose id ends in the file's base name: `tests/regression/modules/<leaf>.test.ts` tests `<author>/<leaf>`. */
+export function runtimeModuleOf(testFileUrl: string): RuntimeModule {
+  const leaf = path.basename(new URL(testFileUrl).pathname, '.test.ts');
+  const module = runtimeModules.find((candidate) => candidate.id.split('/')[1] === leaf);
+  if (!module) throw new Error(`no run-time module named ${leaf} under modules/`);
+  return module;
+}
 
 /** Real USB upload, persisted bytes, selected reboot, registration and fault acceptance.
  * DSP allocation/registration does not establish rendered audio correctness. */
@@ -33,7 +87,7 @@ export async function expectModuleLoad(
   await settleUi(session);
   expect(await dk.list(), 'fresh daemon has an empty store').toEqual([]);
   expect(await dk.modules(), 'fresh runtime has no uploaded modules').toEqual([]);
-  if (module.id === 'digikit/remote') {
+  if (module.type === 'service') {
     expect((await dk.request(SERVICE_CMD.REMOTE_STATE)).status, 'remote service is absent before upload').toBe(-60);
   }
   const epoch = (await session.status()).epoch;
@@ -81,7 +135,7 @@ export async function expectModuleLoad(
     expect(loaded.contracts[module.contract]![0], 'intended module contract is active').toBeGreaterThan(0);
     if (module.dsp) {
       expect(loaded.dsp_len, 'module DSP image was allocated').toBeGreaterThan(0);
-      if (module.id === 'digikit/pluck') {
+      if (module.type === 'machine') {
         expect(loaded.rows, 'machine has a published DSP voice row').toBeGreaterThan(0);
         expect(loaded.types, 'machine has a published firmware type').toHaveLength(1);
       }

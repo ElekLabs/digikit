@@ -885,7 +885,7 @@ def run_rust(c: Any) -> None:
     import subprocess
 
     exe = rust_binary(c)
-    mod = c.pack("digikit/pluck", "rust.dkm")
+    mod = c.pack("test/sine", "rust.dkm")
     dkm_file = c.env.folder / "digikit" / mod
     dkm = dkm_file.read_bytes()
     dkm_file.unlink()
@@ -1107,7 +1107,7 @@ def run_playback(c: Any) -> None:
         def run() -> None:
             with c.rig(img, card, f"play-{key}") as rig:
                 if c.dt2:
-                    rig.select_type(rig.dyn_type(M.MODULE, "pluck"), t.get("hint", 7))
+                    rig.select_type(rig.dyn_type(M.MODULE, M.MACHINE), t.get("hint", 7))
                 else:
                     rig.select(t.get("hint_run", t["hint"]))
                 up = D.Uploader(transport(rig))

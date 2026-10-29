@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every patchkit emulator proof on its quick tier, one after the other: one summary line per tool and a total.
 
-    uv run python -m tools.patchkit.pk_proofs [--only gain,drive,...] [--jobs N] [--out DIR]
+    uv run python -m tools.patchkit.pk_proofs [--only fx,voice,...] [--jobs N] [--out DIR]
     mise run patch:proofs
 
 Each tool is `tools/patchkit/pk_proof_<name>.py --quick` (parts in parallel processes inside the tool, `--jobs`); the tools
@@ -24,9 +24,6 @@ ROOT = HERE.parent.parent
 
 # (label, script, extra arguments)
 TOOLS = [
-    ("gain dt2", "pk_proof_gain.py", ["dt2"]),
-    ("gain dn2", "pk_proof_gain.py", ["dn2"]),
-    ("drive dt2", "pk_proof_drive.py", ["dt2"]),
     ("fx dt2", "pk_proof_fx.py", ["dt2"]),
     ("fx dn2", "pk_proof_fx.py", ["dn2"]),
     ("voice dt2", "pk_proof_voice.py", []),
@@ -63,7 +60,7 @@ def command(script: str, extra: list[str], out: Path, jobs: int) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
-        "--only", help="comma-separated tool labels or first words (gain, drive, ...)"
+        "--only", help="comma-separated tool labels or first words (fx, voice, ...)"
     )
     ap.add_argument(
         "--jobs",

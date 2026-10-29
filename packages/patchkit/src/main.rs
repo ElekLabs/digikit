@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_arch = "wasm32"))]
 mod build_cli;
 #[cfg(not(target_arch = "wasm32"))]
+mod flash_cli;
+#[cfg(not(target_arch = "wasm32"))]
 mod storedump;
 
 const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
@@ -24,6 +26,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   verify  OUT.syx [--base X.syx]         re-decode and check an image
   preflight OUT.syx                      before flashing: known stock base, sections 2/4/5/8 identical, checksum, HMAC, limits;
                                          exit 1 on any failure (stock files are looked up in firmware/ by sha256)
+  isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
   pack    MODULE_ID -o OUT.dkm [--name N] [--runtime-min V] [--device SHORT]   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
@@ -55,6 +58,10 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          object placed at a short-word address and verified, the shift-immediate rule on hex words
   cf-link SRC... --base HEX [--sym NAME=HEX]... [-I DIR]... [--bin OUT] [--json OUT]
                                          compile, link at BASE against the symbols, ISA-check (unit tests of C routines)
+  flash   STOCK.syx (--port NAME | --emulator SOCKET) [--restore] [--set NAME] [--dry-run] [--save OUT.syx] [--yes]
+                                         patch the stock file with the device's patch set, check the image and the messages the way the
+                                         device's OS UPGRADE receiver does, then send it (USB MIDI) and read INFO after the restart;
+                                         --restore sends the stock file itself; --dry-run only checks (docs/PATCHING.md, \"Flashing\")
   list                                   modules under modules/ and ports under devices/ports/
   gen [--check] [--modules a,b]          write (or check) build/gen/ of modules with typed sections: Rust constants,
                                          a SHARC include per device, gallery JSON
@@ -288,6 +295,12 @@ fn run(a: Args) -> Result<()> {
                 );
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        "flash" => {
+            let reg = registry(&a.root)?;
+            let lib = library(&a.root, rest)?;
+            flash_cli::run(&reg, &lib, rest)?;
+        }
         "gen" => {
             // the generated files are inputs of the build: nothing is built here
             let lib = library_with(&a.root, rest, true, Some(&[]))?;
@@ -309,6 +322,41 @@ fn run(a: Args) -> Result<()> {
                 files.extend(patchkit::devgen::generate(&lib, &facts, m.id())?);
                 for (rel, text) in files {
                     let path = m.dir.join(&rel);
+                    let have = std::fs::read_to_string(&path).ok();
+                    if have.as_deref() == Some(text.as_str()) {
+                        continue;
+                    }
+                    if check {
+                        println!("stale    {}", path.display());
+                        stale += 1;
+                    } else {
+                        if let Some(d) = path.parent() {
+                            std::fs::create_dir_all(d)
+                                .map_err(|e| Error(format!("{}: {e}", d.display())))?;
+                        }
+                        write(&path.to_string_lossy(), text.as_bytes())?;
+                        println!("wrote    {}", path.display());
+                    }
+                }
+            }
+            // A content module declares its machines in its objects (.dk.desc), so its gallery.json needs them: a second library loads
+            // (and builds when stale) the objects, after the files above are written, which the build reads.
+            let with_gallery: Vec<String> = lib
+                .modules
+                .iter()
+                .filter(|m| patchkit::typed::has_typed(&m.manifest))
+                .map(|m| m.id().to_string())
+                .collect();
+            let content: Vec<String> = lib
+                .modules
+                .iter()
+                .filter(|m| !with_gallery.iter().any(|g| g == m.id()))
+                .filter(|m| only.is_empty() || only.iter().any(|o| o == m.id()))
+                .map(|m| m.id().to_string())
+                .collect();
+            if !content.is_empty() {
+                let full = library_with(&a.root, rest, true, Some(&content))?;
+                for (path, text) in patchkit::modgen::generate_many(&full, &models, &content)? {
                     let have = std::fs::read_to_string(&path).ok();
                     if have.as_deref() == Some(text.as_str()) {
                         continue;
@@ -488,6 +536,27 @@ plan.json {}",
                 std::process::exit(1);
             }
             println!("PREFLIGHT OK: {path}");
+        }
+        "isa-scan" => {
+            let fw = Firmware::parse(&read(need(rest)?)?)?;
+            let dsp = fw
+                .section(7)
+                .ok_or_else(|| Error("the image has no DSP section (7)".into()))?;
+            if rest.iter().any(|a| a == "--list") {
+                // every scanned instruction (comparison aid)
+                for l in patchkit::dspscan::list(&dsp.data)? {
+                    println!("{l}");
+                }
+                return Ok(());
+            }
+            let found = patchkit::dspscan::scan(&dsp.data)?;
+            for f in &found {
+                println!("{f}");
+            }
+            println!("{} store(s)", found.len());
+            if !found.is_empty() {
+                std::process::exit(1);
+            }
         }
         "rebuild" => {
             let fw = Firmware::parse(&read(need(rest)?)?)?;

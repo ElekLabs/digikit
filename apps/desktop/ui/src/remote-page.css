@@ -83,17 +83,3 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-.target-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.target-select select {
-  height: 26px;
-  border: 1px solid #2c2f35;
-  background: #1a1c20;
-  color: var(--ink, #eceae5);
-  border-radius: 7px;
-  font: inherit;
-  font-size: 12px;
-}

@@ -9,7 +9,7 @@ import '../styles/site.css';
 interface Props {
   title: string;
   description?: string;
-  active?: 'home' | 'patch' | 'emulator' | 'upload';
+  active?: 'home' | 'firmware' | 'emulator' | 'transfer';
   /** The page fills the window instead of scrolling (the emulator). */
   fill?: boolean;
 }
@@ -42,14 +42,14 @@ const current = (page: Props['active']) => (active === page ? 'page' : undefined
           digikit
         </a>
         <nav class="nav-links" aria-label="Main">
-          <a href={`${base}patch/`} aria-current={current('patch')}>
-            Patch
+          <a href={`${base}firmware/`} aria-current={current('firmware')}>
+            Firmware
           </a>
           <a href={`${base}emulator/`} aria-current={current('emulator')}>
             Emulator
           </a>
-          <a href={`${base}upload/`} aria-current={current('upload')}>
-            Upload
+          <a href={`${base}transfer/`} aria-current={current('transfer')}>
+            Transfer
           </a>
         </nav>
         <a class="nav-source" href="https://github.com/ElekLabs/digikit">

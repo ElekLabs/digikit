@@ -121,7 +121,6 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
             "tools/patchkit/modroots.py",
             "tools/patchkit/port_resolve.py",
             "tools/patchkit/patchkit.py",
-            "tools/patchkit/pluck_ref.py",
             "tests/patchkit/",
         ),
         ("tests/patchkit",),
@@ -141,6 +140,13 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
             "tests/modules/",
         ),
         ("tests/modules",),
+    ),
+    (
+        # the tests inside the modules (modules/<group>/<name>/tests/test_*.py): found by globbing, so a new module test needs no entry;
+        # a change in a module selects its own tests through verify_route.module_fine
+        "module-tests",
+        (),
+        ("modules/*/*/tests/test_*.py",),
     ),
     (
         "digikit-boot",
@@ -309,6 +315,7 @@ UI_ONLY: tuple[str, ...] = (
     "apps/desktop/ui/*",
     "apps/web/src/components/*",
     "apps/web/src/styles/*",
+    "apps/web/src/transfer/*",
     "apps/web/tests/*.mjs",
     "docs/*",
     "*.md",
@@ -393,6 +400,8 @@ RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ),
         ("web",),
     ),
+    # The Transfer pane is shared code: the desktop app builds and type-checks it too.
+    (("apps/web/src/transfer/",), ("desktop", "web")),
     (("apps/web/",), ("web",)),
     # The mixed web samples suite still imports these desktop sources.
     (
@@ -587,11 +596,17 @@ def is_python_source(path: str) -> bool:
     return path.endswith(".py") and path.startswith(("tools/", "tests/"))
 
 
+def is_module_test_dir(path: str) -> bool:
+    """Whether PATH is inside a module's own tests/ directory (modules/<group>/<name>/tests/)."""
+    parts = path.split("/")
+    return len(parts) > 4 and parts[0] == "modules" and parts[3] == "tests"
+
+
 def is_changed_test(path: str) -> bool:
     """A changed test file that python-tests runs itself."""
     name = path.rsplit("/", 1)[-1]
     return (
-        path.startswith("tests/")
+        (path.startswith("tests/") or is_module_test_dir(path))
         and name.startswith("test_")
         and name.endswith(".py")
         and (ROOT / path).is_file()
@@ -607,6 +622,8 @@ def resolve_tests(paths: tuple[str, ...]) -> list[str]:
             hits = sorted(ROOT.glob(pattern))
         else:
             hits = [ROOT / pattern] if (ROOT / pattern).exists() else []
+        if not hits and pattern.startswith("modules/"):
+            continue  # module-owned tests: there are none until a module has one
         if not hits:
             raise SystemExit(f"verify: PY_SUITES entry matches nothing: {pattern}")
         found += [hit.relative_to(ROOT).as_posix() for hit in hits]

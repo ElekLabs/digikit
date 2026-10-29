@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """`dk run MODULE`: build, pack, upload, select, restart and follow the log, in one command (docs/design/digikit-upload.md, runtime 4).
 
-    uv run --with python-rtmidi python -m tools.device.dkrun digikit/pluck --port Digitakt
-    uv run python -m tools.device.dkrun digikit/pluck --emu            # the running emulator (desktop app or `mise run emu:serve`)
-    mise run dk:run -- digikit/pluck --port Digitakt --seconds 30
+    uv run --with python-rtmidi python -m tools.device.dkrun <author/name> --port Digitakt
+    uv run python -m tools.device.dkrun <author/name> --emu            # the running emulator (desktop app or `mise run emu:serve`)
+    mise run dk:run -- <author/name> --port Digitakt --seconds 30
 
 Steps, one line each: INFO (the runtime must be 4 or newer; its device id picks the pack target), build and pack (`patchkit pack` builds the objects that are stale, in memory), upload to `modules/<name>.dkm` (skipped when LIST shows the same sha256), SELECT (the selection becomes this module
 only), RESTART, wait for the new boot, then the boot's MOD_LOAD / MOD_DSP results, then the log for `--seconds`.
@@ -361,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("module", help="module id, e.g. digikit/pluck")
+    ap.add_argument("module", help="module id, e.g. <author/name>")
     where = ap.add_mutually_exclusive_group(required=True)
     where.add_argument("--emu", action="store_true", help="the running emulator")
     where.add_argument(

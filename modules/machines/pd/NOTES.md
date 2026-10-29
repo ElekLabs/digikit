@@ -2,7 +2,7 @@
 
 A phase-distortion voice: the oscillator reads a sine through a warped phase, so the wave leans from a sine to a saw,
 a pulse or a resonant formant without ever leaving the harmonic series. Two detuned oscillators, before the track
-filter. Machine type 14 (the analog machine owns 13).
+filter. The runtime assigns the machine type when the module is loaded.
 
 ## Panel
 

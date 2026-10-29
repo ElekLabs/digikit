@@ -7,18 +7,21 @@ import '@fontsource/jetbrains-mono/500.css';
 import '@web/styles/site.css';
 import '../src/console.css';
 import '../src/native.css';
+import '../src/desktop-env';
 import { installNativeFeel } from '../src/native';
 import LivePanel from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
+import FirmwarePage from '@web/firmware/FirmwarePage';
 import RemotePage from '../src/RemotePage';
 import SidePanels from '../src/SidePanels';
-import TransferPage from '../src/TransferPage';
-import { setLocalFolder, setMode } from '../src/transfer-state';
+import { setLocalFolder } from '../src/samples-state';
+import TransferPage from '@web/transfer/TransferPage';
+import { setMode } from '@web/transfer/transfer-state';
 import { cardDevice, reloadCard } from './card-mock';
 import { installRemoteMock, testPattern } from './remote-mock';
 import { SAMPLES_ROOT, control, sim } from './sim';
 
-// ?page=transfer (default) | remote | emulator: the Emulator page shows the faceplate only (the real one needs the emulator) with the same
+// ?page=transfer (default) | remote | emulator | firmware (state: fwdev, fwstate, fwos; see firmware-mock.ts): the Emulator page shows the faceplate only (the real one needs the emulator) with the same
 // markup as ../src/Console.tsx, to put its screen next to the Remote page's.
 const page = new URLSearchParams(location.search).get('page') ?? 'transfer';
 if (page === 'remote') installRemoteMock();
@@ -72,12 +75,17 @@ render(
           <button type="button" class={page === 'remote' ? 'side on' : 'side'}>
             <span>Remote</span>
           </button>
+          <button type="button" class={page === 'firmware' ? 'side on' : 'side'}>
+            <span>Firmware</span>
+          </button>
         </nav>
         <div class="content">
           {page === 'remote' ? (
             <RemotePage fallbackDevice="dn2" />
           ) : page === 'emulator' ? (
             emulatorFaceplate()
+          ) : page === 'firmware' ? (
+            <FirmwarePage />
           ) : (
             <TransferPage />
           )}

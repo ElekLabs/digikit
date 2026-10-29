@@ -4,7 +4,7 @@
     uv run python -m tools.patchkit.pk_digikit_cost run [--base GIT_REF] [--image dt2-1.17] [--seconds 30] [--keep DIR]
 
 A is the runtime of GIT_REF (default: the commit before the log was added, `COST_BASE`), B is the runtime in the working tree; both with
-`core/health`, the same card (a selection that loads the pluck machine) and the same script on the coupled daemon: boot, play one note on the
+`core/health`, the same card (a selection that loads a machine) and the same script on the coupled daemon: boot, play one note on the
 run-time machine and capture its PCM, then SECONDS of emulated idle time. The emulator is deterministic, so the figures are counts, not timings:
 
   - the PCM of the note: equal or not (`numpy.array_equal`);
@@ -109,7 +109,7 @@ def measure(
     trig = M.TRIG_FRAME
     with env.boot(img, card, tag, watch=False) as rig:
         b = rig.boot_info()
-        rig.select_type(rig.dyn_type(M.MODULE, "pluck"), 7)
+        rig.select_type(rig.dyn_type(M.MODULE, M.MACHINE), 7)
         pcm = rig.note(env.work / f"{tag}.wav", trig)
         rig.s.run_ms(2000)  # the health windows are one second each: settle
         st0 = rig.emu.status()
@@ -141,8 +141,8 @@ def run(base: str, image: str, seconds: int, keep: Path | None) -> int:
     work = keep or Path(tempfile.mkdtemp(prefix="digikit-cost-"))
     work.mkdir(parents=True, exist_ok=True)
     env = B.Env(image, work)
-    env.pack("digikit/pluck", "pluck.dkm")
-    card = env.card(["modules/pluck.dkm"], tag="cost")
+    env.pack(M.MODULE, "cost.dkm")
+    card = env.card(["modules/cost.dkm"], tag="cost")
     a_img = build(env, "A", old_root(base, work))
     b_img = build(env, "B", None)
     a = measure(env, a_img, card, "costA", seconds)

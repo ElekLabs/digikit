@@ -1,0 +1,8 @@
+/* The Firmware page on the site: its surfaces take the site's tokens (apps/web/src/styles/site.css, dark only). The desktop app keeps the defaults. */
+.firmware-page.firmware-page {
+  --fp-bg: var(--ground);
+  --fp-card: var(--panel);
+  --fp-border: var(--line-2);
+  --fp-inset: var(--ground);
+  --fp-track: var(--panel-2);
+}

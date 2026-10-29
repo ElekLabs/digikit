@@ -128,7 +128,6 @@ mode = "retarget"
 regs = { in = [], clobbers = ["r0-r3", "i4", "astat"], modes = { m5 = 0, m6 = 1, simd = false } }   # no DO loop is active
 devices = ["dt2", "dn2"]
 mark = "D"
-users = ["digikit/master-drive", "digikit/master-gain"]
 doc = "The master block handler's one CALL of the Q31 converter (64 planar floats in the master buffer; arguments in r4/r8); the hook point for processing the master block in place."
 ```
 

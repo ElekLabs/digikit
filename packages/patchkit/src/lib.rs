@@ -13,7 +13,10 @@ pub mod aplib;
 pub mod devdata;
 pub mod devgen;
 pub mod firmware;
+pub mod flash;
+pub mod flash_rpc;
 pub mod fwgen;
+pub mod imageid;
 pub mod syx;
 
 pub use error::{Error, Result};
@@ -27,6 +30,7 @@ pub mod dkmsynth;
 pub mod desc;
 pub mod dko;
 pub mod dsp;
+pub mod dspscan;
 pub mod explain;
 pub mod expr;
 pub mod link;

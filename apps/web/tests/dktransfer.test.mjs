@@ -1,7 +1,6 @@
 // The pure TypeScript protocol client (`DkSession`, dkupload-core.ts) and the Transfer logic (dktransfer.ts) against a fake device that
 // speaks the SysEx protocol of docs/design/digikit-upload.md byte for byte (framing included), as the Rust mock does for the wasm client.
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
   DkError,
@@ -14,7 +13,7 @@ import {
   splitMessages,
   storeSpace,
 } from '@digi/dk-session';
-import { CAP, CAPACITY_KINDS, CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { CAP, CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
 import {
   PROGRESS_EVENTS,
   buildView,
@@ -26,12 +25,8 @@ import {
   restartDevice,
   uploadProgress,
 } from '../src/modules/dktransfer.ts';
-
-const sha = (b) => createHash('sha256').update(b).digest();
-const hex = (b) => Buffer.from(b).toString('hex');
-const concat = (...p) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
-const be32 = (n) => Uint8Array.of((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255);
-const cs = (s) => concat(Buffer.from(s), Uint8Array.of(0));
+import { parseSoftwareVersion } from '../src/transfer/connection-core.ts';
+import { FakeDevice, concat, hex, sha } from './fakedevice.mjs';
 
 /** A .dkm with a valid header (docs/design/digikit-dkm.md) of `size` bytes. */
 function dkm(name, { machine = 0, fx = 0, service = 1, size = 700, dsp = 0, version = 0x000102, salt = 0 } = {}) {
@@ -57,235 +52,6 @@ const needsOf = (b) => {
   const dsp = new DataView(b.buffer, b.byteOffset, b.length).getUint32(0x9c);
   return { file_size: b.length, ARENA: 120, DSP_AREA: dsp, DSP_ALIGN: dsp ? 8 : 0 };
 };
-
-const ST = { E_STATE: -53, E_NOFILE: -59, E_HASH: -56, E_FULL: -52, E_OFFSET: -54 };
-
-/** The device: files, a selection, a log, modules, and a RESTART that is silent for a while and then boots again. */
-class FakeDevice {
-  constructor() {
-    this.files = new Map();
-    this.dirs = new Set(); // folders with nothing in them
-    this.selection = [];
-    this.seen = []; // the commands received, by name
-    this.corrupt = false; // VERIFY answers a wrong hash
-    this.pageSize = 2; // LIST entries per reply
-    this.silent = 0; // requests to ignore (the reboot)
-    this.loaded = []; // the names MODULES lists
-    this.staged = null;
-    this.log = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
-    this.queue = [];
-    this.free = 1 << 20; // INFO's u32 free_bytes
-    this.storeKib = null; // CAPACITY's STORE limit in KiB (null: the entry is left out); 1024 KiB are used
-    this.caps = null; // INFO's capability word (null: every capability)
-    this.pending = 0; // after a RESTART: requests that are still answered by the old boot before the reset
-  }
-  reply(cmd, seq, status, body = new Uint8Array()) {
-    const packed = encode8in7(concat(Uint8Array.of(status & 255), body));
-    return concat([0xf0, 0x7d, 0x64, 0x6b, 1, cmd | 0x40, seq], packed, [0xf7]);
-  }
-  send(msg) {
-    const cmd = msg[5];
-    const seq = msg[6];
-    const body = decode8in7(msg.subarray(7, msg.length - 1));
-    if (this.silent > 0) {
-      this.silent--;
-      if (this.silent === 0) this.boot();
-      return;
-    }
-    const name = Object.entries(CMD).find(([, v]) => v === cmd)?.[0] ?? `0x${cmd.toString(16)}`;
-    this.seen.push(name);
-    const r = this.handle(cmd, seq, body);
-    if (r) this.queue.push(r);
-    if (this.pending > 0 && cmd !== CMD.RESTART && --this.pending === 0) this.silent = 2; // the guest is resetting: two requests get no answer
-  }
-  boot() {
-    this.log = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
-  }
-  async recv() {
-    return this.queue.shift() ?? null;
-  }
-  pathOf(body) {
-    const end = body.indexOf(0);
-    return [Buffer.from(body.subarray(0, end)).toString(), end + 1];
-  }
-  handle(cmd, seq, body) {
-    const ok = (b) => this.reply(cmd, seq, 0, b);
-    const err = (code, b) => this.reply(cmd, seq, code, b);
-    switch (cmd) {
-      case CMD.INFO: {
-        const flags = this.staged ? 2 : 0;
-        return ok(
-          concat(
-            Uint8Array.of(0, 1, 0x02, 0x04),
-            cs('dt2'),
-            be32(this.free),
-            be32(32768),
-            [flags],
-            be32(1),
-            be32(this.log.length),
-            be32(0x000204),
-            be32(this.caps ?? Object.values(CAP).reduce((a, bit) => a | (1 << bit), 0)),
-          ),
-        );
-      }
-      case CMD.LIST: {
-        const first = new DataView(body.buffer, body.byteOffset).getUint32(0);
-        const prefix = body.length > 4 ? Buffer.from(body.subarray(4, body.length - 1)).toString() : '';
-        const all = [...this.files, ...[...this.dirs].map((d) => [d, new Uint8Array(0), true])]
-          .filter(([p]) => p.startsWith(prefix))
-          .sort(([a], [b]) => (a < b ? -1 : 1));
-        const page = all.slice(first, first + this.pageSize);
-        return ok(
-          concat(
-            be32(all.length),
-            [page.length],
-            ...page.map(([p, d, dir]) => concat(cs(p), be32(d.length), dir ? new Uint8Array(32) : sha(d))),
-          ),
-        );
-      }
-      case CMD.MKDIR: {
-        const [path] = this.pathOf(body);
-        if ([...this.files.keys()].some((f) => f === path || path.startsWith(`${f}/`))) return err(-51);
-        const exists = [...this.dirs, ...this.files.keys()].some((f) => f === path || f.startsWith(`${path}/`));
-        if (!exists) {
-          for (const d of this.dirs) if (path.startsWith(`${d}/`)) this.dirs.delete(d);
-          this.dirs.add(path);
-        }
-        return ok();
-      }
-      case CMD.BEGIN: {
-        const [path, at] = this.pathOf(body);
-        const size = new DataView(body.buffer, body.byteOffset).getUint32(at);
-        this.staged = { path, size, sha: body.slice(at + 4, at + 36), data: new Uint8Array(0), last: -1 };
-        return ok();
-      }
-      case CMD.DATA: {
-        const st = this.staged;
-        if (!st) return err(ST.E_STATE);
-        const off = new DataView(body.buffer, body.byteOffset).getUint32(0);
-        const part = body.subarray(4);
-        if (off === st.last) return ok(); // the repeat of the last chunk
-        if (off !== st.data.length) return err(ST.E_OFFSET);
-        st.data = concat(st.data, part);
-        st.last = off;
-        return ok();
-      }
-      case CMD.END: {
-        const st = this.staged;
-        if (!st) return err(ST.E_STATE);
-        this.staged = null;
-        if (st.data.length !== st.size || hex(sha(st.data)) !== hex(st.sha)) return err(ST.E_HASH);
-        for (const d of this.dirs) if (st.path.startsWith(`${d}/`)) this.dirs.delete(d);
-        this.files.set(st.path, st.data);
-        return ok();
-      }
-      case CMD.DELETE: {
-        const [path] = this.pathOf(body);
-        return this.files.delete(path) || this.dirs.delete(path) ? ok() : err(ST.E_NOFILE);
-      }
-      case CMD.READ: {
-        const [path, at] = this.pathOf(body);
-        const f = this.files.get(path);
-        if (!f) return err(ST.E_NOFILE);
-        const dv = new DataView(body.buffer, body.byteOffset);
-        const off = dv.getUint32(at);
-        const len = Math.min(dv.getUint32(at + 4), 768, f.length - off);
-        return ok(concat(be32(f.length), f.subarray(off, off + len)));
-      }
-      case CMD.VERIFY: {
-        const [path, at] = this.pathOf(body);
-        const f = this.files.get(path);
-        if (!f) return err(ST.E_NOFILE);
-        if (body.length > at) {
-          const dv = new DataView(body.buffer, body.byteOffset);
-          const off = dv.getUint32(at);
-          const len = dv.getUint32(at + 4);
-          if (off % 512 !== 0 || off >= f.length) return err(ST.E_OFFSET);
-          if (len === 0 || len > f.length - off) return err(-55);
-          return ok(sha(f.subarray(off, off + len)));
-        }
-        return ok(this.corrupt ? sha(concat(f, [1])) : sha(f));
-      }
-      case CMD.SELECT: {
-        const n = body[0];
-        let at = 1;
-        this.selection = [];
-        for (let i = 0; i < n; i++) {
-          const [p, used] = this.pathOf(body.subarray(at));
-          this.selection.push(p);
-          at += used;
-        }
-        return ok();
-      }
-      case CMD.RESTART:
-        this.log.push({ seq: this.log.length + 1, kind: LOG_KIND.UPLOAD, flags: 0, args: [CMD.RESTART, 0, 0, 0, 0] });
-        this.pending = 1;
-        this.loaded = this.selection.map((p) => `mod:${p}`);
-        return ok();
-      case CMD.MODULES: {
-        const entry = (name, i) => {
-          const nm = new Uint8Array(32);
-          nm.set(Buffer.from(name));
-          return concat(
-            [i],
-            nm,
-            be32(0x10000),
-            [1, 1, 1, 0, 0, 0, 1, 0],
-            be32(0x47e8b000),
-            be32(256),
-            be32(0),
-            be32(0),
-            be32(1),
-            [1, 17],
-            be32(0),
-            [0],
-          );
-        };
-        return ok(
-          concat(
-            be32(100),
-            be32(90),
-            be32(80),
-            be32(70),
-            [this.loaded.length, this.loaded.length],
-            ...this.loaded.map(entry),
-          ),
-        );
-      }
-      case CMD.CAPACITY: {
-        const store = this.storeKib === null ? [] : [[CAPACITY_KINDS.STORE], be32(this.storeKib), be32(1024), be32(0)];
-        return ok(
-          concat(
-            [1, 3 + (this.storeKib === null ? 0 : 1)],
-            [CAPACITY_KINDS.MODULES],
-            be32(8),
-            be32(this.loaded.length),
-            be32(0),
-            [CAPACITY_KINDS.ARENA],
-            be32(1000),
-            be32(0),
-            be32(300),
-            [CAPACITY_KINDS.DSP_AREA],
-            be32(1000),
-            be32(0),
-            be32(50),
-            ...store,
-          ),
-        );
-      }
-      case CMD.LOG: {
-        const from = new DataView(body.buffer, body.byteOffset).getUint32(0);
-        const ev = this.log.filter((e) => e.seq >= from).slice(0, 3);
-        const out = ev.map((e) =>
-          concat(be32(e.seq), be32(0), [e.kind >> 8, e.kind & 255, e.flags >> 8, e.flags & 255], ...e.args.map(be32)),
-        );
-        return ok(concat(be32(1), be32(this.log.length), [ev.length], ...out));
-      }
-      default:
-        return err(-60);
-    }
-  }
-}
 
 const session = (dev, o = {}) => new DkSession(dev, { timeoutMs: 20, retries: 1, ...o });
 const sleep = async () => {};
@@ -319,7 +85,7 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
   const dev = new FakeDevice();
   for (const [i, n] of ['modules/a.dkm', 'modules/b.dkm', 'modules/c.dkm'].entries())
     dev.files.set(n, dkm(`x/${i}`, { salt: i }));
-  dev.loaded = ['digikit/pluck'];
+  dev.loaded = ['someone/machine'];
   const s = session(dev);
   const info = await s.info();
   assert.deepEqual(
@@ -327,6 +93,9 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
     ['dt2', 0x204, 32768, false, false],
   );
   assert.ok(info.caps !== null);
+  assert.equal(info.image_id, null, 'a runtime before 0.5.2 sends no image id');
+  dev.imageId = '281e6b9b1a0a9b83';
+  assert.equal((await s.info()).image_id, '281e6b9b1a0a9b83');
   const ls = await s.list();
   assert.deepEqual(
     ls.map((e) => e.path),
@@ -335,7 +104,7 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
   assert.equal(ls[0].sha256, hex(sha(dev.files.get('modules/a.dkm'))));
   assert.deepEqual(
     (await s.modules()).map((m) => [m.name, m.types, m.contracts[1]]),
-    [['digikit/pluck', [17], [1, 0]]],
+    [['someone/machine', [17], [1, 0]]],
   );
   assert.deepEqual(await s.capacity(), {
     MODULES: { limit: 8, used: 1, largest: 0 },
@@ -402,25 +171,25 @@ test('restarted(): the log of the old boot holds the RESTART request, the new bo
 });
 
 test('header, library module, the merged list', async () => {
-  const pluck = dkm('digikit/pluck', { machine: 1, dsp: 64, size: 900 });
+  const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
   const sine = dkm('test/sine', { machine: 1, dsp: 400, size: 800 });
-  const tool = dkm('digikit/tool', { service: 1, size: 500 });
-  assert.deepEqual([headerInfo(pluck).group, headerInfo(pluck).version], ['Machines', '0.1.2']);
+  const tool = dkm('someone/tool', { service: 1, size: 500 });
+  assert.deepEqual([headerInfo(mach).group, headerInfo(mach).version], ['Machines', '0.1.2']);
   assert.equal(headerInfo(dkm('a', { fx: 1 })).group, 'Effects');
   assert.equal(headerInfo(tool).group, 'Tools');
   assert.equal(headerInfo(new Uint8Array(300)), null);
   assert.equal(await libraryModule(new Uint8Array(300)), null);
-  const lm = await libraryModule(pluck, needsOf);
+  const lm = await libraryModule(mach, needsOf);
   assert.deepEqual(
     [lm.id, lm.label, lm.test, lm.path, lm.file_size, lm.sha256],
-    ['digikit/pluck', 'pluck', false, 'modules/pluck.dkm', 900, hex(sha(pluck))],
+    ['someone/machine', 'machine', false, 'modules/machine.dkm', 900, hex(sha(mach))],
   );
   assert.deepEqual([lm.needs.ARENA, lm.needs.DSP_AREA, lm.needs.file_size], [120, 64, 900]);
   // no reader, or a file the reader says the loader would refuse: no needs, so no fit verdict (the device still refuses what does not load)
-  assert.equal((await libraryModule(pluck)).needs, null);
-  assert.equal((await libraryModule(pluck, () => null)).needs, null);
+  assert.equal((await libraryModule(mach)).needs, null);
+  assert.equal((await libraryModule(mach, () => null)).needs, null);
   const unknown = mergeView(
-    [await libraryModule(pluck, () => null)],
+    [await libraryModule(mach, () => null)],
     [],
     [],
     { MODULES: { limit: 8, used: 8, largest: 0 } },
@@ -430,7 +199,7 @@ test('header, library module, the merged list', async () => {
 
   const library = [await libraryModule(sine, needsOf), lm, await libraryModule(tool, needsOf)];
   const card = [
-    { path: 'modules/pluck.dkm', size: 900, sha256: hex(sha(pluck)) }, // same file
+    { path: 'modules/machine.dkm', size: 900, sha256: hex(sha(mach)) }, // same file
     { path: 'modules/tool.dkm', size: 500, sha256: 'ff' }, // same path, other bytes
     { path: 'modules/other.dkm', size: 700, sha256: 'aa' }, // not from the library
     { path: 'modules/junk.dkm', size: 9, sha256: 'bb' },
@@ -442,17 +211,17 @@ test('header, library module, the merged list', async () => {
     ARENA: { limit: 1000, used: 0, largest: 300 },
     DSP_AREA: { limit: 1000, used: 0, largest: 50 },
   };
-  const v = mergeView(library, card, ['digikit/pluck', 'someone/effect'], cap, headers);
+  const v = mergeView(library, card, ['someone/machine', 'someone/effect'], cap, headers);
   assert.deepEqual(
     v.modules.map((r) => r.id),
-    ['digikit/pluck', 'test/sine', 'digikit/tool'],
+    ['someone/machine', 'test/sine', 'someone/tool'],
   ); // group, test last, id
   const by = Object.fromEntries(v.modules.map((r) => [r.id, r]));
   assert.deepEqual(
-    [by['digikit/pluck'].on_card, by['digikit/pluck'].loaded, by['digikit/pluck'].fits],
+    [by['someone/machine'].on_card, by['someone/machine'].loaded, by['someone/machine'].fits],
     ['yes', true, true],
   );
-  assert.equal(by['digikit/tool'].on_card, 'other version');
+  assert.equal(by['someone/tool'].on_card, 'other version');
   assert.deepEqual([by['test/sine'].on_card, by['test/sine'].fits, by['test/sine'].test], ['no', false, true]); // DSP 400 > largest 50
   assert.match(
     by['test/sine'].warnings[0],
@@ -477,14 +246,14 @@ test('header, library module, the merged list', async () => {
 
 test('buildView reads the device: INFO, LIST, MODULES, CAPACITY and the headers of the card-only files by READ', async () => {
   const dev = new FakeDevice();
-  const pluck = dkm('digikit/pluck', { machine: 1, dsp: 64, size: 900 });
-  dev.files.set('modules/pluck.dkm', pluck);
+  const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
+  dev.files.set('modules/machine.dkm', mach);
   dev.files.set('modules/other.dkm', dkm('someone/effect', { fx: 1, size: 700 }));
-  dev.loaded = ['digikit/pluck'];
-  const view = await buildView(session(dev), [await libraryModule(pluck, needsOf)]);
+  dev.loaded = ['someone/machine'];
+  const view = await buildView(session(dev), [await libraryModule(mach, needsOf)]);
   assert.deepEqual(
     [view.device, view.runtime, view.free_bytes, view.loaded],
-    ['dt2', '0.2.4', 1 << 20, ['digikit/pluck']],
+    ['dt2', '0.2.4', 1 << 20, ['someone/machine']],
   );
   assert.equal(view.modules[0].on_card, 'yes');
   assert.deepEqual([view.card_only[0].group, view.card_only[0].version], ['Effects', '0.1.2']);
@@ -492,10 +261,10 @@ test('buildView reads the device: INFO, LIST, MODULES, CAPACITY and the headers 
 });
 
 test('Modules mode lists the modules/ folder only: the samples/ of a version 3 store stay out (with and without FOLDERS)', async () => {
-  const pluck = dkm('digikit/pluck', { machine: 1, dsp: 64, size: 900 });
+  const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
   const withSamples = () => {
     const dev = new FakeDevice();
-    dev.files.set('modules/pluck.dkm', pluck);
+    dev.files.set('modules/machine.dkm', mach);
     dev.files.set('modules/other.dkm', dkm('someone/effect', { fx: 1, size: 700 }));
     dev.files.set('samples/01', new Uint8Array(3000).fill(7));
     dev.files.set('samples/ff_ht_bass_drop_A#', new Uint8Array(500).fill(9));
@@ -503,12 +272,12 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
     dev.dirs.add('samples/empty');
     return dev;
   };
-  const lib = [await libraryModule(pluck, needsOf)];
+  const lib = [await libraryModule(mach, needsOf)];
   const rows = (v) => [...v.modules, ...v.card_only].map((r) => r.path ?? r.id).sort();
   // FOLDERS: the device filters by the LIST prefix, and the host does not read the other files' headers
   const dev = withSamples();
   const view = await buildView(session(dev), lib);
-  assert.deepEqual(rows(view), ['modules/other.dkm', 'modules/pluck.dkm'].sort());
+  assert.deepEqual(rows(view), ['modules/other.dkm', 'modules/machine.dkm'].sort());
   assert.deepEqual(
     view.card_only.map((r) => r.name),
     ['someone/effect'],
@@ -516,10 +285,10 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
   // a runtime without FOLDERS answers every entry to a LIST: the host filters
   const old = withSamples();
   old.caps = Object.values(CAP).reduce((a, bit) => a | (1 << bit), 0) & ~(1 << CAP.FOLDERS);
-  assert.deepEqual(rows(await buildView(session(old), lib)), ['modules/other.dkm', 'modules/pluck.dkm'].sort());
+  assert.deepEqual(rows(await buildView(session(old), lib)), ['modules/other.dkm', 'modules/machine.dkm'].sort());
   // install compares with the modules/ entries too, and leaves the samples alone
   const events = [];
-  await install(session(dev), ['digikit/pluck'], lib, (e) => events.push(e));
+  await install(session(dev), ['someone/machine'], lib, (e) => events.push(e));
   assert.ok(events.some((e) => e.event === 'skip'));
   assert.equal(dev.files.size, 5);
 });
@@ -543,14 +312,14 @@ test('free space above 4 GiB: INFO saturates at 2^32 - 1, CAPACITY STORE (KiB) d
 
 test('install: skip the same sha256, upload the rest with capped progress, VERIFY each, no SELECT', async () => {
   const dev = new FakeDevice();
-  const pluck = dkm('digikit/pluck', { machine: 1, size: 900 });
+  const mach = dkm('someone/machine', { machine: 1, size: 900 });
   const big = dkm('test/big', { size: 20000 });
-  dev.files.set('modules/pluck.dkm', pluck); // already on the card
+  dev.files.set('modules/machine.dkm', mach); // already on the card
   const events = [];
   const out = await install(
     session(dev, { chunk: 512 }),
-    ['digikit/pluck', 'test/big'],
-    [await libraryModule(pluck, needsOf), await libraryModule(big, needsOf)],
+    ['someone/machine', 'test/big'],
+    [await libraryModule(mach, needsOf), await libraryModule(big, needsOf)],
     (e) => events.push(e),
   );
   assert.deepEqual(out, { uploaded: ['test/big'], selected: [], restarted: false });
@@ -570,7 +339,7 @@ test('install: skip the same sha256, upload the rest with capped progress, VERIF
     [true, true],
   );
   await assert.rejects(
-    install(session(dev), ['digikit/none'], [await libraryModule(pluck, needsOf)]),
+    install(session(dev), ['someone/none'], [await libraryModule(mach, needsOf)]),
     /not a run-time module/,
   );
 });
@@ -578,13 +347,13 @@ test('install: skip the same sha256, upload the rest with capped progress, VERIF
 test('install: a VERIFY that does not match is an error', async () => {
   const dev = new FakeDevice();
   dev.corrupt = true;
-  const m = dkm('digikit/pluck', { machine: 1 });
+  const m = dkm('someone/machine', { machine: 1 });
   const events = [];
   await assert.rejects(
-    install(session(dev), ['digikit/pluck'], [await libraryModule(m, needsOf)], (e) => events.push(e)),
+    install(session(dev), ['someone/machine'], [await libraryModule(m, needsOf)], (e) => events.push(e)),
     /did not keep the file/,
   );
-  assert.deepEqual(events.at(-1), { event: 'verify', id: 'digikit/pluck', path: 'modules/pluck.dkm', ok: false });
+  assert.deepEqual(events.at(-1), { event: 'verify', id: 'someone/machine', path: 'modules/machine.dkm', ok: false });
 });
 
 test('the upload progress callback: at most a tenth apart, always the last', () => {
@@ -634,15 +403,15 @@ test('delete: one DELETE per path, confirmed by LIST; a path that is not on the 
 
 test('restart: RESTART, wait for the new boot in the log, then report what MODULES lists', async () => {
   const dev = new FakeDevice();
-  dev.selection = ['modules/pluck.dkm'];
+  dev.selection = ['modules/machine.dkm'];
   const events = [];
   const out = await restartDevice(session(dev, { timeoutMs: 5, retries: 0 }), (e) => events.push(e), sleep);
-  assert.deepEqual(out, { loaded: ['mod:modules/pluck.dkm'], missing: [] });
+  assert.deepEqual(out, { loaded: ['mod:modules/machine.dkm'], missing: [] });
   assert.deepEqual(
     events.map((e) => e.event),
     ['restart', 'wait', 'done'],
   );
-  assert.deepEqual(events.at(-1), { event: 'done', restarted: true, loaded: ['mod:modules/pluck.dkm'], missing: [] });
+  assert.deepEqual(events.at(-1), { event: 'done', restarted: true, loaded: ['mod:modules/machine.dkm'], missing: [] });
   // the old boot's log (with the RESTART request) answered first, then two requests got nothing, then the new boot
   assert.ok(dev.seen.filter((c) => c === 'LOG').length >= 2);
   assert.equal(dev.log.length, 1);
@@ -693,4 +462,12 @@ test('VERIFY of a range, and verifyFile in pieces', async () => {
   assert.equal(await s.verifyFile('samples/a.wav', other, 1024), false);
   await assert.rejects(s.verify('samples/a.wav', 100, 10), (e) => e instanceof DkError && e.status === 'E_OFFSET');
   assert.equal(await s.verifyFile('samples/a.wav', new Uint8Array(0), 1024), false); // the file is not empty
+});
+
+test('session: the stock SoftwareVersion request is answered with the OS version string', async () => {
+  const dev = new FakeDevice();
+  dev.os = '1.17';
+  const reply = await session(dev).rpc(2, new Uint8Array(), 100);
+  assert.deepEqual(parseSoftwareVersion(reply), '1.17');
+  await assert.rejects(session(new FakeDevice()).rpc(2, new Uint8Array(), 20), (e) => e.kind === 'timeout');
 });

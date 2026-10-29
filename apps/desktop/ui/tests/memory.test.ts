@@ -23,7 +23,7 @@ const mod = (name: string, group: KnownModule['group'], needs: KnownModule['need
   needs,
 });
 const library = [
-  mod('digikit/pluck', 'Machines', { ARENA: 4096, DSP_AREA: 259 * KiB, MACHINE_ROWS: 1, PARAM_ROWS: 4 }),
+  mod('test/sine', 'Machines', { ARENA: 4096, DSP_AREA: 259 * KiB, MACHINE_ROWS: 1, PARAM_ROWS: 4 }),
   mod('digikit/chorus', 'Effects', { ARENA: 2048 }),
   mod('digikit/remote', 'Tools', { ARENA: 1024 }),
   mod('digikit/broken', 'Tools', null), // no needs: the loader would refuse the file
@@ -41,7 +41,7 @@ const dn2: Caps = {
   SELECTION: c(8, 3),
   STAGE: c(65536, 0),
 };
-const loaded = ['digikit/pluck', 'digikit/chorus', 'digikit/remote'];
+const loaded = ['test/sine', 'digikit/chorus', 'digikit/remote'];
 const by = (bars: Bar[], r: string) => bars.find((b) => b.resource === r)!;
 
 test('one bar per resource the device limits, in the panel order, under the user-facing names', () => {
@@ -81,14 +81,14 @@ test('each bar has a segment per loaded module that takes some of it, coloured b
   const dsp = by(bars, 'DSP_AREA');
   assert.deepEqual(
     dsp.segments.map((s) => [s.id, s.kind, s.amount]),
-    [['digikit/pluck', 'machine', 259 * KiB]], // the effect and the tool take none of the DSP memory: no segment
+    [['test/sine', 'machine', 259 * KiB]], // the effect and the tool take none of the DSP memory: no segment
   );
   assert.equal(dsp.free, 253 * KiB);
   const cpu = by(bars, 'ARENA');
   assert.deepEqual(
     cpu.segments.map((s) => [s.label, s.kind, s.amount]),
     [
-      ['pluck', 'machine', 4096],
+      ['sine', 'machine', 4096],
       ['chorus', 'effect', 2048],
       ['remote', 'tool', 1024],
       ['Other', 'other', 6 * KiB], // the runtime's own blocks: used, but no known module's
@@ -100,40 +100,40 @@ test('each bar has a segment per loaded module that takes some of it, coloured b
   assert.deepEqual(
     mods.segments.map((s) => [s.label, s.amount]),
     [
-      ['pluck', 1],
+      ['sine', 1],
       ['chorus', 1],
       ['remote', 1],
     ],
   );
   assert.deepEqual(
     by(bars, 'MACHINE_ROWS').segments.map((s) => s.label),
-    ['pluck'],
+    ['sine'],
   );
   assert.deepEqual(by(bars, 'PAGE_ROWS').segments, []); // nothing uses a page row
 });
 
 test('a loaded module that is not in the library, or has no needs, is part of "other"', () => {
   const caps = { ...dn2, MODULES: c(8, 4), ARENA: c(512 * KiB, 4096 + 9000), MACHINE_ROWS: c(8, 2) };
-  const bars = buildBars(caps, ['digikit/pluck', 'someone/mystery', 'digikit/broken'], library);
+  const bars = buildBars(caps, ['test/sine', 'someone/mystery', 'digikit/broken'], library);
   const mods = by(bars, 'MODULES');
   assert.deepEqual(
     mods.segments.map((s) => [s.id, s.kind, s.amount]),
     [
-      ['digikit/pluck', 'machine', 1],
+      ['test/sine', 'machine', 1],
       ['other', 'other', 3], // the unknown one, the one without needs and one the device holds that MODULES did not name
     ],
   );
   assert.deepEqual(
     by(bars, 'ARENA').segments.map((s) => [s.id, s.amount]),
     [
-      ['digikit/pluck', 4096],
+      ['test/sine', 4096],
       ['other', 9000],
     ],
   );
   assert.deepEqual(
     by(bars, 'MACHINE_ROWS').segments.map((s) => [s.id, s.amount]),
     [
-      ['digikit/pluck', 1],
+      ['test/sine', 1],
       ['other', 1],
     ],
   );
@@ -166,7 +166,7 @@ test('the texts: KiB for bytes, counts for rows, the module name and amount on h
   assert.equal(usedText(dsp), '259 KiB / 512 KiB');
   assert.equal(usedText(cpu), '13 KiB / 512 KiB');
   assert.equal(usedText(mods), '3 / 8');
-  assert.equal(segmentTitle(dsp, dsp.segments[0]), 'pluck: 259 KiB');
+  assert.equal(segmentTitle(dsp, dsp.segments[0]), 'sine: 259 KiB');
   assert.equal(segmentTitle(mods, mods.segments[1]), 'chorus: 1');
   assert.match(segmentTitle(cpu, cpu.segments[3]), /^Other: 6 KiB/);
   assert.equal(freeTitle(dsp), 'Free: 253 KiB');

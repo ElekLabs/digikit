@@ -47,7 +47,7 @@ test('patchkit.wasm is small and carries no firmware', () => {
   }
 });
 
-test('wasm and CLI produce byte-identical output for digikit/master-gain', { skip: !need }, async () => {
+test('wasm and CLI produce byte-identical output for core/fx', { skip: !need }, async () => {
   const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
   const bundlePath = join(work, 'bundle.json');
   py('tools.patchkit.patchkit', 'bundle', '-o', bundlePath);
@@ -57,21 +57,10 @@ test('wasm and CLI produce byte-identical output for digikit/master-gain', { ski
     const fw = readFileSync(path);
     const out = join(work, `${name}.syx`);
     const plan = join(work, `${name}.plan.json`);
-    py(
-      'tools.patchkit.patchkit',
-      'patch',
-      '--firmware',
-      path,
-      '--modules',
-      'digikit/master-gain',
-      '-o',
-      out,
-      '--plan',
-      plan,
-    );
+    py('tools.patchkit.patchkit', 'patch', '--firmware', path, '--modules', 'core/fx', '-o', out, '--plan', plan);
     const [fp, fl] = put(fw);
     const [bp, bl] = put(bundle);
-    const [ip, il] = put(Buffer.from('digikit/master-gain'));
+    const [ip, il] = put(Buffer.from('core/fx'));
     const rc = x.pk_apply(fp, fl, bp, bl, ip, il);
     assert.equal(rc, 0, text(x.pk_err_ptr, x.pk_err_len));
     const wasmOut = Buffer.from(get(x.pk_out_ptr, x.pk_out_len));
@@ -85,7 +74,7 @@ test('wasm and CLI produce byte-identical output for digikit/master-gain', { ski
     assert.equal(x.pk_verify(op, ol, bp, bl, fbp, fbl), 0, text(x.pk_err_ptr, x.pk_err_len));
     const report = JSON.parse(text(x.pk_plan_ptr, x.pk_plan_len));
     assert.equal(report.device, name);
-    assert.ok(report.record.modules[0].startsWith('digikit/master-gain@'));
+    assert.ok(report.record.modules[0].startsWith('core/fx@'));
   }
 });
 
@@ -252,14 +241,14 @@ test('wasm refuses what the CLI refuses', { skip: !need }, async () => {
 
 // The SHARC+ build runs in the page: the sources of a module as texts in, the `.dko.json` text out, the bytes `patchkit build` writes.
 test(
-  'wasm and CLI build byte-identical SHARC+ objects (freqshift, pluck)',
+  'wasm and CLI build byte-identical SHARC+ objects (a machine and an effect)',
   { skip: !existsSync(wasmPath) },
   async () => {
     const { x, put, text } = await load();
     const work = mkdtempSync(join(tmpdir(), 'pk-wasm-sharc-'));
     const modules = [
-      ['modules/fx/freqshift', 'build/freqshift-dsp.dko.json', 'src/dsp/freqshift.s'],
-      ['modules/machines/pluck', 'build/pluck-dsp.dko.json', 'src/dsp/pluck.s'],
+      ['tests/fixtures/modules/dyn-fx-gain', 'build/dyn-fx-gain-dsp.dko.json', 'src/dsp/dyn_fx_gain.s'],
+      ['tests/fixtures/modules/sine', 'build/sine-dsp.dko.json', 'src/dsp/sine.s'],
     ];
     for (const [mod, object, source] of modules) {
       py('tools.patchkit.patchkit', 'build', join(root, mod), '--force', '--out', work);

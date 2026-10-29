@@ -70,7 +70,7 @@ Device tasks never build a daemon or the emulator themselves. Prerequisites are 
 | `mise run build:plusdrive` | Builds the plusdrive CLI into `out/native/target/nogen`. |
 | `mise run module:check ID` | Machine or effect conformance and the module's own tests in one pytest process. Own tests may build or launch an emulator. Not an all-module load proof. |
 | `mise run module:audit NAME` | ColdFire memory audit of one run-time module. |
-| `mise run patch:test` | Smoke tour over `tests/patchkit/smoke/matrix.toml` (`-- --cell dt2-1.17:digikit/master-gain`, `-- --update`). |
+| `mise run patch:test` | Smoke tour over `tests/patchkit/smoke/matrix.toml` (`-- --cell dt2-1.17:core/fx`, `-- --update`). |
 | `mise run patch:proofs` | Every emulator proof on its quick tier. |
 | `mise run dev:plusdrive-check` | The firmware's own view of an image built from a folder (about 1 min). |
 | `mise run scenario NAME` | Replays one headless scenario. |
@@ -150,6 +150,7 @@ All regression device suites share `tests/regression/vitest.config.ts` with the 
 | `tests/sharc/{semantics,trace,generation,analysis,integration}` | SHARC+ semantics, tracer, assembler and generator, loader and sharcdb, firmware-backed harness and golden hashes |
 | `tests/patchkit` | Patchkit, module primitives, DSP voice rig, PLUCK, proofs. `smoke/` holds the smoke matrix (`matrix.toml`, `tours/`, `goldens.json`). |
 | `tests/modules` | Machine and FX conformance for every module |
+| `modules/<kind>/<name>/tests` | A module's own tests (below, "Module-owned tests") |
 | `tests/coldfire` | ColdFire analysis tools |
 | `tests/emulator` | Launcher, PGO, coupled runner helpers, live audio, bootstrap |
 | `tests/control` | The control-socket client and daemon |
@@ -186,6 +187,23 @@ Rust tests in their crates.
   Add an exception to `allow` in `tools/devtools/pathcheck.json` with a reason. An allow that matches
   nothing fails.
 
+## Module-owned tests
+
+A module keeps its tests in its own folder, `modules/<kind>/<name>/tests/`. No list names them; globbing finds them.
+
+- `test_*.py`, also in subfolders: pytest files. The basename is unique across the repository (prefix it with the module name). A helper
+  next to the test is imported by name. Use `Path(__file__).parents[1]` for the module folder.
+- `*.test.ts`: Vitest project `module-tests` of `vitest.host.projects.json` (`mise run test:host`).
+- `scenarios/*.toml`: digikit scenarios. `pk_digikit_scen list|run NAME` and the tiers find them next to `tests/digikit/scenarios/`.
+- `module:check ID`, `verify` and `test:changed` select them. A change in the module selects its tests and those of the modules that depend
+  on it; a change only in `tests/` runs python-tests (and `host` for `.ts`), no Rust or web step.
+- A scenario that pins the PCM of a module lives with that module. A shared test needs "a module" only: it uses a fixture of
+  `tests/fixtures/modules` (`test/sine`, a dynamic machine on both devices; `test/dyn-fx-gain`, an effect; the table is in
+  docs/MODULE-AUTHORING.md), or a made-up id such as `acme/demo` when nothing is built. A list of all shipped modules is a scan of
+  `modules/{machines,fx,tools}/*/module.toml`, never a literal list.
+- `mise run check:layers` (rule `self-contained`): no tracked file outside a module's folder names its id or path. Docs, `*.md`, `.agents/`
+  and the fixtures may. `host = true` in `[module]` exempts a module the workbench speaks to (the remote control service).
+
 ## The gate
 
 `mise run verify` runs the steps the changed files need. Routing is in `tools/devtools/verify.py`
@@ -217,8 +235,10 @@ dt2-tier-sweep.
   digikit/remote, test/svc-echo), builds plusdrive before samples-live, and runs the runtime project.
   It runs for relevant changes with filename filters, and with `--full` or `--only runtime-fixture`.
   It needs a two-core budget share and one fresh coupled daemon at a time.
-- `module-load` filters the production leaves (PLUCK, freqshift, remote) to the changed module on both
-  devices. Shared ABI, protocol and unknown modules select all uploads.
+- `module-load` filters the production uploads to the changed module on both
+  devices. The uploads are the shipped modules that are `dynamic`, a service or `host`, and have a
+  `tests/regression/modules/<name>.test.ts` (`verify_route.RUNTIME_UPLOADS`, built from the manifests;
+  `acceptance.ts` scans them by the same rule). Shared ABI, protocol and unknown modules select all uploads.
 - `rust-tests` runs `cargo nextest run --workspace --release`, without the desktop app crate. The
   `desktop` step builds the console and tests the app crate.
 - `smoke` runs the patchkit smoke matrix (`pk_harness run`, 17 cells, one daemon each).
@@ -276,9 +296,9 @@ The `capacity` and `isolation` parts fill every runtime limit with synthetic mod
 
 ### Machine and FX conformance (`tests/modules`)
 
-`mise run module:check NAME [--device dt2|dn2]` (NAME: `digikit/pluck` or `pluck`) selects the suite by
+`mise run module:check NAME [--device dt2|dn2]` (NAME: `<author/name>` or the name alone) selects the suite by
 module type and runs the module's own tests. The suite alone:
-`DIGI_CONFORM_MODULES=digikit/pluck uv run python -m pytest tests/modules/test_machine_conformance.py -rf`.
+`DIGI_CONFORM_MODULES=<author/name> uv run python -m pytest tests/modules/test_machine_conformance.py -rf`.
 
 Machine rules (`pk_conform.py`, rig `tests/support/machine_rig.py`, workers `tests/support/conform_worker.py`),
 checked in every block of every case:
@@ -368,6 +388,12 @@ Type checks do not show a misaligned row. `mise run ui:preview` serves the deskt
 `?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`).
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at
 1440x900 and at 700 px wide (`--list` lists scenes). Look at the pictures before and after a UI change.
+
+The Firmware page (`?page=firmware&fwdev=dt2|dn2&fwstate=stock|runtime|noreply|none`) runs the real patchkit checks (`patchkit.wasm`) over a fake
+device that restarts after the last message. `node tools/devtools/firmware_shots.mjs --app desktop|web [--url URL] [--out DIR] [scene ...]` takes its
+pictures for the workbench (this preview) and for the site (`astro dev` or `astro preview`, with a fake Web MIDI port); it needs the stock files in
+`firmware/` and `mise run wasm:patchkit` and `web:build` (or the site's `gen-modules`) for `patchkit.wasm` and the module bundle.
+The same flash against an emulated device at OS UPGRADE: `os_upgrade_rig.py ... --exec` runs `apps/web/tests/firmware-emulator.test.ts` (finding 75).
 
 To test pages against a running emulator, `uv run python -m tools.devtools.emu_live --device dn2 --run-dir DIR`
 starts a daemon, `apps/desktop/ui/preview/live.vite.config.ts` serves the pages over it

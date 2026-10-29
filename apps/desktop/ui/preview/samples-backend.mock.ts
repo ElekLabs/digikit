@@ -1,18 +1,19 @@
 // The Samples backend of the preview (replaces ../src/samples-backend.ts): the folder on the computer and the device's sample folders come
 // from sim.ts. Same exports as the real module; an upload is paced by `sim.speed` through the real `uploadFiles` of samples-core.ts.
-import { noteActivity } from '../src/activity';
+import { noteActivity } from '@web/transfer/activity';
+import { asked, noteConnection } from '@web/transfer/connection-state';
 import { sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry, SamplesBackend } from '@digi/dk-session/samples';
 import { joinPath, type LocalEntry, type Prepare } from '../src/samples-core';
+import { setDeviceInfo } from '@web/transfer/transfer-state';
 import {
   localFolder,
   localPath,
   sampleFolder,
-  setDeviceInfo,
   setLocalEntries,
   setLocalKinds,
   setSampleEntries,
-} from '../src/transfer-state';
+} from '../src/samples-state';
 import { SAMPLES_ROOT, control, delay, deviceRead, listLocal, localKindOf, localSizeOf, sampleTree, sim } from './sim';
 
 const NAME = 'Digitakt II';
@@ -99,7 +100,8 @@ const backend: SamplesBackend = {
 };
 
 export async function openDeviceSamples(): Promise<OpenedSamples> {
-  await deviceRead();
+  await asked(deviceRead);
+  noteConnection({ type: 'answered', device: { id: 'dt2', name: NAME, runtime: '0.5.2' } });
   return {
     name: NAME,
     runtime: '0.9.4',

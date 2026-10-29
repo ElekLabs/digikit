@@ -52,14 +52,12 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
 from tools.emulator import card_overlay  # noqa: E402
-from tools.patchkit import (  # noqa: E402
-    hook_ab,  # noqa: E402
-    pluck_ref,  # noqa: E402
-)
+from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_dn2_common as C  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proof_machines as M  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
+from tools.patchkit.pitch import f0_from_crossings  # noqa: E402
 
 PLUCK_TYPE = 9  # core/machines types.toml, "test/patched-pluck:pluck" on dt2
 MODS = ["core/dsp-voice", "core/machines", "core/params", "test/patched-pluck"]
@@ -106,7 +104,7 @@ def onset(left: np.ndarray, thresh: float = 1e-4) -> int:
 
 
 def f0_of(left: np.ndarray, start: int, want_hz: float, n: int = 30000) -> float:
-    return pluck_ref.f0_from_crossings(left[start + 300 : start + 300 + n], want_hz)
+    return f0_from_crossings(left[start + 300 : start + 300 + n], want_hz)
 
 
 def t60_of(left: np.ndarray, start: int, drop_db: float = 30.0) -> float | None:

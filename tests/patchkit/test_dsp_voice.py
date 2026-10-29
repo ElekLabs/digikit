@@ -539,27 +539,6 @@ def test_no_build_of_the_module_stores_a_same_dag_register_through_an_index_regi
         pk_sharc.sharc_object([bad], [], frozenset())
 
 
-def test_the_ureg_class_rule_flags_index_register_stores_and_not_direct_stores():
-    from tools.patchkit import pk_isacheck
-
-    p = pk_isacheck.ureg_class_problems
-    for form in ("3a", "3b", "3d", "15a", "15b"):
-        assert p({"d": 1, "g": 0, "ureg[6:0]": 0x10}, "x", form), form  # DM store of I0
-        assert p({"d": 1, "g": 0, "ureg": 0x37}, "x", form), (
-            form
-        )  # DM store of L7 (a stem without the bit range)
-        assert not p({"d": 1, "g": 0, "ureg[6:0]": 0x18}, "x", form)  # I8, DAG2
-        assert not p({"d": 0, "g": 0, "ureg[6:0]": 0x10}, "x", form)  # a load
-        assert p({"d": 1, "g": 1, "ureg[6:0]": 0x18}, "x", form)  # PM store of I8
-        assert not p({"d": 1, "g": 1, "ureg[6:0]": 0x10}, "x", form)  # PM store of I0
-        assert not p({"d": 1, "g": 0, "ureg[6:0]": 0x05}, "x", form)  # R5
-    # Type 14a (direct address): exempt, the stock image has 304 such stores of DAG1 registers
-    assert not p({"d": 1, "g": 0, "ureg[6:0]": 0x10}, "x", "14a")
-    assert not p({"d": 1, "g": 1, "ureg[6:0]": 0x18}, "x", "14a")
-    for other in ("5b_move", "17a", "12a_ureg", ""):
-        assert not p({"d": 1, "g": 0, "ureg[6:0]": 0x10}, "x", other)
-
-
 def test_the_c3_noirq_variant_masks_interrupts_inside_and_restores_mode1():
     defines = C3_VARIANTS["b-noirq"]
     rig = CrumbRig(defines)

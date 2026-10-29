@@ -7,19 +7,9 @@ firmware = "1.17"
 modules = []
 
 [[cell]]
-device = "dt2"
-firmware = "1.17"
-modules = ["digikit/master-gain", "test/cf-demo"]
-
-[[cell]]
 device = "dn2"
 firmware = "1.12"
 modules = []
-
-[[cell]]
-device = "dn2"
-firmware = "1.12"
-modules = ["digikit/master-gain", "test/cf-demo"]
 
 [[cell]]
 device = "dt2"
@@ -31,17 +21,22 @@ device = "dt2"
 firmware = "1.17"
 modules = ["core/dsp-voice", "core/machines", "core/params", "test/patched-pluck"]
 
-# The device on the desk runs DT2 1.17.
-[[cell]]
-device = "dt2"
-firmware = "1.17"
-modules = ["digikit/master-drive"]
-
 # Rust on the ColdFire (finding 26)
 [[cell]]
 device = "dt2"
 firmware = "1.17"
 modules = ["test/rust-demo"]
+
+# The ColdFire C demo: its functions are called in place (tests/fixtures/modules/cf-demo/tests/smoke.toml).
+[[cell]]
+device = "dt2"
+firmware = "1.17"
+modules = ["test/cf-demo"]
+
+[[cell]]
+device = "dn2"
+firmware = "1.12"
+modules = ["test/cf-demo"]
 
 [[cell]]
 device = "dn2"

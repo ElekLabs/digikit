@@ -169,6 +169,10 @@ pub struct Emulator {
     panel_diff: u32,
     fb_front: u32,
     flash_read: u32,
+    /// MAIN OS's sector erase and page program (`None` where the signature is not found): the OS upgrade's writes go to `flash`.
+    flash_erase: Option<u32>,
+    flash_program: Option<u32>,
+    flash_writes: FlashWrites,
     flash: Vec<u8>,
     fs_worker: Option<(u32, u32, u32, u32)>,
     intro_done: u32,
@@ -439,6 +443,8 @@ impl Emulator {
         let job_pump =
             unique_signature(&main, JOB_PUMP_SIG, None).ok_or("job_pump signature ambiguous")?;
         let flash_read = unique(&main, FLASH_READ_SIG, &vec![false; FLASH_READ_SIG.len()])?;
+        let flash_erase = unique(&main, FLASH_ERASE_SIG, &data_mask(FLASH_ERASE_SIG, None)).ok();
+        let flash_program = unique(&main, FLASH_PROGRAM_SIG, &data_mask(FLASH_PROGRAM_SIG, None)).ok();
         let fs_worker = match contract {
             device_profile::ReadinessContract::MainPanelFsCheckV1 => {
                 Some(resolve_fs_worker(&main)?)
@@ -541,6 +547,9 @@ impl Emulator {
             panel_diff,
             fb_front,
             flash_read,
+            flash_erase,
+            flash_program,
+            flash_writes: FlashWrites::default(),
             flash,
             fs_worker,
             intro_done,
@@ -1018,6 +1027,16 @@ impl Emulator {
     /// (d0-d7, a0-a7, pc, sr): for headless diagnosis (a fault report).
     pub fn cpu_regs(&self) -> ([u32; 8], [u32; 8], u32, u16) {
         (self.cpu.d, self.cpu.a, self.cpu.pc, self.cpu.sr)
+    }
+
+    /// What the guest wrote to the container area of the flash (the OS upgrade): erases, page programs and bytes. All zero until it does.
+    pub fn flash_writes(&self) -> FlashWrites {
+        self.flash_writes
+    }
+
+    /// `len` bytes of the model's flash from `offset` (the container is at 0x80000); `None` outside the 16 MiB.
+    pub fn flash_bytes(&self, offset: usize, len: usize) -> Option<&[u8]> {
+        self.flash.get(offset..offset.checked_add(len)?)
     }
 
     /// Read a guest longword without side effects (None when unmapped or
@@ -1579,6 +1598,8 @@ impl Emulator {
             self.job_pump,
             self.panel_diff,
             self.flash_read,
+            self.flash_erase.unwrap_or(0),
+            self.flash_program.unwrap_or(0),
             self.intro_done,
             self.display_start,
             self.set_pixel,
@@ -2040,6 +2061,21 @@ impl Emulator {
                 self.flash_hle_calls += 1;
             }
             result
+        } else if watched
+            && (Some(pc) == self.flash_erase || Some(pc) == self.flash_program)
+            && matches!(
+                hle_flash_write(
+                    &mut self.bus,
+                    &mut self.cpu,
+                    &mut self.flash,
+                    Some(pc) == self.flash_erase,
+                    &mut self.flash_writes,
+                ),
+                Ok(true)
+            )
+        {
+            self.cpu.icount += 1;
+            Ok(())
         } else if watched
             && self.softfloat.try_call(
                 &mut self.cpu,

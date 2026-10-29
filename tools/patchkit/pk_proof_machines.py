@@ -47,7 +47,7 @@ from tools.firmware import config  # noqa: E402
 from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit import pk_proofkit as K  # noqa: E402
-from tools.patchkit.pk_proof_drive import aligned_equal, analyse  # noqa: E402
+from tools.patchkit.pk_proofkit import aligned_equal, analyse  # noqa: E402
 
 TRACK_OBJ_WORD = 0x4265338C  # the type byte is the third byte of this word (0x4265338e)
 TX_TYPE = (
