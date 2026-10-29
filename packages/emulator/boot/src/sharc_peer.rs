@@ -1667,6 +1667,159 @@ mod tests {
         }
     }
 
+    /// Firmware-free receiver: a transfer disarms DMA until the simulated
+    /// callback has run. Audio still uses the ordinary frame mock above.
+    struct LinkMock {
+        audio: Mock,
+        ready: bool,
+        received: Vec<Vec<u8>>,
+        rearm_after: Option<u32>,
+        rearm_ran: u32,
+        in_transfer: bool,
+    }
+
+    impl DspEngine for LinkMock {
+        fn spi2_exchange(&mut self, frame: &[u8]) -> Result<Vec<u8>, String> {
+            self.in_transfer = false;
+            self.audio.spi2_exchange(frame)
+        }
+        fn lp0_ready(&self) -> bool {
+            self.ready
+        }
+        fn lp0_transfer(&mut self, bytes: &[u8]) -> Result<(), String> {
+            assert!(self.ready);
+            self.received.push(bytes.to_vec());
+            self.ready = false;
+            self.in_transfer = true;
+            self.rearm_ran = 0;
+            Ok(())
+        }
+        fn step(&mut self, n: u32) -> u32 {
+            if self.in_transfer {
+                self.rearm_ran += n;
+                if self
+                    .rearm_after
+                    .is_some_and(|after| self.rearm_ran >= after)
+                {
+                    self.ready = true;
+                }
+            }
+            self.audio.step(n)
+        }
+        fn sport_block(&mut self) -> Result<Option<Vec<u8>>, String> {
+            self.audio.sport_block()
+        }
+        fn pc(&self) -> u32 {
+            self.audio.pc()
+        }
+        fn halt_reason(&self) -> Option<String> {
+            self.audio.halt_reason()
+        }
+    }
+
+    fn profiled_link_peer(
+        device: &str,
+        version: &str,
+    ) -> (SharcPeer<LinkMock>, Rc<RefCell<Shared>>) {
+        let registry = device_profile::Registry::embedded().unwrap();
+        let profile = registry.dsp_for(device, version).unwrap();
+        let (mut peer, shared) = SharcPeer::new(
+            LinkMock {
+                audio: mock(None),
+                ready: false,
+                received: Vec::new(),
+                rearm_after: Some(4000),
+                rearm_ran: 0,
+                in_transfer: false,
+            },
+            20_000,
+        );
+        peer.set_idle_range((profile.idle_start, profile.idle_end));
+        // Use the embedded firmware's route selection, as the coupled and cold
+        // constructors do. Removing DN2 1.12's capability must break delivery.
+        if profile.sample_link == Some(device_profile::SampleLink::Lp0) {
+            peer.enable_sample_link();
+        }
+        (peer, shared)
+    }
+
+    #[test]
+    fn profiled_lp0_waits_for_complete_units_and_armed_dma_while_audio_continues() {
+        for (device, version) in [("dn2", "1.12"), ("dt2", "1.17")] {
+            let (mut peer, shared) = profiled_link_peer(device, version);
+            let unit: Vec<u8> = (0..LP0_UNIT_BYTES).map(|i| (i % 251) as u8).collect();
+            let frame = [0x12, 0x34, 0x56, 0x78];
+            peer.core.engine.ready = true;
+            peer.link_bytes(&unit[..LP0_UNIT_BYTES - 1]);
+            assert_eq!(peer.exchange(&frame), vec![0xab; frame.len()]);
+            assert!(
+                peer.core.engine.received.is_empty(),
+                "partial unit: {device}"
+            );
+            assert_eq!(shared.borrow().lp0_pending as usize, LP0_UNIT_BYTES - 1);
+            peer.core.engine.ready = false;
+            peer.link_bytes(&unit[LP0_UNIT_BYTES - 1..]);
+            assert_eq!(peer.exchange(&frame), vec![0xab; frame.len()]);
+            assert!(
+                peer.core.engine.received.is_empty(),
+                "unarmed DMA: {device}"
+            );
+            assert_eq!(shared.borrow().lp0_pending as usize, LP0_UNIT_BYTES);
+            peer.core.engine.ready = true;
+            assert_eq!(peer.exchange(&frame), vec![0xab; frame.len()]);
+            assert_eq!(
+                peer.core.engine.received,
+                vec![unit],
+                "wire bytes: {device}"
+            );
+            assert!(peer.core.engine.ready);
+            assert_eq!(peer.core.engine.rearm_ran, 4000);
+            let shared = shared.borrow();
+            assert_eq!((shared.lp0_units, shared.lp0_pending), (1, 0));
+            assert_eq!(peer.core.engine.audio.frames, 3);
+            assert_eq!(shared.pcm.len(), 3 * BLOCK_WORDS);
+            assert!(
+                shared
+                    .pcm
+                    .chunks_exact(BLOCK_WORDS)
+                    .all(|block| block[0] == 0.5 && block[1] == -0.5)
+            );
+            assert_eq!(shared.frames[2].executed, 20_000);
+            assert!(shared.halted.is_none());
+        }
+    }
+
+    #[test]
+    fn dn2_lp0_rearm_and_units_have_per_frame_budgets() {
+        let (mut peer, shared) = profiled_link_peer("dn2", "1.12");
+        let units = vec![0x5a; (LP0_UNITS_PER_FRAME + 1) * LP0_UNIT_BYTES];
+        peer.core.engine.ready = true;
+        peer.link_bytes(&units);
+        peer.exchange(&[1, 2]);
+        assert_eq!(peer.core.engine.received.len(), LP0_UNITS_PER_FRAME);
+        assert!(
+            peer.core
+                .engine
+                .received
+                .iter()
+                .all(|unit| unit == &units[..LP0_UNIT_BYTES])
+        );
+        assert_eq!(shared.borrow().lp0_pending as usize, LP0_UNIT_BYTES);
+        // A receiver whose callback never rearms must not hang the audio frame.
+        peer.core.engine.rearm_after = None;
+        assert_eq!(peer.exchange(&[3, 4]), vec![0xab; 2]);
+        assert_eq!(peer.core.engine.rearm_ran, LP0_REARM_BUDGET);
+        assert!(!peer.core.engine.ready);
+        assert_eq!(shared.borrow().lp0_units as usize, LP0_UNITS_PER_FRAME + 1);
+        peer.link_bytes(&units[..LP0_UNIT_BYTES]);
+        assert_eq!(peer.exchange(&[5, 6]), vec![0xab; 2]);
+        let shared = shared.borrow();
+        assert_eq!(shared.lp0_pending as usize, LP0_UNIT_BYTES);
+        assert_eq!(shared.lp0_units as usize, LP0_UNITS_PER_FRAME + 1);
+        assert_eq!(shared.pcm.len(), 3 * BLOCK_WORDS);
+        assert!(shared.halted.is_none());
+    }
+
     /// A PC that is in the idle range exactly while the instruction count
     /// lies in one of `idle` ([start, end) intervals), optionally able to
     /// stop at the first such boundary (`fast`), and halting at `halt`.
