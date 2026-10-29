@@ -16,7 +16,7 @@ STATE, INPUT, PARAMS, OUT, READY, OBSERVE = [0x08020000 + n * 0x100 for n in ran
 CONTROL = {
     name: 0x08022000 + i
     for i, name in enumerate(
-        ("admission_open", "admitted", "retire_closed", "admit_fault")
+        ("admission_open", "admitted", "retire_closed", "admit_fault", "token")
     )
 }
 SOURCE = 0x10200000
@@ -112,6 +112,7 @@ def voice(consumer, ready=1, reverse=False):
     for addr in CONTROL.values():
         sess.poke(addr, 0)
     sess.poke(CONTROL["admission_open"], int(ready == 1))
+    sess.poke(CONTROL["token"], 0x81234567)
     sess.proof_seeded = False
     return sess
 
@@ -230,6 +231,7 @@ def test_terminal_closed_callbacks_have_no_source_reads_and_keep_incoming_mode(
         assert not sess.stores
         assert sess.peek(STATE + 1) == 0
         assert sess.peek(STATE + 5) == 1
+        assert sess.peek(STATE + 6) == 0
         assert sess.peek(CONTROL["admitted"]) == 0
     assert [sess.peek(OUT + i) for i in range(32)] == [0] * 32
     assert sess.peek(OBSERVE + 5) == 1
@@ -245,3 +247,68 @@ def test_counter_corruption_fails_closed_without_wrapping_to_drained(consumer):
     assert sess.peek(CONTROL["retire_closed"]) == 1
     assert sess.peek(CONTROL["admit_fault"]) == 1
     assert sess.peek(CONTROL["admission_open"]) == 0
+
+
+@pytest.mark.parametrize("mode", [0x8000, 0x9000])
+def test_cached_voice_rejects_new_generation_until_fresh_note(consumer, mode):
+    sess = voice(consumer)
+    call(sess, "_dd_play_note_on")
+    old_token = sess.peek(STATE + 6)
+    assert old_token == sess.peek(CONTROL["token"])
+    call(sess, "_dd_play_render")
+    reads = sess.peek(OBSERVE + 5)
+    sess.poke(CONTROL["token"], old_token + 1)
+    sess.record_reads(SOURCE, 240000)
+    for _ in range(2):
+        r = sess.call(
+            "_dd_play_render",
+            {**REGS, "MODE1": mode, "R4": STATE, "R8": INPUT, "R12": PARAMS},
+            read_regs=KEEP,
+        )
+        assert r["halt"]["reason"] == "breakpoint"
+        assert r["regs"]["MODE1"] == mode
+        assert all(r["regs"][n] == REGS[n] for n in KEEP if n != "MODE1")
+        assert not sess.stores
+        assert sess.peek(STATE + 6) == 0
+        assert sess.peek(STATE + 5) == 1
+        assert sess.peek(CONTROL["admitted"]) == 0
+        assert sess.peek(OBSERVE + 5) == reads
+        assert [sess.peek(OUT + i) for i in range(32)] == [0] * 32
+    # Reopening is modeled only by the control words; this is not a wire test.
+    sess.poke(CONTROL["token"], old_token)
+    sess.proof_seeded = False  # Resume the common helper with its expected MODE1.
+    call(sess, "_dd_play_render")
+    assert not sess.stores  # An invalidated cached voice cannot revive.
+    sess.poke(CONTROL["token"], old_token + 1)
+    call(sess, "_dd_play_note_on")
+    assert sess.peek(STATE + 6) == old_token + 1
+    call(sess, "_dd_play_render")
+    assert sess.stores
+    assert [sess.peek(OUT + i) for i in range(32)] == [bits(i) for i in range(32)]
+
+
+@pytest.mark.parametrize(
+    "denial", ["admission_open", "retire_closed", "token", "ready"]
+)
+def test_denied_note_cannot_arm_after_gate_changes(consumer, denial):
+    sess = voice(consumer)
+    call(sess, "_dd_play_note_on")
+    sess.poke(
+        CONTROL[denial] if denial != "ready" else READY,
+        1 if denial == "retire_closed" else 0,
+    )
+    call(sess, "_dd_play_note_on")
+    assert sess.peek(STATE + 6) == 0
+    assert sess.peek(STATE + 5) == 1
+    sess.poke(READY, 1)
+    sess.poke(CONTROL["admission_open"], 1)
+    sess.poke(CONTROL["retire_closed"], 0)
+    sess.poke(CONTROL["token"], 0x81234568)
+    # An armed-like cursor still lacks an accepted note's private generation.
+    sess.poke(STATE + 1, 480000)
+    sess.poke(STATE + 5, 0)
+    sess.record_reads(SOURCE, 240000)
+    call(sess, "_dd_play_render")
+    assert not sess.stores
+    assert [sess.peek(STATE + i) for i in range(7)] == [0, 0, 0, 0, 0, 1, 0]
+    assert sess.peek(OBSERVE + 5) == 0

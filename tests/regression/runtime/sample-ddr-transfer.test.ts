@@ -227,7 +227,7 @@ async function playbackProof(session: Session, plan: RuntimePlan, retire?: () =>
   expect(await word(field(voices, voice.index, 'note_on'))).toBe(planSymbol(plan, '_dd_play_note_on'));
   const descriptor = await peek(session, planSymbol(plan, '_dd_play_desc'), 40);
   const descriptorWords = Array.from({ length: 10 }, (_, i) => descriptor.readUInt32LE(i * 4));
-  expect(descriptorWords.slice(2, 6)).toEqual([1, 16, 24, 24]);
+  expect(descriptorWords.slice(2, 6)).toEqual([1, 16, 28, 28]);
   fs.writeFileSync(
     path.join(session.runDir, 'playback-binding.json'),
     JSON.stringify(

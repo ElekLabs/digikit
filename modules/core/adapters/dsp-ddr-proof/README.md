@@ -82,8 +82,14 @@ fixed inside this core diagnostic and remains immutable until exact terminal
 RETIRED or reboot. It has no public resource ABI or reopen/replacement path. Reverse starts at 479999 with rate -1;
 forward starts at zero with rate +1. Unready notes are silent and DONE. The
 bridge preserves the adapter's I12/I13 and exact stack boundary across DK_CALL.
-The descriptor uses 24 bytes of state and conservative instruction budgets
-2400/2600 (render/note-on including render), without a hardware cycle claim.
+The descriptor uses 28 bytes of state: the six SDK cursor words followed by a
+private generation token. An accepted note captures the current nonzero bank
+token in the masked admission section. Render compares that cached token in the
+same section before admission; a mismatch or denied callback invalidates the
+voice and returns silent DONE. Render cannot adopt a newer bank token. This
+protects cached voices; queued-note event age and reopening policy remain pending.
+Conservative instruction budgets are 2400/2600 (render/note-on including render),
+without a hardware cycle claim.
 
 The consumer unit test is `tests/patchkit/test_dsp_ddr_playback.py`, including
 forward/reverse retriggers, end-of-view completion and an extra silent render
