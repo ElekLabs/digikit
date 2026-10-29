@@ -82,7 +82,7 @@ interface BootFixture {
  * DSP execution, descriptor resizing or snapshot preparation happens here. */
 function readBootFixture(): BootFixture {
   const need = (ok: unknown, message: string) => {
-    if (!ok) throw new Error(`LP0 0.2 boot fixture: ${message}`);
+    if (!ok) throw new Error(`LP0 0.3 boot fixture: ${message}`);
   };
   const file = process.env.DIGI_LP0_BOOT_FIXTURE;
   need(file && path.isAbsolute(file), 'set DIGI_LP0_BOOT_FIXTURE to an absolute provenance JSON path');
@@ -190,6 +190,7 @@ const bootFixture = enabled ? readBootFixture() : undefined;
 // by name and each uses its own fresh Session through this shared harness.
 const cases = [
   {
+    closeControl: false,
     fullBank: false,
     stockAudio: false,
     label: 'first-page',
@@ -200,27 +201,43 @@ const cases = [
   {
     fullBank: true,
     stockAudio: false,
+    closeControl: false,
     label: 'full-bank',
-    name: 'delivers full bank: 235 packets and 960000 bytes without terminal rearm',
+    name: 'delivers full bank: 235 packets and 960000 bytes and remains armed for control',
     bodyMs: 240000,
     testMs: 300000,
   },
   {
     fullBank: true,
     stockAudio: true,
+    closeControl: false,
     label: 'full-bank-stock-audio',
     name: 'delivers full bank with held stock audio before during and after transfer',
     bodyMs: 270000,
     testMs: 330000,
   },
+  {
+    fullBank: true,
+    stockAudio: true,
+    closeControl: true,
+    label: 'close-control-stock-audio',
+    name: 'closes diagnostic reader control over real LP0 and drains without resend with held stock audio',
+    bodyMs: 300000,
+    testMs: 360000,
+  },
 ] as const;
 for (const scenario of cases) {
-  const { fullBank, stockAudio } = scenario;
+  const { fullBank, stockAudio, closeControl } = scenario;
   const validBytes = fullBank ? BANK_BYTES : PAGE_BYTES;
   const packets = Math.ceil(validBytes / PAGE_BYTES);
   // Explicit opt-in: importing this file never builds or starts a native case.
   describe.skipIf(
-    !enabled || (stockAudio ? process.env.DIGI_LP0_AUDIO !== '1' : fullBank && process.env.DIGI_LP0_FULL_BANK !== '1'),
+    !enabled ||
+      (closeControl
+        ? process.env.DIGI_LP0_CLOSE !== '1'
+        : stockAudio
+          ? process.env.DIGI_LP0_AUDIO !== '1'
+          : fullBank && process.env.DIGI_LP0_FULL_BANK !== '1'),
   )(`DN2 1.12 private LP0 ${scenario.label} proof`, () => {
     const runDir = path.join(root, 'out/runs/lp0-proof', randomUUID());
     if (enabled) fs.mkdirSync(runDir, { recursive: true });
@@ -628,7 +645,7 @@ for (const scenario of cases) {
             'core/expansion',
           ]);
           expect(plan.output?.syx_sha256).toMatch(/^[a-f0-9]{64}$/);
-          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.2.1 patch').toBe(
+          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.3 patch').toBe(
             bootFixture!.patchedSyxSha256,
           );
           for (const name of [
@@ -782,8 +799,7 @@ for (const scenario of cases) {
             expect(await word(symbol('_lp_error'))).toBe(0);
             expect(await word(symbol('_lp_status'))).toBe(terminal ? 3 : 2);
             const dma = await armed();
-            if (!terminal) expect(dma).toMatchObject({ ready: true, addr: rx, count: 0x401, modify: 4 });
-            else expect(dma.ready, 'terminal packet must not rearm receive DMA').toBe(false);
+            expect(dma).toMatchObject({ ready: true, addr: rx, count: 0x401, modify: 4 });
             const captureSamples = stockAudio ? await audioMarker(`packet-${tag}-consumed`) : undefined;
             const progress = {
               tag,
@@ -798,6 +814,62 @@ for (const scenario of cases) {
               path.join(runDir, 'requests.jsonl'),
               JSON.stringify({ event: 'consumed', ...progress }) + '\n',
             );
+          }
+          if (closeControl) {
+            phase = 'private diagnostic reader CLOSE, not an actual paused voice';
+            const mail = symbol('lp_close_mail');
+            const reply = symbol('lp_close_ack');
+            const bBefore = await bytes(symbol('_lp_close_b_open'), 24);
+            const injectCount = async (value: number, previous: number) => {
+              const text = `BASE ${stockSha}\nDM ${symbol('_lp_close_a_count').toString(16)} ${value.toString(16).padStart(8, '0')} was ${previous.toString(16).padStart(8, '0')}\n`;
+              save(`close-count-${value}.json`, { text, diagnosticFaultInjection: true });
+              await rpc('dsp.patch', { text });
+              expect(await word(symbol('_lp_close_a_count'))).toBe(value);
+            };
+            const exactClose = async (status: number) => {
+              const before = await cfWord(reply);
+              const fields = await Promise.all([4, 8, 12, 16, 20].map((offset) => cfWord(reply + offset)));
+              const after = await cfWord(reply);
+              observations.closeAck = { before, after, fields };
+              return (
+                !(before & 1) &&
+                before === after &&
+                fields.every((value, index) => value === [1, status, 1, 0, 1][index])
+              );
+            };
+            await injectCount(1, 0);
+            for (const [offset, value] of [
+              [8, 1],
+              [12, 0],
+              [16, 1],
+            ] as const)
+              await rpc('mem.cf.poke', { addr: mail + offset, value });
+            await rpc('mem.cf.poke', { addr: mail, value: 1 });
+            await expect.poll(() => cfWord(mail), { timeout: 20000 }).toBe(2);
+            await expect.poll(() => exactClose(1), { timeout: 20000 }).toBe(true);
+            expect(await cfWord(mail + 20)).toBe(1);
+            expect(await word(symbol('_lp_close_a_open'))).toBe(0);
+            expect(await word(symbol('_lp_close_a_ready'))).toBe(0);
+            expect(await word(symbol('_lp_close_a_closed'))).toBe(1);
+            expect(await bytes(symbol('_lp_close_b_open'), 24)).toEqual(bBefore);
+            const pendingFrame = await frames();
+            await expect.poll(frames, { timeout: 10000 }).toBeGreaterThan(pendingFrame);
+            expect(await cfWord(mail)).toBe(2);
+            await injectCount(0, 1);
+            await expect.poll(() => cfWord(mail), { timeout: 20000 }).toBe(3);
+            await expect.poll(() => exactClose(2), { timeout: 20000 }).toBe(true);
+            expect(await cfWord(mail + 4)).toBe(0);
+            expect(await cfWord(mail + 20), 'drain poll must not resend CLOSE').toBe(1);
+            expect(await bytes(symbol('_lp_close_b_open'), 24)).toEqual(bBefore);
+            expect(await word(symbol('_lp_pages'))).toBe(235);
+            expect(await word(symbol('_lp_bytes'))).toBe(BANK_BYTES);
+            expect(await armed()).toMatchObject({ ready: true, addr: rx, count: 0x401, modify: 4 });
+            save('close-control.json', {
+              diagnosticReaderCountInjection: true,
+              actualAudioReader: false,
+              bBefore: bBefore.toString('hex'),
+              ...observations,
+            });
           }
           if (stockAudio) await finishStockAudio();
           const after = await armed();
@@ -832,15 +904,14 @@ for (const scenario of cases) {
           const frameAfter = await frames();
           await session.expectNoFault(`LP0 ${scenario.label} and subsequent frames`);
           if (fullBank) {
-            // Completion and hardware inactivity must persist across normal frames;
-            // status 3 alone cannot prove that the driver did not rearm DMA.
+            // Payload completion persists while the receiver remains armed for CLOSE.
             await expectAck(235, BANK_BYTES, 3);
             expect(await word(symbol('_lp_status'))).toBe(3);
             expect(await word(symbol('_lp_error'))).toBe(0);
             expect(await word(symbol('_lp_pages'))).toBe(235);
             expect(await word(symbol('_lp_bytes'))).toBe(BANK_BYTES);
             const terminalDma = await armed();
-            expect(terminalDma.ready).toBe(false);
+            expect(terminalDma).toMatchObject({ ready: true, addr: rx, count: 0x401, modify: 4 });
             expect(await cfWord(mail)).toBe(3);
             expect(await cfWord(mail + 12)).toBe(235);
             observations.terminalAfterFrames = { dma: terminalDma, pages: 235, bytes: BANK_BYTES, frameAfter };

@@ -164,6 +164,17 @@ selected. Next work remains checked production reservation/cache maintenance
 and real CF/DSP transport integration. The 22-case logical close/ACK proof is
 complete and independent of cache encoding and production backing ownership.
 
+- [x] Implement private LP0 0.3 CLOSE and exact CF ACK with separate reply
+  snapshots, sticky ISR failures and bounded drain polling. All 73 owner cases,
+  scoped static/generation/current-object checks pass; CF/DSP objects redecoded
+  (450/727 instructions). Diagnostic controls are not connected to audio readers.
+- [x] Complete independent code review and prepare the exact 0.3 boot fixture;
+  cold idle and all four pre-exchange descriptor counts match. See finding 94.
+- [ ] Run the explicit `DIGI_LP0_CLOSE=1` native held-stock-audio/CLOSE case with
+  a newly prepared exact-0.3-hash boot fixture. Terminal receive is now armed;
+  historical 0.2 terminal-inactive evidence remains unchanged. Parent owns this
+  run; no new native, physical IRQ/cache or production ownership claim follows.
+
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.
 The initial ordering and reader strategy are recorded in

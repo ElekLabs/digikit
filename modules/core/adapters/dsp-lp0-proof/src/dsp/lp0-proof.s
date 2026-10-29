@@ -1,6 +1,6 @@
 #include "dsp/call.inc"
 #include "dsp/sample_bank.inc"
-// DN2 1.12 emulator-only, private LP0 receive diagnostic. No ACK or voice publication.
+// DN2 1.12 private LP0 data/CLOSE diagnostic; no voice or backing integration.
 .SECTION/PM seg_pmco;
 .GLOBAL _lp_hook;
 .GLOBAL _lp_callback;
@@ -140,6 +140,10 @@ _lp_hook:
     DM(_lp_save + 284) = R0;
     R0 = STKYX;
     DM(_lp_save + 288) = R0;
+    // Scalar conditions must not combine a stale secondary SIMD status flag.
+    // Saved MODE1 (including bank selectors) is restored at the common exit.
+    BIT CLR MODE1 0x200000;
+    NOP; NOP;
     // A saved AudioTask common tail, with the driver interrupt predicate checked live.
     R0 = DM(_lp_status);
     R0 = PASS R0;
@@ -218,6 +222,10 @@ _lp_hook:
     LCNTR = 1024, DO _lp_guard_init UNTIL LCE;
         DM(I0, M6) = R0 (NW);
 _lp_guard_init: DM(I1, M6) = R0 (NW);
+    // Two diagnostic controls only: epoch=1, open/ready=1, no audio readers.
+    R0 = 1;
+    DM(_lp_close_a_open) = R0; DM(_lp_close_a_ready) = R0; DM(_lp_close_a_epoch) = R0;
+    DM(_lp_close_b_open) = R0; DM(_lp_close_b_ready) = R0; DM(_lp_close_b_epoch) = R0;
     R0 = 2;
     DM(_lp_status) = R0;
     DK_CALL(_lp_arm, _lp_after_arm);
@@ -243,6 +251,38 @@ _lp_restore:
     NOP; NOP;
     M6 = 1;
     L4 = 0;
+    L0 = 0;
+    // No calls here: bounded pending-drain poll under the full hook save/mask.
+    R0 = DM(_lp_status); R1 = 4; COMP(R0, R1); IF EQ JUMP _lp_progress_reply;
+    R0 = DM(_lp_close_rearming); R0 = PASS R0; IF NE JUMP _lp_progress_reply;
+    R0 = DM(_lp_close_last_id); R0 = PASS R0; IF EQ JUMP _lp_choose_reply;
+    R0 = DM(_lp_close_last_drained); R0 = PASS R0; IF NE JUMP _lp_choose_reply;
+    R0 = DM(_lp_close_last_track); R0 = PASS R0; IF NE JUMP _lp_poll_b;
+    I0 = _lp_close_a_open; JUMP _lp_poll_control;
+_lp_poll_b:
+    I0 = _lp_close_b_open;
+_lp_poll_control:
+    NOP; NOP; NOP;
+    R0 = DM(5, I0); R1 = DM(_lp_close_last_epoch);
+    COMP(R0, R1); IF NE JUMP _lp_poll_rejected;
+    R0 = DM(0, I0); R0 = PASS R0; IF NE JUMP _lp_choose_reply;
+    R0 = DM(1, I0); R0 = PASS R0; IF NE JUMP _lp_choose_reply;
+    R0 = DM(2, I0); R1 = 1; COMP(R0, R1); IF NE JUMP _lp_choose_reply;
+    R0 = DM(3, I0); R0 = PASS R0; IF NE JUMP _lp_choose_reply;
+    R0 = DM(4, I0); R0 = PASS R0; IF NE JUMP _lp_choose_reply;
+    R0 = 1; DM(_lp_close_last_drained) = R0;
+    R0 = 2; JUMP _lp_poll_publish;
+_lp_poll_rejected:
+    R0 = 3;
+_lp_poll_publish:
+    DM(_lp_close_status) = R0;
+    R0 = DM(_lp_close_last_id); DM(_lp_close_id) = R0;
+    R0 = DM(_lp_close_last_track); DM(_lp_close_track) = R0;
+    R0 = DM(_lp_close_last_epoch); DM(_lp_close_epoch) = R0;
+    R0 = 1; DM(_lp_reply_kind) = R0;
+_lp_choose_reply:
+    R0 = DM(_lp_reply_kind); R0 = PASS R0; IF NE JUMP _lp_control_reply;
+_lp_progress_reply:
     R3 = 0x00014c50;                     // numeric halves: magic, version
     R4 = DM(_lp_status);
     R5 = DM(_lp_error);
@@ -250,6 +290,12 @@ _lp_restore:
     R4 = R4 OR R5;                       // numeric halves: status, error
     R5 = DM(_lp_pages);
     R6 = DM(_lp_bytes);
+    JUMP _lp_write_reply;
+_lp_control_reply:
+    R3 = DM(_lp_close_status); R3 = LSHIFT R3 BY 24;
+    R0 = 0x00014241; R3 = R3 OR R0;
+    R4 = DM(_lp_close_id); R5 = DM(_lp_close_track); R6 = DM(_lp_close_epoch);
+_lp_write_reply:
     R0 = DM(_lp_save + 80);              // incoming I4: current reply byte pointer
     R1 = 0xabc;
     R0 = R0 + R1;
@@ -429,7 +475,7 @@ _lp_arm_done:
     DK_LEAVE(R3, 2);
 // Callback arguments: R4=context, R8=event, R12=normalized RX byte address.
 _lp_callback:
-    DK_ENTER(9);
+    DK_ENTER(10);
     DK_SAVE(2, R3);
     DK_SAVE(3, R5);
     DK_SAVE(4, R6);
@@ -444,10 +490,15 @@ _lp_callback:
     DK_SAVE(9, R0);
     R0 = I5;
     DK_SAVE(10, R0);
+    DK_SAMPLE_BANK_LOCK(R0);
+    DK_SAVE(11, R0);
+    BIT CLR MODE1 0x200000;
+    NOP; NOP;
     R0 = DM(_lp_status);
     R1 = 2;
     COMP(R0, R1);
     IF EQ JUMP _lp_cb_active;
+    R1 = 3; COMP(R0, R1); IF EQ JUMP _lp_cb_active;
     R1 = 4;
     COMP(R0, R1);
     IF EQ JUMP _lp_cb_done;
@@ -464,6 +515,9 @@ _lp_cb_active:
     IF NE JUMP _lp_cb_bad;
     I0 = R0;
     R4 = DM(0, I0);
+    R0 = 0x01014243; COMP(R4, R0); IF EQ JUMP _lp_cb_close;
+    R0 = DM(_lp_status); R1 = 2; COMP(R0, R1); IF NE JUMP _lp_cb_bad;
+    R0 = 0; DM(_lp_reply_kind) = R0;
     R5 = DM(_lp_pages);
     COMP(R4, R5);
     IF NE JUMP _lp_cb_bad;
@@ -515,6 +569,57 @@ _lp_guard_check:
     IF NE JUMP _lp_guard_check;
     R0 = 3;
     DM(_lp_status) = R0;
+    DK_CALL(_lp_arm, _lp_after_terminal_rearm);
+    JUMP _lp_cb_done;
+_lp_cb_close:
+    R0 = 1; DM(_lp_close_rearming) = R0;
+    R5 = DM(1, I0); R6 = DM(2, I0); R7 = DM(3, I0);
+    DM(_lp_close_id) = R5; DM(_lp_close_track) = R6; DM(_lp_close_epoch) = R7;
+    R5 = PASS R5; IF LE JUMP _lp_close_rejected;
+    R7 = PASS R7; IF LE JUMP _lp_close_rejected;
+    R0 = 0; COMP(R6, R0); IF LT JUMP _lp_close_rejected;
+    R0 = 1; COMP(R6, R0); IF GT JUMP _lp_close_rejected;
+    R0 = DM(_lp_close_last_id); COMP(R5, R0); IF LT JUMP _lp_close_rejected;
+    IF EQ JUMP _lp_close_retry;
+    R0 = PASS R0; IF EQ JUMP _lp_close_identity;
+    R0 = DM(_lp_close_last_drained); R0 = PASS R0; IF EQ JUMP _lp_close_rejected;
+    JUMP _lp_close_identity;
+_lp_close_retry:
+    R0 = DM(_lp_close_last_track); COMP(R6, R0); IF NE JUMP _lp_close_rejected;
+    R0 = DM(_lp_close_last_epoch); COMP(R7, R0); IF NE JUMP _lp_close_rejected;
+_lp_close_identity:
+    R0 = PASS R6; IF NE JUMP _lp_close_b;
+    I1 = _lp_close_a_open; JUMP _lp_close_check;
+_lp_close_b:
+    I1 = _lp_close_b_open;
+_lp_close_check:
+    NOP; NOP; NOP;
+    R0 = DM(5, I1); COMP(R7, R0); IF NE JUMP _lp_close_rejected;
+    R0 = DM(_lp_close_last_id); COMP(R5, R0); IF EQ JUMP _lp_close_adopt;
+    R0 = 0; DM(_lp_close_last_drained) = R0;
+_lp_close_adopt:
+    DM(_lp_close_last_id) = R5; DM(_lp_close_last_track) = R6; DM(_lp_close_last_epoch) = R7;
+    // Same SDK close semantics, with explicit record addresses for each track.
+    R0 = PASS R6; IF NE JUMP _lp_close_b_admission;
+    DK_SAMPLE_BANK_CLOSE(_lp_close_a_open, _lp_close_a_ready, _lp_close_a_closed, R0);
+    DK_SAMPLE_BANK_CHECK_DRAIN(_lp_close_a_count, _lp_close_a_fault, R0, R1, _lp_close_pending);
+    JUMP _lp_close_drained;
+_lp_close_b_admission:
+    DK_SAMPLE_BANK_CLOSE(_lp_close_b_open, _lp_close_b_ready, _lp_close_b_closed, R0);
+    DK_SAMPLE_BANK_CHECK_DRAIN(_lp_close_b_count, _lp_close_b_fault, R0, R1, _lp_close_pending);
+_lp_close_drained:
+    R0 = 1; DM(_lp_close_last_drained) = R0;
+    R0 = 2; JUMP _lp_close_result;
+_lp_close_pending:
+    R0 = 1; JUMP _lp_close_result;
+_lp_close_rejected:
+    R0 = 3;
+_lp_close_result:
+    DM(_lp_close_status) = R0;
+    DK_CALL(_lp_arm, _lp_after_close_rearm);
+    R0 = DM(_lp_status); R1 = 4; COMP(R0, R1); IF EQ JUMP _lp_cb_done;
+    R0 = 0; DM(_lp_close_rearming) = R0;
+    R0 = 1; DM(_lp_reply_kind) = R0;
     JUMP _lp_cb_done;
 _lp_cb_bad:
     R0 = 4;
@@ -535,6 +640,8 @@ _lp_cb_done:
     I3 = R0;
     DK_RESTORE(R0, 10);
     I5 = R0;
+    DK_RESTORE(R0, 11);
+    DK_SAMPLE_BANK_UNLOCK(R0);
     DK_LEAVE(R3, 2);
 .SECTION/DM seg_dmda;
 .PKDATA _lp_save, 292;
@@ -556,3 +663,27 @@ _lp_cb_done:
 .VAR _lp_rx = 0;
 .GLOBAL _lp_handle;
 .VAR _lp_handle = 0;
+
+// Six contiguous words per diagnostic control: no actual audio voice binding.
+.GLOBAL _lp_close_a_open; .VAR _lp_close_a_open = 0;
+.GLOBAL _lp_close_a_ready; .VAR _lp_close_a_ready = 0;
+.GLOBAL _lp_close_a_closed; .VAR _lp_close_a_closed = 0;
+.GLOBAL _lp_close_a_count; .VAR _lp_close_a_count = 0;
+.GLOBAL _lp_close_a_fault; .VAR _lp_close_a_fault = 0;
+.GLOBAL _lp_close_a_epoch; .VAR _lp_close_a_epoch = 0;
+.GLOBAL _lp_close_b_open; .VAR _lp_close_b_open = 0;
+.GLOBAL _lp_close_b_ready; .VAR _lp_close_b_ready = 0;
+.GLOBAL _lp_close_b_closed; .VAR _lp_close_b_closed = 0;
+.GLOBAL _lp_close_b_count; .VAR _lp_close_b_count = 0;
+.GLOBAL _lp_close_b_fault; .VAR _lp_close_b_fault = 0;
+.GLOBAL _lp_close_b_epoch; .VAR _lp_close_b_epoch = 0;
+.VAR _lp_close_last_id = 0;
+.VAR _lp_close_last_track = 0;
+.VAR _lp_close_last_epoch = 0;
+.VAR _lp_close_last_drained = 0;
+.VAR _lp_close_rearming = 0;
+.VAR _lp_reply_kind = 0;
+.VAR _lp_close_status = 0;
+.VAR _lp_close_id = 0;
+.VAR _lp_close_track = 0;
+.VAR _lp_close_epoch = 0;
