@@ -121,8 +121,9 @@ hardware sample-memory limits**. The ten-second target cannot fit even raw PCM16
 allocation ownership and cache/coherence rules remain unproved. These candidates do not verify an allocator;
 older [V] marks or observations on other images do not transfer to this adapter.
 
-**[D]** The bounded DN2 current-database scout found external-looking reads at `0x1c8ef7` → `0x8c4ad790` and
-`0x1c8f00` → `0x8c4ad990`. **[O]** It found no established free or owned sample-sized DSP allocation and no
+**[C]** The earlier external-read leads at `0x1c8ef7` and `0x1c8f00` are withdrawn: the independent current-image
+raw-byte audit in [finding 83](83-sample-retirement-design.md) identifies a non-instruction boundary and a register move.
+**[O]** There is no established free or owned sample-sized DSP allocation and no
 established delivery path for such a pool. A ColdFire cave or CF module arena does not prove DSP addressability.
 Do not assume the DT2 pool, stock sampler or LP0 path exists on DN2. DN2 feasibility for the ten-second target
 remains unresolved.
