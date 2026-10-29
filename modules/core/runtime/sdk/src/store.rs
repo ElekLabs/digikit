@@ -528,6 +528,71 @@ pub unsafe fn find(io: &Io, lay: &Layout, h: &Hdr, buf: *mut u8, cap: usize, pat
     Ok(hit)
 }
 
+/// Copy one complete file into caller-owned storage, with fail-closed generation
+/// checks around lookup and read. Unlike `stable`, exhaustion never returns an
+/// unverified result. `hash` must compute SHA-256 of the supplied retained bytes.
+///
+/// # Safety
+/// `path` is NUL terminated. All buffers are private to this operation, disjoint,
+/// and 16-byte aligned: `fp` is 512 bytes; `scratch` has `cap >= 512` bytes;
+/// `dst` has `dst_cap` bytes, including sector padding. A failed call does not
+/// publish any bytes. The caller must not use `dst` after an error.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn snapshot<F: FnMut(&[u8]) -> [u8; 32]>(
+    io: &Io,
+    lay: &Layout,
+    path: *const u8,
+    fp: *mut u8,
+    scratch: *mut u8,
+    cap: usize,
+    dst: *mut u8,
+    dst_cap: usize,
+    max_bytes: u32,
+    mut hash: F,
+) -> Result<Entry, i32> {
+    let mut tries = 0;
+    loop {
+        let before = fingerprint(io, lay, fp).ok_or(E_READ)?;
+        let result = (|| {
+            let table = open(io, lay, fp, scratch, cap, true)?;
+            let (_, entry) = find(io, lay, &table.h, scratch, cap, path)?.ok_or(E_NOT_FOUND)?;
+            if entry.kind != KIND_FILE {
+                return Err(E_NOT_FOUND);
+            }
+            if entry.size == 0 || entry.size > max_bytes || entry.size > u32::MAX - 511 {
+                return Err(crate::E_TOO_BIG);
+            }
+            let sectors = sectors_of(entry.size);
+            if sectors as usize > dst_cap / 512 || entry.first == 0 || entry.first >= lay.limit() || sectors > lay.limit() - entry.first {
+                return Err(crate::E_TOO_BIG);
+            }
+            // Bounded reads even when the caller permits a file larger than one
+            // firmware block read. Nothing retains a table extent after return.
+            let mut done = 0;
+            while done < sectors {
+                let count = core::cmp::min(sectors - done, MAX_IO_SECTORS);
+                let r = read_sectors(io, lay, entry.first + done, count, dst.add(done as usize * 512), dst_cap - done as usize * 512);
+                if r != OK {
+                    return Err(r);
+                }
+                done += count;
+            }
+            if hash(core::slice::from_raw_parts(dst, entry.size as usize)) != entry.sha {
+                return Err(crate::E_SHA);
+            }
+            Ok(entry)
+        })();
+        let after = fingerprint(io, lay, fp).ok_or(E_READ)?;
+        if before == after {
+            return result;
+        }
+        if tries >= STABLE_TRIES {
+            return Err(crate::E_BUSY);
+        }
+        tries += 1;
+    }
+}
+
 // ---- free space -------------------------------------------------------------------------------------------------------------
 
 const FIXED_MAX: usize = 6;

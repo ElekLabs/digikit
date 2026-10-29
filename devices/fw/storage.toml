@@ -34,3 +34,45 @@ rule.dn2 = { kind = "cf_func", hash = "f2ab3c0214b6212848a6300a70dd6129", offset
 mark = "D"
 users = ["core/runtime"]
 doc = "The firmware's normal writer of the boot record (finding 36 section 2; DT2 1.16 FUN_400f044a, 1.17 0x400f05ae; DN2 1.11 FUN_400f1e26, 1.12 FUN_400f1f8a): writes the arena to the next of the two record slots, invalidates the other, one shot per boot."
+
+# Read-only sample-source adapter; DT2 1.17 hashes and signatures inspected in
+# finding 78. No DN2 path filesystem is declared.
+[[fn]]
+name = "cf.storage.fn.path.open"
+cpu = "cf"
+sig = "i32 (const u8 *path, const u8 *mode, u32 *handle)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "f642319babf0cc8f26a18a17356a25df", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 78)."
+
+[[fn]]
+name = "cf.storage.fn.path.read"
+cpu = "cf"
+sig = "i32 (u8 *buf, u32 bytes, u32 *handle)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "c791af18f208eb18539a112ba7339fa3", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 78)."
+
+[[fn]]
+name = "cf.storage.fn.path.close"
+cpu = "cf"
+sig = "i32 (u32 *handle)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "ad3982007ea053f7f633f28b1f0e5f59", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 78)."
+
+[[fn]]
+name = "cf.storage.fn.path.size"
+cpu = "cf"
+sig = "u32 (u32 entry_id)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "b37e8567dc53892b5fe3ddba277e1a9c", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 78)."

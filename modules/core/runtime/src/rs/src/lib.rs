@@ -28,6 +28,8 @@ mod loader;
 pub mod registry;
 pub mod scan;
 pub mod settings;
+mod sample;
+mod sample_source;
 mod sha256;
 pub mod store;
 mod table;
@@ -442,6 +444,10 @@ unsafe extern "C" fn api_register_cmds(first: u32, count: u32, handler: Option<d
     upload::register_cmds(first, count, handler)
 }
 
+unsafe extern "C" fn api_sample_bank(id: u32) -> i32 { sample::bank(id) }
+unsafe extern "C" fn api_sample_load(handle: u32, path: *const u8) -> i32 { sample::load(handle, path) }
+unsafe extern "C" fn api_sample_status(handle: u32) -> i32 { sample::status(handle) }
+
 /// The table is built at first use: pointers to the helpers are not constants.
 #[no_mangle]
 pub static mut dkrt_api: Api = Api {
@@ -462,6 +468,9 @@ pub static mut dkrt_api: Api = Api {
     umoddi3: 0,
     log_lv: api_log_lv,
     register_cmds: api_register_cmds,
+    sample_bank: api_sample_bank,
+    sample_load: api_sample_load,
+    sample_status: api_sample_status,
 };
 
 pub unsafe fn log(msg: *const u8, value: u32) {
@@ -949,6 +958,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     upload::restart_poll();
     crash::install();
     dsp::step();
+    sample::tick();
     fxpage::tick();
     settings::tick();
     dlog::tick();

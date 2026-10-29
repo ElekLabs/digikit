@@ -222,7 +222,36 @@ pub fn boot_emulator_to_ready(
             return Err(SOFT_RESET.into());
         }
         if let Some(error) = &status.error {
-            return Err(format!("guest fault during boot: {error}"));
+            let (d, a, pc, sr) = emulator.cpu_regs();
+            let last_bus_pc = emulator.last_bus_pc();
+            let stack_start = a[7] & !3;
+            // The board's SDRAM/SRAM range excludes MMIO. Keep the word reads
+            // aligned and bounded even when the guest has corrupted its SP.
+            let stack = if (0x4000_0000..0x8c00_0000).contains(&stack_start) {
+                emulator.peek_ram(stack_start, 128.min(0x8c00_0000 - stack_start))
+            } else {
+                Vec::new()
+            };
+            let code_start = last_bus_pc.saturating_sub(16).max(0x4000_0000) & !3;
+            let code = if (0x4000_0000..0x8c00_0000).contains(&last_bus_pc) {
+                emulator.peek_ram(code_start, 32.min(0x8c00_0000 - code_start))
+            } else {
+                Vec::new()
+            };
+            let diagnostic = serde_json::json!({
+                "error": error,
+                "cpu_regs": { "d": d, "a": a, "pc": pc, "sr": sr },
+                "last_bus_pc": last_bus_pc,
+                "code": { "address": code_start, "bytes": code },
+                "stack": { "address": stack_start, "bytes": stack },
+            });
+            let path = out_dir.join("boot-fault.json");
+            let message = format!("guest fault during boot: {error}");
+            let message = match write_atomic(&path, diagnostic.to_string().as_bytes()) {
+                Ok(()) => format!("{message} (diagnostic: {})", path.display()),
+                Err(write_error) => format!("{message} (could not save diagnostic: {write_error})"),
+            };
+            return Err(message);
         }
         // Commit every frame sent so far, so the quiet test does not depend on
         // how far the worker thread got.

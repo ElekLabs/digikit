@@ -17,12 +17,16 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 - SDK checkpoint: `4cd29a3c`. The resumed loading/lifetime investigation is in
   [finding 78](../findings/78-sample-loading-lifetime.md). Read the next proof proposal below before changing runtime
   code. It preserves Transfer destinations and uses a module-owned, session-pinned DSP bank. The proof is approved;
-  do not ask for its approval again. Source, packaging and runtime patches are integrated; the transferred-file
-  selected DN2 boot passes after the ColdFire byte-swap helper fix. DN2 now confirms actual type 16 dispatch
-  and unready PCM silence, but its first note halts the native DSP before transfer; publication subsequently
-  times out (-35, no chunks acknowledged). Diagnose that note's control flow with existing PCDUMP before
-  changing transport. DN2 and DT2 transferred-file proofs remain incomplete; no hardware run is authorized.
-  [Finding 79](../findings/79-sample-bank-proof.md) records the evidence and current blocker.
+  do not ask for its approval again. Source, packaging and runtime patches are integrated.
+  Both DN2 1.12 and DT2 1.17 transferred-file acceptance now pass after the ColdFire byte-swap helper and explicit-label
+  DK_CALL corrections: oversize rejection, clean restart, actual type 16 dispatch, unready silence/no fault,
+  exact published bytes, READY, replacement refusal, audible playback and retriggering. Log:
+  `out/runs/dsp-sdk-checks/sample-playback-fixed-dn2.log` and
+  `out/runs/dsp-sdk-checks/sample-playback-dt2-retry.log` (each one pass, the other device filtered out).
+  The bounded emulator proof is complete; production capacity, replacement and sample selection remain proposed decisions.
+  Use git log for the final implementation checkpoint commit.
+  No transport or core-semantics change was made for the call-frame fault. No hardware run is authorized.
+  [Finding 79](../findings/79-sample-bank-proof.md) records the evidence and remaining limits.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -234,7 +238,7 @@ Names below are conceptual, not new exported ABI commitments:
 
 Em approved this bounded bank API on 2026-10-29, narrower than the earlier general prepare/bind/release sketch.
 Evidence and exact current-image mappings are in finding 78. Runtime implementation is integrated below;
-the transferred-file device proof remains incomplete. The first SDK milestone is checkpointed at `4cd29a3c`.
+the transferred-file bounded emulator proof passes on both current OS images. The first SDK milestone is checkpointed at `4cd29a3c`.
 
 **Scope:** prove an actual transferred mono sample can reach the existing numerical reader on both devices,
 with correct ownership and failure behavior. Preserve the current Transfer destinations. No stock-pointer
@@ -274,15 +278,16 @@ and format, and close every successfully opened handle. First emulator proofs ex
 writes; do not claim concurrent DT2 overwrite/delete support until its handle behavior is tested or an enforceable
 exclusion exists. Bound work per UI pass; synchronous read latency must still be measured.
 
-**Work after approval:**
+**Approved proof work:**
 
-- [ ] Agree declaration/record and status contracts here, then assign disjoint SDK/packer and DT2 source-adapter
+- [x] Agree declaration/record and status contracts here, then assign disjoint SDK/packer and DT2 source-adapter
   tasks to workers in separate worktrees. One worker owns shared runtime queue/lifetime integration.
-- [ ] Add host tests for declaration ownership/bounds, private snapshot consistency and fake-link state transitions.
-- [ ] Add current-image DT2 read-only filesystem bindings/wrapper and DN2 snapshot reader.
-- [ ] Add module-owned bank job and immutable descriptor publication, serialized with existing module/registry work.
-- [ ] Add a minimal proof consumer on both devices using actual transferred data; bound emulator runs and test PCM,
-  silence-before-ready, failure, full-memory and retrigger behavior. No user sample audio committed.
+- [x] Add host tests for declaration ownership/bounds, private snapshot consistency and fake-link state transitions.
+- [x] Add current-image DT2 read-only filesystem bindings/wrapper and DN2 snapshot reader.
+- [x] Add module-owned bank job and immutable descriptor publication, serialized with existing module/registry work.
+- [x] Add a minimal proof consumer on both devices using actual transferred data; bound emulator runs and test PCM,
+  silence-before-ready, oversize failure and retrigger behavior. Host tests cover allocation capacity/failure;
+  emulator acceptance does not establish arbitrary module coexistence. No user sample audio committed.
 - [ ] Report latency, memory and instructions; review product sample length, stereo and editing scope separately.
 
 Independent evidence audit supports the source constraints, including UI task placement, conditional early-free
@@ -335,9 +340,12 @@ ownership/coherency protocol. Hoist conversions/coefficient work out of sample l
   load queues a copied path, and execution waits for the owner's full DSP load. Status 0 unused, 1 queued,
   2 loading, 3 ready, negative existing SDK error codes on failure. No destination reuse after transfer starts.
 - [x] Integrate source, packaging and lifecycle implementations; review the combined boundary behavior.
-- [ ] Add the proof consumer and transferred-file emulator scenarios; execute owner checks on both devices.
+- [x] Add the proof consumer and transferred-file emulator scenarios; execute owner checks on both devices.
+- [x] DN2 1.12: run the transferred-file scenario through oversize failure, clean restart, unready dispatch/silence,
+  exact READY publication, replacement refusal, audible playback/retrigger and no-fault checks.
+- [x] DT2 1.17: run the same transferred-file scenario with the current-worktree daemon.
 
-Implementation resume notes (not completion):
+Implementation and bounded-proof checkpoint (product scope remains open):
 
 - Source, SDK/packer and runtime patches are integrated in the parent worktree, uncommitted. Decoder/snapshot
   tests pass (five); lifecycle tests pass (seven), including delayed pointer reads and lost final READY acknowledgement.
@@ -399,16 +407,57 @@ Implementation resume notes (not completion):
   The kernel epilogue reads that stale value into I12, then jumps to `0x254aa1`. Evidence:
   `out/runs/dsp-sdk-checks/unready-module-trace-window/pcdump.csv` and
   `out/runs/dsp-sdk-checks/unready-stack-alias-trace/stack-rows.json`. Public PRM pages 13-18/13-19 confirm
-  `u=1` denotes post-modify. No root-cause fix yet: investigate assembler encoding/native PC handling and why
-  Python call-stack tests passed despite the missing saved return.
+  `u=1` denotes post-modify. The Python test path also used an abstract call stack: an unknown saved return
+  bypassed target checking and returned through recorded call metadata. This explains the earlier false pass;
+  no interpreter/native core semantics were changed.
+- Approved bounded correction: `DK_CALL(fn, return_label)` now requires a caller-supplied unique label and
+  emits an immediate Type 16a post-modify store of `return_label - 1`. The one-argument form is rejected. All
+  repository SDK callers were migrated. Repeated/nested-call experiments proved distinct relocations with
+  addend -1; neither numeric local labels nor a builtin `__COUNTER__` was usable, so no preprocessor feature
+  or dependency edit was added. Artifacts: `out/runs/dsp-sdk-checks/call-label-experiment/`.
+- New `test_dsp_call_frames.py` in `tests/patchkit/` executes the actual assembled bytes in Python architectural-stack
+  mode and the fingerprint-checked native core, with runtime decoding, poisoned saved-return slots, repeated
+  and nested calls, low-alias and L2-byte-alias stacks. It asserts actual continuation PCs, saved frame/return
+  slots and exact I6/I7 restoration; old one-argument assembly must fail. The four named suites (call frames,
+  generic kernels, sample kernels, fixture consumer) passed **85 tests, no skips** with an explicit current native
+  library. Log: `out/runs/dsp-sdk-checks/sdk-call-frame-tests.log`.
+- Actual fixture `module:check` passes **29 tests, five skipped**, and both device packs were refreshed under
+  `out/regression/modules/{dn2,dt2}/sample-proof.dkm`. Each needs 33,984 DSP bytes and fits an empty device;
+  this does not establish coexistence or device playback. Logs: `out/runs/dsp-sdk-checks/sdk-call-module-check.log`,
+  `sdk-call-module-build.log`, `sdk-call-pack-dn2.log` and `sdk-call-pack-dt2.log` in the same directory.
+  The cached fixture now decodes its return store at byte 396 as Type 16a, with an ABS32/addend -1 relocation
+  to `_sp_after_linear` (parcel 201).
+- Parent's corrected fast DN2 `dk:dev` first-note reproduction now passes without a DSP halt (12.38 s total):
+  `out/runs/dsp-sdk-checks/sample-note-fixed-dn2.log`. This is a bounded first-note check, not full transferred
+  playback acceptance by itself. The subsequent full DN2 scenario **passes** (session 7984), with one test
+  passed and one DT2-filtered skip, 235.36 s total wall time and 228.197 s scenario time:
+  `out/runs/dsp-sdk-checks/sample-playback-fixed-dn2.log`. It verifies uploaded 9,000-frame oversize rejection
+  (-13), zero descriptor/no fault, clean restart, actual type 16 dispatch, exact-zero unready PCM/no fault,
+  4,096-frame exact decoded publication with READY=3, replacement refusal (-10), audible playback/retrigger
+  and no faults. These suite durations are not loading-latency or performance measurements. Passing temporary
+  artifacts at `run-fMhyJt` were removed by normal test cleanup; exact ready/retrigger peaks are not retained here.
+- Independent review found no concrete issues in the explicit-label macro or native return-frame regression.
+  DT2 current-worktree daemon build completed in about 90 s (session 47443), logged in
+  `out/runs/dsp-sdk-checks/sample-dt2-daemon-build.log`. The prepared binary is
+  `out/native/target-wt/digikit-dsp-sampler/g-e7aa50f9/release/digi-emud`, used for the passing DT2 retry below.
+- The first DT2 scenario retry failed its diagnostic assertion (expected type 16, read 1), while screenshots
+  showed SAMPLE PROOF with START/END/REV and the DSP remained healthy. The test had read DN2's diagnostic
+  layout: DT2 stores type at `_dv_g + 4` and `_dv_c` word 0 is note-on; DN2 stores type at `_dv_c` word 0.
+  The scenario now resolves the device-specific symbol from its exact patch plan and records the address.
+  The exact assigned-type assertion is retained; this test-only correction resolves the failure.
+- DT2 1.17 retry **passes**: one test passed, one DN2-filtered skip, 94.25 s wall time and about 67 s scenario
+  time (`out/runs/dsp-sdk-checks/sample-playback-dt2-retry.log`). It verifies the same assertions as DN2:
+  oversize -13/zero descriptor/no fault, clean restart, actual type 16, exact-zero unready PCM and healthy DSP,
+  exact READY=3 bank bytes, replacement -10, audible finite playback/retrigger and no faults. Both-device
+  bounded proof acceptance is complete; these durations are not loading-latency or performance measurements.
 - Focused stock OneShot investigation is now requested. Current DT2 1.17 database candidates are render
   dispatch `0x1c6b00` → `0x1c4ecf` and stretch branch `0x1c6af1` → `0x1c5576`; stock Type 16a immediate
   post-modify return stores provide a comparator. These are [D] database observations, not [V] byte audits
   or a completed sample-access/ownership trace.
 - The TypeScript scenario now records `unready-state.json` (daemon status, faults and PCM summary) immediately
   after capture and calls `expectNoFault('unready proof-machine note')` before valid loading. Publication
-  diagnostics also retain daemon status/faults. These latest assertions pass formatting and TypeScript checks
-  only; their full emulator rerun has not run yet.
+  diagnostics also retain daemon status/faults. Formatting and TypeScript checks pass, and the full DN2 run
+  above and the DT2 retry now exercise these assertions successfully.
 - Partial `test:changed` checks pass Ruff, layercheck and the two selected Python files
   `tests/devtools/test_changed_tests.py` and `tests/devtools/test_verify.py`. The known baseline ten stale
   references still block repository pathcheck. Host checks were blocked by pnpm 12's automatic install attempt
@@ -416,19 +465,26 @@ Implementation resume notes (not completion):
   exits zero with no selected host tests (`out/runs/dsp-sdk-checks/sample-host-related.log`); oxlint passes
   using existing Node binaries. Neither is a full gate pass. Changed-check log:
   `out/runs/dsp-sdk-checks/sample-test-changed.log`.
-- Next: resolve the captured call-frame mismatch and examine the focused OneShot path before transport changes,
-  then finish DN2 and DT2
-  upload/publication/audio proofs. Both full proofs remain incomplete. No hardware run or timing claim.
+- The subsequent SDK-call changed check passed Ruff and layercheck but reported eleven path references.
+  The added temporary-test path in `packages/patchkit/src/module.rs` is now constructed with separate `join`
+  calls (same resulting path, no production change). Repository pathcheck confirms the remaining ten known
+  baseline references in five unchanged files; log: `out/runs/dsp-sdk-checks/sdk-call-pathcheck-after-test-path.log`.
+  Scoped checks of that source file and these documents pass. The full routed gate has not run.
+- Next proposed decision: production memory and lifetime for longer samples, safe replacement while voices
+  are active, and a sample picker. None is implemented. The current limit is 8,192 mono frames at 48 kHz
+  (about 171 ms), with session-pinned immutable source storage and fixed proof paths. Continue stock-reader
+  investigation separately; no stock-quality equivalence, coexistence, performance or hardware claim follows.
 - A standalone native-boot diagnostic halted after six instructions, before reaching the target. It is unusable
   for this investigation and does not establish proof behavior.
 - Runtime artifact builds require rustup Cargo first in PATH (`/Users/em/.cargo/bin`), not Homebrew Cargo.
 - Parent shares only input symlinks; Node workspace package links resolve to this worktree, dependency cache is shared.
   Ready inputs' firmware hashes match current DT2 1.17 / DN2 1.12, despite an old DN2 image label in provenance.
-- Local check logs: `out/runs/dsp-sdk-checks/`. Parent completes the single `runtime/sample-playback.test.ts`
-  scenario, DN2 first and DT2 last. Use bounded sessions and shared benchlock.
+- Local check logs: `out/runs/dsp-sdk-checks/`. The parent completed the single `runtime/sample-playback.test.ts`
+  scenario on DN2 first and DT2 last, with bounded sessions and shared benchlock.
 
-This approved continuation implements the bounded sample API and proof fixture. It does not establish device
-playback or resolve the general conditional transfer cleanup risk; no completed device or hardware proof is claimed.
+This approved continuation completes the bounded sample API, proof fixture and both-device emulator playback
+acceptance. It does not resolve general conditional transfer cleanup or establish hardware behavior, production
+capacity, arbitrary module coexistence, stock quality or performance. Use git log for the final checkpoint commit.
 
 ### 2026-10-29 — first implementation checkpoint
 

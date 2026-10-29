@@ -54,7 +54,7 @@ pub const KIND_EFFECT: u32 = 4;
 pub const LEN_EFFECT: u32 = 0x1a4;
 pub const MAX_RECORDS: u32 = 32;
 
-/// The DSP section: magic "DKDS", versions 1 to 4, header 0x40 bytes, voices of 16, 48 or 64 bytes (version 4: voices of 64 bytes and effect records).
+/// The DSP section: magic "DKDS", versions 1 to 5, header 0x40 bytes, voices of 16, 48 or 64 bytes (version 4: voices of 64 bytes and effect records).
 pub const DSP_MAGIC: u32 = 0x444b_4453;
 pub const DSP_HEADER: u32 = 0x40;
 pub const MAX_RELOCS: u32 = 4096;
@@ -307,7 +307,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         16
     } else if version == 2 {
         48
-    } else if version == 3 || version == 4 {
+    } else if (3..=5).contains(&version) {
         64
     } else {
         return Err(Error::Dsp);
@@ -322,7 +322,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     );
     let (import_off, nimport) = (word(src, off + 0x24)?, word(src, off + 0x28)?);
     let (voice_off, nvoice) = (word(src, off + 0x2c)?, word(src, off + 0x30)?);
-    let (fx_off, nfx) = if version == 4 {
+    let (fx_off, nfx) = if version >= 4 {
         (word(src, off + 0x34)?, word(src, off + 0x38)?)
     } else {
         (0, 0)
@@ -343,6 +343,60 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         || !inside(fx_off, nfx * FX_LEN, size)
     {
         return Err(Error::Dsp);
+    }
+    if version == 5 {
+        let bank_off = word(src, off + 0x3c)?;
+        if bank_off < DSP_HEADER || bank_off & 3 != 0 || !inside(bank_off, 32, image_off) {
+            return Err(Error::Dsp);
+        }
+        for (table, len) in [
+            (reloc_off, nreloc * 8),
+            (import_off, nimport * 32),
+            (voice_off, nvoice * stride),
+            (fx_off, nfx * FX_LEN),
+        ] {
+            if len != 0 && table < bank_off + 32 && bank_off < table + len {
+                return Err(Error::Dsp);
+            }
+        }
+        let at = off + bank_off;
+        // The sample-bank record alone has little-endian words.
+        let bank_version = word(src, at)?.swap_bytes();
+        let bank = word(src, at + 8)?.swap_bytes();
+        let frames = word(src, at + 12)?.swap_bytes();
+        let descriptor = word(src, at + 16)?.swap_bytes();
+        let end = image.checked_add(bss).ok_or(Error::Dsp)?;
+        let bank_end = frames
+            .checked_mul(4)
+            .and_then(|n| bank.checked_add(n))
+            .ok_or(Error::Dsp)?;
+        if bank_version != 1
+            || !(1..=8192).contains(&frames)
+            || bank & 3 != 0
+            || bank < image
+            || bank_end > end
+            || descriptor & 3 != 0
+            || !inside(descriptor, 16, image)
+        {
+            return Err(Error::Dsp);
+        }
+        for i in 5..8 {
+            if word(src, at + i * 4)? != 0 {
+                return Err(Error::Dsp);
+            }
+        }
+        for i in 0..4 {
+            if word(src, off + image_off + descriptor + i * 4)? != 0 {
+                return Err(Error::Dsp);
+            }
+        }
+        for i in 0..nreloc {
+            let r = word(src, off + reloc_off + i * 8)?;
+            if u64::from(r) < u64::from(descriptor) + 16 && u64::from(r) + 6 > u64::from(descriptor)
+            {
+                return Err(Error::Dsp);
+            }
+        }
     }
     // the range: image and bss to 8, then (version 3) every voice record's states, each rounded to 8
     let mut total = image

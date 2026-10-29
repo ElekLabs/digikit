@@ -96,6 +96,7 @@ const SPIN: u32 = 4_000_000;
 pub const PH_IDLE: u32 = 0;
 pub const PH_SEND: u32 = 1;
 pub const PH_ROWS: u32 = 2;
+const PH_QUARANTINE: u32 = 3;
 
 // words of `dyndsp_info` (byte offset / 4)
 const I_MAGIC: usize = 0;
@@ -346,7 +347,7 @@ pub unsafe fn fx_set_route(k: usize, route: u32, amt: [u32; 4]) {
 /// An effect row whose words are in the DSP: claimed, published and no load in progress, so a one-word write can go out.
 pub unsafe fn fx_live(k: usize) -> bool {
     let d = ds();
-    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0
+    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !crate::sample::busy()
 }
 
 /// The effect row's words in the chain: word `w` of row `k` (a one-word write through window 2).
@@ -513,6 +514,7 @@ pub struct Job {
     /// The effect records (version 4), `FX_REC` bytes each.
     pub fxs: *const u8,
     pub nfx: u32,
+    pub bank: *const u8,
     import_vals: [u32; MAX_IMPORTS as usize],
 }
 
@@ -532,6 +534,7 @@ impl Job {
             vstride: VOICE_V2,
             fxs: core::ptr::null(),
             nfx: 0,
+            bank: core::ptr::null(),
             import_vals: [0; MAX_IMPORTS as usize],
         }
     }
@@ -589,7 +592,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     }
     let s = f.add(off as usize);
     let version = rd32(s.add(4));
-    if rd32(s) != STATE_MAGIC || (version != 1 && version != 2 && version != 3 && version != 4) {
+    if rd32(s) != STATE_MAGIC || (version != 1 && version != 2 && version != 3 && version != 4 && version != 5) {
         return E_DSP_FORMAT;
     }
     if !have_link() {
@@ -605,13 +608,15 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     let (import_off, nimport) = (rd32(s.add(0x24)), rd32(s.add(0x28)));
     let (voice_off, nvoice) = (rd32(s.add(0x2c)), rd32(s.add(0x30)));
     // version 4: the effect records (0x34 offset, 0x38 count)
-    let (fx_off, nfx) = if version == 4 { (rd32(s.add(0x34)), rd32(s.add(0x38))) } else { (0, 0) };
+    let (fx_off, nfx) = if version >= 4 { (rd32(s.add(0x34)), rd32(s.add(0x38))) } else { (0, 0) };
     let vstride = match version {
         1 => VOICE_V1,
         2 => VOICE_V2,
         _ => VOICE_V3,
     };
-    if image_size == 0
+    if image_size > iw(I_AREA_BYTES)
+        || bss > iw(I_AREA_BYTES)
+        || image_size == 0
         || image_size & 3 != 0
         || bss & 3 != 0
         || !(8..=GRANULE).contains(&align)
@@ -627,6 +632,57 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         || !in_sec(voice_off, nvoice * vstride, size)
     {
         return E_DSP_FORMAT;
+    }
+    let bank_off = if version == 5 { rd32(s.add(0x3c)) } else { 0 };
+    if version == 5 {
+        if bank_off < 64 || bank_off & 3 != 0 || !in_sec(bank_off, 32, size) {
+            return E_DSP_FORMAT;
+        }
+        // The record must not alias another section table or the initialized image.
+        for (o, n) in [
+            (image_off, image_size),
+            (reloc_off, nreloc * 8),
+            (import_off, nimport * 32),
+            (voice_off, nvoice * vstride),
+            (fx_off, nfx * FX_REC),
+        ] {
+            if n != 0 && bank_off < o + n && o < bank_off + 32 {
+                return E_DSP_FORMAT;
+            }
+        }
+        let regions = [
+            (image_off, image_size),
+            (reloc_off, nreloc * 8),
+            (import_off, nimport * 32),
+            (voice_off, nvoice * vstride),
+            (fx_off, nfx * FX_REC),
+        ];
+        for (i, &(o, n)) in regions.iter().enumerate() {
+            if n != 0 && o < 64 {
+                return E_DSP_FORMAT;
+            }
+            for &(p, m) in &regions[..i] {
+                if n != 0 && m != 0 && o < p + m && p < o + n {
+                    return E_DSP_FORMAT;
+                }
+            }
+        }
+        let b = s.add(bank_off as usize);
+        if !dkrt_sdk::sample_job::valid_bank(
+            core::slice::from_raw_parts(b, 32),
+            core::slice::from_raw_parts(s.add(image_off as usize), image_size as usize),
+            bss,
+        ) {
+            return E_DSP_FORMAT;
+        }
+        let desc = rd32le(b.add(16));
+        // Relocations cannot turn the initially empty descriptor into a published one.
+        for k in 0..nreloc {
+            let at = rd32(s.add((reloc_off + k * 8) as usize));
+            if at < desc + 16 && desc < at.saturating_add(6) {
+                return E_DSP_FORMAT;
+            }
+        }
     }
     // version 3 voices: the state counts must be sane before the range is computed from them
     if vstride == VOICE_V3 {
@@ -691,8 +747,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         let o = rd32(e);
         let w = rd32(e.add(4));
         let (kind, class, imp) = (w >> 28, (w >> 24) & 15, w & 0xffff);
-        if o > image_size - 6 || kind > 1 || class > 2 || (class == 2 && imp >= nimport) || (kind == 0 && class == 1)
-        {
+        if o > image_size - 6 || kind > 1 || class > 2 || (class == 2 && imp >= nimport) || (kind == 0 && class == 1) {
             return E_DSP_FORMAT;
         }
         i += 1;
@@ -763,6 +818,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     job.vstride = vstride;
     job.fxs = s.add(fx_off as usize);
     job.nfx = nfx;
+    job.bank = if version == 5 { s.add(bank_off as usize) } else { core::ptr::null() };
     OK
 }
 
@@ -897,6 +953,15 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         frow += 1;
         f += 1;
     }
+    if !job.bank.is_null() {
+        crate::sample::reserve(
+            rec,
+            rd32le(job.bank.add(4)),
+            base + rd32le(job.bank.add(8)),
+            rd32le(job.bank.add(12)),
+            base + rd32le(job.bank.add(16)),
+        );
+    }
     d.mod_fx[rec] = fclaimed;
     d.mod_off[rec] = off;
     d.mod_len[rec] = len;
@@ -909,6 +974,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
 
 /// Give back what `reserve` took for module record `rec` (the rows must have been cleared first).
 unsafe fn unreserve(rec: usize) {
+    crate::sample::remove(rec);
     let d = ds();
     let mut k = 0;
     while k < MAX_ROWS {
@@ -969,7 +1035,15 @@ unsafe fn start_word(win: u32, word: u32, value: u32) -> bool {
 
 /// `Some(true)` done, `Some(false)` failed, `None` still running.
 unsafe fn poll_done() -> Option<bool> {
-    let mut s = DlStatus { state: 0, err: 0, nchunks: 0, acked: 0, sent: 0, resent: 0, nerr: 0 };
+    let mut s = DlStatus {
+        state: 0,
+        err: 0,
+        nchunks: 0,
+        acked: 0,
+        sent: 0,
+        resent: 0,
+        nerr: 0,
+    };
     call_poll(&mut s);
     match s.state {
         DL_DONE => Some(true),
@@ -1133,8 +1207,19 @@ pub unsafe fn step() {
     if d.phase == PH_IDLE {
         return;
     }
-    d.ticks += 1;
+    d.ticks = d.ticks.saturating_add(1);
+    if d.phase == PH_QUARANTINE {
+        if poll_done().is_some() {
+            d.started = 0;
+            fail(E_DSP_XFER);
+        }
+        return;
+    }
     if d.ticks > GUARD_TICKS {
+        if d.started != 0 && poll_done().is_none() {
+            d.phase = PH_QUARANTINE;
+            return;
+        }
         fail(E_DSP_XFER);
         return;
     }
@@ -1203,6 +1288,7 @@ pub unsafe fn step() {
                 }
                 if row == MAX_ROWS && frow == MAX_FX {
                     // every row is in: list the machine, run init, publish the slots
+                    crate::sample::ready(rec);
                     crate::boot::note_result(d.pending.boot_idx, OK);
                     crate::st().last_result = OK;
                     next_job();
@@ -1288,4 +1374,15 @@ pub unsafe fn state() -> u32 {
     } else {
         STATE_IDLE
     }
+}
+
+/// Serialized window-zero transfer for an owned sample job.
+pub unsafe fn sample_send(dst: u32, src: *const u8, len: u32) -> i32 {
+    call_send(dst, src, len)
+}
+pub unsafe fn sample_poll() -> Option<bool> {
+    poll_done()
+}
+pub unsafe fn sample_idle() -> bool {
+    ds().phase == PH_IDLE && ds().nwait == 0
 }
