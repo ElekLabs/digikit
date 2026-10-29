@@ -24,8 +24,9 @@ and [`module.toml`](../../modules/core/adapters/dsp-lp0-proof/module.toml).
 `0x20088dc8`, aligned RX at `0x20088dd0`, active payload of 4,100 bytes at
 `[0x20088dd0,0x20089dd4)`, and storage end at `0x20089dd8`.
 Rounded maintenance covers 65 lines, `[0x20088dc0,0x20089e00)`: 16 bytes before
-and 44 after payload, eight before and 40 after storage. Current alignment does
-not provide exclusive whole lines. This artifact is not a hardware cache proof.
+and 44 after payload, eight before and 40 after storage. The historical 0.2
+alignment does not provide exclusive whole lines. This artifact is not a
+hardware cache proof.
 
 ## Conditional startup configuration
 
@@ -69,6 +70,18 @@ writeback could overwrite DMA data if a dirty CPU line remains.
 **[O]** Helper ABI, DAG/SIMD/stack preservation and callback context are unproved;
 it is not yet a production callable maintenance API.
 
+**[D]** Public Programming Reference Rev 1.5 printed p. 8-9 requires cache
+MMR/configuration/range maintenance to execute from internal/L1 memory using
+unconditional DM accesses. CFG/CFG2 changes require 12 uncompressed 48-bit
+unrelated instructions before cache-MMR access, non-L1 access or a cache operation;
+one instruction of separation suffices between range start/end writes. Printed
+pp. 8-12–14 describe byte-addressed, 64-byte-aligned half-open ranges, joint
+DM/PM operation and per-line maintenance walking controller index/count. PFB
+invalidation explicitly sets then resets its control after range writeback/
+invalidation. These constraints rule out casually inlining maintenance into the
+current `dsp.l2` module; no implementation route is selected, and the driver's
+existing cache handling is not established by this manual reading.
+
 **[D]** Existing [`forms_system.py`](../../tools/sharc_dev/sharc_core/forms_system.py)
 records maintenance events over coherent backing rather than modeling dirty
 cache lines; the transpiler strips the event. Emulator execution cannot prove
@@ -107,3 +120,65 @@ core correction on the premise that W2B has been proved.
 Production pool reservation, cache-safe RX ownership and CF/DSP close/drain
 acknowledgement remain open. Completion-dispatch and ownership investigation
 continues read-only; no production protocol or sampler readiness is established.
+
+## Private 0.2.1 RX layout change
+
+**[D]** Private fixture 0.2.1 reserves 4,224 bytes and computes RX with
+`(storage + 63) & -64`, independently of the unchanged 16-byte-aligned,
+128-byte driver state. The complete 4,160-byte rounded footprint for 4,100 DMA
+bytes now fits inside RX storage, disjoint from descriptor/context/metadata.
+Payload remains 4,096 bytes;
+no cache calls, address conversions, descriptor protocol or public ABI changed.
+The addresses above remain historical 0.2 artifacts. **[O]** Layout alone does
+not provide coherence; a new native fixture bound to the exact 0.2.1 image hash
+is required before claiming native evidence for this layout.
+
+**[D]** Focused assembled checks pass all 47 cases, including each four-byte
+placement phase within a 64-byte line, full RX footprint containment/disjointness,
+preserved padding and payload/rearm behavior. Scoped Python/TypeScript static
+checks, generation check, document paths and diff whitespace checks pass.
+No new native execution, boot fixture preparation or hardware check was run.
+
+**[C]** Ownership checks use order-independent interval disjointness, not the
+Python JSON section iteration order. Production preserves declaration order;
+Python's sorted section keys place the descriptor before RX and saved context
+after it. The assembled phase checks derive reservation size from the actual
+RX section length and check each metadata word separately. Parent object
+validation built the tracked DSP object (528 instructions), redecoded it
+successfully and passed `build --check`; the CF object is unchanged. This does
+not supply new native or physical-cache evidence.
+
+## Bounded STOP receive callback ownership
+
+**[D]** An independent agent checked original DN2 1.12 section-7 bytes for the
+private single-descriptor STOP RX path. Under private port ownership and no
+other submitter, successful IRQ DONE callback entry grants the adapter RX
+ownership until its explicit rearm. Async submit initializes completed count 0,
+total 1, and descriptor head/tail. Source 81 dispatch reaches
+`0x1cae6b → 0x1caf5d → 0x1cad20`.
+
+The STOP path clears the busy byte at +2 (`0x1cadc5`), LP enable
+(`0x1cade2`), and all DMA_CFG (`0x1cade8`), then reset `0xb8e210` clears
+DMA address/count/config before callback `0x1cae16`. Callback arguments are
+R4=context, R8=event 4, R12=address-helper result. No arm precedes the callback
+on this path; the adapter copies before explicitly arming again. The inactive
+descriptor is **not dequeued**: head/tail retain it and submit replaces it.
+This narrows the earlier open ownership question for STOP only.
+
+**[D]** AUTO FLOW1 is a counterexample to generalizing this result:
+`0x1cad87 → 0x1cae56 → 0x1cadfc` bypasses STOP cleanup and can receive again
+before callback; chained paths advance head at `0x1cae67/68` or `0x1cae52/54`.
+The public [Hardware Reference](../sharc/SOURCES.md), Rev 1.0 printed p. 27-31,
+places work-unit completion IRQ after acknowledgement of the last memory
+transaction, while allowing next-descriptor prefetch. That is not cache visibility.
+
+**[D]** Dispatch is synchronous SEC interrupt context, not a deferred task:
+SID 81 selects an index, trampoline `0x1c02a4` uses handler table
+`0x2404b0[index]`, reaching `0x1cae6b`. Registration is
+`0xb8ce5c → 0x1c066c`, installation at `0x1c069d`, IVT slot 15 jumps to
+`0x1c0acd`, and trampoline calls the handler at `0x1c04b1`. Do not assume
+interrupts disabled: saved IRPTEN is set at `0x1c02bb`, status restored at
+`0x1c03ea`, and IRPTEN cleared only after handler return at `0x1c04b7`.
+**[O]** Exact nesting constraints and a callable cache-maintenance contract
+remain open. STOP ownership does not establish physical cache coherence,
+production pool ownership or a production close/drain protocol.

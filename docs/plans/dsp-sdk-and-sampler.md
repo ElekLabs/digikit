@@ -42,6 +42,12 @@ side panels and dialogs rather than introducing a separate UI framework.
 - [x] Prove a private two-track descriptor/retirement boundary in the assembled
   consumer: 15 focused tests and independent review pass. Physical IRQ/DMA and
   production transport/backing remain separate obligations.
+- [x] Bound the private DN2 single-descriptor STOP receive ownership window;
+  synchronous SEC dispatch and nested-interrupt limits are recorded in finding 95.
+- [x] Isolate the private RX buffer's complete cache-line footprint; 47 focused
+  cases, rebuilt module object and independent review pass (fixture 0.2.1).
+- [ ] Establish a callable cache-maintenance path with supported L1 placement,
+  register ownership and pre-/post-DMA ordering; layout alone is insufficient.
 - [x] Implement bounded catalogue access with focused tests.
 - [ ] Implement per-track binding with focused tests.
 - [ ] Build the on-device picker using SDK UI components, with loading/error states.
@@ -82,14 +88,32 @@ pnpm launcher failure. No merge gate, hardware run or performance claim is made.
 `[0x804ad790,0x8052d790)` (sixteen 32 KiB per-track clears), not universal
 runtime bounds or free space. Adjacent helpers/consumers remain open.
 [D]/[C] Private 0.2 LP0 RX is `dsp.l2` module BSS, not the L1 allocator;
-its 16-byte alignment leaves neighboring storage inside the rounded 64-byte
-cache lines. Startup ranges make RX potentially cached under the audited register
+its historical 16-byte alignment leaves neighboring storage inside the rounded
+64-byte cache lines. Private fixture 0.2.1 now isolates RX on 64-byte boundaries
+inside a 4,224-byte reservation, owning the full 4,160-byte rounded footprint.
+This supplies no coherence; native proof needs a new fixture and exact image
+hash. Startup ranges make RX potentially cached under the audited register
 constants, whose preservation through earlier calls remains unproved.
 The stock maintenance helper needs range-0 ownership and an ABI/context audit;
 writeback plus invalidate is not a safe generic post-DMA invalidate operation.
 See [finding 95](../findings/95-dn2-cache-and-lp0-staging.md) for exact extents,
 conditional configuration and public-manual citations. The emulator has no dirty
 cache model and cannot prove physical coherence.
+
+**[D] STOP callback ownership narrowed:** independent original-byte audit now
+supports private single-descriptor STOP RX ownership from successful IRQ DONE
+callback entry until explicit rearm, under private port ownership with no other
+submitter. STOP disables LP/DMA and resets DMA address/count/config before the
+callback; the inactive descriptor stays queued until replaced by submit. The
+adapter copies before rearm. AUTO FLOW1/chained paths do not share that guarantee.
+Dispatch is synchronous SEC IRQ context, not a deferred task, and IRQ masking
+must not be assumed; exact nested-interrupt constraints remain open. Hardware
+completion ordering does not establish cache visibility. Finding 95 records
+addresses and public-manual limits. Production cache/pool/close-drain work remains.
+Parent built/redecoded the 528-instruction tracked 0.2.1 DSP object and passed
+`build --check`; CF is unchanged. RX ownership assertions now use order-independent
+interval checks, with unit reservation bounds derived from assembled section size.
+No new native fixture, run or hardware proof is claimed.
 
 **[C] Encoding correction:** `0x1c0807` / `0x1c081b` currently execute Type 7a
 conditional MODIFY under NOT SV. The earlier conditional-W2B conclusion is
@@ -104,6 +128,10 @@ evidence; do not request approval based on false certainty about W2B.
 No hardware or core regeneration is authorized. Continue read-only completion
 and ownership investigation; production pool reservation, cache-safe RX and
 CF/DSP close/drain ACK remain before binding, with the picker after binding.
+The 0.2.1 routed check retains the known ten stale references and linked pnpm
+launcher failures. Direct scoped lint, format and types pass; no new native run
+or merge gate is claimed. The module-owned DSP object was rebuilt with the
+existing patchkit; no SHARC emulator core was regenerated.
 
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.

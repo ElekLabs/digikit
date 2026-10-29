@@ -180,7 +180,7 @@ _lp_hook:
     IF NE JUMP _lp_bad_owned;
     R0 = 1;
     DM(_lp_status) = R0;
-    // Overallocate, then align the private 128-byte state and 4100-byte RX.
+    // Keep driver state 16-byte aligned; RX owns complete 64-byte cache lines.
     R0 = _lp_state_storage;
     R2 = 15;
     R0 = R0 + R2;
@@ -189,8 +189,9 @@ _lp_hook:
     DM(_lp_state) = R0;
     R12 = R0;
     R0 = _lp_rx_storage;
-    R2 = 15;
+    R2 = 63;
     R0 = R0 + R2;
+    R1 = -64;
     R0 = R0 AND R1;
     DM(_lp_rx) = R0;
     R4 = 0;
@@ -538,7 +539,8 @@ _lp_cb_done:
 .SECTION/DM seg_dmda;
 .PKDATA _lp_save, 292;
 .PKDATA _lp_state_storage, 144;
-.PKDATA _lp_rx_storage, 4112;
+// 4100 DMA bytes round to 4160; add 63 alignment bytes, round to a word.
+.PKDATA _lp_rx_storage, 4224;
 .PKDATA _lp_descriptor, 28;
 .GLOBAL _lp_status;
 .VAR _lp_status = 0;
