@@ -2330,6 +2330,26 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.fn.directory.next"
+cpu = "cf"
+kind = "code"
+addr = 0x4015734e
+len = 4
+sha256 = "e6752da589244235a571742b2dee4d2a6fa6ebd021048ad3b93613e00213360d"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.fn.directory.open"
+cpu = "cf"
+kind = "code"
+addr = 0x401572a0
+len = 4
+sha256 = "763c9ca825a3c90532f3d216b86b386464ff32c1f1c2085ebcb3e40ea3c692ad"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.fn.path.close"
 cpu = "cf"
 kind = "code"

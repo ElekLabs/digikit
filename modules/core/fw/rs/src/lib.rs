@@ -516,6 +516,18 @@ pub mod storage {
     }
 
     unsafe extern "C" {
+        /// DT2 1.17 read-only directory next, 1 entry/0 EOF/-1 failure. Caller zeros private 0x114-byte output; ID +0, u16 type +4, directory ID +8, page/offset +12/+16, NUL name[256] +20. Task context; no latency bound (finding 93).
+        #[link_name = "cf.storage.fn.directory.next"]
+        pub fn directory_next(state: *mut u32, output: *mut u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// DT2 1.17 read-only path directory open, 0 success/-1 failure; caller-owned four-word state. Task context; may block under filesystem locking (finding 93).
+        #[link_name = "cf.storage.fn.directory.open"]
+        pub fn directory_open(path: *const u8, state: *mut u32) -> i32;
+    }
+
+    unsafe extern "C" {
         /// Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 78).
         #[link_name = "cf.storage.fn.path.close"]
         pub fn path_close(handle: *mut u32) -> i32;
