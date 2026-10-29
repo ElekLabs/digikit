@@ -1,0 +1,391 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_previous_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 140,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_previous_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 170,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 220,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 10,
+   "offset": 226,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 258,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 14,
+   "offset": 264,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 312,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 318,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 328,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 336,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 342,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 348,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 354,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 2,
+   "offset": 360,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 380,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 6,
+   "offset": 386,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 408,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 10,
+   "offset": 414,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 430,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 14,
+   "offset": 436,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 458,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 26,
+   "offset": 464,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 492,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 498,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 508,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 516,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 530,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 538,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 556,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 570,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 582,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 612,
+   "section": ".text.dd_frame_hook",
+   "symbol": "dd_stock_send",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 2,
+   "hex": "4fefffe048d704fc262f0024206f0028242f002c226f00300c8300000a8067364281428445f900000000201223c1000000004ab9000000006760700323c0000000002f4900302f42002c2f4800282f430024600002060c8200000abc66c24a8867be71d057804a8066b64a68000266b0322800243028002280813228002680813228002880814a4066964ab90000000056c4720179044484608a7204b280670000a653804a80669a4ab900000000670001584a896700015271e900600c800000a6dd66000144322900603f41001e32290062302900643c2900663e39000000003a390000000071c0484642467fc7484542458c808a87ba866600010e484142413c39000000003a390000000071ef001e808142414841484542457dc60281000001ff8a86ba81660000e07219e2a87201b280640000c623c10000000023c0000000006000fef642b900000000700142b90000000042b90000000023c00000000032390000000030390000000073c148404240808159804a80666c32390000000030390000000073c14840424080810c80ddf4a601665032390000000030390000000073c1484042408081673a32390000000030390000000073c14840424080810c8000000178621e32390000000030390000000073c14840424080810c80000002806300fec47001726523c00000000023c1000000006000fe4223c000000000720223c1000000007201b2926600fe34203900000000528023c0000000000c8000000384630c7001726423c00000000060be4a846700fe0c223c00000000203c00000a8052b9000000002f4900302f42002c2f4100282f4000244cd704fc4fef00204ef900000000",
+   "kind": "text",
+   "name": ".text.dd_frame_hook",
+   "size": 616
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_failed",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_previous_quiet",
+   "size": 4
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_frame",
+   "size": 2688
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_mail",
+   "size": 16
+  },
+  {
+   "align": 4,
+   "hex": "00000004000000a86464725f70726f6f660000000000000044445250524f4f46000000000000000000000000000000004444522070726f6f660000000000000000000000000000000000000100000000000000ff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003000000706464725f70726f6f660000000000000064645f7265766572736500000000000000000000000000000000000000000000000001000000000052657665727365000000000000000000000000000000000000000000000000005245560000000000000000000000000000000002000000a86464725f70726f6f66000000000000004444522070726f6f660000000000000000000000000000004444520000000000000000000000000000000000000000005f64645f706c61795f72656e64657200000000000000000000000000000000005f64645f706c61795f6e6f74655f6f6e000000000000000000000000000000005f64645f706c61795f6465736300000000000000000000000000000000000000",
+   "kind": "data",
+   "name": ".dk.desc",
+   "size": 448
+  }
+ ],
+ "source_sha256": "913658d2d15f1052e2b205813e7a7d1e4b9b76b27cccd8f1546f32ad2a7d82e9",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.dd_failed",
+   "section": ".bss.dd_failed",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.dd_frame",
+   "section": ".bss.dd_frame",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.dd_mail",
+   "section": ".bss.dd_mail",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.dd_previous_quiet",
+   "section": ".bss.dd_previous_quiet",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dd_failed",
+   "section": ".bss.dd_failed",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dd_frame",
+   "section": ".bss.dd_frame",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dd_frame_hook",
+   "section": ".text.dd_frame_hook",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dd_mail",
+   "section": ".bss.dd_mail",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dd_previous_quiet",
+   "section": ".bss.dd_previous_quiet",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dd_stock_send",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dk_desc_machine_ddr_proof",
+   "section": ".dk.desc",
+   "value": 280
+  },
+  {
+   "global": false,
+   "name": "dk_desc_page_ddr_proof_8",
+   "section": ".dk.desc",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dk_desc_param_ddr_proof_0",
+   "section": ".dk.desc",
+   "value": 168
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "177",
+  "isa_check": "0425a5d68ea096c7ff117f5a5afedabfcd411ffccd8e595d1323a31a12485baa",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

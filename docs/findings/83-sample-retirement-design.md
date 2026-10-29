@@ -141,9 +141,11 @@ at `0x1c9fbc`; its call at `0x1c3044` reaches `0x1c8ef1`, whose call at `0x1c945
 The conditional at `0x1c9ff1` can skip that call, and `0x1c9ffb` loops to `0x1c9fe7`. The parent's external
 caller remains unresolved, but is not required to establish these shared-parent callsites. As on DT2,
 this static order does not prove every-path execution, callback drain or global interrupt ordering.
-A candidate dynamic jump at `0x1c29aa` follows loading I12 from DM at base `0x25d968` plus M4, but the
-jump is `JUMP PM(I4,M5)` after I4 = M9. I12 must not be equated with that branch target; the table is only
-a candidate. An empty static caller result does not establish runtime absence. Reproduce these static
+**[C][D]** The earlier conclusion about the dynamic jump at `0x1c29aa` was incorrect: the
+DAG2 encoding displayed as `PM(I4,M5)` selects I12/M13. The listing omits the register-bank +8;
+it does not establish that I4/M5 supply this branch target. This is a disassembler-formatting
+follow-up, outside the current diagnostic; no core semantic fix or regeneration is included.
+An empty static caller result does not establish runtime absence. Reproduce these static
 chains with `fw disasm ADDRESS -i IMAGE --max 0` and function/caller queries on the current images;
 these are [D] reads, not a second-agent image-byte audit.
 
@@ -187,7 +189,9 @@ is not a hardware memory limit.
 - [ ] Prove exact-token handling for stale/duplicate acknowledgments, rapid A → B → C, stale load completion,
   load failure and timeout with backing retained and admission closed.
 - [ ] Separately prove external DT2 replace/unload/project reset coverage before borrowing stock project backing.
-- [ ] Separately establish DN2 larger backing/delivery and both-device capacity for the ten-second target.
+- [x] Establish isolated DN2 emulator 960,000-byte backing/delivery and complete ten-second playback.
+- [ ] Separately establish DT2 ten-second bank capacity and hardware ownership/cache/coexistence; no general
+  memory pool or replacement lifetime follows from the isolated DN2 proof.
 
 Next perform a bounded diagnostic scheduling trace plus current-image IRQ-path analysis to test the
 remaining dynamic ordering and admission/drain questions on both devices. Trace submit-guard initialization,
@@ -215,3 +219,151 @@ docs/plans/dsp-sdk-and-sampler.md` passed layercheck and failed only on the ten 
 five unchanged files. An independent design reviewer found no issues at that checkpoint; that review does
 not cover today's expanded text and is not image-byte verification. No device proof, build or full merge
 gate ran for that documentation checkpoint.
+
+
+## Authorized quiet DDR transport diagnostic (2026-10-29)
+
+Em's “Go for it” authorizes a bounded ten-second diagnostic path and its reusable numerical
+reader prerequisite; it does not approve a product sample API. The packed PCM16 SDK checkpoint
+is `6ece2ae8`: 96 numerical/assembled tests passed and the parent completed review. Transport
+and playback remain separate proof stages.
+
+**[C][D]** The raw current DN2 1.12 section-7 audit above also checked the command dispatch.
+The loaded table at `0x268a68` contains exactly four targets: `0x1c9dc2`, `0x1c9e76`,
+`0x1c9eda`, `0x1c9f0f`, followed by the AudioTask string. Command word 4 takes the rejection
+path at `0x1c9dc2`: output is muted, then the existing common tail at `0x1c9e5f` runs.
+It does not require a table extension. The acknowledgement owner region is exactly eight
+bytes, record offsets `0x60..0x67`, written by two DM stores and read as four CF halfwords;
+earlier six/twelve-byte descriptions must not be used for this diagnostic.
+
+**[D][O]** Current SHARC initialization writes configuration `0x0af00622` at byte
+`0x28242c4c`; this supports the investigated DSP geometry, rather than inferring geometry
+from ColdFire's 128 MiB. The loaded DDR end is `0x8052fbe0`. The emulator-only candidate
+range is `[0x80800000,0x808ea600)`, 960,000 bytes, with complete 4 KiB guard bands
+`[0x807ff000,0x80800000)` and `[0x808ea600,0x808eb600)`. The upper guard begins at a
+word-aligned, non-page-aligned address. Hardware cache and coexistence safety remain open.
+
+The isolated adapter `core/dsp-ddr-proof` conflicts with `core/dsp-link` and is selected only
+by explicit `apply --modules core/dsp-ddr-proof`. Its host mailbox and full-frame wire format are
+specified in [its README](../../modules/core/adapters/dsp-ddr-proof/README.md). It preserves
+the stock sender while idle, requires current and prior ISR mask samples to be quiet, uses
+one immutable staged frame and an exact 32-bit token, and admits INIT once per boot. DATA
+checks sequence, exact next offset, count, range and checksum before copying. Errors poison
+the proof; COMMIT publishes READY only after all 240,000 words. This does not prove a queued
+note-event fence, active-voice retirement or live-audio loading. No production runtime/sample
+ABI or DSP dispatch-table change is part of this stage. The external-source report remains
+excluded pending citation clarification.
+
+Implementation preflight: the CF and DSP objects cross-build and pass instruction re-decoding.
+Twelve focused tests passed on the assembled DSP and prebuilt CF core, including CF
+prior-mask pulse and stale-ACK assertions. The coupled test is prepared to capture the
+baseline, read back the entire payload and both guard bands, and use fresh boots for sticky
+errors. No coupled run or transport success is claimed at this checkpoint.
+
+
+Preflight launch blocker: patch sets are embedded by `packages/patchkit/src/devdata.rs`.
+The existing prebuilt patchkit reports only `device`/`emulator` and refuses `ddr-proof`;
+the prebuilt daemon likewise cannot discover the new set from the edited TOML. No daemon
+build or coupled run was started. Parent decision is required between rebuilding binaries
+with this set or using the existing explicit patched-image loading path. Focused unit
+checks still pass (12 tests); lint/format checks and document pathcheck pass. Default
+runtime test collection safely skips the four diagnostic scenarios without both explicitly
+supplied preflight binary environment variables. Artifacts are retained under `out/runs/ddr-proof/`.
+
+
+The parent resolved the embedded-set blocker by choosing the existing explicit-image path:
+remove the proposed device patch-set addition, use the prebuilt CLI's
+`apply --modules core/dsp-ddr-proof`, then load the patched image and stock base hash through
+`firmware.load` on a stock `withSession` session. The test checks the returned load hash and
+live injected/base identity against the exact plan, and retains stock identity, patched load,
+plan and status artifacts. No daemon/native rebuild is needed. The explicit-module image
+preflight succeeds (DN2 1.12, proof plus `core/expansion` only); the coupled run remains the
+parent's next step.
+
+
+### 2026-10-29 — transport passed; fixed resident playback preflight
+
+The parent completed the isolated DN2 1.12 coupled transport: all 960,000 payload
+bytes matched, both complete canary bands (8,192 bytes) matched, and duplicate DATA
+was accepted without advancing the word count. Separate fresh sessions passed
+out-of-range rejection, partial checksum failure and stale-token/watchdog cases.
+Valid-run artifacts: `out/runs/ddr-proof/84d1a9b9-4bca-463e-8572-1ac1414c257d`;
+logs: `out/runs/ddr-proof/full-transport.log` and `out/runs/ddr-proof/failure-cases.log`.
+The valid source SHA-256 was `296a543415ca5c7e6e32a40f0692d18f6d8a46fe8841ba6c245e4720c4073162`,
+patched image `bea2909e36322ad082809fdcd46e45d79b809e295b0baf26f48734bab9008e75`.
+Reported 24.2-second valid-test wall time is not a transport throughput measurement.
+
+The approved next stage places the SDK PCM16 consumer directly in the same core
+adapter. A scoped diagnostic-only DN2 type 11 reservation
+`core/dsp-ddr-proof:ddr_proof` leaves all existing allocations and dynamic range
+16..23 unchanged. No default patch-set inclusion or public sample ABI is added.
+A declaration in a framework module is supported by existing typed lowering.
+The actual preflight closure is `core/dsp-voice`, `core/expansion`, `core/machines`,
+`core/params`, `core/dsp-ddr-proof`; `core/dsp-link` remains excluded.
+
+The six-word consumer admits READY at note-on, plays the fixed immutable 480,000-frame
+view forward or reverse, preserves the machine-adapter return/stack contract, and
+returns DONE at the exact end. Conservative instruction budgets are 2400/2600;
+these are not measured hardware cycles. Seventeen focused transport/consumer tests
+pass at preflight. The coupled valid test now repeats full transport with a windowed
+200 Hz PCM16 triangle, resolves its actual registry binding and UI list position,
+then captures at least 11.5 seconds with one held note. It checks early/late/end
+cursor, exact completion, continued normal frames, finite PCM and early/late periodic
+audible content. WAV, state snapshots, UI and binding/image/descriptor evidence are
+retained. Stock output workspace reuse or FX tails are not confused with the unit
+check that an extra reader call after DONE emits zeros and reads no source.
+
+The playback coupled run remains pending parent execution. Hardware cache/coexistence,
+resource retirement/replacement, sample Transfer UI and user selection APIs remain open.
+
+
+### Playback observation and command-width correction (2026-10-29)
+
+**[D][C]** The first coupled playback run completed exact cursor
+`[0,480000,480000,0,65536,1]`, DONE and 15,000 renders. It then failed the observer's
+normal-frame assertion: count 21,478 stayed unchanged across 257 snapshots. The WAV is
+not silent: 552,736 finite stereo frames, peak 0.02065205; early/late one-second RMS
+0.009347532/0.009347522 and expected 200 Hz correlations approximately +1 at lag 240,
+-1 at lag 120. Artifacts and independent extraction are retained under
+`out/runs/ddr-proof/5982a581-d387-491f-9d5b-5be402f1b872`.
+
+The parent's current-image raw-byte audit identified `0x1c9da8` as Type3b unsigned
+SHORT16 (`l=1,x=0,w=0`), despite the listing omitting that width. Thus the stock `R2 >> 2`
+bounds check applies to a 16-bit command. Current CF instruction `0x400274b4` stores
+command 3 at `0x80005e60`; the following halfword `0x80005e62` carries pitch. The
+32-bit diagnostic observer had incorrectly required that adjacent pitch to be zero.
+It now masks only its observed command to bits 0..15. Exact complete word 4 and proof
+magic remain required for all transport processing; this is no protocol relaxation.
+An assembled regression counts command 3 with nonzero pitch and confirms that a
+high-half forged word 4 cannot initialize or write. Eighteen focused checks pass.
+No core semantic or formatter change is included. The parent's final coupled rerun
+is the remaining validation step; static conditional-tail analysis still does not
+establish a universal one-tail-call-per-render cadence.
+
+
+### Completed isolated emulator capacity/playback proof (2026-10-29)
+
+**[D]** The final parent coupled rerun passes full payload and canary verification plus
+all playback assertions. Artifact directory:
+`out/runs/ddr-proof/11723539-7f66-4fce-b663-45cd9ea3d3da`; log
+`out/runs/ddr-proof/transport-playback-fixed.log`. Image SHA-256 is
+`e079d4fadaa8d26512b714d290c23bd9421c33f6c858c8cac6b60294d0f9e933`.
+The selected registry binding is actual patched-in type 11. One note completes all
+480,000 source frames in 15,000 renders, cursor `[0,480000,480000,0,65536,1]` and
+DONE=1. Normal command observations advance 21798→39082 during the captured workload;
+this measurement does not assert a universal one-hook-call-per-render cadence.
+
+The WAV contains 552,992 finite stereo frames; the tap reports 11.514 seconds.
+Early/late RMS is 0.009347532/0.009347522 with expected 200 Hz lag-240 correlation
+approximately +1 and lag-120 approximately -1. The complete 960,000-byte source and
+both 4 KiB guard bands match before note-on. Separate transport error cases passed;
+18 focused transport/consumer checks, including the observer-width regression, pass.
+Scoped lint/format, path and diff checks pass. Parent routed validation retains only
+known baseline path-reference failures and the pnpm launcher constraint; direct host
+coverage passes after the sandbox-blocked socket tests pass on permitted retry.
+
+This closes the bounded DN2 emulator capacity and playback milestone. Hardware cache
+and coexistence, DT2 ten-second backing, active consumer retirement/replacement,
+sample Transfer UI and user-selection/resource APIs remain open. Existing immutable
+source-until-reboot and quiet-transfer scope remain in force. Parent owns checkpoint
+and push; no further coupled run is required for this scoped result.
