@@ -6,6 +6,20 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
+**Current checkpoint (2026-10-29): the isolated DN2 emulator capacity and ten-second
+playback milestone is complete.** Full 960,000-byte transport and both 4 KiB canary bands
+pass; duplicate, out-of-range, partial checksum and stale-token/watchdog cases pass.
+The final coupled run resolves actual type 11, completes cursor 480000/DONE in exactly
+15,000 renders, observes advancing normal frames, and captures finite, audible known
+200 Hz content in early and late windows (552,992 stereo WAV frames). Eighteen focused
+checks pass. The observer-only SHORT16 correction is included; exact proof word 4 remains.
+Final artifacts: `out/runs/ddr-proof/11723539-7f66-4fce-b663-45cd9ea3d3da`,
+log: `out/runs/ddr-proof/transport-playback-fixed.log`.
+**Next:** prove consumer retirement before backing overwrite, preserving Em's choice to
+stop old notes on selection. Keep delayed-event handling and transfer-writer quiescence
+explicit in that design. Production sample APIs, Transfer UI integration, DT2 ten-second
+backing and hardware cache/coexistence remain separate design/proof steps.
+
 - Worktree: `/private/tmp/digikit-dsp-sampler`; branch: `refs/heads/sdk/dsp-sampler-discovery`.
   Keep Claude's original checkout on its cleanup branch untouched.
 - Read this plan, then [finding 77](../findings/77-dsp-sdk-sampler-discovery.md). Check git status and the
@@ -357,12 +371,15 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 - [x] Record the confirmed target: approximately ten-second one-shots; stop old notes on selection.
 - [ ] Prove DT2 1.17 stock DSP-pool slot ownership, external mutation interception, lifetime/reclaim and cache rules
   before borrowing stock backing. The next retirement candidate is an independent owned-bank proof on both devices.
-- [ ] Investigate DN2 larger backing/delivery from the stock-machine dependency map in finding 81; bound any probe by those gaps.
+- [x] Prove bounded DN2 emulator backing/delivery for 960,000 packed PCM16 bytes and full ten-second playback,
+  with exact payload, complete canaries, failure cases, actual dispatch, end cursor and early/late PCM evidence.
+- [ ] Establish hardware ownership/cache/coexistence and general capacity beyond that isolated emulator range.
 - [x] Record proposed retirement sequencing and source-survey/review results in finding 83; transport ACK is not a reader barrier.
 - [ ] Resolve scheduling and CF producer/frame fence evidence before protocol code; then agree the owned-bank proof
   contract and stop scope. Prove note_on/render drain, armed/held/delayed starts, stale ACK/completion, rapid A/B/C,
   load failure and timeout. Product stop granularity and ABI remain open.
-- [ ] Investigate PCM16 resident-bank numerical behavior and paired cost before adoption; sample-picker scope remains open.
+- [x] Prove the packed PCM16 reader and fixed resident diagnostic consumer numerically and on coupled DN2.
+- [ ] Measure paired cost before a performance/adoption claim; product sample-picker scope remains open.
 
 **Approved proof work:**
 
@@ -716,3 +733,146 @@ checkpoint; sample transport/lifetime, product controls and stereo remain open.
 Check an item only when its acceptance criterion is met; record evidence and residual uncertainty alongside it.
 Do not mark a proposal implemented or a historical finding current. Update this plan after each meaningful
 discovery or implementation checkpoint. Keep new questions visible and record accepted decisions with dates.
+
+
+### 2026-10-29 — packed PCM16 checkpoint and isolated transport preflight
+
+Em's “Go for it” approves the bounded ten-second diagnostic and numerical prerequisites;
+a product sample/resource API remains outside that approval. Packed PCM16 reader checkpoint
+`6ece2ae8` has 96 passing numerical/assembled tests and completed parent review. The float
+reader remains unchanged; the new reader uses packed signed16 containing words and the
+existing exact split cursor.
+
+The next isolated transport stage is `core/dsp-ddr-proof`, selected only by explicit
+`apply --modules core/dsp-ddr-proof`, conflicting with `core/dsp-link`. Its full-frame mailbox protocol is
+[documented with the module](../../modules/core/adapters/dsp-ddr-proof/README.md). It is a
+quiet host-driven CF→SPI→DSP diagnostic, without a runtime sample ABI, event-drain claim,
+live-audio loading or production machine. The candidate emulator range holds exactly
+960,000 packed PCM16 bytes, with complete 4 KiB canary bands. Hardware cache/coexistence
+remains open. [Finding 83](../findings/83-sample-retirement-design.md) records the current-image
+command-4 rejection audit, corrected DAG2 register display interpretation and exact eight-byte
+ACK owner region. These observations require no core semantic change or regeneration.
+
+The CF/DSP objects cross-build and instruction re-decoding passes. The initial focused unit
+run passed 12 checks using actual assembled DSP and a prebuilt CF CPU harness. The new
+TypeScript coupled acceptance test covers the complete payload, canary bands, duplicate and
+stale-token handling, out-of-range rejection and partial checksum failure, with fresh boots
+for sticky errors. It is prepared for parent review; no coupled transport or ten-second
+playback completion is claimed here. The external-source report remains excluded pending
+citation clarification.
+
+
+Preflight launch blocker: patch sets are embedded by `packages/patchkit/src/devdata.rs`.
+The existing prebuilt patchkit reports only `device`/`emulator` and refuses `ddr-proof`;
+the prebuilt daemon likewise cannot discover the new set from the edited TOML. No daemon
+build or coupled run was started. Parent decision is required between rebuilding binaries
+with this set or using the existing explicit patched-image loading path. Focused unit
+checks still pass (12 tests); lint/format checks and document pathcheck pass. Default
+runtime test collection safely skips the four diagnostic scenarios without both explicitly
+supplied preflight binary environment variables. Artifacts are retained under `out/runs/ddr-proof/`.
+
+
+The parent resolved the embedded-set blocker by choosing the existing explicit-image path:
+remove the proposed device patch-set addition, use the prebuilt CLI's
+`apply --modules core/dsp-ddr-proof`, then load the patched image and stock base hash through
+`firmware.load` on a stock `withSession` session. The test checks the returned load hash and
+live injected/base identity against the exact plan, and retains stock identity, patched load,
+plan and status artifacts. No daemon/native rebuild is needed. The explicit-module image
+preflight succeeds (DN2 1.12, proof plus `core/expansion` only); the coupled run remains the
+parent's next step.
+
+
+### 2026-10-29 — transport passed; fixed resident playback preflight
+
+The parent completed the isolated DN2 1.12 coupled transport: all 960,000 payload
+bytes matched, both complete canary bands (8,192 bytes) matched, and duplicate DATA
+was accepted without advancing the word count. Separate fresh sessions passed
+out-of-range rejection, partial checksum failure and stale-token/watchdog cases.
+Valid-run artifacts: `out/runs/ddr-proof/84d1a9b9-4bca-463e-8572-1ac1414c257d`;
+logs: `out/runs/ddr-proof/full-transport.log` and `out/runs/ddr-proof/failure-cases.log`.
+The valid source SHA-256 was `296a543415ca5c7e6e32a40f0692d18f6d8a46fe8841ba6c245e4720c4073162`,
+patched image `bea2909e36322ad082809fdcd46e45d79b809e295b0baf26f48734bab9008e75`.
+Reported 24.2-second valid-test wall time is not a transport throughput measurement.
+
+The approved next stage places the SDK PCM16 consumer directly in the same core
+adapter. A scoped diagnostic-only DN2 type 11 reservation
+`core/dsp-ddr-proof:ddr_proof` leaves all existing allocations and dynamic range
+16..23 unchanged. No default patch-set inclusion or public sample ABI is added.
+A declaration in a framework module is supported by existing typed lowering.
+The actual preflight closure is `core/dsp-voice`, `core/expansion`, `core/machines`,
+`core/params`, `core/dsp-ddr-proof`; `core/dsp-link` remains excluded.
+
+The six-word consumer admits READY at note-on, plays the fixed immutable 480,000-frame
+view forward or reverse, preserves the machine-adapter return/stack contract, and
+returns DONE at the exact end. Conservative instruction budgets are 2400/2600;
+these are not measured hardware cycles. Seventeen focused transport/consumer tests
+pass at preflight. The coupled valid test now repeats full transport with a windowed
+200 Hz PCM16 triangle, resolves its actual registry binding and UI list position,
+then captures at least 11.5 seconds with one held note. It checks early/late/end
+cursor, exact completion, continued normal frames, finite PCM and early/late periodic
+audible content. WAV, state snapshots, UI and binding/image/descriptor evidence are
+retained. Stock output workspace reuse or FX tails are not confused with the unit
+check that an extra reader call after DONE emits zeros and reads no source.
+
+The playback coupled run remains pending parent execution. Hardware cache/coexistence,
+resource retirement/replacement, sample Transfer UI and user selection APIs remain open.
+
+
+### 2026-10-29 — first playback evidence and observer correction
+
+The first coupled playback attempt retained artifacts at
+`out/runs/ddr-proof/5982a581-d387-491f-9d5b-5be402f1b872` and log
+`out/runs/ddr-proof/transport-playback.log`. All assertions through exact cursor
+`[0,480000,480000,0,65536,1]`, DONE and 15,000 renders passed. The normal-frame observer
+then failed: it remained 21,478 across 257 snapshots while rendering advanced. Independent
+WAV extraction (`playback-audio-audit.json`) found 552,736 stereo frames, all finite,
+peak 0.02065205, early RMS 0.009347532 and late RMS 0.009347522; both windows have
+lag-240 correlation approximately 1 and lag-120 approximately -1. Thus the captured
+known 200 Hz content satisfies the planned early/late audio checks, although the test
+verdict failed before reaching those assertions.
+
+The parent raw-byte audit resolves the observer fault: current DN2 instruction `0x1c9da8`
+is Type3b unsigned SHORT16 (`l=1,x=0,w=0`); its display omitted the load width. The stock
+bounds check therefore applies to the low command halfword. Current CF builder
+`0x400274b4` stores command 3 at `0x80005e60`; the next halfword at `0x80005e62` is pitch.
+The diagnostic's 32-bit observer incorrectly compared both halves with 3. Only the observer
+now extracts bits 0..15. The exact complete-word-4 proof admission gate is unchanged.
+A focused assembled regression covers nonzero-pitch command 3 and rejects a high-half
+forged command 4. All 18 focused tests pass; the rebuilt DSP object re-decodes 501
+instructions. No core, decoder or formatter edit/regeneration is included.
+
+The TypeScript test now writes state/audio/result evidence before state/counter verdicts.
+The strict normal-frame progression assertion remains for the measured workload; a static
+one-hook-call-per-render guarantee is not asserted. Parent rerun remains pending at this
+checkpoint. Direct TS lint/format and Python checks pass; the parent's broader routed
+check retains the known baseline path references and pnpm launcher constraint, while its
+direct host coverage passed after rerunning socket tests outside the sandbox restriction.
+
+
+### Final emulator milestone validation (2026-10-29)
+
+The parent rerun **passed** the single full transport-plus-playback scenario after the
+observer-only correction. Artifacts are retained at
+`out/runs/ddr-proof/11723539-7f66-4fce-b663-45cd9ea3d3da`; log
+`out/runs/ddr-proof/transport-playback-fixed.log`. Patched-image SHA-256:
+`e079d4fadaa8d26512b714d290c23bd9421c33f6c858c8cac6b60294d0f9e933`.
+The exact 960,000-byte payload and both complete canary bands pass before triggering.
+Actual machine type 11 dispatches one note; cursor ends at 480000, DONE=1 and render
+count=15000. The corrected normal-command count advances 21798→39082. The tap reports
+11.514 seconds and the WAV contains 552,992 stereo frames, all finite. Early/late RMS
+is 0.009347532/0.009347522; both expected 200 Hz windows retain lag-240 correlation
+approximately +1 and lag-120 approximately -1. All strict playback assertions pass.
+
+Eighteen focused tests pass, including adapter ABI, unready/after-DONE zero-source-read
+checks, forward/reverse end/retrigger behavior and the nonzero-pitch observer regression.
+The parent also passed the three transport failure scenarios before playback integration;
+the wire/protocol semantics are unchanged by the observer correction. Generation and
+cross-build/re-decoding pass; scoped Python/TS lint/format, pathcheck and diff checks pass.
+The routed changed check passes Python lint/format and layercheck but retains ten baseline
+path-reference failures; its host/type phases were blocked by the existing pnpm 12 shared
+node_modules launcher constraint. Direct host Vitest passed 187 tests with 16 skips;
+the six socket tests blocked by sandbox `listen` EPERM all passed on the parent's permitted
+retry. Logs: `out/runs/ddr-proof/changed-checks.log`, `host-checks.log`, `host-sockets-check.log`.
+This is an emulator capacity/playback milestone, without hardware timing, coexistence,
+resource replacement/retirement or Transfer UI/user-selection API claims. Parent owns
+checkpoint, push and subsequent integration; no further coupled run is needed here.
