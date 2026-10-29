@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
-import { button } from '@digi/test-support';
+import { button, MS } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { decodeFault, readSettingsRecord, settingsValue } from './fault.ts';
-import { tap as holdTap, installModule, liveArtifacts, moduleArtifact, runtimeTests, settleUi } from './live.ts';
+import { installModule, liveArtifacts, moduleArtifact, runtimeTests, settleUi } from './live.ts';
 import { openDigikitMenu, readAboutRows } from './runtime-menu.ts';
 import { prepareRuntimePlan } from './runtime-plan.ts';
 
@@ -13,6 +13,8 @@ const SOURCE_SHIFT = 8;
 const BLOCKS_PAST_THE_LIMIT = 9000;
 /** After a reset the UI needs about ten seconds before it takes keys (the input-adapter test waits the same). */
 const SETTLE_BLOCKS = 15_000;
+/** The ABOUT walk holds each key this many emulated ms, timed by the daemon in ColdFire instructions like the stock tests. */
+const TAP_HOLD_MS = 100;
 
 /** Wait until the DSP has run `blocks` more frames (emulated time, not wall time). */
 async function waitFrames({ session }: PatchedSession, blocks: number): Promise<void> {
@@ -43,10 +45,11 @@ function panelTap(runtime: PatchedSession) {
 
 /** The rows of the ABOUT page, opened through the panel like a user does. */
 async function aboutRows(runtime: PatchedSession, plan: Awaited<ReturnType<typeof prepareRuntimePlan>>) {
-  // wall-clock taps like the input-adapter test: on the Digitakt II the block-timed taps above did not open SETTINGS after the safe boot
+  // keys held in emulated time by the daemon: wall-clock holds lost keys under gate load, and holds that end on a frame poll
+  // last up to a second, which the Digitakt II SETTINGS key ignored after the safe boot
   const tap = async (name: string, settleMs = 1200) => {
-    const code = button(name);
-    await holdTap((down) => runtime.session.client.inputButton(code, down), 300, settleMs);
+    await runtime.session.client.inputTap(button(name), TAP_HOLD_MS * MS);
+    await waitFrames(runtime, Math.round(settleMs * 1.5));
   };
   await openDigikitMenu(tap);
   // in safe mode opening DIGIKIT shows a dialog that names the reason (NO closes it), and the first row is the SAFE notice: ABOUT is the second
@@ -260,4 +263,6 @@ runtimeTests('a machine that stops the DSP gives safe mode and names the module 
 runtimeTests('effect faults are logged with the module as source', expectFxFaultEvents, { timeout: 900_000 });
 runtimeTests('a normal effect is no stop', expectNoFalseStop, { timeout: 1_200_000 });
 runtimeTests('a CPU crash is kept as the last fault', expectCpuCrashFault, { timeout: 1_200_000, devices: ['dt2'] });
-runtimeTests('a panic of the runtime gives safe mode and names the runtime', expectRuntimePanic, { timeout: 1_200_000 });
+runtimeTests('a panic of the runtime gives safe mode and names the runtime', expectRuntimePanic, {
+  timeout: 1_200_000,
+});
