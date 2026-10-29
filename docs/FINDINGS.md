@@ -150,3 +150,7 @@ records the reusable extraction, independent bindings and exact firmware identit
 
 Runtime sample follow-up: [bounded PCM16 streaming](findings/87-pcm16-streaming.md)
 records source packing without whole-file staging and remaining integration gates.
+
+Sampler integration audits: [DN2 reply ownership](findings/88-dn2-reply-ownership.md)
+and [DT2 waveform workspace](findings/89-dt2-waveform-workspace.md) record concrete
+occupied regions and the remaining production ownership questions.
