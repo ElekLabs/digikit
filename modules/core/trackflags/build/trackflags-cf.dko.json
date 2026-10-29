@@ -1,0 +1,252 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text",
+   "symbol": "tf_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text",
+   "symbol": "tf_rowsize",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text",
+   "symbol": "tf_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text",
+   "symbol": "tf_held",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text",
+   "symbol": "tf_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 146,
+   "section": ".text",
+   "symbol": "tf_kit_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 6,
+   "offset": 210,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 9,
+   "offset": 220,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 232,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text",
+   "symbol": "tf_msg",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 272,
+   "section": ".text",
+   "symbol": "tf_key_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text",
+   "symbol": "tf_tx_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 292,
+   "section": ".text",
+   "symbol": "tf_kit_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 356,
+   "section": ".text",
+   "symbol": "tf_frame_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 368,
+   "section": ".text",
+   "symbol": "tf_load_tail",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "43f900000000243c000000004a826718b091660a4a816b12b2a90004670cd3fc00000000538260e493c920494e75206f00082028000c0480000000290c8000000008640000ca2228001008010000670000be08010003660000b64fefffec48d70c1c2600487800114eb900000000588f4a8067000092246f00182f2a00744eb900000000588f0c80000000106400007820790000000022106700006c243c000004504c020000d08106800000003426407000102b00a222036100ff464a886700004622280008302b0014b3803740001443f900000000c081670643f9000000002f092f28000c4879000000002f2a006c4eb9000000004fef00104cd70c1c4fef001470014e754cd70c1c4fef00144ef9000000004fefffdc48d70f1f2479000000002679000000002013672e264047eb00347610204b382800147000102800a272ff6100febc4a886704354400f845ea006047eb0450538366da4cd70f1f4fef00244ef900000000356b001c00144ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 372
+  },
+  {
+   "align": 1,
+   "hex": "2573202573004f4e004f464600",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 13
+  }
+ ],
+ "source_sha256": "484a1274deacd90824d5e5483d54c055bd947e658663cf67fbb4c9ffa44f45c8",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..rodata",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_count",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "tf_find",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "tf_fmt",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_frame",
+   "section": ".text",
+   "value": 276
+  },
+  {
+   "global": true,
+   "name": "tf_frame_tail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_held",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_key",
+   "section": ".text",
+   "value": 46
+  },
+  {
+   "global": true,
+   "name": "tf_key_tail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_kit_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_load",
+   "section": ".text",
+   "value": 360
+  },
+  {
+   "global": true,
+   "name": "tf_load_tail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_msg",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "tf_off",
+   "section": ".rodata",
+   "value": 9
+  },
+  {
+   "global": false,
+   "name": "tf_on",
+   "section": ".rodata",
+   "value": 6
+  },
+  {
+   "global": true,
+   "name": "tf_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_rowsize",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_track",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "tf_tx_lit",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "102",
+  "isa_check": "30a1bf49b78916b9b339b20cc4c8c346bd487adc8eda63fcc8686fc8fb4a0080",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

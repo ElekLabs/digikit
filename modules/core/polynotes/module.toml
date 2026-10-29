@@ -1,0 +1,156 @@
+[module]
+id = "core/polynotes"
+version = "0.1.0"
+name = "Poly notes"
+category = "core"
+type = "framework"
+author = "tom"
+status = "experimental"
+summary = "Audio tracks whose machine is in the poly_notes registry record up to four notes per trig, as MIDI tracks do."
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# Every step of every track has a list of up to four notes (the pattern's note pool): note 1 absolute, notes 2-4 as
+# `note - note1 + 0x40`. The firmware fills notes 2-4 only on MIDI tracks: its record paths ask FUN_4003630c ("is an
+# audio track", the inverse of the kit's MIDI bit) and on an audio track replace the step's notes with one. The hooks
+# answer that call with "not audio" for a track whose machine has a row here; the MIDI bit itself is not touched (it
+# routes the track to MIDI).
+#
+# A machine module adds its type with
+#
+#     [[entry]]
+#     registry = "poly_notes"
+#     id = "para"
+#     type = "machines.para.index"
+#     devices = ["dt2"]
+[[registry]]
+name = "poly_notes"
+devices = ["dt2"]
+first = "0"
+max = 16
+region = "cf.expansion"
+
+[[registry.field]]
+name = "type"
+kind = "u32"
+
+[[object]]
+path = "build/polynotes-cf.dko.json"
+sources = ["src/cf/polynotes.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+pn_rows = "poly_notes.rows"
+pn_count = "poly_notes.count"
+pn_rowsize = "poly_notes.row_size"
+pn_isaudio = "cf.pn.isaudio"
+pn_kit_lit = "cf.pn.kit_lit"
+pn_tx_lit = "cf.pn.tx_lit"
+pn_trig_tail = "hook.cf.pn.trig.tail"
+
+[[op]]
+op = "hook"
+cpu = "cf"
+kind = "call"
+anchor = "cf.pn.rec"
+offset = 0
+to = "pn_rec"
+devices = ["dt2"]
+
+[[op]]
+op = "hook"
+cpu = "cf"
+kind = "call"
+anchor = "cf.pn.step"
+offset = 0
+to = "pn_rec"
+devices = ["dt2"]
+
+[[op]]
+op = "hook"
+cpu = "cf"
+anchor = "cf.pn.trig"
+offset = 0
+to = "pn_trig"
+displaced = "run"
+devices = ["dt2"]
+
+[[claim]]
+resource = "cf.pn.trig"
+[[claim]]
+resource = "cf.pn.rec"
+[[claim]]
+resource = "cf.pn.step"
+
+# The live-record note writer FUN_40048fb2 (from FUN_400318c6): `jsr FUN_4003630c.l` with (the track set, the track) pushed.
+# On "not audio" a note played on a step that already has a trig and a note 1 goes into the first free of notes 2-4.
+[[anchor_rule]]
+name = "cf.pn.rec"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "352d15c2c4edd7717e1afa1924e2754a"
+offset = 0xa6
+len = 6
+mark = "D"
+
+# The other note writer FUN_40030d12 (from the same note handler FUN_400318c6): `jsr FUN_4003630c.l` with (the track set, the
+# track) pushed; on "not audio" a note that differs from note 1 goes into the first free of notes 2-4.
+[[anchor_rule]]
+name = "cf.pn.step"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "f76a21ed019dd060daebc8df6133f886"
+offset = 0x48
+len = 6
+mark = "D"
+
+# vector_191_handler, a new trig on an audio track (event at (-0x64,A6), track in D2) after the sound copy and its locks:
+# `movea.l (-0x64,A6),A0; move.l (0x64,A0),D1` (8 bytes) before the sample-lock test. Stock reads note 1 alone.
+[[anchor_rule]]
+name = "cf.pn.trig"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "e17112316e2cef97a3ebdd4ec57cc849"
+offset = 0x8d0
+len = 8
+mark = "D"
+
+# the frame's address, as core/trackflags' cf.tf.tx_lit
+[[anchor_rule]]
+name = "cf.pn.tx_lit"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "e17112316e2cef97a3ebdd4ec57cc849"
+offset = 0x60
+len = 4
+mark = "D"
+
+# bool is_audio(track set, track) (FUN_4003630c)
+[[anchor_rule]]
+name = "cf.pn.isaudio"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "3c913dbf102c1ca92387d34629c81aa8"
+offset = 0
+len = 6
+mark = "D"
+
+# the live kit's pointer, as core/trackflags' cf.tf.kit_lit
+[[anchor_rule]]
+name = "cf.pn.kit_lit"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "82c1a0cc8af95a468267b865a31b69ec"
+offset = 0xc
+len = 4
+mark = "D"

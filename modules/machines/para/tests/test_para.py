@@ -5,13 +5,13 @@ import pytest
 from support.machine_rig import MachineRig
 from support.pluck_rig import SKIP_NO_SELACHE
 
-from tools.patchkit import para_ref, wtstack_ref
+from tools.patchkit import para_ref
 
 pytestmark = SKIP_NO_SELACHE
 
 IDS = ("pa_wave", "pa_dtun", "pa_atk", "pa_dec", "pa_jump", "pa_sprd")
 SAMPLE = 0x8422B9E8  # sample memory (DDR), where the firmware put a slot's first sample
-SERUM = wtstack_ref.serum_table(8)
+SERUM = para_ref.serum_table(8)
 
 
 class Rig(MachineRig):
@@ -29,19 +29,25 @@ class Rig(MachineRig):
         self.rec_word(self.voice, 0x188, len(table))
 
 
-def play(table: np.ndarray, params: list[int], events: dict[int, tuple], n: int, addr: int = SAMPLE):
+def play(table: np.ndarray, params: list[int], events: dict[int, tuple], n: int, addr: int = SAMPLE, smooth: bool = True):
     """EVENTS: block -> ("on", note) or ("off",). The routine and the model, block for block: (got L, got R, want L, want R)."""
     rig = Rig(table, addr)
     rig.set_params({"tune": 0x4000, **dict(zip(IDS, params, strict=True))})
     m = para_ref.Para(table)
+    if not smooth:
+        rig.hw(0x7C + 0x30 * rig.track, 1)  # the track's flags word (core/trackflags), frame byte 0xf8 + 0x60 t: bit 0
+        m.smooth = False
     gl, gr, wl, wr = [], [], [], []
     for b in range(n):
         ev = events.get(b)
         released = False
         if ev and ev[0] == "on":
+            notes = ev[2] if len(ev) > 2 else 0
+            rig.hw(0x7A + 0x30 * rig.track, notes & 0xFFFF)  # core/polynotes' notes 2-4, frame byte 0xf4 + 0x60 t
+            rig.hw(0x7B + 0x30 * rig.track, notes >> 16)
             rig.set_note(ev[1], 100)
             rig.trigger()
-            m.note_on(int(ev[1] * 256))
+            m.note_on_notes(int(ev[1] * 256), notes)
         elif ev:
             rig.release()
             released = True
@@ -56,12 +62,15 @@ def play(table: np.ndarray, params: list[int], events: dict[int, tuple], n: int,
 
 
 CHORD = {0: ("on", 48), 5: ("on", 55), 10: ("on", 60), 15: ("on", 64), 20: ("off",), 25: ("on", 67)}
+# trigs with notes 2-4 (0x40 + the interval): four notes, three (steals two slots), notes that are none, a single note
+CHORD_TRIGS = {0: ("on", 48, 0x4B4744), 6: ("on", 55, 0x4744), 12: ("on", 60, 0x00FF40), 20: ("off",), 25: ("on", 67)}
 CASES = {
     "chord": (SERUM, SAMPLE, [0x2000, 0x5000, 0x1000, 0x3000, 0x4000, 0x7F00], CHORD),
     "jump-up": (SERUM, SAMPLE, [0x3000, 0x4800, 0, 0x2000, 0x4200, 0x4000], CHORD),
     "jump-down-wraps": (SERUM, SAMPLE + 2, [0x1000, 0x3000, 0x2000, 0x1000, 0x3D00, 0x6000], CHORD),
     "short-decay": (SERUM, SAMPLE, [0x7F00, 0x4000, 0, 0, 0x4000, 0], {0: ("on", 60), 3: ("off",), 8: ("on", 62)}),
-    "single-cycle": (wtstack_ref.serum_table(1, 601), SAMPLE, [0, 0x5000, 0x800, 0x4000, 0x4800, 0x7F00], CHORD),
+    "single-cycle": (para_ref.serum_table(1, 601), SAMPLE, [0, 0x5000, 0x800, 0x4000, 0x4800, 0x7F00], CHORD),
+    "chord-trigs": (SERUM, SAMPLE, [0x2000, 0x5000, 0x1000, 0x3000, 0x4200, 0x7F00], CHORD_TRIGS),
 }
 
 
@@ -78,6 +87,14 @@ def test_each_trig_takes_the_next_of_four_slots():
     m = para_ref.Para(SERUM)
     assert [m.note_on(n << 8) for n in (48, 52, 55, 59, 62, 64)] == [0, 1, 2, 3, 0, 1]
     assert m.pit == [62 << 8, 64 << 8, 55 << 8, 59 << 8]
+
+
+def test_a_trigs_notes_take_the_next_slots_round_robin():
+    m = para_ref.Para(SERUM)
+    assert m.note_on_notes(48 << 8, 0x4B4744) == [0, 1, 2, 3]
+    assert m.note_on_notes(55 << 8, 0x3944) == [0, 1, 2]
+    assert m.note_on_notes(60 << 8, 0xFF4000) == [3]
+    assert m.pit == [55 << 8, 59 << 8, 48 << 8, 60 << 8]
 
 
 def test_the_envelope_holds_until_the_note_off_then_decays_and_stops():
@@ -125,3 +142,12 @@ def test_cost_per_block():
         blk = rig.block()
         counts.append(blk.instructions)
     assert max(counts) < 13000, counts
+
+
+def test_smoothing_off_plays_the_nearer_frame():
+    params = [0x3A00, 0x4000, 0, 0x4000, 0x4400, 0x7F00]  # WAVE between frames 3 and 4, nearer 4; JUMP +4 wraps
+    gl, gr, wl, wr = play(SERUM, params, CHORD, 30, smooth=False)
+    np.testing.assert_allclose(gl, wl, atol=2e-5)
+    np.testing.assert_allclose(gr, wr, atol=2e-5)
+    _, _, sl, _ = play(SERUM, params, CHORD, 30)
+    assert np.max(np.abs(wl - sl)) > 1e-3

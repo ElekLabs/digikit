@@ -28,7 +28,7 @@ OFF, ATTACK, HELD, DECAY = 0, 1, 2, 3
 
 
 def loop(word: int, n: int) -> tuple[int, int]:
-    """LOOP (bipolar, 0x4000 OFF) as (mode, loop start in frames): 0 none, 1 forward, -1 ping-pong (as tom/chord)."""
+    """LOOP (bipolar, 0x4000 OFF) as (mode, loop start in frames): 0 none, 1 forward, -1 ping-pong."""
     d = word - 0x4000
     if -0x100 < d < 0x100:
         return 0, -1
@@ -62,6 +62,16 @@ class ParaSmp:
         self.stg[k] = ATTACK
         self.new[k] = True
         return k
+
+    def note_on_notes(self, pitch: int, notes: int = 0) -> list[int]:
+        """Note 1 and core/polynotes' notes 2-4 (NOTES: a byte each from the low one, 0x40 + the interval from note 1; 0, 0x40 and
+        0x80 up are none), each in the next slot."""
+        slots = [self.note_on(pitch)]
+        for i in range(3):
+            b = (notes >> (8 * i)) & 0xFF
+            if 0 < b < 0x80 and b != 0x40:
+                slots.append(self.note_on(pitch + 256 * (b - 0x40)))
+        return slots
 
     def voice(
         self, k: int, params: list[int]

@@ -26,12 +26,23 @@ PAN_N = gen.PAN_N
 OFF, ATTACK, HELD, DECAY = 0, 1, 2, 3
 
 
+def serum_table(frames: int, size: int = FRAME) -> np.ndarray:
+    """int16 frames that morph from a sine to a saw-like stack of harmonics: frame f has 1 + f harmonics at 1/h."""
+    t = np.arange(size) / size
+    out = []
+    for f in range(frames):
+        w = sum(np.sin(2 * np.pi * h * t) / h for h in range(1, f + 2))
+        out.append(np.round(w / np.max(np.abs(w)) * 0.8 * 32767))
+    return np.concatenate(out).astype(np.int16)
+
+
 class Para:
     """Params: the six knob words (WAVE, DTUN, ATK, DEC, JUMP, SPRD). `table`: the sample's int16 samples. `note_on(pitch)` at
     each trig, `block(params, released)` per 32 samples: (left, right, done)."""
 
     def __init__(self, table: np.ndarray) -> None:
         self.table = np.asarray(table, np.int16)
+        self.smooth = True
         self.scaled = self.table.astype(np.float32) * np.float32(
             65536
         )  # as the routine reads them
@@ -49,6 +60,16 @@ class Para:
         self.ph[k] = f32(0.0)
         return k
 
+    def note_on_notes(self, pitch: int, notes: int = 0) -> list[int]:
+        """Note 1 and core/polynotes' notes 2-4 (NOTES: a byte each from the low one, 0x40 + the interval from note 1; 0, 0x40 and
+        0x80 up are none), each in the next slot."""
+        slots = [self.note_on(pitch)]
+        for i in range(3):
+            b = (notes >> (8 * i)) & 0xFF
+            if 0 < b < 0x80 and b != 0x40:
+                slots.append(self.note_on(pitch + 256 * (b - 0x40)))
+        return slots
+
     def frames(
         self, params: list[int]
     ) -> tuple[int, int, list[tuple[int, int]], np.float32]:
@@ -59,6 +80,8 @@ class Para:
         p = f32(f32(min(f32(f32(params[0]) * K["W01"]), K["ONE"])) * f32(nf - 1))
         f0 = int(p)
         fr = f32(p - f32(f0))
+        if not self.smooth:  # core/trackflags bit 0 (FUNC + press WAVE): the nearer frame alone
+            fr = K["ONE"] if fr >= K["HALF"] else f32(0.0)
         jump = (params[4] >> 8) - 64
         out = []
         for k in range(4):

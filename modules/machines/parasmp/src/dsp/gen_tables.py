@@ -50,7 +50,7 @@ def consts() -> list[tuple[str, float]]:
         ("DMAX", DETUNE_MAX),
         ("SPR", (PAN_N / 2) / 0x7F00),  # SPRD's word to pan steps either side of the centre
         ("W01", 1 / 0x7F00),
-        ("GAIN", G1 / 2),  # each voice at half a single Chord voice (-6 dB), as ParaWT
+        ("GAIN", G1 / 2),  # each voice 6 dB below a stock sample machine, as ParaWT
         ("OFF", OFF),
     ]
 

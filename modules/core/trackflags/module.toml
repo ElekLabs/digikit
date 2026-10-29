@@ -1,0 +1,183 @@
+[module]
+id = "core/trackflags"
+version = "0.1.0"
+name = "Track flags"
+category = "core"
+type = "framework"
+author = "tom"
+status = "experimental"
+summary = "Sixteen flag bits per track (Sound[0], saved with the sound, sent to the DSP in the frame) that a machine toggles with FUNC + a knob press on its SRC page."
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+
+# A machine module adds its toggles with
+#
+#     [[entry]]
+#     registry = "flag_toggles"
+#     id = "pa_smooth"
+#     type = "machines.para.index"      # the machine type
+#     knob = 1                          # 0..7: knob A..H, pressed with FUNC held
+#     mask = 1                          # the bit it flips in the track's flags
+#     label = "SMOOTHING"               # shown as "SMOOTHING ON" (the bit clear) / "SMOOTHING OFF" (the bit set)
+#
+# and reads the flags on the DSP at the frame halfword +0xf8 + 0x60 * track: the low half of the 32-bit word at that byte offset
+# of the frame copy (`dsp.voice.frame_base`). Only tracks whose machine has a row get the word (it is a slice boundary of type 6).
+[[registry]]
+name = "flag_toggles"
+devices = ["dt2"]
+first = "0"
+max = 16
+region = "cf.expansion"
+
+[[registry.field]]
+name = "type"
+kind = "u32"
+[[registry.field]]
+name = "knob"
+kind = "u32"
+[[registry.field]]
+name = "mask"
+kind = "u32"
+[[registry.field]]
+name = "label"
+kind = "cstr"
+max_len = 15
+
+[[object]]
+path = "build/trackflags-cf.dko.json"
+sources = ["src/cf/trackflags.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+tf_rows = "flag_toggles.rows"
+tf_count = "flag_toggles.count"
+tf_rowsize = "flag_toggles.row_size"
+tf_held = "cf.tf.held"
+tf_track = "cf.tf.track"
+tf_msg = "cf.tf.msg"
+tf_tx_lit = "cf.tf.tx_lit"
+tf_kit_lit = "cf.tf.kit_lit"
+tf_key_tail = "hook.cf.tf.key.tail"
+tf_frame_tail = "hook.cf.tf.frame.tail"
+tf_load_tail = "hook.cf.tf.load.tail"
+
+[[op]]
+op = "hook"
+cpu = "cf"
+anchor = "cf.tf.key"
+offset = 0
+to = "tf_key"
+displaced = "run"
+devices = ["dt2"]
+
+[[op]]
+op = "hook"
+cpu = "cf"
+anchor = "cf.tf.frame"
+offset = 0
+to = "tf_frame"
+displaced = "run"
+devices = ["dt2"]
+
+[[op]]
+op = "hook"
+cpu = "cf"
+anchor = "cf.tf.load"
+offset = 0
+to = "tf_load"
+displaced = "run"
+devices = ["dt2"]
+
+# MachineParameterPageView::vfunc_2 (the SRC page's key handler): `link.w A6,-0x54; movem.l ...,(SP)` at its entry
+[[anchor_rule]]
+name = "cf.tf.key"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "cda6789150920d540acf061ca9321fd1"
+offset = 0
+len = 8
+mark = "D"
+
+# vector_191_handler (builds the frame): `move.l (counter).l,D0` after its per-track loop, before the registers are restored
+[[anchor_rule]]
+name = "cf.tf.frame"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "e17112316e2cef97a3ebdd4ec57cc849"
+offset = 0x1638
+len = 6
+mark = "D"
+
+# the sound loader FUN_400db3b2 (A2 the Sound, A3 the record): `move.l (0,A0,D0*4),D0; lsl.l #8,D0` after its table loop
+[[anchor_rule]]
+name = "cf.tf.load"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "d5cd38f131d3119fd16d700d526b4fb9"
+offset = 0x9e
+len = 6
+mark = "D"
+
+# int key_held(int key) (FUN_4011e150; FUNC is key 0x11)
+[[anchor_rule]]
+name = "cf.tf.held"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "1ffd7e389bfa418309caabcfbe980b9f"
+offset = 0
+len = 6
+mark = "D"
+
+# int active_track(obj) (FUN_4004abb8, called by the page views with view + 0x74)
+[[anchor_rule]]
+name = "cf.tf.track"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "cedb2a1ea2dbc72965b79e3f95f41157"
+ordinal = 1                 # the first of the two functions with this hash is another getter of the same shape
+offset = 0
+len = 6
+mark = "D"
+
+# void message(obj, const char *fmt, ...) (FUN_4005b23a, the page views' popup text with view + 0x6c, e.g. "Clear %s")
+[[anchor_rule]]
+name = "cf.tf.msg"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "9582a093a5d20214e23283925ebeb058"
+offset = 0
+len = 6
+mark = "D"
+
+# the frame's address: the literal of vector_191_handler's `pea (frame).l` before its send
+[[anchor_rule]]
+name = "cf.tf.tx_lit"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "e17112316e2cef97a3ebdd4ec57cc849"
+offset = 0x60
+len = 4
+mark = "D"
+
+# the live kit's pointer (the kit the encoders edit; finding 61): the literal of FUN_4002da7a's `move.l D0,(kit).l` (the table of
+# Sound pointers next to it is cleared while a machine changes, so the Sounds are found in the kit)
+[[anchor_rule]]
+name = "cf.tf.kit_lit"
+devices = ["dt2"]
+cpu = "cf"
+kind = "cf_func"
+hash = "82c1a0cc8af95a468267b865a31b69ec"
+offset = 0xc
+len = 4
+mark = "D"

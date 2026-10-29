@@ -40,7 +40,7 @@ def consts() -> list[tuple[str, float]]:
         ("DTN", 1 / 0x3F00),  # DTUN's word - 0x4000 to -1 .. 1
         ("DMAX", DETUNE_MAX),
         ("SPR", (PAN_N / 2) / 0x7F00),  # SPRD's word to pan steps either side of the centre
-        ("GAIN", 1 / 2**31),  # each voice at half WTStack's single voice (0.707 per channel at the centre): headroom for four
+        ("GAIN", 1 / 2**31),  # each voice at half a single full-scale voice (0.707 per channel at the centre): headroom for four
         ("OFF", OFF),
     ]
 

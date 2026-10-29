@@ -9,7 +9,7 @@ status = "experimental"
 summary = "The track's sample as a one-shot played paraphonically: each trig takes the next of four voices, with its own note, amp envelope (attack, held for the trig, decay), detune and stereo position; a forward or ping-pong loop and a start point."
 dynamic = false
 ports = ["dt2-1.17"]
-requires = ["core/machines", "core/params", "core/dsp-voice"]
+requires = ["core/machines", "core/params", "core/dsp-voice", "core/polynotes"]
 conflicts = []
 
 [targets]
@@ -25,6 +25,7 @@ devices = ["dt2"]
 
 [object.externs]
 _fw_release_latch = "dsp.voice.release_latch"
+_fw_frame = "dsp.voice.frame_base"
 
 # the value texts of LOOP and DTUN
 [[object]]
@@ -44,6 +45,13 @@ lev = 0x6400
 
 # SAMPLE's TUNE (0xca) first; knob D is SAMPLE's SAMP (0xcd): the slot. Knob H is the slot the stock level reads (LEV): SPRD takes
 # it, and `lev` gives the track a fixed level of 100.
+# a trig's notes 2-4 (core/polynotes) take the next slots
+[[entry]]
+registry = "poly_notes"
+id = "parasmp"
+type = "machines.parasmp.index"
+devices = ["dt2"]
+
 [[machine]]
 id = "parasmp"
 name = "Para"

@@ -20,7 +20,8 @@
 
 # This fork patches machines in and never ships the run-time loader: the run-time range of both devices (16 ..= 23,
 # core/dynreg) is retired and its numbers are allocated to built-in machines: dynamic_first past `last` leaves it empty.
-# Digitakt II 11, 16, 17, 18 and 20 are reserved (taken by machines kept out of this repository); never allocate them.
+# Digitakt II 11, 16, 17, 18 and 20 are reserved (taken by machines kept out of this repository), 21 and 23 retired (Chord and
+# ChordWT, replaced by Para and ParaWT with chord trigs: saved sounds may still name them); never allocate them.
 [dt2]
 last = 23
 dynamic_first = 24
@@ -28,9 +29,7 @@ dynamic_first = 24
 [dt2.alloc]
 "tom/tb303:tb303" = 12
 "tom/para:para" = 19
-"tom/chord:chord" = 21
 "tom/parasmp:parasmp" = 22
-"tom/wtstack:wtstack" = 23
 "fadedlimes/bd:bd" = 15
 "fadedlimes/pd:pd" = 14
 "fadedlimes/analog:analog" = 13

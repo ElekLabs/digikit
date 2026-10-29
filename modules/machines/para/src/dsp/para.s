@@ -3,7 +3,7 @@
 // out, then 32 right ones). tools/patchkit/para_ref.py is the model, operation for operation.
 //
 // Knobs (params): 0 WAVE, 1 DTUN, 2 ATK, 3 DEC, 4 JUMP, 5 SPRD (knob H; the row's `lev` gives the track a fixed level).
-//   table  as WTStack's: the even voice's record, word 0 the sample's first frame (a byte address), +0x188 its frames; frames
+//   table  the even voice's record, word 0 the sample's first frame (a byte address), +0x188 its frames; frames
 //          of FRAME samples, a shorter sample is one frame
 //   WAVE   the position over the frames: two neighbouring frames, each read with linear interpolation, crossfaded
 //   JUMP   voice slot k plays WAVE + k x JUMP frames (JUMP = (word >> 8) - 64), wrapped around the table
@@ -12,10 +12,10 @@
 //          DEC's factor per sample and stops below -80 dB
 //   DTUN   slot k at +/- d^3 semitones (+, -, +1/2, -1/2), d = (word - 0x4000) / 0x3f00
 //   SPRD   slot k at the centre +/- SPRD (right, left, right/2, left/2), equal power
-//   out    the voices' sum, each at half WTStack's single-voice gain
+//   out    the voices' sum, each at half a single full-scale voice
 // render returns DK_DONE when every slot has stopped.
 //
-// The sample is 16-bit; as WTStack, the loop reads the aligned word that holds a sample, shifts the sample to the upper half
+// The sample is 16-bit; the loop reads the aligned word that holds a sample, shifts the sample to the upper half
 // and masks the lower one (the assembler drops a load's (SWSE)).
 //
 // State (512 bytes, a power of two for the track index; loaded as zeros, never cleared): words S_* below, per slot k at S_x + k.
@@ -52,6 +52,7 @@
 .GLOBAL _pa_note_on;
 .EXTERN _dv_exp2;
 .EXTERN _dv_g;
+.EXTERN _fw_frame;
 .EXTERN _pa_k;
 .EXTERN _pa_pan;
 .EXTERN _pa_atk;
@@ -154,6 +155,23 @@ _pa_one:
     R12 = TRUNC F0;
     F2 = FLOAT R12;
     F0 = F0 - F2;
+    // smoothing off (bit 0 of the track's core/trackflags word, frame byte 0xf8 + 0x60 t): the nearer frame alone
+    R2 = DM(_dv_g + 12);
+    R4 = 0x60;
+    R2 = R2 * R4 (SSI);
+    R4 = _fw_frame;
+    R2 = R2 + R4;
+    I4 = R2;
+    R2 = DM(62, I4);
+    R2 = FEXT R2 BY 0:1;
+    R2 = PASS R2;
+    IF EQ JUMP _pa_smooth;
+    R4 = DM(K_ONE, I1);
+    R2 = DM(K_HALF, I1);
+    COMP(F0, F2);
+    R0 = 0;
+    IF GE R0 = PASS R4;
+_pa_smooth:
     DM(S_FR, I3) = R0;
     // JUMP: R10 frames per slot
     R10 = DM(4, I5);
@@ -464,23 +482,56 @@ _pa_out:
 
 // the next slot takes the note: pitch, phase 0, the attack from its level
 _pa_note_on:
+    // note 1, then core/polynotes' notes 2-4 (frame word 61 + 0x18 t: a byte each from the low one, 0x40 + the interval from
+    // note 1; 0, 0x40 and 0x80 up are none): each takes the next slot (0, 1, 2, 3, 0, ...)
     I3 = R4;
     I2 = R8;
-    R0 = DM(S_NEXT, I3);
-    R1 = R0 + 1;
+    R8 = DM(DK_IN_W_PITCH, I2);
+    R2 = DM(_dv_g + 12);
+    R4 = 0x60;
+    R2 = R2 * R4 (SSI);
+    R4 = _fw_frame;
+    R2 = R2 + R4;
+    I4 = R2;
+    R9 = DM(61, I4);
+    R9 = LSHIFT R9 BY 8;
+    R0 = 0x40;
+    R9 = R9 OR R0;                        // note 1 as the low byte
+    R10 = 4;
+_pa_nn:
+    R0 = FEXT R9 BY 0:8;
+    R9 = LSHIFT R9 BY -8;
+    R0 = PASS R0;
+    IF EQ JUMP _pa_nx;
+    R1 = 0x80;
+    COMP(R0, R1);
+    IF GE JUMP _pa_nx;
+    R1 = 0x40;
+    R0 = R0 - R1;                         // the interval
+    IF NE JUMP _pa_nt;
+    R1 = 4;
+    COMP(R10, R1);
+    IF NE JUMP _pa_nx;
+_pa_nt:
+    R0 = LSHIFT R0 BY 8;
+    R0 = R0 + R8;
+    R4 = DM(S_NEXT, I3);
+    R1 = R4 + 1;
     R2 = 3;
     R1 = R1 AND R2;
     DM(S_NEXT, I3) = R1;
-    R0 = LSHIFT R0 BY 2;
+    R4 = LSHIFT R4 BY 2;
     R1 = I3;
-    R0 = R0 + R1;
-    I4 = R0;
-    R0 = DM(DK_IN_W_PITCH, I2);
+    R4 = R4 + R1;
+    I4 = R4;
     DM(S_PIT, I4) = R0;
     R0 = 1;
     DM(S_STG, I4) = R0;
     R0 = 0;
     DM(S_PH, I4) = R0;
+_pa_nx:
+    R10 = R10 - 1;
+    IF NE JUMP _pa_nn;
     R0 = DK_OK;
     JUMP (M13, I13);
 
@@ -495,6 +546,6 @@ _pa_note_on:
 .VAR _pa_desc4 = 512;
 .VAR _pa_desc5 = 0;
 .VAR _pa_desc6 = 13000;
-.VAR _pa_desc7 = 60;
+.VAR _pa_desc7 = 200;
 .VAR _pa_desc8 = 2;
 .VAR _pa_desc9 = 0;

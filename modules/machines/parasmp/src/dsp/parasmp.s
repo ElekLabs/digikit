@@ -3,13 +3,13 @@
 // 32 right ones). tools/patchkit/parasmp_ref.py is the model, operation for operation.
 //
 // Knobs (params): 0 LOOP, 1 DTUN, 2 ATK, 3 DEC, 4 STRT, 5 SPRD (knob H; the row's `lev` gives the track a fixed level).
-//   sample  as tom/chord's: the even and odd voices' records give the left and right channels and the frames
-//   LOOP    as tom/chord's: 0x4000 OFF (a voice ends at the sample's end), above forward, below ping-pong
+//   sample  the even and odd voices' records give the left and right channels and the frames
+//   LOOP    0x4000 OFF (a voice ends at the sample's end), above forward, below ping-pong
 //   voices  note_on gives the next slot (0, 1, 2, 3, 0, ...) the note and the attack; the slot starts at STRT x the frames at
 //           its first block. Envelope as ParaWT's: attack to 1, held until the track's note-off (the release latch, byte
 //           v = 2t), then DEC's factor per sample, stopped below -80 dB
 //   DTUN    slot k at +/- d^3 semitones (+, -, +1/2, -1/2); SPRD slot k at right, left, right/2, left/2 (equal power)
-//   out     the voices' sum, each at half a single Chord voice
+//   out     the voices' sum, each 6 dB below a stock sample machine playing the slot
 // render returns DK_DONE when every slot has stopped.
 //
 // State (512 bytes, a power of two for the track index; loaded as zeros): words S_* below, per slot k at S_x + k.
@@ -48,6 +48,7 @@
 .GLOBAL _ps_note_on;
 .EXTERN _dv_exp2;
 .EXTERN _dv_g;
+.EXTERN _fw_frame;
 .EXTERN _ps_k;
 .EXTERN _ps_pan;
 .EXTERN _ps_atk;
@@ -507,22 +508,55 @@ _ps_get:
 
 // the next slot takes the note: pitch, the attack from its level, its start at its first block
 _ps_note_on:
+    // note 1, then core/polynotes' notes 2-4 (frame word 61 + 0x18 t: a byte each from the low one, 0x40 + the interval from
+    // note 1; 0, 0x40 and 0x80 up are none): each takes the next slot (0, 1, 2, 3, 0, ...)
     I3 = R4;
     I2 = R8;
-    R0 = DM(S_NEXT, I3);
-    R1 = R0 + 1;
+    R8 = DM(DK_IN_W_PITCH, I2);
+    R2 = DM(_dv_g + 12);
+    R4 = 0x60;
+    R2 = R2 * R4 (SSI);
+    R4 = _fw_frame;
+    R2 = R2 + R4;
+    I4 = R2;
+    R9 = DM(61, I4);
+    R9 = LSHIFT R9 BY 8;
+    R0 = 0x40;
+    R9 = R9 OR R0;                        // note 1 as the low byte
+    R10 = 4;
+_ps_qn:
+    R0 = FEXT R9 BY 0:8;
+    R9 = LSHIFT R9 BY -8;
+    R0 = PASS R0;
+    IF EQ JUMP _ps_qx;
+    R1 = 0x80;
+    COMP(R0, R1);
+    IF GE JUMP _ps_qx;
+    R1 = 0x40;
+    R0 = R0 - R1;                         // the interval
+    IF NE JUMP _ps_qt;
+    R1 = 4;
+    COMP(R10, R1);
+    IF NE JUMP _ps_qx;
+_ps_qt:
+    R0 = LSHIFT R0 BY 8;
+    R0 = R0 + R8;
+    R4 = DM(S_NEXT, I3);
+    R1 = R4 + 1;
     R2 = 3;
     R1 = R1 AND R2;
     DM(S_NEXT, I3) = R1;
-    R0 = LSHIFT R0 BY 2;
+    R4 = LSHIFT R4 BY 2;
     R1 = I3;
-    R0 = R0 + R1;
-    I4 = R0;
-    R0 = DM(DK_IN_W_PITCH, I2);
+    R4 = R4 + R1;
+    I4 = R4;
     DM(S_PIT, I4) = R0;
     R0 = 1;
     DM(S_STG, I4) = R0;
     DM(S_NEW, I4) = R0;
+_ps_qx:
+    R10 = R10 - 1;
+    IF NE JUMP _ps_qn;
     R0 = DK_OK;
     JUMP (M13, I13);
 
@@ -537,6 +571,6 @@ _ps_note_on:
 .VAR _ps_desc4 = 512;
 .VAR _ps_desc5 = 0;
 .VAR _ps_desc6 = 22000;
-.VAR _ps_desc7 = 60;
+.VAR _ps_desc7 = 200;
 .VAR _ps_desc8 = 2;
 .VAR _ps_desc9 = 0;

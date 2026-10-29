@@ -48,9 +48,12 @@ def play(left, right, params, events, n, addr=LEFT):
         ev = events.get(b)
         released = False
         if ev and ev[0] == "on":
+            notes = ev[2] if len(ev) > 2 else 0
+            rig.hw(0x7A + 0x30 * rig.track, notes & 0xFFFF)  # core/polynotes' notes 2-4, frame byte 0xf4 + 0x60 t
+            rig.hw(0x7B + 0x30 * rig.track, notes >> 16)
             rig.set_note(ev[1], 100)
             rig.trigger()
-            m.note_on(ev[1] << 8)
+            m.note_on_notes(ev[1] << 8, notes)
         elif ev:
             rig.release()
             released = True
@@ -66,11 +69,14 @@ def play(left, right, params, events, n, addr=LEFT):
 
 S = note(3000)
 CHORD = {0: ("on", 48), 4: ("on", 55), 8: ("on", 60), 12: ("on", 64), 20: ("off",), 26: ("on", 67)}
+# trigs with notes 2-4 (0x40 + the interval): four notes, three (steals two slots), notes that are none, a single note
+CHORD_TRIGS = {0: ("on", 48, 0x4B4744), 6: ("on", 55, 0x4744), 12: ("on", 60, 0x00FF40), 20: ("off",), 26: ("on", 67)}
 CASES = {
     "one-shot": (S, None, [OFF, 0x5000, 0x1000, 0x3000, 0, 0x7F00], CHORD, LEFT),
     "stereo-forward": (S, (S // 2).astype(np.int16), [0x6000, 0x4800, 0, 0x2000, 0x1000, 0x4000], CHORD, LEFT),
     "ping-pong-start": (S, None, [0x2800, 0x3000, 0x800, 0x4000, 0x3000, 0x6000], CHORD, LEFT + 2),
     "short": (S, None, [OFF, OFF, 0, 0, 0x7000, 0], {0: ("on", 60), 3: ("off",), 8: ("on", 62)}, LEFT),
+    "chord-trigs": (S, None, [OFF, 0x5000, 0x1000, 0x3000, 0, 0x7F00], CHORD_TRIGS, LEFT),
 }
 
 
@@ -86,6 +92,14 @@ def test_the_routine_matches_the_model(name):
 def test_each_trig_takes_the_next_of_four_slots():
     m = parasmp_ref.ParaSmp(S)
     assert [m.note_on(n << 8) for n in (48, 52, 55, 59, 62)] == [0, 1, 2, 3, 0]
+
+
+def test_a_trigs_notes_take_the_next_slots_round_robin():
+    m = parasmp_ref.ParaSmp(S)
+    assert m.note_on_notes(48 << 8, 0x4B4744) == [0, 1, 2, 3]
+    assert m.note_on_notes(55 << 8, 0x3944) == [0, 1, 2]
+    assert m.note_on_notes(60 << 8, 0xFF4000) == [3]
+    assert m.pit == [55 << 8, 59 << 8, 48 << 8, 60 << 8]
 
 
 def test_a_slot_starts_at_strt_and_a_one_shot_ends():

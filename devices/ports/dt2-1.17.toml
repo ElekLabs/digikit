@@ -1881,6 +1881,66 @@ mark = "D"
 rule = "core/params:cf_func"
 
 [[anchor]]
+name = "cf.pn.isaudio"
+cpu = "cf"
+kind = "code"
+addr = 0x4003630c
+len = 6
+sha256 = "49637682081d4c3402e715cc214ba81869bb11fb271e387a69b193713861b169"
+mark = "D"
+rule = "core/polynotes:cf_func"
+
+[[anchor]]
+name = "cf.pn.kit_lit"
+cpu = "cf"
+kind = "code"
+addr = 0x4002da86
+len = 4
+sha256 = "b218f484cc22848056a4e0b3ac959fba8649501f36734e4daacbffd24e2c5987"
+mark = "D"
+rule = "core/polynotes:cf_func"
+
+[[anchor]]
+name = "cf.pn.rec"
+cpu = "cf"
+kind = "code"
+addr = 0x40049058
+len = 6
+sha256 = "618cff6026f8ca67349476242009337b414e770bca26751cbfac1c2f3a407914"
+mark = "D"
+rule = "core/polynotes:cf_func"
+
+[[anchor]]
+name = "cf.pn.step"
+cpu = "cf"
+kind = "code"
+addr = 0x40030d5a
+len = 6
+sha256 = "618cff6026f8ca67349476242009337b414e770bca26751cbfac1c2f3a407914"
+mark = "D"
+rule = "core/polynotes:cf_func"
+
+[[anchor]]
+name = "cf.pn.trig"
+cpu = "cf"
+kind = "code"
+addr = 0x4002e5dc
+len = 8
+sha256 = "6767bd833bbb041d8d7ebbf4eb77c4d7195c61038ad5bcef5c66886d9c241d8a"
+mark = "D"
+rule = "core/polynotes:cf_func"
+
+[[anchor]]
+name = "cf.pn.tx_lit"
+cpu = "cf"
+kind = "code"
+addr = 0x4002dd6c
+len = 4
+sha256 = "960a4fd399eb973bddad90eba71377e6fd6056c81babaf83f3025723eadfa9b8"
+mark = "D"
+rule = "core/polynotes:cf_func"
+
+[[anchor]]
 name = "cf.reset.clear_helper"
 cpu = "cf"
 kind = "value"
@@ -1911,6 +1971,86 @@ len = 8
 sha256 = "dbd7ee3ac848bc629a889c3a534a8b23d8bb88fb05c5dd9f8f825696a3c6b633"
 mark = "D"
 rule = "core/expansion:cf_reset_init_calls"
+
+[[anchor]]
+name = "cf.tf.frame"
+cpu = "cf"
+kind = "code"
+addr = 0x4002f344
+len = 6
+sha256 = "920dc4d2e56df39d5ad02e14a5819a00b95df9b68e2d67c39ac3f499683b10ad"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.held"
+cpu = "cf"
+kind = "code"
+addr = 0x4011e150
+len = 6
+sha256 = "9eab14ed9d527816054c9f68837b2e021fba5470d105516b94b63ffb8ed1f45d"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.key"
+cpu = "cf"
+kind = "code"
+addr = 0x4005fb0c
+len = 8
+sha256 = "b3cafaf05cca703fb3af1a18d97f2139059407105d37f9b55aeded4165085908"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.kit_lit"
+cpu = "cf"
+kind = "code"
+addr = 0x4002da86
+len = 4
+sha256 = "b218f484cc22848056a4e0b3ac959fba8649501f36734e4daacbffd24e2c5987"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.load"
+cpu = "cf"
+kind = "code"
+addr = 0x400db450
+len = 6
+sha256 = "09c626ebc6701060b9e1896a7ce882e59f6ce59f1f3e7e1383e76101e60ab9ee"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.msg"
+cpu = "cf"
+kind = "code"
+addr = 0x4005b23a
+len = 6
+sha256 = "184626902fd7dc4bef16d57cb3eaed7526119fe1a3d19871dd9bfba5612a02b7"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.track"
+cpu = "cf"
+kind = "code"
+addr = 0x4004abb8
+len = 6
+sha256 = "8d1503d38f264a9b0be0700a53c1e2e61354803cc529f54092a511ae826bca7f"
+mark = "D"
+rule = "core/trackflags:cf_func"
+
+[[anchor]]
+name = "cf.tf.tx_lit"
+cpu = "cf"
+kind = "code"
+addr = 0x4002dd6c
+len = 4
+sha256 = "960a4fd399eb973bddad90eba71377e6fd6056c81babaf83f3025723eadfa9b8"
+mark = "D"
+rule = "core/trackflags:cf_func"
 
 [[anchor]]
 name = "dkrt.fw.alloc"

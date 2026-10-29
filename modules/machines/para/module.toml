@@ -9,7 +9,7 @@ status = "experimental"
 summary = "The track's sample as a Serum wavetable played paraphonically: each trig takes the next of four voices, with its own note, amp envelope (attack, held for the trig, decay), detune, stereo position and table offset."
 dynamic = false
 ports = ["dt2-1.17"]
-requires = ["core/machines", "core/params", "core/dsp-voice"]
+requires = ["core/machines", "core/params", "core/dsp-voice", "core/trackflags", "core/polynotes"]
 conflicts = []
 
 [targets]
@@ -25,6 +25,7 @@ devices = ["dt2"]
 
 [object.externs]
 _fw_release_latch = "dsp.voice.release_latch"
+_fw_frame = "dsp.voice.frame_base"
 
 # the value text of DTUN and JUMP
 [[object]]
@@ -44,6 +45,13 @@ lev = 0x6400
 
 # SAMPLE's TUNE (0xca) first; knob D is SAMPLE's SAMP (0xcd): the slot (the wavetable). Knob H is the slot the stock level reads (LEV): SPRD takes
 # it, and `lev` gives the track a fixed level of 100.
+# a trig's notes 2-4 (core/polynotes) take the next slots
+[[entry]]
+registry = "poly_notes"
+id = "para"
+type = "machines.para.index"
+devices = ["dt2"]
+
 [[machine]]
 id = "para"
 name = "ParaWT"
@@ -108,3 +116,13 @@ template = 0xd1
 min = 0
 max = 0x7f00
 default = 0
+
+# FUNC + press WAVE: frame smoothing off (bit 0) / on
+[[entry]]
+registry = "flag_toggles"
+id = "pa_smooth"
+type = "machines.para.index"
+knob = 1
+mask = 1
+label = "SMOOTHING"
+devices = ["dt2"]
