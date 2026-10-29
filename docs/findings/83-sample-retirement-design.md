@@ -32,8 +32,10 @@ Transport completion and consumer retirement are separate obligations.
 ## Proposed logical protocol
 
 **[O]** The next implementation candidate is an asynchronous runtime-owned-bank proof on both devices,
-after scheduling and event ordering are resolved. It tests retirement independently of the larger memory
-backend needed for approximately ten-second one-shots. The product sampler and borrowed-view API remain gated.
+after its scheduling, admission/drain and writer-order obligations are specified. It tests pointer retirement
+independently of larger backing for approximately ten-second one-shots and of strict UI-time event-age policy.
+The sequence below describes the broader logical protocol; a narrowed proof must state which event-age
+obligations it does not establish. The product sampler and borrowed-view API remain gated.
 
 1. Close admission for the old resource/generation before any backing mutation.
 2. Drain already admitted `note_on` and `render` callbacks; prevent new old-generation callbacks from entering.
@@ -45,6 +47,9 @@ backend needed for approximately ten-second one-shots. The product sampler and b
 transfer window is approved; window 3 is merely a possible implementation location. Stale or duplicate
 acknowledgments must not satisfy another request. Rapid A → B → C changes must reject obsolete completions.
 On failure or timeout retain backing and keep admission closed; no timeout-based reuse or partial publication.
+Serialize backing writes as well as acknowledgments: an obsolete B transfer must finish or be cancelled and
+quiescent before C can publish or reuse its destination. Exact-token ACK rejection alone cannot stop a stale
+writer from corrupting the current bank.
 
 **[O]** Per-machine blanket stopping may be acceptable only as an explicitly bounded proof scope. Product
 per-resource or per-track stopping, shared consumers and resource ownership still require decisions and proof.
@@ -63,9 +68,14 @@ Setting previous-trigger to zero while a trigger remains high therefore rearms i
 consume/synchronize trigger history, clear armed phase and require a fresh low/high transition where needed;
 merely zeroing state does not establish stale-start rejection.
 
-**[O]** Capture generation before an event is queued, or establish an explicit upstream ordering fence that
-prevents delayed old events crossing publication. Tagging an event with the current generation only when it
-arrives at the DSP mislabels delayed old notes as new. Identify every queue/trigger path and its ordering boundary.
+**[O]** Separate backing-pointer safety from strict rejection of notes by their UI-time age. A proposed
+owned-bank proof can establish pointer safety without an upstream CF event-age fence if every admitted
+consumer resolves the current descriptor and all cached old voice pointers are drained and invalidated before
+reuse. This is a proof proposal, not established behavior. Held-trigger handling and the armed gap still need
+explicit coverage. Whether a delayed old note event may start the newly selected sample remains a product
+decision; do not silently relax “Stop old notes on selection.” Strict UI-time stale-event rejection requires
+capturing generation before queueing or establishing an upstream event-order fence. Tagging an arriving event
+with the current generation cannot establish its original selection age.
 
 **[D]** Current-image decompiler reads identify these producer/frame candidates; they do not establish a
 generation binding or a stale-event fence. Parameters and triggers sharing a frame is insufficient.
@@ -80,6 +90,26 @@ occurred in that order in one invocation. Both current decompilations instead su
 traversing the queue and reconstructing the next frame. This does not prove a fixed one-block latency:
 the submit guards and DMA timing remain unresolved. A selection fence must account for the pending prior
 frame as well as queued events.
+
+**[D]** A current-section-3 absolute-reference scan with base `0x40000400` over each full section found
+only the recorded builder read/write pair for each submit guard:
+
+| Image | Scanned bytes / decoded instructions | Decode coverage | Guard read / write |
+| --- | ---: | ---: | --- |
+| DN2 1.12 | 3,196,288 / 977,590 | 96.61% | `0x40287c38`: `0x40025e82` / `0x40025eac` |
+| DT2 1.17 | 3,275,616 / 1,007,317 | 96.81% | `0x402a19c8`: `0x4002dd58` / `0x4002dd82` |
+
+Each scan returned two hits. This bounds the scanned absolute references only; it cannot exclude computed
+initialization or unrecognized references and does not establish a safe producer fence.
+
+**[D]** DN2 send routine `0x400cf922` copies the caller frame into DMA staging at `0x80002510`.
+TCDs `0xfc045380` and `0xfc0453a0` belong to RX channel 28 and TX channel 29 respectively. The register
+interpretation follows the repository's [DSPI model](../../packages/emulator/periph/src/dspi.rs) and
+[eDMA model](../../packages/emulator/periph/src/edma.rs): status `0xec03802c` bit `0x10000000` is the
+write-one-to-clear EOQF end-of-queue flag, not a generic transfer-start bit; a SERQ write of `0x1c` at
+`0xfc044018` enables channel 28. Neither staging-copy completion nor these register operations proves DSP
+reader retirement. **[O]** Guard initialization, pending-frame completion and every producer's ordering
+remain unresolved; no safe fence is established.
 
 **[D]** DN2 `0x40138e3c` inserts into a timestamp-sorted timeline rooted at `0x44645228`, linked through
 `node[4]`. `node[1]` holds the timestamp; an exact timestamp match replaces `node[3]`. Observed callers include
@@ -105,13 +135,17 @@ calls `0x1c2b24`, whose callsite `0x1c3083` reaches `0x1c642a`; callsite `0x1c6b
 The conditional branch at `0x1c7753` skips to `0x1c775d`, and a loop runs from `0x1c775d` to `0x1c7749`.
 These ordered static callsites do not establish every-path execution or a global interrupt-order guarantee.
 
-**[D]** DN2 voice `0xb8251b` is called at `0x1c9459` in `0x1c8ef1`, which is called at `0x1c3044` in
-`0x1c2712`. Link-tail `0x1c9e5f` is in `0x1c9d6b`, called at `0x1c9ff4` in `0x1c9e76`; the external
-caller of `0x1c9e76` remains unresolved. A candidate dynamic jump at `0x1c29aa` follows loading I12 from
-DM at base `0x25d968` plus M4, but the jump is `JUMP PM(I4,M5)` after I4 = M9. I12 must not be equated
-with that branch target; the table is only a candidate. An empty static caller result does not establish
-runtime absence. Reproduce these static chains with `fw disasm ADDRESS -i IMAGE --max 0` and function/caller
-queries on the current images; no shared DN2 tail/voice scheduling chain is yet established.
+**[C][D]** DN2 has an established same-parent static chain: `0x1c9e76` calls voice dispatcher `0x1c2712`
+at `0x1c9fbc`; its call at `0x1c3044` reaches `0x1c8ef1`, whose call at `0x1c9459` reaches voice
+`0xb8251b`. The same parent calls `0x1c9d6b` at `0x1c9ff4`, reaching link-tail `0x1c9e5f`.
+The conditional at `0x1c9ff1` can skip that call, and `0x1c9ffb` loops to `0x1c9fe7`. The parent's external
+caller remains unresolved, but is not required to establish these shared-parent callsites. As on DT2,
+this static order does not prove every-path execution, callback drain or global interrupt ordering.
+A candidate dynamic jump at `0x1c29aa` follows loading I12 from DM at base `0x25d968` plus M4, but the
+jump is `JUMP PM(I4,M5)` after I4 = M9. I12 must not be equated with that branch target; the table is only
+a candidate. An empty static caller result does not establish runtime absence. Reproduce these static
+chains with `fw disasm ADDRESS -i IMAGE --max 0` and function/caller queries on the current images;
+these are [D] reads, not a second-agent image-byte audit.
 
 **[D]** Existing diagnostics can support part of the bounded trace without new instrumentation:
 [`SHARC_IRQ_PROBE`](../INSTRUMENTATION.md) can inject the kernel tick (`0x400000`) or SFT3 context-switch
@@ -144,9 +178,10 @@ is not a hardware memory limit.
 - [x] Record the stock replacement counterexample and preserve the immutable-bank proof (finding 82).
 - [x] Survey candidate DT2 release/reset boundaries and both device adapters; review the held-trigger and delayed-event hazards.
 - [x] Separate transport delivery from logical consumer retirement and persist the proposed sequencing.
-- [x] Trace both CF builders' prior-frame submission order, DN2 timestamp insertion/reuse helpers and the DT2 static voice call chain.
+- [x] Trace both CF builders' prior-frame submission order, DN2 timestamp insertion/reuse helpers and both devices' same-parent static voice/tail chains.
 - [ ] Resolve callback scheduling, interrupt nesting/atomicity and safe admission/drain points before coding the protocol.
-- [ ] Resolve generation capture or an upstream event-order fence before coding stale-note rejection.
+- [ ] Specify pointer-safety admission/drain separately from UI-time event-age semantics; resolve generation
+  capture or an upstream event-order fence before claiming strict stale-note rejection.
 - [ ] Agree a bounded owned-bank asynchronous proof contract and explicit stop scope; no product ABI follows automatically.
 - [ ] On both devices, prove retirement during `note_on` and `render`, the armed gap, held triggers and delayed old events.
 - [ ] Prove exact-token handling for stale/duplicate acknowledgments, rapid A → B → C, stale load completion,
@@ -154,19 +189,24 @@ is not a hardware memory limit.
 - [ ] Separately prove external DT2 replace/unload/project reset coverage before borrowing stock project backing.
 - [ ] Separately establish DN2 larger backing/delivery and both-device capacity for the ten-second target.
 
-Next resolve DN2's tail caller and order relative to the voice, then perform a bounded diagnostic
-scheduling trace plus current-image IRQ-path analysis. Trace both CF submit guards, DMA completion and every
-queue producer to define the pending-frame/queue fence. Current static reads do not establish global dynamic
-ordering, callback atomicity or nested-interrupt exclusion. Only then propose the concrete owned-bank
-proof implementation for approval; preserve existing proof behavior until that decision. This document records
+Next perform a bounded diagnostic scheduling trace plus current-image IRQ-path analysis to test the
+remaining dynamic ordering and admission/drain questions on both devices. Trace submit-guard initialization,
+DMA completion and every queue producer to define the pending-frame/queue fence. Current static reads do not
+establish global dynamic ordering, callback atomicity or nested-interrupt exclusion. Specify the bounded owned-bank proof's pointer-safety, held-trigger, drain, exact-token and serialized-writer
+obligations independently of the still-open UI-time event policy, then propose its implementation for approval;
+preserve existing proof behavior until that decision. This document records
 design progress, not execution of the checklist's open proofs or product implementation approval.
 
 ## Checkpoint validation
 
-For this discovery update, scoped pathcheck for findings 80 and 83 and the sampler plan passes;
-`git diff --check` passes. No diagnostic or device test, build or full merge gate ran.
-The parent ran `mise run test:changed -- --files` for those three documents: layercheck passes;
-the aggregate fails only on the same ten stale references in five unchanged files.
+For this update, scoped pathcheck for this finding and the sampler plan passes, and `git diff --check` passes.
+The parent ran `mise run test:changed -- --files` for these two documents: layercheck passes; the aggregate
+fails only on the known ten stale references in five unchanged files. No device test, build or full merge gate ran.
+
+At prior checkpoint `506b00da`, scoped pathcheck for findings 80 and 83 and the sampler plan passed;
+`git diff --check` passed. The parent ran `mise run test:changed -- --files` for those three documents:
+layercheck passed; the aggregate failed only on the same ten stale references in five unchanged files.
+Finding 80 is unchanged in this update. No diagnostic run was executed for these static observations.
 
 At prior checkpoint `f4d22575`, scoped pathcheck for this finding, the findings index and the sampler plan passed;
 `git diff --check` passed.

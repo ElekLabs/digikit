@@ -61,15 +61,30 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   observed producers, with no established resource/generation binding. The DT2 static chain reaches the voice
   through `0x1c75d8` → `0x1c2b24` → `0x1c642a` → `0x1c4ecf`; its link-tail anchor belongs to the separate
   `0x1c74cd`, called later at `0x1c7756` by the same parent, with conditional/loop control still to resolve.
-  DN2's voice chain and tail parent are located, but the tail parent's external caller remains unresolved;
-  the candidate dynamic jump uses PM(I4,M5), so an adjacent I12 load does not establish its target.
-  These static reads do not prove every-path ordering or interrupt exclusion. Next resolve DN2 tail/render
-  order, callback/IRQ atomicity, submit guards/DMA and every queue producer with a
-  bounded diagnostic trace before coding an asynchronous owned-bank retirement proof on both devices.
+  DN2 now has the same-parent static relation too: `0x1c9e76` calls dispatcher `0x1c2712` at `0x1c9fbc`,
+  then conditionally calls tail function `0x1c9d6b` at `0x1c9ff4`; the branch and loop remain relevant.
+  Its external caller is unresolved, but is not needed to establish those callsites. The candidate dynamic
+  jump uses PM(I4,M5), so an adjacent I12 load does not establish its target. Full current-section-3 absolute
+  scans found only each guard's recorded builder read/write pair; computed initialization is not excluded.
+  DN2 send copies into DMA staging; EOQF completion and SERQ channel enable are not reader retirement.
+  These static reads do not prove every-path ordering or interrupt exclusion. Next resolve dynamic callback/IRQ
+  atomicity, guard initialization, DMA completion and every queue producer with a bounded diagnostic trace
+  before coding an asynchronous owned-bank retirement proof on both devices.
   Existing `SHARC_IRQ_PROBE` and `SHARC_PCDUMP` cover some interpreter-boundary tests; they do not create
   pending DMA/SEC sources or variable peripheral timing, and PCDUMP may miss AOT stock PCs. No such test
   ran in this discovery update. That proof is
   independent of larger backing for the ten-second target; external DT2 mutation and DN2 capacity remain separate proofs.
+  A proposed owned-bank proof may separate pointer safety from strict UI-time event-age rejection: every admitted
+  consumer must resolve the current descriptor, and all cached old pointers must drain/invalidate before reuse.
+  The delayed-old-event policy remains open. Exact-token acknowledgments also require serialized backing writes:
+  an obsolete transfer must finish or cancel quiescently before a later generation can publish. These are proof
+  obligations, not a scope change, passed proof or code approval.
+- A separate source survey supplies a concrete candidate for DN2 larger-DDR backing and full-frame delivery;
+  its review draft is preserved at `out/runs/sampler-crossport-discovery/backing-draft.md` while citation-policy
+  clarification is pending. It is ignored run output, not an indexed finding or adopted backend. The next capacity
+  proof design runs alongside owned-bank retirement: establish current DN2 1.12 hooks and ownership before any
+  write, then specify a guarded 960,000-byte known-PCM16 delivery/playback proof. No production address, ABI,
+  source-copying decision or code approval follows; preserve the existing immutable bank.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -147,8 +162,9 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 - [x] Capture current stock OneShot slot binding and the unique ten-second a → b active replacement transition
   on the original DT2 1.17 image; retain exact source bytes, active/cursor state and PCM (finding 82).
 - [x] Persist retirement protocol discovery and review of adapter/trigger hazards in finding 83; no ABI or protocol code approved.
-- [x] Read both current CF builders' prior-frame submission order, DN2 timestamp queue/reuse helpers and the
-  DT2 static voice call chain; record existing diagnostic capabilities and limits in finding 83.
+- [x] Read both current CF builders' prior-frame submission order, DN2 timestamp queue/reuse helpers and
+  both-device same-parent static voice/tail chains, submit-guard absolute references and DN2 staging/register
+  semantics; record existing diagnostic capabilities and limits in finding 83.
 - [ ] Prove callback scheduling/interrupt atomicity and upstream generation capture or an event-order fence before
   implementing retirement. Then prove owned-bank retirement on both devices, followed separately by external DT2
   replace/unload/project reset coverage before borrowed-view exposure. Start/end/reverse captures remain open.
