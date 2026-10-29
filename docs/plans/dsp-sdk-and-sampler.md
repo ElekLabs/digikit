@@ -1,8 +1,8 @@
 # DSP SDK and first sampler
 
 Status: discovery and the first implementation milestone approved by Em on 2026-10-29.
-Approved implementation: exact reusable DSP extractions and numerical sampler primitives. Sample transport,
-resource/lifetime ABI changes and the product sampler remain proposals requiring agreement.
+Approved implementation: exact reusable DSP extractions, numerical sampler primitives, and the bounded
+loading/lifetime proof below (Em approved 2026-10-29). The product sampler remains a separate decision.
 
 ## Resume here
 
@@ -13,10 +13,16 @@ resource/lifetime ABI changes and the product sampler remain proposals requiring
 - First approved implementation is now integrated: exact xorshift and BD/PD sine-polynomial SDK macros with
   consumer replacements; split cursor and bounded mono linear-reader kernel with numerical references/tests.
   Read the implementation checkpoint below for verification status. Sample transport, stereo ABI and hardware
-  work are still unapproved; settle the next scope with Em after this milestone.
+  work remain separate decisions. Em has now approved the bounded sample transport/lifetime proof below.
 - SDK checkpoint: `4cd29a3c`. The resumed loading/lifetime investigation is in
   [finding 78](../findings/78-sample-loading-lifetime.md). Read the next proof proposal below before changing runtime
-  code. It preserves Transfer destinations and uses a module-owned, session-pinned DSP bank.
+  code. It preserves Transfer destinations and uses a module-owned, session-pinned DSP bank. The proof is approved;
+  do not ask for its approval again. Source, packaging and runtime patches are integrated; the transferred-file
+  selected DN2 boot passes after the ColdFire byte-swap helper fix. DN2 now confirms actual type 16 dispatch
+  and unready PCM silence, but its first note halts the native DSP before transfer; publication subsequently
+  times out (-35, no chunks acknowledged). Diagnose that note's control flow with existing PCDUMP before
+  changing transport. DN2 and DT2 transferred-file proofs remain incomplete; no hardware run is authorized.
+  [Finding 79](../findings/79-sample-bank-proof.md) records the evidence and current blocker.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -87,6 +93,8 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 
 - [ ] Inventory available current-image databases, dumps and provenance; do not rebuild them implicitly.
 - [ ] Trace DT2 1.17 selection/load/slot registration through ColdFire to SHARC-readable PCM and voice access.
+- [ ] At Em's request, trace stock DT2 OS 1.17 OneShot dispatch → note/render → sample access and ownership.
+  Finding 77 covers metadata/pages only; finding 15 is historical DT2 1.16 evidence, not this complete path.
 - [ ] Trace DN2 1.12 storage and available cross-core delivery/memory mechanisms; identify what must be added.
 - [x] Establish transferred-file PCM format, channel layout and rate from the host converter; DSP conversion/representation proposal below, implementation pending.
 - [ ] Establish placement, capacity, alignment, address representation, ownership, retention and eviction.
@@ -121,7 +129,8 @@ Acceptance: a traceable sample lifecycle on each device, or precise unresolved b
 - [ ] Give a residency limit, polyphony target, memory budget and worst-case block-cost budget for both devices.
 - [x] Present an initial phased proposal and API sketch below; detailed ABI and measured budgets are still open.
 - [x] Em approves exact DSP extractions and numerical sampler primitives (2026-10-29).
-- [ ] Em approves sample service/transport, lifetime and product-machine changes. **Those changes remain gated.**
+- [x] Em approves the bounded sample service/transport and lifetime proof (2026-10-29).
+- [ ] Em approves product-machine changes beyond the proof.
 
 Proposed priority:
 
@@ -153,9 +162,9 @@ Any such requirement is a separate scoped decision with its full regeneration co
 
 ## Phased implementation scope
 
-Em approved exact DSP extractions and numerical sampler primitives on 2026-10-29. This covers the DSP work in
-milestone 1 and numerical work in milestone 2 below. The read-only graph-constructor tooling suggestion, runtime
-sample transport, full resident playback proof and product sampler are still proposals, not implementation approval.
+Em approved exact DSP extractions, numerical sampler primitives and the bounded loading/lifetime proof on
+2026-10-29. This covers the DSP work in milestone 1 and the bounded proof in milestone 2 below. The read-only
+graph-constructor tooling suggestion and product sampler remain proposals, not implementation approval.
 
 Three milestones allow useful SDK work before the harder memory questions are solved:
 
@@ -221,11 +230,11 @@ Names below are conceptual, not new exported ABI commitments:
 - Report instruction ceilings and one paired A/B for any speed claim. Hardware performance/cache coherence remains
   unproved until an explicitly authorized device test. No new absolute CPU budget or sample-length promise yet.
 
-## Next proof proposal — loading and lifetime (awaiting agreement)
+## Approved proof — loading and lifetime
 
-The current proposal is a bounded bank API, narrower than the earlier general prepare/bind/release sketch.
-Evidence and exact current-image mappings are in finding 78. No runtime implementation is authorized by the
-read-only resume request alone; the first SDK milestone remains complete at `4cd29a3c`.
+Em approved this bounded bank API on 2026-10-29, narrower than the earlier general prepare/bind/release sketch.
+Evidence and exact current-image mappings are in finding 78. Runtime implementation is integrated below;
+the transferred-file device proof remains incomplete. The first SDK milestone is checkpointed at `4cd29a3c`.
 
 **Scope:** prove an actual transferred mono sample can reach the existing numerical reader on both devices,
 with correct ownership and failure behavior. Preserve the current Transfer destinations. No stock-pointer
@@ -309,10 +318,117 @@ ownership/coherency protocol. Hoist conversions/coefficient work out of sample l
   initial mistaken nearby-address inference and worktree input-link gap; record only the actual mapped entries.
 - [x] Inspect UI job context, source snapshots, allocator ownership, transport source retention and READY ordering.
 - [x] Obtain independent evidence audit; record caveats and the bounded next implementation proposal in finding 78.
-- [ ] Em agrees to the loading/lifetime proof scope above before core runtime/adapter or packaging edits.
+- [x] Em agrees to the loading/lifetime proof scope above before core runtime/adapter or packaging edits (2026-10-29).
 
-This continuation changes documentation only. It does not implement a sample API or fix the conditional transfer
-cleanup risk. Existing numerical kernels and module binaries remain unchanged.
+### 2026-10-29 — approved loading/lifetime implementation in progress
+
+- Source worker: `/private/tmp/digikit-sample-source`, branch `refs/heads/sdk/sample-source-proof`.
+- SDK/packer worker: `/private/tmp/digikit-sample-bank`, branch `refs/heads/sdk/sample-bank-proof`.
+- Runtime worker: `/private/tmp/digikit-sample-runtime`, branch `refs/heads/sdk/sample-runtime-proof`.
+- All lanes start at `a3a95073`; parent integrates into this plan's worktree. No edits in the cleanup checkout.
+- Contract settled: optional one-bank DSP section v5, existing 64-byte big-endian header with bank-record offset
+  at byte 60; 32-byte little-endian record (version 1, local numeric id, BSS byte offset, capacity in frames,
+  initialized descriptor byte offset, three zero reserved words). Capacity 1–8,192 frames for this proof.
+- DSP descriptor is four initialized zero words: READY, normal-word source pointer, frame count, sample rate.
+  Runtime publishes READY last. Both packer and runtime validate ownership, bounds and initialization.
+- API minor 1.3 appends `sample_bank`, `sample_load`, `sample_status`. Lookup during init yields an opaque handle;
+  load queues a copied path, and execution waits for the owner's full DSP load. Status 0 unused, 1 queued,
+  2 loading, 3 ready, negative existing SDK error codes on failure. No destination reuse after transfer starts.
+- [x] Integrate source, packaging and lifecycle implementations; review the combined boundary behavior.
+- [ ] Add the proof consumer and transferred-file emulator scenarios; execute owner checks on both devices.
+
+Implementation resume notes (not completion):
+
+- Source, SDK/packer and runtime patches are integrated in the parent worktree, uncommitted. Decoder/snapshot
+  tests pass (five); lifecycle tests pass (seven), including delayed pointer reads and lost final READY acknowledgement.
+  Worker validation: patchkit 127, dkneeds 11, SDK generation 8 tests passed; host and actual ColdFire builds passed.
+- New `test/sample-proof` fixture and `sample-playback.test.ts` in `tests/regression/runtime/` are integrated. Six assembled
+  consumer tests pass. The fixture packs for both devices. Device playback remains unproven until the TS scenario passes.
+- Parent SDK tests pass (47), and fit tests pass (nine). `module:check test/sample-proof` reports 29 passed and five
+  skipped in total; package/fit covers both devices. These checks do not establish transferred-file device playback.
+- The proof bridge preserves I12/I13 and adjusts I7. Harness tests now use frame zero at the actual DN2 adapter
+  entry; the stock helper's frame value 18 applies only after its return.
+- Generation initially omitted all cached content declarations. A scoped fix now reads existing cache objects in
+  lenient generation without compiling, with a passing regression. Fixture gallery was generated after packing.
+- Independent combined review found no new issues. Existing blocking module-row cleanup can still ignore failed
+  writes; the new quarantine protects the accepted module-image source but is not a universal rollback safety proof.
+- DN2 emulator first failed on sandbox socket permission; escalated local emulator execution is authorized. The
+  subsequent optional `cf.*` import/mandatory-anchor failure is resolved: per-device function tables contain the
+  four DT2 path bindings and DN2 zeros, preserving generated symbol anchors. Runtime artifacts are rebuilt.
+- DN2 boots with an empty module selection; selecting the proof module exposed `UnsupportedGuestPc(0)` before
+  sample loading. Diagnostics identified context restoration by RTE at `0x40000458` after stack corruption.
+  The confirmed cause is an emitted weak compiler-builtin `__bswapsi2` that calls itself: its return address
+  `0x4673d290` and argument `0x00200000` match the corrupted ColdFire registers. The new `valid_bank` call to
+  `from_le_bytes` triggers this before module init. The initial static init audit had found no error.
+- `rust.rs` and the new `cf_rust_helpers.s` in `packages/patchkit/src/build/` now provide a strong
+  private ISA_C BYTEREV cdecl helper before the builtin archive; the helper source text is included in the build
+  hash. Runtime rebuilt with 33,384 instructions; the helper is eight bytes (`202f000402c04e75`) with no outgoing
+  relocations. Build log: `out/runs/dsp-sdk-checks/cf-helper-runtime-build.log`.
+- Worker regression `coldfire_rust_endian_conversions_return_without_recursive_helpers` in
+  `packages/patchkit/tests/build.rs` passes: actual cross-compiled endian reads/writes on five inputs run on
+  `ColdFireCpu`, bounded at 100 instructions, checking cdecl stack/kept registers and private helpers with no
+  outgoing relocations. It ran release/offline in `out/native/target-wt/digikit-dsp-sampler/nogen`.
+  Independent review found no issues. MCF5441xRM printed page 97, Table 3-4 confirms BYTEREV's operation,
+  matching emulator behavior; this is not hardware proof.
+- `packages/emulator/coupled/src/cold.rs` now writes bounded `boot-fault.json` diagnostics on guest faults,
+  preserving the original error and capturing registers, at most 128 stack bytes, the last recorded bus PC and
+  at most 32 code bytes. The rebuilt daemon uses mandatory `--coupled`; build log:
+  `out/runs/dsp-sdk-checks/diagnostic-daemon-build.log`. Selected-fixture DN2 boot now passes; log:
+  `out/runs/dsp-sdk-checks/sample-dev-dn2.log`. This is boot evidence, not a performance or sample-playback claim.
+- First DN2 TypeScript run (session 6653) passed module upload/reboot, oversize rejection (-13), zero descriptor,
+  no-fault and fresh-boot checks, then failed unready audio after selecting MIDI row 4. This navigation failure
+  does not establish a DSP playback result. Live panel inspection confirmed four audio rows, MIDI, then SAMPLE
+  PROOF at row 5; the corrected selection shows the fixture's START/END/REV controls.
+- The scenario now selects row 5, closes the modal with NO, saves framebuffers, and asserts the adapter's actual
+  `_dv_c` type from the patch plan equals the runtime-assigned type before testing unready silence. Session 39860
+  failed that assertion (expected type 16, actual 0), despite unready peak zero. The saved panel was still in the
+  machine menu on MIDI: a fixed 500 ms wall wait raced queued keys, so silence did not establish fixture dispatch.
+- The selector now waits on `inputTap.release_at` and `status.elapsed`, polling every 50 ms with a 20 s bound;
+  missing clock fields fail clearly. It mirrors the existing harness: 20 ms hold, 5 ms pre-scan/release,
+  200 ms open, 80 ms navigation and 300 ms YES. Parent's known-panel NO → menu → row 5 → YES sequence confirmed
+  SAMPLE PROOF START/END/REV. Completed DN2 reruns now confirm actual type 16 dispatch and exact-zero unready
+  PCM, followed by valid-load error -35 instead of READY. Artifact `run-15D8JZ/publication-state.json` records
+  `dl_link` state 3, error 100 (timeout), acked 0, and an unpublished descriptor. The failed timing log remains
+  `out/runs/dsp-sdk-checks/sample-playback-dn2-input-timing.log`, artifact run `run-F9Pyr7`.
+- Fast `dk:dev` reproduction isolates `native-trap: no decoded instruction at 0x254aa1` on the first TRIG 1,
+  before sample transfer: `out/runs/dsp-sdk-checks/sample-note-dn2.log`. The later link timeout is likely
+  downstream of that DSP halt; this is an inference, not a transport root cause. Whether the note fault is in
+  the module integration or emulator remains open. Numerical and conformance passes do not resolve it.
+- Bounded live PCDUMP traces pin the bad return to the second `DK_CALL` delay-slot store: Type 3b `u=0`
+  pre-modify leaves I7 unchanged and writes zero at I6-8; the expected I6-4 return slot retains `0x254aa0`.
+  The kernel epilogue reads that stale value into I12, then jumps to `0x254aa1`. Evidence:
+  `out/runs/dsp-sdk-checks/unready-module-trace-window/pcdump.csv` and
+  `out/runs/dsp-sdk-checks/unready-stack-alias-trace/stack-rows.json`. Public PRM pages 13-18/13-19 confirm
+  `u=1` denotes post-modify. No root-cause fix yet: investigate assembler encoding/native PC handling and why
+  Python call-stack tests passed despite the missing saved return.
+- Focused stock OneShot investigation is now requested. Current DT2 1.17 database candidates are render
+  dispatch `0x1c6b00` → `0x1c4ecf` and stretch branch `0x1c6af1` → `0x1c5576`; stock Type 16a immediate
+  post-modify return stores provide a comparator. These are [D] database observations, not [V] byte audits
+  or a completed sample-access/ownership trace.
+- The TypeScript scenario now records `unready-state.json` (daemon status, faults and PCM summary) immediately
+  after capture and calls `expectNoFault('unready proof-machine note')` before valid loading. Publication
+  diagnostics also retain daemon status/faults. These latest assertions pass formatting and TypeScript checks
+  only; their full emulator rerun has not run yet.
+- Partial `test:changed` checks pass Ruff, layercheck and the two selected Python files
+  `tests/devtools/test_changed_tests.py` and `tests/devtools/test_verify.py`. The known baseline ten stale
+  references still block repository pathcheck. Host checks were blocked by pnpm 12's automatic install attempt
+  and unavailable offline cache; no dependency changes were made. The later owner host related-test command
+  exits zero with no selected host tests (`out/runs/dsp-sdk-checks/sample-host-related.log`); oxlint passes
+  using existing Node binaries. Neither is a full gate pass. Changed-check log:
+  `out/runs/dsp-sdk-checks/sample-test-changed.log`.
+- Next: resolve the captured call-frame mismatch and examine the focused OneShot path before transport changes,
+  then finish DN2 and DT2
+  upload/publication/audio proofs. Both full proofs remain incomplete. No hardware run or timing claim.
+- A standalone native-boot diagnostic halted after six instructions, before reaching the target. It is unusable
+  for this investigation and does not establish proof behavior.
+- Runtime artifact builds require rustup Cargo first in PATH (`/Users/em/.cargo/bin`), not Homebrew Cargo.
+- Parent shares only input symlinks; Node workspace package links resolve to this worktree, dependency cache is shared.
+  Ready inputs' firmware hashes match current DT2 1.17 / DN2 1.12, despite an old DN2 image label in provenance.
+- Local check logs: `out/runs/dsp-sdk-checks/`. Parent completes the single `runtime/sample-playback.test.ts`
+  scenario, DN2 first and DT2 last. Use bounded sessions and shared benchlock.
+
+This approved continuation implements the bounded sample API and proof fixture. It does not establish device
+playback or resolve the general conditional transfer cleanup risk; no completed device or hardware proof is claimed.
 
 ### 2026-10-29 — first implementation checkpoint
 
@@ -425,12 +541,12 @@ Keep symbol-name matches as candidates until their actual behavior is establishe
 
 ## Plan maintenance
 
-Validation (2026-10-29, resumed discovery documentation):
+Validation (2026-10-29, historical resumed discovery documentation, before proof approval):
 
 - Targeted pathcheck for the plan, finding 78 and findings index passes; `git diff --check HEAD` passes.
 - `mise run test:changed` passes layercheck and fails only on the same 10 stale references in five
   unchanged baseline files recorded below. No code, firmware or hardware checks were needed for this
-  documentation-only checkpoint. The runtime proof remains awaiting agreement.
+  documentation-only checkpoint. The runtime proof was awaiting agreement then; Em subsequently approved it.
 
 Validation (2026-10-29, first SDK implementation):
 
