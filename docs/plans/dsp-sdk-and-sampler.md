@@ -175,6 +175,35 @@ complete and independent of cache encoding and production backing ownership.
   historical 0.2 terminal-inactive evidence remains unchanged. Parent owns this
   run; no new native, physical IRQ/cache or production ownership claim follows.
 
+**Current blocker:** native acceptance did not start. Its 600-second exclusive
+lock wait expired behind the other session's shared `verify runtime-fixture`
+process (observed PID 56574). The waiter has exited; no owned native daemon remains.
+Implementation/review checkpoint `b185fa1d` is pushed. The fixture audit passes,
+including independent current-object relinking and all 117 symbol addresses.
+Resume the single native case when the shared repository lock is available;
+do not stop the other session or treat this as a native test failure/pass.
+
+**Exact native resume inputs:** ignored artifact
+`out/runs/lp0-close-fixture/native-command.json` records cwd, command, environment,
+480-second external deadline and exclusive lock requirement. Use the existing
+prebuilt daemon/patchkit selected there; do not rebuild a core or resize live DMA.
+Select only `sample-lp0-transfer.test.ts` / `closes diagnostic reader control`
+with `DIGI_LP0_CLOSE=1`, the private ready directory and its `provenance.json`.
+The fixture's patched image is `6ff3b5ec9d9ed80f1108746922a213a75c9827a867fb257c1690c419fa56a2c8`.
+A new module/object edit requires a newly matched fixture. After the run, audit
+its `out/runs/lp0-proof/<session>` artifacts before checking off native acceptance.
+
+**Next integration seams (read-only scout):** both machine adapters already
+provide the latched source track in `dk_voice_in.track`. DT2 routes paired voices
+to track state; DN2 keeps per-slot voice state with a separately latched source
+track, so a DN2 voice slot must not become a binding index. The single-bank
+`modules/core/adapters/dsp-ddr-proof/src/dsp/playback.inc` already pins each
+note/render callback around backing access, but uses global bank controls. Its
+legacy payload transport replaces stock audio and must not become the new
+per-track route. Use its callback ABI as a reference and the isolated two-track
+fixture's cached owner/epoch checks; keep LP0 transport integration separate.
+No real per-track adapter, pool reservation or publication has been implemented.
+
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.
 The initial ordering and reader strategy are recorded in

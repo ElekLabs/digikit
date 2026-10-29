@@ -159,8 +159,9 @@ instructions, within the 800M/120-second bounds. Parent inspection of exported
 memory reads all four concrete XCNT fields as `0x566` before CF exchange.
 The private packed image is a physical stock copy, and unchanged ready inputs
 remain linked to their original files. No live descriptor resizing or core
-regeneration occurred. Native CLOSE acceptance is queued behind the repository's
-exclusive measurement lock; no native CLOSE pass is claimed at this checkpoint.
+regeneration occurred. Native CLOSE acceptance did not launch: its exclusive-lock acquisition expired
+after 600 seconds behind another session's shared `verify runtime-fixture` holder
+(observed PID 56574). No native CLOSE pass is claimed at this checkpoint.
 
 **[D] Independent fixture audit:** input/output hashes, cold-state entry/empty
 overlay, idle marker/PC and all four concrete descriptor words agree. The retained
@@ -169,3 +170,15 @@ actual DN2 1.12 SYX section 7 reproduces the private packed image byte-for-byte
 (6,424,692 bytes, SHA-256
 `fea39d589ac45b20a6dfdb3f6c89a5b9d28fd7936ff819a7a09f17f3ff847a2a`).
 The label is not used as version evidence; original inputs remain unchanged.
+
+The independent audit also relinked the current tracked CF/DSP objects in memory:
+both payloads match the plan and patched section bytes, and all 117 defined symbols
+match. The full cold-idle file SHA-256 is
+`1e9ffc2d16406889d845d04fa3d9856362d33badb7b1ca2c72f798b7dae4ad22`;
+the log's `state_sha256` names the serialized payload rather than the full file.
+The parent used `subprocess.run(..., timeout=120)` for cold preparation. Artifacts
+record the deadline and actual 44-second completion, but do not independently
+expose that external enforcement wrapper. Native resume command/environment and
+lock outcome are retained as `native-command.json` and `native-lock-result.json`
+in the same private fixture directory. The lock waiter exited; it started no
+native daemon and did not stop or modify the other session.
