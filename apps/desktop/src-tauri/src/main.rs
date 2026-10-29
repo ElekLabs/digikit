@@ -15,6 +15,7 @@ mod desktop_runtime;
 mod firmware;
 mod library;
 mod local;
+mod log_save;
 mod midi_port;
 use serde_json::Value;
 use std::sync::mpsc;
@@ -552,6 +553,7 @@ fn main() {
             card_open_folder,
             firmware::firmware_prepare,
             firmware::firmware_save,
+            log_save::log_save,
             library::lib_scan,
             library::lib_read,
             library::sample_wasm,

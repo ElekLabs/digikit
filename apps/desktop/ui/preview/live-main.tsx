@@ -3,7 +3,8 @@
 // Memory and Card panels are shown only on the Emulator page, and `status` is set once per display frame, as the runtime's pump sets it (a
 // new object each time), so a panel that reads on every change of `status` is as busy here as in the app. The daemon is asked for the
 // status twice a second only: a real call per frame would load it more than the app's pump does.
-//   live.html?page=emulator|transfer|remote[&idle=1]   window.__live: { page(name), frames() }
+//   live.html?page=emulator|transfer|remote[&idle=1][&log=1]   window.__live: { page(name), frames() }
+// `log=1` adds the Log drawer, following the running emulator's own runtime log (the device side has no port here).
 // `idle=1` leaves the panels out (the status ticks stay): the baseline a measurement of the panels is compared with.
 import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -20,12 +21,15 @@ import { panels } from '@web/data/faceplates';
 import RemotePage from '../src/RemotePage';
 import SidePanels from '../src/SidePanels';
 import { emulatorSession } from '@web/transfer/target';
+import { createLogFollow, followSession } from '../src/log-follow';
+import LogPanel from '../src/LogPanel';
 import TransferPage from '@web/transfer/TransferPage';
 
 type Page = 'emulator' | 'transfer' | 'remote';
 const query = new URLSearchParams(location.search);
 const start = (query.get('page') as Page | null) ?? 'emulator';
 const idle = query.has('idle');
+const withLog = query.has('log');
 const call = async <T,>(method: string): Promise<T> =>
   (await (await fetch('/__emu', { method: 'POST', body: JSON.stringify({ method, params: {} }) })).json()) as T;
 
@@ -65,6 +69,18 @@ function Shell() {
     page: (p: Page) => setPage(p),
     frames: () => frames,
   };
+  const follow = withLog
+    ? createLogFollow({
+        follow: () => true,
+        flashing: () => false,
+        emulator: { running: () => !!status(), session: async () => followSession(await emulatorSession()) },
+        device: {
+          port: () => undefined,
+          session: () => Promise.reject(new Error('no port')),
+          present: async () => false,
+        },
+      })
+    : undefined;
   return (
     <div class="console" style={{ '--accent': panel().accent, '--func-legend': panel().func_legend }}>
       <div class="shell">
@@ -99,6 +115,11 @@ function Shell() {
           </Show>
         </div>
       </div>
+      <Show when={follow}>
+        <section class="log-drawer" aria-label="Log" style={{ height: '420px' }}>
+          <LogPanel follow={follow!} emulatorRunning={() => !!status()} devicePort={() => undefined} />
+        </section>
+      </Show>
     </div>
   );
 }

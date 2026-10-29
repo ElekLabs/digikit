@@ -19,6 +19,10 @@ import TransferPage from '@web/transfer/TransferPage';
 import { setMode } from '@web/transfer/transfer-state';
 import { cardDevice, reloadCard } from './card-mock';
 import { installRemoteMock, testPattern } from './remote-mock';
+import { createLogFollow } from '../src/log-follow';
+import LogPanel from '../src/LogPanel';
+import { setLogOpen } from '../src/log-state';
+import { logMode, previewLog } from './runtime-log-mock';
 import { SAMPLES_ROOT, control, sim } from './sim';
 
 // ?page=transfer (default) | remote | emulator | firmware (state: fwdev, fwstate, fwos; see firmware-mock.ts): the Emulator page shows the faceplate only (the real one needs the emulator) with the same
@@ -46,6 +50,26 @@ const emulatorFaceplate = () => (
     />
   </div>
 );
+
+/** The Log drawer under an empty page, as in the app: the same panel, fed by the fake runtime logs. */
+function LogPage() {
+  setLogOpen(true);
+  const follow = createLogFollow({
+    follow: () => true,
+    flashing: () => false,
+    emulator: { running: previewLog.emulatorRunning, session: async () => previewLog.emulator },
+    device: { port: previewLog.devicePort, session: async () => previewLog.device, present: async () => true },
+  });
+  return (
+    <section
+      class="log-drawer"
+      aria-label="Log"
+      style={{ height: `${Number(new URLSearchParams(location.search).get('logh') ?? 360)}px` }}
+    >
+      <LogPanel follow={follow} emulatorRunning={previewLog.emulatorRunning} devicePort={previewLog.devicePort} />
+    </section>
+  );
+}
 
 installNativeFeel();
 setMode(sim.mode);
@@ -80,7 +104,11 @@ render(
           </button>
         </nav>
         <div class="content">
-          {page === 'remote' ? (
+          {page === 'log' ? (
+            <p class="note" style={{ padding: '24px' }}>
+              Log preview ({logMode}): the drawer below follows the fake emulator and the fake device.
+            </p>
+          ) : page === 'remote' ? (
             <RemotePage fallbackDevice="dn2" />
           ) : page === 'emulator' ? (
             emulatorFaceplate()
@@ -91,6 +119,7 @@ render(
           )}
         </div>
       </div>
+      {page === 'log' ? <LogPage /> : null}
     </div>
   ),
   document.getElementById('app')!,

@@ -485,6 +485,16 @@ body {
   background: #2a2d33;
   border-color: #4a4e56;
 }
+.tb .follow-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
 .log-list {
   flex: 1;
   min-height: 0;
@@ -544,7 +554,7 @@ body {
 .log-list .detail {
   margin: 0 0 6px 74px;
   padding: 8px 10px;
-  max-height: 160px;
+  max-height: 320px;
   overflow: auto;
   border-radius: 6px;
   background: #0f1012;

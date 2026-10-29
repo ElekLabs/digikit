@@ -18,7 +18,7 @@ pub fn prepare(root: &Path, stock: &[u8], restore: bool) -> Result<Vec<u8>, Stri
     Ok(pack(&p.summary_json().to_string(), &p.image))
 }
 
-fn body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
+pub(crate) fn body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
     match request.body() {
         tauri::ipc::InvokeBody::Raw(bytes) => Ok(bytes.clone()),
         _ => Err("the file must be sent as a raw byte body".into()),
@@ -73,7 +73,7 @@ pub async fn firmware_save(
 }
 
 /// `%XX` escapes of a header value (a header carries ASCII only).
-fn unescape(s: &str) -> String {
+pub(crate) fn unescape(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;

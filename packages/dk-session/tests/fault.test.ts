@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { decodeFault, settingsValue } from '../runtime/fault.ts';
+import { decodeFault, faultRows, faultSummary, settingsValue } from '../src/fault.ts';
 
 function record(entries: [string, Uint8Array][]): Uint8Array {
   const body = entries.flatMap(([key, value]) => [
@@ -45,4 +45,30 @@ test('dk/fault decodes to the site, the steps and the module', () => {
   expect(decodeFault(faultValue(3, 0, 0, 0, 0, 0, 'runtime'))).toMatchObject({ kind: 'panic', module: 'runtime' });
   expect(decodeFault(new Uint8Array(40))).toBeNull();
   expect(decodeFault(faultValue(7, 0, 0, 0, 0, 0, 'x'))).toBeNull();
+});
+
+const rowsOf = (kind: number, site: number, stage: number, step: number, at: number, name: string) =>
+  faultRows(decodeFault(faultValue(kind, site, stage, 96, step, at, name))!);
+
+// the same cases as tests/digikit/test_dklog.py, so the Log drawer and dklog show the rows of the device's menu
+test('the rows are those of the runtime menu', () => {
+  expect(rowsOf(2, 3, 4, 3, 0x30004, 'test/dyn-fx-hang')).toEqual([
+    'FAULT: DSP STOP',
+    'IN DYN-FX-HANG',
+    'FX SEND STEP 3',
+  ]);
+  expect(rowsOf(2, 2, 4, 0, 0, 'fx/gain')[2]).toBe('FX MASTER CALL');
+  expect(rowsOf(2, 0, 4, 0, 0, 'x')[2]).toBe('SITE UNKNOWN');
+  expect(rowsOf(1, 0, 0, 0, 0x12a4f0, 'test/crash')).toEqual(['FAULT: CPU CRASH', 'IN CRASH', 'PC 0012A4F0']);
+  expect(rowsOf(1, 0, 0, 0, 0, '')[1]).toBe('IN FIRMWARE');
+  expect(rowsOf(3, 0, 0, 0, 0, 'runtime')).toEqual(['FAULT: CPU PANIC', 'IN RUNTIME']);
+  expect(rowsOf(2, 1, 4, 0, 0, 'abcdefghijklmnop')[1]).toBe('IN ABCDEFGHIJKLMNO');
+});
+
+test('the summary joins the rows for one line', () => {
+  const f = (...a: Parameters<typeof rowsOf>) =>
+    faultSummary(decodeFault(faultValue(a[0], a[1], a[2], 96, a[3], a[4], a[5]))!);
+  expect(f(2, 3, 4, 3, 0, 'test/dyn-fx-hang')).toBe('DSP STOP in DYN-FX-HANG, FX SEND STEP 3');
+  expect(f(1, 0, 0, 0, 0x12a4f0, 'test/crash')).toBe('CPU CRASH in CRASH, PC 0012A4F0');
+  expect(f(3, 0, 0, 0, 0, 'runtime')).toBe('CPU PANIC in RUNTIME');
 });

@@ -25,6 +25,21 @@ const read = (): Target => {
 
 export const [target, setTargetSignal] = createSignal<Target>(read());
 
+/** The MIDI port chosen last, also while the Emulator is the target: the workbench's Log follows the device on it. Kept per profile. */
+const MIDI_KEY = 'digikit.lastMidi';
+const readMidi = (): string | undefined => {
+  const t = target();
+  if (t.kind === 'midi') return t.port;
+  try {
+    const port = localStorage.getItem(MIDI_KEY);
+    if (port) return port;
+  } catch {
+    // no storage: none
+  }
+  return undefined;
+};
+export const [lastMidiPort, setLastMidiPort] = createSignal<string | undefined>(readMidi());
+
 export const NO_PORT = 'No MIDI port';
 export const targetLabel = (t: Target): string =>
   t.kind === 'emulator' ? 'Emulator' : t.kind === 'none' ? NO_PORT : `MIDI: ${t.port}`;
@@ -73,6 +88,14 @@ export async function selectTarget(next: Target): Promise<void> {
   cancelPending();
   if (opened) forget(opened);
   opened = next.kind === 'midi' ? next.port : undefined;
+  if (next.kind === 'midi') {
+    setLastMidiPort(next.port);
+    try {
+      localStorage.setItem(MIDI_KEY, next.port);
+    } catch {
+      // the choice is not kept
+    }
+  }
   setTargetSignal(next);
   noteConnection({ type: 'target' });
   try {
@@ -110,6 +133,16 @@ export const session = (): Promise<DkSession> => sessionOf(target());
  * the one `session()` returns while the emulator is the target, so every reader of the emulator's USB takes its turn in one queue.
  */
 export const emulatorSession = (): Promise<DkSession> => sessionOf({ kind: 'emulator' });
+
+/**
+ * The session of the MIDI port chosen last, whatever the selected target is (the Log follows the device on it). The port is opened if it is
+ * not; its requests take their turn with the Transfer pane's when the port is also the target.
+ */
+export function lastMidiSession(): Promise<DkSession> {
+  const port = lastMidiPort();
+  if (!port) return Promise.reject(new Error(NO_PORT));
+  return sessionOf({ kind: 'midi', port });
+}
 
 /** Drop the session of a failed MIDI port (the next request opens it again). The emulator's session stays: it has no port to reopen. */
 export function resetSession(): void {

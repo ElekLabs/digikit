@@ -106,4 +106,4 @@ blocks with no stop and no reset (DT2, DN2). A CPU crash gives `dk/fault` kind C
 
 Unit tests: `dkrt-sdk` `fault.rs` (record and row text), `tests/digikit/test_dklog.py` (decoding), `tests/patchkit/test_dsplink.py` (the word slots),
 `tests/patchkit/test_fx.py` (the marks in both records, the fault words), `tests/patchkit/test_dsp_voice.py` (the step cleared before a call),
-`tests/regression/host/fault-record.test.ts`. Fixtures: `tests/fixtures/modules/dyn-fx-hang`, `dyn-fx-nan`. The fixture `dyn-fx-hang` uses the `DK_STEP` macro of `sdk/asm/dk_trace.inc` and defines `DK_TRACE` itself, because the test needs the steps in a build without `--trace`.
+`packages/dk-session/tests/fault.test.ts` (the record decoder and rows, in `packages/dk-session/src/fault.ts`). Fixtures: `tests/fixtures/modules/dyn-fx-hang`, `dyn-fx-nan`. The fixture `dyn-fx-hang` uses the `DK_STEP` macro of `sdk/asm/dk_trace.inc` and defines `DK_TRACE` itself, because the test needs the steps in a build without `--trace`.

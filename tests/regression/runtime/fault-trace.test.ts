@@ -1,9 +1,9 @@
 import fs from 'node:fs';
+import { decodeFault, readSettingsRecord, settingsValue } from '@digi/dk-session';
 import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { button, MS } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { decodeFault, readSettingsRecord, settingsValue } from './fault.ts';
 import { installModule, liveArtifacts, moduleArtifact, runtimeTests, settleUi } from './live.ts';
 import { openDigikitMenu, readAboutRows } from './runtime-menu.ts';
 import { prepareRuntimePlan } from './runtime-plan.ts';

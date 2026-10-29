@@ -881,6 +881,12 @@ export class DkSession {
     }
     return [u32(b, 0), u32(b, 4), events];
   }
+  /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether debug logging is on. */
+  async logConfig(quick = false): Promise<{ level: number; modules: number[]; debug: boolean }> {
+    const b = await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(0), quick);
+    if (b.length < 10) throw new DkError({ error: 'logcfg: malformed reply', kind: 'protocol' });
+    return { level: b[0]!, modules: Array.from(b.subarray(1, 9)), debug: b[9] !== 0 };
+  }
   /** Every event of the log. */
   async readLog(quick = false): Promise<DkLogEvent[]> {
     const out: DkLogEvent[] = [];

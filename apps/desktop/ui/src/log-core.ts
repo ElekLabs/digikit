@@ -5,10 +5,28 @@ import type { FirmwareRun } from '../../../web/src/firmware/env.ts';
 import type { TransferRun } from '../../../web/src/transfer/env.ts';
 import type { CardFolder } from './card-core.ts';
 import { shortFolder } from './card-core.ts';
+import type { RuntimeEvent } from '@digi/dk-session';
 
-export const LOG_SOURCES = ['reload', 'build', 'firmware', 'card', 'transfer', 'emulator', 'reset'] as const;
+/** What the app logs about itself. */
+export const APP_SOURCES = ['reload', 'build', 'firmware', 'card', 'transfer', 'reset'] as const;
+/** The origins of a runtime log: the emulator's and the real device's. */
+export const ORIGINS = ['emulator', 'device'] as const;
+export type Origin = (typeof ORIGINS)[number];
+/** `emulator` is also the app's own entries about the emulator (health, faults, stalls, pause). */
+export const LOG_SOURCES = [...APP_SOURCES, 'emulator', 'device'] as const;
 export type LogSource = (typeof LOG_SOURCES)[number];
 export type LogLevel = 'info' | 'error';
+
+/** What an entry has when it comes from the runtime log of an origin (and not from the app). */
+export interface RuntimeMeta {
+  origin: Origin;
+  /** The module that wrote the event; '' for the runtime itself. */
+  module: string;
+  /** The event, for the Save file; entries made from the log (a fault, a gap, a note) have none. */
+  event?: RuntimeEvent;
+  /** The readable line of the event (as `dklog` writes it), for the Save file. */
+  line?: string;
+}
 
 export interface LogInput {
   source: LogSource;
@@ -17,6 +35,8 @@ export interface LogInput {
   text: string;
   /** Longer output (a compiler log); shown when the entry is expanded. */
   detail?: string;
+  /** Set for the entries of a runtime log. */
+  rt?: RuntimeMeta;
 }
 export interface LogEntry extends LogInput {
   id: number;
@@ -29,35 +49,117 @@ export interface LogState {
   nextId: number;
 }
 
-/** The log keeps this many entries; the oldest go first. */
+/** The log keeps this many entries of the app; the oldest go first. */
 export const LOG_CAP = 500;
+/** The same for the runtime log of each origin (the device's ring holds 512 events). */
+export const RUNTIME_CAP = 2000;
 
 export const emptyLog = (): LogState => ({ entries: [], nextId: 1 });
 
-export function addEntry(state: LogState, input: LogInput, at: number): LogState {
-  const entry: LogEntry = { ...input, id: state.nextId, at };
-  return { entries: [...state.entries, entry].slice(-LOG_CAP), nextId: state.nextId + 1 };
+/** The entries that share a cap: the app's, and each origin's runtime log. */
+const bucket = (e: LogInput): string => (e.rt ? `rt:${e.rt.origin}` : 'app');
+const capOf = (b: string): number => (b === 'app' ? LOG_CAP : RUNTIME_CAP);
+
+/** Add entries received at `at` (a batch from one poll). */
+export function addEntries(state: LogState, inputs: LogInput[], at: number): LogState {
+  if (inputs.length === 0) return state;
+  let nextId = state.nextId;
+  let entries = [...state.entries, ...inputs.map((input): LogEntry => ({ ...input, id: nextId++, at }))];
+  const count = new Map<string, number>();
+  for (const e of entries) count.set(bucket(e), (count.get(bucket(e)) ?? 0) + 1);
+  const drop = new Map([...count].map(([b, n]) => [b, n - capOf(b)] as const).filter(([, over]) => over > 0));
+  if (drop.size)
+    entries = entries.filter((e) => {
+      const over = drop.get(bucket(e));
+      if (!over) return true;
+      drop.set(bucket(e), over - 1);
+      return false;
+    });
+  return { entries, nextId };
 }
+
+export const addEntry = (state: LogState, input: LogInput, at: number): LogState => addEntries(state, [input], at);
 
 export const clearEntries = (state: LogState): LogState => ({ entries: [], nextId: state.nextId });
 
+/**
+ * What the Source menu selects: `all`; an app source (`reload`, `build`, `firmware`, `card`, `transfer`, `reset`) or `emulator` (the app's
+ * entries about the emulator: health, faults, stalls); or an origin's runtime log, `emulator:all`, `emulator:runtime`, `emulator:mod:NAME`
+ * and the same for `device`.
+ */
 export interface LogFilter {
-  source: LogSource | 'all';
+  source: string;
   errorsOnly: boolean;
 }
 
+export const originKey = (origin: Origin, part: 'all' | 'runtime' | { module: string }): string =>
+  typeof part === 'string' ? `${origin}:${part}` : `${origin}:mod:${part.module}`;
+
+export function matchesSource(e: LogEntry, source: string): boolean {
+  if (source === 'all') return true;
+  const [origin, part, ...name] = source.split(':');
+  if (part === undefined) return e.source === source && !e.rt;
+  if (e.source !== origin) return false;
+  if (part === 'all') return true;
+  if (!e.rt) return false;
+  return part === 'runtime' ? e.rt.module === '' : e.rt.module === name.join(':');
+}
+
 export const filterEntries = (entries: LogEntry[], filter: LogFilter): LogEntry[] =>
-  entries.filter(
-    (e) => (filter.source === 'all' || e.source === filter.source) && (!filter.errorsOnly || e.level === 'error'),
-  );
+  entries.filter((e) => matchesSource(e, filter.source) && (!filter.errorsOnly || e.level === 'error'));
+
+export interface SourceOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  title?: string;
+}
+export interface SourceGroup {
+  label: string;
+  options: SourceOption[];
+}
+
+/** What the Source menu needs to know of an origin. */
+export interface OriginMenu {
+  /** Something can be followed now (the emulator runs, the device is there and has the runtime log). */
+  live: boolean;
+  /** The origin has entries in the log. */
+  logged: boolean;
+  /** The modules it has loaded. */
+  modules: string[];
+}
+
+/** The groups of the Source menu: App, Emulator, and the device on the MIDI port. A group with nothing to follow or show has one disabled option. */
+export function sourceMenu(o: { emulator: OriginMenu; device: OriginMenu & { port?: string } }): SourceGroup[] {
+  const origin = (name: Origin, m: OriginMenu, none: string): SourceOption[] =>
+    m.live || m.logged
+      ? [
+          { value: originKey(name, 'all'), label: 'all' },
+          ...(name === 'emulator'
+            ? [{ value: 'emulator', label: 'emulator', title: 'Health, faults and stalls of the emulator' }]
+            : []),
+          { value: originKey(name, 'runtime'), label: 'runtime' },
+          ...m.modules.map((module) => ({ value: originKey(name, { module }), label: module })),
+        ]
+      : [{ value: '', label: none, disabled: true }];
+  return [
+    { label: 'App', options: APP_SOURCES.map((value) => ({ value, label: value })) },
+    { label: 'Emulator', options: origin('emulator', o.emulator, 'no runtime running') },
+    {
+      label: o.device.port ? `Device: MIDI ${o.device.port}` : 'Device',
+      options: origin('device', o.device, o.device.port ? 'no runtime running' : 'no MIDI port'),
+    },
+  ];
+}
 
 /** Errors logged after the entry `seenId` (the last one on screen when the drawer was open): the badge of the Log button. */
 export const unseenErrors = (entries: LogEntry[], seenId: number): number =>
   entries.filter((e) => e.level === 'error' && e.id > seenId).length;
 
-/** The drawer opens by itself for a failed reload, a failed build, and a guest fault, stall or DSP halt (all `emulator` errors). */
+/** The drawer opens by itself for a failed reload, a failed build, a guest fault, stall or DSP halt, and an error of the emulator's or the device's runtime. */
 export const autoOpens = (e: Pick<LogInput, 'source' | 'level'>): boolean =>
-  e.level === 'error' && (e.source === 'reload' || e.source === 'build' || e.source === 'emulator');
+  e.level === 'error' &&
+  (e.source === 'reload' || e.source === 'build' || e.source === 'emulator' || e.source === 'device');
 
 const two = (n: number) => String(n).padStart(2, '0');
 /** HH:MM:SS in the local time. */
@@ -83,6 +185,41 @@ export function entryText(e: LogEntry): string {
 
 /** The text that Copy puts on the clipboard: the entries given (the visible ones), details included. */
 export const copyText = (entries: LogEntry[]): string => entries.map(entryText).join('\n');
+
+// ----- the file that Save writes -----
+
+/** The local time as `2026-10-30T14:03:22.123` (what `dklog follow` writes as `host_time`); without the milliseconds when `withMs` is false. */
+function isoLocal(at: number, withMs: boolean): string {
+  const d = new Date(at);
+  const day = `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+  const time = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+  return `${day}T${time}${withMs ? `.${String(d.getMilliseconds()).padStart(3, '0')}` : ''}`;
+}
+
+/** The suggested file name: `device-log-2026-10-30-1403.log`. */
+export function saveName(now: number): string {
+  const d = new Date(now);
+  return `device-log-${isoLocal(now, false).slice(0, 10)}-${two(d.getHours())}${two(d.getMinutes())}.log`;
+}
+
+/**
+ * The file Save writes, in the format of `tools/device/dklog.py follow`: a `# ` line with the readable text of each entry, and after it, for an
+ * event of a runtime log, the event as one JSON object on a line of its own (the `event_dict` fields and `host_time`). `grep -v '^#'` gives
+ * JSON lines. Entries of the app and notes are `# ` lines only (a detail follows on `# ` lines).
+ */
+export function saveText(entries: LogEntry[], now: number): string {
+  const lines = [`# workbench log, saved ${isoLocal(now, false)}`];
+  for (const e of entries) {
+    if (e.rt?.event) {
+      lines.push(`# ${e.rt.line ?? e.text}`, JSON.stringify({ ...e.rt.event, host_time: isoLocal(e.at, true) }));
+      continue;
+    }
+    const mark = e.level === 'error' ? ' ✕' : '';
+    lines.push(`# ${formatTime(e.at)}  ${e.source}${mark}  ${e.text}`);
+    for (const l of (e.detail ?? '').trimEnd().split('\n')) if (l) lines.push(`#   ${l}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
 
 // ----- the texts of the events -----
 
