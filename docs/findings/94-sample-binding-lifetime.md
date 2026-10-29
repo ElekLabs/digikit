@@ -108,3 +108,64 @@ Follow-up review found no remaining issue. Scoped path and whitespace checks pas
 Routed `test:changed` passes Ruff and layering and retains only the ten baseline
 stale references in five unchanged files (`out/sample-binding-close-changed.log`).
 No full merge gate is claimed.
+
+
+## Private LP0 0.3 transport/control integration
+
+**[D]** The private `core/dsp-lp0-proof` 0.3 diagnostic now receives logical
+CLOSE `{0x01014243,id,track,epoch}` through its LP0 callback and multiplexes exact
+CLOSE replies into the existing 16-byte reply extension. CF keeps distinct
+seqlock progress/control snapshots, serializes both request paths and requires
+an exact DRAINED tuple before DONE. Bounded pending rechecks run at the saved
+AudioTask tail without resend; malformed matching replies, rejected requests,
+65,536 UI polls or global driver error quarantine requests without releasing
+buffers. Driver arm failure overrides DRAINED. Version 0.3 intentionally rearms
+after the full payload, superseding 0.2 terminal-inactive behavior.
+
+**[O]** These are two diagnostic control records, not actual audio-reader
+bindings. The 22-case logical proof retains its separate actual-reader evidence.
+Production backing/reservation, physical cache coherence, source validation,
+real voice integration and picker remain open. The opt-in CLOSE case requires
+an exact 0.3 patched-image hash.
+See the [diagnostic contract](../../modules/core/adapters/dsp-lp0-proof/README.md).
+
+**[D]** All 73 focused LP0 owner cases pass, retaining the earlier guards and
+adding reply multiplexing, compiled CF/assembled DSP exact tuples, pending poll,
+serialization, sticky malformed/rejected observations, timeout and arm-error
+priority. ISR-visible identity is immutable/volatile and published active last;
+matching bad evidence is latched before later frames can replace it. DRAINED
+retires the active tuple as terminal claim before checking that evidence and
+publishing DONE. Late tuple replies cannot change the terminal outcome.
+Module-owned CF/DSP objects built/redecoded with existing patchkit under the
+shared lock (450/727 instructions); scoped Python/TypeScript static checks,
+generation/current-object, paths and diff checks pass. No emulator/core build
+or hardware proof was performed.
+The callback mask spans stock rearm; tests preserve incoming scalar-call MODE1,
+bank selectors, callee state and stack, without proving physical IRQ/cache behavior.
+
+**[D] Parent checkpoint:** independent code review caught a matching bad ACK
+being overwritten before UI polling. The ISR sticky latch and terminal-claim
+ordering above fix it; follow-up review reports no remaining issue. The routed
+changed-files check passes Python/layer checks and retains the ten stale references
+in five unchanged files plus the linked pnpm launcher failure. Scoped direct
+checks pass; no merge gate is claimed. Log:
+`out/runs/lp0-close-fixture/changed-check.log`.
+
+**[D] Fresh boot fixture:** `out/runs/lp0-close-fixture/provenance.json` binds
+patched SYX SHA-256
+`6ff3b5ec9d9ed80f1108746922a213a75c9827a867fb257c1690c419fa56a2c8`.
+The existing cold-start executable reached idle PC `0xb88a5d` after 563,750,000
+instructions, within the 800M/120-second bounds. Parent inspection of exported
+memory reads all four concrete XCNT fields as `0x566` before CF exchange.
+The private packed image is a physical stock copy, and unchanged ready inputs
+remain linked to their original files. No live descriptor resizing or core
+regeneration occurred. Native CLOSE acceptance is queued behind the repository's
+exclusive measurement lock; no native CLOSE pass is claimed at this checkpoint.
+
+**[D] Independent fixture audit:** input/output hashes, cold-state entry/empty
+overlay, idle marker/PC and all four concrete descriptor words agree. The retained
+`SOURCE.json` has a stale `image: dn2-1.11` label; independently repacking the
+actual DN2 1.12 SYX section 7 reproduces the private packed image byte-for-byte
+(6,424,692 bytes, SHA-256
+`fea39d589ac45b20a6dfdb3f6c89a5b9d28fd7936ff819a7a09f17f3ff847a2a`).
+The label is not used as version evidence; original inputs remain unchanged.

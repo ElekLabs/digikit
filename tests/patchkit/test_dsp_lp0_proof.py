@@ -4,6 +4,7 @@ Driver stand-ins inspect our ABI without asserting third-party driver behavior.
 The CF runner reuses the existing executable; these tests never build a daemon.
 """
 
+import os
 import struct
 from pathlib import Path
 
@@ -283,7 +284,7 @@ def test_final_page_clamps_to_1536_bytes_and_verifies_full_canaries(dsp):
     assert [sess.peek(DEST + 234 * 1024 + i) for i in range(384)] == payload[:384]
     assert all(sess.peek(DEST + 240000 + i) == CANARY for i in range(1024))
     assert all(sess.peek(DEST - 1024 + i) == CANARY for i in range(1024))
-    assert val(sess, syms, "_test_submit_calls") == 1
+    assert val(sess, syms, "_test_submit_calls") == 2
 
 
 @pytest.mark.parametrize("phase", ["open", "first_submit", "rearm"])
@@ -326,7 +327,7 @@ def test_duplicate_page_stops_and_guard_damage_prevents_completion(dsp):
 def cf(tmp_path_factory):
     if pk_toolchains.m68k_bin("gcc") is None:
         pytest.skip("ColdFire compiler absent")
-    runner = Path("/Users/em/src/digi/digitakt2/target/release/examples/cf_call")
+    runner = Path(os.environ.get("DIGI_LP0_CF_CALL", str(pk_cfcall.EXAMPLE)))
     if not runner.is_file():
         pytest.skip("prebuilt cf_call absent; no implicit native build")
     patch = pytest.MonkeyPatch()
@@ -361,6 +362,18 @@ void lp_test_stage(u32 tag) {
 }
 void lp_test_prime(u32 next) { lp_next=next; lp_mail.sent=next; }
 void lp_test_odd(void) { lp_ack.sequence |= 1; }
+void lp_test_close(u32 id,u32 track,u32 epoch) {
+ lp_close_mail.id=id;lp_close_mail.track=track;lp_close_mail.epoch=epoch;lp_close_mail.state=1;
+}
+void lp_test_control_wire(u32 header,u32 id,u32 track,u32 epoch) {
+ volatile u16 *e=lp_fake_reply+0xabc/2;
+ e[0]=header;e[1]=header>>16;e[2]=id;e[3]=id>>16;
+ e[4]=track;e[5]=track>>16;e[6]=epoch;e[7]=epoch>>16;
+ lp_copy_reply((void *)lp_fake_copy,(const void *)lp_fake_reply,0xabc);
+}
+void lp_test_close_odd(void) { lp_close_ack.sequence |= 1; }
+void lp_test_timeout(void) { lp_close_polls=LP_CLOSE_POLLS; }
+
 """)
     linked = patchkit.cf_link([stub], 0x47E80000, {}, include_dirs=[MOD / "src/cf"])
     try:
@@ -378,6 +391,8 @@ def cf_run(cf, commands):
         (cf.symbols["lp_capture"], 32),
         (cf.symbols["lp_ack"], 24),
         (cf.symbols["lp_fake_copy"], 0xABC + 16),
+        (cf.symbols["lp_close_mail"], 24),
+        (cf.symbols["lp_close_ack"], 24),
     ]
     calls = [
         {"pc": cf.symbols[name], "args": args, "reads": reads}
@@ -564,3 +579,373 @@ def test_cf_old_presend_ack_waits_then_exact_ack_permits_single_send(cf):
     assert cf_words(r[5], 0) == (2, 0, 1, 2)
     assert cf_words(r[6], 1)[0] == 1
     assert cf_words(r[-1], 0) == (3, 0, 1, 2)
+
+
+def control_wire(status=2, request_id=1, track=0, epoch=1, version=1):
+    return (
+        "lp_test_control_wire",
+        [0x4241 | version << 16 | status << 24, request_id, track, epoch],
+    )
+
+
+def close_command(sess, syms, request_id=1, track=0, epoch=1):
+    rx = val(sess, syms, "_lp_rx")
+    for i, word in enumerate([0x01014243, request_id, track, epoch]):
+        sess.poke(rx // 4 + i, word)
+    keep = {
+        **REGS,
+        "MODE1": 0x19000,
+        "R3": 0x7303,
+        "R5": 0x7305,
+        "R6": 0x7306,
+        "R7": 0x7307,
+        "I0": 0x20040000,
+        "I1": 0x20041000,
+        "I2": 0x20042000,
+        "I3": 0x20043000,
+        "I5": 0x20044000,
+    }
+    result = sess.call(
+        "_test_callback",
+        {**keep, "R4": syms["_lp_status"], "R8": 4, "R12": rx},
+        max_steps=30000,
+        read_regs=tuple(keep),
+    )
+    assert result["halt"]["reason"] == "breakpoint"
+    assert all(result["regs"][key] == value for key, value in keep.items())
+
+
+def tail_reply(sess):
+    reply = 0x20050000
+    init(sess, {"I4": reply, "M6": 9, "L0": 17, "L4": 17, "MODE1": 0x219000})
+    return [sess.peek((reply + 0xABC) // 4 + i) for i in range(4)]
+
+
+def test_close_actual_reply_halves_cross_compiled_cf_without_payload_progress(dsp, cf):
+    sess, syms = fresh(dsp)
+    init(sess)
+    sess.poke(DEST, 0x12349876)
+    put(sess, syms, "_lp_close_a_count", 1)
+    close_command(sess, syms)
+    assert tail_reply(sess) == [0x01014241, 1, 0, 1]
+    assert val(sess, syms, "_lp_close_a_closed") == 1
+    assert val(sess, syms, "_lp_close_b_open") == 1
+    assert val(sess, syms, "_lp_pages") == val(sess, syms, "_lp_bytes") == 0
+    assert sess.peek(DEST) == 0x12349876
+    put(sess, syms, "_lp_close_a_count", 0)
+    wire = tail_reply(sess)
+    assert wire == [0x02014241, 1, 0, 1]
+    # Four DSP numeric words become eight low-half-first numeric wire halves.
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            ("lp_test_control_wire", wire),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[2], 4) == (2, 0, 1, 0, 1, 1)
+    assert cf_words(r[-1], 4) == (3, 0, 1, 0, 1, 1)
+    assert cf_words(r[-1], 5)[1:] == (1, 2, 1, 0, 1)
+    assert cf_words(r[-1], 1)[:7] == (
+        1,
+        0x01014243,
+        cf.symbols["lp_close_staging"],
+        1,
+        0,
+        1,
+        0,
+    )
+
+
+def test_close_pending_history_rejects_higher_and_retry_rechecks_epoch(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    close_command(sess, syms)
+    assert tail_reply(sess)[0] == 0x02014241
+    put(sess, syms, "_lp_close_b_count", 1)
+    close_command(sess, syms, 2, 1)
+    assert tail_reply(sess) == [0x01014241, 2, 1, 1]
+    before = [
+        val(sess, syms, name)
+        for name in ("_lp_close_last_id", "_lp_close_last_drained", "_lp_close_a_epoch")
+    ]
+    close_command(sess, syms, 3, 0)
+    assert tail_reply(sess) == [0x03014241, 3, 0, 1]
+    assert [
+        val(sess, syms, name)
+        for name in ("_lp_close_last_id", "_lp_close_last_drained", "_lp_close_a_epoch")
+    ] == before
+    close_command(sess, syms, 2, 0)
+    assert tail_reply(sess)[0] == 0x03014241
+    put(sess, syms, "_lp_close_b_count", 0)
+    assert tail_reply(sess) == [0x02014241, 2, 1, 1]
+    put(sess, syms, "_lp_close_b_epoch", 2)
+    put(sess, syms, "_lp_close_b_open", 1)
+    close_command(sess, syms, 2, 1)
+    assert tail_reply(sess) == [0x03014241, 2, 1, 1]
+    assert val(sess, syms, "_lp_close_b_open") == 1
+
+
+@pytest.mark.parametrize(
+    "fields", [(0, 0, 1), (0x80000000, 0, 1), (1, 2, 1), (1, 0, 0), (1, 0, 0x80000000)]
+)
+def test_close_invalid_identity_preserves_controls_and_history(dsp, fields):
+    sess, syms = fresh(dsp)
+    init(sess)
+    close_command(sess, syms, *fields)
+    assert tail_reply(sess) == [0x03014241, *fields]
+    assert val(sess, syms, "_lp_close_last_id") == 0
+    assert (
+        val(sess, syms, "_lp_close_a_open") == val(sess, syms, "_lp_close_b_open") == 1
+    )
+
+
+def test_close_rearm_error_overrides_drained_and_tail_cannot_publish_early(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    put(sess, syms, "_test_submit_result", 4)
+    close_command(sess, syms)
+    assert tail_reply(sess) == [0x00014C50, 0x00030004, 0, 0]
+    assert val(sess, syms, "_lp_close_rearming") == 1
+    sess, syms = fresh(dsp)
+    init(sess)
+    put(sess, syms, "_lp_close_a_count", 1)
+    close_command(sess, syms)
+    put(sess, syms, "_lp_close_a_count", 0)
+    put(sess, syms, "_lp_close_rearming", 1)
+    assert tail_reply(sess)[0] == 0x00014C50
+    assert val(sess, syms, "_lp_close_last_drained") == 0
+
+
+def test_close_after_terminal_payload_remains_armed_and_fault_count_never_drains(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    put(sess, syms, "_lp_pages", 234)
+    put(sess, syms, "_lp_bytes", 234 * 4096)
+    complete(sess, syms, 234)
+    put(sess, syms, "_lp_close_a_fault", 1)
+    close_command(sess, syms)
+    assert tail_reply(sess) == [0x01014241, 1, 0, 1]
+    assert val(sess, syms, "_lp_status") == 3
+    assert val(sess, syms, "_lp_pages") == 235
+    assert val(sess, syms, "_lp_bytes") == 960000
+    assert val(sess, syms, "_test_submit_calls") == 3
+
+
+def test_cf_alternating_kinds_retain_separate_snapshots_and_send_once(cf):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            control_wire(1),
+            ("lp_tick", []),
+            ack(),
+            ("lp_tick", []),
+            control_wire(),
+            ("lp_tick", []),
+            control_wire(1),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[4], 4)[0] == cf_words(r[6], 4)[0] == 2
+    assert cf_words(r[6], 5)[2] == 1
+    assert cf_words(r[-1], 4)[0] == 3
+    assert cf_words(r[-1], 2)[1:] == (1, 2, 0, 0, 0)
+    assert cf_words(r[-1], 1)[0] == 1
+
+
+@pytest.mark.parametrize("fields", [(2, 1, 1), (1, 0, 2), (2, 0, 1)])
+def test_cf_close_unrelated_tuple_cannot_complete(cf, fields):
+    request_id, track, epoch = fields
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            control_wire(2, request_id, track, epoch),
+            ("lp_tick", []),
+            control_wire(),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[4], 4)[0] == 2
+    assert cf_words(r[-1], 4)[0] == 3
+
+
+@pytest.mark.parametrize(
+    "wire",
+    [
+        control_wire(3),
+        control_wire(4),
+        control_wire(version=2),
+        ("lp_test_control_wire", [0x02014240, 1, 0, 1]),
+    ],
+)
+def test_cf_close_matching_bad_ack_quarantines_both_and_late_ack_cannot_recover(
+    cf, wire
+):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            wire,
+            ("lp_tick", []),
+            control_wire(),
+            ("lp_test_close", [2, 1, 1]),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[4], 4)[0] == cf_words(r[-1], 4)[0] == 4
+    assert cf_words(r[-1], 0)[0] == 4
+    assert cf_words(r[-1], 1)[0] == 1
+
+
+def test_cf_close_timeout_and_odd_snapshot_are_bounded_and_fail_closed(cf):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            control_wire(),
+            ("lp_test_close_odd", []),
+            ("lp_tick", []),
+            ("lp_test_timeout", []),
+            ("lp_tick", []),
+            control_wire(),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[5], 4)[0] == 2
+    assert cf_words(r[-1], 4)[:2] == (4, 6)
+    assert cf_words(r[-1], 1)[0] == 1
+
+
+def test_cf_serializes_both_queued_and_existing_active_data(cf):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_stage", [0]),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            ("lp_tick", []),
+            control_wire(),
+            ("lp_tick", []),
+            ("lp_tick", []),
+            ack(1),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[3], 0)[0] == 1
+    assert cf_words(r[3], 1)[1] == 0x01014243
+    assert cf_words(r[7], 1)[0] == 2
+    assert cf_words(r[-1], 0)[0] == 3
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_stage", [0]),
+            ("lp_tick", []),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            ack(1),
+            ("lp_tick", []),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[4], 1)[0] == 1
+    assert cf_words(r[7], 1)[0] == 2
+    assert cf_words(r[7], 4)[0] == 2
+
+
+def test_global_driver_error_wins_even_after_control_reply(cf):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            control_wire(),
+            ack(status=4, error=3),
+            control_wire(),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[-1], 0)[0] == cf_words(r[-1], 4)[0] == 4
+
+
+def test_close_maximum_id_epoch_pack_exactly_and_cannot_wrap(dsp, cf):
+    sess, syms = fresh(dsp)
+    init(sess)
+    put(sess, syms, "_lp_close_a_epoch", 0x7FFFFFFF)
+    close_command(sess, syms, 0x7FFFFFFF, 0, 0x7FFFFFFF)
+    wire = tail_reply(sess)
+    assert wire == [0x02014241, 0x7FFFFFFF, 0, 0x7FFFFFFF]
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [0x7FFFFFFF, 0, 0x7FFFFFFF]),
+            ("lp_tick", []),
+            ("lp_test_control_wire", wire),
+            ("lp_tick", []),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[4], 4)[0] == 3
+    assert cf_words(r[-1], 4)[0] == 4
+    assert cf_words(r[-1], 1)[0] == 1
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        control_wire(3),
+        control_wire(4),
+        control_wire(version=2),
+        ("lp_test_control_wire", [0x02014240, 1, 0, 1]),
+    ],
+)
+def test_cf_matching_bad_frame_is_sticky_before_ui_consumes_later_drained(cf, bad):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            bad,
+            control_wire(),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[-1], 4)[:2] == (4, 7)
+    assert cf_words(r[-1], 0)[0] == 4
+    assert cf_words(r[-1], 1)[0] == 1
+
+
+def test_cf_unrelated_malformed_frame_and_postclaim_rejection_do_not_poison_success(cf):
+    r = cf_run(
+        cf,
+        [
+            ack(),
+            ("lp_test_close", [1, 0, 1]),
+            ("lp_tick", []),
+            control_wire(4, request_id=2),
+            control_wire(),
+            ("lp_tick", []),
+            control_wire(3),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[5], 4)[0] == cf_words(r[-1], 4)[0] == 3
+    assert cf_words(r[-1], 1)[0] == 1

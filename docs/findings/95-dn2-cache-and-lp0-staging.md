@@ -229,3 +229,15 @@ new API or production route is selected. Retain the aligned L2 private proof
 while investigating checked production reservation, cache maintenance and real
 CF/DSP transport integration. The completed logical close/ACK proof is
 independent of this cache question.
+
+
+## Private LP0 0.3 transport/control integration
+
+**[D]** The 0.3 diagnostic adds exact CLOSE/ACK transport and terminal receive
+rearm while retaining the 64-byte-isolated L2 RX layout. All 73 focused owner
+cases pass; module-owned CF/DSP objects re-decode (450/727 instructions).
+The callback masks local interrupts across stock rearm and restores incoming
+MODE1; this does not settle physical interrupt behavior, cache coherence or
+production backing ownership. See [finding 94](94-sample-binding-lifetime.md#private-lp0-03-transportcontrol-integration)
+for the protocol, review and native evidence. The conditional address-conversion
+question and rejected fatal-OOM allocator route above remain unchanged.

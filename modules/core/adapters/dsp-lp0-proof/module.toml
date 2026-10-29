@@ -1,6 +1,6 @@
 [module]
 id = "core/dsp-lp0-proof"
-version = "0.2.1"
+version = "0.3.0"
 name = "Private LP0 receive proof"
 category = "core"
 role = "adapter"

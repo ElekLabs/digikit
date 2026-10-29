@@ -1,6 +1,6 @@
 # Private DN2 LP0 receive and reply-extension diagnostic
 
-Version 0.2.1, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
+Version 0.3.0, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
 `core/expansion`; conflicts with `core/dsp-link`, `core/runtime` and
 `core/dsp-ddr-proof`. Absent from device module sets. Never use on hardware.
 The earlier 0.1 memory-observed proof is retained in its committed checkpoints.
@@ -18,7 +18,7 @@ A wrapper at that memcpy call preserves its arguments and return value, then
 reads the separate extension from source `+0xabc` into module-owned storage
 before the frame driver rearms DMA. No header, row or trailer bytes are reused.
 
-The extension is eight numeric 16-bit halves, in order:
+The extension remains eight numeric 16-bit halves. For LP progress, in order:
 
 | Half | Meaning |
 | --- | --- |
@@ -26,6 +26,14 @@ The extension is eight numeric 16-bit halves, in order:
 | 2, 3 | Status, error |
 | 4, 5 | Pages, low half then high half |
 | 6, 7 | Bytes, low half then high half |
+
+Version 0.3 multiplexes the last reply kind into those same 16 bytes. CLOSE
+replies are four numeric words `{0x00014241 | status<<24, id, track, epoch}`,
+with status PENDING=1, DRAINED=2, REJECTED=3. Each word travels low numeric half
+first, so header halves are `0x4241`, `0x0100*status+1`. Global driver ERROR
+always overrides CLOSE and publishes the LP progress error kind. CF decodes
+progress and CLOSE into **separate** sequence-protected snapshots; observing one
+kind retains the other. Unknown/malformed matching CLOSE replies fail closed.
 
 The DSP stores four words using the existing low-half-first wire convention.
 It captures status/error/pages/bytes under the SDK local interrupt mask, clears
@@ -47,7 +55,10 @@ pages/bytes exactly matching the current cursor. A send-once flag is set before
 the stock sender. BUSY=2 retains staging through sender return and subsequent
 ACK polling: DONE=3 now means **DSP acknowledged consumption**, not merely sender
 return. Post-ACK must match the next page and byte count, status 2 for intermediate
-pages or status 3 for terminal page 235 / 960,000 bytes. Invalid requests/errors
+pages or status 3 for terminal page 235 / 960,000 bytes. Version 0.3 rearms after
+that terminal payload too, retaining status 3 on success, to receive CLOSE. This
+intentionally supersedes 0.2 terminal-inactive behavior; old runs retain their
+historical meaning. Invalid requests/errors
 produce sticky ERROR=4. There is no teardown, retry, reopen or retirement on timeout;
 errors require a fresh boot. The stock sender itself still has an unbounded
 readiness wait, so the external runner must bound its owned emulator.
@@ -58,14 +69,61 @@ the fixed unpublished bank `0x80800000..0x808ea600`, final 1,536-byte clamp, and
 both full 4 KiB canaries remain. `_lp_status/error/pages/bytes` are independent
 emulator oracles; native test progress comes from the CF wire ACK.
 
-Version 0.2.1 aligns RX independently to 64 bytes within a 4,224-byte reservation.
+Version 0.2.1 introduced independent RX alignment to 64 bytes within a
+4,224-byte reservation, retained by 0.3.
 The 4,100 DMA bytes (tag plus 4,096-byte payload) occupy a rounded 4,160-byte
 footprint wholly owned by RX, disjoint from the descriptor and saved context. Driver state remains
 128 bytes with 16-byte alignment; descriptor logic is unchanged. This layout is
 necessary for whole-line ownership but supplies no cache coherence or maintenance.
 The 0.2 native runs retain their historical addresses and evidence only. Version
-0.2.1 requires a new native boot fixture bound to the exact new patched-image hash;
+0.3 requires a new native boot fixture bound to the exact new patched-image hash;
 no new native execution is claimed.
+
+## Private CLOSE command and diagnostic drain controls
+
+LP0 tag `0x01014243` carries a fixed 1,024-word payload beginning
+`{request_id, track, expected_epoch}`. CF uses a separate zero-initialized
+staging buffer; unused padding has no DSP semantics. CLOSE never copies sample
+payload or advances pages/bytes. IDs/epochs are positive signed 31-bit values;
+tracks are 0/1. Lower IDs, conflicting identical IDs and higher IDs while pending
+reject without replacing accepted history or changing controls. An exact retry
+rechecks the live epoch and drain; a new accepted ID clears the prior drained
+grant. No wrap is permitted.
+
+Two private six-word diagnostic records expose open, ready, closed, count, fault
+and epoch (`_lp_close_{a,b}_FIELD`). They initialize at epoch/open/ready 1 and
+closed/count/fault 0. **No audio reader is connected to them.** SDK close/drain
+macros close admission and check exact count/fault. The callback rearms before
+its result becomes eligible for tail publication; rearm failure is global ERROR.
+The AudioTask tail checks a pending accepted request once per frame under its
+local mask, after scalar normalization and with full hook state restored on
+exit. It never spins, calls a driver or resends. Full incoming MODE1/bank selectors
+are retained; scalar status tests occur after disabling SIMD. Callback entry
+uses the existing scalar stock calling convention and preserves its MODE1,
+callee registers and stack while masking the SDK control operations.
+
+`lp_close_mail` has six u32 words `{state,error,id,track,epoch,sent}`. Publish
+START last and retain all request fields until DONE/ERROR. CF captures an
+immutable tuple; coherent LP readiness status 2 or 3 permits one send. Sender
+return and LP progress cannot complete CLOSE. Exact PENDING stays BUSY; only
+exact DRAINED completes. Wrong ID/track/epoch is ignored. Matching malformed,
+REJECTED/unknown status and a budget of 65,536 UI polls cause sticky quarantine;
+late ACKs cannot recover it or authorize buffer reuse. ISR-visible active identity
+is volatile and published last. A matching bad observation is latched in the ISR,
+so a later valid frame cannot erase it before UI polling. On exact DRAINED, CF
+first retires the active tuple (terminal claim), then checks sticky evidence before
+publishing DONE. Subsequent tuple replies cannot change that terminal outcome.
+This poll budget is not
+a wall-clock bound; the stock sender still requires the external deadline.
+CLOSE quarantine/global errors fail both mailboxes and retain buffers until boot.
+
+One global sender owner serializes both paths. In-flight data finishes first;
+otherwise queued CLOSE has priority over queued data. No data begins while CLOSE
+is active. Separate bounded one-attempt CF seqlock reads and the IRQ-masked DSP
+snapshot cover this diagnostic's publication; READY-last alone is not a coherent
+multiword message protocol. No public ABI, physical cache or reader-retirement
+integration follows from these diagnostic controls. The separate 22-case logical
+fixture supplies actual PCM-reader interleavings, independently of this transport.
 
 ## Required private boot fixture
 
@@ -135,12 +193,28 @@ When native opt-ins are enabled without it, collection fails clearly.
 ## Validation limits
 
 Focused assembled checks: `uv run python -m pytest tests/patchkit/test_dsp_lp0_proof.py -q`.
-All 47 focused cases pass, including 16 four-byte data-placement phases checking
+All 73 focused cases pass, including 16 four-byte data-placement phases checking
 RX alignment, complete footprint ownership and padding preservation.
 Stand-ins test our guards/call frames, halfword decoding, stock-copy boundary,
 seqlock and send-once completion behavior. They do not execute the real driver/ISR
 or prove cache behavior, gap ownership, DMA bank ownership or hardware safety.
-The native first-page, full-bank and held-stock-audio cases retain their independent
-bank/hash/canary/terminal checks. The 0.2 first-page and full-bank held-stock-audio
+The native first-page, full-bank and held-stock-audio cases retain independent
+bank/hash/canary checks and now require armed terminal receive under 0.3.
+The additional opt-in `DIGI_LP0_CLOSE=1` selects the test named
+`closes diagnostic reader control over real LP0 and drains without resend with held stock audio`.
+It uses the same exact-hash boot-fixture validation and existing Session harness,
+transfers the full bank, injects diagnostic A count=1 before CLOSE, observes
+BUSY/PENDING/A closed/B unchanged, then clears count and waits for exact DRAINED
+without resend. Bank, canaries and finite/non-silent held stock audio are checked
+afterward. This is explicit diagnostic fault injection, not a paused native voice.
+Do not reuse a 0.2/0.2.1 boot fixture. No 0.3 native run has been performed.
+The historical 0.2 first-page and full-bank held-stock-audio
 proofs pass with a verified private boot fixture; artifacts and remaining limits
 are in finding 88. No public production completion contract follows from this proof.
+
+Current 0.3 owner checks pass: focused Python tests and Ruff; scoped TypeScript
+format/lint/types; generation, current-object and document path checks. Module-owned
+CF/DSP objects re-decode successfully (450/727 instructions), built with the existing
+patchkit under the shared build lock. No emulator/core build or native run occurred.
+For a shared prebuilt CF test runner, explicitly set `DIGI_LP0_CF_CALL`; otherwise
+the tests use `pk_cfcall.EXAMPLE` in the checkout and never implicitly build it.
