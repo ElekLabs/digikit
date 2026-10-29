@@ -29,19 +29,58 @@
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.size",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 84,
+   "section": ".rodata",
+   "symbol": "cf.storage.fn.directory.open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".rodata",
+   "symbol": "cf.storage.fn.directory.next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".rodata",
+   "symbol": "cf.storage.fn.directory.metadata",
+   "type": "cf.32"
   }
  ],
  "sections": [
   {
    "align": 4,
-   "hex": "0000000164743200000000024000000047e3000047e8b00047fe10000000000000000000000000000000000002df100000029000444b494d47494431000000000000000000000000000000000000000000000000",
+   "hex": "0000000164743200000000024000000047e3000047e8b00047fe10000000000000000000000000000000000002df100000029000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 84
+   "size": 96
   }
  ],
- "source_sha256": "857a95d2f52643a4661f98174350c6d181c2b0052b06de18ad23d7c6de2f8132",
+ "source_sha256": "814c98a50ab1c2a5522ad8cc9687b5728d9cedf99c85d9409cbc6df93ffa86be",
  "symbols": [
+  {
+   "global": true,
+   "name": "cf.storage.fn.directory.metadata",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.storage.fn.directory.next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.storage.fn.directory.open",
+   "section": null,
+   "value": 0
+  },
   {
    "global": true,
    "name": "cf.storage.fn.path.close",
@@ -77,6 +116,12 @@
    "name": "dkrt_device_name",
    "section": ".rodata",
    "value": 4
+  },
+  {
+   "global": true,
+   "name": "dkrt_files_fs",
+   "section": ".rodata",
+   "value": 84
   },
   {
    "global": true,
@@ -120,7 +165,7 @@
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "24833b91f710bf7728e15e3b0a9efcce7bfd966110140ad85643d121b5382c50",
+  "isa_check": "e61c624742c5d8e27f29cb8ce79e08c0376780fb855d63a11a2026028c310f9a",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

@@ -522,6 +522,12 @@ pub mod storage {
     }
 
     unsafe extern "C" {
+        /// DT2 1.17 locked stored metadata getter: 0 success/-1 failure, output unchanged on failure. Four words: id, stored odd hash, physical byte size, node word. No hash recomputation or source lease (finding 93).
+        #[link_name = "cf.storage.fn.directory.metadata"]
+        pub fn directory_metadata(entry_id: u32, output: *mut u32) -> i32;
+    }
+
+    unsafe extern "C" {
         /// DT2 1.17 read-only directory next, 1 entry/0 EOF/-1 failure. Caller zeros private 0x114-byte output; ID +0, u16 type +4, directory ID +8, page/offset +12/+16, NUL name[256] +20. Task context; no latency bound (finding 93).
         #[link_name = "cf.storage.fn.directory.next"]
         pub fn directory_next(state: *mut u32, output: *mut u8) -> i32;

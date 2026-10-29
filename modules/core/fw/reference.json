@@ -9582,6 +9582,42 @@
       "at": {
         "dt2-1.17": [
           {
+            "addr": "0x4015aec2",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_storage_directory_metadata",
+        "rust": "dkfw::storage::directory_metadata"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 locked stored metadata getter: 0 success/-1 failure, output unchanged on failure. Four words: id, stored odd hash, physical byte size, node word. No hash recomputation or source lease (finding 93).",
+      "file": "devices/fw/storage.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.storage.fn.directory.metadata",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "i32 (u32 entry_id, u32 *output)",
+      "subsystem": "storage",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
             "addr": "0x4015734e",
             "len": 4
           }
@@ -9610,7 +9646,8 @@
       "sig": "i32 (u32 *state, u8 *output)",
       "subsystem": "storage",
       "users": [
-        "core/file-catalog-proof"
+        "core/file-catalog-proof",
+        "core/runtime"
       ],
       "was": []
     },
@@ -9646,7 +9683,8 @@
       "sig": "i32 (const u8 *path, u32 *state)",
       "subsystem": "storage",
       "users": [
-        "core/file-catalog-proof"
+        "core/file-catalog-proof",
+        "core/runtime"
       ],
       "was": []
     },
@@ -12766,7 +12804,7 @@
       "name": "rtos"
     },
     {
-      "count": 9,
+      "count": 10,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",

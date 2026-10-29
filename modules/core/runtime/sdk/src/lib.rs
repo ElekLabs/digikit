@@ -275,6 +275,7 @@ pub mod sample_job;
 
 /// Internal fixed-memory listing work/notification lifecycle model.
 pub mod files_job;
+pub mod files;
 pub mod sample_stream;
 
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").

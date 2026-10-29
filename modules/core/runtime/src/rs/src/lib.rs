@@ -30,6 +30,7 @@ pub mod scan;
 pub mod settings;
 mod sample;
 mod sample_source;
+mod files;
 mod sha256;
 pub mod store;
 mod table;
@@ -453,6 +454,11 @@ unsafe extern "C" fn api_register_cmds(first: u32, count: u32, handler: Option<d
 unsafe extern "C" fn api_sample_bank(id: u32) -> i32 { sample::bank(id) }
 unsafe extern "C" fn api_sample_load(handle: u32, path: *const u8) -> i32 { sample::load(handle, path) }
 unsafe extern "C" fn api_sample_status(handle: u32) -> i32 { sample::status(handle) }
+unsafe extern "C" fn api_files_client() -> i32 { files::client() }
+unsafe extern "C" fn api_files_list(client: u32, root: u32, path: *const u8, notify: Option<dkrt_sdk::api::FileEvent>, context: *mut u8) -> i32 { files::list(client, root, path, notify, context) }
+unsafe extern "C" fn api_files_poll(client: u32, ticket: u32, out: *mut u8, cap: u32) -> i32 { files::poll(client, ticket, out, cap) }
+unsafe extern "C" fn api_files_cancel(client: u32, ticket: u32) -> i32 { files::cancel(client, ticket) }
+
 
 /// The table is built at first use: pointers to the helpers are not constants.
 #[no_mangle]
@@ -477,6 +483,10 @@ pub static mut dkrt_api: Api = Api {
     sample_bank: api_sample_bank,
     sample_load: api_sample_load,
     sample_status: api_sample_status,
+    files_client: api_files_client,
+    files_list: api_files_list,
+    files_poll: api_files_poll,
+    files_cancel: api_files_cancel,
 };
 
 pub unsafe fn log(msg: *const u8, value: u32) {
@@ -981,6 +991,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     crash::install();
     dsp::step();
     sample::tick();
+    files::tick();
     fxpage::tick();
     settings::tick();
     dlog::tick();

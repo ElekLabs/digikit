@@ -40,3 +40,10 @@ dkrt_sample_fs:
     .long cf.storage.fn.path.read
     .long cf.storage.fn.path.close
     .long cf.storage.fn.path.size
+
+    .balign 4
+    .globl dkrt_files_fs
+dkrt_files_fs:
+    .long cf.storage.fn.directory.open
+    .long cf.storage.fn.directory.next
+    .long cf.storage.fn.directory.metadata

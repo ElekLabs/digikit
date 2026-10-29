@@ -7,6 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* The function type `file_event` of [api.types]. */
+typedef void dk_file_event(uint32_t client, uint32_t request, int32_t state, uint8_t *context);
+
 /* The function type `service_cmd` of [api.types]. */
 typedef int32_t dk_service_cmd(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *out);
 
@@ -32,10 +35,14 @@ typedef struct dk_api {
     int32_t (*sample_bank)(uint32_t local_id); /* (api 1.3) In init, resolve the module-owned sample bank to a positive opaque handle, or a negative DK_SAMPLE_E_* error. */
     int32_t (*sample_load)(uint32_t handle, const uint8_t *path); /* (api 1.3) Queue one load from a NUL-terminated device sample path using a handle resolved in init. May be called from init or a service callback; copies the path without file IO. Returns 0 or a negative DK_SAMPLE_E_* error. The bank is retained once delivery starts. */
     int32_t (*sample_status)(uint32_t handle); /* (api 1.3) Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error. */
+    int32_t (*files_client)(void);           /* (api 1.4) Init-only: acquire this module's listing client; positive handle or negative error. Retired before teardown/failed-init free. */
+    int32_t (*files_list)(uint32_t client, uint32_t root, const uint8_t *path, dk_file_event *notify, uint8_t *context); /* (api 1.4) Copy a canonical root-relative directory request; positive ticket or negative error. Supersedes prior results. Optional deferred UI-task notify/context remain module-owned until retirement quiesces. No I/O here. */
+    int32_t (*files_poll)(uint32_t client, uint32_t ticket, uint8_t *out, uint32_t capacity); /* (api 1.4) No I/O: 0 pending, 1 copied 304-byte dk_file_entry, 2 end, negative error. Validate output/capacity before consumption; output unchanged unless 1. Stored metadata is not content validation or a lease. */
+    int32_t (*files_cancel)(uint32_t client, uint32_t ticket); /* (api 1.4) Invalidate matching request/results/queued notification without waiting for active work or callback. Does not free the module-owned client. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
-_Static_assert(sizeof(dk_api) == 80, "dk_api size");
+_Static_assert(sizeof(dk_api) == 96, "dk_api size");
 _Static_assert(offsetof(dk_api, version) == 0, "dk_api.version");
 _Static_assert(offsetof(dk_api, size) == 4, "dk_api.size");
 _Static_assert(offsetof(dk_api, device) == 8, "dk_api.device");
@@ -56,6 +63,10 @@ _Static_assert(offsetof(dk_api, register_cmds) == 64, "dk_api.register_cmds");
 _Static_assert(offsetof(dk_api, sample_bank) == 68, "dk_api.sample_bank");
 _Static_assert(offsetof(dk_api, sample_load) == 72, "dk_api.sample_load");
 _Static_assert(offsetof(dk_api, sample_status) == 76, "dk_api.sample_status");
+_Static_assert(offsetof(dk_api, files_client) == 80, "dk_api.files_client");
+_Static_assert(offsetof(dk_api, files_list) == 84, "dk_api.files_list");
+_Static_assert(offsetof(dk_api, files_poll) == 88, "dk_api.files_poll");
+_Static_assert(offsetof(dk_api, files_cancel) == 92, "dk_api.files_cancel");
 #endif
 
 /* Imports: names the loader resolves in the runtime's table (Api.import gives the address at run time). */
@@ -98,6 +109,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 3
+#define DK_API_MINOR 4
 
 #endif /* DK_GEN_API_H */
