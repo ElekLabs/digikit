@@ -82,3 +82,62 @@ supports the risk; exact DN2 1.12 host interpretation and audible consequences
 remain unmeasured. Copying the bytes does not itself prove how a host uses them,
 but the existing link comment calling the region unused is insufficient for live
 sample-loading ownership.
+
+## Completion-field follow-up after LP0 proof
+
+**[D]** The native LP0 payload and stock-audio proofs in
+[finding 92](92-dn2-native-bulk-seam.md) observe completion through emulator
+memory reads. They do not provide a device-side completion protocol.
+
+**[D]** Raw row-loop counts at `0x1c26b2/26c4` are 14 stereo channel pairs and
+32 samples, respectively. At six bytes per pair and `0x54` stride, the rows
+cover reply `[+0x1c,+0xa9c)`. The remaining 32 bytes before transfer length
+`0xabc` are not established spare space: stock accessor `0x400cfbfc` reads
+signed halfwords from staging `+0xa9c + 2 * argument`, maps negative values
+to zero, and otherwise returns the value shifted right seven bits. Arguments
+0..15 cover the entire trailer. No argument bound is enforced by this accessor.
+
+**[D]** Header accessor `0x400cfbe0` combines two unsigned halfwords at `+0x08`
+as `(first << 16) | second`. Whole-main reference scanning at 96.61% coverage
+found no external reference to either accessor; that still excludes neither
+computed calls nor asynchronous producers. Trailer producer coverage remains
+incomplete. Finding 31's categorical claim that no stock code writes header word
+2 exceeds this bounded audit's evidence.
+
+**[O]** Neither header nor trailer can yet be claimed for completion. The next
+bounded feasibility question is an explicitly owned extension beyond the stock
+reply, preserving all original bytes and consumers. It must account for both
+DMA counts, actual buffer extents, clocking and CF copy lengths; spacing between
+buffers alone does not authorize enlargement. No protocol extension is implemented.
+
+## Explicit extension feasibility
+
+**[D]** A bounded original-byte audit finds a numerically plausible 16-byte
+extension (`0xabc → 0xacc`), with coordinated boot-time changes on both CPUs:
+
+| Control | Current DN2 1.12 path |
+| --- | --- |
+| CF wire size | `0x400cf08c → 0x40027d3a` returns `0xabc`; `0x400cf7ec` stores it at `0x42441958`. |
+| CF DMA | `0x400cf922` caps bytes at `0xaf0` and programs TX29 and RX28 with count/2. `0xacc` would require `0x566` transfers. |
+| Stock reply copy | Caller `0x40025e90` independently supplies `0xabc`; copy at `0x400cf956` uses staging `0x80001a20` and destination `0x800053a4`. |
+| DSP descriptors | `0x1ca812` supplies `R4=0xabc` to `0x1ca46a`; length/2 at `0x1ca502` feeds all four ping-pong RX/TX descriptors, with two-byte stride. |
+
+**[D]** Preserve the stock copy length: `0x800053a4 + 0xabc = 0x80005e60`,
+the beginning of the stock TX payload. Extending that copy would corrupt TX
+data. Any completion consumption must be separate from the stock copy.
+
+CF staging begins at `0x80001a20`; TX PUSHR storage begins exactly `0xaf0`
+bytes later at `0x80002510`. Its maximum `2 * 0xaf0` span ends at `0x80003af0`,
+where stock initialization writes another object (`0x40025b20`). At proposed
+size `0xacc`, both numerical spans end before those neighbors. On DSP, the four
+main roots are `0x2c29d0/39d0/49d0/59d0`. Auxiliary DMA setup at
+`0x1ca5b3..5da` installs buffers at each main root plus `0xaf0`, leaving 36
+bytes between a proposed `0xacc` main extent and the next auxiliary buffer.
+
+**[O]** These are positive size and neighboring-object facts, not proof of
+exclusive ownership of every intervening byte. Boot counts must agree before
+DMA starts; resizing armed descriptors is excluded. Private-buffer redirection
+seams exist at CF RX DADDR and staging memcpy source, and DSP ADDRSTART/selector
+initializers, if ownership requires separate allocations. The next step is a
+read-only implementation assessment of an isolated boot-time diagnostic; no
+production wire-format change or extension proof has been implemented.
