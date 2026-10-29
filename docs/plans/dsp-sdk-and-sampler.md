@@ -23,6 +23,12 @@ side panels and dialogs rather than introducing a separate UI framework.
   live emulator; independently audit the stock metadata/hash getter.
 - [x] Map DN2 store and DT2 +Drive catalogue providers and identity metadata;
   neither listing establishes an immutable file lease.
+- [x] Implement and independently review fixed-memory DN2 directory projection:
+  implied/empty folders, sorted continuation pages and exact file metadata.
+- [x] Make initial store verification incremental and retain generation on rewind;
+  independent review and all 80 SDK host tests pass.
+- [x] Test/review the shared listing request/cancel/notification lifecycle model;
+  all 93 SDK tests pass. Runtime serialization/dispatch/retirement remain pending.
 - [ ] Define/export the reusable SDK file/directory listing contract and adapters.
 - [ ] Define per-track selection/binding separately, preserving the existing
   pinned-bank proof API until a versioned replacement is available.
@@ -77,6 +83,10 @@ flat table, including implied folders and deduplication; zero matches in a raw
 chunk must not be mistaken for EOF. DT2 can wrap the proved iterator in task
 context; its stored hash/size metadata and file mutation behavior need explicit
 semantics. Keep source validation and sample ownership out of the listing API.
+Current service decisions and remaining ABI work are in
+[the reusable listing design](../design/sdk-files.md). UI callbacks lack current
+module attribution, so clients are acquired during initialization; generations
+reject late results. Notifications must not require owning the sole module slot 0.
 
 **Initial integration route:** use the existing `DK_MENU` entry with a track list,
 then a reusable `DK_UI_LIST` browser for that explicitly chosen track. This makes

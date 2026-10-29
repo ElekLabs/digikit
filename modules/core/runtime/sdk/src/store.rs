@@ -599,6 +599,9 @@ pub mod stream;
 /// Internal bounded metadata enumeration; no public C SDK contract.
 pub mod catalog;
 
+/// Pure fixed-memory immediate-child projection of a complete catalogue scan.
+pub mod directory;
+
 // ---- free space -------------------------------------------------------------------------------------------------------------
 
 const FIXED_MAX: usize = 6;
