@@ -22,9 +22,15 @@ read/write beyond the loaded extent. Therefore even the end of the loaded image
 does not establish the start of free DDR.
 
 **[D]** Audited allocator initialization `0xb89c53` constructs a free-list arena
-`[0x2d08b8,0x2dd0b0)`, 51,192 bytes in L1 normal-address space, with metadata
+`[0x2d08b8,0x2dd0b0)`, 51,192 bytes in L1 private byte-address space, with metadata
 at `0x2dd0b8..d8`. Its `0x80000000` constant is an allocation flag, not a DDR
 base. This allocator cannot be used as evidence for a larger sample pool.
+
+**[C]** The earlier normal-address-space description was incorrect: allocator
+`0xb89c9c` takes a byte count and returns a private L1 byte pointer, not a
+normal-word address. The arena extent is not available capacity. Its audited
+failure path is fatal rather than a recoverable NULL result; see the
+[L1 staging audit](95-dn2-cache-and-lp0-staging.md#l1-staging-option-and-allocator-failure).
 
 **[O]** The five-root pass establishes no general DDR allocator, maximum dynamic
 scratch extent or production reservation hook. The existing emulator bank and a
