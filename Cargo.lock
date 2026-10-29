@@ -1057,6 +1057,7 @@ dependencies = [
  "device-profile",
  "elektron-native-boot",
  "emmc-card",
+ "plusdrive-format",
  "serde_json",
  "sha2",
  "sharc-fast-cl",

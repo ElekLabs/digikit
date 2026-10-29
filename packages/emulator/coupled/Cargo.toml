@@ -39,3 +39,6 @@ sharc-fast-cl-2 = { path = "../sharc-fast-cl-2", optional = true }
 name = "coupled-run"
 path = "src/bin/coupled_run.rs"
 required-features = ["coupled-audio"]
+
+[dev-dependencies]
+plusdrive-format = { path = "../plusdrive" }
