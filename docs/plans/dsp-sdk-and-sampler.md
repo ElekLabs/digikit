@@ -48,6 +48,12 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   address while exact backing bytes change; cleared slot metadata is not retirement. Next design requires explicit consumer retirement
   before overwrite/release, stale-note generation guards, and coverage of external slot replacement/project reset.
   No borrowed-view API is implemented or safe to expose yet; preserve the current immutable-bank proof.
+- [Finding 83](../findings/83-sample-retirement-design.md) records the checked retirement design discovery:
+  candidate DT2 pre-mutation hooks, close/drain/invalidate/RETIRED/mutate/publish sequencing, held-trigger and
+  delayed-event hazards, and exact-token failure rules. These are [D]/[O], not an approved ABI or implementation.
+  Next resolve current-image callback/IRQ scheduling and CF producer/frame generation fencing with a bounded
+  diagnostic trace before coding an asynchronous owned-bank retirement proof on both devices. That proof is
+  independent of larger backing for the ten-second target; external DT2 mutation and DN2 capacity remain separate proofs.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -124,8 +130,10 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
   OneShot UI; broader CF/lifecycle audit and controlled parameter/boundary semantics remain open.
 - [x] Capture current stock OneShot slot binding and the unique ten-second a → b active replacement transition
   on the original DT2 1.17 image; retain exact source bytes, active/cursor state and PCM (finding 82).
-- [ ] Specify explicit retirement and stale-note guards before borrowed-view exposure, covering external slot
-  replacement and project reset/reload. Start/end/reverse, unload and project reload captures remain open.
+- [x] Persist retirement protocol discovery and review of adapter/trigger hazards in finding 83; no ABI or protocol code approved.
+- [ ] Prove callback scheduling/interrupt atomicity and upstream generation capture or an event-order fence before
+  implementing retirement. Then prove owned-bank retirement on both devices, followed separately by external DT2
+  replace/unload/project reset coverage before borrowed-view exposure. Start/end/reverse captures remain open.
 - [ ] Map DT2 dependencies against DN2 1.12's working voice seam and source acquisition; identify missing larger
   backing ownership/delivery without assuming DT2's pool or LP0, or restarting playback feasibility from scratch.
 - [x] Establish transferred-file format/rate and the implemented bounded float32 delivery path; the proposed
@@ -313,9 +321,13 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 - [x] Measure no-dynamic-module and proof-only runtime capacity on both current images; persist provenance and limits.
 - [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
 - [x] Record the confirmed target: approximately ten-second one-shots; stop old notes on selection.
-- [ ] Prioritize DT2 1.17 stock DSP-pool adapter/slot ownership, lifetime/reclaim and cache rules before small-bank replacement implementation.
+- [ ] Prove DT2 1.17 stock DSP-pool slot ownership, external mutation interception, lifetime/reclaim and cache rules
+  before borrowing stock backing. The next retirement candidate is an independent owned-bank proof on both devices.
 - [ ] Investigate DN2 larger backing/delivery from the stock-machine dependency map in finding 81; bound any probe by those gaps.
-- [ ] Design replacement quiescence and consumer generations for the chosen backend; transport ACK is not a reader barrier.
+- [x] Record proposed retirement sequencing and source-survey/review results in finding 83; transport ACK is not a reader barrier.
+- [ ] Resolve scheduling and CF producer/frame fence evidence before protocol code; then agree the owned-bank proof
+  contract and stop scope. Prove note_on/render drain, armed/held/delayed starts, stale ACK/completion, rapid A/B/C,
+  load failure and timeout. Product stop granularity and ABI remain open.
 - [ ] Investigate PCM16 resident-bank numerical behavior and paired cost before adoption; sample-picker scope remains open.
 
 **Approved proof work:**
