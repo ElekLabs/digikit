@@ -135,7 +135,7 @@ def test_failed_transfer_stays_unready_without_payload_write(dsp, bad):
     assert value(sess, syms, "ready") == 0
 
 
-def test_commit_requires_exact_total_and_publishes_ready(dsp):
+def test_commit_seals_until_explicit_open(dsp):
     sess, syms = receiver(dsp)
     deliver(sess, packet(0, 1))
     # Boundary setup isolates the final block and COMMIT; the coupled test owns
@@ -148,9 +148,18 @@ def test_commit_requires_exact_total_and_publishes_ready(dsp):
     assert value(sess, syms, "ready") == 0
     assert sess.peek(DEST + 239999) == data[-1]
     deliver(sess, packet(376, 3, 240000))
-    assert value(sess, syms, "ready") == 1
+    assert value(sess, syms, "ready") == 0
+    assert value(sess, syms, "admission_open") == 0
     assert value(sess, syms, "status") == 1
     assert sess.peek(RECORD // 4 + 24) == 0xA6DD | (376 << 16) | (1 << 25)
+    deliver(sess, packet(376, 3, 240000))
+    assert value(sess, syms, "status") == 1
+    assert value(sess, syms, "ready") == 0
+    deliver(sess, packet(378, 5))
+    assert value(sess, syms, "ready") == 1
+    assert value(sess, syms, "status") == 7
+    deliver(sess, packet(378, 5))
+    assert value(sess, syms, "status") == 7
 
 
 @pytest.fixture(scope="module")
@@ -164,6 +173,12 @@ void dd_stock_send(int n, const unsigned short *s, int r, const volatile unsigne
   dd_capture[2]=r; dd_capture[3]=(unsigned int)p;
   if (dd_clear_mask) for (unsigned int i=17;i<=20;i++) ((unsigned short *)s)[i]=0;
 }
+extern unsigned short dd_frame[];
+extern unsigned int dd_mail[];
+void dd_test_request(const unsigned short *p)
+{ for(unsigned int i=0;i<1344;i++) dd_frame[i]=p[i]; dd_mail[0]=4; }
+void dd_test_ack(unsigned short *p, unsigned int token, unsigned int seq, unsigned int status)
+{ p[48]=0xa6dd; p[49]=seq|(status<<9); p[50]=token; p[51]=token>>16; }
 """)
     return patchkit.cf_link([MOD / "src/cf/ddr-proof.c", stub], 0x47E80000, {})
 
@@ -290,8 +305,8 @@ def test_tail_observer_records_active_marker_and_balanced_entries(dsp):
 def committed(sess, syms):
     for name, value_ in (
         ("token", TOKEN),
-        ("seq", 376),
-        ("status", 1),
+        ("seq", 378),
+        ("status", 7),
         ("ready", 1),
         ("admission_open", 1),
         ("words", 240000),
@@ -408,6 +423,9 @@ def test_actual_reader_interleaving_cannot_retire_until_guarded_release(
     assert value(sess, syms, "status") == 6
     assert value(sess, syms, "retire_closed") == 1
     assert value(sess, syms, "ready") == 0
+    deliver(sess, packet(0, 1, token=TOKEN + 1))
+    assert value(sess, syms, "token") == TOKEN
+    assert value(sess, syms, "status") == 6
     assert [sess.peek(DEST + i) for i in range(32)] == [0x10002000] * 32
     sess.runner.state = saved
     sess.runner.breakpoints = frozenset((BACK,))
@@ -489,3 +507,323 @@ def test_cf_retirement_pending_exact_ack_busy_context_and_watchdog(cf):
     r = machine.run({**pokes, stage: bytes(bad), rec: ack(6)}, [call()])
     assert struct.unpack(">4I", r[0].reads[0])[:2] == (3, 101)
     assert struct.unpack(">4I", r[0].reads[1])[1] == src
+
+
+def retired(sess, syms, token=TOKEN):
+    committed(sess, syms)
+    sess.poke(syms["_dd_token"] // 4, token)
+    deliver(sess, packet(377, 4, token=token))
+    assert value(sess, syms, "status") == 5
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "skip",
+        "old",
+        "zero",
+        "exhausted",
+        "pending",
+        "count",
+        "fault",
+        "checksum",
+        "op",
+        "offset",
+    ],
+)
+def test_successor_rejection_preserves_bank_and_ack_identity(dsp, bad):
+    sess, syms = receiver(dsp)
+    token = 0xFFFFFFFF if bad == "exhausted" else TOKEN
+    retired(sess, syms, token)
+    next_token = (token + 1) & 0xFFFFFFFF
+    if bad == "skip":
+        next_token += 1
+    elif bad == "old":
+        next_token = token - 1
+    elif bad == "zero":
+        next_token = 0
+    elif bad == "pending":
+        sess.poke(syms["_dd_status"] // 4, 6)
+    elif bad == "count":
+        sess.poke(syms["_dd_admitted"] // 4, 1)
+    elif bad == "fault":
+        sess.poke(syms["_dd_admit_fault"] // 4, 1)
+    req = packet(
+        0, 2 if bad == "op" else 1, 1 if bad == "offset" else 0, token=next_token
+    )
+    if bad == "checksum":
+        req[7] ^= 1
+    before = {
+        name: value(sess, syms, name)
+        for name in (
+            "token",
+            "seq",
+            "ackseq",
+            "status",
+            "ready",
+            "words",
+            "retire_closed",
+            "admission_open",
+        )
+    }
+    for addr in (DEST - 1, DEST, DEST + 240000):
+        sess.poke(addr, 0x11223344)
+    deliver(sess, req)
+    assert {name: value(sess, syms, name) for name in before} == before
+    assert [sess.peek(addr) for addr in (DEST - 1, DEST, DEST + 240000)] == [
+        0x11223344
+    ] * 3
+
+
+def test_successor_adoption_sealed_skip_and_stale_controls(dsp):
+    sess, syms = receiver(dsp)
+    retired(sess, syms)
+    for token in (TOKEN + 1, TOKEN + 2):
+        deliver(sess, packet(0, 1, token=token))
+        assert value(sess, syms, "token") == token
+        assert value(sess, syms, "status") == 0
+        assert value(sess, syms, "retire_closed") == 0
+        assert value(sess, syms, "words") == 0
+        assert value(sess, syms, "ready") == 0
+        sess.poke(syms["_dd_seq"] // 4, 375)
+        sess.poke(syms["_dd_words"] // 4, 240000)
+        deliver(sess, packet(376, 3, 240000, token=token))
+        assert value(sess, syms, "status") == 1
+        assert value(sess, syms, "ready") == 0
+        if token == TOKEN + 2:
+            deliver(sess, packet(378, 5, token=token))
+            assert value(sess, syms, "status") == 7
+            assert value(sess, syms, "ready") == 1
+        else:
+            deliver(sess, packet(377, 4, token=token))
+            assert value(sess, syms, "status") == 5
+    sess.poke(DEST, 0x12345678)
+    for old in (TOKEN, TOKEN + 1):
+        for req in (
+            packet(0, 1, token=old),
+            packet(1, 2, payload=[99], token=old),
+            packet(376, 3, 240000, token=old),
+            packet(378, 5, token=old),
+            packet(377, 4, token=old),
+        ):
+            deliver(sess, req)
+            assert value(sess, syms, "token") == TOKEN + 2
+            assert value(sess, syms, "ackseq") == 378
+            assert value(sess, syms, "status") == 7
+            assert sess.peek(DEST) == 0x12345678
+    deliver(sess, packet(377, 4, token=TOKEN + 2))
+    deliver(sess, packet(378, 5, token=TOKEN + 2))
+    assert value(sess, syms, "status") == 5
+    assert value(sess, syms, "ackseq") == 377
+    assert value(sess, syms, "ready") == 0
+
+
+@pytest.mark.parametrize("kind", ["early", "checksum", "seq", "offset", "count"])
+def test_open_requires_exact_sealed_control(dsp, kind):
+    sess, syms = receiver(dsp)
+    deliver(sess, packet(0, 1))
+    if kind != "early":
+        sess.poke(syms["_dd_seq"] // 4, 375)
+        sess.poke(syms["_dd_words"] // 4, 240000)
+        deliver(sess, packet(376, 3, 240000))
+    req = packet(
+        379 if kind == "seq" else 378,
+        5,
+        1 if kind == "offset" else 0,
+        [1] if kind == "count" else (),
+    )
+    if kind == "checksum":
+        req[7] ^= 1
+    deliver(sess, req)
+    assert value(sess, syms, "status") in (2, 3, 4)
+    assert value(sess, syms, "ready") == 0
+    assert value(sess, syms, "admission_open") == 0
+
+
+def test_cf_closed_bank_grants_require_exact_ack_and_expire_at_open(cf):
+    syx = config.stock("Digitakt_II_OS1.17.syx")
+    if not syx.exists():
+        pytest.skip("CF test setup firmware absent")
+    state = os.environ.get("DIGI_DDR_PROOF_CF_STATE")
+    machine = CfMachine(syx, state=Path(state) if state else None)
+    src, rec = 0x47EC0000, 0x47ED0000
+    mail, stage, capture = (
+        cf.symbols[n] for n in ("dd_mail", "dd_frame", "dd_capture")
+    )
+    held = bytearray(0xA80)
+    struct.pack_into(">H", held, 0, 3)
+    struct.pack_into(">H", held, 34, 1)
+    pokes = {
+        cf.base: cf.image,
+        cf.base + len(cf.image): bytes(cf.bss_size),
+        src: bytes(held),
+        rec: bytes(0xABC),
+    }
+    reads = [(mail, 16), (capture, 16)]
+    calls = []
+    observations = []
+
+    def submit(req):
+        addr = 0x47EE0000 + len(pokes) * 0x1000
+        raw = b"".join(struct.pack(">HH", w & 65535, w >> 16) for w in req)
+        pokes[addr] = raw.ljust(2688, b"\0")
+        calls.append({"pc": cf.symbols["dd_test_request"], "args": [addr]})
+
+    def ack(token, seq, status):
+        calls.append(
+            {"pc": cf.symbols["dd_test_ack"], "args": [rec, token, seq, status]}
+        )
+
+    def hook(expected_state, expected_source, error=0):
+        observations.append((len(calls), expected_state, expected_source, error))
+        calls.append(
+            {
+                "pc": cf.symbols["dd_frame_hook"],
+                "args": [0xA80, src, 0xABC, rec],
+                "reads": reads,
+            }
+        )
+
+    submit(packet(1, 2, payload=[1]))
+    hook(1, src)  # Held DATA has no closed-bank grant, even with a plausible ACK.
+    ack(TOKEN, 1, 0)
+    hook(1, src)  # sent=0: an unsolicited ACK cannot grant or complete anything.
+    submit(packet(377, 4))
+    hook(1, stage)
+    ack(TOKEN + 1, 377, 5)
+    hook(1, stage)  # Wrong-token retirement ACK cannot grant successor INIT.
+    submit(packet(0, 1, token=TOKEN + 1))
+    hook(1, src)
+    submit(packet(377, 4))
+    hook(1, stage)
+    ack(TOKEN, 377, 5)
+    hook(2, src, 5)
+    submit(packet(0, 1, token=TOKEN + 1))
+    hook(1, stage)
+    ack(TOKEN + 1, 0, 0)
+    hook(2, src)
+    submit(packet(1, 2, payload=[2], token=TOKEN + 1))
+    hook(1, stage)
+    ack(TOKEN + 1, 1, 0)
+    hook(2, src)
+    submit(packet(376, 3, 240000, token=TOKEN + 1))
+    hook(1, stage)
+    ack(TOKEN + 1, 376, 1)
+    hook(2, src, 1)
+    submit(packet(376, 3, 240000, token=TOKEN + 1))
+    hook(1, stage)  # A sealed grant also permits a fresh duplicate COMMIT.
+    hook(2, src, 1)
+    submit(packet(378, 5, token=TOKEN + 1))
+    hook(1, stage)
+    ack(TOKEN + 1, 378, 7)
+    hook(2, src, 7)
+    submit(packet(378, 5, token=TOKEN + 1))
+    hook(1, stage)  # Only the OPEN ACK's separate grant permits duplicate OPEN.
+    hook(2, src, 7)
+    submit(packet(1, 2, payload=[2], token=TOKEN + 1))
+    hook(1, src)  # OPEN cleared all loading/closed grants.
+    submit(packet(377, 4, token=TOKEN + 1))
+    hook(1, stage)
+    ack(TOKEN + 1, 377, 5)
+    hook(2, src, 5)
+    submit(packet(378, 5, token=TOKEN + 1))
+    hook(1, src)  # RETIRE cleared the duplicate-OPEN grant; no resurrection.
+    results = machine.run(pokes, calls)
+    assert all(r.ok and not r.clobbered for r in results)
+    for index, expected_state, expected_source, error in observations:
+        result = results[index]
+        assert struct.unpack(">4I", result.reads[0])[:2] == (expected_state, error)
+        assert struct.unpack(">4I", result.reads[1])[1] == expected_source
+
+
+@pytest.mark.parametrize(
+    "op,seq,offset,status",
+    [
+        (1, 0, 0, 1),
+        (2, 1, 0, 1),
+        (3, 376, 240000, 0),
+        (4, 377, 0, 1),
+        (5, 378, 0, 1),
+    ],
+)
+def test_cf_success_status_is_operation_specific(cf, op, seq, offset, status):
+    syx = config.stock("Digitakt_II_OS1.17.syx")
+    if not syx.exists():
+        pytest.skip("CF test setup firmware absent")
+    machine = CfMachine(syx)
+    src, rec = 0x47EC0000, 0x47ED0000
+    mail, stage = (cf.symbols[n] for n in ("dd_mail", "dd_frame"))
+    raw = b"".join(
+        struct.pack(">HH", w & 65535, w >> 16)
+        for w in packet(seq, op, offset, [1] if op == 2 else ())
+    )
+    normal = bytearray(0xA80)
+    struct.pack_into(">H", normal, 0, 3)
+    ack = bytearray(0xABC)
+    struct.pack_into(
+        ">4H", ack, 0x60, 0xA6DD, seq | (status << 9), TOKEN & 65535, TOKEN >> 16
+    )
+    calls = [
+        {
+            "pc": cf.symbols["dd_frame_hook"],
+            "args": [0xA80, src, 0xABC, rec],
+            "reads": [(mail, 16)],
+        }
+    ] * 3
+    result = machine.run(
+        {
+            cf.base: cf.image,
+            cf.base + len(cf.image): bytes(cf.bss_size),
+            src: bytes(normal),
+            rec: bytes(ack),
+            stage: raw,
+            mail: struct.pack(">4I", 4, 0, 0, 0),
+        },
+        calls,
+    )
+    assert all(r.ok and not r.clobbered for r in result)
+    assert struct.unpack(">4I", result[-1].reads[0])[:2] == (3, 102)
+
+
+@pytest.mark.parametrize("kind", ["checksum", "bounds", "open", "commit"])
+def test_cf_rejects_malformed_staging_before_any_send(cf, kind):
+    syx = config.stock("Digitakt_II_OS1.17.syx")
+    if not syx.exists():
+        pytest.skip("CF test setup firmware absent")
+    machine = CfMachine(syx)
+    src = 0x47EC0000
+    mail, stage, capture = (
+        cf.symbols[n] for n in ("dd_mail", "dd_frame", "dd_capture")
+    )
+    req = packet(1, 2, payload=[99])
+    if kind == "checksum":
+        req[7] ^= 1
+    elif kind == "bounds":
+        req = packet(1, 2, 240000, [99])
+    elif kind == "open":
+        req = packet(378, 5, payload=[99])
+    else:
+        req = packet(375, 3, 240000)
+    raw = b"".join(struct.pack(">HH", w & 65535, w >> 16) for w in req)
+    normal = bytearray(0xA80)
+    struct.pack_into(">H", normal, 0, 3)
+    result = machine.run(
+        {
+            cf.base: cf.image,
+            cf.base + len(cf.image): bytes(cf.bss_size),
+            src: bytes(normal),
+            stage: raw,
+            mail: struct.pack(">4I", 4, 0, 0, 0),
+        },
+        [
+            {
+                "pc": cf.symbols["dd_frame_hook"],
+                "args": [0xA80, src, 0xABC, 0],
+                "reads": [(mail, 16), (capture, 16)],
+            }
+        ]
+        * 3,
+    )
+    assert all(r.ok and not r.clobbered for r in result)
+    assert struct.unpack(">4I", result[-1].reads[0]) == (3, 101, 0, 0)
+    assert all(struct.unpack(">4I", r.reads[1])[1] == src for r in result)

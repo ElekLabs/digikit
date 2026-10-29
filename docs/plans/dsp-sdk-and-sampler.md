@@ -6,7 +6,36 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
-**Current checkpoint (2026-10-29): the independent cached-voice generation guard is complete.**
+**Current checkpoint (2026-10-29): private generation reopening is implemented and all six coupled cases pass.**
+The user selected: stop currently playing notes on selection; queued notes starting
+after new READY play the new bank. Exact successor tokens, sealed COMMIT, explicit
+OPEN, operation-specific ACKs and ACK-derived held-note loading grants are implemented.
+The private host writer owns whole transactions and stops permanently after uncertain
+completion, even when callers catch the error. There is no cancellation: seal B,
+retire B, then load C.
+
+Validation: 68 focused assembled diagnostic/CF tests; 195 host passes/16 skips
+(`out/runs/ddr-proof/reopen-host-checks.log`); six coupled passes
+(`out/runs/ddr-proof/generation-reopen-suite.log`, 202.04-second wall time, not a
+performance measurement). A → B sealed skip → C artifact:
+`out/runs/ddr-proof/5103437f-373f-4f40-b9f9-c2ef10a73698`. C's full readback matches
+its source, guards remain intact, a fresh note uses C, and stale-B RETIRE times out
+without changing C or preventing resumed normal frames. An independent audit confirms
+all 72,544 C frames finite and window RMS 0.0094734175. The tightened sixth-case
+finite/RMS assertions also pass in `out/runs/ddr-proof/generation-reopen-audio-check.log`;
+artifact `out/runs/ddr-proof/9a8eff19-98bf-4d2d-b643-8461f07fd6a2` retains 72,448
+finite frames and the same measured window RMS. Metrics save before audio verdicts.
+Objects re-decode 370 CF / 912 DSP instructions.
+
+The ten known reference failures and pnpm launcher failure remain in changed routing
+(`out/runs/ddr-proof/reopen-changed-checks.log`); no clean integration gate is claimed.
+[Finding 84](../findings/84-sample-generation-reopening.md) retains exact hashes,
+audio evidence and scope. Next: port the owned-bank lifecycle proof to DT2, then
+extract the reusable SDK/runtime contract for both devices. No public API or new
+hardware pool ownership is approved; hardware cache/coexistence remain separate work.
+The queued-note policy is settled.
+
+**Prior independent guard checkpoint (2026-10-29): the independent cached-voice generation guard is complete.**
 The private seventh state word preserves the six SDK cursor words; state/clear size is
 28 bytes. Forty-two focused assembled diagnostic/CF checks and all five existing coupled
 cases pass. Host checks pass 193 with 16 skipped. Coupled log:
@@ -14,8 +43,9 @@ cases pass. Host checks pass 193 with 16 skipped. Coupled log:
 measurement); normal artifact `out/runs/ddr-proof/55f9f2f3-ff27-47d5-aa3b-1d80f4054be6`,
 terminal artifact `out/runs/ddr-proof/d1974ff3-48fa-46f1-8bec-6feb6b6f9314`.
 [Finding 84](../findings/84-sample-generation-reopening.md) records the guard and proposed
-next protocol. The wire protocol remains unchanged: bank reopening is unimplemented,
-and the queued-note policy question awaits the user's answer. The ten known path-reference
+next protocol. Those coupled results predate the explicit-OPEN wire changes. The selected policy stops
+currently playing notes on selection; queued notes that start after new READY play
+the new bank. The ten known path-reference
 failures and pnpm launcher failure remain in routed changed checks; no clean gate is claimed.
 
 **Prior terminal-retirement checkpoint:**
@@ -58,8 +88,9 @@ and scoped path/diff checks pass. `test:changed` retains ten known path-referenc
 and the pnpm launcher failure (`out/runs/ddr-proof/terminal-changed-checks.log`); this is
 not a passed routed integration gate.
 
-**Next:** settle queued-note policy, then design opening a new generation, the required
-event fence and serialized backing writers while preserving “Stop old notes on selection.” The terminal bank never
+**Next:** port the owned-bank lifecycle proof to DT2, then extract the reusable
+SDK/runtime contract for both devices after the focused tighter-audio rerun and final review. Stop currently
+playing notes on selection; queued notes that start after new READY play the new bank. The terminal bank never
 reopens. Product sample APIs, Transfer UI integration, external DT2 mutation interception,
 DT2 ten-second backing and hardware ownership/cache/coexistence remain separate work.
 
@@ -72,9 +103,9 @@ Forty-two focused assembled diagnostic/CF checks pass, including six new cases f
 changed global token, fresh-note capture, denied notes and armed-like cached cursors.
 The DSP object rebuilds/re-decodes 832 instructions and passes its freshness check.
 This checkpoint does not implement reopening, queued-event fencing or serialized writers.
-Queued-note reopening policy is pending; the coordinator retains that decision and final
-integration verification. [Finding 84](../findings/84-sample-generation-reopening.md)
-records the pending policy, proposed exact-successor/sealed-COMMIT/explicit-OPEN
+Queued-note policy is selected as above; the coordinator retains final integration
+verification. [Finding 84](../findings/84-sample-generation-reopening.md)
+records the selected policy, implemented exact-successor/sealed-COMMIT/explicit-OPEN
 protocol and whole-transaction writer requirements. All five existing coupled cases
 pass with the changed consumer; no actual bank reopening is claimed.
 
@@ -215,7 +246,8 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
   both-device same-parent static voice/tail chains, submit-guard absolute references and DN2 staging/register
   semantics; record existing diagnostic capabilities and limits in finding 83.
 - [x] Prove terminal DN2 owned-bank retirement under explicit one-core, serialized adapter/hook and maskable-access assumptions, with assembled interleavings and coupled held/retriggered coverage.
-- [ ] Design reopen/new-generation publication, strict upstream stale-event fencing and serialized writers; prove DT2 retirement separately and cover external replace/unload/project reset before borrowed-view exposure. Start/end/reverse captures remain open.
+- [x] Prove private DN2 reopen/new-generation publication and serialized writers under the selected policy: queued notes starting after READY use the new bank; cached old voices cannot adopt it.
+- [ ] Prove DT2 retirement separately and cover external replace/unload/project reset before borrowed-view exposure. Start/end/reverse captures remain open.
 - [ ] Map DT2 dependencies against DN2 1.12's working voice seam and source acquisition; identify missing larger
   backing ownership/delivery without assuming DT2's pool or LP0, or restarting playback feasibility from scratch.
 - [x] Establish transferred-file format/rate and the implemented bounded float32 delivery path; the proposed
@@ -410,7 +442,8 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 - [ ] Establish hardware ownership/cache/coexistence and general capacity beyond that isolated emulator range.
 - [x] Record proposed retirement sequencing and source-survey/review results in finding 83; transport ACK is not a reader barrier.
 - [x] Implement and prove the scoped terminal DN2 retirement contract: guarded note_on/render admission/drain, closed cached/delayed callbacks, held/retriggered starts, exact/stale ACKs, pending retries and timeout.
-- [ ] Design reopening/new generations, strict producer/event fencing and serialized writer quiescence; then prove rapid A/B/C and replacement failure. Product stop granularity and public ABI remain open.
+- [x] Prove DN2 generation reopening, sealed B skip, C playback, stale controls and serialized writer failure-stop. Concurrent queued loads are covered by host tests; the coupled case executes A → sealed B → C. Strict event-age rejection is not the selected policy.
+- [ ] Establish product stop granularity and a shared public ABI after the DT2 lifecycle proof.
 - [x] Prove the packed PCM16 reader and fixed resident diagnostic consumer numerically and on coupled DN2.
 - [ ] Measure paired cost before a performance/adoption claim; product sample-picker scope remains open.
 
