@@ -1,9 +1,10 @@
-// Six-word cursor, fixed immutable packed PCM16 source until reboot.
+// Six SDK cursor words followed by a private admitted-generation token.
 // Machine-adapter entry is JUMP. Preserve I12/I13 across the kernel's CJUMP ABI.
 .SECTION/PM seg_pmco;
 .GLOBAL _dd_play_render;
 .GLOBAL _dd_play_note_on;
 .EXTERN _dd_ready;
+.EXTERN _dd_token;
 _dd_play_render:
     // Raw context before observer arithmetic; ASTATX low 12 is retained raw.
     R1 = ASTATX;
@@ -56,6 +57,15 @@ _dd_obs_render_seen:
     R0 = 0x7fffffff;
     COMP(R1, R0);
     IF GE JUMP _dd_render_fault_masked;
+    // Compare the cached generation in the same masked admission section.
+    I3 = R4;
+    R0 = DM(6, I3);
+    R0 = PASS R0;
+    IF EQ JUMP _dd_render_denied_masked;
+    R1 = DM(_dd_token);
+    COMP(R0, R1);
+    IF NE JUMP _dd_render_denied_masked;
+    R1 = DM(_dd_admitted);
     R1 = R1 + 1;
     DM(_dd_admitted) = R1;
     MODE1 = R2;
@@ -173,6 +183,7 @@ _dd_obs_note_seen:
     DM(1, I3) = R0;
     DM(2, I3) = R0;
     DM(3, I3) = R0;
+    DM(6, I3) = R0;
     R0 = 1;
     DM(5, I3) = R0;
     R0 = 65536;
@@ -193,6 +204,16 @@ _dd_obs_note_seen:
     R0 = 0x7fffffff;
     COMP(R1, R0);
     IF GE JUMP _dd_note_fault_masked;
+    // Only a fresh accepted note can bind this voice to the current bank.
+    R0 = DM(_dd_ready);
+    R1 = 1;
+    COMP(R0, R1);
+    IF NE JUMP _dd_note_denied_masked;
+    R0 = DM(_dd_token);
+    R0 = PASS R0;
+    IF EQ JUMP _dd_note_denied_masked;
+    DM(6, I3) = R0;
+    R1 = DM(_dd_admitted);
     R1 = R1 + 1;
     DM(_dd_admitted) = R1;
     MODE1 = R2;
@@ -271,6 +292,7 @@ _dd_render_silent:
     DM(2, I3) = R0;
     DM(3, I3) = R0;
     DM(4, I3) = R0;
+    DM(6, I3) = R0;
     R1 = 1;
     DM(5, I3) = R1;
     DM(_dd_play_done) = R1;

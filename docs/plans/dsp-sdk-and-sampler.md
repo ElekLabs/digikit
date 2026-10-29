@@ -6,7 +6,19 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
-**Current checkpoint (2026-10-29): the isolated DN2 terminal retirement proof passes.**
+**Current checkpoint (2026-10-29): the independent cached-voice generation guard is complete.**
+The private seventh state word preserves the six SDK cursor words; state/clear size is
+28 bytes. Forty-two focused assembled diagnostic/CF checks and all five existing coupled
+cases pass. Host checks pass 193 with 16 skipped. Coupled log:
+`out/runs/ddr-proof/voice-generation-suite.log` (119.59-second wall time, not a performance
+measurement); normal artifact `out/runs/ddr-proof/55f9f2f3-ff27-47d5-aa3b-1d80f4054be6`,
+terminal artifact `out/runs/ddr-proof/d1974ff3-48fa-46f1-8bec-6feb6b6f9314`.
+[Finding 84](../findings/84-sample-generation-reopening.md) records the guard and proposed
+next protocol. The wire protocol remains unchanged: bank reopening is unimplemented,
+and the queued-note policy question awaits the user's answer. The ten known path-reference
+failures and pnpm launcher failure remain in routed changed checks; no clean gate is claimed.
+
+**Prior terminal-retirement checkpoint:**
 All five coupled cases pass: full 960,000-byte transport and ten-second playback,
 three fresh-boot failure cases, and terminal retirement during progressing playback.
 Log: `out/runs/ddr-proof/terminal-retirement-suite.log`; its 121.38-second wall time is
@@ -46,10 +58,25 @@ and scoped path/diff checks pass. `test:changed` retains ten known path-referenc
 and the pnpm launcher failure (`out/runs/ddr-proof/terminal-changed-checks.log`); this is
 not a passed routed integration gate.
 
-**Next:** design opening a new generation, strict stale-event fencing and serialized
-backing writers while preserving “Stop old notes on selection.” The terminal bank never
+**Next:** settle queued-note policy, then design opening a new generation, the required
+event fence and serialized backing writers while preserving “Stop old notes on selection.” The terminal bank never
 reopens. Product sample APIs, Transfer UI integration, external DT2 mutation interception,
 DT2 ten-second backing and hardware ownership/cache/coexistence remain separate work.
+
+**Completed independent guard (2026-10-29): cached-voice generation fencing.** The diagnostic now
+reserves a private seventh state word (28-byte state/clear size), leaving the six-word
+SDK cursor unchanged. A fresh accepted note latches the nonzero bank token inside the
+masked admission section; render rejects a zero or mismatched cached token in that same
+section before incrementing the admitted count. Denied callbacks invalidate the token.
+Forty-two focused assembled diagnostic/CF checks pass, including six new cases for a
+changed global token, fresh-note capture, denied notes and armed-like cached cursors.
+The DSP object rebuilds/re-decodes 832 instructions and passes its freshness check.
+This checkpoint does not implement reopening, queued-event fencing or serialized writers.
+Queued-note reopening policy is pending; the coordinator retains that decision and final
+integration verification. [Finding 84](../findings/84-sample-generation-reopening.md)
+records the pending policy, proposed exact-successor/sealed-COMMIT/explicit-OPEN
+protocol and whole-transaction writer requirements. All five existing coupled cases
+pass with the changed consumer; no actual bank reopening is claimed.
 
 - Worktree: `/private/tmp/digikit-dsp-sampler`; branch: `refs/heads/sdk/dsp-sampler-discovery`.
   Keep Claude's original checkout on its cleanup branch untouched.
