@@ -66,8 +66,10 @@ The current adapter has `note_on` and `render`, with no module `note_off` or
 voice-steal callback. Therefore do not hold a reader count for a note's entire
 lifetime: an idle or stolen voice might never return to release it. Instead,
 cover each callback's actual backing accesses. Fresh notes latch the ready epoch;
-later renders check their cached epoch before dereferencing their cached pointer.
-Admission, epoch validation and count acquisition share one masked scope; checking
+later renders check their cached track identity and epoch before dereferencing
+their cached pointer. Per-track tokens can be equal, so token equality alone
+does not establish which binding owns that pointer. Admission, cached ownership,
+epoch validation and count acquisition share one masked scope; checking
 first and acquiring in a later scope would leave a retirement race.
 Admission failure or stale epoch returns `DK_DONE` without touching PCM.
 
@@ -119,5 +121,8 @@ picker can reuse the public listing service and SDK UI components, retaining the
 captured target track throughout navigation and asynchronous completion.
 
 Independent source/design review found no unsafe ordering or contradiction with
-the current adapter and macro contracts. The private two-track integration proof
-and all platform ownership obligations above remain open.
+the current adapter and macro contracts. The private two-track assembled-consumer
+proof now passes 15 focused tests and independent review; see
+[binding lifetime evidence](../findings/94-sample-binding-lifetime.md).
+Physical interrupt dispatch, runtime transport and all platform ownership
+obligations above remain open.

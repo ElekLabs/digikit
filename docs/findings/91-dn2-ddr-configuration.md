@@ -181,3 +181,26 @@ and caller-state tracing before treating it as either a real table mutation or
 stale pointer propagation; packed access width and intervening I2 reloads matter.
 Other computed writers and consumer bounds remain open. No production DDR
 reservation or free-space conclusion follows from this initialization mapping.
+
+**[C]** Original-byte follow-up resolves that specific `0x1c9118` estimate on a
+bounded first-pass path. The instruction is a Type4b **byte** store with signed
+offset -16 and premodify addressing; it leaves I2 unchanged. The following
+`0x1c911a` is also a byte store, at current I2, then advances by `0xf1` bytes.
+Applying a four-byte scale to either modifier invents the table overlap.
+
+The dispatch prologue saves `base + 0x1380c` to stack slot -31, reloads it into I2
+at `0x1c8fef`, adds `0x110` at `0x1c9032`, then subtracts `0xf0` at `0x1c90f6`.
+On the selected route through `0x1c90b2`, normal return from `0x1c4f04`, direct
+SV branch `0x1c90c8 → 0x1c90d4` and EQ fallthrough at `0x1c9104`, the store is at
+`base + 0x1381c = 0x254ab4`, outside the table ending at `0x254aa0`.
+The intervening callee saves I2 at `0x1c4f17/19` and restores it at `0x1c511f`;
+its checked continuations share that epilogue and do not overwrite the saved slot.
+There is no earlier call on that chosen dispatch route. An independent agent
+checked these instructions in the original image and public byte-access semantics
+(Programming Reference printed pp. 14-29–32 and 6-9–12).
+
+**[O]** Other branches through `0x1c4e5c` or `0xb82440`, later loop recurrence,
+indirect paths and other writers remain outside this bounded check. The local
+subtract/postincrement suggests one-byte progression when every pass takes this
+path and preserves I2; it is not a universal lifetime proof. This correction
+removes a false positive, without declaring the table immutable or DDR free.
