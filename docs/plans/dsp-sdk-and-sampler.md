@@ -7,6 +7,32 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 ## Resume here
 
 
+**Runtime integration in progress (2026-10-29):** Em asks us to continue
+through routine implementation/checkpoints and pause only for a real decision,
+with occasional progress updates. Preserve unrelated audio during sample loading
+unless Em chooses otherwise; do not inherit the diagnostic's global mute.
+
+The next independent implementation is a bounded-memory native PCM16 stream
+validator/packer in the shared runtime SDK. It accepts fragmented input and
+bounded output, validates the canonical mono 48 kHz header/trailer, and emits
+little-endian packed words with odd final-frame padding. A late validation error
+invalidates all staged output; nothing becomes READY until complete validation
+and source-consistency checks succeed. The existing pinned float32 ABI stays
+unchanged. This removes the need to stage/decode the entire ten-second source in
+the 512 KiB CF arena; it does not itself establish an immutable source lease.
+
+- [x] Map transport geometry and existing source snapshot constraints.
+- [x] Implement and test bounded streaming validation/packing with backpressure.
+Streaming checkpoint: 53 shared runtime SDK tests, the named owner pytest and
+host `no_std` compilation pass. The new parser emits only complete packed words,
+handles odd final frames and output backpressure, and fails sticky on bad/truncated
+or trailing input. It does not change the current decoder/runtime/public ABI.
+Evidence and integration gates: [finding 87](../findings/87-pcm16-streaming.md).
+
+- [ ] Establish owned DSP backing and source-consistency strategy for integration.
+- [ ] Connect serialized runtime selection/retirement/loading/publication.
+- [ ] Add module controls and user-facing selection, then prove on both devices.
+
 **Current checkpoint (2026-10-29): shared lifecycle primitives extracted.**
 Em approved implementation and parallel independent agent work. The SDK now
 provides `sdk/dsp/sample_bank.inc`: caller-bound mask/restore, admission checks,

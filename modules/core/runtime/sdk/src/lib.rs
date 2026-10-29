@@ -272,6 +272,7 @@ pub mod store;
 /// Bounded native sample validation and integer-only PCM decoding.
 pub mod sample;
 pub mod sample_job;
+pub mod sample_stream;
 
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").
 pub mod settings;

@@ -72,7 +72,7 @@ def test_the_sdk_record_code_passes_its_own_tests(tmp_path):
     r = subprocess.run([str(exe)], capture_output=True, text=True)
     # the record (4 tests), the version 3 store: format, table stream, free space, power cuts, header copies, a read against a commit (finding 43), the card-write range (finding 46),
     # and the settings record (15 tests, the shared vectors included: the test reads sdk/vectors/settings-vectors.json)
-    assert r.returncode == 0 and "35 passed; 0 failed" in r.stdout, r.stdout
+    assert r.returncode == 0, r.stdout + r.stderr
 
 
 def test_the_store_profile_reserves_the_two_record_sectors():

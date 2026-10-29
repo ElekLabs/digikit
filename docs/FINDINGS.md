@@ -147,3 +147,6 @@ records current-image transport and candidate-bank audits, port validation and l
 
 SDK follow-up: [sample-bank lifecycle primitives](findings/86-sample-bank-sdk.md)
 records the reusable extraction, independent bindings and exact firmware identity.
+
+Runtime sample follow-up: [bounded PCM16 streaming](findings/87-pcm16-streaming.md)
+records source packing without whole-file staging and remaining integration gates.
