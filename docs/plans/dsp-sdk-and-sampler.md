@@ -27,6 +27,17 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   Use git log for the final implementation checkpoint commit.
   No transport or core-semantics change was made for the call-frame fault. No hardware run is authorized.
   [Finding 79](../findings/79-sample-bank-proof.md) records the evidence and remaining limits.
+- Capacity discovery is recorded in [finding 80](../findings/80-sampler-capacity-and-replacement.md): four snapshots
+  establish baseline and proof-only module pools, not stock free RAM or general coexistence. The CF arena is
+  512 KiB on both devices; shared DSP module areas are 512 KiB DT2 and 320 KiB DN2. Decoded CF source memory
+  is freed after terminal transport; only the DSP bank stays pinned until restart.
+  Em explicitly chose “Stop old notes on selection.” Length remains an unanswered question. A replacement
+  barrier and consumer generation contract remain proposed, not implemented. Investigate PCM16 resident storage
+  with native numerical proof and a paired A/B after the lifetime protocol; no speed or streaming claim is established.
+  Next recommended proof keeps the current 8,192-frame float32 bank: stop and reload only after an explicit
+  DSP reader-quiescence handshake and generation guard. DSP-link ACK means receiver processing, not idle
+  voice readers; a READY=0 write ACK is not a barrier. The four-word descriptor has no generation or reader
+  tracking, so API/ABI design is required. Keep capacity, format and new-pool changes outside that proof.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -278,6 +289,15 @@ and format, and close every successfully opened handle. First emulator proofs ex
 writes; do not claim concurrent DT2 overwrite/delete support until its handle behavior is tested or an enforceable
 exclusion exists. Bound work per UI pass; synchronous read latency must still be measured.
 
+**Capacity and replacement follow-up:**
+
+- [x] Measure no-dynamic-module and proof-only runtime capacity on both current images; persist provenance and limits.
+- [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
+- [ ] Obtain the sample-length target; choose capacity/headroom without assuming a new available pool.
+- [ ] Next bounded proof: keep the 8,192-frame float32 bank and design/prove explicit DSP reader quiescence plus
+  consumer generations before stop-and-reload; existing transport ACK is not this barrier. Sample-picker scope remains open.
+- [ ] After the lifetime protocol, investigate PCM16 resident-bank numerical behavior and paired cost before adoption.
+
 **Approved proof work:**
 
 - [x] Agree declaration/record and status contracts here, then assign disjoint SDK/packer and DT2 source-adapter
@@ -470,8 +490,8 @@ Implementation and bounded-proof checkpoint (product scope remains open):
   calls (same resulting path, no production change). Repository pathcheck confirms the remaining ten known
   baseline references in five unchanged files; log: `out/runs/dsp-sdk-checks/sdk-call-pathcheck-after-test-path.log`.
   Scoped checks of that source file and these documents pass. The full routed gate has not run.
-- Next proposed decision: production memory and lifetime for longer samples, safe replacement while voices
-  are active, and a sample picker. None is implemented. The current limit is 8,192 mono frames at 48 kHz
+- Next proposed decision: production memory and lifetime for longer samples, stop-old-notes replacement with
+  acknowledged DSP quiescence and a consumer generation contract, and a sample picker. None is implemented. The current limit is 8,192 mono frames at 48 kHz
   (about 171 ms), with session-pinned immutable source storage and fixed proof paths. Continue stock-reader
   investigation separately; no stock-quality equivalence, coexistence, performance or hardware claim follows.
 - A standalone native-boot diagnostic halted after six instructions, before reaching the target. It is unusable
