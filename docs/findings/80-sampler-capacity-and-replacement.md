@@ -99,6 +99,13 @@ The quiescence and generation requirements above still apply to eventual replace
 is no longer the immediate implementation priority. PCM16 resident-reader numerical proof and a paired A/B remain
 possible later investigations, not an adopted format or speed claim.
 
+**[C]** [Finding 81](81-stock-sampler-dependencies.md) supersedes the immediate investigation order above:
+use stock DT2 OneShot to capture selected slot → voice pointer/PCM and lifecycle transitions before designing
+adapter quiescence. Derive independent shared packed-PCM16 SDK semantics with device-specific ready views;
+do not copy the whole stock machine. DN2 already has working playback/source acquisition: investigate missing
+larger backing/delivery against those concrete dependencies, not feasibility from scratch. No new implementation
+or stereo decision follows.
+
 ## Stock capacity and backend feasibility
 
 **[D]** Elektron's official DT2 user manual documents **400 MB per project**, approximately 72 minutes mono or
@@ -120,10 +127,10 @@ established delivery path for such a pool. A ColdFire cave or CF module arena do
 Do not assume the DT2 pool, stock sampler or LP0 path exists on DN2. DN2 feasibility for the ten-second target
 remains unresolved.
 
-**[O]** Next bounded static work: trace DT2 slot allocation, reference/lifetime, reclaim and page-copy ownership
-on 1.17; separately map DN2 external DSP ranges to physical backing and current readers/writers/owners on 1.12,
-then identify a legitimate allocation and delivery contract. Decide whether a bounded probe is justified only
-after that mapping; do not probe or claim new available RAM from address appearance alone.
+**[O]** Current next steps are the stock-machine-led proof and dependency mapping in finding 81. The newly
+recorded project release/reset and preview correction refine these earlier candidates. DN2 external ranges are
+a supporting question only when tied to a missing backing/delivery dependency; address appearance alone still
+proves neither available RAM nor safe ownership.
 
 The following capacity ceilings spend the entire reserved DSP area on audio, **before code, descriptors,
 alignment, other modules and safety headroom**. They are arithmetic bounds, not playable product limits.
