@@ -494,8 +494,8 @@ and validates a private snapshot before delivery.
 Once delivery starts, the bank stays pinned until restart, including on failure; no replacement or eviction is
 supported. Runtime publishes the immutable descriptor's READY word last, after payload and view acknowledgements.
 The [sample-proof fixture](../tests/fixtures/modules/sample-proof/README.md) demonstrates the declarations, service
-calls and tested DSP bridge. It is a bounded proof fixture; transferred-file playback runs on both devices remain
-pending, and it is not a product sampler.
+calls and tested DSP bridge. Transferred-file playback acceptance passes in the emulator on DT2 OS 1.17 and
+DN2 OS 1.12. Hardware behavior and product capacity/replacement/selection remain unproved; this is not a product sampler.
 
 Names a module may import (from `[[import]]` in `sdk/sdk.toml`):
 
