@@ -339,6 +339,41 @@ fn run(a: Args) -> Result<()> {
                     }
                 }
             }
+            // A content module declares its machines in its objects (.dk.desc), so its gallery.json needs them: a second library loads
+            // (and builds when stale) the objects, after the files above are written, which the build reads.
+            let with_gallery: Vec<String> = lib
+                .modules
+                .iter()
+                .filter(|m| patchkit::typed::has_typed(&m.manifest))
+                .map(|m| m.id().to_string())
+                .collect();
+            let content: Vec<String> = lib
+                .modules
+                .iter()
+                .filter(|m| !with_gallery.iter().any(|g| g == m.id()))
+                .filter(|m| only.is_empty() || only.iter().any(|o| o == m.id()))
+                .map(|m| m.id().to_string())
+                .collect();
+            if !content.is_empty() {
+                let full = library_with(&a.root, rest, true, Some(&content))?;
+                for (path, text) in patchkit::modgen::generate_many(&full, &models, &content)? {
+                    let have = std::fs::read_to_string(&path).ok();
+                    if have.as_deref() == Some(text.as_str()) {
+                        continue;
+                    }
+                    if check {
+                        println!("stale    {}", path.display());
+                        stale += 1;
+                    } else {
+                        if let Some(d) = path.parent() {
+                            std::fs::create_dir_all(d)
+                                .map_err(|e| Error(format!("{}: {e}", d.display())))?;
+                        }
+                        write(&path.to_string_lossy(), text.as_bytes())?;
+                        println!("wrote    {}", path.display());
+                    }
+                }
+            }
             for (rel, text) in patchkit::sdkgen::generate(&a.root)? {
                 let path = a.root.join(&rel);
                 let have = std::fs::read_to_string(&path).ok();

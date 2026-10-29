@@ -27,6 +27,17 @@ device = "dt2"
 firmware = "1.17"
 modules = ["test/rust-demo"]
 
+# The ColdFire C demo: its functions are called in place (tests/fixtures/modules/cf-demo/tests/smoke.toml).
+[[cell]]
+device = "dt2"
+firmware = "1.17"
+modules = ["test/cf-demo"]
+
+[[cell]]
+device = "dn2"
+firmware = "1.12"
+modules = ["test/cf-demo"]
+
 [[cell]]
 device = "dn2"
 firmware = "1.12"
