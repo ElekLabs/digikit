@@ -11,7 +11,7 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 Changing a track's sample stops that track's old notes; unrelated tracks keep
 playing. Em confirmed this interpretation and asked us to continue until a real
 decision is needed. Parser checkpoint `db3514f7`, audit checkpoint `bc7ad3a6` and bounded source
-checkpoint `3b402543` are pushed. The existing spare-frame channel has a theoretical 72,000-byte/second
+checkpoint `3b402543` are pushed. Source-track checkpoint is `03b6310e`. The existing spare-frame channel has a theoretical 72,000-byte/second
 ceiling on DN2; 960,000 bytes require at least 13.33 seconds before overhead.
 This is not measured loading time. The diagnostic's global mute is unsuitable
 for runtime integration.
@@ -29,9 +29,16 @@ Current parallel work (source cursor reviewed; 59 SDK tests, no_std and owner py
   delayed-note latching and invalid-owner isolation; 17 focused + 8 adapter tests,
   generation/object/header checks and independent review pass (finding 90).
 - [ ] Integrate owned backing, per-track generation binding and live transport.
-- [ ] Audit newly found DN2 generic 4 KiB FlexBus sender `0x400cfb0e` and DSP
-  LP0 receiver setup as a bulk-delivery alternative; unmatched DT2 functions did
-  not mean the sender was absent.
+- [x] Audit DN2 generic 4 KiB FlexBus sender and generic LP0 driver ([finding 92](../findings/92-dn2-native-bulk-seam.md)); empty function matches did not mean absence.
+- [x] Enable/test DN2 1.12 emulator LP0 delivery: six peer tests and one profile
+  test pass, reviewed; runtime-only native build, no generated-core changes.
+- [x] Establish generic driver setup/callback/submit ABI and preflight obligations (finding 92).
+- [ ] Implement/prove private receive setup/completion/rearm and byte-exact bank
+  transfer during normal audio frames. Refuse owned/active port; initialize from
+  task context. Existing driver open and submit mutate state before failure.
+  Payoff: bypass the 72 kB/s SPI ceiling and occupied reply rows for payload.
+  Confidence: moderate until receive setup and concurrent audio run; reuse the
+  experimental bank, with no new production reservation or hardware operations.
 
 Checkpoint checks: changed-document pathcheck, diff whitespace and direct generated
 JSON formatting pass. Routed `test:changed` passes scoped Python/layer checks but

@@ -58,7 +58,8 @@ softfloat_abi = true
 # Section 7 is byte-identical to 1.11, so the idle loop addresses carry over.
 # Has a port lockfile (devices/ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
 port = true
-dsp = { image = "dn2-1.12", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab }
+# Audited LP0 bulk-transport capability (finding 92), not stock sampling support.
+dsp = { image = "dn2-1.12", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab, sample_link = "lp0" }
 
 
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
