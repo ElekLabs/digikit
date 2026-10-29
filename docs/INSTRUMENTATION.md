@@ -136,6 +136,31 @@ both on (about 1 billion instructions).
 
 `packages/emulator/boot/examples/cf_script.rs` runs a patched image with a card through a JSON script of runs, pokes, peeks, waits and direct calls with these variables set; `tools/patchkit/pk_dkrt.py proof` and `tools/patchkit/pk_cdemo.py proof` are its users (findings 29 and 35; the hot-load `pk_registry.py proof`, which called the firmware's own list getter through a stub it poked into free RAM, is archived with hot reload).
 
+## Scripted patched runs (ColdFire with the frame interrupt)
+
+`packages/emulator/coupled/examples/zero_patched.rs` runs a patched build (a mod's OS file, or the stock file itself)
+with the DSP side answering zeros, so the frame interrupt and the UI run as on a unit, and takes one command a line
+on stdin; another program (a mod's own test scripts, say) drives it. `cf_script` above runs ColdFire only, without
+frames; the daemon runs a patched build ColdFire-only too.
+
+```bash
+cargo build --release -p digi-coupled --example zero_patched
+```
+
+`zero_patched STOCK.syx BUILD.syx CF_STATE [CARD_SECTORS]`: `CF_STATE` is made on the first run (a cold boot to the
+main screen) and reused; `CARD_SECTORS` is a `card-save` file the card starts with. Its header lists the commands:
+keys, encoders, steps, the OLED frame and the LEDs, `peek`, `poke` and `dump` of guest memory, `card-save`, and these
+debugger instruments over the ones above:
+
+| command | instrument |
+|---|---|
+| `guard LO-HI[,..]`, `guards`, `guard off` | the write-range guards: every CPU store into the ranges, with the storing PC (the first 64, then a count) |
+| `probe PC..`, `probes` | execution counts of PCs |
+| `regs-at PC..`, `reglog PATH` | a breakpoint that logs and goes on: D0-D7, A0-A7 and the four longwords at A7 (the caller, on a function's first instruction), as JSON lines |
+| `run-until PC MAX`, `regs` | run to a PC; the registers |
+
+While a guard is armed the bus single-steps, as with `--guard`.
+
 ## Task stack high-water (ColdFire)
 
 `DIGI_STACK_WATCH=LO-HI[,..]` (hex, HI exclusive) names task stacks. Every CPU store into one is tracked after the write-watch
