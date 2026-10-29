@@ -139,3 +139,45 @@ instruction `0xb84597` has raw fields `l/w/x=0/0/0`, a byte access. Its `0xd3`
 post-modifier advances from object offset `0x400119` to `0x4001ec`. Applying
 blanket four-byte scaling would invent an overrun; raw access semantics control
 the bound, not the pointer table's estimate.
+
+## Output-pointer table initializer
+
+**[D]** A targeted follow-up resolves the initializer of the previously open
+table at `0x254a60`. The parent traced the computed field through current query
+listings; an independent agent checked the original DN2 1.12 section-7 bytes
+against the SHA above and the public Programming Reference.
+
+Boot `0x1c14a2` passes base `0x241298` to `0x1c8e1c`. Its valid-rate branch at
+`0x1c8e42` is delayed: both setup instructions at `0x1c8e45/48` execute before
+continuation `0x1c8e67`, setting R11=0 and preserving the base in R5. The loop
+calls `0x1c8b6d` at `0x1c8ecc` with that base and track index 0..15. Callee
+register preservation and the increment/comparison maintain those values.
+
+The callee forms the table address as `base + 0x1387c - 0xb4`. At `0x1c8bfd`,
+the parallel memory operation stores incoming R2 while the compute operation
+produces a new shifted R2 for later use. Normal-word premodify addressing scales
+the track modifier by four without updating the table base. The resulting mapping is:
+
+```text
+table[track] at 0x254a60 + 4*track = 0x804acf90 + 128*track
+track = 0..15
+```
+
+The table occupies `[0x254a60,0x254aa0)`. Sixteen SIMD pair stores at
+`0x1c8c18..36`, with eight-byte advancement, clear 128 bytes per target.
+The combined initialized output region is `[0x804acf90,0x804ad790)`, 2,048 bytes.
+Public semantics: [SHARC+ Programming Reference](../sharc/SOURCES.md), Rev 1.5,
+printed pp. 3-2, 3-22 and 14-12–15. The separate pointer assigned at
+`0x1c8c05/0b/0d` is `0x804ad790 + (track << 15)`; this establishes pointer values,
+not a 32-KiB usable allocation or every consumer's access bound.
+
+**[C]** Two analysis traps matter here. A function-boundary label at `0x1c8e67`
+does not make it independent of the earlier branch's delay-slot setup. Also,
+the table has sixteen entries, not eight: `0x254a84` is slot 9, inside it.
+
+**[O]** This closes initializer provenance, not the table's whole lifetime.
+The database's resolved store candidate `0x1c9118 → 0x254a84` needs instruction
+and caller-state tracing before treating it as either a real table mutation or
+stale pointer propagation; packed access width and intervening I2 reloads matter.
+Other computed writers and consumer bounds remain open. No production DDR
+reservation or free-space conclusion follows from this initialization mapping.
