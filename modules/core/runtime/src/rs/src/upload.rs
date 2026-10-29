@@ -1138,6 +1138,20 @@ unsafe fn cmd_logcfg(seq: u32, body: *const u8, blen: usize) -> i32 {
     reply(CMD_LOGCFG,seq, OK, 10)
 }
 
+/// FAULT (dev): body `u8 what`; 1 makes the runtime panic with a failed bounds check, to test the fault path. It does not reply: the device resets.
+/// Other values: `E_PROTO`.
+unsafe fn cmd_fault(seq: u32, body: *const u8, blen: usize) -> i32 {
+    if blen != 1 {
+        return reply(CMD_FAULT, seq, E_MSG, 0);
+    }
+    if *body != 1 {
+        return reply(CMD_FAULT, seq, E_PROTO, 0);
+    }
+    let a = [1u8, 2, 3, 4];
+    let i = core::hint::black_box(a.len() + 3);
+    reply(CMD_FAULT, seq, OK, a[i] as usize)
+}
+
 /// SELECT (runtime 4): save the selection record, the same `boot::selection_set` the menu's APPLY & RESTART calls (so the card range check and
 /// the "blank or ours" rule apply). Body: `u8 n`, then `n` store paths, each NUL terminated. Status: 0, `E_MSG` (malformed), `E_INUSE` (card
 /// not writable), or the selection code (`E_SEL_COUNT`, `E_SEL_PATH`, `E_SEL_WRITE`, `E_CARD_RO`). Takes effect at the next boot.
@@ -1348,6 +1362,9 @@ unsafe fn h_peek(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
 unsafe fn h_logcfg(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
     cmd_logcfg(seq, body, blen)
 }
+unsafe fn h_fault(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
+    cmd_fault(seq, body, blen)
+}
 unsafe fn h_select(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
     cmd_select(seq, body, blen)
 }
@@ -1356,7 +1373,7 @@ unsafe fn h_restart(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> 
 }
 
 /// The built-in commands, looked up one after the other (a jump table is not ColdFire code).
-static CMDS: [Cmd; 19] = [
+static CMDS: [Cmd; 20] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG, h: h_info },
     Cmd { cmd: CMD_LIST, flags: 0, h: h_list },
     Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },
@@ -1374,6 +1391,7 @@ static CMDS: [Cmd; 19] = [
     Cmd { cmd: CMD_LOG, flags: NOLOG, h: h_log },
     Cmd { cmd: CMD_PEEK, flags: NOLOG, h: h_peek },
     Cmd { cmd: CMD_LOGCFG, flags: NOLOG, h: h_logcfg },
+    Cmd { cmd: CMD_FAULT, flags: 0, h: h_fault },
     Cmd { cmd: CMD_SELECT, flags: BIG, h: h_select },
     Cmd { cmd: CMD_RESTART, flags: 0, h: h_restart },
 ];

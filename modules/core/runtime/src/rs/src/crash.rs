@@ -49,7 +49,7 @@ const W_TAILN: usize = 64;
 const W_TAIL: usize = 65; // 8 events of 8 words
 pub const TAIL: usize = 8;
 // version 2: the kind and the DSP hang fields follow the last events
-const W_HKIND: usize = W_TAIL + TAIL * 8; // 1 CPU crash, 2 DSP stopped
+const W_HKIND: usize = W_TAIL + TAIL * 8; // 1 CPU crash, 2 DSP stopped, 3 panic
 const W_HSITE: usize = W_HKIND + 1; // dsp::SITE_*
 const W_HID: usize = W_HKIND + 2; // machine type (voice) or the effect table row's byte offset (effects)
 const W_HSTAGE: usize = W_HKIND + 3; // the core step: 4 CALL, 5 RET
@@ -73,7 +73,7 @@ fn rec() -> *mut u32 {
 /// What `at_boot` found, kept for `dkrt_diag`, the proofs and the boot code.
 #[no_mangle]
 pub static mut DKRT_CRASH: CrashSeen =
-    CrashSeen { found: 0, pc: 0, vec: 0, module: u32::MAX, stable: 0, ram_kept: 0, installed: 0, bad: 0, hang: 0, saved: 0 };
+    CrashSeen { found: 0, pc: 0, vec: 0, module: u32::MAX, stable: 0, ram_kept: 0, installed: 0, bad: 0, hang: 0, saved: 0, panic: 0 };
 
 #[repr(C)]
 pub struct CrashSeen {
@@ -93,6 +93,8 @@ pub struct CrashSeen {
     pub hang: u32,
     /// `dk/fault` was written from the record (result of the put: 1 written, 0 not).
     pub saved: u32,
+    /// The record was a panic record of the runtime (1: not a crash; `found` stays 0 and the boot counter is not touched).
+    pub panic: u32,
 }
 
 pub fn seen() -> &'static CrashSeen {
@@ -176,16 +178,7 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
         i += 1;
     }
     write_volatile(r.add(W_REGS + 15), a7);
-    // 32 stack words, when the pointer is in DDR and they fit
-    i = 0;
-    while i < STACK_WORDS {
-        let at = a7.wrapping_add(4 * i as u32);
-        let ok = a7 & 3 == 0
-            && a7 >= DDR_CACHED_BASE
-            && at < DDR_CACHED_BASE + DDR_BYTES - 4;
-        write_volatile(r.add(W_STACK + i), if ok { read_volatile(at as usize as *const u32) } else { 0 });
-        i += 1;
-    }
+    copy_stack(r, a7);
     // the state of the runtime: boot stable, tasks in slots, the module that holds the PC
     let s = st();
     write_volatile(r.add(W_STABLE), crate::boot::info().stable);
@@ -229,7 +222,21 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
     }
     write_volatile(r.add(W_HKIND), dkrt_sdk::fault::KIND_CPU);
     write_volatile(r.add(W_HRT), RUNTIME_VERSION);
-    seal()
+    seal(true);
+    loop {}
+}
+
+/// 32 stack words from `a7` into the record, when the pointer is in DDR and they fit (else 0).
+unsafe fn copy_stack(r: *mut u32, a7: u32) {
+    let mut i = 0;
+    while i < STACK_WORDS {
+        let at = a7.wrapping_add(4 * i as u32);
+        let ok = a7 & 3 == 0
+            && a7 >= DDR_CACHED_BASE
+            && at < DDR_CACHED_BASE + DDR_BYTES - 4;
+        write_volatile(r.add(W_STACK + i), if ok { read_volatile(at as usize as *const u32) } else { 0 });
+        i += 1;
+    }
 }
 
 /// Write the short name of module record `m` (the part of its name after the last `/`, up to 16 bytes, NUL padded) into `W_HNAME`.
@@ -260,8 +267,8 @@ unsafe fn write_short_name(r: *mut u32, m: usize) {
     }
 }
 
-/// The CRC, the magic last, the flush and the soft reset. Never returns.
-unsafe fn seal() -> ! {
+/// The CRC, the magic last and the flush; then the soft reset when `reset` (which does not return).
+unsafe fn seal(reset: bool) {
     let r = rec();
     let mut v = [0u32; REC_WORDS];
     let mut i = 0;
@@ -274,7 +281,61 @@ unsafe fn seal() -> ! {
     write_volatile(r.add(W_CRC), crc);
     write_volatile(r.add(W_MAGIC), MAGIC); // the record is valid from here
     dkrt_flush(KEEP_BASE, (REC_WORDS * 4) as u32);
-    dkrt_soft_reset()
+    if reset {
+        dkrt_soft_reset()
+    }
+}
+
+/// Start a record of `kind` (version 2) for the hang and the panic: zero it (the magic first, so an older record is not valid while this one is
+/// written), then the header every kind has: version, time, stable, no module, the last events and the runtime version.
+unsafe fn begin(kind: u32) {
+    let r = rec();
+    write_volatile(r.add(W_MAGIC), 0);
+    let mut i = 2;
+    while i < W_CRC {
+        write_volatile(r.add(i), 0);
+        i += 1;
+    }
+    write_volatile(r.add(W_VERSION), VERSION);
+    write_volatile(r.add(W_TIME), crate::fw_blocks().unwrap_or(0));
+    write_volatile(r.add(W_STABLE), crate::boot::info().stable);
+    write_volatile(r.add(W_MODULE), u32::MAX);
+    write_tail(r);
+    write_volatile(r.add(W_HKIND), kind);
+    write_volatile(r.add(W_HRT), RUNTIME_VERSION);
+}
+
+/// The name a panic record carries (what ABOUT shows after `IN`).
+const PANIC_NAME: [u8; 16] = *b"runtime\0\0\0\0\0\0\0\0\0";
+
+/// A panic of the runtime's Rust code: `panic_handler` calls this. The toolchain strips the file and line of a panic, so nothing of `PanicInfo` is used;
+/// the record holds the stack (the return addresses lead to the panicking code). The settings store is not touched: the panic may be inside it. Never returns.
+pub fn panic() -> ! {
+    unsafe {
+        // the first fault only: a panic inside this function, or after a CPU exception, keeps the record
+        if read_volatile(addr_of!(IN_EXC)) != 0 {
+            loop {}
+        }
+        write_volatile(addr_of_mut!(IN_EXC), 1);
+        begin(dkrt_sdk::fault::KIND_PANIC);
+        let r = rec();
+        let mark = 0u32;
+        let a7 = core::hint::black_box(addr_of!(mark)) as usize as u32;
+        write_volatile(r.add(W_A7), a7);
+        copy_stack(r, a7);
+        let mut k = 0;
+        while k < 4 {
+            let n = &PANIC_NAME[4 * k..4 * k + 4];
+            let w = u32::from_be_bytes([n[0], n[1], n[2], n[3]]);
+            write_volatile(r.add(W_NAME + k), w);
+            write_volatile(r.add(W_HNAME + k), w);
+            k += 1;
+        }
+        // in safe mode a reset would loop; during an OS upgrade the device must not reset
+        let reset = crate::boot::info().safe == 0 && !crate::os_upgrade_active();
+        seal(reset);
+        loop {}
+    }
 }
 
 /// What the heartbeat watch knows when the DSP has stopped (dlog.rs).
@@ -291,17 +352,9 @@ pub struct Hang {
 
 /// Write the hang record of a stopped DSP (version 2, kind 2) into the keep area and soft-reset. Never returns.
 pub unsafe fn write_hang(h: &Hang) -> ! {
+    begin(dkrt_sdk::fault::KIND_DSP);
     let r = rec();
-    write_volatile(r.add(W_MAGIC), 0); // an older record is not valid while this one is written
-    let mut i = 2;
-    while i < REC_WORDS - 1 {
-        write_volatile(r.add(i), 0);
-        i += 1;
-    }
-    write_volatile(r.add(W_VERSION), VERSION);
-    write_volatile(r.add(W_TIME), crate::fw_blocks().unwrap_or(0));
-    write_volatile(r.add(W_STABLE), crate::boot::info().stable);
-    write_volatile(r.add(W_MODULE), u32::MAX);
+    let mut i;
     if h.module < crate::MAX_MODULES {
         let md = &st().modules[h.module];
         write_volatile(r.add(W_MODULE), h.module as u32);
@@ -312,20 +365,18 @@ pub unsafe fn write_hang(h: &Hang) -> ! {
         }
         write_short_name(r, h.module);
     }
-    write_tail(r);
-    write_volatile(r.add(W_HKIND), dkrt_sdk::fault::KIND_DSP);
     write_volatile(r.add(W_HSITE), h.site);
     write_volatile(r.add(W_HID), h.id);
     write_volatile(r.add(W_HSTAGE), h.stage);
     write_volatile(r.add(W_HSTEP), h.step);
     write_volatile(r.add(W_HLAST), h.last);
-    write_volatile(r.add(W_HRT), RUNTIME_VERSION);
     i = 0;
     while i < dlog::DIAG_WORDS {
         write_volatile(r.add(W_HDIAG + i), h.diag[i]);
         i += 1;
     }
-    seal()
+    seal(true);
+    loop {}
 }
 
 /// The last events of the log into the record (`W_TAIL`, `W_TAILN`).
@@ -403,6 +454,16 @@ pub unsafe fn at_boot() -> bool {
         c.saved = store_fault(&f);
         return true;
     }
+    if kind == dkrt_sdk::fault::KIND_PANIC {
+        // a panic record: no PC, the stack holds the way to the panic; boot.rs turns it into safe mode (SAFE_PANIC)
+        c.panic = 1;
+        c.module = module_idx;
+        dlog::ev(logk::FAULT_FOUND, e, [kind, v[W_A7], 0, 0, module_idx]);
+        log_stack(&v);
+        log_tail(&v);
+        c.saved = store_fault(&f);
+        return true;
+    }
     c.found = 1;
     c.pc = v[W_PC];
     c.vec = v[W_VEC] & 0xff;
@@ -417,14 +478,20 @@ pub unsafe fn at_boot() -> bool {
         dlog::ev(logk::CRASH_REG, e, [k as u32, v[W_REGS + k], v[W_REGS + k + 1], v[W_REGS + k + 2], v[W_REGS + k + 3]]);
         k += 4;
     }
-    k = 0;
+    log_stack(&v);
+    log_tail(&v);
+    c.saved = store_fault(&f);
+    true
+}
+
+/// The stack words of the record as `CRASH_STACK` events (four words each).
+unsafe fn log_stack(v: &[u32; REC_WORDS]) {
+    let e = logk::F_ERROR;
+    let mut k = 0;
     while k < STACK_WORDS {
         dlog::ev(logk::CRASH_STACK, e, [k as u32, v[W_STACK + k], v[W_STACK + k + 1], v[W_STACK + k + 2], v[W_STACK + k + 3]]);
         k += 4;
     }
-    log_tail(&v);
-    c.saved = store_fault(&f);
-    true
 }
 
 /// The events before the stop, oldest first, two log events each: (seq, time, kind << 16 | flags) and the five arguments.

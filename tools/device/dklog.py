@@ -112,7 +112,7 @@ DIAG_NAMES = (
 
 # The fault table's sites (the `site` byte of a fault) and the core steps (stage 4 and 5 of the breadcrumb).
 SITES = {0: "unknown", 1: "voice", 2: "fx master", 3: "fx send"}
-FAULT_KINDS = {1: "cpu crash", 2: "dsp stopped"}
+FAULT_KINDS = {1: "cpu crash", 2: "dsp stopped", 3: "cpu panic"}
 FAULT_MAGIC = 0x464C5431  # "FLT1": the value of the settings key dk/fault
 FAULT_BYTES = 40
 FX_ROW_BYTES = 96
@@ -612,14 +612,17 @@ def fault_value(raw: bytes) -> dict[str, Any] | None:
 
 def fault_rows(f: dict[str, Any]) -> list[str]:
     """The ABOUT rows of a fault (the same text as `dkrt_sdk::fault::rows`)."""
-    rows = ["FAULT: CPU CRASH" if f["kind"] == "cpu crash" else "FAULT: DSP STOP"]
+    head = {"cpu crash": "FAULT: CPU CRASH", "cpu panic": "FAULT: CPU PANIC"}
+    rows = [head.get(f["kind"], "FAULT: DSP STOP")]
     name = f["module"].rsplit("/", 1)[-1].upper()[:15]
     rows.append(
         f"IN {name}"
         if name
         else ("IN FIRMWARE" if f["kind"] == "cpu crash" else "IN UNKNOWN")
     )
-    if f["kind"] == "cpu crash":
+    if f["kind"] == "cpu panic":
+        pass
+    elif f["kind"] == "cpu crash":
         rows.append(f"PC {f['pc']:08X}")
     elif f["site"] == "unknown":
         rows.append("SITE UNKNOWN")
@@ -710,15 +713,66 @@ def hang_text(rec: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def panic_record(
+    events: list[tuple[int, int, int, int, tuple[int, ...]]],
+) -> dict[str, Any] | None:
+    """The last panic record in a list of events: the FAULT_FOUND event of kind 3 (its second argument is the stack pointer), the stack words and the last events."""
+    starts = [
+        i
+        for i, e in enumerate(events)
+        if e[2] == K["FAULT_FOUND"] and (e[4][0] & 0xFF) == 3
+    ]
+    if not starts:
+        return None
+    i = starts[-1]
+    rec: dict[str, Any] = {
+        "seq": events[i][0],
+        "panic": True,
+        "a7": events[i][4][1],
+        "module": None,
+        "regs": {},
+        "stack": {},
+        "tail": [],
+    }
+    pending: tuple[int, ...] | None = None
+    for _seq, _t, kind, _fl, a in events[i + 1 :]:
+        if kind == K["CRASH_STACK"]:
+            for j, w in enumerate(a[1:]):
+                rec["stack"][a[0] + j] = w
+        elif kind == K["CRASH_TAIL"]:
+            if pending is None:
+                pending = a
+            else:
+                rec["tail"].append(
+                    (
+                        pending[0],
+                        pending[1],
+                        pending[2] >> 16,
+                        pending[2] & 0xFFFF,
+                        (pending[3], pending[4], a[1], a[2], a[3]),
+                    )
+                )
+                pending = None
+        else:
+            break
+    return rec
+
+
 def crash_text(rec: dict[str, Any]) -> str:
     if rec.get("corrupt"):
         return f"a crash record was found at the boot (event {rec['seq']}) but it failed its CRC"
     m = rec["module"]
-    lines = [
-        f"crash found at boot (log event {rec['seq']}), crashed {rec['crash_blocks'] / BLOCKS_PER_SECOND:.1f} s after the boot before started",
-        f"  vector {rec['vector']} ({rec['vector_name']}), format {rec['format']}, sr {rec['sr']:04x}",
-        f"  pc {rec['pc']:08x}   a7 {rec['a7']:08x}",
-    ]
+    if rec.get("panic"):
+        lines = [
+            f"CPU PANIC in runtime found at boot (log event {rec['seq']}); the file and line are not kept, the stack holds the way to it",
+            f"  a7 {rec['a7']:08x}",
+        ]
+    else:
+        lines = [
+            f"crash found at boot (log event {rec['seq']}), crashed {rec['crash_blocks'] / BLOCKS_PER_SECOND:.1f} s after the boot before started",
+            f"  vector {rec['vector']} ({rec['vector_name']}), format {rec['format']}, sr {rec['sr']:04x}",
+            f"  pc {rec['pc']:08x}   a7 {rec['a7']:08x}",
+        ]
     if m is not None:
         where = (
             f"module {m['name']!r} (index {m['index']})"
@@ -902,7 +956,12 @@ def main(argv: list[str] | None = None) -> int:
             _, _, evs = read_all(up)
             rec = crash_record(evs)
             hang = hang_record(evs)
-            if hang and (not rec or hang["seq"] > rec.get("seq", 0)):
+            panic = panic_record(evs)
+            if panic and panic["seq"] > max(
+                rec.get("seq", 0) if rec else 0, hang["seq"] if hang else 0
+            ):
+                print(crash_text(panic))
+            elif hang and (not rec or hang["seq"] > rec.get("seq", 0)):
                 print(hang_text(hang))
             else:
                 print(

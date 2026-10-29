@@ -51,6 +51,8 @@
 #define DKRT_SAFE_FLAG 3
 /* DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen). */
 #define DKRT_SAFE_DSP 4
+/* DkrtBootInfo.reason: the boot before left a panic record (the runtime's Rust code panicked). */
+#define DKRT_SAFE_PANIC 5
 /* Rows of DkrtDiag.fault_text. */
 #define DKRT_FAULT_ROWS 4
 /* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode. */

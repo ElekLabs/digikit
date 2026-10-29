@@ -42,6 +42,7 @@ test('dk/fault decodes to the site, the steps and the module', () => {
   const f = decodeFault(faultValue(2, 3, 4, 96, 3, 0x600304, 'test/dyn-fx-hang'))!;
   expect(f).toMatchObject({ kind: 'dsp', site: 3, stage: 4, id: 96, step: 3, module: 'test/dyn-fx-hang' });
   expect(decodeFault(faultValue(1, 0, 0, 0, 0, 0x12a4f0, 'x'))).toMatchObject({ kind: 'cpu', at: 0x12a4f0 });
+  expect(decodeFault(faultValue(3, 0, 0, 0, 0, 0, 'runtime'))).toMatchObject({ kind: 'panic', module: 'runtime' });
   expect(decodeFault(new Uint8Array(40))).toBeNull();
   expect(decodeFault(faultValue(7, 0, 0, 0, 0, 0, 'x'))).toBeNull();
 });

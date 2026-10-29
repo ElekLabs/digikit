@@ -20,6 +20,7 @@ export const CMD = {
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
+  FAULT: 0x23,
   SELECT: 0x30,
   RESTART: 0x31,
 } as const;

@@ -253,16 +253,11 @@ static void result_text(txt *t, int32_t code)
 
 static void safe_reason(txt *t, uint32_t reason)
 {
-    if (reason == DKRT_SAFE_COUNTER)
-        t_s(t, "2 BAD BOOTS");
-    else if (reason == DKRT_SAFE_KEY)
-        t_s(t, "KEY HELD");
-    else if (reason == DKRT_SAFE_FLAG)
-        t_s(t, "REQUESTED");
-    else if (reason == DKRT_SAFE_DSP)
-        t_s(t, "DSP STOPPED");
-    else
-        t_s(t, "UNKNOWN");
+    // a table, not an if chain: five dense values become a jump table, which is data in the code
+    static const char *const why[6] = {"UNKNOWN", "2 BAD BOOTS", "KEY HELD", "REQUESTED", "DSP STOPPED", "CPU PANIC"};
+    _Static_assert(DKRT_SAFE_COUNTER == 1 && DKRT_SAFE_KEY == 2 && DKRT_SAFE_FLAG == 3 && DKRT_SAFE_DSP == 4 && DKRT_SAFE_PANIC == 5,
+                   "why[] follows the DKRT_SAFE_* values");
+    t_s(t, reason < 6 ? why[reason] : why[0]);
 }
 
 /* The file name of a path, upper case, at most max characters: from the end, or with head the first ones. */

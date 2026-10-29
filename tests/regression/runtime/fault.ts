@@ -41,7 +41,7 @@ export async function readSettingsRecord(dk: DkSession): Promise<Uint8Array> {
 }
 
 export interface Fault {
-  kind: 'cpu' | 'dsp';
+  kind: 'cpu' | 'dsp' | 'panic';
   site: number;
   stage: number;
   id: number;
@@ -58,10 +58,10 @@ export function decodeFault(value: Uint8Array): Fault | null {
   if (view.getUint32(0) !== 0x464c5431) return null;
   const k = view.getUint32(4);
   const kind = k & 0xff;
-  if (kind !== 1 && kind !== 2) return null;
+  if (kind !== 1 && kind !== 2 && kind !== 3) return null;
   const name = String.fromCharCode(...value.subarray(24, 40)).split('\0')[0]!;
   return {
-    kind: kind === 1 ? 'cpu' : 'dsp',
+    kind: kind === 1 ? 'cpu' : kind === 2 ? 'dsp' : 'panic',
     site: (k >> 8) & 0xff,
     stage: (k >> 16) & 0xff,
     id: view.getUint32(8),

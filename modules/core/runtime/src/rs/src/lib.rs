@@ -35,7 +35,7 @@ pub mod upload;
 
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
-    loop {}
+    crate::crash::panic()
 }
 
 /// Arena bytes. A sub-region of `cf.expansion` that is part of this object's bss: patchkit places it with the object, so no

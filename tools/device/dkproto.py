@@ -20,6 +20,7 @@ CMD: dict[str, int] = {
     "LOG": 0x20,
     "PEEK": 0x21,
     "LOGCFG": 0x22,
+    "FAULT": 0x23,
     "SELECT": 0x30,
     "RESTART": 0x31,
 }
@@ -40,6 +41,7 @@ CMD_SETTINGS = 0x19
 CMD_LOG = 0x20
 CMD_PEEK = 0x21
 CMD_LOGCFG = 0x22
+CMD_FAULT = 0x23
 CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 

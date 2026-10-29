@@ -270,6 +270,10 @@ Fault instrumentation follow-ups (the base is in finding 77): only when a real b
 - [ ] A "trace" tag for traced `.dkm` files on the site's Transfer page.
 - [ ] Module-source tags for the callbacks that `core/ui` and `core/params` make.
 - [ ] A gdb bridge to the emulator's ColdFire, and the crash record as an m68k core file.
+- [ ] Host-side names for the runtime stack addresses of a panic record: patchkit `cf-link --json` emits the symbols and `text_ranges` (`packages/patchkit/src/build_cli.rs:212-216`).
+- [ ] `api->fatal(code)` for C modules through the same fatal path as the runtime panic.
+- [ ] Review the runtime's footprint and move non-critical instrumentation into a debug module, keeping only critical fault handling in the runtime (Em's idea). Baseline from
+      2026-10-30: .text 109 KB, bss 671 KB, of which the module arena is 512 KB, DKRT_STAGE 64 KB, DKRT_UPLOAD_BUF 36 KB and DKRT_LOG 16 KB.
 
 ## Status at end of session
 

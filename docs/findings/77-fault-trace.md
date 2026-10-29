@@ -79,6 +79,22 @@ sequence or checksum sets 0 again; finding 75). `dlog.rs` writes the hang record
 (`DSP_STOPPED`). The state is read statically: it is not run in the emulator with a DSP that stops. If a stream is cut after its header, the byte stays non-zero until the
 next boot, and a DSP stop in that time only logs. If the anchor does not resolve, the runtime acts as before.
 
+## 5a. Runtime panics
+
+**[D]** The panic handler of the runtime's Rust code (`lib.rs`) used to be `loop {}`: a panic froze the device with no record. It now calls `crash::panic`,
+which writes a panic record (kind 3, the same keep-area record as the hang) and soft-resets. Our toolchain strips the file and line of a panic (the `Location` constants hold
+neither), so `PanicInfo` is not used. The record holds `W_A7` (the stack pointer in the handler), 32 stack words from it (bounds-checked like the CPU crash record), the name
+`runtime`, the last 8 events and no PC. The return addresses in the stack lead to the panicking code: in the `CMD_FAULT` test the 32 words hold the return into the panicking handler and into `dkrt_midi_rx`, the SysEx dispatcher. A call to a function that does not return (`panic_bounds_check`) is often the last instruction, so its return address is the first byte of the next function: look up the address minus 2. Naming them from the host is open (docs/plans/sdk-api.md, "Later").
+
+Rules: only the first fault writes (the `IN_EXC` guard, shared with `dkrt_exc`); the settings store is not touched, because the panic may be inside it. The device resets only
+when the boot is not already safe mode (no reset loop) and no OS upgrade is running (`os_upgrade_active`); otherwise the record is sealed and the CPU stays in `loop {}`.
+
+At the next boot `at_boot` logs `FAULT_FOUND` (kind 3, second argument the stack pointer), the `CRASH_STACK` events and the last events, and keeps `dk/fault` (kind 3, name `runtime`).
+Safe mode reason `SAFE_PANIC` (5), after `SAFE_DSP` and before the boot counter rule; a panic does not add to the boot counter. ABOUT shows `SAFE: CPU PANIC`, `FAULT: CPU PANIC`
+and `IN RUNTIME` (no place row). `dklog crash` prints `CPU PANIC in runtime` and the stack.
+
+Dev trigger: the SysEx command `CMD_FAULT` (0x23), body byte 0 = 1, runs an out-of-range index (a real `panic_bounds_check`). Other values give `E_PROTO`.
+
 ## 6. Tests
 
 Emulator, `tests/regression/runtime/fault-trace.test.ts` (Vitest `runtime` project; the daemon runs a stopped DSP at about 50 blocks a second, so a stop takes about 5 minutes
@@ -86,7 +102,7 @@ of wall time; the tests wait in DSP blocks, not in seconds): **[D]** an effect o
 (kind DSP, site FX send, core step CALL, module step 3, module `dyn-fx-hang`), the `FAULT_FOUND` and `SAFE` events and the last events of the boot before (DT2 and DN2); the
 ABOUT rows are read too on both devices (`SAFE: DSP STOPPED`, `FAULT: DSP STOP`, `IN DYN-FX-HANG`, `FX SEND STEP 3`). A machine that stops the DSP (DT2, `dyn-dsp-hang`) gives
 site voice, core step CALL and the machine type in `dk/fault`. Effect faults give `FX_FAULT` and `FX_DISABLED` with the module's source (DT2, DN2). A normal send effect runs 9000
-blocks with no stop and no reset (DT2, DN2). A CPU crash gives `dk/fault` kind CPU with the PC of the crash record (DT2). **[C]** An earlier version of this section said the DT2 ABOUT page could not be opened in the safe boot. The cause was the test: its keys were timed in DSP blocks (100 ms hold), and the DT2 UI did not take them; with 300 ms wall-clock taps (as the input-adapter test) SETTINGS > DIGIKIT > ABOUT opens in the safe boot and shows the rows. The DIGIKIT menu is reachable in safe mode on the DT2 (the first row is `SAFE: DSP STOPPED`, then ABOUT, HEALTH, MEMORY, MODULES).
+blocks with no stop and no reset (DT2, DN2). A CPU crash gives `dk/fault` kind CPU with the PC of the crash record (DT2). `CMD_FAULT` gives a panic record, safe mode `CPU PANIC`, `dk/fault` kind panic and the ABOUT rows (DT2, DN2). The test sends it once (`quick`): a retry of the unanswered request reached the safe boot and panicked it again, which by the rules above does not reset. **[C]** An earlier version of this section said the DT2 ABOUT page could not be opened in the safe boot. The cause was the test: its keys were timed in DSP blocks (100 ms hold), and the DT2 UI did not take them; with 300 ms wall-clock taps (as the input-adapter test) SETTINGS > DIGIKIT > ABOUT opens in the safe boot and shows the rows. The DIGIKIT menu is reachable in safe mode on the DT2 (the first row is `SAFE: DSP STOPPED`, then ABOUT, HEALTH, MEMORY, MODULES).
 
 Unit tests: `dkrt-sdk` `fault.rs` (record and row text), `tests/digikit/test_dklog.py` (decoding), `tests/patchkit/test_dsplink.py` (the word slots),
 `tests/patchkit/test_fx.py` (the marks in both records, the fault words), `tests/patchkit/test_dsp_voice.py` (the step cleared before a call),

@@ -691,6 +691,7 @@ SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit
 LOG = 0x20
 PEEK = 0x21
 LOGCFG = 0x22
+FAULT = 0x23        # dev: make the runtime fail on purpose to test the fault path; body byte 0 = 1: a Rust panic (a bounds check)
 SELECT = 0x30
 RESTART = 0x31
 

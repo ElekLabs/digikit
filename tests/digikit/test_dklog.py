@@ -202,6 +202,22 @@ def test_the_crash_record_is_rebuilt_from_its_events():
     )
 
 
+def test_a_panic_record_is_rebuilt_from_its_events():
+    evs = [
+        ev(1, "BOOT_START"),
+        ev(2, "FAULT_FOUND", (3, 0x40B2_0000, 0, 0, 0xFFFFFFFF), flags=1),
+    ]
+    for k in range(0, 32, 4):
+        evs.append(ev(3 + k // 4, "CRASH_STACK", (k, k, k + 1, k + 2, k + 3), flags=1))
+    rec = L.panic_record(evs)
+    assert rec["a7"] == 0x40B20000 and rec["stack"] == {i: i for i in range(32)}
+    text = L.crash_text(rec)
+    assert "CPU PANIC in runtime" in text and "+000  00000000 00000001" in text
+    assert L.panic_record([ev(1, "BOOT_START")]) is None
+    # the CPU and DSP records are not taken for a panic
+    assert L.panic_record([ev(2, "FAULT_FOUND", (1, 0, 0, 0x1234, 0), flags=1)]) is None
+
+
 def test_the_last_crash_wins_and_a_log_without_one_has_none():
     assert L.crash_record([ev(1, "BOOT_START")]) is None
     first = crash_events(2)

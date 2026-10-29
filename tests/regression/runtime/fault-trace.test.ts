@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { LOG_KIND } from '@digi/dk-session/gen_proto';
+import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { button } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
@@ -26,6 +26,7 @@ const SITE_VOICE = 1;
 const SITE_FX_SEND = 3;
 const STAGE_CALL = 4;
 const SAFE_DSP = 4;
+const SAFE_PANIC = 5;
 
 /** Press, hold and release a key, then let the UI settle, all in DSP blocks (emulated time): the daemon may run far slower than real time, and a wall-clock
  * settle would find the UI not yet done. `settleMs` is the milliseconds the other runtime tests wait; a block is 2/3 ms, and a third of the time suffices here. */
@@ -217,6 +218,38 @@ async function expectCpuCrashFault(runtime: PatchedSession): Promise<void> {
   expect(fault!.at, 'the PC of the crash record').toBe(crash!.args[0]);
 }
 
+/** A panic of the runtime (CMD_FAULT, a failed bounds check) writes a panic record and resets: the next boot is safe mode and ABOUT, dk/fault and the log name it. */
+async function expectRuntimePanic(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
+  await settleUi(session);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', 'DK_ABOUT_N']);
+  // the device resets inside the handler and never replies; one try (quick), since a retry would reach the safe boot and panic it too
+  await dk.request(CMD.FAULT, Uint8Array.of(1), true).catch(() => undefined);
+  await waitForSafeMode(runtime);
+  await waitFrames(runtime, SETTLE_BLOCKS);
+
+  const fault = decodeFault(settingsValue(await readSettingsRecord(dk), 'dk/fault') ?? new Uint8Array());
+  expect(fault, 'dk/fault is in the settings record').not.toBeNull();
+  expect(fault).toMatchObject({ kind: 'panic', module: 'runtime', at: 0 });
+
+  const log = await dk.readLog();
+  const found = log.filter((e) => e.kind === LOG_KIND.FAULT_FOUND);
+  expect(
+    found.map((e) => e.args[0]! & 0xff),
+    'FAULT_FOUND of kind panic',
+  ).toEqual([3]);
+  expect(log.filter((e) => e.kind === LOG_KIND.SAFE).map((e) => e.args[0])).toEqual([SAFE_PANIC]);
+  expect(
+    log.some((e) => e.kind === LOG_KIND.CRASH_STACK),
+    'the stack of the panic',
+  ).toBe(true);
+
+  const rows = await aboutRows(runtime, plan);
+  expect(rows).toEqual(expect.arrayContaining(['SAFE: CPU PANIC', 'FAULT: CPU PANIC', 'IN RUNTIME']));
+  for (const row of rows) expect(row.length, row).toBeLessThanOrEqual(22);
+  await session.expectNoFault('runtime panic');
+}
+
 runtimeTests('an effect that stops the DSP gives safe mode and names the module, site and step', expectFxHang, {
   timeout: 1_200_000,
 });
@@ -227,3 +260,4 @@ runtimeTests('a machine that stops the DSP gives safe mode and names the module 
 runtimeTests('effect faults are logged with the module as source', expectFxFaultEvents, { timeout: 900_000 });
 runtimeTests('a normal effect is no stop', expectNoFalseStop, { timeout: 1_200_000 });
 runtimeTests('a CPU crash is kept as the last fault', expectCpuCrashFault, { timeout: 1_200_000, devices: ['dt2'] });
+runtimeTests('a panic of the runtime gives safe mode and names the runtime', expectRuntimePanic, { timeout: 1_200_000 });

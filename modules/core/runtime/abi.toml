@@ -145,6 +145,12 @@ value = 4
 doc = "DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen)."
 
 [[const]]
+name = "SAFE_PANIC"
+type = "u32"
+value = 5
+doc = "DkrtBootInfo.reason: the boot before left a panic record (the runtime's Rust code panicked)."
+
+[[const]]
 name = "FAULT_ROWS"
 type = "usize"
 value = 4

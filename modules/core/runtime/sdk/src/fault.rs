@@ -13,6 +13,7 @@ pub const BYTES: usize = 40;
 
 pub const KIND_CPU: u32 = 1;
 pub const KIND_DSP: u32 = 2;
+pub const KIND_PANIC: u32 = 3;
 
 pub const SITE_NONE: u32 = 0;
 pub const SITE_VOICE: u32 = 1;
@@ -84,7 +85,7 @@ impl Fault {
         }
         let k = w(1);
         let kind = k & 0xff;
-        if kind != KIND_CPU && kind != KIND_DSP {
+        if kind != KIND_CPU && kind != KIND_DSP && kind != KIND_PANIC {
             return None;
         }
         let mut name = [0u8; 16];
@@ -189,13 +190,13 @@ fn core_step(stage: u32) -> &'static str {
 
 /// The ABOUT rows of a fault (`FAULT: ...`, `IN <MODULE>`, and the place: `PC` of a CPU crash, or the site and the step of a DSP stop).
 /// Every row is at most `ROW` (18) characters: ABOUT rows are cut at about 18 characters on DT2.
-/// Returns the rows made (0 to 3).
+/// Returns the rows made (0 to 3; a panic makes 2).
 pub fn rows(f: &Fault, out: &mut [Row; ROWS]) -> usize {
     let mut r0 = Row::new();
-    r0.s(if f.kind == KIND_CPU {
-        "FAULT: CPU CRASH"
-    } else {
-        "FAULT: DSP STOP"
+    r0.s(match f.kind {
+        KIND_CPU => "FAULT: CPU CRASH",
+        KIND_PANIC => "FAULT: CPU PANIC",
+        _ => "FAULT: DSP STOP",
     });
     out[0] = r0;
     let mut r1 = Row::new();
@@ -208,6 +209,10 @@ pub fn rows(f: &Fault, out: &mut [Row; ROWS]) -> usize {
         r1.s("IN UNKNOWN");
     }
     out[1] = r1;
+    if f.kind == KIND_PANIC {
+        // the panic has no PC: the stack is in the log
+        return 2;
+    }
     let mut r2 = Row::new();
     if f.kind == KIND_CPU {
         r2.s("PC ");
@@ -354,6 +359,19 @@ mod tests {
             ..Fault::empty()
         };
         assert_eq!(text(&rows_of(&f)[1]), "IN FIRMWARE");
+    }
+
+    #[test]
+    fn a_panic_names_the_runtime_and_has_no_pc_row() {
+        let f = Fault {
+            kind: KIND_PANIC,
+            name: name("runtime"),
+            ..Fault::empty()
+        };
+        assert_eq!(Fault::decode(&f.encode()), Some(f));
+        let mut out = [Row::new(), Row::new(), Row::new(), Row::new()];
+        assert_eq!(rows(&f, &mut out), 2);
+        assert_eq!((text(&out[0]), text(&out[1])), ("FAULT: CPU PANIC", "IN RUNTIME"));
     }
 
     #[test]

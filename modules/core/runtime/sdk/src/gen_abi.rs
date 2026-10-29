@@ -46,6 +46,8 @@ pub const SAFE_KEY: u32 = 2;
 pub const SAFE_FLAG: u32 = 3;
 /// DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen).
 pub const SAFE_DSP: u32 = 4;
+/// DkrtBootInfo.reason: the boot before left a panic record (the runtime's Rust code panicked).
+pub const SAFE_PANIC: u32 = 5;
 /// Rows of DkrtDiag.fault_text.
 pub const FAULT_ROWS: usize = 4;
 /// Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode.
