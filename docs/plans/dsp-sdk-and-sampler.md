@@ -77,6 +77,34 @@ Both runs pass independent artifact review. Direct host checks pass 195 tests
 (16 skipped); routed checks retain baseline stale references and the linked
 pnpm launcher failure. No merge gate, hardware run or performance claim is made.
 
+**Audit checkpoint (2026-10-30): owned backing and cache safety remain open.**
+[D] Finding 91 now establishes a positive 512 KiB initialization extent at
+`[0x804ad790,0x8052d790)` (sixteen 32 KiB per-track clears), not universal
+runtime bounds or free space. Adjacent helpers/consumers remain open.
+[D]/[C] Private 0.2 LP0 RX is `dsp.l2` module BSS, not the L1 allocator;
+its 16-byte alignment leaves neighboring storage inside the rounded 64-byte
+cache lines. Startup ranges make RX potentially cached under the audited register
+constants, whose preservation through earlier calls remains unproved.
+The stock maintenance helper needs range-0 ownership and an ABI/context audit;
+writeback plus invalidate is not a safe generic post-DMA invalidate operation.
+See [finding 95](../findings/95-dn2-cache-and-lp0-staging.md) for exact extents,
+conditional configuration and public-manual citations. The emulator has no dirty
+cache model and cannot prove physical coherence.
+
+**[C] Encoding correction:** `0x1c0807` / `0x1c081b` currently execute Type 7a
+conditional MODIFY under NOT SV. The earlier conditional-W2B conclusion is
+plausible but **not proved**: public Type 7a/7d figures/tables conflict, and the
+current decoder's selection rationale is unsupported. The earlier claim that
+already-byte pointers remain unchanged is also retracted; public Selache lacks
+conversion coverage and supplies no independent MODIFY proof. Helper coverage
+remains conditional on address normalization. This is a suspected model
+gap, not a confirmed fix; a universal shift is unsafe because conversion depends
+on the memory map. Hold core changes/regeneration pending independent encoding
+evidence; do not request approval based on false certainty about W2B.
+No hardware or core regeneration is authorized. Continue read-only completion
+and ownership investigation; production pool reservation, cache-safe RX and
+CF/DSP close/drain ACK remain before binding, with the picker after binding.
+
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.
 The initial ordering and reader strategy are recorded in
