@@ -1,6 +1,6 @@
 # Reusable SDK file listing
 
-Design in progress, 2026-10-30. Scope: read-only file and directory listing for
+Public implementation and DN2/DT2 emulator acceptance, 2026-10-30. Scope: read-only file and directory listing for
 the sampler and a later file manager. This does not define sample-bank ownership
 or file mutation operations. See the [implementation plan](../plans/dsp-sdk-and-sampler.md)
 and [provider evidence](../findings/93-sdk-file-catalogue.md).
@@ -50,13 +50,16 @@ and [provider evidence](../findings/93-sdk-file-catalogue.md).
 The pure `files_job::Broker` now tests those lifecycle barriers with owned work
 and event leases. Readiness hints coalesce: polling consumes a queued hint for
 the observed result, while a notification already in progress keeps its own pin.
-Its return cannot erase a newer queued event. The runtime still has to implement
-serialization, callback dispatch and loader rollback/retirement hooks.
+Its return cannot erase a newer queued event. Runtime `files.rs` now serializes
+short queue operations with the interrupt mask, runs providers and callbacks
+outside that scope, and pins active callbacks through return. Loader rollback
+and teardown retire clients before freeing module code or context; initialization
+must succeed before provider or notification dispatch begins.
 
-## First public contract direction
+## Public contract
 
-No public listing imports are exported yet. The next integration will append to
-the existing API table (minor version 1.4), retaining the pinned-bank entries:
+Runtime 0.5.4 appends four calls to the existing API table (minor version 1.4),
+retaining the pinned-bank entries. Include `<dk/files.h>`:
 
 - `files_client()` obtains the module's client during initialization.
 - `files_list(client, root, path, notify, context)` copies a request and returns
@@ -73,15 +76,17 @@ event for every row. Callback/context must stay in module-owned memory for the
 session, as with SDK UI callbacks. Provider and notification dispatch must stay
 disabled for a module until its initialization has successfully completed.
 
-The first entry layout will use fixed-width fields for kind, metadata-validity
-flags, source byte length, hash algorithm, 32 hash bytes and a 256-byte full path.
+The 304-byte entry uses four 32-bit fields for kind, metadata-validity
+flags, source byte length and hash algorithm, then 32 hash bytes at offset 16
+and a 256-byte full path at offset 48.
 Directories need not have size/hash metadata; unknown must not be represented as
 known zero. Paths are relative to the captured root. Store SHA-256 stays bytewise;
-DT2's odd stored 32-bit hash will use a documented byte order, with the remaining
-hash bytes zero. Never expose a guessed writable/read-only flag: the DT2 ReadDir
+DT2's odd stored 32-bit hash occupies the first four hash bytes in big-endian
+order, with the remaining bytes zero. Never expose a guessed writable/read-only flag: the DT2 ReadDir
 flag is currently known only as a boolean derived from two filesystem node bits.
-Validate the C layout and generation gate at the actual module/runtime boundary
-before declaring this contract implemented.
+The public C fixture asserts the record layout and the unchanged API prefix.
+Both prepared DKMs require API 1.4 and runtime 0.5.4; native acceptance checks
+the running table too. This contract does not replace the pinned sample-bank API.
 
 ## DN2 provider
 
@@ -123,8 +128,9 @@ storage reads can block. Do not call these routines with interrupts masked or
 with an outer filesystem lock.
 
 Raw dot records are omitted by name. Preserve other leading-dot names. Stored
-hash and size conversion follow the independently audited getter, with errors
-reported explicitly. Concurrent directory mutation has no proven generation
+hash and size conversion follow the independently audited getter. A metadata
+getter failure retains the file row with validity flags clear; open/iteration
+errors terminate the request. Concurrent directory mutation has no proven generation
 token or immutable snapshot; the public contract must not promise one.
 
 ## Integration checks
@@ -135,3 +141,10 @@ teardown, and interleaved clients. Then validate the actual public C boundary an
 both provider adapters in bounded emulator cases before building picker flows.
 The existing UI host fake will cover track capture, folder navigation and stale
 result rejection without claiming a sample is loaded.
+
+The scheduler performs at most one provider step and one deferred notification
+per UI pass. Store scratch is 4,096 bytes, with a separate 512-byte fingerprint
+buffer, 16 raw rows and eight retained directory children per client. The initial
+implementation reserves roughly 42 KiB of fixed ColdFire listing storage for
+eight clients. This is a memory/call-count ceiling, not a latency measurement;
+DT2 firmware calls can block and each store directory page rescans the table.

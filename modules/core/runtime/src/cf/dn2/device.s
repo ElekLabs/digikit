@@ -36,3 +36,8 @@ dkrt_image_id:
     .globl dkrt_sample_fs
 dkrt_sample_fs:
     .long 0, 0, 0, 0
+
+    .balign 4
+    .globl dkrt_files_fs
+dkrt_files_fs:
+    .long 0, 0, 0

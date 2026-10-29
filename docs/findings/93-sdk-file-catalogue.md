@@ -216,3 +216,69 @@ This SDK checkpoint also passes scoped document paths and diff checks. Routed
 `test:changed` passes layering and retains only the known ten stale references
 in five unchanged files (`out/files-sdk-changed.log`). No runtime integration,
 new device proof or merge gate is claimed for these pure helpers.
+
+## Public runtime listing service
+
+**[D]** API 1.4 / runtime 0.5.4 now exports `files_client`, `files_list`,
+`files_poll` and `files_cancel`, with `<dk/files.h>` and a shared 304-byte record.
+The existing API prefix and pinned-bank contract are unchanged. Clients attach
+during module initialization; requests carry copied full paths and positive
+nonreused tickets. Poll copies an owned row without I/O, leaving output untouched
+on pending, end or error. Optional UI-task readiness callbacks need no module
+slot 0 and retain their module/context pin through return. Init failure and
+early-DSP teardown retire clients before freeing code; failed init also releases
+registered service commands. Dispatch begins only after successful init.
+
+**[D]** DN2 SAMPLES projects the runtime store's `samples/` prefix; STORE is
+available on both devices. Empty DN2 virtual root completes cleanly. DT2 SAMPLES
+uses the audited open/next/metadata functions, with separate scheduler steps.
+It omits exact dot records, preserves full root-relative paths, and reports the
+stored odd hash as four big-endian bytes plus 28 zero bytes. Source sizes include
+the 16-byte trailer omitted by stock ReadDir. A metadata getter failure preserves
+the file row with flags clear; open/iteration errors remain terminal. Listing
+does not pin a source or prove it is safe/valid sample data.
+
+Resource ceiling: one provider step and one notification per UI pass, eight
+clients, eight retained directory children per store page, 16 raw rows, 4,096-byte
+scratch and a separate 512-byte fingerprint. Fixed listing state is roughly
+42 KiB of ColdFire memory; runtime object totals are 125,364 bytes text, 37,512
+data and 679,489 BSS. Firmware calls can block, and each store directory page
+replays the table. No latency or throughput improvement is claimed.
+
+**[D]** Independent source review found no correctness issue. All 94 SDK host
+tests, no_std compilation, the named owner pytest, generation/layer checks,
+scoped TS types/lint/format and object checks pass. The public C fixture
+`tests/fixtures/modules/files-proof` asserts API offsets and entry layout and
+exports zero slots. Both packed artifacts require API 1.4 / runtime 0.5.4.
+
+**[D]** Native acceptance passes in `tests/regression/runtime/files-api.test.ts`.
+DN2 run `out/runs/files-api/dn2/7b5255c0-1a6b-478e-9b46-063270a29efa` checks:
+empty virtual root, directory rows with unknown metadata, exact file paths,
+257-byte source size and stored SHA-256, retained copied rows, undersized output
+without row consumption, stale tickets and reentrant callback cancellation.
+Independent artifact review confirms the saved rows and clean final status.
+DT2 run `out/runs/files-api/dt2/c8967bb4-e7a6-4856-bc00-8b5c628a9a04` passes
+the same public boundary cases, including root directories without dot rows,
+the 273-byte physical source against stock ReadDir's 257 bytes, and the exact
+stored odd hash with zero padding. Logs are `out/files-api-native-{dn2,dt2}.log`.
+Independent DT2 artifact review also passes. Its final snapshot reports no
+faults but `cf.ready=false` at the main panel after restart; the service replies
+and assertions establish the listing proof, not a final readiness-flag proof.
+Both runs use the unchanged prebuilt daemon, explicit current-firmware inputs,
+prepared runtime-only patches and a private card overlay; only CF section 3
+changes. The DKM SHA-256 is
+`eb998094c936d84f9767b611f6010e1cd5c8ac1f2bb5f3082df3ce62cbd7a0c4`.
+Patched SYX hashes are DN2
+`5d5cdeaac940639ce81567e541264029ddf57a787a5c92912b6dd171f5ce1eb6`
+and DT2 `bcd23a2fdb3cf17f5b9e7bdc7bd9dfadbc6ba5ad2b2b049c020aca9631b4ec49`.
+Live reentrant request replacement and failed-init teardown remain covered only
+by the lifecycle model and source review, not separate native scenarios.
+No hardware, performance improvement, picker or sample-binding proof follows.
+
+Checkpoint validation additionally passes 195 direct host tests (16 skipped),
+scoped changed-document path checks and diff checks. Routed `test:changed`
+passes layering but retains the ten baseline stale references in five unchanged
+files and the linked-worktree pnpm launcher failure before host/lint/format/types
+can run. Direct installed-tool checks cover the scoped TS checks and host suite;
+no dependency installation or full merge gate is claimed. Logs:
+`out/files-api-{changed,host,ts-types,ts-lint,ts-format}.log`.

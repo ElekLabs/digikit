@@ -28,11 +28,17 @@ side panels and dialogs rather than introducing a separate UI framework.
 - [x] Make initial store verification incremental and retain generation on rewind;
   independent review and all 80 SDK host tests pass.
 - [x] Test/review the shared listing request/cancel/notification lifecycle model;
-  all 93 SDK tests pass. Runtime serialization/dispatch/retirement remain pending.
-- [ ] Define/export the reusable SDK file/directory listing contract and adapters.
+  all 93 lifecycle/helper SDK tests pass.
+- [x] Define/export the reusable SDK file/directory listing contract and adapters.
+- [x] Integrate runtime serialization, deferred dispatch and loader retirement;
+  public API 1.4 / runtime 0.5.4, independent source review and 94 SDK tests pass.
+- [x] Prove the public C boundary on DN2 1.12 and DT2 1.17: both roots,
+  directory/file rows and typed metadata, copied-row lifetime, stale tickets,
+  invalid-capacity retention and reentrant callback cancellation, without slot 0.
 - [ ] Define per-track selection/binding separately, preserving the existing
   pinned-bank proof API until a versioned replacement is available.
-- [ ] Implement bounded catalogue access and binding with focused tests.
+- [x] Implement bounded catalogue access with focused tests.
+- [ ] Implement per-track binding with focused tests.
 - [ ] Build the on-device picker using SDK UI components, with loading/error states.
 - [ ] Integrate owned backing and prove selection/replacement/playback on both devices.
 
@@ -55,35 +61,56 @@ the UI. Do not promise that the DT2 hash and DN2 SHA have identical semantics or
 that either listing pins file contents. Revalidate a selected identity when opening
 it for loading. File mutation operations are a later extension to this service.
 
-The first backend is `modules/core/runtime/sdk/src/store/catalog.rs`: verified
+**Latest checkpoint (2026-10-30): public listing passes on both devices.**
+The common `<dk/files.h>` contract is implemented; runtime 0.5.4 appends API 1.4
+calls while retaining the existing pinned-bank API. All 94 SDK tests, no_std,
+the owner pytest, generation/layer checks, CF objects and scoped TS checks pass.
+Native runs: DN2 `out/runs/files-api/dn2/7b5255c0-1a6b-478e-9b46-063270a29efa`
+and DT2 `out/runs/files-api/dt2/c8967bb4-e7a6-4856-bc00-8b5c628a9a04`.
+See [finding 93](../findings/93-sdk-file-catalogue.md) for evidence and limits.
+Both runs pass independent artifact review. Direct host checks pass 195 tests
+(16 skipped); routed checks retain baseline stale references and the linked
+pnpm launcher failure. No merge gate, hardware run or performance claim is made.
+
+**Resume next:** define per-track binding/retirement independently of listing.
+The old sample API still owns one nonreplaceable 8,192-frame bank per module;
+it cannot implement this product by changing a path alone. Existing
+`sdk/dsp/sample_bank.inc` supplies admission, epoch and reader-drain primitives.
+Integrate those around every possible PCM read, and establish a DSP-visible
+close/drain acknowledgement before reusing backing. Inactive voices need not
+be forced to render if future admission reliably rejects their stale epoch.
+The private 0.2 transport already proved device-side CF completion acknowledgements
+with stock audio; that is separate from retiring an old audio reader. Production
+pool reservation, cache safety and bounded transfer/recovery remain open.
+Use the established source-track contract (0..15), stop only the selected track,
+and publish the new generation only after source validation and DSP completion.
+Keep the picker independent of provider internals and do not report READY early.
+
+The initial backend was `modules/core/runtime/sdk/src/store/catalog.rs`: verified
 open once, then one bounded table read per page, with header checks before and
-after. It enumerates raw entries without sample filtering or prefix-total scans;
-the adapter will form directory pages. Its initial full-table verification still
-needs scheduling outside UI callbacks. This is internal Rust plumbing, not yet
-an exported C SDK contract. Finalize that common contract after the DT2 iterator
-ABI and ownership audit, then add the runtime service and SDK bindings.
+after. It enumerates raw entries without sample filtering or prefix-total scans.
+The runtime now uses incremental `CatalogOpen`, bounded directory projection
+and same-generation rewind to form pages outside UI fill/action callbacks.
 The byte audit now identifies a caller-owned 16-byte state and `0x114`-byte
 entry; the initial C++ name-ownership inference was incorrect. Its locking and
 sequential scan still require task-context scheduling. Details, validation and
-remaining adapter gaps: [finding 93](../findings/93-sdk-file-catalogue.md).
+remaining limits: [finding 93](../findings/93-sdk-file-catalogue.md).
 
-**Latest checkpoint:** DN2 backend is committed/pushed as `81d235b7`. The DT2
+**Earlier checkpoint:** DN2 backend is committed/pushed as `81d235b7`. The DT2
 private UI-task diagnostic now passes its live test and independent artifact
 review: root and child listings match stock ReadDir, dot entries are observed,
 physical sizes differ by the documented 16-byte trailer, invalid paths and EOF
 behave correctly, and guards remain intact. Run:
 `out/runs/file-catalog/808e86fa-814f-4b46-92a0-660fc9c20162`.
-No exported SDK listing calls or picker are claimed yet.
+This private proof preceded the public SDK acceptance above; a picker remains pending.
 
-Next implementation boundary: specify the shared read-only directory request,
-page/result and close/cancel lifecycle before exposing C imports. Full path and
-provider metadata must survive display truncation; late results from a previous
-folder/request must be rejected. DN2 needs bounded directory projection over its
-flat table, including implied folders and deduplication; zero matches in a raw
-chunk must not be mistaken for EOF. DT2 can wrap the proved iterator in task
-context; its stored hash/size metadata and file mutation behavior need explicit
-semantics. Keep source validation and sample ownership out of the listing API.
-Current service decisions and remaining ABI work are in
+The listing implementation preserves full paths and provider metadata and
+rejects results from superseded requests. DN2 projects bounded directory pages
+over its flat table, with implied folders and deduplication; empty filtered
+chunks are not EOF. DT2 wraps the proved iterator in task context and exposes
+typed stored metadata. Concurrent source mutation still requires revalidation
+at load. Keep source validation and sample ownership out of the listing API.
+Current service decisions and ABI are in
 [the reusable listing design](../design/sdk-files.md). UI callbacks lack current
 module attribution, so clients are acquired during initialization; generations
 reject late results. Notifications must not require owning the sole module slot 0.
@@ -97,11 +124,10 @@ context. YES on a file queues selection; NO returns without changing the binding
 Show the selected binding and queued/loading/ready/error status separately from
 the currently highlighted catalogue row.
 
-Catalogue implementation must run on the device. Existing TypeScript
+Catalogue implementation runs on the device. Existing TypeScript
 `RpcSamples`/`StoreSamples` demonstrate host-side listing semantics; they are not
-callable CF backends. DN2 can build on the runtime store scanner and header
-fingerprint. DT2 needs an adapter to the underlying firmware directory operations
-used by stock ReadDir, with audited signatures and lifetimes. Neither existing
+callable CF backends. DN2 uses the runtime store scanner and header fingerprint;
+DT2 uses the audited firmware directory adapter. Neither existing
 host listing exposes a catalogue generation snapshot. Preserve DN2 path/size/SHA
 and DT2 path/hash/size where available, and revalidate at selection/load rather
 than treating a row number as a durable reference.

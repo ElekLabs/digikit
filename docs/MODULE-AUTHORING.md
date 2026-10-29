@@ -480,6 +480,7 @@ The `dk_api` table that `dkm_init` receives. Fields are only appended, each is 4
 | `log_lv(level, msg, value)` | The same with a level. API 1.1. |
 | `register_cmds(first, count, handler)` | Register SysEx commands. API 1.2. |
 | `sample_bank(local_id)`, `sample_load(handle, path)`, `sample_status(handle)` | Resolve, load and query a module-owned sample bank. API 1.3; see the bounded proof contract below. |
+| `files_client()`, `files_list(client, root, path, notify, context)`, `files_poll(client, ticket, out, capacity)`, `files_cancel(client, ticket)` | Read-only file/directory listing. API 1.4, runtime 0.5.4; see below. |
 | `memcpy_addr`, `memset_addr`, `memcmp_addr`, `muldi3_addr`, `udivdi3_addr`, `umoddi3_addr` | Addresses of the runtime's helpers. The compiler calls the 64-bit ones by itself. |
 
 For the bounded sample-bank proof, include `<dk/sample.h>` and declare
@@ -500,6 +501,27 @@ supported. Runtime publishes the immutable descriptor's READY word last, after p
 The [sample-proof fixture](../tests/fixtures/modules/sample-proof/README.md) demonstrates the declarations, service
 calls and tested DSP bridge. Transferred-file playback acceptance passes in the emulator on DT2 OS 1.17 and
 DN2 OS 1.12. Hardware behavior and product capacity/replacement/selection remain unproved; this is not a product sampler.
+
+For reusable browsing, include `<dk/files.h>` and acquire a positive `files_client()` handle during init.
+`files_list` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
+empty path lists the root. `DK_FILES_SAMPLES` maps to DT2 +Drive or DN2 store `samples/`, and
+`DK_FILES_STORE` lists the runtime store on either device. A new request supersedes the previous one.
+The public path holds at most 255 bytes; provider limits are smaller (DT2 sample paths 254 bytes,
+store paths 159 bytes, DN2 nonempty sample paths 151 bytes after the virtual prefix).
+
+`files_poll` performs no storage I/O: it returns pending (0), a copied `dk_file_entry` (1), end (2),
+or a negative error. Pass space for the whole 304-byte record; only return 1 changes the output.
+Rows retain the full path and file/directory kind. Check validity flags before using size or hash.
+Size is physical source bytes: DT2 includes the 16-byte trailer omitted by stock ReadDir.
+Hashes are typed stored metadata: SHA-256 or DT2's odd 32-bit hash in the first four bytes, big endian.
+Listing neither pins contents nor validates a sample; revalidate the selected source when loading it.
+
+An optional callback receives `(client, ticket, state, context)` in the UI task without owning slot 0.
+It is a deferred, coalesced readiness hint: poll the supplied ticket and tolerate a stale-ticket error.
+Keep callback context in module memory, never on the stack. Cancel or request another folder without
+waiting for old work; late results are discarded. Fill/action callbacks should queue or poll, not read
+storage. See the [listing design](design/sdk-files.md) and
+the [public boundary fixture](../tests/fixtures/modules/files-proof/src/files-proof.c).
 
 Names a module may import (from `[[import]]` in `sdk/sdk.toml`):
 
