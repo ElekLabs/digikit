@@ -150,6 +150,36 @@ Scoped lint/types/format and object freshness checks pass. Routed changed checks
 retain ten baseline stale references and the linked-node_modules launcher failure
 (`out/lp0-proof-changed.log`). No clean merge gate is claimed.
 
-**[O]** Audible stock coexistence, cache behavior, teardown, production memory
-ownership and a bounded production completion protocol remain open. Ordinary
+**[O]** At this checkpoint, audible stock coexistence, cache behavior, teardown,
+production memory ownership and a bounded production completion protocol remained open. Ordinary
 frame progress is insufficient to establish audio quality or hardware behavior.
+
+## Stock PCM during full transfer
+
+**[D]** A third, independently reviewed opt-in test (`DIGI_LP0_AUDIO=1`) holds
+stock DN2 TRIG 1 continuously, without selecting a new machine, retriggering or
+changing stock parameters. It passes in
+`out/runs/lp0-proof/c11e79fa-c21b-4b48-896f-a6d5a925a771`.
+The same 235-packet, exact-bank, guard and terminal checks pass. The captured WAV
+has 2,357,440 interleaved float samples, stereo 48 kHz, SHA-256
+`c53f4450a89424d056ccb5f907ea28cc47585ff412dc40d3a5398f138e84a908`.
+
+Window offsets use the capture file's own sample counter, not the separately
+started PCM tap. The measured transfer interval begins after first START and
+ends before final START, so its PCM overlaps the transfer sequence.
+
+| Phase | Interleaved sample range | RMS | Non-finite samples | Silent 100 ms windows |
+| --- | --- | --- | --- | --- |
+| Before | `[448,49728)` | 0.031370 | 0 | 0 of 6 |
+| During | `[53888,2299392)` | 0.028749 | 0 | 0 of 234 |
+| After | `[2305216,2356992)` | 0.028740 | 0 | 0 of 6 |
+
+The final window of each phase may be shorter than 100 ms. During and after have
+no exact-zero sample runs. This demonstrates finite, non-silent stock PCM across
+the measured intervals, not sample-exact equivalence, universal absence of audio
+glitches, or hardware timing. No performance benchmark or PCM pin was changed.
+Artifacts include the WAV, per-window metrics, capture counters per packet and
+bounded key-release/capture-stop cleanup. Native log:
+`out/lp0-proof-native-stock-audio.log`; scoped lint/types/format pass in
+`out/lp0-audio-ts-*.log`. Production ownership, cache behavior, teardown and
+bounded production completion remain open.
