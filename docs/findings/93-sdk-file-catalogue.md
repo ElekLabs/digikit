@@ -160,3 +160,59 @@ the ten pre-existing stale references and the workspace pnpm launcher before
 its host/lint/format/types commands run. Direct checks cover those code checks;
 logs are `out/file-catalog-{live,host,changed,types,lint,format}.log`.
 No merge gate or hardware run is claimed.
+
+## Bounded directory pages and incremental opening
+
+**[D]** `store/directory.rs` adds `DirectoryCollector<N>`: full-path byte ordering,
+exclusive continuation, deduplicated immediate children (including implied and
+empty folders), exact file metadata and no heap/I/O. It exposes no page until the
+caller finishes the complete raw scan with a valid generation. Memory holds N
+entries; each directory page replays the table with O(table entries * N) insertion
+work. Malformed paths/kinds and requested-file/ancestor-file cases fail closed;
+conflicting metadata checks cover retained children, not the whole table.
+
+**[D]** `CatalogOpen` advances verified opening without a full-table loop per
+scheduler step. Initial capture uses at most six header-sector reads. Later steps
+use four header reads plus one table read bounded by the caller's scratch and
+128 sectors; incremental CRC and tail checks share the chunk. Preferred-table
+CRC, tail or data-read failure falls back to the other captured header, including
+identical header copies. Captured-header read failures are intentionally strict
+`E_READ`; the legacy opener could hide a transient failed B read. The existing
+synchronous opener remains unchanged. `take` refuses incomplete verification;
+`rewind` checks the retained fingerprint and resets iteration without a full
+table revalidation. Neither operation establishes an immutable lease.
+
+**[D]** Eight projection tests plus seven incremental-open/rewind tests bring the
+SDK host suite to 80 passing tests. no_std compilation, the named owner pytest,
+scoped formatting and independent review pass. Logs:
+`out/directory-sdk-{tests,nostd,owner}.log` and
+`out/catalog-open-{tests,nostd,owner}.log`. No new native timing claim follows.
+The [service design](../design/sdk-files.md) records client ownership, request
+generations, copied result lifetime and notification/rollback invariants before
+the public ABI is exposed.
+
+**[D]** `files_job.rs` adds a fixed-client, allocation-free lifecycle broker.
+Owned requests and rows, separate work/event leases, nonreused positive IDs and
+per-lease nonces prevent late or duplicated completions from altering a newer
+request. Cancel/retire invalidate queued work and notifications immediately;
+active work/callback pins remain until their exact lease returns. A retired client
+cannot be reused before both pins drain. Poll returns a copied row. Readiness
+hints coalesce and an old callback's return cannot clear a newer edge.
+Thirteen interleaving/exhaustion tests bring the SDK suite to 93 passing tests;
+no_std, the owner pytest and independent review pass (`out/files-job-*.log`).
+External synchronization, actual callback lifetime and loader retirement are
+runtime integration obligations, not established by this pure model alone.
+
+**[D]** A further original-byte audit finds that stock DT2 ReadDir's flag tests
+node byte +1 bits 0 and 2 (`0x4015be58` / `0x4015bea2`). Its interpretation as
+read-only/protected/factory remains **[O]**, and failed getter paths can normalize
+to true. Do not use it as an authorization flag. The locked metadata getter
+`0x4015aec2` copies all four words on success and leaves output untouched on
+failure; it retains no caller output pointer. Its declaration candidate is
+`cf_func` hash `56566ccf1985a1fe2868df8f8d909661`, offset 0, length 4. It has not
+been added to the runtime or executed by the private directory proof yet.
+
+This SDK checkpoint also passes scoped document paths and diff checks. Routed
+`test:changed` passes layering and retains only the known ten stale references
+in five unchanged files (`out/files-sdk-changed.log`). No runtime integration,
+new device proof or merge gate is claimed for these pure helpers.
