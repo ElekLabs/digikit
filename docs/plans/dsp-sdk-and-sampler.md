@@ -133,6 +133,23 @@ launcher failures. Direct scoped lint, format and types pass; no new native run
 or merge gate is claimed. The module-owned DSP object was rebuilt with the
 existing patchkit; no SHARC emulator core was regenerated.
 
+- [x] Prove private CF exact-tuple close/ACK gating against the assembled two-track
+  reader, including paused-reader drain and unaffected-track PCM. Logical complete
+  message snapshots only; 22 focused cases pass. No physical transport/cache/backing
+  ownership claim.
+
+The private logical close/ACK proof now connects compiled CF gating to the
+assembled two-track reader using complete immutable numeric messages. It is
+independent of the cache encoding question and grants no production backing
+ownership. Matching DRAINED is required before reuse; malformed replies and
+timeout quarantine the operation. Physical transport and concurrent snapshot
+publication remain separate work; see finding 94 and the fixture contract.
+
+A focused public-source search (five targeted queries) left the encoding issue
+unresolved: official ADI PRM Rev 1.5 and Rev 1.4 repeat the figure ambiguity; no
+official erratum or encoded conditional W2B example was found. Do not repeat a
+broad search or declare a confirmed core bug from that evidence.
+
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.
 The initial ordering and reader strategy are recorded in
