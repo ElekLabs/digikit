@@ -155,7 +155,7 @@ pub fn crc32_of(p: *const u8, n: usize) -> u32 {
 }
 
 pub const fn sectors_of(bytes: u32) -> u32 {
-    (bytes + 511) / 512
+    bytes / 512 + ((bytes & 511 != 0) as u32)
 }
 
 /// Sectors of a table of `count` entries.
@@ -592,6 +592,9 @@ pub unsafe fn snapshot<F: FnMut(&[u8]) -> [u8; 32]>(
         tries += 1;
     }
 }
+
+/// Bounded file reads with explicit digest completion.
+pub mod stream;
 
 // ---- free space -------------------------------------------------------------------------------------------------------------
 

@@ -154,3 +154,6 @@ records source packing without whole-file staging and remaining integration gate
 Sampler integration audits: [DN2 reply ownership](findings/88-dn2-reply-ownership.md)
 and [DT2 waveform workspace](findings/89-dt2-waveform-workspace.md) record concrete
 occupied regions and the remaining production ownership questions.
+
+| [`90-dn2-track-owner-and-worker.md`](findings/90-dn2-track-owner-and-worker.md) | Current DN2 source-track frame producer and computed assignment; delayed SHARC map; corrected queued-worker entry and unresolved sample allocator |
+| [`91-dn2-ddr-configuration.md`](findings/91-dn2-ddr-configuration.md) | Current DN2 configures 512 MiB DDR geometry; stock scratch extends beyond loaded memory; production reservation remains open |

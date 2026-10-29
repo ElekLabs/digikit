@@ -7,26 +7,42 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 ## Resume here
 
 
-**Decision pending (2026-10-29): sample-loading transport policy.**
-The user asks to continue autonomously until a real decision. Parser checkpoint
-`db3514f7` is pushed. An async question asks whether DN2 sample changes must keep
-other tracks playing (recommended) or may mute the whole output for faster loading.
-The existing spare-frame channel has a theoretical 72,000-byte/second ceiling;
-960,000 bytes require at least 13.33 seconds before overhead. This is not measured
-loading time. Do not start policy-dependent transport implementation before the reply.
+**Confirmed (2026-10-29): independent per-track sampling.**
+Changing a track's sample stops that track's old notes; unrelated tracks keep
+playing. Em confirmed this interpretation and asked us to continue until a real
+decision is needed. Parser checkpoint `db3514f7` and audit checkpoint `bc7ad3a6`
+are pushed. The existing spare-frame channel has a theoretical 72,000-byte/second
+ceiling on DN2; 960,000 bytes require at least 13.33 seconds before overhead.
+This is not measured loading time. The diagnostic's global mute is unsuitable
+for runtime integration.
 
-Static audits completed while waiting:
+Current parallel work (source cursor reviewed; 59 SDK tests, no_std and owner pytest pass):
+- [x] Resolve loading policy and record independent per-track selection.
+- [x] Map SDK input/version checks: append-only input needs a machine minor gate;
+  DN2 physical voice slots must not be treated as track IDs.
+- [x] Trace the current DN2 frame's source-track producer and same-handler assignment ordering ([finding 90](../findings/90-dn2-track-owner-and-worker.md)); dynamic reassignment proof remains open.
+- [x] Trace DN2 background-worker callbacks against current image bytes ([finding 90](../findings/90-dn2-track-owner-and-worker.md)); no sample allocator follows from generic worker dispatch.
+- [x] Add bounded DN2 store reads with generation checks and mandatory digest completion ([finding 87](../findings/87-pcm16-streaming.md)).
+- [x] Audit DN2 DDR configuration: 512 MiB configured geometry, stock scratch beyond loaded extent ([finding 91](../findings/91-dn2-ddr-configuration.md)).
+- [ ] Establish explicit DN2 pool reservation from runtime pointer origins/bounds; configuration is not ownership.
+- [ ] Integrate owned backing, per-track generation binding and live transport.
+
+Checkpoint checks: changed-document pathcheck and diff whitespace pass. Routed
+`test:changed` passes layercheck and fails only on the known ten stale references
+in five unchanged files. No full merge gate or hardware run is claimed.
+
+Completed static audits:
 - [x] [Finding 88](../findings/88-dn2-reply-ownership.md): current DN2 1.12 ACK/diagnostic row bytes reach outgoing records. Header +0x08 is only a candidate and has a stock DMA-buffer accessor of unresolved reachability. No safe eight-byte reply slot is established.
 - [x] [Finding 89](../findings/89-dt2-waveform-workspace.md): the 32 MiB pool above 0x80a00008 is a recurring min/max summary workspace with a forward bump allocator. It cannot be borrowed as free sample memory.
 - [x] Source consistency: DT2 read calls serialize individually; no cross-read immutable lease or digest is established. Concurrent same-size Transfer replacement remains unsupported by the current source path.
-- [ ] After the policy decision, choose and validate the corresponding transport and backing integration. No hardware probe/upload has been authorized or performed.
+- [ ] Choose and validate transport and backing integration that preserve unrelated tracks. No hardware probe/upload has been authorized or performed.
 
 **Runtime integration in progress (2026-10-29):** Em asks us to continue
 through routine implementation/checkpoints and pause only for a real decision,
 with occasional progress updates. Preserve unrelated audio during sample loading
-unless Em chooses otherwise; do not inherit the diagnostic's global mute.
+as confirmed by Em; do not inherit the diagnostic's global mute.
 
-The next independent implementation is a bounded-memory native PCM16 stream
+The completed independent implementation is a bounded-memory native PCM16 stream
 validator/packer in the shared runtime SDK. It accepts fragmented input and
 bounded output, validates the canonical mono 48 kHz header/trailer, and emits
 little-endian packed words with odd final-frame padding. A late validation error

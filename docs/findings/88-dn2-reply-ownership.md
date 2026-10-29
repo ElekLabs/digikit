@@ -69,5 +69,16 @@ words on DN2, at most 48 bytes per 32-sample block. At 48 kHz that is a theoreti
 72,000 bytes/second ceiling, so 960,000 bytes require at least 13.33 seconds before
 acknowledgement, framing or host overhead. This is a capacity bound, not a benchmark.
 The full-frame diagnostic is faster in principle but substitutes audio commands
-and mutes output in its emulator proof. The user is being asked which loading
-policy to target; no hardware performance claim follows from either route.
+and mutes output in its emulator proof. The user confirmed per-track changes with unrelated audio preserved; no hardware performance claim follows from either route.
+
+
+**[D]** Follow-up traces the row copies through `0x40003118` to its transfer
+submission at `0x40003352..58`: a `0x3f4` descriptor on endpoint index 7,
+identified by the existing USB findings as Overbridge EP3 IN. Thus these bytes
+reach an outgoing USB stream. Historical DN2 1.11 live-row measurements in
+[finding 31](31-dsp-link.md) identify the overlapping bytes as parts of
+channels 22..25 and show playback-dependent content. That historical measurement
+supports the risk; exact DN2 1.12 host interpretation and audible consequences
+remain unmeasured. Copying the bytes does not itself prove how a host uses them,
+but the existing link comment calling the region unused is insufficient for live
+sample-loading ownership.

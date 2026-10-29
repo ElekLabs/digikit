@@ -627,3 +627,221 @@ fn snapshot_fails_closed_after_retry_exhaustion_and_after_missing_final_fingerpr
     *READ_PAYLOAD.lock().unwrap() = false;
     assert_eq!(unsafe { take_snapshot(&Io { rd: missing_after, wr }, &mut w, &mut dst) }, Err(E_READ));
 }
+
+#[path = "../../../src/rs/src/sha256.rs"]
+mod stream_sha;
+use stream::FileStream;
+
+fn stream_digest(data: &[u8]) -> [u8; 32] {
+    let mut sha = stream_sha::Sha::new();
+    let mut out = [0; 32];
+    unsafe {
+        sha.update(data.as_ptr(), data.len() as u32);
+        sha.finish(out.as_mut_ptr());
+    }
+    out
+}
+
+fn stream_file(w: &mut Work, size: usize) -> Vec<u8> {
+    let data: Vec<u8> = (0..size).map(|i| (i % 251) as u8).collect();
+    let e = Entry {
+        first: 100,
+        size: size as u32,
+        kind: KIND_FILE,
+        sha: stream_digest(&data),
+    };
+    let mut encoded = [0; ENTRY];
+    unsafe { encode_entry(cstr("sample").as_ptr(), &e, encoded.as_mut_ptr()) };
+    let sectors = sectors_of(e.size) as usize;
+    CARD.lock().unwrap()[100 * 512..(100 + sectors) * 512].fill(0xee);
+    CARD.lock().unwrap()[100 * 512..100 * 512 + size].copy_from_slice(&data);
+    let h = current(w);
+    unsafe {
+        commit(
+            &IO,
+            &LAY,
+            &h,
+            w.a.0.as_mut_ptr(),
+            w.b.0.as_mut_ptr(),
+            1024,
+            w.s.0.as_mut_ptr(),
+            Edit::Insert(encoded.as_ptr()),
+            &[],
+        )
+    }
+    .unwrap();
+    data
+}
+
+unsafe fn stream_open(io: &Io, w: &mut Work, max: u32) -> Result<FileStream, i32> {
+    FileStream::open(io, &LAY, cstr("sample").as_ptr(), w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 4096, max)
+}
+
+#[test]
+fn stream_multichunk_exact_hash_excludes_padding_and_caps_io() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    let data = stream_file(&mut w, 130 * 512 + 17);
+    let mut cursor = unsafe { stream_open(&IO, &mut w, u32::MAX) }.unwrap();
+    let mut dst = Box::new(Buf([0; 129 * 512]));
+    let mut sha = stream_sha::Sha::new();
+    let mut total = 0;
+    for expected in [128 * 512, 2 * 512 + 17, 0] {
+        let n = unsafe { cursor.read(w.s.0.as_mut_ptr(), dst.0.as_mut_ptr(), dst.0.len()) }.unwrap();
+        assert_eq!(n, expected);
+        assert_eq!(&dst.0[..n], &data[total..total + n]);
+        unsafe {
+            sha.update(dst.0.as_ptr(), n as u32);
+        }
+        total += n;
+    }
+    let mut digest = [0; 32];
+    unsafe {
+        sha.finish(digest.as_mut_ptr());
+    }
+    let e = unsafe { cursor.finish(w.s.0.as_mut_ptr(), digest) }.unwrap();
+    assert_eq!(e.size as usize, data.len());
+    assert_eq!(unsafe { cursor.finish(w.s.0.as_mut_ptr(), digest) }, Ok(e));
+    assert_eq!(unsafe { cursor.read(w.s.0.as_mut_ptr(), dst.0.as_mut_ptr(), dst.0.len()) }, Ok(0));
+}
+
+#[test]
+fn stream_replacement_before_between_and_during_chunks_is_sticky() {
+    let _g = lock();
+    unsafe extern "C" fn changing(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        let r = rd(sector, bytes, buf);
+        if sector == FIRST + 100 {
+            insert(&mut work(), "sample", 300, 1025, &[]).unwrap();
+        }
+        r
+    }
+    for timing in 0..3 {
+        fresh();
+        let mut w = work();
+        stream_file(&mut w, 1025);
+        let io = if timing == 2 { Io { rd: changing, wr } } else { IO };
+        let mut c = unsafe { stream_open(&io, &mut w, 1025) }.unwrap();
+        if timing == 1 {
+            assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 512) }, Ok(512));
+        }
+        if timing != 2 {
+            insert(&mut w, "sample", 300, 1025, &[]).unwrap();
+        }
+        assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 512) }, Err(crate::E_BUSY));
+        assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 512) }, Err(crate::E_BUSY));
+        assert_eq!(unsafe { c.finish(w.s.0.as_mut_ptr(), [0; 32]) }, Err(crate::E_BUSY));
+    }
+}
+
+#[test]
+fn stream_digest_premature_finish_and_buffer_bounds_fail_closed() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    stream_file(&mut w, 513);
+    let mut c = unsafe { stream_open(&IO, &mut w, 513) }.unwrap();
+    assert_eq!(unsafe { c.finish(w.s.0.as_mut_ptr(), [0; 32]) }, Err(crate::E_FORMAT));
+    assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 512) }, Err(crate::E_FORMAT));
+    let mut c = unsafe { stream_open(&IO, &mut w, 513) }.unwrap();
+    CARD.lock().unwrap()[100 * 512] ^= 1;
+    assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024) }, Ok(513));
+    // Hash what was actually read: corruption is discovered only at completion.
+    let digest = stream_digest(&w.b.0[..513]);
+    assert_eq!(unsafe { c.finish(w.s.0.as_mut_ptr(), digest) }, Err(crate::E_SHA));
+    assert_eq!(unsafe { c.finish(w.s.0.as_mut_ptr(), digest) }, Err(crate::E_SHA));
+    for cap in [0, 511, 513] {
+        let mut c = unsafe { stream_open(&IO, &mut w, 513) }.unwrap();
+        assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), cap) }, Err(E_BAD_STORE));
+    }
+    assert_eq!(unsafe { stream_open(&IO, &mut w, 512) }.err(), Some(crate::E_TOO_BIG));
+    let mut c = unsafe { stream_open(&IO, &mut w, 513) }.unwrap();
+    assert_eq!(
+        unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr().add(1), 512) },
+        Err(E_BAD_STORE)
+    );
+}
+
+#[test]
+fn stream_failed_fingerprint_or_payload_read_is_sticky() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    stream_file(&mut w, 513);
+    static FAIL_AT: Mutex<Option<u32>> = Mutex::new(None);
+    unsafe extern "C" fn failing(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        if *FAIL_AT.lock().unwrap() == Some(sector) {
+            return -1;
+        }
+        rd(sector, bytes, buf)
+    }
+    let io = Io { rd: failing, wr };
+    for sector in [FIRST, FIRST + LAY.header_b(), FIRST + 100] {
+        *FAIL_AT.lock().unwrap() = None;
+        let mut c = unsafe { stream_open(&io, &mut w, 513) }.unwrap();
+        *FAIL_AT.lock().unwrap() = Some(sector);
+        assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024) }, Err(E_READ));
+        *FAIL_AT.lock().unwrap() = None;
+        assert_eq!(unsafe { c.finish(w.s.0.as_mut_ptr(), [0; 32]) }, Err(E_READ));
+    }
+}
+
+#[test]
+fn stream_lookup_rejects_generation_changes_and_failed_headers() {
+    let _g = lock();
+    // Every read boundary of the complete initial lookup (fingerprints, headers,
+    // CRC, extent verification, and find) must fail instead of retrying.
+    for at in 1..9 {
+        fresh();
+        let mut w = work();
+        stream_file(&mut w, 513);
+        *HOOK.lock().unwrap() = Some((0, at));
+        let result = unsafe { stream_open(&Io { rd: rd_hooked, wr }, &mut w, 513) };
+        *HOOK.lock().unwrap() = None;
+        assert_eq!(result.err(), Some(crate::E_BUSY), "commit at lookup read {at}");
+    }
+    unsafe extern "C" fn fail(_: u32, _: u32, _: *mut u8) -> i32 {
+        -1
+    }
+    let mut w = work();
+    assert_eq!(unsafe { stream_open(&Io { rd: fail, wr }, &mut w, 513) }.err(), Some(E_READ));
+    fresh();
+    stream_file(&mut w, 0);
+    assert_eq!(unsafe { stream_open(&IO, &mut w, u32::MAX) }.err(), Some(crate::E_TOO_BIG));
+    // Verified table contents still need a valid data extent.
+    fresh();
+    insert(&mut w, "sample", 0, 513, &[]).unwrap();
+    assert_eq!(unsafe { stream_open(&IO, &mut w, 513) }.err(), Some(E_BAD_STORE));
+    fresh();
+    insert(&mut w, "sample", 100, u32::MAX, &[]).unwrap();
+    assert_eq!(unsafe { stream_open(&IO, &mut w, u32::MAX) }.err(), Some(E_BAD_STORE));
+}
+
+#[test]
+fn stream_final_check_and_post_read_fingerprint_fail_closed() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    let data = stream_file(&mut w, 513);
+    let mut c = unsafe { stream_open(&IO, &mut w, 513) }.unwrap();
+    assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024) }, Ok(513));
+    insert(&mut w, "sample", 300, 513, &[]).unwrap();
+    assert_eq!(unsafe { c.finish(w.s.0.as_mut_ptr(), stream_digest(&data)) }, Err(crate::E_BUSY));
+    static PAYLOAD: Mutex<bool> = Mutex::new(false);
+    unsafe extern "C" fn missing_after(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        if *PAYLOAD.lock().unwrap() {
+            return -1;
+        }
+        if sector == FIRST + 100 {
+            *PAYLOAD.lock().unwrap() = true;
+        }
+        rd(sector, bytes, buf)
+    }
+    fresh();
+    stream_file(&mut w, 513);
+    *PAYLOAD.lock().unwrap() = false;
+    let mut c = unsafe { stream_open(&Io { rd: missing_after, wr }, &mut w, 513) }.unwrap();
+    assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024) }, Err(E_READ));
+    *PAYLOAD.lock().unwrap() = false;
+    assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024) }, Err(E_READ));
+}
