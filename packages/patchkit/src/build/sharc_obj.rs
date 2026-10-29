@@ -16,6 +16,7 @@
 //! 48-bit jump or call (low 24 bits of the instruction), type 12 the absolute 32-bit immediate or address (low 32 bits). Both carry the
 //! symbol's address; the addend is in the symbol name (`sym + 4`).
 
+use super::sharc_legal::legality_problems;
 use crate::dko::{Dko, DkoReloc, DkoSection, DkoSymbol, FORMAT};
 use crate::error::*;
 use regex_lite::{Regex, RegexBuilder};
@@ -595,7 +596,7 @@ fn field(d: &Decoded, key: &str) -> Option<i64> {
 }
 
 /// Join the pieces `stem[hi:lo]` of a decoded form into one number; a form with the whole field only gives that.
-fn field_joined(d: &Decoded, stem: &str) -> Option<i64> {
+pub(super) fn field_joined(d: &Decoded, stem: &str) -> Option<i64> {
     let mut parts = vec![];
     for f in d.fields() {
         if let Some(r) = f.key.strip_prefix(stem)
@@ -666,38 +667,6 @@ fn fix_shift_counts(code: &[u8], rows: &[Row]) -> (Vec<u8>, Vec<Row>) {
         fixed[k] = (*p, out[s..s + raw.len()].to_vec());
     }
     (out, fixed)
-}
-
-/// The forms that address memory through an index register (Ia/Ic, with an immediate or register modifier): the ISA encodes the source
-/// of their stores as UREGXDAG1 / UREGXDAG2. Type 14a (`DM(<addr32>) = Ureg`) has no index register and takes the full UREG class.
-const INDEXED_MEMORY_FORMS: [&str; 5] = ["3a", "3b", "3d", "15a", "15b"];
-
-/// A store through DM with an index register cannot take a DAG1 register (I0-I7, M0-M7, L0-L7, B0-B7) and a store through PM cannot take
-/// a DAG2 register: the ISA encodes the source of such a store as UREGXDAG1 / UREGXDAG2 (SHARC+ PRM 15-7, 15-10, 13-13: "the Ureg may not
-/// be from the same DAG as Ia/Mb or Ic/Md"). Types 3a, 3b, 3d, 15a, 15b are checked; Type 14a, the direct-address store, is exempt, as is
-/// every other form. Loads take every register. The stock DSP image has not one store of the excluded kind (finding 49 section 10). The
-/// assembler and the emulator accept them; the silicon does not run them as written.
-pub(crate) fn ureg_class_problems(d: &Decoded, where_: &str) -> Vec<String> {
-    if !INDEXED_MEMORY_FORMS.contains(&d.type_name) {
-        return vec![];
-    }
-    let (dd, u) = (field_joined(d, "d"), field_joined(d, "ureg"));
-    let Some(u) = u.filter(|u| dd == Some(1) && (0x10..=0x4F).contains(u)) else {
-        return vec![];
-    };
-    let Some(g) = field_joined(d, "g") else {
-        return vec![]; // a form with no DM/PM select
-    };
-    let dag = if (u & 0xF) < 8 { 1 } else { 2 };
-    if (g == 0 && dag == 1) || (g == 1 && dag == 2) {
-        let name = ["I", "M", "L", "B"][(u >> 4) as usize - 1];
-        return vec![format!(
-            "{where_}: {} store of {name}{} (DAG{dag})",
-            if g != 0 { "PM" } else { "DM" },
-            u & 0xF
-        )];
-    }
-    vec![]
 }
 
 // ---------------------------------------------------------------------------------------------------------- link and verify
@@ -792,7 +761,7 @@ fn verify(
         let d = decode_row(raw, 6);
         linked
             .ureg_class
-            .extend(ureg_class_problems(&d, &format!("parcel {parcel:#x}")));
+            .extend(legality_problems(&d, &format!("parcel {parcel:#x}")));
         if let Some(why) = shift_imm_problem(&d) {
             problems.push(format!("parcel {parcel:#x} {}: {why}", hex(raw)));
         }
@@ -932,9 +901,9 @@ pub fn object_from_text(source: &str) -> Result<Dko> {
     }
     let linked = link(&obj, PLACEHOLDER_BASE, &externs)?;
     if !linked.ureg_class.is_empty() {
-        // a store through an index register whose source register the ISA excludes (ureg_class_problems): the silicon does not run it
+        // an instruction the ISA excludes (sharc_legal): the silicon does not run it
         return Err(err!(
-            "{} store(s) the ISA does not allow (finding 49 section 10): {}",
+            "{} instruction(s) the ISA does not allow (finding 49 section 10): {}",
             linked.ureg_class.len(),
             linked.ureg_class.join("; ")
         ));
@@ -1174,6 +1143,43 @@ mod tests {
             "I0 = DM(15, I4);",
         ] {
             object_from_text(&format!("{HEAD}    {ok}\n    RTS;\n"))
+                .unwrap_or_else(|e| panic!("{ok}: {e}"));
+        }
+    }
+
+    #[test]
+    fn a_post_modify_load_of_a_register_of_the_index_dag_is_refused_and_its_neighbours_are_not() {
+        // Ureg = DM(Ia, Mb) loads UREGXDAG1 only (PRM 13-15). With a compute the assembler emits Type 3a (u = 1 for the (I, M) order);
+        // the word-level rule, with PM, is tested in sharc_legal.
+        let c = ", R0 = R1 + R2;";
+        for bad in [
+            "I0 = DM(I4, M4)",
+            "M1 = DM(I4, M4)",
+            "L7 = DM(I0, M0)",
+            "B3 = DM(I4, M4)",
+        ] {
+            let e = object_from_text(&format!("{HEAD}    {bad}{c}\n    RTS;\n")).unwrap_err();
+            assert!(e.0.contains("the ISA does not allow"), "{bad}: {e}");
+        }
+        let e = object_from_text(&format!("{HEAD}_x:\n    I0 = DM(I4, M4){c}\n    RTS;\n"))
+            .unwrap_err();
+        assert!(
+            e.0.contains("parcel 0x0: DM post-modify load of I0 (DAG1)"),
+            "{e}"
+        );
+        // the nearest legal ones: a DAG2 register, a data register, the pre-modify load, the immediate-address load
+        for ok in [
+            "I8 = DM(I4, M4)",
+            "R3 = DM(I4, M4)",
+            "I0 = DM(M4, I4)",
+            "I0 = DM(15, I4)",
+        ] {
+            let src = if ok.contains("15") {
+                format!("{ok};")
+            } else {
+                format!("{ok}{c}")
+            };
+            object_from_text(&format!("{HEAD}    {src}\n    RTS;\n"))
                 .unwrap_or_else(|e| panic!("{ok}: {e}"));
         }
     }

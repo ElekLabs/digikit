@@ -19,6 +19,7 @@ pub mod cf;
 pub mod elf;
 pub mod rust;
 pub mod sharc;
+pub mod sharc_legal;
 pub mod sharc_obj;
 pub mod show;
 pub mod toolchain;

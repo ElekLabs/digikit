@@ -257,6 +257,29 @@ child processes.
 - [x] After phase 5: the workbench Reload modules button builds first (`patchkit build` in Rust).
 - [ ] Cache the module library scan in `dev.reload` (1.2 s of each reload).
 
+### Freqshift freeze on the DT2
+
+Em's DT2 (2026-10-29): the `device` set, freqshift on its send route, restart: spinner, then the screen and the
+buttons froze. Not reproduced in the emulator. No effect had run on the device before (only pluck has, finding 47),
+so the whole FX path is new on silicon. Candidates from a static audit: a runtime panic (it was a silent `loop {}`),
+a SHARC encoding the assembler and emulator accept but silicon does not (finding 49 section 10), a parity fault on a
+DSP word read before any write. Not the cycle budget (about 8k instructions against 666k cycles per block).
+
+- [x] DSP fault table, hang record, safe mode and opt-in module trace (finding 77; 1702fcb7, 2a720eb2).
+- [x] Runtime panics: panic record, reset and safe mode `CPU PANIC` instead of a silent freeze; dev command
+      `FAULT` (0x23); emulator test on DT2 and DN2 (finding 77 section 5a; 5625034f).
+- [x] B1: build-time legality check of SHARC instructions in patchkit (`build/sharc_legal.rs`, shared with `dspscan`):
+      the same-DAG store rule, and now the post-modify load into a register of the index register's DAG (PRM p.13-15,
+      13-18/19, 13-24: UREGXDAG1/2). DM/PM index pairing has no encoding to check. Zero hits on the stock images
+      (DT2 1.16/1.17, DN2 1.11/1.12) and on all 22 module and fixture DSP objects: not the cause.
+- [x] B2: `SHARC_UNINIT_TRAP=1` in the emulator (`sharc-rt` `bnd.rs`, off by default; docs/INSTRUMENTATION.md). Cold
+      boots of `fx-freqshift-dt2` and `-dn2`: the same never-written reads in the dry, master and send boots (stock code
+      at the starts of placed blocks, an SDRAM poll); no FX-path or freqshift word is read before a write: not the cause.
+- [ ] Open from B1 (assembler probes, not on the freqshift path): Selache encodes Type 3b `Ureg = DM(Ia, Mb)` with u = 0
+      like `DM(Mb, Ia)`, and Type 3a `PM(I12, M12)` with g = 0 like `DM(I4, M4)`. Same bytes in the emulator and on
+      silicon, so a wrong-result risk, not a halt. Check against the manual and the stock encodings.
+- [ ] Retry freqshift on Em's DT2 with these builds; fix what ABOUT names (`CPU PANIC` or `DSP STOP`, module and step).
+
 ### Later
 
 Own DSP work (`sdk/dsp`, the C-on-SHARC replacement), text entry, module-owned views and the
@@ -270,7 +293,7 @@ Fault instrumentation follow-ups (the base is in finding 77): only when a real b
 - [ ] A "trace" tag for traced `.dkm` files on the site's Transfer page.
 - [ ] Module-source tags for the callbacks that `core/ui` and `core/params` make.
 - [ ] A gdb bridge to the emulator's ColdFire, and the crash record as an m68k core file.
-- [ ] Host-side names for the runtime stack addresses of a panic record: patchkit `cf-link --json` emits the symbols and `text_ranges` (`packages/patchkit/src/build_cli.rs:212-216`).
+- [ ] Host-side names for the runtime stack addresses of a panic record: patchkit `cf-link --json` emits the symbols and `text_ranges` (`packages/patchkit/src/build_cli.rs:212-216`); the patch plan of the image also has a symbol per runtime function. Look up the address minus 2: a call to a function that does not return is often the last instruction, so its return address is the first byte of the next function.
 - [ ] `api->fatal(code)` for C modules through the same fatal path as the runtime panic.
 - [ ] Review the runtime's footprint and move non-critical instrumentation into a debug module, keeping only critical fault handling in the runtime (Em's idea). Baseline from
       2026-10-30: .text 109 KB, bss 671 KB, of which the module arena is 512 KB, DKRT_STAGE 64 KB, DKRT_UPLOAD_BUF 36 KB and DKRT_LOG 16 KB.
@@ -287,3 +310,8 @@ runtime sets of both devices); Em approved the new goldens. Phase 3 done. Then c
 modules builds first). 6a done (SHARC built in Rust with Selache as a
 library, natively and in wasm); 6b done (gcc in wasm, finding 74). 6c and 6d done (Transfer and Firmware in the site; flash over
 MidiRpc, tested on Em's DT2). Next: phase 7.
+
+2026-10-30: branch `debug/fault-trace` (from main ac77afc1): fault trace (finding 77) and its gate fixes pushed
+(2a720eb2), no PR yet; runtime panics committed (5625034f), not pushed. The freqshift freeze is not explained yet:
+B1 and B2 found nothing on the FX path (section "Freqshift freeze on the DT2"); next a retry on the device with
+this build, which now names a CPU panic or a DSP stop.

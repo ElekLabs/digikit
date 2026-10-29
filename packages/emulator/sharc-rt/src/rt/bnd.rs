@@ -1064,6 +1064,40 @@ fn uninit_log(line: &str) {
     }
 }
 
+/// `SHARC_UNINIT_TRAP=1` (opt-in, default off): list data reads of bytes that nothing
+/// loaded or wrote, once per word-aligned address, to `SHARC_UNINIT_LOG` (stderr if
+/// unset). The value read does not change. Silicon parity (MODE1 bits 27-29) may fault
+/// on such reads.
+fn uninit_trap() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SHARC_UNINIT_TRAP").is_some_and(|v| v != "0"))
+}
+
+#[cold]
+fn uninit_trap_hit(s: &St, address: Int, width: Int) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static SEEN: OnceLock<Mutex<HashMap<u32, u64>>> = OnceLock::new();
+    let word = (address as u32) & !3;
+    let n = {
+        let mut m = SEEN.get_or_init(Default::default).lock().unwrap();
+        let c = m.entry(word).or_insert(0);
+        *c += 1;
+        *c
+    };
+    if n == 1 || (n >= 64 && n.is_power_of_two()) {
+        let line = format!(
+            "uninit-read addr={:#x} w={width} pc={:#x} n={n}",
+            address as u32, s.pc_sw as u32
+        );
+        if std::env::var_os("SHARC_UNINIT_LOG").is_some() {
+            uninit_log(&line);
+        } else {
+            eprintln!("{line}");
+        }
+    }
+}
+
 #[cold]
 fn uninit_value(address: Int, width: Int) -> Int {
     let seed = uninit_seed();
@@ -1358,10 +1392,13 @@ pub fn _dm_read_full(
     }
     let canonical = _canonical_dm_address(s, concrete, width, false)?;
     let Some(canonical) = canonical else {
-        let plain = matches!(width, 1 | 2 | 4)
-            && !(fixed_width_mmr(s, concrete)
-                || in_core_mmr_range(concrete)
-                || in_system_mmr_range(concrete));
+        let non_mmr = !(fixed_width_mmr(s, concrete)
+            || in_core_mmr_range(concrete)
+            || in_system_mmr_range(concrete));
+        if non_mmr && uninit_trap() {
+            uninit_trap_hit(s, concrete, width);
+        }
+        let plain = matches!(width, 1 | 2 | 4) && non_mmr;
         if plain && (s.cfg.explicit_memory_model || uninit_seed() != 0) {
             // bytes nothing loaded or wrote: zero, or (SHARC_UNINIT) the power-up pattern
             return Ok(Some(V::c(uninit_value(concrete, width))));

@@ -46,6 +46,7 @@ the default directory for every native `*_OUT` that is unset.
 
 Not a `spikes` name: `SHARC_UNINIT=<hex seed>` makes DSP bytes that no boot block loaded and no store wrote read as a seeded non-zero pattern
 instead of zero (default off, part of the render cache key); `SHARC_UNINIT_LOG=FILE` lists the first reads (finding 49).
+`SHARC_UNINIT_TRAP=1` (default off, value unchanged) logs each data read of a never-written byte once per word-aligned address as `uninit-read addr=0x.. w=N pc=0x.. n=COUNT` to `SHARC_UNINIT_LOG` (stderr if unset), again at counts 64, 128, ...; widths 1, 2, 4 and 8, no instruction fetch. Silicon parity (MODE1 bits 27-29) may fault on such reads.
 
 `SHARC_IRQ_PROBE=LO-HI[,LO-HI...]:MASK[:EVERY]` (hex software PCs, an IRPTL bit mask, a decimal divisor; default off, part of the render cache key)
 latches the interrupt bits MASK just before the interpreter executes an instruction in a window, once per visit of that PC and for every EVERY-th

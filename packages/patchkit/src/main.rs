@@ -564,7 +564,7 @@ plan.json {}",
             for f in &found {
                 println!("{f}");
             }
-            println!("{} store(s)", found.len());
+            println!("{} instruction(s)", found.len());
             if !found.is_empty() {
                 std::process::exit(1);
             }
