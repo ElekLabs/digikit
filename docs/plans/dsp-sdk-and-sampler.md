@@ -7,6 +7,20 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 ## Resume here
 
 
+**Decision pending (2026-10-29): sample-loading transport policy.**
+The user asks to continue autonomously until a real decision. Parser checkpoint
+`db3514f7` is pushed. An async question asks whether DN2 sample changes must keep
+other tracks playing (recommended) or may mute the whole output for faster loading.
+The existing spare-frame channel has a theoretical 72,000-byte/second ceiling;
+960,000 bytes require at least 13.33 seconds before overhead. This is not measured
+loading time. Do not start policy-dependent transport implementation before the reply.
+
+Static audits completed while waiting:
+- [x] [Finding 88](../findings/88-dn2-reply-ownership.md): current DN2 1.12 ACK/diagnostic row bytes reach outgoing records. Header +0x08 is only a candidate and has a stock DMA-buffer accessor of unresolved reachability. No safe eight-byte reply slot is established.
+- [x] [Finding 89](../findings/89-dt2-waveform-workspace.md): the 32 MiB pool above 0x80a00008 is a recurring min/max summary workspace with a forward bump allocator. It cannot be borrowed as free sample memory.
+- [x] Source consistency: DT2 read calls serialize individually; no cross-read immutable lease or digest is established. Concurrent same-size Transfer replacement remains unsupported by the current source path.
+- [ ] After the policy decision, choose and validate the corresponding transport and backing integration. No hardware probe/upload has been authorized or performed.
+
 **Runtime integration in progress (2026-10-29):** Em asks us to continue
 through routine implementation/checkpoints and pause only for a real decision,
 with occasional progress updates. Preserve unrelated audio during sample loading
