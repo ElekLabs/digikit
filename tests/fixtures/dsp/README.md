@@ -36,3 +36,44 @@ resume. This models scheduler interleaving, not physical interrupt entry/priorit
 NMI exclusion, DMA completion, cache coherency, device backing ownership or timing.
 
 Run only `uv run pytest -q tests/patchkit/test_dsp_sample_bindings.py`.
+
+## Private CF close/ACK boundary
+
+`sample-binding-close.s` includes the unchanged reader fixture and adds
+`_bind_control(R4=command, R8=reply)` with normal-word DM pointers. The matching
+`sample-binding-close.c` is compiled and executed by the existing CF call harness.
+The test driver transfers complete immutable four-word numeric snapshots between
+them. This is a logical protocol, not a physical wire byte order or transport ABI;
+READY-last is not evidence of atomic four-word publication. Reply reads do not
+race writes in this proof.
+
+CLOSE is `{0x01014243, request_id, track, expected_epoch}`. Reply header is
+`0x00014241 | (status << 24)`, followed by the identical ID/track/epoch;
+status 1 is PENDING, 2 DRAINED, 3 REJECTED. IDs and epochs are positive signed
+32-bit values; tracks are 0/1. One serialized producer retains its accepted tuple.
+Lower IDs, conflicting identical IDs and higher IDs while pending are rejected
+without changing accepted history or bank state. Exact retries recheck live
+identity/drain, including after replacement. New IDs require the prior request
+to have drained and a valid current binding identity; IDs never wrap.
+
+CF retains its immutable request through PENDING. Only an exact matching DRAINED
+snapshot authorizes reuse. Unrelated snapshots are ignored; matching malformed,
+unknown-status or REJECTED replies quarantine the operation. Timeout also
+quarantines it. Terminal DRAINED/FAILED outcomes ignore all late ACKs; beginning a
+strictly newer request is possible only from initial idle or DRAINED. No memory
+is freed and no sender-return or transport-terminal claim is made.
+
+The interleaving proof pauses A inside the actual PCM kernel, retains its stack,
+gets PENDING through both compiled CF and assembled DSP, renders B's exact old
+PCM, resumes/releases A, then retries the same request and obtains DRAINED before
+publishing A's replacement. Cached old A cannot read it; fresh A and unaffected B
+produce independently derived exact PCM. A separate paused-B case checks that a
+new pending request cannot inherit an older request's drained grant. Distinct
+A/B/producer stacks and distinctive saved registers are checked.
+
+Run `uv run python -m pytest tests/patchkit/test_dsp_sample_binding_close.py -q`.
+The CF test uses `pk_cfcall.EXAMPLE` in this checkout by default; optionally set
+`DIGI_BIND_CLOSE_CF_CALL` to an explicitly owned prebuilt runner. A missing binary
+fails the prebuilt guard; the test never builds an emulator.
+This does not prove physical IRQ dispatch, concurrent message snapshots, SPI/LP0,
+DMA/cache coherence, production pool ownership or a public close/drain ABI.
