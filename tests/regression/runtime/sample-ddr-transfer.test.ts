@@ -7,6 +7,7 @@ import { button, repoRoot, resolveInputs, type Session } from '@digi/test-suppor
 import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { DdrWriter } from './sample-ddr-writer.ts';
 
 const root = repoRoot();
 const binary = process.env.DIGI_EMUD_DN2;
@@ -30,7 +31,7 @@ function checksum(words: number[]): number {
   return (s1 ^ s2) >>> 0;
 }
 
-function frame(seq: number, op: number, offset = 0, data = Buffer.alloc(0), token = TOKEN): Buffer {
+function frame(seq: number, op: number, offset = 0, data: Buffer = Buffer.alloc(0), token = TOKEN): Buffer {
   if (data.length % 4 || data.length > 2560) throw new Error('payload must be at most 640 complete words');
   const header = [4, MAGIC, token, seq, op, offset, data.length / 4];
   const payload = Array.from({ length: data.length / 4 }, (_, i) => data.readUInt32LE(i * 4));
@@ -159,7 +160,20 @@ async function prepare(session: Session) {
   async function dspWord(addr: number): Promise<number> {
     return (await peek(session, addr, 4)).readUInt32LE();
   }
-  return { request, ready: () => dspWord(ready), words: () => dspWord(words), plan };
+  const writer = new DdrWriter(async (token, seq, op, offset, data) => {
+    await request(frame(seq, op, offset, data, token), 2, op === 3 ? 1 : op === 4 ? 5 : op === 5 ? 7 : 0);
+    if (op === 2 && seq === 1) {
+      const before = await peek(session, BASE, 2560);
+      await request(frame(seq, op, offset, data, token));
+      expect(await dspWord(words)).toBe(640);
+      expect(await peek(session, BASE, 2560)).toEqual(before);
+    }
+    if (op === 3) {
+      expect(await dspWord(ready), 'COMMIT seals without publishing READY').toBe(0);
+      expect(await dspWord(planSymbol(plan, '_dd_admission_open'))).toBe(0);
+    }
+  });
+  return { request, writer, ready: () => dspWord(ready), words: () => dspWord(words), plan };
 }
 
 function quietProof(name: string, body: (session: Session) => Promise<void>) {
@@ -205,7 +219,12 @@ interface Registry {
   entries: { id: string; index: number; module: string }[];
 }
 
-async function playbackProof(session: Session, plan: RuntimePlan, retire?: () => Promise<void>): Promise<void> {
+async function playbackProof(
+  session: Session,
+  plan: RuntimePlan,
+  retire?: () => Promise<void>,
+  replace?: () => Promise<{ token: number; data: Buffer }>,
+): Promise<void> {
   const registries = (plan as RuntimePlan & { registries: Registry[] }).registries;
   const machines = registries.find((registry) => registry.name === 'machines')!;
   const voices = registries.find((registry) => registry.name === 'voices')!;
@@ -432,6 +451,90 @@ async function playbackProof(session: Session, plan: RuntimePlan, retire?: () =>
           2,
         ),
       );
+      if (replace) {
+        // Keep a trigger held through closed-bank transport. Only exact DSP ACKs
+        // grant CF substitution; no quiet-note assumption permits backing reuse.
+        await session.client.inputButton(button('TRIG 1'), true);
+        await settle(100);
+        const replacement = await replace();
+        expect(await peek(session, BASE, BYTES)).toEqual(replacement.data);
+        expect(await peek(session, BASE - 4096, 4096)).toEqual(canary);
+        expect(await peek(session, BASE + BYTES, 4096)).toEqual(canary);
+        const readsBeforeNewNote = await word(planSymbol(plan, '_dd_play_reads'));
+        const noteEntries = await word(planSymbol(plan, '_dd_obs_note_entries'));
+        // A fresh/late note after READY resolves the selected current bank.
+        await session.client.inputButton(button('TRIG 1'), false);
+        await settle(100);
+        await session.client.call('pcm.tap', { action: 'capture_stop' });
+        const replacementWav = path.join(session.runDir, 'generation-c.wav');
+        await session.client.call('pcm.tap', { action: 'start' });
+        await session.client.call('pcm.tap', { action: 'capture', path: replacementWav });
+        await session.client.inputButton(button('TRIG 1'), true);
+        await expect
+          .poll(async () => word(planSymbol(plan, '_dd_obs_note_entries')), { timeout: 10000 })
+          .toBeGreaterThan(noteEntries);
+        await settle(1500);
+        await session.client.call('pcm.tap', { action: 'capture_stop' });
+        const currentState = await word(stateAddress);
+        expect(await word(currentState + 24)).toBe(replacement.token);
+        expect(await word(planSymbol(plan, '_dd_play_reads'))).toBeGreaterThan(readsBeforeNewNote);
+        const pcm = fs.readFileSync(replacementWav).subarray(44);
+        let finite = true;
+        for (let i = 0; i < pcm.length; i += 4) finite &&= Number.isFinite(pcm.readFloatLE(i));
+        const samples = Array.from({ length: 24000 }, (_, i) => {
+          const offset = (14400 + i) * 8;
+          return (pcm.readFloatLE(offset) + pcm.readFloatLE(offset + 4)) * 0.5;
+        });
+        const power = (hz: number) => {
+          let real = 0;
+          let imag = 0;
+          samples.forEach((sample, i) => {
+            real += sample * Math.cos((2 * Math.PI * hz * i) / 48000);
+            imag += sample * Math.sin((2 * Math.PI * hz * i) / 48000);
+          });
+          return real * real + imag * imag;
+        };
+        const powers = [200, 300, 400].map(power);
+        const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+        const audio = {
+          finite,
+          capturedFrames: pcm.length / 8,
+          windowStartFrame: 14400,
+          windowEndFrame: 38400,
+          rms,
+          frequencies: [200, 300, 400],
+          powers,
+        };
+        // Retain measurements before the audibility/content verdicts.
+        fs.writeFileSync(path.join(session.runDir, 'generation-c-audio.json'), JSON.stringify(audio, null, 2));
+        fs.writeFileSync(
+          path.join(session.runDir, 'generation-reopening-result.json'),
+          JSON.stringify(
+            {
+              token: replacement.token,
+              sourceSha256: createHash('sha256').update(replacement.data).digest('hex'),
+              fullBankSha256: createHash('sha256')
+                .update(await peek(session, BASE, BYTES))
+                .digest('hex'),
+              guardSha256: createHash('sha256').update(canary).digest('hex'),
+              noteEntriesBefore: noteEntries,
+              readsBeforeNewNote,
+              cursor: (await peek(session, currentState, 28)).toString('hex'),
+              frequencies: [200, 300, 400],
+              powers,
+              audio,
+              replacementWav,
+              scope:
+                'A retired while active; B sealed and retired without opening; C explicitly opened and a fresh note uses C.',
+            },
+            null,
+            2,
+          ),
+        );
+        expect(finite, 'entire generation C capture is finite').toBe(true);
+        expect(rms, 'generation C is audible in the measured window').toBeGreaterThan(0.001);
+        expect(powers[2]!).toBeGreaterThan(100 * Math.max(powers[0]!, powers[1]!));
+      }
     }
   } finally {
     await session.client.inputButton(button('TRIG 1'), false);
@@ -561,23 +664,8 @@ quietProof('full quiet DDR transport: 960000 bytes, complete canaries and duplic
     const fade = Math.min(1, i / 960, (479999 - i) / 960);
     data.writeInt16LE(Math.round(triangle * fade), i * 2);
   }
-  await proof.request(frame(0, 1));
-  expect(await proof.ready()).toBe(0);
-  let last = frame(0, 1);
-  for (let seq = 1; seq <= 375; seq++) {
-    const offset = (seq - 1) * 2560;
-    last = frame(seq, 2, offset / 4, data.subarray(offset, offset + 2560));
-    await proof.request(last);
-    if (seq === 1) {
-      const before = await peek(session, BASE, 2560);
-      await proof.request(last);
-      expect(await proof.words()).toBe(640);
-      expect(await peek(session, BASE, 2560)).toEqual(before);
-    }
-  }
-  expect(await proof.ready()).toBe(0);
+  await proof.writer.load(data, TOKEN);
   expect(await proof.words()).toBe(240000);
-  await proof.request(frame(376, 3, 240000), 2, 1);
   expect(await proof.ready()).toBe(1);
   const after = await peek(session, BASE, BYTES);
   expect(after.equals(data), 'entire transferred payload, not a prefix or hash only').toBe(true);
@@ -608,7 +696,7 @@ quietProof('DDR out-of-range DATA poisons proof without READY', async (session) 
   await proof.request(frame(0, 1));
   const before = await rawPeek(session, BASE - 4096, BYTES + 8192);
   fs.writeFileSync(path.join(session.runDir, 'ddr-before-rejection.json'), JSON.stringify(before));
-  await proof.request(frame(1, 2, 240000, Buffer.from([1, 2, 3, 4])), 3, 3);
+  await proof.request(frame(1, 2, 240000, Buffer.from([1, 2, 3, 4])), 3, 101);
   expect(await proof.ready()).toBe(0);
   expect(await proof.words()).toBe(0);
   const after = await rawPeek(session, BASE - 4096, BYTES + 8192);
@@ -624,7 +712,7 @@ quietProof('DDR partial checksum failure retains backing and never publishes REA
   fs.writeFileSync(path.join(session.runDir, 'ddr-before-rejection.json'), JSON.stringify(before));
   const bad = frame(2, 2, 640, Buffer.alloc(2560, 0x96));
   bad[28] = bad[28]! ^ 1; // Corrupt checksum, leaving token/sequence/range valid.
-  await proof.request(bad, 3, 2);
+  await proof.request(bad, 3, 101);
   expect(await proof.ready()).toBe(0);
   expect(await proof.words()).toBe(640);
   const after = await rawPeek(session, BASE - 4096, BYTES + 8192);
@@ -655,14 +743,99 @@ quietProof(
       const fade = Math.min(1, i / 960, (479999 - i) / 960);
       data.writeInt16LE(Math.round(triangle * fade), i * 2);
     }
-    await proof.request(frame(0, 1));
-    for (let seq = 1; seq <= 375; seq++) {
-      const offset = (seq - 1) * 2560;
-      await proof.request(frame(seq, 2, offset / 4, data.subarray(offset, offset + 2560)));
-    }
-    await proof.request(frame(376, 3, 240000), 2, 1);
+    await proof.writer.load(data, TOKEN);
     expect(await proof.ready()).toBe(1);
     expect(await peek(session, BASE, BYTES)).toEqual(data);
     await playbackProof(session, proof.plan, () => proof.request(frame(377, 4), 2, 5));
   },
 );
+
+function triangleBank(hz: number): Buffer {
+  const data = Buffer.alloc(BYTES);
+  const period = 48000 / hz;
+  for (let i = 0; i < BYTES / 2; i++) {
+    const triangle = 8192 * (1 - 4 * Math.abs((i % period) / period - 0.5));
+    const fade = Math.min(1, i / 960, (479999 - i) / 960);
+    data.writeInt16LE(Math.round(triangle * fade), i * 2);
+  }
+  return data;
+}
+
+quietProof('DDR generation A retires, sealed B is skipped, and C opens for a new note', async (session) => {
+  const proof = await prepare(session);
+  const a = triangleBank(200);
+  await proof.writer.load(a, TOKEN);
+  expect(await peek(session, BASE, BYTES)).toEqual(a);
+  await playbackProof(
+    session,
+    proof.plan,
+    () => proof.request(frame(377, 4), 2, 5),
+    async () => {
+      const b = triangleBank(300);
+      const c = triangleBank(400);
+      // C must retire sealed B before its next INIT.
+      const loadingB = proof.writer.load(b, TOKEN + 1, false);
+      const loadingC = loadingB.then(async () => {
+        expect(await proof.ready()).toBe(0);
+        expect(await peek(session, BASE, BYTES)).toEqual(b);
+        const canary = Buffer.alloc(4096);
+        for (let i = 0; i < 1024; i++) canary.writeUInt32LE(CANARY, i * 4);
+        const guards = [await peek(session, BASE - 4096, 4096), await peek(session, BASE + BYTES, 4096)];
+        expect(guards).toEqual([canary, canary]);
+        fs.writeFileSync(
+          path.join(session.runDir, 'generation-b-sealed.json'),
+          JSON.stringify({
+            token: TOKEN + 1,
+            ready: await proof.ready(),
+            guardSha256: guards.map((guard) => createHash('sha256').update(guard).digest('hex')),
+            sha256: createHash('sha256')
+              .update(await peek(session, BASE, BYTES))
+              .digest('hex'),
+          }),
+        );
+        return proof.writer.load(c, TOKEN + 2);
+      });
+      await loadingC;
+      expect(await proof.ready()).toBe(1);
+      return { token: TOKEN + 2, data: c };
+    },
+  );
+  const word = async (name: string) => (await peek(session, planSymbol(proof.plan, name), 4)).readUInt32LE();
+  const before = await peek(session, BASE - 4096, BYTES + 8192);
+  const current = {
+    token: await word('_dd_token'),
+    ready: await proof.ready(),
+    open: await word('_dd_admission_open'),
+  };
+  expect(current).toEqual({ token: TOKEN + 2, ready: 1, open: 1 });
+  // A valid stale B RETIRE bypasses quiet masks and actually reaches DSP.
+  // C's ACK identity cannot complete it; timeout permanently stops the CF writer.
+  await proof.request(frame(377, 4, 0, Buffer.alloc(0), TOKEN + 1), 3, 100);
+  const mail = planSymbol(proof.plan, 'dd_mail');
+  expect(await session.client.memPeek(mail + 12)).toBeGreaterThan(0);
+  expect(await session.client.memPeek(mail)).toBe(3);
+  expect({
+    token: await word('_dd_token'),
+    ready: await proof.ready(),
+    open: await word('_dd_admission_open'),
+  }).toEqual(current);
+  expect(await peek(session, BASE - 4096, BYTES + 8192)).toEqual(before);
+  const normalBefore = await word('_dd_normal_frames');
+  await expect.poll(() => word('_dd_normal_frames'), { timeout: 10000 }).toBeGreaterThan(normalBefore);
+  expect(await session.client.memPeek(mail)).toBe(3);
+  fs.writeFileSync(
+    path.join(session.runDir, 'stale-b-retire-result.json'),
+    JSON.stringify(
+      {
+        current,
+        error: await session.client.memPeek(mail + 4),
+        sent: await session.client.memPeek(mail + 12),
+        fullBankAndGuardsSha256: createHash('sha256').update(before).digest('hex'),
+        normalBefore,
+        normalAfter: await word('_dd_normal_frames'),
+      },
+      null,
+      2,
+    ),
+  );
+});

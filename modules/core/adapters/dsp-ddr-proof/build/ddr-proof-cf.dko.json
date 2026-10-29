@@ -11,184 +11,373 @@
   },
   {
    "addend": 0,
-   "offset": 94,
+   "offset": 8,
+   "section": ".text.fail",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 16,
+   "section": ".text.fail",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.fail",
+   "symbol": ".sec..bss.dd_op",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.fail",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_previous_quiet",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 110,
+   "offset": 114,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 122,
+   "offset": 120,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_op",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_previous_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 132,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 142,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 190,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 200,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 246,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..text.frame_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 156,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_previous_quiet",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 162,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_failed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 174,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
    "offset": 336,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 460,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
+   "symbol": ".sec..rodata.CSWTCH.33",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 468,
+   "offset": 354,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 480,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 488,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 508,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_failed",
+   "symbol": ".sec..text.frame_word",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 514,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 524,
+   "offset": 552,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 8,
-   "offset": 532,
+   "offset": 560,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 538,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 546,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 566,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_failed",
+   "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
-   "addend": 4,
+   "addend": 0,
    "offset": 572,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
+   "symbol": ".sec..bss.dd_op",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 580,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_mail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 694,
-   "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_failed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 700,
+   "offset": 578,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 714,
+   "offset": 594,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_failed",
+   "symbol": ".sec..text.fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 734,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_retired_token",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 740,
    "section": ".text.dd_frame_hook",
-   "symbol": ".sec..bss.dd_frame",
+   "symbol": ".sec..bss.dd_opened_token",
    "type": "cf.32"
   },
   {
-   "addend": 12,
+   "addend": 0,
+   "offset": 746,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_sealed_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 752,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 758,
    "section": ".text.dd_frame_hook",
    "symbol": ".sec..bss.dd_mail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 782,
+   "offset": 766,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 774,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 784,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 792,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 812,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..text.fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 830,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 836,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_opened_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 842,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_sealed_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 848,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_retired_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 862,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_sealed_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 868,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_retired_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 882,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_opened_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 888,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_sealed_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 894,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 906,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..text.fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 924,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 964,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..text.frame_word",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 988,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 996,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_retired_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1022,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 1034,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1064,
    "section": ".text.dd_frame_hook",
    "symbol": "dd_stock_send",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1084,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_sealed_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1092,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_opened_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1104,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1116,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_loading_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1124,
+   "section": ".text.dd_frame_hook",
+   "symbol": ".sec..bss.dd_sealed_token",
    "type": "cf.32"
   }
  ],
@@ -202,10 +391,59 @@
   },
   {
    "align": 2,
-   "hex": "4fefffcc48d77cfc2a6f0038266f003c2e2f0040286f0044bbfc00000a80660c0c8700000abc66044a8b6608428242854284603871d357804a8066f04a6b00026674322b0024302b00228081322b00268081322b002880814a40665a4ab90000000056c474017a01790444844df9000000002f56003042a745f9000000004e92588f59804a806610487800014e92588f0c80ddf4a6016726428323c2000000004ab90000000067000092720323c1000000006000019442827a016000ff74487800024e92588f26004a8067ce487800034e92588f0c800000017966bc487800044e92588f59804a8066ae487800054e92588f26004a8066a0487800064e92588f2c004a80669491c82f082f4800304e92206f0030588fdc80d68652887007b08866e6487800074e92588f2206b781b08157c1770144836000ff627004b0af0030670000c87201b2af0030660000fc4ab900000000670000824a8c677c71ec00600c800000a6dd6670322c0060342c0062302c00643c2c00663f4100304878000271c0484642468c804e92588fbc8066484842424271ef00304878000384804e92588f2202424148410281000001ffb08166267019e0aa4a83670000e67206b28267167005b082660000e023c200000000700223c0000000007001b096666a203900000000528023c0000000000c8000000384630000de7201706423c10000000023c0000000006000fea242b900000000700142b90000000042b90000000042a723c0000000004e92588f59804a80672c7001726523c00000000023c100000000700323c0000000002f4c00442f4700402f4b003c2f4d0038600000aa487800014e92588f0c80ddf4a60166c4487800024e92588f4a8067b8487800034e92588f0c800000017863044a8367a4487800064e92588f0c800000028062946000feb07201b2826400ff24200272025580b2806512700123c00000000023c2000000006000fde87001726623c0000000006000ff6a4a84660c4a836700ff6e4a856700ff68203c00000000223c00000a8052b9000000002f4c00442f4700402f40003c2f4100384cd77cfc4fef00344ef900000000",
+   "hex": "700141ef000423c000000000700323d00000000042b90000000023c0000000004e75",
+   "kind": "text",
+   "name": ".text.fail",
+   "size": 34
+  },
+  {
+   "align": 2,
+   "hex": "4fefffcc222f003848d77cfc266f003c2a6f0040286f00442f4100300c8100000a80660cbbfc00000abc66044a8b6608428042874284603871d357804a8066f04a6b00026662322b0024302b00228081322b00268081322b002880814a4066484ab90000000056c470017e017904448422390000000024390000000023c0000000004ab9000000006724700323c0000000002f4c00442f4d00402f4b003c2f6f003000386000037842807e0160867004b081670000a853814a8166d62a39000000004a8566cc4ab900000000670002344a8c6700022e71ec00600c800000a6dd66000220322c00603c2c0062302c0064362c006645f9000000003f41002e4878000271c04843424386804e92588fb680660001f04846424671ef002e487800038c804e92588f2206424148410281000001ffb081660001cc70197204e0aeb2826600017a7006b086670001b8700141f9000000007bb008006000016e4878000445f9000000004e924878000324004e92487800052c004e924878000626004e9242a72a004e924fef001459804a806706428260000092487800014e92588f0c80ddf4a60166ea487800024e92588f4a8067de0c850000028062d60c830003a98062ce203c0003a9809083b08565c27001b082660c8686868566b69dce4286601a7202b282667653860c860000017662a04a85679c9dce428642832f034e925283588f7207dc80ddc6b28366ee4283b68566000096487800074e92588f220eb386bc806600ff6c42b900000000700142b90000000042b90000000023c20000000023c0000000004a826600fe72487800654eb900000000588f6000fe627003b082661e0c86000001786600ff260c830003a9806600ff1c4a856700ff7a6000ff1220025980e2886600ff087004b0826610203c00000179b0866600fef66000ff38203c0000017a60ee20435283486800204e92588fdc80ddc66000ff54200272025780b2806400fe88bc85660000b8487800024e92588f7204b282665a23c00000000042b90000000042b90000000042b90000000023c600000000700223c0000000007001b0b9000000006600fd86203900000000528023c0000000000c80000003846300008a487800644eb900000000588f6000fd5e7201b282661a23c00000000042b90000000042b90000000042b900000000609e7203b282660e23c00000000042b90000000060847205b282668423c00000000042b90000000042b90000000060ca2006720241f9000000005580b28065142f064e90588f4ab9000000006700ff606000fcec4878006660e84a84664a4a876700fcdc4a826700fcd6487800024eb900000000588f7203b2826700008a655853824a826674b0b900000000671a22390000000074fd20415388b4886500fca05281b2806600fc9841f900000000203c00000a8052b9000000002f4c00442f4d00402f48003c2f4000384cd77cfc4fef00344ef9000000007204b28267ca5b824a826600fc5ab0b90000000067bab0b9000000006600fc4860aeb0b9000000006600fc3c60a2b0b900000000679ab0b9000000006600fc28608e",
    "kind": "text",
    "name": ".text.dd_frame_hook",
-   "size": 786
+   "size": 1134
+  },
+  {
+   "align": 1,
+   "hex": "010507",
+   "kind": "data",
+   "name": ".rodata.CSWTCH.33",
+   "size": 3
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_opened_token",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_sealed_token",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_loading_token",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_retired_token",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.dd_op",
+   "size": 4
   },
   {
    "align": 2,
@@ -243,7 +481,7 @@
    "size": 448
   }
  ],
- "source_sha256": "583d0d7fc56dcb861db99c2a97192c43660976f499c0c05f6f07d84381854d3c",
+ "source_sha256": "8d9462e49ee88d18d24583cebbfeacc152ce041401026b1ddda2caab0e165f39",
  "symbols": [
   {
    "global": false,
@@ -259,8 +497,26 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.dd_loading_token",
+   "section": ".bss.dd_loading_token",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.dd_mail",
    "section": ".bss.dd_mail",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.dd_op",
+   "section": ".bss.dd_op",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.dd_opened_token",
+   "section": ".bss.dd_opened_token",
    "value": 0
   },
   {
@@ -271,8 +527,38 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.dd_retired_token",
+   "section": ".bss.dd_retired_token",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.dd_sealed_token",
+   "section": ".bss.dd_sealed_token",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.CSWTCH.33",
+   "section": ".rodata.CSWTCH.33",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fail",
+   "section": ".text.fail",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.frame_word",
    "section": ".text.frame_word",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "CSWTCH.33",
+   "section": ".rodata.CSWTCH.33",
    "value": 0
   },
   {
@@ -294,6 +580,12 @@
    "value": 0
   },
   {
+   "global": false,
+   "name": "dd_loading_token",
+   "section": ".bss.dd_loading_token",
+   "value": 0
+  },
+  {
    "global": true,
    "name": "dd_mail",
    "section": ".bss.dd_mail",
@@ -301,8 +593,32 @@
   },
   {
    "global": false,
+   "name": "dd_op",
+   "section": ".bss.dd_op",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dd_opened_token",
+   "section": ".bss.dd_opened_token",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "dd_previous_quiet",
    "section": ".bss.dd_previous_quiet",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dd_retired_token",
+   "section": ".bss.dd_retired_token",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dd_sealed_token",
+   "section": ".bss.dd_sealed_token",
    "value": 0
   },
   {
@@ -331,6 +647,12 @@
   },
   {
    "global": false,
+   "name": "fail",
+   "section": ".text.fail",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "frame_word",
    "section": ".text.frame_word",
    "value": 0
@@ -340,8 +662,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "264",
-  "isa_check": "929f86056d0d90b67c529f3a5c720f39d82e684d5595e3a4ef3b54dc80f3f75b",
+  "instructions_redecoded": "370",
+  "isa_check": "584d5ae102f6ce2e57a227fde8217bd779aa34e7bf342313d6a35751b9540e17",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

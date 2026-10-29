@@ -92,15 +92,29 @@ _dd_header:
     R3 = PASS R3;
     IF EQ JUMP _dd_initial;
     COMP(R10, R3);
-    IF NE JUMP _dd_ack; // never adopt another token
-    DM(_dd_ackseq) = R11;
+    IF EQ JUMP _dd_bounds;
+    // Only the exact successor INIT may replace a fully retired generation.
+    R4 = -1;
+    COMP(R3, R4);
+    IF EQ JUMP _dd_ack; // boot-scoped token exhaustion, never wrap or reuse
+    R3 = R3 + 1;
+    COMP(R10, R3);
+    IF NE JUMP _dd_ack;
+    R11 = PASS R11;
+    IF NE JUMP _dd_ack;
+    R3 = 1;
+    COMP(R13, R3);
+    IF NE JUMP _dd_ack;
+    R3 = R14 OR R15;
+    IF NE JUMP _dd_ack;
     R3 = DM(_dd_status);
-    R4 = 2;
+    R4 = 5;
     COMP(R3, R4);
-    IF LT JUMP _dd_bounds;
-    R4 = 4;
-    COMP(R3, R4);
-    IF LE JUMP _dd_ack; // terminal statuses 5/6 may recheck retirement
+    IF NE JUMP _dd_ack;
+    R3 = DM(_dd_admitted);
+    R4 = DM(_dd_admit_fault);
+    R3 = R3 OR R4;
+    IF NE JUMP _dd_ack;
     JUMP _dd_bounds;
 _dd_initial:
     R10 = PASS R10;
@@ -158,13 +172,21 @@ _dd_sumdone:
     R3 = DM(_dd_token);
     R3 = PASS R3;
     IF EQ JUMP _dd_init;
+    COMP(R10, R3);
+    IF NE JUMP _dd_successor;
     R3 = 4;
     COMP(R13, R3);
     IF EQ JUMP _dd_retire;
     R3 = DM(_dd_retire_closed);
     R3 = PASS R3;
-    IF NE JUMP _dd_ack; // terminal: never write or reopen this bank
-    // A duplicate may only repeat the immediately preceding accepted frame.
+    IF NE JUMP _dd_ack; // this generation cannot reopen after retirement
+    R3 = 5;
+    COMP(R13, R3);
+    IF EQ JUMP _dd_open;
+    R3 = 1;
+    COMP(R13, R3);
+    IF EQ JUMP _dd_ack; // replayed INIT never resets a generation or ACK identity
+    // Only an immediate exact duplicate of loading DATA/COMMIT is idempotent.
     R3 = DM(_dd_seq);
     COMP(R11, R3);
     IF NE JUMP _dd_next;
@@ -173,18 +195,22 @@ _dd_sumdone:
     IF NE JUMP _dd_protocol;
     JUMP _dd_ack;
 _dd_next:
+    R3 = DM(_dd_status);
+    R3 = PASS R3;
+    IF NE JUMP _dd_ack; // a sealed or open bank accepts no further payload
+    R3 = 3;
+    COMP(R13, R3);
+    IF EQ JUMP _dd_commit;
+    R3 = 2;
+    COMP(R13, R3);
+    IF NE JUMP _dd_protocol;
+    R3 = DM(_dd_seq);
     R3 = R3 + 1;
     COMP(R11, R3);
-    IF NE JUMP _dd_protocol;
-    R3 = DM(_dd_ready);
-    R3 = PASS R3;
     IF NE JUMP _dd_protocol;
     R3 = DM(_dd_words);
     COMP(R14, R3);
     IF NE JUMP _dd_range;
-    R3 = 2;
-    COMP(R13, R3);
-    IF NE JUMP _dd_commit;
     R15 = PASS R15;
     IF EQ JUMP _dd_range;
     R3 = 375;
@@ -205,22 +231,48 @@ _dd_copy: DM(I2, M6) = R0 (NW);
     DM(_dd_words) = R3;
     JUMP _dd_accepted;
 _dd_commit:
-    R3 = 3;
-    COMP(R13, R3);
-    IF NE JUMP _dd_protocol;
     R3 = 376;
     COMP(R11, R3);
+    IF NE JUMP _dd_protocol;
+    R3 = DM(_dd_seq);
+    R4 = 375;
+    COMP(R3, R4);
     IF NE JUMP _dd_protocol;
     R15 = PASS R15;
     IF NE JUMP _dd_range;
     R3 = 240000;
     COMP(R14, R3);
     IF NE JUMP _dd_range;
+    R4 = DM(_dd_words);
+    COMP(R3, R4);
+    IF NE JUMP _dd_range;
     R3 = 1;
-    DM(_dd_status) = R3;
+    DM(_dd_status) = R3; // SEALED, not READY: only explicit OPEN admits notes
     JUMP _dd_accepted;
+_dd_successor:
+    // Header, checksum and exact successor were checked before any mutation.
+    // Recheck the drain under the same local gate used by readers and retirement.
+    R6 = MODE1;
+    BIT CLR MODE1 0x1000;
+    NOP; NOP;
+    R3 = DM(_dd_status);
+    R4 = 5;
+    COMP(R3, R4);
+    IF NE JUMP _dd_successor_denied;
+    R3 = DM(_dd_admitted);
+    R4 = DM(_dd_admit_fault);
+    R3 = R3 OR R4;
+    IF NE JUMP _dd_successor_denied;
+    MODE1 = R6;
+    NOP; NOP;
+    JUMP _dd_init;
+_dd_successor_denied:
+    MODE1 = R6;
+    NOP; NOP;
+    JUMP _dd_ack;
 _dd_init:
-    // This path is reachable only once: the token is published after both bands.
+    // Admission is closed and the previous generation drained before either band.
+    // The successor token is published only after both complete guard bands.
     I2 = 0x101ffc00;
     R0 = 0xA55A3CC3;
     NOP; NOP; NOP; NOP;
@@ -236,25 +288,51 @@ _dd_upper: DM(I2, M6) = R0 (NW);
     DM(_dd_ready) = R3;
     DM(_dd_status) = R3;
     DM(_dd_words) = R3;
+    DM(_dd_admission_open) = R3;
+    DM(_dd_retire_closed) = R3;
     DM(_dd_token) = R10;
 _dd_accepted:
     DM(_dd_seq) = R11;
     DM(_dd_ackseq) = R11;
     R3 = DM(_dd_check);
     DM(_dd_lastcheck) = R3;
+    JUMP _dd_ack;
+_dd_open:
+    R3 = 378;
+    COMP(R11, R3);
+    IF NE JUMP _dd_protocol;
+    R3 = R14 OR R15;
+    IF NE JUMP _dd_protocol;
     R3 = DM(_dd_status);
+    R4 = 7;
+    COMP(R3, R4);
+    IF EQ JUMP _dd_ack; // duplicate OPEN only while this generation remains open
     R4 = 1;
     COMP(R3, R4);
-    IF NE JUMP _dd_ack;
-    // Publication is paired with callback admission under the same local mask.
+    IF NE JUMP _dd_protocol;
+    R3 = DM(_dd_seq);
+    R4 = 376;
+    COMP(R3, R4);
+    IF NE JUMP _dd_protocol;
     R6 = MODE1;
     BIT CLR MODE1 0x1000;
     NOP; NOP;
-    DM(_dd_admission_open) = R4;
-    DM(_dd_ready) = R4; // complete COMMIT is the only opening
+    R3 = DM(_dd_admitted);
+    R4 = DM(_dd_admit_fault);
+    R3 = R3 OR R4;
+    IF NE JUMP _dd_open_fault;
+    R3 = 1;
+    DM(_dd_admission_open) = R3;
+    DM(_dd_ready) = R3;
+    R3 = 7;
+    DM(_dd_status) = R3;
     MODE1 = R6;
     NOP; NOP;
-    JUMP _dd_ack;
+    JUMP _dd_accepted;
+_dd_open_fault:
+    MODE1 = R6;
+    NOP; NOP;
+    JUMP _dd_protocol;
 // RETIRE uses the exact completed bank token and fixed terminal sequence.
 // Serialized hook + one core + maskable access are proof assumptions; this
 // local mask does not establish universal firmware exclusion or NMI safety.
@@ -294,6 +372,12 @@ _dd_retire_status:
     NOP; NOP;
     JUMP _dd_accepted;
 _dd_badcheck:
+    R3 = DM(_dd_token);
+    R3 = PASS R3;
+    IF EQ JUMP _dd_badcheck_current;
+    COMP(R10, R3);
+    IF NE JUMP _dd_ack;
+_dd_badcheck_current:
     R3 = 2;
     JUMP _dd_error;
 _dd_range:
