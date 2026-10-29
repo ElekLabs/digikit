@@ -29,10 +29,13 @@ typedef struct dk_api {
     uint32_t umoddi3_addr;                   /* Address of the runtime's __umoddi3. */
     void (*log_lv)(uint32_t level, const uint8_t *msg, uint32_t value); /* (api 1.1) Like `log`, with a level: 0 error, 1 warn, 2 info, 3 debug, 4 trace (above 4: 4). */
     int32_t (*register_cmds)(uint32_t first, uint32_t count, dk_service_cmd *handler); /* (api 1.2) Register the SysEx commands `first .. first + count` with `handler` (docs/design/module-sdk.md, "Service commands"). The range must lie inside one of the ranges sdk/sdk.toml `[protocol.ranges]` reserves and overlap no registered one; else it returns `proto::E_CMD_RANGE`. Call it from `init`; the range is released when the module's `fini` has run. Returns 0. */
+    int32_t (*sample_bank)(uint32_t local_id); /* (api 1.3) In init, resolve the module-owned sample bank to a positive opaque handle, or a negative DK_SAMPLE_E_* error. */
+    int32_t (*sample_load)(uint32_t handle, const uint8_t *path); /* (api 1.3) Queue one load from a NUL-terminated device sample path using a handle resolved in init. May be called from init or a service callback; copies the path without file IO. Returns 0 or a negative DK_SAMPLE_E_* error. The bank is retained once delivery starts. */
+    int32_t (*sample_status)(uint32_t handle); /* (api 1.3) Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
-_Static_assert(sizeof(dk_api) == 68, "dk_api size");
+_Static_assert(sizeof(dk_api) == 80, "dk_api size");
 _Static_assert(offsetof(dk_api, version) == 0, "dk_api.version");
 _Static_assert(offsetof(dk_api, size) == 4, "dk_api.size");
 _Static_assert(offsetof(dk_api, device) == 8, "dk_api.device");
@@ -50,6 +53,9 @@ _Static_assert(offsetof(dk_api, udivdi3_addr) == 52, "dk_api.udivdi3_addr");
 _Static_assert(offsetof(dk_api, umoddi3_addr) == 56, "dk_api.umoddi3_addr");
 _Static_assert(offsetof(dk_api, log_lv) == 60, "dk_api.log_lv");
 _Static_assert(offsetof(dk_api, register_cmds) == 64, "dk_api.register_cmds");
+_Static_assert(offsetof(dk_api, sample_bank) == 68, "dk_api.sample_bank");
+_Static_assert(offsetof(dk_api, sample_load) == 72, "dk_api.sample_load");
+_Static_assert(offsetof(dk_api, sample_status) == 76, "dk_api.sample_status");
 #endif
 
 /* Imports: names the loader resolves in the runtime's table (Api.import gives the address at run time). */
@@ -92,6 +98,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 2
+#define DK_API_MINOR 3
 
 #endif /* DK_GEN_API_H */

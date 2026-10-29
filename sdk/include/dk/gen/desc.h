@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Record kind of dk_desc_sample_bank. */
+#define DK_DESC_SAMPLE_BANK 6
 /* Record kind of dk_desc_fx. */
 #define DK_DESC_FX 1
 /* Record kind of dk_desc_machine. */
@@ -28,6 +30,16 @@
 #define DK_ROUTE_MASTER 1
 /* The effect runs on a send bus (one amount per track). */
 #define DK_ROUTE_SEND 2
+
+/* One module-owned DSP BSS sample bank and initialized zero descriptor. At most one per module. */
+typedef struct {
+    uint32_t kind;                           /* DK_DESC_SAMPLE_BANK */
+    uint32_t size;                           /* sizeof(dk_desc_sample_bank) */
+    uint32_t local_id;                       /* module-local numeric id */
+    char bank[32];                           /* module DSP BSS symbol */
+    char descriptor[32];                     /* module DSP initialized data symbol, four zero words */
+    uint32_t capacity_frames;                /* mono float frames, 1 .. 8192 */
+} dk_desc_sample_bank;
 
 /* One effect. The process routine and its dk_fx_desc are symbols of the module's SHARC+ object. */
 typedef struct {
@@ -98,6 +110,13 @@ typedef struct {
     dk_desc_page_knob knob[DK_PAGE_KNOBS];   /* the encoders, from entry 0, without gaps */
 } dk_desc_page;
 
+_Static_assert(sizeof(dk_desc_sample_bank) == 80, "dk_desc_sample_bank size");
+_Static_assert(offsetof(dk_desc_sample_bank, kind) == 0, "dk_desc_sample_bank.kind");
+_Static_assert(offsetof(dk_desc_sample_bank, size) == 4, "dk_desc_sample_bank.size");
+_Static_assert(offsetof(dk_desc_sample_bank, local_id) == 8, "dk_desc_sample_bank.local_id");
+_Static_assert(offsetof(dk_desc_sample_bank, bank) == 12, "dk_desc_sample_bank.bank");
+_Static_assert(offsetof(dk_desc_sample_bank, descriptor) == 44, "dk_desc_sample_bank.descriptor");
+_Static_assert(offsetof(dk_desc_sample_bank, capacity_frames) == 76, "dk_desc_sample_bank.capacity_frames");
 _Static_assert(sizeof(dk_desc_fx) == 100, "dk_desc_fx size");
 _Static_assert(offsetof(dk_desc_fx, kind) == 0, "dk_desc_fx.kind");
 _Static_assert(offsetof(dk_desc_fx, size) == 4, "dk_desc_fx.size");

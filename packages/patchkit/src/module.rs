@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Manifest {
+    #[serde(skip)]
+    pub sample_bank: Option<crate::typed::SampleBankDef>,
     pub module: ModuleInfo,
     #[serde(default)]
     pub targets: BTreeMap<String, String>,
@@ -536,6 +538,7 @@ impl Module {
             manifest.param = d.params;
             manifest.page = d.pages;
             manifest.voice = d.voices;
+            manifest.sample_bank = d.sample_bank;
             // a patched-in module keeps the records out of the image: the objects lose their descriptor sections
             if !manifest.module.dynamic {
                 // an object that held only records is removed with its manifest entry (the two lists stay aligned)
@@ -670,7 +673,8 @@ pub struct Build<'a> {
     /// The repository root: the toolchain and the cache are there.
     pub root: &'a std::path::Path,
     /// Load the objects of the content modules with these ids only (built when stale); the other content modules load without objects
-    /// (as in `from_parts_lenient`), so nothing is hashed or built for them and no toolchain is needed. `None`: all content modules.
+    /// (as in `from_parts_lenient`), so nothing is hashed or built for them and no toolchain is needed. Lenient generation reads their
+    /// existing cache without checking freshness or building. `None`: all content modules.
     pub only: Option<&'a [String]>,
     /// Build defines (`DK_TRACE`) for the objects built on demand; they are part of the cache key (`crate::build::toolchain::Env::defines`).
     pub defines: &'a [String],
@@ -719,6 +723,9 @@ impl Library {
                     && m.builds(rel)
                 {
                     if !allow {
+                        if lenient {
+                            return crate::build::read_cached_object(env, &dir, m, rel);
+                        }
                         return Err(err!("{rel}: not loaded"));
                     }
                     return crate::build::load_object(env, &dir, m, rel);
@@ -764,7 +771,10 @@ impl Library {
     }
 
     /// [`Library::scan_repo_or_skip`] that loads (and builds) the objects of the content modules `only` names (see [`Build::only`]).
-    pub fn scan_repo_for_or_skip(root: &std::path::Path, only: Option<&[String]>) -> Option<Library> {
+    pub fn scan_repo_for_or_skip(
+        root: &std::path::Path,
+        only: Option<&[String]>,
+    ) -> Option<Library> {
         if crate::build::toolchain::Env::new(root).m68k("gcc").is_err() {
             eprintln!(
                 "SKIP: the m68k-elf toolchain is not installed, so the content modules cannot be built (uv run python -m tools.patchkit.pk_toolchains m68k)"
@@ -830,11 +840,7 @@ impl Library {
     pub fn scan_in(build: Option<Build>, root: &std::path::Path, lenient: bool) -> Result<Library> {
         let env = build.map(|b| crate::build::toolchain::Env::new(b.root).with_defines(b.defines));
         let mut lib = Library::default();
-        lib.extend_unique(Self::read_root(
-            root,
-            lenient,
-            env.as_ref().zip(build),
-        )?)?;
+        lib.extend_unique(Self::read_root(root, lenient, env.as_ref().zip(build))?)?;
         // the device models sit next to `modules/` (`devices/*.toml`); an extra module root without them
         // is lowered by the caller
         let devices = root.parent().map(|p| p.join("devices"));
@@ -842,5 +848,79 @@ impl Library {
             lib.lower(&crate::typed::Models::from_dir(&d)?)?;
         }
         Ok(lib)
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod cache_generation_tests {
+    use super::*;
+
+    #[test]
+    fn generation_reads_cached_declarations_without_building_and_tolerates_missing_cache() {
+        let root = std::env::temp_dir().join(format!("digikit-cached-gen-{}", std::process::id()));
+        let dir = root.join("modules").join("new-machine");
+        let cache = root.join("out/cache/dko/test/new-machine/build/module.dko.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        // No sources or toolchains exist here: either a freshness check or a
+        // build would fail. Generation must use the existing cache only.
+        std::fs::write(dir.join("module.toml"), r#"
+[module]
+id = "test/new-machine"
+version = "0.1.0"
+name = "New machine"
+category = "test"
+type = "machine"
+author = "digikit"
+status = "experimental"
+summary = "Cached generation fixture."
+dynamic = true
+[[object]]
+path = "build/module.dko.json"
+sources = ["missing.c"]
+place = "cf.expansion"
+"#).unwrap();
+        let spec = crate::sdkgen::desc_spec();
+        let rec = spec.records.iter().find(|r| r.name == "dk_desc_machine").unwrap();
+        let mut bytes = vec![0u8; rec.size];
+        for (field, word) in [("kind", rec.kind.unwrap()), ("size", rec.size as u32)] {
+            let at = rec.field(field).unwrap().off;
+            bytes[at..at + 4].copy_from_slice(&word.to_be_bytes());
+        }
+        for (field, value) in [("id", "new"), ("name", "New machine"), ("short_name", "NEW"),
+            ("render", "_render"), ("note_on", "_note_on"), ("desc", "_desc")] {
+            let at = rec.field(field).unwrap().off;
+            bytes[at..at + value.len()].copy_from_slice(value.as_bytes());
+        }
+        let object = serde_json::json!({
+            "format": crate::dko::FORMAT, "arch": "cf", "source_sha256": "stale",
+            "sections": [{ "name": spec.section, "kind": "data", "align": 4,
+                "size": bytes.len(), "hex": hex(&bytes) }], "symbols": [], "relocs": []
+        }).to_string();
+        std::fs::write(&cache, &object).unwrap();
+        let env = crate::build::toolchain::Env::new(&root);
+        let build = Build { root: &root, only: Some(&[]) };
+        let models = crate::typed::Models::from_texts([
+            include_str!("../../../devices/digitakt-ii.toml"),
+            include_str!("../../../devices/digitone-ii.toml"),
+        ]).unwrap();
+        let load = || Library {
+            modules: Library::read_root(&root.join("modules"), true, Some((&env, build))).unwrap(),
+        };
+        let lib = load();
+        let files = crate::modgen::generate(&lib, &models, "test/new-machine").unwrap();
+        assert_eq!(files[0].0, "build/gen/gallery.json");
+        let gallery: serde_json::Value = serde_json::from_str(&files[0].1).unwrap();
+        assert_eq!(gallery["machines"][0]["id"], "new");
+        assert_eq!(gallery["machines"][0]["name"], "New machine");
+        assert_eq!(std::fs::read_to_string(&cache).unwrap(), object);
+        // Excluded modules in a pack still omit objects even if cache exists.
+        let excluded = Library::read_root(&root.join("modules"), false, Some((&env, build))).unwrap();
+        assert!(excluded[0].objects.is_empty());
+        std::fs::remove_file(&cache).unwrap();
+        let lib = load();
+        assert!(crate::modgen::generate(&lib, &models, "test/new-machine").unwrap().is_empty());
+        assert!(!cache.exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

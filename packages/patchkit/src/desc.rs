@@ -15,6 +15,7 @@ use crate::typed::{FxDef, FxKnob, MachineDef, PageDef, PageKnob, ParamDef, Voice
 /// The declarations of a set of objects.
 #[derive(Debug)]
 pub struct Desc {
+    pub sample_bank: Option<crate::typed::SampleBankDef>,
     /// The effects, sorted by id.
     pub fx: Vec<FxDef>,
     /// The machines, sorted by id.
@@ -29,6 +30,7 @@ pub struct Desc {
 
 /// One record as it was read, before the records are put together.
 enum Rec {
+    SampleBank(crate::typed::SampleBankDef),
     Fx {
         what: String,
         def: FxDef,
@@ -326,6 +328,12 @@ fn records(obj: &Dko, spec: &DescSpec) -> Result<Vec<Rec>> {
             }
             let rb = &b[at..at + size];
             out.push(match rec.name.as_str() {
+                "dk_desc_sample_bank" => Rec::SampleBank(crate::typed::SampleBankDef {
+                    local_id: word(rb, rec, "local_id")?,
+                    bank: req(&what, rb, rec, "bank")?,
+                    descriptor: req(&what, rb, rec, "descriptor")?,
+                    capacity_frames: word(rb, rec, "capacity_frames")?,
+                }),
                 "dk_desc_fx" => fx_def(&what, spec, rb, rec)?,
                 "dk_desc_fx_param" => fx_param(&what, spec, rb, rec)?,
                 "dk_desc_machine" => machine_def(&what, rb, rec)?,
@@ -384,6 +392,7 @@ fn positions(what: &str, entries: &[PageKnob]) -> Result<Vec<u32>> {
 
 /// Put the records together: ids, owners and words are checked here.
 fn assemble(recs: Vec<Rec>) -> Result<Desc> {
+    let mut sample_bank = None;
     let mut fxs: Vec<(String, FxDef)> = vec![];
     let mut fx_params: Vec<(String, String, u32, FxKnob)> = vec![];
     let mut machines: Vec<(MachineDef, VoiceDef)> = vec![];
@@ -391,6 +400,15 @@ fn assemble(recs: Vec<Rec>) -> Result<Desc> {
     let mut pages: Vec<(String, String, String, String, Vec<PageKnob>)> = vec![];
     for r in recs {
         match r {
+            Rec::SampleBank(b) => {
+                if sample_bank.is_some() {
+                    return Err(err!("at most one sample bank per module"));
+                }
+                if !(1..=8192).contains(&b.capacity_frames) {
+                    return Err(err!("sample bank capacity must be 1 .. 8192 frames"));
+                }
+                sample_bank = Some(b);
+            }
             Rec::Fx { what, def } => fxs.push((what, def)),
             Rec::FxParam {
                 what,
@@ -507,7 +525,11 @@ fn assemble(recs: Vec<Rec>) -> Result<Desc> {
                 mine.len()
             ));
         }
-        gapless(&who, "param", &mut mine.iter().map(|m| m.0).collect::<Vec<_>>())?;
+        gapless(
+            &who,
+            "param",
+            &mut mine.iter().map(|m| m.0).collect::<Vec<_>>(),
+        )?;
         mine.sort_by_key(|m| m.0);
         match fx_pages.iter().find(|p| p.0 == f.id) {
             Some((_, name, title, knobs)) => {
@@ -552,6 +574,7 @@ fn assemble(recs: Vec<Rec>) -> Result<Desc> {
         fx_out.push(f);
     }
     Ok(Desc {
+        sample_bank,
         fx: fx_out,
         params: params.into_iter().map(|p| p.1).collect(),
         pages: machine_pages,
@@ -646,6 +669,29 @@ mod tests {
         fn done(&self) -> Vec<u8> {
             self.b.clone()
         }
+    }
+
+    #[test]
+    fn sample_bank_declarations_are_numeric_single_and_capacity_bounded() {
+        let mut r = Rb::new("dk_desc_sample_bank");
+        r.num("local_id", 17)
+            .text("bank", "_bank")
+            .text("descriptor", "_sample")
+            .num("capacity_frames", 8192);
+        let d = read(&obj(&r.done())).unwrap();
+        let b = d.sample_bank.unwrap();
+        assert_eq!((b.local_id, b.capacity_frames), (17, 8192));
+        assert_eq!(
+            (b.bank.as_str(), b.descriptor.as_str()),
+            ("_bank", "_sample")
+        );
+        assert!(err_of(&[&r, &r]).contains("one sample bank"));
+        for n in [0, 8193, u32::MAX] {
+            r.num("capacity_frames", n);
+            assert!(err_of(&[&r]).contains("capacity"));
+        }
+        r.num("capacity_frames", 1).text("bank", "");
+        assert!(err_of(&[&r]).contains("bank is empty"));
     }
 
     const AUTO: u32 = 255;
@@ -775,7 +821,12 @@ mod tests {
     fn an_effect_without_a_page_keeps_the_defaults_of_its_params() {
         let mut p1 = fx_param("fshift", 1, "Other");
         p1.num("def", 2.0f32.to_bits()).num("max", 3.0f32.to_bits());
-        let d = read(&obj(&all(&[&fx("fshift"), &p1, &fx_param("fshift", 0, "A")]))).unwrap();
+        let d = read(&obj(&all(&[
+            &fx("fshift"),
+            &p1,
+            &fx_param("fshift", 0, "A"),
+        ])))
+        .unwrap();
         let f = &d.fx[0];
         assert!(f.tab.is_none() && f.title.is_none() && f.knob.is_empty());
         assert_eq!(f.defaults, [0.0f32.to_bits(), 2.0f32.to_bits()]);
@@ -785,7 +836,13 @@ mod tests {
     fn auto_positions_take_the_lowest_free_one_in_entry_order() {
         let mut g = page("fshift");
         g.knob(0, 0, AUTO).knob(1, 1, 0).knob(2, 2, AUTO);
-        let recs = [&fx("fshift"), &fx_param("fshift", 0, "A"), &fx_param("fshift", 1, "B"), &fx_param("fshift", 2, "C"), &g];
+        let recs = [
+            &fx("fshift"),
+            &fx_param("fshift", 0, "A"),
+            &fx_param("fshift", 1, "B"),
+            &fx_param("fshift", 2, "C"),
+            &g,
+        ];
         let d = read(&obj(&all(&recs))).unwrap();
         let pos: Vec<_> = d.fx[0].knob.iter().map(|k| k.position).collect();
         assert_eq!(pos, [Some(1), Some(0), Some(2)]);
@@ -804,7 +861,12 @@ mod tests {
     fn machine_records_read_to_machines_params_pages_and_voices() {
         let mut g = page("pluck");
         g.knob(0, 1, AUTO).knob(1, 0, 3);
-        let recs = [&machine("pluck"), &param("pluck", "pk_b", 1), &param("pluck", "pk_a", 0), &g];
+        let recs = [
+            &machine("pluck"),
+            &param("pluck", "pk_b", 1),
+            &param("pluck", "pk_a", 0),
+            &g,
+        ];
         let d = read(&obj(&all(&recs))).unwrap();
         assert_eq!(d.machines.len(), 1);
         assert_eq!((d.machines[0].name.as_str(), d.machines[0].short.as_str()), ("Pluck", "PLK"));

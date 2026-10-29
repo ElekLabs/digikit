@@ -546,3 +546,84 @@ fn a_store_that_reaches_into_the_tail_is_not_used() {
     let moved = Hdr { table_first: end, ..t.h };
     assert!(unsafe { reaches_tail(&IO, &LAY, &moved, w.a.0.as_mut_ptr(), 4096) }.unwrap());
 }
+
+// A deterministic digest seam: the runtime supplies its SHA-256 implementation.
+fn snapshot_hash(bytes: &[u8]) -> [u8; 32] {
+    let mut out = [0; 32];
+    for (i, byte) in bytes.iter().enumerate() {
+        out[i % 32] ^= byte;
+    }
+    out
+}
+
+fn snapshot_file(w: &mut Work) {
+    let data = [0x51; 513];
+    let e = Entry { first: 100, size: data.len() as u32, kind: KIND_FILE, sha: snapshot_hash(&data) };
+    let mut encoded = [0; ENTRY];
+    unsafe { encode_entry(cstr("sample").as_ptr(), &e, encoded.as_mut_ptr()) };
+    CARD.lock().unwrap()[100 * 512..100 * 512 + data.len()].copy_from_slice(&data);
+    let h = current(w);
+    unsafe { commit(&IO, &LAY, &h, w.a.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024, w.s.0.as_mut_ptr(), Edit::Insert(encoded.as_ptr()), &[]) }.unwrap();
+}
+
+unsafe fn take_snapshot(io: &Io, w: &mut Work, dst: &mut Buf<1024>) -> Result<Entry, i32> {
+    snapshot(io, &LAY, cstr("sample").as_ptr(), w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 4096, dst.0.as_mut_ptr(), 1024, 513, snapshot_hash)
+}
+
+#[test]
+fn snapshot_owns_retained_bytes_and_rejects_corruption_or_read_failure() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    snapshot_file(&mut w);
+    let mut dst = Buf([0; 1024]);
+    assert_eq!(unsafe { take_snapshot(&IO, &mut w, &mut dst) }.unwrap().size, 513);
+    CARD.lock().unwrap()[100 * 512] ^= 1;
+    assert_eq!(&dst.0[..513], &[0x51; 513]);
+    assert_eq!(unsafe { take_snapshot(&IO, &mut w, &mut dst) }, Err(crate::E_SHA));
+    unsafe extern "C" fn fail(_: u32, _: u32, _: *mut u8) -> i32 { -1 }
+    assert_eq!(unsafe { take_snapshot(&Io { rd: fail, wr }, &mut w, &mut dst) }, Err(E_READ));
+}
+
+#[test]
+fn snapshot_retries_commits_at_lookup_and_read_boundaries() {
+    let _g = lock();
+    for at in 0..18 {
+        fresh();
+        let mut w = work();
+        snapshot_file(&mut w);
+        *HOOK.lock().unwrap() = Some((0, at));
+        let mut dst = Buf([0; 1024]);
+        let r = unsafe { take_snapshot(&Io { rd: rd_hooked, wr }, &mut w, &mut dst) };
+        *HOOK.lock().unwrap() = None;
+        assert_eq!(r.unwrap().size, 513, "commit at read {at}");
+        assert_eq!(&dst.0[..513], &[0x51; 513]);
+    }
+}
+
+#[test]
+fn snapshot_fails_closed_after_retry_exhaustion_and_after_missing_final_fingerprint() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    snapshot_file(&mut w);
+    // Change a header on each payload read. This simulates writers committing
+    // continuously, including after each successful copy into private storage.
+    unsafe extern "C" fn changing(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        if sector == FIRST + 100 {
+            let mut w = work();
+            insert(&mut w, "late", 300, 512, &[]).unwrap();
+        }
+        rd(sector, bytes, buf)
+    }
+    let mut dst = Buf([0; 1024]);
+    assert_eq!(unsafe { take_snapshot(&Io { rd: changing, wr }, &mut w, &mut dst) }, Err(crate::E_BUSY));
+    static READ_PAYLOAD: Mutex<bool> = Mutex::new(false);
+    unsafe extern "C" fn missing_after(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        if *READ_PAYLOAD.lock().unwrap() { return -1; }
+        if sector == FIRST + 100 { *READ_PAYLOAD.lock().unwrap() = true; }
+        rd(sector, bytes, buf)
+    }
+    *READ_PAYLOAD.lock().unwrap() = false;
+    assert_eq!(unsafe { take_snapshot(&Io { rd: missing_after, wr }, &mut w, &mut dst) }, Err(E_READ));
+}

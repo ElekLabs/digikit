@@ -9,7 +9,7 @@ version = "0.5.3"   # 0.x: MINOR may break (contract major, store format, SysEx 
 [contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
                     # An appended Api function is a minor bump; a changed or removed one is a major bump.
-api = [1, 2]        # the ColdFire Api table (every module, `raw` included); minor 1: `log_lv` appended; minor 2: `register_cmds` appended
+api = [1, 3]        # the ColdFire Api table (every module, `raw` included); minor 1: `log_lv` appended; minor 2: `register_cmds` appended; minor 3: sample bank API appended
 machine = [1, 0]
 fx = [1, 0]         # run-time effects (sdk/include/dk/gen/fx.h, DSP section version 4 of a .dkm); 0.4.0; effect pages (register kind 4) 0.5.0
 service = [1, 0]
@@ -37,6 +37,9 @@ fields = [
     { name = "umoddi3", type = "addr", doc = "Address of the runtime's __umoddi3." },
     { name = "log_lv", type = "void (u32 level, const u8 *msg, u32 value)", doc = "Like `log`, with a level: 0 error, 1 warn, 2 info, 3 debug, 4 trace (above 4: 4).", since = 1 },
     { name = "register_cmds", type = "i32 (u32 first, u32 count, service_cmd handler)", doc = "Register the SysEx commands `first .. first + count` with `handler` (docs/design/module-sdk.md, \"Service commands\"). The range must lie inside one of the ranges sdk/sdk.toml `[protocol.ranges]` reserves and overlap no registered one; else it returns `proto::E_CMD_RANGE`. Call it from `init`; the range is released when the module's `fini` has run. Returns 0.", since = 2 },
+    { name = "sample_bank", type = "i32 (u32 local_id)", doc = "In init, resolve the module-owned sample bank to a positive opaque handle, or a negative DK_SAMPLE_E_* error.", since = 3 },
+    { name = "sample_load", type = "i32 (u32 handle, const u8 *path)", doc = "Queue one load from a NUL-terminated device sample path using a handle resolved in init. May be called from init or a service callback; copies the path without file IO. Returns 0 or a negative DK_SAMPLE_E_* error. The bank is retained once delivery starts.", since = 3 },
+    { name = "sample_status", type = "i32 (u32 handle)", doc = "Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error.", since = 3 },
 ]
 
 # Function types by name. As a parameter or field a name is a nullable pointer to the function (`Option<ServiceCmd>` in Rust, `dk_service_cmd *` in C).
@@ -156,6 +159,7 @@ fns = [
 [desc]
 section = ".dk.desc"
 consts = [
+    { name = "DK_DESC_SAMPLE_BANK", value = 6, doc = "Record kind of dk_desc_sample_bank." },
     { name = "DK_DESC_FX", value = 1, doc = "Record kind of dk_desc_fx." },
     { name = "DK_DESC_MACHINE", value = 2, doc = "Record kind of dk_desc_machine." },
     { name = "DK_DESC_PARAM", value = 3, doc = "Record kind of dk_desc_param." },
@@ -167,6 +171,19 @@ consts = [
     { name = "DK_BIPOLAR", value = 2, doc = "A knob shown as -64 .. +63." },
     { name = "DK_ROUTE_MASTER", value = 1, doc = "The effect runs on the master block." },
     { name = "DK_ROUTE_SEND", value = 2, doc = "The effect runs on a send bus (one amount per track)." },
+]
+
+[[desc.record]]
+name = "dk_desc_sample_bank"
+kind = "DK_DESC_SAMPLE_BANK"
+doc = "One module-owned DSP BSS sample bank and initialized zero descriptor. At most one per module."
+fields = [
+    "u32 kind // DK_DESC_SAMPLE_BANK",
+    "u32 size // sizeof(dk_desc_sample_bank)",
+    "u32 local_id // module-local numeric id",
+    "char bank[32] // module DSP BSS symbol",
+    "char descriptor[32] // module DSP initialized data symbol, four zero words",
+    "u32 capacity_frames // mono float frames, 1 .. 8192",
 ]
 
 [[desc.record]]

@@ -2340,6 +2340,46 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.fn.path.close"
+cpu = "cf"
+kind = "code"
+addr = 0x401588c0
+len = 4
+sha256 = "945e33bb4b14d28a5813755f8106ac0c2dbec82302f81140d3b1bf6fc964d321"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.fn.path.open"
+cpu = "cf"
+kind = "code"
+addr = 0x40158902
+len = 4
+sha256 = "7a1c490d00932ce398c257d1f645f970b387600df35a794ab50d686950accd99"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.fn.path.read"
+cpu = "cf"
+kind = "code"
+addr = 0x4015860a
+len = 4
+sha256 = "22fa7fb41970cac158504ca01c7a417ded71b60ff0d8466961d19ff2332567a7"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.fn.path.size"
+cpu = "cf"
+kind = "code"
+addr = 0x4015bcfe
+len = 4
+sha256 = "22fa7fb41970cac158504ca01c7a417ded71b60ff0d8466961d19ff2332567a7"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.string.fn.shared_ptr.make"
 cpu = "cf"
 kind = "code"

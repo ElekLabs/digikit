@@ -1029,6 +1029,13 @@ impl Emulator {
         (self.cpu.d, self.cpu.a, self.cpu.pc, self.cpu.sr)
     }
 
+    /// Last execution/bus PC recorded by the run loop, including accelerated
+    /// paths. This is not a full instruction trace or necessarily the CPU's
+    /// current PC; an unsupported-PC fault leaves the previous value intact.
+    pub fn last_bus_pc(&self) -> u32 {
+        self.bus.current_pc
+    }
+
     /// What the guest wrote to the container area of the flash (the OS upgrade): erases, page programs and bytes. All zero until it does.
     pub fn flash_writes(&self) -> FlashWrites {
         self.flash_writes

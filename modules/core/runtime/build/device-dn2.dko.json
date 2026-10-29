@@ -4,14 +4,14 @@
  "relocs": [],
  "sections": [
   {
-   "align": 2,
-   "hex": "00000002646e32000000000240000000466c00004671200047fe100000000000000000000000000000000000008000000261a000444b494d474944310000000000000000",
+   "align": 4,
+   "hex": "00000002646e32000000000240000000466c00004671200047fe100000000000000000000000000000000000008000000261a000444b494d47494431000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 68
+   "size": 84
   }
  ],
- "source_sha256": "198b901ff8ed23c6815b8a6095b01aca2e8b54128c6eabdf66ef3b318e2e48f0",
+ "source_sha256": "76a9ba5ff781f33c7831bb7882a5a2e61b2fb001c842b233aa1145823c920c68",
  "symbols": [
   {
    "global": true,
@@ -45,6 +45,12 @@
   },
   {
    "global": true,
+   "name": "dkrt_sample_fs",
+   "section": ".rodata",
+   "value": 68
+  },
+  {
+   "global": true,
    "name": "dkrt_store_first",
    "section": ".rodata",
    "value": 44
@@ -61,7 +67,7 @@
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "4f68b6d2fca776cea7ed8258ca08e190c38ecbd72127adafb4efc00032a9e6d5",
+  "isa_check": "c29ab271e6a4a96a056079ee3d319742c3dfec495352375af531a6cf71735cf3",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

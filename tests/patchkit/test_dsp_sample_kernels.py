@@ -128,11 +128,11 @@ def linked():
             f"R4 = {SRC};",
             f"R8 = {OUT};",
             f"R12 = {STATE};",
-            "DK_CALL(_dk_sample_linear);",
+            "DK_CALL(_dk_sample_linear, _sample_after0);",
             f"R4 = {SRC};",
             f"R8 = {OUT + 32};",
             f"R12 = {STATE};",
-            "DK_CALL(_dk_sample_linear);",
+            "DK_CALL(_dk_sample_linear, _sample_after1);",
             "RTS;",
             "",
         ]

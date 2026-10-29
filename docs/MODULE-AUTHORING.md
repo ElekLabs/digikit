@@ -356,6 +356,9 @@ uv run python -m tools.patchkit.patchkit gen --modules AUTHOR/NAME    # one modu
 ```
 
 Run `gen:modules` after you change `module.toml`, `src/module.c`, `devices/*.toml` or `sdk/sdk.toml`.
+Generation reads existing cached content objects and never builds them. After changing a C declaration, run
+`mise run module:build -- AUTHOR/NAME` before `gen:modules` to refresh the declarations in the cache.
+For a new module with no cached objects, generation skips its gallery until that first build; run generation again afterward.
 
 ## 7. Contracts
 
@@ -472,7 +475,27 @@ The `dk_api` table that `dkm_init` receives. Fields are only appended, each is 4
 | `log(msg, value)` | Append to the runtime log. API 1.0. |
 | `log_lv(level, msg, value)` | The same with a level. API 1.1. |
 | `register_cmds(first, count, handler)` | Register SysEx commands. API 1.2. |
+| `sample_bank(local_id)`, `sample_load(handle, path)`, `sample_status(handle)` | Resolve, load and query a module-owned sample bank. API 1.3; see the bounded proof contract below. |
 | `memcpy_addr`, `memset_addr`, `memcmp_addr`, `muldi3_addr`, `udivdi3_addr`, `umoddi3_addr` | Addresses of the runtime's helpers. The compiler calls the 64-bit ones by itself. |
+
+For the bounded sample-bank proof, include `<dk/sample.h>` and declare
+`DK_SAMPLE_BANK(LOCAL_ID, BANK, DESCRIPTOR, CAPACITY)` in the module's C declaration. Exactly one bank is supported:
+reserve 1–8,192 mono float32 frames in the module's own DSP BSS and a four-word initialized zero descriptor
+(READY, normal-word source pointer, frame count, sample rate). Check the API 1.3 table `size` covers the appended
+sample functions before calling them. Resolve the positive opaque handle with `sample_bank(local_id)` during init.
+
+Call `sample_load(handle, path)` from init or a service callback. It copies the NUL-terminated path and queues work
+for the UI task; the callback performs no file I/O. `sample_status(handle)` returns UNUSED=0, QUEUED=1, LOADING=2,
+READY=3, or a negative `DK_SAMPLE_E_*` error. Only an unused bank accepts a load. Input must be a complete canonical
+mono 48 kHz PCM16 native sample, nonempty and at most 8,192 frames. DT2 uses an absolute +Drive path (`/...`), opens
+read-only and requires no concurrent Transfer writes during acquisition. DN2 uses `samples/...` in the digikit store
+and validates a private snapshot before delivery.
+
+Once delivery starts, the bank stays pinned until restart, including on failure; no replacement or eviction is
+supported. Runtime publishes the immutable descriptor's READY word last, after payload and view acknowledgements.
+The [sample-proof fixture](../tests/fixtures/modules/sample-proof/README.md) demonstrates the declarations, service
+calls and tested DSP bridge. It is a bounded proof fixture; transferred-file playback runs on both devices remain
+pending, and it is not a product sampler.
 
 Names a module may import (from `[[import]]` in `sdk/sdk.toml`):
 

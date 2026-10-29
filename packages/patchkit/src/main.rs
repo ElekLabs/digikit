@@ -680,14 +680,18 @@ plan.json {}",
                 }
                 match sharc.first() {
                     Some((o, _)) => {
-                        dsp = patchkit::dkmdsp::pack(
+                        dsp = patchkit::dkmdsp::pack_with_bank(
                             o,
                             patchkit::register::device_id(&dev)?,
                             &voices,
                             &fxs,
+                            m.manifest.sample_bank.as_ref(),
                         )?
                     }
-                    None if !voices.is_empty() || !fxs.is_empty() => {
+                    None if !voices.is_empty()
+                        || !fxs.is_empty()
+                        || m.manifest.sample_bank.is_some() =>
+                    {
                         return Err(Error(format!(
                             "{id}: a voice or an effect needs a DSP object for {dev}"
                         )));
@@ -744,6 +748,7 @@ plan.json {}",
                     "params": mf.param,
                     "pages": mf.page,
                     "voices": mf.voice,
+                    "sample_bank": mf.sample_bank,
                 }))?
             );
         }

@@ -4,7 +4,7 @@
 pub const RUNTIME_VERSION: u32 = 0x000503;
 
 pub mod contract {
-    pub const API: (u8, u8) = (1, 2);
+    pub const API: (u8, u8) = (1, 3);
     pub const MACHINE: (u8, u8) = (1, 0);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
@@ -245,6 +245,12 @@ pub mod api {
         pub log_lv: unsafe extern "C" fn(level: u32, msg: *const u8, value: u32),
         /// (api 1.2) Register the SysEx commands `first .. first + count` with `handler` (docs/design/module-sdk.md, "Service commands"). The range must lie inside one of the ranges sdk/sdk.toml `[protocol.ranges]` reserves and overlap no registered one; else it returns `proto::E_CMD_RANGE`. Call it from `init`; the range is released when the module's `fini` has run. Returns 0.
         pub register_cmds: unsafe extern "C" fn(first: u32, count: u32, handler: Option<ServiceCmd>) -> i32,
+        /// (api 1.3) In init, resolve the module-owned sample bank to a positive opaque handle, or a negative DK_SAMPLE_E_* error.
+        pub sample_bank: unsafe extern "C" fn(local_id: u32) -> i32,
+        /// (api 1.3) Queue one load from a NUL-terminated device sample path using a handle resolved in init. May be called from init or a service callback; copies the path without file IO. Returns 0 or a negative DK_SAMPLE_E_* error. The bank is retained once delivery starts.
+        pub sample_load: unsafe extern "C" fn(handle: u32, path: *const u8) -> i32,
+        /// (api 1.3) Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error.
+        pub sample_status: unsafe extern "C" fn(handle: u32) -> i32,
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).

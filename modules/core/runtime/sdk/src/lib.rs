@@ -269,6 +269,10 @@ pub struct Mailbox {
 /// The module and sample store, version 3 (docs/design/digikit-store.md).
 pub mod store;
 
+/// Bounded native sample validation and integer-only PCM decoding.
+pub mod sample;
+pub mod sample_job;
+
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").
 pub mod settings;
 

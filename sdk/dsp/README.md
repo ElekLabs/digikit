@@ -72,10 +72,19 @@ and `selcc`-compiled C call it the same way. `call.inc` has the macros and the f
   not match). The caller sets up M5 = 0, M6 = 1, M7 = -1, M14 = 1 as the module contract already guarantees.
 - A caller assumes R0, R1, R2, R4, R8, R12, I4, I12, MR and ASTAT are clobbered. R3, R5-R7, R9-R11, R13-R15, I0-I3, I5, M1-M3
   and B3 are kept. I6 and I7 are restored by the routine's `RFRAME`.
-- Stack: `DK_CALL` (`CJUMP` plus two pushes) builds the frame, `DK_ENTER(N)` reserves N save slots at `[I6 - 2]` downward, and
+- Stack: `DK_CALL(fn, return_label)` (`CJUMP` plus two pushes) builds the frame, `DK_ENTER(N)` reserves N save slots at `[I6 - 2]` downward, and
   `DK_LEAVE` returns and runs `RFRAME`.
+- Every call supplies a continuation label unique within the assembled object, including repeated calls to the same routine.
+  The macro defines that label and pushes its relocated address minus one through an immediate Type16a store.
+  The former one-argument form is unsupported; storing the PC UREG produced an invalid manual return frame.
 - Cost of a call with S saved registers: 2 S + 7 instructions on top of the work.
 - Symbols: `_dk_<name>` for assembly, `dk_<name>.` for selcc C. Include `dsp/call.inc` once, then the routine files.
+
+`DK_CALL` uses the CJUMP ABI; the machine adapter enters a module with JUMP and a different return contract.
+A module calling a block routine must preserve its adapter-return registers I12/I13 and restore its exact entry I7.
+Entry I7 is an exclusive stack boundary: reserve space below it before constructing the CJUMP frame, so no store
+overwrites the adapter's context. The [sample-proof fixture](../../tests/fixtures/modules/sample-proof/README.md)
+contains a tested bridge for both adapters; this fixture does not define a general module-call API.
 
 | File | Routine | Instructions per sample | Per call (32 samples, with `DK_CALL`) | Notes |
 | --- | --- | --- | --- | --- |
