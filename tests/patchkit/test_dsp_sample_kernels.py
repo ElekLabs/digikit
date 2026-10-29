@@ -114,31 +114,40 @@ def test_cursor_split_against_exact_integer_position():
         )
 
 
-@pytest.fixture(scope="module")
-def linked():
+def build_reader(kernel="_dk_sample_linear", source_base=SRC):
     if pk_toolchains.selache_dir() is None:
         pytest.skip("selache not built")
     text = "\n".join(
         [
             '#include "dsp/call.inc"',
             '#include "dsp/sample.inc"',
+            '#include "dsp/sample_pcm16.inc"' if "pcm16" in kernel else "",
             ".SECTION/PM seg_pmco;",
             ".GLOBAL _sample_h;",
             "_sample_h:",
-            f"R4 = {SRC};",
+            f"R4 = {source_base};"
+            if source_base is not None
+            else f"R4 = DM({STATE + 6});",
             f"R8 = {OUT};",
             f"R12 = {STATE};",
-            "DK_CALL(_dk_sample_linear, _sample_after0);",
-            f"R4 = {SRC};",
+            f"DK_CALL({kernel}, _sample_after0);",
+            f"R4 = {source_base};"
+            if source_base is not None
+            else f"R4 = DM({STATE + 6});",
             f"R8 = {OUT + 32};",
             f"R12 = {STATE};",
-            "DK_CALL(_dk_sample_linear, _sample_after1);",
+            f"DK_CALL({kernel}, _sample_after1);",
             "RTS;",
             "",
         ]
     )
     _, result = pk_sharc.build(pk_sharc.expand_includes(text, [ROOT / "sdk"]), BASE)
     return result
+
+
+@pytest.fixture(scope="module")
+def linked():
+    return build_reader()
 
 
 def poke(source, st):
@@ -182,3 +191,156 @@ def test_assembled_source_read_guards(linked, st):
         r = sess.call("_sample_h", REGS)
         assert r["halt"]["reason"] == "breakpoint", r["halt"]
         assert bool(sess.stores) == control
+
+
+# Packed input is deliberately encoded through transport bytes, independently of
+# the kernel's shift/sign-extension sequence. Unselected halves contain poison.
+PCM16_VALUES = (-32768, 32767, -1, 0, 1, -16384, 16384, -30001, 29999)
+PCM16_CASES = CASES + [
+    ref.Cursor(1, 2, 1, 65535, 0),  # high-half singleton, clamped neighbor
+    ref.Cursor(1, 5, 1, 32768, 32768),  # odd start and odd exclusive end
+    ref.Cursor(2, 7, 6, 65535, -32769),
+    ref.Cursor(2**30 - 103, 2**30 - 1, 2**30 - 2, 65535, 0x7FFFFFFF),
+    ref.Cursor(2**30 - 103, 2**30 - 1, 2**30 - 103, 0, -0x80000000),
+    ref.Cursor(0, 1, -32768, 0, 0x7FFFFFFF),
+    ref.Cursor(0, 1, 2**30 + 32767, 0, -0x80000000),
+]
+PCM16_CEILING = 32 * 64 + 100
+
+
+def pcm16_source(st):
+    return {
+        i: PCM16_VALUES[(i - st.start) % len(PCM16_VALUES)]
+        for i in range(st.start, st.end)
+    }
+
+
+def pcm16_base(st):
+    # Rebase sparse large cursors so every accessed containing word is in the
+    # architectural normal-word range, even near the signed cursor bounds.
+    return (SRC - st.start // 2) & 0xFFFFFFFF
+
+
+def pcm16_poke(source, st, source_base=None):
+    if source_base is None:
+        source_base = pcm16_base(st)
+    # Every containing word is fully mapped, including an unused high half at an
+    # odd end. No decision about DDR ownership or physical mapping is implied.
+    packed = {}
+    for i, value in source.items():
+        word = packed.setdefault(i // 2, bytearray(b"\xa5\x5a\xa5\x5a"))
+        offset = 2 * (i % 2)
+        word[offset : offset + 2] = value.to_bytes(2, "little", signed=True)
+    dm = {
+        (source_base + i) & 0xFFFFFFFF: int.from_bytes(value, "little")
+        for i, value in packed.items()
+    }
+    dm.update({STATE + i: w for i, w in enumerate(words(st))})
+    dm[STATE + 6] = source_base  # Harness argument, outside the six-word ABI.
+    # Guard the two output edges, state edges, and the call's stack extent.
+    for addr in (OUT - 1, OUT + 64, STATE - 1, STATE + 7, STACK + 1, STACK - 15):
+        dm[addr] = 0x5A96C33C
+    dm.update({OUT + i: 0x7FC00001 for i in range(64)})
+    return dm
+
+
+@pytest.fixture(scope="module")
+def linked_pcm16():
+    return build_reader("_dk_sample_pcm16_linear", None)
+
+
+def pcm16_expected(source, st):
+    normalized = {i: F32(value / 32768) for i, value in source.items()}
+    return oracle(normalized, st)
+
+
+@pytest.mark.parametrize("st", PCM16_CASES)
+def test_pcm16_assembled_two_blocks(linked_pcm16, st):
+    source = pcm16_source(st)
+    expected, final = pcm16_expected(source, st)
+    dm = pcm16_poke(source, st)
+    immutable = {
+        addr: value
+        for addr, value in dm.items()
+        if addr not in range(OUT, OUT + 64)
+        and addr not in (STATE + 2, STATE + 3, STATE + 5)
+    }
+    r = pk_sharc.run_call(
+        linked_pcm16,
+        "_sample_h",
+        regs=REGS,
+        dm_words=dm,
+        reads={
+            "out": (OUT, 64),
+            "state": (STATE, 6),
+            **{f"immutable_{addr}": (addr, 1) for addr in immutable},
+        },
+        read_regs=tuple(REGS),
+    )
+    assert r["halt"]["reason"] == "breakpoint", r["halt"]
+    assert r["state"] == words(final)
+    assert r["out"] == bits(np.concatenate(expected))
+    assert {name: r["regs"][name] for name in REGS} == REGS
+    assert all(r[f"immutable_{addr}"] == [value] for addr, value in immutable.items())
+    assert r["instructions"] <= 2 * PCM16_CEILING + 1
+
+
+@pytest.mark.parametrize("st", PCM16_CASES)
+def test_pcm16_assembled_read_guards(linked_pcm16, st):
+    source = pcm16_source(st)
+    base = pcm16_base(st)
+    lo = (base + st.start // 2) & 0xFFFFFFFF
+    hi = (base + (st.end + 1) // 2) & 0xFFFFFFFF
+    # Watch both adjacent words and the entire source view. This also checks that
+    # done/empty/outside cursors perform no speculative source loads.
+    valid = not st.done and st.start <= st.index < st.end
+    for addr, count, should_read in (
+        (lo - 1, 1, False),
+        (hi, 1, False),
+        (lo, max(1, hi - lo), valid),
+    ):
+        sess = pk_sharc.CallSession([linked_pcm16], 0xB9F000)
+        for address, word in pcm16_poke(source, st).items():
+            sess.poke(address, word)
+        sess.record_reads(addr, count)
+        r = sess.call("_sample_h", REGS)
+        assert r["halt"]["reason"] == "breakpoint", r["halt"]
+        assert bool(sess.stores) == should_read
+
+
+def test_pcm16_normal_word_source_base():
+    # Same packed bytes at a distinct normal-word base. Numerics establish raw
+    # frame addressing; this does not assert any firmware allocator's mapping.
+    source_base = 0x10200000
+    linked = build_reader("_dk_sample_pcm16_linear", source_base)
+    st = ref.Cursor(1, 10, 1, 16384, 32768)
+    source = pcm16_source(st)
+    expected, final = pcm16_expected(source, st)
+    r = pk_sharc.run_call(
+        linked,
+        "_sample_h",
+        regs=REGS,
+        dm_words=pcm16_poke(source, st, source_base),
+        reads={"out": (OUT, 64), "state": (STATE, 6)},
+    )
+    assert r["halt"]["reason"] == "breakpoint", r["halt"]
+    assert r["out"] == bits(np.concatenate(expected))
+    assert r["state"] == words(final)
+
+
+@pytest.mark.parametrize("st", [CASES[8], CASES[9]])
+def test_pcm16_completion_on_output31(linked_pcm16, st):
+    sess = pk_sharc.CallSession(
+        [linked_pcm16],
+        0xB9F000,
+        breaks=(linked_pcm16.symbols["_sample_after0"],),
+    )
+    source = pcm16_source(st)
+    for addr, word in pcm16_poke(source, st).items():
+        sess.poke(addr, word)
+    r = sess.call("_sample_h", REGS)
+    assert r["halt"]["reason"] == "breakpoint", r["halt"]
+    assert r["final_pc_sw"] == linked_pcm16.symbols["_sample_after0"]
+    assert sess.peek(STATE + 5) == 1
+    expected, _ = pcm16_expected(source, st)
+    assert [sess.peek(OUT + i) for i in range(32)] == bits(expected[0])
