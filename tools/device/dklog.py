@@ -12,7 +12,9 @@ its own. `grep -v '^#' FILE` is a JSON-lines file. It notes a gap (events the ri
 (the sequence numbers start again). `--once` reads what is there and stops; Ctrl-C stops a follow.
 
 `crash` prints the last crash record the device found at its boot, decoded: the program counter, the vector, the registers, the stack, the
-module, and the events before the crash. `peek ADDR LEN` hex-dumps RAM inside the ranges the device file lists (`[digikit] peek`).
+module, and the events before the crash. A record of a stopped DSP (a hang record, version 2) is decoded the same way: the site, the machine type or the
+effect row, the module, the core step and the module step. The last fault is also kept on the card as the settings key `dk/fault` (it survives power
+cycles); `crash` prints it too (`fault_value`). `peek ADDR LEN` hex-dumps RAM inside the ranges the device file lists (`[digikit] peek`).
 
 The log is a ring of 512 events: a host that polls once a second loses nothing in normal use (about 1 to 3 events a second with DEBUG on).
 The transports are those of `tools.device.dkupload`: `--emu` for the emulator, `--port` for a device through python-rtmidi (not a repository
@@ -72,7 +74,7 @@ CRUMB_STAGES = {
     21: "D_AFTER_L4_L5_STORES",
     22: "D_AFTER_MODE1_READ",
 }
-# The 24 words of dl_diag (modules/core/adapters/dsp-link/README.md), in order.
+# The 32 words of dl_diag (modules/core/adapters/dsp-link/README.md), in order.
 DIAG_NAMES = (
     "magic_count",
     "link_beat",
@@ -98,7 +100,22 @@ DIAG_NAMES = (
     "guard_p45",
     "guard_p67",
     "guard_disabled_type",
+    "fx_last",
+    "module_step",
+    "fx_master_calls",
+    "fx_send_calls",
+    "fx_faults",
+    "record_this",
+    "record_before",
+    "fx_disabled_row",
 )
+
+# The fault table's sites (the `site` byte of a fault) and the core steps (stage 4 and 5 of the breadcrumb).
+SITES = {0: "unknown", 1: "voice", 2: "fx master", 3: "fx send"}
+FAULT_KINDS = {1: "cpu crash", 2: "dsp stopped"}
+FAULT_MAGIC = 0x464C5431  # "FLT1": the value of the settings key dk/fault
+FAULT_BYTES = 40
+FX_ROW_BYTES = 96
 
 
 def crumb_of(w: int) -> dict[str, Any]:
@@ -109,6 +126,17 @@ def crumb_of(w: int) -> dict[str, Any]:
         "voice": (w >> 8) & 0xFF,
         "type": w >> 16,
     }
+
+
+def core_step_text(stage: int) -> str:
+    return {0: "none", 1: "ENTER", 4: "CALL", 5: "RET"}.get(stage, f"STAGE{stage}")
+
+
+def fx_last_text(w: int) -> str:
+    """The `last` word of core/fx: stage | site << 8 | row byte offset << 16."""
+    if w == 0:
+        return "NONE"
+    return f"{core_step_text(w & 0xFF)} {SITES.get((w >> 8) & 0xFF, '?')} row={(w >> 16) // FX_ROW_BYTES}"
 
 
 def crumb_text(w: int) -> str:
@@ -127,7 +155,7 @@ CARD_STATES = {
     4: "unreadable",
     5: "too small",
 }
-SAFE_REASONS = {1: "counter", 2: "key", 3: "flag"}
+SAFE_REASONS = {1: "counter", 2: "key", 3: "flag", 4: "dsp"}
 REFUSAL = {
     1: "outside the store range",
     2: "card read-only",
@@ -227,12 +255,17 @@ def fields_of(kind: int, a: tuple[int, ...]) -> dict[str, Any]:
                 break
             if DIAG_NAMES[j] == "crumb":
                 f["crumb"] = crumb_text(w)
+            elif DIAG_NAMES[j] == "fx_last":
+                f["fx_last"] = fx_last_text(w)
             elif DIAG_NAMES[j] in (
                 "link_beat",
                 "voice_beat",
                 "dispatches",
                 "returns",
                 "guard_disabled_type",
+                "module_step",
+                "fx_master_calls",
+                "fx_send_calls",
             ):
                 f[DIAG_NAMES[j]] = w
             else:
@@ -262,6 +295,18 @@ def fields_of(kind: int, a: tuple[int, ...]) -> dict[str, Any]:
         }
     elif name == "MACHINE_DISABLED":
         f = {"type": a[0], "disabled": a[1], "faults": a[2]}
+    elif name in ("FX_FAULT", "FX_DISABLED"):
+        f = {"row": a[0], "faults": a[1]}
+    elif name == "FAULT_FOUND":
+        f = {
+            "kind": FAULT_KINDS.get(a[0] & 0xFF, a[0] & 0xFF),
+            "site": SITES.get((a[0] >> 8) & 0xFF, (a[0] >> 8) & 0xFF),
+            "core_step": core_step_text((a[0] >> 16) & 0xFF),
+            "id": a[1],
+            "module_step": a[2],
+            "at": f"{a[3]:08x}",
+            "module": None if a[4] == 0xFFFFFFFF else a[4],
+        }
     elif name == "CRASH_REG":
         f = {REGS[a[0] + i]: f"{w:08x}" for i, w in enumerate(a[1:]) if a[0] + i < 16}
     elif name == "CRASH_STACK":
@@ -542,6 +587,131 @@ def crash_record(
     return rec
 
 
+def fault_value(raw: bytes) -> dict[str, Any] | None:
+    """The settings value of the key `dk/fault` (40 bytes, big-endian): `FLT1`, kind | site << 8 | core step << 16, id, module step, PC (CPU crash) or the DSP site's
+    `last` word, the runtime version, the module name (16 bytes). None when it is not a fault record."""
+    if len(raw) < FAULT_BYTES or int.from_bytes(raw[0:4], "big") != FAULT_MAGIC:
+        return None
+    w = [int.from_bytes(raw[4 * i : 4 * i + 4], "big") for i in range(6)]
+    kind = w[1] & 0xFF
+    if kind not in FAULT_KINDS:
+        return None
+    return {
+        "kind": FAULT_KINDS[kind],
+        "site": SITES.get((w[1] >> 8) & 0xFF, "?"),
+        "core_step": core_step_text((w[1] >> 16) & 0xFF),
+        "id": w[2],
+        "module_step": w[3],
+        "pc" if kind == 1 else "last": w[4],
+        "runtime": D.fmt_runtime(w[5]),
+        "module": ascii_of(
+            *(int.from_bytes(raw[24 + 4 * i : 28 + 4 * i], "big") for i in range(4))
+        ),
+    }
+
+
+def fault_rows(f: dict[str, Any]) -> list[str]:
+    """The ABOUT rows of a fault (the same text as `dkrt_sdk::fault::rows`)."""
+    rows = [
+        "FAULT: CPU CRASH" if f["kind"] == "cpu crash" else "FAULT: DSP STOP"
+    ]
+    name = f["module"].rsplit("/", 1)[-1].upper()[:15]
+    rows.append(
+        f"IN {name}"
+        if name
+        else ("IN FIRMWARE" if f["kind"] == "cpu crash" else "IN UNKNOWN")
+    )
+    if f["kind"] == "cpu crash":
+        rows.append(f"PC {f['pc']:08X}")
+    elif f["site"] == "unknown":
+        rows.append("SITE UNKNOWN")
+    else:
+        step = f"STEP {f['module_step']}" if f["module_step"] else f["core_step"]
+        rows.append(f"{f['site'].upper()} {step}")
+    return [r[:18] for r in rows]
+
+
+def hang_record(
+    events: list[tuple[int, int, int, int, tuple[int, ...]]],
+) -> dict[str, Any] | None:
+    """The last hang record (a stopped DSP) in a list of events: the FAULT_FOUND event of kind 2 and the module, the diagnostic words and the events that follow it."""
+    starts = [
+        i
+        for i, e in enumerate(events)
+        if e[2] == K["FAULT_FOUND"] and (e[4][0] & 0xFF) == 2
+    ]
+    if not starts:
+        return None
+    i = starts[-1]
+    a = events[i][4]
+    rec: dict[str, Any] = {
+        "seq": events[i][0],
+        "kind": "dsp stopped",
+        "site": SITES.get((a[0] >> 8) & 0xFF, "?"),
+        "core_step": core_step_text((a[0] >> 16) & 0xFF),
+        "id": a[1],
+        "module_step": a[2],
+        "last": a[3],
+        "module": None,
+        "diag": {},
+        "tail": [],
+    }
+    pending: tuple[int, ...] | None = None
+    for _seq, _t, kind, _fl, b in events[i + 1 :]:
+        if kind == K["CRASH_MOD"] and b[0] != 0x100:
+            rec["module"] = {
+                "index": None if b[0] == 0xFFFFFFFF else b[0],
+                "name": ascii_of(b[2], b[3], b[4]),
+            }
+        elif kind == K["DSP_DIAG"]:
+            chunk = b[0] & 0xFF
+            for j, w in enumerate(b[1:]):
+                if chunk * 4 + j < len(DIAG_NAMES):
+                    rec["diag"][DIAG_NAMES[chunk * 4 + j]] = w
+        elif kind == K["CRASH_TAIL"]:
+            if pending is None:
+                pending = b
+            else:
+                rec["tail"].append(
+                    (
+                        pending[0],
+                        pending[1],
+                        pending[2] >> 16,
+                        pending[2] & 0xFFFF,
+                        (pending[3], pending[4], b[1], b[2], b[3]),
+                    )
+                )
+                pending = None
+        else:
+            break
+    return rec
+
+
+def hang_text(rec: dict[str, Any]) -> str:
+    m = rec["module"]
+    where = f"{m['name']!r}" if m and m["name"] else "an unknown module"
+    what = (
+        f"machine type {rec['id']}"
+        if rec["site"] == "voice"
+        else f"effect table row {rec['id'] // FX_ROW_BYTES}"
+        if rec["site"].startswith("fx")
+        else "no site"
+    )
+    lines = [
+        f"DSP stop found at boot (log event {rec['seq']}): in {where}, site {rec['site']}, {what}",
+        f"  core step {rec['core_step']}, module step {rec['module_step']}, last word {rec['last']:08x}",
+    ]
+    if rec["diag"]:
+        lines.append(
+            "  DSP words: " + " ".join(f"{k}={v:08x}" for k, v in rec["diag"].items())
+        )
+    if rec["tail"]:
+        lines.append("  events before the stop (oldest first):")
+        for seq, t, kind, flags, a in rec["tail"]:
+            lines.append("    " + text_of(event_dict((seq, t, kind, flags, a))))
+    return "\n".join(lines)
+
+
 def crash_text(rec: dict[str, Any]) -> str:
     if rec.get("corrupt"):
         return f"a crash record was found at the boot (event {rec['seq']}) but it failed its CRC"
@@ -733,11 +903,26 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "crash":
             _, _, evs = read_all(up)
             rec = crash_record(evs)
-            print(
-                crash_text(rec)
-                if rec
-                else "no crash record in the log (the last boot did not follow a crash, or the ring has overwritten it)"
-            )
+            hang = hang_record(evs)
+            if hang and (not rec or hang["seq"] > rec.get("seq", 0)):
+                print(hang_text(hang))
+            else:
+                print(
+                    crash_text(rec)
+                    if rec
+                    else "no crash record in the log (the last boot did not follow a crash, or the ring has overwritten it)"
+                )
+            try:
+                from tools.device import dksettings
+
+                raw = dksettings.decode(up.settings_record()[3])
+                kept = fault_value(raw.get("dk/fault") or b"") if raw else None
+            except (D.UploadError, TimeoutError, ValueError):
+                kept = None
+            if kept:
+                print("kept on the card (settings key dk/fault):")
+                print("  " + " | ".join(fault_rows(kept)))
+                print("  " + json.dumps(kept))
         elif args.cmd == "peek":
             print(hexdump(args.addr, peek_range(up, args.addr, args.length)))
         elif args.cmd == "info":

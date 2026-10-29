@@ -1,0 +1,29 @@
+[module]
+id = "test/dyn-fx-nan"
+version = "0.1.0"
+name = "FX NaN (run time)"
+category = "test"
+type = "fx"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: a send effect that writes a NaN into its output, so core/fx counts a fault in every block and switches the row off after the eighth."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# `patchkit pack test/dyn-fx-nan --device dt2` makes the .dkm. The runtime-loaded twin of test/fx-nan, on the send route (src/module.c).
+[[object]]
+path = "build/dyn-fx-nan-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/dyn-fx-nan-dsp.dko.json"
+sources = ["src/dsp/nan.s"]
+place = "dsp.l2"
+devices = ["dt2", "dn2"]

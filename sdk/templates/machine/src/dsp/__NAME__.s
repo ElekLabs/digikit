@@ -7,6 +7,8 @@
 // degree-9 odd Taylor polynomial gives |error| < 4e-6.
 
 #include "dk_machine.inc"
+// Trace (optional, nothing in the object without `pack --trace`): add `#include "dk_trace.inc"` above, then write `DK_STEP(1, R0);` where a fault
+// record should say "STEP 1". a register that is free there. See sdk/README.md, "Tracing".
 
 .SECTION/PM seg_pmco;
 .GLOBAL ___NAME___render;

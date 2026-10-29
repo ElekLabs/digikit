@@ -515,7 +515,7 @@ fn a_content_module_builds_into_the_cache_on_demand() {
     let cached = build::cache_dir(&root()).join(&id).join("build/tiny.dko.json");
     let _ = std::fs::remove_dir_all(build::cache_dir(&root()).join(&id));
     let scan = |only: Option<&[String]>| {
-        Library::scan_in(Some(Build { root: &root(), only }), &d, false).unwrap()
+        Library::scan_in(Some(Build { root: &root(), only, defines: &[] }), &d, false).unwrap()
     };
 
     // asked for nothing: no object, nothing built

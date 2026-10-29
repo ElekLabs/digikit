@@ -146,7 +146,7 @@ _dv_scan:
     IF EQ JUMP _dv_f1a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -159,7 +159,7 @@ _dv_f1a:
     IF EQ JUMP _dv_f1b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -187,7 +187,7 @@ _dv_f1b:
     IF EQ JUMP _dv_d11a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -200,7 +200,7 @@ _dv_d11a:
     IF EQ JUMP _dv_d11b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -231,7 +231,7 @@ _dv_d11b:
     IF EQ JUMP _dv_d12a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -244,7 +244,7 @@ _dv_d12a:
     IF EQ JUMP _dv_d12b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -267,7 +267,7 @@ _dv_d12b:
     IF EQ JUMP _dv_d13a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -280,7 +280,7 @@ _dv_d13a:
     IF EQ JUMP _dv_d13b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -309,7 +309,7 @@ _dv_d13b:
     IF EQ JUMP _dv_d14a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -322,7 +322,7 @@ _dv_d14a:
     IF EQ JUMP _dv_d14b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -349,7 +349,7 @@ _dv_d14b:
     IF EQ JUMP _dv_d15a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -362,7 +362,7 @@ _dv_d15a:
     IF EQ JUMP _dv_d15b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -387,7 +387,7 @@ _dv_d15b:
     IF EQ JUMP _dv_d16a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -400,7 +400,7 @@ _dv_d16a:
     IF EQ JUMP _dv_d16b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -427,7 +427,7 @@ _dv_d16b:
     IF EQ JUMP _dv_d17a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -440,7 +440,7 @@ _dv_d17a:
     IF EQ JUMP _dv_d17b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -464,7 +464,7 @@ _dv_d17b:
     IF EQ JUMP _dv_d18a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -477,7 +477,7 @@ _dv_d18a:
     IF EQ JUMP _dv_d18b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -506,7 +506,7 @@ _dv_d18b:
     IF EQ JUMP _dv_d19a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -519,7 +519,7 @@ _dv_d19a:
     IF EQ JUMP _dv_d19b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -541,7 +541,7 @@ _dv_d19b:
     IF EQ JUMP _dv_d20a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -554,7 +554,7 @@ _dv_d20a:
     IF EQ JUMP _dv_d20b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -578,7 +578,7 @@ _dv_d20b:
     IF EQ JUMP _dv_d21a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -591,7 +591,7 @@ _dv_d21a:
     IF EQ JUMP _dv_d21b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -616,7 +616,7 @@ _dv_d21b:
     IF EQ JUMP _dv_d22a;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -629,7 +629,7 @@ _dv_d22a:
     IF EQ JUMP _dv_d22b;
     I4 = R0;
     DM(192, I4) = R2;
-    R0 = 0x18D1A6;
+    R0 = 0x20D1A6;
     DM(45, I4) = R0;
     R0 = DM(_dv_diag + 52);
     DM(193, I4) = R0;
@@ -652,7 +652,7 @@ _dv_d22b:
     IF EQ JUMP _dv_f2a;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -665,7 +665,7 @@ _dv_f2a:
     IF EQ JUMP _dv_f2b;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -702,7 +702,7 @@ _dv_f2b:
     IF EQ JUMP _dv_f3a;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -715,7 +715,7 @@ _dv_f3a:
     IF EQ JUMP _dv_f3b;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -755,6 +755,7 @@ _dv_f3b:
 #else
     CALL _dv_crumb;                       // stage 4: the routine is about to be called (R3, R5, I4 are free here)
 #endif
+    CALL _dv_clrstep;                     // the module step (fault table word 25) is cleared in both reply records
     R3 = DM(_dv_g + 0);
     I4 = R3;
     R3 = DM(-8, I4);                      // row word 16: the note_on pc; 0 is a routine of the old form
@@ -1356,7 +1357,7 @@ _dv_stock:
     IF EQ JUMP _dv_i1;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -1369,7 +1370,7 @@ _dv_i1:
     IF EQ JUMP _dv_i2;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -1411,7 +1412,7 @@ _dv_crumb:
     IF EQ JUMP _dv_cb;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -1424,7 +1425,7 @@ _dv_cb:
     IF EQ JUMP _dv_cc;
     I4 = R5;
     DM(192, I4) = R3;
-    R5 = 0x18D1A6;
+    R5 = 0x20D1A6;
     DM(45, I4) = R5;
     R5 = DM(_dv_diag + 52);
     DM(193, I4) = R5;
@@ -1438,6 +1439,24 @@ _dv_cc:
 #else
     RTS;
 #endif
+
+// Clears the module step (fault table word 25, dsp-link.inc) in both reply records, before the core calls a module. Clobbers R3, R5, I4 (L4 must be 0).
+_dv_clrstep:
+    R3 = 0;
+    I4 = _dv_rec;
+    R5 = DM(0, I4);
+    R5 = PASS R5;
+    IF EQ JUMP _dv_cs1;
+    I4 = R5;
+    DM(298, I4) = R3;
+    I4 = _dv_rec;
+_dv_cs1:
+    R5 = DM(1, I4);
+    R5 = PASS R5;
+    IF EQ RTS;
+    I4 = R5;
+    DM(298, I4) = R3;
+    RTS;
 
 // ---- helpers for machine routines (ordinary subroutines: CALL _dv_..., return with RTS) ----
 

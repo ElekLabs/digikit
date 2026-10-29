@@ -49,6 +49,10 @@
 #define DKRT_SAFE_KEY 2
 /* DkrtBootInfo.reason: the selection record asked for it (DkrtSelection.flags bit 0). */
 #define DKRT_SAFE_FLAG 3
+/* DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen). */
+#define DKRT_SAFE_DSP 4
+/* Rows of DkrtDiag.fault_text. */
+#define DKRT_FAULT_ROWS 4
 /* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode. */
 #define DKRT_SAFE_AFTER 2
 /* The stable period: DSP blocks (1500 per second) of UI loop after which the boot counter is cleared (30 seconds). */
@@ -77,6 +81,8 @@
 #define DKRT_SCAN_LOADED 4
 /* DkrtScan.flags: with SCAN_LOADED, its DSP part is still being sent. */
 #define DKRT_SCAN_LOADING 8
+/* DkrtScan.flags: the file was packed with `patchkit pack --trace` (bit 31 of the header word at 0x30). The loader does not look at it. */
+#define DKRT_SCAN_TRACE 16
 /* Bytes of DkrtFitOut.line, with the NUL. */
 #define DKRT_FIT_LINE 24
 /* Bytes of DkrtFitRow.reason, with the NUL. */
@@ -279,6 +285,8 @@ typedef struct DkrtDiag {
     uint32_t crash_vec;                          /* its vector */
     uint32_t ram_kept;                           /* 1 when the keep-probe word of the boot before was still in RAM at this boot (RAM survived the reset that led here) */
     uint32_t dsp_crumb;                          /* the DSP's last breadcrumb when the watch decided it stopped (0 before): stage | voice << 8 | machine type << 16 (finding 48) */
+    uint32_t fault_rows;                         /* rows of fault_text that are filled: the last fault kept in the settings key dk/fault (0: none) */
+    uint8_t fault_text[DKRT_FAULT_ROWS][24];     /* the ABOUT rows of that fault, upper case, at most 18 characters (the ABOUT page width on DT2) and a NUL */
 } DkrtDiag;
 
 /* dkrt_module_header result: what the DIGIKIT menu shows of a .dkm header. The layout only grows at the end. */
@@ -412,7 +420,7 @@ _Static_assert(offsetof(DkrtBootInfo, ui_reached) == 36, "DkrtBootInfo.ui_reache
 _Static_assert(offsetof(DkrtBootInfo, results) == 40, "DkrtBootInfo.results");
 _Static_assert(offsetof(DkrtBootInfo, dsp_wait) == 72, "DkrtBootInfo.dsp_wait");
 _Static_assert(offsetof(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
-_Static_assert(sizeof(DkrtDiag) == 72, "DkrtDiag size");
+_Static_assert(sizeof(DkrtDiag) == 172, "DkrtDiag size");
 _Static_assert(offsetof(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 _Static_assert(offsetof(DkrtDiag, version) == 4, "DkrtDiag.version");
 _Static_assert(offsetof(DkrtDiag, card_state) == 8, "DkrtDiag.card_state");
@@ -431,6 +439,8 @@ _Static_assert(offsetof(DkrtDiag, crash_pc) == 56, "DkrtDiag.crash_pc");
 _Static_assert(offsetof(DkrtDiag, crash_vec) == 60, "DkrtDiag.crash_vec");
 _Static_assert(offsetof(DkrtDiag, ram_kept) == 64, "DkrtDiag.ram_kept");
 _Static_assert(offsetof(DkrtDiag, dsp_crumb) == 68, "DkrtDiag.dsp_crumb");
+_Static_assert(offsetof(DkrtDiag, fault_rows) == 72, "DkrtDiag.fault_rows");
+_Static_assert(offsetof(DkrtDiag, fault_text) == 76, "DkrtDiag.fault_text");
 _Static_assert(sizeof(DkrtModuleHeader) == 4, "DkrtModuleHeader size");
 _Static_assert(offsetof(DkrtModuleHeader, version) == 0, "DkrtModuleHeader.version");
 _Static_assert(sizeof(DkrtScan) == 116, "DkrtScan size");

@@ -25,7 +25,7 @@ dyndsp_info:
     .long   _dd_vfirst
     .long   DYN_TYPES
     .long   _dd_vcount
-    .long   3
+    .long   4
     .asciz  "_dv_exp2"
     .space  28 - 9
     .long   _dv_exp2
@@ -35,3 +35,6 @@ dyndsp_info:
     .asciz  "_dv_frame_sw"
     .space  28 - 13
     .long   _dv_frame_sw
+    .asciz  "_dk_step"
+    .space  28 - 9
+    .long   _dk_step

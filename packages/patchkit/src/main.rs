@@ -28,9 +28,10 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          exit 1 on any failure (stock files are looked up in firmware/ by sha256)
   isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
-  pack    MODULE_ID -o OUT.dkm [--name N] [--runtime-min V] [--device SHORT]   the module's ColdFire object as a run-time .dkm;
+  pack    MODULE_ID -o OUT.dkm [--name N] [--runtime-min V] [--device SHORT] [--trace]   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
                                          (a `dynamic = true` module: its machine and param records for --device)
+                                         (--trace: built with DK_TRACE defined, trace bit set in the header; objects cached apart)
   desc    MODULE_ID                      the effects the module declares (the DK_FX records of its ColdFire object), as JSON
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
@@ -115,7 +116,13 @@ fn library_with(
     lenient: bool,
     only: Option<&[String]>,
 ) -> Result<Library> {
-    let mut lib = Library::scan_repo_for(root, lenient, only)?;
+    // `--trace` builds the modules with DK_TRACE defined (C: -DDK_TRACE; SHARC+: `#ifdef DK_TRACE`)
+    let defines: Vec<String> = if rest.iter().any(|a| a == "--trace") {
+        vec!["DK_TRACE".into()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::scan_repo_defined(root, lenient, only, &defines)?;
     let mut extra: Vec<PathBuf> = flag(rest, "--modules-dir")
         .into_iter()
         .map(PathBuf::from)
@@ -123,7 +130,11 @@ fn library_with(
     if let Some(v) = std::env::var_os("PATCHKIT_MODULES") {
         extra.extend(std::env::split_paths(&v));
     }
-    let build = patchkit::module::Build { root, only };
+    let build = patchkit::module::Build {
+        root,
+        only,
+        defines: &defines,
+    };
     for d in extra {
         if d.is_dir() {
             lib.extend_unique(Library::scan_in(Some(build), &d, lenient)?.modules)?;
@@ -593,6 +604,7 @@ plan.json {}",
                         .map_err(|_| Error("--runtime-min: a number".into()))?,
                     None => patchkit::dkm::runtime_version(),
                 },
+                trace: rest.iter().any(|a| a == "--trace"),
             };
             // a run-time module: its typed sections, lowered for one device, are the `register` records
             let mut dsp: Vec<u8> = vec![];
@@ -820,6 +832,7 @@ plan.json {}",
                 d.version & 255
             );
             println!("runtime   >= {}", patchkit::dkm::fmt_runtime(d.runtime_min));
+            println!("trace     {}", if d.trace { "yes (built with DK_TRACE)" } else { "no" });
             println!("sha256    {}", d.sha256);
             println!("size      {}", d.size_summary(file_len));
             println!(

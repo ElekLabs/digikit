@@ -309,6 +309,9 @@ pub unsafe extern "C" fn dkrt_boot() {
         SAFE_FLAG
     } else if key_held() {
         SAFE_KEY
+    } else if crash::seen().hang != 0 {
+        // the boot before stopped because the DSP stopped (a hang record): one stop is enough, even after a stable boot; the selection stays as it is
+        SAFE_DSP
     } else if r.boot_counter >= SAFE_AFTER {
         SAFE_COUNTER
     } else {

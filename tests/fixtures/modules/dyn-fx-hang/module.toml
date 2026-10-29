@@ -1,0 +1,31 @@
+[module]
+id = "test/dyn-fx-hang"
+version = "0.1.0"
+name = "FX hang"
+category = "test"
+type = "fx"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: a send effect whose DSP process routine never returns after a few blocks, to see what the fault trace shows when the SHARC stops inside an effect."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# Like test/dyn-fx-gain-send (route = send) with a process routine that stores its step in `_dk_step` and enters an endless loop on the HANG_AFTER-th call
+# (src/dsp/hang.s). `patchkit pack test/dyn-fx-hang --device dt2` makes the .dkm.
+# Never select this module on a device you care about: the DSP stops until the restart that the runtime's hang record makes (docs/findings/77-fault-trace.md).
+[[object]]
+path = "build/dyn-fx-hang-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/dyn-fx-hang-dsp.dko.json"
+sources = ["src/dsp/hang.s"]
+place = "dsp.l2"
+devices = ["dt2", "dn2"]

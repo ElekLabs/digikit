@@ -814,6 +814,16 @@ mark = "D"
 rule = "fw/midi:cf_func"
 
 [[anchor]]
+name = "cf.midi.site.os_upgrade_state_lit"
+cpu = "cf"
+kind = "code"
+addr = 0x40122576
+len = 4
+sha256 = "c2f460fdce0aa0cbfa765a75ae1ae6ea3b2018a7fdf23cf613e7c5b6a7d92d52"
+mark = "D"
+rule = "fw/midi:cf_words"
+
+[[anchor]]
 name = "cf.midi.site.rx"
 cpu = "cf"
 kind = "code"

@@ -8,6 +8,8 @@
 
 /* The firmware's MIDI send `void f(u32 len, const u8 *msg, u32 port)` (DT2 1.16 FUN_401217fc): port 2 sends to USB through the TX function with the TX mutex taken. Same hash on all four images. */
 void dk_fw_midi_send(uint32_t len, const uint8_t *msg, uint32_t port) __asm__("cf.midi.fn.send");
+/* The 4-byte address literal of the stub `move.l #<state>,d0; rts` (DT2 1.17 FUN_40120bcc) that returns the OS upgrade receive state object, found by the first words of the stream parser behind it. The byte at +0 of the object is 0 when idle, 1 to 3 while a stream is taken (finding 75). core/runtime does not reset on a DSP stop while it is not 0. */
+extern const uint8_t dk_fw_midi_os_upgrade_state_lit __asm__("cf.midi.site.os_upgrade_state_lit");
 /* The USB MIDI transmit function (DT2 1.16 FUN_40004734, `void f(u32 len, const u8 *msg)`, hash identical on the four images): the 4-byte address literal of its `movea.l (<in flight>).l,a0`, the bytes handed to the USB stack and not yet sent (added by the submit function, taken off by the completion). */
 extern const uint8_t dk_fw_midi_tx_inflight_lit __asm__("cf.midi.site.tx_inflight_lit");
 

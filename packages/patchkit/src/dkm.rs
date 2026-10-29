@@ -75,6 +75,9 @@ pub const H_REG_SIZE: usize = 0x94;
 pub const H_DSP_OFF: usize = 0x98;
 pub const H_DSP_SIZE: usize = 0x9c;
 pub const H_MENU: usize = 0xa0; // only when the header size is HEADER_MENU
+/// Bit 31 of the word at [`H_RUNTIME`]: the module was built with `DK_TRACE`. The word is informational for the loader (it does not refuse
+/// on it), so a runtime that does not know the bit loads the file as before; a version never reaches this bit.
+pub const FLAG_TRACE: u32 = 1 << 31;
 /// The runtime version that loads a DSP section (`dkrt_sdk::RUNTIME_VERSION` is at least this).
 pub const RUNTIME_DSP: u32 = 5; // DSP sections of version 2 (voices with knob ranges, finding 51); a runtime 2 to 4 loads version 1 only
 
@@ -83,6 +86,8 @@ pub struct Options {
     /// major << 16 | minor << 8 | patch
     pub version: u32,
     pub runtime_min: u32,
+    /// A traced build (`patchkit pack --trace`, DK_TRACE defined): sets [`FLAG_TRACE`].
+    pub trace: bool,
 }
 
 /// "1.2.3" -> 0x010203
@@ -336,11 +341,11 @@ pub fn pack_full_max(
     put(
         &mut f,
         H_RUNTIME,
-        if dsp.is_empty() {
+        (if dsp.is_empty() {
             o.runtime_min
         } else {
             o.runtime_min.max(RUNTIME_DSP)
-        },
+        }) | if o.trace { FLAG_TRACE } else { 0 },
     );
     put(&mut f, H_VERSION, o.version);
     // contracts: api always; machine with a DSP section (that is not only effects) or a machine record; fx with an effect record; service with slot functions or a real `dkm_init`/`dkm_fini` (not the stub)
@@ -412,6 +417,8 @@ pub struct Dkm {
     pub name: String,
     pub version: u32,
     pub runtime_min: u32,
+    /// Built with `DK_TRACE` ([`FLAG_TRACE`]); not part of `runtime_min`.
+    pub trace: bool,
     pub sha256: String,
     pub image: Vec<u8>,
     pub bss: u32,
@@ -513,7 +520,8 @@ impl Dkm {
         Ok(Dkm {
             name,
             version: get(f, H_VERSION),
-            runtime_min: get(f, H_RUNTIME),
+            runtime_min: get(f, H_RUNTIME) & !FLAG_TRACE,
+            trace: get(f, H_RUNTIME) & FLAG_TRACE != 0,
             sha256: hex(&f[H_SHA..H_SHA + 32]),
             image,
             bss: get(f, H_BSS),
@@ -623,6 +631,7 @@ mod tests {
             name: "test/x".into(),
             version: 0x010203,
             runtime_min: 1,
+            trace: false,
         }
     }
 

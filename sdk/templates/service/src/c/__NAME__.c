@@ -5,6 +5,9 @@
  * To add SysEx commands, allocate a range in sdk/sdk.toml [protocol.ranges] and register it in dkm_init:
  *
  *     api->register_cmds(FIRST_CMD, COUNT, handler);
+ *
+ * Trace marks (optional, no code without `pack --trace`): `#include <dk/trace.h>`, call `DK_TRACE_INIT(api);` in dkm_init, then
+ * `DK_TRACE_LOG("message", value);` anywhere in this file. See sdk/README.md, "Tracing".
  */
 
 #include <dk/api.h>

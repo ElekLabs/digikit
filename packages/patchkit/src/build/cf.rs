@@ -28,6 +28,11 @@ fn inc_flags(dirs: &[PathBuf]) -> Vec<String> {
     dirs.iter().map(|d| format!("-I{}", d.display())).collect()
 }
 
+/// `-DNAME` for each build define (C sources only: the assembler's `-D` means something else).
+fn def_flags(env: &Env) -> Vec<String> {
+    env.defines.iter().map(|d| format!("-D{d}")).collect()
+}
+
 /// One C or assembly file to a relocatable ELF.
 pub fn compile_source(env: &Env, path: &Path, out: &Path, include_dirs: &[PathBuf]) -> Result<()> {
     let (prog, mut args) = if is_asm(path) {
@@ -37,6 +42,7 @@ pub fn compile_source(env: &Env, path: &Path, out: &Path, include_dirs: &[PathBu
     };
     args.extend(inc_flags(include_dirs));
     if !is_asm(path) {
+        args.extend(def_flags(env));
         args.push("-c".into());
     }
     args.extend([
@@ -180,6 +186,7 @@ pub fn deps(env: &Env, src: &Path, include_dirs: &[PathBuf]) -> Result<Vec<PathB
     } else {
         let mut args = tc::strs(&tc::CFLAGS);
         args.extend(inc_flags(include_dirs));
+        args.extend(def_flags(env));
         args.extend([
             "-MM".into(),
             "-MT".into(),
@@ -228,6 +235,11 @@ pub fn source_digest(env: &Env, sources: &[PathBuf], include_dirs: &[PathBuf]) -
             h.update(tc::read(&d)?);
         }
         h.update(env.toolchain_id()?.as_bytes());
+        // the define set is part of the key; an empty set adds nothing, so the hashes of untraced builds stay as they were
+        for d in &env.defines {
+            h.update(b"\0-D");
+            h.update(d.as_bytes());
+        }
     }
     Ok(hex(&h.finalize()))
 }

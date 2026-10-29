@@ -279,6 +279,17 @@ _fx_off:
     R5 = 2;                               // mode: fade out
 _fx_go:
     DM(_fx_c + 4) = R5;
+    R0 = DM(FX_ROUTE, I4);                // the site's beat: word 4 (master, route 0) or word 5 (send, route 1) of _fx_diag
+    R0 = LSHIFT R0 BY 2;
+    R3 = _fx_diag;
+    R3 = R3 + R0;
+    I1 = R3;
+    R0 = DM(4, I1);
+    R0 = R0 + 1;
+    DM(4, I1) = R0;
+    R5 = 4;                               // `last`: the core is about to call the module; the module step is cleared
+    R6 = 0;
+    CALL _fx_mark;
     R4 = DM(FX_STATE, I4);
     R8 = _fx_in;
     R12 = I4;
@@ -291,6 +302,9 @@ _fx_ret:
     DM(_fx_c + 12) = R0;
     R0 = DM(_fx_c + 0);
     I4 = R0;
+    R5 = 5;                               // `last`: the module returned (its step stays)
+    R6 = -1;
+    CALL _fx_mark;
     R0 = DM(_fx_c + 12);
     R0 = PASS R0;
     IF LT JUMP _fx_fault;                 // a negative result
@@ -319,6 +333,11 @@ _fx_fault:
     R1 = DM(_fx_diag + 4);
     R1 = R1 + 1;
     DM(_fx_diag + 4) = R1;                // faults of all effects
+    R2 = I4;
+    R3 = _fx_table;
+    R2 = R2 - R3;
+    R2 = R2 + 1;
+    DM(_fx_diag + 8) = R2;                // the row (byte offset + 1) of the last fault
     R5 = DM(_fx_blk);
     R6 = DM(FX_WSTART, I4);
     R7 = R5 - R6;
@@ -340,7 +359,48 @@ _fx_fwin:
     IF LT JUMP _fx_xnone;
     R0 = 1;
     DM(FX_DIS, I4) = R0;
+    DM(_fx_diag + 12) = R2;               // the row (byte offset + 1) switched off last
     JUMP _fx_xnone;
+
+// The core's mark of a module call (the fault table, dsp-link.inc): In: I4 = the row, R5 = stage (4 the module is about to be called, 5 it returned), R6 = the mask
+// for the module step (0 clears it, -1 keeps it). Stores `last` = stage | site << 8 (2 master, 3 send: 2 + route) | row byte offset << 16 in _fx_diag word 0 and, at
+// once, into both reply records (_fx_rec, written by core/dsp-link; 0 without it) with the header word, so that it is there when the DSP stops inside the module
+// and never reaches the block tail (finding 48). Clobbers R0, R3, I1.
+_fx_mark:
+    R3 = I4;
+    R0 = _fx_table;
+    R3 = R3 - R0;
+    R3 = LSHIFT R3 BY 16;
+    R0 = DM(FX_ROUTE, I4);
+    R0 = BSET R0 BY 1;                    // 2 + route (the route is 0 or 1)
+    R0 = LSHIFT R0 BY 8;
+    R3 = R3 OR R0;
+    R3 = R3 OR R5;
+    DM(_fx_diag) = R3;
+    I1 = _fx_rec;
+    R0 = DM(0, I1);
+    R0 = PASS R0;
+    IF EQ JUMP _fx_mk1;
+    I1 = R0;
+    DM(297, I1) = R3;
+    R0 = DM(298, I1);
+    R0 = R0 AND R6;
+    DM(298, I1) = R0;
+    R0 = 0x20D1A6;                        // DL_DG_MAGIC | 32 << 16: a record the engine had cleared still decodes
+    DM(45, I1) = R0;
+    I1 = _fx_rec;
+_fx_mk1:
+    R0 = DM(1, I1);
+    R0 = PASS R0;
+    IF EQ RTS;
+    I1 = R0;
+    DM(297, I1) = R3;
+    R0 = DM(298, I1);
+    R0 = R0 AND R6;
+    DM(298, I1) = R0;
+    R0 = 0x20D1A6;
+    DM(45, I1) = R0;
+    RTS;
 
 // Saves every register that the stock function expects back and the context registers, pins the context and sets the output and the
 // block number (`_fx_blk`, not advanced here) of the dk_fx_in (the caller sets its `in`). Called by the master hook and by the send hook (fxsend.s). Returns with RTS; clobbers R0, R3, I4.
@@ -517,5 +577,8 @@ _fx_xl: DM(I0, M6) = R1;
 .PKDATA _fx_scratch, 256;                 // the effect's output block
 // The adapter's scalars: 0 row, 4 mode, 8 enabled, 12 result.
 .PKDATA _fx_c, 16;
-// Diagnostics: word 0 spare, word 1 faults of all effects.
+// Diagnostics (copied into the fault table by core/dsp-link): 0 `last` (see _fx_mark), 1 faults of all effects, 2 row (byte offset + 1) of the last fault, 3 row
+// (byte offset + 1) switched off last, 4 module calls of the master route, 5 module calls of the send route.
 .PKDATA _fx_diag, 32;
+// The addresses of the two reply records (rings): [0] the one the last block built, [1] the one before it. Written by core/dsp-link.
+.PKDATA _fx_rec, 8;

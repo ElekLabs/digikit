@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fast edit loop for module code on the emulator: build the changed objects, reload a kept daemon, press keys, save screenshots.
 
-    mise run dk:dev -- MODULE_OR_SET [--device dn2[,dt2]] [--keys FILE|INLINE] [--store IDS] [--out DIR] [--stop]
+    mise run dk:dev -- MODULE_OR_SET [--device dn2[,dt2]] [--keys FILE|INLINE] [--store IDS] [--trace] [--out DIR] [--stop]
 
 MODULE_OR_SET is a patch set of devices/<device>.toml (`emulator`), or module ids separated by commas (`test/ui-demo`); the modules
 they require are added. Per device the tool
@@ -157,11 +157,15 @@ def contact_sheet(frames: list[tuple[str, bytes]], dest: Path) -> None:
 # ----- one device -------------------------------------------------------------------------------------------------
 
 
-def run_dir_of(device: str, target: str, store: list[str] | None = None) -> Path:
+def run_dir_of(
+    device: str, target: str, store: list[str] | None = None, trace: bool = False
+) -> Path:
     slug = re.sub(
         r"[^A-Za-z0-9.+-]+",
         "_",
-        target + ("+store-" + ",".join(store) if store else ""),
+        target
+        + ("+store-" + ",".join(store) if store else "")
+        + ("+trace" if trace else ""),
     )
     return H.OUT / f"run-devreload-{device}-{slug}"
 
@@ -180,8 +184,9 @@ def connect(run_dir: Path) -> Emu | None:
     return emu
 
 
-def store_card(device: str, ids: list[str], run_dir: Path) -> Path:
-    """A card image whose module store holds the modules `ids`, packed for the device (`<leaf>.dkm` under digikit/modules)."""
+def store_card(device: str, ids: list[str], run_dir: Path, trace: bool = False) -> Path:
+    """A card image whose module store holds the modules `ids`, packed for the device (`<leaf>.dkm` under digikit/modules);
+    with `trace` they are built with DK_TRACE (`patchkit pack --trace`)."""
     from tools.firmware import config
     from tools.patchkit import pk_dkrt
 
@@ -205,7 +210,15 @@ def store_card(device: str, ids: list[str], run_dir: Path) -> Path:
             tools.patchkit_run("synth-dkm", spec, "--device", device, "-o", out)
         else:
             out = folder / "digikit" / "modules" / f"{mid.rpartition('/')[2]}.dkm"
-            tools.patchkit_run("pack", mid, "--device", device, "-o", out)
+            tools.patchkit_run(
+                "pack",
+                mid,
+                "--device",
+                device,
+                "-o",
+                out,
+                *(["--trace"] if trace else []),
+            )
         if pick:
             selected.append(f"modules/{out.name}")
     syx = config.stock(STOCK_SYX[device])
@@ -217,7 +230,7 @@ def store_card(device: str, ids: list[str], run_dir: Path) -> Path:
 
 
 def start(
-    cell: H.Cell, run_dir: Path, store: list[str] | None = None
+    cell: H.Cell, run_dir: Path, store: list[str] | None = None, trace: bool = False
 ) -> tuple[Emu, H.Session]:
     """A new daemon that outlives this process: it boots the patched image of the cell (cached by image)."""
     session = H.Session(
@@ -229,7 +242,7 @@ def start(
     )
     if store:
         run_dir.mkdir(parents=True, exist_ok=True)
-        session.card_override = str(store_card(cell.device, store, run_dir))
+        session.card_override = str(store_card(cell.device, store, run_dir, trace))
     session.open()
     assert session.emu is not None
     emu = session.emu
@@ -252,8 +265,10 @@ def session_on(emu: Emu, cell: H.Cell, run_dir: Path) -> H.Session:
     return session
 
 
-def stop(device: str, target: str, store: list[str] | None = None) -> None:
-    run_dir = run_dir_of(device, target, store)
+def stop(
+    device: str, target: str, store: list[str] | None = None, trace: bool = False
+) -> None:
+    run_dir = run_dir_of(device, target, store, trace)
     emu = connect(run_dir)
     if emu is None:
         print(f"{device}: no daemon in {run_dir}")
@@ -272,13 +287,13 @@ def run_device(device: str, a: argparse.Namespace) -> dict[str, Any]:
     cell = H.Cell(device, FIRMWARE[device], modules)
     t_build, rebuilt = build(closure(modules))
     store = [m for m in (a.store or "").split(",") if m]
-    run_dir = run_dir_of(device, a.target, store)
+    run_dir = run_dir_of(device, a.target, store, a.trace)
     emu = connect(run_dir)
     started = False
     t_start = 0.0
     if emu is None:
         t = time.monotonic()
-        emu, session = start(cell, run_dir, store)
+        emu, session = start(cell, run_dir, store, a.trace)
         t_start, started = time.monotonic() - t, True
     else:
         session = session_on(emu, cell, run_dir)
@@ -362,6 +377,11 @@ def main(argv: list[str]) -> int:
         "--store",
         help="module ids separated by commas: packed into the module store of the card the daemon boots with; an id ending in * is also in the saved selection, synth:NAME:BSS is a module that needs BSS bytes of arena (a kept daemon keeps its card; each list has its own daemon)",
     )
+    ap.add_argument(
+        "--trace",
+        action="store_true",
+        help="build the --store modules with DK_TRACE (patchkit pack --trace): their DK_TRACE_LOG and DK_STEP marks exist; the kept daemon is its own (the card differs)",
+    )
     ap.add_argument("--out", default=str(ROOT / "out" / "runs" / "devreload"))
     ap.add_argument(
         "--stop", action="store_true", help="end the kept daemons of this module set"
@@ -374,7 +394,7 @@ def main(argv: list[str]) -> int:
             ap.error(f"unknown device {d!r}")
     if a.stop:
         for d in devices:
-            stop(d, a.target, [m for m in (a.store or "").split(",") if m])
+            stop(d, a.target, [m for m in (a.store or "").split(",") if m], a.trace)
         return 0
     results = []
     try:

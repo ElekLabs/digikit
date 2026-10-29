@@ -143,9 +143,15 @@ pub fn cache_dir(root: &Path) -> PathBuf {
 }
 
 /// Where the object `o` of a module is stored: in the module for `core/*`, else in the cache.
-fn object_file(root: &Path, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> PathBuf {
+fn object_file(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> PathBuf {
     if m.is_content() {
-        cache_dir(root).join(&m.module.id).join(&o.path)
+        // a build with defines has its own directory, so objects of different define sets never share a file
+        let mut dir = m.module.id.clone();
+        for d in &env.defines {
+            dir.push('+');
+            dir.push_str(d);
+        }
+        cache_dir(&env.root).join(dir).join(&o.path)
     } else {
         moddir.join(&o.path)
     }
@@ -194,7 +200,7 @@ fn source_hash(env: &Env, moddir: &Path, sources: &[String]) -> Result<String> {
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
         Kind::Sharc => {
-            let text = sharc::source_text(&env.root, moddir, &paths, &[])?;
+            let text = sharc::source_text(&env.root, moddir, &paths, &env.defines)?;
             Ok(sharc::source_hash(&text))
         }
         Kind::Rust => rust::source_sha256(&paths[0]),
@@ -208,7 +214,7 @@ fn committed_hash(path: &Path) -> Option<String> {
 }
 
 fn object_unchanged(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> bool {
-    let out = object_file(&env.root, moddir, m, o);
+    let out = object_file(env, moddir, m, o);
     match source_hash(env, moddir, &o.sources) {
         Ok(want) => committed_hash(&out).is_some_and(|h| h == want),
         Err(_) => false,
@@ -299,7 +305,7 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
         .iter()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    let file = object_file(&env.root, moddir, m, o);
+    let file = object_file(env, moddir, m, o);
     let want = source_hash(env, moddir, &o.sources)
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     if committed_hash(&file).is_some_and(|h| h == want)
@@ -307,7 +313,13 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     {
         return Ok(t);
     }
-    let obj = build_object(env, moddir, o, &[])
+    // the define set of the env: SHARC+ sources take it as `#ifdef` names, C sources as `-D` (the compiler step reads `env.defines`)
+    let defines = if kind_of(&o.sources) == Kind::Sharc {
+        env.defines.clone()
+    } else {
+        vec![]
+    };
+    let obj = build_object(env, moddir, o, &defines)
         .map_err(|e| err!("{}: {rel}: build failed: {e}", moddir.display()))?;
     let text = to_text(&obj)?;
     write_object(&file, &text)?;
@@ -326,7 +338,7 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     let m = manifest(moddir)?;
     let mut report = BuildReport::default();
     for o in m.object.iter().filter(|o| !o.sources.is_empty()) {
-        let stored = object_file(&env.root, moddir, &m, o);
+        let stored = object_file(&env, moddir, &m, o);
         if !opts.check
             && opts.defines.is_empty()
             && !opts.force

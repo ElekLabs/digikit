@@ -1261,7 +1261,13 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
     match service(cmd) {
         Some(h) => {
             let out = (addr_of_mut!(RBODY) as *mut u8).add(1);
+            // what the handler logs carries its module's source (owner 255: registered by no module)
+            let owner = service_of(cmd).map_or(255, |s| s.owner);
+            let prev = if owner != 255 && owner > 0 { dlog::enter_module(owner as usize - 1) } else { dlog::current_source() };
             let r = h(cmd as u32, seq, body, blen as u32, out);
+            if owner != 255 && owner > 0 {
+                dlog::leave_module(prev);
+            }
             if r < 0 {
                 reply(cmd, seq, r, 0)
             } else if r as usize > REPLY_BODY_MAX - 1 {

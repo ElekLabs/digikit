@@ -83,7 +83,7 @@ pub fn leave_module(prev: u8) {
     unsafe { write_volatile(addr_of_mut!(CURRENT_SRC), prev) }
 }
 
-/// The source index of the module whose `init` or `fini` runs now (record index + 1), 0 outside one.
+/// The source index of the module whose code runs now (record index + 1): its `init`, `fini`, slot 0 or a registered service command; 0 outside one.
 pub fn current_source() -> u8 {
     unsafe { read_volatile(addr_of!(CURRENT_SRC)) }
 }
@@ -202,13 +202,27 @@ extern "C" {
 /// (its README): word 0 is `0xD1A6` with the count in the high half, word 1 the link hook's block beat, word 2 the voice hook's, words 3 to 13 the
 /// context registers, word 14 the last breadcrumb (stage | voice << 8 | machine type << 16), word 15 the dispatches to registered machine types, word 16 the routines that returned,
 /// words 17 to 23 the guard of `core/dsp-voice` (finding 51): 17 faults (16 bits) | kind << 16 | machine types disabled << 24, 18 type | voice << 16 of the last fault, 19 to 22 the
-/// eight parameter words of that call in pairs, 23 the type disabled last.
+/// eight parameter words of that call in pairs, 23 the type disabled last. The fault table (always, even without `core/dsp-voice`): 24 `last` of `core/fx`
+/// (stage | site << 8 | row byte offset << 16: stage 4 the core is about to call the module, 5 it returned; site 2 master, 3 send), 25 the module step (`DK_STEP`),
+/// 26 and 27 the module calls of the master and the send route, 28 effect faults (16 bits) | row of the last fault (byte offset + 1) << 16, 29 and 30 the
+/// addresses of this and of the previous reply record, 31 the effect row switched off last (byte offset + 1).
 /// If it moves the heartbeat, change `DIAG_HEARTBEAT` here and nothing else.
-pub const DIAG_WORDS: usize = 24;
+pub const DIAG_WORDS: usize = 32;
+/// Words of the fault table.
+const D_FXLAST: usize = 24;
+const D_STEP: usize = 25;
+const D_FXFAULT: usize = 28;
+const D_REC0: usize = 29;
+const D_REC1: usize = 30;
+const D_FXDIS: usize = 31;
+/// Byte offset of the module step word from the start of a reply record (word 25 sits at word index 298 of the record, dsp-link.inc).
+const STEP_REC_OFF: u32 = 298 * 4;
+/// The effect table's row size in bytes.
+const FX_ROW_BYTES: u32 = 96;
 pub const DIAG_HEARTBEAT: usize = 1;
 /// Words that count up while the DSP runs and so say nothing when they move: the two beats and the dispatch and return counts. The poll logs the diagnostics
 /// again only when another word changes.
-const DIAG_COUNTERS: [usize; 4] = [1, 2, 15, 16];
+const DIAG_COUNTERS: [usize; 8] = [1, 2, 15, 16, 26, 27, D_REC0, D_REC1];
 /// The low half of word 0 of a diagnostics block.
 pub const DIAG_MAGIC: u32 = 0xd1a6;
 /// The DSP diagnostics are read once a second (blocks); a full set is logged at the first poll, when a word other than a counter changes, and at
@@ -264,6 +278,15 @@ struct Watch {
     nseen: usize,
     /// The breadcrumb (word 14) of the reply that showed the stop.
     stop_crumb: u32,
+    /// Effect faults and the switched-off row already logged (words 28 and 31).
+    fx_faults_seen: u32,
+    fx_disabled_seen: u32,
+    /// The hang record: passes left before it is written (0: none pending), and what the replies seen after the stop showed: the module step, the effect `last`
+    /// and the voice breadcrumb with a call pending (stage 4). The record of a stopped DSP alternate; the step is in only one of them.
+    hang_wait: u32,
+    m_step: u32,
+    m_fx: u32,
+    m_voice: u32,
 }
 static mut W: Watch = Watch {
     next_tracks: 0,
@@ -290,7 +313,15 @@ static mut W: Watch = Watch {
     seen: [[0; DIAG_WORDS]; 4],
     nseen: 0,
     stop_crumb: 0,
+    fx_faults_seen: 0,
+    fx_disabled_seen: 0,
+    hang_wait: 0,
+    m_step: 0,
+    m_fx: 0,
+    m_voice: 0,
 };
+/// Passes after the stop before the hang record is written: the two reply records have both been read by then.
+const HANG_WAIT_PASSES: u32 = 40;
 /// 1 once the watch decided the DSP stopped. Read by `dkrt_diag`, the proofs and ABOUT.
 #[no_mangle]
 pub static mut DKRT_DSP_STOPPED: u32 = 0;
@@ -332,6 +363,14 @@ pub unsafe fn tick() {
     if w.present && w.sampling > 0 {
         w.sampling -= 1;
         sample_stopped(w);
+        if w.hang_wait > 0 {
+            w.hang_wait -= 1;
+            // not while the firmware takes or flashes an OS upgrade: a reset in the flash write would leave the container half written (finding 77, section 5);
+            // the stop stays in the log
+            if w.hang_wait == 0 && !crate::os_upgrade_active() {
+                write_hang(w);
+            }
+        }
     }
     if due(now, w.next_tracks) {
         w.next_tracks = now.wrapping_add(TRACKS_EVERY);
@@ -424,6 +463,7 @@ unsafe fn sample_stopped(w: &mut Watch) {
     if w.stop_crumb == 0 {
         w.stop_crumb = buf[14];
     }
+    merge_stop(w, &buf);
     // the larger heartbeat of the two records is the frozen one: the reference for "it moves again" (see `RESUME_MARGIN`)
     if n > DIAG_HEARTBEAT && (buf[DIAG_HEARTBEAT].wrapping_sub(w.hb) as i32) > 0 {
         w.hb = buf[DIAG_HEARTBEAT];
@@ -457,6 +497,7 @@ unsafe fn poll_diag(w: &mut Watch, now: u32) {
     w.last = buf;
     if n >= DIAG_WORDS {
         log_guard(w, &buf);
+        log_fx(w, &buf);
     }
     // the words, raw: the first time, when a word other than a counter changed, and every ten seconds
     if !w.logged || differs(&buf, &w.logged_words, n) || due(now, w.next_log) {
@@ -482,6 +523,7 @@ unsafe fn poll_diag(w: &mut Watch, now: u32) {
                 // it moves again
                 write_volatile(addr_of_mut!(DKRT_DSP_STOPPED), 0);
                 w.sampling = 0;
+                w.hang_wait = 0;
                 ev(logk::DSP_STOPPED, INFO, [hb, buf[2], buf[14], buf[15], 1]);
             }
         } else {
@@ -559,7 +601,93 @@ unsafe fn stall_check(w: &mut Watch, now: u32, buf: &[u32; DIAG_WORDS]) {
         w.nseen = 1;
         w.sampling = STOPPED_SAMPLES;
         list_modules();
+        w.m_step = 0;
+        w.m_fx = 0;
+        w.m_voice = 0;
+        merge_stop(w, buf);
+        // The hang record (crash.rs): only after a valid reply was read (a DSP that has not started leaves no diagnostic block) and not in a safe boot (a stop there
+        // would reset again and again). The first UI pass has run: the watch is called from it. A DSP that stops within the first seconds (a module that hangs at once)
+        // never shows a second beat; it counts as stopped after the 20 s of `NEVER_BLOCKS`.
+        if w.hb_valid && crate::boot::info().safe == 0 && crate::boot::info().ui_reached != 0 {
+            w.hang_wait = HANG_WAIT_PASSES;
+        }
     }
+}
+
+/// What a reply of the stopped DSP adds to the picture: the module step (the DSP clears it before the call, the module stores it in one of the two records), and the
+/// sites with a call pending.
+fn merge_stop(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
+    if buf[D_STEP] != 0 {
+        w.m_step = buf[D_STEP];
+    }
+    if buf[D_FXLAST] & 0xff == dkrt_sdk::fault::STAGE_CALL {
+        w.m_fx = buf[D_FXLAST];
+    }
+    if buf[14] & 0xff == dkrt_sdk::fault::STAGE_CALL {
+        w.m_voice = buf[14];
+    }
+}
+
+/// Write the hang record and reset (crash.rs). The site is the one with a call pending: an effect (the master or the send route) or a voice; with none, the stop was
+/// in the core itself and the record has no site.
+unsafe fn write_hang(w: &mut Watch) {
+    use dkrt_sdk::fault::*;
+    let mut diag = w.seen[0];
+    diag[D_STEP] = w.m_step;
+    let (site, stage, id, last, module) = if w.m_fx != 0 {
+        let site = (w.m_fx >> 8) & 0xff;
+        let off = w.m_fx >> 16;
+        (site, w.m_fx & 0xff, off, w.m_fx, crate::dsp::module_of_fx_table_row(off / FX_ROW_BYTES))
+    } else if w.m_voice != 0 {
+        let ty = w.m_voice >> 16;
+        (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, crate::dsp::module_of_type(ty))
+    } else {
+        (SITE_NONE, 0, 0, w.stop_crumb, None)
+    };
+    ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
+    crate::settings::flush_if_dirty();
+    crate::crash::write_hang(&crate::crash::Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
+}
+
+/// The effect guard's words (28 and 31): a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row.
+unsafe fn log_fx(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
+    let faults = buf[D_FXFAULT] & 0xffff;
+    if faults != w.fx_faults_seen {
+        w.fx_faults_seen = faults;
+        let off = (buf[D_FXFAULT] >> 16).wrapping_sub(1);
+        fx_event(logk::FX_FAULT, off / FX_ROW_BYTES, faults);
+    }
+    if buf[D_FXDIS] != w.fx_disabled_seen {
+        w.fx_disabled_seen = buf[D_FXDIS];
+        if buf[D_FXDIS] != 0 {
+            fx_event(logk::FX_DISABLED, (buf[D_FXDIS] - 1) / FX_ROW_BYTES, faults);
+        }
+    }
+}
+
+unsafe fn fx_event(kind: u16, row: u32, faults: u32) {
+    let src = match crate::dsp::module_of_fx_table_row(row) {
+        Some(m) => (m as u16 + 1) << logk::SOURCE_SHIFT,
+        None => 0,
+    };
+    ev(kind, logk::F_ERROR | src, [row, faults, 0, 0, 0]);
+}
+
+/// Where a module's step store goes: the module step word of the older of the DSP's two reply records, from the record addresses in the diagnostic block (words 29
+/// and 30). None until the DSP has run two blocks with the link.
+pub unsafe fn record_step_addr() -> Option<u32> {
+    if core::hint::black_box(dl_diag as usize) == 0 {
+        return None;
+    }
+    let mut buf = [0u32; DIAG_WORDS];
+    if read_diag(&mut buf) < DIAG_WORDS {
+        return None;
+    }
+    let (a, b) = (buf[D_REC0], buf[D_REC1]);
+    if a == 0 || b == 0 || a == b {
+        return None;
+    }
+    Some(a.min(b) + STEP_REC_OFF)
 }
 
 /// The loaded modules, one event each (`logk::MOD_LIST`, an error event when the DSP stopped): index, slots mask, 12 bytes of name.

@@ -35,7 +35,7 @@ typedef unsigned char u8;
 #define DL_ACK_MAGIC 0xA5D1u
 #define DL_ACK_OFF 0x60u
 #define DL_DG_MAGIC 0xD1A6u /* low half of diagnostic word 0; the high half is the word count */
-#define DL_DG_WORDS 24u
+#define DL_DG_WORDS 32u
 #define DL_AREA_BYTES DL_AREA_MAX_BYTES /* the largest area the 17-bit offset reaches (generated, sdk.toml); the DSP knows the real size (status 3) */
 #define DL_WINDOW 12u
 #define DL_STALL_FRAMES 900u /* 0.6 s without progress */
@@ -163,7 +163,7 @@ int dl_poll(DlStatus *s)
     return (int)st;
 }
 
-/* Record byte offset of diagnostic word j: slot row 1 + j / 2 (0x1c + 0x54 row), +0x44 for even j, +0x48 for odd j (words 14 and 15 are in row 8, 16 and 17 in row 9, 22 and 23 in row 12). */
+/* Record byte offset of diagnostic word j: slot row 1 + j / 2 (0x1c + 0x54 row), +0x44 for even j, +0x48 for odd j (words 14 and 15 are in row 8, 16 and 17 in row 9, 22 and 23 in row 12, 24 and 25 in row 13, 30 and 31 in row 16). */
 static u32 diag_off(u32 j)
 {
     return 0x1cu + 0x54u * (1u + j / 2u) + ((j & 1u) ? 0x48u : 0x44u);

@@ -199,6 +199,12 @@ pub unsafe fn tx_in_flight() -> Option<u32> {
     word_at_literal(addr_of!(dkfw::midi::TX_INFLIGHT_LIT) as *const u32)
 }
 
+/// Is an OS upgrade stream being taken (finding 75)? The receive state object's byte at +0 is 0 when idle and 1 to 3 from the header on. False when the
+/// anchor does not point at a DDR object, so the caller then acts as before.
+pub unsafe fn os_upgrade_active() -> bool {
+    matches!(word_at_literal(addr_of!(dkfw::midi::OS_UPGRADE_STATE_LIT) as *const u32), Some(w) if w >> 24 != 0)
+}
+
 pub unsafe fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
     dkfw::storage::block_read(sector, bytes, buf)
 }
@@ -813,7 +819,23 @@ pub unsafe extern "C" fn dkrt_diag(out: *mut DkrtDiag) {
         crash_vec: k.vec,
         ram_kept: k.ram_kept,
         dsp_crumb: dlog::stop_crumb(),
+        fault_rows: 0,
+        fault_text: [[0; 24]; FAULT_ROWS],
     };
+    // the last fault, kept in the settings store (`dk/fault`): CPU crash or DSP stop, the module, the place
+    let mut v = [0u8; dkrt_sdk::fault::BYTES];
+    if settings::get(dkrt_sdk::fault::KEY, &mut v) == dkrt_sdk::fault::BYTES as i32 {
+        if let Some(f) = dkrt_sdk::fault::Fault::decode(&v) {
+            let mut rows = [dkrt_sdk::fault::Row::new(), dkrt_sdk::fault::Row::new(), dkrt_sdk::fault::Row::new(), dkrt_sdk::fault::Row::new()];
+            let n = dkrt_sdk::fault::rows(&f, &mut rows);
+            let mut k = 0;
+            while k < n && k < FAULT_ROWS {
+                o.fault_text[k] = rows[k].b;
+                k += 1;
+            }
+            o.fault_rows = k as u32;
+        }
+    }
 }
 
 /// `dkrt_debug_set(on)`: the debug log keeps every event (1) or errors only (0), now, and saved in the selection record's flags for the next

@@ -23,7 +23,7 @@ to 11 and Phase 6; the runtime side is finding 37. Earlier menu: findings 28 and
 - **Safe mode.** When `dkrt_boot_info` reports it, the DIGIKIT view has a first row `SAFE: <reason>` (`2 BAD BOOTS`, `KEY HELD`, `REQUESTED`), a
   popup `SAFE MODE: <reason>` opens once per boot when DIGIKIT is opened (the row shows it again), MODULES keeps the saved selection ticked
   and offers APPLY & RESTART (a normal boot loads the selection; the safe boot cleared the flag and the counter) or CLEAR SELECTION first.
-- **ABOUT**: `RUNTIME ABI n`, `SAFE MODE: <reason>` when it applies, `BOOT: m OF n OK`, then for each module of the saved selection its
+- **ABOUT**: `RUNTIME ABI n`, `SAFE: <reason>` when it applies (`SAFE MODE: <reason>` before runtime 0.5.3), `BOOT: m OF n OK`, then for each module of the saved selection its
   name and `- <result>` (`OK`, `LOADING`, or the text of the code: tables `TEXT_RUNTIME`, `TEXT_REGISTRY`, `TEXT_DSP` and the new `TEXT_BOOT` for -40..-44;
   unknown codes `ERROR <n>`), then `FREE n KB`. The names come from the saved selection, which is what the boot loaded unless it was saved
   again without a restart **[O]** (`DkrtBootInfo` has no paths).

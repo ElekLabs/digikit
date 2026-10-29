@@ -558,6 +558,8 @@ used and what is left. The runtime refuses a module that does not fit, with its 
 
 Device facts for authors are in `.agents/skills/digikit-module/references/devices.md`.
 
+Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `module:pack`, `module:check` and `dk:dev`: see `sdk/README.md`, "Tracing".
+
 ## 9. Versions and compatibility
 
 - `sdk/sdk.toml` is the single source of the runtime version and the contract versions. Each contract is `[major, minor]`.

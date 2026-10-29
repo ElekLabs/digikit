@@ -262,6 +262,15 @@ child processes.
 Own DSP work (`sdk/dsp`, the C-on-SHARC replacement), text entry, module-owned views and the
 Syntakt adapter (S3, S4).
 
+Fault instrumentation follow-ups (the base is in finding 77): only when a real bug needs them.
+
+- [ ] A timer-interrupt watch, so a DSP stop is caught when the firmware has already blocked the
+      UI task (needs a free timer on the CPU).
+- [ ] A live log panel in the workbench and the site (the SysEx LOG command, in TypeScript).
+- [ ] A "trace" tag for traced `.dkm` files on the site's Transfer page.
+- [ ] Module-source tags for the callbacks that `core/ui` and `core/params` make.
+- [ ] A gdb bridge to the emulator's ColdFire, and the crash record as an m68k core file.
+
 ## Status at end of session
 
 2026-10-27: plan agreed. Phase 1 done in ae364ec3. Phase 2 done in 1eb92a86 and its follow-up. Phase 3 started: the ABI spec, the runtime exports and the UI firmware anchors are done; the

@@ -672,6 +672,8 @@ pub struct Build<'a> {
     /// Load the objects of the content modules with these ids only (built when stale); the other content modules load without objects
     /// (as in `from_parts_lenient`), so nothing is hashed or built for them and no toolchain is needed. `None`: all content modules.
     pub only: Option<&'a [String]>,
+    /// Build defines (`DK_TRACE`) for the objects built on demand; they are part of the cache key (`crate::build::toolchain::Env::defines`).
+    pub defines: &'a [String],
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -783,8 +785,22 @@ impl Library {
         lenient: bool,
         only: Option<&[String]>,
     ) -> Result<Library> {
-        let env = crate::build::toolchain::Env::new(root);
-        let b = Build { root, only };
+        Self::scan_repo_defined(root, lenient, only, &[])
+    }
+
+    /// [`Library::scan_repo_for`] with build `defines` for the objects it builds (a traced build: `DK_TRACE`).
+    pub fn scan_repo_defined(
+        root: &std::path::Path,
+        lenient: bool,
+        only: Option<&[String]>,
+        defines: &[String],
+    ) -> Result<Library> {
+        let env = crate::build::toolchain::Env::new(root).with_defines(defines);
+        let b = Build {
+            root,
+            only,
+            defines,
+        };
         let mut lib = Library::default();
         lib.extend_unique(Self::read_root(
             &root.join("modules"),
@@ -812,7 +828,7 @@ impl Library {
 
     /// `scan_with`; with `build`, the content modules of the root get their objects from the cache like in `scan_repo_for`.
     pub fn scan_in(build: Option<Build>, root: &std::path::Path, lenient: bool) -> Result<Library> {
-        let env = build.map(|b| crate::build::toolchain::Env::new(b.root));
+        let env = build.map(|b| crate::build::toolchain::Env::new(b.root).with_defines(b.defines));
         let mut lib = Library::default();
         lib.extend_unique(Self::read_root(
             root,

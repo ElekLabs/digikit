@@ -9,7 +9,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from support.fx_rig import DIS, MIX, NFAULT, ONE, P0, WAS, FxRig, Row, f2w, w2f
+from support import dsp_voice_rig as dv
+from support.fx_rig import DIS, MIX, NFAULT, ONE, P0, WAS, FxRig, Row, f2w, nw, w2f
 from support.paths import REPO_ROOT
 
 from tools.firmware import config
@@ -376,7 +377,7 @@ def test_the_cost_of_the_mix_per_active_row():
     print(
         f"one effect steady: mix 1.0 {one}, mix 0 {zero}, mix 0.5 {half} instructions per block"
     )
-    assert one < 770 and zero < one and half < one + 420
+    assert one < 830 and zero < one and half < one + 420
 
 
 GAIN = ROOT / "tests/fixtures/modules/fx-gain/src/dsp/fx_gain.s"
@@ -390,7 +391,7 @@ def test_the_fixture_test_fx_gain_halves_the_master_through_the_adapter():
         assert b.master == tuple(HALF)
         assert b.ctx_bad == [] and b.regs_bad == []
     assert rig.symbol_word("_fg_gain") == f2w(0.5)
-    assert rig.block(RAMP).instructions < 800
+    assert rig.block(RAMP).instructions < 860
 
 
 # ---- patchkit: the hook on both devices ------------------------------------------------------------------------------------
@@ -512,3 +513,51 @@ def test_the_dsp_diff_of_the_patched_image_is_the_hook_and_the_placed_code(
     assert all(
         int(ln[1], 16) >= 0x2001AB7C for ln in lines[2:]
     )  # the rest is appended L2
+
+
+def test_a_module_call_leaves_its_site_in_both_reply_records():
+    """The fault table (modules/core/adapters/dsp-link/src/dsp/dsp-link.inc): the core writes `last` (stage | site << 8 | row byte offset << 16) into its own
+    word and, at once, into both reply records with the header; it clears the module step before the call and keeps it at the return."""
+    for route, site in ((0, 2), (1, 3)):
+        rig = FxRig(
+            [
+                Row("", ""),
+                Row("_te_half", "_te_state_a", route=route, amounts=(127,) * 16),
+            ]
+        )
+        rec = rig.built.data["_fx_rec"]
+        rig.sess.poke(nw(rec), dv.RING_A)
+        rig.sess.poke(nw(rec) + 1, dv.RING_B)
+        for ring in (dv.RING_A, dv.RING_B):
+            rig.sess.poke(nw(ring) + 298, 7)  # an old module step
+        b = (
+            rig.block(SIGNALS["ramp"], ctx="friendly")
+            if route == 0
+            else rig.send_block(ctx="friendly")
+        )
+        assert b.returned, b.halt
+        want = 5 | site << 8 | 96 << 16  # returned, the second row of the table
+        assert rig.symbol_word("_fx_diag", 0) == want, hex(
+            rig.symbol_word("_fx_diag", 0)
+        )
+        for ring in (dv.RING_A, dv.RING_B):
+            assert rig.sess.peek(nw(ring) + 297) == want
+            assert rig.sess.peek(nw(ring) + 45) == 0x20D1A6
+            assert rig.sess.peek(nw(ring) + 298) == 0, (
+                "cleared at the call; the test effect stores no step"
+            )
+        assert rig.symbol_word("_fx_diag", 4 + route) == 1, (
+            "one module call on this route"
+        )
+        assert rig.symbol_word("_fx_diag", 5 - route) == 0
+
+
+def test_a_faulting_effect_names_its_row_in_the_fault_words():
+    rig = FxRig([Row("", ""), Row("_te_nan", "_te_state_a")])
+    for _ in range(8):
+        rig.block(SIGNALS["dc"], ctx="friendly")
+    assert rig.symbol_word("_fx_diag", 1) == 8  # faults of all effects
+    assert (
+        rig.symbol_word("_fx_diag", 2) == 96 + 1
+    )  # the row of the last fault (byte offset + 1)
+    assert rig.symbol_word("_fx_diag", 3) == 96 + 1  # switched off by the eighth

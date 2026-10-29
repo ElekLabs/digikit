@@ -9,9 +9,9 @@ and the device profiles (`devices/*.toml`).
 | Path | What | Edit |
 | --- | --- | --- |
 | `sdk.toml` | The contract spec: versions, the `dk_api` table, imports, machine and effect layouts, log kinds, protocol numbers, limits, settings. | yes |
-| `include/dk/` | Public C headers. Modules include these: `<dk/api.h>`, `<dk/fx.h>`, `<dk/machine.h>`, and `<dk/page.h>` (`DK_PAGE` and `DK_KNOB`, shared by the other two). | yes |
+| `include/dk/` | Public C headers. Modules include these: `<dk/api.h>`, `<dk/fx.h>`, `<dk/machine.h>`, `<dk/page.h>` (`DK_PAGE` and `DK_KNOB`, shared by the other two) and `<dk/trace.h>` (trace marks). | yes |
 | `include/dk/gen/` | C layouts and constants generated from `sdk.toml`. | no |
-| `asm/` | SHARC+ includes generated from `sdk.toml`: `dk_fx.inc`, `dk_machine.inc`. | no |
+| `asm/` | SHARC+ includes generated from `sdk.toml`: `dk_fx.inc`, `dk_machine.inc`. `dk_trace.inc` is hand-written (see Tracing). | partly |
 | `dsp/` | SHARC+ DSP kernels (macros and block routines). See [dsp/README.md](dsp/README.md). | yes |
 | `templates/` | Module templates for `mise run module:new`. | yes |
 | `vectors/` | Test vectors shared by the Rust, Python and web tests. | no |
@@ -67,6 +67,33 @@ DK_PAGE(pluck, "PLUCK", "Pluck", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2), DK_KNOB(3))
 Parameter values are knob units 0 to 127. The stored word is the value times 256. The DSP symbols are required: a machine has no data-only form.
 A machine has at most 4 parameters, in word order, and one page with `DK_KNOB` only. The adapter places word w on a fixed knob.
 The rules are in [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.2 and 5.3.
+
+## Tracing
+
+Trace marks tell you where a module was when it faulted or hung. They are opt-in and cost nothing when off.
+
+| Side | Include | Macro | What it does when on |
+| --- | --- | --- | --- |
+| ColdFire C | `<dk/trace.h>` | `DK_TRACE_INIT(api);` once per source file in `dkm_init`, then `DK_TRACE_LOG("msg", value);` | Calls `api->log(msg, value)`: the message (24 bytes kept) and a word go to the runtime's log ring (`dk:log`). |
+| SHARC+ | `#include "dk_trace.inc"` | `DK_STEP(3, R0);` | Loads the step number 3 into the scratch register `R0` and stores it in the word `_dk_step`. Pick a register that is free at that point: SHARC+ cannot store an immediate to memory. |
+
+The C macro is `DK_TRACE_LOG` because the build define is `DK_TRACE` and a function-like macro of that name would clash with it.
+
+Build with `--trace` to switch them on: `mise run module:pack -- ID --device dt2 --trace`, `mise run module:check -- ID --trace`
+(size lines), `mise run dk:dev -- ID --store ID --trace`. `--trace` defines `DK_TRACE` for the C sources (`-DDK_TRACE`) and the SHARC+
+sources (`#ifdef DK_TRACE`), and sets bit 31 of the header word at 0x30 of the `.dkm` (`patchkit dkm-info` prints `trace yes`; a runtime
+that does not know the bit ignores it). Traced and plain objects are cached apart (`out/cache/dko/<id>+DK_TRACE/`).
+
+What you see:
+
+- DIGIKIT, ABOUT: the module's result row ends in ` TRACE` (for example `- OK TRACE`).
+- The fault record: the core clears `_dk_step` before each call into a module and prints it with the fault, for example `FX SEND STEP 3`.
+  A traced module imports `_dk_step` from `core/dyndsp`; a runtime without that export refuses it with `DSP IMPORT`.
+- The log: the `DK_TRACE_LOG` messages.
+
+Off means off: without `--trace` both macros expand to nothing (the arguments of `DK_TRACE_LOG` are not evaluated), the objects have no extra
+instruction, data or import, and the `.dkm` is byte-identical to one built from sources without the marks
+(`packages/patchkit/tests/trace.rs`). A `DK_STEP` costs two instructions when on, so keep it out of the innermost loop.
 
 ## Writing modules
 

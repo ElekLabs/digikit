@@ -33,6 +33,15 @@ mark = "D"
 users = ["core/runtime"]
 doc = "The USB MIDI transmit function (DT2 1.16 FUN_40004734, `void f(u32 len, const u8 *msg)`, hash identical on the four images): the 4-byte address literal of its `movea.l (<in flight>).l,a0`, the bytes handed to the USB stack and not yet sent (added by the submit function, taken off by the completion)."
 
+[[site]]
+name = "cf.midi.site.os_upgrade_state_lit"
+bind = "static"
+cpu = "cf"
+rule = { kind = "cf_words", as = "code", words = ["*", "*", 0x4fefffe8, 0x48d71c1c, 0x266f0020, 0x246f001c, 0x71930c80, 0x000000f0], offset = 0x2, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The 4-byte address literal of the stub `move.l #<state>,d0; rts` (DT2 1.17 FUN_40120bcc) that returns the OS upgrade receive state object, found by the first words of the stream parser behind it. The byte at +0 of the object is 0 when idle, 1 to 3 while a stream is taken (finding 75). core/runtime does not reset on a DSP stop while it is not 0."
+
 [[hook]]
 name = "cf.midi.hook.rx"
 site = "cf.midi.site.rx"

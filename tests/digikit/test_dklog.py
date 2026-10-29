@@ -57,7 +57,7 @@ def test_the_guard_events_decode():
     f = L.event_dict(ev(3, "MACHINE_DISABLED", (18, 1, 17, 0, 0), flags=1))["fields"]
     assert (f["type"], f["disabled"], f["faults"]) == (18, 1, 17)
     # the diagnostic words 17 to 23 are named
-    assert L.DIAG_NAMES[17:] == (
+    assert L.DIAG_NAMES[17:24] == (
         "guard_faults",
         "guard_last",
         "guard_p01",
@@ -66,6 +66,9 @@ def test_the_guard_events_decode():
         "guard_p67",
         "guard_disabled_type",
     )
+    # the fault table follows: the effect site's last word and the module step
+    assert L.DIAG_NAMES[24:26] == ("fx_last", "module_step")
+    assert len(L.DIAG_NAMES) == 32
 
 
 def test_events_decode_to_readable_fields():
@@ -324,3 +327,57 @@ def test_read_all_pages_through_the_ring():
     assert (oldest, newest, len(evs)) == (1, 69, 69) and [e[0] for e in evs] == list(
         range(1, 70)
     )
+
+
+def fault_blob(kind, site, stage, ident, step, at, name):
+    w = [L.FAULT_MAGIC, kind | site << 8 | stage << 16, ident, step, at, 0x00050300]
+    return b"".join(x.to_bytes(4, "big") for x in w) + name.encode().ljust(16, b"\0")
+
+
+def test_the_stored_fault_gives_the_same_rows_as_the_menu():
+    # a send effect that stopped the DSP in its third step; the rows are those of dkrt_sdk::fault::rows
+    f = L.fault_value(fault_blob(2, 3, 4, 96, 3, 0x00030004, "test/dyn-fx-hang"))
+    assert (f["kind"], f["site"], f["core_step"], f["module_step"]) == (
+        "dsp stopped",
+        "fx send",
+        "CALL",
+        3,
+    )
+    assert L.fault_rows(f) == [
+        "FAULT: DSP STOP",
+        "IN DYN-FX-HANG",
+        "FX SEND STEP 3",
+    ]
+    # without a module step the core step is shown; a CPU crash shows the PC
+    f = L.fault_value(fault_blob(2, 2, 4, 0, 0, 0, "fx/gain"))
+    assert L.fault_rows(f)[2] == "FX MASTER CALL"
+    f = L.fault_value(fault_blob(1, 0, 0, 0, 0, 0x0012A4F0, "test/crash"))
+    assert L.fault_rows(f) == ["FAULT: CPU CRASH", "IN CRASH", "PC 0012A4F0"]
+    assert L.fault_value(b"\0" * 40) is None
+    assert L.fault_value(fault_blob(2, 3, 4, 0, 0, 0, "x")[:39]) is None
+
+
+def test_a_hang_record_is_read_from_its_events():
+    evs = [
+        ev(1, "BOOT_START"),
+        # kind 2 (dsp stopped) | site 3 (fx send) << 8 | stage 4 (CALL) << 16; row byte offset 96; module step 3; last word; module index 0
+        ev(2, "FAULT_FOUND", (2 | 3 << 8 | 4 << 16, 96, 3, 0x00600304, 0), flags=1),
+        ev(3, "CRASH_MOD", (0, 0, word("test"), word("/dyn"), word("-fx\0")), flags=1),
+        ev(4, "DSP_DIAG", (32 << 8 | 6, 0x600304, 3, 7, 9, 0), flags=1),
+    ]
+    rec = L.hang_record(evs)
+    assert rec and (rec["site"], rec["core_step"], rec["module_step"]) == (
+        "fx send",
+        "CALL",
+        3,
+    )
+    assert rec["module"]["name"] == "test/dyn-fx"
+    assert rec["diag"]["fx_last"] == 0x600304 and rec["diag"]["module_step"] == 3
+    text = L.hang_text(rec)
+    assert (
+        "fx send" in text and "effect table row 1" in text and "module step 3" in text
+    )
+    assert L.hang_record(evs[:1]) is None
+    # FX_FAULT and FAULT_FOUND decode to readable fields
+    d = L.event_dict(ev(5, "FX_FAULT", (1, 8, 0, 0, 0), flags=1))
+    assert d["fields"] == {"row": 1, "faults": 8}
