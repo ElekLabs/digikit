@@ -50,6 +50,142 @@ function sha256(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
+interface ProofFile {
+  path: string;
+  sha256: string;
+}
+interface BootFixture {
+  schema: 1;
+  readyDir: string;
+  baseSha256: string;
+  patchedSyxSha256: string;
+  dspPatch: ProofFile;
+  packedDspImage: ProofFile;
+  coldState: ProofFile & { pc: number; overlayBytes: number };
+  coldIdle: ProofFile & { pc: number };
+  originalReadyDspSnapshot: ProofFile;
+  dspColdBinary: ProofFile;
+  preparation: {
+    command: string[];
+    environment: { DSP_PATCH: string; DSP_DEVICE: string };
+    maxInstructions: number;
+    wallTimeoutSeconds: number;
+    idleReached: boolean;
+    log: ProofFile;
+  };
+  preExchange: {
+    descriptors: { rootHostByteAddress: number; xcntHostByteAddress: number; xcnt: number; knownMask: number }[];
+  };
+}
+
+/** Read-only validation: the parent prepares this fixture explicitly. No build,
+ * DSP execution, descriptor resizing or snapshot preparation happens here. */
+function readBootFixture(): BootFixture {
+  const need = (ok: unknown, message: string) => {
+    if (!ok) throw new Error(`LP0 0.2 boot fixture: ${message}`);
+  };
+  const file = process.env.DIGI_LP0_BOOT_FIXTURE;
+  need(file && path.isAbsolute(file), 'set DIGI_LP0_BOOT_FIXTURE to an absolute provenance JSON path');
+  const fixture = JSON.parse(fs.readFileSync(file!, 'utf8')) as BootFixture;
+  need(fixture.schema === 1, 'schema must be 1');
+  need(path.isAbsolute(fixture.readyDir), 'readyDir must be absolute');
+  need(
+    process.env.DIGI_PK_READY_DN2_112 &&
+      path.resolve(process.env.DIGI_PK_READY_DN2_112) === path.resolve(fixture.readyDir),
+    'DIGI_PK_READY_DN2_112 must explicitly select the same private readyDir',
+  );
+  const checkFile = (record: ProofFile, label: string) => {
+    need(
+      record && path.isAbsolute(record.path) && /^[a-f0-9]{64}$/.test(record.sha256),
+      `${label} needs absolute path and SHA256`,
+    );
+    need(sha256(fs.readFileSync(record.path)) === record.sha256, `${label} hash mismatch`);
+  };
+  for (const [label, record] of Object.entries({
+    dspPatch: fixture.dspPatch,
+    packedDspImage: fixture.packedDspImage,
+    coldState: fixture.coldState,
+    coldIdle: fixture.coldIdle,
+    originalReadyDspSnapshot: fixture.originalReadyDspSnapshot,
+    dspColdBinary: fixture.dspColdBinary,
+    preparationLog: fixture.preparation.log,
+  }))
+    checkFile(record, label);
+  const inputs = resolveInputs('dn2', '1.12');
+  need(
+    path.dirname(fs.realpathSync(inputs.dspImage)) === fs.realpathSync(fixture.readyDir),
+    'packed DSP image must resolve inside private readyDir: the daemon selects cold-idle beside its canonical path',
+  );
+  need(sha256(fs.readFileSync(inputs.syx)) === fixture.baseSha256, 'stock base hash mismatch');
+  need(/^[a-f0-9]{64}$/.test(fixture.patchedSyxSha256), 'patchedSyxSha256 missing');
+  need(
+    path.resolve(fixture.coldIdle.path) === path.join(path.resolve(fixture.readyDir), 'cold-idle.dsp'),
+    'coldIdle must name private readyDir/cold-idle.dsp',
+  );
+  need(
+    sha256(fs.readFileSync(inputs.dspImage)) === fixture.packedDspImage.sha256,
+    'private packed image must remain the original stock image',
+  );
+  need(
+    sha256(fs.readFileSync(inputs.dspState)) === fixture.originalReadyDspSnapshot.sha256,
+    'initial Session restore must retain the original ready DSP snapshot',
+  );
+  need(
+    fixture.coldState.pc === 0x1c12e2 && fixture.coldState.overlayBytes === 0,
+    'pre-init cold.state evidence must show PC1c12e2 and empty overlay',
+  );
+  need(
+    fixture.coldIdle.pc >= 0xb88a49 && fixture.coldIdle.pc <= 0xb88abb,
+    'cold-idle PC outside current DN2 idle range',
+  );
+  need(fixture.preparation.idleReached === true, 'dsp_cold exit alone does not prove idle');
+  need(
+    Number.isSafeInteger(fixture.preparation.maxInstructions) &&
+      fixture.preparation.maxInstructions > 0 &&
+      fixture.preparation.maxInstructions <= 800000000,
+    'preparation needs an explicit instruction limit <=800M',
+  );
+  need(
+    fixture.preparation.wallTimeoutSeconds > 0 && fixture.preparation.wallTimeoutSeconds <= 120,
+    'preparation needs a wall timeout <=120 seconds',
+  );
+  need(
+    fixture.preparation.environment.DSP_PATCH === fixture.dspPatch.path &&
+      fixture.preparation.environment.DSP_DEVICE === 'dn2',
+    'preparation DSP_PATCH/device mismatch',
+  );
+  for (const argument of [
+    fixture.dspColdBinary.path,
+    fixture.packedDspImage.path,
+    fixture.coldState.path,
+    fixture.coldIdle.path,
+    String(fixture.preparation.maxInstructions),
+  ]) {
+    need(fixture.preparation.command.includes(argument), `preparation command lacks ${argument}`);
+  }
+  const idle = /^idle: pc=(0x[0-9a-f]+) after ([0-9]+) instructions$/m.exec(
+    fs.readFileSync(fixture.preparation.log.path, 'utf8'),
+  );
+  need(
+    idle && Number(idle[1]) === fixture.coldIdle.pc && Number(idle[2]) <= fixture.preparation.maxInstructions,
+    'preparation log must contain the matching actual idle PC within the instruction limit',
+  );
+  const roots = [0x282c2960, 0x282c297c, 0x282c2998, 0x282c29b4];
+  need(fixture.preExchange.descriptors.length === 4, 'exactly four pre-exchange descriptor observations required');
+  for (const root of roots) {
+    const entries = fixture.preExchange.descriptors.filter((entry) => entry.rootHostByteAddress === root);
+    need(
+      entries.length === 1 &&
+        entries[0]!.xcntHostByteAddress === root + 0xc &&
+        entries[0]!.xcnt === 0x566 &&
+        entries[0]!.knownMask === 0xffffffff,
+      `fully-known pre-exchange XCNT566 missing for descriptor0x${root.toString(16)}`,
+    );
+  }
+  return fixture;
+}
+const bootFixture = enabled ? readBootFixture() : undefined;
+
 // Full-bank execution requires an additional opt-in; both cases remain selectable
 // by name and each uses its own fresh Session through this shared harness.
 const cases = [
@@ -343,6 +479,35 @@ for (const scenario of cases) {
           expect(Number.isSafeInteger(status.dsp_frames)).toBe(true);
           return status.dsp_frames;
         };
+        const cfAck = async () => {
+          const address = symbol('lp_ack');
+          const sequence = await cfWord(address);
+          const [valid, status, error, pages, bytes] = await Promise.all(
+            [4, 8, 12, 16, 20].map((offset) => cfWord(address + offset)),
+          );
+          const after = await cfWord(address);
+          return { sequence, valid, status, error, pages, bytes, coherent: !(sequence & 1) && sequence === after };
+        };
+        const expectAck = async (pages: number, bytes: number, status: number) => {
+          await expect
+            .poll(
+              async () => {
+                const ack = await cfAck();
+                observations.cfAck = ack;
+                return (
+                  ack.coherent &&
+                  ack.valid === 1 &&
+                  ack.status === status &&
+                  ack.error === 0 &&
+                  ack.pages === pages &&
+                  ack.bytes === bytes
+                );
+              },
+              { timeout: 20000, interval: 20 },
+            )
+            .toBe(true);
+          return cfAck();
+        };
         const armed = async () => {
           const [cfg, stat, addr, count, modify] = await Promise.all([
             word(DMA + 8),
@@ -404,6 +569,7 @@ for (const scenario of cases) {
                   ),
                   attempt('descriptor', () => raw(symbol('_lp_descriptor'), 28, true)),
                   attempt('savedHookContext', () => raw(symbol('_lp_save'), 292, true)),
+                  attempt('cfAck', () => cfAck()),
                   attempt('mail', async () =>
                     Promise.all([0, 4, 8, 12].map((off) => session.client.memPeek(symbol('lp_mail') + off))),
                   ),
@@ -426,7 +592,7 @@ for (const scenario of cases) {
         const run = async () => {
           const inputs = resolveInputs('dn2', '1.12');
           const stockSha = sha256(fs.readFileSync(inputs.syx));
-          save('inputs.json', { inputs, stockSha, binary, patchkit });
+          save('inputs.json', { inputs, stockSha, binary, patchkit, bootFixture });
           save('stock-load.json', session.loadResult);
           // Refuse stale objects before apply, so this opt-in never invokes a build.
           const checked = await exec(
@@ -462,7 +628,11 @@ for (const scenario of cases) {
             'core/expansion',
           ]);
           expect(plan.output?.syx_sha256).toMatch(/^[a-f0-9]{64}$/);
-          for (const name of [...globals, '_lp_descriptor', '_lp_save', 'lp_mail', 'lp_staging']) symbol(name);
+          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.2 patch').toBe(
+            bootFixture!.patchedSyxSha256,
+          );
+          for (const name of [...globals, '_lp_descriptor', '_lp_save', 'lp_mail', 'lp_ack', 'lp_staging'])
+            symbol(name);
           phase = 'patched startup';
           const load = await rpc<{ syx_sha256: string }>(
             'firmware.load',
@@ -483,8 +653,17 @@ for (const scenario of cases) {
             injected: true,
           });
           await session.expectNoFault('LP0 setup');
-          phase = 'receiver setup';
-          await expect.poll(() => word(symbol('_lp_status')), { timeout: 30000 }).toBe(2);
+          phase = 'CF-observed receiver setup';
+          await expectAck(0, 0, 2);
+          // DSP reads are independent oracles; completion is driven by the CF wire ACK.
+          expect(await word(symbol('_lp_status'))).toBe(2);
+          const wireCounts = {
+            cfBytes: await cfWord(0x42441958),
+            txCount: await word(0x3102d20c),
+            rxCount: await word(0x3102d28c),
+          };
+          save('wire-after-boot.json', { ...wireCounts, preExchange: bootFixture!.preExchange });
+          expect(wireCounts).toEqual({ cfBytes: 0xacc, txCount: 0x566, rxCount: 0x566 });
           expect(await word(symbol('_lp_error'))).toBe(0);
           expect(await word(symbol('_lp_pages'))).toBe(0);
           expect(await word(symbol('_lp_bytes'))).toBe(0);
@@ -534,6 +713,7 @@ for (const scenario of cases) {
             const progressAfter = Math.min((tag + 1) * PAGE_BYTES, validBytes);
             expect(await cfWord(mail)).toBe(tag === 0 ? 0 : 3);
             expect(await cfWord(mail + 12)).toBe(tag);
+            await expectAck(tag, progressBefore, 2);
             expect(await word(symbol('_lp_status'))).toBe(2);
             expect(await word(symbol('_lp_error'))).toBe(0);
             expect(await word(symbol('_lp_pages'))).toBe(tag);
@@ -576,19 +756,20 @@ for (const scenario of cases) {
             await expect.poll(() => cfWord(mail), { timeout: 20000, interval: 20 }).toBe(3);
             expect(await cfWord(mail + 4)).toBe(0);
             expect(await cfWord(mail + 12)).toBe(tag + 1);
-            phase = `callback progress ${tag}/${packets - 1}`;
-            await expect.poll(() => word(symbol('_lp_pages')), { timeout: 20000, interval: 20 }).toBe(tag + 1);
+            phase = `CF completion ${tag}/${packets - 1}`;
+            const terminal = fullBank && tag === packets - 1;
+            const ack = await expectAck(tag + 1, progressAfter, terminal ? 3 : 2);
+            expect(await word(symbol('_lp_pages'))).toBe(tag + 1);
             expect(await word(symbol('_lp_bytes'))).toBe(progressAfter);
             expect(await word(symbol('_lp_error'))).toBe(0);
-            const terminal = fullBank && tag === packets - 1;
-            await expect.poll(() => word(symbol('_lp_status')), { timeout: 10000 }).toBe(terminal ? 3 : 2);
-            await expect.poll(async () => (await armed()).ready, { timeout: 10000 }).toBe(!terminal);
+            expect(await word(symbol('_lp_status'))).toBe(terminal ? 3 : 2);
             const dma = await armed();
             if (!terminal) expect(dma).toMatchObject({ ready: true, addr: rx, count: 0x401, modify: 4 });
             else expect(dma.ready, 'terminal packet must not rearm receive DMA').toBe(false);
             const captureSamples = stockAudio ? await audioMarker(`packet-${tag}-consumed`) : undefined;
             const progress = {
               tag,
+              ack,
               pages: tag + 1,
               bytes: progressAfter,
               dma,
@@ -635,6 +816,7 @@ for (const scenario of cases) {
           if (fullBank) {
             // Completion and hardware inactivity must persist across normal frames;
             // status 3 alone cannot prove that the driver did not rearm DMA.
+            await expectAck(235, BANK_BYTES, 3);
             expect(await word(symbol('_lp_status'))).toBe(3);
             expect(await word(symbol('_lp_error'))).toBe(0);
             expect(await word(symbol('_lp_pages'))).toBe(235);

@@ -280,72 +280,162 @@ def cf(tmp_path_factory):
     patch.setattr(pk_cfcall, "EXAMPLE", runner)
     patch.setattr(pk_cfcall, "_built", True)
     stub = tmp_path_factory.mktemp("lp0-proof") / "sender.c"
-    stub.write_text("""typedef unsigned int u32;
+    stub.write_text("""#include "lp0-proof.c"
 volatile u32 lp_capture[8];
-extern volatile u32 lp_mail[], lp_staging[];
+volatile u16 lp_fake_reply[0xacc/2];
+volatile unsigned char lp_fake_copy[0xabc+16];
 void lp_stock_send(u32 tag, const volatile u32 *source, u32 format) {
     ++lp_capture[0]; lp_capture[1]=tag; lp_capture[2]=(u32)source;
-    lp_capture[3]=format; lp_capture[4]=lp_mail[0];
+    lp_capture[3]=format; lp_capture[4]=lp_mail.state;
     lp_capture[5]=source[0]; lp_capture[6]=source[1023];
 }
-void lp_test_stage(u32 tag) {
-    lp_mail[2]=tag; lp_staging[0]=0x12345678; lp_staging[1023]=0x89abcdef;
-    lp_mail[0]=1;
+void *lp_stock_copy(void *dst, const void *src, u32 n) {
+    unsigned char *d=dst; const unsigned char *s=src;
+    for(u32 i=0;i<n;i++) d[i]=s[i];
+    return dst;
 }
+void lp_test_wire(u32 magic, u32 version, u32 status, u32 error, u32 pages, u32 bytes) {
+    for(u32 i=0;i<0xabc/2;i++) lp_fake_reply[i]=(u16)(i*71+0x8001);
+    for(u32 i=0;i<sizeof(lp_fake_copy);i++) lp_fake_copy[i]=0xa5;
+    volatile u16 *e=lp_fake_reply+0xabc/2;
+    e[0]=magic;e[1]=version;e[2]=status;e[3]=error;
+    e[4]=pages;e[5]=pages>>16;e[6]=bytes;e[7]=bytes>>16;
+    lp_capture[7]=(u32)lp_copy_reply((void *)lp_fake_copy,(const void *)lp_fake_reply,0xabc);
+}
+void lp_test_stage(u32 tag) {
+    lp_mail.tag=tag; lp_staging[0]=0x12345678; lp_staging[1023]=0x89abcdef;
+    lp_mail.state=1;
+}
+void lp_test_prime(u32 next) { lp_next=next; lp_mail.sent=next; }
+void lp_test_odd(void) { lp_ack.sequence |= 1; }
 """)
-    linked = patchkit.cf_link([MOD / "src/cf/lp0-proof.c", stub], 0x47E80000, {})
+    linked = patchkit.cf_link([stub], 0x47E80000, {}, include_dirs=[MOD / "src/cf"])
     try:
         yield linked
     finally:
         patch.undo()
 
 
-def test_cf_mailbox_retains_request_through_sender_and_rejects_nonsequential(cf):
+def cf_run(cf, commands):
     image = config.stock("Digitone_II_OS1.12.syx")
     if not image.exists():
         pytest.skip("firmware for CF CPU setup absent")
-    machine = pk_cfcall.CfMachine(image)
-    mail, capture, staging = [
-        cf.symbols[n] for n in ("lp_mail", "lp_capture", "lp_staging")
+    reads = [
+        (cf.symbols["lp_mail"], 16),
+        (cf.symbols["lp_capture"], 32),
+        (cf.symbols["lp_ack"], 24),
+        (cf.symbols["lp_fake_copy"], 0xABC + 16),
     ]
-    reads = [(mail, 16), (capture, 32), (staging, 4), (staging + 4092, 4)]
-
-    def tick():
-        return {"pc": cf.symbols["lp_tick"], "args": [], "reads": reads}
-
-    def stage(tag):
-        return {"pc": cf.symbols["lp_test_stage"], "args": [tag], "reads": []}
-
-    pokes = {cf.base: cf.image, cf.base + len(cf.image): bytes(cf.bss_size)}
     calls = [
-        tick(),
-        stage(0),
-        tick(),
-        tick(),
-        stage(1),
-        tick(),
-        stage(1),
-        tick(),
-        stage(2),
-        tick(),
+        {"pc": cf.symbols[name], "args": args, "reads": reads}
+        for name, args in commands
     ]
-    results = machine.run(pokes, calls)
+    results = pk_cfcall.CfMachine(image).run(
+        {cf.base: cf.image, cf.base + len(cf.image): bytes(cf.bss_size)}, calls
+    )
     assert all(r.ok and not r.clobbered for r in results)
+    return results
 
-    def decode(r, i):
-        return struct.unpack(">" + "I" * (len(r.reads[i]) // 4), r.reads[i])
 
-    assert decode(results[0], 1)[0] == 0  # idle never sends
-    first = results[2]
-    assert decode(first, 0) == (3, 0, 0, 1)
-    assert decode(first, 1)[:7] == (1, 0, staging, 1, 2, 0x12345678, 0x89ABCDEF)
-    assert decode(first, 2) == (0x12345678,)
-    assert decode(first, 3) == (0x89ABCDEF,)
-    assert decode(results[3], 1)[0] == 1  # DONE cannot resend retained staging
-    assert decode(results[5], 0) == (3, 0, 1, 2)
-    assert decode(results[7], 0) == (4, 1, 1, 2)  # duplicate poisons mailbox
-    assert decode(results[9], 0)[0] == 4
-    assert decode(results[9], 1)[0] == 2  # host cannot reset sticky error
+def ack(pages=0, status=2, error=0, count=None, magic=0x4C50, version=1):
+    count = (960000 if pages == 235 else pages * 4096) if count is None else count
+    return ("lp_test_wire", [magic, version, status, error, pages, count])
+
+
+def cf_words(result, index):
+    data = result.reads[index]
+    return struct.unpack(">" + "I" * (len(data) // 4), data)
+
+
+def test_cf_mailbox_waits_for_wire_ack_without_resending(cf):
+    r = cf_run(
+        cf,
+        [
+            ("lp_test_stage", [0]),
+            ("lp_tick", []),
+            ack(magic=0x1234, status=4, error=99),
+            ("lp_tick", []),
+            ack(),
+            ("lp_tick", []),
+            ("lp_tick", []),
+            ack(1),
+            ("lp_tick", []),
+            ("lp_test_stage", [0]),
+            ("lp_tick", []),
+            ("lp_test_stage", [1]),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[1], 0) == (1, 0, 0, 0)  # missing stays START
+    assert cf_words(r[3], 0) == (1, 0, 0, 0)  # wrong magic is not a published reply
+    assert cf_words(r[5], 0) == (2, 0, 0, 1)  # sender returned, but no consumption ACK
+    assert cf_words(r[5], 1)[:7] == (
+        1,
+        0,
+        cf.symbols["lp_staging"],
+        1,
+        2,
+        0x12345678,
+        0x89ABCDEF,
+    )
+    assert cf_words(r[6], 0) == (2, 0, 0, 1)
+    assert cf_words(r[6], 1)[0] == 1
+    assert cf_words(r[8], 0) == (3, 0, 0, 1)
+    assert cf_words(r[10], 0) == (4, 1, 0, 1)
+    assert cf_words(r[12], 0)[0] == 4
+    assert cf_words(r[12], 1)[0] == 1
+
+
+@pytest.mark.parametrize(
+    "wire", [ack(version=2), ack(1, count=0), ack(status=4, error=7), ack(2)]
+)
+def test_cf_bad_ack_is_sticky_and_never_sends(cf, wire):
+    r = cf_run(
+        cf,
+        [wire, ack(), ("lp_test_stage", [0]), ("lp_tick", []), ack(), ("lp_tick", [])],
+    )
+    # Future but internally valid progress is rejected at request admission.
+    # For that case preserve it until the UI observes it.
+    if wire == ack(2):
+        r = cf_run(
+            cf, [wire, ("lp_test_stage", [0]), ("lp_tick", []), ack(), ("lp_tick", [])]
+        )
+    assert cf_words(r[-1], 0)[0] == 4
+    assert cf_words(r[-1], 1)[0] == 0
+
+
+def test_cf_terminal_requires_status_three_and_odd_snapshot_stays_pending(cf):
+    r = cf_run(
+        cf,
+        [
+            ("lp_test_prime", [234]),
+            ack(234),
+            ("lp_test_stage", [234]),
+            ("lp_tick", []),
+            ("lp_tick", []),
+            ack(235, status=3),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[3], 0) == (2, 0, 234, 235)
+    assert cf_words(r[4], 1)[0] == 1
+    assert cf_words(r[6], 0) == (3, 0, 234, 235)
+    r = cf_run(
+        cf, [ack(), ("lp_test_odd", []), ("lp_test_stage", [0]), ("lp_tick", [])]
+    )
+    assert cf_words(r[-1], 0) == (1, 0, 0, 0)
+    assert cf_words(r[-1], 1)[0] == 0
+
+
+def test_cf_copy_keeps_stock_extent_return_and_explicit_halfword_order(cf):
+    r = cf_run(cf, [ack(234)])[-1]
+    expected = b"".join(
+        struct.pack(">H", (i * 71 + 0x8001) & 65535) for i in range(0xABC // 2)
+    )
+    assert r.reads[3][:0xABC] == expected
+    assert r.reads[3][0xABC:] == bytes([0xA5]) * 16
+    assert cf_words(r, 1)[7] == cf.symbols["lp_fake_copy"]
+    assert cf_words(r, 2)[1:] == (1, 2, 0, 234, 958464)
 
 
 def test_restore_bases_precedes_indices_for_real_hardware():
@@ -354,4 +444,70 @@ def test_restore_bases_precedes_indices_for_real_hardware():
     source = (MOD / "src/dsp/lp0-proof.s").read_text()
     restore = source.split("_lp_restore:", 1)[1].split("JUMP _lp_back;", 1)[0]
     for i in range(8):
-        assert restore.index(f"B{i} = R0;") < restore.index(f"I{i} = R0;")
+        assert restore.index(f"B{i} = R0;") < restore.rindex(f"I{i} = R0;")
+
+
+def test_dsp_reply_extension_keeps_stock_bytes_and_updates_every_tail(dsp):
+    sess, syms = fresh(dsp)
+    reply = 0x20050000
+    for i in range((0xABC + 16) // 4):
+        sess.poke(reply // 4 + i, 0xCAFE1234)
+    init(sess, {"I4": reply})
+    assert [sess.peek(reply // 4 + i) for i in range(0xABC // 4)] == [0xCAFE1234] * (
+        0xABC // 4
+    )
+    assert [sess.peek((reply + 0xABC) // 4 + i) for i in range(4)] == [
+        0x00014C50,
+        2,
+        0,
+        0,
+    ]
+    complete(sess, syms, 0)
+    init(sess, {"I4": reply, "M6": 9, "L4": 17, "MODE1": 0x210000})
+    assert [sess.peek((reply + 0xABC) // 4 + i) for i in range(4)] == [
+        0x00014C50,
+        2,
+        1,
+        4096,
+    ]
+
+
+@pytest.mark.parametrize("wire", [ack(1, count=4095), ack(235, status=2)])
+def test_cf_invalid_postack_never_releases_or_resends(cf, wire):
+    start = 234 if wire[1][4] == 235 else 0
+    r = cf_run(
+        cf,
+        [
+            ("lp_test_prime", [start]),
+            ack(start),
+            ("lp_test_stage", [start]),
+            ("lp_tick", []),
+            wire,
+            ("lp_tick", []),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[-1], 0)[0] == 4
+    assert cf_words(r[-1], 1)[0] == 1
+
+
+def test_cf_old_presend_ack_waits_then_exact_ack_permits_single_send(cf):
+    r = cf_run(
+        cf,
+        [
+            ("lp_test_prime", [1]),
+            ack(0),
+            ("lp_test_stage", [1]),
+            ("lp_tick", []),
+            ack(1),
+            ("lp_tick", []),
+            ("lp_tick", []),
+            ack(2),
+            ("lp_tick", []),
+        ],
+    )
+    assert cf_words(r[3], 0) == (1, 0, 1, 1)
+    assert cf_words(r[3], 1)[0] == 0
+    assert cf_words(r[5], 0) == (2, 0, 1, 2)
+    assert cf_words(r[6], 1)[0] == 1
+    assert cf_words(r[-1], 0) == (3, 0, 1, 2)

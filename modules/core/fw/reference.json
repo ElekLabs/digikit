@@ -490,6 +490,42 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x40134770",
+            "len": 2
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_link_reply_copy",
+        "rust": "dkfw::link::reply_copy"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Original DN2 reply memcpy, returning destination in D0; retained by the private extension wrapper.",
+      "file": "devices/fw/link.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.link.fn.reply_copy",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 0
+        }
+      },
+      "sig": "u8 *(u8 *destination, const u8 *source, u32 length)",
+      "subsystem": "link",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x40025e36"
@@ -599,6 +635,92 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400cf08c"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_link_boot_wire_size_hook",
+        "gas": "dk_fw_link_boot_wire_size_hook",
+        "rust": "dkfw::link::BootWireSizeHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private boot-only replacement for the wire-length getter call.",
+      "file": "devices/fw/link.toml",
+      "handler": {
+        "args": [],
+        "sig": "u32 ()"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "cf.link.hook.boot_wire_size",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "sig": "u32 ()",
+      "site": "cf.link.site.boot_wire_size",
+      "subsystem": "link",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400cf956"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_link_reply_copy_hook",
+        "gas": "dk_fw_link_reply_copy_hook",
+        "rust": "dkfw::link::ReplyCopyHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming.",
+      "file": "devices/fw/link.toml",
+      "handler": {
+        "args": [
+          "sp+4",
+          "sp+8",
+          "sp+12"
+        ],
+        "sig": "u8 *(u8 *destination, const u8 *source, u32 length)"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "cf.link.hook.reply_copy",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "sig": "u8 *(u8 *destination, const u8 *source, u32 length)",
+      "site": "cf.link.site.reply_copy",
+      "subsystem": "link",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x40027b84",
@@ -697,6 +819,68 @@
         "cf.link.site.frame_call",
         "dl.cf.frame_call"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400cf08c",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 boot-only size getter CALL, before the transfer size setter and DMA arming. Retargeting this call leaves the original getter and stock 0xabc reply copy unchanged. Private diagnostic only.",
+      "file": "devices/fw/link.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.link.site.boot_wire_size",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 656
+        }
+      },
+      "subsystem": "link",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400cf956",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 stock reply memcpy CALL inside the frame driver, before DMA rearming. Keep its 0xabc length: destination+0xabc is the stock TX buffer.",
+      "file": "devices/fw/link.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.link.site.reply_copy",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 52
+        }
+      },
+      "subsystem": "link",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -11810,6 +11994,38 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x28395024",
+            "len": 4,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 R4=0xabc before SPI2 descriptor construction. Private boot-only wire-size change; never resize armed descriptors.",
+      "file": "devices/fw/dsp/link.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.link.site.boot_wire_size",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 4,
+          "offset": 167
+        }
+      },
+      "subsystem": "link",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x268ca8",
             "len": 6
           }
@@ -12365,7 +12581,7 @@
       "name": "input"
     },
     {
-      "count": 9,
+      "count": 14,
       "cpu": "cf",
       "file": "devices/fw/link.toml",
       "meaning": "the ColdFire side of the DSP link: block interrupt, frame call, records",
@@ -12477,7 +12693,7 @@
       "name": "fx"
     },
     {
-      "count": 6,
+      "count": 7,
       "cpu": "sharc",
       "file": "devices/fw/dsp/link.toml",
       "meaning": "the DSP side of the link",

@@ -139,6 +139,16 @@ mark = "D"
 rule = "fw/link:cf_func"
 
 [[anchor]]
+name = "cf.link.fn.reply_copy"
+cpu = "cf"
+kind = "code"
+addr = 0x40134770
+len = 2
+sha256 = "d6f718c1086a221db7b9e2c0bd473331b7546204e6293ab8b774c5c10a0a80e9"
+mark = "D"
+rule = "fw/link:cf_func"
+
+[[anchor]]
 name = "cf.link.site.block_isr.counter_lit"
 cpu = "cf"
 kind = "code"
@@ -155,6 +165,26 @@ kind = "code"
 addr = 0x40025e9e
 len = 6
 sha256 = "e4dfe588496260e653f2e6b413b8363ff945a390aa64a48d1e6f5181e497da54"
+mark = "D"
+rule = "fw/link:cf_func"
+
+[[anchor]]
+name = "cf.link.site.boot_wire_size"
+cpu = "cf"
+kind = "code"
+addr = 0x400cf08c
+len = 6
+sha256 = "883e14957c07c8b97ee2108d77f66a84c3edffda623ea259d931884d1792e1b6"
+mark = "D"
+rule = "fw/link:cf_func"
+
+[[anchor]]
+name = "cf.link.site.reply_copy"
+cpu = "cf"
+kind = "code"
+addr = 0x400cf956
+len = 6
+sha256 = "72c561607b43ee92a553e032cfbeec0b0bdf23a323ea727182146d217bd128cf"
 mark = "D"
 rule = "fw/link:cf_func"
 
@@ -2648,6 +2678,17 @@ mark = "D"
 rule = "fw/dsp/link:sharc_func"
 
 [[anchor]]
+name = "dsp.link.site.boot_wire_size"
+cpu = "sharc"
+kind = "code"
+addr = 0x28395024
+pm = 0x1ca812
+len = 4
+sha256 = "16ed86153ec020d82d62c405ffde99410370ce4cf94951ecd73ee98cd7ba41a4"
+mark = "D"
+rule = "fw/dsp/link:sharc_func"
+
+[[anchor]]
 name = "dsp.link.value.lp0_record"
 cpu = "sharc"
 kind = "value"
@@ -2732,6 +2773,16 @@ mode = "before"
 [[hook]]
 name = "cf.link.hook.block_isr.frame_call"
 site = "cf.link.site.block_isr.frame_call"
+mode = "retarget"
+
+[[hook]]
+name = "cf.link.hook.boot_wire_size"
+site = "cf.link.site.boot_wire_size"
+mode = "retarget"
+
+[[hook]]
+name = "cf.link.hook.reply_copy"
+site = "cf.link.site.reply_copy"
 mode = "retarget"
 
 [[hook]]

@@ -47,6 +47,12 @@ pub mod link {
     // cf.link.fn.frame: no sig yet
 
     unsafe extern "C" {
+        /// Original DN2 reply memcpy, returning destination in D0; retained by the private extension wrapper.
+        #[link_name = "cf.link.fn.reply_copy"]
+        pub fn reply_copy(destination: *mut u8, source: *const u8, length: u32) -> *mut u8;
+    }
+
+    unsafe extern "C" {
         /// The 4-byte address literal of `addq.l #1,<counter>` in the block interrupt handler's tail: the firmware's DSP block counter, 1500 per second from boot. core/runtime reads it.
         #[link_name = "cf.link.site.block_isr.counter_lit"]
         pub static BLOCK_ISR_COUNTER_LIT: u8;
@@ -57,6 +63,12 @@ pub mod link {
 
     /// The jsr abs.l with which the block interrupt handler calls the stock frame driver (four arguments on the stack); the hook point for the DSP link's per-block sender.
     pub type BlockIsrFrameCallHook = unsafe extern "C" fn(len: i32, src: *const u16, reclen: i32, rec: *const u16);
+
+    /// Private boot-only replacement for the wire-length getter call.
+    pub type BootWireSizeHook = unsafe extern "C" fn() -> u32;
+
+    /// Private wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming.
+    pub type ReplyCopyHook = unsafe extern "C" fn(destination: *mut u8, source: *const u8, length: u32) -> *mut u8;
 }
 
 pub mod machine {
