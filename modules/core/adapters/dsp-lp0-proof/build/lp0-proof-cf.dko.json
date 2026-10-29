@@ -1,0 +1,252 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text",
+   "symbol": "lp_tick",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "lp_queue_pop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 44,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 56,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_failed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_staging",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.lp_tick",
+   "symbol": "lp_stock_send",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 114,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 120,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text.lp_tick",
+   "symbol": ".sec..bss.lp_mail",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d703034eb9000000004cd703034fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "4ab900000000670a700423c0000000004e757201b2b90000000066f42039000000000c80000000ea6208b0b90000000067187001720423c00000000023c00000000023c10000000060c64878000172024879000000002f0023c1000000004eb9000000004fef000c203900000000528023c00000000023c000000000700323c000000000608a",
+   "kind": "text",
+   "name": ".text.lp_tick",
+   "size": 134
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.lp_next",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.lp_failed",
+   "size": 4
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.lp_staging",
+   "size": 4096
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.lp_mail",
+   "size": 16
+  }
+ ],
+ "source_sha256": "b0a150a7fcc7203e87fc4207d4883b42b56276d45d29ee63f0da49730ac3c359",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.lp_failed",
+   "section": ".bss.lp_failed",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.lp_mail",
+   "section": ".bss.lp_mail",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.lp_next",
+   "section": ".bss.lp_next",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.lp_staging",
+   "section": ".bss.lp_staging",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "lp_failed",
+   "section": ".bss.lp_failed",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_loop_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_mail",
+   "section": ".bss.lp_mail",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "lp_next",
+   "section": ".bss.lp_next",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_queue_pop",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_staging",
+   "section": ".bss.lp_staging",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_stock_send",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lp_tick",
+   "section": ".text.lp_tick",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "39",
+  "isa_check": "30e3044c6baeb305cf372d9d13ab438f7e53100b0e6f4d5167c16133564e8065",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

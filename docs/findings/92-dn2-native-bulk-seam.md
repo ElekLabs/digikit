@@ -109,3 +109,47 @@ Checkpoint validation: generation check, scoped document paths and diff whitespa
 pass. Routed changed checks pass layercheck and fail only on the known ten stale
 references in five unchanged files (`out/dn2-lp0-changed.log`). No full gate or
 native firmware receiver proof has run for this checkpoint.
+
+## Private real-driver transfer proof
+
+**[D]** The opt-in `core/dsp-lp0-proof` adapter now initializes from the AudioTask
+tail with live context/ownership/MMIO guards, private aligned state and receive
+buffer. It reconstructs the mutable descriptor on every submit. Its callback
+validates context, event, buffer and sequential progress before copying to the
+experimental bank. It does not publish samples to voices or use reply rows.
+The stock CF sender remains unbounded on hardware readiness; the emulator test
+retains one request, checks armed reception before START, and imposes deadlines.
+
+Twenty-one focused tests and independent review pass. Real SHARC base-register
+writes can reset index registers: restoration now writes all B/L registers before
+the final I-register restore. Driver stand-ins do not model that silicon effect;
+an explicit source-order regression protects it.
+
+**[D]** Corrected first-page native proof passes in
+`out/runs/lp0-proof/08286bcd-1023-487f-87e7-9f179f3f1845`.
+The initial run delivered exact data but compared volatile RPC timestamps in its
+tail assertion. The corrected comparison retains only memory fields. Its untouched
+955,904-byte tail remains unknown; matching unknown markers is not proof of its
+concrete contents.
+
+**[D]** Full-bank proof passes in
+`out/runs/lp0-proof/aaafd568-2d0e-47bc-8fd4-35a30f90e17a`:
+235 sequential packets produce 960,000 known, byte-exact bytes, SHA-256
+`0eb5375f0383e6dc3422abcf93926ebdff4632af0c1c6bc06598ecbbb00d4a72`.
+The final packet contributes only 1,536 bytes. Both full 4 KiB canaries remain
+known and unchanged; raw guard observations are saved. Completion reports status
+3, error 0, pages 235 and bytes 960,000. DMA configuration/status/count are zero
+after completion and again after subsequent frames. DSP frame counts progress
+91 → 35,333 → 36,529. These counts are not a throughput or PCM quality measurement.
+
+The prebuilt daemon SHA-256 is
+`fe5ae28b760f62c594fd9b215313636e5feb10f73b04fa4ccba38f1d025a83e0`;
+it reuses the checked existing generated core, without regeneration. Native logs:
+`out/lp0-proof-native-corrected.log` and `out/lp0-proof-native-full-bank.log`.
+Scoped lint/types/format and object freshness checks pass. Routed changed checks
+retain ten baseline stale references and the linked-node_modules launcher failure
+(`out/lp0-proof-changed.log`). No clean merge gate is claimed.
+
+**[O]** Audible stock coexistence, cache behavior, teardown, production memory
+ownership and a bounded production completion protocol remain open. Ordinary
+frame progress is insufficient to establish audio quality or hardware behavior.

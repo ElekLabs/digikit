@@ -38,6 +38,12 @@ pub mod input {
 pub mod link {
     // cf.link.fn.block_isr: no sig yet
 
+    unsafe extern "C" {
+        /// DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first.
+        #[link_name = "cf.link.fn.bulk_send"]
+        pub fn bulk_send(tag: u32, source: *const u32, format: u32);
+    }
+
     // cf.link.fn.frame: no sig yet
 
     unsafe extern "C" {

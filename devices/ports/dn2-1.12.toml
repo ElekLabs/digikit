@@ -119,6 +119,16 @@ mark = "D"
 rule = "fw/link:cf_func"
 
 [[anchor]]
+name = "cf.link.fn.bulk_send"
+cpu = "cf"
+kind = "code"
+addr = 0x400cfb0e
+len = 4
+sha256 = "e59cdca0d536f67a27bdb308b1683f2c5d97565cb4d2dfe566afb0c8f6dae402"
+mark = "D"
+rule = "fw/link:cf_func"
+
+[[anchor]]
 name = "cf.link.fn.frame"
 cpu = "cf"
 kind = "code"
@@ -2604,6 +2614,39 @@ mark = "D"
 rule = "fw/dsp/fx:sharc_mem_addr"
 
 [[anchor]]
+name = "dsp.link.fn.lp0_open"
+cpu = "sharc"
+kind = "code"
+addr = 0x28395ff6
+pm = 0x1caffb
+len = 6
+sha256 = "e0bb9c31d977272f74ffb07cb62f705baae18b14fd9a9c5444a59a79ab4436a6"
+mark = "D"
+rule = "fw/dsp/link:sharc_func"
+
+[[anchor]]
+name = "dsp.link.fn.lp0_set_callback"
+cpu = "sharc"
+kind = "code"
+addr = 0x283956c0
+pm = 0x1cab60
+len = 6
+sha256 = "cf508824d9c305d7208e679e9df38e84fd353b8248964d0b875f2d88c86071fd"
+mark = "D"
+rule = "fw/dsp/link:sharc_func"
+
+[[anchor]]
+name = "dsp.link.fn.lp0_submit"
+cpu = "sharc"
+kind = "code"
+addr = 0x2839554c
+pm = 0x1caaa6
+len = 6
+sha256 = "c66dbe16eb7fe4e55bd33c9dd4e06ce04f0caa261dbcbb20d08a207dc2cd4c1a"
+mark = "D"
+rule = "fw/dsp/link:sharc_func"
+
+[[anchor]]
 name = "dsp.link.site.block_tail"
 cpu = "sharc"
 kind = "code"
@@ -2613,6 +2656,17 @@ len = 6
 sha256 = "9489f54d1cb1ed596c0cee43d27a53ed20b01e92623d4147dec3e3c12f31c24b"
 mark = "D"
 rule = "fw/dsp/link:sharc_func"
+
+[[anchor]]
+name = "dsp.link.value.lp0_record"
+cpu = "sharc"
+kind = "value"
+addr = 0x268ca8
+src = 0x28396038
+len = 6
+sha256 = "412322a377b1e5ca6d97af9267e489d4e1450cb71d9064a2abcfa4c80bca70c2"
+mark = "D"
+rule = "fw/dsp/link:sharc_literal"
 
 [[anchor]]
 name = "dsp.master.fn.q31_converter"

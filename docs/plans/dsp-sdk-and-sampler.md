@@ -6,6 +6,26 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
+**Latest checkpoint: DN2 native bulk transfer passes (2026-10-29).**
+The private LP0 adapter uses the existing CF sender and SHARC driver. The
+first-page proof passes, then the separately selected full-bank proof passes:
+235 packets, 960,000 exact bytes, final 1,536-byte clamp, intact 4 KiB guards,
+terminal DMA inactive, and subsequent ordinary DSP frames. This is emulator
+evidence, not audible coexistence, production pool ownership or hardware safety.
+See [finding 92](../findings/92-dn2-native-bulk-seam.md) for artifacts and limits.
+
+- [x] Implement private task-context setup, guarded callback and descriptor rearm.
+- [x] Pass 21 focused tests, scoped static checks and independent review.
+- [x] Run byte-exact first-page and full-bank native proofs.
+- [ ] Prove audible stock DN2 playback during transfer.
+- [ ] Bound stock fixed DDR object access before choosing production reservation.
+- [ ] Integrate per-track loading/publication and prove both devices.
+
+Next ownership lead: fixed FX object rooted at `0x8005912c`, including initializer
+and render/reset pointer bounds. Existing small allocation entry is an L1 heap;
+no general reservable DDR arena has been established. Keep the experimental bank
+private and unpublished to voices until ownership is resolved.
+
 
 **Confirmed (2026-10-29): independent per-track sampling.**
 Changing a track's sample stops that track's old notes; unrelated tracks keep
