@@ -1,7 +1,7 @@
 # Sample consumer retirement: design and proof boundary
 
 2026-10-29. DT2 OS 1.17 and DN2 OS 1.12. **[D]** denotes a source read or prior observation;
-**[O]** denotes a proposal or unresolved proof. No new [V], runtime implementation, ABI approval,
+**[O]** denotes a proposal or unresolved proof. No new [V], production runtime implementation, public ABI approval,
 hardware or performance claim. This follows [the executed replacement observation](82-stock-sampler-lifetime.md)
 and [the stock dependency map](81-stock-sampler-dependencies.md).
 
@@ -122,25 +122,41 @@ decomp ADDRESS -i IMAGE --max 0`; use `dossier ADDRESS -i IMAGE --decomp 80 --ma
 `batch FILE` for the image/address pairs above. Line numbers refer to the full decompiler body. These are [D]
 decompiler observations, not original-byte audits.
 
-**[D]** [Prior voice-context observations](45-dsp-voice-context.md) record MODE1 `0x39011cf8` on both target
-images, including IRPTEN/NESTM in a software-interrupt voice context. **[O]** This does not exclude nested
-callbacks. An in-flight counter needs a proven atomic admission/drain protocol and interrupt behavior. A common
-block-tail hook alone guarantees neither callback quiescence nor event fencing; ordinary render-before-tail
-ordering must not be inferred solely from the anchor description.
+**[C][D]** [Prior voice-context observations](45-dsp-voice-context.md) record MODE1
+`0x39011cf8`; its bank selects and IRPTEN/NESTM do not establish that the complete voice/tail
+path is one software ISR. Current raw-section task-creation reads distinguish the actual
+AudioTask entry from the database's merged function extent:
 
-**[D]** The current DT2 static call chain reaches the voice: callsite `0x1c771e` in function `0x1c75d8`
-calls `0x1c2b24`, whose callsite `0x1c3083` reaches `0x1c642a`; callsite `0x1c6b00` there reaches voice
-`0x1c4ecf`. The link-tail anchor `0x1c75c1` belongs to a different function, `0x1c74cd`, but parent
-`0x1c75d8` directly calls that function at `0x1c7756`, after its voice-dispatch call at `0x1c771e`.
-The conditional branch at `0x1c7753` skips to `0x1c775d`, and a loop runs from `0x1c775d` to `0x1c7749`.
-These ordered static callsites do not establish every-path execution or a global interrupt-order guarantee.
+| Image | Task-entry literal / creator call | Command-table loader byte address | Command targets |
+| --- | --- | --- | --- |
+| DT2 1.17 | `0x1c7770`: R4=`0x1c7749`; `0x1c7775` calls `0xb8615d` | `0x2825f7b0` | `0x1c7524`, `0x1c75d8`, `0x1c763c`, `0x1c7671` |
+| DN2 1.12 | `0x1ca00e`: R4=`0x1c9fe7`; `0x1ca013` calls `0xb88839` | `0x28268a68` | `0x1c9dc2`, `0x1c9e76`, `0x1c9eda`, `0x1c9f0f` |
 
-**[C][D]** DN2 has an established same-parent static chain: `0x1c9e76` calls voice dispatcher `0x1c2712`
-at `0x1c9fbc`; its call at `0x1c3044` reaches `0x1c8ef1`, whose call at `0x1c9459` reaches voice
-`0xb8251b`. The same parent calls `0x1c9d6b` at `0x1c9ff4`, reaching link-tail `0x1c9e5f`.
-The conditional at `0x1c9ff1` can skip that call, and `0x1c9ffb` loops to `0x1c9fe7`. The parent's external
-caller remains unresolved, but is not required to establish these shared-parent callsites. As on DT2,
-this static order does not prove every-path execution, callback drain or global interrupt ordering.
+R8 points to the AudioTask name and R12 is stack size `0x1000`. Command 3 renders and
+rejoins the block-handler tail. The task loop is a separate entry inside the merged
+function extent; the earlier apparent same-parent conditional call is not the actual
+voice-to-tail chain. Existing `tools/sharc_dev/sharc_symbols.py` distinguishes these entries.
+The parent audit matched section-7 hashes to database metadata, without independently
+re-unpacking the original SysEx; this remains [D], not [V]. Higher-priority interrupt
+preemption remains possible. A common tail hook alone does not prove callback drain.
+
+**[D]** The public SHARC+ Core Programming Reference Rev 1.5
+([source inventory](../sharc/SOURCES.md), local `sc58x-2158x-prm.pdf`, SHA-256
+`a3edf83beb75b44a77f8366cf54c0353083ab49a1c69d8179d2b727ba7ba1470`)
+PDF p.624 (printed 29–56) describes IRPTEN as enabling/disabling all maskable interrupts.
+PDF pp.179 and 151 discuss register-effect latency; the private diagnostic conservatively
+places two NOPs after clearing/restoring IRPTEN. PDF p.135 warns against changing NESTM
+inside an ISR: the diagnostic leaves NESTM unchanged and restores exact incoming MODE1.
+DT2's existing `DV_C3_NOIRQ` guard is conditional, not evidence of default exclusion.
+
+**[O]** The terminal DN2 diagnostic assumes serialized adapter/hook execution on one core
+and maskable access to its bank. Short masked admission/release/close sections do not
+establish universal firmware exclusion or NMI safety. Saved-runner interleavings test the
+assembled protocol while retaining shared DM, not physical IRQ delivery. First/latest
+raw MODE1/ASTATX and stack/return observations cannot identify an RTOS task, and zero
+observed tail overlap cannot prove absence of nesting. No production retirement ABI or
+upstream event-age fence follows.
+
 **[C][D]** The earlier conclusion about the dynamic jump at `0x1c29aa` was incorrect: the
 DAG2 encoding displayed as `PM(I4,M5)` selects I12/M13. The listing omits the register-bank +8;
 it does not establish that I4/M5 supply this branch target. This is a disassembler-formatting
@@ -367,3 +383,56 @@ and coexistence, DT2 ten-second backing, active consumer retirement/replacement,
 sample Transfer UI and user-selection/resource APIs remain open. Existing immutable
 source-until-reboot and quiet-transfer scope remain in force. Parent owns checkpoint
 and push; no further coupled run is required for this scoped result.
+
+
+### Terminal DN2 owned-bank retirement result (2026-10-29)
+
+**[D]** The parent executed all five coupled diagnostic cases successfully: normal full
+transport/ten-second playback, out-of-range, partial checksum, stale-token/watchdog,
+and terminal retirement while the known source was progressing. Log:
+`out/runs/ddr-proof/terminal-retirement-suite.log`. Its 121.38-second suite wall time is
+not a throughput or hardware performance claim. The full-playback artifact is
+`out/runs/ddr-proof/6f65ad4c-3cf6-4553-8500-15eadd79bc51`; terminal evidence is
+`out/runs/ddr-proof/ff8f8057-0a9f-4030-95ff-83143b7ac2a5` (`retirement-result.json`,
+`retirement-observations.json`, request log, playback states, plan and WAV).
+Patched image SHA-256:
+`2cb4d2622f0a1eccaaed217c0000e07d36653cd597ccdfc3750ae238b570dc32`.
+
+The terminal request observed cursor `[0,480000,49664,0,65536,0]`, DONE=0.
+Exact token/sequence/op retirement completed with READY/open=0, closed=1, admitted=0,
+fault=0 and 1,572 source-kernel calls, below 15,000 natural-completion calls. The test
+then used the existing `dsp.patch` BASE-guarded byte edit to poison the complete bank.
+The original held trigger, a fresh note reaching the actual callback, and a duplicate
+RETIRE all retained that control state and 1,572 source-kernel calls. Normal frames
+progressed after poison; the consumer was DONE and the session reported no fault.
+This establishes the tested terminal bank behavior, not reopening or a UI-time event-age policy.
+
+| Retained bytes | SHA-256 |
+| --- | --- |
+| Original 960,000-byte source | `d4fa333d949c55fd4c9751ab5a5ca852ceba2a6835533898096dc66bddde8a82` |
+| Complete poisoned bank | `af99c4a7ac4ce10d285f03424fa2f0757c8c7e12306b61f5b63964c2a0caec06` |
+| Each complete 4 KiB canary band, expected `0xA55A3CC3` pattern | `539a03c496fbb7fca763db383a58ecb3373356a98a31b79fd5421277a9652cd5` |
+
+First/latest raw contexts report MODE1 `0x39011cf8`; ASTATX is not definitive task/IRQ
+identity. Note entries/exits read 2/2 and render entries/exits 1574/1574. Tail entries
+35355 and exits 35358 were read asynchronously while execution continued: these are
+not a coherent snapshot or evidence of balanced/global exclusive execution.
+`tailSawActive=0` is an observation, not proof that overlap is impossible.
+
+Thirty-six focused assembled diagnostic/CF tests pass, including a real reader paused
+before its first read, mid-reader and after kernel return. Saved register/call/loop state
+shares the same DM overlay with the actual close/poll code: status stays PENDING with
+one admitted reader, backing remains unchanged, and RETIRED follows final-read release.
+Subsequent cached/delayed callbacks read no source. These are modeled interleavings,
+not physical IRQ injection. Objects rebuild/re-decode 264 CF and 813 DSP instructions.
+Direct lint/format/types and scoped reference/diff checks pass; host checks pass 193,
+skip 16 (`out/runs/ddr-proof/terminal-host-checks.log`). Routed `test:changed` retains
+ten known path-reference failures and a pnpm launcher failure
+(`out/runs/ddr-proof/terminal-changed-checks.log`); no clean integration gate is claimed.
+
+**[O]** One core, serialized adapter/hook paths and maskable bank accesses remain explicit
+assumptions. No hardware cache/coexistence, NMI exclusion, universal firmware exclusion,
+DT2 retirement/capacity, public sample ABI or stock FX-tail silence follows. The bank
+stays terminally closed; next design is new-generation opening, strict stale-event
+fencing and serialized writers, followed by separate replacement and external-mutation
+proofs. No additional terminal proof is needed for this completed scope.

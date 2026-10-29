@@ -29,3 +29,6 @@
 
 .GLOBAL _dd_play_output;
 .VAR _dd_play_output = 0;
+
+.GLOBAL _dd_play_reads;
+.VAR _dd_play_reads = 0;

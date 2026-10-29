@@ -205,7 +205,7 @@ interface Registry {
   entries: { id: string; index: number; module: string }[];
 }
 
-async function playbackProof(session: Session, plan: RuntimePlan): Promise<void> {
+async function playbackProof(session: Session, plan: RuntimePlan, retire?: () => Promise<void>): Promise<void> {
   const registries = (plan as RuntimePlan & { registries: Registry[] }).registries;
   const machines = registries.find((registry) => registry.name === 'machines')!;
   const voices = registries.find((registry) => registry.name === 'voices')!;
@@ -330,16 +330,115 @@ async function playbackProof(session: Session, plan: RuntimePlan): Promise<void>
             seconds: tapReport.seconds,
           };
           snapshots.push(sample);
-          return sample.done === 1 && tapReport.seconds >= 11.5;
+          return retire
+            ? cursor[2]! >= 48000 && cursor[2]! < 432000 && sample.done === 0
+            : sample.done === 1 && tapReport.seconds >= 11.5;
         },
         { timeout: 180000, interval: 50 },
       )
       .toBe(true);
+    if (retire) {
+      const atRequest = snapshots.at(-1)!;
+      await retire(); // Exact token/seq/op, CF DONE only for DSP RETIRED status 5.
+      const control = async () => ({
+        ready: await word(planSymbol(plan, '_dd_ready')),
+        open: await word(planSymbol(plan, '_dd_admission_open')),
+        closed: await word(planSymbol(plan, '_dd_retire_closed')),
+        admitted: await word(planSymbol(plan, '_dd_admitted')),
+        fault: await word(planSymbol(plan, '_dd_admit_fault')),
+        reads: await word(planSymbol(plan, '_dd_play_reads')),
+      });
+      const retired = await control();
+      expect(retired).toMatchObject({ ready: 0, open: 0, closed: 1, admitted: 0, fault: 0 });
+      expect(retired.reads).toBeGreaterThan(0);
+      expect(retired.reads).toBeLessThan(15000);
+      const oldBank = await peek(session, BASE, BYTES);
+      const guardsBefore = [await peek(session, BASE - 4096, 4096), await peek(session, BASE + BYTES, 4096)];
+      const canary = Buffer.alloc(4096);
+      for (let i = 0; i < 1024; i++) canary.writeUInt32LE(CANARY, 4 * i);
+      expect(guardsBefore).toEqual([canary, canary]);
+      const poisoned = Buffer.alloc(BYTES, 0x5a);
+      const patchFile = path.join(session.runDir, 'retired-bank.patch');
+      fs.writeFileSync(
+        patchFile,
+        `BASE ${plan.base.syx_sha256}\nBYTES ${BASE.toString(16)} ${poisoned.toString('hex')}\n`,
+      );
+      // Existing diagnostic memory edit API; no transport or firmware overwrite
+      // occurs before the exact retirement acknowledgment above.
+      const injected = await session.client.call('dsp.patch', { file: patchFile });
+      const afterBank = await peek(session, BASE, BYTES);
+      expect(afterBank.equals(poisoned)).toBe(true);
+      const normalAfterPoison = await word(normalAddress);
+      const observations = [retired];
+      const observationFile = path.join(session.runDir, 'retirement-observations.json');
+      fs.writeFileSync(observationFile, JSON.stringify(observations, null, 2));
+      const unchanged = async () => {
+        const sample = await control();
+        observations.push(sample);
+        fs.writeFileSync(observationFile, JSON.stringify(observations, null, 2));
+        expect(sample).toEqual(retired);
+      };
+      await settle(1200); // Keep the original note held across backing reuse.
+      await unchanged();
+      await expect
+        .poll(async () => word(normalAddress), { timeout: 10000, interval: 25 })
+        .toBeGreaterThan(normalAfterPoison);
+      const heldState = await word(stateAddress);
+      expect((await peek(session, heldState, 24)).readUInt32LE(20)).toBe(1);
+      await session.expectNoFault('retired bank with original note held');
+      const notesBeforeRetrigger = await word(planSymbol(plan, '_dd_obs_note_entries'));
+      await session.client.inputButton(button('TRIG 1'), false);
+      await settle(300);
+      await tap('TRIG 1'); // A fresh note must also remain terminally denied.
+      await settle(1200);
+      await expect
+        .poll(async () => word(planSymbol(plan, '_dd_obs_note_entries')), { timeout: 10000, interval: 25 })
+        .toBeGreaterThan(notesBeforeRetrigger);
+      await unchanged();
+      await retire(); // Duplicate terminal request remains idempotent.
+      await unchanged();
+      const finalState = await word(stateAddress);
+      expect((await peek(session, finalState, 24)).readUInt32LE(20)).toBe(1);
+      const guardsAfter = [await peek(session, BASE - 4096, 4096), await peek(session, BASE + BYTES, 4096)];
+      expect(guardsAfter).toEqual(guardsBefore);
+      const context: Record<string, unknown> = {};
+      for (const kind of ['note', 'render', 'tail']) {
+        context[kind] = {
+          entries: await word(planSymbol(plan, `_dd_obs_${kind}_entries`)),
+          exits: await word(planSymbol(plan, `_dd_obs_${kind}_exits`)),
+          first: (await peek(session, planSymbol(plan, `_dd_obs_${kind}_first`), 24)).toString('hex'),
+          last: (await peek(session, planSymbol(plan, `_dd_obs_${kind}_last`), 24)).toString('hex'),
+        };
+      }
+      fs.writeFileSync(
+        path.join(session.runDir, 'retirement-result.json'),
+        JSON.stringify(
+          {
+            atRequest,
+            normalAfterPoison,
+            notesBeforeRetrigger,
+            retired,
+            observations,
+            injected,
+            context,
+            tailSawActive: await word(planSymbol(plan, '_dd_obs_tail_active')),
+            beforeSha256: createHash('sha256').update(oldBank).digest('hex'),
+            afterSha256: createHash('sha256').update(afterBank).digest('hex'),
+            guardSha256: guardsAfter.map((guard) => createHash('sha256').update(guard).digest('hex')),
+            wavPath,
+            scope: 'Terminal bank only; no reopen or upstream event-age policy. Stock effect tails may remain audible.',
+          },
+          null,
+          2,
+        ),
+      );
+    }
   } finally {
     await session.client.inputButton(button('TRIG 1'), false);
     await session.client.call('pcm.tap', { action: 'capture_stop' });
     fs.writeFileSync(path.join(session.runDir, 'playback-states.json'), JSON.stringify(snapshots, null, 2));
   }
+  if (retire) return;
   const final = snapshots.at(-1)!;
   const dispatchedType = await word(planSymbol(plan, '_dv_c'));
   const output = await word(planSymbol(plan, '_dd_play_output'));
@@ -380,6 +479,34 @@ async function playbackProof(session: Session, plan: RuntimePlan): Promise<void>
   const early = window(1);
   const late = window(8);
 
+  // Sequential live reads can straddle callbacks. These bounded snapshots and
+  // non-atomic markers describe observations only; zero overlap cannot prove
+  // exclusion, and ASTATX (including its low 12 bits) is not a task identity.
+  const context = async (name: string) => {
+    const bytes = await peek(session, planSymbol(plan, name), 24);
+    const words = Array.from({ length: 6 }, (_, i) => bytes.readUInt32LE(i * 4));
+    return {
+      mode1: words[0],
+      astatx: words[1],
+      astatxLow12: words[1]! & 0xfff,
+      i6: words[2],
+      i7: words[3],
+      i13: words[4],
+      active: words[5],
+    };
+  };
+  const scheduling: Record<string, unknown> = {
+    active: await word(planSymbol(plan, '_dd_obs_active')),
+    tailSawActive: await word(planSymbol(plan, '_dd_obs_tail_active')),
+  };
+  for (const kind of ['note', 'render', 'tail']) {
+    scheduling[kind] = {
+      entries: await word(planSymbol(plan, `_dd_obs_${kind}_entries`)),
+      exits: await word(planSymbol(plan, `_dd_obs_${kind}_exits`)),
+      first: await context(`_dd_obs_${kind}_first`),
+      last: await context(`_dd_obs_${kind}_last`),
+    };
+  }
   fs.writeFileSync(
     path.join(session.runDir, 'playback-result.json'),
     JSON.stringify(
@@ -396,6 +523,7 @@ async function playbackProof(session: Session, plan: RuntimePlan): Promise<void>
         dispatchedType,
         finite,
         capturedFrames: pcm.length / 8,
+        scheduling,
         early,
         late,
         output,
@@ -516,3 +644,25 @@ quietProof('DDR stale token cannot adopt or write; CF watchdog resumes stock fra
   fs.writeFileSync(path.join(session.runDir, 'ddr-after-rejection.json'), JSON.stringify(after));
   expect(after).toEqual(before);
 });
+
+quietProof(
+  'terminal DDR retirement drains before poison and denies held and retriggered consumers',
+  async (session) => {
+    const proof = await prepare(session);
+    const data = Buffer.alloc(BYTES);
+    for (let i = 0; i < BYTES / 2; i++) {
+      const triangle = 8192 * (1 - 4 * Math.abs((i % 240) / 240 - 0.5));
+      const fade = Math.min(1, i / 960, (479999 - i) / 960);
+      data.writeInt16LE(Math.round(triangle * fade), i * 2);
+    }
+    await proof.request(frame(0, 1));
+    for (let seq = 1; seq <= 375; seq++) {
+      const offset = (seq - 1) * 2560;
+      await proof.request(frame(seq, 2, offset / 4, data.subarray(offset, offset + 2560)));
+    }
+    await proof.request(frame(376, 3, 240000), 2, 1);
+    expect(await proof.ready()).toBe(1);
+    expect(await peek(session, BASE, BYTES)).toEqual(data);
+    await playbackProof(session, proof.plan, () => proof.request(frame(377, 4), 2, 5));
+  },
+);
