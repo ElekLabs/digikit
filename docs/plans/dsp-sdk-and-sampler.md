@@ -6,6 +6,53 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
 
 ## Resume here
 
+**First-release UX decided (2026-10-30): on-device sample selection.**
+Em requires an on-device picker in the initial sampler and points to the existing
+SDK UI components. Workbench remains the transfer tool; per-track assignment must
+be usable on the device. Reuse `sdk/include/dk/ui.h` and `core/ui` lists, actions,
+side panels and dialogs rather than introducing a separate UI framework.
+
+- [x] Resolve the on-device-versus-Workbench selection decision.
+- [x] Locate existing `DK_UI_LIST`, fill/refresh callbacks and module menu entry.
+- [ ] Map existing DN2 store and DT2 +Drive catalogue providers and stable identities.
+- [ ] Define SDK catalogue and per-track selection/binding contracts, preserving
+  the existing pinned-bank proof API until a versioned replacement is available.
+- [ ] Implement bounded catalogue access and binding with focused tests.
+- [ ] Build the on-device picker using SDK UI components, with loading/error states.
+- [ ] Integrate owned backing and prove selection/replacement/playback on both devices.
+
+Picker design direction: capture the intended track when opening; browsing does
+not retire a sample. Confirming selection stops only that track's old notes, queues
+loading, and publishes the new generation only after validation and DSP completion.
+Keep callback context in persistent module memory, page catalogue rows, and use
+stable sample identity rather than a truncated display name or volatile row index.
+Keep storage reads and decoding out of fill/action callbacks. Start/end/reverse
+remain machine-page controls. The exact device entry point and selected-track
+SDK access still need mapping; the UI widgets themselves already exist.
+
+**Initial integration route:** use the existing `DK_MENU` entry with a track list,
+then a reusable `DK_UI_LIST` browser for that explicitly chosen track. This makes
+the target visible and does not depend on an undeclared current-track getter.
+A machine-page shortcut can later open the same browser with a supplied track.
+Reuse the menu object; retain target, folder, page and row identities in persistent
+context. YES on a file queues selection; NO returns without changing the binding.
+Show the selected binding and queued/loading/ready/error status separately from
+the currently highlighted catalogue row.
+
+Catalogue implementation must run on the device. Existing TypeScript
+`RpcSamples`/`StoreSamples` demonstrate host-side listing semantics; they are not
+callable CF backends. DN2 can build on the runtime store scanner and header
+fingerprint. DT2 needs an adapter to the underlying firmware directory operations
+used by stock ReadDir, with audited signatures and lifetimes. Neither existing
+host listing exposes a catalogue generation snapshot. Preserve DN2 path/size/SHA
+and DT2 path/hash/size where available, and revalidate at selection/load rather
+than treating a row number as a durable reference.
+
+Validation will use the existing UI host fake for track capture, navigation,
+cancel, paging and stale-result rejection, then device-specific catalogue tests
+and bounded DN2/DT2 emulator picker flows. Do not build a picker that reports a
+successful binding before the runtime can actually own and publish that sample.
+
 **Latest checkpoint: private device-side completion proof passes (2026-10-29).**
 Diagnostic 0.2 changes both boot-time wire counts from `0xabc` to `0xacc`, keeps
 the stock `0xabc` copy, and carries a coherent completion snapshot in the new
@@ -21,10 +68,8 @@ before/during/after, and no silent window in 415 measured transfer segments.
 - [x] Run the first-page and full-bank audio proofs and independently audit artifacts.
 - [x] Run direct host checks: 195 passed, 16 skipped. Routed checks retain the
   ten baseline stale references and linked-package launcher failures; no merge gate claimed.
-- [ ] Resolve first-release UX: per-track Workbench assignment with machine
-  start/end/reverse controls (recommended), or an on-device picker immediately.
-  The question is pending with Em; do not infer an answer from elapsed time.
-- [ ] Design the production binding/loading API and owned backing after that choice.
+- [x] Resolve first-release UX: on-device picker, confirmed by Em on 2026-10-30.
+- [ ] Design the production binding/loading API and owned backing for that choice.
 
 Evidence and fixture-selection correction: [finding 88](../findings/88-dn2-reply-ownership.md).
 The first 0.2 run selected the old cold-idle through a canonicalized image symlink;
