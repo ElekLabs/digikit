@@ -37,6 +37,10 @@ side panels and dialogs rather than introducing a separate UI framework.
   invalid-capacity retention and reentrant callback cancellation, without slot 0.
 - [ ] Define per-track selection/binding separately, preserving the existing
   pinned-bank proof API until a versioned replacement is available.
+- [x] Specify per-track selection ordering and per-callback reader retirement;
+  independent design review passes. No new public binding ABI is exported.
+- [ ] Prove a private two-track descriptor/retirement boundary before integrating
+  production backing and publishing ready bindings.
 - [x] Implement bounded catalogue access with focused tests.
 - [ ] Implement per-track binding with focused tests.
 - [ ] Build the on-device picker using SDK UI components, with loading/error states.
@@ -73,6 +77,14 @@ Both runs pass independent artifact review. Direct host checks pass 195 tests
 pnpm launcher failure. No merge gate, hardware run or performance claim is made.
 
 **Resume next:** define per-track binding/retirement independently of listing.
+The initial ordering and reader strategy are recorded in
+[the binding design](../design/sample-binding.md); public ABI and production
+backing remain unimplemented.
+The DN2 output-pointer table initializer is now resolved and independently
+checked against original bytes: sixteen 128-byte output buffers at
+`0x804acf90..0x804ad790`. This narrows provenance; it does not establish a free
+pool. Next audit the apparent later writer `0x1c9118` with actual I2 provenance,
+then consumer bounds; see finding 91. Do not repeat the initializer investigation.
 The old sample API still owns one nonreplaceable 8,192-frame bank per module;
 it cannot implement this product by changing a path alone. Existing
 `sdk/dsp/sample_bank.inc` supplies admission, epoch and reader-drain primitives.
