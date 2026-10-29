@@ -612,9 +612,7 @@ def fault_value(raw: bytes) -> dict[str, Any] | None:
 
 def fault_rows(f: dict[str, Any]) -> list[str]:
     """The ABOUT rows of a fault (the same text as `dkrt_sdk::fault::rows`)."""
-    rows = [
-        "FAULT: CPU CRASH" if f["kind"] == "cpu crash" else "FAULT: DSP STOP"
-    ]
+    rows = ["FAULT: CPU CRASH" if f["kind"] == "cpu crash" else "FAULT: DSP STOP"]
     name = f["module"].rsplit("/", 1)[-1].upper()[:15]
     rows.append(
         f"IN {name}"

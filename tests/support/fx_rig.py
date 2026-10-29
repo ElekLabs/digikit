@@ -6,7 +6,7 @@
 
 The adapter (modules/core/adapters/fx/src/dsp/fx.s) and the effect sources are assembled and linked the way the patch does: the table at TABLE, the master
 block at MASTER, the hook's tail (the stock function's second instruction) at STOCK_BP. Data symbols (`.PKDATA`, `.PKBSS`, `.VAR`) go to free L2;
-`.PKBSS` memory (the effects' states) starts poisoned, so an effect that reads a state the adapter did not zero shows. Every call draws a hostile
+`_dk_step` (the `DK_STEP` word) is one zeroed word. `.PKBSS` memory (the effects' states) starts poisoned, so an effect that reads a state the adapter did not zero shows. Every call draws a hostile
 context (M5 ... MODE1) and fills the registers the stock function expects back with markers; both must come back unchanged.
 Plain Python (no numpy, no pytest): it also runs under PyPy."""
 
@@ -188,6 +188,11 @@ def _build(sources: tuple[Path, ...], device: str) -> _Built:
         inits.append((addr, bytes(AUTO_STATE_BYTES), True))
         own[-1].append((addr, AUTO_STATE_BYTES))
         addr += AUTO_STATE_BYTES
+    # the module step word (`DK_STEP`, sdk/asm/dk_trace.inc); core/dyndsp exports it on the device
+    data["_dk_step"] = addr
+    inits.append((addr, bytes(4), True))
+    own[-1].append((addr, 4))
+    addr += 4
     if addr > DATA_END:
         raise RuntimeError(f"data symbols need {addr - DATA_BASE:#x} bytes of L2")
     externs = {
