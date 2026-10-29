@@ -31,7 +31,7 @@ def prebuilt_tools():
 
 
 @pytest.fixture(scope="module")
-def dsp():
+def dsp_objects():
     if pk_toolchains.selache_dir() is None:
         pytest.skip("assembler absent")
     objects = [
@@ -40,7 +40,11 @@ def dsp():
         )
         for path in (MOD / "src/dsp/lp0-proof.s", FIX)
     ]
-    address, syms, inits = 0x20080000, {}, []
+    return objects
+
+
+def link_dsp(objects, data_address):
+    address, syms, inits = data_address, {}, []
     for obj in objects:
         sections = {}
         for sec, (data, align, _) in obj.data.items():
@@ -59,6 +63,11 @@ def dsp():
         for obj, base in zip(objects, bases, strict=True)
     ]
     return linked, syms, inits
+
+
+@pytest.fixture(scope="module")
+def dsp(dsp_objects):
+    return link_dsp(dsp_objects, 0x20080000)
 
 
 def fresh(dsp):
@@ -136,7 +145,7 @@ def test_setup_once_uses_real_call_frames_and_preserves_hook_context(dsp):
     assert val(sess, syms, "_test_submit_config") == 0
     assert val(sess, syms, "_test_submit_arg2") == 1
     rx = val(sess, syms, "_lp_rx")
-    assert rx & 15 == 0
+    assert rx & 63 == 0
     assert [val(sess, syms, f"_test_desc{i}") for i in range(7)] == [
         0,
         rx,
@@ -152,6 +161,50 @@ def test_setup_once_uses_real_call_frames_and_preserves_hook_context(dsp):
         == val(sess, syms, "_test_submit_calls")
         == 1
     )
+
+
+@pytest.mark.parametrize("phase", range(0, 64, 4))
+def test_rx_owns_whole_cache_lines_at_every_data_placement(dsp_objects, phase):
+    sess, syms = fresh(link_dsp(dsp_objects, 0x20080000 + phase))
+    init(sess)
+    rx = val(sess, syms, "_lp_rx")
+    storage = syms["_lp_rx_storage"]
+    section, offset, _ = dsp_objects[0].data_symbols["_lp_rx_storage"]
+    reservation_bytes = len(dsp_objects[0].data[section][0]) - offset
+    assert rx % 64 == 0
+    assert storage <= rx
+    assert rx + 4160 <= storage + reservation_bytes
+    state = val(sess, syms, "_lp_state")
+    assert state % 16 == 0
+    for start, size in (
+        (state, 128),
+        (syms["_lp_descriptor"], 28),
+        (syms["_lp_save"], 292),
+        *(
+            (syms[name], 4)
+            for name in (
+                "_lp_status",
+                "_lp_error",
+                "_lp_pages",
+                "_lp_bytes",
+                "_lp_state",
+                "_lp_rx",
+                "_lp_handle",
+            )
+        ),
+    ):
+        assert start + size <= rx or rx + 4160 <= start
+    assert val(sess, syms, "_test_desc1") == rx
+    assert val(sess, syms, "_test_desc3") * val(sess, syms, "_test_desc4") == 4100
+    # The simulated receive and assembled callback leave cache-line padding alone.
+    padding = range(rx + 4100, rx + 4160, 4)
+    for address in padding:
+        sess.poke(address // 4, CANARY)
+    payload = complete(sess, syms, 0)
+    assert [sess.peek(DEST + i) for i in range(1024)] == payload
+    assert all(sess.peek(address // 4) == CANARY for address in padding)
+    assert val(sess, syms, "_test_submit_calls") == 2
+    assert val(sess, syms, "_test_desc1") == rx
 
 
 @pytest.mark.parametrize("bad", ["context", "owner", "lpctl", "dmacfg"])

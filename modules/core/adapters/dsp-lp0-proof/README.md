@@ -1,6 +1,6 @@
 # Private DN2 LP0 receive and reply-extension diagnostic
 
-Version 0.2, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
+Version 0.2.1, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
 `core/expansion`; conflicts with `core/dsp-link`, `core/runtime` and
 `core/dsp-ddr-proof`. Absent from device module sets. Never use on hardware.
 The earlier 0.1 memory-observed proof is retained in its committed checkpoints.
@@ -57,6 +57,15 @@ mutation. Private aligned L2 state/descriptor/RX storage, sequential tags 0..234
 the fixed unpublished bank `0x80800000..0x808ea600`, final 1,536-byte clamp, and
 both full 4 KiB canaries remain. `_lp_status/error/pages/bytes` are independent
 emulator oracles; native test progress comes from the CF wire ACK.
+
+Version 0.2.1 aligns RX independently to 64 bytes within a 4,224-byte reservation.
+The 4,100 DMA bytes (tag plus 4,096-byte payload) occupy a rounded 4,160-byte
+footprint wholly owned by RX, disjoint from the descriptor and saved context. Driver state remains
+128 bytes with 16-byte alignment; descriptor logic is unchanged. This layout is
+necessary for whole-line ownership but supplies no cache coherence or maintenance.
+The 0.2 native runs retain their historical addresses and evidence only. Version
+0.2.1 requires a new native boot fixture bound to the exact new patched-image hash;
+no new native execution is claimed.
 
 ## Required private boot fixture
 
@@ -126,6 +135,8 @@ When native opt-ins are enabled without it, collection fails clearly.
 ## Validation limits
 
 Focused assembled checks: `uv run python -m pytest tests/patchkit/test_dsp_lp0_proof.py -q`.
+All 47 focused cases pass, including 16 four-byte data-placement phases checking
+RX alignment, complete footprint ownership and padding preservation.
 Stand-ins test our guards/call frames, halfword decoding, stock-copy boundary,
 seqlock and send-once completion behavior. They do not execute the real driver/ISR
 or prove cache behavior, gap ownership, DMA bank ownership or hardware safety.

@@ -628,10 +628,18 @@ for (const scenario of cases) {
             'core/expansion',
           ]);
           expect(plan.output?.syx_sha256).toMatch(/^[a-f0-9]{64}$/);
-          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.2 patch').toBe(
+          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.2.1 patch').toBe(
             bootFixture!.patchedSyxSha256,
           );
-          for (const name of [...globals, '_lp_descriptor', '_lp_save', 'lp_mail', 'lp_ack', 'lp_staging'])
+          for (const name of [
+            ...globals,
+            '_lp_rx_storage',
+            '_lp_descriptor',
+            '_lp_save',
+            'lp_mail',
+            'lp_ack',
+            'lp_staging',
+          ])
             symbol(name);
           phase = 'patched startup';
           const load = await rpc<{ syx_sha256: string }>(
@@ -669,9 +677,19 @@ for (const scenario of cases) {
           expect(await word(symbol('_lp_bytes'))).toBe(0);
           const rx = await word(symbol('_lp_rx'));
           const state = await word(symbol('_lp_state'));
-          expect(rx & 15).toBe(0);
-          expect(rx).toBeGreaterThanOrEqual(0x20000000);
-          expect(rx + 4100).toBeLessThanOrEqual(0x20100000);
+          expect(rx & 63).toBe(0);
+          expect(rx).toBeGreaterThanOrEqual(symbol('_lp_rx_storage'));
+          expect(rx + 4160).toBeLessThanOrEqual(symbol('_lp_rx_storage') + 4224);
+          for (const [start, size] of [
+            [symbol('_lp_descriptor'), 28] as const,
+            [symbol('_lp_save'), 292] as const,
+            [state, 128] as const,
+            ...globals.map((name) => [symbol(name), 4] as const),
+          ]) {
+            expect(start + size <= rx || rx + 4160 <= start, 'RX cache lines exclude other owners').toBe(true);
+          }
+          expect(symbol('_lp_rx_storage')).toBeGreaterThanOrEqual(0x20000000);
+          expect(rx + 4160).toBeLessThanOrEqual(0x20100000);
           expect(await word(PORT + 0x14)).toBe(state);
           expect(await word(symbol('_lp_handle'))).toBe(0x268ca8);
           const canary = Buffer.alloc(4096);
