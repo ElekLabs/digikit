@@ -31,13 +31,17 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   establish baseline and proof-only module pools, not stock free RAM or general coexistence. The CF arena is
   512 KiB on both devices; shared DSP module areas are 512 KiB DT2 and 320 KiB DN2. Decoded CF source memory
   is freed after terminal transport; only the DSP bank stays pinned until restart.
-  Em explicitly chose “Stop old notes on selection.” Length remains an unanswered question. A replacement
-  barrier and consumer generation contract remain proposed, not implemented. Investigate PCM16 resident storage
-  with native numerical proof and a paired A/B after the lifetime protocol; no speed or streaming claim is established.
-  Next recommended proof keeps the current 8,192-frame float32 bank: stop and reload only after an explicit
-  DSP reader-quiescence handshake and generation guard. DSP-link ACK means receiver processing, not idle
-  voice readers; a READY=0 write ACK is not a barrier. The four-word descriptor has no generation or reader
-  tracking, so API/ABI design is required. Keep capacity, format and new-pool changes outside that proof.
+  Em confirmed approximately ten-second one-shots and “Stop old notes on selection.” Ten seconds of 48 kHz
+  mono PCM16 is 960,000 bytes (stereo twice), beyond either current reserved DSP module pool. The official DT2
+  manual documents 400 MB project sample RAM; our module reservations are not hardware memory limits.
+  Next priority is static proof of DT2 stock DSP-pool adapter/slot ownership, before implementing small-bank
+  replacement. The SDK may expose device-specific backends. Finding 77 identifies static slot/page-copy
+  candidates; current-image lifetime, reclamation, cache rules and allocator ownership remain open.
+  DN2 external-looking reads do not establish owned sample RAM or delivery. Map external ranges/backing/owners
+  before considering a probe; do not assume DT2's pool or LP0 path exists on DN2. Ten-second DN2 feasibility is open.
+  DSP-link ACK means receiver processing, not reader quiescence; READY=0 ACK is not a barrier. The four-word
+  descriptor has no generation or reader tracking. These replacement requirements remain open; no capacity,
+  backend, lifecycle or PCM16 format change is implemented by this checkpoint.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -243,7 +247,8 @@ Names below are conceptual, not new exported ABI commitments:
 - Account for all code/state/sample bytes. Plan for 16 concurrent voices and simultaneous triggers; do not inherit
   a conformance assumption that only one note-on consumes the block headroom.
 - Report instruction ceilings and one paired A/B for any speed claim. Hardware performance/cache coherence remains
-  unproved until an explicitly authorized device test. No new absolute CPU budget or sample-length promise yet.
+  unproved until an explicitly authorized device test. No new absolute CPU budget; the confirmed ten-second
+  sample-length target is not yet implemented.
 
 ## Approved proof — loading and lifetime
 
@@ -293,10 +298,11 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 
 - [x] Measure no-dynamic-module and proof-only runtime capacity on both current images; persist provenance and limits.
 - [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
-- [ ] Obtain the sample-length target; choose capacity/headroom without assuming a new available pool.
-- [ ] Next bounded proof: keep the 8,192-frame float32 bank and design/prove explicit DSP reader quiescence plus
-  consumer generations before stop-and-reload; existing transport ACK is not this barrier. Sample-picker scope remains open.
-- [ ] After the lifetime protocol, investigate PCM16 resident-bank numerical behavior and paired cost before adoption.
+- [x] Record the confirmed target: approximately ten-second one-shots; stop old notes on selection.
+- [ ] Prioritize DT2 1.17 stock DSP-pool adapter/slot ownership, lifetime/reclaim and cache rules before small-bank replacement implementation.
+- [ ] Map DN2 1.12 external DSP ranges/backing/owners and establish allocation/delivery feasibility before any probe.
+- [ ] Design replacement quiescence and consumer generations for the chosen backend; transport ACK is not a reader barrier.
+- [ ] Investigate PCM16 resident-bank numerical behavior and paired cost before adoption; sample-picker scope remains open.
 
 **Approved proof work:**
 
@@ -490,8 +496,9 @@ Implementation and bounded-proof checkpoint (product scope remains open):
   calls (same resulting path, no production change). Repository pathcheck confirms the remaining ten known
   baseline references in five unchanged files; log: `out/runs/dsp-sdk-checks/sdk-call-pathcheck-after-test-path.log`.
   Scoped checks of that source file and these documents pass. The full routed gate has not run.
-- Next proposed decision: production memory and lifetime for longer samples, stop-old-notes replacement with
-  acknowledged DSP quiescence and a consumer generation contract, and a sample picker. None is implemented. The current limit is 8,192 mono frames at 48 kHz
+- Next: prove DT2 stock DSP-pool adapter/slot ownership before implementing small-bank replacement; map DN2
+  external DSP range ownership and delivery feasibility separately. The confirmed target is approximately ten-second
+  one-shots, stopping old notes on selection. Backend capacity/lifetime and sample-picker work remain unimplemented. The current limit is 8,192 mono frames at 48 kHz
   (about 171 ms), with session-pinned immutable source storage and fixed proof paths. Continue stock-reader
   investigation separately; no stock-quality equivalence, coexistence, performance or hardware claim follows.
 - A standalone native-boot diagnostic halted after six instructions, before reaching the target. It is unusable

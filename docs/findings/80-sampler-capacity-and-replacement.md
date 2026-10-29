@@ -71,8 +71,10 @@ by [the bounded proof](79-sample-bank-proof.md), not a reusable live sample-pool
 
 ## Replacement decision and next proof
 
-**[D]** The user explicitly chose: **“Stop old notes on selection.”** The sample-length target question remains
-pending; do not infer a duration or increase the current 8,192-frame limit (about 171 ms mono at 48 kHz).
+**[D]** The user confirmed **approximately ten-second one-shots** and **“Stop old notes on selection.”**
+Ten seconds at 48 kHz mono PCM16 requires **960,000 bytes** of audio; stereo requires 1,920,000 bytes, before
+metadata or allocation overhead. This is a product target, not an implemented capacity. The current proof remains
+limited to 8,192 mono frames (about 171 ms at 48 kHz).
 
 **[O]** A single-bank replacement design can follow that choice: invalidate the old view and stop its notes;
 obtain an acknowledged DSP quiescence barrier proving no consumer still reads the old bank; transfer the new
@@ -90,20 +92,47 @@ barrier. See [link bindings](../../devices/fw/dsp/link.toml),
 [finding 31](31-dsp-link.md). The current four-word descriptor contains neither a generation nor reader
 tracking, so the replacement protocol needs an explicit API/ABI design or extension.
 
-**[O]** The next recommended bounded proof keeps the existing 8,192-frame float32 bank and proves stop-and-reload
-with an explicit DSP reader-quiescence handshake and generation guard. Do not combine capacity increases,
-format changes or a new pool with that lifecycle proof. Investigate a PCM16 reader for capacity after the lifetime
-protocol is established; the sample-length target remains pending. The existing immutable-bank proof remains
-valid and unchanged.
+**[O]** The coordinator now prioritizes proving a **DT2 stock DSP-pool adapter and slot ownership** before
+implementing the small-bank replacement protocol. The SDK interface may use device-specific backends; its
+portable contract need not imply identical backing storage. Keep the current immutable-bank proof unchanged.
+The quiescence and generation requirements above still apply to eventual replacement; the small-bank handshake
+is no longer the immediate implementation priority. PCM16 resident-reader numerical proof and a paired A/B remain
+possible later investigations, not an adopted format or speed claim.
+
+## Stock capacity and backend feasibility
+
+**[D]** Elektron's official DT2 user manual documents **400 MB per project**, approximately 72 minutes mono or
+36 minutes stereo, and up to 1,016 sample slots (OS 1.03A manual, page 17, section 5.2.6). Page 68 explicitly calls
+this the project's RAM. Local extracted evidence is
+`out/refs/Digitakt-2-User-Manual_ENG_OS1.03A_241023/pages/p0017.txt` line 10 and `p0068.txt` line 8 in the same
+folder. This is documented stock capacity from that manual version, not a measurement or ownership proof for
+our DT2 1.17 adapter. The 512 KiB DT2 / 320 KiB DN2 reservations above are digikit module-pool choices, **not
+hardware sample-memory limits**. The ten-second target cannot fit even raw PCM16 in either current reservation.
+
+**[D]** Current DT2 1.17 static candidates in [finding 77](77-dsp-sdk-sampler-discovery.md) are slot table
+`0x257810`, rebased DSP address `0x8422b9c8`, and page-copy routine `0x1c403c`. **[O]** Slot lifetime, reclamation,
+allocation ownership and cache/coherence rules remain unproved. These candidates do not verify an allocator;
+older [V] marks or observations on other images do not transfer to this adapter.
+
+**[D]** The bounded DN2 current-database scout found external-looking reads at `0x1c8ef7` → `0x8c4ad790` and
+`0x1c8f00` → `0x8c4ad990`. **[O]** It found no established free or owned sample-sized DSP allocation and no
+established delivery path for such a pool. A ColdFire cave or CF module arena does not prove DSP addressability.
+Do not assume the DT2 pool, stock sampler or LP0 path exists on DN2. DN2 feasibility for the ten-second target
+remains unresolved.
+
+**[O]** Next bounded static work: trace DT2 slot allocation, reference/lifetime, reclaim and page-copy ownership
+on 1.17; separately map DN2 external DSP ranges to physical backing and current readers/writers/owners on 1.12,
+then identify a legitimate allocation and delivery contract. Decide whether a bounded probe is justified only
+after that mapping; do not probe or claim new available RAM from address appearance alone.
 
 The following capacity ceilings spend the entire reserved DSP area on audio, **before code, descriptors,
 alignment, other modules and safety headroom**. They are arithmetic bounds, not playable product limits.
 
 | Next option | Raw resident ceiling DT2 / DN2 at 48 kHz mono | Required evidence / decision |
 | --- | --- | --- |
-| Float32 single bank | 131072 / 81920 frames (2.731 / 1.707 s) | Choose a smaller shared budget and length; prove stop/quiescence/generation replacement contract. |
-| PCM16 resident bank | 262144 / 163840 frames (5.461 / 3.413 s) | Investigate packed signed-PCM16 reads/conversion with native numerical proof and a paired A/B before adoption. Same source precision, half the float32 storage; no speed claim. |
-| Newly owned pool | Unknown | Establish ownership, bounds, all competing consumers and lifecycle before allocating. External RAM or a DT2 stock pool is not established as available. |
+| Float32 single bank | 131072 / 81920 frames (2.731 / 1.707 s) | Cannot meet the ten-second target in this reservation; retain for the current proof. Replacement contract remains unproved. |
+| PCM16 resident bank | 262144 / 163840 frames (5.461 / 3.413 s) | Investigate packed signed-PCM16 reads/conversion with native numerical proof and a paired A/B before adoption. Same source precision, half the float32 storage; still below the ten-second target here, with no speed claim. |
+| Newly owned pool | Unknown | Prioritize DT2 stock-pool slot/ownership proof; map DN2 external ranges separately. Neither is established as available to this SDK. |
 
 Memory aliases name the same physical storage and add no RAM. DT2 stock sample ownership does not establish an
 available pool on DN2. A larger declared bank also competes with every other loaded module.
