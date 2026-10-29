@@ -34,14 +34,14 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   Em confirmed approximately ten-second one-shots and “Stop old notes on selection.” Ten seconds of 48 kHz
   mono PCM16 is 960,000 bytes (stereo twice), beyond either current reserved DSP module pool. The official DT2
   manual documents 400 MB project sample RAM; our module reservations are not hardware memory limits.
-  Next priority is static proof of DT2 stock DSP-pool adapter/slot ownership, before implementing small-bank
-  replacement. The SDK may expose device-specific backends. Finding 77 identifies static slot/page-copy
-  candidates; current-image lifetime, reclamation, cache rules and allocator ownership remain open.
-  DN2 external-looking reads do not establish owned sample RAM or delivery. Map external ranges/backing/owners
-  before considering a probe; do not assume DT2's pool or LP0 path exists on DN2. Ten-second DN2 feasibility is open.
-  DSP-link ACK means receiver processing, not reader quiescence; READY=0 ACK is not a barrier. The four-word
-  descriptor has no generation or reader tracking. These replacement requirements remain open; no capacity,
-  backend, lifecycle or PCM16 format change is implemented by this checkpoint.
+  [Finding 81](../findings/81-stock-sampler-dependencies.md) now records the stock-machine-led dependency map
+  and corrects the earlier preview-loader lead. Next: select real DT2 1.17 OneShot and capture slot → voice pointer
+  and PCM through start/end/reverse, sample changes and project reload; then design lifetime/quiescence around
+  the actual stock contract. Derive independently written SDK operations, rather than copy a complete machine.
+  Proposed shared packed-PCM16 reader/cursor/region semantics use device-specific ready immutable views;
+  runtime owns selection/loading/lifetime and stock downstream envelope/filter remains. Mono first is a proposal.
+  DN2 already plays samples through the working voice seam/source acquisition; investigate its missing larger
+  backing/delivery against DT2's dependencies, not playback feasibility from scratch. No new backend is implemented.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -52,7 +52,8 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   The resumed source investigation also links the existing `out/ghidra/` dump directory read-only.
 - Documentation and the first approved SDK implementation are now present. Validation and known baseline failures
   are recorded below; do not mistake the numerical sample reader for a complete sampling machine.
-  Em explicitly requested this documentation checkpoint commit; no push or merge was requested.
+  Em authorized committing and pushing this branch; checkpoints have been pushed. Consult git log for current
+  commit identity. No merge is claimed here.
 
 ## Objective and scope
 
@@ -62,8 +63,8 @@ Initial musical scope: sample selection, start/end, reverse, and normal note pit
 time stretch, wavetable synthesis and multisampling are future consumers, not first-release requirements.
 
 The payoff is a reusable sample-access contract and tested kernels that make later machines cheaper to build.
-Confidence is high in the discovery approach; DN2 playback feasibility, memory capacity and delivery cost remain
-open until traced. If sample delivery requires a large unrelated runtime redesign, stop and present alternatives
+Confidence is high in the discovery approach; DN2 playback is proven for the bounded bank, while larger backing
+capacity, ownership and delivery remain open. If sample delivery requires a large unrelated runtime redesign, stop and present alternatives
 before extending scope. Do not survey every stock machine before delivering a sampler decision.
 
 ## Agreed direction
@@ -112,9 +113,13 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 
 - [ ] Inventory available current-image databases, dumps and provenance; do not rebuild them implicitly.
 - [ ] Trace DT2 1.17 selection/load/slot registration through ColdFire to SHARC-readable PCM and voice access.
-- [ ] At Em's request, trace stock DT2 OS 1.17 OneShot dispatch → note/render → sample access and ownership.
-  Finding 77 covers metadata/pages only; finding 15 is historical DT2 1.16 evidence, not this complete path.
-- [ ] Trace DN2 1.12 storage and available cross-core delivery/memory mechanisms; identify what must be added.
+- [x] Record current DT2 project loader/release/reset, slot/setup/render dependencies and DN2 hash-comparison limits
+  in finding 81, including independently audited rebase/store/tap bytes. Broader CF/lifecycle audit and controlled
+  OneShot naming/parameter proof remain open.
+- [ ] Select real stock DT2 1.17 OneShot; capture slot → voice pointer and PCM under start/end/reverse, sample
+  changes and project reload, then specify adapter readiness/lifetime/quiescence from the observed contract.
+- [ ] Map DT2 dependencies against DN2 1.12's working voice seam and source acquisition; identify missing larger
+  backing ownership/delivery without assuming DT2's pool or LP0, or restarting playback feasibility from scratch.
 - [x] Establish transferred-file PCM format, channel layout and rate from the host converter; DSP conversion/representation proposal below, implementation pending.
 - [ ] Establish placement, capacity, alignment, address representation, ownership, retention and eviction.
 - [ ] Establish ready/failure/unavailable behavior and synchronization for sample replacement and active voices.
@@ -300,7 +305,7 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 - [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
 - [x] Record the confirmed target: approximately ten-second one-shots; stop old notes on selection.
 - [ ] Prioritize DT2 1.17 stock DSP-pool adapter/slot ownership, lifetime/reclaim and cache rules before small-bank replacement implementation.
-- [ ] Map DN2 1.12 external DSP ranges/backing/owners and establish allocation/delivery feasibility before any probe.
+- [ ] Investigate DN2 larger backing/delivery from the stock-machine dependency map in finding 81; bound any probe by those gaps.
 - [ ] Design replacement quiescence and consumer generations for the chosen backend; transport ACK is not a reader barrier.
 - [ ] Investigate PCM16 resident-bank numerical behavior and paired cost before adoption; sample-picker scope remains open.
 
@@ -496,8 +501,8 @@ Implementation and bounded-proof checkpoint (product scope remains open):
   calls (same resulting path, no production change). Repository pathcheck confirms the remaining ten known
   baseline references in five unchanged files; log: `out/runs/dsp-sdk-checks/sdk-call-pathcheck-after-test-path.log`.
   Scoped checks of that source file and these documents pass. The full routed gate has not run.
-- Next: prove DT2 stock DSP-pool adapter/slot ownership before implementing small-bank replacement; map DN2
-  external DSP range ownership and delivery feasibility separately. The confirmed target is approximately ten-second
+- Next: execute the stock OneShot slot-to-voice/PCM lifecycle proof in finding 81 before implementation;
+  investigate missing DN2 backing/delivery against those dependencies while preserving its working playback seam. The confirmed target is approximately ten-second
   one-shots, stopping old notes on selection. Backend capacity/lifetime and sample-picker work remain unimplemented. The current limit is 8,192 mono frames at 48 kHz
   (about 171 ms), with session-pinned immutable source storage and fixed proof paths. Continue stock-reader
   investigation separately; no stock-quality equivalence, coexistence, performance or hardware claim follows.
