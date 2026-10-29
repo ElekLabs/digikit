@@ -92,6 +92,7 @@ contains a tested bridge for both adapters; this fixture does not define a gener
 | `delay.inc` | `_dk_delay` | 4 | 175 | linearly interpolated delay, hardware circular ring; R12 = 4 words ring base, ring length L (>= 34), write offset w, delay d (float, 1 <= d <= L - 2); in place allowed; L1 and L2 are 0 on return |
 | `halfband.inc` | `_dk_halfband_down` | 20 per output (2 inputs) | 701 | 2x decimator, 23-tap half-band (Kaiser window), 64 inputs to 32 outputs; R12 = 2 words history ring base (32 words), offset (unchanged by a call); coefficient table 2 c_j in DM (`.SECTION/DM`); L1 is 0 on return |
 | `sample.inc` | `_dk_sample_linear` | path-dependent | ceiling 1,380 including three argument loads | bounded mono float32 view; split cursor, clamped linear interpolation, zero tail and completion |
+| `sample_pcm16.inc` | `_dk_sample_pcm16_linear` | path-dependent | ceiling 2,148 including three argument loads | packed signed PCM16 view; same cursor, interpolation and completion |
 
 For the older block kernels, consult their headers and `tests/patchkit/test_dsp_kernels.py` for the distinction
 between static instruction counts and measured counts. The sample reader's measured evidence is described below.
@@ -116,3 +117,25 @@ harness measured 557–2,231 instructions across its cases, below its 2,761-inst
 instruction counts, not hardware cycles or a speedup claim. This first implementation is sequential and has no
 anti-alias filter, playback looping or boundary fades. Float32 input is a numerical view, not a decision to store
 all transferred PCM as float32. Resource ownership and stereo playback remain separate work.
+
+
+`sample_pcm16.inc` adds `_dk_sample_pcm16_linear` (`dk_sample_pcm16_linear.` for C).
+Include `dsp/call.inc`, then `dsp/sample.inc` for its shared cursor macro, then
+`dsp/sample_pcm16.inc`. It uses the same six integer state words and calling
+convention. R4 addresses immutable packed normal-word DM: frame `i` is in
+`base + floor(i/2)`, with even frames in the low 16 bits and odd frames in the
+high 16 bits. Little-endian transport bytes store each frame's low byte first.
+The backing storage has `ceil(total_frames/2)` full words; an odd frame count
+still requires the final word's unused high half. Odd starts and ends need only
+the containing words; the unused halves are ignored.
+
+The selected half is sign-extended and normalized exactly as `int16/32768` in
+float32, then interpolated in the same operation order as the float reader.
+The neighbor clamps to `end - 1`; no containing word beyond the view is read.
+Empty, completed and out-of-bounds cursors read no source and emit silence.
+The caller handles resource readiness. The source base is a normal-word address,
+without a firmware address, allocation policy or physical-memory mapping in this
+contract. The numerical tests exercise packed transport bytes, signed extrema,
+odd boundaries, extreme rates, repeated calls, preserved registers and stack
+boundaries, guarded source reads and completion immediately after output 31.
+The ceiling above counts instructions, not hardware cycles.
