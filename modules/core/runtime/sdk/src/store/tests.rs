@@ -845,3 +845,259 @@ fn stream_final_check_and_post_read_fingerprint_fail_closed() {
     *PAYLOAD.lock().unwrap() = false;
     assert_eq!(unsafe { c.read(w.s.0.as_mut_ptr(), w.b.0.as_mut_ptr(), 1024) }, Err(E_READ));
 }
+use catalog::{CatalogCursor, CatalogEntry};
+const CATALOG_EMPTY: CatalogEntry = CatalogEntry { path: [0; PATH_BYTES], entry: Entry { first: 0, size: 0, kind: 0, sha: [0; 32] } };
+
+/// Install a real CRC-checked table directly, including a maximum-length path.
+fn catalog_table(count: u32) -> Vec<CatalogEntry> {
+    let mut expected = Vec::new();
+    let mut card = CARD.lock().unwrap();
+    for i in 0..count {
+        let name = if i == 1 { "x".repeat(PATH_MAX) } else { std::format!("folder/item-{i}") };
+        let mut value = CATALOG_EMPTY;
+        value.path[..name.len()].copy_from_slice(name.as_bytes());
+        value.entry = if i & 1 == 0 { entry(1000 + i, i + 1, KIND_FILE) } else { entry(0, 0, KIND_DIR) };
+        unsafe {
+            encode_entry(value.path.as_ptr(), &value.entry, card.as_mut_ptr().add(10 * 512 + i as usize * ENTRY));
+        }
+        expected.push(value);
+    }
+    let mut h =
+        Hdr { count, table_first: 10, table_sectors: table_sectors(count), table_crc: 0, seq: 7, used: 1 + table_sectors(count) + count, area: SECTORS };
+    h.table_crc = crc32_of(card[10 * 512..].as_ptr(), h.table_sectors as usize * 512);
+    unsafe {
+        encode_header(&h, card.as_mut_ptr());
+        encode_header(&h, card.as_mut_ptr().add(LAY.header_b() as usize * 512));
+    }
+    expected
+}
+
+unsafe fn catalog_open(io: &Io, w: &mut Work) -> Result<CatalogCursor, i32> {
+    CatalogCursor::open(io, &LAY, w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 4096)
+}
+
+fn catalog_change() {
+    let mut card = CARD.lock().unwrap();
+    for at in [0, LAY.header_b() as usize * 512] {
+        unsafe {
+            let p = card.as_mut_ptr().add(at);
+            let mut h = parse_header(p).unwrap();
+            h.seq += 1;
+            encode_header(&h, p);
+        }
+    }
+}
+
+#[test]
+fn catalog_pages_keep_full_paths_metadata_and_bound_each_read() {
+    let _g = lock();
+    fresh();
+    let expected = catalog_table(263);
+    static READS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+    unsafe extern "C" fn counted(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        READS.lock().unwrap().push((sector, bytes));
+        rd(sector, bytes, buf)
+    }
+    let mut w = work();
+    let mut c = unsafe { catalog_open(&Io { rd: counted, wr }, &mut w) }.unwrap();
+    let mut scratch = Box::new(Buf([0; 129 * 512]));
+    let mut out = [CATALOG_EMPTY; 300];
+    let mut got = Vec::new();
+    // Odd output boundaries reread only the shared sector, never rescan.
+    for (capacity, n) in [(3, 3), (300, 255), (3, 3), (300, 2), (300, 0)] {
+        READS.lock().unwrap().clear();
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), scratch.0.as_mut_ptr(), scratch.0.len(), &mut out[..capacity]) }, Ok(n));
+        got.extend_from_slice(&out[..n]);
+        let reads = READS.lock().unwrap();
+        assert_eq!(reads.len(), if n == 0 { 4 } else { 5 });
+        assert!(reads.iter().all(|(_, bytes)| *bytes <= MAX_IO_SECTORS * 512));
+        if n > 0 {
+            assert_eq!(reads[2].1 as usize, (n + ((got.len() - n) & 1) + 1) / 2 * 512);
+        }
+    }
+    assert_eq!(got, expected);
+    catalog_change();
+    assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Err(crate::E_BUSY));
+}
+
+#[test]
+fn catalog_empty_eof_and_preferred_corrupt_table_fallback() {
+    let _g = lock();
+    fresh();
+    catalog_table(0);
+    let mut w = work();
+    let mut out = [CATALOG_EMPTY; 3];
+    let mut c = unsafe { catalog_open(&IO, &mut w) }.unwrap();
+    for _ in 0..2 {
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Ok(0));
+    }
+    let expected = catalog_table(3);
+    {
+        let mut card = CARD.lock().unwrap();
+        let mut h = unsafe { parse_header(card.as_ptr()) }.unwrap();
+        h.seq += 1;
+        h.table_first = 20; // higher generation, bad CRC
+        unsafe {
+            encode_header(&h, card.as_mut_ptr());
+        }
+    }
+    let mut c = unsafe { catalog_open(&IO, &mut w) }.unwrap();
+    assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 1024, &mut out) }, Ok(3));
+    assert_eq!(out.as_slice(), expected.as_slice());
+}
+
+#[test]
+fn catalog_mutations_before_between_during_pages_and_open_fail_closed() {
+    let _g = lock();
+    static TRIGGER: Mutex<bool> = Mutex::new(false);
+    unsafe extern "C" fn changing(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        let r = rd(sector, bytes, buf);
+        if sector == FIRST + 10 && *TRIGGER.lock().unwrap() {
+            catalog_change();
+        }
+        r
+    }
+    for timing in 0..4 {
+        fresh();
+        catalog_table(5);
+        *TRIGGER.lock().unwrap() = timing == 3;
+        let mut w = work();
+        let mut out = [CATALOG_EMPTY; 1];
+        let result = unsafe { catalog_open(&Io { rd: changing, wr }, &mut w) };
+        if timing == 3 {
+            assert_eq!(result.err(), Some(crate::E_BUSY));
+            continue;
+        }
+        let mut c = result.unwrap();
+        if timing == 1 {
+            assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Ok(1));
+        }
+        if timing == 2 {
+            *TRIGGER.lock().unwrap() = true;
+        } else {
+            catalog_change();
+        }
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Err(crate::E_BUSY));
+        *TRIGGER.lock().unwrap() = false;
+        for _ in 0..2 {
+            assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Err(crate::E_BUSY));
+        }
+    }
+}
+
+#[test]
+fn catalog_io_failures_and_bad_buffers_stick() {
+    let _g = lock();
+    fresh();
+    catalog_table(5);
+    static FAIL: Mutex<Option<u32>> = Mutex::new(None);
+    unsafe extern "C" fn failing(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        if *FAIL.lock().unwrap() == Some(sector) {
+            return -1;
+        }
+        rd(sector, bytes, buf)
+    }
+    let mut w = work();
+    let mut out = [CATALOG_EMPTY; 2];
+    for at in [FIRST, FIRST + LAY.header_b(), FIRST + 10] {
+        *FAIL.lock().unwrap() = None;
+        let mut c = unsafe { catalog_open(&Io { rd: failing, wr }, &mut w) }.unwrap();
+        *FAIL.lock().unwrap() = Some(at);
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Err(E_READ));
+        *FAIL.lock().unwrap() = None;
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Err(E_READ));
+    }
+    for bad in 0..8 {
+        let mut c = unsafe { catalog_open(&IO, &mut w) }.unwrap();
+        let fp = if bad == 0 {
+            core::ptr::null_mut()
+        } else if bad == 6 {
+            unsafe { w.s.0.as_mut_ptr().add(1) }
+        } else {
+            w.s.0.as_mut_ptr()
+        };
+        let scratch = if bad == 1 {
+            core::ptr::null_mut()
+        } else if bad == 2 {
+            unsafe { w.a.0.as_mut_ptr().add(1) }
+        } else {
+            w.a.0.as_mut_ptr()
+        };
+        let cap = if bad == 3 {
+            0
+        } else if bad == 4 {
+            513
+        } else if bad == 7 {
+            usize::MAX - 511
+        } else {
+            512
+        };
+        let output = if bad == 5 { &mut out[..0] } else { &mut out[..] };
+        assert_eq!(unsafe { c.read_page(fp, scratch, cap, output) }, Err(E_BAD_STORE));
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512, &mut out) }, Err(E_BAD_STORE));
+    }
+    for lay in [Layout { first: u32::MAX, sectors: SECTORS }, Layout { first: FIRST, sectors: TAIL }] {
+        assert_eq!(unsafe { CatalogCursor::open(&IO, &lay, w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 512) }.err(), Some(E_BAD_STORE));
+    }
+    assert_eq!(unsafe { CatalogCursor::open(&IO, &LAY, w.s.0.as_mut_ptr(), core::ptr::null_mut(), 512) }.err(), Some(E_BAD_STORE));
+}
+
+#[test]
+fn catalog_crc_verified_but_malformed_entries_are_rejected() {
+    let _g = lock();
+    for bad_kind in [false, true] {
+        fresh();
+        catalog_table(3);
+        {
+            let mut card = CARD.lock().unwrap();
+            if bad_kind {
+                card[10 * 512 + O_KIND] = 2;
+            } else {
+                card[10 * 512..10 * 512 + PATH_BYTES].fill(b'x');
+            }
+            let mut h = unsafe { parse_header(card.as_ptr()) }.unwrap();
+            h.table_crc = crc32_of(card[10 * 512..].as_ptr(), h.table_sectors as usize * 512);
+            unsafe {
+                encode_header(&h, card.as_mut_ptr());
+                encode_header(&h, card.as_mut_ptr().add(LAY.header_b() as usize * 512));
+            }
+        }
+        let mut w = work();
+        let mut out = [CATALOG_EMPTY; 3];
+        let mut c = unsafe { catalog_open(&IO, &mut w) }.unwrap();
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 1024, &mut out) }, Err(E_BAD_STORE));
+        assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 1024, &mut out) }, Err(E_BAD_STORE));
+    }
+}
+
+#[test]
+fn catalog_post_read_header_failure_invalidates_populated_output() {
+    let _g = lock();
+    fresh();
+    catalog_table(3);
+    static AFTER: Mutex<bool> = Mutex::new(false);
+    static ENABLED: Mutex<bool> = Mutex::new(false);
+    unsafe extern "C" fn missing_after(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+        if *AFTER.lock().unwrap() {
+            return -1;
+        }
+        let r = rd(sector, bytes, buf);
+        if sector == FIRST + 10 && *ENABLED.lock().unwrap() {
+            *AFTER.lock().unwrap() = true;
+        }
+        r
+    }
+    *AFTER.lock().unwrap() = false;
+    *ENABLED.lock().unwrap() = false;
+    let io = Io { rd: missing_after, wr };
+    let mut w = work();
+    let mut out = [CATALOG_EMPTY; 3];
+    let mut c = unsafe { catalog_open(&io, &mut w) }.unwrap();
+    *ENABLED.lock().unwrap() = true;
+    assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 1024, &mut out) }, Err(E_READ));
+    assert_ne!(out[0], CATALOG_EMPTY); // Filled staging must still be discarded.
+    *AFTER.lock().unwrap() = false;
+    assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 1024, &mut out) }, Err(E_READ));
+    *AFTER.lock().unwrap() = true;
+    assert_eq!(unsafe { catalog_open(&io, &mut w) }.err(), Some(E_READ));
+}

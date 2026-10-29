@@ -160,3 +160,4 @@ occupied regions and the remaining production ownership questions.
 | [`90-dn2-track-owner-and-worker.md`](findings/90-dn2-track-owner-and-worker.md) | Current DN2 source-track frame producer and computed assignment; delayed SHARC map; corrected queued-worker entry and unresolved sample allocator |
 | [`91-dn2-ddr-configuration.md`](findings/91-dn2-ddr-configuration.md) | Current DN2 configures 512 MiB DDR geometry; stock scratch extends beyond loaded memory; production reservation remains open |
 | [`92-dn2-native-bulk-seam.md`](findings/92-dn2-native-bulk-seam.md) | Existing DN2 4 KiB FlexBus sender and generic LP0 driver; receiver and emulator-route proof pending |
+| [`93-sdk-file-catalogue.md`](findings/93-sdk-file-catalogue.md) | Reusable SDK listing direction, bounded DN2 store pages and independently audited DT2 plain-data directory iterator ABI; public service and device proof pending |
