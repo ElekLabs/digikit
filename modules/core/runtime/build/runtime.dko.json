@@ -5779,14 +5779,14 @@
   },
   {
    "addend": 0,
-   "offset": 30,
+   "offset": 24,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt5crash10write_tail",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4dlog10copy_event",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 44,
+   "offset": 40,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt5crash10write_tail",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
@@ -23113,10 +23113,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffc048d75c3c4eb9000000002a01282f0044068400000104428349f900000000240f06820000004047f900000000b68567542005908341ef002042187240d28fb28866f6486f00202f004e94508f4a0067224def002024442f0e4e93588f24c0588eb48e66f252830684000000207008b08366ba206f0044214301004cd75c3c4fef00404e75260560ea",
+   "hex": "4fefffb848d75cfc4eb9000000002600240142847a0147f9000000002c2f004c06860000010445f900000000601e206f004c214401004cd75cfc4fef00484e7571af0033080000006644538220034a8366022005b48065d641ef002842187048d08fb08866f6486f00282f024e93508f4a0067ba73af0030e18971af00312e008e817209b28767b8700ab08767b24def00282004eb882840d9c62e0f0687000000482f0e4e92588f28c0588ebe8e66f252847207b2846500ff765382608e",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt5crash10write_tail",
-   "size": 140
+   "size": 190
   },
   {
    "align": 2,
@@ -25611,7 +25611,7 @@
    "size": 24
   }
  ],
- "source_sha256": "d01fdc6bddb585ee5a2171bf2e0d9b9dc492448cc0138d3c0936eabc6ff94707",
+ "source_sha256": "5d436ae22f986b1c254127a85f1c686e4c7fa21c81d57593047405104ae56dfe",
  "symbols": [
   {
    "global": false,
@@ -29354,8 +29354,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_ASSIGN DKRT_BOOT DKRT_CARD DKRT_CONTRACTS DKRT_CRASH DKRT_DSP DKRT_DSP_STOPPED DKRT_FXP DKRT_FXS DKRT_HEALTH DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_PATHS DKRT_POLL DKRT_REG DKRT_SAVE_MODE DKRT_SECBUF DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dkrt_api dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_debug_set dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_set dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_get dkrt_settings_put dkrt_settings_remove dkrt_status dkrt_store_list dkrt_tick",
-  "instructions_redecoded": "33530",
-  "isa_check": "b88cc692c8c56da512eadd6a63b08de2f7bcacbcf162816b80232fc85ebbe3c9",
+  "instructions_redecoded": "33552",
+  "isa_check": "05e5969fda8a9ecb8e95f23cd9844de39198361059ac57ac19dc782250f58671",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

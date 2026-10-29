@@ -153,16 +153,27 @@ test('the badge counts errors after the last one seen', () => {
   assert.equal(unseenErrors(s.entries, 4), 0);
 });
 
-test('the drawer opens for a failed reload, a failed build and an emulator or device error only', () => {
-  assert.equal(autoOpens(bad('x', 'device')), true);
-  assert.equal(autoOpens(info('x', 'device')), false);
+test('the drawer opens for a failed reload, a failed build and an app error about the emulator', () => {
   assert.equal(autoOpens(bad('x', 'reload')), true);
   assert.equal(autoOpens(bad('x', 'build')), true);
-  assert.equal(autoOpens(bad('x', 'emulator')), true);
+  assert.equal(autoOpens(bad('fault: x', 'emulator')), true);
   assert.equal(autoOpens(info('x', 'reload')), false);
   assert.equal(autoOpens(bad('x', 'transfer')), false);
   assert.equal(autoOpens(bad('x', 'card')), false);
   assert.equal(autoOpens(bad('x', 'firmware')), false);
+});
+
+test('of a runtime log only the fault entry opens the drawer, not an error row', () => {
+  for (const origin of ['device', 'emulator'] as const) {
+    const rt = { origin, module: '' };
+    const event = { kind: 'UPLOAD' } as unknown as NonNullable<LogInput['rt']>['event'];
+    const row: LogInput = { source: origin, level: 'error', text: '!UPLOAD cmd=0x3e status=-60', rt: { ...rt, event } };
+    const fault: LogInput = { source: origin, level: 'error', text: 'fault: DSP STOP in X', rt };
+    assert.equal(autoOpens(row), false);
+    assert.equal(autoOpens({ ...row, text: 'fault: looks like one', rt: { ...rt, event } }), false);
+    assert.equal(autoOpens(fault), true);
+    assert.equal(autoOpens({ ...fault, level: 'info' }), false);
+  }
 });
 
 test('copy text has the time, the source, and the indented detail', () => {

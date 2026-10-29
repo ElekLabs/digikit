@@ -117,7 +117,7 @@ function Shell() {
       </div>
       <Show when={follow}>
         <section class="log-drawer" aria-label="Log" style={{ height: '420px' }}>
-          <LogPanel follow={follow!} emulatorRunning={() => !!status()} devicePort={() => undefined} />
+          <LogPanel follow={follow!} emulatorRunning={() => !!status()} devicePort={() => undefined} toggleKey="⌘J" />
         </section>
       </Show>
     </div>

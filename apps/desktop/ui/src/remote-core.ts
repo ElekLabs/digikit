@@ -16,6 +16,19 @@ export function remoteNotice(state: RemoteState | undefined, error?: unknown): s
   return '';
 }
 
+/** The module id the Remote page needs on the device. */
+export const REMOTE_MODULE = 'digikit/remote';
+
+/** The device answered REMOTE_STATE with E_PROTO: digikit/remote is not loaded (the runtime logs every such request as an error). */
+export const isRemoteMissing = (error: unknown): boolean => error instanceof DkError && error.status === 'E_PROTO';
+
+/**
+ * Whether the page may ask REMOTE_STATE now. While the module is known to be missing it asks only when the loaded modules (MODULES, a
+ * command every runtime answers without logging an error) list it. `loaded` is undefined when the list could not be read: then it asks.
+ */
+export const remoteStateWanted = (missing: boolean, loaded: readonly { name: string }[] | undefined): boolean =>
+  !missing || !loaded || loaded.some((m) => m.name === REMOTE_MODULE);
+
 /** What the faceplate calls to press, release and turn: each becomes one request of the remote module. */
 export function remoteRuntime(get: () => Promise<DkSession>) {
   return {

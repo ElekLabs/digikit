@@ -379,25 +379,31 @@ pub unsafe fn write_hang(h: &Hang) -> ! {
     loop {}
 }
 
-/// The last events of the log into the record (`W_TAIL`, `W_TAILN`).
+/// The last `TAIL` events of the log that `fault::tail_keeps` accepts into the record (`W_TAIL`, `W_TAILN`), newest first. The periodic info
+/// events (`HEALTH`, `DSP_DIAG`) are skipped, so a burst of them does not push out the boot's `MOD_LOAD` and `MOD_DSP` results. The walk goes
+/// back until `TAIL` events are kept or the ring starts.
 unsafe fn write_tail(r: *mut u32) {
-    let (_, newest) = dlog::range();
-    let mut n = 0u32;
-    while n < TAIL as u32 && n < newest {
-        let seq = newest - n;
+    let (oldest, newest) = dlog::range();
+    let mut n = 0usize;
+    let mut seq = newest;
+    while n < TAIL && seq >= oldest.max(1) {
         let mut b = [0u8; 32];
-        if dlog::copy_event(seq, b.as_mut_ptr()) {
+        if !dlog::copy_event(seq, b.as_mut_ptr()) {
+            break;
+        }
+        let kind = ((b[8] as u16) << 8) | b[9] as u16;
+        let flags = ((b[10] as u16) << 8) | b[11] as u16;
+        if dkrt_sdk::fault::tail_keeps(kind, flags) {
             let mut k = 0;
             while k < 8 {
-                write_volatile(r.add(W_TAIL + 8 * n as usize + k), crate::rd32(b.as_ptr().add(4 * k)));
+                write_volatile(r.add(W_TAIL + 8 * n + k), crate::rd32(b.as_ptr().add(4 * k)));
                 k += 1;
             }
             n += 1;
-        } else {
-            break;
         }
+        seq -= 1;
     }
-    write_volatile(r.add(W_TAILN), n);
+    write_volatile(r.add(W_TAILN), n as u32);
 }
 
 /// At boot: the keep area may hold the crash record of the boot before. Logs it (events a host can read), clears it, and returns whether it

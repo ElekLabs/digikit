@@ -238,6 +238,14 @@ pub fn rows(f: &Fault, out: &mut [Row; ROWS]) -> usize {
     3
 }
 
+/// Whether an event of the log goes into the tail of the crash record (the last events before a crash or a stop). The periodic info events
+/// `HEALTH` and `DSP_DIAG` do not: a burst of them can fill the whole tail and push out the boot's `MOD_LOAD` and `MOD_DSP` results. An error
+/// flagged event of these kinds stays, and so does every other kind.
+pub fn tail_keeps(kind: u16, flags: u16) -> bool {
+    use crate::gen_sdk::logk;
+    (kind != logk::HEALTH && kind != logk::DSP_DIAG) || flags & logk::F_ERROR != 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,5 +412,16 @@ mod tests {
         for row in r.iter().take(3) {
             assert!(row.n <= 18);
         }
+    }
+
+    #[test]
+    fn the_tail_leaves_out_periodic_info_events() {
+        use crate::gen_sdk::logk;
+        assert!(!tail_keeps(logk::DSP_DIAG, 0));
+        assert!(!tail_keeps(logk::HEALTH, 0));
+        assert!(tail_keeps(logk::DSP_DIAG, logk::F_ERROR));
+        assert!(tail_keeps(logk::HEALTH, logk::F_ERROR));
+        assert!(tail_keeps(logk::MOD_LOAD, 0));
+        assert!(tail_keeps(logk::MOD_DSP, 0));
     }
 }

@@ -1,17 +1,19 @@
-// The inside of the Log drawer: the header (Source, Errors only, Follow, Save, Copy, Clear) and the list. The dock around it (its height and
+// The inside of the Log drawer: the header (Source, Errors only, Follow, Save, Copy, Clear, Close) and the list. The dock around it (its height and
 // its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
 import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { copyText, filterEntries, formatTime, saveName, saveText, sourceMenu, type Origin } from './log-core';
 import type { LogFollow } from './log-follow';
 import type { OriginStatus } from './log-follow-core';
-import { clearLog, followOn, logOpen, logState, setFollowOn } from './log-state';
+import { clearLog, followOn, logOpen, logState, setFollowOn, setLogOpen } from './log-state';
 
 export interface LogPanelProps {
   follow: LogFollow;
   /** Something is there to follow: the emulator runs, the MIDI port was chosen. */
   emulatorRunning(): boolean;
   devicePort(): string | undefined;
+  /** The key that toggles the drawer, as the status bar shows it (⌘J, Ctrl+J). */
+  toggleKey: string;
 }
 
 const NO_RUNTIME = 'The selected target has no digikit runtime';
@@ -174,6 +176,14 @@ export default function LogPanel(props: LogPanelProps) {
           }}
         >
           Clear
+        </button>
+        <button
+          type="button"
+          class="tb small"
+          title={`Close the Log (${props.toggleKey})`}
+          onClick={() => setLogOpen(false)}
+        >
+          Close
         </button>
       </header>
       <ol

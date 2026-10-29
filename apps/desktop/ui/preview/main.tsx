@@ -66,7 +66,12 @@ function LogPage() {
       aria-label="Log"
       style={{ height: `${Number(new URLSearchParams(location.search).get('logh') ?? 360)}px` }}
     >
-      <LogPanel follow={follow} emulatorRunning={previewLog.emulatorRunning} devicePort={previewLog.devicePort} />
+      <LogPanel
+        follow={follow}
+        emulatorRunning={previewLog.emulatorRunning}
+        devicePort={previewLog.devicePort}
+        toggleKey="⌘J"
+      />
     </section>
   );
 }

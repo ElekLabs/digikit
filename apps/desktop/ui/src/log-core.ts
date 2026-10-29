@@ -156,10 +156,16 @@ export function sourceMenu(o: { emulator: OriginMenu; device: OriginMenu & { por
 export const unseenErrors = (entries: LogEntry[], seenId: number): number =>
   entries.filter((e) => e.level === 'error' && e.id > seenId).length;
 
-/** The drawer opens by itself for a failed reload, a failed build, a guest fault, stall or DSP halt, and an error of the emulator's or the device's runtime. */
-export const autoOpens = (e: Pick<LogInput, 'source' | 'level'>): boolean =>
-  e.level === 'error' &&
-  (e.source === 'reload' || e.source === 'build' || e.source === 'emulator' || e.source === 'device');
+/**
+ * The drawer opens by itself for a failed reload, a failed build, and the app's own emulator errors (a guest fault, stall or DSP halt). Of the
+ * runtime logs (origin `emulator` and `device`) only the `fault: …` entry the follower makes from dk/fault opens it; an error row does not
+ * (it counts in the badge of the Log button). The follower makes each fault once, so a closed drawer stays closed until a new fault.
+ */
+export const autoOpens = (e: Pick<LogInput, 'source' | 'level' | 'text' | 'rt'>): boolean => {
+  if (e.level !== 'error') return false;
+  if (e.rt) return !e.rt.event && e.text.startsWith('fault:');
+  return e.source === 'reload' || e.source === 'build' || e.source === 'emulator';
+};
 
 const two = (n: number) => String(n).padStart(2, '0');
 /** HH:MM:SS in the local time. */

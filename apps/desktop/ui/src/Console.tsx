@@ -767,7 +767,12 @@ export default function Console() {
               e.preventDefault();
             }}
           />
-          <LogPanel follow={logFollow} emulatorRunning={() => !!status()} devicePort={lastMidiPort} />
+          <LogPanel
+            follow={logFollow}
+            emulatorRunning={() => !!status()}
+            devicePort={lastMidiPort}
+            toggleKey={logKey}
+          />
         </section>
       </Show>
 

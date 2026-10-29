@@ -4,7 +4,7 @@ import { createRoot, createSignal } from 'solid-js';
 import { test } from 'vitest';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { DkLogEvent, Fault } from '@digi/dk-session';
-import type { LogInput } from '../src/log-core.ts';
+import { autoOpens, type LogInput } from '../src/log-core.ts';
 import { FROZEN_MS, LogFollower, type FollowSession, type OriginStatus } from '../src/log-follow-core.ts';
 import { createLogFollow } from '../src/log-follow.ts';
 
@@ -151,9 +151,14 @@ test('a DSP stop of the boot before is one error entry, with the crash events fo
   assert.equal(entry.level, 'error');
   assert.match(entry.detail!, /kept on the card as dk\/fault/);
   assert.match(entry.detail!, /events before the stop \(oldest first\):\n {2} +90 +3\.000s .*MENU/);
-  // the same record on the next start is not shown again
+  // the drawer opens for the fault entry, not for the error row FAULT_FOUND, and not again for the same record on the next start
+  assert.deepEqual(
+    t.entries.filter(autoOpens).map((e) => e.text),
+    [entry.text],
+  );
   await t.follower.tick();
   assert.equal(t.entries.filter((e) => e.text.startsWith('fault:')).length, 1);
+  assert.equal(t.entries.filter(autoOpens).length, 1);
 });
 
 test('events the ring overwrote are counted, a restart is noted and the fault record is read again', async () => {
