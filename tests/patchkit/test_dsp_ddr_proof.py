@@ -41,7 +41,11 @@ def packet(seq, op, offset=0, payload=(), token=TOKEN, count=None):
 def dsp():
     if pk_toolchains.selache_dir() is None:
         pytest.skip("assembler absent")
-    obj = pk_sharc.assemble((MOD / "src/dsp/ddr-proof.s").read_text())
+    obj = pk_sharc.assemble(
+        pk_sharc.expand_includes(
+            (MOD / "src/dsp/ddr-proof.s").read_text(), [REPO_ROOT / "sdk"]
+        )
+    )
     syms = {
         name: 0x20080000 + offset for name, (_, offset, _) in obj.data_symbols.items()
     }

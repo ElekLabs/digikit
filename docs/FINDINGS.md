@@ -144,3 +144,6 @@ DSP follow-up: [unknown-value loop fallback](findings/07-emulator.md#unknown-val
 
 Sampler follow-up: [DT2 sample lifecycle port](findings/85-dt2-sample-lifecycle.md)
 records current-image transport and candidate-bank audits, port validation and limits.
+
+SDK follow-up: [sample-bank lifecycle primitives](findings/86-sample-bank-sdk.md)
+records the reusable extraction, independent bindings and exact firmware identity.

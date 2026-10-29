@@ -1,3 +1,4 @@
+#include "dsp/sample_bank.inc"
 // Isolated DN2 1.12 quiet diagnostic. Same byte-address receive/ACK and hook
 // save convention as core/dsp-link. DDR stores explicitly use normal-word DM.
 // Every payload range and checksum is checked before the first destination store.
@@ -252,23 +253,16 @@ _dd_commit:
 _dd_successor:
     // Header, checksum and exact successor were checked before any mutation.
     // Recheck the drain under the same local gate used by readers and retirement.
-    R6 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
+    DK_SAMPLE_BANK_LOCK(R6);
     R3 = DM(_dd_status);
     R4 = 5;
     COMP(R3, R4);
     IF NE JUMP _dd_successor_denied;
-    R3 = DM(_dd_admitted);
-    R4 = DM(_dd_admit_fault);
-    R3 = R3 OR R4;
-    IF NE JUMP _dd_successor_denied;
-    MODE1 = R6;
-    NOP; NOP;
+    DK_SAMPLE_BANK_CHECK_DRAIN(_dd_admitted, _dd_admit_fault, R3, R4, _dd_successor_denied);
+    DK_SAMPLE_BANK_UNLOCK(R6);
     JUMP _dd_init;
 _dd_successor_denied:
-    MODE1 = R6;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R6);
     JUMP _dd_ack;
 _dd_init:
     // Admission is closed and the previous generation drained before either band.
@@ -314,24 +308,15 @@ _dd_open:
     R4 = 376;
     COMP(R3, R4);
     IF NE JUMP _dd_protocol;
-    R6 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
-    R3 = DM(_dd_admitted);
-    R4 = DM(_dd_admit_fault);
-    R3 = R3 OR R4;
-    IF NE JUMP _dd_open_fault;
-    R3 = 1;
-    DM(_dd_admission_open) = R3;
-    DM(_dd_ready) = R3;
+    DK_SAMPLE_BANK_LOCK(R6);
+    DK_SAMPLE_BANK_CHECK_DRAIN(_dd_admitted, _dd_admit_fault, R3, R4, _dd_open_fault);
+    DK_SAMPLE_BANK_PUBLISH(_dd_admission_open, _dd_ready, R3);
     R3 = 7;
     DM(_dd_status) = R3;
-    MODE1 = R6;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R6);
     JUMP _dd_accepted;
 _dd_open_fault:
-    MODE1 = R6;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R6);
     JUMP _dd_protocol;
 // RETIRE uses the exact completed bank token and fixed terminal sequence.
 // Serialized hook + one core + maskable access are proof assumptions; this
@@ -350,26 +335,16 @@ _dd_retire:
     R4 = 1;
     COMP(R3, R4);
     IF LT JUMP _dd_protocol;
-    R6 = MODE1;
-    BIT CLR MODE1 0x1000;
-    NOP; NOP;
-    R3 = 0;
-    DM(_dd_admission_open) = R3;
-    DM(_dd_ready) = R3;
-    R3 = 1;
-    DM(_dd_retire_closed) = R3;
-    R3 = DM(_dd_admitted);
-    R4 = DM(_dd_admit_fault);
-    R3 = R3 OR R4;
-    IF NE JUMP _dd_retire_pending;
+    DK_SAMPLE_BANK_LOCK(R6);
+    DK_SAMPLE_BANK_CLOSE(_dd_admission_open, _dd_ready, _dd_retire_closed, R3);
+    DK_SAMPLE_BANK_CHECK_DRAIN(_dd_admitted, _dd_admit_fault, R3, R4, _dd_retire_pending);
     R3 = 5;
     JUMP _dd_retire_status;
 _dd_retire_pending:
     R3 = 6;
 _dd_retire_status:
     DM(_dd_status) = R3;
-    MODE1 = R6;
-    NOP; NOP;
+    DK_SAMPLE_BANK_UNLOCK(R6);
     JUMP _dd_accepted;
 _dd_badcheck:
     R3 = DM(_dd_token);
