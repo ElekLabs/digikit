@@ -69,9 +69,19 @@ from playback. Investigate those gaps against the concrete DT2 dependency list, 
 claim that DN2 sampling is infeasible. External-looking addresses, a CF cave or module arena alone establish
 neither owned DSP memory nor a delivery path; do not assume DT2's stock pool or LP0 exists on DN2.
 
+## Executed follow-up
+
+[Finding 82](82-stock-sampler-lifetime.md) records the scoped lifecycle discovery, image identities, retained
+captures and stock-only reproduction status. OneShot selection, stored slot binding, verified ten-second input
+and a passing active replacement reproduction on the original unpatched DT2 1.17 image are now recorded.
+Start/end/reverse, removal and project reload
+remain open; the full lifecycle is not complete. The result requires explicit retirement before overwrite,
+including external replacement/reset paths, rather than treating a metadata acknowledgement as a barrier.
+
 ## Bounded next proof, before implementation
 
-- [ ] Select real stock DT2 OneShot on OS 1.17 and capture selected slot → voice pointer with actual PCM.
+- [x] Select stock DT2 OneShot on OS 1.17 and capture selected slot → stored voice binding with actual PCM;
+  active-note and image-specific replacement evidence is separated in finding 82.
 - [ ] Capture start/end/reverse behavior and sample-change/project-reload transitions, including old-note stop behavior.
 - [ ] Use those observations to specify adapter readiness, retention, invalidation and reader-quiescence appropriate
   to the actual stock contract; transport ACK alone is not that barrier.

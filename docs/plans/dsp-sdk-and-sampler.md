@@ -35,13 +35,19 @@ loading/lifetime proof below (Em approved 2026-10-29). The product sampler remai
   mono PCM16 is 960,000 bytes (stereo twice), beyond either current reserved DSP module pool. The official DT2
   manual documents 400 MB project sample RAM; our module reservations are not hardware memory limits.
   [Finding 81](../findings/81-stock-sampler-dependencies.md) now records the stock-machine-led dependency map
-  and corrects the earlier preview-loader lead. Next: select real DT2 1.17 OneShot and capture slot → voice pointer
-  and PCM through start/end/reverse, sample changes and project reload; then design lifetime/quiescence around
-  the actual stock contract. Derive independently written SDK operations, rather than copy a complete machine.
+  and corrects the earlier preview-loader lead. The executed OneShot slot/binding and active replacement
+  follow-up is in finding 82; start/end/reverse and project reload remain open. Derive independently written SDK
+  operations, rather than copy a complete machine.
   Proposed shared packed-PCM16 reader/cursor/region semantics use device-specific ready immutable views;
   runtime owns selection/loading/lifetime and stock downstream envelope/filter remains. Mono first is a proposal.
   DN2 already plays samples through the working voice seam/source acquisition; investigate its missing larger
   backing/delivery against DT2's dependencies, not playback feasibility from scratch. No new backend is implemented.
+- [Finding 82](../findings/82-stock-sampler-lifetime.md) records the executed slot/lifetime discovery and exact
+  image provenance. Stock OneShot selection and ten-second acquisition are established. Both the identified
+  patched-image trial and the passing unpatched DT2 1.17 critical reproduction retain a progressing active voice
+  address while exact backing bytes change; cleared slot metadata is not retirement. Next design requires explicit consumer retirement
+  before overwrite/release, stale-note generation guards, and coverage of external slot replacement/project reset.
+  No borrowed-view API is implemented or safe to expose yet; preserve the current immutable-bank proof.
 - Use workers for scoped implementation, in separate writer worktrees if parallel; keep design and integration
   in the parent. The user confirmed the personal spawn-policy hooks were reviewed and trusted in this session.
   A new session must satisfy its own applicable hook/trust requirements before delegation.
@@ -114,13 +120,16 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 - [ ] Inventory available current-image databases, dumps and provenance; do not rebuild them implicitly.
 - [ ] Trace DT2 1.17 selection/load/slot registration through ColdFire to SHARC-readable PCM and voice access.
 - [x] Record current DT2 project loader/release/reset, slot/setup/render dependencies and DN2 hash-comparison limits
-  in finding 81, including independently audited rebase/store/tap bytes. Broader CF/lifecycle audit and controlled
-  OneShot naming/parameter proof remain open.
-- [ ] Select real stock DT2 1.17 OneShot; capture slot → voice pointer and PCM under start/end/reverse, sample
-  changes and project reload, then specify adapter readiness/lifetime/quiescence from the observed contract.
+  in finding 81, including independently audited rebase/store/tap bytes. Finding 82 now captures the current
+  OneShot UI; broader CF/lifecycle audit and controlled parameter/boundary semantics remain open.
+- [x] Capture current stock OneShot slot binding and the unique ten-second a → b active replacement transition
+  on the original DT2 1.17 image; retain exact source bytes, active/cursor state and PCM (finding 82).
+- [ ] Specify explicit retirement and stale-note guards before borrowed-view exposure, covering external slot
+  replacement and project reset/reload. Start/end/reverse, unload and project reload captures remain open.
 - [ ] Map DT2 dependencies against DN2 1.12's working voice seam and source acquisition; identify missing larger
   backing ownership/delivery without assuming DT2's pool or LP0, or restarting playback feasibility from scratch.
-- [x] Establish transferred-file PCM format, channel layout and rate from the host converter; DSP conversion/representation proposal below, implementation pending.
+- [x] Establish transferred-file format/rate and the implemented bounded float32 delivery path; the proposed
+  packed-PCM16 reader is separate and unimplemented.
 - [ ] Establish placement, capacity, alignment, address representation, ownership, retention and eviction.
 - [ ] Establish ready/failure/unavailable behavior and synchronization for sample replacement and active voices.
 - [ ] Check retriggering, voice stealing, reverse boundary access and parameter changes during playback.
@@ -501,8 +510,9 @@ Implementation and bounded-proof checkpoint (product scope remains open):
   calls (same resulting path, no production change). Repository pathcheck confirms the remaining ten known
   baseline references in five unchanged files; log: `out/runs/dsp-sdk-checks/sdk-call-pathcheck-after-test-path.log`.
   Scoped checks of that source file and these documents pass. The full routed gate has not run.
-- Next: execute the stock OneShot slot-to-voice/PCM lifecycle proof in finding 81 before implementation;
-  investigate missing DN2 backing/delivery against those dependencies while preserving its working playback seam. The confirmed target is approximately ten-second
+- Next: use the executed replacement observation in finding 82 to design and prove explicit consumer retirement
+  before overwrite/release, including external slot replacement/reset and stale queued notes. Preserve the existing
+  immutable-bank proof and DN2 playback seam; larger DN2 backing/delivery remains a separate missing contract. The confirmed target is approximately ten-second
   one-shots, stopping old notes on selection. Backend capacity/lifetime and sample-picker work remain unimplemented. The current limit is 8,192 mono frames at 48 kHz
   (about 171 ms), with session-pinned immutable source storage and fixed proof paths. Continue stock-reader
   investigation separately; no stock-quality equivalence, coexistence, performance or hardware claim follows.
