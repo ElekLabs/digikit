@@ -2,7 +2,8 @@
 
 Reference for the test levels, commands, inputs and gate. The gate is `mise run verify`. Other docs
 link here. Results of runs belong in `docs/findings/`, not here. Planned changes:
-[docs/plans/test-architecture.md](plans/test-architecture.md).
+[docs/plans/test-architecture.md](plans/test-architecture.md); gate speed:
+[docs/plans/gate-speed.md](plans/gate-speed.md).
 
 ## Test levels
 

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import sys
 import os
 import re
 import subprocess
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 

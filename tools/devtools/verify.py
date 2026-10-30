@@ -1658,7 +1658,7 @@ def finish_python(gate: Gate) -> None:
     text = "\n".join(test_outcomes.record_line(r) for r in records)
     (gate.out / "python-tests.log").write_text(text + "\n")
     ran = [
-        (l, c) for l, c in PY_CHECKS if gate.py_checks is None or l in gate.py_checks
+        (n, c) for n, c in PY_CHECKS if gate.py_checks is None or n in gate.py_checks
     ]
     for label, cmd in ran:
         gate.run(f"python-tests:{label}", cmd)
