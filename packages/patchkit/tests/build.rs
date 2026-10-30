@@ -554,7 +554,8 @@ fn a_content_module_builds_into_the_cache_on_demand() {
     // `patchkit build` finds it current
     let r = build::build_module(&moddir, &BuildOptions { root: root(), ..Default::default() }).unwrap();
     assert_eq!(r.objects[0].status, Status::Unchanged);
-    assert_eq!(r.objects[0].path, std::fs::canonicalize(&cached).unwrap());
+    // both canonical: in a lane `out` is a symlink to the main tree's
+    assert_eq!(std::fs::canonicalize(&r.objects[0].path).unwrap(), std::fs::canonicalize(&cached).unwrap());
     let _ = std::fs::remove_dir_all(build::cache_dir(&root()).join(&id));
     let _ = std::fs::remove_dir_all(&d);
 }
