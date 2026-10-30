@@ -159,9 +159,10 @@ instructions, within the 800M/120-second bounds. Parent inspection of exported
 memory reads all four concrete XCNT fields as `0x566` before CF exchange.
 The private packed image is a physical stock copy, and unchanged ready inputs
 remain linked to their original files. No live descriptor resizing or core
-regeneration occurred. Native CLOSE acceptance did not launch: its exclusive-lock acquisition expired
-after 600 seconds behind another session's shared `verify runtime-fixture` holder
-(observed PID 56574). No native CLOSE pass is claimed at this checkpoint.
+regeneration occurred. The initial native CLOSE attempt did not launch: its
+exclusive-lock acquisition expired after 600 seconds behind another session's
+shared `verify runtime-fixture` holder (observed PID 56574). This was a lock wait,
+not a native test verdict; the later resumed run below passed.
 
 **[D] Independent fixture audit:** input/output hashes, cold-state entry/empty
 overlay, idle marker/PC and all four concrete descriptor words agree. The retained
@@ -182,3 +183,42 @@ expose that external enforcement wrapper. Native resume command/environment and
 lock outcome are retained as `native-command.json` and `native-lock-result.json`
 in the same private fixture directory. The lock waiter exited; it started no
 native daemon and did not stop or modify the other session.
+
+
+**[D] Native CLOSE milestone (2026-10-30):** the resumed explicit 0.3 native
+case passed with the same exact patched-image hash above. Artifacts:
+`out/runs/lp0-proof/27dbeea7-d1f2-415a-b98a-0a75c25fc3d1`; log:
+`out/runs/lp0-close-fixture/native-close.log`. The result records
+`close-control-stock-audio`, 235 pages and 960,000 bytes; Vitest reports one
+pass, three skips and 60.350 seconds for the selected test (exit 0).
+
+The real LP0/stock reply-extension path transports CLOSE after the full payload.
+The passing test asserts BUSY/exact PENDING with diagnostic A count injected to
+1, A closed and B's control unchanged; clearing count to 0 yields DONE/exact
+DRAINED with sent count still 1. Terminal RX stays armed (`count=0x401`, stride 4),
+and full-bank bytes and both 4 KiB canaries remain exact. The retained final
+`closeAck` is coherent at sequence 6, fields `[1,2,1,0,1]` (valid, DRAINED,
+request 1, track 0, epoch 1). Intermediate PENDING, send-once and B-unchanged
+assertions are supported by the passing source/log; full transition snapshots
+were not separately retained.
+
+Held stock audio's before/during/after sampled windows are finite and non-silent,
+with RMS 0.0313741515 / 0.0287484255 / 0.0287344436. This establishes diagnostic
+control transport/drain, not an actual paused native audio-reader or other-track
+PCM proof. The separate logical fixture retains those reader interleavings.
+Production backing/cache safety, hardware behavior and performance remain open;
+no dropout-free audio claim follows.
+
+**[D] Independent native artifact audit:** the retained payload independently
+matches all 240,000 generated words (SHA-256
+`0eb5375f0383e6dc3422abcf93926ebdff4632af0c1c6bc06598ecbbb00d4a72`),
+both 4 KiB canaries are exact, and all 470 journal rows form 235 ordered
+publish/consumed pairs with matching ACKs, staging hashes and DMA state. The
+3,924,928-value stereo 48 kHz WAV independently reproduces the finite/nonzero
+window metrics above. Final status has no CF error, DSP halt, traps or missing
+blocks, and frame progress continues with terminal RX armed. The audit found no
+contradiction; the intermediate CLOSE snapshot retention limit above remains.
+
+Scoped changed-document path and whitespace checks pass. The routed docs check
+passes layering and retains only the same ten stale references in five unchanged
+files (`out/runs/lp0-close-fixture/native-docs-changed.log`); no merge gate is claimed.

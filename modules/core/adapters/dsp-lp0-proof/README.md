@@ -76,8 +76,8 @@ footprint wholly owned by RX, disjoint from the descriptor and saved context. Dr
 128 bytes with 16-byte alignment; descriptor logic is unchanged. This layout is
 necessary for whole-line ownership but supplies no cache coherence or maintenance.
 The 0.2 native runs retain their historical addresses and evidence only. Version
-0.3 requires a new native boot fixture bound to the exact new patched-image hash;
-no new native execution is claimed.
+0.3 requires a native boot fixture bound to the exact new patched-image hash;
+the passing 0.3 run below uses that fixture.
 
 ## Private CLOSE command and diagnostic drain controls
 
@@ -207,7 +207,20 @@ transfers the full bank, injects diagnostic A count=1 before CLOSE, observes
 BUSY/PENDING/A closed/B unchanged, then clears count and waits for exact DRAINED
 without resend. Bank, canaries and finite/non-silent held stock audio are checked
 afterward. This is explicit diagnostic fault injection, not a paused native voice.
-Do not reuse a 0.2/0.2.1 boot fixture. No 0.3 native run has been performed.
+Do not reuse a 0.2/0.2.1 boot fixture.
+
+The explicit 0.3 CLOSE case passed on 2026-10-30: one pass, three skips,
+60.350-second selected test, exit 0. Artifacts:
+`out/runs/lp0-proof/27dbeea7-d1f2-415a-b98a-0a75c25fc3d1`; log:
+`out/runs/lp0-close-fixture/native-close.log`. Exact patched-image SHA-256:
+`6ff3b5ec9d9ed80f1108746922a213a75c9827a867fb257c1690c419fa56a2c8`.
+All 235 pages / 960,000 bytes, exact diagnostic drain without resend, bank/canary
+checks and finite/non-silent before/during/after held-stock-audio windows pass.
+This is real LP0/stock reply transport with injected count 1→0, not an actual
+paused native audio reader or other-track PCM proof. Only the final CLOSE ACK
+snapshot is retained; intermediate assertion limits and the passing independent
+native artifact audit are detailed in [finding 94](../../../../docs/findings/94-sample-binding-lifetime.md).
+No production backing/cache, hardware, dropout-free audio or performance claim follows.
 The historical 0.2 first-page and full-bank held-stock-audio
 proofs pass with a verified private boot fixture; artifacts and remaining limits
 are in finding 88. No public production completion contract follows from this proof.
@@ -215,6 +228,7 @@ are in finding 88. No public production completion contract follows from this pr
 Current 0.3 owner checks pass: focused Python tests and Ruff; scoped TypeScript
 format/lint/types; generation, current-object and document path checks. Module-owned
 CF/DSP objects re-decode successfully (450/727 instructions), built with the existing
-patchkit under the shared build lock. No emulator/core build or native run occurred.
+patchkit under the shared build lock. No emulator/core build occurred for this
+checkpoint; the native CLOSE run used the existing prebuilt daemon.
 For a shared prebuilt CF test runner, explicitly set `DIGI_LP0_CF_CALL`; otherwise
 the tests use `pk_cfcall.EXAMPLE` in the checkout and never implicitly build it.
