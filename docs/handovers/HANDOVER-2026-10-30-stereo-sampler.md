@@ -267,10 +267,14 @@ unfollowed edges also leave reach incomplete. All 23 missing-target-function CAL
 rows have concrete destinations (22 unique containing ranges, one unowned).
 Final tool review closed the entry-identity P2. The bounded `0x1c125e` helper
 body audit is now complete: no stores/further calls in its followed ranges, with
-adjacent entry/other callers excluded. Next audit caller `0xb80e54`'s incoming R4
-provenance for `DM(I5+2)` after another call; entry/dispatch precision remains
-separate, with no current policy expansion or ownership conclusion. See
-[finding 91](../findings/91-dn2-ddr-configuration.md).
+adjacent entry/other callers excluded. The subsequent R4 audit closes caller
+`0xb80e54`'s `DM(I5+2)` destination as voice-state word 2, at
+`0x2535e8 + 0x48*v` for valid slots 0..15 (`0x48` bytes = 72 decimal).
+It does not dereference the separate word-16 external ring pointer. External ring
+ownership, corrupted state and entry/dispatch precision remain open, with no
+policy expansion or reservation conclusion. The active next bounded audit is
+auxiliary DMA helper `0x1ca59f` direction/count/lifetime, not an exhaustive writer
+audit. See [finding 91](../findings/91-dn2-ddr-configuration.md).
 
 The canonical packed-PCM16 parser already exists, but the current source/job
 contract is LE float32. Direct substitution would violate the consumer contract.

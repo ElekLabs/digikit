@@ -54,8 +54,10 @@ merged database owner `0x1c9e76` makes whole-function reach an overapproximation
 The bounded report has 93 functions/2,278 recorded stores, not ownership closure.
 All 23 CALL rows missing target functions have concrete PCs; the one with no
 containing range, `0x1c125e`, now has a bounded store-free body audit. Its caller's
-incoming R4 destination provenance is next; entry/dispatch precision and DT2
-source mutation coverage remain open. See
+R4 provenance closes the `0xb80e79` store as per-slot voice-state word 2, separate
+from external ring backing. The active next bounded audit is `0x1ca59f`
+auxiliary DMA direction/count/lifetime; external ring ownership, entry/dispatch
+precision and DT2 source mutation coverage remain open. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
 
@@ -2676,10 +2678,15 @@ and mypy pass. Source/report identity and commands are retained in ignored
 - [x] Audit the bounded `0x1c125e` helper body: callable despite missing DB
   ownership, no stores/further calls in the followed ranges; adjacent entry and
   two other callers remain outside that body audit.
-- [ ] Establish incoming R4 provenance for caller `0xb80e54`'s `DM(I5+2)` store
-  after another call. Keep explicit entry/dispatch precision separate from
-  whole-function reach; no traversal-policy or ownership expansion is approved.
-  See [finding 91](../findings/91-dn2-ddr-configuration.md).
+- [x] Establish incoming R4 provenance for caller `0xb80e54`'s `DM(I5+2)` store:
+  valid slots 0..15 target voice-state word 2 at `0x2535e8 + 0x48*v`, not the
+  external ring pointer/backing. The stride is `0x48` bytes (72 decimal).
+- [ ] Audit auxiliary DMA helper `0x1ca59f` direction/count/lifetime as the next
+  named boundary, without inferring a general allocator or free DDR region.
+- [ ] Keep external ring ownership and explicit entry/dispatch precision separate
+  from this closed destination family; corrupted state and complete writer reach
+  remain open. No traversal-policy or production reservation is approved. See
+  [finding 91](../findings/91-dn2-ddr-configuration.md).
 
 **[O] Parser wiring boundary:** the existing source contract supplies LE float32,
 whereas `NativePcm16Stream` emits packed PCM16. Its existing canonical parser is

@@ -246,8 +246,10 @@ TRUNC(float(record word 14) minus record word 15, adding 8192 if negative),
 and the initial write index is record word 14. Only their adjacent read
 indices are initially masked. The loader's zero FILL extent
 `[0x28241290,0x2825d2b8)` covers word 13 for all sixteen records
-(byte alias `0x28253614 + 48 * track`); the checked constructors/reset omit
-that word. Adjacent `0xb80e48` clears record word 0, `0xb80e82` initializes
+(byte alias `0x28253614 + 0x48 * track`); the checked constructors/reset omit
+that word. **[C]** The same-family stride is `0x48` bytes (72 decimal), not
+48 decimal bytes; the bounded R4 provenance audit below resolves the earlier
+ambiguous notation. Adjacent `0xb80e48` clears record word 0, `0xb80e82` initializes
 coefficients, and `0xb805d8` resets record word 14: these are not allocators.
 
 **[O]** The delay clamp at `0xb80607` to 1..8191 alone does not prove the
@@ -346,7 +348,36 @@ the skipped adjacent entry or expand the other callers.
 In immediate caller `0xb80e54`, registers are saved through I6-relative stores
 at `0xb80e5b/60`, with I7-relative frame stores at `0xb80e6d/6e`. The nonstack store is `DM(I5+2)` at `0xb80e79`.
 I5 copies incoming R4 at `0xb80e56`, and the store follows another call at
-`0xb80e71`. **[O]** Incoming R4 provenance and preservation across that call are
-the next bounded audit. No database repair or traversal-policy change is made;
-the helper's store-free body does not establish caller destination bounds,
-complete reachability or backing ownership.
+`0xb80e71`. The following provenance audit resolves this bounded caller's R4
+and word-2 destination. No database repair or traversal-policy change is made;
+the helper's store-free body alone does not establish complete reachability or
+backing ownership.
+
+## Caller destination closed: per-slot voice state, not ring backing
+
+**[D]** The next bounded DN2 1.12 audit checked 214 original instruction heads
+(widths, forms and raw encodings), using the same section-7 hash above. Engine
+setup `0x1c303e` supplies R4=`0x241298`, retained in I9 at `0x1c8f18/1d`.
+Frame slot I6−4 holds that base; I6−13 holds the slot byte offset, initialized
+to zero and incremented by `0x48` (72 decimal) at `0x1c9351/57`. The slot counter
+starts at zero, increments at `0x1c927e`, and the four-bit termination at
+`0x1c934e` bounds valid initialized slots to 0..15.
+
+Dispatch table `0x8052dba4` identifies `0x1c977b` and `0x1c984e`. Both supply
+R4=`base + 0x12348 + slotOffset` to `0xb80607` at `0x1c97b7/0x1c988b`;
+the former sets R4 in delay instruction `0x1c97ba`. `0xb80607` preserves R4
+through `0xb80660 → 0xb80e54`; `0xb80e56` copies it to I5. Store `0xb80e79`
+therefore targets record word 2. The audited normal-word `+2` is an eight-byte
+offset: record addresses are `0x2535e0 + 0x48*v`, with four-byte word-2 targets
+`0x2535e8 + 0x48*v`, last target `0x253a20` for v=15. Canonical byte aliases
+add `0x28000000` to these local addresses.
+
+The alternate `0xb80e82 → 0xb80e54` path forwards the object; parent constructor
+`0xb80575` uses the same layout. Setup `0x1c8bcb/da` independently corroborates
+`base + 0x12348 + 0x48*slot`. This closes the bounded destination-family gap:
+`0xb80e79` writes known per-slot voice state, not external ring backing. The
+external ring pointer is separate record word 16 in
+[finding 96](96-stereo-machine-processing.md); this word-2 store does not
+dereference it. **[O]** External ring ownership, corrupted-state behavior, complete
+writer reach and exact-entry query precision remain unproved. No database repair,
+production policy or reservation is selected.
