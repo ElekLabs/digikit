@@ -23,7 +23,7 @@ use std::sync::OnceLock;
 
 /// The Selache commit this build links (`selas`, `selelf` and `selinstr` in Cargo.toml). `tools/patchkit/pk_toolchains.py` pins the same
 /// one for the command-line tools (`SELACHE_REV`); a test keeps the two equal.
-pub const SELACHE_REV: &str = "926bfac9c8a7b51fcc7750498af3fd2521541b3e";
+pub const SELACHE_REV: &str = "02d6d785b8e3a125ab237a00bb89503aff835f5d";
 const SECTION: &str = "seg_pmco";
 const PROCESSOR: &str = "ADSP-21569";
 const R_ABS24: u32 = 11;

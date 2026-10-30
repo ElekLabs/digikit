@@ -18,7 +18,7 @@ from pathlib import Path
 
 from tools.sharc_dev.sharc_isa import DecodeResult, InstructionSet, load_instruction_set
 
-PINNED_REVISION = "926bfac9c8a7b51fcc7750498af3fd2521541b3e"
+PINNED_REVISION = "02d6d785b8e3a125ab237a00bb89503aff835f5d"
 DEFAULT_PROCESSOR = "ADSP-21569"
 DEFAULT_SECTION = "seg_pmco"
 _LISTING_ROW = re.compile(
