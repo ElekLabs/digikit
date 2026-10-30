@@ -192,6 +192,12 @@ fn copy_tree(src: &Path, dst: &Path) -> Result<()> {
             copy_tree(&from, &to)?;
         } else {
             std::fs::copy(&from, &to).map_err(|e| err!("{}: {e}", from.display()))?;
+            // The target dir is shared by every tree and Cargo compares modification times: stamp the copy now.
+            std::fs::File::options()
+                .write(true)
+                .open(&to)
+                .and_then(|f| f.set_modified(std::time::SystemTime::now()))
+                .map_err(|e| err!("{}: {e}", to.display()))?;
         }
     }
     Ok(())
@@ -553,4 +559,30 @@ pub fn object_proto(
     let mut toolchain = toolchain_info(env);
     toolchain.insert("exports".into(), exports.join(" "));
     Ok((proto, source_sha256(&manifest)?, toolchain))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_tree_stamps_the_copy_with_the_current_time() {
+        let src = TempDir::new("pk-copy-src-").unwrap();
+        let dst = TempDir::new("pk-copy-dst-").unwrap();
+        let file = src.path().join("lib.rs");
+        std::fs::write(&file, b"fn f() {}").unwrap();
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        copy_tree(src.path(), dst.path()).unwrap();
+        let copied = std::fs::metadata(dst.path().join("lib.rs"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert!(copied > old);
+    }
 }

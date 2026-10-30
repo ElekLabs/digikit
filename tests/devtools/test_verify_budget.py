@@ -384,7 +384,7 @@ def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
         "tests/digikit/test_menu_dt2.py": 372.0,
         "tests/devtools/test_verify.py": 2.0,
     }
-    nodes, deps = verify.expand_python(nodes, deps, list(secs), secs)
+    nodes, deps = verify.expand_python(nodes, deps, list(secs), secs, {})
     daemon, plain = (
         FILE + "tests/digikit/test_menu_dt2.py",
         FILE + "tests/devtools/test_verify.py",
@@ -397,9 +397,37 @@ def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
     assert nodes[-1] == "python-tests"
     nodes, deps = verify.plan(("python-tests",), ["tests/devtools/test_verify.py"])
     nodes, deps = verify.expand_python(
-        nodes, deps, ["tests/devtools/test_verify.py"], {}
+        nodes, deps, ["tests/devtools/test_verify.py"], {}, {}
     )
     assert deps[plain] == ()  # no daemon build in the plan: nothing to wait for
+
+
+def test_long_steps_start_with_the_long_files() -> None:
+    nodes, deps = verify.plan(
+        verify.EVERYTHING,
+        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_verify.py"],
+    )
+    secs = {
+        "tests/digikit/test_menu_dt2.py": 372.0,
+        "tests/devtools/test_verify.py": 2.0,
+    }
+    daemon = FILE + "tests/digikit/test_menu_dt2.py"
+    nodes, _ = verify.expand_python(
+        nodes, deps, list(secs), secs, {"runtime-fixture": 4000.0, "smoke": 50.0}
+    )
+    assert nodes.index("runtime-fixture") < nodes.index(daemon) < nodes.index("smoke")
+    nodes, deps = verify.plan(
+        verify.EVERYTHING,
+        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_verify.py"],
+    )
+    nodes, _ = verify.expand_python(nodes, deps, list(secs), secs, {})
+    assert nodes.index(daemon) < nodes.index(
+        "runtime-fixture"
+    )  # no estimate: after the files
+
+
+def test_untracked_changes_drop_root_files() -> None:
+    assert verify.untracked_changes(["device-log.log", "tools/x.py"]) == ["tools/x.py"]
 
 
 def test_files_longest_first_and_unknown_files_in_plan_order() -> None:
@@ -437,6 +465,26 @@ def test_file_seconds_read_the_newest_runs(tmp_path: Path) -> None:
         tmp_path / "20260104-000000",
     )
     assert got == {"fa.py": 30.0, "fb.py": 20.0}
+
+
+def test_step_seconds_read_the_newest_runs(tmp_path: Path) -> None:
+    from tools.devtools import verify_times
+
+    def run(name: str, tsv: str | None = None) -> None:
+        (tmp_path / name).mkdir(parents=True)
+        if tsv:
+            (tmp_path / name / "jobs.tsv").write_text(
+                "node\tstart_s\tend_s\tshare\tload_start\tload_end\n" + tsv
+            )
+
+    run("20260101-000000", tsv="check\t0.0\t10.0\t2\t1\t1\nbad\n")
+    run("20260102-000000", tsv="check\t5.0\t35.0\t2\t1\t1\npins\t1.0\t3.0\t2\t1\t1\n")
+    run("20260103-000000")  # no jobs.tsv
+    run("20260104-000000", tsv="check\t0.0\t999.0\t2\t1\t1\n")  # this run: left out
+    got = verify_times.step_seconds(
+        tmp_path, ["check", "pins", "tier-sweep"], tmp_path / "20260104-000000"
+    )
+    assert got == {"check": 30.0, "pins": 2.0}
 
 
 def test_file_jobs_leave_the_cores_a_waiting_step_needs() -> None:

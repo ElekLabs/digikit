@@ -526,8 +526,23 @@ def changed_files(base: str, head: str | None = None) -> list[str]:
     if head is not None:
         return sorted(git_lines("diff", "--name-only", since, head))
     files = set(git_lines("diff", "--name-only", since))
-    files |= set(git_lines("ls-files", "--others", "--exclude-standard"))
+    files |= set(
+        untracked_changes(git_lines("ls-files", "--others", "--exclude-standard"))
+    )
     return sorted(files)
+
+
+def untracked_changes(paths: list[str]) -> list[str]:
+    """The untracked PATHS inside a directory. A file at the root (a log, a note) is no change: it would
+    take the fallback route and the full smoke."""
+    kept = [p for p in paths if "/" in p]
+    for p in paths:
+        if "/" not in p:
+            print(
+                f"verify: ignored untracked file at the root: {p} (add it to git to test it)",
+                file=sys.stderr,
+            )
+    return kept
 
 
 def git_show(rev: str | None, path: str) -> str | None:
@@ -1253,6 +1268,13 @@ def python_file_seconds(
     )
 
 
+def step_seconds(steps: list[str], current: Path | None = None) -> dict[str, float]:
+    """Seconds of STEPS in the newest earlier verify runs (verify_times), CURRENT (this run) left out."""
+    return verify_times.step_seconds(
+        Path(digi_env.RUNS_ROOT) / "verify", steps, current
+    )
+
+
 def python_files(py_tests: list[str]) -> list[tuple[str, str]]:
     """(file, the plan entry it came from) for every test file of PY_TESTS (a directory is expanded as
     test_outcomes does), in plan order and without duplicates."""
@@ -1276,6 +1298,7 @@ def expand_python(
     deps: dict[str, tuple[str, ...]],
     py_tests: list[str],
     seconds: dict[str, float],
+    step_secs: dict[str, float],
 ) -> tuple[list[str], dict[str, tuple[str, ...]]]:
     """Replace the python-tests node by one job per file (FILE_PREFIX + path) plus the node itself, which
     only judges the files once they all ended (finish_python) and holds no cores.
@@ -1283,7 +1306,8 @@ def expand_python(
     A file that drives a daemon waits for build-daemons only; any other file waits for every build of
     the plan (it may build for itself: the cargo steps of tests/emulator). The jobs are in the order of
     verify_times.longest_first; those of LONG_FILE_SECONDS or more come before the other steps, so the
-    longest file starts as soon as its daemon is built; the rest fill the cores the steps leave."""
+    longest file starts as soon as its daemon is built; the rest fill the cores the steps leave.
+    A step whose estimate in STEP_SECS is LONG_FILE_SECONDS or more joins that long part, longest first."""
     if "python-tests" not in nodes:
         return nodes, deps
     py_tests = [rel for rel, _ in python_files(py_tests)]
@@ -1304,9 +1328,21 @@ def expand_python(
     rest = [n for n in nodes if n != "python-tests"]
     built = [n for n in rest if n in BUILD_CHAIN]
     steps = [n for n in rest if n not in BUILD_CHAIN]
-    long_jobs = [names[r] for r, sec, _ in ordered if sec >= LONG_FILE_SECONDS]
+    long_part = [(sec, names[r]) for r, sec, _ in ordered if sec >= LONG_FILE_SECONDS]
+    long_part += [
+        (step_secs[n], n) for n in steps if step_secs.get(n, 0) >= LONG_FILE_SECONDS
+    ]
+    long_part.sort(key=lambda p: -p[0])  # stable
+    long_steps = {n for _, n in long_part}
+    other_steps = [n for n in steps if n not in long_steps]
     short_jobs = [names[r] for r, sec, _ in ordered if sec < LONG_FILE_SECONDS]
-    return [*built, *long_jobs, *steps, *short_jobs, "python-tests"], new_deps
+    return [
+        *built,
+        *(n for _, n in long_part),
+        *other_steps,
+        *short_jobs,
+        "python-tests",
+    ], new_deps
 
 
 def next_starts(
@@ -1767,7 +1803,14 @@ def run_steps(gate: Gate, steps: tuple[str, ...]) -> list[tuple[str, float]]:
     nodes, deps = plan(steps, gate.py_tests)
     gate.py_files = [rel for rel, _ in python_files(gate.py_tests)]
     nodes, deps = expand_python(
-        nodes, deps, gate.py_tests, python_file_seconds(gate.py_files, gate.out)
+        nodes,
+        deps,
+        gate.py_tests,
+        python_file_seconds(gate.py_files, gate.out),
+        step_seconds(
+            [n for n in nodes if n not in BUILD_CHAIN and n != "python-tests"],
+            gate.out,
+        ),
     )
     budget = verify_budget.Budget(max(1, gate.budget))
     done: set[str] = set()
