@@ -404,12 +404,17 @@ def run_dir(kind: str, stamp: str | None = None) -> pathlib.Path:
     kind = "".join(c if c.isalnum() or c in "._+-" else "_" for c in kind)[:80]
     stamp = stamp or datetime.datetime.now(datetime.UTC).strftime("%Y%m%d-%H%M%S")
     base = RUNS_ROOT / kind
+    base.mkdir(parents=True, exist_ok=True)
     path = base / stamp
     n = 1
-    while path.exists():
-        n += 1
-        path = base / f"{stamp}-{n}"
-    path.mkdir(parents=True)
+    # mkdir decides, so parallel runs with the same stamp get different directories
+    while True:
+        try:
+            path.mkdir()
+            break
+        except FileExistsError:
+            n += 1
+            path = base / f"{stamp}-{n}"
     link = base / f".latest-{os.getpid()}"
     link.unlink(missing_ok=True)
     link.symlink_to(path.name)

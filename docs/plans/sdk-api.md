@@ -289,7 +289,8 @@ Fault instrumentation follow-ups (the base is in finding 77): only when a real b
 
 - [ ] A timer-interrupt watch, so a DSP stop is caught when the firmware has already blocked the
       UI task (needs a free timer on the CPU).
-- [ ] A live log panel in the workbench and the site (the SysEx LOG command, in TypeScript).
+- [x] A live log panel in the workbench (docs/plans/workbench-device-log.md).
+- [ ] The same log panel on the site.
 - [ ] A "trace" tag for traced `.dkm` files on the site's Transfer page.
 - [ ] Module-source tags for the callbacks that `core/ui` and `core/params` make.
 - [ ] A gdb bridge to the emulator's ColdFire, and the crash record as an m68k core file.
@@ -297,6 +298,7 @@ Fault instrumentation follow-ups (the base is in finding 77): only when a real b
 - [ ] `api->fatal(code)` for C modules through the same fatal path as the runtime panic.
 - [ ] Review the runtime's footprint and move non-critical instrumentation into a debug module, keeping only critical fault handling in the runtime (Em's idea). Baseline from
       2026-10-30: .text 109 KB, bss 671 KB, of which the module arena is 512 KB, DKRT_STAGE 64 KB, DKRT_UPLOAD_BUF 36 KB and DKRT_LOG 16 KB.
+- [ ] A probe for the frame where a note-on reaches the DSP, so the fx route checks can measure route latency. Today the onset moves in 64-sample steps between boots (0 to 192 on DN2), and `ONSET_JITTER` in tools/patchkit/pk_digikit_fxroutes.py only catches a delay of 256 samples or more.
 
 ## Status at end of session
 
