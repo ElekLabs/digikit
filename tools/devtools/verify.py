@@ -2330,6 +2330,9 @@ def main(argv: list[str] | None = None) -> int:
     full, dt2 = args.full, args.dt2
     if full:  # tests/digikit: every scenario (the gate runs the quick tier)
         os.environ["DIGIKIT_TIER"] = "full"
+    # The head the run starts on: a commit that lands during the run must not
+    # replace it in result.json, or --rerun-failed misses what changed since.
+    start_head = git_lines("rev-parse", "HEAD")[0]
     rerun: Rerun | None = None
     if args.rerun_failed:
         last = load_last_result(Path(digi_env.RUNS_ROOT) / "verify", None)
@@ -2340,7 +2343,7 @@ def main(argv: list[str] | None = None) -> int:
             print("verify: the last run had no failed steps; nothing to do")
             return 0
         full, dt2 = bool(last.get("full")), bool(last.get("dt2"))
-        old, new = str(last.get("head", "?")), git_lines("rev-parse", "HEAD")[0]
+        old, new = str(last.get("head", "?")), start_head
         changed = None
         if old != new:
             try:
@@ -2471,7 +2474,7 @@ def main(argv: list[str] | None = None) -> int:
         "full": full,
         "dt2": dt2,
         "base": args.base,
-        "head": git_lines("rev-parse", "HEAD")[0],
+        "head": start_head,
         "py_tests": gate.py_tests,
         "failed_units": failed_units(gate),
         "run": out.name,

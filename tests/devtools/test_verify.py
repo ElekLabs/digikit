@@ -809,6 +809,23 @@ def test_explain_runs_nothing(
     assert "pins" in capsys.readouterr().out
 
 
+def test_result_records_the_head_the_run_started_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    heads = iter(["a" * 40, "b" * 40, "c" * 40])
+    real = verify.git_lines
+
+    def fake(*args: str) -> list[str]:
+        return [next(heads)] if args == ("rev-parse", "HEAD") else real(*args)
+
+    monkeypatch.setattr(verify, "git_lines", fake)
+    monkeypatch.setattr(verify.digi_env, "run_dir", lambda _name: str(tmp_path))
+    monkeypatch.setattr(verify.verify_budget, "lower_priority", lambda _fg: None)
+    monkeypatch.setattr(verify, "run_steps", lambda _gate, _steps: [])
+    assert verify.main(["--only", "pins"]) == 0
+    assert json.loads((tmp_path / "result.json").read_text())["head"] == "a" * 40
+
+
 # ---- finer routing (tools/devtools/verify_route.py) ----------------------------------------------
 
 PCM_STEPS = {
