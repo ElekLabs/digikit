@@ -227,6 +227,20 @@ What this shows:
   br 2.21 -> 1.61, srr 2.23 -> 1.51, dry hold 1.39 -> 1.51. The dry-hold figure went up with
   the larger core (or the load), so check with an exclusive timed run before quoting it. DT2
   was not regenerated: it has no FX scenarios to profile.
+- **Send-FX coverage from a live daemon [V, 2026-10-30], "Send-FX coverage".** The coupled scenarios run no runtime, so
+  a send effect module (`dyn-fx-gain-send`, `freqshift`) ran about 85% of its instructions in stock functions that no profile
+  had seen: DN2 fell from about 1000 to 40-99 DSP blocks/s. Recipe for DN2 1.12 (DT2: same with its card image):
+  1. Build `digi-emud` with `SHARC_PROFILE_PREFIX` support (this tree) and start it with the runtime firmware and
+     `SHARC_PROFILE_PREFIX=out/native/dn2-audio/fxprof-send/NAME`.
+  2. Wait 45 s for the boot. Install the module over SysEx (`dk.put`, `select`, `restart`, `waitForBoot`) and run
+     100 s of audio. The restart makes a second engine, so every run writes two file sets. Do this once per module
+     (`NAME` = `gainsend` for `dyn-fx-gain-send.dkm`, `freqshift` for `freqshift.dkm`). The module takes the send route by default.
+  3. Merge into the old profile: `uv run python -m tools.sharc_dev.aot_fxprof --out out/native/dn2-audio/fxprof-send
+     --base-cov .../fxprof-s3/prof-fx --base-entries .../prof-fx.entries --base-trans .../prof-fx.trans
+     --live .../fxprof-send/gainsend --live .../fxprof-send/freqshift` (counts are summed per key).
+  4. Regenerate with the usual `sharc_transpile` and `sharc_rsgen` recipe (`--coverage/--entries/--transitions` = the merged files).
+  Result: 2692 -> 2789 blocks; the daemon with `dyn-fx-gain-send` went from 97-101 to 600-660 blocks/s; PCM identical on all
+  DN2 pins and scenarios. Not covered: a module on the master route, module unload.
 - **A/B of the larger core [V, timed, exclusive lock, 2026-10-09].** Old (`gen-pre-fxprof-20261009`,
   binary in `out/native/target/g-e220e7a2`) vs new (prod gen), same sources, `coupled-run`
   alternated old/new, 2.0 s each, DSP CPU s per audio s (median, min-max): br-127 2.04

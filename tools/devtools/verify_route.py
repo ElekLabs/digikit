@@ -24,12 +24,16 @@ Rules (docs/TESTING.md "What verify runs"):
   digikit test files of the scenario kinds whose runners call it (DEVICE_KINDS).
 - a scenario file of tests/digikit/scenarios: the test files that run the scenario's kind.
 - `tests/digikit/test_*.py`, `tests/patchkit/test_*.py`: the file itself.
+- a Rust file of packages/patchkit/src in a group of PATCHKIT_GROUPS: the steps and tests of the group (checks, build, flash,
+  wasm, codegen); any other file of the crate keeps the wide route.
+- a scenario runner of tools/patchkit (RUNNER_KINDS): the digikit tests of its kinds and of the runners that import it.
 - `mise.toml`: the tasks that changed, routed like the tool their `run` names (`mise_paths`).
 """
 
 from __future__ import annotations
 
 import ast
+import json
 import re
 import shlex
 import tomllib
@@ -304,7 +308,11 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
             or path
             in ("tests/regression/package.json", "tests/regression/tsconfig.json")
             or path.startswith(ACCEPTANCE_SHARED)
-            or (step != "stock" and path.startswith(RUNTIME_SHARED))
+            or (
+                step != "stock"
+                and path.startswith(RUNTIME_SHARED)
+                and not patchkit_no_smoke(path)
+            )
             or (step != "stock" and path == "tools/emulator/fast_regions.json")
             or (
                 step != "stock"
@@ -387,6 +395,13 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_fxroute.py": ("fxroute",),
     "pk_digikit_fxroutes.py": ("fxroutes",),
     "pk_digikit_settings.py": ("settings",),
+    "pk_digikit_fxpage.py": ("fxpage",),
+    "pk_digikit_fxpersist.py": ("fxpersist",),
+    "pk_digikit_fxshift.py": ("fxshift",),
+    "pk_digikit_capacity.py": ("debug",),
+    "pk_digikit_memaudit.py": ("debug",),
+    "pk_digikit_cost.py": ("debug",),
+    "pk_dkmenu.py": ("menu",),
 }
 
 
@@ -430,7 +445,11 @@ def pk_refs(name: str) -> frozenset[str]:
 def runner_kinds(hit: set[str]) -> set[str]:
     """The scenario kinds whose runner code names a module of HIT."""
     kinds: set[str] = set()
-    for path in sorted((ROOT / "tools/patchkit").glob("pk_digikit_*.py")):
+    runners = [
+        *(ROOT / "tools/patchkit").glob("pk_digikit_*.py"),
+        ROOT / "tools/patchkit/pk_dkmenu.py",
+    ]
+    for path in sorted(runners):
         if pk_refs(path.stem) & hit:
             kinds |= set(RUNNER_KINDS.get(path.name, tuple(kind_files()) + ("pages",)))
     return kinds
@@ -661,9 +680,153 @@ def digikit_fine(path: str) -> Fine | None:
     return None
 
 
+PATCHKIT_SRC = "packages/patchkit/src/"
+# packages/patchkit/src groups: (label, files, steps, test files). A file of the crate in no group keeps the
+# wide route. `smoke` in the steps keeps the smoke matrix; the groups without it skip it (patchkit_no_smoke).
+PATCHKIT_GROUPS: tuple[
+    tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...
+] = (
+    (
+        "patchkit/checks",
+        ("build/sharc_legal.rs", "dspscan.rs"),
+        ("rust-tests", "python-tests"),
+        (
+            "tests/patchkit/test_dsp_guard.py",
+            "tests/patchkit/test_dsp_guard_contract.py",
+            "tests/patchkit/test_pk_dsp_budget.py",
+            "tests/patchkit/test_pk_sharc.py",
+        ),
+    ),
+    (
+        "patchkit/build",
+        ("build_cli.rs", "dko.rs", "link.rs", "abigen.rs", "modgen.rs", "explain.rs"),
+        ("rust-tests", "python-tests", "smoke"),
+        (
+            "tests/patchkit/test_patchkit_cmodules.py",
+            "tests/patchkit/test_patchkit_rust.py",
+            "tests/patchkit/test_patchkit_dkrt.py",
+            "tests/patchkit/test_patchkit_registry.py",
+            "tests/patchkit/test_patchkit_expansion.py",
+            "tests/patchkit/test_patchkit_dkrt_machine.py",
+            "tests/patchkit/test_patchkit_dkrt_boot.py",
+            "tests/patchkit/test_pk_cf.py",
+            "tests/patchkit/test_dsplink.py",
+            "tests/patchkit/test_dyn_fx.py",
+            "tests/patchkit/test_health.py",
+            "tests/patchkit/test_fx*.py",
+            "tests/patchkit/test_digikit_menu.py",
+            "tests/patchkit/test_modcheck_needs.py",
+            "tests/modules",
+        ),
+    ),
+    (
+        "patchkit/flash",
+        ("flash.rs", "flash_rpc.rs", "flash_cli.rs"),
+        ("rust-tests", "web"),
+        (),
+    ),
+    ("patchkit/wasm", ("wasm.rs",), ("rust-tests", "web"), ()),
+    (
+        "patchkit/codegen",
+        ("sdkgen.rs", "devgen.rs", "fwgen.rs", "desc.rs", "devdata.rs"),
+        ("rust-tests", "python-tests"),
+        (
+            "tests/patchkit/test_pk_gen_include.py",
+            "tests/patchkit/test_pk_new.py",
+            "tests/patchkit/test_pk_conform.py",
+            "tests/patchkit/test_pk_types.py",
+        ),
+    ),
+)
+# Files of build/ outside the checks group that the build group takes; build/mod.rs stays on the wide route.
+PATCHKIT_BUILD_DIR_WIDE = ("build/mod.rs",)
+
+
+def patchkit_fine(path: str) -> Fine | None:
+    if not (path.startswith(PATCHKIT_SRC) and path.endswith(".rs")):
+        return None
+    rel = path.removeprefix(PATCHKIT_SRC)
+    for label, files, steps, tests in PATCHKIT_GROUPS:
+        in_build = (
+            label == "patchkit/build"
+            and rel.startswith("build/")
+            and rel not in PATCHKIT_BUILD_DIR_WIDE
+            and not any(rel in g[1] for g in PATCHKIT_GROUPS if g[0] != label)
+        )
+        if rel in files or in_build:
+            found = [
+                p.relative_to(ROOT).as_posix()
+                for t in tests
+                for p in sorted(ROOT.glob(t))
+            ]
+            return Fine(label, steps, tuple(found))
+    return None
+
+
+def patchkit_no_smoke(path: str) -> str | None:
+    """The label of PATH's patchkit group when it needs no smoke matrix, else None."""
+    found = patchkit_fine(path)
+    return found.label if found and "smoke" not in found.steps else None
+
+
+def runner_users(stem: str) -> list[str] | None:
+    """The modules of tools/patchkit that import the runner STEM. None when the dispatcher
+    pk_digikit_scen uses it outside its one-line wrapper for the kind."""
+    wrapper = re.compile(
+        rf"    from tools\.patchkit import {stem} as \w+\n\n    \w+\.run_\w+\(c\)\n"
+    )
+    uses = re.compile(
+        rf"from tools\.patchkit import [^\n]*\b{stem}\b|from tools\.patchkit\.{stem} import"
+    )
+    users: list[str] = []
+    for path in sorted((ROOT / "tools/patchkit").glob("*.py")):
+        if path.stem == stem:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if path.stem == "pk_digikit_scen":
+            text = wrapper.sub("", text)
+        if uses.search(text):
+            if path.stem == "pk_digikit_scen":
+                return None
+            users.append(path.stem)
+    return users
+
+
+def runner_fine(path: str) -> Fine | None:
+    """A scenario runner (RUNNER_KINDS) selects the digikit tests of the kinds it serves and of the
+    runners that import it. A user that is no listed runner, a kind no test runs: the wide route."""
+    name = path.rsplit("/", 1)[-1]
+    if path != f"tools/patchkit/{name}" or name not in RUNNER_KINDS:
+        return None
+    stem = name.removesuffix(".py")
+    seen, todo = {stem}, [stem]
+    kinds: set[str] = set()
+    while todo:
+        cur = todo.pop()
+        if f"{cur}.py" not in RUNNER_KINDS:
+            return None
+        kinds |= set(RUNNER_KINDS[f"{cur}.py"])
+        users = runner_users(cur)
+        if users is None:
+            return None
+        todo += [u for u in users if u not in seen]
+        seen.update(users)
+    if not kinds <= set(kind_files()):
+        return None
+    return Fine(
+        f"scenario runner {name}", ("python-tests",), tuple(scenario_tests(kinds))
+    )
+
+
 def fine(path: str) -> Fine | None:
     """The finer route of PATH, or None to use the prefix rules of verify.py."""
-    return module_fine(path) or device_fine(path) or digikit_fine(path)
+    return (
+        module_fine(path)
+        or device_fine(path)
+        or digikit_fine(path)
+        or patchkit_fine(path)
+        or runner_fine(path)
+    )
 
 
 # ---- mise.toml ---------------------------------------------------------------------------------
@@ -699,6 +862,71 @@ def paths_of_run(lines: list[str]) -> list[str] | None:
             return None
         found += mine
     return found
+
+
+def lock_members(old: str, new: str) -> set[str] | None:
+    """The workspace members (packages without a source) that a Cargo.lock change reaches: the members
+    that are new or changed, and the first members on the way up from a package that is new, removed or
+    changed (version, source, checksum or dependency list). None when a text does not parse or no member is
+    reached (the caller keeps the wide route)."""
+    try:
+        packages = [tomllib.loads(t).get("package", []) for t in (old, new)]
+        keyed = [
+            {(p["name"], p["version"], p.get("source")): p for p in pkgs}
+            for pkgs in packages
+        ]
+    except (tomllib.TOMLDecodeError, KeyError, TypeError):
+        return None
+    before, after = keyed
+
+    def content(p: dict) -> tuple:
+        return (p.get("checksum"), tuple(sorted(p.get("dependencies", ()))))
+
+    changed = {
+        k
+        for k, p in after.items()
+        if k not in before or content(before[k]) != content(p)
+    }
+    removed_names = {k[0] for k in before if k not in after}
+    changed |= {k for k in after if k[0] in removed_names and k not in changed}
+
+    def target(entry: str) -> list[tuple]:
+        parts = entry.split(" ", 2)
+        return [
+            k
+            for k in after
+            if k[0] == parts[0] and (len(parts) < 2 or k[1] == parts[1])
+        ]
+
+    users: dict[tuple, set[tuple]] = {}
+    for k, p in after.items():
+        for entry in p.get("dependencies", ()):
+            for t in target(entry):
+                users.setdefault(t, set()).add(k)
+    # the walk stops at a member: the members that use it are routed by that member's own route
+    reached, todo = set(changed), [k for k in changed if k[2] is not None]
+    while todo:
+        for user in users.get(todo.pop(), ()):
+            if user not in reached:
+                reached.add(user)
+                if user[2] is not None:
+                    todo.append(user)
+    members = {k[0] for k in reached if k[2] is None}
+    return members or None
+
+
+def object_metadata_only(old: str, new: str) -> bool:
+    """Whether two versions of a committed .dko.json differ only in metadata (`toolchain`, `source_sha256`):
+    the sections, symbols and relocations are the same. False when a text is not a JSON object."""
+    try:
+        a, b = json.loads(old), json.loads(new)
+    except ValueError:
+        return False
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    meta = ("toolchain", "source_sha256")
+    drop = lambda d: {k: v for k, v in d.items() if k not in meta}  # noqa: E731
+    return drop(a) == drop(b)
 
 
 def mise_paths(

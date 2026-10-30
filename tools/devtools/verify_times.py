@@ -29,6 +29,15 @@ def run_seconds(run: Path, files: Iterable[str]) -> dict[str, float]:
     return found
 
 
+def failed_files(run: Path) -> list[str]:
+    """The python-tests files of one verify run directory whose status is not OK."""
+    summary = run / "python-tests" / "summary.tsv"
+    if not summary.is_file():
+        return []
+    rows = (row.split("\t") for row in summary.read_text().splitlines()[1:])
+    return [cols[0] for cols in rows if len(cols) > 1 and cols[1] != "OK"]
+
+
 def file_seconds(
     verify_dir: Path, files: Iterable[str], exclude: Path | None = None
 ) -> dict[str, float]:
@@ -49,6 +58,37 @@ def file_seconds(
         for rel, seconds in run_seconds(run, files).items():
             known.setdefault(rel, seconds)
         if len(known) == len(files):
+            break
+    return known
+
+
+def step_seconds(
+    runs_root: Path, steps: list[str], current: Path | None = None
+) -> dict[str, float]:
+    """The newest known seconds of each of STEPS (a node of jobs.tsv: end_s - start_s) over the newest
+    runs under RUNS_ROOT, CURRENT (the run being made) skipped. A step no run timed is left out."""
+    known: dict[str, float] = {}
+    if not runs_root.is_dir():
+        return known
+    runs = [
+        r
+        for r in sorted(runs_root.iterdir(), key=lambda p: p.name, reverse=True)
+        if r.is_dir()
+        and not r.is_symlink()
+        and (current is None or r.resolve() != current.resolve())
+    ]
+    wanted = set(steps)
+    for run in runs[:RUNS_SCANNED]:
+        try:
+            rows = (run / "jobs.tsv").read_text().splitlines()[1:]
+        except (OSError, UnicodeDecodeError):
+            continue
+        for row in rows:
+            cols = row.split("\t")
+            if len(cols) > 2 and cols[0] in wanted and cols[0] not in known:
+                with contextlib.suppress(ValueError):
+                    known[cols[0]] = float(cols[2]) - float(cols[1])
+        if len(known) == len(wanted):
             break
     return known
 

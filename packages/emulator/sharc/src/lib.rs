@@ -555,6 +555,9 @@ fn image_insn_at() -> fn(Int) -> Option<Insn> {
 
 impl Drop for Engine {
     fn drop(&mut self) {
+        if let Some(prefix) = std::env::var_os("SHARC_PROFILE_PREFIX") {
+            self.write_profile(std::path::Path::new(&prefix));
+        }
         if let Some(p) = &self.irq_probe {
             eprintln!(
                 "irq_probe: windows {:x?} mask {:#x} every {}: {} latched, {} interrupts taken ({})",
@@ -674,6 +677,10 @@ impl Engine {
             irq_probe: irq_probe::IrqProbe::from_env(),
             diag_on: false,
         };
+        // Live-daemon profile for sharc_rsgen (docs/INSTRUMENTATION.md): same maps as option 26.
+        if std::env::var_os("SHARC_PROFILE_PREFIX").is_some() {
+            engine.set_option(26, 1);
+        }
         engine.refresh_diag();
         engine
     }
@@ -2570,6 +2577,21 @@ pub unsafe extern "C" fn sharc_native_profile(
 }
 
 impl Engine {
+    /// Writes the coverage, entries and transitions maps to
+    /// `PREFIX.e<pid>-<n>`, `.entries` and `.trans` (one set per engine).
+    /// Does nothing for maps that are off (option 26 unset).
+    fn write_profile(&self, prefix: &std::path::Path) {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        for (kind, suffix) in [(0, ""), (1, ".entries"), (2, ".trans")] {
+            if let Some(text) = self.profile_text(kind) {
+                let mut path = prefix.as_os_str().to_owned();
+                path.push(format!(".e{}-{n}{suffix}", std::process::id()));
+                let _ = std::fs::write(path, text);
+            }
+        }
+    }
+
     /// The profile maps (option 26) as text (sharc_native_profile's KIND).
     pub fn profile_text(&self, kind: u32) -> Option<String> {
         let e = self;

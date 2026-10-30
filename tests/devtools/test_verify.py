@@ -377,6 +377,69 @@ def test_moved_paths_route() -> None:
     assert "dt2-tone" in verify.steps_for(["packages/emulator/machine/src/lib.rs"])
 
 
+def _lock(dep_version: str, shared_version: str = "1.0.0") -> str:
+    return f"""
+[[package]]
+name = "a"
+version = "0.1.0"
+dependencies = ["dep", "shared"]
+
+[[package]]
+name = "b"
+version = "0.1.0"
+dependencies = ["shared"]
+
+[[package]]
+name = "c"
+version = "0.1.0"
+dependencies = ["a"]
+
+[[package]]
+name = "dep"
+version = "{dep_version}"
+source = "registry+https://example.test/index"
+checksum = "c{dep_version}"
+
+[[package]]
+name = "shared"
+version = "{shared_version}"
+source = "registry+https://example.test/index"
+checksum = "s{shared_version}"
+"""
+
+
+def test_lock_change_reaches_only_the_member_that_uses_the_package() -> None:
+    # c uses a, but a's own route covers what depends on it
+    assert verify_route.lock_members(_lock("1.0.0"), _lock("1.1.0")) == {"a"}
+
+
+def test_lock_change_reaches_every_member_that_uses_the_package() -> None:
+    assert verify_route.lock_members(_lock("1.0.0"), _lock("1.0.0", "2.0.0")) == {
+        "a",
+        "b",
+    }
+
+
+def test_unparsable_lock_is_wide() -> None:
+    assert verify_route.lock_members(_lock("1.0.0"), "not [toml") is None
+
+
+def test_object_with_other_toolchain_and_source_hash_is_metadata_only() -> None:
+    old = json.dumps(
+        {"toolchain": {"cc": "1"}, "source_sha256": "a", "sections": ["00"]}
+    )
+    new = json.dumps(
+        {"toolchain": {"cc": "2"}, "source_sha256": "b", "sections": ["00"]}
+    )
+    assert verify_route.object_metadata_only(old, new)
+
+
+def test_object_with_other_code_is_a_change() -> None:
+    old = json.dumps({"toolchain": {}, "source_sha256": "a", "sections": ["00"]})
+    new = json.dumps({"toolchain": {}, "source_sha256": "a", "sections": ["01"]})
+    assert not verify_route.object_metadata_only(old, new)
+
+
 def test_full_and_empty() -> None:
     assert verify.python_tests([], False) == list(verify.PY_GATE)
     full = verify.python_tests([], True)
@@ -495,9 +558,129 @@ def test_load_last_result(tmp_path: Path) -> None:
 def test_rerun_plan() -> None:
     result = {"failed": ["pins", "check"], "py_tests": ["tests/a.py"]}
     expected = tuple(s for s in verify.STEPS if s in {"pins", "check"})
-    assert verify.rerun_plan(result) == (expected, ["tests/a.py"])
+    plan = verify.rerun_plan(result)
+    assert plan.steps == expected
+    assert plan.py_tests == []  # python-tests did not fail
     with pytest.raises(SystemExit):
         verify.rerun_plan({"failed": ["bogus"], "py_tests": []})
+
+
+def test_rerun_repeats_only_the_failed_python_file(tmp_path: Path) -> None:
+    gate = verify.Gate(tmp_path)
+    gate.failed = ["python-tests"]
+    gate.py_files = ["tests/a.py", "tests/b.py"]
+    gate.py_records = {"tests/a.py": {}, "tests/b.py": {}}
+    summary = tmp_path / "python-tests" / "summary.tsv"
+    summary.parent.mkdir()
+    summary.write_text(
+        "file\tstatus\trc\tseconds\n"
+        "tests/a.py\tOK\t0\t1.0\n"
+        "tests/b.py\tTIMEOUT\t-9\t5.0\n"
+    )
+    units = verify.failed_units(gate)
+    assert units == {"python-tests": ["tests/b.py"]}
+    result = {
+        "failed": ["python-tests"],
+        "py_tests": ["tests/a.py", "tests/b.py"],
+        "failed_units": units,
+        "run": "run1",
+        "head": "abcdef1234567",
+    }
+    plan = verify.rerun_plan(result)
+    assert plan.py_tests == ["tests/b.py"]
+    assert ("python-tests: tests/b.py", "failed in run1") in plan.reasons
+
+
+def test_rerun_adds_what_changed_since_the_failed_head() -> None:
+    result = {
+        "failed": ["python-tests"],
+        "py_tests": ["tests/a.py"],
+        "failed_units": {"python-tests": ["tests/a.py"]},
+        "run": "run1",
+        "head": "abcdef1234567",
+    }
+    changed_test = "tests/devtools/test_verify.py"
+    plan = verify.rerun_plan(result, ([changed_test], ("python-tests",), None))
+    assert plan.py_tests[0] == "tests/a.py"
+    assert changed_test in plan.py_tests
+    why = dict(plan.reasons)
+    assert why["python-tests: tests/a.py"] == "failed in run1"
+    assert why[f"python-tests: {changed_test}"] == "changed since abcdef1234"
+
+
+def test_rerun_repeats_failed_acceptance_files_or_the_whole_step() -> None:
+    result = {
+        "failed": ["runtime-fixture"],
+        "failed_units": {"runtime-fixture": ["runtime/a.test.ts"]},
+    }
+    only_failed = verify.rerun_plan(result)
+    assert only_failed.acceptance == {"runtime-fixture": ["runtime/a.test.ts"]}
+    # a failed step without known files repeats whole
+    whole = verify.rerun_plan({"failed": ["runtime-fixture"]})
+    assert whole.acceptance == {"runtime-fixture": []}
+
+
+JUNIT = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="1" errors="0" time="0.3">
+    <testsuite name="runtime/fault-trace.test.ts" tests="2" failures="1" errors="0" skipped="0" time="0.2">
+        <testcase classname="runtime/fault-trace.test.ts" name="fault &gt; reports" time="0.1"></testcase>
+        <testcase classname="runtime/fault-trace.test.ts" name="fault &gt; stops" time="0.1">
+            <failure message="expected 1 to be 2" type="AssertionError">trace</failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="runtime/ok.test.ts" tests="1" failures="0" errors="0" skipped="0" time="0.1">
+        <testcase classname="runtime/ok.test.ts" name="passes" time="0.1"></testcase>
+    </testsuite>
+</testsuites>
+"""
+
+
+def test_junit_reader_returns_the_failed_vitest_file(tmp_path: Path) -> None:
+    report = tmp_path / "runtime-fixture.junit.xml"
+    report.write_text(JUNIT)
+    assert verify.junit_failed_files(report) == ["runtime/fault-trace.test.ts"]
+    assert verify.junit_failed_files(tmp_path / "missing.xml") == []
+
+
+def test_named_python_file_must_exist() -> None:
+    with pytest.raises(SystemExit) as info:
+        verify.main(["--py-tests", "tests/devtools/test_no_such_file.py"])
+    assert info.value.code == 2
+
+
+def test_named_vitest_file_goes_to_the_step_of_its_directory() -> None:
+    py, by_step = verify.named_units([], ["runtime/fault-trace.test.ts"])
+    assert py == []
+    assert by_step == {"runtime-fixture": ["runtime/fault-trace.test.ts"]}
+    with pytest.raises(ValueError):
+        verify.named_units([], ["runtime/no-such.test.ts"])
+
+
+def test_named_files_exclude_rerun_and_full() -> None:
+    for other in ("--rerun-failed", "--full"):
+        with pytest.raises(SystemExit) as info:
+            verify.main(["--py-tests", "tests/devtools/test_verify.py", other])
+        assert info.value.code == 2
+
+
+def test_daemon_check_needs_variables_that_name_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for var in ("DIGI_EMUD_DT2", "DIGI_EMUD_DN2"):
+        monkeypatch.delenv(var, raising=False)
+    assert verify.missing_daemons(("runtime-fixture",), []) == [
+        "DIGI_EMUD_DT2",
+        "DIGI_EMUD_DN2",
+    ]
+    assert verify.main(["--only", "runtime-fixture"]) == 2
+    for var in ("DIGI_EMUD_DT2", "DIGI_EMUD_DN2"):
+        binary = tmp_path / var
+        binary.write_text("")
+        monkeypatch.setenv(var, str(binary))
+    assert verify.missing_daemons(("runtime-fixture",), []) == []
+    # a plan that builds the daemons needs no variables
+    monkeypatch.setenv("DIGI_EMUD_DT2", str(tmp_path / "gone"))
+    assert verify.missing_daemons(("runtime-fixture", "smoke"), []) == []
 
 
 def test_rerun_failed_excludes_only_and_full() -> None:
@@ -708,6 +891,65 @@ def test_digikit_test_files_and_scenarios() -> None:
     for scen, (kind, _) in verify_route.scenario_refs().items():
         got = selected(scen)
         assert set(verify_route.kind_files().get(kind, ())) <= got, scen
+
+
+def test_patchkit_checks_select_the_dsp_check_tests_without_smoke() -> None:
+    path = "packages/patchkit/src/build/sharc_legal.rs"
+    steps = verify.steps_for([path])
+    assert {"rust-tests", "python-tests"} <= set(steps)
+    assert "smoke" not in steps
+    assert selected(path) == {
+        "tests/patchkit/test_dsp_guard.py",
+        "tests/patchkit/test_dsp_guard_contract.py",
+        "tests/patchkit/test_pk_dsp_budget.py",
+        "tests/patchkit/test_pk_sharc.py",
+    }
+
+
+def test_patchkit_build_files_select_the_module_build_tests_and_smoke() -> None:
+    path = "packages/patchkit/src/build/rust.rs"
+    assert "smoke" in verify.steps_for([path])
+    got = selected(path)
+    assert "tests/patchkit/test_patchkit_rust.py" in got
+    assert "tests/modules" in got
+    assert "tests/digikit" not in got
+    assert "tests/patchkit" not in got
+
+
+def test_patchkit_wasm_selects_rust_and_web_only() -> None:
+    path = "packages/patchkit/src/wasm.rs"
+    steps = set(verify.steps_for([path]))
+    assert {"rust-tests", "web"} <= steps
+    assert not steps & {"python-tests", "smoke"}
+    assert selected(path) == set()
+
+
+def test_other_patchkit_files_keep_the_wide_route() -> None:
+    for path in (
+        "packages/patchkit/src/apply.rs",
+        "packages/patchkit/src/build/mod.rs",
+    ):
+        assert verify_route.fine(path) is None
+        assert "tests/patchkit" in selected(path)
+        assert "smoke" in verify.steps_for([path])
+
+
+def test_a_scenario_runner_selects_the_tests_of_its_kind() -> None:
+    assert selected("tools/patchkit/pk_digikit_fxshift.py") == {
+        "tests/digikit/test_fxshift_dn2.py",
+        "tests/digikit/test_fxshift_dt2.py",
+    }
+    assert "tests/digikit" not in selected("tools/patchkit/pk_digikit_fxpage.py")
+    # a runner others import also selects their kinds
+    assert {
+        "tests/digikit/test_fxshift_dt2.py",
+        "tests/digikit/test_fxpage_dt2.py",
+    } <= selected("tools/patchkit/pk_digikit_fxpage.py")
+
+
+def test_shared_digikit_helpers_keep_the_wide_route() -> None:
+    for name in ("pk_digikit_scen", "pk_digikit_project", "pk_digikit_upload"):
+        assert verify_route.fine(f"tools/patchkit/{name}.py") is None
 
 
 def test_module_leaf_selects_the_tests_that_name_it() -> None:
@@ -1348,9 +1590,8 @@ def test_failed_native_host_workflow_persists_for_rerun_and_blocks_web(
     assert (tmp_path / "host.log").read_text() == "bad format"
     assert gate.failed.count("host") == 1
     failed = [step for step in gate.failed if step in verify.STEPS]
-    assert verify.rerun_plan({"failed": failed, "py_tests": []}) == (
-        tuple(step for step in verify.STEPS if step in {"host", *steps}),
-        [],
+    assert verify.rerun_plan({"failed": failed, "py_tests": []}).steps == tuple(
+        step for step in verify.STEPS if step in {"host", *steps}
     )
     assert ("web" in gate.failed) == ("web" in steps)
 

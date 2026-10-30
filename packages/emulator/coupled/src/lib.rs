@@ -1279,7 +1279,8 @@ mod coupled {
             );
             let initial = initial_snapshot.status;
             assert!(initial.ready);
-            let mut script = crate::common::Script::from_env();
+            // the pins hold for this workload only, whatever NOTE_EVENTS says (the PGO training sets trig too)
+            let mut script = crate::common::Script::with_notes(Some("trig"));
             script.poll(&mut runtime.emulator, initial.icount, true);
             let timing_before = runtime.audio.as_ref().unwrap().handle.timing_profile();
             let desktop_timing_before = runtime.audio.as_ref().map(|audio| {
@@ -1335,9 +1336,10 @@ mod coupled {
             // Updated again 2026-10-06 for the dn2-audio-ready-2026-10-06 snapshot (pSLC 32 GB card, no SLC dialog; docs/findings/14): the CF state changed, the PCM and the DSP export did not.
             // Updated 2026-10-07: reference state rebuilt from cold start (`mise run emu:ready -- dn2`, tools/emulator/ready.py: DSP state from the .syx alone) with the DSPI1 eDMA ch14 board fix. The old state had the DC-blocker coefficient (DM 0x24f378) corrupted by the pre-ed02999 SIMD Type 17 bug. CF digest, PCM and DSP export are all new.
             // re-pinned 2026-10-13: forced IRQ delivery on by default (Em approved)
+            // re-pinned 2026-10-30: the DN2 1.12 ready fixture (67fee13b) changed the CF state (Em approved)
             assert_eq!(
                 runtime.emulator.state_digest().unwrap(),
-                "8914ba7b7ba8f00fa544c21193df64fed614ed72c51f10f0de39c88695fa1561"
+                "8bd3e0bf6b5fbf8720481efa752a6a5d2210d3f84094984d2d92a2cf37faa59b"
             );
             let audio = runtime.audio.as_ref().unwrap();
             let pcm: Vec<u8> = captured(audio)
@@ -1356,9 +1358,11 @@ mod coupled {
                 std::fs::write(path, audio.handle.export().0).unwrap();
             }
             // Cold-start snapshot: the export is the DSP state after the 100M-instruction workload from the rebuilt ready state.
+            // re-pinned 2026-10-30: changed after d59058c7 by a SHARC core change (most likely conditional Type 7a,
+            // f881124a; not the 2026-10-27 RFRAME fix); the PCM is identical (Em approved)
             assert_eq!(
                 format!("{:x}", Sha256::digest(audio.handle.export().0)),
-                "5cf54eba4b404acfae2e15eae5ef26a12459c171e1a6440a27cc2aa48a692fc6"
+                "795515d85cbabfc71909ddd4d1f8793a0a936a7a6ea43076be61d4f483a4be24"
             );
             assert_eq!(audio.report()["missing_blocks"], 0);
             assert!(audio.shared.borrow().pcm.is_empty());

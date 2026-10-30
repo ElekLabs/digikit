@@ -2624,3 +2624,27 @@ fn ordinary_auto_and_follow_tiers_remain_active_with_healthy_code() {
         assert!(e.block_plan(10).unwrap().1.fast_active);
     }
 }
+
+#[test]
+fn profile_writer_emits_one_file_set_only_when_maps_are_on() {
+    let dir = std::env::temp_dir().join(format!("sharc-profile-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let names = |dir: &std::path::Path| {
+        let mut v: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        v.sort();
+        v
+    };
+    let mut engine = crate::Engine::new(Mem::new());
+    engine.write_profile(&dir.join("p"));
+    assert!(names(&dir).is_empty());
+    engine.set_option(26, 1);
+    engine.write_profile(&dir.join("p"));
+    let files = names(&dir);
+    assert_eq!(files.len(), 3);
+    assert!(files.iter().any(|f| f.ends_with(".entries")));
+    assert!(files.iter().any(|f| f.ends_with(".trans")));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

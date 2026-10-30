@@ -11,9 +11,20 @@ export default defineConfig({
   test: {
     // Caps the shared pool; only stock runs files in parallel.
     maxWorkers: Number(process.env.REGRESSION_JOBS ?? 4),
+    // REGRESSION_JUNIT_FILE (verify's failed-unit record) names the report; REGRESSION_JUNIT=1 alone keeps the default.
     reporters:
-      process.env.REGRESSION_JUNIT === '1'
-        ? ['default', ['junit', { outputFile: '../../out/regression/junit.xml' }]]
+      process.env.REGRESSION_JUNIT === '1' || process.env.REGRESSION_JUNIT_FILE
+        ? [
+            'default',
+            [
+              'junit',
+              {
+                outputFile:
+                  process.env.REGRESSION_JUNIT_FILE ??
+                  '../../out/regression/junit.xml',
+              },
+            ],
+          ]
         : ['default'],
     projects: [
       {

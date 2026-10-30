@@ -73,6 +73,11 @@ reference them. Runs are deterministic, so two dumps of one scenario are equal
 and scenarios with identical event times give dumps at the same DSP instruction
 count.
 
+`SHARC_PROFILE_PREFIX=PATH` (default off; no cost when unset) turns on the profile maps (option 26) in every SHARC engine of a live
+process, for example `digi-emud`. When an engine is dropped (daemon restart or exit) it writes `PATH.e<pid>-<n>` (coverage: `pc mode known count`),
+`.entries` (`pc count`) and `.trans` (`from to count`), the inputs of `sharc_rsgen --coverage/--entries/--transitions`. Merge them with
+`tools/sharc_dev/aot_fxprof.py --live PATH` (finding 18, "Send-FX coverage"). The daemon runs slower while it records.
+
 Not in `--diag` (set the variable by hand): `SHARC_LIVE_AOT_CAPTURE_PC/_DIR/_LIMIT`
 (raw block-call snapshots), `SHARC_FAST_DUMP_ALL`, `SHARC_FAST_CL_DISASM`,
 `DIGI_LP0_LOG` (stderr), `DN2_PROFILE_LINK=1`,
