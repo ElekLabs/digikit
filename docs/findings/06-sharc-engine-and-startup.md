@@ -3178,21 +3178,9 @@ identical extraction records hash to
 
 The public references give L2 SRAM as 1 MB at byte `0x20000000..0x20100000`
 (eight 128 KB banks), and allow code and data in external DDR, more slowly.
-The sizes of the four L1 blocks are in the datasheet, which is not under
-`out/refs/`, so L1 space past each loaded window is of unknown extent, not
-free. The L1 blocks are not contiguous, so the gaps between them, such as
-`0x26f000..0x2c0000`, are probably not memory at all. **[D]**
+Current free L2 and L1 ranges: [finding 100](100-module-limits.md) **[C]**. The range 0x200fa000-0x200fe000 is a cache range set at start-up, not data.
 
-L2 past the loader, `0x2001ab7c..0x20100000` (939,140 bytes), is the only
-large candidate. `0x200fa000..0x200fe000` (16 KB) is occupied: two called
-functions load those addresses as literals. The remaining ~922,756 bytes have
-no literal reference, but `tools/sharc_dev/sharcwriters.py` leaves 59% of stores
-unresolved for any probe address and the SHARC has no runtime leg, so this is
-weaker evidence than the ColdFire cave map. The external-DDR FILL spans
-(about 4.35 MB, 1.05 MB and 33.5 MB) showed live references wherever
-sampled, one of them read by the render orchestrator `FUN_001c642a`; treat
-them as occupied. The L2 code block's short-word base is `0xb80000`,
-confirmed by byte comparison. **[D][O]**
+The external-DDR FILL spans (about 4.35 MB, 1.05 MB and 33.5 MB) showed live references wherever sampled, one of them read by the render orchestrator `FUN_001c642a`; treat them as occupied. The L2 code block's short-word base is `0xb80000`, confirmed by byte comparison. **[D]**
 
 **DN2 1.11 has less free L2, and its loader never touches the DT2 DDR
 command block.** The L2 is 1 MB at `0x20000000` (ADSP-2156x HWR, chapter 8,
@@ -3204,7 +3192,7 @@ DN2 1.11's last L2 write at `0x2008823c` (with an 8-byte unwritten gap at
 `docs/sharc/structure-1.16.md` §4a) finds every field address that document
 cites in DT2 1.16 and none in DN2 1.11, and DN2's loader writes nothing in
 `0x82000000..0x83000000`. The `0x82a00000` structure is DT2-specific, or
-DN2 keeps equivalent state elsewhere. **[V]**
+DN2 keeps equivalent state elsewhere. **[V]** Current numbers: [finding 100](100-module-limits.md) **[C]**.
 
 The context-switch pointer `DM(0x2ca3e0)` is zero in the loader image, so
 its structures are built at run time. Its two writers, `FUN_00b85af7` and
@@ -5294,6 +5282,7 @@ by one `trig1-taps` run, and the PCM changed. Conclusion: the unloaded L2 is fre
 exercise; keep `0x200fa000..0x200fe000` out of the allocator on DT2 until a path that uses it is found, which leaves
 922,756 bytes (DT2) and 491,972 bytes (DN2), of which the stream can carry 727,540 and 211,600. Static references and
 the unexercised paths (sample recording to RAM, sample load beyond one file, MIDI) remain **[O]**.
+Current numbers: [finding 100](100-module-limits.md) **[C]**: 914,564 B (DT2) and 466,372 B (DN2) below 0x200fa000, plus 8,192 B at 0x200fe000 after boot.
 
 **Open.** (1) Whether the real SHARC boot ROM accepts the extra block: partly closed by the rule check in "Boot ROM conformance" below, which also corrects this section (**[C]**: the free range up to `0x20100000` includes the ROM's own 8 KB workspace, which a boot block may not target, and the append did not update the FIRST blocks' next-application pointer); the rest is hardware **[O]**. (2) L1: the sizes of the L1 blocks are
 in the datasheet, which is not under `out/refs/`; the emulator accepts writes anywhere, so a run cannot show that the
@@ -5403,6 +5392,8 @@ sets the same wire word the ColdFire would send; it is not a knob. DN2: not exam
 not `FUN_1c24e9`; the hook itself works there).
 
 ## Headroom **[D]**
+
+**[C]** These are 1.16 / 1.11 emulator instruction counts without cycle factors. They are not a budget for 1.17 / 1.12; see [finding 100](100-module-limits.md).
 
 Instruction counts of the coupled runner (the DSP is stepped 666,667 instructions per 1500 Hz block, i.e. an
 assumed 1 GHz core with one instruction per cycle; the idle loop is skipped exactly and counted):

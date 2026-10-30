@@ -313,7 +313,8 @@ block_cycles    = 666666                  # dsp_clock_hz / dsp_blocks_per_second
 ```
 
 `param_slots = [1,2,4,5]` keeps pluck's present knob positions (`pluck/module.toml:42`: knobs 3 and 6 empty), because a saved project stores values by
-slot. Why 3 and 6 are empty is not recorded; this design keeps it **[O]**: it is a clone-of-SAMPLE constraint or a pluck choice. A module with more
+slot. Knob D (slot 3) is the sample slot on a SAMPLE clone (finding 02). Knob G (slot 6) is used by stock sample machines and works for a module; knob C is
+unused by every stock machine ([finding 100](../findings/100-module-limits.md)). A module with more
 parameters than `param_slots` is refused at build time with the profile's number in the message. (Slot rule: D1, section 11.5.)
 
 ### 5.3 The guard inside the adapter
@@ -603,7 +604,7 @@ with the toolchains (`module:check` needs only Selache, no firmware). If the web
 | Risk | Detail | Mitigation |
 | --- | --- | --- |
 | C on SHARC | the public compiler was evaluated on six small functions; no optimiser to speak of (24 instructions against 7 by hand for a scale loop); pointers are byte addresses, so whether silicon agrees is open (`20-patch-toolchains.md:71-82`); the frame call convention | assembly remains the supported language of v1; a C pilot (the `pluck` string loop in C, measured against the assembly on the rig for cycles) before `--lang c` is offered |
-| contract cost | adapter and frame call add cycles; DT2 has 16 tracks x 666,666 cycles per block of headroom shared with the firmware | cost targets in 5.4, measured on the rig in step 2 before step 3 starts |
+| contract cost | adapter and frame call add cycles; DT2 has 16 tracks x 666,667 (1 GHz, [D] finding 100) cycles per block of headroom shared with the firmware | cost targets in 5.4, measured on the rig in step 2 before step 3 starts |
 | DN2 memory | 320 KiB DSP area; pluck alone uses 256 KiB | state is declared and reported; `voices` per module and per device is in the profile |
 | DN2 engine constraints | the note-on is a one-block trig bit; the amp envelope and gate come after the module; whether the engine reads `own_dsp` machines the same for every module is only read for pluck (finding 33) | the DN2 adapter is the only place that knows; step 3 re-runs `equiv-dn2-set` and `pages-dyn-pluck` |
 | "write only own state" is not provable statically | computed pointers | write-set check on the rig (needs a store hook) plus a canary word after each state block, checked by the adapter, cost about 4 instructions per call |
@@ -614,12 +615,11 @@ with the toolchains (`module:check` needs only Selache, no firmware). If the web
 ### 11.2 Questions for Em
 
 1. Is a saved project with pluck as type 9 (the patched-in one) in use? If not, retire it without an alias (10.3).
-2. Why are knobs 3 and 6 empty on the DT2 pluck? If it is only a choice, `param_slots = [1,2,3,4,5,6]` gives six parameters; if it comes from the SAMPLE clone, the limit is four. A profile fact either way.
-3. C on SHARC: do you want the pilot measured before the contract is frozen, or contract first with assembly only? Recommendation: contract first; the contract does not depend on the language.
-4. DN2 DSP memory: accept 256 KiB for one pluck, or shorten the lines (changes the sound at low notes) or reduce `voices` on DN2?
-5. Should `xslice` (a SLICE clone, no synthesis) be part of the SDK as a second Machine kind ("sample machine") or stay outside?
-6. Cycle enforcement: SHARC cannot be preempted; only the guard's output check and the DSP hang breadcrumbs (finding 48) exist. Is a declared-and-measured budget enough, or should the runtime take the DSP block time from HEALTH and disable the heaviest machine when the block time is over budget?
-7. A new command `MODULES` and DSP section v3 raise `RUNTIME_VERSION` to 6; a card with runtime-5 `.dkm` files must still load (the plan: yes, both loaders in one runtime). Confirm. (Superseded by D3, section 11.5.)
+2. C on SHARC: do you want the pilot measured before the contract is frozen, or contract first with assembly only? Recommendation: contract first; the contract does not depend on the language.
+3. DN2 DSP memory: accept 256 KiB for one pluck, or shorten the lines (changes the sound at low notes) or reduce `voices` on DN2?
+4. Should `xslice` (a SLICE clone, no synthesis) be part of the SDK as a second Machine kind ("sample machine") or stay outside?
+5. Cycle enforcement: SHARC cannot be preempted; only the guard's output check and the DSP hang breadcrumbs (finding 48) exist. Is a declared-and-measured budget enough, or should the runtime take the DSP block time from HEALTH and disable the heaviest machine when the block time is over budget?
+6. A new command `MODULES` and DSP section v3 raise `RUNTIME_VERSION` to 6; a card with runtime-5 `.dkm` files must still load (the plan: yes, both loaders in one runtime). Confirm. (Superseded by D3, section 11.5.)
 
 ### 11.3 Estimates (agent time, a lane each; wall time is shorter with lanes in parallel; outcome risk stated separately)
 

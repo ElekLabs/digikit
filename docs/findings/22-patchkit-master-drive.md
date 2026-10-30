@@ -64,7 +64,7 @@ largest |x[n] - x[n-1]|.
 Concrete SHARC+ core, one block (`tests/patchkit/test_master_drive.py`): **20 instructions** with no drive (early exit before
 the saved registers), **968** at full drive (two 32-sample loops of 12 instructions plus the coefficient set-up).
 Against the headroom of finding 06 (about 330,000 DN2 and 450,000 DT2 instructions per block at the assumed clock)
-that is 0.3 % and 0.2 %. The routine has no division and no RECIPS.
+that is 0.3 % and 0.2 % (**[C]** old emulator counts, see [finding 100](100-module-limits.md)). The routine has no division and no RECIPS.
 
 ## Toolchain facts found on the way **[D]**
 
