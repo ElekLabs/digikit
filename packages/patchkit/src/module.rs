@@ -899,7 +899,7 @@ place = "cf.expansion"
         }).to_string();
         std::fs::write(&cache, &object).unwrap();
         let env = crate::build::toolchain::Env::new(&root);
-        let build = Build { root: &root, only: Some(&[]) };
+        let build = Build { root: &root, only: Some(&[]), defines: &[] };
         let models = crate::typed::Models::from_texts([
             include_str!("../../../devices/digitakt-ii.toml"),
             include_str!("../../../devices/digitone-ii.toml"),

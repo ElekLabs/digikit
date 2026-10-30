@@ -1,5 +1,42 @@
 # DSP SDK and first sampler
 
+
+## Rebase checkpoint — main 409414f9
+
+The sampler branch was rebased onto `origin/main` at `409414f9`. Original tip
+`68db1215` is retained by `backup/dsp-sampler-pre-rebase-68db1215`. The inherited
+cleanup WIP `219570ca` was skipped after independent comparison confirmed that
+main's completed self-contained-module migration supersedes it. All 42 sampler
+commits were retained. Historical commit hashes and run evidence below identify
+their original checkpoints.
+
+- [x] Preserve main fault tracing, diagnostics, trace-aware build cache and SHARC
+  legality checks alongside sample/file APIs and source-track callbacks.
+- [x] Fix two build API integration mismatches and update stale encoded DKM
+  contract expectations (API 1.4, machine 1.1); independent review is clean.
+- [x] Rebuild runtime and both voice objects from merged sources. Refresh DDR
+  proof source hashes without changing its object bytes; no temporary conflict
+  objects remain. SDK/FW/module generation and selected current-object checks pass.
+- [x] Validate 103 SDK tests; cache-generation 1, header 1, ABI-generation 4,
+  SDK-generation 8, trace 1, voice guard/track contract 17 and breadcrumb 4 tests.
+  LP0 and DDR proof builds pass the new hardware-loop legality check.
+- [x] Reapply private LP0 0.3 with the new patchkit: exact firmware image remains
+  `6ff3b5ec9d9ed80f1108746922a213a75c9827a867fb257c1690c419fa56a2c8`.
+  Its prior native pass still applies to those bytes; no redundant native run or
+  emulator core regeneration was performed. This is not a new merged-runtime
+  device acceptance result or full merge gate.
+
+Routed `test:changed` now passes path and layer checks; its host/format/types
+launchers retain the known linked-pnpm failure. Direct installed-tool fallbacks
+pass: 222 host tests (16 skipped), all five workspace TypeScript checks and scoped
+Prettier. No dependency files or installation were changed. Logs:
+`out/rebase-changed-check.log`, `out/rebase-host-check.log`.
+
+Main's DSP-link full-cache code-load sequence is useful evidence, but does not
+settle DMA receive coherence or production sample-pool ownership. These remain
+before exposing usable per-track bindings; see finding 95. Continue the sampler
+work from the reader/backing integration boundary below.
+
 Status: discovery and the first implementation milestone approved by Em on 2026-10-29.
 Approved implementation: exact reusable DSP extractions, numerical sampler primitives, and the bounded
 loading/lifetime proof below (Em approved 2026-10-29). The product sampler remains a separate decision.

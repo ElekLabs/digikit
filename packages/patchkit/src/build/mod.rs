@@ -303,7 +303,7 @@ pub fn read_cached_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -
         .iter()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    toolchain::read_text(&object_file(&env.root, moddir, m, o))
+    toolchain::read_text(&object_file(env, moddir, m, o))
 }
 
 /// The text of the object `rel` of the content module in `moddir`, for the module library: the stored object when its `source_sha256`

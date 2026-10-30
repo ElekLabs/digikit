@@ -241,3 +241,20 @@ MODE1; this does not settle physical interrupt behavior, cache coherence or
 production backing ownership. See [finding 94](94-sample-binding-lifetime.md#private-lp0-03-transportcontrol-integration)
 for the protocol, review and native evidence. The conditional address-conversion
 question and rejected fatal-OOM allocator route above remain unchanged.
+
+
+## Rebase: main DSP-link cache maintenance is a distinct path
+
+**[D]** Main commit `463248e3` adds full-cache maintenance after CPU-owned DSP
+code writes: combined DM/PM write-back plus invalidate, followed separately by
+instruction-cache invalidation, with uncompressed instruction spacing. See
+[the hardware-loop and DSP-link findings](91-hardware-loop-ends-and-dsp-link-cache.md).
+That report itself leaves external/L2 execution and cacheability questions open;
+its device result cannot separate the loop-encoding fix from cache maintenance.
+
+This code-load sequence does not establish LP0 DMA receive visibility, exclusive
+receive-buffer ownership or a production sample pool. In particular, post-DMA
+write-back of stale dirty CPU lines remains unsafe. The sampler's cache and
+reservation obligations above are unchanged. The rebased private LP0 and DDR
+proof objects pass main's new hardware-loop legality check; LP0's exact patched
+firmware hash also remains identical to its audited native proof.
