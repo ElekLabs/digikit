@@ -88,3 +88,40 @@ alone would bypass earlier mono processing and is not the selected solution.
 
 No module ABI change, firmware patch, emulator run or hardware test is claimed
 by this finding.
+
+## Finite post-source inventory
+
+**[D]** A further original-byte pass checked 722 aligned instructions in
+`0x1c9448..0x1c9b33` and 99 local continuation/dispatch instructions in
+`0x1c9b73..0x1c9c5d`. There are ten processing families, of which the two
+recurrences above have audited state footprints. The remaining families are:
+
+| Callee | State base + byte stride per slot | Placement |
+| --- | --- | --- |
+| `0x1cdb56` | `0x24fa20 + 0x60*v` | Conditional early or later scaled placement |
+| `0xb8265b` | `0x250160 + 0x14*v` | Conditional early or late placement |
+| `0xb82342` | `0x2505a0 + 0xcc*v` | Dispatch case 1 |
+| `0xb81a16` | `0x251260 + 0x12c*v` | Dispatch case 2 |
+| `0xb80f2e` | `0x252520 + 0xec*v` | Dispatch case 3 |
+| `0xb806f5` | `0x2535e0 + 0x48*v` | Dispatch cases 4 and 6; existing ring bounds in finding 91 |
+| `0xb81526` | `0x253a60 + 0xd4*v` | Dispatch case 5, scratch output then blend |
+| `0xb80345` | `0x2547a0 + 0x2c*v` | After selected processing stages |
+
+The seven-entry dispatch table at `0x8052dbc0` has case 0 as skip. Other cases
+process the mono buffer in place except case 5, whose scratch destination comes
+from `DM(0x254aa0)`; its continuation blends scratch and the original buffer.
+Conditional placements use tables at `0x254ab4`, `0x254aa4`, `0x254ac4`.
+Their full flag domains are not established, so early/late exclusivity is not
+assumed for arbitrary values.
+
+The ordered path is constant gain, conditional `0x1cdb56`, audited first-order
+stage, conditional `0xb8265b`, conditional audited U/Y stage, selected dispatch,
+late conditional placements, `0xb80345`, gain ramp, conditional fade, metadata
+cleanup, then the two-channel split. Most control/coefficient generation is
+before the source hook at `0x1c9045..93c6`. Some physically later code rejoins
+that earlier control flow; it must not be counted as extra post-source stages.
+The inline cleanup mutates shared flags and must not simply run twice.
+
+**[O]** The eight remaining callee footprints, live routing-table invariants and
+per-channel versus shared-control fields still need classification. This finite
+inventory does not authorize duplicating the whole chain's execution.
