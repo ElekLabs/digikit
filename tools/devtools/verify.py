@@ -33,7 +33,7 @@ for tier-quick, all for tier-sweep), cut their (default/no-aot x file) groups in
 them from one shared queue, longest first, on the step's share of the budget in emulator processes (DIGI_TIER_JOBS replaces it).
 check-no-aot runs 17 native FX assertions even with --full (--all-no-aot: 61 normally, 191 with --full).
 Normal routing includes relevant stock, runtime and module acceptance; full tier sweeps stay explicit.
-python-tests runs the PY_CHECKS commands (ruff, ruff format, mypy, pathcheck, layercheck), the PY_GATE files, the tests that reach a changed Python module of tools/ or tests/ in the
+python-tests runs the PY_CHECKS commands (ruff, ruff format, mypy, pathcheck, layercheck, gen-check), the PY_GATE files, the tests that reach a changed Python module of tools/ or tests/ in the
 import graph (changed_tests.gate_tests), the PY_SUITES whose trigger prefixes match a changed file (a suite with
 a test directory only for the other files),
 every changed tests/**/test_*.py, and the
@@ -102,7 +102,7 @@ DT2_FX_FILES = (
 # reach them in the import graph instead (changed_tests.gate_tests). Test paths may be globs or
 # directories; one that matches nothing is an error.
 PY_GATE = ("tests/patchkit/test_pk_current.py",)
-# Plain commands python-tests runs as sub-checks (label "python-tests:NAME"): lint, format, types, paths.
+# Plain commands python-tests runs as sub-checks (label "python-tests:NAME"): lint, format, types, paths, generated sources.
 # ruff and mypy read their file lists from pyproject.toml.
 PY_CHECKS: tuple[tuple[str, list[str]], ...] = (
     ("ruff", [sys.executable, "-m", "ruff", "check", "--no-cache"]),
@@ -111,6 +111,8 @@ PY_CHECKS: tuple[tuple[str, list[str]], ...] = (
     ("pathcheck", [sys.executable, "-m", "tools.devtools.pathcheck"]),
     # the module layering (docs/ARCHITECTURE.md): reads manifests, sources and built objects, under a second
     ("layercheck", [sys.executable, "-m", "tools.devtools.layercheck"]),
+    # the generated sources match sdk/sdk.toml, devices/*.toml and abi.toml (mise run gen:modules)
+    ("gen-check", [sys.executable, "-m", "tools.patchkit.patchkit", "gen", "--check"]),
 )
 PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     (

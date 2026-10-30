@@ -29,23 +29,6 @@ fn the_fx_chain_cap_is_the_registrys() {
     }
 }
 
-#[test]
-fn the_contract_files_are_current() {
-    let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
-    let files = sdkgen::render(&text).unwrap();
-    assert_eq!(files.len(), 14);
-    for (rel, text) in files {
-        let path = root().join(&rel);
-        let have = std::fs::read_to_string(&path).unwrap_or_default();
-        assert_eq!(
-            have,
-            text,
-            "{} is stale: run `patchkit gen`",
-            path.display()
-        );
-    }
-}
-
 /// `text` with its `[api]` fields replaced by `fields` (the lines of the `fields = [...]` array).
 fn with_api(text: &str, fields: &str) -> String {
     let a = text.find("[api]\n").unwrap();

@@ -35,6 +35,7 @@ import sys
 import time
 
 from tools.coldfire.digikit_menu_proof import Plan
+from tools.device.dkproto import ARENA_HDR
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / "out" / "runs" / "lanes" / "r1-health"
@@ -104,7 +105,7 @@ def expected_lines(h: dict) -> list[str]:
     )
     out.append("LARGEST " + (size_text(h["heap_largest"]) if f & F_HEAP else "--"))
     out.append("CPU FREE " + size_text(h["arena_free"]))
-    if h["arena_largest"] + 16 < h["arena_free"]:
+    if h["arena_largest"] + ARENA_HDR < h["arena_free"]:
         out.append("CPU BIG " + size_text(h["arena_largest"]))
     out.append(
         "DSP FREE " + (size_text(h["dsp_area_free"]) if h["dsp_area_total"] else "--")

@@ -15,23 +15,6 @@ fn texts() -> (String, String) {
     )
 }
 
-#[test]
-fn the_abi_files_are_current() {
-    let (abi, sdk) = texts();
-    let files = abigen::render_with(&abi, &sdk).unwrap();
-    assert_eq!(files.len(), 3);
-    for (rel, text) in files {
-        let path = root().join(&rel);
-        let have = std::fs::read_to_string(&path).unwrap_or_default();
-        assert_eq!(
-            have,
-            text,
-            "{} is stale: run `patchkit gen`",
-            path.display()
-        );
-    }
-}
-
 /// `abi` with its first `[[struct]]` replaced by `body`.
 fn with_struct(abi: &str, body: &str) -> String {
     let a = abi.find("[[struct]]").unwrap();

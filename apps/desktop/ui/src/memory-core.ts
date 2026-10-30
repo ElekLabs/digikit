@@ -6,10 +6,10 @@
 // the known modules (the runtime's own, a module that is not in the library) is one "other" segment. Nothing that is only ticked or pending
 // is shown: the bars are what the device holds now.
 
+import { ARENA_HDR } from '@digi/dk-session/gen_proto';
 import type { Caps, Needs } from '../../../web/src/modules/fit.ts';
 
-/** The arena's block header (ARENA_HDR in arena.rs): its `largest` is a payload, while `free` adds up block sizes. DSP_AREA's `largest` is a raw gap. */
-const ARENA_HDR = 16;
+// ARENA_HDR (the arena's block header): the `largest` of the ARENA is a payload, while `free` adds up block sizes. DSP_AREA's `largest` is a raw gap.
 
 /** The type of a module, which sets its colour: the library's groups. A module that is not in the library is `other`. */
 export type SegmentKind = 'machine' | 'effect' | 'tool' | 'other';

@@ -10,6 +10,7 @@ from support.paths import REPO_ROOT
 ROOT = REPO_ROOT
 
 from tools.coldfire import digikit_health_proof as hp  # noqa: E402
+from tools.device.dkproto import ARENA_HDR  # noqa: E402
 from tools.patchkit import patchkit as front_end  # noqa: E402
 from tools.patchkit import pk_toolchains  # noqa: E402
 
@@ -124,7 +125,8 @@ def test_largest_rows_only_when_they_differ():
         "arena_largest": 100 * 1024,
     }
     assert "CPU BIG 100 KB" in hp.expected_lines(h)
-    h["arena_largest"] = h["arena_free"] - 16  # one free block: its payload is the size minus the header
+    # one free block: its payload is the size minus the header
+    h["arena_largest"] = h["arena_free"] - ARENA_HDR
     assert not any("LARGEST" in x and x.startswith("CPU") for x in hp.expected_lines(h))
 
 

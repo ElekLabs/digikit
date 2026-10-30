@@ -344,6 +344,7 @@ The generated files are in `sdk/include/dk/gen/` and `sdk/asm/`.
 | `sdk/asm/dk_machine.inc` | The machine constants and field offsets for assembly. | The machine's `.s`. |
 | `sdk/include/dk/gen/fx_consts.h` | The effect constants as C `#define`s. | `<dk/fx.h>`. |
 | `sdk/asm/dk_fx.inc` | The effect constants and field offsets for assembly. | The effect's `.s`. |
+| `sdk/include/dk/gen/limits.h` | The `.dkm` format limits (`[limits.format]`) as C `#define`s, such as `DK_ARENA_HDR`. | Core apps in C. |
 
 Do not include `dk_fx.inc` and `dk_machine.inc` in one assembly file. `DK_BLOCK` and `DK_LEVEL_BOUND_BITS` are in both.
 

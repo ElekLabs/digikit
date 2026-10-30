@@ -29,6 +29,8 @@ pub const C_FX_VIEW_OUT: &str = "sdk/include/dk/gen/fx.h";
 pub const C_API_OUT: &str = "sdk/include/dk/gen/api.h";
 /// The generated C header of the descriptor records, relative to the repository root.
 pub const C_DESC_OUT: &str = "sdk/include/dk/gen/desc.h";
+/// The generated C header of the format limits, relative to the repository root.
+pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 /// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
 pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
 /// The generated Python protocol numbers, relative to the repository root.
@@ -1115,6 +1117,16 @@ fn c_consts(
     s
 }
 
+/// `sdk/include/dk/gen/limits.h`: the format limits as C `#define`s, `DK_` plus the generated name (`DK_ARENA_HDR`).
+fn limits_h(sdk: &Sdk) -> String {
+    let mut s = format!("/* {HEADER} */\n#ifndef DK_GEN_LIMITS_H\n#define DK_GEN_LIMITS_H\n\n");
+    for (n, v) in format_limits(sdk) {
+        let _ = writeln!(s, "#define DK_{n} {v}");
+    }
+    s.push_str("\n#endif /* DK_GEN_LIMITS_H */\n");
+    s
+}
+
 /// `sdk/include/dk/gen/machine_consts.h`: the numbers of `sdk/include/dk/gen/machine.h`.
 fn machine_consts_h(sdk: &Sdk) -> String {
     let m = &sdk.machine;
@@ -2116,6 +2128,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (FX_INC_OUT.to_string(), fx_inc(&sdk)),
         (C_MACHINE_OUT.to_string(), machine_consts_h(&sdk)),
         (C_FX_OUT.to_string(), fx_consts_h(&sdk)),
+        (C_LIMITS_OUT.to_string(), limits_h(&sdk)),
         (PROTO_PY_OUT.to_string(), python_proto(&sdk)),
         (PROTO_RS_OUT.to_string(), rust_proto(&sdk)),
         (PROTO_TS_OUT.to_string(), ts_proto(&sdk)),

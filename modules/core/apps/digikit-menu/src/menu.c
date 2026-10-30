@@ -15,6 +15,7 @@
 #include <stddef.h>
 #include <dk/ui.h>
 #include <dk_ui_core.h>
+#include <dk/gen/limits.h>
 #include "dkrt.h"
 
 #define MAX_ENT DKRT_SCAN_MAX
@@ -795,8 +796,8 @@ static void fill_health(dk_ui_menu *m, void *ctx)
     t_s(&t, "CPU FREE ");
     size_text(&t, h->arena_free);
     hrow(m, &t);
-    /* arena_largest is a payload (block size minus the 16-byte block header, ARENA_HDR in arena.rs); arena_free sums block sizes */
-    if (h->arena_largest + 16u < h->arena_free) {
+    /* arena_largest is a payload (block size minus the 16-byte block header, DK_ARENA_HDR); arena_free sums block sizes */
+    if (h->arena_largest + DK_ARENA_HDR < h->arena_free) {
         t_init(&t);
         t_s(&t, "CPU BIG ");
         size_text(&t, h->arena_largest);
