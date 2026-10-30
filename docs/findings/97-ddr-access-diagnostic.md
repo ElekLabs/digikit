@@ -107,3 +107,41 @@ Exact commands, environment and result codes are in
 No Python core regeneration was required. This closes the compiled-kernel refusal
 proof, not full daemon dispatch, stock coexistence or Wasm execution. Those remain
 open, along with hardware ownership and coherence.
+
+
+## Ordered daemon control route
+
+**[D]** The host-only `dsp.ddr_monitor` RPC accepts `arm` with byte `start` and
+exclusive `end`, `status` (default), `clear`, and `disarm`. A typed command crosses
+the active DSP worker FIFO with a per-request acknowledgment after audio sync.
+Both generated-core bridges implement the same contract; unsupported engines
+return an error. Invalid ranges and actions are rejected before mutation.
+
+Responses contain the active generated-core profile label, instruction count,
+armed range and first observation. The profile label is not a firmware-version
+claim. Status reads only metadata. Access kinds describe helper paths: a host
+peek through the CPU semantic accessor can report `cpu_read`, so that label alone
+does not establish guest origin.
+
+Four dual-core focused unit cases and a separate no-audio controller case pass;
+independent source review found no issues. The scoped regression TypeScript check,
+related host selection, lint and format passed directly with installed tools.
+The usual changed-files wrapper passes Python/path/layer checks but its JavaScript
+steps fail at the existing worktree pnpm hoist/bootstrap layout. This is not a
+full workspace type or merge-gate pass. Commands and logs are retained under
+`out/runs/ddr-monitor-rpc/`.
+
+The new `tests/regression/runtime/dsp-ddr-monitor.test.ts` requires an explicit
+immutable daemon path and registry-ready DT2 1.17 / DN2 1.12 inputs. It checks
+lifecycle ordering, unchanged peek data, invalid-command preservation, then a
+separate bounded stock-execution observation. Its arbitrary upper-DDR interval
+is a diagnostic probe, not a selected allocation. Both native cases pass with immutable daemon `digi-emud-6850e27b98d9`
+(SHA-256 `6850e27b98d9123fa77d470516da6cb729082236b9dc0968f0e100948763cbd3`).
+Each stock observation advances 3,333,335 DSP instructions and records no hit in
+`[0x9fff0000,0x9fff1000)`. Lifecycle, explicit helper-read capture and no-fault
+checks pass. Input hashes and load identities are in the per-device acceptance
+results; legacy generated profile labels do not override those identities.
+These are short ready-state observations, not memory availability evidence.
+Commands/logs are in the `native-build` and `native-acceptance` subdirectories of
+`out/runs/ddr-monitor-rpc/`, with per-device records under `acceptance`.
+Wasm execution remains open; native acceptance does not establish the browser path.

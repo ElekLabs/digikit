@@ -276,6 +276,24 @@ impl CoupledRuntime {
             Err("no DSP audio session".into())
         }
     }
+    /// Diagnose the session's active DSP, fenced after outstanding audio work.
+    pub fn dsp_ddr_monitor(
+        &mut self,
+        command: elektron_native_boot::ddr_monitor::DdrMonitorCommand,
+    ) -> Result<elektron_native_boot::ddr_monitor::DdrMonitorStatus, String> {
+        #[cfg(feature = "coupled-audio")]
+        {
+            let audio = self.audio.as_mut().ok_or("no DSP audio session")?;
+            audio.sync();
+            audio.handle.ddr_monitor(command)
+        }
+        #[cfg(not(feature = "coupled-audio"))]
+        {
+            let _ = command;
+            Err("no DSP audio session".into())
+        }
+    }
+
     /// Read one exact DSP word address, including unaligned compact MMRs.
     pub fn peek_dsp_word(&mut self, addr: u32) -> Result<Option<u32>, String> {
         #[cfg(feature = "coupled-audio")]

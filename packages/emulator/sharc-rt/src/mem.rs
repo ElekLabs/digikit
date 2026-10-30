@@ -175,6 +175,10 @@ impl Mem {
         Ok(())
     }
 
+    pub fn ddr_monitor_range(&self) -> Option<(u32, u32)> {
+        self.ddr_range
+    }
+
     pub fn ddr_monitor_active(&self) -> bool {
         self.ddr_range.is_some()
     }

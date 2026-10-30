@@ -2165,5 +2165,13 @@ made. The primary branch remains the integration and publication branch.
 
 Finding 96 records the bounded domains and remaining lifecycle limitations.
 The daemon DDR diagnostic route is implemented and source-reviewed; dual-core
-unit checks passed. A dual-core native build is running before device-model
-acceptance, so full daemon validation is not yet claimed.
+unit checks and both native acceptance cases pass. The explicit helper access is
+captured, status does not self-latch, invalid commands preserve state, and bounded
+stock execution completes without faults. Finding 97 records immutable binary
+identity and observation limits; no production memory ownership is established.
+
+- [x] Expose and validate the ordered diagnostic RPC on DT2 1.17 and DN2 1.12.
+- [ ] Exercise the Wasm fast-path refusal with a focused V8 proof.
+- [ ] Expand stock coexistence scenarios before selecting any production backing.
+- [ ] Review the composed source/filter/blend/gain/output-split proof under way
+  in the secondary worktree; preserve the explicit synthetic-route boundary.

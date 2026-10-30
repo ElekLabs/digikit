@@ -1814,6 +1814,7 @@ impl Actor {
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
             "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
             "dsp.patch" => self.rpc_dsp_patch(&p).map(Some),
+            "dsp.ddr_monitor" => self.rpc_dsp_ddr_monitor(&p).map(Some),
             "card.load" => self.rpc_card_load(&p, &reply),
             "card.status" => Ok(Some(self.card_status())),
             "card.folder" => self.rpc_card_folder().map(Some),
@@ -2833,6 +2834,38 @@ impl Actor {
                 .map_err(|e| RpcError::new(code::AUDIO_UNAVAILABLE, e))
         })?;
         Ok(json!({"addr": addr, "value": value}))
+    }
+
+    /// Actions apply to the active coupled DSP. Event kind names describe
+    /// helper paths, including host peeks; they do not prove guest provenance.
+    fn rpc_dsp_ddr_monitor(&mut self, p: &Params) -> RpcResult {
+        use elektron_native_boot::ddr_monitor::{DdrMonitorCommand, DdrMonitorRange};
+        let command = match p.opt_str("action")?.unwrap_or("status") {
+            "status" => DdrMonitorCommand::Status,
+            "clear" => DdrMonitorCommand::Clear,
+            "disarm" => DdrMonitorCommand::Disarm,
+            "arm" => {
+                let address = |key| {
+                    u32::try_from(p.u64(key)?)
+                        .map_err(|_| RpcError::bad_params("start and end are 32-bit byte addresses"))
+                };
+                DdrMonitorCommand::Arm(DdrMonitorRange {
+                    start: address("start")?,
+                    end: address("end")?,
+                })
+            }
+            _ => {
+                return Err(RpcError::bad_params(
+                    "action is arm, status, clear or disarm",
+                ));
+            }
+        };
+        command.validate().map_err(RpcError::bad_params)?;
+        let status = self.with_runtime(|r| {
+            r.dsp_ddr_monitor(command)
+                .map_err(|e| RpcError::new(code::AUDIO_UNAVAILABLE, e))
+        })?;
+        Ok(json!(status))
     }
 
     fn rpc_dsp_patch(&mut self, p: &Params) -> RpcResult {
@@ -4444,5 +4477,49 @@ mod mem_write_tests {
         assert!(decode_hex("abc").is_err(), "odd length");
         assert!(decode_hex("zz").is_err(), "not hex");
         assert!(decode_hex("é1").is_err(), "not ASCII");
+    }
+}
+
+#[cfg(test)]
+mod ddr_monitor_tests {
+    use super::*;
+
+    #[test]
+    fn ddr_monitor_bad_params_are_rejected_before_runtime_access() {
+        let (_commands, rx) = mpsc::channel();
+        let mut actor = Actor::new(rx, Config::new(None));
+        for params in [
+            json!({"action":"unknown"}),
+            json!({"action":3}),
+            json!({"action":"arm"}),
+            json!({"action":"arm","start":0x80000000u64,"end":0x100000000u64}),
+            json!({"action":"arm","start":0x7fffffffu64,"end":0x80000004u64}),
+            json!({"action":"arm","start":0x80000000u64,"end":0x80000000u64}),
+            json!({"action":"arm","start":0x80000000u64,"end":0xa0000001u64}),
+        ] {
+            assert_eq!(
+                actor
+                    .rpc_dsp_ddr_monitor(&Params(&params))
+                    .unwrap_err()
+                    .code,
+                code::BAD_PARAMS
+            );
+        }
+        // Omitted action is status, and valid commands reach the ordinary
+        // no-firmware error rather than being rejected as malformed.
+        for params in [
+            json!({}),
+            json!({"action":"clear"}),
+            json!({"action":"disarm"}),
+            json!({"action":"arm","start":0x80000000u64,"end":0xa0000000u64}),
+        ] {
+            assert_ne!(
+                actor
+                    .rpc_dsp_ddr_monitor(&Params(&params))
+                    .unwrap_err()
+                    .code,
+                code::BAD_PARAMS
+            );
+        }
     }
 }

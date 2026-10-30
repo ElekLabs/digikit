@@ -24,6 +24,7 @@ use std::{
     time::Instant,
 };
 
+use crate::ddr_monitor::{DdrMonitorCommand, DdrMonitorStatus};
 use periph::dspi::Peer;
 
 /// DN2 RTOS idle loop, short-word PCs (inclusive start, exclusive end).
@@ -168,6 +169,10 @@ pub trait DspEngine {
                 w.map(|w| (w >> (8 * (a & 3))) as u8)
             })
             .collect()
+    }
+    /// Ordered host diagnostic, unsupported by engines without a monitor.
+    fn ddr_monitor(&mut self, _command: DdrMonitorCommand) -> Result<DdrMonitorStatus, String> {
+        Err("this DSP engine does not support the DDR monitor".into())
     }
     /// One 32-bit word at the exact DSP data address, including compact MMR
     /// addresses that need not be byte-aligned. None means unknown,
@@ -1008,6 +1013,10 @@ impl<E: DspEngine> RemoteDsp<E> {
 }
 
 enum Msg {
+    DdrMonitor {
+        command: DdrMonitorCommand,
+        ack: mpsc::Sender<Result<DdrMonitorStatus, String>>,
+    },
     Frame {
         tx: Vec<u8>,
         /// Link port 0 bytes sent by the ColdFire since the previous frame.
@@ -1317,6 +1326,9 @@ impl ThreadedPeer {
                         Msg::ExecutionProfileReport => {
                             let _ = execution_profile_tx.send(core.engine.execution_profile());
                         }
+                        Msg::DdrMonitor { command, ack } => {
+                            let _ = ack.send(core.engine.ddr_monitor(command));
+                        }
                         Msg::Peek { addr, len, ack } => {
                             let _ = ack.send(core.engine.peek_bytes(addr, len));
                         }
@@ -1486,6 +1498,24 @@ impl ThreadedHandle {
             .map_err(|_| "DSP worker stopped while reading".to_string())
     }
 
+    /// Apply a monitor command after queued frames and acknowledge the exact
+    /// resulting metadata. Status does not inspect the watched data memory.
+    pub fn ddr_monitor(&self, command: DdrMonitorCommand) -> Result<DdrMonitorStatus, String> {
+        let (ack, reply) = mpsc::channel();
+        let sent = self
+            .link
+            .borrow()
+            .tx
+            .as_ref()
+            .is_some_and(|tx| tx.send(Msg::DdrMonitor { command, ack }).is_ok());
+        if !sent {
+            return Err("DSP worker has stopped".into());
+        }
+        reply
+            .recv()
+            .map_err(|_| "DSP worker stopped during DDR monitor command".to_string())?
+    }
+
     /// Read one exact DSP word address between frames, retaining unknowns.
     pub fn peek_word(&self, addr: u32) -> Result<Option<u32>, String> {
         let (ack_tx, ack_rx) = mpsc::channel();
@@ -1636,6 +1666,133 @@ pub mod second {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ddr_monitor_worker_contract<E, F>(make: F)
+    where
+        E: DspEngine + 'static,
+        F: FnOnce() -> Result<E, String> + Send + 'static,
+    {
+        use crate::ddr_monitor::{DdrMonitorHit, DdrMonitorKind, DdrMonitorRange};
+        let (_peer, handle, _) = ThreadedPeer::spawn(make, 5000, DN2_IDLE_RANGE).unwrap();
+        let range = DdrMonitorRange {
+            start: 0x8001_0000,
+            end: 0x8001_0004,
+        };
+        let initial = handle.ddr_monitor(DdrMonitorCommand::Status).unwrap();
+        assert!(!initial.armed);
+        assert_eq!(
+            (initial.range, initial.first, initial.dsp_icount),
+            (None, None, 73)
+        );
+        assert!(!initial.active_core_profile.is_empty());
+        let armed = handle.ddr_monitor(DdrMonitorCommand::Arm(range)).unwrap();
+        assert!(armed.armed);
+        assert_eq!((armed.range, armed.first), (Some(range), None));
+        assert_eq!(
+            handle.ddr_monitor(DdrMonitorCommand::Status).unwrap(),
+            armed
+        );
+        // Queue a deliberate host peek without waiting for its acknowledgement.
+        // The subsequent monitor reply must reflect that earlier worker message.
+        let (ack, peeked) = mpsc::channel();
+        handle
+            .link
+            .borrow()
+            .tx
+            .as_ref()
+            .unwrap()
+            .send(Msg::PeekWord {
+                addr: range.start,
+                ack,
+            })
+            .unwrap();
+        let hit = handle.ddr_monitor(DdrMonitorCommand::Status).unwrap();
+        assert_eq!(peeked.try_recv().unwrap(), Some(0x0403_0201));
+        assert_eq!(
+            hit.first,
+            Some(DdrMonitorHit {
+                address: range.start,
+                width: 4,
+                kind: DdrMonitorKind::CpuRead
+            })
+        );
+        assert_eq!(handle.ddr_monitor(DdrMonitorCommand::Status).unwrap(), hit);
+        assert!(
+            handle
+                .ddr_monitor(DdrMonitorCommand::Arm(DdrMonitorRange {
+                    start: range.start,
+                    end: range.start
+                }))
+                .is_err()
+        );
+        assert_eq!(handle.ddr_monitor(DdrMonitorCommand::Status).unwrap(), hit);
+        let cleared = handle.ddr_monitor(DdrMonitorCommand::Clear).unwrap();
+        assert!(cleared.armed);
+        assert_eq!((cleared.range, cleared.first), (Some(range), None));
+        handle.peek_word(range.start).unwrap();
+        assert!(
+            handle
+                .ddr_monitor(DdrMonitorCommand::Status)
+                .unwrap()
+                .first
+                .is_some()
+        );
+        let replaced = handle
+            .ddr_monitor(DdrMonitorCommand::Arm(DdrMonitorRange {
+                start: range.start + 4,
+                end: range.end + 4,
+            }))
+            .unwrap();
+        assert_eq!(replaced.first, None);
+        assert_eq!(replaced.range.unwrap().start, range.start + 4);
+        let disarmed = handle.ddr_monitor(DdrMonitorCommand::Disarm).unwrap();
+        assert!(!disarmed.armed);
+        assert_eq!((disarmed.range, disarmed.first), (None, None));
+        handle.link.borrow_mut().tx.take();
+        assert!(
+            handle
+                .ddr_monitor(DdrMonitorCommand::Status)
+                .unwrap_err()
+                .contains("stopped")
+        );
+    }
+
+    #[test]
+    fn ddr_monitor_ordered_worker_lifecycle() {
+        ddr_monitor_worker_contract(|| {
+            let mut mem = sharc_native::mem::Mem::new();
+            mem.load(0x8001_0000, &[1, 2, 3, 4]);
+            mem.reset();
+            let mut engine = sharc_native::Engine::new(mem);
+            engine.s.icount = 73;
+            Ok(NativeDsp(engine))
+        });
+    }
+
+    #[cfg(feature = "second-core")]
+    #[test]
+    fn ddr_monitor_second_core_worker_lifecycle() {
+        ddr_monitor_worker_contract(|| {
+            let mut mem = sharc_native_2::mem::Mem::new();
+            mem.load(0x8001_0000, &[1, 2, 3, 4]);
+            mem.reset();
+            let mut engine = sharc_native_2::Engine::new(mem);
+            engine.s.icount = 73;
+            Ok(second::NativeDsp(engine))
+        });
+    }
+
+    #[test]
+    fn ddr_monitor_unsupported_engine_acknowledges_error() {
+        let (_peer, handle, _) = ThreadedPeer::spawn(|| Ok(WordProbe), 5000, DN2_IDLE_RANGE).unwrap();
+        assert!(
+            handle
+                .ddr_monitor(DdrMonitorCommand::Status)
+                .unwrap_err()
+                .contains("does not support")
+        );
+        assert_eq!(handle.peek_word(0x3e002).unwrap(), Some(0x55667788));
+    }
 
     struct WordProbe;
 
