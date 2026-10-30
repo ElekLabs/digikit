@@ -2120,10 +2120,18 @@ Mem-only counter is not a complete guest-access monitor.
 - [x] Pass eight focused monitor tests and all 21 runtime-crate units (overlapping
   counts), with independent source review clean. Shared-IR interpreter fallback
   is exercised; there is no full compiled-backend dispatch claim yet.
-- [ ] Resolve the existing Cranelift flat-access harness panic in a separate scoped
+- [x] Resolve the existing Cranelift flat-access harness panic in a separate scoped
   change, then run the monitor proof through the actual compiled backend.
 - [ ] Validate Wasm and expose a bounded diagnostic entry point for stock runs.
 
 [Finding 97](../findings/97-ddr-access-diagnostic.md) records the exact contract,
 reset/import behavior and remaining coverage. No instruction-core regeneration,
 firmware change, production allocation or hardware test is part of this checkpoint.
+
+
+Native backend follow-up passes: three flat-access tests run reference and actual
+Cranelift kernels, two focused guard regressions pass, and eight diagnostic tests
+remain green. Independent review is clean. Reproduction and exact commands are in
+`out/runs/ddr-monitor-native/`; finding 97 records the small failure-block ordering
+fix. Next is an ordered emulator diagnostic control route and bounded stock runs;
+this is separate from public module ABI and sample allocation.

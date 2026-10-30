@@ -83,3 +83,27 @@ Formatting: owner-wide `cargo fmt --check` reports existing unformatted generate
 and handwritten sources. A scoped check of the six changed files identified three
 new formatting hunks, which were corrected; unrelated formatting was retained.
 This is not an owner-wide formatting pass.
+
+
+## Native compiled-backend follow-up
+
+**[D]** The pre-existing panic is now reproduced and fixed in a separate compiler
+change. `Emit::fail_block` previously switched away from a still-open predecessor
+before Guard emitted its branch. Failure-block allocation is now separate from
+body emission: Guard, GuardAny and Leave terminate their predecessor first, then
+fill a fresh failure block. Cached blocks still use the same instruction/exit key,
+and temporary boolean-conversion cache cleanup is preserved.
+
+The original flat-load/store tests and the monitor test now execute both reference
+IR and actual Cranelift kernels. Three flat-access tests, two new guard/exit
+regressions, and eight monitor tests pass. Independent source review found no
+issues. The new regressions cover shared and distinct exits, continuation boolean
+reuse, GuardAny/Leave, noncanonical truth values and float-bitcast fixups.
+
+Exact commands, environment and result codes are in
+`out/runs/ddr-monitor-native/commands.json`; the pre-fix stack trace is
+`out/runs/ddr-monitor-native/reproduce.log`. Passing logs are `flat-access.log`,
+`guard-regressions.log`, `monitor.log` and `changed-preflight.log` in that directory.
+No Python core regeneration was required. This closes the compiled-kernel refusal
+proof, not full daemon dispatch, stock coexistence or Wasm execution. Those remain
+open, along with hardware ownership and coherence.

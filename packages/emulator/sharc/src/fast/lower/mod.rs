@@ -2250,13 +2250,7 @@ mod tests {
         const A: u32 = 0x8001_0000;
         for bytes in [1, 2, 4] {
             for write in [false, true] {
-                // The native backend's existing flat harness currently aborts
-                // during compilation. Exercise the shared guarded IR here;
-                // native and Wasm execution coverage remains a separate proof.
-                let k = super::super::interp::InterpBackend
-                    .compile(&flat_test_ir(bytes, write))
-                    .unwrap();
-                {
+                for k in flat_test_kernels(bytes, write) {
                     let mut mem = Mem::new();
                     for i in 0..4 {
                         mem.write_byte(A + i, 0x55);
