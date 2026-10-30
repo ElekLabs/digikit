@@ -427,7 +427,9 @@ def test_long_steps_start_with_the_long_files() -> None:
 
 
 def test_untracked_changes_drop_root_files() -> None:
-    assert verify.untracked_changes(["device-log.log", "tools/x.py"]) == ["tools/x.py"]
+    assert verify.untracked_changes(["device-log.log", "tools/devtools/verify.py"]) == [
+        "tools/devtools/verify.py"
+    ]
 
 
 def test_files_longest_first_and_unknown_files_in_plan_order() -> None:
