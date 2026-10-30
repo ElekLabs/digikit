@@ -49,7 +49,7 @@ Tools: `tools/patchkit/pk_toolchains.py`, `pk_link.py`, `pk_cfcall.py`, `pk_shar
 
 ## SHARC+ (ADSP-2156x)
 
-- **Toolchain [D].** Selache at `2b26d3b7` (GPLv3, public), `cargo build --release`, built by
+- **Toolchain [D].** Selache at `926bfac9` (GPLv3, ElekLabs fork of the public project), `cargo build --release`, built by
   `tools/patchkit/pk_toolchains.py selache` into `out/tools/selache` in under a minute. `selas -proc ADSP-21569`.
 - **Object facts [D].** Section `seg_pmco` (assembly, 48-bit forms) or `seg_swco` (selcc). Symbol values and
   relocation offsets are in 16-bit parcels (the PC unit). Two relocation types: **11** = absolute 24-bit target

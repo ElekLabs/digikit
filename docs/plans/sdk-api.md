@@ -280,14 +280,14 @@ DSP word read before any write. Not the cycle budget (about 8k instructions agai
       silicon, so a wrong-result risk, not a halt. Check against the manual and the stock encodings.
 - [x] B3: the likely cause (finding 91): Selache keeps one loop-end slot, so in the nested 4x4 gain loop of
       `core/fx` `fxsend-a.inc` the outer loop ends in a 16-bit instruction; the PRM (p. 4-42) wants the last 11
-      instructions of a hardware loop in 48-bit form. Fixed with `.NOCOMPRESS;` around the loop (both send objects,
+      instructions of a hardware loop in 48-bit form. Fixed first with `.NOCOMPRESS;` around the loop, later in Selache itself (both send objects,
       DT2 and DN2); the two send objects were the only hits in the repository. **[D]**; the device retry passed.
 - [x] B3 build check: `loop_end_problems` in `build/sharc_legal.rs` refuses a VISA instruction in the last 11
       instructions of a `DO` body (module build and `dspscan`); zero hits on the stock images (DT2 1.16/1.17, DN2
       1.11/1.12).
 - [x] B3 load path: `core/dsp-link` writes the data cache back (write-back invalidation of DM and PM, PRM p. 8-11)
       before the instruction cache invalidation, with 48-bit instructions after each cache MMR write (p. 8-9).
-- [ ] Selache issue (nested `DO`: the outer loop end is compressed): draft written, not filed.
+- [x] Selache issue (nested `DO`: the outer loop end is compressed): fixed in our fork (ElekLabs/selache, commit 926bfac9, pinned); the `.NOCOMPRESS` workaround in `fxsend-a.inc` is removed and the objects are identical. Not filed upstream. **[D]**
 - [x] Retry freqshift on Em's DT2 (OS 1.17, 2026-10-30): it runs on the send route and on the master route, no stop.
 
 ### Later

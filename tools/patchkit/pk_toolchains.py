@@ -44,8 +44,8 @@ SHA256 = {
     "gcc-16.2.0.tar.xz": "e6738e29597f733270731aa90600f37ffdc045079dfc27ec7e8192cc81085c3e",
 }
 M68K_PREFIX = TOOLS / "m68k-elf"
-SELACHE_URL = "https://github.com/js216/selache"
-SELACHE_REV = "2b26d3b75c53063575bc5c820fa0d38879335187"
+SELACHE_URL = "https://github.com/ElekLabs/selache"
+SELACHE_REV = "926bfac9c8a7b51fcc7750498af3fd2521541b3e"
 SELACHE_DIR = TOOLS / "selache"
 
 # Rust through GCC (finding 23 S1b, finding 26). Every revision is pinned.
