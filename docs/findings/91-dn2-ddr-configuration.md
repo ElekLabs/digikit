@@ -295,3 +295,58 @@ in finding 88. The observed `0x100000` control writes denote DMA interrupt
 configuration, not a transfer extent. Auxiliary transfer direction/count and
 boot-only versus runtime lifetime remain unresolved. These fixed roots narrow
 the owner table; they establish no general free DDR region or sample capacity.
+
+## Actual AudioTask entry versus database function ownership
+
+**[D]** A bounded DN2 1.12 original-byte audit checked 18 instruction heads in
+section 7 (SHA-256
+`336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`).
+Task creation loads the name pointer at `0x1ca00b`, R4=`0x1c9fe7` at
+`0x1ca00e`, then calls `0xb88839` at `0x1ca013`. The entry is forwarded through
+`0xb88885 → 0xb87b58 → 0xb8af28` to initial-context store `0xb8af71`.
+Thus `0x1c9fe7` is the actual task entry; the earlier database-owner route
+starting at `0x1c9e76` is not an entry-address claim.
+
+The actual loop waits at `0x1c9fe7`, calls dispatch `0x1c9d6b` at `0x1c9ff4`,
+and reaches command-table target `0x1c9f0f`. The chain continues through call
+`0x1c9fbc → 0x1c2712`, call `0x1c3044 → 0x1c8ef1`, then call
+`0x1c9459 → 0xb8251b`. The table at byte address `0x28268a68` contains four
+targets: `0x1c9dc2`, `0x1c9e76`, `0x1c9eda`, `0x1c9f0f`; its indirect
+transfer is `0x1c9dbf`.
+
+**[D/O]** The database merges ownership into `[0x1c9e76,0x1ca000)`, so the
+whole-containing-function store report overapproximates around the actual entry.
+Unfollowed edges also prevent complete reachability. All 23 CALL rows lacking a
+database target function have concrete target PCs: 22 have a unique containing
+range, one has none, and none is ambiguous. Examples are
+`0x1c9fe7 → 0xb891fa` (interior of `0xb891eb`), `0x1c95b4 → 0xb8265b`
+(interior of `0xb8258f`), and `0xb80e6a → 0x1c125e` (no recorded owner).
+The bounded helper audit below addresses `0x1c125e`; explicit entry/dispatch
+precision remains future work before any query-policy change. No tool policy is
+expanded here; this establishes no runtime
+store bound, full closure, free DDR or backing ownership.
+
+## Callable helper missing database ownership: `0x1c125e`
+
+**[D]** A further bounded audit checked 64 original DN2 1.12 instruction heads,
+including widths, forms and raw encodings, against the same section-7 hash above.
+`0x1c125e` is callable despite lacking a database owner: direct caller
+`0xb80e6a` reaches it; other recorded callers `0xb810e8` and `0xb81f2e` were
+not expanded. Followed body ranges are `0x1c125e..0x1c126c` and
+`0x1c127f..0x1c12df`, skipping adjacent entry `0x1c126d`. Saved-return I12 use
+at `0x1c1260` precedes jump `0x1c1266` with RFRAME in its delay sequence.
+The conditional return at `0x1c1280` is non-delayed despite its database delay
+label; final return `0x1c12d7` has two delay instructions.
+
+The followed helper body has no stores or further calls. Its memory operands
+read saved-frame state and fixed normal-word table `0x90123` (byte alias
+`0x2824048c`); the remaining work is floating-point math. This does not describe
+the skipped adjacent entry or expand the other callers.
+
+In immediate caller `0xb80e54`, registers are saved through I6-relative stores
+at `0xb80e5b/60`, with I7-relative frame stores at `0xb80e6d/6e`. The nonstack store is `DM(I5+2)` at `0xb80e79`.
+I5 copies incoming R4 at `0xb80e56`, and the store follows another call at
+`0xb80e71`. **[O]** Incoming R4 provenance and preservation across that call are
+the next bounded audit. No database repair or traversal-policy change is made;
+the helper's store-free body does not establish caller destination bounds,
+complete reachability or backing ownership.

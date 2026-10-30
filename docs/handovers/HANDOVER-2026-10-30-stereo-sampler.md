@@ -1,8 +1,9 @@
 # Stereo sampler: numerical routing and memory diagnostics
 
 Primary worktree: `/private/tmp/digikit-dsp-sampler`, sampler discovery branch.
-Latest bounded native checkpoint: the private first-stage proof described below
-(source integration/publication is coordinator-owned). The ongoing source of truth is
+Current checkpoints include the private combined observer, read-only store inventory
+and fail-closed runtime cleanup (integration/publication is coordinator-owned).
+The ongoing source of truth is
 [the plan](../plans/dsp-sdk-and-sampler.md); this handover is a short resume guide.
 Other sessions may own the original checkout. Do not reset it or stop their runs.
 
@@ -248,3 +249,30 @@ writer path that can ignore busy deletion before opening the existing ID. This
 establishes no immutable source lease; it is not an observed race or a complete
 outer-admission audit. Next inspect mutation-under-mutex seams for partial-load
 invalidation, without selecting hooks, ABI or production policy.
+
+The new read-only `fw stores` command inventories recorded SHARC store operands
+through explicit-root CALL-only reach, retaining interior targets and unresolved
+edge/pointer evidence. The DN2 1.12 explicit-blob report is in
+`out/runs/dn2-store-inventory/report.json`: root `0x1c9fe7` normalizes to containing
+function `0x1c9e76`, with 93 functions/2,278 operands, including 1,002 stack
+candidates; 23 CALL and 16 indirect rows remain unresolved. No runtime bound,
+decoder completeness, alias footprint or backing ownership follows. Command and
+provenance semantics are in [Instrumentation](../INSTRUMENTATION.md); coordinator
+review will select the next named gaps rather than treating prior counts as goldens.
+
+The original-byte root audit now confirms actual AudioTask entry `0x1c9fe7`
+through task creation/initial context. Database owner `[0x1c9e76,0x1ca000)` merges
+adjacent dispatch code, so whole-function reach overapproximates around that entry;
+unfollowed edges also leave reach incomplete. All 23 missing-target-function CALL
+rows have concrete destinations (22 unique containing ranges, one unowned).
+Final tool review closed the entry-identity P2. The bounded `0x1c125e` helper
+body audit is now complete: no stores/further calls in its followed ranges, with
+adjacent entry/other callers excluded. Next audit caller `0xb80e54`'s incoming R4
+provenance for `DM(I5+2)` after another call; entry/dispatch precision remains
+separate, with no current policy expansion or ownership conclusion. See
+[finding 91](../findings/91-dn2-ddr-configuration.md).
+
+The canonical packed-PCM16 parser already exists, but the current source/job
+contract is LE float32. Direct substitution would violate the consumer contract.
+Production wiring awaits explicit representation/destination byte extents and
+source consistency; no integration or public ABI is selected.

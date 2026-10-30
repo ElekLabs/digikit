@@ -42,6 +42,23 @@ private. The DDR diagnostic has compiled-native, ordered-RPC and bounded Wasm
 proofs. See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md) and
 [finding 97](../findings/97-ddr-access-diagnostic.md).
 
+Runtime failed-load cleanup now retains DSP/CF/module/transfer storage on uncertain
+invalidation and stops the queue. Ten actual-runtime host failure/success tests and
+two-device normal pluck load acceptance pass; standalone dkrt tests now route
+through the existing Rust job and `test:runtime:unit` owner. This does not prove
+physical ACK/callback quiescence. See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
+
+The read-only `fw stores` report passes 25 named tests and independent review.
+Its DN2 requested PC `0x1c9fe7` is now byte-audited as the actual AudioTask entry;
+merged database owner `0x1c9e76` makes whole-function reach an overapproximation.
+The bounded report has 93 functions/2,278 recorded stores, not ownership closure.
+All 23 CALL rows missing target functions have concrete PCs; the one with no
+containing range, `0x1c125e`, now has a bounded store-free body audit. Its caller's
+incoming R4 destination provenance is next; entry/dispatch precision and DT2
+source mutation coverage remain open. See
+[finding 91](../findings/91-dn2-ddr-configuration.md) and
+[finding 81](../findings/81-stock-sampler-dependencies.md).
+
 Production backing ownership/coexistence, callback-private lifetime, full-route
 capture/commit/reset/cleanup, public stereo integration and picker publication
 remain open. No production reservation or new IRQ policy is selected. Hardware,
@@ -2622,3 +2639,50 @@ or production memory policy is selected; DN2 generation/SHA remains a separate p
   rejecting unpublished loads; require fail-closed counter wrap. Seams found are
   not complete coverage, an implementation or a DSP pool ownership claim. See
   [finding 81](../findings/81-stock-sampler-dependencies.md).
+
+### Read-only reachable SHARC store inventory
+
+- [x] Extend the existing firmware query command with deterministic JSON rooted in
+  explicit PCs, preserving actual edge targets versus containing functions.
+- [x] Validate database schema/image provenance without rebuilding; account for
+  every recorded store operand, pointer ambiguity and unresolved/out-of-scope edge.
+- [x] Check synthetic read-only fixtures and one DN2 1.12 AudioTask report. This
+  inventories static evidence/gaps, not runtime bounds, backing ownership or reserves.
+
+The first DN2 1.12 report verifies explicit section-7 bytes against SHA-256
+`336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`.
+Requested `0x1c9fe7` lies in database function `0x1c9e76`; CALL-only whole-function
+reach yields 93 functions and 2,278 recorded store operands/sites, including 1,002
+stack-register candidates. Of 917 recorded edge rows, 171 CALL rows are followed;
+23 unresolved CALL and 16 indirect rows remain explicit. No PM/dual operand occurs
+in this bounded set; synthetic tests exercise both, without an absence claim.
+These policy-labelled counts do not use earlier 3,229/729/1,136 totals as goldens:
+roots/normalization, edge coverage, operand accounting and pointer ambiguity must
+be aligned before comparing them. No width-to-byte or interval ownership inference
+is made. See [command usage](../INSTRUMENTATION.md) and ignored
+`out/runs/dn2-store-inventory/report.json`; coordinator review selects the next gaps.
+
+The final named firmware-query file passes 25 tests, including read-only synthetic
+cycles/interior targets, dual operands, pointer ambiguity, provenance/schema
+failures and entry identity independent of edge normalization. Ruff, formatting
+and mypy pass. Source/report identity and commands are retained in ignored
+`out/runs/dn2-store-inventory/commands.json`.
+
+- [x] Audit the requested root against original task creation/initial context:
+  actual AudioTask entry is `0x1c9fe7`; database owner `0x1c9e76` merges adjacent
+  dispatch code. All 23 missing-target-function CALL rows have concrete PCs
+  (22 unique containing ranges, one unowned, zero ambiguous). Final tool review
+  closed the entry-identity P2; prior source tests are not repeated for these docs.
+- [x] Audit the bounded `0x1c125e` helper body: callable despite missing DB
+  ownership, no stores/further calls in the followed ranges; adjacent entry and
+  two other callers remain outside that body audit.
+- [ ] Establish incoming R4 provenance for caller `0xb80e54`'s `DM(I5+2)` store
+  after another call. Keep explicit entry/dispatch precision separate from
+  whole-function reach; no traversal-policy or ownership expansion is approved.
+  See [finding 91](../findings/91-dn2-ddr-configuration.md).
+
+**[O] Parser wiring boundary:** the existing source contract supplies LE float32,
+whereas `NativePcm16Stream` emits packed PCM16. Its existing canonical parser is
+not a direct replacement for that job/consumer path. Production wiring awaits an
+explicit representation and destination byte-extent contract plus source
+consistency; no implementation, public ABI or product policy is selected.
