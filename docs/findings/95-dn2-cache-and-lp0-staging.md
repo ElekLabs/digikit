@@ -2,8 +2,9 @@
 
 2026-10-30, DN2 OS 1.12. **[D]** static inspection and existing artifacts;
 **[O]** production ownership/coherence unresolved; **[C]** corrected inference.
-Original-byte checks were independently audited; no new hardware, emulator run,
-core change or regeneration is part of this checkpoint. Section-7 SHA-256:
+Original-byte checks were independently audited. The initial sections record static
+discovery; later sections record the implemented native proofs. No hardware work
+or instruction-core regeneration is claimed. Section-7 SHA-256:
 `336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`.
 See the [sampler plan](../plans/dsp-sdk-and-sampler.md).
 

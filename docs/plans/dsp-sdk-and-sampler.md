@@ -22,8 +22,27 @@ binding and connecting the on-device picker. The private staging window is not a
 production DDR reservation. DT2 loader/reset and DN2 runtime-ring evidence remains
 in findings 81/91. Physical cache behavior, broader firmware coexistence, and the
 existing AudioTask-tail SIMD save limitation remain open. The new runtime path has
-native DN2 acceptance; DT2/second-core integration and the full merge gate remain
-required before merging.
+native DN2 acceptance and DT2/second-core startup/cache integration acceptance;
+the full merge gate remains required before merging.
+
+## Confirmed cross-device architecture
+
+The user confirmed one shared sampler/SDK engine for both DT2 and DN2, with
+separate adapters only where device memory acquisition, transport, storage or
+project/reset integration differ. Both adapters must provide the same ready
+sample view and reader-lifetime contract. DT2 stock sampling is a reference and
+potential backing implementation, not a dependency imposed on DN2.
+
+The user confirmed that device adapters ship with the runtime. Content modules
+depend only on the shared SDK and declare the required contract/version; a
+compatible runtime supplies the device implementation and rejects unsupported
+requirements. Modules must not separately install a device adapter. Extend the
+existing runtime compatibility mechanism rather than inventing a parallel one.
+
+A 16 MiB DT2 tail reservation was discussed as an option, not approved. Continue
+investigating stock shared-pool allocation/lifecycle integration before reducing
+stock project capacity. DN2 already has the ten-second actual-reader proof; its
+remaining backing-memory ownership question is distinct from playback capability.
 
 ## Current bounded discovery — production ownership
 
@@ -1723,3 +1742,59 @@ routing still cannot use this linked worktree dependency layout; direct installe
 tools were used. Six socket-based host tests initially hit sandbox EPERM and pass
 with socket access. No dependencies changed. The dual-core build and full merge
 gate were not run; this is a verified branch checkpoint, not merge acceptance.
+
+
+### DT2 integration follow-up (in progress)
+
+- [x] Confirm both generated cores match the branch fingerprint and snapshot them
+  under `out/runs/dt2-startup-validation/` to avoid concurrent regeneration races.
+- [x] Prepare private current-metadata DT2 1.17 inputs and existing patched-pluck
+  fixture objects; no object changes or instruction-core regeneration required.
+- [x] Add an opt-in DT2 cold/cached startup regression, including DT2 core selection.
+- [x] Complete dual-core compilation, focused Rust checks and native DT2 acceptance.
+- [ ] Resolve DT2 before-reclaim/overwrite ordering for a shared-pool adapter.
+
+The original-byte pool audit establishes conditional bounds, not an unconditional
+reservation: initial rounded-size limit and append-end limit differ by 0x400;
+subtracting the same delta preserves this difference. The initial comparison is
+signed, and rounding/addition can wrap outside an established input domain. The
+inspected record insertion/release/reset family preserves an in-bounds invariant
+for nonnegative, nonwrapping sizes, but does not prove universal ownership.
+
+
+DT2 lifetime follow-up: release entry precedes reference removal/reclamation;
+header clear is too late. Reset needs close-all before its first header clear.
+Stock slot counts are not DSP reader pins, and project reset destroys records
+regardless of those counts. The next adapter design must keep CLOSE/DRAINED
+progressing asynchronously while stock mutation is suspended; the current UI-tick
+transport cannot safely be awaited by blocking that same UI path. No blocking
+stock hook or unbalanced reference-count increment has been implemented.
+
+DT2 integration run `out/runs/patched-dsp-startup/842ffcaf-b976-40ae-853b-5b41afdbb483/`
+passes the bounded cold/cached startup regression with DT2 OS 1.17. The dual-core
+daemon selects its DT2 backend (legacy generated label `dt2-1.16`; the loaded
+firmware is independently identified by the 1.17 SYX hash). Four DSP startup
+unit tests and the ready-pair key test also pass with `second-core` enabled.
+Cold and cached states retain CFG `0x414141` and CFG2 `0xf0`; cached restore follows
+an intervening stock restore and reports `cache_hit=true`, `snapshot-cache`.
+The immutable daemon SHA is
+`f2c167cc1c34b39ef2658277101af7287f90c1d406e0db0ee69fb16599ba810d`.
+Input manifests, isolated generated-core copies and logs are under
+`out/runs/dt2-startup-validation/`. This generic patched-pluck fixture checks DT2
+startup/cache integration; the DN2 LP0 sentinel proof supplies the boot-variable
+preservation regression. Neither is a hardware or production memory-owner proof.
+
+The runtime service inventory confirms existing API 1.3 sample-bank loading and
+API 1.4 reusable file listing already advance from the UI loop. Preserve those
+contracts while introducing per-track binding; the private LP0 fixture is not a
+shipping adapter. Next, inspect stock DT2 release/reset callers for a preceding
+DSP stop/drain handshake before designing a new asynchronous continuation.
+
+Validation: independent source/artifact review is clean. The new regression's
+TypeScript project, four other routed TypeScript projects, scoped lint/format,
+pathcheck and layercheck pass; related host selection finds no tests. The routed
+`mise run test:changed` cannot run its pnpm-backed steps because this worktree's
+linked dependency layout rejects `.pnpm` directory creation; equivalent installed
+tools were used directly without dependency changes. The first native attempt
+hit sandbox socket EPERM; the authorized local-socket rerun passed. No full merge
+gate, hardware test, PCM pin change or instruction-core regeneration was performed.

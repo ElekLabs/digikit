@@ -146,7 +146,9 @@ block-size check at `0x40154aea` from a shared pool boundary. The loader also
 reuses gaps and grows/merges records. Helper `0x40154682`, called by
 `0x40154770` and the loader at `0x40154c10`, derives the next offset from the
 last vector record (or `0x400` for an empty vector) and compares the proposed
-end against `0x19000401`. Its decompiled return encoding is not a complete ABI
+end against an exclusive `0x19000401` bound in the decompiler; original bytes
+below establish the encoded comparison as unsigned `> 0x19000400`.
+Its decompiled return encoding is not a complete ABI
 proof. The vector's storage-end pointer `0x405a0f6c` concerns metadata capacity,
 not an independently owned sample tail.
 
@@ -155,3 +157,74 @@ A reservation must constrain initial allocation, append/growth, gap reuse and
 reset/reinitialization consistently. The current pass identifies those enforcement
 questions; it has not implemented or validated a smaller stock pool. Borrowing a
 stock allocation remains another route only with a fence before reclamation.
+
+
+## Independently audited pool-boundary and writer follow-up
+
+**[D]** A second agent extracted DT2 1.17 original main-section bytes and checked
+both bounds. Rounded size is `(size+0x200f)&0xffffe000` at `0x40154aca/ade`.
+The limit at `0x40154aea` is `0x19000000`, with signed BGT rejection at
+`0x40154af0`. Append candidate end is compared against `0x19000400` at
+`0x4015470a`, with unsigned BHI rejection at `0x40154710`; equality succeeds.
+The first allocation starts at `0x400`. For a proposed end E, the corresponding
+limits are E−0x400 and E. Subtracting the same delta from the original limits
+preserves that relationship.
+
+The bounded record-writer family includes loader emplace calls at `0x40154b56`
+and `0x40154d1c`, insertion at `0x4015500a`, and inline construction/end advance
+at `0x40154fd8/fe2`. Gap reuse `0x40154c28..30` allocates inside an existing gap.
+Release `0x40154458/62/486/4a2` shifts records, shrinks the vector and merges freed
+space into the next gap. Reset `0x40154662` sets end to begin. An absolute-reference
+scan also found vector-global initialization at `0x401e2b8e/94/9a` outside indexed
+function boundaries. These positive paths support a conditional extent invariant;
+they are not an exclusion proof for arbitrary computed pointers.
+
+**[O]** Input-domain evidence remains material: a size of `0x7fffdff1` rounds to
+`0x80000000` and passes the signed initial comparison. Rounding and append addition
+also need nonwrapping operands. No upstream restriction excluding these cases was
+established in this bounded audit. Changing two literals alone is therefore not
+proven safe for all accepted inputs. No reservation patch was implemented or
+approved. The next DT2 adapter question is a fence before stock reclamation or
+overwrite, using the shared SDK reader-retirement contract.
+
+
+## Before-reclaim adapter seams
+
+**[D]** Independent original-byte checks establish that release `0x401543a2`
+removes a slot-reference node at `0x4015443a`, decrements record count at
+`0x40154448`, and can remove/coalesce records at `0x40154458..a2`, before its
+header-clear call at `0x401544de`. A custom-reader fence must precede reclamation;
+intercepting header clear alone is too late. Reset `0x40154634` first clears a
+header at `0x40154640`, destroys records at `0x4015465c`, then resets vector end
+at `0x40154662`: all borrowed SDK bindings must drain before its first clear.
+Loader replacement calls release at `0x401548f4`, before deduplication/allocation
+and first PCM sends at `0x40154dce/ee`. These are ordering facts, not a callable
+production continuation interface.
+
+Reload dispatch checks SampleLoaderBgWorker identity and queues work when invoked
+off-worker, but this does not establish that every release caller is worker-only.
+The queue unlock at `0x400f0b12` precedes job callback `0x400f0b3c`; queue protection
+is not a global allocator lifetime lock. The separate queued page sender
+`0x40153f34` has a positive preview producer at `0x4015431e`, using fixed preview
+buffers, rather than evidence that general-loader pages share that route.
+
+**[O]** The current private CLOSE request progresses in the UI-loop tick. A
+synchronous wait in a UI-originated release/reset could prevent both sending and
+completion polling. Shared-pool integration therefore needs an asynchronous
+suspend/resume or a separately proved progress context, with exact DRAINED before
+mutation. On failure retain the backing and suspend or abort upstream; returning
+early from a void release/reset function is not enough to stop its caller.
+A genuine balanced stock slot-reference pin could prevent ordinary last-slot
+release, but is not an active-reader pin and does not survive project reset's
+vector destruction. Neither production adapter route is implemented by this pass.
+
+**[D]** The immediate caller audit also resolves two misleading candidates.
+ProjectSettings virtual `+0x28` resolves through vtable `0x401f4e90` to
+`0x401a96b8`, a field getter with no calls. Removal wrapper `0x4004b794` clears
+the project slot at `0x4004b7f0`, calls release at `0x4004b7f8`, then invokes
+virtual `+0x10` notification at `0x4004b81a`. Reload's worker path calls the
+getter at `0x4004e962`, stores a flag, then calls reset at `0x4004e976`.
+The immediate loader predecessor `0x4015b616` only compares a four-word sample
+key, and busy-scope exit `0x40153896` only clears its flag. None of these
+inspected calls establishes a DSP drain acknowledgement. This bounded result
+does not exclude a barrier higher in the call chain or stock DSP slot validation.
