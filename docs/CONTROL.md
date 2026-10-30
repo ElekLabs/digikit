@@ -221,14 +221,16 @@ firmware) instead of the image it had loaded. `patchkit flash STOCK.syx --emulat
 
     {"window_s": 1.2,
      "cf":  {"model_pct", "real_pct", "real_high_pct"},
-     "dsp": {"busy_per_block", "model_pct", "real_pct", "real_high_pct"} | null}
+     "dsp": {"busy_per_block", "model_pct", "real_pct", "real_high_pct", "peak_pct"} | null}
 
 `model_pct` is the load in the emulator's own model. ColdFire: busy / total instructions of the window (busy = the
 interpreted ones; the idle fast-forward and the RAM clear do not count). DSP: busy instructions per block over the
 666,667 cycles of a block (1 instruction = 1 cycle). `real_*` estimate the chip. ColdFire: busy instructions per
 emulated second (total / 132 M) x busy CPI / 264 MHz, CPI nominal in `real_pct`, pessimistic in `real_high_pct`. DSP:
 the model load x the device's real-cycles-per-instruction factor, nominal in `real_pct`, high in `real_high_pct`.
-The real values are estimates from the public manuals' cycle tables and our instruction counts, not measurements. The
+`peak_pct` (DSP only, optional) is the largest unsmoothed `real_pct` of any single window since the meter was reset (a
+restored or replaced runtime resets it). On the device in the emulator, the runtime's HEALTH page shows the model figure
+(its EMUCLK ticks once per instruction), so compare it with `model_pct`, not `real_pct`. The real values are estimates from the public manuals' cycle tables and our instruction counts, not measurements. The
 factors are one file, `devices/cycle-factors.json` (cited findings inside; `tools/patchkit/pk_dsp_budget.py` reads the
 same numbers). Each closed window is blended 50/50 into the shown value; a restored or replaced runtime clears it.
 `dsp` is `null` without a DSP session (`status.dsp` is `"zero"` or `"none"`). The desktop panel gets the same object as

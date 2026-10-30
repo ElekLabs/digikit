@@ -41,7 +41,7 @@ uint8_t DK_ABOUT[24][24];
 uint32_t DK_ABOUT_N;
 uint8_t DK_MEM[8][24];
 uint32_t DK_MEM_N;
-uint8_t DK_LINES[9][24];
+uint8_t DK_LINES[12][24];
 /* The last dialog the menu opened: title, text and how many were opened. */
 uint8_t DK_POPUP[48];
 uint8_t DK_POPUP_TEXT[48];
@@ -733,9 +733,13 @@ static void pct_text(txt *t, uint32_t x10)
     t_c(t, '%');
 }
 
-static void hrow(dk_ui_menu *m, const txt *t, int k)
+/* The next free row of the proof array DK_LINES; the page has up to 12 rows (the two BIG rows, the largest free block, only show when it differs from the total; the page is about 16 characters wide). */
+static int g_hrows;
+
+static void hrow(dk_ui_menu *m, const txt *t)
 {
-    keep(DK_LINES[k], t->b);
+    if (g_hrows < 12)
+        keep(DK_LINES[g_hrows++], t->b);
     dk_ui_text(m, t->b);
 }
 
@@ -744,23 +748,32 @@ static void fill_health(dk_ui_menu *m, void *ctx)
     (void)ctx;
     const DkrtHealth *h = &DK_HEALTH;
     txt t;
+    for (int r = 0; r < 12; r++)
+        keep(DK_LINES[r], "");
+    g_hrows = 0;
     t_init(&t);
-    t_s(&t, "CPU ");
+    /* relative to the quietest window since boot, not to the CPU's capacity */
+    t_s(&t, "CPU REL ");
     if (h->flags & DKRT_HEALTH_CPU)
         pct_text(&t, h->cpu_x10);
     else
         t_s(&t, "--");
-    hrow(m, &t, 0);
+    hrow(m, &t);
     t_init(&t);
-    t_s(&t, "DSP ");
-    if (h->flags & DKRT_HEALTH_DSP) {
+    /* of an assumed 1 GHz block (finding 100) */
+    t_s(&t, "DSP 1GHZ ");
+    if (h->flags & DKRT_HEALTH_DSP)
         pct_text(&t, h->dsp_avg_x10);
-        t_s(&t, " MAX ");
-        pct_text(&t, h->dsp_max_x10);
-    } else {
+    else
         t_s(&t, "--");
-    }
-    hrow(m, &t, 1);
+    hrow(m, &t);
+    t_init(&t);
+    t_s(&t, "DSP MAX ");
+    if (h->flags & DKRT_HEALTH_DSP)
+        pct_text(&t, h->dsp_max_x10);
+    else
+        t_s(&t, "--");
+    hrow(m, &t);
     t_init(&t);
     t_s(&t, "RAM FREE ");
     if (h->flags & DKRT_HEALTH_HEAP) {
@@ -770,43 +783,56 @@ static void fill_health(dk_ui_menu *m, void *ctx)
     } else {
         t_s(&t, "--");
     }
-    hrow(m, &t, 2);
+    hrow(m, &t);
     t_init(&t);
     t_s(&t, "LARGEST ");
     if (h->flags & DKRT_HEALTH_HEAP)
         size_text(&t, h->heap_largest);
     else
         t_s(&t, "--");
-    hrow(m, &t, 3);
+    hrow(m, &t);
     t_init(&t);
     t_s(&t, "CPU FREE ");
     size_text(&t, h->arena_free);
-    hrow(m, &t, 4);
+    hrow(m, &t);
+    /* arena_largest is a payload (block size minus the 16-byte block header, ARENA_HDR in arena.rs); arena_free sums block sizes */
+    if (h->arena_largest + 16u < h->arena_free) {
+        t_init(&t);
+        t_s(&t, "CPU BIG ");
+        size_text(&t, h->arena_largest);
+        hrow(m, &t);
+    }
     t_init(&t);
     t_s(&t, "DSP FREE ");
     if (h->dsp_area_total != 0)
         size_text(&t, h->dsp_area_free);
     else
         t_s(&t, "--");
-    hrow(m, &t, 5);
+    hrow(m, &t);
+    if (h->dsp_area_total != 0 && h->dsp_area_largest < h->dsp_area_free) {
+        t_init(&t);
+        t_s(&t, "DSP BIG ");
+        size_text(&t, h->dsp_area_largest);
+        hrow(m, &t);
+    }
     t_init(&t);
     t_s(&t, "STORE USED ");
     if (h->flags & DKRT_HEALTH_STORE)
         size_text_kb(&t, h->store_used);
     else
         t_s(&t, "--");
-    hrow(m, &t, 6);
+    hrow(m, &t);
     t_init(&t);
     t_s(&t, "STORE FREE ");
     if (h->flags & DKRT_HEALTH_STORE)
         size_text_kb(&t, h->store_free);
     else
         t_s(&t, "--");
-    hrow(m, &t, 7);
+    hrow(m, &t);
     if (!(h->flags & DKRT_HEALTH_MODULE)) {
         t_init(&t);
         t_s(&t, "NO HEALTH MODULE");
-        hrow(m, &t, 8);
+        hrow(m, &t);
     }
 }
 

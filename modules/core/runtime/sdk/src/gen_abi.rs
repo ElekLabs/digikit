@@ -169,7 +169,7 @@ pub struct DkrtHealth {
     pub blocks: u32,
     /// windows (one second each) closed
     pub windows: u32,
-    /// CPU load of the last window, tenths of a percent (HEALTH_CPU)
+    /// CPU load of the last window, tenths of a percent, relative to the quietest window since boot (HEALTH_CPU)
     pub cpu_x10: u32,
     /// the idle-loop iterations in the last window
     pub idle_win: u32,
@@ -181,7 +181,7 @@ pub struct DkrtHealth {
     pub dsp_max: u32,
     /// the cycles a block has (DSP_BLOCK_CYCLES)
     pub dsp_period: u32,
-    /// dsp_avg as tenths of a percent of dsp_period (HEALTH_DSP)
+    /// dsp_avg as tenths of a percent of dsp_period, an assumed 1 GHz block (finding 100) (HEALTH_DSP)
     pub dsp_avg_x10: u32,
     /// dsp_max as tenths of a percent of dsp_period
     pub dsp_max_x10: u32,

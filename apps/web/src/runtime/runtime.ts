@@ -91,7 +91,13 @@ export interface NativeAudioStatus {
   load?: {
     window_s: number;
     cf: { model_pct: number; real_pct: number; real_high_pct: number };
-    dsp: { busy_per_block: number; model_pct: number; real_pct: number; real_high_pct: number } | null;
+    dsp: {
+      busy_per_block: number;
+      model_pct: number;
+      real_pct: number;
+      real_high_pct: number;
+      peak_pct?: number;
+    } | null;
   } | null;
   dsp_tiers?: {
     worker_cpu_s: number;

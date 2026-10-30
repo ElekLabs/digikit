@@ -139,7 +139,14 @@ export interface LoadStatus {
   window_s: number;
   cf: { model_pct: number; real_pct: number; real_high_pct: number };
   /** null when no DSP runs. */
-  dsp: { busy_per_block: number; model_pct: number; real_pct: number; real_high_pct: number } | null;
+  dsp: {
+    busy_per_block: number;
+    model_pct: number;
+    real_pct: number;
+    real_high_pct: number;
+    /** Largest unsmoothed `real_pct` of any window since the meter reset; absent from older controllers. */
+    peak_pct?: number;
+  } | null;
 }
 
 export interface StatusResult {

@@ -188,13 +188,13 @@ typedef struct DkrtHealth {
     uint32_t flags;                              /* HEALTH_* */
     uint32_t blocks;                             /* DSP blocks seen since boot (1500 per second) */
     uint32_t windows;                            /* windows (one second each) closed */
-    uint32_t cpu_x10;                            /* CPU load of the last window, tenths of a percent (HEALTH_CPU) */
+    uint32_t cpu_x10;                            /* CPU load of the last window, tenths of a percent, relative to the quietest window since boot (HEALTH_CPU) */
     uint32_t idle_win;                           /* the idle-loop iterations in the last window */
     uint32_t idle_ref;                           /* the best window so far (100 % idle) */
     uint32_t dsp_avg;                            /* DSP block handler, cycles per block, average of the last window (the DSP's own EMUCLK difference) */
     uint32_t dsp_max;                            /* maximum of the last window */
     uint32_t dsp_period;                         /* the cycles a block has (DSP_BLOCK_CYCLES) */
-    uint32_t dsp_avg_x10;                        /* dsp_avg as tenths of a percent of dsp_period (HEALTH_DSP) */
+    uint32_t dsp_avg_x10;                        /* dsp_avg as tenths of a percent of dsp_period, an assumed 1 GHz block (finding 100) (HEALTH_DSP) */
     uint32_t dsp_max_x10;                        /* dsp_max as tenths of a percent of dsp_period */
     uint32_t heap_total;                         /* the firmware heap (HEALTH_HEAP): bytes in all */
     uint32_t heap_free;
