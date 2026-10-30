@@ -272,6 +272,9 @@ pub mod store;
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").
 pub mod settings;
 
+/// The last fault (a CPU crash or a DSP stop) as the settings key `dk/fault`, and the ABOUT rows made from it.
+pub mod fault;
+
 // `CARD_*` (the state of the card's store area as the runtime found it at boot), `DkrtDiag` and `DIAG_MAGIC` are in `gen_abi`
 // (docs/findings/46-digikit-debug.md).
 

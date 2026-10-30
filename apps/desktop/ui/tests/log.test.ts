@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   LOG_CAP,
+  RUNTIME_CAP,
+  addEntries,
   addEntry,
   autoOpens,
   clearEntries,
@@ -15,6 +17,9 @@ import {
   healthStart,
   reloadEntry,
   reloadFailureEntry,
+  saveName,
+  saveText,
+  sourceMenu,
   transferEntry,
   unseenErrors,
   type LogInput,
@@ -34,6 +39,52 @@ test('the log keeps the newest 500 entries', () => {
   assert.equal(s.entries.at(-1)!.text, `e${LOG_CAP + 24}`);
 });
 
+const rtEntry = (
+  origin: 'device' | 'emulator',
+  module: string,
+  text: string,
+  level: 'info' | 'error' = 'info',
+): LogInput => ({
+  source: origin,
+  level,
+  text,
+  rt: { origin, module },
+});
+
+test('each runtime log has its own cap of 2000, and the app keeps its 500', () => {
+  let s = emptyLog();
+  s = addEntries(
+    s,
+    Array.from({ length: RUNTIME_CAP + 30 }, (_, n) => rtEntry('device', '', `d${n}`)),
+    0,
+  );
+  s = addEntries(
+    s,
+    Array.from({ length: 40 }, (_, n) => rtEntry('emulator', '', `e${n}`)),
+    0,
+  );
+  s = addEntries(
+    s,
+    Array.from({ length: LOG_CAP + 10 }, (_, n) => info(`a${n}`)),
+    0,
+  );
+  const count = (f: (e: (typeof s.entries)[number]) => boolean) => s.entries.filter(f).length;
+  assert.equal(
+    count((e) => e.source === 'device'),
+    RUNTIME_CAP,
+  );
+  assert.equal(
+    count((e) => e.source === 'emulator'),
+    40,
+  );
+  assert.equal(
+    count((e) => e.source === 'reload'),
+    LOG_CAP,
+  );
+  assert.equal(s.entries.find((e) => e.source === 'device')!.text, 'd30');
+  assert.equal(s.entries.find((e) => e.source === 'reload')!.text, 'a10');
+});
+
 test('ids keep growing after a clear', () => {
   const s = clearEntries(fill([info('a'), info('b')]));
   assert.equal(s.entries.length, 0);
@@ -49,6 +100,52 @@ test('the filter takes one source and errors only', () => {
   assert.deepEqual(text({ source: 'card', errorsOnly: true }), ['d']);
 });
 
+test('the Source menu picks an app source, an origin, its runtime or one of its modules', () => {
+  const s = fill([
+    info('a', 'reload'),
+    info('health', 'emulator'),
+    rtEntry('emulator', '', 'boot'),
+    rtEntry('emulator', 'freqshift', 'emu mod'),
+    rtEntry('device', '', 'dev boot'),
+    rtEntry('device', 'freqshift', 'dev mod'),
+    rtEntry('device', 'other', 'dev other', 'error'),
+  ]);
+  const text = (source: string, errorsOnly = false) =>
+    filterEntries(s.entries, { source, errorsOnly }).map((e) => e.text);
+  assert.deepEqual(text('reload'), ['a']);
+  assert.deepEqual(text('emulator'), ['health']); // the app's entries about the emulator
+  assert.deepEqual(text('emulator:all'), ['health', 'boot', 'emu mod']);
+  assert.deepEqual(text('emulator:runtime'), ['boot']);
+  assert.deepEqual(text('device:all'), ['dev boot', 'dev mod', 'dev other']);
+  assert.deepEqual(text('device:runtime'), ['dev boot']);
+  assert.deepEqual(text('device:mod:freqshift'), ['dev mod']);
+  assert.deepEqual(text('device:all', true), ['dev other']);
+});
+
+test('the menu groups App, Emulator and the device; a group with nothing to follow has one disabled option', () => {
+  const none = { live: false, logged: false, modules: [] };
+  const [app, emu, dev] = sourceMenu({ emulator: none, device: { ...none } });
+  assert.deepEqual(
+    app!.options.map((o) => o.label),
+    ['reload', 'build', 'firmware', 'card', 'transfer', 'reset'],
+  );
+  assert.deepEqual(emu!.options, [{ value: '', label: 'no runtime running', disabled: true }]);
+  assert.deepEqual([dev!.label, dev!.options.map((o) => o.label)], ['Device', ['no MIDI port']]);
+  const [, emu2, dev2] = sourceMenu({
+    emulator: { live: true, logged: true, modules: ['freqshift'] },
+    device: { live: true, logged: true, modules: ['a', 'b'], port: 'Elektron Digitakt II' },
+  });
+  assert.deepEqual(
+    emu2!.options.map((o) => o.value),
+    ['emulator:all', 'emulator', 'emulator:runtime', 'emulator:mod:freqshift'],
+  );
+  assert.equal(dev2!.label, 'Device: MIDI Elektron Digitakt II');
+  assert.deepEqual(
+    dev2!.options.map((o) => o.value),
+    ['device:all', 'device:runtime', 'device:mod:a', 'device:mod:b'],
+  );
+});
+
 test('the badge counts errors after the last one seen', () => {
   const s = fill([bad('a'), info('b'), bad('c'), bad('d')]);
   assert.equal(unseenErrors(s.entries, 0), 3);
@@ -56,14 +153,27 @@ test('the badge counts errors after the last one seen', () => {
   assert.equal(unseenErrors(s.entries, 4), 0);
 });
 
-test('the drawer opens for a failed reload, a failed build and an emulator fault only', () => {
+test('the drawer opens for a failed reload, a failed build and an app error about the emulator', () => {
   assert.equal(autoOpens(bad('x', 'reload')), true);
   assert.equal(autoOpens(bad('x', 'build')), true);
-  assert.equal(autoOpens(bad('x', 'emulator')), true);
+  assert.equal(autoOpens(bad('fault: x', 'emulator')), true);
   assert.equal(autoOpens(info('x', 'reload')), false);
   assert.equal(autoOpens(bad('x', 'transfer')), false);
   assert.equal(autoOpens(bad('x', 'card')), false);
   assert.equal(autoOpens(bad('x', 'firmware')), false);
+});
+
+test('of a runtime log only the fault entry opens the drawer, not an error row', () => {
+  for (const origin of ['device', 'emulator'] as const) {
+    const rt = { origin, module: '' };
+    const event = { kind: 'UPLOAD' } as unknown as NonNullable<LogInput['rt']>['event'];
+    const row: LogInput = { source: origin, level: 'error', text: '!UPLOAD cmd=0x3e status=-60', rt: { ...rt, event } };
+    const fault: LogInput = { source: origin, level: 'error', text: 'fault: DSP STOP in X', rt };
+    assert.equal(autoOpens(row), false);
+    assert.equal(autoOpens({ ...row, text: 'fault: looks like one', rt: { ...rt, event } }), false);
+    assert.equal(autoOpens(fault), true);
+    assert.equal(autoOpens({ ...fault, level: 'info' }), false);
+  }
 });
 
 test('copy text has the time, the source, and the indented detail', () => {
@@ -160,4 +270,42 @@ test('a flash of the Firmware page is logged as the firmware source, an error as
   const failed = flashEntry({ level: 'error', text: 'flash failed: the image id differs' });
   assert.equal(failed.level, 'error');
   assert.equal(autoOpens(failed), false); // the Firmware page shows its own error; the Log does not open by itself
+});
+
+test('Save writes a # line for each entry and the event as JSON after the lines of runtime events', () => {
+  const event = {
+    seq: 7,
+    blocks: 1050,
+    t: 0.7,
+    kind: 'CARD_CHECK',
+    kind_id: 2,
+    error: true,
+    level: 'error',
+    source: 0,
+    args: [3, 100, 0, 0, 0],
+    fields: { state: 'foreign' },
+  };
+  const s = fill([
+    info('built a (248 ms)'),
+    {
+      ...rtEntry('device', '', 'CARD_CHECK  state=foreign', 'error'),
+      rt: { origin: 'device', module: '', event, line: '     7      0.700s error  !CARD_CHECK    state=foreign' },
+    },
+    { ...rtEntry('device', '', 'fault: CPU PANIC in RUNTIME', 'error'), detail: 'FAULT: CPU PANIC\nIN RUNTIME' },
+  ]);
+  const lines = saveText(s.entries, at(14, 30, 0)).split('\n');
+  assert.equal(lines[0], '# workbench log, saved 2026-10-28T14:30:00');
+  assert.equal(lines[1], '# 14:00:00  reload  built a (248 ms)');
+  assert.equal(lines[2], '#      7      0.700s error  !CARD_CHECK    state=foreign');
+  const json = JSON.parse(lines[3]!);
+  assert.equal(json.kind, 'CARD_CHECK');
+  assert.match(json.host_time, /^2026-10-28T14:00:01\.\d{3}$/);
+  assert.deepEqual(lines.slice(4, 7), [
+    '# 14:00:02  device ✕  fault: CPU PANIC in RUNTIME',
+    '#   FAULT: CPU PANIC',
+    '#   IN RUNTIME',
+  ]);
+  // the JSON lines are what is left without the comments
+  assert.equal(lines.filter((l) => l && !l.startsWith('#')).length, 1);
+  assert.equal(saveName(at(9, 5, 0)), 'device-log-2026-10-28-0905.log');
 });

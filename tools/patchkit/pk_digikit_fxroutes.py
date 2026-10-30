@@ -44,6 +44,9 @@ from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
 from tools.patchkit.pk_harness import text_rows
 
 W_ROUTE = 18  # row word of the route (core/fx module.toml)
+# Boots differ in when the key press reaches the DSP: the onset moves in 64-sample sub-block steps between separate boots
+# (measured 0 to 192 on DN2 for one tree). The checks are about bit-exact PCM after alignment; this bound only catches a gross delay.
+ONSET_JITTER = 256
 GAIN, SEND, SENDONLY = (
     "test/dyn-fx-gain",
     "test/dyn-fx-gain-send",
@@ -648,7 +651,7 @@ def run_fxroutes(c: Any) -> None:
         r = scaled(pcm["dry"], pcm["send0"], 1.0)
         c.check(
             "apply: on the send route with no amount the PCM is the dry PCM, bit for bit from the onset on",
-            bool(r["identical"]) and abs(r["shift"]) <= 128,
+            bool(r["identical"]) and abs(r["shift"]) <= ONSET_JITTER,
             f"onset shift {r['shift']}, max err {r.get('max_abs_err')}",
         )
         r = scaled(pcm["dry"], pcm["master"], 0.5)
@@ -657,13 +660,13 @@ def run_fxroutes(c: Any) -> None:
             r["rms_db"] is not None
             and r["max_err_ulps"] <= 2.0
             and abs(r["rms_db"] - 20 * np.log10(0.5)) < 0.001
-            and abs(r["shift"]) <= 128,
+            and abs(r["shift"]) <= ONSET_JITTER,
             f"rms {r['rms_db']}, max err {r['max_err_ulps']:.2f} ulps, shift {r['shift']}",
         )
         r = scaled(pcm["dry"], pcm["send1"], 1.0)
         c.check(
             "back: after the restart on the send route again (no amount) the PCM is the dry PCM again",
-            bool(r["identical"]) and abs(r["shift"]) <= 128,
+            bool(r["identical"]) and abs(r["shift"]) <= ONSET_JITTER,
             f"onset shift {r['shift']}, max err {r.get('max_abs_err')}",
         )
 

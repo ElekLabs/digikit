@@ -464,7 +464,11 @@ FX_MAX = max(
 # The budget below is the effect's own.
 FX_ADAPTER_MAX = 900
 FX_PARAM_MAX = 0x7F00  # the range of a parameter word until the manifest declares one
-FX_NEGATIVE = {"test/fx-nan": "guard stepped in"}
+FX_NEGATIVE = {"test/fx-nan": "guard stepped in", "test/dyn-fx-nan": "guard stepped in"}
+# Fixtures of the runtime's fault tests that the suite does not run.
+FX_SKIP = {
+    "test/dyn-fx-hang": "stops the DSP on purpose after 5000 calls; tests/regression/runtime/fault-trace.test.ts runs it"
+}
 
 
 @dataclass(frozen=True)
@@ -538,7 +542,7 @@ def fx_specs(negative: bool = False) -> list[FxSpec]:
     """Every effect module the FX suite runs (FX_NEGATIVE fixtures only with `negative`)."""
     out = []
     for mid in modroots.manifests():
-        if (mid in FX_NEGATIVE) != negative:
+        if mid in FX_SKIP or (mid in FX_NEGATIVE) != negative:
             continue
         s = fx_spec(mid)
         if s is not None:

@@ -61,6 +61,7 @@ import subprocess
 import sys
 import threading
 import time
+import tomllib
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -1534,6 +1535,19 @@ def finish_python(gate: Gate) -> None:
     gate.report("python-tests", problem, time.monotonic() - began, text)
 
 
+def pack_devices(mid: str) -> tuple[str, ...]:
+    """The devices to pack MID for: those its manifest's `[module] ports` names (both when it names none)."""
+    ports = (
+        tomllib.loads((modroots.manifests()[mid] / "module.toml").read_text())[
+            "module"
+        ].get("ports")
+        or []
+    )
+    if not ports:
+        return ("dt2", "dn2")
+    return tuple(d for d in ("dt2", "dn2") if any(p.startswith(f"{d}-") for p in ports))
+
+
 def prepare_acceptance_modules(gate: Gate, step: str, modules: list[str]) -> Path:
     """Build the stale objects (they are cached in out/cache/dko) and pack fresh DKMs; each acceptance node owns its directory/logs."""
     directory = gate.out / step / "modules"
@@ -1557,6 +1571,8 @@ def prepare_acceptance_modules(gate: Gate, step: str, modules: list[str]) -> Pat
     for device in ("dt2", "dn2"):
         (directory / device).mkdir(parents=True, exist_ok=True)
         for mid in modules:
+            if device not in pack_devices(mid):
+                continue
             leaf = mid.rsplit("/", 1)[-1]
             name = f"{step}-pack-{device}-{leaf}"
             packs.append(name)

@@ -6,7 +6,7 @@ import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import type { DkSession, RemoteState } from '@digi/dk-session';
-import { deviceOfPort, remoteNotice, remoteRuntime } from './remote-core';
+import { deviceOfPort, isRemoteMissing, remoteNotice, remoteRuntime, remoteStateWanted } from './remote-core';
 import SidePanels from './SidePanels';
 import TargetSelect from '@web/transfer/TargetSelect';
 import { cancelPending, resetSession, session, target, targetLabel } from '@web/transfer/target';
@@ -48,15 +48,22 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
     }
   };
   const stateLoop = async () => {
+    // set when the device answered E_PROTO: from then on the MODULES list says when digikit/remote is there (no failing request every poll)
+    let missing = false;
     while (alive) {
       try {
         const s = await session();
         const info = await s.info(true);
         const d = deviceOfPort(info.port);
         if (d && d !== device()) setDevice(d);
-        setState(await s.remoteState());
-        setStateError(undefined);
+        const loaded = missing ? await s.modules().catch(() => undefined) : undefined;
+        if (remoteStateWanted(missing, loaded)) {
+          setState(await s.remoteState());
+          setStateError(undefined);
+          missing = false;
+        }
       } catch (e) {
+        missing = isRemoteMissing(e);
         setState(undefined);
         setStateError(e);
       }

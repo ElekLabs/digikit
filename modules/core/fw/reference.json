@@ -5764,6 +5764,56 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x40122296",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40122576",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40120bce",
+            "len": 4
+          }
+        ]
+      },
+      "bind": "static",
+      "bindings": {
+        "c": "dk_fw_midi_os_upgrade_state_lit",
+        "rust": "dkfw::midi::OS_UPGRADE_STATE_LIT"
+      },
+      "cpu": "cf",
+      "doc": "The 4-byte address literal of the stub `move.l #<state>,d0; rts` (DT2 1.17 FUN_40120bcc) that returns the OS upgrade receive state object, found by the first words of the stream parser behind it. The byte at +0 of the object is 0 when idle, 1 to 3 while a stream is taken (finding 75). core/runtime does not reset on a DSP stop while it is not 0.",
+      "file": "devices/fw/midi.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.midi.site.os_upgrade_state_lit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_words",
+          "len": 4,
+          "offset": 2
+        },
+        "dt2": {
+          "kind": "cf_words",
+          "len": 4,
+          "offset": 2
+        }
+      },
+      "subsystem": "midi",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x40120876",
             "len": 6
           }
@@ -12087,7 +12137,7 @@
       "name": "menu"
     },
     {
-      "count": 4,
+      "count": 5,
       "cpu": "cf",
       "file": "devices/fw/midi.toml",
       "meaning": "MIDI send and receive",

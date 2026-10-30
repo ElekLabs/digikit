@@ -768,6 +768,78 @@ const SCENES = [
       await p.wait(400);
     },
   },
+  // ---- the Log drawer over fake runtime logs (apps/desktop/ui/preview/runtime-log-mock.ts); logspeed makes the script run faster than real time ----
+  ...[
+    ['log-both-wide', 'page=log&log=both&logspeed=3&logh=640', WIDE, 5500],
+    ['log-both-narrow', 'page=log&log=both&logspeed=3&logh=640', MIN, 5500],
+    ['log-empty-wide', 'page=log&log=empty', WIDE, 1500],
+    ['log-empty-narrow', 'page=log&log=empty', MIN, 1500],
+    ['log-frozen', 'page=log&log=frozen', WIDE, 9500],
+  ].map(([name, q, size, ms]) => ({ name, q, size, steps: async (p) => p.wait(ms) })),
+  ...[
+    ['log-fault-wide', WIDE],
+    ['log-fault-narrow', MIN],
+  ].map(([name, size]) => ({
+    name,
+    q: 'page=log&log=fault&logh=700',
+    size,
+    steps: async (p) => {
+      await p.wait(2500);
+      await p.eval(
+        "(() => { const li = [...document.querySelectorAll('.log-list li')].find((l) => l.querySelector('.text')?.textContent.startsWith('fault:')); li?.querySelector('.more')?.click(); li?.scrollIntoView({ block: 'center' }); })()",
+      );
+      await p.wait(300);
+    },
+  })),
+  {
+    // the menu of a <select> is drawn by the system and is not in a screenshot: the same options as an open list
+    name: 'log-menu',
+    q: 'page=log&log=both&logspeed=3&logh=640',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(5500);
+      await p.eval(
+        "(() => { const s = document.querySelector('.log-drawer select'); s.size = 22; s.style.position = 'absolute'; s.style.zIndex = '9'; s.style.height = 'auto'; s.style.right = '40px'; s.style.top = '40px'; })()",
+      );
+      await p.wait(300);
+    },
+  },
+  {
+    name: 'log-menu-empty',
+    q: 'page=log&log=empty',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(1200);
+      await p.eval(
+        "(() => { const s = document.querySelector('.log-drawer select'); s.size = 16; s.style.position = 'absolute'; s.style.zIndex = '9'; s.style.height = 'auto'; s.style.right = '40px'; s.style.top = '40px'; })()",
+      );
+      await p.wait(300);
+    },
+  },
+  {
+    // over a running emulator: `--url http://127.0.0.1:5298/live.html` (live.vite.config.ts, tools.devtools.emu_live); the drawer follows its real runtime log
+    name: 'log-live',
+    q: 'page=emulator&log=1',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(6000);
+      p.say('rows: ' + (await p.eval("document.querySelectorAll('.log-list li').length")));
+    },
+  },
+  {
+    name: 'log-save',
+    q: 'page=log&log=both&logspeed=3&logh=640',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(5500);
+      await p.click('Save');
+      await p.wait(300);
+      p.say(
+        'saved: ' + (await p.eval('JSON.stringify(window.__saved?.map((s) => [s.name, s.text.split("\\n").length]))')),
+      );
+      p.say('first lines: ' + (await p.eval('(window.__saved?.[0]?.text ?? "").split("\\n").slice(0, 4).join(" | ")')));
+    },
+  },
   { name: 'emulator-faceplate-wide', q: 'page=emulator', size: WIDE },
   { name: 'emulator-faceplate-narrow', q: 'page=emulator', size: MIN },
 ];

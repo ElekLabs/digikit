@@ -38,21 +38,34 @@
 // status: 0 running, 1 done (every chunk taken, last one flagged, caches invalidated), 3 destination out of range.
 // It is written in every block while a transfer is active (xid != 0): the engine clears the record each block.
 //
-// Diagnostics (dl_diag, findings 45 and 48). In every block, when core/dsp-voice is in the image, 24 words go into the record, two in
-// each of the slot rows 1 to 12 (slot row r starts at record byte 0x1c + 0x54 r; the words are at +0x44 and +0x48, inside the
-// entries 11 and 12 that no DSP code writes and the ColdFire reads only for parameters 36 to 39, the place of the acknowledgement in
-// row 0). Word j (0 to 13) is at row 1 + j / 2, +0x44 for even j, +0x48 for odd j:
-//   0 DL_DG_MAGIC (low half 0xD1A6) and the word count 17 (high half)     1 blocks that ran this hook (the heartbeat)
+// Diagnostics (dl_diag, findings 45, 48 and 77): the fault table. In every block, whatever else is in the image, 32 words go into the record, two in
+// each of the slot rows 1 to 16 (slot row r starts at record byte 0x1c + 0x54 r; the words are at +0x44 and +0x48, inside the entries 11 and 12 that
+// no DSP code writes and the ColdFire reads only for parameters 36 to 39, the place of the acknowledgement in row 0). Word j (0 to 31) is at
+// row 1 + j / 2, +0x44 for even j, +0x48 for odd j; as a record word index: 7 + 21 (1 + j / 2) + 17 + (j & 1). Rows 13 to 16 hold the words of the
+// fault trace; the record has 32 rows, so no row is added. On the Digitone II these bytes are samples of the effect buses (finding 31): rows 13 to 16 add
+// four more rows to the twelve that the table used before.
+//   0 DL_DG_MAGIC (low half 0xD1A6) and the word count 32 (high half)     1 blocks that ran this hook (the heartbeat)
 //   2 blocks that reached core/dsp-voice's hook (its heartbeat)            3 M5     4 M6     5 M7     6 M13     7 M14     8 M15
 //   9 I6     10 I7     11 B7     12 L7     13 MODE1  (registers as the firmware left them at the first voice of the block)
-//   14 the last breadcrumb: stage | voice << 8 | machine type << 16 (stages: dsp-voice.s, _dv_crumb; the voice wrapper also writes it, with the
-//      header and words 15 and 16, straight into both reply records, so that it is there when the core stops inside a routine)
+//   14 the voice site's `last`, the breadcrumb: stage | voice << 8 | machine type << 16 (stages: dsp-voice.s, _dv_crumb; the Digitakt II wrapper also writes it, with the
+//      header and words 15 and 16, straight into both reply records, so that it is there when the core stops inside a routine; the Digitone II wrapper writes
+//      only stage 4 (the routine is about to be called) and 5 (it returned), with the slot as the voice)
 //   15 dispatches to registered machine types since the start (counted before the routine is called)
 //   16 routines that returned (15 - 16 is 1 while a routine runs; a core stopped inside one leaves it at 1)
 //   17 the guard's fault count (low 16 bits) | kind of the last fault << 16 (1 Inf or NaN, 2 over the level bound) | types it disabled << 24
 //   18 type | voice << 16 of the last fault   19 to 22 the 8 parameter words of that call, in pairs (knob 2k | knob 2k + 1 << 16)
 //   23 the machine type the guard disabled last (docs/findings/51)
-// The block tail also stores this block's record address into core/dsp-voice's _dv_rec ([0] this block's, [1] the one before).
+//   24 the effect site's `last` (core/fx, fx.s _fx_mark): stage (4 the core is about to call the module, 5 it returned) | site << 8 (2 master route, 3 send route) |
+//      the row's byte offset in the effect table << 16 (96 bytes a row); written straight into both reply records at the call and the return
+//   25 the module step: the number the module stores into `_dk_step` (the import core/dyndsp exports; the runtime points the stores at this word of the reply
+//      record, dsp.rs `patch_steps`); the core clears it right before each call into a module; a module that stored nothing leaves 0
+//   26 module calls of the master route   27 module calls of the send route (core/fx)
+//   28 effect faults (low 16 bits) | the row of the last fault (byte offset + 1) << 16   31 the row switched off last (byte offset + 1)
+//   29 the address of this block's reply record   30 the address of the one before (the two rings; the stores of the module step go to the lower)
+// The words 2 to 23 are filled when core/dsp-voice is in the image, 24 and 26 to 28 and 31 when core/fx is; 0, 1, 29 and 30 always. `last` and the module step
+// are written by the sites themselves into both records (a core that stopped never reaches this hook); the block tail copies what the sites keep in
+// DM (`_dv_diag`, `_fx_diag`) and the static `_dk_step` (used when the runtime could not patch the stores).
+// The block tail also stores this block's record address into the sites' tables (_dv_rec, _fx_rec; [0] this block's, [1] the one before).
 // The ColdFire side is dl_diag(out, n) in dsp-link.c.
 
 #define DL_MAGIC 0xD15C
@@ -71,6 +84,8 @@
 .EXTERN _dl_fcount;
 .EXTERN _dv_diag;
 .EXTERN _dv_rec;
+.EXTERN _fx_diag;
+.EXTERN _fx_rec;
 
 _dl_hook:
     DM(_dl_sv0) = R0;
@@ -252,18 +267,18 @@ _dl_ack:
     R4 = R5 OR R4;
     DM(I2, M6) = R4;                      // a1
 _dl_out:
-    R3 = _dv_diag;                        // 0 when core/dsp-voice is not in the image
-    R3 = PASS R3;
-    IF EQ JUMP _dl_nodiag;
-    I3 = R3;
     R3 = I4;                              // the record pointer
     I2 = R3;
     R0 = DM(_dl_beat);
     R0 = R0 + 1;
     DM(_dl_beat) = R0;
     DM(46, I2) = R0;                      // word 1
-    R0 = 0x18D1A6;                        // DL_DG_MAGIC | 24 << 16
+    R0 = 0x20D1A6;                        // DL_DG_MAGIC | 32 << 16
     DM(45, I2) = R0;                      // word 0
+    R3 = _dv_diag;                        // 0 when core/dsp-voice is not in the image
+    R3 = PASS R3;
+    IF EQ JUMP _dl_novd;
+    I3 = R3;
     R0 = DM(0, I3);
     DM(66, I2) = R0;                      // word 2
     R0 = DM(1, I3);
@@ -308,11 +323,51 @@ _dl_out:
     DM(276, I2) = R0;                      // word 22
     R0 = DM(21, I3);
     DM(277, I2) = R0;                      // word 23: the type the guard disabled last
-    I3 = _dv_rec;                         // the two reply records, for core/dsp-voice's breadcrumbs: [0] this block's, [1] the one before
+    R3 = _dv_rec;                         // the two reply records, for core/dsp-voice's breadcrumbs: [0] this block's, [1] the one before
+    I3 = R3;
     R0 = DM(0, I3);
     DM(1, I3) = R0;
     R0 = I4;
     DM(0, I3) = R0;
+_dl_novd:
+    R3 = _fx_diag;                        // 0 when core/fx is not in the image
+    R3 = PASS R3;
+    IF EQ JUMP _dl_nofx;
+    I3 = R3;
+    R0 = DM(0, I3);
+    DM(297, I2) = R0;                     // word 24: core/fx's `last`
+    R0 = DM(4, I3);
+    DM(318, I2) = R0;                     // word 26: module calls of the master route
+    R0 = DM(5, I3);
+    DM(319, I2) = R0;                     // word 27: module calls of the send route
+    R0 = DM(1, I3);
+    R4 = 0xffff;
+    R0 = R0 AND R4;
+    R5 = DM(2, I3);
+    R5 = LSHIFT R5 BY 16;
+    R0 = R0 OR R5;
+    DM(339, I2) = R0;                     // word 28: faults (16 bits) | row of the last fault (byte offset + 1) << 16
+    R0 = DM(3, I3);
+    DM(361, I2) = R0;                     // word 31: the row switched off last (byte offset + 1)
+    R3 = _fx_rec;
+    I3 = R3;
+    R0 = DM(0, I3);
+    DM(1, I3) = R0;
+    R0 = I4;
+    DM(0, I3) = R0;
+_dl_nofx:
+    R0 = DM(_dk_step);                    // a module step stored in the static word (the record word is the usual place)
+    R0 = PASS R0;
+    IF EQ JUMP _dl_nostep;
+    DM(298, I2) = R0;                     // word 25
+    R3 = 0;
+    DM(_dk_step) = R3;
+_dl_nostep:
+    R0 = DM(_dk_rec);
+    DM(360, I2) = R0;                     // word 30: the record of the block before
+    R0 = I4;
+    DM(340, I2) = R0;                     // word 29: this block's record
+    DM(_dk_rec) = R0;
 _dl_nodiag:
     R0 = DM(_dl_svm5);
     M5 = R0;
@@ -334,6 +389,7 @@ _dl_nodiag:
 .GLOBAL _dl_cum;
 .GLOBAL _dl_status;
 .GLOBAL _dl_nerr;
+.GLOBAL _dk_step;
 .VAR _dl_xid = 0;
 .VAR _dl_cum = 0;
 .VAR _dl_status = 0;
@@ -349,3 +405,7 @@ _dl_nodiag:
 .VAR _dl_svl2 = 0;
 .VAR _dl_svl3 = 0;
 .VAR _dl_beat = 0;
+// The module step (fault table word 25): the static word that core/dyndsp exports as `_dk_step` when the record word is not available.
+.VAR _dk_step = 0;
+// The previous block's record address (word 30).
+.VAR _dk_rec = 0;

@@ -1188,7 +1188,19 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
 @pytest.mark.parametrize(
     "selected, packed",
     [
-        ([], ["test/input-probe", "digikit/remote", "test/svc-echo"]),
+        (
+            [],
+            [
+                "test/input-probe",
+                "digikit/remote",
+                "test/svc-echo",
+                "test/dyn-fx-hang",
+                "test/dyn-dsp-hang",
+                "test/dyn-fx-nan",
+                "test/dyn-fx-gain-send",
+                "test/dyn-crash",
+            ],
+        ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
         (["runtime/service-commands.test.ts"], ["test/svc-echo"]),
         (["runtime/input-adapter.test.ts"], ["test/input-probe"]),

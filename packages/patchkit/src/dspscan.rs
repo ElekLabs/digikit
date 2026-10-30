@@ -1,15 +1,16 @@
-//! The DSP image scan (container section 7): stores through an index register whose source register the SHARC+ ISA excludes.
+//! The DSP image scan (container section 7): instructions the SHARC+ ISA excludes (`build::sharc_legal`).
 //!
 //! A store through an index register (Types 3a, 3b, 3d, 15a, 15b) cannot take a source register of the same DAG: `DM(x, Ia) = Ureg`
 //! not a DAG1 register, `PM(x, Ic) = Ureg` not a DAG2 register (finding 49 section 10). The rule is
-//! `build::sharc_obj::ureg_class_problems`, the same one a module build fails on. The stock images have none.
+//! `build::sharc_legal::legality_problems`, the same rules a module build fails on, with the post-modify load of a same-DAG register. The
+//! stock images have none.
 //!
 //! The scan decodes the code blocks of the boot stream with the aligned decode that built the sharcdb databases: every even offset
 //! decoded with the confident width, then the instructions a sweep from the start reaches, kept when at least [`MIN_DEPTH`] decoded
 //! instructions in a row end there. Code blocks are the stock ones (by target address; the DT2 and DN2 lists) and the run of blocks
 //! below 0x80000000 a patch appended before the final block. Data blocks are not scanned: decoded as code they give false stores.
 
-use crate::build::sharc_obj::ureg_class_problems;
+use crate::build::sharc_legal::legality_problems;
 use crate::dsp::{L2_BYTE_BASE, L2_BYTE_LIMIT, L2_SW_BASE, SW_ALIAS_BASE, Stream};
 use crate::error::*;
 use sharc_rt::decode::{self, DecodeKind};
@@ -146,7 +147,7 @@ pub fn scan(blob: &[u8]) -> Result<Vec<String>> {
             continue;
         };
         for (off, d) in aligned(&payload) {
-            for msg in ureg_class_problems(&d, "") {
+            for msg in legality_problems(&d, "") {
                 found.push(format!(
                     "block {idx} pc {:#x}{msg}",
                     base + (off / 2) as u32
@@ -161,12 +162,12 @@ pub fn scan(blob: &[u8]) -> Result<Vec<String>> {
 pub fn check_section7(dsp: &[u8]) -> Result<String> {
     let found = scan(dsp)?;
     if found.is_empty() {
-        return Ok("section 7: no store through an index register of a same-DAG register".into());
+        return Ok("section 7: no instruction the ISA excludes".into());
     }
     let n = found.len();
     let shown: Vec<&str> = found.iter().take(8).map(String::as_str).collect();
     Err(err!(
-        "{n} store(s) the SHARC+ ISA does not allow in section 7 (finding 49 section 10): {}{}",
+        "{n} instruction(s) the SHARC+ ISA does not allow in section 7 (finding 49 section 10): {}{}",
         shown.join("; "),
         if n > shown.len() { "; ..." } else { "" }
     ))
@@ -219,7 +220,7 @@ mod tests {
             .unwrap_err()
             .0;
         assert!(
-            e.contains("1 store(s)") && e.contains("DM store of I0"),
+            e.contains("1 instruction(s)") && e.contains("DM store of I0"),
             "{e}"
         );
         // the direct-address store and a store of a data register are allowed

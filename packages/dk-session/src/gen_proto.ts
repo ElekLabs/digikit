@@ -20,6 +20,7 @@ export const CMD = {
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
+  FAULT: 0x23,
   SELECT: 0x30,
   RESTART: 0x31,
 } as const;
@@ -172,4 +173,65 @@ export const LOG_KIND = {
   MACHINE_TYPE_EVICTED: 31,
   SETTINGS_LOAD: 32,
   SETTINGS_WRITE: 33,
+  FX_FAULT: 34,
+  FX_DISABLED: 35,
+  FAULT_FOUND: 36,
 } as const;
+
+/** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
+export const LOG_KINDS: Record<number, [string, [string, string, string, string, string]]> = {
+  1: ['BOOT_START', ['runtime', 'device', 'stable_blocks', 'record_seq', 'boot_counter']],
+  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', '-']],
+  3: ['SAFE', ['reason', 'boot_counter', 'record_seq', '-', '-']],
+  4: ['BOOT_RECORD', ['seq', 'copy', 'boot_counter', 'selected', 'flags']],
+  5: ['MOD_LOAD', ['index', 'result', 'name0', 'name1', 'name2']],
+  6: ['MOD_DSP', ['index', 'result', '-', '-', '-']],
+  7: ['UPLOAD', ['cmd', 'status', 'card_writes', '-', '-']],
+  8: ['MENU', ['action', 'arg', '-', '-', '-']],
+  9: ['HEALTH', ['flags_cpu', 'dsp_avg_x10', 'dsp_max_x10', 'arena_free', 'heap_free_kb']],
+  10: ['DSP_DIAG', ['count_chunk', 'w0', 'w1', 'w2', 'w3']],
+  11: ['DSP_STOPPED', ['heartbeat', 'voice_beat', 'crumb', 'dispatches', 'resumed']],
+  12: ['CRASH_FOUND', ['pc', 'vector_format', 'sr', 'a7', 'time']],
+  13: ['CARD_REFUSED', ['sector', 'bytes', 'reason', 'card_state', '-']],
+  14: ['MOD_LOG', ['msg0', 'msg1', 'msg2', 'msg3', 'value']],
+  15: ['UI_FIRST', ['blocks', 'safe', 'loaded', '-', '-']],
+  16: ['STABLE', ['blocks', 'floor', '-', '-', '-']],
+  17: ['DEBUG_SET', ['on', '-', '-', '-', '-']],
+  18: ['RAM_KEEP', ['kept', 'generation', '-', '-', '-']],
+  19: ['CRASH_DETAIL', ['-', '-', '-', '-', '-']],
+  20: ['DSP_ABSENT', ['-', '-', '-', '-', '-']],
+  21: ['MOD_LIST', ['index', 'slots', 'name0', 'name1', 'name2']],
+  22: ['CRASH_MOD', ['module', 'entered_stable', 'name0', 'name1', 'name2']],
+  23: ['CRASH_REG', ['first', 'r0', 'r1', 'r2', 'r3']],
+  24: ['CRASH_STACK', ['first', 'w0', 'w1', 'w2', 'w3']],
+  25: ['CRASH_TAIL', ['a', 'b', 'c', 'd', 'e']],
+  26: ['MACHINE_CHANGE', ['track', 'old_type', 'new_type', '-', '-']],
+  27: ['MACHINE_FAULT', ['type_voice', 'kind_faults', 'p01', 'p23', 'p45']],
+  28: ['MACHINE_DISABLED', ['type', 'disabled', 'faults', '-', '-']],
+  29: ['TABLE_BAD', ['invariant', 'module', 'a', 'b', '-']],
+  30: ['MACHINE_TYPE_ASSIGNED', ['hash', 'type', 'sticky', 'rule', '-']],
+  31: ['MACHINE_TYPE_EVICTED', ['hash', 'type', '-', '-', '-']],
+  32: ['SETTINGS_LOAD', ['state', 'copy', 'seq', 'used', 'entries']],
+  33: ['SETTINGS_WRITE', ['copy', 'seq', 'used', 'result', '-']],
+  34: ['FX_FAULT', ['row', 'faults', '-', '-', '-']],
+  35: ['FX_DISABLED', ['row', 'faults', '-', '-', '-']],
+  36: ['FAULT_FOUND', ['kind_site_stage', 'id', 'step', 'at', 'module']],
+};
+
+/** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
+export const GUARD_KINDS: Record<number, string> = {
+  1: 'nonfinite',
+  2: 'overlevel',
+};
+
+/** The `flags` word of a LOG event: the error bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
+export const LOG_FLAGS = {
+  ERROR: 1,
+  LEVEL_SHIFT: 1,
+  LEVEL_MASK: 7,
+  SOURCE_SHIFT: 8,
+  SOURCE_MASK: 255,
+} as const;
+
+/** The level names, by number. */
+export const LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const;

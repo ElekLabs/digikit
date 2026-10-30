@@ -22,3 +22,15 @@ def test_run_dir_prunes_old_runs(tmp_path, monkeypatch):
     assert "other" in names
     assert (base / "latest").is_symlink()
     assert (base / "latest").resolve() == new.resolve()
+
+
+def test_run_dir_gives_each_call_with_the_same_stamp_its_own_directory(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(digi_env, "RUNS_ROOT", tmp_path)
+    (tmp_path / "kind" / "20300101-000000").mkdir(parents=True)
+    a = digi_env.run_dir("kind", stamp="20300101-000000")
+    b = digi_env.run_dir("kind", stamp="20300101-000000")
+    assert a.name == "20300101-000000-2"
+    assert b.name == "20300101-000000-3"
+    assert a.is_dir() and b.is_dir()

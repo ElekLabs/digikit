@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """patchkit: check one module with its conformance suite and own tests.
 
-    uv run python -m tools.patchkit.pk_modcheck NAME [--device dt2|dn2]      (mise run module:check NAME)
+    uv run python -m tools.patchkit.pk_modcheck NAME [--device dt2|dn2] [--trace]      (mise run module:check NAME)
 
 NAME is a module id (`<author/name>`) or its last part (`<name>`). An effect module runs tests/modules/test_fx_conformance.py. A machine module (tools/patchkit/pk_conform.py) runs the conformance
 suite, tests/modules/test_machine_conformance.py, for its devices (docs/TESTING.md "Machine conformance"). The same process includes the module's own tests: `modules/<group>/<name>/tests/**/test_*.py` and its scenarios in `tests/scenarios/*.toml` (only those run, at every tier). One pytest process runs all of them; the exit code is pytest's.
@@ -135,7 +135,7 @@ def needs_lines(dkm: bytes, dev: str) -> list[str]:
     ]
 
 
-def size_lines(mid: str, devices: list[str]) -> list[str]:
+def size_lines(mid: str, devices: list[str], trace: bool = False) -> list[str]:
     """The `size` line of `patchkit pack` for module MID, once per device (design rule D5), then what a load of it takes (inferred from the file) and whether it fits an
     empty device. A module that does not pack (no ColdFire object, or several, e.g. a patched-in module) gets a "not packed" line with the reason."""
     from tools.patchkit import patchkit
@@ -145,7 +145,16 @@ def size_lines(mid: str, devices: list[str]) -> list[str]:
         for dev in devices:
             out = Path(tmp) / f"{mid.rsplit('/', 1)[-1]}-{dev}.dkm"
             r = patchkit.run(
-                ["pack", mid, "--device", dev, "-o", str(out)], capture=True
+                [
+                    "pack",
+                    mid,
+                    "--device",
+                    dev,
+                    "-o",
+                    str(out),
+                    *(["--trace"] if trace else []),
+                ],
+                capture=True,
             )
             if r.returncode:
                 why = (r.stderr or r.stdout).strip().splitlines()
@@ -166,6 +175,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("name")
     ap.add_argument("--device", choices=pk_conform.DEVICES)
+    ap.add_argument(
+        "--trace",
+        action="store_true",
+        help="pack the size lines with DK_TRACE defined (patchkit pack --trace); the conformance and own tests run the module as stored",
+    )
     a = ap.parse_args()
     mid = resolve(a.name)
     paths, env = plan(mid, a.device)
@@ -186,7 +200,7 @@ def main() -> int:
         except patchkit.BuildError as e:
             print(f"{mid}: {e}", file=sys.stderr)
             return 1
-        for line in size_lines(mid, devices):
+        for line in size_lines(mid, devices, a.trace):
             print(line, flush=True)
         return 0
     cmd = [
@@ -201,7 +215,7 @@ def main() -> int:
     ]
     rc = subprocess.run(cmd, cwd=ROOT, env={**os.environ, **env}).returncode
     if rc == 0:
-        for line in size_lines(mid, devices):
+        for line in size_lines(mid, devices, a.trace):
             print(line, flush=True)
     return rc
 

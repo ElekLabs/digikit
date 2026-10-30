@@ -215,9 +215,16 @@ _dv_scan:
     BIT CLR MODE1 0x20A000;               // PEYEN, TRUNCATE, ALUSAT
     BIT SET MODE1 0x10000;                // RND32
     NOP;
+    DM(_dv_typ) = R0;
+    R6 = 4;                               // `last`: the core is about to call the module; the module step is cleared (fault table, dsp-link.inc)
+    R7 = 0;
+    CALL _dv_mark;
     I13 = _dv_back;
     JUMP (M13, I12);                      // the routine returns with JUMP (M13, I13)
 _dv_back:
+    R6 = 5;                               // `last`: the module returned (its step stays)
+    R7 = -1;
+    CALL _dv_mark;
     I4 = _dv_ctx;
     R0 = DM(11, I4);
     MODE1 = R0;
@@ -268,6 +275,43 @@ _dv_done:
     R0 = DM(_dv_s_r0);
     MODIFY(I7, -18) (NW);                 // the displaced first instruction of the stock helper
     JUMP _fw_render_next;
+
+// The core's mark of a module call (the breadcrumb of the Digitakt II wrapper, reduced to the call and the return). In: R6 = stage (4 the module is about to be
+// called, 5 it returned), R7 = the mask for the module step (0 clears it, -1 keeps it); the slot is `_dv_t`, the type `_dv_typ`. Writes stage | slot << 8 |
+// type << 16 into _dv_diag word 12 (core/dsp-link copies it into its word 14) and at once into both reply records (_dv_rec) with the header word, so that it is
+// there when the DSP stops inside the module (finding 48). Clobbers R1, R3, I1.
+_dv_mark:
+    R1 = DM(_dv_t);
+    R1 = LSHIFT R1 BY 8;
+    R3 = DM(_dv_typ);
+    R3 = LSHIFT R3 BY 16;
+    R1 = R1 OR R3;
+    R1 = R1 OR R6;
+    DM(_dv_diag + 48) = R1;
+    I1 = _dv_rec;
+    R3 = DM(0, I1);
+    R3 = PASS R3;
+    IF EQ JUMP _dv_mk1;
+    I1 = R3;
+    DM(192, I1) = R1;
+    R3 = DM(298, I1);
+    R3 = R3 AND R7;
+    DM(298, I1) = R3;
+    R3 = 0x20D1A6;                        // DL_DG_MAGIC | 32 << 16
+    DM(45, I1) = R3;
+    I1 = _dv_rec;
+_dv_mk1:
+    R3 = DM(1, I1);
+    R3 = PASS R3;
+    IF EQ RTS;
+    I1 = R3;
+    DM(192, I1) = R1;
+    R3 = DM(298, I1);
+    R3 = R3 AND R7;
+    DM(298, I1) = R3;
+    R3 = 0x20D1A6;
+    DM(45, I1) = R3;
+    RTS;
 
 // ---- a machine of the SDK contract (the row has a note_on pc), slot v ----
 // Entered with JUMP (M13, I12) from the code above, the context pinned: R0 = type, R2 = v, R4 = the voice buffer, DM(_dv_row) = the row's end
@@ -612,9 +656,10 @@ _dv_frame_sw:
 // I6, I7, B7, L7, MODE1 as the firmware left them at slot 0. core/dsp-link copies the block into the record it sends to the
 // ColdFire each block (dl_diag).
 .PKDATA _dv_diag, 128;
-// Words 12 and 13 (the breadcrumb and the dispatch count of the Digitakt II wrapper, finding 48) stay 0 here; _dv_rec is written by core/dsp-link.
+// Word 12 (the breadcrumb) holds only the call and the return stage here (_dv_mark), word 13 (the dispatch count of the Digitakt II wrapper, finding 48) stays 0; _dv_rec is written by core/dsp-link.
 .PKDATA _dv_rec, 8;
 .PKDATA _dv_t, 4;
+.PKDATA _dv_typ, 4;
 .PKDATA _dv_buf, 4;
 .PKDATA _dv_row, 4;
 // The contract adapter's data: the `dk_voice_in` it hands to the module, the parameter words (8), its scalars (see `_dv_contract`), the slots'

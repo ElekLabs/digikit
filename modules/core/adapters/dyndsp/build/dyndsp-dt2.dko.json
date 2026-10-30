@@ -50,18 +50,25 @@
    "section": ".rodata",
    "symbol": "_dv_frame_sw",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": ".rodata",
+   "symbol": "_dk_step",
+   "type": "cf.32"
   }
  ],
  "sections": [
   {
    "align": 4,
-   "hex": "444453500000000100000001000000000008000000000000000000000000000800000000000000035f64765f657870320000000000000000000000000000000000000000000000005f64765f6672616d655f687700000000000000000000000000000000000000005f64765f6672616d655f73770000000000000000000000000000000000000000",
+   "hex": "444453500000000100000001000000000008000000000000000000000000000800000000000000045f64765f657870320000000000000000000000000000000000000000000000005f64765f6672616d655f687700000000000000000000000000000000000000005f64765f6672616d655f737700000000000000000000000000000000000000005f646b5f73746570000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 136
+   "size": 168
   }
  ],
- "source_sha256": "46516e750f79c79a861c6b3bfe069a7b4bc08153103b50a1b485135fa7a01566",
+ "source_sha256": "477c4a6ff02e1bb90845ebab12889e1887aa20920bccd88fa73c93b3fd35da9e",
  "symbols": [
   {
    "global": true,
@@ -78,6 +85,12 @@
   {
    "global": true,
    "name": "_dd_vrows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dk_step",
    "section": null,
    "value": 0
   },
@@ -117,7 +130,7 @@
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "f33060d67b21aaa3ce936af36a3c777fab75f03c30ba18c72289c6faaf10823c",
+  "isa_check": "58974ff2461049479032722203620f97428950c14df6c56aba04fb4f401e4da3",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

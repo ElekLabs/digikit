@@ -323,9 +323,25 @@ def test_breadcrumbs_name_each_step_and_reach_both_reply_records():
         for ring in ("ra", "rb"):
             r = out[ring]
             assert r[192] == want and r[193] == 1 and r[213] == 1, (ring, v)
-            assert r[45] == 0x18D1A6, (ring, v)  # the header: 0xD1A6, 17 words
+            assert r[45] == 0x20D1A6, (ring, v)  # the header: 0xD1A6, 32 words
             # nothing else in the record was written
             assert sum(1 for x in r if x) == 4, (ring, v)
+
+
+def test_the_module_step_is_cleared_in_both_records_before_the_call():
+    """The fault table's module step (record word 298, dsp-link.inc) holds what the last module stored; the wrapper clears it in both reply records
+    right before it calls the routine, so a step read after a stop belongs to this call."""
+    rig = CrumbRig()
+    rig.set_rings()
+    rig.set_type(1, TYPE)
+    rig.set_note(1, 60)
+    rig.rec_word(2, 0x1B8, 1)
+    rig.dm[nw(RING_A) + 298] = 7
+    rig.dm[nw(RING_B) + 298] = 9
+    reads = {"ra": (nw(RING_A) + 296, 4), "rb": (nw(RING_B) + 296, 4)}
+    out = rig.call(2, extra_reads=reads, ctx="friendly")
+    assert stops_at(out, RETURN_SW), out["halt"]
+    assert out["ra"][2] == 0 and out["rb"][2] == 0, (out["ra"], out["rb"])
 
 
 def test_the_routine_sees_the_called_breadcrumb():
@@ -439,7 +455,7 @@ def test_the_c3_variants_keep_the_registered_path_working(name):
         even = v % 2 == 0
         assert out["diag"][12:15] == [want, int(even), int(even)], (name, v)
         for ring in ("ra", "rb"):
-            assert out[ring][192] == want and out[ring][45] == 0x18D1A6
+            assert out[ring][192] == want and out[ring][45] == 0x20D1A6
         context_intact(out)
         assert (
             out["regs"]["I7"] == out["in"]["I6"]

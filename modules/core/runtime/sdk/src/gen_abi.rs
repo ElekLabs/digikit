@@ -44,6 +44,12 @@ pub const SAFE_COUNTER: u32 = 1;
 pub const SAFE_KEY: u32 = 2;
 /// DkrtBootInfo.reason: the selection record asked for it (DkrtSelection.flags bit 0).
 pub const SAFE_FLAG: u32 = 3;
+/// DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen).
+pub const SAFE_DSP: u32 = 4;
+/// DkrtBootInfo.reason: the boot before left a panic record (the runtime's Rust code panicked).
+pub const SAFE_PANIC: u32 = 5;
+/// Rows of DkrtDiag.fault_text.
+pub const FAULT_ROWS: usize = 4;
 /// Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode.
 pub const SAFE_AFTER: u32 = 2;
 /// The stable period: DSP blocks (1500 per second) of UI loop after which the boot counter is cleared (30 seconds).
@@ -72,6 +78,8 @@ pub const SCAN_NEEDS: u32 = 2;
 pub const SCAN_LOADED: u32 = 4;
 /// DkrtScan.flags: with SCAN_LOADED, its DSP part is still being sent.
 pub const SCAN_LOADING: u32 = 8;
+/// DkrtScan.flags: the file was packed with `patchkit pack --trace` (bit 31 of the header word at 0x30). The loader does not look at it.
+pub const SCAN_TRACE: u32 = 16;
 /// Bytes of DkrtFitOut.line, with the NUL.
 pub const FIT_LINE: usize = 24;
 /// Bytes of DkrtFitRow.reason, with the NUL.
@@ -394,8 +402,12 @@ pub struct DkrtDiag {
     pub ram_kept: u32,
     /// the DSP's last breadcrumb when the watch decided it stopped (0 before): stage | voice << 8 | machine type << 16 (finding 48)
     pub dsp_crumb: u32,
+    /// rows of fault_text that are filled: the last fault kept in the settings key dk/fault (0: none)
+    pub fault_rows: u32,
+    /// the ABOUT rows of that fault, upper case, at most 18 characters (the ABOUT page width on DT2) and a NUL
+    pub fault_text: [[u8; 24]; FAULT_ROWS],
 }
-const _: () = assert!(size_of::<DkrtDiag>() == 72, "DkrtDiag size");
+const _: () = assert!(size_of::<DkrtDiag>() == 172, "DkrtDiag size");
 const _: () = assert!(offset_of!(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 const _: () = assert!(offset_of!(DkrtDiag, version) == 4, "DkrtDiag.version");
 const _: () = assert!(offset_of!(DkrtDiag, card_state) == 8, "DkrtDiag.card_state");
@@ -414,6 +426,8 @@ const _: () = assert!(offset_of!(DkrtDiag, crash_pc) == 56, "DkrtDiag.crash_pc")
 const _: () = assert!(offset_of!(DkrtDiag, crash_vec) == 60, "DkrtDiag.crash_vec");
 const _: () = assert!(offset_of!(DkrtDiag, ram_kept) == 64, "DkrtDiag.ram_kept");
 const _: () = assert!(offset_of!(DkrtDiag, dsp_crumb) == 68, "DkrtDiag.dsp_crumb");
+const _: () = assert!(offset_of!(DkrtDiag, fault_rows) == 72, "DkrtDiag.fault_rows");
+const _: () = assert!(offset_of!(DkrtDiag, fault_text) == 76, "DkrtDiag.fault_text");
 
 /// dkrt_module_header result: what the DIGIKIT menu shows of a .dkm header. The layout only grows at the end.
 #[repr(C)]

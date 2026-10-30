@@ -20,6 +20,7 @@ pub const CMD_SETTINGS: u8 = 0x19;
 pub const CMD_LOG: u8 = 0x20;
 pub const CMD_PEEK: u8 = 0x21;
 pub const CMD_LOGCFG: u8 = 0x22;
+pub const CMD_FAULT: u8 = 0x23;
 pub const CMD_SELECT: u8 = 0x30;
 pub const CMD_RESTART: u8 = 0x31;
 pub const SVC_REMOTE_KEY: u8 = 0x38;

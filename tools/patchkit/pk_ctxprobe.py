@@ -70,9 +70,9 @@ def diag_off(j: int) -> int:
 
 
 def record_words(emu: Any, rec: int) -> list[int]:
-    """The 17 diagnostic words as dl_diag reads them from the ColdFire's copy of the DSP's reply record."""
+    """The 32 diagnostic words as dl_diag reads them from the ColdFire's copy of the DSP's reply record."""
     out = []
-    for j in range(17):
+    for j in range(32):
         v = int(
             emu.peek32(rec + diag_off(j)) or 0
         )  # big-endian: the low half of the DSP word comes first
@@ -187,7 +187,7 @@ def probe(a: argparse.Namespace) -> dict[str, Any]:
         rep["record_ok"] = (
             bool(w)
             and (w[0] & 0xFFFF) == 0xD1A6
-            and (w[0] >> 16) == 17
+            and (w[0] >> 16) == 32
             and w[1] > 0
             and w[2] > 0
         )

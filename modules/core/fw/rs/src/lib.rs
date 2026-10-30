@@ -385,6 +385,12 @@ pub mod midi {
     }
 
     unsafe extern "C" {
+        /// The 4-byte address literal of the stub `move.l #<state>,d0; rts` (DT2 1.17 FUN_40120bcc) that returns the OS upgrade receive state object, found by the first words of the stream parser behind it. The byte at +0 of the object is 0 when idle, 1 to 3 while a stream is taken (finding 75). core/runtime does not reset on a DSP stop while it is not 0.
+        #[link_name = "cf.midi.site.os_upgrade_state_lit"]
+        pub static OS_UPGRADE_STATE_LIT: u8;
+    }
+
+    unsafe extern "C" {
         /// The USB MIDI transmit function (DT2 1.16 FUN_40004734, `void f(u32 len, const u8 *msg)`, hash identical on the four images): the 4-byte address literal of its `movea.l (<in flight>).l,a0`, the bytes handed to the USB stack and not yet sent (added by the submit function, taken off by the completion).
         #[link_name = "cf.midi.site.tx_inflight_lit"]
         pub static TX_INFLIGHT_LIT: u8;

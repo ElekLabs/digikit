@@ -101,6 +101,11 @@ unsafe fn compatible(first: u32, device: u32) -> bool {
     }
 }
 
+/// Is the file at store sector `first` a `.dkm` packed with `--trace` (bit 31 of the word at 0x30, which the loader ignores)?
+unsafe fn traced(first: u32) -> bool {
+    file_word(first, 0) == Some(DKM_MAGIC) && file_word(first, 0x30).is_some_and(|w| w >> 31 != 0)
+}
+
 /// A card file as the needs reader's byte source: the store's sector reads, one sector cached (the file is never staged).
 struct CardFile {
     first: u32,
@@ -192,6 +197,9 @@ pub unsafe extern "C" fn dkrt_scan(out: *mut DkrtScan, max: u32) -> i32 {
         o.path = le.path;
         o.first = le.first;
         o.size = le.size;
+        if traced(le.first) {
+            o.flags |= SCAN_TRACE;
+        }
         if compatible(le.first, dev) {
             o.flags |= SCAN_COMPAT;
             let mut f = CardFile {

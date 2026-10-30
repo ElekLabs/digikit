@@ -252,6 +252,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
         name: spec.name.clone(),
         version: 0x00_01_00,
         runtime_min: dkm::runtime_version(),
+        trace: false,
     };
     let max = if spec.oversize {
         usize::MAX

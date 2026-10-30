@@ -81,6 +81,7 @@ fn the_register_records_are_the_lowered_typed_sections() {
         name: "test/sine".into(),
         version: 0x000100,
         runtime_min: 1,
+        trace: false,
     };
     let a = dkm::pack_with(None, &reg.encode(), &opts).unwrap();
     assert_eq!(a, dkm::pack_with(None, &reg.encode(), &opts).unwrap());

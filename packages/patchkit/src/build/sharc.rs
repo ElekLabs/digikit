@@ -97,14 +97,22 @@ fn expand_with(
 }
 
 /// `#ifdef NAME` / `#ifndef NAME` / `#else` / `#endif` lines (alone on their line, nestable). A line outside the taken branches is
-/// dropped together with the directive lines.
+/// dropped together with the directive lines. `#define NAME` / `#undef NAME` lines of the taken branches count as defines too
+/// (the lines stay in the output).
 pub fn apply_conditionals(text: &str, defines: &[String]) -> Result<String> {
     let mut out: Vec<&str> = vec![];
     let mut stack: Vec<bool> = vec![];
+    let mut defined: Vec<String> = defines.to_vec();
     for (n, line) in text.split('\n').enumerate() {
         let n = n + 1;
         let Some((kind, name)) = directive(line) else {
             if stack.iter().all(|b| *b) {
+                if let Some((def, name)) = define_directive(line) {
+                    defined.retain(|d| d != name);
+                    if def {
+                        defined.push(name.to_string());
+                    }
+                }
                 out.push(line);
             }
             continue;
@@ -114,7 +122,7 @@ pub fn apply_conditionals(text: &str, defines: &[String]) -> Result<String> {
                 let Some(name) = name else {
                     return Err(err!("line {n}: #{kind} needs a name"));
                 };
-                stack.push(defines.iter().any(|d| d == name) == (kind == "ifdef"));
+                stack.push(defined.iter().any(|d| d == name) == (kind == "ifdef"));
             }
             _ if stack.is_empty() => return Err(err!("line {n}: #{kind} without #ifdef")),
             "else" => {
@@ -130,6 +138,20 @@ pub fn apply_conditionals(text: &str, defines: &[String]) -> Result<String> {
         return Err(err!("#ifdef without #endif"));
     }
     Ok(out.join("\n"))
+}
+
+/// `^#(define|undef)[ \t]+(\w+)`: (is define, name).
+fn define_directive(line: &str) -> Option<(bool, &str)> {
+    let rest = line.strip_prefix('#')?;
+    let (def, after) = match rest.strip_prefix("define") {
+        Some(a) => (true, a),
+        None => (false, rest.strip_prefix("undef")?),
+    };
+    let name = after.strip_prefix([' ', '\t'])?.trim_start_matches([' ', '\t']);
+    let end = name
+        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .unwrap_or(name.len());
+    (end > 0).then(|| (def, &name[..end]))
 }
 
 /// `^#(ifdef|ifndef|else|endif)(?:[ \t]+(\w+))?[ \t]*$`

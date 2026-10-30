@@ -2,7 +2,7 @@
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
 import { invoke } from '@tauri-apps/api/core';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import {
@@ -16,24 +16,24 @@ import {
 import { bumpCardRefresh } from './card-state';
 import { DOCK_KEY_STEP, clampDock, dockAt, parseDock, startDock } from './dock-core';
 import {
-  LOG_SOURCES,
-  copyText,
   duration,
   failureEntry,
-  filterEntries,
   firmwareEntry,
-  formatTime,
   healthChanges,
   healthStart,
   reloadEntry,
   reloadFailureEntry,
   unseenErrors,
-  type LogSource,
 } from './log-core';
-import { clearLog, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
+import { createLogFollow, followSession } from './log-follow';
+import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
+import LogPanel from './LogPanel';
 import SidePanels from './SidePanels';
 import RemotePage from './RemotePage';
-import { emulatorSession, target } from '@web/transfer/target';
+import { emulatorSession, lastMidiPort, lastMidiSession, target } from '@web/transfer/target';
+import { transferEnv } from '@web/transfer/env';
+import { run as flashRun } from '@web/firmware/firmware-state';
+import { running as flashRunning } from '@web/firmware/firmware-core';
 import FirmwarePage from '@web/firmware/FirmwarePage';
 import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
@@ -151,12 +151,8 @@ export default function Console() {
   const [audio, setAudio] = createSignal<NativeAudioStatus>();
   const [rate, setRate] = createSignal<number>();
   const [drawer, setDrawer] = createSignal(false);
-  // the Log drawer: its filter, the entries shown in full, the last entry seen (the badge counts the errors after it), a copy note
-  const [logSource, setLogSource] = createSignal<LogSource | 'all'>('all');
-  const [errorsOnly, setErrorsOnly] = createSignal(false);
-  const [expanded, setExpanded] = createSignal<ReadonlySet<number>>(new Set<number>());
+  // the Log drawer: the last entry seen (the badge counts the errors after it); the filter and the list are in LogPanel.tsx
   const [seenId, setSeenId] = createSignal(0);
-  const [copied, setCopied] = createSignal(false);
   // the Log dock: its height (undefined: the default share of the window), the window height, and a drag in progress
   const [dockSaved, setDockSaved] = createSignal(readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
@@ -174,9 +170,7 @@ export default function Console() {
   let lastModified: number | undefined;
   let reloading = false;
   let health = healthStart();
-  let logList: HTMLOListElement | undefined;
   let dockEl: HTMLElement | undefined;
-  let stickToEnd = true;
   const timers: number[] = [];
 
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
@@ -453,39 +447,27 @@ export default function Console() {
   };
 
   // the Log drawer
-  const visibleLog = createMemo(() =>
-    filterEntries(logState().entries, { source: logSource(), errorsOnly: errorsOnly() }),
-  );
   const badge = () => (logOpen() ? 0 : unseenErrors(logState().entries, seenId()));
   const mac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
   const logKey = mac ? '⌘J' : 'Ctrl+J';
-  const toggleExpanded = (id: number) =>
-    setExpanded((set) => {
-      const next = new Set(set);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  const copyLog = async () => {
-    try {
-      await navigator.clipboard.writeText(copyText(visibleLog()));
-      setCopied(true);
-      timers.push(window.setTimeout(() => setCopied(false), 1500));
-    } catch {
-      /* the clipboard may be blocked; the entries stay on screen */
-    }
-  };
   // an open drawer has seen everything logged so far
   createEffect(() => {
     const entries = logState().entries;
     if (logOpen()) setSeenId(entries.at(-1)?.id ?? 0);
   });
-  // newest at the bottom: follow it while the list is at the bottom
-  createEffect(() => {
-    visibleLog();
-    if (logOpen())
-      queueMicrotask(() => {
-        if (logList && stickToEnd) logList.scrollTop = logList.scrollHeight;
-      });
+  // the runtime logs of the emulator and of the device on the MIDI port chosen last (nothing is read while the emulator is paused)
+  const logFollow = createLogFollow({
+    follow: followOn,
+    flashing: () => flashRunning(flashRun()),
+    emulator: {
+      running: () => !!status() && !paused(),
+      session: async () => followSession(await emulatorSession()),
+    },
+    device: {
+      port: lastMidiPort,
+      session: async () => followSession(await lastMidiSession()),
+      present: async () => (await transferEnv().targets.ports()).includes(lastMidiPort() ?? ''),
+    },
   });
 
   const fileLabel = () => opened() || source()?.path || 'No firmware file';
@@ -785,99 +767,12 @@ export default function Console() {
               e.preventDefault();
             }}
           />
-          <header>
-            <strong>Log</strong>
-            <span class="count">
-              {visibleLog().length === logState().entries.length
-                ? `${logState().entries.length} entries`
-                : `${visibleLog().length} of ${logState().entries.length}`}
-            </span>
-            <span class="sp" />
-            <select
-              aria-label="Source"
-              value={logSource()}
-              onChange={(e) => setLogSource(e.currentTarget.value as LogSource | 'all')}
-            >
-              <option value="all">All</option>
-              <For each={LOG_SOURCES}>{(name) => <option value={name}>{name}</option>}</For>
-            </select>
-            <button
-              type="button"
-              class="tb small"
-              classList={{ on: errorsOnly() }}
-              aria-pressed={errorsOnly()}
-              onClick={() => setErrorsOnly(!errorsOnly())}
-            >
-              Errors only
-            </button>
-            <button
-              type="button"
-              class="tb small"
-              disabled={visibleLog().length === 0}
-              title="Copy the entries shown, with their details"
-              onClick={() => void copyLog()}
-            >
-              {copied() ? 'Copied' : 'Copy'}
-            </button>
-            <button
-              type="button"
-              class="tb small"
-              disabled={logState().entries.length === 0}
-              onClick={() => {
-                clearLog();
-                setExpanded(new Set<number>());
-              }}
-            >
-              Clear
-            </button>
-          </header>
-          <ol
-            class="log-list"
-            ref={logList}
-            onScroll={(e) => {
-              const el = e.currentTarget;
-              stickToEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
-            }}
-          >
-            <For
-              each={visibleLog()}
-              fallback={
-                <li class="empty">
-                  {logState().entries.length ? 'No entry matches the filter.' : 'Nothing logged yet.'}
-                </li>
-              }
-            >
-              {(entry) => (
-                <li classList={{ bad: entry.level === 'error' }}>
-                  <div class="row">
-                    <time>{formatTime(entry.at)}</time>
-                    <span class="src">
-                      {entry.source}
-                      {entry.level === 'error' ? ' ✕' : ''}
-                    </span>
-                    <span class="text" title={entry.text}>
-                      {entry.text}
-                    </span>
-                    <Show when={entry.detail}>
-                      <button
-                        type="button"
-                        class="more"
-                        aria-expanded={expanded().has(entry.id)}
-                        aria-label={expanded().has(entry.id) ? 'Hide the full output' : 'Show the full output'}
-                        title={expanded().has(entry.id) ? 'Hide the full output' : 'Show the full output'}
-                        onClick={() => toggleExpanded(entry.id)}
-                      >
-                        {expanded().has(entry.id) ? '▾' : '▸'}
-                      </button>
-                    </Show>
-                  </div>
-                  <Show when={entry.detail && expanded().has(entry.id)}>
-                    <pre class="detail">{entry.detail}</pre>
-                  </Show>
-                </li>
-              )}
-            </For>
-          </ol>
+          <LogPanel
+            follow={logFollow}
+            emulatorRunning={() => !!status()}
+            devicePort={lastMidiPort}
+            toggleKey={logKey}
+          />
         </section>
       </Show>
 

@@ -66,6 +66,8 @@ pub struct Env {
     pub root: PathBuf,
     /// `out/tools`, resolved (a lane's `out/` is a link to the main tree's).
     pub tools: PathBuf,
+    /// Build defines (`DK_TRACE`): `-D` for the C sources, `#ifdef` names for the SHARC+ sources. They are part of the object's cache key.
+    pub defines: Vec<String>,
     version: OnceLock<std::result::Result<Vec<(String, String)>, String>>,
 }
 
@@ -80,8 +82,15 @@ impl Env {
         Env {
             root,
             tools,
+            defines: vec![],
             version: OnceLock::new(),
         }
+    }
+
+    /// The same environment building with `defines`.
+    pub fn with_defines(mut self, defines: &[String]) -> Env {
+        self.defines = defines.to_vec();
+        self
     }
 
     pub fn m68k_prefix(&self) -> PathBuf {

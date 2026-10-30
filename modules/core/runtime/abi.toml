@@ -139,6 +139,24 @@ value = 3
 doc = "DkrtBootInfo.reason: the selection record asked for it (DkrtSelection.flags bit 0)."
 
 [[const]]
+name = "SAFE_DSP"
+type = "u32"
+value = 4
+doc = "DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen)."
+
+[[const]]
+name = "SAFE_PANIC"
+type = "u32"
+value = 5
+doc = "DkrtBootInfo.reason: the boot before left a panic record (the runtime's Rust code panicked)."
+
+[[const]]
+name = "FAULT_ROWS"
+type = "usize"
+value = 4
+doc = "Rows of DkrtDiag.fault_text."
+
+[[const]]
 name = "SAFE_AFTER"
 type = "u32"
 value = 2
@@ -221,6 +239,12 @@ name = "SCAN_LOADING"
 type = "u32"
 value = 8
 doc = "DkrtScan.flags: with SCAN_LOADED, its DSP part is still being sent."
+
+[[const]]
+name = "SCAN_TRACE"
+type = "u32"
+value = 16
+doc = "DkrtScan.flags: the file was packed with `patchkit pack --trace` (bit 31 of the header word at 0x30). The loader does not look at it."
 
 [[const]]
 name = "FIT_LINE"
@@ -401,6 +425,8 @@ fields = [
     "u32 crash_vec // its vector",
     "u32 ram_kept // 1 when the keep-probe word of the boot before was still in RAM at this boot (RAM survived the reset that led here)",
     "u32 dsp_crumb // the DSP's last breadcrumb when the watch decided it stopped (0 before): stage | voice << 8 | machine type << 16 (finding 48)",
+    "u32 fault_rows // rows of fault_text that are filled: the last fault kept in the settings key dk/fault (0: none)",
+    "u8 fault_text[FAULT_ROWS][24] // the ABOUT rows of that fault, upper case, at most 18 characters (the ABOUT page width on DT2) and a NUL",
 ]
 
 [[struct]]

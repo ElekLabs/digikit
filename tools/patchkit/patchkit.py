@@ -9,7 +9,7 @@
     uv run python -m tools.patchkit.patchkit build [MODULE...] [--check] [--force] [--define NAME --out DIR] [--status]   module sources -> build/*.dko.json
     uv run python -m tools.patchkit.patchkit dko show FILE.dko.json [--relocs]   an object's arch, toolchain, sections, symbols, relocations
     uv run python -m tools.patchkit.patchkit needs [--json] FILE.dkm...   what a load of each file takes (arena, DSP area, rows), inferred from its contents
-    uv run python -m tools.patchkit.patchkit pack MODULE --device dt2|dn2 [-o OUT.dkm]  pack a run-time module (default out/patch/<name>-<device>.dkm)
+    uv run python -m tools.patchkit.patchkit pack MODULE --device dt2|dn2 [--trace] [-o OUT.dkm]  pack a run-time module (default out/patch/<name>-<device>.dkm; --trace builds it with DK_TRACE)
     uv run python -m tools.patchkit.patchkit bundle [-o FILE] [--modules-dir DIR]  ports + modules as one JSON (what patchkit.wasm reads)
     uv run python -m tools.patchkit.patchkit inject [OUT.syx] [--hot]  load a patched image into the running emulator
     uv run python -m tools.patchkit.patchkit inject STOCK.syx --runtime [--patch-set NAME]  the emulator patches STOCK.syx itself

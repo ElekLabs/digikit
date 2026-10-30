@@ -78,8 +78,12 @@ def test_fx_specs_find_the_fixtures_and_keep_the_negative_apart():
         "_fg_desc",
         "_fg_state",
     )
-    assert [s.module for s in c.fx_specs(negative=True)] == ["test/fx-nan"]
-    assert "test/fx-nan" not in [s.module for s in c.fx_specs()]
+    assert sorted(s.module for s in c.fx_specs(negative=True)) == [
+        "test/dyn-fx-nan",
+        "test/fx-nan",
+    ]
+    positive = [s.module for s in c.fx_specs()]
+    assert "test/fx-nan" not in positive and "test/dyn-fx-hang" not in positive
     assert c.fx_spec("core/fx") is None  # a framework renders no effect of its own
     assert c.fx_spec("test/sine") is None  # a machine is no effect
     assert not c.is_machine_module("test/fx-gain")

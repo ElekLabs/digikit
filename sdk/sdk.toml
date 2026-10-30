@@ -4,7 +4,7 @@
 # sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h and api.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.5.2"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
+version = "0.5.3"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
 
 [contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
@@ -652,6 +652,24 @@ id = 33
 name = "SETTINGS_WRITE"
 args = ["copy", "seq", "used", "result", "-"]
 
+# an effect row's output failed the check (the DSP guard of core/fx); the event carries the source of the module that owns the row; `faults` counts all effect faults since the start
+[[log.kind]]
+id = 34
+name = "FX_FAULT"
+args = ["row", "faults", "-", "-", "-"]
+
+# the guard switched an effect row off until the next start (8 faults within 1500 blocks)
+[[log.kind]]
+id = 35
+name = "FX_DISABLED"
+args = ["row", "faults", "-", "-", "-"]
+
+# a fault record of the boot before was found (a CPU crash or a DSP stop) and kept as the settings key dk/fault; `step` is the module step, `at` the PC or the DSP site's last word
+[[log.kind]]
+id = 36
+name = "FAULT_FOUND"
+args = ["kind_site_stage", "id", "step", "at", "module"]
+
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
@@ -673,6 +691,7 @@ SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit
 LOG = 0x20
 PEEK = 0x21
 LOGCFG = 0x22
+FAULT = 0x23        # dev: make the runtime fail on purpose to test the fault path; body byte 0 = 1: a Rust panic (a bounds check)
 SELECT = 0x30
 RESTART = 0x31
 

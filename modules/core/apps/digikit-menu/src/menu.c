@@ -159,15 +159,6 @@ static txt *t_int(txt *t, int32_t v)
     return t_num(t, (uint32_t)v);
 }
 
-static txt *t_hex(txt *t, uint32_t v)
-{
-    for (int k = 7; k >= 0; k--) {
-        uint32_t d = (v >> (4 * k)) & 15;
-        t_c(t, (char)(d < 10 ? '0' + d : 'A' + d - 10));
-    }
-    return t;
-}
-
 /* Spaces up to n characters. */
 static txt *t_pad(txt *t, int n)
 {
@@ -262,14 +253,11 @@ static void result_text(txt *t, int32_t code)
 
 static void safe_reason(txt *t, uint32_t reason)
 {
-    if (reason == DKRT_SAFE_COUNTER)
-        t_s(t, "2 BAD BOOTS");
-    else if (reason == DKRT_SAFE_KEY)
-        t_s(t, "KEY HELD");
-    else if (reason == DKRT_SAFE_FLAG)
-        t_s(t, "REQUESTED");
-    else
-        t_s(t, "UNKNOWN");
+    // a table, not an if chain: five dense values become a jump table, which is data in the code
+    static const char *const why[6] = {"UNKNOWN", "2 BAD BOOTS", "KEY HELD", "REQUESTED", "DSP STOPPED", "CPU PANIC"};
+    _Static_assert(DKRT_SAFE_COUNTER == 1 && DKRT_SAFE_KEY == 2 && DKRT_SAFE_FLAG == 3 && DKRT_SAFE_DSP == 4 && DKRT_SAFE_PANIC == 5,
+                   "why[] follows the DKRT_SAFE_* values");
+    t_s(t, reason < 6 ? why[reason] : why[0]);
 }
 
 /* The file name of a path, upper case, at most max characters: from the end, or with head the first ones. */
@@ -536,6 +524,22 @@ static void fill_main(dk_ui_menu *m, void *ctx)
 
 /* ---- ABOUT ----------------------------------------------------------------------------------------------------------- */
 
+/* Is the scanned file of the store path p (l characters) a build with --trace? */
+static int traced_path(const uint8_t *p, int l)
+{
+    for (uint32_t i = 0; i < NENT; i++) {
+        const uint8_t *q = g_ent[i].path;
+        if (path_len(q, 63) != l)
+            continue;
+        int same = 1;
+        for (int c = 0; c < l; c++)
+            same &= q[c] == p[c];
+        if (same)
+            return (g_ent[i].flags & DKRT_SCAN_TRACE) != 0;
+    }
+    return 0;
+}
+
 static void arow(dk_ui_menu *m, const char *s)
 {
     if (DK_ABOUT_N < 24)
@@ -547,6 +551,9 @@ static void fill_about(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
     DK_ABOUT_N = 0;
+    /* the per-module TRACE tag reads the scan of the store: scan once when MODULES has not (a later scan of MODULES resets its ticks, so not again here) */
+    if (STORE == 0)
+        scan_store();
     arow(m, "DIGIKIT 0.1.0");
     DkrtStatus st;
     dkrt_status(&st);
@@ -591,15 +598,12 @@ static void fill_about(dk_ui_menu *m, void *ctx)
             arow(m, t.b);
         }
     }
-    if (d.crash_found != 0) {
-        t_init(&t);
-        t_s(&t, "CRASH PC ");
-        t_hex(&t, d.crash_pc);
-        arow(m, t.b);
-    }
+    /* the last fault (a CPU crash or a DSP stop), kept on the card: FAULT: CPU CRASH or FAULT: DSP STOP, IN <module>, PC or the DSP site and step */
+    for (uint32_t k = 0; k < d.fault_rows && k < DKRT_FAULT_ROWS; k++)
+        arow(m, (const char *)d.fault_text[k]);
     if (g_boot.safe != 0) {
         t_init(&t);
-        t_s(&t, "SAFE MODE: ");
+        t_s(&t, "SAFE: ");
         safe_reason(&t, g_boot.reason);
         arow(m, t.b);
     }
@@ -622,6 +626,8 @@ static void fill_about(dk_ui_menu *m, void *ctx)
         t_init(&t);
         t_s(&t, "- ");
         result_text(&t, g_boot.results[k]);
+        if (traced_path(p, path_len(p, DKRT_SEL_PATH - 1)))
+            t_s(&t, " TRACE");
         arow(m, t.b);
     }
     t_init(&t);

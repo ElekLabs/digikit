@@ -31,7 +31,7 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x08 | 4 | file size in bytes |
 | 0x0c | 4 | header size = 0xa0, or 0xa4 when the file has the `menu` field (below) |
 | 0x10 | 32 | sha256 of the whole file with these 32 bytes read as zeros |
-| 0x30 | 4 | `runtime_min`: informational, the runtime version the module was built for (packed semantic version; informational; `dkrt_sdk::RUNTIME_VERSION`, now 0.1.0); since runtime 0.1.0 the loader does not refuse on it (the contract bytes at 0x38 decide) |
+| 0x30 | 4 | `runtime_min`: informational, the runtime version the module was built for (packed semantic version; informational; `dkrt_sdk::RUNTIME_VERSION`, now 0.1.0); since runtime 0.1.0 the loader does not refuse on it (the contract bytes at 0x38 decide). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
 | 0x34 | 4 | module version, `major << 16 \| minor << 8 \| patch` |
 | 0x38 | 8 | contracts built against, a (major, minor) byte pair each: api, machine, fx, service. Major 0 = the module does not implement that contract (api is never 0). `pack` writes api always, machine when the file has a DSP section or its `register` records hold a machine record (a data-only machine), service when it has slot functions or a real `dkm_init`/`dkm_fini`, fx when the DSP section has effect records (version 4; a section of effects only carries no machine contract) |
 | 0x40 | 32 | name, NUL padded |

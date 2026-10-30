@@ -460,6 +460,10 @@ class that leaves the same-DAG registers out, and says it in words:
 - What the silicon does with the excluded encodings is not in the public manual. The manual lists an illegal-opcode interrupt (ILOPI, level 4, Table 4-45, `p0172`; "Illegal Opcode Error Detection for Instruction Fetch", 9-2, `p0278`),
   which is what a register code outside the class would raise if the core checks it. **[O]** which of the three it is (ILOPI, a silent wrong store, a hang) is not decided here; all three stop a voice.
 
+Build-time checks (`packages/patchkit/src/build/sharc_legal.rs`, 2026-10-30; `patchkit build` and `patchkit isa-scan` run them) **[D]**: the store rule above, and the post-modify load of a same-DAG register (Types 3a, 3b, 3d with `u` = 1, `d` = 0: the encode tables list the
+destination as `UREGXDAG1` / `UREGXDAG2`, PRM p.13-15, 13-18, 13-24; the pre-modify load, `u` = 0, lists the full `UREG` class). Zero hits on the DT2 1.17 and DN2 1.12 DSP images and on every SHARC module source and core object of the repository. The DM/PM
+index pairing (I0-I7 with DM, I8-I15 with PM) is not a rule: the I and M fields are 3 bits wide and `g` picks the DAG, so a mismatch has no encoding.
+
 ### 10.2 What the stock image does **[V]** (index-register forms)
 
 Decoded stock instructions (`sharcdb`, `dt2-1.17`, forms 15a, 15b, 3b, confident, aligned), the register in the store's `ureg` field and the `g` (PM) / `d` (store) bits:

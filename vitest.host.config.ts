@@ -12,11 +12,16 @@ export default defineConfig({
     // Host tests also read desktop source/CSS via fs: related cannot discover
     // those edges. This native trigger conservatively reruns every host project.
     forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/apps/desktop/ui/src/**'],
-    projects: projects.map(({ name, dir, include }) => ({
+    // desktop-host: the Solid client build (the server build runs no effects), for the tests of reactive code
+    projects: projects.map((p: { name: string; dir: string; include: string; conditions?: string[] }) => ({
+      ...(p.conditions
+        ? { resolve: { conditions: p.conditions }, ssr: { resolve: { conditions: p.conditions } } }
+        : {}),
       test: {
-        name,
-        root: fileURLToPath(new URL(dir, import.meta.url)),
-        include: [include],
+        ...(p.conditions ? { server: { deps: { inline: ['solid-js'] } } } : {}),
+        name: p.name,
+        root: fileURLToPath(new URL(p.dir, import.meta.url)),
+        include: [p.include],
         testTimeout: 5000,
       },
     })),

@@ -483,7 +483,7 @@ def test_window_transfers_carry_the_window_and_refuse_bad_arguments(machine, bui
     assert [x.d0 & 0xFFFFFFFF for x in res] == [0xFFFFFFFE] * len(bad)
 
 
-DG_MAGIC, DG_WORDS = 0xD1A6, 24
+DG_MAGIC, DG_WORDS = 0xD1A6, 32
 
 
 def diag_off(j: int) -> int:
@@ -513,12 +513,13 @@ def test_diagnostic_words_have_the_same_slots_on_both_sides():
         int(m.group(1)): int(m.group(2))
         for m in re.finditer(r"DM\((\d+), I2\) = R0;\s+// word (\d+)", inc)
     }
+    # the step is stored by the carry of the static word, which the loop above does not need to see twice
     assert sorted(stores.values()) == list(range(DG_WORDS))
     for widx, j in stores.items():
         assert 4 * widx == diag_off(j), (j, widx)
         row = (diag_off(j) - 0x1C) // 0x54
         entry_off = (diag_off(j) - 0x1C) % 0x54
-        assert 1 <= row <= 12
+        assert 1 <= row <= 16
         assert (
             entry_off >= 6 * 11 and entry_off + 4 <= 6 * 13 - 2
         )  # entries 11 and 12 only

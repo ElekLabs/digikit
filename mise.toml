@@ -301,7 +301,7 @@ description = "Compile module sources to objects (core/* modules: build/*.dko.js
 
 [tasks."module:check"]
 run = "uv run python -m tools.patchkit.pk_modcheck"
-description = "Check one module: module:check ID [--device dt2|dn2]. Machine/effect conformance plus own tests in one pytest process; own tests may build or launch an emulator. Service/raw modules without tests can succeed with nothing to run; not an all-module patched load proof. After passing tests, reports packed size/fit per device (or why it is not packed)"
+description = "Check one module: module:check ID [--device dt2|dn2] [--trace]. Machine/effect conformance plus own tests in one pytest process; own tests may build or launch an emulator. Service/raw modules without tests can succeed with nothing to run; not an all-module patched load proof. After passing tests, reports packed size/fit per device (or why it is not packed)"
 
 [tasks."module:audit"]
 run = "uv run python -m tools.patchkit.pk_modaudit"
@@ -313,7 +313,7 @@ description = "Build and pack every run-time module for every device into out/mo
 
 [tasks."module:pack"]
 run = "uv run python -m tools.patchkit.patchkit pack"
-description = "Build the stale objects and pack a run-time module as a .dkm in one command: mise run module:pack -- <author/name> --device dt2 [-o FILE] (default out/patch/<name>-<device>.dkm)"
+description = "Build the stale objects and pack a run-time module as a .dkm in one command: mise run module:pack -- <author/name> --device dt2 [--trace] [-o FILE] (default out/patch/<name>-<device>.dkm; --trace defines DK_TRACE for the module's C and DSP sources and sets the trace bit)"
 
 [tasks."module:export"]
 run = "uv run python -m tools.patchkit.pk_package export"
@@ -325,7 +325,7 @@ description = "Import a .dkmod: mise run module:import -- FILE [--dir DIR] [--re
 
 [tasks."dk:dev"]
 run = "uv run python -m tools.patchkit.pk_devreload"
-description = "Fast edit loop for module code: mise run dk:dev -- test/ui-demo --device dn2[,dt2] [--keys FILE|tap:SETTINGS,wait:400,shot:menu] [--out DIR] [--stop]; builds changed objects, reloads a kept emulator daemon (module swap in about a second, or a boot), presses the keys, writes PNGs and a contact sheet"
+description = "Fast edit loop for module code: mise run dk:dev -- test/ui-demo --device dn2[,dt2] [--keys FILE|tap:SETTINGS,wait:400,shot:menu] [--store IDS [--trace]] [--out DIR] [--stop]; builds changed objects, reloads a kept emulator daemon (module swap in about a second, or a boot), presses the keys, writes PNGs and a contact sheet"
 
 [tasks."module:dev"]
 run = "uv run python -m tools.patchkit.pk_dev"

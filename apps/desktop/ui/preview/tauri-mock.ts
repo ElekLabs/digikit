@@ -34,6 +34,16 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
         decodeURIComponent(_options?.headers?.['x-name'] ?? 'firmware.syx'),
         args as Uint8Array,
       ) as T;
+    case 'log_save': {
+      // the Save button of the Log drawer: keep the text where a script can read it, answer with a path
+      const name = decodeURIComponent(_options?.headers?.['x-name'] ?? 'log.log');
+      (window as unknown as { __saved: { name: string; text: string }[] }).__saved ??= [];
+      (window as unknown as { __saved: { name: string; text: string }[] }).__saved.push({
+        name,
+        text: new TextDecoder().decode(args as Uint8Array),
+      });
+      return `/Users/em/Downloads/${name}` as T;
+    }
     case 'emu_call': {
       const method = String(args?.method);
       if (method === 'status') return { mode: sim.paused ? 'paused' : 'running' } as T;

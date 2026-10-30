@@ -174,6 +174,11 @@ RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts",),
     "test/svc-echo": ("runtime/service-commands.test.ts",),
+    "test/dyn-fx-hang": ("runtime/fault-trace.test.ts",),
+    "test/dyn-dsp-hang": ("runtime/fault-trace.test.ts",),
+    "test/dyn-fx-nan": ("runtime/fault-trace.test.ts",),
+    "test/dyn-fx-gain-send": ("runtime/fault-trace.test.ts",),
+    "test/dyn-crash": ("runtime/fault-trace.test.ts",),
 }
 # Host sources only these runtime test files read.
 RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {

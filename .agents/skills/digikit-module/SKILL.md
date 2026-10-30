@@ -31,7 +31,7 @@ The guide is `docs/MODULE-AUTHORING.md`. Read the section you need there; this f
 3. After a change to `module.toml`, `src/module.c`, `devices/*.toml` or `sdk/sdk.toml`: `mise run gen:modules` (`-- --check` lists stale files). Never edit `build/gen/`.
 4. Build: `mise run module:build -- PATH [--check]` (`patchkit build`; the objects go to `out/cache/dko/<id>/`, `patchkit dko show FILE` shows one). Pack and `dk:run` build what is stale, so this step is optional.
 5. Check, no emulator: `mise run module:check -- AUTHOR/NAME [--device dt2|dn2]` (guide 8). The module's own tests live in its `tests/` (`test_<name>_*.py` with a unique basename, `*.test.ts`, `scenarios/*.toml`); no list names them. Code outside the module folder never names the module (`check:layers`, rule `self-contained`; `host = true` exempts a host-protocol module); shared tests use `tests/fixtures/modules`.
-6. Pack: `mise run module:pack -- AUTHOR/NAME --device dt2|dn2 [-o FILE.dkm]`.
+6. Pack: `mise run module:pack -- AUTHOR/NAME --device dt2|dn2 [--trace] [-o FILE.dkm]`. `--trace` is described under Tracing below.
 7. Run: start `mise run workbench` in another shell, then `mise run dk:run -- AUTHOR/NAME --emu --seconds 10`. On a device with the runtime:
    `mise run dk:run -- AUTHOR/NAME --port Digitakt`. Hardware is Em's decision every time; never flash anything.
 8. Log: `mise run dk:log -- --emu follow --module NAME` (guide 11).
@@ -55,6 +55,18 @@ Each task takes `-- --help`.
 - **Versions.** Contract versions are in `sdk/sdk.toml`. A contract major mismatch is refused (`E_CONTRACT`): rebuild (guide 9).
 - **Tests.** Use the owner's checks (`mise run test:changed -- --explain`). Do not run the emulator when a static answer is enough, and bound every run.
 - Facts go in `docs/findings/` with the marks [V], [D], [O], not in handovers.
+
+## Tracing
+
+Opt-in marks that compile to nothing without `--trace` (same objects, byte-identical `.dkm`). Full text: `sdk/README.md`, "Tracing".
+
+- C: `#include <dk/trace.h>`, `DK_TRACE_INIT(api);` once per source file in `dkm_init`, then `DK_TRACE_LOG("msg", value);` (calls `api->log`).
+- SHARC+: `#include "dk_trace.inc"`, then `DK_STEP(3, R0);` stores 3 in `_dk_step` using the scratch register you name (free at that point).
+- Build: `module:pack -- ID --device dt2 --trace`, `module:check -- ID --trace` (size lines), `dk:dev -- ID --store ID --trace`. `--trace` defines
+  `DK_TRACE` for C and SHARC+ sources and sets the trace bit in the `.dkm` header (`patchkit dkm-info` shows it).
+- You see it as ` TRACE` on the module's row in DIGIKIT, ABOUT, and as `STEP n` in the fault record (the core clears `_dk_step` before each call
+  into a module). A traced module imports `_dk_step` from `core/dyndsp`: a runtime without it answers `DSP IMPORT`.
+- Do not ship a traced `.dkm`. The fixture is `tests/fixtures/modules/trace-demo`; the zero-cost proof is `packages/patchkit/tests/trace.rs`.
 
 ## Firmware functions for a core adapter
 

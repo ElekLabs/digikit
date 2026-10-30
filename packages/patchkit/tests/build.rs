@@ -166,6 +166,24 @@ fn compiler_helper_names() {
 }
 
 #[test]
+fn source_defines_count_for_ifdef() {
+    let a = "#define A\n#ifdef A\nyes\n#else\nno\n#endif";
+    assert_eq!(sharc::apply_conditionals(a, &[]).unwrap(), "#define A\nyes");
+    let b = "#ifdef X\n#define B\n#endif\n#ifdef B\nb\n#endif\nz";
+    assert_eq!(sharc::apply_conditionals(b, &[]).unwrap(), "z");
+    let f = "#define F(x) \\\n#ifdef F\nf\n#endif";
+    assert_eq!(
+        sharc::apply_conditionals(f, &[]).unwrap(),
+        "#define F(x) \\\nf"
+    );
+    let u = "#undef X\n#ifndef X\nn\n#endif";
+    assert_eq!(
+        sharc::apply_conditionals(u, &["X".into()]).unwrap(),
+        "#undef X\nn"
+    );
+}
+
+#[test]
 fn ifdef_alternatives_and_includes_of_dsp_sources() {
     let src = "a\n#ifdef X\nb\n#else\nc\n#endif\n#ifndef X\nd\n#endif\ne";
     assert_eq!(sharc::apply_conditionals(src, &[]).unwrap(), "a\nc\nd\ne");
@@ -515,7 +533,7 @@ fn a_content_module_builds_into_the_cache_on_demand() {
     let cached = build::cache_dir(&root()).join(&id).join("build/tiny.dko.json");
     let _ = std::fs::remove_dir_all(build::cache_dir(&root()).join(&id));
     let scan = |only: Option<&[String]>| {
-        Library::scan_in(Some(Build { root: &root(), only }), &d, false).unwrap()
+        Library::scan_in(Some(Build { root: &root(), only, defines: &[] }), &d, false).unwrap()
     };
 
     // asked for nothing: no object, nothing built
