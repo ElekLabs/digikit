@@ -1,6 +1,7 @@
-//! Allocation-free native mono PCM16 streaming packer, independent of the small
-//! float decoder's frame limit. Packed words are little endian, with the even
-//! frame in the low half and the odd frame in the high half (zero for odd EOF).
+//! Allocation-free native mono or stereo PCM16 streaming packer, independent of
+//! the small float decoder's frame limit. Packed words are little endian: mono
+//! pairs place the even frame low and odd frame high (zero for odd EOF); stereo
+//! preserves interleaved left/right samples, with one complete frame per word.
 //!
 //! Output is staging data: **all output is invalid after any error**, including
 //! a later trailer/EOF error. A caller must not publish READY until `finish`
@@ -25,6 +26,7 @@ pub struct NativePcm16Stream {
     word: [u8; 4],
     header_len: usize,
     word_len: usize,
+    channels: u8,
     max_frames: u32,
     frames: u32,
     pcm_left: u32,
@@ -34,12 +36,30 @@ pub struct NativePcm16Stream {
 }
 
 impl NativePcm16Stream {
+    /// Accept only canonical mono files, with capacity measured in frames.
     pub const fn new(max_frames: u32) -> Self {
+        Self::with_channels(max_frames, 1)
+    }
+
+    /// Accept only canonical interleaved stereo files, with capacity in frames.
+    /// Output preserves left/right order as two little-endian PCM16 values per word.
+    pub const fn new_stereo(max_frames: u32) -> Self {
+        Self::with_channels(max_frames, 2)
+    }
+
+    /// Configured channel count, available before the header is received.
+    /// This describes the required mode, not validated input metadata.
+    pub const fn channels(&self) -> u8 {
+        self.channels
+    }
+
+    const fn with_channels(max_frames: u32, channels: u8) -> Self {
         Self {
             header: [0; HEADER_BYTES],
             word: [0; 4],
             header_len: 0,
             word_len: 0,
+            channels,
             max_frames,
             frames: 0,
             pcm_left: 0,
@@ -57,8 +77,9 @@ impl NativePcm16Stream {
     fn validate_header(&mut self) -> Result<(), i32> {
         let pcm = u32::from_be_bytes(self.header[4..8].try_into().unwrap());
         let rate = u32::from_be_bytes(self.header[8..12].try_into().unwrap());
+        let bytes_per_frame = u32::from(self.channels) * 2;
         if pcm == 0
-            || pcm & 1 != 0
+            || pcm % bytes_per_frame != 0
             || rate != RATE
             || pcm
                 .checked_add((HEADER_BYTES + TRAILER_BYTES) as u32)
@@ -67,14 +88,19 @@ impl NativePcm16Stream {
             return self.fail(E_FORMAT);
         }
         for (i, &byte) in self.header.iter().enumerate() {
-            if !(4..12).contains(&i) && byte != if i == 0x14 { 0x7f } else { 0 } {
+            let expected = match i {
+                1 => self.channels - 1,
+                0x14 => 0x7f,
+                _ => 0,
+            };
+            if !(4..12).contains(&i) && byte != expected {
                 return self.fail(E_FORMAT);
             }
         }
-        if pcm / 2 > self.max_frames {
+        if pcm / bytes_per_frame > self.max_frames {
             return self.fail(E_TOO_BIG);
         }
-        self.frames = pcm / 2;
+        self.frames = pcm / bytes_per_frame;
         self.pcm_left = pcm;
         Ok(())
     }
@@ -149,6 +175,7 @@ impl NativePcm16Stream {
     }
 
     /// Assert exact EOF after all payload output and sixteen zero trailer bytes.
+    /// Returns frames, not the number of individual channel samples.
     /// Calling too early permanently fails, including with a word still pending.
     /// Successful empty pushes and repeated finishes are idempotent.
     pub fn finish(&mut self) -> Result<u32, i32> {
@@ -241,6 +268,135 @@ mod tests {
             }
             assert_eq!(parser.finish(), Ok(values.len() as u32));
             assert_eq!(packed, expected(values));
+        }
+    }
+
+    fn stereo(values: &[i16]) -> Vec<u8> {
+        let pcm: Vec<u8> = values.iter().flat_map(|v| v.to_be_bytes()).collect();
+        canonical::build_native_sample(&pcm, true).unwrap()
+    }
+
+    #[test]
+    fn stereo_fragmentation_preserves_channels_and_backpressure() {
+        let values = [-32768, 32767, -1, 42, 1234, -2345];
+        let file = stereo(&values);
+        for split in 0..=file.len() {
+            for output_size in 4..=11 {
+                let mut parser = NativePcm16Stream::new_stereo(3);
+                assert_eq!(parser.channels(), 2);
+                let mut packed = Vec::new();
+                feed(&mut parser, &file[..split], output_size, &mut packed);
+                feed(&mut parser, &file[split..], output_size, &mut packed);
+                assert_eq!(parser.finish(), Ok(3));
+                assert_eq!(packed, expected(&values));
+            }
+        }
+        for size in 0..4 {
+            let mut parser = NativePcm16Stream::new_stereo(3);
+            let mut output = [0xa5; 3];
+            let first = parser.push(&file, &mut output[..size]).unwrap();
+            assert_eq!(
+                first,
+                Progress {
+                    consumed: 68,
+                    written: 0
+                }
+            );
+            assert_eq!(output, [0xa5; 3]);
+            assert_eq!(
+                parser.push(&file[68..], &mut output[..size]),
+                Ok(Progress::default())
+            );
+            let mut packed = Vec::new();
+            feed(&mut parser, &[], 4, &mut packed);
+            for byte in &file[68..] {
+                feed(&mut parser, &[*byte], 5, &mut packed);
+            }
+            assert_eq!(parser.finish(), Ok(3));
+            assert_eq!(packed, expected(&values));
+        }
+    }
+
+    #[test]
+    fn strict_modes_and_stereo_frame_alignment_reject_before_output() {
+        assert_eq!(NativePcm16Stream::new(1).channels(), 1);
+        let valid = stereo(&[-1, 2]);
+        let mut cases = Vec::new();
+        cases.push(native(&[-1, 2]));
+        for flag in [2, 255] {
+            let mut bad = valid.clone();
+            bad[1] = flag;
+            cases.push(bad);
+        }
+        for pcm in [0u32, 1, 2, 3, 5, 6, u32::MAX, u32::MAX - 3, u32::MAX - 79] {
+            let mut bad = valid.clone();
+            bad[4..8].copy_from_slice(&pcm.to_be_bytes());
+            cases.push(bad);
+        }
+        for bad in cases {
+            let mut parser = NativePcm16Stream::new_stereo(u32::MAX);
+            let mut output = [0xa5; 16];
+            assert_eq!(parser.push(&bad, &mut output), Err(E_FORMAT));
+            assert_eq!(output, [0xa5; 16]);
+            sticky(&mut parser, E_FORMAT);
+        }
+        let mut mono = NativePcm16Stream::new(2);
+        let mut output = [0xa5; 16];
+        assert_eq!(mono.push(&valid, &mut output), Err(E_FORMAT));
+        assert_eq!(output, [0xa5; 16]);
+        sticky(&mut mono, E_FORMAT);
+    }
+
+    #[test]
+    fn stereo_capacity_counts_frames_and_accepts_long_headers_without_allocation() {
+        let file = stereo(&[-1, 2, 3, -4]);
+        let mut exact = NativePcm16Stream::new_stereo(2);
+        let mut packed = Vec::new();
+        feed(&mut exact, &file, 4, &mut packed);
+        assert_eq!(exact.finish(), Ok(2));
+        assert_eq!(packed, expected(&[-1, 2, 3, -4]));
+        // Header acceptance proves parser arithmetic, not allocatable device RAM.
+        for frames in [1u32, 480_001, 48_000 * 60 * 60, (400 * 1024 * 1024) / 4] {
+            let mut header = [0; HEADER_BYTES];
+            header.copy_from_slice(&file[..HEADER_BYTES]);
+            header[4..8].copy_from_slice(&(frames * 4).to_be_bytes());
+            let mut output = [0xa5; 4];
+            let mut parser = NativePcm16Stream::new_stereo(frames);
+            assert_eq!(
+                parser.push(&header, &mut output),
+                Ok(Progress {
+                    consumed: HEADER_BYTES,
+                    written: 0
+                })
+            );
+            assert_eq!(parser.frames, frames);
+            assert_eq!(parser.pcm_left, frames * 4);
+            assert_eq!(output, [0xa5; 4]);
+            let mut too_small = NativePcm16Stream::new_stereo(frames - 1);
+            assert_eq!(too_small.push(&header, &mut output), Err(E_TOO_BIG));
+            assert_eq!(output, [0xa5; 4]);
+            sticky(&mut too_small, E_TOO_BIG);
+        }
+    }
+
+    #[test]
+    fn stereo_truncation_and_late_trailer_errors_are_sticky() {
+        let file = stereo(&[-1, 2, 3, -4]);
+        for end in 0..file.len() {
+            let mut parser = NativePcm16Stream::new_stereo(2);
+            let mut packed = Vec::new();
+            feed(&mut parser, &file[..end], 4, &mut packed);
+            assert_eq!(parser.finish(), Err(E_FORMAT));
+            sticky(&mut parser, E_FORMAT);
+        }
+        for at in file.len() - TRAILER_BYTES..file.len() {
+            let mut bad = file.clone();
+            bad[at] = 1;
+            let mut parser = NativePcm16Stream::new_stereo(2);
+            let mut output = [0xa5; 8];
+            assert_eq!(parser.push(&bad, &mut output), Err(E_FORMAT));
+            assert_eq!(output.as_slice(), expected(&[-1, 2, 3, -4]));
+            sticky(&mut parser, E_FORMAT);
         }
     }
 

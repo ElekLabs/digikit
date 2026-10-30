@@ -1,5 +1,26 @@
 # DSP SDK and first sampler
 
+## Current product requirements — corrected 2026-10-30
+
+The first sampler requires full stereo on both DT2 OS 1.17 and DN2 OS 1.12,
+across 16 tracks sharing one project sample pool. Do not divide capacity into fixed
+per-track partitions. References to the same asset should share its backing through
+deduplication. Long samples are limited by real pool capacity and supported format
+limits, not a ten-second cap. Stock DT2-like project capacity is the target, not
+proven parity on either device.
+
+Keep one shared SDK/sampler engine and runtime-shipped device adapters. Selecting a
+sample stops only the selected track's old notes. The on-device picker remains a
+first-release requirement. The payoff is useful stereo sampling across the project,
+with shared accounting rather than a small allocation multiplied by track count.
+Confidence in the shared architecture remains high; achievable capacity, stereo
+representation and production backing ownership remain unproved.
+
+Mono banks and ten-second clips below describe historical prototype scope and proof
+fixtures, not current product limits. Historical empirical results remain valid only
+within their recorded scope. The proposed 16 MiB DT2 tail recommendation is withdrawn;
+there is no outstanding reservation-choice request and no approved reservation patch.
+
 
 ## Latest checkpoint — LP0 0.5 startup window and real readers passed
 
@@ -39,10 +60,11 @@ compatible runtime supplies the device implementation and rejects unsupported
 requirements. Modules must not separately install a device adapter. Extend the
 existing runtime compatibility mechanism rather than inventing a parallel one.
 
-A 16 MiB DT2 tail reservation was discussed as an option, not approved. Continue
-investigating stock shared-pool allocation/lifecycle integration before reducing
-stock project capacity. DN2 already has the ten-second actual-reader proof; its
-remaining backing-memory ownership question is distinct from playback capability.
+The earlier 16 MiB DT2 tail proposal is withdrawn. Investigate shared project-pool
+allocation, deduplication and lifecycle integration against the current stereo and
+capacity requirements. No reservation patch is approved. DN2 already has the historical
+ten-second actual-reader proof; production ownership and capacity remain distinct
+from that bounded playback result.
 
 ## Current bounded discovery — production ownership
 
@@ -52,11 +74,19 @@ remaining backing-memory ownership question is distinct from playback capability
 - [x] Trace DT2 project-pool capacity/reset paths; one size literal is not a
   complete reservation boundary.
 - [ ] Reconcile a finite owner/boundary/reset/bypass table with DN2's fixed-buffer
-  map, then choose a production reservation mechanism. Absence of discovered
-  writers does not establish ownership.
+  map to establish production ownership. Absence of discovered writers does not
+  establish ownership.
+- [ ] Inventory stereo file/descriptor formats, channel layout, frame/length fields
+  and arithmetic limits on both devices, including long-sample boundary cases.
+- [ ] Establish DT2 stereo allocation accounting: bytes per frame, guards/alignment,
+  slot/reference deduplication and actual shared project-pool capacity.
+- [ ] Establish DN2 backing ownership, usable capacity and reset/coexistence bounds
+  for the same shared-pool contract, without fixed per-track partitions.
 
-The payoff is a concrete adapter ownership boundary for ten-second per-track
-samples. Confidence remains moderate; production memory ownership is not selected.
+The payoff is a concrete adapter ownership boundary and capacity accounting for
+full-stereo, long samples shared across 16 tracks. Stock DT2-like capacity is a
+target, not established parity. Confidence remains moderate; production memory
+ownership is not selected.
 Limit further investigation to named boundary gaps rather than arbitrary computed
 stores. Hardware testing still requires a separate decision.
 
@@ -759,7 +789,7 @@ pass with the changed consumer; no actual bank reopening is claimed.
   establish baseline and proof-only module pools, not stock free RAM or general coexistence. The CF arena is
   512 KiB on both devices; shared DSP module areas are 512 KiB DT2 and 320 KiB DN2. Decoded CF source memory
   is freed after terminal transport; only the DSP bank stays pinned until restart.
-  Em confirmed approximately ten-second one-shots and “Stop old notes on selection.” Ten seconds of 48 kHz
+  The historical prototype target was approximately ten-second one-shots; stop old notes on selection remains required. Ten seconds of 48 kHz
   mono PCM16 is 960,000 bytes (stereo twice), beyond either current reserved DSP module pool. The official DT2
   manual documents 400 MB project sample RAM; our module reservations are not hardware memory limits.
   [Finding 81](../findings/81-stock-sampler-dependencies.md) now records the stock-machine-led dependency map
@@ -767,7 +797,7 @@ pass with the changed consumer; no actual bank reopening is claimed.
   follow-up is in finding 82; start/end/reverse and project reload remain open. Derive independently written SDK
   operations, rather than copy a complete machine.
   Proposed shared packed-PCM16 reader/cursor/region semantics use device-specific ready immutable views;
-  runtime owns selection/loading/lifetime and stock downstream envelope/filter remains. Mono first is a proposal.
+  runtime owns selection/loading/lifetime and stock downstream envelope/filter remains. The earlier mono-first proposal is historical; full stereo is now required.
   DN2 already plays samples through the working voice seam/source acquisition; investigate its missing larger
   backing/delivery against DT2's dependencies, not playback feasibility from scratch. No new backend is implemented.
   Finding 83's independent DN2 1.12 raw-byte audit withdraws finding 80's external-read leads at `0x1c8ef7`
@@ -807,7 +837,10 @@ pass with the changed consumer; no actual bank reopening is claimed.
 
 Extend the device-independent module SDK with reusable DSP operations, migrate existing machines and effects,
 and build a first one-shot sampler for Digitakt II OS 1.17 and Digitone II OS 1.12. Working name: SPARK (not final).
-Initial musical scope: sample selection, start/end, reverse, and normal note pitch. Granular playback, slicing,
+Initial musical scope: full-stereo sample selection, start/end, reverse, and normal note pitch
+on both devices, with 16 tracks sharing a deduplicated project pool and no fixed
+per-track partitions. Long-sample limits follow real capacity and supported formats;
+stock DT2-like capacity is a target awaiting proof. Granular playback, slicing,
 time stretch, wavetable synthesis and multisampling are future consumers, not first-release requirements.
 
 The payoff is a reusable sample-access contract and tested kernels that make later machines cheaper to build.
@@ -940,7 +973,7 @@ checking what the module adapter already provides.
 Do not expand core generated instruction semantics or regenerate emulator cores as incidental SDK work.
 Any such requirement is a separate scoped decision with its full regeneration costs.
 
-## Phased implementation scope
+## Historical phased implementation scope
 
 Em approved exact DSP extractions, numerical sampler primitives and the bounded loading/lifetime proof on
 2026-10-29. This covers the DSP work in milestone 1 and the bounded proof in milestone 2 below. The read-only
@@ -958,8 +991,8 @@ Three milestones allow useful SDK work before the harder memory questions are so
    Start with a transferred native file below the existing 64 KiB whole-file limit; this is a proof limitation, not
    the final product sample-length promise. A packaged synthetic fixture tests the kernel but is not completion
    of the transferred-sample requirement. No continuous streaming, new transport or external DSP memory region.
-3. **Product sampler decision.** Based on proof, choose the actual pool/clip limit, chunked card reads, DT2 stock
-   pool adapter or owned pool, replacement behavior, stereo scope and exact endpoint UI. Then implement the user
+3. **Product sampler integration.** Under the current requirements above, establish actual shared-pool capacity,
+   format/length limits, chunked card reads, backing ownership and stereo integration. Then implement the user
    machine and migrate remaining modules with measured costs. Do not label the mono proof a finished sampler.
 
 The approved DSP work in milestone 1 and the numerical part of 2 can run independently in separate writer worktrees.
@@ -997,7 +1030,7 @@ Names below are conceptual, not new exported ABI commitments:
   even a click-prevention fade changes the waveform. Test hard endpoints and faded endpoints independently.
 - Proposed four-word layout: sample slot, start, end, reverse, with pitch from the existing voice input. This fits
   the current parameter transport but cannot provide precise frame editing of long clips with 128 knob values.
-  Exact trim controls, sample browsing and true stereo remain product decisions; no silent downmix is approved.
+  Exact trim controls remain open; the on-device picker and full stereo are now required. No silent downmix is approved.
 
 ### Acceptance before expanding the proof
 
@@ -1008,10 +1041,10 @@ Names below are conceptual, not new exported ABI commitments:
 - Account for all code/state/sample bytes. Plan for 16 concurrent voices and simultaneous triggers; do not inherit
   a conformance assumption that only one note-on consumes the block headroom.
 - Report instruction ceilings and one paired A/B for any speed claim. Hardware performance/cache coherence remains
-  unproved until an explicitly authorized device test. No new absolute CPU budget; the confirmed ten-second
-  sample-length target is not yet implemented.
+  unproved until an explicitly authorized device test. No new absolute CPU budget; the historical ten-second
+  fixture does not define the product sample-length limit.
 
-## Approved proof — loading and lifetime
+## Historical approved proof — loading and lifetime
 
 Em approved this bounded bank API on 2026-10-29, narrower than the earlier general prepare/bind/release sketch.
 Evidence and exact current-image mappings are in finding 78. Runtime implementation is integrated below;
@@ -1059,7 +1092,7 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 
 - [x] Measure no-dynamic-module and proof-only runtime capacity on both current images; persist provenance and limits.
 - [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
-- [x] Record the confirmed target: approximately ten-second one-shots; stop old notes on selection.
+- [x] Record the historical ten-second prototype target; superseded by the current stereo/shared-pool requirements. Stop old notes on selection remains required.
 - [ ] Prove DT2 1.17 stock DSP-pool slot ownership, external mutation interception, lifetime/reclaim and cache rules
   before borrowing stock backing. The terminal DN2 owned-bank proof does not establish stock backing ownership.
 - [x] Prove bounded DN2 emulator backing/delivery for 960,000 packed PCM16 bytes and full ten-second playback,
@@ -1799,7 +1832,7 @@ tools were used directly without dependency changes. The first native attempt
 hit sandbox socket EPERM; the authorized local-socket rerun passed. No full merge
 gate, hardware test, PCM pin change or instruction-core regeneration was performed.
 
-### Next architecture decision — stock sharing versus owned reservation
+### Current decision and next discovery — stereo shared project pool
 
 The bounded stock header/reader audit is complete (finding 81). Header receipt
 updates slot metadata; the immediate renderer uses a cached voice pointer. Neither
@@ -1807,18 +1840,66 @@ the inspected CF sender nor receiver supplies a proven old-reader drain grant.
 This does not exclude wider stock coordination, but header clear is not a usable
 shortcut around the pre-reclaim lifetime obligation.
 
-Recommended next discovery: prove a runtime-owned pool for each device, keeping
-the shared reader and runtime-shipped adapters. For DT2, evaluate a 16 MiB tail
-reservation that would reduce the stock project's pool from 400 to 384 MiB.
-This remains unapproved and must not be implemented yet. Required evidence:
-consistent initial/append/gap/reset bounds, rejection of wrapping/negative sizes,
-disjoint preview/runtime regions, and bounded allocation/reload/coexistence tests.
-DN2 needs its own ownership proof; DT2's allocator cannot supply that proof.
-Existing selected-word watches cannot prove exclusion (finding 91).
+The user requires full stereo on both devices, 16 tracks sharing a project sample
+pool with no fixed per-track partitions, and deduplicated backing for references
+to the same asset. Long samples must be constrained by actual capacity and format
+limits, not the historical ten-second fixture. Stock DT2-like capacity is the
+product target; parity has not been proved. Keep the shared engine and
+runtime-shipped adapters, and stop only the selected track's old notes on selection.
 
-Alternative: preserve all DT2 stock project capacity and continue shared-pool
-integration. This requires a proven asynchronous pre-reclaim suspension/resume
-boundary and reader-drain completion across removal, replacement and project
-reset. Its immediate callers and header path do not yet establish that boundary.
-The user must choose the stock-capacity tradeoff before a reservation patch;
-neither option changes the one-engine, runtime-adapter SDK architecture.
+The proposed 16 MiB tail recommendation and request to choose a stock-capacity
+tradeoff are withdrawn. No reservation patch is approved. The allocator and
+reader-lifetime audits remain evidence about obligations, not approval for a
+smaller pool or proof of a safe shared-pool adapter.
+
+Next discovery is bounded to:
+
+- Inventory stereo representation, channel layout, sample-rate/encoding support,
+  frame/length fields and long-sample arithmetic limits on both current images.
+- Establish DT2 stereo pool accounting, including guards/alignment, actual usable
+  capacity and deduplicated slot/reference ownership; distinguish the 400 MiB
+  allocator observation from achieved stereo product capacity.
+- Establish DN2 ownership, usable backing capacity, delivery and reset/coexistence
+  bounds for the same shared project-pool contract, without fixed track partitions.
+- Carry forward the asynchronous pre-reclaim suspension/resume and exact reader-drain
+  obligations for shared DT2 backing across removal, replacement and project reset.
+
+Return the concrete capacity/format/ownership gaps before proposing an allocation
+change. The historical mono and ten-second proofs do not complete these requirements.
+
+### Stereo implementation checkpoint
+
+- [x] Inventory current SDK/host sample restrictions separately from firmware limits.
+- [x] Add explicit stereo mode to the allocation-free native PCM16 stream parser;
+  preserve the existing mono constructor and count capacity/completion in frames.
+- [x] Check channel preservation, fragmented input, output backpressure, malformed
+  alignment, truncation, trailer failures and long-header arithmetic: ten focused
+  stream tests pass, with independent source review clean.
+- [ ] Integrate stereo sample views and readers with the production pool/binding
+  contract on both devices. Parser support alone does not establish stereo playback.
+
+`NativePcm16Stream::new_stereo` preserves interleaved left/right PCM16 in packed
+little-endian staging words. It does not expand whole samples to float32. Header
+tests include a 400 MiB PCM payload without allocating that payload: this proves
+parser arithmetic, not device capacity. The old mono `new` remains strict so an
+existing mono consumer cannot silently accept and misinterpret stereo data.
+
+Remaining implementation limits are explicit: the public pinned-bank decoder and
+runtime source loader still accept only 8,192 mono float frames; numerical readers
+are mono. The host WAV converter already preserves stereo but defaults to 64 MiB
+source and 128 MiB output PCM limits and holds whole-file conversion buffers.
+These are software resource limits, not hardware capacity measurements. Large-file
+host conversion needs a bounded-memory design before simply raising those defaults.
+The native wrapper uses a 32-bit PCM byte length; the stream parser additionally
+checks that header, payload and trailer length fit that representation.
+
+DT2 original-byte stereo accounting is now recorded in finding 81: native files
+are interleaved PCM16, stock DSP backing has two channel planes, allocation uses
+rounded whole-file size, and the packet carries per-channel bytes which lookup
+converts to frames. The new SDK stream's interleaved staging is not a description
+of the stock pool layout. Next bounded firmware check: header PCM length versus
+file size/allocation validation. Production capacity and lifecycle remain open.
+
+Validation: focused SDK stream tests, independent source review, scoped rustfmt,
+`mise run test:changed` (path/layer checks) and changed-document pathcheck pass.
+No full merge gate, device run, firmware patch or generated-core change is claimed.

@@ -9,8 +9,16 @@ capacity measurements and the completed immutable-bank proof in [finding 79](79-
 ## Direction
 
 The user wants stock DT2 OneShot and other machines to reveal the dependencies the SDK needs, rather than
-wholesale copying of a stock machine. Confirmed product intent remains approximately ten-second one-shots,
-stopping old notes on selection. Mono is the first proposed implementation scope; stereo is not approved here.
+wholesale copying of a stock machine. **Current requirements, corrected 2026-10-30:** full stereo on DT2
+and DN2, 16 tracks sharing one project sample pool without fixed per-track partitions, and deduplicated backing
+for references to the same asset. Long samples are bounded by actual capacity and supported format limits,
+not ten seconds. Stock DT2-like project capacity is the target, not proven parity. Selecting a sample stops
+only the selected track's old notes. The earlier mono/ten-second scope is historical prototype scope only.
+
+Keep one shared SDK/sampler engine and runtime-shipped device adapters. The payoff is project-wide stereo
+sample access with shared accounting. Stereo representation, achievable capacity and production ownership
+remain open. The proposed 16 MiB DT2 tail recommendation is withdrawn; there is no outstanding reservation
+choice and no approved reservation patch.
 
 **[O]** The coordinator proposes an independently written shared **packed-PCM16 bounded reader, cursor and
 region semantics**. A device adapter supplies a ready immutable view; runtime owns slot selection/loading and
@@ -72,13 +80,20 @@ neither owned DSP memory nor a delivery path; do not assume DT2's stock pool or 
 ## Executed follow-up
 
 [Finding 82](82-stock-sampler-lifetime.md) records the scoped lifecycle discovery, image identities, retained
-captures and stock-only reproduction status. OneShot selection, stored slot binding, verified ten-second input
+captures and stock-only reproduction status. OneShot selection, stored slot binding, verified historical ten-second fixture input
 and a passing active replacement reproduction on the original unpatched DT2 1.17 image are now recorded.
 Start/end/reverse, removal and project reload
 remain open; the full lifecycle is not complete. The result requires explicit retirement before overwrite,
 including external replacement/reset paths, rather than treating a metadata acknowledgement as a barrier.
 
 ## Bounded next proof, before implementation
+
+- [ ] Inventory stereo format/channel layout, encoding/rate support, frame/length fields and long-sample limits
+  on both current images; do not use the historical ten-second fixture as a product cap.
+- [ ] Establish DT2 stereo pool accounting: bytes per frame, guards/alignment, actual usable capacity and
+  deduplicated slot/reference ownership. The 400 MiB bound does not prove stereo product capacity.
+- [ ] Establish DN2 backing ownership, usable capacity, delivery and reset/coexistence bounds for the same
+  shared project pool across 16 tracks, without fixed per-track partitions.
 
 - [x] Select stock DT2 OneShot on OS 1.17 and capture selected slot → stored voice binding with actual PCM;
   active-note and image-specific replacement evidence is separated in finding 82.
@@ -97,8 +112,8 @@ Use distinct deterministic PCM fixtures to expose stale old reads versus new dat
 reference count, DSP metadata and active voice pointer before and after each transition. Hearing the new sample
 or observing READY alone does not prove reader quiescence. This note adds no scenario or test implementation.
 
-No implementation, stereo decision, throughput claim, new pool ownership or hardware validation is established
-by this note. Current immutable-bank acceptance remains unchanged.
+Full stereo is now a product requirement; no stereo implementation, throughput claim, new pool ownership or
+hardware validation is established by this note. Current immutable-bank acceptance remains unchanged.
 
 ## Reproduction
 
@@ -139,7 +154,10 @@ an ownership contract and a reset/replacement fence before reusing its pool.
 The dossier observations do not establish either contract.
 
 
-## Explicit-tail reservation candidate
+## Historical explicit-tail reservation candidate
+
+The tail-reservation recommendation is withdrawn under the current requirements above. The following
+allocator observations are retained as historical evidence; they do not authorize a reservation patch.
 
 **[D]** A bounded DT2 1.17 loader follow-up distinguishes the initial rounded
 block-size check at `0x40154aea` from a shared pool boundary. The loader also
@@ -252,3 +270,44 @@ The enclosing sender's delay/mutex release is not a proven header-applied or
 old-readers-drained acknowledgement. These observations strengthen the need for
 an explicit pre-reclaim adapter fence; they do not prove that no broader stock
 coordination exists. The original DT2 1.17 image hashes match the audit above.
+
+## Stereo storage and length accounting
+
+**[D]** A bounded original-byte audit of current DT2 1.17 resolves the file-to-pool
+layout. Native files contain interleaved PCM16, while the stock DSP pool stores
+stereo in two channel planes. Split helper `0x40153884..8e` separates successive
+16-bit values, preserving first/second channel order. Loader `0x40154dc0..de` and
+`0x40154e60..86` send each chunk's two halves to the corresponding planes.
+The source flag is native-header byte 1, tested for equality to 1 at
+`0x40154da4..aa`; the deduplicated path uses the saved result in `0x405ba368[slot]`.
+
+The current native writer `0x40153c70` sets header byte 1, total PCM byte count at
+byte 4, and 48,000 at byte 8 (`0x40153d12`, `0x40153d0e`, `0x40153d20`). It sizes
+the file as PCM bytes plus `0x50` and writes a sixteen-byte trailer. For a valid
+canonical N-frame, C-channel PCM16 file, with C=1 or 2:
+
+`P = 2*C*N`, `F = P+80`, `A = align_up(P+96,8192)`.
+
+These are distinct quantities, not interchangeable frame counts:
+
+| Field | Meaning | Current-image evidence |
+| --- | --- | --- |
+| File header byte +4 | Total PCM bytes P | Writer `0x40153cb2..d0`, `0x40153d0e` |
+| Allocation record byte +0x14 | Rounded extent A | Loader `0x40154aca/ade`, `0x401549fe` |
+| CF header packet byte +0x10 | Per-channel bytes: P mono, P/2 stereo | Builders `0x40153e90`, `0x40153e44..46` |
+| DSP slot record byte +8 | Same per-channel byte count | Receiver `0x1c7e90/0x1c7eb3`, store `0x1c4006` |
+| Lookup result | Per-channel byte count /2 = N frames | `0x1c3fbf`, `0x1c3fc1`; M7=-1 initialized at `0x1c0f3c` |
+
+For pool block offset B, stereo PCM starts at `B+32` and `B+A/2+32`; mono starts
+at `B+64`, with the same pointer supplied for both channels. Packet pointers
+subtract `0x400` before the established DSP rebase. Allocation rounding is based
+on full file size, not just the PCM payload. An SDK adapter must not expose this
+stock backing as interleaved stereo or treat any byte-length field as frames.
+
+Audit hashes match the original SYX/section-7 identities above; main section 3 is
+3,275,616 bytes at `0x40000400`, SHA-256
+`a1e7b657b705eba1a19d81c33c1e11ba9c409816447ad74005d7bbf36da6d964`.
+**[O]** Canonical accounting does not establish validation of arbitrary input:
+header PCM length versus actual file size/allocation remains the next bounded
+check. Ownership, usable SDK capacity, reader retirement and supported input-rate
+bounds remain separate questions. No new emulator or hardware run was performed.
