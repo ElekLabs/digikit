@@ -599,8 +599,8 @@ fn sharc_sources_given_as_texts_make_the_object_of_the_files() {
     let t = sharc::source_text_in(vec![d.clone()], &[d.join("m.s")], &[]).unwrap();
     assert_eq!(build::to_text(&sharc::sharc_object(&t).unwrap()).unwrap(), plain);
     std::fs::remove_dir_all(&d).unwrap();
-    // a missing include and a guard are errors, not panics
+    // a missing include and a refused instruction are errors, not panics
     assert!(sharc::source_text_from(&["#include \"no.inc\"".into()], &includes, &[]).is_err());
-    let e = sharc::sharc_object(".SECTION/PM seg_pmco;\nR0 = FDEP R11 BY 4:8;\n").unwrap_err();
-    assert!(e.0.contains("known Selache encode bug"), "{e}");
+    let e = sharc::sharc_object(".SECTION/PM seg_pmco;\nDM(15, I4) = I0;\n").unwrap_err();
+    assert!(e.0.contains("the ISA does not allow"), "{e}");
 }

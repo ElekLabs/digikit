@@ -329,10 +329,10 @@ mod tests {
         // current: skipped, not built again
         let second = build_dirs(&root(), &dirs).unwrap();
         assert!(second.built.is_empty() && second.skipped == [id.clone()]);
-        // a source Selache mis-encodes is refused with the guard's text; the old object stays
-        std::fs::write(&src, ".SECTION/PM seg_pmco;\n.GLOBAL _f;\n_f:\n    R0 = ASHIFT R11 BY 3;\n    RTS;\n").unwrap();
+        // an instruction the ISA excludes is refused with the check's text; the old object stays
+        std::fs::write(&src, ".SECTION/PM seg_pmco;\n.GLOBAL _f;\n_f:\n    DM(15, I4) = I0;\n    RTS;\n").unwrap();
         let err = build_dirs(&root(), &dirs).unwrap_err();
-        assert!(err.starts_with(&format!("build of {id} failed:")) && err.contains("known Selache encode bug"), "{err}");
+        assert!(err.starts_with(&format!("build of {id} failed:")) && err.contains("the ISA does not allow"), "{err}");
         assert_eq!(std::fs::read_to_string(dir.join("build/d.dko.json")).unwrap(), text);
         let _ = std::fs::remove_dir_all(&dir);
     }

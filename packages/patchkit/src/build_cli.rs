@@ -235,12 +235,12 @@ pub fn cf_link(root: &Path, rest: &[String]) -> Result<()> {
 /// * `link INPUT --base N [--extern NAME=ADDR]...`: the object placed at the short-word address, verified; JSON.
 /// * `shift-check FILE`: for each line of hex 48-bit instruction words, the shift-immediate problem or `ok`.
 ///
-/// INPUT is `--text FILE` (an expanded source; `-` is stdin) or `--elf FILE.doj --source FILE [--asm FILE]` (an object another Selache
+/// INPUT is `--text FILE` (an expanded source; `-` is stdin) or `--elf FILE.doj --source FILE` (an object another Selache
 /// tool wrote, with its source for the hash and the assembly it was made from for the encoding-bug guards).
 pub fn sharc(root: &Path, rest: &[String]) -> Result<()> {
     use build::sharc as bs;
     use build::sharc_obj as so;
-    const U: &str = "usage: patchkit sharc text [--module DIR] [-I DIR]... [--define NAME]... SRC... | cond [--define NAME]... | inc [-I DIR]... | object INPUT | asm INPUT | link INPUT --base N [--extern NAME=ADDR]... | shift-check FILE\n  INPUT: --text FILE | --elf FILE.doj --source FILE [--asm FILE]";
+    const U: &str = "usage: patchkit sharc text [--module DIR] [-I DIR]... [--define NAME]... SRC... | cond [--define NAME]... | inc [-I DIR]... | object INPUT | asm INPUT | link INPUT --base N [--extern NAME=ADDR]... | shift-check FILE\n  INPUT: --text FILE | --elf FILE.doj --source FILE";
     let cmd = rest.first().map(String::as_str).unwrap_or("");
     let rest = rest.get(1..).unwrap_or(&[]);
     let read = |p: &str| -> Result<String> {
@@ -266,9 +266,8 @@ pub fn sharc(root: &Path, rest: &[String]) -> Result<()> {
         }
         let elf = flag(rest, "--elf").ok_or_else(|| Error(U.into()))?;
         let src = read(&flag(rest, "--source").ok_or_else(|| Error(U.into()))?)?;
-        let asm = flag(rest, "--asm").map(|p| read(&p)).transpose()?;
         let blob = std::fs::read(&elf).map_err(|e| Error(format!("{elf}: {e}")))?;
-        so::object_from_elf(&blob, &src, asm.as_deref())
+        so::object_from_elf(&blob, &src)
     };
     match cmd {
         "text" => {
