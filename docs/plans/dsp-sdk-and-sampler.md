@@ -2588,7 +2588,20 @@ The converter's 64 MiB input/128 MiB PCM ceilings are software constraints, not 
 ownership. Checked stereo extents, source consistency and an owned pool remain
 open end to end; no new ABI, product limit or production backing is selected.
 
-- [ ] Route the nested standalone dkrt cleanup tests into the normal owner/gate
-  selection; current root workspace Rust routing does not select this crate.
-  Until then use the explicit shared-lock owner command in
-  `out/runs/dsp-cleanup-retention/commands.json`.
+- [x] Route the nested standalone dkrt cleanup tests into the existing Rust job;
+  default/whole tests include it, with the direct `test:runtime:unit` owner task.
+  Runtime sources and local dependencies select it without losing existing readers.
+
+### Route standalone runtime host tests
+
+- [x] Add dkrt and its real local dependency edges to existing Rust affected-package
+  selection, preserving workspace readers and one sequential gate job.
+- [x] Split workspace/standalone execution; dkrt-only needs no generated SHARC core
+  and uses a pinned, worktree-aware host target. Add the direct shared-lock owner.
+- [x] Check routing/execution behavior, run the ten-test owner once and document
+  the now-routed coverage without changing runtime sources or artifacts.
+
+Routing validation passes 252 tests across the named selection/verify files and
+the ten-test direct runtime owner. `mise run test:changed` passes fast checks;
+`verify --only rust-tests --explain` retains one existing Rust job. No full gate,
+runtime source/object rebuild or device acceptance is repeated for this routing delta.

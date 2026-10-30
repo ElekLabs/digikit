@@ -14,10 +14,11 @@ execution requirements, not levels. A successful boot proves only what the run a
 | Static (JS/TS) | oxlint, Prettier check, host Vitest, `pnpm -r run typecheck` | `mise run verify:host` |
 | Static (Python) | ruff check and format over pyproject `[tool.ruff] include`; mypy over `[tool.mypy] files` | `mise run lint:py`; `uv run python -m tools.devtools.pathcheck`; `mise run check:layers` (module layering, docs/ARCHITECTURE.md) |
 | Fast preflight | Changed files only; no builds, no devices | `mise run test:changed` |
-| Unit (TS host) | Packages, desktop UI logic, regression helpers; no device | `mise run test:host` |
+| Unit (TS host) | Packages, desktop UI logic, regression helpers; no device | `mise run test:runtime:unit` | Standalone dkrt host cleanup tests through `rust_ws test --packages dkrt`, under the shared benchlock; pinned toolchain, worktree-aware `nogen/host-dkrt` target; no generated SHARC core, device or fixture build. |
+| `mise run test:host` |
 | Unit (web) | Web app Node suites in `apps/web/tests` | `mise run web:test` |
 | Unit (Python) | RE, firmware and dev tools | pytest on named files under `tests/<owner>/`; `mise run test:pypy` for the PyPy subset |
-| Unit (Rust) | Crates | `cargo nextest` through the gate step `rust-tests` or `mise run test` |
+| Unit (Rust) | Workspace and standalone dkrt | Gate step `rust-tests` or `mise run test`; runtime-only: `mise run test:runtime:unit` |
 | Component | Module DSP conformance on the SHARC core | `mise run module:check ID` |
 | Device: stock UI | DT2 stock pages and transport goldens (zero DSP) | `mise run test:stock` |
 | Device: FX | Stock FX oracles | `mise run test:fx`, `mise run test:fx:dt2` |
@@ -239,8 +240,16 @@ dt2-tier-sweep.
   devices. The uploads are the shipped modules that are `dynamic`, a service or `host`, and have a
   `tests/regression/modules/<name>.test.ts` (`verify_route.RUNTIME_UPLOADS`, built from the manifests;
   `acceptance.ts` scans them by the same rule). Shared ABI, protocol and unknown modules select all uploads.
-- `rust-tests` runs `cargo nextest run --workspace --release`, without the desktop app crate. The
-  `desktop` step builds the console and tests the app crate.
+- `rust-tests` runs the selected workspace packages with `cargo nextest` in release
+  mode, without the desktop app crate, then selected standalone dkrt host tests
+  with `cargo test --lib --offline` in the same job. Default/whole selection includes
+  both; dkrt-only selection skips generated-core setup. Runtime source and its
+  local SDK/fit/dkneeds/fw dependencies select dkrt; existing patchkit/boot readers
+  remain selected for runtime sources. The `desktop` step tests the app crate.
+  The router preserves the caller's Cargo job budget and adds no nested gate lock;
+  the direct runtime owner task acquires the shared lock itself. Extra arguments
+  in workspace/mixed runs go only to nextest; standalone tests still run in full.
+  With `--packages dkrt` alone, extras are Cargo test filters/options instead.
 - `smoke` runs the patchkit smoke matrix (`pk_harness run`, 17 cells, one daemon each).
 
 Smoke is skipped when every changed path is:

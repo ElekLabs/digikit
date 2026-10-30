@@ -136,6 +136,10 @@ description = "Full gate: every runtime acceptance file, 191 DN2 FX assertions a
 run = "pnpm test:host"
 description = "Run the host-only Vitest projects with the native test runner; no native/WASM build or device checks"
 
+[tasks."test:runtime:unit"]
+run = "uv run python -m tools.devtools.benchlock run --shared --label runtime-unit -- uv run python -m tools.devtools.rust_ws test --packages dkrt"
+description = "Standalone runtime host cleanup tests with pinned toolchain; no generated SHARC core, device or native fixture build"
+
 [tasks."test:stock"]
 run = "pnpm --filter @digi/regression test:stock"
 description = "Stock DT2 1.17 zero-DSP UI/sequencer goldens; accepts Vitest filters; requires existing DIGI_EMUD binary, stock firmware and complete ready inputs; starts owned daemons, no implicit build, no audio coverage"

@@ -210,8 +210,12 @@ host/format/types wrappers stop at the existing `node_modules/.pnpm` hoist layou
 problem. Python checks are skipped because no Python source changed. The named
 Rust cleanup tests and runtime object source-current check pass independently.
 
-The nested standalone `dkrt` crate is not selected by the root workspace Rust gate.
-Run its explicit owner check:
+The nested standalone `dkrt` crate now participates in the existing `rust-tests`
+job after selected workspace tests. Its runtime sources and local dependencies
+select it; default/whole runs include it. The direct owner is
+`mise run test:runtime:unit` (shared lock, pinned host toolchain, worktree-aware
+`nogen/host-dkrt` target, no generated core or native fixtures). The underlying
+explicit check remains:
 
 ```sh
 cargo test --manifest-path modules/core/runtime/src/rs/Cargo.toml \
@@ -220,8 +224,9 @@ cargo test --manifest-path modules/core/runtime/src/rs/Cargo.toml \
 ```
 
 under the shared benchlock/environment recorded in `commands.json` above.
-**[O]** Wire this owner check into normal gate/routing separately; the default gate
-does not currently cover these tests.
+Routing/execution unit checks cover standalone-only, mixed/default, empty/desktop
+selection and failures. Runtime sources and the compiled object are unchanged by
+this routing delta; no native run or full gate was repeated.
 
 Coordinator normal-loader acceptance passes both DT2 1.17 and DN2 1.12 cases
 (235.08 s total; 80,037/154,845 ms respectively), using the fresh runtime object
@@ -230,3 +235,8 @@ nonzero DSP extent and voice row/type, with no fault; it is neither audio correc
 nor native failure injection. Exact invocation/environment and whole-file hashes
 are in `out/runs/dsp-cleanup-retention/commands.json`, with
 `out/runs/dsp-cleanup-retention/native-pluck-acceptance.log` recording exit zero.
+
+The routing delta passes 252 named Python checks, ten direct runtime host tests,
+and `mise run test:changed`. The explain-only gate plan retains the existing single
+Rust job. Commands/results are under `routing` in the cleanup provenance JSON;
+no full gate or native acceptance is repeated for this tooling-only change.
