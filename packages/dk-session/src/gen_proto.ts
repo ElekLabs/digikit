@@ -17,6 +17,7 @@ export const CMD = {
   VERIFY: 0x17,
   MKDIR: 0x18,
   SETTINGS: 0x19,
+  RENAME: 0x1a,
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
@@ -113,6 +114,7 @@ export const CAP = {
   SERVICE_CMDS: 9,
   FOLDERS: 10,
   SETTINGS: 11,
+  RENAME: 12,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */
