@@ -665,3 +665,173 @@ def test_prepared_shadow_matches_isolated_mono(filter_rig, family, fault):
                 )
     if fault is not None:
         assert any(audio_differences)
+
+
+@pytest.fixture(scope="module")
+def gain_rig(rig):
+    source = REPO_ROOT / "tests/fixtures/dsp/stereo-gain-shadow-replay.s"
+    linked = pk_sharc.link(
+        pk_sharc.assemble(
+            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+        ),
+        0xB94000,
+        {"_gain": 0xB80345},
+    )
+    return linked, rig[1]
+
+
+def gain_call(session, side, control=0, byte_control=0):
+    regs = {
+        **REGS,
+        "I6": STACK * 4,
+        "I7": STACK * 4,
+        "M13": 0,
+        "M15": 0xFFFFFFFF,
+        "R0": control,
+        "R1": byte_control,
+    }
+    result = session.call(f"_{side}_gain", regs, max_steps=12000)
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert result["final_pc_sw"] == BACK
+    assert not session.runner.state.approx_recips_used
+    if side == "prepare":
+        allowed = {CONTROL + 0x100 + i for i in range(11)}
+    else:
+        offset = 0x100 if side == "right" else 0
+        allowed = {CONTROL + offset + i for i in (7, 9, 10)}
+        allowed |= {LEFT + offset + i for i in range(32)}
+        allowed |= set(range(STACK - 64, STACK + 1))
+    addresses = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        ): a
+        for a in allowed
+    }
+    stores = [e for e in session.stores if e.access == "write"]
+    assert all(e.width == 4 and e.address in addresses for e in stores), stores
+    counts = Counter(addresses[e.address] for e in stores)
+    if side == "prepare":
+        assert set(counts) == allowed
+        assert set(counts.values()) == {1}
+    else:
+        # Unity/hold paths may leave in-place audio untouched. Each stored
+        # sample must still occur once and remain inside the 32-word plane.
+        assert all(counts[LEFT + offset + i] <= 1 for i in range(32))
+        tables = {
+            0xB8039C: 0x26A570,
+            0xB803D7: 0x26A570,
+            0xB80452: 0x26A970,
+            0xB8049D: 0x26A770,
+            0xB804FC: 0x26A770,
+        }
+        for pc, table in tables.items():
+            reads = [e for e in session.stores if e.access == "read" and e.pc_sw == pc]
+            base = _canonical_dm_address(session.runner.state, table, 4)
+            assert len(reads) % 4 == 0
+            assert all(
+                e.width == 1
+                and e.new_value is not None
+                and base <= e.address < base + 128 * 4
+                for e in reads
+            )
+    return result
+
+
+@pytest.mark.parametrize(
+    "advanced_controls", (False, True), ids=("snapshot", "advanced")
+)
+@pytest.mark.parametrize(
+    "hold_release", (False, True), ids=("attack-decay", "hold-release")
+)
+def test_gain_shadow_matches_isolated_mono(gain_rig, advanced_controls, hold_release):
+    stereo, left, right = (fresh(gain_rig, approximate=False) for _ in range(3))
+    sessions = (stereo, left, right)
+    # b8030c/b80338 initialize words8,7,10, but do not initialize9.
+    # Captured b8028c setter arguments yield words0..6 below; word9 is
+    # explicitly zeroed here. Reinitialization below is the b80345 entry
+    # control boundary only, not a claim about a named trigger/reset event.
+    # Setter capture: R8=0, R12=1/16, stack(1/64,1/16,1/2,1/16,1).
+    # The optional finite variant enables the inspected 14-sample hold then
+    # phase4 release to zero; it does not invoke an unaudited live setter.
+    initial = (
+        7,
+        1,
+        7,
+        bits(0 if hold_release else 0.5),
+        7,
+        1,
+        int(hold_release),
+        5,
+        0,
+        0,
+        0,
+    )
+    for session in sessions:
+        session.runner.state.assume_nw32 = True
+        session.runner.attach_watchpoints(
+            [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
+        )
+        session.runner.set_watch_active(False)
+        for offset in (0, 0x100):
+            for i, value in enumerate(initial):
+                session.poke(CONTROL + offset + i, value)
+    phases = []
+    markers = []
+    table_pcs = set()
+    audio_differences = []
+    for block, control in enumerate((1, 0, 0, 0, 0, 1, 0, 0, 0)):
+        inputs = []
+        for i in range(32):
+            lv, rv = bits((i - 11) / 64 + block / 64), bits((7 - i) / 83 - block / 128)
+            inputs.append((lv, rv))
+            stereo.poke(LEFT + i, lv)
+            stereo.poke(RIGHT + i, rv)
+            left.poke(LEFT + i, lv)
+            right.poke(LEFT + i, rv)
+        gain_call(stereo, "prepare")
+        snapshot = words(stereo, CONTROL, 11)
+        assert words(stereo, CONTROL + 0x100, 11) == snapshot
+        gain_call(stereo, "left", control)
+        table_pcs.update(e.pc_sw for e in stereo.stores if e.access == "read")
+        authoritative = words(stereo, CONTROL, 11)
+        if advanced_controls:
+            gain_call(stereo, "prepare")
+        gain_call(stereo, "right", control)
+        gain_call(left, "left", control)
+        gain_call(right, "left", control)
+        assert words(stereo, CONTROL, 11) == authoritative == words(left, CONTROL, 11)
+        assert words(left, CONTROL, 11) == words(right, CONTROL, 11)
+        assert words(stereo, LEFT, 32) == words(left, LEFT, 32)
+        actual, expected = words(stereo, RIGHT, 32), words(right, LEFT, 32)
+        audio_differences.append(actual != expected)
+        if not advanced_controls:
+            assert actual == expected
+            assert words(stereo, CONTROL + 0x100, 11) == authoritative
+        assert words(stereo, LEFT, 32) != [v[0] for v in inputs]
+        assert expected != [v[1] for v in inputs]
+        if hold_release and block in (2, 7):
+            # The bounded phase3 segment is unity with in-place source/dest.
+            # Retain its input even if no multiply/store is needed there.
+            original_right = [v[1] for v in inputs]
+            assert any(
+                expected[i : i + 14] == original_right[i : i + 14] for i in range(19)
+            )
+        assert words(stereo, LEFT, 32) != actual
+        phases.append(stereo.peek(CONTROL + 7))
+        markers.append(stereo.peek(CONTROL + 10))
+        for session in sessions:
+            for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
+                assert all(
+                    (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
+                )
+    # The first attack crosses the -1 clamp in block2, then reaches phase1
+    # or the finite hold/phase4 path. Entry control1 later restarts the attack.
+    expected_phases = [2, 2, 4 if hold_release else 1]
+    assert phases[:3] == expected_phases
+    assert phases[5:8] == expected_phases
+    assert {0xB8039C, 0xB803D7} <= table_pcs
+    assert ({0xB80452, 0xB804FC} if hold_release else {0xB8049D}) <= table_pcs
+    assert markers[0] != markers[1] != markers[2]
+    assert markers[5:8] == markers[:3]
+    if advanced_controls:
+        assert any(audio_differences)

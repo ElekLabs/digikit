@@ -333,3 +333,35 @@ when a signed-short frame value is nonzero. This is a concrete clear writer;
 the writer that makes the guard nonzero remains unidentified. Empty targeted
 reference results do not exclude other writers. Upstream indirect-preservation
 and event-name caveats above still apply; no lifecycle hook is selected yet.
+
+
+## Final gain replay
+
+**[D]** Four more cases in `tests/fixtures/dsp/stereo-gain-shadow-replay.s`
+exercise `0xb80345`: linear attack followed by exponential progression toward
+0.5, and a second record with a 14-sample in-place unity hold followed by release
+toward zero. Nine blocks include two uses of the actual entry reinitialization
+control. All eleven words are captured before left processing; right output and
+control state match an isolated mono reference, and right processing leaves the
+left record unchanged. Copying advanced controls after left processing must
+change the right output. No audio-history fields are introduced for this stage.
+
+The full reachable body ends at `0xb80545`, beyond the database function boundary.
+Its consumed-count calculation divides a byte-pointer difference by four, so the
+proof uses byte-space audio pointers, explicit 32-bit normal-word access context
+and in-place buffers. Table-load PCs are checked against 128-word table bounds;
+state writes are restricted to words 7,9,10, plus audio and bounded stack stores.
+The hold path may leave existing in-place audio untouched. Reciprocal approximation
+is disabled and the trajectories avoid the phase-5 division helper.
+
+The synthetic record begins with indices 7,1,7,4th-word float 0.5, then 7,1,0,5,
+0,0,0. Constructor/setter provenance was separately inspected. Word 9 is explicitly
+initialized: the constructor does not initialize it. The alternate record uses
+word 6=1 and target word 3=0. The entry control rewrites phase/gain markers; this
+is not a complete-record reset or a named note-on/retrigger event claim.
+
+All 22 replay tests pass without skips. Independent source review found no issues;
+the primary worktree received byte-identical tested files from the isolated gain
+worktree. Nine of ten local stage families now have bounded replay experiments.
+The ring-backed stage, complete ordered routing, scratch blend, pan/send integration,
+external writer coverage and production lifecycle still remain open.

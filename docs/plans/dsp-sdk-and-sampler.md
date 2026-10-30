@@ -26,7 +26,7 @@ there is no outstanding reservation-choice request and no approved reservation p
 
 The branch is rebased onto main `d6b5d4bb`; DT2 startup/cache and DN2 actual-reader
 proofs pass on the rebuilt daemon. All ten DN2 processing families have local
-state audits. Eighteen assembled synthetic stereo replay cases cover eight local stage families,
+state audits. Twenty-two assembled synthetic stereo replay cases cover nine local stage families,
 including changing controls, independent histories and bounded reset behavior. Production
 pool ownership, full route/reset coverage and stereo integration remain open.
 See [the rebase/replay checklist](#2026-10-30-rebase-and-stereo-replay-checkpoint)
@@ -2135,3 +2135,19 @@ remain green. Independent review is clean. Reproduction and exact commands are i
 `out/runs/ddr-monitor-native/`; finding 97 records the small failure-block ordering
 fix. Next is an ordered emulator diagnostic control route and bounded stock runs;
 this is separate from public module ABI and sample allocation.
+
+
+### Parallel gain proof checkpoint
+
+- [x] Exercise the final gain stage on two nontrivial trajectories, preserving
+  one authoritative control evolution and replaying the same initial control
+  state on unequal right audio. Actual entry reinitialization and advanced-control
+  corruption are tested; all 22 replay cases pass without skips or reciprocal
+  approximation in the new cases. Independent review is clean.
+- [ ] Prove independent backing for the remaining ring-backed numerical stage,
+  then integrate ordered routes, scratch blending and pan/send output.
+
+The gain proof was developed in `/private/tmp/digikit-sampler-gain-proof`, on its isolated gain-proof branch, based on checkpoint `3e236b89`, while the native compiler
+fix proceeded in the primary worktree. The coordinator applied and byte-compared
+its two tested files; no secondary-worktree commit or independent publication was
+made. The primary branch remains the integration and publication branch.
