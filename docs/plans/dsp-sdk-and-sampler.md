@@ -26,8 +26,8 @@ there is no outstanding reservation-choice request and no approved reservation p
 
 The branch is rebased onto main `d6b5d4bb`; DT2 startup/cache and DN2 actual-reader
 proofs pass on the rebuilt daemon. All ten DN2 processing families have local
-state audits. The assembled synthetic stereo replay proof passes for three stages,
-including changing controls, independent histories and explicit reset. Production
+state audits. Eighteen assembled synthetic stereo replay cases cover eight local stage families,
+including changing controls, independent histories and bounded reset behavior. Production
 pool ownership, full route/reset coverage and stereo integration remain open.
 See [the rebase/replay checklist](#2026-10-30-rebase-and-stereo-replay-checkpoint)
 and [reciprocal follow-up](#reciprocal-emulator-follow-up) below.
@@ -2109,3 +2109,21 @@ Mem-only counter is not a complete guest-access monitor.
   behavior. Rebuild native and Wasm as needed; Python core fingerprint need not change.
 - [ ] Only then run bounded stock coexistence scenarios over candidate intervals.
   A quiet run is bounded observation, never universal ownership or hardware proof.
+
+
+### DDR diagnostic foundation checkpoint
+
+- [x] Implement the opt-in Rust first-attempt diagnostic and explicit CPU versus
+  storage attribution, including synthesized reads and symbolic-value write
+  attempts with concrete addresses. Range changes invalidate raw pointer caches;
+  reset preserves policy and clears the latch; monitoring disables idle skipping.
+- [x] Pass eight focused monitor tests and all 21 runtime-crate units (overlapping
+  counts), with independent source review clean. Shared-IR interpreter fallback
+  is exercised; there is no full compiled-backend dispatch claim yet.
+- [ ] Resolve the existing Cranelift flat-access harness panic in a separate scoped
+  change, then run the monitor proof through the actual compiled backend.
+- [ ] Validate Wasm and expose a bounded diagnostic entry point for stock runs.
+
+[Finding 97](../findings/97-ddr-access-diagnostic.md) records the exact contract,
+reset/import behavior and remaining coverage. No instruction-core regeneration,
+firmware change, production allocation or hardware test is part of this checkpoint.

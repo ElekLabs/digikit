@@ -2169,7 +2169,7 @@ mod tests {
         }
     }
 
-    fn flat_test_kernels(bytes: u8, write: bool) -> Vec<Box<dyn CompiledKernel>> {
+    fn flat_test_ir(bytes: u8, write: bool) -> Kernel {
         let mut l = Lower::new(env(), Plan::default(), 2);
         let addr = l.emit(Ty::I32, Op::Ctx32(CTX_REGS_IN));
         let (p, o) = l.flat_access(addr, bytes, write).unwrap();
@@ -2201,7 +2201,11 @@ mod tests {
                 v,
             });
         }
-        let k = l.finish().unwrap().kernel;
+        l.finish().unwrap().kernel
+    }
+
+    fn flat_test_kernels(bytes: u8, write: bool) -> Vec<Box<dyn CompiledKernel>> {
+        let k = flat_test_ir(bytes, write);
         let mut kernels = vec![super::super::interp::InterpBackend.compile(&k).unwrap()];
         #[cfg(not(target_family = "wasm"))]
         {
@@ -2237,6 +2241,68 @@ mod tests {
         // are guarded, and this kernel never accesses engine state.
         let result = unsafe { k.run(ctx.ptr(), std::ptr::null_mut()) };
         (result, ctx.get32(CTX_REGS_OUT))
+    }
+
+    #[test]
+    fn ddr_monitor_flat_access_declines_before_load_or_store() {
+        use crate::mem::{DdrAccessKind, Mem};
+        use crate::rt::{Int, St, V, VI, bnd};
+        const A: u32 = 0x8001_0000;
+        for bytes in [1, 2, 4] {
+            for write in [false, true] {
+                // The native backend's existing flat harness currently aborts
+                // during compilation. Exercise the shared guarded IR here;
+                // native and Wasm execution coverage remains a separate proof.
+                let k = super::super::interp::InterpBackend
+                    .compile(&flat_test_ir(bytes, write))
+                    .unwrap();
+                {
+                    let mut mem = Mem::new();
+                    for i in 0..4 {
+                        mem.write_byte(A + i, 0x55);
+                    }
+                    // Compile and run before attachment, then reuse the same
+                    // kernel with changed page policy.
+                    assert_eq!(flat_test_run(&*k, &mut mem, A).0, 0);
+                    let old = mem.read_le(A, bytes as u32);
+                    mem.set_ddr_monitor(Some((A, A + 4))).unwrap();
+                    assert_eq!(flat_test_run(&*k, &mut mem, A), (1, 0xdead_beef));
+                    assert_eq!(mem.first_ddr_access(), None);
+                    let mut s = St::new(mem);
+                    // Simulate the normal instruction fallback after the
+                    // kernel exits before its data access.
+                    if write {
+                        assert!(
+                            bnd::_dm_write_b(
+                                &mut s,
+                                VI::I(A as Int),
+                                bytes as Int,
+                                V::c(old as Int),
+                                false
+                            )
+                            .unwrap()
+                        );
+                        assert_eq!(
+                            s.mem.first_ddr_access().unwrap().kind,
+                            DdrAccessKind::CpuWrite
+                        );
+                    } else {
+                        assert_eq!(
+                            bnd::_dm_read_b(&s, VI::I(A as Int), bytes as Int, false, false)
+                                .unwrap(),
+                            Some(V::c(old as Int))
+                        );
+                        assert_eq!(
+                            s.mem.first_ddr_access().unwrap().kind,
+                            DdrAccessKind::CpuRead
+                        );
+                    }
+                    assert_eq!(s.mem.read_le(A, bytes as u32), old);
+                    s.mem.set_ddr_monitor(None).unwrap();
+                    assert_eq!(flat_test_run(&*k, &mut s.mem, A).0, 0);
+                }
+            }
+        }
     }
 
     #[test]
