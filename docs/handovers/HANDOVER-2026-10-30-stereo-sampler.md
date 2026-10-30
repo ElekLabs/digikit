@@ -333,22 +333,24 @@ block errors can instead yield stale/incomplete/potentially changing cache copie
 with filesystem success counts. Source validation therefore needs lifecycle/
 content-change evidence plus an independently latched low-level storage fault;
 counts/native headers alone are insufficient. This is a design requirement, not
-selected hooks or public ABI. Recovery/full coverage remain open; uncertain
-completion is not assumed retry-safe. See
+selected hooks or public ABI. Recovery mechanisms/full coverage remain open;
+uncertain completion is not assumed retry-safe. See
 [finding 81](../findings/81-stock-sampler-dependencies.md).
 
 A proposed storage-fault record must not reset on a new load, and its installation
 must cover relevant cache I/O history or establish fresh/quiescent initialization.
-A new clear token cannot prove health after an unobserved failure; no implementation
-or recovery policy is selected.
+A new clear token cannot prove health after an unobserved failure. Implementation
+mechanisms remain open; the user has accepted the first-release policy below.
 
-Pending user decision: DT2 first-release recovery after low-level storage fault
-with unproved completion. The coordinator recommends rejecting the active
-unpublished load and latching the fault for the rest of the boot, refusing new
-sample loads until reboot or independently proven reset. Other published bindings
-are left alone, with no underlying-device-health guarantee. Source changes without
-I/O faults abort only that load. Automatic retry would instead require a separate
-larger abort/drain + cache-invalidate + FS-revalidate proof and bounded error
-injection. Both options require correct fault/history capture before cache use;
-no DMA-stop proof, production hooks/pool or implementation is approved by this
-recommendation. The user recovery-scope decision remains open.
+Accepted first-release recovery policy: missing, invalid or changed samples show
+an error, discard the unpublished load and leave the selected track silent; another
+selection is allowed. An uncertain low-level storage fault with unproved DMA
+completion blocks new sample loads until reboot or independently proven recovery.
+The loader leaves other published bindings alone, without guaranteeing underlying
+device health. No automatic retry/recovery is required for the first release.
+Next technical work is fault capture/history before cache use plus a lifecycle/
+content-change source witness and complete hook coverage. The policy is accepted,
+not implemented by this documentation update, and proves neither DMA stopping nor
+production pool readiness. Future automatic retry requires a separate abort/drain,
+cache-invalidation, FS-revalidation and bounded error-injection scope. No new
+reservation or public ABI is approved.

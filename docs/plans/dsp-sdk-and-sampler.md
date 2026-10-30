@@ -78,16 +78,16 @@ generation scheme are selected. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
 
-**Pending user decision — DT2 first-release storage-fault recovery:** for low-level
-faults with unproved completion, the coordinator recommends rejecting the active
-unpublished load and latching the fault for the remaining boot, refusing new sample
-loads until reboot or an independently proven reset. Existing published bindings
-are left alone, without an underlying-device-health guarantee. Ordinary source
-changes abort the load without permanent poisoning. Automatic retry instead needs
-proven abort/drain, cache invalidation, FS revalidation and bounded error injection
-as a separate larger scope. Both choices need correct fault capture/history before
-cache use; neither proves DMA stopping or approves hooks/production backing.
-No implementation is approved pending that recovery-scope decision.
+**Accepted first-release recovery policy:** missing, invalid or changed samples
+show an error and discard the unpublished load; the selected track stays silent,
+and another selection is allowed. An uncertain low-level storage fault with
+unproved DMA completion latches the fault and blocks new sample loads until reboot
+or independently proven recovery. The loader leaves other published bindings alone,
+without guaranteeing underlying-device health. Automatic retry/recovery is not
+required for the first release. Next technical work is correct low-level fault
+capture/history plus a lifecycle/content-change source witness before cache use.
+The accepted policy does not establish implementation completeness, DMA stopping,
+hook coverage or production backing/reservation approval.
 
 Production backing ownership/coexistence, callback-private lifetime, full-route
 capture/commit/reset/cleanup, public stereo integration and picker publication
@@ -2755,27 +2755,35 @@ consistency; no implementation, public ABI or product policy is selected.
 
 The proposed storage-fault record must survive new loads. Its installation must
 cover relevant cache I/O history or establish fresh/quiescent cache initialization;
-a clear token after an unobserved failure is not health proof. Implementation and
-recovery policy remain unselected.
+a clear token after an unobserved failure is not health proof. Fault-capture and
+recovery mechanisms remain unimplemented; the first-release policy is accepted below.
 
-### Pending decision: DT2 first-release storage-fault recovery scope
+### Accepted decision: first-release sample-load recovery scope
 
-The bounded static audits above are complete within their recorded scopes. For a
-low-level storage fault with unproved completion, the coordinator recommends:
+The user accepted the following policy; the bounded audits above retain their
+recorded limits:
 
-- Reject the active unpublished load and latch the storage fault for the remaining
-  boot; reject new sample-load requests until reboot or independently proven reset.
-- Leave other published bindings alone, without guaranteeing the underlying device
-  remains healthy. Ordinary source-change detection without I/O fault aborts only
-  that load, without permanent poisoning.
+- Missing, invalid or changed samples show an error, discard the unpublished load
+  and leave the selected track silent. Another selection is allowed.
+- An uncertain low-level storage fault with unproved DMA completion rejects the
+  unpublished load and blocks new sample-load requests until reboot or
+  independently proven recovery. A new load does not clear the fault record.
+- The loader does not modify other published bindings; this does not guarantee
+  underlying-device health. Automatic retry/recovery is not required in the first
+  release.
 
-The alternative is a separate larger work scope: prove controller abort/drain,
-cache invalidation and FS revalidation, then perform bounded error injection before
-allowing automatic retry in the first release. Both options require correct fault
-capture and relevant cache-I/O history from before cache use. The recommendation
-does not prove DMA stops or approve production pools/hooks. **Awaiting the user's
-recovery-scope decision; no implementation is approved.**
+- [x] Accept first-release recovery scope, distinguishing ordinary sample errors
+  from uncertain low-level storage faults.
+- [ ] Establish fault capture/history before relevant cache use and a lifecycle/
+  content-change witness, then implement and validate the accepted behavior with
+  complete hook coverage. No implementation completeness is claimed here.
 
-Validation for this documentation checkpoint: auditor prose cross-checks, pathcheck,
-`git diff --check`, and `mise run test:changed` pass. No code change, emulator run,
-hardware experiment or full merge gate is claimed.
+Any future automatic retry is a separate larger scope requiring proven controller
+abort/drain, cache invalidation, FS revalidation and bounded error injection.
+The accepted policy itself proves neither DMA stopping nor production pool/hook
+readiness and approves no reservation or public ABI change.
+
+The prior documentation checkpoint passed auditor prose cross-checks, pathcheck,
+`git diff --check` and `mise run test:changed`. This policy-only update runs docs
+pathcheck and diff checks; no code change, emulator run, hardware experiment or
+full merge gate is claimed.
