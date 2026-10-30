@@ -710,6 +710,65 @@ def test_digikit_test_files_and_scenarios() -> None:
         assert set(verify_route.kind_files().get(kind, ())) <= got, scen
 
 
+def test_patchkit_checks_select_the_dsp_check_tests_without_smoke() -> None:
+    path = "packages/patchkit/src/build/sharc_legal.rs"
+    steps = verify.steps_for([path])
+    assert {"rust-tests", "python-tests"} <= set(steps)
+    assert "smoke" not in steps
+    assert selected(path) == {
+        "tests/patchkit/test_dsp_guard.py",
+        "tests/patchkit/test_dsp_guard_contract.py",
+        "tests/patchkit/test_pk_dsp_budget.py",
+        "tests/patchkit/test_pk_sharc.py",
+    }
+
+
+def test_patchkit_build_files_select_the_module_build_tests_and_smoke() -> None:
+    path = "packages/patchkit/src/build/rust.rs"
+    assert "smoke" in verify.steps_for([path])
+    got = selected(path)
+    assert "tests/patchkit/test_patchkit_rust.py" in got
+    assert "tests/modules" in got
+    assert "tests/digikit" not in got
+    assert "tests/patchkit" not in got
+
+
+def test_patchkit_wasm_selects_rust_and_web_only() -> None:
+    path = "packages/patchkit/src/wasm.rs"
+    steps = set(verify.steps_for([path]))
+    assert {"rust-tests", "web"} <= steps
+    assert not steps & {"python-tests", "smoke"}
+    assert selected(path) == set()
+
+
+def test_other_patchkit_files_keep_the_wide_route() -> None:
+    for path in (
+        "packages/patchkit/src/apply.rs",
+        "packages/patchkit/src/build/mod.rs",
+    ):
+        assert verify_route.fine(path) is None
+        assert "tests/patchkit" in selected(path)
+        assert "smoke" in verify.steps_for([path])
+
+
+def test_a_scenario_runner_selects_the_tests_of_its_kind() -> None:
+    assert selected("tools/patchkit/pk_digikit_fxshift.py") == {
+        "tests/digikit/test_fxshift_dn2.py",
+        "tests/digikit/test_fxshift_dt2.py",
+    }
+    assert "tests/digikit" not in selected("tools/patchkit/pk_digikit_fxpage.py")
+    # a runner others import also selects their kinds
+    assert {
+        "tests/digikit/test_fxshift_dt2.py",
+        "tests/digikit/test_fxpage_dt2.py",
+    } <= selected("tools/patchkit/pk_digikit_fxpage.py")
+
+
+def test_shared_digikit_helpers_keep_the_wide_route() -> None:
+    for name in ("pk_digikit_scen", "pk_digikit_project", "pk_digikit_upload"):
+        assert verify_route.fine(f"tools/patchkit/{name}.py") is None
+
+
 def test_module_leaf_selects_the_tests_that_name_it() -> None:
     src = "tests/fixtures/modules/sine/src/module.c"
     assert verify.steps_for([src]) == ("python-tests", "rust-tests", "smoke")

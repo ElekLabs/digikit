@@ -729,6 +729,8 @@ def smoke_reason(files: list[str]) -> str | None:
             ui = True
         elif reason := SMOKE_EXEMPT.get(path):
             maintenance.append(reason)
+        elif group := verify_route.patchkit_no_smoke(path):
+            maintenance.append(group)
         elif host_test_path(path):
             host = True
         else:
@@ -1463,6 +1465,7 @@ def explain(
             path
             for path in files
             if path not in SMOKE_EXEMPT
+            and not verify_route.patchkit_no_smoke(path)
             and not ui_only_path(path)
             and not host_test_path(path)
         ]
