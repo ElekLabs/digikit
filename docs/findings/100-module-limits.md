@@ -65,23 +65,22 @@ level is fixed another way). On DN2 a machine can have several pages and up to 4
 | Module file (`stage_bytes`) | 64 KiB | ours only |
 | DDR for modules | none | DT2 sample pool; DN2 512 MiB configured, free range [O] |
 
-## 5. Known gap: arena fragmentation at boot
+## 5. Arena holes after boot, and the steps list
 
-Modules are transferred to the card over USB and enabled in the DIGIKIT menu; they load at the next boot. At boot the runtime loads the enabled modules in turn.
-A DSP send is the runtime sending the module's DSP code to the SHARC over core/dsp-link. The fit check (`dkrt-fit`) compares a module's needs with two
-numbers per resource: the free total and the largest free block. The loader does not place memory that way. For each module it allocates first-fit the module block, which stays
-(`modules/core/runtime/src/rs/src/loader.rs`, `arena::alloc(total)`), then a transfer buffer for the DSP image and a small steps list
-(`dsp.rs`, `reserve`), which are freed only when that module's DSP send has finished. DSP sends are queued, not waited for (`dsp.rs`, the
-`waiting` list), so the next module's block is placed above buffers that are freed later. That leaves holes, and several transfer buffers can be
-alive at once. A selection can therefore pass the fit check and still fail to load (`E_NOMEM` for that module, reported by the boot) **[D]**
-(read in the code, not reproduced).
+Modules are transferred to the card over USB and enabled in the DIGIKIT menu; they load at the next boot. **[C]** An earlier version of this
+section said a selection could pass the fit check and still fail to load. It cannot: during the boot load nothing in the arena is freed. For each
+enabled module the runtime allocates the module block (`loader.rs`, `arena::alloc(total)`), a buffer for its DSP code and a steps list (`dsp.rs`,
+`reserve`), first-fit from an empty arena. The frames that carry DSP code do not flow until the sound engine starts (`boot.rs`, before
+`loader::EARLY = true`), so no DSP send (core/dsp-link) finishes and no buffer is freed during the loop: the blocks stack from the bottom. The fit
+check counts each module's DSP code buffer as kept (`take` subtracts `arena + arena_xfer`), which is the boot peak **[D]** (read in the code).
 
-Ways to remove it, smallest first:
+What remains:
 
-1. Load one module at a time at boot: wait until the previous module's DSP send has finished and freed its buffers. Permanent blocks then pack from the bottom
-   and the current rule is exact. DSP sends already go one at a time over the link, so boot is barely slower.
-2. Allocate from both ends: permanent blocks from the bottom of the arena, temporary buffers from the top (or a separate scratch pool). The check
-   then also needs the peak of the temporary buffers alive at once.
-3. No full-size transfer buffer: stream and relocate the DSP image in chunks through the staging buffer.
+1. After boot the DSP sends finish and their buffers are freed, which leaves holes between the module blocks for the rest of the session. This
+   affects only memory a module allocates at run time (`alloc` in the API) and the largest free block shown during the session (the HEALTH page
+   shows it as "CPU BIG"). Module loading is not affected: the selection changes only at the next boot. A fix, if needed: allocate the DSP code
+   buffer and the steps list from the top of the arena, so the holes close up when they are freed.
+2. The steps list (4 bytes per step plus the 16-byte block header) is not in the needs (`dkneeds`, `arena_xfer` covers the DSP code only), so the
+   check is short by tens of bytes per module with DSP code. Fix: add it to the needs.
 
 Plan: [module limits](../plans/module-limits.md).

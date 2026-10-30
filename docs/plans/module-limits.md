@@ -57,8 +57,9 @@ Each with one proof run on DN2, then DT2.
 
 ## 6. Gaps to revisit
 
-- [ ] Arena fragmentation at boot: the fit check can pass a selection that fails to load (finding 100, section 5). Fix: at boot, finish each module's
-      DSP send (core/dsp-link) before loading the next module, then a test that fills the arena with a fragmenting selection and compares the check with the real load. Own branch.
+- [ ] Arena holes after boot: freed DSP code buffers leave holes for the session (finding 100, section 5); they affect only run-time `alloc` in
+      modules and the largest free block shown. Fix if needed: allocate those temporary buffers from the top of the arena.
+- [ ] The steps list of a module with DSP code is not in its needs (tens of bytes): add it to `dkneeds`.
 - [ ] Build cache: `patchkit build` called two cached fixture objects (`out/cache/dko/test/dyn-fx-gain*`) unchanged while `--check` rebuilt them
       with other bytes; the source hash may miss an input (toolchain or SDK header). Reproduce, then fix the hash.
 - [ ] Rust formatting: `rust_ws fmt` reports about 190 diffs on `main` in files this branch did not touch; the check is red regardless.
