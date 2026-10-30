@@ -2862,7 +2862,15 @@ runtime path. This is a separate gap from DMA59, not an exhaustive absence claim
 The controlled ISR proof remains passed; full native IRQ validation remains
 **failed/open**.
 
-**Priority decision pending:** the recommendation is to continue storage/source
-consistency work while keeping full native IRQ validation a release blocker. The
-alternative is to build the missing card-controller interrupt emulation first.
-The user has been asked to choose; this note authorizes no new behavior.
+**Discovery completed; implementation scope pending:** the bounded controller,
+interrupt-routing and runtime-policy audit is recorded in
+[finding 100](../findings/100-storage-interrupt-emulation-scope.md). The proposed
+sequence is isolated Device-policy status/register and signal behavior, integrated
+eSDHC source delivery to the actual firmware handler and guest waiter, then an
+explicit opt-in daemon/snapshot and two-device fault-history proof. Normal Oracle
+behavior stays unchanged. Earlier informal 1–3-day/week estimates are withdrawn:
+confidence is medium for register/component work and low for runtime integration
+until the controlled experiment. The user authorized discovery; implementation
+is still pending. Full native fault-history acceptance remains **failed/open** and
+a release blocker. No production API, pool, SHARC or recovery work is authorized
+by this proposal.

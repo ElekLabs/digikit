@@ -24,7 +24,7 @@ loader, before the traced MAIN storage initialization. It is separate from
 runtime-loaded DKM BSS and is never reset by selection/load/UI/runtime hooks.
 Bounded native traces observe loader zeroing before FS initialization and host-seeded
 retention, but the full fault-history acceptance remains failed/open: it records
-zero observer writes. The observer covers only these three snapshots/audited error bits;
+zero observer writes. The observer covers only these three snapshots and audited error bits;
 quiet output is not health, cache-history, full fault coverage or DMA-drain proof.
 
 The compiled-source owner test is `packages/patchkit/tests/storage_fault_observer.rs`:
