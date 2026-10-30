@@ -673,6 +673,43 @@ def run_folders(c: Any) -> None:
         up.rm("tmp/x")
         check("DELETE of a folder entry", set())
 
+        # RENAME: a file moves with its sectors and sha256 (no data is copied), the folder it leaves stays, and an empty folder renames
+        c.check("INFO: capability RENAME", D.has_cap(up.info(), "RENAME"), str(up.info()["caps"]))
+        up.rename("holes/small.bin", "moved/small.bin")
+        files["moved/small.bin"] = files.pop("holes/small.bin")
+        rows = check("RENAME into a new folder (holes keeps f0 and f2: no entry)", set())
+        c.check(
+            "RENAME keeps the file's sectors: the moved file starts where it was",
+            rows["moved/small.bin"][0] == small,
+            f"{rows['moved/small.bin'][0]} vs {small}",
+        )
+        up.rename("holes/f0.bin", "holes/F0 renamed.bin")
+        files["holes/F0 renamed.bin"] = files.pop("holes/f0.bin")
+        check("RENAME in the same folder", set())
+        up.rename("holes/f2.bin", "moved/f2.bin")
+        files["moved/f2.bin"] = files.pop("holes/f2.bin")
+        up.rename("holes/F0 renamed.bin", "moved/f0.bin")
+        files["moved/f0.bin"] = files.pop("holes/F0 renamed.bin")
+        check("the folder the last file left stays, as a folder entry", {"holes"})
+        for frm, to, want in [
+            ("moved/nope", "moved/x", -59),
+            ("moved/f0.bin", "moved/f2.bin", -51),
+            ("moved/f0.bin", "moved", -51),
+            ("moved/f0.bin", "moved/f0.bin/x", -51),
+            ("holes", "holes/in", -51),
+            ("moved", "elsewhere", -59),
+            ("moved/f0.bin", "a//b", -51),
+        ]:
+            st, _ = up.request(D.CMD_RENAME, frm.encode() + b"\0" + to.encode() + b"\0")
+            c.check(f"RENAME {frm!r} -> {to!r}: refused ({want})", st == want, str(st))
+        st, _ = up.request(D.CMD_RENAME, b"moved/f0.bin\0")
+        c.check("RENAME with no second path: E_MSG or E_PATH", st in (-50, -51), str(st))
+        check("refused renames change nothing", {"holes"})
+        up.rename("holes", "empty")
+        check("RENAME of an empty folder", {"empty"})
+        up.rm("empty")
+        check("DELETE of the renamed folder", set())
+
         # LIST paging: many entries, several replies
         for i in range(40):
             files[f"many/s{i:02d}.wav"] = blob(1 + i, 100 + i)

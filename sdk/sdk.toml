@@ -4,7 +4,7 @@
 # sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h and api.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.5.3"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
+version = "0.5.4"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
 
 [contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
@@ -687,6 +687,7 @@ ABORT = 0x15
 READ = 0x16         # a byte range of a store file: path, u32 offset, u32 length (at most 768); reply: u32 file size, the bytes
 VERIFY = 0x17       # re-read a store file from the card and hash it: path; reply: sha256[32]
 MKDIR = 0x18        # make a folder (a folder entry with nothing in it): path; ok when it exists
+RENAME = 0x1a       # rename or move a file or an empty folder: from path NUL, to path NUL; the data and sha256 stay, the folder it leaves stays
 SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit-store.md, "The settings record"): u32 offset, u16 length (at most 768); reply: u8 copy (0 A, 1 B), u32 seq, u32 used, the bytes
 LOG = 0x20
 PEEK = 0x21
@@ -740,6 +741,7 @@ VERIFY = 8
 SERVICE_CMDS = 9    # modules register commands (Api.register_cmds)
 FOLDERS = 10        # LIST takes a prefix, MKDIR, CAPACITY kind STORE (store format 3)
 SETTINGS = 11       # the SETTINGS command (read the settings record), CAPACITY kind SETTINGS
+RENAME = 12         # the RENAME command (rename or move one store entry)
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused
 MODULES = 1         # module records; used: loaded; largest: 0

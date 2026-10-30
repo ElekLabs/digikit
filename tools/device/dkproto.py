@@ -17,6 +17,7 @@ CMD: dict[str, int] = {
     "VERIFY": 0x17,
     "MKDIR": 0x18,
     "SETTINGS": 0x19,
+    "RENAME": 0x1A,
     "LOG": 0x20,
     "PEEK": 0x21,
     "LOGCFG": 0x22,
@@ -38,6 +39,7 @@ CMD_READ = 0x16
 CMD_VERIFY = 0x17
 CMD_MKDIR = 0x18
 CMD_SETTINGS = 0x19
+CMD_RENAME = 0x1A
 CMD_LOG = 0x20
 CMD_PEEK = 0x21
 CMD_LOGCFG = 0x22
@@ -136,6 +138,7 @@ CAP: dict[str, int] = {
     "SERVICE_CMDS": 9,
     "FOLDERS": 10,
     "SETTINGS": 11,
+    "RENAME": 12,
 }
 
 RANGES: dict[str, tuple[int, int]] = {
