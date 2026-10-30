@@ -1,7 +1,7 @@
 # Private stereo-frame fetch exclusion experiment
 
-**[D]** A private assembled fixture and 58 named model checks establish a smaller
-reader exclusion scope for one pending maskable writer. They leave SDK kernels,
+**[D]** A private assembled fixture and 59 named model checks establish a smaller
+reader exclusion scope for one pending maskable writer. They leave existing SDK block kernels,
 public ABI, current whole-block exclusion tests and production runtime unchanged.
 This is not a shipping IRQ policy, a pool reservation or hardware acceptance.
 
@@ -119,7 +119,33 @@ callback lifetime and backing allocation remain open.
 Sources: `tests/fixtures/dsp/sample-stereo-frame-fetch.s` and
 `tests/patchkit/test_dsp_sample_stereo_frame_fetch.py`. Exact commands, immutable
 tool identity, hashes, metrics and guard events remain under ignored
-`out/runs/stereo-frame-fetch/`. The owner check passes 58 tests with no skips;
+`out/runs/stereo-frame-fetch/`. The current owner check passes 59 tests with no skips;
 scoped Ruff, formatting and reference checks accompany this checkpoint.
-The staged `mise run test:changed` fast checks also pass; deferred merge-gate
-coverage remains separate.
+The original proof's staged fast checks passed; deferred merge-gate coverage
+remains separate. For extraction, fast preflight passed Ruff/format/layer checks
+but initially failed its path catalog on the untracked new header. After staging
+that header, the scoped path check passes; a fresh full-wrapper pass is not claimed.
+
+
+## Reusable raw-fetch extraction
+
+**[D]** `sdk/dsp/sample_pcm16_fetch.inc` now supplies only
+`DK_SAMPLE_PCM16_FETCH_WORDS(BASE, INDEX_A, INDEX_B, WORD_A, WORD_B, ADDR, DAG)`.
+It reads two complete containing words in index order in eight instructions. Its
+caller validates nonnegative indices/clamping and valid, nonwrapping word addresses
+within one address space, supplies a linear DAG with PEYEN clear, and protects
+both words across both reads. BASE/indices are preserved; output/address/DAG and
+integer flags are clobbered, with only the two index operands allowed to alias.
+There is no memory write, storage, label, unpacking, interpolation, validation,
+mask or resource/output ABI. Raw normal-word addressing is the SHARC backend
+implementation behind the SDK primitive. See
+[the SDK contract and example](../../sdk/dsp/README.md).
+
+Only this private fixture's two fetch pairs are refactored to use it. Both channels
+remain inside the same admitted protection scope, retaining fetch order, private
+copies and arithmetic. The original 58 checks and the new domain-edge case pass together (59 total),
+with identical instruction metrics. A focused shared-index-register case reads the final valid
+DDR word twice, retaining its raw unused terminal half, preserving inputs and
+performing no stores; repeated inclusion/expansion is supported. The new primitive
+is reusable; exclusion, generation and callback-storage lifetime policy remain
+private experimental responsibilities. Existing mono/stereo kernels are untouched.

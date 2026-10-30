@@ -643,3 +643,45 @@ def test_instruction_count_comparison_only(whole_block_dsp, traces):
         "scope": "Existing represented-span fixture only; instruction counts, not cycles/latency or production performance.",
     }
     assert longest > traces["page", False][3]
+
+
+def test_raw_fetch_shared_index_at_last_ddr_word():
+    # New macro domain edge: the two indices may be the SAME register. Frame2
+    # is an odd terminal's low half in the final valid full NW32 DDR word.
+    source = """#include "dsp/sample_pcm16_fetch.inc"
+#include "dsp/sample_pcm16_fetch.inc"
+.SECTION/PM seg_pmco;
+.GLOBAL _raw_fetch_h;
+_raw_fetch_h:
+    DK_SAMPLE_PCM16_FETCH_WORDS(R4, R7, R7, R8, R0, R1, I4);
+    RTS;
+"""
+    obj = pk_sharc.assemble(pk_sharc.expand_includes(source, [REPO_ROOT / "sdk"]))
+    linked = pk_sharc.link(obj, 0xB90000, {})
+    session = pk_sharc.CallSession([linked], BACK)
+    raw = 0x80017FFF
+    session.poke(0x17FFFFFF, raw)
+    session.record_stores()
+    session.runner.attach_watchpoints(
+        [
+            Watchpoint(0, 1 << 40, on_read=False, stop=False),
+            Watchpoint(0x9FFFFFFC, 0xA0000000, on_write=False, stop=False),
+        ]
+    )
+    context = REGS | {"R4": 0x17FFFFFE, "R7": 2}
+    result = session.call(
+        "_raw_fetch_h", context, max_steps=30, read_regs=("R4", "R7", "R8", "R0")
+    )
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert {name: result["regs"][name] for name in ("R4", "R7", "R8", "R0")} == {
+        "R4": context["R4"],
+        "R7": 2,
+        "R8": raw,
+        "R0": raw,
+    }
+    assert all(e.access == "read" for e in session.stores)
+    assert sum(e.width for e in session.stores) == 8
+    assert all(
+        0x9FFFFFFC <= e.address < e.address + e.width <= 0xA0000000
+        for e in session.stores
+    )

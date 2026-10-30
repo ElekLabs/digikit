@@ -47,6 +47,7 @@ Rules that apply to the loop around a macro (style.md 5a):
 | `noise.inc` | `DK_XORSHIFT32_LOAD_STEP(STATE, TMP)` | 7 | same recurrence, retains BD's inline shift load |
 | `oscillator.inc` | `DK_SINE_POLY_STEP(OUT, X, SQUARE, COEF, OUT_BITS, COEF_BITS)` | 16 | BD/PD polynomial on already folded phase, -0.25 to +0.25 |
 | `sample.inc` | `DK_SAMPLE_CURSOR_STEP(INDEX, FRAC, HI, LO, MASK, TMP, CARRY)` | 5 | exact split integer/fraction update for signed Q16.16 rate |
+| `sample_pcm16_fetch.inc` | `DK_SAMPLE_PCM16_FETCH_WORDS(BASE, INDEX_A, INDEX_B, WORD_A, WORD_B, ADDR, DAG)` | 8 per pair | raw packed containing words; caller-owned protection and validated scalar addressing |
 
 Each file has a header with the maths, the arguments, the instruction count and the accuracy. The float32 reference
 models are in `tools/patchkit/dsp_ref.py`; the tests are in `tests/patchkit/test_dsp_kernels.py`.
@@ -154,6 +155,45 @@ and mono reader's numerical bounds still apply. This is a correctness baseline,
 not a measured optimization or a stereo machine-output ABI. Assembled coverage is
 in `tests/patchkit/test_dsp_sample_stereo_kernels.py`; actual memory ownership and
 stereo routing through each device's stock processing remain adapter obligations.
+
+## Raw packed PCM16 fetch
+
+`sample_pcm16_fetch.inc` exposes only a caller-owned raw-word primitive. It reads
+`BASE+floor(INDEX_A/2)` then `BASE+floor(INDEX_B/2)` as two full NW32 words, without
+selecting halves or converting/interpolating samples. Raw normal-word addressing
+is the SHARC backend implementation behind this SDK primitive; it adds no resource,
+output-pointer or transport ABI.
+
+The caller validates nonnegative frame indices, bounds and any clamped neighbor.
+Both containing-word addresses must be valid and nonwrapping within one address
+space; even an odd terminal frame needs its full containing word addressable.
+Use SISD with PEYEN clear and a caller-owned linear DAG (L register zero). All
+Dreg operands are distinct except that the two input indices may name the same
+register. BASE/indices are preserved; outputs, address scratch, DAG and integer
+condition flags are clobbered. An include guard permits repeated inclusion and
+expansion, with no labels, storage or memory writes.
+
+For example, after validating R7 and clamping its neighbor into R12, with R4
+holding the source base and protection already held:
+
+```asm
+#include "dsp/sample_pcm16_fetch.inc"
+DK_SAMPLE_PCM16_FETCH_WORDS(R4, R7, R12, R8, R0, R1, I4);
+// R8/R0 now hold the two raw packed words; keep/copy them before clobbering.
+```
+
+The caller must own/protect both containing words throughout both reads. The
+macro provides no validation, locking, atomicity, admission, allocation, lifetime
+or cache policy. It is eight instructions, not a cycle/performance claim; immediate
+DAG write/use is hardware-interlocked (public SHARC+ PRM Rev 1.5, printed4-63/64),
+so hardware stalls are separate from model instruction counts. This qualifies the
+general DAG scheduling advice above without inserting NOPs into the primitive.
+
+The [private frame-fetch proof](../../docs/findings/99-stereo-frame-fetch-exclusion.md)
+uses two expansions inside one admitted masked fetch for both stereo planes, then
+releases backing and computes from private copies. Its exclusion and callback
+storage ownership policy remain private experimental obligations. Existing mono
+and stereo block kernels are unchanged.
 
 ## Sample-bank lifecycle
 

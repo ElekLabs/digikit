@@ -3,6 +3,7 @@
 #include "dsp/call.inc"
 #include "dsp/sample.inc"
 #include "dsp/sample_pcm16.inc"
+#include "dsp/sample_pcm16_fetch.inc"
 #include "dsp/sample_pcm16_stereo.inc"
 #include "dsp/sample_bank.inc"
 .SECTION/PM seg_pmco;
@@ -67,10 +68,8 @@ _ff_frame:
 _ff_neighbor:
     DM(-20, I6) = R12;
     R4 = DM(0, I3);
-    R0 = LSHIFT R7 BY -1; R0 = R4 + R0; I4 = R0;
-    R0 = DM(0, I4); DM(-16, I6) = R0;
-    R0 = LSHIFT R12 BY -1; R0 = R4 + R0; I4 = R0;
-    R0 = DM(0, I4); DM(-17, I6) = R0;
+    DK_SAMPLE_PCM16_FETCH_WORDS(R4, R7, R12, R8, R0, R1, I4);
+    DM(-16, I6) = R8; DM(-17, I6) = R0;
     // Deliberately unsafe control: deliver between channel fetches after count0.
     // Only this control skips re-admission for right; the real path stays locked.
     R0 = DM(_ff_split_control); R0 = PASS R0;
@@ -84,10 +83,8 @@ _ff_split_boundary:
     DK_SAMPLE_BANK_LOCK(R3);
 _ff_right_fetch:
     R4 = DM(1, I3);
-    R0 = LSHIFT R7 BY -1; R0 = R4 + R0; I4 = R0;
-    R0 = DM(0, I4); DM(-18, I6) = R0;
-    R0 = LSHIFT R12 BY -1; R0 = R4 + R0; I4 = R0;
-    R0 = DM(0, I4); DM(-19, I6) = R0;
+    DK_SAMPLE_PCM16_FETCH_WORDS(R4, R7, R12, R8, R0, R1, I4);
+    DM(-18, I6) = R8; DM(-19, I6) = R0;
     R0 = DM(_ff_split_control); R0 = PASS R0; IF NE JUMP _ff_released;
     DK_SAMPLE_BANK_RELEASE(_ff_count, R0, _ff_faulted, _ff_released);
 _ff_released:

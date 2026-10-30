@@ -674,11 +674,16 @@ occupy words 2..5 and live histories words 6/7. R4 supplies the record, R8=R12
 the slot audio buffer, and `[I6+1]=R9` the count (normally 32). Reset call
 `0x1c96aa → 0xb8135a` uses delayed setup R4=R5+R10 and clears words 6/7.
 The early placement selects G=0 and the late placement G=1 from table
-`0x254ac4+4*v` with R11=0. A stable gate would make the placements exclusive,
+`DM8(0x254ac4+v)` with R11=0. A stable gate would make the placements exclusive,
 but gate stability is not proved; both are reachable in the CFG. They therefore
 require one persistent private right history per slot, captured controls/input
 before each occurrence, and no reinitialization between placements. Both render
 hooks and the reset must be covered; the helper's other five callers stay stock.
+
+**[C]** The earlier four-byte gate stride was wrong. Original instruction fields
+at producer `0x1c911a` and readers `0x1c9531/0x1c99a4` select byte accesses.
+The producer's subtract-`0xf0`/postmodify-`0xf1` sequence advances one byte per
+slot. The abbreviated listings hid this width; the gate is not a word array.
 
 The immediate continuations do not consume returned I12/R2. The scalar predecessor
 is `0x1c94b0`; the existing SIMD/context fallbacks must remain. These are bounded

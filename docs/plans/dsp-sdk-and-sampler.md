@@ -2455,9 +2455,35 @@ reference measures 3,462/3,485. These are different-body instruction observation
 not cycles, performance or IRQ latency. Incoming-disabled mode remains disabled.
 See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md) for the ownership
 assumption, exact helper provenance, negative controls and remaining production
-gaps. SDK/public ABI/runtime/core and current exclusion tests are unchanged.
+gaps. Existing SDK kernels/public ABI/runtime/core and current exclusion tests
+are unchanged.
 
 - [ ] Separately resolve unsupported `(SW)` store source-form handling; no assembler
   or core change is part of this proof, and byte-store forms remain unprobed.
 - [ ] Establish production callback-private cursor/scratch lifetime independently
   of backing count/drain before considering runtime integration.
+
+
+### Scoped raw packed-fetch extraction
+
+- [x] Approve only an eight-instruction caller-owned raw containing-word macro;
+  keep scalar/linear/address-domain/protection preconditions explicit and add no
+  validation, state, locking, unpacking, interpolation or resource/output ABI.
+- [x] Refactor only the private frame fixture's two fetch pairs, retaining order,
+  private copies and one admitted stereo protection scope; rerun its 58 checks.
+- [x] Document the reusable SDK primitive and worked private proof, while leaving
+  old PCM kernels and production exclusion/lifetime policy unchanged.
+
+
+The SDK now exposes `DK_SAMPLE_PCM16_FETCH_WORDS` in
+`sdk/dsp/sample_pcm16_fetch.inc`. Its eight raw-fetch instructions preserve input
+base/indices and require caller-validated nonnegative bounds, nonwrapping full
+containing words in one address space, SISD/PEYEN clear, a linear caller-owned DAG
+and protection across both reads. It supplies no validation, state, conversion,
+masking, atomicity, lifetime or cache policy. Only the private frame fixture uses
+it here; old kernels and production policy remain unchanged. The original 58
+functional/interleaving controls retain the same 80/81 masked and 5,172/5,204 total
+instruction observations. A new shared-index-register/last-DDR-word case covers
+the macro's broader caller operand domain. See the
+[SDK contract](../../sdk/dsp/README.md) and
+[finding 99](../findings/99-stereo-frame-fetch-exclusion.md).

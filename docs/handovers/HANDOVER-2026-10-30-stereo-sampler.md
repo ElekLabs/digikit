@@ -104,8 +104,8 @@ and `out/runs/dsp-stereo-proof/native/a49fdec1-2e03-42a1-a0d0-58989c6c9ede/resul
 with `out/runs/dsp-stereo-proof/native-uy-acceptance.log`. Late-site positive
 coverage remains open despite both callsites being hooked.
 
-The private per-stereo-frame fetch experiment now passes 58 model tests, with no
-SDK/runtime/core changes: both channels' packed taps/scalars are copied in one
+The private per-stereo-frame fetch experiment now passes 59 model tests, with no
+runtime/core policy changes: both channels' packed taps/scalars are copied in one
 admitted masked scope, count is released, and private compute/store/one cursor
 advance follows exact mask restore. Denial zeros the remaining block without epoch
 relatch. Actual DDR aliases and stock page geometry replace represented overlap
@@ -143,3 +143,13 @@ proof files developed from an older base. All current additions were integrated
 and checked in primary. Do not apply its whole diff again or discard it blindly.
 Use only configured agents with fresh context, read-only reviewers, one writer
 per worktree, and root-owned decisions/integration/publication.
+
+
+The raw containing-word fetch is now reusable as the eight-instruction
+`DK_SAMPLE_PCM16_FETCH_WORDS` macro in `sdk/dsp/sample_pcm16_fetch.inc`; only the
+private frame fixture is refactored to use it. The SDK documents scalar/linear,
+nonwrapping full-word and caller-protection preconditions. Existing 58 proof
+cases retain their metrics, plus a focused shared-index-register/final-DDR-word
+edge case. Old PCM kernels, public resource/output ABI and production exclusion
+policy are unchanged. See [the SDK contract](../../sdk/dsp/README.md) and
+[finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
