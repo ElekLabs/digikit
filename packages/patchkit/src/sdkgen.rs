@@ -177,6 +177,29 @@ struct Protocol {
     /// command byte marks a reply), so a range lies in 0x01..=0x3f and overlaps no command and no other range.
     #[serde(default)]
     ranges: BTreeMap<String, [u8; 2]>,
+    limits: ProtoLimits,
+}
+/// `[protocol.limits]`: the sizes of the upload protocol, generated into every language.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProtoLimits {
+    max_chunk: u32,
+    read_max: u32,
+    peek_max: u32,
+    max_request_wire: u32,
+    max_reply_wire: u32,
+}
+impl ProtoLimits {
+    /// (generated name, value) in file order.
+    fn all(&self) -> [(&'static str, u32); 5] {
+        [
+            ("MAX_CHUNK", self.max_chunk),
+            ("READ_MAX", self.read_max),
+            ("PEEK_MAX", self.peek_max),
+            ("MAX_REQUEST_WIRE", self.max_request_wire),
+            ("MAX_REPLY_WIRE", self.max_reply_wire),
+        ]
+    }
 }
 /// `[capacity]`: the kinds of a CAPACITY entry.
 #[derive(Deserialize)]
@@ -229,6 +252,23 @@ pub struct LimitsMax {
     pub dsp_area_bytes: u64,
     pub param_rows: u64,
     pub page_rows: u64,
+    pub machine_rows: u64,
+    pub stage_bytes: u64,
+}
+
+/// `DK_PAGE_KNOBS` of `[desc]` in `sdk/sdk.toml`: the encoders on a page.
+fn page_knobs_of(sdk: &Sdk) -> usize {
+    sdk.desc
+        .consts
+        .iter()
+        .find(|c| c.name == "DK_PAGE_KNOBS")
+        .expect("sdk/sdk.toml [desc] has DK_PAGE_KNOBS")
+        .value as usize
+}
+
+/// `DK_PAGE_KNOBS` of the `sdk/sdk.toml` this crate was built with.
+pub fn page_knobs() -> usize {
+    page_knobs_of(&parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses"))
 }
 
 /// The contract maxima of the `sdk/sdk.toml` this crate was built with.
@@ -540,6 +580,9 @@ fn proto_consts(sdk: &Sdk, indent: &str, status_ty: &str) -> String {
     let p = &sdk.protocol;
     let mut s = String::new();
     let _ = writeln!(s, "{indent}pub const VERSION: u8 = {};", p.version);
+    for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "{indent}pub const {n}: usize = {v};");
+    }
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "{indent}pub const CMD_{n}: u8 = {v:#04x};");
     }
@@ -634,10 +677,19 @@ fn rust(sdk: &Sdk) -> String {
     for (i, n) in LEVELS.iter().enumerate() {
         let _ = writeln!(s, "    pub const L_{}: u16 = {i};", n.to_uppercase());
     }
-    s.push_str("}\n\n/// The selection record's format limits (`[limits.max]`): paths and sticky map entries.\npub mod limits {\n");
+    s.push_str("}\n\n/// Format and table limits (`[limits.max]` and `DK_PAGE_KNOBS`): array sizes of the runtime.\npub mod limits {\n");
     let m = &sdk.limits.max;
     let _ = writeln!(s, "    pub const SEL_MAX: usize = {};", m.modules);
     let _ = writeln!(s, "    pub const MAP_N: usize = {};", m.map_entries);
+    let _ = writeln!(s, "    pub const MACHINE_ROWS: usize = {};", m.machine_rows);
+    let _ = writeln!(s, "    pub const PARAM_ROWS: usize = {};", m.param_rows);
+    let _ = writeln!(s, "    pub const PAGE_ROWS: usize = {};", m.page_rows);
+    let _ = writeln!(s, "    pub const STAGE_BYTES: usize = {};", m.stage_bytes);
+    let _ = writeln!(
+        s,
+        "    pub const PAGE_KNOBS: usize = {};",
+        page_knobs_of(sdk)
+    );
     s.push_str("}\n\n");
     s.push_str(&rust_settings(sdk));
     s.push_str("\npub mod proto {\n");
@@ -692,7 +744,11 @@ fn py_status(s: &mut String, name: &str, st: &Status) {
 fn python_proto(sdk: &Sdk) -> String {
     let p = &sdk.protocol;
     let mut s = format!("# {HEADER}\n\n");
-    let _ = writeln!(s, "VERSION = {}\n", p.version);
+    let _ = writeln!(s, "VERSION = {}", p.version);
+    for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "{n} = {v}");
+    }
+    s.push('\n');
     s.push_str("CMD: dict[str, int] = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "    {n:?}: 0x{v:02X},");
@@ -753,9 +809,13 @@ fn rust_proto(sdk: &Sdk) -> String {
 fn ts_proto(sdk: &Sdk) -> String {
     let p = &sdk.protocol;
     let mut s = format!(
-        "// {HEADER}\n\nexport const PROTO_VERSION = {};\n\n",
+        "// {HEADER}\n\nexport const PROTO_VERSION = {};\n",
         p.version
     );
+    for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "export const {n} = {v};");
+    }
+    s.push('\n');
     s.push_str("export const CMD = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "  {n}: {v:#04x},");

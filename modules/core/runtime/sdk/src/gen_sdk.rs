@@ -62,10 +62,15 @@ pub mod logk {
     pub const L_TRACE: u16 = 4;
 }
 
-/// The selection record's format limits (`[limits.max]`): paths and sticky map entries.
+/// Format and table limits (`[limits.max]` and `DK_PAGE_KNOBS`): array sizes of the runtime.
 pub mod limits {
     pub const SEL_MAX: usize = 8;
     pub const MAP_N: usize = 8;
+    pub const MACHINE_ROWS: usize = 8;
+    pub const PARAM_ROWS: usize = 16;
+    pub const PAGE_ROWS: usize = 8;
+    pub const STAGE_BYTES: usize = 65536;
+    pub const PAGE_KNOBS: usize = 8;
 }
 
 /// The settings record (`[settings]`): the area of one copy, the key and value limits and the keys by owner.
@@ -83,6 +88,11 @@ pub mod settings {
 
 pub mod proto {
     pub const VERSION: u8 = 1;
+    pub const MAX_CHUNK: usize = 32768;
+    pub const READ_MAX: usize = 768;
+    pub const PEEK_MAX: usize = 512;
+    pub const MAX_REQUEST_WIRE: usize = 40960;
+    pub const MAX_REPLY_WIRE: usize = 1024;
     pub const CMD_INFO: u8 = 0x01;
     pub const CMD_LIST: u8 = 0x02;
     pub const CMD_MODULES: u8 = 0x03;

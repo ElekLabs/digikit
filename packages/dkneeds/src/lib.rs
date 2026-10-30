@@ -59,6 +59,10 @@ pub const DSP_MAGIC: u32 = 0x444b_4453;
 pub const DSP_HEADER: u32 = 0x40;
 pub const MAX_RELOCS: u32 = 4096;
 pub const MAX_IMPORTS: u32 = 32;
+/// The entries of the `.dkm` slot table (`[dkm.slot] count` of sdk/sdk.toml).
+pub const SLOTS: u32 = 8;
+/// The ColdFire import table's most entries (the DSP section's `MAX_IMPORTS` is a different table).
+pub const MAX_CF_IMPORTS: u32 = 64;
 pub const MAX_VOICES: u32 = 8;
 /// Effect records of a version 4 section: their size and the most the loader takes (`DK_FX_MAX`), and the state bytes of one (the loader's own limit).
 pub const FX_LEN: u32 = 64;
@@ -68,6 +72,8 @@ pub const MAX_STATE_VOICES: u32 = 64;
 pub const MAX_STATE_BYTES: u32 = 1 << 24;
 /// The DSP area's placement granule (`dsp.rs`).
 pub const GRANULE: u32 = 64;
+/// The bytes the DSP range may start before its alignment.
+pub const DSP_SLACK: u32 = 8;
 /// The arena's block header (`arena.rs`).
 pub const ARENA_HDR: u32 = 16;
 
@@ -169,7 +175,8 @@ impl Needs {
         if self.dsp_area == 0 {
             0
         } else {
-            self.dsp_area.saturating_add(self.dsp_align.max(8) - 8)
+            self.dsp_area
+                .saturating_add(self.dsp_align.max(DSP_SLACK) - DSP_SLACK)
         }
     }
 }
@@ -220,8 +227,8 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         || image > size
         || image_off & 15 != 0
         || reloc_n > MAX_RELOCS
-        || import_n > 64
-        || slot_n > 8
+        || import_n > MAX_CF_IMPORTS
+        || slot_n > SLOTS
         || !inside(image_off, image, size)
         || !inside(reloc_off, reloc_n * 8, size)
         || !inside(import_off, import_n * 32, size)

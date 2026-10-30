@@ -108,7 +108,7 @@ pub fn empty(caps: &mut [DkrtCap]) {
         c.largest = if c.kind == CAPK_ARENA as u32 {
             c.limit.saturating_sub(ARENA_HDR)
         } else if c.kind == CAPK_DSP_AREA as u32 {
-            c.limit.saturating_sub(8)
+            c.limit.saturating_sub(dkneeds::DSP_SLACK)
         } else {
             c.limit
         };

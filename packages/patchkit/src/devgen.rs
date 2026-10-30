@@ -415,6 +415,8 @@ fn check_limits(
         ("send_slots", l.send_slots, max.send_slots),
         ("param_rows", l.param_rows, max.param_rows),
         ("page_rows", l.page_rows, max.page_rows),
+        ("machine_rows", l.machine_rows, max.machine_rows),
+        ("stage_bytes", l.stage_bytes, max.stage_bytes),
         (
             "[digikit] dsp_area_bytes",
             dsp_area_bytes,

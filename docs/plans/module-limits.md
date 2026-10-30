@@ -1,7 +1,7 @@
 # Module limits (plan, 2026-10-31)
 
 Goal: modules are limited only by what the firmware allows; each limit has one source; every usage number we show is measured correctly.
-Facts: [finding 100](../findings/100-module-limits.md). Branch: `limits/single-source`. It lands before `sdk/dsp-sampler-discovery`; that branch then merges
+Facts: [finding 100](../findings/100-module-limits.md). Branch: limits/single-source. It lands before the sampler branch; that branch then merges
 `main`. Step 4 starts after the sampler branch is merged.
 
 ## 1. Findings

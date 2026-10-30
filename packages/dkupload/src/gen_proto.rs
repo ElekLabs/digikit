@@ -3,6 +3,11 @@
 #![allow(dead_code)]
 
 pub const VERSION: u8 = 1;
+pub const MAX_CHUNK: usize = 32768;
+pub const READ_MAX: usize = 768;
+pub const PEEK_MAX: usize = 512;
+pub const MAX_REQUEST_WIRE: usize = 40960;
+pub const MAX_REPLY_WIRE: usize = 1024;
 pub const CMD_INFO: u8 = 0x01;
 pub const CMD_LIST: u8 = 0x02;
 pub const CMD_MODULES: u8 = 0x03;

@@ -117,6 +117,11 @@ fn the_record_format_constants_come_from_the_contract_maxima() {
         .unwrap()
         .value;
     assert_eq!(dk_fx_max as u64, max.fx_slots);
+    assert_eq!(dkneeds::MAX_FX as u64, max.fx_slots);
+    // the voice records of one DSP section are bounded by the run-time machine rows
+    assert_eq!(dkneeds::MAX_VOICES as u64, max.machine_rows);
+    // the packer's array length is a copy of `DK_PAGE_KNOBS`
+    assert_eq!(patchkit::register::KNOBS, sdkgen::page_knobs());
 }
 
 #[test]

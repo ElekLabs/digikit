@@ -18,8 +18,10 @@ pub const NONE: u32 = 0xffff_ffff;
 pub const SLOTS: u32 = 8;
 pub const NAME_LEN: usize = 32;
 pub const IMPORT_LEN: usize = 32;
-/// Largest module file the v0 runtime stages (its staging buffer).
-pub const MAX_FILE: usize = 64 * 1024;
+/// Largest module file the v0 runtime stages (its staging buffer): `[limits.max] stage_bytes` of sdk/sdk.toml.
+pub fn max_file() -> usize {
+    crate::sdkgen::limits_max().stage_bytes as usize
+}
 /// The runtime version this packer targets (`dkrt_sdk::RUNTIME_VERSION`), packed major << 16 | minor << 8 | patch, from sdk/sdk.toml.
 pub fn runtime_version() -> u32 {
     crate::sdkgen::embedded_runtime()
@@ -170,7 +172,7 @@ pub fn pack_with(obj: Option<&Dko>, reg: &[u8], o: &Options) -> Result<Vec<u8>> 
 /// Pack an object (or none), `register` records and a DSP section (see [`crate::dkmdsp`]; empty: none). A file with a DSP section
 /// needs a runtime of version [`RUNTIME_DSP`] or later.
 pub fn pack_full(obj: Option<&Dko>, reg: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
-    pack_full_max(obj, reg, dsp, o, MAX_FILE)
+    pack_full_max(obj, reg, dsp, o, max_file())
 }
 
 /// [`pack_full`] with another file size limit: `dkm_synth` makes files over the staging buffer on purpose (the capacity tests of the
@@ -819,6 +821,7 @@ mod tests {
         assert_eq!(dkneeds::MAGIC, MAGIC);
         assert_eq!(dkneeds::FORMAT, super::FORMAT);
         assert_eq!(dkneeds::HEADER as usize, HEADER);
+        assert_eq!(dkneeds::SLOTS, crate::dkm::SLOTS);
         for (a, b) in [
             (dkneeds::H_SIZE, H_SIZE),
             (dkneeds::H_HDRSIZE, H_HDRSIZE),
@@ -849,14 +852,9 @@ mod tests {
         assert_eq!(dkneeds::LEN_PAGE as usize, r::LEN_PAGE);
         assert_eq!(dkneeds::KIND_EFFECT, r::KIND_EFFECT);
         assert_eq!(dkneeds::LEN_EFFECT as usize, r::LEN_EFFECT);
-        assert_eq!(dkneeds::MAX_RECORDS as usize, r::MAX_RECORDS);
         use crate::dkmdsp as d;
         assert_eq!(dkneeds::DSP_MAGIC, d::MAGIC);
         assert_eq!(dkneeds::DSP_HEADER as usize, d::HEADER);
-        assert_eq!(dkneeds::MAX_RELOCS as usize, d::MAX_RELOCS);
-        assert_eq!(dkneeds::MAX_IMPORTS as usize, d::MAX_IMPORTS);
-        assert_eq!(dkneeds::MAX_VOICES as usize, d::MAX_VOICES);
-        assert_eq!(dkneeds::GRANULE, d::GRANULE);
     }
 
     #[test]

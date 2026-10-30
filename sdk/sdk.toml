@@ -673,6 +673,13 @@ args = ["kind_site_stage", "id", "step", "at", "module"]
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
+[protocol.limits]   # sizes of the upload protocol; every host and the runtime take them from here
+max_chunk = 32768   # bytes of one PUT chunk (DATA body); the runtime's BEGIN reply sends it
+read_max = 768      # bytes of one READ (and SETTINGS) reply
+peek_max = 512      # bytes of one PEEK reply
+max_request_wire = 40960  # the largest request on the wire, SysEx-encoded (40 KiB)
+max_reply_wire = 1024     # the largest reply on the wire, SysEx-encoded
+
 [protocol.commands] # command numbers; never reuse or renumber (additive only)
 INFO = 0x01
 LIST = 0x02
@@ -766,6 +773,8 @@ send_slots = 2      # effects on a send bus: the Sound array's free indices a se
 dsp_area_bytes = 524288  # the 17-bit word offset of a core/dsp-link chunk reaches 2^17 words
 param_rows = 16     # parameter rows core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 page_rows = 8       # page rows core/dynreg reserves (Digitone II)
+machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
+stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection
 # record. `sectors` is the size of ONE copy; the runtime keeps the record in RAM and writes the copy that is not current. The area is part of the

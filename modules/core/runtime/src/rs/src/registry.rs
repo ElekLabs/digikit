@@ -26,11 +26,11 @@ const LEN_MACHINE: u32 = 0x6c;
 const LEN_PAGE: u32 = 0x60;
 const LEN_EFFECT: u32 = crate::fxpage::LEN_EFFECT;
 const KNOB_PARAM: u32 = 0x8000_0000;
-const MAX_RECORDS: u32 = 32;
-const MAX_MACH: usize = 8;
-const MAX_PARAM: usize = 16;
-const MAX_PAGE: usize = 8;
-const KNOBS: usize = 8;
+const MAX_RECORDS: u32 = dkneeds::MAX_RECORDS;
+const MAX_MACH: usize = limits::MACHINE_ROWS;
+const MAX_PARAM: usize = limits::PARAM_ROWS;
+const MAX_PAGE: usize = limits::PAGE_ROWS;
+const KNOBS: usize = limits::PAGE_KNOBS;
 const MACH_TEXT: usize = 24;
 const REP_SIZE: usize = 48;
 
