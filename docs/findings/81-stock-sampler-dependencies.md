@@ -721,3 +721,33 @@ controlled fault capture, including error plus command-complete in one ISR.
 This is not the production sample-load gate. Source lifecycle/content witnesses,
 complete capture history and production backing remain unimplemented; no public
 ABI, reservation or recovery mechanism is approved by this evidence.
+
+
+### Controlled actual ISR replay preserves the observed stock path
+
+**[D]** The opt-in [Rust fixture](../../packages/patchkit/tests/storage_fault_isr.rs)
+loads the exact stock DT2 1.17 `.syx` at runtime, verifies its SHA-256 and the
+original six-byte hook-site hashes, then installs the actual assembled observer
+only in an in-memory copy. No vendor bytes are embedded. Synthetic vector/level
+setup enters with `Cpu::take_interrupt`; the actual ISR at `0x4012d5ba`, signal
+helpers `0x4000155c` / `0x400011ee` on their no-waiter path, and RTE at
+`0x4012d69e` execute under a 2,048-instruction ceiling. IRQSTAT is a controlled
+W1C Bus test double, not a hardware-controller model.
+
+The named test passed 36 sequence/SR combinations: eleven single-interrupt cases
+plus one five-interrupt sequence at three SR values, totaling 48 interrupt
+invocations per image. Cases include every audited error bit, completion-only,
+simultaneous error/completion and sequential sticky union. Stock/patched
+registers, SR, PC, A7, exact MMIO and nonobserver write traces, and status/signal
+globals match; only the observer latch and its checked temporary stack writes are
+excluded from the write comparison. See the
+[adapter README](../../modules/core/adapters/storage-fault-proof/README.md) for
+`DIGI_STORAGE_FAULT_ISR_SYX` and the invocation.
+
+**[O]** The default native full fault-history check remains **failed/open** with
+zero observer writes: Oracle completion does not establish stock ISR execution.
+This component result proves neither real controller delivery nor DMA completion,
+waiter/scheduler behavior, hardware or native-boot IRQ validation, complete early/
+reset fault history, or production sample-load readiness. The
+[next proof in the plan](../plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
+retains those boundaries and outstanding work.

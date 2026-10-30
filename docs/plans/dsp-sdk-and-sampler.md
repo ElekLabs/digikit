@@ -94,10 +94,10 @@ traced storage ISR installation, first command and later FS/runtime task startup
 An optional private patched-in DT2 observer now has compiled model and static
 image/loader evidence **[D]**, plus bounded native zeroing/host-seed retention
 observations. Native IRQ capture remains open: the default Oracle completion path
-posts storage semaphores directly, and the run observed no observer stores. Next
-is isolated controlled error+completion execution through the actual ISR/hook and
-independent initialization verification. Whole-bootstrap/reset coverage and source
-witnesses remain open; this is not production gating or backing approval.
+posts storage semaphores directly, and the run observed no observer stores.
+Controlled actual ISR/hook replay now passes, including error plus completion;
+real delivery, complete initialization/reset history and source witnesses remain
+open. This is not production gating or backing approval.
 
 Production backing ownership/coexistence, callback-private lifetime, full-route
 capture/commit/reset/cleanup, public stereo integration and picker publication
@@ -2827,14 +2827,28 @@ is not a production gate or DN2 implementation proof.
   (`packages/emulator/machine/src/board.rs:1075`); `drain_board()` counts the events
   (`packages/emulator/boot/src/runtime.rs:2249`). Default native storage completion
   therefore does not establish stock ISR execution.
-- [ ] Isolate bounded controlled error+completion execution through the actual
-  ISR/hook and independently verify initialization. Do not weaken observer
-  assertions, change emulator semantics or switch wholesale to Device mode to
-  obtain a pass.
+- [x] **[D]** Execute the actual stock DT2 ISR, real no-waiter signal helpers and
+  RTE with assembled hooks in the opt-in
+  [component fixture](../../packages/patchkit/tests/storage_fault_isr.rs).
+  All 36 sequence/SR combinations pass: eleven single-interrupt cases and one
+  five-interrupt sequence, each at three SR values (48 interrupt invocations per
+  image). Synthetic vector/level injection and a controlled W1C IRQSTAT double
+  compare stock/patched context, exact MMIO and nonobserver write traces,
+  status/signal globals and sticky error union, including error plus completion.
+  The [adapter README](../../modules/core/adapters/storage-fault-proof/README.md)
+  gives the opt-in `DIGI_STORAGE_FAULT_ISR_SYX` command and strict input hash.
+- [ ] Complete the full native fault-history acceptance, which remains
+  **failed/open** because zero observer writes were observed. Controlled component
+  success does not establish native-boot IRQ execution, hardware delivery, DMA
+  completion, waiter/scheduler behavior or complete initialization/reset history.
+  Do not weaken observer assertions, change emulator semantics or switch wholesale
+  to Device mode to obtain a pass.
 - [ ] Establish complete relevant fault history and source lifecycle/content-change
   witnesses before any production sample-load gate. No pool/reservation/public ABI
   decision follows from this private proof.
 
-The earlier `mise run test:changed` wrapper failed on the pnpm dependency layout;
-direct scoped checks passed. No full gate pass is claimed. The code/model and
-bounded observations above remain **[D]**, not **[V]**.
+The earlier all-changed `mise run test:changed` wrapper failed on the pnpm
+dependency layout. The later explicitly scoped changed-file check for the new ISR
+fixture and these four documentation files passed pathcheck/layers; the full merge
+gate was deferred and has not run. The code/model and bounded observations above
+remain **[D]**, not **[V]**.

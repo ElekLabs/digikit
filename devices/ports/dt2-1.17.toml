@@ -2410,6 +2410,36 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.site.fault_irqstat_a"
+cpu = "cf"
+kind = "code"
+addr = 0x4012d5c2
+len = 6
+sha256 = "ecda53f8ded4ab291974386fad6a07fc3d8672509f611233aff4a9c2560b15f9"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.fault_irqstat_b"
+cpu = "cf"
+kind = "code"
+addr = 0x4012d616
+len = 6
+sha256 = "ecda53f8ded4ab291974386fad6a07fc3d8672509f611233aff4a9c2560b15f9"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.fault_irqstat_c"
+cpu = "cf"
+kind = "code"
+addr = 0x4012d642
+len = 6
+sha256 = "ecda53f8ded4ab291974386fad6a07fc3d8672509f611233aff4a9c2560b15f9"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.string.fn.shared_ptr.make"
 cpu = "cf"
 kind = "code"
@@ -3007,6 +3037,21 @@ mode = "replace"
 name = "cf.rtos.hook.main_os_task"
 site = "cf.rtos.site.main_os_task"
 mode = "before"
+
+[[hook]]
+name = "cf.storage.hook.fault_irqstat_a"
+site = "cf.storage.site.fault_irqstat_a"
+mode = "replace"
+
+[[hook]]
+name = "cf.storage.hook.fault_irqstat_b"
+site = "cf.storage.site.fault_irqstat_b"
+mode = "replace"
+
+[[hook]]
+name = "cf.storage.hook.fault_irqstat_c"
+site = "cf.storage.site.fault_irqstat_c"
+mode = "replace"
 
 [[hook]]
 name = "cf.test.hook.kit_vfunc_12"

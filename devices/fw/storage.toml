@@ -107,3 +107,65 @@ rule = { kind = "cf_func", hash = "56566ccf1985a1fe2868df8f8d909661", offset = 0
 mark = "D"
 users = ["core/runtime"]
 doc = "DT2 1.17 locked stored metadata getter: 0 success/-1 failure, output unchanged on failure. Four words: id, stored odd hash, physical byte size, node word. No hash recomputation or source lease (finding 93)."
+
+# Optional private DT2 1.17 storage error observer: one displaced MMIO load per site.
+
+[[site]]
+name = "cf.storage.site.fault_irqstat_a"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "eda4898863f1144ab5b5a619f8d8468b", offset = 0x8, len = 6 }
+mark = "D"
+users = ["core/storage-fault-proof"]
+doc = "DT2 1.17 storage ISR IRQSTAT-to-D0 six-byte MOVE.L; private observer replaces exactly this read and resumes at site+6."
+
+[[hook]]
+name = "cf.storage.hook.fault_irqstat_a"
+site = "cf.storage.site.fault_irqstat_a"
+cpu = "cf"
+devices = ["dt2"]
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }
+mark = "D"
+users = ["core/storage-fault-proof"]
+doc = "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim."
+
+[[site]]
+name = "cf.storage.site.fault_irqstat_b"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "eda4898863f1144ab5b5a619f8d8468b", offset = 0x5c, len = 6 }
+mark = "D"
+users = ["core/storage-fault-proof"]
+doc = "DT2 1.17 storage ISR IRQSTAT-to-D0 six-byte MOVE.L; private observer replaces exactly this read and resumes at site+6."
+
+[[hook]]
+name = "cf.storage.hook.fault_irqstat_b"
+site = "cf.storage.site.fault_irqstat_b"
+cpu = "cf"
+devices = ["dt2"]
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }
+mark = "D"
+users = ["core/storage-fault-proof"]
+doc = "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim."
+
+[[site]]
+name = "cf.storage.site.fault_irqstat_c"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "eda4898863f1144ab5b5a619f8d8468b", offset = 0x88, len = 6 }
+mark = "D"
+users = ["core/storage-fault-proof"]
+doc = "DT2 1.17 storage ISR IRQSTAT-to-D0 six-byte MOVE.L; private observer replaces exactly this read and resumes at site+6."
+
+[[hook]]
+name = "cf.storage.hook.fault_irqstat_c"
+site = "cf.storage.site.fault_irqstat_c"
+cpu = "cf"
+devices = ["dt2"]
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }
+mark = "D"
+users = ["core/storage-fault-proof"]
+doc = "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim."

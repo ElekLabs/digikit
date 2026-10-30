@@ -9834,6 +9834,195 @@
     },
     {
       "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4012d5c2"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.fault_irqstat_a",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.fault_irqstat_a",
+      "subsystem": "storage",
+      "users": [
+        "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4012d616"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.fault_irqstat_b",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.fault_irqstat_b",
+      "subsystem": "storage",
+      "users": [
+        "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4012d642"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.fault_irqstat_c",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.fault_irqstat_c",
+      "subsystem": "storage",
+      "users": [
+        "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4012d5c2",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 storage ISR IRQSTAT-to-D0 six-byte MOVE.L; private observer replaces exactly this read and resumes at site+6.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.fault_irqstat_a",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 8
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4012d616",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 storage ISR IRQSTAT-to-D0 six-byte MOVE.L; private observer replaces exactly this read and resumes at site+6.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.fault_irqstat_b",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 92
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4012d642",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 storage ISR IRQSTAT-to-D0 six-byte MOVE.L; private observer replaces exactly this read and resumes at site+6.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.fault_irqstat_c",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 136
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4011b74e",
@@ -13455,7 +13644,7 @@
       "name": "rtos"
     },
     {
-      "count": 10,
+      "count": 16,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",

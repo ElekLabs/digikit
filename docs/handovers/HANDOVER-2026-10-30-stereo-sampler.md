@@ -372,11 +372,29 @@ survived one million ColdFire steps. Zero observer writes means IRQ capture is
 still unproved. The native runtime uses `CompletionPolicy::Oracle` and board
 `complete()` directly posts DMA/data/command semaphores and clears status;
 `drain_board()` counts events. Default native completion does not establish stock
-ISR execution. Next isolate bounded controlled error+completion through the actual
-ISR/hook and independently verify initialization, without weakening assertions,
-changing emulator semantics or switching wholesale to Device mode. Fault history,
-whole-bootstrap/reset coverage and source witnesses remain open. The earlier
-`test:changed` wrapper failed on pnpm dependency layout; direct scoped checks
-passed, with no full gate pass. These observations remain **[D]**, not **[V]**.
+ISR execution. The full native fault-history acceptance remains **failed/open**
+because zero observer writes were observed.
+
+The opt-in [controlled ISR fixture](../../packages/patchkit/tests/storage_fault_isr.rs)
+now passes 36 sequence/SR combinations: eleven single-interrupt cases and one
+five-interrupt sequence at three SR values, giving 48 interrupt invocations per
+image (stock and patched). It loads hash-bound stock DT2 1.17 at runtime and
+executes the actual ISR, real no-waiter signal helpers and RTE, with assembled
+hooks installed only in memory after verifying the original sites. Synthetic
+vector/level injection and a controlled W1C IRQSTAT double preserve matching
+context, exact MMIO/nonobserver write traces and status/signal globals; sticky
+union includes simultaneous error/completion. The
+[adapter README](../../modules/core/adapters/storage-fault-proof/README.md) gives
+the `DIGI_STORAGE_FAULT_ISR_SYX` opt-in command. Missing input skips only when the
+environment variable is unset; a configured invalid input fails.
+
+This **[D]** component result is not hardware/controller delivery, DMA completion,
+waiter/scheduler behavior or native-boot IRQ validation. Fault history,
+whole-bootstrap/reset coverage and source witnesses remain open. Keep native
+assertions intact; no emulator semantics change or wholesale Device-mode switch
+is justified by this result. The earlier all-changed
+`test:changed` wrapper failed on pnpm dependency layout; the later scoped check
+for the ISR fixture and four documentation files passed pathcheck/layers. The
+full merge gate was deferred and has not run. These observations remain **[D]**, not **[V]**.
 See the [next proof](../plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
 and [finding 81](../findings/81-stock-sampler-dependencies.md).
