@@ -2882,15 +2882,39 @@ individual RSTC/RSTD are implemented. Full RSTA remains unresolved: manual p0637
 explicitly includes RW in the cleared types, while the generic IRQSTATEN reset
 value is `0x117f013f`; no post-RSTA enable state is guessed. RSTA, including
 combined reset writes, retains legacy self-clear behavior unchanged and is not a
-hardware-faithful full reset. A bounded DT2 1.17 direct-reference scan found no
-IRQSTATEN references in the exact range recorded in finding 100; computed aliases
-and global absence remain unproved.
+hardware-faithful full reset.
+
+**[D/O] Reset investigation checkpoint (2026-10-31):** full setup and immediate
+command helpers on DT2 1.17 / DN2 1.12 show IRQSIGEN (`0xfc0cc038`) OR
+`0x00310003`, with no explicit IRQSTATEN initialization in the audited paths.
+The expanded DT2 MAIN raw scan `0x40000400..0x4031ff60` decoded 1,007,317
+instructions at 96.81% coverage, with zero absolute references to IRQSTATEN
+`0xfc0cc034`. Computed/indirect accesses remain outside the scan; this is not
+absence proof. Finding 100 records the exact helper addresses and source limits.
+
+The public errata's SECF215 RSTA clock glitch/workaround and SECF218 SDIO entry
+do not resolve enable reset values in the bounded search. Linux's ColdFire reset
+path explicitly rewrites both enables after reset; the audited U-Boot path
+suggests reliance on nonzero status enables but cannot distinguish preservation
+from reset defaults. No trusted hardware readback was found. See
+[finding 100's reset investigation](../findings/100-storage-interrupt-emulation-scope.md#reset-investigation-and-pending-checkpoint-decision)
+for the primary driver links and limitations. Neither preserving, restoring the
+reset default nor zeroing IRQSTATEN after RSTA is proved. No component tests,
+builds or emulator runs were repeated for this evidence checkpoint.
 
 Stage A remains incomplete on full RSTA. Stages B (controller-source delivery to
 the actual ISR/waiter) and C (opt-in runtime/snapshot and two-device fault-history
-proof) are unstarted. The next action is narrow reset-resolution evidence, not a
-blanket Device-mode switch. Full native fault-history acceptance remains
-**failed/open** and a release blocker. Earlier informal 1–3-day/week estimates
-remain withdrawn; confidence is medium for bounded component work and low for
-runtime integration until the controlled experiment. No production API, pool,
-SHARC, recovery or hardware-flashing work follows from this checkpoint.
+proof) are unstarted. **Pending user decision:** recommend controlled Stage B
+from explicitly initialized registers, while full RSTA fidelity, cold boot and
+full native fault-history release acceptance remain blocked. This would change
+the earlier full-Stage-A prerequisite; it is not approved. Alternatively scope
+trusted hardware readback first: two nondefault IRQSTATEN seed patterns and both
+enables before/after RSTA could discriminate outcomes, but no execution is
+approved or performed. SECF215 requires that scope to address a quiescent,
+isolated controller and the erratum before any procedure is defined.
+
+Full native fault-history acceptance remains **failed/open** and a release
+blocker. Earlier informal 1–3-day/week estimates remain withdrawn; confidence is
+medium for the bounded experiment and low for runtime integration until it
+passes. No production API, pool, SHARC, recovery or hardware-flashing work follows
+from this checkpoint.

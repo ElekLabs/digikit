@@ -8,10 +8,13 @@ default native fault-history acceptance remains **failed/open**. No controller
 model boot or runtime interrupt-delivery proof was performed for this checkpoint.
 The evidence remains **[D]**, not **[V]**.
 
-The next action is narrow reset-resolution evidence before integrated
-controller-source delivery into the real firmware handler and waiter. Keep normal
-Oracle completion unchanged. The payoff is testing early sticky fault capture
-through the controller path instead of synthetic ISR entry. Confidence is medium
+The bounded reset investigation below did not resolve post-RSTA enables. The
+pending recommendation is controlled Stage B from explicitly initialized
+registers, while keeping full RSTA, cold boot and native fault-history acceptance
+blocked. This changes the earlier full-Stage-A prerequisite and is not approved;
+Stages B and C remain unstarted. Keep normal Oracle completion unchanged. The
+payoff is testing early sticky fault capture through the controller path instead
+of synthetic ISR entry. Confidence is medium
 for bounded register/component work and low for runtime integration until that
 experiment. Earlier informal 1–3-day/week calendar estimates remain withdrawn;
 scope and acceptance gates below replace them.
@@ -57,8 +60,9 @@ uses this block-I/O transport.
 ## Stages and acceptance gates
 
 Stage A is user-approved and partially implemented below. Stages B and C remain
-proposed and unstarted. Gate each before proceeding; component tests do not prove
-cold boot, IRQ delivery or fault history.
+proposed and unstarted. The pending checkpoint change below requires approval
+before B can proceed without full RSTA resolution. Gate each before proceeding;
+component tests do not prove cold boot, IRQ delivery or fault history.
 
 ### A — Device-policy status and signal component
 
@@ -100,12 +104,61 @@ including combined reset writes, retains the legacy self-clear behavior unchange
 it is not a hardware-faithful full-controller reset implementation. Stage A
 therefore remains incomplete.
 
-A bounded DT2 1.17 MAIN refscan used section base `0x40000400`, scan range
-`0x4012d500..0x4012e600` and target range `0xfc0cc034..0xfc0cc038`: zero references,
-100% coverage of 4,352 bytes and 1,190 instructions. This covers that exact range
-and direct references only; it does not exclude computed aliases or establish a
-global absence of IRQSTATEN writes. The next action is narrow reset-resolution
-evidence, not a blanket Device-mode switch.
+### Reset investigation and pending checkpoint decision
+
+**[D/O] Bounded evidence, 2026-10-31:** the full setup paths at DT2
+`0x4012d78e` / DN2 `0x4012be52` and immediate command helpers at DT2
+`0x4012d6c8` / DN2 `0x4012bd8c` show absolute IRQSIGEN
+(`0xfc0cc038`) OR with `0x00310003`. No explicit IRQSTATEN initialization
+was found in these audited paths. Offset `0x38` is IRQSIGEN, not IRQSTATEN;
+these writes must not be described as IRQSTATEN ORs.
+
+The earlier direct-reference scan covered only DT2 `0x4012d500..0x4012e600`
+(4,352 bytes, 1,190 instructions, 100% coverage). The expanded raw DT2 1.17
+MAIN scan covered `0x40000400..0x4031ff60`: 1,007,317 decoded instructions,
+96.81% coverage and zero absolute references to IRQSTATEN `0xfc0cc034`.
+Computed/indirect accesses and undecoded bytes remain outside that result;
+it does not prove global absence of IRQSTATEN writes.
+
+The manual's broad RSTA clearing rule explicitly includes RW, while the generic
+IRQSTATEN reset value is `0x117f013f`. The investigation cannot distinguish
+preservation, reset-default restoration or zeroing of enables after RSTA.
+The locally retained public errata (`out/refs/MCF54418DE/`) p0012,
+SECF215, describes an RSTA clock glitch and a disable-clock workaround. Page
+p0013, SECF218, concerns SDIO and does not clarify these reset values. This was
+a bounded errata search, not an exhaustive exclusion of further documentation.
+
+Two public driver paths provide context without resolving hardware state:
+
+- [Linux ColdFire eSDHC reset](https://raw.githubusercontent.com/torvalds/linux/master/drivers/mmc/host/sdhci-esdhc-mcf.c),
+  `esdhc_mcf_reset` (audited lines 180–190), calls `sdhci_reset`, then writes
+  `host->ier` to both `SDHCI_INT_ENABLE` and `SDHCI_SIGNAL_ENABLE`. Those explicit
+  writes mask the hardware-default question.
+- [U-Boot eSDHC driver](https://android.googlesource.com/platform/external/u-boot/+/825936815a752ce15f5a883c23bc54be76403268/drivers/mmc/fsl_esdhc_imx.c)
+  includes MCF5441x branches. `fsl_esdhc_init` resets then writes IRQEN;
+  `esdhc_init_common` later issues another RSTA and only clears BRR/BWR enables.
+  Its command path clears signal enables and polls IRQSTAT. The inference is
+  reliance on nonzero status enables, not a measurement or a distinction between
+  preservation and reset-default restoration.
+
+No trusted hardware readback was found in this bounded search. RSTA, including
+combined reset writes, remains unchanged legacy behavior with unsupported
+full-reset fidelity. The existing 21 passing component tests remain the current
+result; no tests, builds or emulator runs were repeated for this investigation.
+
+**Pending user decision:** recommend a controlled Stage B experiment from
+explicitly initialized registers, with its real ISR/waiter acceptance below.
+Full RSTA fidelity, cold-boot coverage and full native fault-history release
+acceptance remain blocked. This is an explicit proposed change from requiring
+full Stage A before B, not an approval or a claim that B has started. Confidence
+is medium for the bounded experiment and low for runtime integration until it
+passes; full-reset behavior remains unresolved.
+
+The alternative is to scope trusted hardware readback first. A discriminating
+proposal would compare both enables before/after RSTA with two nondefault
+IRQSTATEN seed patterns. It has not been approved or executed. Given SECF215,
+that scope must first establish a quiescent, isolated controller and account for
+the erratum; this document is not a hardware execution procedure.
 
 ### B — Controller source delivery and actual waiter
 
