@@ -408,15 +408,35 @@ runtime path. This gap is separate from DMA59; this is not an exhaustive absence
 claim. The controlled ISR proof remains passed and full native IRQ validation
 remains **failed/open**.
 
-**Discovery completed; implementation scope pending:** the bounded controller,
-interrupt-routing and runtime-policy audit is recorded in
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md). The proposed
-sequence is isolated Device-policy status/register and signal behavior, integrated
-eSDHC source delivery to the actual firmware handler and guest waiter, then an
-explicit opt-in daemon/snapshot and two-device fault-history proof. Normal Oracle
-behavior stays unchanged. Earlier informal 1–3-day/week estimates are withdrawn:
-confidence is medium for register/component work and low for runtime integration
-until the controlled experiment. The user authorized discovery; implementation
-is still pending. Full native fault-history acceptance remains **failed/open** and
-a release blocker. No production API, pool, SHARC or recovery work is authorized
-by this proposal.
+**[D/O] User-approved Stage A is partially implemented:**
+[finding 100](../findings/100-storage-interrupt-emulation-scope.md) records the
+bounded Device component and remaining gates. Immediate host events accept only
+`0x00310033`; raw completion/error bits latch independently through IRQSTATEN,
+with enable-clear effects, W1C and a separate IRQSIGEN gate on the derived shared
+line. Device commands emit CC and data readiness, with explicit TC rather than
+TC on every command. Contained big-endian 1/2/4-byte writes have these semantics;
+crossing writes are rejected. Oracle behavior and snapshot layout are preserved
+by the code and component tests, with no queued fault state. This is not a full
+default native regression or controller model boot proof.
+
+The 21 targeted eSDHC manual/event/DMA tests passed; the constructor reset-value
+case alone was rerun after extending it to both policies and passed. Independent
+static review reported no issues. The coordinator's scoped `mise run test:changed`
+for the three Rust and three documentation files passed pathcheck/layers; the full
+merge gate was deferred and has not run. Only the documented IRQSTAT effects of
+individual RSTC/RSTD are implemented. Full RSTA remains unresolved: manual p0637
+explicitly includes RW in the cleared types, while the generic IRQSTATEN reset
+value is `0x117f013f`; no post-RSTA enable state is guessed. RSTA, including
+combined reset writes, retains legacy self-clear behavior unchanged and is not a
+hardware-faithful full reset. A bounded DT2 1.17 direct-reference scan found no
+IRQSTATEN references in the exact range recorded in finding 100; computed aliases
+and global absence remain unproved.
+
+Stage A remains incomplete on full RSTA. Stages B (controller-source delivery to
+the actual ISR/waiter) and C (opt-in runtime/snapshot and two-device fault-history
+proof) are unstarted. The next action is narrow reset-resolution evidence, not a
+blanket Device-mode switch. Full native fault-history acceptance remains
+**failed/open** and a release blocker. Earlier informal 1–3-day/week estimates
+remain withdrawn; confidence is medium for bounded component work and low for
+runtime integration until the controlled experiment. No production API, pool,
+SHARC, recovery or hardware-flashing work follows from this checkpoint.
