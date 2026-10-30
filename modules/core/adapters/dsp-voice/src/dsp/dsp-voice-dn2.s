@@ -3,8 +3,9 @@
 // The Digitone II engine (FUN_1c8ef1) is a stage pipeline over 16 voice slots: slot v has a 32-float voice buffer
 // (48 kHz, one DSP block) at `0x804acf90 + 0x80 v` and a frame slot (pitch halfword 1 + v = note << 8, velocity 26 + v
 // = velocity << 8, machine type 74 + v). The FM synthesis of each voice writes its buffer; the stages that follow
-// (gain, amplitude envelope and its gate, filter, overdrive and the rest of the track chain, then the upsample to the
-// 64-float block at 96 kHz, the sends, the master mix) work on the same buffers in place. A slot whose machine type is
+// (gain, amplitude envelope and its gate, filter, overdrive and the rest of the track chain) process the mono buffer.
+// FUN_1c9aea then applies independent pan gains to produce two 32-sample channel planes for the sends and master mix;
+// the configured rate/block is 48000 Hz / 32 samples (finding 96). A slot whose machine type is
 // above 4 is skipped by the synthesis like MIDI and its buffer holds nothing, so a routine that fills it makes the
 // slot sound through everything after the synthesis (findings 06, "Per-voice hook on DN2").
 //

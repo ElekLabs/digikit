@@ -22,7 +22,17 @@ within their recorded scope. The proposed 16 MiB DT2 tail recommendation is with
 there is no outstanding reservation-choice request and no approved reservation patch.
 
 
-## Latest checkpoint — LP0 0.5 startup window and real readers passed
+## Latest checkpoint
+
+The branch is rebased onto main `d6b5d4bb`; DT2 startup/cache and DN2 actual-reader
+proofs pass on the rebuilt daemon. All ten DN2 processing families have local
+state audits. The assembled synthetic stereo replay proof passes for three stages,
+including changing controls, independent histories and explicit reset. Production
+pool ownership, full route/reset coverage and stereo integration remain open.
+See [the rebase/replay checklist](#2026-10-30-rebase-and-stereo-replay-checkpoint)
+and [reciprocal follow-up](#reciprocal-emulator-follow-up) below.
+
+## Historical checkpoint — LP0 0.5 startup window and real readers passed
 
 LP0 0.5 passes the bounded DN2 1.12 native actual-reader proof with fresh cache
 register metadata and a boot-configured private RR4 window. Both tracks start,
@@ -1885,8 +1895,8 @@ parser arithmetic, not device capacity. The old mono `new` remains strict so an
 existing mono consumer cannot silently accept and misinterpret stereo data.
 
 Remaining implementation limits are explicit: the public pinned-bank decoder and
-runtime source loader still accept only 8,192 mono float frames; numerical readers
-are mono. The host WAV converter already preserves stereo but defaults to 64 MiB
+runtime source loader still accept only 8,192 mono float frames. The numerical
+stereo reader added below does not yet replace that public loading contract. The host WAV converter already preserves stereo but defaults to 64 MiB
 source and 128 MiB output PCM limits and holds whole-file conversion buffers.
 These are software resource limits, not hardware capacity measurements. Large-file
 host conversion needs a bounded-memory design before simply raising those defaults.
@@ -1916,7 +1926,7 @@ No full merge gate, device run, firmware patch or generated-core change is claim
   mono output or bypassing stock processing. Current machine 1.1 has one 32-float
   output; DT2's adapter copies it to the paired voice, while DN2's hook feeds a
   mono per-slot processing chain. A second SDK pointer alone cannot solve DN2.
-- [ ] Verify current DN2 channel/rate transitions and the first actual stereo mix
+- [x] Verify current DN2 channel/rate transitions and the first actual stereo mix
   before selecting a backward-compatible machine contract extension.
 
 The numerical stereo ceiling is 4,396 instructions including caller argument
@@ -1960,5 +1970,77 @@ correction: DN2's downstream 64-float layout is two 32-sample channel planes,
 not 96 kHz temporal upsampling. Its source seam still feeds a mono chain. Two
 audited stages have independent recursive histories and read-only coefficients,
 so stereo can share coefficient/control values without sharing audio history.
-The remaining ordered chain/state inventory is in progress; no machine contract
-extension or late insertion bypassing stock processing has been implemented.
+The finite ordered chain and all ten local state footprints are now audited;
+external writers, route domains and lifecycle integration remain open. No machine
+contract extension or late insertion bypassing stock processing is implemented.
+
+
+### 2026-10-30 rebase and stereo replay checkpoint
+
+- [x] Rebase the sampler branch onto `origin/main` at `d6b5d4bb`, preserving the
+  pre-rebase history at `backup/dsp-sampler-pre-d6b5d4bb` (`813772e8`). Regenerate
+  our core objects with the current assembler. Independent review confirms only
+  toolchain/source hashes changed, with identical payloads and relocations.
+- [x] Revalidate 154 assembled mono/stereo/exclusion tests, ten stream SDK tests,
+  four coupled-startup tests and one ready-pair-key test. No core regeneration.
+- [x] Pass DT2 generic patched startup/cache and DN2 selected actual-two-track
+  reader/close tests with the rebuilt dual-core daemon. Independent artifact
+  review confirms the bounded claims; this is not hardware or production stereo.
+- [x] Audit all ten DN2 processing families' local state footprints. Record shared
+  control updates, channel audio histories, scratch and the separate-ring gap.
+- [x] Implement and independently review an assembled three-stage shadow replay
+  proof using actual original code loaded at runtime. Six focused tests pass with
+  unequal channels, changing controls, explicit reset and corruption controls.
+- [ ] Prove actual route/live-in coverage, natural reset/retrigger/steal mirroring,
+  snapshot stability, scratch lifetime, independent ring backing and pan/send
+  integration before promoting the replay mechanism into the runtime adapter.
+- [ ] Complete safe project-pool ownership and replacement/reset fences on both
+  devices, then connect shared stereo views, per-track binding and the picker.
+
+Rebase validation artifacts: `out/runs/sampler-main-rebase/`; immutable daemon
+`out/runs/sampler-main-rebase/stable/digi-emud-6bd36a197f14`.
+DT2 run: `out/runs/patched-dsp-startup/5d429bbb-4b2c-4104-bd02-aefae54c2974/`.
+DN2 run: `out/runs/lp0-proof/d2bed357-2973-4c48-9213-89bfe2bc2fca/`.
+The first DT2 attempt stopped during stale test-fixture preflight; rebuilding
+our cached patched-pluck fixture resolved it. DN2 selects one actual-reader case;
+four other cases are intentionally not run. The new harness owner checks report
+12 passed, two skipped because `SHARC_NATIVE_LIB` was not supplied; all six new
+replay tests execute. No full merge gate or hardware acceptance is claimed.
+
+The shadow replay is a synthetic subset, not a verified stock preset. Shared
+controls are snapshotted before the left pass; right mutations remain live within
+the replay, while independent right audio histories survive between blocks.
+Combined equality uses the existing reciprocal approximation; the separate
+recurrence-only test uses the default core. See finding 96 for scope and evidence.
+
+### Reciprocal emulator follow-up
+
+- [x] Identify the current gap: ordinary RECIPS numeric seed, rather than a broad
+  missing instruction/flag implementation. Public PRM 19-17 describes a ROM
+  indexed by seven mantissa bits, but its table contents are not supplied.
+- [ ] Audit approximation compliance with documented index/exponent rules and
+  final firmware division error over bounded representative/edge inputs. Current
+  truncation of mathematical reciprocal is an explicitly approximate model.
+- [ ] If warranted, propose a separate core change with exact/approximate behavior
+  kept distinct, then regenerate and validate both device cores and shared core.
+  Do not silently turn the existing approximation into claimed hardware truth.
+
+A finite source/manual audit and numerical characterization is hours-to-day scale;
+exact table recovery is unbounded without a trustworthy table or measurements.
+With such evidence available, implementation, regeneration and validation are
+roughly a 1–3 engineering-day estimate, not a commitment. Hardware measurement and
+core regeneration are separate decision points; no core edit is part of this
+sampler checkpoint. This follow-up does not block the model-based replay proof.
+
+
+Checkpoint preflight: Ruff, layercheck, 281 routed Python tooling tests and changed
+reference checks pass. `test:changed` initially reports a new fixture as untracked;
+staging it resolves pathcheck. Its pnpm host/format/type launches are blocked by
+the shared worktree's linked `.pnpm` directory, so the installed executables were
+run directly without dependency changes. Direct host checks total 222 passed and
+16 skipped across three firmware-dependent files; six local-socket tests initially
+hit sandbox EPERM and pass when that file alone is rerun with socket permission.
+All five workspace TypeScript checks and changed-JSON Prettier checks pass. Logs
+are in `out/runs/sampler-main-rebase/host-final.log` and `host-socket-final.log`.
+The wrapper itself did not return success; these are the resolved constituent
+checks, not a claimed full merge gate.

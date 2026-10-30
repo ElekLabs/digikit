@@ -93,8 +93,8 @@ by this finding.
 
 **[D]** A further original-byte pass checked 722 aligned instructions in
 `0x1c9448..0x1c9b33` and 99 local continuation/dispatch instructions in
-`0x1c9b73..0x1c9c5d`. There are ten processing families, of which the two
-recurrences above have audited state footprints. The remaining families are:
+`0x1c9b73..0x1c9c5d`. There are ten processing families. The two recurrences above were audited first;
+the eight additional footprints are now classified below. Their placements are:
 
 | Callee | State base + byte stride per slot | Placement |
 | --- | --- | --- |
@@ -122,6 +122,90 @@ before the source hook at `0x1c9045..93c6`. Some physically later code rejoins
 that earlier control flow; it must not be counted as extra post-source stages.
 The inline cleanup mutates shared flags and must not simply run twice.
 
-**[O]** The eight remaining callee footprints, live routing-table invariants and
-per-channel versus shared-control fields still need classification. This finite
-inventory does not authorize duplicating the whole chain's execution.
+**[O]** Live routing-table invariants, external state writers and reset/lifetime
+coverage remain open. The local classifications below do not authorize duplicating
+the whole chain's execution.
+
+
+## Remaining eight state footprints
+
+**[D]** Original DN2 1.12 section-7 byte audits classify all ten local bodies.
+Offsets below are 32-bit words in the passed record; the placement strides above
+are bytes. These are finite local read/write audits, not whole-engine ownership.
+
+| Stage | Persistent reads | Persistent writes and interpretation |
+| --- | --- | --- |
+| `0x1cdb56` | 0,1,2,5,12 | 4,5,6 and 11,12,13: two shared old/current/step control groups; no audio history |
+| `0xb8265b` | 0..4 | 1,2 held audio; 3,4 phase counters. Share captured timing, retain independent held samples |
+| `0xb82342` | 3,4,5,6,7,12,14,26,28,33,35,40,42 | 3,4 recursive histories; 48,49,50 audio-dependent snapshots. Keep all five channel-local pending external-consumer audit |
+| `0xb81a16` | 10,11; 12+7k and 14+7k, k=0..8 | 10,11 histories only; coefficient ramps evolve locally |
+| `0xb80f2e` | 0,1,2,3,4,5,9,10,11,12,14,18,25,32,39,46,53 | Audio histories 5,9,10,11,12; shared block preparation writes {17,18,19}+7k, k=0..5 |
+| `0xb806f5` | 0,2,4,10,13,14,15,16,17 | Audio history 0 and external ring; control old/current/step 3,4,5; read coordinate 13, write cursor 14, fill status 17 |
+| `0xb81526` | 9,10; 11+7k and 13+7k, k=0..5 | 9,10 histories only; coefficient ramps evolve locally |
+| `0xb80345` | 0..7,9,10 | 7 phase, 9 counter, 10 gain marker; audio-independent control evolution |
+
+The nonlinear `0x1cdb56` uses captured control ramps and memoryless clipping/
+shaping. Replaying it or `0xb80f2e` on already advanced shared state changes
+its ramp. For example, `0xb80f79` copies word 4 to prior-value word 46; another
+invocation immediately computes zero difference there. Shadow control changes
+must survive repeated occurrences within the right-channel replay, then remain
+separate from authoritative control state.
+
+`0xb8265b` reads table `0x26e9c8`; its active path is fixed at 32 samples.
+`0xb80f2e` reads `0x26b3a8` with adjacent dynamic indices; their full domain is
+not audited. `0xb80345` reads tables `0x26a570/0x26a770/0x26a970`; upstream
+index bounds remain open. Its unity paths assume in-place input/output. Its
+stack arguments are control, byte control, then sample count, unlike a simple
+single-count wrapper. No new mutable globals or RNG effects were found in
+these bounded bodies apart from the external ring below.
+
+`0xb806f5` word 16 points at `0x804ad790 + 0x8000*v`, established by
+`0x1c8c05/0b/0d`. Constructor `0xb80575 → 0xb80546` clears each 32 KiB ring;
+reset `0xb805d8` clears history/cursor/status without clearing the backing.
+**A copied record retaining that pointer would share audio history.** Ownership
+of an independent second-channel ring is not established. Initial coordinate
+bounds and DAG/SIMD entry assumptions remain open. Case-5 scratch is
+`0x804ace90`, installed through `DM(0x254aa0)` by `0x1c8c02/08`; consume or
+retain each result before reusing it, including the continuation blend.
+
+Arithmetic helper `0x1c06ba` has no memory accesses in its actual body. Its
+returns at `0x1c06fa` and `0x1c0701` include delayed-return forms; later copy
+code printed by the database is outside the helper. Its temporary MODE1
+rounding-bit change is restored on the bounded normal path. The truncation
+helper `0x1c07cc` likewise restores its temporary mode. These observations do
+not cover exceptional floating-point inputs or arbitrary live contexts.
+
+## Bounded shadow replay proof
+
+**[D]** `tests/fixtures/dsp/stereo-shadow-replay.s` exercises a synthetic ordered
+subset: `0x1cdb56 → 0xb80c39 → 0xb81368 → 0x1cdb56`. This is deliberately
+not identified as a stock default route. Original firmware is loaded only at
+runtime, hash-bound to the section above; no firmware bytes are in the fixture.
+
+The assembled preparation copies initial shared controls and coefficients before
+left processing, preserving independent right histories. Right control mutations
+persist between repeated stages but are never published to the left record.
+Three changing-control blocks with unequal channel inputs match two isolated mono
+reference executions exactly within the configured numerical model. Explicitly
+resetting both histories and controls reproduces block zero. Store checks bound
+writes to declared state, audio and stack, with exact stage-write counts.
+
+Six focused tests pass without skips. Negative controls detect copying controls
+after left processing, clearing right histories between blocks, and restoring
+initial controls between repeated occurrences. The harness also checks original
+image preservation, linked-code overlay priority and per-image decode-cache
+isolation. Independent source review found no issues.
+
+**[O]** The combined test uses existing `approx_recips=True`: default execution
+stops at `0x1c0706` on an unknown AV predicate after an unmodeled ordinary RECIPS
+seed. Candidate and references use the same approximation. A separate three-block
+recurrence-only test passes with approximation disabled. This establishes model
+state-separation equivalence, not hardware-exact reciprocal arithmetic, complete
+routing, pan/send integration, natural reset/retrigger/steal coverage, external
+writer serialization, throughput or production stereo ABI.
+
+A database-only reset candidate is `0xb8135a` (zeros words 6/7). The call at
+`0x1c96aa` lies in a physically later pre-hook branch: `0x1c9343 → 0x1c9642`,
+then `0x1c970e → 0x1c9346`, before source hook `0x1c9459`. Numerical address
+order is not execution order. The actual passed record and trigger semantics of
+that call remain unresolved; it is not yet a proven reset hook for our shadow.
