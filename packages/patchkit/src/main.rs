@@ -26,7 +26,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   verify  OUT.syx [--base X.syx]         re-decode and check an image
   preflight OUT.syx                      before flashing: known stock base, sections 2/4/5/8 identical, checksum, HMAC, limits;
                                          exit 1 on any failure (stock files are looked up in firmware/ by sha256)
-  isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
+  isa-scan X.syx [--list] [--code START:END ...]
+                                         instructions in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when
+                                         found. --code adds a byte range of loaded memory that holds code the block rule does not reach
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
   pack    MODULE_ID -o OUT.dkm [--name N] [--runtime-min V] [--device SHORT] [--trace]   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
@@ -560,7 +562,20 @@ plan.json {}",
                 }
                 return Ok(());
             }
-            let found = patchkit::dspscan::scan(&dsp.data)?;
+            let mut ranges = vec![];
+            for (i, a) in rest.iter().enumerate() {
+                if a != "--code" {
+                    continue;
+                }
+                let r = rest.get(i + 1).and_then(|v| v.split_once(':'));
+                let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
+                match r.and_then(|(s, e)| Some((hex(s)?, hex(e)?))) {
+                    Some(range) => ranges.push(range),
+                    None => return Err(Error("--code takes START:END in hex".into())),
+                }
+            }
+            let mut found = patchkit::dspscan::scan(&dsp.data)?;
+            found.extend(patchkit::dspscan::scan_ranges(&dsp.data, &ranges)?);
             for f in &found {
                 println!("{f}");
             }

@@ -9,6 +9,8 @@
 //! decoded with the confident width, then the instructions a sweep from the start reaches, kept when at least [`MIN_DEPTH`] decoded
 //! instructions in a row end there. Code blocks are the stock ones (by target address; the DT2 and DN2 lists) and the run of blocks
 //! below 0x80000000 a patch appended before the final block. Data blocks are not scanned: decoded as code they give false stores.
+//! That run ends at the first fill or SDRAM block, so code a patch placed before its SDRAM data is not reached: [`scan_ranges`]
+//! (`isa-scan --code START:END`) scans the ranges the caller knows hold code.
 
 use crate::build::sharc_legal::legality_problems;
 use crate::dsp::{L2_BYTE_BASE, L2_BYTE_LIMIT, L2_SW_BASE, SW_ALIAS_BASE, Stream};
@@ -158,6 +160,26 @@ pub fn scan(blob: &[u8]) -> Result<Vec<String>> {
     Ok(found)
 }
 
+/// The same rules over byte ranges `[start, end)` of loaded memory that the caller says hold code: code a patch placed that
+/// [`code_blocks`] does not reach, for example blocks followed by SDRAM data before the final block. A range nothing loads is an error.
+pub fn scan_ranges(blob: &[u8], ranges: &[(u32, u32)]) -> Result<Vec<String>> {
+    let stream = Stream::parse(blob.to_vec())?;
+    let mut found = vec![];
+    for &(start, end) in ranges {
+        let base = sw_base(start).ok_or_else(|| err!("{start:#x}: not an L1 or L2 code address"))?;
+        let payload = (end > start)
+            .then(|| stream.read(start, (end - start) as usize))
+            .flatten()
+            .ok_or_else(|| err!("{start:#x}..{end:#x}: the boot stream does not load this range"))?;
+        for (off, d) in aligned(&payload) {
+            for msg in legality_problems(&d, "") {
+                found.push(format!("range {start:#x} pc {:#x}{msg}", base + (off / 2) as u32));
+            }
+        }
+    }
+    Ok(found)
+}
+
 /// The scan of a firmware image: section 7 must exist and be clean. `Ok` carries the summary line.
 pub fn check_section7(dsp: &[u8]) -> Result<String> {
     let found = scan(dsp)?;
@@ -255,5 +277,22 @@ mod tests {
             s.extend_from_slice(&vec![0; count as usize]);
         }
         assert_eq!(code_blocks(&Stream::parse(s).unwrap()), [0, 2, 4, 5]);
+    }
+
+    #[test]
+    fn code_before_sdram_blocks_is_scanned_only_through_a_range() {
+        let code = assembled("    DM(-16, I6) = I0;\n");
+        let mut s = block_header(APPENDED, code.len() as u32).to_vec();
+        s.extend_from_slice(&code);
+        s.extend_from_slice(&with_code(block_header(0x8046_7CD0, 8), 0xAD00_0001)); // SDRAM data after the code
+        s.extend_from_slice(&[0; 8]);
+        s.extend_from_slice(&with_code(block_header(0x1C_1338, 0), 0xAD00_0001 | FINAL));
+        assert!(scan(&s).unwrap().is_empty(), "the trailing run stops at the SDRAM block");
+        let end = APPENDED + code.len() as u32;
+        let found = scan_ranges(&s, &[(APPENDED, end)]).unwrap();
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].starts_with(&format!("range {APPENDED:#x} pc 0x")), "{found:?}");
+        assert!(found[0].ends_with(": DM store of I0 (DAG1)"), "{found:?}");
+        assert!(scan_ranges(&s, &[(0x2009_0000, 0x2009_0010)]).is_err(), "a range nothing loads");
     }
 }
