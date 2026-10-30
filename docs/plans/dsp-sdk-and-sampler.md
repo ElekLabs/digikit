@@ -91,11 +91,13 @@ hook coverage or production backing/reservation approval.
 
 The early DT2 MAIN audit now places patched-in segment BSS zeroing before the
 traced storage ISR installation, first command and later FS/runtime task startup.
-It supports a candidate boot-scoped fault record, not runtime-loaded DKM storage
-or an existing observer artifact. Next proof: an optional private patched-in DT2
-observer, with actual BSS/segment/loader checks and bounded early-boot/sticky/fault
-capture including simultaneous error+complete. Whole-bootstrap/reset coverage and
-source witnesses remain open; this is not production gating or backing approval.
+An optional private patched-in DT2 observer now has compiled model and static
+image/loader evidence **[D]**, plus bounded native zeroing/host-seed retention
+observations. Native IRQ capture remains open: the default Oracle completion path
+posts storage semaphores directly, and the run observed no observer stores. Next
+is isolated controlled error+completion execution through the actual ISR/hook and
+independent initialization verification. Whole-bootstrap/reset coverage and source
+witnesses remain open; this is not production gating or backing approval.
 
 Production backing ownership/coexistence, callback-private lifetime, full-route
 capture/commit/reset/cleanup, public stereo integration and picker publication
@@ -2798,15 +2800,41 @@ full merge gate is claimed.
 
 ### Next proof: private early DT2 storage-fault observer
 
+This is shared runtime storage infrastructure, with the sampler as its first
+consumer and reuse intended for the file manager/importer. The private DT2 proof
+is not a production gate or DN2 implementation proof.
+
 - [x] Bound the static early MAIN path: expansion-loader BSS zeroing precedes traced
   storage setup/ISR enable/first command, FS initialization and runtime task entry.
-  Existing patched-in BSS is a candidate; no observer artifact is built yet.
-- [ ] Implement only an optional private patched-in DT2 observer, then verify its
-  actual symbol/BSS extent, segment header and loader relocation. Runtime-loaded
-  DKM BSS is too late for the traced early history.
-- [ ] Run a bounded native proof of initial zeroing, sticky retention through early
-  storage events, and controlled fault capture including error plus completion in
-  one ISR. No such native pass or complete early/reset coverage is claimed yet.
+- [x] **[D]** Build the optional private patched-in DT2 observer: 39 assembled
+  instructions and three passing compiled-source model tests. Static verification
+  of the actual image segment, symbol/BSS extent and loader placement passed;
+  runtime-loaded DKM BSS remains too late for the traced early history. Independent
+  hook/model review is complete, and five host watch-validator tests pass.
+- [ ] Complete the bounded native proof of initialization, sticky retention and
+  controlled fault capture, including error plus completion in one ISR. Run
+  `out/runs/storage-fault-proof/native/40cd90b5-0945-43af-9223-6626e5945f16`
+  failed on the second boot's `main_changed: false`: the same MAIN image was already
+  loaded. The assertion now expects `boot === 1`; it has not been rerun. Cold/cache,
+  hash and observer assertions remain unchanged.
+- **[D]** Both native traces place loader zeroing before FS initialization. The
+  first readiness latch was zero, and the host seed `0x00310000` remained after
+  one million ColdFire steps. There were zero observer writes, so these observations
+  do not prove IRQ fault capture or complete early/reset history.
+- **[D]** The native runtime constructs the board with `CompletionPolicy::Oracle`
+  (`packages/emulator/boot/src/runtime.rs:483`). `complete()` directly posts
+  DMA/data/command semaphores and clears status
+  (`packages/emulator/machine/src/board.rs:1075`); `drain_board()` counts the events
+  (`packages/emulator/boot/src/runtime.rs:2249`). Default native storage completion
+  therefore does not establish stock ISR execution.
+- [ ] Isolate bounded controlled error+completion execution through the actual
+  ISR/hook and independently verify initialization. Do not weaken observer
+  assertions, change emulator semantics or switch wholesale to Device mode to
+  obtain a pass.
 - [ ] Establish complete relevant fault history and source lifecycle/content-change
   witnesses before any production sample-load gate. No pool/reservation/public ABI
-  decision is made by this proof proposal.
+  decision follows from this private proof.
+
+The earlier `mise run test:changed` wrapper failed on the pnpm dependency layout;
+direct scoped checks passed. No full gate pass is claimed. The code/model and
+bounded observations above remain **[D]**, not **[V]**.

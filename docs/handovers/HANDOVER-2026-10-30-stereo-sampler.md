@@ -355,12 +355,28 @@ production pool readiness. Future automatic retry requires a separate abort/drai
 cache-invalidation, FS-revalidation and bounded error-injection scope. No new
 reservation or public ABI is approved.
 
-The early DT2 MAIN audit places patched-in segment BSS zeroing before traced
-storage setup, fault-ISR installation/enable, first command and FS/runtime startup.
-Existing patched-in adapter BSS is a plausible boot-scoped fault record, unlike
-runtime-loaded DKM BSS; no observer artifact exists yet. Next is an optional private
-patched-in DT2 storage-fault observer proof: verify actual BSS/segment/loader
-placement, then bounded early initialization/sticky retention and controlled
-error+complete ISR capture. Whole-bootstrap/reset coverage and source witnesses
-remain open. This is not a production gate, new reservation or public ABI.
-See [finding 81](../findings/81-stock-sampler-dependencies.md).
+The private optional DT2 storage-fault observer now has **[D]** evidence: 39
+assembled instructions, three passing compiled-source model tests, actual-image
+segment/BSS/loader verification, five passing host watch-validator tests and a
+completed independent hook/model review. It is shared runtime storage
+infrastructure, with the sampler as first consumer and reuse intended for the
+file manager/importer; it is not a production gate or DN2 implementation proof.
+
+Native run
+`out/runs/storage-fault-proof/native/40cd90b5-0945-43af-9223-6626e5945f16`
+failed because the second same-image load returned `main_changed: false`. The
+assertion now expects `boot === 1` and has not been rerun; cold/cache/hash and
+observer assertions remain unchanged. Both traces show loader zeroing before FS
+initialization; the first readiness latch was zero, and host seed `0x00310000`
+survived one million ColdFire steps. Zero observer writes means IRQ capture is
+still unproved. The native runtime uses `CompletionPolicy::Oracle` and board
+`complete()` directly posts DMA/data/command semaphores and clears status;
+`drain_board()` counts events. Default native completion does not establish stock
+ISR execution. Next isolate bounded controlled error+completion through the actual
+ISR/hook and independently verify initialization, without weakening assertions,
+changing emulator semantics or switching wholesale to Device mode. Fault history,
+whole-bootstrap/reset coverage and source witnesses remain open. The earlier
+`test:changed` wrapper failed on pnpm dependency layout; direct scoped checks
+passed, with no full gate pass. These observations remain **[D]**, not **[V]**.
+See the [next proof](../plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
+and [finding 81](../findings/81-stock-sampler-dependencies.md).
