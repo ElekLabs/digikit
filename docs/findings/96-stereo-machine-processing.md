@@ -204,8 +204,27 @@ state-separation equivalence, not hardware-exact reciprocal arithmetic, complete
 routing, pan/send integration, natural reset/retrigger/steal coverage, external
 writer serialization, throughput or production stereo ABI.
 
-A database-only reset candidate is `0xb8135a` (zeros words 6/7). The call at
+**[D]** A reset candidate is `0xb8135a` (zeros words 6/7). The call at
 `0x1c96aa` lies in a physically later pre-hook branch: `0x1c9343 → 0x1c9642`,
 then `0x1c970e → 0x1c9346`, before source hook `0x1c9459`. Numerical address
-order is not execution order. The actual passed record and trigger semantics of
-that call remain unresolved; it is not yet a proven reset hook for our shadow.
+order is not execution order.
+
+An independent original-byte audit resolves the reset argument to
+`0x2533e0 + R10`: the delayed call at `0x1c96aa` sets `R4=R5+R10` in its
+`0x1c96ad` delay slot, overriding the earlier `R4=M9`. Caller `0x1c303e`
+supplies engine base `0x241298`, propagated to I9 by `0x1c8f18/1d`.
+`0x1c928b/93/96` computes R5 as that base plus `0x12148`. Complete bounded
+callee audits (`0xb813e8`, `0xb8028c`, `0xb81d6d`, `0xb818c7`, `0xb81c8d`,
+`0xb811f1`, `0xb82440`) preserve R5/R10 along this path. `0x1c93aa/ae`
+increments R10 by `0x20`, matching the processing-record stride. Exact slot
+ordinal mapping and the event-level meaning of the SV branch remain unaudited.
+
+**[C]** An intermediate database-only interpretation of engine pointer
+`0x257e6c` as this reset argument is contradicted by the delayed argument
+setup. An apparent instruction at `0x1c96a9` is actually the final parcel of
+`0x1c96a7`; a frame-slot propagation inference also used a value from before
+its reload. Neither interpretation may be used to place a reset hook.
+
+This establishes one concrete per-slot reset path, not complete initialization,
+retrigger/steal/filter-change coverage or an implemented shadow reset hook.
+The audit used original bytes with the project decoder, not a hardware trace.

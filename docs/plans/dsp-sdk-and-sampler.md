@@ -2044,3 +2044,10 @@ All five workspace TypeScript checks and changed-JSON Prettier checks pass. Logs
 are in `out/runs/sampler-main-rebase/host-final.log` and `host-socket-final.log`.
 The wrapper itself did not return success; these are the resolved constituent
 checks, not a claimed full merge gate.
+
+
+Reset follow-up: an original-byte audit resolves the `0x1c96aa` reset argument
+through delayed-call setup to `0x2533e0 + R10`, matching the U/Y processing-record
+base and `0x20` stride. This closes one pointer question; slot ordinal, branch
+event semantics and complete reset/steal coverage remain open. Finding 96 records
+the evidence and rejects an intermediate database-only pointer interpretation.
