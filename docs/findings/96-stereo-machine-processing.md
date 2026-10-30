@@ -288,3 +288,48 @@ register-preservation graphs are not exhausted. Keep full guard-address/ordinal
 propagation conditional on that gap. Neither guard is identified as note-on,
 retrigger, steal or filter change. Next bounded question: their actual producers.
 This is a concrete common reset path, not complete lifecycle coverage.
+
+
+## Held samples and shared block preparation
+
+**[D]** `tests/fixtures/dsp/stereo-prepared-shadow-replay.s` extends the numerical
+replay experiment to `0xb8265b` and `0xb80f2e`. Six new cases plus the previous
+twelve pass without skips. Both run unequal channels over three changing-control
+blocks; right histories stay independent and the left record matches an isolated
+reference after right execution. Negative controls copy already advanced controls
+or replace right histories with left state and must change output samples.
+
+Held-sample tests use active table indices 32,48,64 with original finite periods
+between 6 and 26 samples. Every block includes both repeated output and refresh;
+the disabled copy path cannot pass. The preparation-stage tests retain five audio
+histories and copy shared input/control fields before the left pass. All dynamic
+table-load PCs are watched over the full address space, so a load outside the
+128-entry or 1,024-entry tables fails rather than disappearing from the watch.
+Canonical store bounds include only permitted state, audio and stack locations.
+
+The held stage runs without reciprocal approximation. The preparation stage uses
+the same explicitly qualified approximation as the earlier nonlinear proof after
+confirming the known default-core stop at `0x1c0706`. Byte-space pointers and
+32-bit normal-word accesses are explicit, as in the filter-leaf tests. These are
+bounded captured-control cases, not complete parameter domains or live routes.
+Eight of ten stage families now have replay tests; the ring-backed stage and
+final gain stage, plus inline blend/pan/route/lifecycle integration, remain open.
+
+## Reset guard producers: bounded follow-up
+
+**[D]** Setter `0xb8028c` writes state word 5 at `0xb802f9` from stack argument
+loaded at `0xb802d2`. Caller `0x1c92a5` pushes R15, loaded at `0x1c9285` from
+`DM(I5-1)`; `0xb813e8` preserves R15 through its delayed restore. Visible frame
+arithmetic supplies `0x2556dc + 0x234*v`. The frame builder writes that same
+word at `0x1c2c14`, after arithmetically shifting the packed word read at
+`0x1c2b00` right by 16 and then 8. Thus the guard receives a sign-extended high
+byte from word `0x25c5ea + 0x92*v` (byte `0x25c5ed + 0x92*v` in the local
+little-endian frame). Its event/parameter name is not established.
+
+Helper `0x1c9c9d`, called at `0x1c31a7` with delayed arguments, writes M13
+(normally zero) as a byte to `0x254ba4 + slot` at `0x1c9cc0`. It also writes
+M13 to `0x254b94 + slot` and M14 to `0x254bb4 + slot`. The caller invokes it
+when a signed-short frame value is nonzero. This is a concrete clear writer;
+the writer that makes the guard nonzero remains unidentified. Empty targeted
+reference results do not exclude other writers. Upstream indirect-preservation
+and event-name caveats above still apply; no lifecycle hook is selected yet.

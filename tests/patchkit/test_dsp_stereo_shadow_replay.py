@@ -378,17 +378,26 @@ FILTER_FAMILIES = {
 @pytest.fixture(scope="module")
 def filter_rig(rig):
     source = REPO_ROOT / "tests/fixtures/dsp/stereo-filter-shadow-replay.s"
+    prepared = REPO_ROOT / "tests/fixtures/dsp/stereo-prepared-shadow-replay.s"
     linked = pk_sharc.link(
         pk_sharc.assemble(
-            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+            pk_sharc.expand_includes(
+                source.read_text() + "\n" + prepared.read_text(), [REPO_ROOT / "sdk"]
+            )
         ),
         0xB92000,
-        {"_snapshots": 0xB82342, "_nine": 0xB81A16, "_six": 0xB81526},
+        {
+            "_snapshots": 0xB82342,
+            "_nine": 0xB81A16,
+            "_six": 0xB81526,
+            "_held": 0xB8265B,
+            "_prepared": 0xB80F2E,
+        },
     )
     return linked, rig[1]
 
 
-def filter_call(session, family, side, histories, coefficients):
+def filter_call(session, family, side, histories, coefficients, shared_writes=()):
     entry = f"_{side}_{family}"
     regs = {**REGS, "I6": STACK * 4, "I7": STACK * 4}
     result = session.call(entry, regs, max_steps=12000)
@@ -399,8 +408,9 @@ def filter_call(session, family, side, histories, coefficients):
     else:
         offset = 0x100 if side == "right" else 0
         allowed = {LEFT + offset + i for i in range(32)}
-        allowed |= {CONTROL + offset + i for i in histories}
+        allowed |= {CONTROL + offset + i for i in (*histories, *shared_writes)}
         allowed |= set(range(STACK - 64, STACK + 1))
+    stores = [e for e in session.stores if e.access == "write"]
     byte_addresses = {
         _canonical_dm_address(
             session.runner.state, normal_word_to_byte(a), 4, for_write=True
@@ -408,13 +418,9 @@ def filter_call(session, family, side, histories, coefficients):
         for a in allowed
     }
     assert all(
-        event.width == 4 and event.address in byte_addresses for event in session.stores
-    ), [
-        (hex(e.address), e.width)
-        for e in session.stores
-        if e.address not in byte_addresses
-    ]
-    counts = Counter(byte_addresses[e.address] for e in session.stores)
+        event.width == 4 and event.address in byte_addresses for event in stores
+    ), [(hex(e.address), e.width) for e in stores if e.address not in byte_addresses]
+    counts = Counter(byte_addresses[e.address] for e in stores)
     if side == "prepare":
         assert {a for a, count in counts.items() if count} == allowed
         assert set(counts.values()) == {1}
@@ -424,6 +430,23 @@ def filter_call(session, family, side, histories, coefficients):
             counts,
         )
         assert all(counts[CONTROL + offset + i] for i in histories)
+        assert all(counts[CONTROL + offset + i] == 1 for i in shared_writes)
+    if side != "prepare" and family in ("held", "prepared"):
+        table = 0x26E9C8 if family == "held" else 0x26B3A8
+        pcs = (0xB826E0,) if family == "held" else (0xB81053, 0xB81059)
+        reads = [e for e in session.stores if e.access == "read" and e.pc_sw in pcs]
+        assert len(reads) == (4 if family == "held" else 256)
+        table_base = _canonical_dm_address(session.runner.state, table, 4)
+        count = 128 if family == "held" else 1024
+        assert all(
+            e.width == 1
+            and e.new_value is not None
+            and table_base <= e.address < table_base + 4 * count
+            for e in reads
+        )
+        if family == "held":
+            period = struct.unpack("<f", bytes(e.new_value for e in reads))[0]
+            assert 1 < period < 32
     return result
 
 
@@ -497,4 +520,148 @@ def test_filter_leaf_shadow_matches_isolated_mono(filter_rig, family, corrupt_hi
                 )
     if corrupt_history:
         assert any(differences)
+        assert any(audio_differences)
+
+
+PREPARED_WRITES = tuple(17 + 7 * k + delta for k in range(6) for delta in (0, 1, 2))
+PREPARED_SHARED = (0, 1, 2, 3, 4, 14, *PREPARED_WRITES)
+
+
+def initialized_prepared_sessions(filter_rig, family, approximate=False):
+    sessions = tuple(fresh(filter_rig, approximate=approximate) for _ in range(3))
+    histories = (1, 2) if family == "held" else (5, 9, 10, 11, 12)
+    size = 5 if family == "held" else 59
+    for session in sessions:
+        session.runner.state.assume_nw32 = True
+        # Log reads as well as stores so dynamic table accesses are checked at
+        # the actual load PCs, including any access outside the declared table.
+        session.runner.attach_watchpoints(
+            [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
+        )
+        session.runner.set_watch_active(False)
+        for offset in (0, 0x100):
+            for i in range(size):
+                session.poke(CONTROL + offset + i, 0)
+        if family == "held":
+            # b82440 resets counters to M13. A finite in-period entry of 1
+            # exposes private held values before the next refresh.
+            for i in (3, 4):
+                session.poke(CONTROL + i, 1)
+        else:
+            # These are captured finite controls, not a live setter invocation.
+            # b811f1 seeds the six current coefficients from these expressions.
+            controls = {0: 0.1, 1: 0.3, 2: 0.08, 3: 0.1, 4: 0.6, 14: 0.2}
+            current = (
+                controls[1],
+                controls[0],
+                controls[2] / 4,
+                controls[3],
+                controls[4],
+                -controls[14] / 8,
+            )
+            for i, value in controls.items():
+                session.poke(CONTROL + i, bits(value))
+            for k, value in enumerate(current):
+                for delta in (0, 1):
+                    session.poke(CONTROL + 17 + 7 * k + delta, bits(value))
+    stereo, left, right = sessions
+    for n, i in enumerate(histories):
+        lv, rv = bits((n + 1) / 256), bits(-(n + 1) / 311)
+        stereo.poke(CONTROL + i, lv)
+        left.poke(CONTROL + i, lv)
+        stereo.poke(CONTROL + 0x100 + i, rv)
+        right.poke(CONTROL + i, rv)
+    return sessions, histories, size
+
+
+@pytest.mark.parametrize("family", ("held", "prepared"))
+@pytest.mark.parametrize("fault", (None, "advanced-controls", "shared-history"))
+def test_prepared_shadow_matches_isolated_mono(filter_rig, family, fault):
+    # b80f2e's 1c06ba division by block count uses the previously qualified
+    # RECIPS approximation; b8265b and its 1c07cc helper do not need it.
+    sessions, histories, size = initialized_prepared_sessions(
+        filter_rig, family, approximate=family == "prepared"
+    )
+    stereo, left, right = sessions
+    shared = (0, 3, 4) if family == "held" else PREPARED_SHARED
+    writes = (3, 4) if family == "held" else PREPARED_WRITES
+    audio_differences = []
+    previous_histories = [stereo.peek(CONTROL + i) for i in histories]
+    for block in range(3):
+        for session in sessions:
+            if family == "held":
+                # Active clamp/index path: trunc(127*c) is 32,48,64. The
+                # original table periods are finite and between 6 and 26;
+                # each block therefore both holds and refreshes samples.
+                session.poke(CONTROL, bits((32 + 16 * block) / 127))
+            else:
+                # b81024 clips before table indexing. The lookup coordinate is
+                # 1023*(0.5 + ramp(-control14/8)*clipped), with |clipped|<=1.
+                # Initial/current control14 stays below 0.25, so both adjacent
+                # indices remain strictly inside the 1024-word original table.
+                for i, value in {
+                    0: 0.12,
+                    1: 0.32,
+                    2: 0.1,
+                    3: 0.12,
+                    4: 0.65,
+                    14: 0.22,
+                }.items():
+                    session.poke(CONTROL + i, bits(value * (1 + block / 16)))
+        inputs = []
+        for i in range(32):
+            lv, rv = (
+                bits((i - 11) / 128 + block / 64),
+                bits((7 - i) / 163 - block / 128),
+            )
+            inputs.append((lv, rv))
+            stereo.poke(LEFT + i, lv)
+            stereo.poke(RIGHT + i, rv)
+            left.poke(LEFT + i, lv)
+            right.poke(LEFT + i, rv)
+        right_history = [stereo.peek(CONTROL + 0x100 + i) for i in histories]
+        filter_call(stereo, family, "prepare", histories, shared)
+        assert [stereo.peek(CONTROL + 0x100 + i) for i in histories] == right_history
+        filter_call(stereo, family, "left", histories, shared, writes)
+        authoritative = words(stereo, CONTROL, size)
+        if fault == "advanced-controls":
+            filter_call(stereo, family, "prepare", histories, shared)
+        elif fault == "shared-history":
+            for i in histories:
+                stereo.poke(CONTROL + 0x100 + i, stereo.peek(CONTROL + i))
+        filter_call(stereo, family, "right", histories, shared, writes)
+        filter_call(left, family, "left", histories, shared, writes)
+        filter_call(right, family, "left", histories, shared, writes)
+        assert (
+            words(stereo, CONTROL, size) == authoritative == words(left, CONTROL, size)
+        )
+        assert words(stereo, LEFT, 32) == words(left, LEFT, 32)
+        actual = words(stereo, RIGHT, 32)
+        expected = words(right, LEFT, 32)
+        audio_differences.append(actual != expected)
+        if fault is None:
+            assert actual == expected
+            assert words(stereo, CONTROL + 0x100, size) == words(right, CONTROL, size)
+            assert [stereo.peek(CONTROL + i) for i in shared] == [
+                stereo.peek(CONTROL + 0x100 + i) for i in shared
+            ]
+        assert words(stereo, LEFT, 32) != [v[0] for v in inputs]
+        assert expected != [v[1] for v in inputs]
+        if family == "held":
+            # Every block includes held output and at least one refresh, not
+            # merely the disabled copy path or a block with stale held values.
+            for output in (words(stereo, LEFT, 32), expected):
+                assert any(a == b for a, b in zip(output[:-1], output[1:], strict=True))
+                assert len(set(output)) > 1
+        assert words(stereo, LEFT, 32) != actual
+        current_histories = [stereo.peek(CONTROL + i) for i in histories]
+        assert current_histories != previous_histories
+        previous_histories = current_histories
+        for session in sessions:
+            assert session.runner.state.approx_recips_used == (family == "prepared")
+            for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
+                assert all(
+                    (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
+                )
+    if fault is not None:
         assert any(audio_differences)

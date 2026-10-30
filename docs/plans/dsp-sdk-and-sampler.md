@@ -2075,3 +2075,37 @@ first-order words 24..27. It executes when a byte and a control-record word are
 both nonzero. The local sixteen-record stride is identified; upstream indirect
 callee preservation and event meanings remain open. Follow the two producers
 before calling these note-on/retrigger/steal hooks (finding 96).
+
+
+- [x] Add bounded replay tests for held-sample timing/history and shared block
+  preparation: eighteen total replay cases pass, including table-read bounds and
+  negative controls. Eight of ten local families have numerical replay coverage.
+- [x] Trace reset word-5 producer to a packed frame byte and identify a clear writer
+  for the other guard. Its nonzero producer and event meanings remain open.
+
+### Candidate DDR diagnostic: implementation direction
+
+Payoff: expose concrete stock CPU/DMA use of candidate project-pool intervals,
+including same-value writes and reads, instead of relying on sampled word changes.
+Confidence is high in the bounded host-layer mechanism, moderate in complete
+integration until bypass tests pass. This may take a day or more including native
+validation; stop expansion if missing paths require instruction-core changes or
+if the instrument cannot distinguish its own bookkeeping sufficiently to interpret.
+No production reservation or capacity is selected by this diagnostic.
+
+The inspected raw fast paths share Mem page pointers and window caches. A candidate
+DDR-only monitor can withhold watched-page fast pointers, invalidate cached windows
+through layout_gen, and let normal execution fall back to observed accessors. This
+must cover native CL and Wasm, cached windows, new-page allocation and reset; a
+window refusal is not itself a data access. Root's review found additional required
+rules: disable idle-loop skipping, capture synthesized/uninitialized read attempts,
+and distinguish guest attempts from journal/rollback/host setup traffic. A plain
+Mem-only counter is not a complete guest-access monitor.
+
+- [ ] Implement an opt-in diagnostic with an explicit event/lifecycle contract,
+  tested first at the memory and semantic boundaries; no public module ABI change.
+- [ ] Prove raw fast paths fall back correctly, imported/reset state reapplies policy,
+  same-value writes and read-only traffic are seen, and diagnostics-off preserves
+  behavior. Rebuild native and Wasm as needed; Python core fingerprint need not change.
+- [ ] Only then run bounded stock coexistence scenarios over candidate intervals.
+  A quiet run is bounded observation, never universal ownership or hardware proof.
