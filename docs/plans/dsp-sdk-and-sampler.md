@@ -2236,3 +2236,34 @@ and exponent/sign behavior, but not exact seed values or a rounding prescription
 search, proposed 128-index raw-result measurement and conditional effort estimate.
 A trusted full-register hardware readback path is the missing prerequisite; no
 hardware action, core edit or regeneration follows automatically from this result.
+
+### Next private native prototype: first processing stage
+
+Root implementation direction: prefer a bounded callsite wrapper experiment over
+reimplementing the complete stock route now. Payoff is a real native caller-context
+and lifecycle check that the numerical fixtures cannot supply. Confidence is
+moderate until native identity passes; this may take a day including packaging and
+validation. Stop expansion if caller context, state ownership or dispatch cannot
+be bounded; do not turn a failing prototype into a production ABI change.
+
+- [ ] Add an opt-in DN2 1.12 proof adapter for the first-order stage and its local
+  reset callsite. Keep the original left call and output authoritative.
+- [ ] Use linker-owned private L2 records/audio for sixteen slots (roughly 4 KiB),
+  avoiding any new DDR reservation. Copy input for an identity right-channel proof;
+  capture controls before left, preserve independent right histories and mirror
+  the actual reset helper. Do not install this in default runtime builds.
+- [ ] Expose bounded diagnostic counters/context through existing proof mechanisms;
+  require right/left identity, unchanged original state/output and preserved call
+  context. Compare the original left output with an unmodified baseline.
+- [ ] Verify fault-detection controls and the owner checks before considering more
+  stages. No public stereo SDK ABI, external ring allocation, full-route claim,
+  hardware access or performance claim is part of this first prototype.
+
+Known callback bindings now identify SPI ring-selector updates and SPORT task
+notification. No concrete processing-setter path was found from those callbacks.
+The generic LP0 driver's accepted range is not evidence of an actual normal
+processing-record writer: no stock submit producer was identified in the bounded
+layer, while the private LP0 proof submits only its own fixed L2 receive buffer.
+Mutable callback registration, computed dispatch and complete writer exclusion
+remain qualified. The experiment preserves existing interrupt policy rather than
+inventing a whole-route exclusion guarantee from these observations.

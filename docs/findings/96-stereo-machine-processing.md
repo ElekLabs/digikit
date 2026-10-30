@@ -529,3 +529,42 @@ is included. Reset calls require no reciprocal approximation; only the previousl
 qualified prepared-stage rendering enables the existing approximation. Independent
 source review found no issues. These tests establish finite helper behavior, not
 natural event coverage, all asynchronous writers or an installed reset hook.
+
+## Bounded callback and DMA follow-up
+
+**[D]** Recorded AudioTask paths reach the named setters/resets through
+`0x1c9e76 → 0x1c2712 → 0x1c8ef1`. Other direct callers sometimes pass different
+object-relative subrecords; their identity with the engine records is not proved.
+The case-1 argument preparation starts at `0x1c9253`; the actual call to
+`0xb82096` is `0x1c9268` (then `0xb82124 → 0xb81e1f`).
+
+The SEC handler table is populated through `0xb8ce24 → 0x1c066c`, with the handler
+stored at `0x2404b0[index]`. SPI2 registration supplies its driver handlers. Its
+user callback is `0x1ca04a`, installed by `0x1ca4b8 → 0x1cb7d2`; dispatches at
+`0x1cc265/0x1cc575` read that binding and zero context. This callback changes the
+input-ring selector `0x2c0450`. SPORT initialization binds `0x1ca136` through
+`0x1ca2b2/b5 → 0x1ccba3`; dispatch `0x1cd813` supplies event 0x100, leading to
+AudioTask notification. No concrete processing-setter path was found through
+these bound callbacks. Registration remains mutable; this is not global exclusion.
+
+Main SPI2 RX descriptors cover `[0x2c29d0,0x2c348c)` and
+`[0x2c39d0,0x2c448c)`, disjoint from the processing records. Auxiliary SPI setup
+has known roots but unresolved active length/activation. Generic LP0 submit
+`0x1caaa6` accepts caller descriptors: word 1 becomes DMA_ADDRSTART after alias
+normalization, and words 3/4 become count/stride. The normalizer accepts private
+L1 addresses, including the processing-record range. That is an accepted
+configuration possibility, not evidence of an armed overlapping transfer.
+
+A bounded direct-producer and original-byte pointer search identified no stock
+submission into that LP0 wrapper. Computed calls/constructed pointers remain open;
+an empty recorded caller set does not prove dead code. The concrete normal
+AudioTask input path instead selects SPI input via `0x1c9d96 → 0x1ca020`.
+The sole repository proof adapter's LP0 descriptor always uses its boot-derived
+L2 receive pointer, 4,100 bytes, stride 4, and no next descriptor; rearm rebuilds
+that same destination. Its later DDR copy is a CPU copy.
+
+LP0 STOP still loads a caller-supplied callback/context installed by `0x1cab60`;
+no concrete stock application binding was established. The missing evidence is
+an actual submitting/registering callsite and its descriptor owner, not another
+negative cross-reference search. These results support a bounded native prototype
+without asserting universal DMA/NMI exclusion or changing interrupt policy.
