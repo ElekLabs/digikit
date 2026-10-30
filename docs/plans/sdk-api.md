@@ -278,7 +278,17 @@ DSP word read before any write. Not the cycle budget (about 8k instructions agai
 - [ ] Open from B1 (assembler probes, not on the freqshift path): Selache encodes Type 3b `Ureg = DM(Ia, Mb)` with u = 0
       like `DM(Mb, Ia)`, and Type 3a `PM(I12, M12)` with g = 0 like `DM(I4, M4)`. Same bytes in the emulator and on
       silicon, so a wrong-result risk, not a halt. Check against the manual and the stock encodings.
-- [ ] Retry freqshift on Em's DT2 with these builds; fix what ABOUT names (`CPU PANIC` or `DSP STOP`, module and step).
+- [x] B3: the likely cause (finding 91): Selache keeps one loop-end slot, so in the nested 4x4 gain loop of
+      `core/fx` `fxsend-a.inc` the outer loop ends in a 16-bit instruction; the PRM (p. 4-42) wants the last 11
+      instructions of a hardware loop in 48-bit form. Fixed with `.NOCOMPRESS;` around the loop (both send objects,
+      DT2 and DN2); the two send objects were the only hits in the repository. **[D]**; the device retry passed.
+- [x] B3 build check: `loop_end_problems` in `build/sharc_legal.rs` refuses a VISA instruction in the last 11
+      instructions of a `DO` body (module build and `dspscan`); zero hits on the stock images (DT2 1.16/1.17, DN2
+      1.11/1.12).
+- [x] B3 load path: `core/dsp-link` writes the data cache back (write-back invalidation of DM and PM, PRM p. 8-11)
+      before the instruction cache invalidation, with 48-bit instructions after each cache MMR write (p. 8-9).
+- [ ] Selache issue (nested `DO`: the outer loop end is compressed): draft written, not filed.
+- [x] Retry freqshift on Em's DT2 (OS 1.17, 2026-10-30): it runs on the send route and on the master route, no stop.
 
 ### Later
 
@@ -313,7 +323,6 @@ modules builds first). 6a done (SHARC built in Rust with Selache as a
 library, natively and in wasm); 6b done (gcc in wasm, finding 74). 6c and 6d done (Transfer and Firmware in the site; flash over
 MidiRpc, tested on Em's DT2). Next: phase 7.
 
-2026-10-30: branch `debug/fault-trace` (from main ac77afc1): fault trace (finding 77) and its gate fixes pushed
-(2a720eb2), no PR yet; runtime panics committed (5625034f), not pushed. The freqshift freeze is not explained yet:
-B1 and B2 found nothing on the FX path (section "Freqshift freeze on the DT2"); next a retry on the device with
-this build, which now names a CPU panic or a DSP stop.
+2026-10-30: fault trace, runtime panics and the workbench device log merged (PR #216). Branch
+`fix/freqshift-dsp-stop`: the freqshift stop was a compressed hardware loop end in the send hook (finding 91,
+section "Freqshift freeze on the DT2"); with the fix freqshift runs on Em's DT2 on the send and master routes.

@@ -167,6 +167,7 @@ DSP budget gate pass.
   `SHL1C_CFG`, and a range invalidation (`CAINV` start and end, 64-byte lines, ends exclusive) must run from internal
   memory. The module uses the full invalidation; the range form is not used. Whether a read-modify-write of `SHL1C_CFG`
   with `ICAINV` set is the right sequence on a device (is the bit self-clearing?) is **[O]** until it runs there.
+- **Data cache write-back (finding 91).** After the last chunk the hook now also writes the data cache back (write-back invalidation of DM and PM) before the ICAINV step, and the 12 instructions after each cache MMR write are 48-bit. Still no effect in the emulator; **[O]** on a device.
 - **SPI timing.** The sender writes the tail whenever the driver is called. If the previous frame is still on the wire
   (the driver then skips its own frame) the chunk is lost or corrupted and the check or the go-back recovers it; the
   emulator's SPI never delays.
