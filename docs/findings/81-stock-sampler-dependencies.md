@@ -475,3 +475,39 @@ for the selected file could reject an unpublished load on mutation only if every
 mutation/reclaim/reset path is covered and counter wrap fails closed. No such
 mechanism, public API or product policy is implemented; neither file immutability
 nor DSP pool ownership follows from this audit.
+
+### Reserve and alternate reclaim bypass write/delete hooks
+
+**[D]** A further bounded DT2 1.17 audit checked 822 original section-3 encodings
+(SHA-256 `a1e7b657b705eba1a19d81c33c1e11ba9c409816447ad74005d7bbf36da6d964`).
+Hooks only at write `0x4015866a` and delete `0x40156e00` would miss both families
+below. This is CF source-consistency evidence, separate from DSP pool ownership.
+
+Reserve `0x40158810` keeps the handle in A2, locks mutex `0x46f4deb0` at
+`0x40158836`, pushes handle word 0 (file ID) at `0x40158846`, and unlocks at
+`0x40158854`. Its allocation chain is `0x40158448 → 0x401581dc → 0x40155974`;
+the first bitmap set is `0x401559fe`, persisted at `0x40155a66`. Extent-node
+writes are `0x40157c98/9a/9e`, with count at `0x40157ca8`. Immediate callers
+are `0x40153cde` and `0x40158bb8` (the latter uses object+8 as its handle).
+This bypasses the old write entry and performs no payload write itself.
+
+Alternate reclaim `0x4015711a` has file ID in D3 at `0x4015711e`, looks up the
+node and passes node plus ID at `0x40157130 → 0x4015614e`; it takes no lock
+itself. First mutation `0x40156160` decrements the node+2 count. On zero,
+`0x401580ae → 0x40155ae4` clears allocation bits, persists at `0x40155b36`
+and reaches block-range work `0x40155b58`. Tail `0x4015bb7e` clears the ID
+allocation bitmap at `0x4015bbc6`, persisted at `0x4015bc00`.
+
+Known parents hold the same filesystem mutex: `0x40157192` acquires at
+`0x401571c8`, reclaims at `0x4015724c/52` and releases at `0x4015725e`.
+This recursive parent first calls the old delete path for one ID, then reclaims
+both child and parent IDs, so invalidating only the delete argument would be
+insufficient. Rollback parent
+`0x4015746e` acquires at `0x401574a4`, reclaims newly allocated ID D2 at
+`0x40157586` and releases at `0x401575ac`, bypassing delete.
+
+**[O]** File identity is available before these first mutations; lower bitmap
+helpers no longer receive it. The two-family audit is complete within this scope,
+not complete mutation coverage. Create/ID reuse, reset/remount and other block
+writers remain open before any selected-file generation scheme could be complete.
+No hook implementation, public contract or production memory policy is selected.

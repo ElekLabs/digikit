@@ -286,3 +286,12 @@ The canonical packed-PCM16 parser already exists, but the current source/job
 contract is LE float32. Direct substitution would violate the consumer contract.
 Production wiring awaits explicit representation/destination byte extents and
 source consistency; no integration or public ABI is selected.
+
+The bounded DT2 reserve/alternate-reclaim audit now closes those two mutation
+families: write/delete-only hooks miss reservation and recursive/rollback reclaim,
+and delete's single argument does not cover every affected child/parent ID.
+File identity exists before the first mutation but is absent from lower bitmap
+helpers. Create/ID reuse, reset/remount and remaining writer coverage are the
+concrete residual work. This is CF source consistency, not DSP pool ownership;
+no hooks or selected-file generation implementation are chosen. See
+[finding 81](../findings/81-stock-sampler-dependencies.md).

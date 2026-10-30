@@ -61,7 +61,9 @@ inactive/empty transfer. The bounded static lifecycle audit links the published
 auxiliary handle to callback shutdown/control; creator invocation/N and complete
 error-path behavior remain unresolved. Next resolve external/computed creator
 entry or the capability for exact-entry R4 observation. External ring ownership, entry/dispatch
-precision and DT2 source mutation coverage remain open. See
+precision remain open. The DT2 reserve/alternate-reclaim audit confirms that
+write/delete-only hooks miss allocation and multi-ID reclaim; create/ID reuse,
+reset/remount and remaining writer coverage are still open, with no hooks selected. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
 
@@ -2640,10 +2642,13 @@ Next audit mutation-under-mutex seams that could invalidate a partial load on
 source change, independently of SHARC pool references. No hook, ABI, product cap
 or production memory policy is selected; DN2 generation/SHA remains a separate path.
 
-- [ ] Complete mutation/reclaim/reset/ID-reuse coverage around the now-identified
-  filesystem mutex seams before considering per-selected-file generation for
-  rejecting unpublished loads; require fail-closed counter wrap. Seams found are
-  not complete coverage, an implementation or a DSP pool ownership claim. See
+- [x] Audit reserve and alternate reclaim under the filesystem mutex: reserve
+  bypasses write, and recursive/rollback reclaim bypasses delete or affects more
+  IDs than its argument. File ID is available before first mutations, but not at
+  lower bitmap helpers. This is CF source consistency, not DSP pool ownership.
+- [ ] Complete create/ID-reuse, reset/remount and remaining writer coverage before
+  considering selected-file generation; require fail-closed counter wrap and
+  account for every affected ID. No hook implementation is selected. See
   [finding 81](../findings/81-stock-sampler-dependencies.md).
 
 ### Read-only reachable SHARC store inventory
