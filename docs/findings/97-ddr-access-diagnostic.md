@@ -145,3 +145,29 @@ These are short ready-state observations, not memory availability evidence.
 Commands/logs are in the `native-build` and `native-acceptance` subdirectories of
 `out/runs/ddr-monitor-rpc/`, with per-device records under `acceptance`.
 Wasm execution remains open; native acceptance does not establish the browser path.
+
+
+## Focused Wasm backend proof
+
+**[D]** A test-only pointer-width override exports actual `Lower::flat_access`
+kernels with a simulated wasm32 page-pointer layout. Production target selection
+is unchanged. The fixture checks fixed Page offsets/size and rejects engine-state,
+helper and 64-bit pointer-table load dependencies. The existing `wasmgen` tool
+emits six kernels: reads and writes of one, two and four bytes.
+
+`packages/emulator/sharc-fast-wasm/flat_access_check.mjs` executes them under
+Node 24/V8. All 49 cases pass, including normal, null and restored pointers,
+same-value stores, page bounds, presence/dirty bitmap boundaries and code-watch
+refusal. Each case compares the entire 1 MiB memory against expected edits,
+including an unrelated audio buffer. Null-pointer tests deliberately supply valid
+low-address bitmap storage so missing null guards cannot be masked by a later
+bitmap refusal. Four native flat-access tests also pass.
+
+Independent source/artifact review found no issues. Exact commands, source/IR/Wasm
+hashes, Node/V8 versions and results are under `out/runs/ddr-monitor-wasm/`.
+Direct lint/format/related checks and path/layer checks pass; the known pnpm
+bootstrap failure still prevents claiming the normal full preflight wrapper.
+
+This proves safe backend exits for real lowering with a simulated target layout.
+It is not a target-native Wasm core build, full browser-engine semantic fallback,
+monitor lifecycle/RPC integration or hardware proof. Those remain separate gaps.

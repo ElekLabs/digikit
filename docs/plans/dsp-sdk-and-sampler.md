@@ -2171,7 +2171,26 @@ stock execution completes without faults. Finding 97 records immutable binary
 identity and observation limits; no production memory ownership is established.
 
 - [x] Expose and validate the ordered diagnostic RPC on DT2 1.17 and DN2 1.12.
-- [ ] Exercise the Wasm fast-path refusal with a focused V8 proof.
+- [x] Exercise the Wasm fast-path refusal with a focused V8 proof.
 - [ ] Expand stock coexistence scenarios before selecting any production backing.
 - [ ] Review the composed source/filter/blend/gain/output-split proof under way
   in the secondary worktree; preserve the explicit synthetic-route boundary.
+
+
+### Composed route and Wasm diagnostic follow-up
+
+- [x] Independently review and integrate a selected source/filter/scratch-blend/
+  gain/output-split route, with four blocks and six positive/corruption cases.
+  It compares both private pairs against isolated mono references. Its candidate
+  left-A/right-B mapping is not a finalized pan policy or production ABI.
+- [ ] Check stock DT2 stereo pan behavior before adopting that mapping on DN2.
+- [ ] Complete original engine context, shared cleanup, full routing, reset and
+  send integration before promoting the replay into a runtime adapter.
+
+The focused Wasm diagnostic proof exports six kernels from real lowering with a
+simulated wasm32 pointer layout, then executes emitted Wasm under V8. Forty-nine
+cases and four native flat-access tests pass; independent review is clean.
+Full browser-engine fallback and RPC coverage remain separate from backend exits.
+
+The integrated ordered replay suite passes all 35 tests without skips. No core
+semantics, generated firmware material or production sample allocation changed.

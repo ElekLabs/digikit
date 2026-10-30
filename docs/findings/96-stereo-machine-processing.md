@@ -398,3 +398,32 @@ All 29 integrated cases pass without skips. Independent source review of both
 additions found no issues. All ten identified post-source families now have
 bounded numerical examples, plus the source continuation. Complete ordered routing,
 inline scratch blend, pan/send integration and production lifecycle remain open.
+
+
+## Selected ordered-route replay
+
+**[D]** `tests/fixtures/dsp/stereo-ordered-shadow-replay.s` composes the source
+continuation, first-order filter, case-5 filter into private scratch, original
+inline scratch blend, final gain and original output split. The blend runs from
+`0x1c9c12` through its delayed final store at `0x1c9c44`, stopping at `0x1c98b9`;
+the split runs from `0x1c9aea` and stops at `0x1c9b30`, before the outer-loop endpoint.
+The synthetic route chooses unity scalar/later ramps and disables other optional
+stages/fade. It does not establish that these routing flags occur together in
+stock operation; shared cleanup remains outside the replay.
+
+Four blocks compare all four intermediate buffers and both output planes from
+each channel with independent mono references. Controls are captured before left
+execution; first-order and case-5 histories remain private. Read/store bounds cover
+state, stack, table, scratch and audio accesses. Gain traverses phases 2,2,1,1.
+All values remain finite; no reciprocal approximation is enabled. Negative controls
+catch shared histories, advanced gain state, scratch overwritten before blending,
+and swapped or duplicated terminal planes. The scratch fault first verifies an
+otherwise-correct filter result, then detects the numerical blend mismatch.
+
+The proposed terminal pair takes plane A from the left input and plane B from the
+right input, without summing cross-contributions or extra normalization. Both
+private pairs are checked against mono references first. This is a candidate
+balance mapping, not a finalized pan policy or public ABI. Stock DT2 stereo pan
+behavior is being checked before adopting it. Send consumers, full engine entry
+context, natural reset/retrigger/steal, all slots and production routing remain
+outside this bounded proof. Independent source review found no issues.

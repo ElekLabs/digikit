@@ -1151,3 +1151,301 @@ def test_source_continuation_matches_isolated_mono(source_rig, control, depth):
             assert result == original
         assert all((v & 0x7F800000) != 0x7F800000 for v in result)
     assert words(stereo, LEFT, 32) != words(stereo, RIGHT, 32)
+
+
+ORDER_ENGINE, ORDER_GAIN, ORDER_PAN = 0x08040600, 0x08040800, 0x08040A00
+ORDER_INPUTS, ORDER_OUTPUTS = 0x08040C00, 0x08040E00
+ORDER_SCRATCH = 0x08041200
+ORDER_PLANES = (0x08041400, 0x08041500, 0x08041600, 0x08041700)
+ORDER_SHARED = (
+    (CONTROL, (0,)),
+    (FIRST, (21, 22, 23)),
+    (UY, tuple(11 + 7 * k + delta for k in range(6) for delta in (0, 2))),
+    (ORDER_ENGINE, (0, 2, 7, 9)),
+    (ORDER_GAIN, tuple(range(11))),
+    (ORDER_PAN, (0, 2, 112, 114)),
+)
+
+
+@pytest.fixture(scope="module")
+def ordered_rig(rig):
+    source = REPO_ROOT / "tests/fixtures/dsp/stereo-ordered-shadow-replay.s"
+    linked = pk_sharc.link(
+        pk_sharc.assemble(
+            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+        ),
+        0xB9A000,
+        {
+            "_source": 0xB8251B,
+            "_first": 0xB80C39,
+            "_case5": 0xB81526,
+            "_gain": 0xB80345,
+        },
+    )
+    return linked, rig[1]
+
+
+def ordered_call(session, side, phase, control=0):
+    offset = 0x100 if side == "right" else 0
+    audio, scratch = LEFT + offset, ORDER_SCRATCH + offset
+    engine, gain, pan = ORDER_ENGINE + offset, ORDER_GAIN + offset, ORDER_PAN + offset
+    stack = set(range(STACK - 64, STACK + 1))
+    shared = {base + i for base, indices in ORDER_SHARED for i in indices}
+    histories = {FIRST + i for i in (24, 25)} | {UY + i for i in (9, 10)}
+    regs = {**REGS, "I6": STACK * 4, "I7": STACK * 4, "M13": 0, "M15": 0xFFFFFFFF}
+    if phase == "prepare":
+        entry, stop = "_prepare_ordered", BACK
+        writes = {a + 0x100 for a in shared}
+        reads = shared
+    elif phase == "prefix":
+        entry, stop = f"_{side}_ordered", BACK
+        writes = {audio + i for i in range(32)} | {scratch + i for i in range(32)}
+        writes |= {a + offset for a in histories} | stack
+        reads = writes | {a + offset for a in shared if a < ORDER_ENGINE}
+    elif phase == "blend":
+        entry, stop = "_original_blend", 0x1C98B9
+        # Original continuation reloads the scratch pointer from engine+4e02.
+        regs.update(I1=(CONTROL + offset) * 4, I0=engine * 4, I5=audio * 4, R9=32)
+        writes = {audio + i for i in range(32)}
+        reads = writes | {scratch + i for i in range(32)}
+        reads |= {CONTROL + offset + 0x4E02} | {engine + i for i in (0, 2, 7, 9)}
+    elif phase == "gain":
+        entry, stop = f"_{side}_ordered_gain", BACK
+        regs.update(R0=control, R1=0)
+        writes = {audio + i for i in range(32)} | {gain + i for i in (7, 9, 10)} | stack
+        reads = writes | {gain + i for i in range(11)}
+    else:
+        assert phase == "pan"
+        entry, stop = "_original_pan", 0x1C9B30
+        regs.update(
+            I3=(ORDER_INPUTS + offset) * 4,
+            I5=(ORDER_OUTPUTS + offset) * 4,
+            I4=pan * 4,
+            R9=32,
+        )
+        planes = ORDER_PLANES[2:] if offset else ORDER_PLANES[:2]
+        writes = {base + i for base in planes for i in range(32)}
+        reads = {audio + i for i in range(32)} | {pan + i for i in (0, 2, 112, 114)}
+        reads |= {
+            ORDER_INPUTS + offset,
+            ORDER_OUTPUTS + offset,
+            ORDER_OUTPUTS + offset + 1,
+        }
+    session.runner.breakpoints = frozenset((BACK, stop))
+    result = session.call(entry, regs, max_steps=12000, read_regs=("MODE1",))
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert result["final_pc_sw"] == stop
+    assert result["regs"]["MODE1"] == 0
+    assert not session.runner.state.approx_recips_used
+    write_bytes = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        ): a
+        for a in writes
+    }
+    read_bytes = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        )
+        + j
+        for a in reads
+        for j in range(4)
+    }
+    if phase == "prefix":
+        tables = (0x26E7C8,)
+    elif phase == "gain":
+        tables = (0x26A570, 0x26A770, 0x26A970)
+    else:
+        tables = ()
+    for table in tables:
+        base = _canonical_dm_address(session.runner.state, table, 4)
+        read_bytes.update(range(base, base + 128 * 4))
+    stores = [e for e in session.stores if e.access == "write"]
+    assert all(e.width == 4 and e.address in write_bytes for e in stores), stores
+    loads = [e for e in session.stores if e.access == "read"]
+    assert all(
+        e.width == 1 and e.new_value is not None and e.address in read_bytes
+        for e in loads
+    ), loads
+    counts = Counter(write_bytes[e.address] for e in stores)
+    if phase == "prepare":
+        assert set(counts) == writes
+        assert set(counts.values()) == {1}
+    elif phase == "prefix":
+        assert [counts[audio + i] for i in range(32)] == [2] * 32
+        assert [counts[scratch + i] for i in range(32)] == [1] * 32
+    elif phase == "blend":
+        assert [counts[audio + i] for i in range(32)] == [1] * 32
+    elif phase == "pan":
+        assert set(counts) == writes
+        assert set(counts.values()) == {1}
+    return result
+
+
+def initialized_ordered_session(ordered_rig, channel=0):
+    session = fresh(ordered_rig, approximate=False)
+    session.runner.state.assume_nw32 = True
+    session.runner.attach_watchpoints(
+        [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
+    )
+    session.runner.set_watch_active(False)
+    session.symbols.update(_original_blend=0x1C9C12, _original_pan=0x1C9AEA)
+    for offset in (0, 0x100):
+        for base, count in (
+            (CONTROL, 1),
+            (FIRST, 28),
+            (UY, 53),
+            (ORDER_ENGINE, 10),
+            (ORDER_GAIN, 11),
+            (ORDER_PAN, 115),
+        ):
+            for i in range(count):
+                session.poke(base + offset + i, 0)
+        for i, value in enumerate((7, 1, 7, bits(0.5), 7, 1, 0, 5, 0, 0, 0)):
+            session.poke(ORDER_GAIN + offset + i, value)
+        side_channel = 1 if offset else channel
+        for base, indices, values in (
+            (FIRST, (24, 25), ((0.03, -0.01), (-0.02, 0.04))),
+            (UY, (9, 10), ((0.02, -0.03), (-0.04, 0.01))),
+        ):
+            for i, value in zip(indices, values[side_channel], strict=True):
+                session.poke(base + offset + i, bits(value))
+        session.poke(CONTROL + offset + 0x4E02, (ORDER_SCRATCH + offset) * 4)
+        session.poke(ORDER_INPUTS + offset, (LEFT + offset) * 4)
+        planes = ORDER_PLANES[2:] if offset else ORDER_PLANES[:2]
+        for i, plane in enumerate(planes):
+            session.poke(ORDER_OUTPUTS + offset + i, plane * 4)
+    return session
+
+
+def run_ordered_channel(session, side, control, overwrite_scratch=False):
+    offset = 0x100 if side == "right" else 0
+    snapshots = {}
+    ordered_call(session, side, "prefix")
+    snapshots["prefix"] = words(session, LEFT + offset, 32)
+    snapshots["scratch"] = words(session, ORDER_SCRATCH + offset, 32)
+    if overwrite_scratch:
+        # Deliberate lifetime fault after the case5 result but before its
+        # original continuation consumes it. Bounds remain valid.
+        for i in range(32):
+            session.poke(ORDER_SCRATCH + offset + i, 0)
+    ordered_call(session, side, "blend")
+    snapshots["blend"] = words(session, LEFT + offset, 32)
+    ordered_call(session, side, "gain", control)
+    snapshots["gain"] = words(session, LEFT + offset, 32)
+    ordered_call(session, side, "pan")
+    planes = ORDER_PLANES[2:] if offset else ORDER_PLANES[:2]
+    snapshots["planes"] = tuple(words(session, plane, 32) for plane in planes)
+    return snapshots
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        None,
+        "shared-history",
+        "advanced-gain",
+        "scratch-overwrite",
+        "swapped-terminal",
+        "duplicated-terminal",
+    ),
+)
+def test_ordered_route_matches_isolated_mono(ordered_rig, fault):
+    """Selected synthetic route: scalar/later ramps unity, other conditionals
+    and fade off. Shared cleanup is outside replay and is not proven here.
+    The terminal L.A/R.B pair is a candidate balance mapping, not an ABI,
+    stock-default reachability, or mixed/send consumer integration proof.
+    """
+    stereo = initialized_ordered_session(ordered_rig)
+    left = initialized_ordered_session(ordered_rig)
+    right = initialized_ordered_session(ordered_rig, channel=1)
+    differences = []
+    phases = []
+    for block in range(4):
+        for session in (stereo, left, right):
+            session.poke(CONTROL, bits(0.5))
+            for i, value in {21: 0.7 - block / 64, 22: 0.2, 23: 0.1}.items():
+                session.poke(FIRST + i, bits(value))
+            for k, value in enumerate((0.6, 0.1, 0.15, 0.2, 0.1, 0.08)):
+                session.poke(UY + 11 + 7 * k, bits(value * (1 + block / 32)))
+                session.poke(UY + 13 + 7 * k, bits(0.0001))
+            for i, value in {
+                0: 0.4 + block / 64,
+                2: 0.001,
+                7: 0.6 - block / 64,
+                9: -0.001,
+            }.items():
+                session.poke(ORDER_ENGINE + i, bits(value))
+            for i, value in {
+                0: 0.25 + block / 32,
+                2: 0.002,
+                112: 0.8 - block / 32,
+                114: -0.001,
+            }.items():
+                session.poke(ORDER_PAN + i, bits(value))
+        for i in range(32):
+            lv, rv = bits((i - 15) / 21 + block / 64), bits((11 - i) / 27 - block / 128)
+            stereo.poke(LEFT + i, lv)
+            stereo.poke(RIGHT + i, rv)
+            left.poke(LEFT + i, lv)
+            right.poke(LEFT + i, rv)
+        ordered_call(stereo, "left", "prepare")
+        actual_left = run_ordered_channel(stereo, "left", int(block == 0))
+        authoritative = [
+            (base + i, stereo.peek(base + i))
+            for base, indices in (*ORDER_SHARED, (FIRST, (24, 25)), (UY, (9, 10)))
+            for i in indices
+        ]
+        left_scratch = words(stereo, ORDER_SCRATCH, 32)
+        if fault == "shared-history":
+            for base, indices in ((FIRST, (24, 25)), (UY, (9, 10))):
+                for i in indices:
+                    stereo.poke(base + 0x100 + i, stereo.peek(base + i))
+        elif fault == "advanced-gain":
+            ordered_call(stereo, "left", "prepare")
+        actual_right = run_ordered_channel(
+            stereo,
+            "right",
+            int(block == 0),
+            overwrite_scratch=fault == "scratch-overwrite",
+        )
+        expected_left = run_ordered_channel(left, "left", int(block == 0))
+        expected_right = run_ordered_channel(right, "left", int(block == 0))
+        assert actual_left == expected_left
+        assert [(a, stereo.peek(a)) for a, _ in authoritative] == authoritative
+        assert words(stereo, ORDER_SCRATCH, 32) == left_scratch
+        if fault == "scratch-overwrite":
+            assert actual_right["prefix"] == expected_right["prefix"]
+            assert actual_right["scratch"] == expected_right["scratch"]
+            assert actual_right["blend"] != expected_right["blend"]
+        if fault not in ("shared-history", "advanced-gain", "scratch-overwrite"):
+            assert actual_right == expected_right
+            assert words(stereo, ORDER_GAIN + 0x100, 11) == words(
+                stereo, ORDER_GAIN, 11
+            )
+        terminal = (actual_left["planes"][0], actual_right["planes"][1])
+        if fault == "swapped-terminal":
+            terminal = (actual_left["planes"][1], actual_right["planes"][0])
+        elif fault == "duplicated-terminal":
+            terminal = (actual_left["planes"][0], actual_left["planes"][0])
+        expected = (expected_left["planes"][0], expected_right["planes"][1])
+        differences.append(terminal != expected)
+        if fault is None:
+            assert terminal == expected
+        assert actual_left["planes"][0] != actual_right["planes"][1]
+        for snapshots in (actual_left, actual_right):
+            assert snapshots["prefix"] != snapshots["scratch"]
+            assert snapshots["blend"] != snapshots["prefix"]
+            assert snapshots["gain"] != snapshots["blend"]
+            for plane in (
+                *snapshots["planes"],
+                snapshots["prefix"],
+                snapshots["scratch"],
+                snapshots["blend"],
+                snapshots["gain"],
+            ):
+                assert all((v & 0x7F800000) != 0x7F800000 for v in plane)
+        phases.append(left.peek(ORDER_GAIN + 7))
+    assert phases == [2, 2, 1, 1]
+    if fault is not None:
+        assert any(differences)
