@@ -189,3 +189,33 @@ fn hw_iack_spurious_when_nothing_pending_at_that_level() {
         "RM SS17.2.10: spurious vector is 0x18"
     );
 }
+
+#[test]
+fn hw_candidate_orders_levels_then_banks_then_sources_including_zero() {
+    let mut intc = IntcBank::new();
+    for base in BASES {
+        intc.write(base + 0x08, 4, 0);
+        intc.write(base + 0x0c, 4, 0);
+        for source in [0, 13, 63] {
+            intc.write(base + 0x40 + source, 1, 3);
+        }
+    }
+    let asserted = [(1, 0), (0, 1 << 31), (0, 1 << 31)];
+    assert_eq!(intc.hw_candidate(asserted), Some((64, 3)));
+    intc.write(BASES[2] + 0x7f, 1, 4);
+    assert_eq!(intc.hw_candidate(asserted), Some((255, 4)));
+    intc.write(BASES[2] + 0x7f, 1, 3);
+    intc.write(BASES[0] + 0x0c, 4, 1); // bank 0 masked
+    assert_eq!(intc.hw_candidate(asserted), Some((191, 3)));
+    intc.write(BASES[1] + 0x7f, 1, 0); // bank 1 disabled
+    assert_eq!(intc.hw_candidate(asserted), Some((255, 3)));
+    intc.write(BASES[0] + 0x4d, 1, 4);
+    intc.write(BASES[0] + 0x14, 4, 1 << 13); // force outranks external level 3
+    assert_eq!(intc.hw_candidate(asserted), Some((77, 4)));
+    intc.write(BASES[0] + 0x7f, 1, 4);
+    intc.write(BASES[0] + 0x10, 4, 1 << 31);
+    assert_eq!(intc.hw_candidate(asserted), Some((127, 4)));
+    intc.write(BASES[0] + 0x10, 4, 0);
+    intc.write(BASES[0] + 0x14, 4, 0);
+    assert_eq!(intc.hw_candidate([(0, 0); 3]), None);
+}

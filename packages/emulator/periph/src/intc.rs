@@ -224,6 +224,37 @@ impl IntcBank {
         (iprl, iprh)
     }
 
+    /// Select from externally asserted (low, high) masks and INTFRC for all
+    /// three controllers, ignoring CPU IPL. Read-only: entry does not clear a
+    /// request. MCF54418RM local p0352 specifies higher source first within a
+    /// level; p0353 describes force recognition and vector mapping; p0354
+    /// specifies INTC0 > INTC1 > INTC2 at equal level. This is candidate
+    /// selection only, not IACK, controller level masking or level-7 timing.
+    pub fn hw_candidate(&self, asserted: [(u32, u32); 3]) -> Option<(u16, u8)> {
+        let mut best: Option<(u16, u8)> = None;
+        // Visit equal-level candidates in priority order and retain the first.
+        for (i, (low, high)) in asserted.into_iter().enumerate() {
+            let (low, high) = self.hw_computed_ipr(i, low, high);
+            for source in (0u32..64).rev() {
+                let pending = if source < 32 {
+                    low >> source
+                } else {
+                    high >> (source - 32)
+                } & 1;
+                if pending == 0 {
+                    continue;
+                }
+                let vector = VECTOR_BASE[i] + source as u16;
+                if let Some(level) = self.level_for_vector(vector)
+                    && best.is_none_or(|(_, best_level)| level > best_level)
+                {
+                    best = Some((vector, level));
+                }
+            }
+        }
+        best
+    }
+
     /// The software-forced source (INTFRCH/INTFRCL) that would be offered
     /// next, ignoring the CPU IPL: the highest (level, vector) among forced,
     /// unmasked sources with a nonzero ICR level. `skip_vector` is a source

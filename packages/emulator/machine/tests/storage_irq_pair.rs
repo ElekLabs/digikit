@@ -236,7 +236,8 @@ fn reject_unchanged(m: &mut Machine, error: StorageStepError) {
     let events = m.board.completion_events().to_vec();
     let inth = pending(m);
     let status = m.board.read32(esdhc::BASE + esdhc::IRQSTAT).unwrap();
-    assert_eq!(m.step_storage(), Err(error));
+    assert_eq!(m.step_storage(), Err(error.clone()));
+    assert_eq!(m.step_storage_with_forced(), Err(error));
     assert_eq!(
         regs,
         (
@@ -305,7 +306,7 @@ fn oracle_interrupt_register_writes_keep_passthrough_behavior() {
 
 #[test]
 fn queued_dma_invalidates_decoded_code_before_handler_or_normal_instruction() {
-    for deliver in [false, true] {
+    for (deliver, forced) in [(false, false), (true, false), (false, true), (true, true)] {
         let mut m = device();
         let mut payload = [0u8; 512];
         payload[..2].copy_from_slice(&0x7002u16.to_be_bytes()); // MOVEQ #2,D0
@@ -326,7 +327,11 @@ fn queued_dma_invalidates_decoded_code_before_handler_or_normal_instruction() {
         } else {
             m.board.write8(INTC + 0x1c, 0).unwrap();
         }
-        m.step_storage().unwrap();
+        if forced {
+            m.step_storage_with_forced().unwrap();
+        } else {
+            m.step_storage().unwrap();
+        }
         assert_eq!(m.cpu.d[0], 2);
         assert_eq!(m.irqs_delivered, u64::from(deliver));
     }
@@ -364,4 +369,170 @@ fn guest_dma_completion_does_not_feed_legacy_latch_and_esdhc_rejects_live_dma() 
         m.step_esdhc(),
         Err(machine::runner::EsdhcStepError::LegacyDmaIrqPending)
     );
+}
+
+fn forced_source(m: &mut Machine, bank: usize, source: u32, level: u8) -> u32 {
+    let base = intc::BASES[bank];
+    let mask = base + if source < 32 { 0x0c } else { 0x08 };
+    let old = m.board.read32(mask).unwrap();
+    m.board.write32(mask, old & !(1 << (source % 32))).unwrap();
+    m.board.write8(base + 0x40 + source, level).unwrap();
+    let vector = u32::from(intc::VECTOR_BASE[bank]) + source;
+    m.board.write32(RAM + vector * 4, DMA_HANDLER).unwrap();
+    base + if source < 32 { 0x14 } else { 0x10 }
+}
+
+#[test]
+fn storage_isr_guest_requests_force_then_guest_clear_deasserts() {
+    let mut m = device();
+    let force = forced_source(&mut m, 2, 13, 2);
+    m.board.time_mut().unwrap().set_force_irq(false); // Oracle knob is irrelevant
+    // Synthetic storage ISR: acknowledge CC, request source 13, then RTE.
+    m.cpu.d[0] = 1;
+    m.cpu.d[1] = 1 << 13;
+    for (off, opcode, addr) in [
+        (0, 0x23c0, esdhc::BASE + esdhc::IRQSTAT),
+        (6, 0x23c1, force),
+    ] {
+        m.board.write16(SD_HANDLER + off, opcode).unwrap(); // MOVE.L Dn,(abs).L
+        m.board.write32(SD_HANDLER + off + 2, addr).unwrap();
+    }
+    m.board.write16(SD_HANDLER + 12, 0x4e73).unwrap();
+    // Synthetic forced ISR clears the actual force register, then RTE.
+    m.board.write16(DMA_HANDLER, 0x23c2).unwrap(); // D2 is zero
+    m.board.write32(DMA_HANDLER + 2, force).unwrap();
+    m.board.write16(DMA_HANDLER + 6, 0x4e73).unwrap();
+    m.board
+        .write32(esdhc::BASE + esdhc::XFERTYP, 13 << 24)
+        .unwrap();
+    m.step_storage_with_forced().unwrap();
+    assert_eq!(m.cpu.pc, SD_HANDLER + 6);
+    m.step_storage_with_forced().unwrap(); // guest sets INTFRC
+    assert_eq!(m.board.read32(force).unwrap(), 1 << 13);
+    m.step_storage_with_forced().unwrap(); // RTE; force is below current IPL
+    assert_eq!(m.cpu.pc, CODE);
+    assert_eq!(m.irqs_delivered, 1);
+    m.step_storage_with_forced().unwrap(); // vector 205 entry and guest clear
+    assert_eq!(m.cpu.pc, DMA_HANDLER + 6);
+    assert_eq!(m.cpu.sr & 0x0700, 0x0200);
+    assert_eq!(m.board.read32(force).unwrap(), 0);
+    m.step_storage_with_forced().unwrap(); // RTE
+    m.step_storage_with_forced().unwrap(); // no recurrence
+    assert_eq!(m.cpu.pc, CODE + 2);
+    assert_eq!(m.irqs_delivered, 2);
+}
+
+#[test]
+fn explicit_force_includes_source_zero_and_ssi_and_respects_mask_icr_live_ipl() {
+    for (bank, source) in [(0, 0), (1, 63), (2, 63)] {
+        let mut m = device();
+        let force = forced_source(&mut m, bank, source, 4);
+        m.board.write32(force, 1 << (source % 32)).unwrap();
+        m.step_storage().unwrap(); // pair-only API ignores forces
+        assert_eq!(m.irqs_delivered, 0);
+        let mask = intc::BASES[bank] + if source < 32 { 0x0c } else { 0x08 };
+        m.board.write32(mask, u32::MAX).unwrap();
+        m.step_storage_with_forced().unwrap();
+        assert_eq!(m.irqs_delivered, 0);
+        m.board.write32(mask, !(1 << (source % 32))).unwrap();
+        m.board
+            .write8(intc::BASES[bank] + 0x40 + source, 0)
+            .unwrap();
+        m.step_storage_with_forced().unwrap();
+        assert_eq!(m.irqs_delivered, 0);
+        m.board
+            .write8(intc::BASES[bank] + 0x40 + source, 4)
+            .unwrap();
+        m.cpu.sr = 0x2400;
+        m.step_storage_with_forced().unwrap();
+        assert_eq!(m.irqs_delivered, 0);
+        m.cpu.sr = 0x2000;
+        m.step_storage_with_forced().unwrap();
+        assert_eq!(m.cpu.pc, DMA_HANDLER + 2);
+        assert_eq!(m.irqs_delivered, 1);
+        assert_eq!(m.board.read32(force).unwrap(), 1 << (source % 32));
+    }
+}
+
+#[test]
+fn forced_physical_source_is_one_persistent_request() {
+    let mut m = device();
+    read_dma(&mut m, true);
+    m.board.write32(INTC + 0x14, 1 << 31).unwrap();
+    m.step_storage_with_forced().unwrap();
+    assert_eq!(m.cpu.pc, SD_HANDLER + 2);
+    assert_eq!(m.irqs_delivered, 1);
+    m.board.write32(esdhc::BASE + esdhc::IRQSTAT, 3).unwrap();
+    m.board.write8(edma::CINT, 59).unwrap();
+    m.step_storage_with_forced().unwrap(); // RTE
+    m.step_storage_with_forced().unwrap(); // only remaining assertion is force
+    assert_eq!(m.cpu.pc, SD_HANDLER + 2);
+    assert_eq!(m.irqs_delivered, 2);
+    m.board.write32(INTC + 0x14, 0).unwrap();
+    m.step_storage_with_forced().unwrap();
+    m.step_storage_with_forced().unwrap();
+    assert_eq!(m.irqs_delivered, 2);
+}
+
+#[test]
+fn forced_route_rejects_unmodeled_controller_modes_before_mutation() {
+    for (addr, size, value, error) in [
+        (
+            intc::BASES[0] + 0x1a,
+            2,
+            1 << 5,
+            StorageStepError::UnsupportedControllerLevelMasking,
+        ),
+        (
+            intc::BASES[0] + 0x1e,
+            1,
+            3,
+            StorageStepError::UnsupportedControllerLevelMasking,
+        ),
+        (INTC + 0x5f, 1, 7, StorageStepError::UnsupportedLevel7),
+    ] {
+        let mut m = device();
+        read_dma(&mut m, true);
+        m.board.write_guest(addr, size, value).unwrap();
+        let regs = (
+            m.cpu.pc,
+            m.cpu.sr,
+            m.cpu.a,
+            m.cpu.d,
+            m.clock,
+            m.irqs_delivered,
+        );
+        let events = m.board.completion_events().to_vec();
+        assert_eq!(m.step_storage_with_forced(), Err(error));
+        assert_eq!(
+            regs,
+            (
+                m.cpu.pc,
+                m.cpu.sr,
+                m.cpu.a,
+                m.cpu.d,
+                m.clock,
+                m.irqs_delivered
+            )
+        );
+        assert_eq!(m.board.completion_events(), events);
+        assert_eq!(pending(&mut m), DMA59);
+        assert!(!m.board.take_dma_written_ranges().is_empty());
+        m.step_storage().unwrap(); // the existing pair-only contract is unchanged
+        assert_eq!(m.irqs_delivered, 1);
+    }
+}
+
+#[test]
+fn forced_entry_failure_is_poisoned() {
+    let mut m = device();
+    let force = forced_source(&mut m, 0, 0, 3);
+    m.board.write32(force, 1).unwrap();
+    m.cpu.a[7] = 0;
+    assert!(matches!(
+        m.step_storage_with_forced(),
+        Err(StorageStepError::InterruptDeliveryPoisoned { .. })
+    ));
+    assert_eq!(m.irqs_delivered, 0);
+    assert_eq!(m.clock, 0);
 }

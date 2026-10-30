@@ -477,7 +477,8 @@ invocations: **144 total across all three tests, not per image**.
 
 Actual DMA CINT and eSDHC W1C acknowledge both lines. Vector-entry/RTE order,
 context/status, semaphore coalescing, the circular three-node bidirectional ready
-queue and scheduling-request bit 13 are checked; the scheduler is never executed.
+queue and scheduling-request bit 13 are checked; this pair fixture never executes
+the scheduler.
 Stock/patched selected observables match, with sticky raw errors retained by the
 observer. Error bits are injected only after the copy completes: this is not
 partial/corrupt DMA recovery. DN2 hooks are in-memory test-only; the packaged
@@ -493,16 +494,43 @@ the log alone cannot establish that opt-in inputs were configured. Exact hashes
 and the command with both environment variables are in the
 [adapter README](../../modules/core/adapters/storage-fault-proof/README.md).
 
-Stage A remains incomplete on full RSTA. Physical DMA quiescence, global
-cross-bank/all-source priority, task resumption/full scheduler and native
-cold-boot fault history remain open; full native fault-history acceptance is
-**failed/open**. **Stage C is unstarted.** A next bounded integration would require
-scheduler/all-source priority and runtime-policy snapshot audits before daemon
-work; this states a requirement, not approval to start. No public ABI, pool,
-SHARC, recovery or hardware-flashing work follows. Runtime integration confidence
-remains low; earlier calendar estimates remain withdrawn.
+Stage A remains incomplete on full RSTA. The later explicit software-force and
+initialized-task continuation checkpoint below extends the pair proof. Physical
+DMA quiescence, full scheduler/timer integration and native cold-boot fault
+history remain open; full native fault-history acceptance is **failed/open**.
+**Stage C is unstarted.** No public ABI, pool, SHARC, recovery, daemon integration
+or hardware-flashing work follows. Runtime integration confidence remains low;
+earlier calendar estimates remain withdrawn.
 
 The coordinator's scoped ten-file `mise run test:changed` passed pathcheck and
 layer checks. The full merge gate remains deferred and has not run. Documentation
-pathcheck and diff checks cover this prose/provenance update; no new build or
-emulator run was performed for it.
+pathcheck and diff checks covered that earlier prose/provenance update.
+
+
+## Latest bounded storage/scheduler checkpoint (2026-10-31)
+
+`step_storage_with_forced` explicitly combines the actual storage lines with all
+software force sources across three banks (higher level, lower bank, higher
+source), with IMR/ICR and live IPL. It rejects unsupported controller level masks
+and level 7 before mutation. Pair-only/Oracle/default routes are preserved.
+The 28 component tests pass; the added bank2-higher-level assertion passes in
+its named-test rerun.
+
+All four named actual-firmware tests pass with both exact firmware opt-ins. The
+new scheduler test contributes 8 controlled stock/patched DT2/DN2 CC/CC+CTOE runs:
+actual storage ISR -> bit-13 request -> actual scheduler -> initialized waiter
+context -> ordinary guest marker instruction. Assertions include old-task save,
+exact selected SP/SR/PC/register restore, singleton queue/semaphore state, force
+clear and W1C; selected stock/patched results match and patched CTOE remains sticky.
+Independent static review found no issues. Exact command, input/fixture hashes
+and log: `out/runs/storage-fault-proof/scheduler-continuation-invocation.json` and
+`scheduler-continuation-tests.log`.
+
+This proves one initialized task continuation, not full scheduler/timer behavior
+or native boot. The snapshot audit found Board/Time backing lacks policy and
+construction binding; native boot hardcodes Oracle and checks firmware identity.
+Runtime execution-policy compatibility remains unaudited, with no claim of an
+exploited mismatch. Policy binding, full reset, physical-source integration and
+native fault history remain open; no snapshot-format or daemon change is approved.
+The coordinator's scoped `test:changed` passed pathcheck/layers before final prose;
+final documentation pathcheck is coordinator-owned and the full gate is deferred.

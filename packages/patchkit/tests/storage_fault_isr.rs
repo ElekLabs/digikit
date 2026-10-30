@@ -1,9 +1,11 @@
 //! Opt-in stock ISR proofs: the original DT2 replay uses a controlled W1C
 //! double; the DT2/DN2 delivery fixture uses real Board eSDHC/INTC registers and
 //! the actual signal helper with one waiter. Queue insertion and the scheduling
-//! request are observed, not task resumption or native-boot completion. The
-//! pair fixture additionally proves a controlled guest-triggered DMA59 copy
-//! before both actual ISRs; injected error bits do not model corrupt DMA.
+//! request are observed in the earlier delivery proofs. The pair fixture proves
+//! a controlled guest-triggered DMA59 copy before both actual ISRs; injected
+//! error bits do not model corrupt DMA. A separate scheduler fixture follows
+//! the real forced request into one initialized task and its guest marker.
+//! None of these fixtures establishes native-boot completion or full scheduling.
 use coldfire::{Bus, BusError, Cpu, InterruptPolicy};
 use patchkit::build::{cf, toolchain::Env};
 use patchkit::error::sha256_hex;
@@ -1021,6 +1023,322 @@ fn actual_storage_pair_orders_both_isrs_and_readies_three_waiters() {
                 patched, stock,
                 "{} DMA level={dma_level} extra IRQ={extra_irq:#x}: observer preserves selected stock results",
                 target.name
+            );
+        }
+    }
+}
+
+// Controlled continuation into one explicitly initialized task, not a restored
+// native boot, a complete scheduler/timer model or a sample-file load.
+const SCHEDULER: u32 = 0x4000_0410;
+const SCHEDULER_RTE: u32 = 0x4000_0458;
+const SCHEDULER_VECTOR: u32 = 205;
+const OLD_TASK: u32 = 0x4100_0300;
+const TASK_SP: u32 = 0x4100_8000;
+const TASK_PC: u32 = 0xa000;
+const TASK_MARKER: u32 = 0xb000;
+const TASK_SR: u16 = 0x2015;
+
+#[derive(Debug, PartialEq, Eq)]
+struct SchedulerResult {
+    d: [u32; 8],
+    a: [u32; 8],
+    sr: u16,
+    pc: u32,
+    saved: Vec<u32>,
+    marker: u32,
+    status: [u32; 2],
+    sem: [u32; 4],
+    queue: [u32; 5],
+    forced: u32,
+    irqstat: u32,
+    entries: Vec<u32>,
+    rtes: Vec<u32>,
+    signal_entries: [usize; 2],
+}
+
+fn scheduler_replay(
+    fw: &Firmware,
+    linked: &Linked,
+    target: &DeliveryTarget,
+    patched: bool,
+    extra_irq: u32,
+) -> SchedulerResult {
+    let mut m = delivery_machine(fw, linked, target, patched, 1);
+    let current_task = if target.sha == STOCK_SHA {
+        0x47db_3f64
+    } else {
+        0x4664_bcdc
+    };
+    m.board.map_ram_page(current_task & !0x000f_ffff).unwrap();
+    m.board.write32(current_task, OLD_TASK).unwrap();
+    m.board
+        .write32(VBR + SCHEDULER_VECTOR * 4, SCHEDULER)
+        .unwrap();
+    m.board.write8(INTC2 + 0x4d, 1).unwrap();
+    m.board
+        .write32(INTC2 + 0x0c, !((1 << 31) | (1 << 13)))
+        .unwrap();
+    // These are the actual stock handler opcodes checked in both current
+    // images, not a substitute scheduler implemented by the fixture.
+    assert_eq!(m.board.read32(SCHEDULER).unwrap(), 0x46fc_2700);
+    assert_eq!(m.board.read16(SCHEDULER_RTE).unwrap(), 0x4e73);
+    let task_d = std::array::from_fn::<_, 8, _>(|i| 0x5160_1000 + i as u32 * 0x101);
+    let mut task_a = std::array::from_fn::<_, 8, _>(|i| 0x6270_2000 + i as u32 * 0x101);
+    task_a[7] = TASK_SP;
+    // MCF5441x format-4 frame: format/vector/SR, then saved PC. The selected
+    // task's MOVEM slot contains the frame SP, whereas its post-RTE SP is +8.
+    let frame_sp = TASK_SP - 8;
+    m.board
+        .write32(
+            frame_sp,
+            0x4000_0000 | (SCHEDULER_VECTOR << 18) | u32::from(TASK_SR),
+        )
+        .unwrap();
+    m.board.write32(frame_sp + 4, TASK_PC).unwrap();
+    for (i, value) in task_d.into_iter().chain(task_a).enumerate() {
+        m.board
+            .write32(
+                WAITER + 0x0c + i as u32 * 4,
+                if i == 15 { frame_sp } else { value },
+            )
+            .unwrap();
+    }
+    m.board.write16(TASK_PC, 0x23c3).unwrap(); // MOVE.L D3,(TASK_MARKER).L
+    m.board.write32(TASK_PC + 2, TASK_MARKER).unwrap();
+    m.board.write16(TASK_PC + 6, 0x4e71).unwrap();
+    m.board.write32(TASK_MARKER, 0).unwrap();
+    m.cpu.sr = 0x2015; // IPL 0 permits level-1 scheduling after level-3 storage
+    assert!(
+        m.step_storage_with_forced()
+            .unwrap()
+            .iter()
+            .all(|event| !matches!(event, machine::CompletionEvent::Dma59 { .. }))
+    ); // guest CMD13
+    assert_eq!(m.cpu.pc, RETURN + 6);
+    assert_eq!(m.irqs_delivered, 0);
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), 1);
+    assert_eq!(
+        m.board.read32(target.sem[1]).unwrap(),
+        0,
+        "no host semaphore post"
+    );
+    assert_eq!(m.board.read32(target.sem[1] + 4).unwrap(), WAITER);
+    assert_eq!(m.board.read32(READY_HEAD).unwrap(), 0);
+    assert_eq!(m.board.read32(target.high_ready).unwrap(), 0);
+    assert_eq!(m.board.read32(TASK_MARKER).unwrap(), 0);
+    if extra_irq != 0 {
+        m.board.esdhc.device_event(extra_irq).unwrap();
+    }
+    m.cpu.resolve_nzv();
+    let before = (m.cpu.d, m.cpu.a, m.cpu.sr, m.cpu.other_a7);
+    let mut entries = Vec::new();
+    let mut rtes = Vec::new();
+    let mut signal_entries = [0; 2];
+    let mut resumed = false;
+    m.board.set_guest_access_capture(true);
+    for _ in 0..PAIR_CEILING {
+        let pc = m.cpu.pc;
+        assert_eq!(
+            m.board.read32(TASK_MARKER).unwrap(),
+            0,
+            "task has not executed before scheduler RTE"
+        );
+        if pc == target.rte {
+            rtes.push(DELIVERY_VECTOR);
+        }
+        if pc == SCHEDULER_RTE {
+            rtes.push(SCHEDULER_VECTOR);
+            assert_eq!(
+                m.cpu.d, task_d,
+                "actual MOVEM restores selected D registers"
+            );
+            let mut frame_a = task_a;
+            frame_a[7] = frame_sp;
+            assert_eq!(
+                m.cpu.a, frame_a,
+                "actual MOVEM restores selected A registers and frame SP"
+            );
+        }
+        if pc == 0x4000_155c {
+            signal_entries[0] += 1;
+        }
+        if pc == 0x4000_11ee {
+            signal_entries[1] += 1;
+        }
+        m.step_storage_with_forced().unwrap_or_else(|error| {
+            panic!(
+                "{} patched={patched} scheduler IRQ={:#x} at {pc:#x}: {error:?}",
+                target.name,
+                extra_irq | 1
+            )
+        });
+        assert_eq!(
+            m.cpu.last_exception, None,
+            "unexpected instruction exception at {pc:#x}"
+        );
+        for read in m.board.take_guest_reads() {
+            for vector in [DELIVERY_VECTOR, SCHEDULER_VECTOR] {
+                if read.address == VBR + vector * 4 {
+                    assert_eq!(read.size, 4);
+                    entries.push(vector);
+                }
+            }
+        }
+        m.board.take_guest_writes();
+        if pc == target.rte {
+            m.cpu.resolve_nzv();
+            assert_eq!(
+                (m.cpu.d, m.cpu.a, m.cpu.sr, m.cpu.other_a7),
+                before,
+                "storage ISR preserves source task context"
+            );
+            assert_eq!(m.cpu.pc, RETURN + 6);
+            assert_eq!(
+                m.board.read32(INTC2 + 0x14).unwrap() & (1 << 13),
+                1 << 13,
+                "actual signal helper requests scheduler"
+            );
+        }
+        if pc == SCHEDULER_RTE {
+            m.cpu.resolve_nzv();
+            assert_eq!(m.cpu.d, task_d);
+            assert_eq!(m.cpu.a, task_a);
+            assert_eq!(m.cpu.sr, TASK_SR);
+            assert_eq!(m.cpu.pc, TASK_PC);
+            assert_eq!(m.cpu.other_a7, before.3);
+            assert_eq!(
+                m.board.read32(TASK_MARKER).unwrap(),
+                0,
+                "RTE precedes sentinel execution"
+            );
+            resumed = true;
+            break;
+        }
+    }
+    assert!(
+        resumed,
+        "{} scheduler exceeded {PAIR_CEILING} instructions at {:#x}",
+        target.name, m.cpu.pc
+    );
+    assert_eq!(entries, [DELIVERY_VECTOR, SCHEDULER_VECTOR]);
+    assert_eq!(rtes, [DELIVERY_VECTOR, SCHEDULER_VECTOR]);
+    assert_eq!(m.irqs_delivered, 2);
+    assert_eq!(signal_entries, [(extra_irq | 1).count_ones() as usize; 2]);
+    let saved: Vec<u32> = (0..16)
+        .map(|i| m.board.read32(OLD_TASK + 0x0c + i * 4).unwrap())
+        .collect();
+    let mut expected_a = before.1;
+    expected_a[7] -= 8; // saved source context points at its scheduler IRQ frame
+    assert_eq!(
+        saved,
+        before.0.into_iter().chain(expected_a).collect::<Vec<_>>(),
+        "actual MOVEM saves old task, including original A0 and frame SP"
+    );
+    assert_eq!(
+        m.board.read32(before.1[7] - 8).unwrap(),
+        0x4000_0000 | (SCHEDULER_VECTOR << 18) | u32::from(before.2)
+    );
+    assert_eq!(m.board.read32(before.1[7] - 4).unwrap(), RETURN + 6);
+    assert_eq!(
+        target.status.map(|at| m.board.read32(at).unwrap()),
+        [0, 0],
+        "CC clears command status after any CTOE"
+    );
+    assert_eq!(m.board.read32(current_task).unwrap(), WAITER);
+    assert_eq!(m.board.read32(READY_HEAD).unwrap(), WAITER);
+    assert_eq!(m.board.read32(WAITER).unwrap(), WAITER);
+    assert_eq!(m.board.read32(WAITER + 4).unwrap(), WAITER);
+    assert_eq!(m.board.read32(WAITER + 8).unwrap(), READY_HEAD);
+    assert_eq!(m.board.read32(target.high_ready).unwrap(), READY_HEAD);
+    assert_eq!(m.board.read32(target.sem[1] + 4).unwrap(), 0);
+    assert_eq!(
+        m.board.read32(target.sem[1]).unwrap(),
+        u32::from(extra_irq != 0)
+    );
+    assert_eq!(m.board.read32(target.sem[0]).unwrap(), 0);
+    assert_eq!(m.board.read32(target.sem[0] + 4).unwrap(), 0);
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), 0);
+    assert!(!m.board.esdhc.interrupt_pending());
+    assert_eq!(
+        m.board.read32(INTC2 + 0x14).unwrap(),
+        0,
+        "actual scheduler AND clears bit 13"
+    );
+    assert_eq!(
+        m.board
+            .read32(linked.symbols["storage_fault_bits"] as u32)
+            .unwrap(),
+        if patched { extra_irq & MASK } else { 0 }
+    );
+    m.board.set_guest_access_capture(false);
+    m.step_storage_with_forced().unwrap(); // ordinary resumed-task instruction
+    assert_eq!(m.cpu.last_exception, None);
+    assert_eq!(m.cpu.pc, TASK_PC + 6);
+    assert_eq!(m.board.read32(TASK_MARKER).unwrap(), task_d[3]);
+    assert_eq!(m.irqs_delivered, 2);
+    m.cpu.resolve_nzv();
+    assert_eq!(m.cpu.d, task_d);
+    assert_eq!(m.cpu.a, task_a);
+    assert_eq!(m.cpu.sr, 0x2010); // MOVE of positive nonzero long preserves X
+    SchedulerResult {
+        d: m.cpu.d,
+        a: m.cpu.a,
+        sr: m.cpu.sr,
+        pc: m.cpu.pc,
+        saved,
+        marker: m.board.read32(TASK_MARKER).unwrap(),
+        status: target.status.map(|at| m.board.read32(at).unwrap()),
+        sem: [
+            target.sem[0],
+            target.sem[0] + 4,
+            target.sem[1],
+            target.sem[1] + 4,
+        ]
+        .map(|at| m.board.read32(at).unwrap()),
+        queue: [
+            READY_HEAD,
+            WAITER,
+            WAITER + 4,
+            WAITER + 8,
+            target.high_ready,
+        ]
+        .map(|at| m.board.read32(at).unwrap()),
+        forced: m.board.read32(INTC2 + 0x14).unwrap(),
+        irqstat: m.board.read32(IRQSTAT).unwrap(),
+        entries,
+        rtes,
+        signal_entries,
+    }
+}
+
+#[test]
+fn actual_storage_isr_schedules_initialized_waiter_and_executes_guest_task() {
+    for target in DELIVERY_TARGETS {
+        let Some(path) = std::env::var_os(target.env) else {
+            eprintln!(
+                "SKIP controlled {} scheduler continuation: set {} to its stock .syx",
+                target.name, target.env
+            );
+            continue;
+        };
+        let raw = std::fs::read(path).expect("configured stock image must be readable");
+        let fw = Firmware::parse(&raw).expect("parse configured stock image");
+        assert_eq!(
+            fw.syx_sha256, target.sha,
+            "requires exact stock {}",
+            target.name
+        );
+        let linked = compiled_at(target.sites);
+        for extra_irq in [0, 0x0001_0000] {
+            let stock = scheduler_replay(&fw, &linked, &target, false, extra_irq);
+            let patched = scheduler_replay(&fw, &linked, &target, true, extra_irq);
+            assert_eq!(
+                patched,
+                stock,
+                "{} scheduler IRQ={:#x}: observer preserves selected results",
+                target.name,
+                extra_irq | 1
             );
         }
     }

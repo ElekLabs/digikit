@@ -94,8 +94,8 @@ IRQSTAT W1C deassertion and preserved interrupted context. CTOE+CC leaves comman
 status zero while the observer retains CTOE; TC+DTOE/DCE leaves data status `-1`.
 The observer preserves stock status, context and queue results.
 
-The scheduling request is observed, not serviced: no resumed task or full
-scheduler proof is claimed. This earlier checkpoint contributes 16 invocations;
+In this earlier fixture, the scheduling request is observed without servicing it.
+This checkpoint contributes 16 invocations;
 the original no-waiter fixture contributes 96. The pair proof below adds 32,
 for **144 total across three tests, not per image**. Fixture dependencies remain
 local; no external package was added. Independent route/fixture static reviews
@@ -136,7 +136,8 @@ error bits remain sticky; the DN2 observer relocation is in-memory test-only.
 
 Error bits are injected after the genuine copy completes. This is controlled
 completion plus error status, not partial/corrupt DMA recovery or physical
-quiescence. All-source scheduling and global cross-bank arbitration remain open.
+quiescence. The later software-force checkpoint below extends arbitration without
+adding physical interrupt sources.
 
 From the repository root, using the original checkout's shared benchlock for
 this worktree:
@@ -171,15 +172,44 @@ Earlier isolated-delivery logs remain
 `out/runs/storage-fault-proof/stage-b-delivery-tests.log` and
 `out/runs/storage-fault-proof/stage-b-firmware-tests.log`.
 
-This remains **[D]** initialized-state evidence; the controlled pair checkpoint
-is complete. Full RSTA fidelity, physical DMA quiescence, global cross-bank and
-all-source arbitration, resumed tasks, native cold boot and complete fault
-history remain open. Default native fault-history acceptance remains
-**failed/open**. Stage C daemon/snapshot integration is unstarted. Any next bounded
-integration would require scheduler/all-source priority and runtime-policy
-snapshot audits before daemon work; this checkpoint does not authorize starting
-that scope. The coordinator's scoped ten-file `mise run test:changed` passed
-pathcheck/layers; the full gate remains deferred and has not run. No public
-sample ABI, pool or hardware-flashing work follows. See the
+The earlier pair checkpoint remains **[D]** initialized-state evidence. A later
+explicit `Machine::step_storage_with_forced` route now combines actual storage
+lines with all INTFRC sources (including source 0 and vector 191) across all banks.
+It selects higher level, then INTC0/1/2, then higher source; IMR/nonzero ICR and
+live IPL apply. Force persists until guest clear. Controller EMASK, CLMASK other
+than 0/15 and selected level 7 reject before mutation. It shares pair preflight,
+cache invalidation and poisoned-entry behavior, ignores the Oracle force knob,
+and requires explicit selection on each step. It synthesizes no timer/physical
+SSI requests or host scheduling; pair-only and default routes stay unchanged.
+
+The component run passes **28 tests** (13 INTC, 15 storage machine); the extended
+higher-level bank2-over-bank0 assertion also passed its named-test rerun. Logs
+and exact component invocation are under `out/runs/storage-fault-proof/storage-forced-*`.
+
+The fourth firmware test follows guest CMD13 through the actual storage ISR,
+bit-13 scheduling request and vector 205/level 1 into scheduler `0x40000410` and
+RTE `0x40000458` on both exact images. Eight controlled runs cover DT2/DN2,
+stock/patched and CC/CC+CTOE. One initialized waiter restores its intended
+registers/SP/SR/PC and then executes an ordinary guest marker instruction.
+Old-task save including original A0/frame SP, queue/semaphore state, actual force
+clear, W1C, no host post and stock/patched equivalence are asserted; patched raw
+CTOE stays sticky. Independent static review found no issues.
+
+All **four named firmware tests pass**, with both variables explicitly set, using
+the command above with label `storage-scheduler-firmware-tests` and log
+`out/runs/storage-fault-proof/scheduler-continuation-tests.log`. The exact successful
+command/environment and fixture/input hashes are recorded in
+`out/runs/storage-fault-proof/scheduler-continuation-invocation.json`.
+
+This is one controlled initialized-task continuation, not native boot, a complete
+scheduler/timer model, physical DMA quiescence or full relevant fault history.
+Full RSTA and native fault-history acceptance remain **failed/open**; Stage C
+daemon integration is unstarted. The policy audit found Board/Time snapshot
+backing lacks CompletionPolicy/TimerPolicy/construction binding, while native
+boot hardcodes Oracle and checks firmware identity. Runtime execution-policy
+compatibility remains unaudited; no exploited mismatch is claimed. No snapshot
+format migration or daemon change is included. The coordinator's scoped
+`test:changed` passed pathcheck/layers before final prose; final docs pathcheck is
+coordinator-owned and the full gate remains deferred. See the
 [plan](../../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
 and [scope finding](../../../../docs/findings/100-storage-interrupt-emulation-scope.md).

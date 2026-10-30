@@ -2937,7 +2937,8 @@ invocations: **144 total across all three tests, not per image**.
 
 Actual DMA CINT and eSDHC W1C acknowledge both lines. Vector-entry/RTE order,
 context/status, semaphore coalescing, the circular three-node bidirectional ready
-queue and scheduling-request bit 13 are checked; the scheduler is never executed.
+queue and scheduling-request bit 13 are checked; this pair fixture never executes
+the scheduler.
 Stock/patched selected observables match, with sticky raw errors retained by the
 observer. Error bits are injected only after the copy completes: this is not
 partial/corrupt DMA recovery. DN2 hooks are in-memory test-only; the packaged
@@ -2953,16 +2954,51 @@ the log alone cannot establish that opt-in inputs were configured. Exact hashes
 and the command with both environment variables are in the
 [adapter README](../../modules/core/adapters/storage-fault-proof/README.md).
 
-Stage A remains incomplete on full RSTA. Physical DMA quiescence, global
-cross-bank/all-source priority, task resumption/full scheduler and native
-cold-boot fault history remain open; full native fault-history acceptance is
-**failed/open**. **Stage C is unstarted.** A next bounded integration would require
-scheduler/all-source priority and runtime-policy snapshot audits before daemon
-work; this states a requirement, not approval to start. No public ABI, pool,
-SHARC, recovery or hardware-flashing work follows. Runtime integration confidence
-remains low; earlier calendar estimates remain withdrawn.
+Stage A remains incomplete on full RSTA. The later explicit software-force and
+initialized-task continuation checkpoint below extends the pair proof. Physical
+DMA quiescence, full scheduler/timer integration and native cold-boot fault
+history remain open; full native fault-history acceptance is **failed/open**.
+**Stage C is unstarted.** No public ABI, pool, SHARC, recovery, daemon integration
+or hardware-flashing work follows. Runtime integration confidence remains low;
+earlier calendar estimates remain withdrawn.
 
 The coordinator's scoped ten-file `mise run test:changed` passed pathcheck and
 layer checks. The full merge gate remains deferred and has not run. Documentation
-pathcheck and diff checks cover this prose/provenance update; no new build or
-emulator run was performed for it.
+pathcheck and diff checks covered that earlier prose/provenance update.
+
+
+**[D/O] Bounded scheduler prerequisite complete (2026-10-31):**
+
+- [x] Manual and runtime-policy/snapshot audits completed for the bounded decision.
+- [x] Explicit `step_storage_with_forced` combines real storage lines with all
+  software force sources, selecting higher level, lower bank, then higher source.
+  IMR/nonzero ICR/live IPL apply; unsupported controller level masking and level 7
+  fail before mutation. Pair-only/Oracle/default routes remain unchanged.
+- [x] 28 component tests pass (13 INTC, 15 storage machine); direct higher-level
+  bank2-over-bank0 assertion passes in its subsequent named-test rerun.
+- [x] Actual controlled scheduler continuation passes 8 runs: both exact images,
+  stock/patched, CC/CC+CTOE. Real vector 223 requests bit 13; vector 205 executes
+  the actual scheduler `0x40000410` and RTE `0x40000458`, restores one initialized
+  waiter's exact context and executes its guest marker instruction. Old-task
+  register save, selected SP/SR/PC, singleton queue, semaphore state, force clear,
+  W1C and stock/patched equivalence are asserted. All four named firmware tests
+  pass with both opt-ins; independent static review found no issues.
+- [ ] Snapshot policy binding remains open: Board/Time retain register backing,
+  without CompletionPolicy/TimerPolicy/construction binding; native boot hardcodes
+  Oracle and checks firmware identity. Runtime execution-policy compatibility is
+  unaudited; no exploited mismatch is claimed. No format migration is approved.
+- [ ] Full reset, physical-source/timer/full-scheduler integration and native-boot
+  fault-history acceptance remain open. Stage C daemon integration is unstarted.
+
+Exact invocation, fixture/input hashes and log are under ignored
+`out/runs/storage-fault-proof/scheduler-continuation-invocation.json` and
+`scheduler-continuation-tests.log`; component logs/provenance use `storage-forced-*`
+in the same directory. These are controlled initialized-state proofs, not a
+native boot or complete relevant fault history. The coordinator's scoped
+`mise run test:changed` for the five arbiter Rust files, firmware fixture and plan
+passed pathcheck/layers before final prose; final docs pathcheck is coordinator-owned.
+The full merge gate remains deferred. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md)
+for boundaries and evidence.
+
+Next: choose a compatible execution-policy binding design while preserving
+existing Oracle snapshot usability, before implementing or exposing Stage C.

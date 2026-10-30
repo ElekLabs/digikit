@@ -72,7 +72,7 @@ pub enum EsdhcStepError {
     },
 }
 
-/// Why the bounded INTC2 storage pair could not execute a boundary.
+/// Why an explicit storage interrupt step could not execute a boundary.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StorageStepError {
     DeviceCompletionRequired,
@@ -81,6 +81,8 @@ pub enum StorageStepError {
     LegacyDmaIrqConfigured,
     LegacyDmaIrqPending,
     UnsupportedDmaGroupSources { pending: u32 },
+    UnsupportedControllerLevelMasking,
+    UnsupportedLevel7,
     Stop(Stop),
     InterruptDeliveryPoisoned { stop: Stop },
 }
@@ -363,6 +365,25 @@ impl Machine {
     /// a global arbiter and models no DMA errors, abort timing or card recovery.
     /// Existing step/step_esdhc contracts and daemon defaults are unchanged.
     pub fn step_storage(&mut self) -> Result<Vec<CompletionEvent>, StorageStepError> {
+        self.step_storage_internal(false)
+    }
+
+    /// Offer the actual storage lines together with all INTFRC sources across
+    /// all three controllers, then execute one instruction. Highest level wins,
+    /// then INTC0 before INTC1 before INTC2, then higher source within a bank.
+    /// Uses IMR, nonzero ICR and live CPU IPL; guest force bits persist until
+    /// cleared. Does not synthesize timer/physical SSI requests or schedule
+    /// tasks on the host, and ignores the Oracle force-delivery knob. Same
+    /// preflight and poisoned-entry
+    /// contract as step_storage; callers explicitly select this on each step.
+    pub fn step_storage_with_forced(&mut self) -> Result<Vec<CompletionEvent>, StorageStepError> {
+        self.step_storage_internal(true)
+    }
+
+    fn step_storage_internal(
+        &mut self,
+        include_forced: bool,
+    ) -> Result<Vec<CompletionEvent>, StorageStepError> {
         if self.board.completion_policy() != CompletionPolicy::Device {
             return Err(StorageStepError::DeviceCompletionRequired);
         }
@@ -386,24 +407,37 @@ impl Machine {
                 pending: unsupported,
             });
         }
-        let esdhc = self
-            .board
-            .esdhc
-            .interrupt_pending()
-            .then(|| time.esdhc_interrupt_level())
-            .flatten()
-            .map(|level| (level, 31_u8, 223_u8));
-        let dma = (pending != 0)
-            .then(|| time.storage_dma_interrupt_level())
-            .flatten()
-            .map(|level| (level, 0_u8, 192_u8));
-        let candidate = esdhc.into_iter().chain(dma).max();
+        if include_forced && !time.storage_forced_config_supported() {
+            return Err(StorageStepError::UnsupportedControllerLevelMasking);
+        }
+        let esdhc = self.board.esdhc.interrupt_pending();
+        let candidate = if include_forced {
+            time.storage_with_forced_candidate(esdhc, pending != 0)
+                .map(|(vector, level)| (vector as u8, level))
+        } else {
+            let esdhc = esdhc
+                .then(|| time.esdhc_interrupt_level())
+                .flatten()
+                .map(|level| (level, 31_u8, 223_u8));
+            let dma = (pending != 0)
+                .then(|| time.storage_dma_interrupt_level())
+                .flatten()
+                .map(|level| (level, 0_u8, 192_u8));
+            esdhc
+                .into_iter()
+                .chain(dma)
+                .max()
+                .map(|(level, _, vector)| (vector, level))
+        };
+        if include_forced && candidate.is_some_and(|(_, level)| level == 7) {
+            return Err(StorageStepError::UnsupportedLevel7);
+        }
         // All route preflight above is read-only. Invalidate queued external
         // writes before either exception entry or the next decoded instruction.
         for (addr, len) in self.board.take_dma_written_ranges() {
             self.cpu.invalidate_external_write(addr, len);
         }
-        if let Some((level, _, vector)) = candidate
+        if let Some((vector, level)) = candidate
             && ((self.cpu.sr >> 8) & 7) < u16::from(level)
             && self
                 .cpu

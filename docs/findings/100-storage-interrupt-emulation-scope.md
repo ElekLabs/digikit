@@ -1,22 +1,19 @@
 # Storage interrupt emulation: controlled delivery and remaining scope
 
-**[D/O]** Controlled Stage B checkpoint, 2026-10-31. Targets: DT2 OS 1.17 and
-DN2 OS 1.12. The user approved delivery from explicitly initialized registers,
-deferring full RSTA fidelity. The controlled storage pair checkpoint now passes:
-INTC2 source 31/eSDHC and source 0/DMA59 ordering, actual firmware handlers and
-three-waiter ready-queue insertion on both images. Stage A remains incomplete on
-full reset; all-source scheduling and global cross-bank arbitration remain open.
-Stage C is unstarted. Full default native fault-history acceptance remains **failed/open**.
-The evidence remains **[D]**, not **[V]**.
+**[D/O]** Controlled Stage B checkpoints, 2026-10-31. Targets: DT2 OS 1.17 and
+DN2 OS 1.12. The initialized-register storage pair and a separate explicit
+storage-plus-software-force route pass. The latter follows actual eSDHC and
+scheduler handlers into one initialized task that executes a guest instruction.
+Stage A remains incomplete on full reset. Stage C daemon/policy integration is
+unstarted; full default native fault-history acceptance remains **failed/open**.
+Evidence remains **[D]**, not **[V]**.
 
 Normal Oracle completion, ordinary `Machine::step` and daemons retain their
-existing behavior. The payoff of the bounded component is observing sticky fault
-capture through real eSDHC/INTC registers and the firmware ISR instead of synthetic
-exception entry. It establishes waiter ready-queue insertion and a scheduling
-request, not resumed task execution, cold boot or full fault history. A genuine
-512-byte guest-triggered transfer precedes pair delivery; it is a controlled
-completion proof. Runtime integration confidence remains low pending all-source
-scheduling and policy/snapshot work.
+existing behavior. These controlled proofs establish register-backed sticky
+fault capture, actual handlers, waiter readiness and one initialized task
+continuation. They do not establish native boot, all physical interrupt sources,
+full scheduler/timer behavior or complete fault history. Runtime integration
+confidence remains low pending execution-policy/snapshot binding and reset work.
 Earlier informal 1–3-day/week calendar estimates remain withdrawn.
 
 ## Evidence and boundary
@@ -55,14 +52,15 @@ uses this block-I/O transport.
 | [Runner](../../packages/emulator/machine/src/runner.rs) | Ordinary `step` retains configured DMA59 delivery; `step_esdhc` isolates source 31; `step_storage` orders sources 31 and 0 | The bounded pair uses shared IMR/ICR and CPU IPL; global arbitration remains open |
 | [INTC](../../packages/emulator/periph/src/intc.rs): 144, 167, 209 | Level/mask, hardware CIMR and IPR helpers exist | Reuse after checking actual mask/priority/CPU-IPL arbitration; `forced_candidate` near 235–258 omits source 0 and uses max(level, vector) across banks, so is not a ready universal arbiter |
 | [Boot runtime](../../packages/emulator/boot/src/runtime.rs): 483, 2253 | Board is fixed to Oracle; drain counts completion events | Opt-in runtime selection needs separate integration work |
-| Board snapshot near 410; boot runtime near 3357 | Save rejects undrained events and retains registers/card; restore checks firmware identity | Complete policy binding and pending-interrupt safety were not inspected/proved |
+| Board/Time snapshots; native boot runtime | Register backing persists, but CompletionPolicy, TimerPolicy and construction settings are not bound in snapshots; native boot hardcodes Oracle and checks firmware identity | Runtime execution-policy compatibility remains unaudited; no exploited mismatch is claimed |
 
 ## Stages and acceptance gates
 
 Stage A is partially implemented. The user-approved controlled B storage pair
 checkpoint is complete from explicitly initialized registers despite unresolved
-RSTA. Stage C is unstarted. This does not establish all-source scheduler priority,
-global cross-bank arbitration, cold boot or complete fault history.
+RSTA. The separate scheduler continuation checkpoint below is also complete.
+Stage C is unstarted; physical-source integration, full scheduler/timer behavior,
+cold boot and complete fault history remain open.
 
 ### A — Device-policy status and signal component
 
@@ -277,19 +275,66 @@ invocation; the test log alone does not establish that opt-in inputs were set.
 Reproduction commands are in the
 [adapter README](../../modules/core/adapters/storage-fault-proof/README.md).
 
-**Remaining [O]:** full RSTA, physical DMA quiescence, global cross-bank and
-all-source priority, resumed tasks/full scheduler and native cold-boot fault
-history remain unproved. Manual p0354, section 17.3.2, gives intercontroller
-priority INTC0 above INTC1 above INTC2; the tested within-INTC2 storage pair does
-not establish that global contract. Before any daemon integration, a separately
-scoped bounded integration would need scheduler/all-source priority and runtime
-policy/snapshot safety audits. This records a requirement, not approval to start.
+### B — Explicit software-force arbitration and initialized task continuation
+
+**Implemented, bounded [D]:** `IntcBank::hw_candidate` combines externally
+asserted masks and INTFRC for sources 0–63 on all three controllers. It selects
+higher level, then INTC0 before INTC1 before INTC2, then higher source within a
+bank, respecting IMR and nonzero ICR. Local manual p0352 supports within-bank
+source priority, p0353 force/vector recognition and p0354 controller priority.
+This read-only candidate selection does not model IACK level masks or level-7
+edge timing. Existing Oracle `forced_candidate` behavior is unchanged.
+
+Explicit `Machine::step_storage_with_forced` combines actual storage lines with
+all force bits, including source 0 and vector 191, checks live CPU IPL and shares
+the pair route's preflight, DMA cache invalidation and poisoned-entry errors.
+It rejects EMASK, CLMASK values other than 0/15 and a selected level 7 before
+mutation. Force persists until guest clearing; the Oracle force knob has no
+effect. The method must be selected on every step. It synthesizes no timer or
+physical SSI requests and performs no host task scheduling. `step_storage`
+remains pair-only; snapshot format and daemon/default routes are unchanged.
+
+The targeted component run passed **28 tests**: 13 INTC manual and 15 storage
+machine tests, including synthetic source-13 delivery, guest clear, bank/source
+priority, masks/ICR/IPL, deduplication, preflight, cache invalidation and poisoned
+entry. After adding the direct higher-level bank2-over-bank0 assertion, that one
+named INTC test passed again. Logs: `out/runs/storage-fault-proof/storage-forced-tests.log`
+and `storage-forced-bank-priority.log`; exact initial invocation is in
+`storage-forced-invocation.json` in that directory.
+
+The separate [actual firmware fixture](../../packages/patchkit/tests/storage_fault_isr.rs)
+now passes **four named tests** with both exact firmware opt-ins. Its new test
+performs **8 runs**: DT2/DN2, stock/patched and CC/CC+CTOE, each bounded to 4,096
+instructions. Guest CMD13 precedes actual vector 223 delivery; the real signal
+helper requests bit 13, followed by vector 205 at level 1 and scheduler
+`0x40000410`/RTE `0x40000458` on both images. The current-task globals are
+DT2 `0x47db3f64` and DN2 `0x4664bcdc`.
+
+Assertions cover old-task MOVEM save including original A0 and frame SP, selected
+D/A registers and exact SP/SR/PC restore, singleton ready queue, semaphore
+consumption, actual force clear and IRQSTAT W1C. An ordinary selected-task
+instruction writes a marker only after scheduler RTE. No host semaphore post or
+unexpected exception occurs; selected stock/patched results match and patched
+raw CTOE stays sticky. This is one controlled initialized-task continuation,
+not a full scheduler or native-boot proof. Independent static reviews reported
+no issues. Log: `out/runs/storage-fault-proof/scheduler-continuation-tests.log`;
+exact command, environment, fixture/input hashes and results are recorded in
+`scheduler-continuation-invocation.json` in that directory.
+
+**Remaining [O]:** full RSTA, physical DMA quiescence, timer/physical-source
+integration, full scheduler and native cold-boot fault history. The policy audit
+found Board/Time snapshot register backing does not bind CompletionPolicy,
+TimerPolicy or construction settings, while native boot hardcodes Oracle and
+checks firmware identity. Runtime execution-policy compatibility remains
+unaudited; this is not a claim of an exploited mismatch. Policy binding and
+pending-state safety must be resolved before daemon integration. No snapshot
+format migration is included or approved here.
 
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in
-daemon mode, establish scheduler/all-source priority and runtime-policy snapshot
-identity/pending-state safety. Bound an actual read followed by a controlled fault on both
+daemon mode, integrate the bounded interrupt contract with runtime execution
+policy and establish snapshot identity/pending-state safety. Bound an actual read followed by a controlled fault on both
 current devices, including late/error completion and failure cleanup. Establish
 which boot/cache history the selected mode actually covers; an old Oracle
 snapshot does not establish prior controller fault history. Run default completion
@@ -298,7 +343,7 @@ regressions to demonstrate preserved normal behavior.
 The native observer assertions remain intact. A successful isolated read/IRQ
 experiment is not full early/reset coverage; full native fault-history acceptance
 remains a release blocker until its own assertions pass. Stage C is unstarted and has low
-confidence pending scheduler/all-source integration and the snapshot/policy audit.
+confidence pending physical-source/runtime integration, policy binding and reset.
 
 ## Unknowns and exclusions
 
@@ -318,3 +363,8 @@ For the earlier isolated-delivery checkpoint, the coordinator's scoped
 scoped ten-file pair check also passed pathcheck/layers. The full merge gate remains
 deferred and has not run. Documentation pathcheck and diff checks cover this
 update; no additional build or emulator run was performed for the prose change.
+
+The coordinator's scoped `mise run test:changed` for the five arbiter Rust files,
+the firmware fixture and plan passed pathcheck/layers before the final prose
+update. Final documentation pathcheck and whitespace checks passed. The full merge gate
+remains deferred and has not run.

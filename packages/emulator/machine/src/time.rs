@@ -229,6 +229,19 @@ impl Time {
         self.intc.level_for_vector(192)
     }
 
+    /// The explicit storage/force seam does not model controller level masks
+    /// or automatic IACK mask updates. CLMASK 0 and 15 disable level masking.
+    pub fn storage_forced_config_supported(&self) -> bool {
+        self.intc.iconfig() & (1 << 5) == 0 && matches!(self.intc.clmask(), 0 | 15)
+    }
+
+    /// Storage lines plus every software-forced source, using the shared bank.
+    /// Independent of the Oracle force-delivery knob; no timer or SSI service.
+    pub fn storage_with_forced_candidate(&self, esdhc: bool, dma: bool) -> Option<(u16, u8)> {
+        let low = (u32::from(esdhc) << 31) | u32::from(dma);
+        self.intc.hw_candidate([(0, 0), (0, 0), (low, 0)])
+    }
+
     /// Write a PIT or INTC register. PIT handles PCSR PIF clearing.
     /// Device mode additionally applies byte SIMR/CIMR writes selecting eSDHC
     /// source 31 or storage DMA source 0 on INTC2. Other INTC hardware
