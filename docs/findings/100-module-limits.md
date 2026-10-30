@@ -47,7 +47,7 @@ level is fixed another way). On DN2 a machine can have several pages and up to 4
 | Core clock | 1 GHz (20 MHz x 100 / 2) | CLKIN `0x1312d00` at `0x120230`; clock word `0x06a10464` built at `0x120532` | [D] (the CTL write is not traced) |
 | Block | 32 samples, 1500 blocks/s at 48 kHz | trip count 32 at `0x1c74b5`, DN2 `0x1c9d53` | [V] length, [D] rate |
 | Cycles per block | 666,667 | from the two lines above | [D] |
-| Free cycles per block | not known for 1.17 / 1.12 | the old 330,000 (DN2) and 450,000 (DT2) were 1.16 / 1.11 emulator instruction counts without cycle factors | [O] |
+| Free cycles per block | not known for 1.17 / 1.12 | not measured on these images | [O] |
 | dsp-link offset field | 17 bits of words, so 512 KiB | `FEXT R14 BY 0:17` in `modules/core/adapters/dsp-link/src/dsp/dsp-link.inc` | [V] |
 | dsp-link payload per block | 171 words (DT2), 12 words (DN2) | tail words minus 3 | [V] |
 | DN2 voices | 16 slots, chosen at note-on, not tied to tracks | frame stride `0x92`; slot chosen per note | [V] stride; no fixed pair for stereo |
@@ -67,8 +67,7 @@ level is fixed another way). On DN2 a machine can have several pages and up to 4
 
 ## 5. Arena holes after boot, and the steps list
 
-Modules are transferred to the card over USB and enabled in the DIGIKIT menu; they load at the next boot. **[C]** An earlier version of this
-section said a selection could pass the fit check and still fail to load. It cannot: during the boot load nothing in the arena is freed. For each
+Modules are transferred to the card over USB and enabled in the DIGIKIT menu; they load at the next boot. During the boot load nothing in the arena is freed. For each
 enabled module the runtime allocates the module block (`loader.rs`, `arena::alloc(total)`), a buffer for its DSP code and a steps list (`dsp.rs`,
 `reserve`), first-fit from an empty arena. The frames that carry DSP code do not flow until the sound engine starts (`boot.rs`, before
 `loader::EARLY = true`), so no DSP send (core/dsp-link) finishes and no buffer is freed during the loop: the blocks stack from the bottom. The fit

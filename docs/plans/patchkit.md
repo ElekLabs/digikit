@@ -204,8 +204,8 @@ enough, audio is an offline render.
 
 - 0.4: `Stream.append_block` and an `APPEND` patch op (Python and Rust); the ColdFire boot routine sends the whole
   depacked section 7 (limits: stored <= 0x100000, depacked <= 0xfffff). Usable appended payload: 727,540 B (DT2),
-  211,600 B (DN2), limited by the stream, not by L2. Free L2 by canary over the scenario suites: 922,756 B (DT2,
-  keep 0x200fa000-0x200fe000 out), 491,972 B (DN2). Open: the real SHARC boot ROM with an extra block (hardware);
+  211,600 B (DN2), limited by the stream, not by L2. Free L2 by canary over the scenario suites: 914,564 B (DT2) and
+  466,372 B (DN2), below the cache range 0x200fa000 (finding 100). Open: the real SHARC boot ROM with an extra block (hardware);
   L1 PM room.
 - 0.5: pinned binutils 2.47 + GCC 16.2.0 for `-mcpu=54418` and selache 926bfac9 (ElekLabs fork) under out/tools
   (`mise run toolchains`); `tools/patchkit/pk_link.py` (JSON object prototype, R_68K_32/PC32/PC16/PC8); call harness on the
