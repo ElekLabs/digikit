@@ -2102,7 +2102,7 @@ rules: disable idle-loop skipping, capture synthesized/uninitialized read attemp
 and distinguish guest attempts from journal/rollback/host setup traffic. A plain
 Mem-only counter is not a complete guest-access monitor.
 
-- [ ] Implement an opt-in diagnostic with an explicit event/lifecycle contract,
+- [x] Implement an opt-in diagnostic with an explicit event/lifecycle contract,
   tested first at the memory and semantic boundaries; no public module ABI change.
 - [ ] Prove raw fast paths fall back correctly, imported/reset state reapplies policy,
   same-value writes and read-only traffic are seen, and diagnostics-off preserves
@@ -2122,7 +2122,9 @@ Mem-only counter is not a complete guest-access monitor.
   is exercised; there is no full compiled-backend dispatch claim yet.
 - [x] Resolve the existing Cranelift flat-access harness panic in a separate scoped
   change, then run the monitor proof through the actual compiled backend.
-- [ ] Validate Wasm and expose a bounded diagnostic entry point for stock runs.
+- [x] Expose and validate a bounded native diagnostic entry point for stock runs.
+- [x] Validate real-lowering Wasm guard exits using the checked target-layout fixture.
+- [ ] Validate full browser-engine fallback and monitor lifecycle integration.
 
 [Finding 97](../findings/97-ddr-access-diagnostic.md) records the exact contract,
 reset/import behavior and remaining coverage. No instruction-core regeneration,
@@ -2144,8 +2146,9 @@ this is separate from public module ABI and sample allocation.
   state on unequal right audio. Actual entry reinitialization and advanced-control
   corruption are tested; all 22 replay cases pass without skips or reciprocal
   approximation in the new cases. Independent review is clean.
-- [ ] Prove independent backing for the remaining ring-backed numerical stage,
-  then integrate ordered routes, scratch blending and pan/send output.
+- [x] Prove independent backing for the remaining ring-backed numerical stage.
+- [x] Prove a selected ordered route with scratch blending and output splitting.
+- [ ] Complete production routes and pan/send integration.
 
 The gain proof was developed in `/private/tmp/digikit-sampler-gain-proof`, on its isolated gain-proof branch, based on checkpoint `3e236b89`, while the native compiler
 fix proceeded in the primary worktree. The coordinator applied and byte-compared
@@ -2173,8 +2176,8 @@ identity and observation limits; no production memory ownership is established.
 - [x] Expose and validate the ordered diagnostic RPC on DT2 1.17 and DN2 1.12.
 - [x] Exercise the Wasm fast-path refusal with a focused V8 proof.
 - [ ] Expand stock coexistence scenarios before selecting any production backing.
-- [ ] Review the composed source/filter/blend/gain/output-split proof under way
-  in the secondary worktree; preserve the explicit synthetic-route boundary.
+- [x] Review and integrate the composed source/filter/blend/gain/output-split
+  proof from the secondary worktree; preserve its synthetic-route boundary.
 
 
 ### Composed route and Wasm diagnostic follow-up
@@ -2204,3 +2207,32 @@ inventing note-on/retrigger meanings for partially traced control flags. Complet
 external writer/lifetime coverage remains a separate obligation. The shared ABI
 will preserve the existing mono input prefix; no public extension is implemented
 before original routing, cleanup and reset boundaries are ready.
+
+### Reset and execution-context audit checkpoint
+
+- [x] Map the four remaining local reset families and their extra engine call
+  sites. Preserve the b82342 snapshots 48..50; reset is not generic record clearing.
+- [x] Check immediate case-1 preparation for audio-history feedback: no such reads
+  in the inspected setter chain; global consumers remain outside the result.
+- [x] Trace the immediate AudioTask/engine caller chain. It supplies no local
+  interrupt-exclusion proof; do not assume snapshot stability from the task name.
+- [x] Add bounded actual-helper reset replay and corruption controls, independently
+  review and integrate. Missed resets alter audio; blanket snapshot clearing is
+  detected at the reset boundary.
+- [ ] Resolve the production capture/commit boundary and relevant asynchronous
+  writers before extending the public stereo contract or shipping a route replay.
+
+Finding 96 retains exact addresses and limits. The last item is an architecture
+constraint, not evidence that an IRQ has actually modified these records.
+
+Integrated reset checkpoint: all 44 named stereo replay cases pass without skips.
+The reciprocal follow-up is read-only: determine whether public documentation
+specifies exact seed recovery or a hardware measurement is required. No
+instruction-core changes or regeneration are authorized by this follow-up.
+
+Reciprocal follow-up complete: the inspected public manuals specify ROM indexing
+and exponent/sign behavior, but not exact seed values or a rounding prescription.
+[Finding 98](../findings/98-reciprocal-seed-fidelity.md) records the bounded source
+search, proposed 128-index raw-result measurement and conditional effort estimate.
+A trusted full-register hardware readback path is the missing prerequisite; no
+hardware action, core edit or regeneration follows automatically from this result.

@@ -454,3 +454,78 @@ This does not establish UI hard-pan mapping, physical connector identity or full
 upstream/downstream routing. A zero coefficient removes its input here rather
 than folding it into the opposite output. The existing module adapter's even-to-
 odd copy is its current mono behavior, not evidence of native channel folding.
+
+## Remaining local reset helpers and control dependencies
+
+**[D]** Original DN2 1.12 bytes identify the remaining private-history resets.
+Offsets in this table are words; record strides are bytes. Full helper bodies,
+including return delays, were inspected under the usual SISD/linear/NW32 context.
+
+| Audio family / record | Reset helper | Local engine calls | History behavior |
+| --- | --- | --- | --- |
+| `0xb82342`, `0x2505a0+0xcc*v` | `0xb81d6d..0xb81e1f` | `0x1c964b`, `0x1c9716` | Clears 3/4; preserves snapshots 48/49/50 |
+| `0xb81a16`, `0x251260+0x12c*v` | `0xb81c8d..0xb81cc0` | `0x1c9684`, `0x1c9747` | Clears 10/11; also initializes coefficient groups |
+| `0xb80f2e`, `0x252520+0xec*v` | `0xb811f1..0xb81278` | `0x1c9692`, `0x1c976f` | Clears 5..12; also initializes coefficient groups |
+| `0xb8265b`, `0x250160+0x14*v` | `0xb82440..0xb82453` | `0x1c91c5`, `0x1c96a3` | Clears all words 0..4, including return-delay store at `0xb82450` |
+
+Constructor paths also invoke those helpers: `0x1c8d2b → 0xb81fa4`,
+`0x1c8d39 → 0xb81cc0`, `0x1c8d51 → 0xb81278`, and direct initialization at
+`0x1c8d07 → 0xb82440`. The latter helper also initializes the separate source
+record at `0x1c8d10`; helper address alone cannot identify the held-sample family.
+The common reset branch alone also misses the other local calls in the table.
+Delayed R4 arguments and the previously qualified upstream indirect preservation
+must be respected; these addresses do not establish named lifecycle events.
+
+For `0xb81d6d`, record writes are
+{3,4,12,13,14,17,19,20,21,24,26,27,28,31,33,34,35,38,40,41,42,45}.
+Only {3,4,14,21,28,35,42} are zeroed; others copy or compute controls.
+`0xb81c8d` writes 10/11 and {12,13,14,17}+7k for k=0..8.
+`0xb811f1` writes 5..12 and {17,18,19,22}+7k for k=0..5.
+A generic full-record clear would not reproduce any of the first three helpers.
+
+**[D]** The immediate case-1 coefficient preparation path
+`0x1c9253 → 0xb82096 → 0xb81e1f` does not consume audio histories 3/4 or snapshots
+48/49/50. The outer setter has no record loads; the nested setter reads only
+13/27/34/41 and updates coefficient ramps. Inspected adjacent constructors and
+setters also reveal no snapshot consumer or initializer. This finite result
+supports the current local separation; it does not prove globally unused state,
+exclude retained pointers/bulk copies, or authorize ignoring external consumers.
+
+## AudioTask context and snapshot-stability gap
+
+**[D]** The immediate caller chain is AudioTask entry `0x1c9fe7`, dispatch
+`0x1c9d6b`, command-3 path `0x1c9f0f/0x1c9fbc`, frame builder `0x1c2712`, then
+engine `0x1c8ef1` called at `0x1c3044`. The builder copies 672 words at
+`0x1c302d..33`; engine preparation begins at `0x1c9045`. Source processing is
+inside the sixteen-slot loop at `0x1c944e/59/60/61`.
+
+No explicit IRPTEN clear or IMASK write was found in those inspected builder/
+engine bodies; their explicit MODE1 changes concern SIMD only. The SEC wrapper
+permits handler execution with interrupts enabled. SPI input DMA and selector
+updates, SPORT callbacks and task notification remain concrete asynchronous
+avenues. This bounded trace does not establish that they write processing records,
+but AudioTask naming alone cannot prove serialization. Callee masks, scheduler
+priorities, indirect writers, DMA and NMI remain outside the local proof.
+
+Capture-before-left remains necessary. A short interrupt mask would only address
+identified maskable CPU writers, not establish whole-route DMA/NMI stability.
+The production snapshot/commit boundary is therefore still unresolved; numerical
+replays with deliberately stable controls do not close that gap.
+
+## Actual-helper reset replay
+
+**[D]** `tests/fixtures/dsp/stereo-reset-shadow-replay.s` executes the four reset
+helpers above on independent records, then compares reset state and subsequent
+rendering with isolated mono references. Nine added cases cover correct mirroring,
+a missed reset in each family, and blanket clearing of snapshots 48..50 in the
+first family. Every missed reset changes subsequent audio. Blanket clearing is
+caught at the reset boundary; the next audio call legitimately overwrites those
+snapshots and could otherwise hide the mistake.
+
+Right execution leaves left state unchanged. Record and stack accesses are bounded;
+the first helper's 128-entry coefficient-table reads are bounded too. The held
+helper is explicitly bound to its held-sample record, and its return-delay store
+is included. Reset calls require no reciprocal approximation; only the previously
+qualified prepared-stage rendering enables the existing approximation. Independent
+source review found no issues. These tests establish finite helper behavior, not
+natural event coverage, all asynchronous writers or an installed reset hook.

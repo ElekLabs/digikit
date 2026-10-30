@@ -164,5 +164,5 @@ occupied regions and the remaining production ownership questions.
 | [`94-sample-binding-lifetime.md`](findings/94-sample-binding-lifetime.md) | Two-track assembled PCM16 reader retirement and replacement; unaffected-track audio, cached ownership, preserved stack frames and remaining production boundaries |
 | [`95-dn2-cache-and-lp0-staging.md`](findings/95-dn2-cache-and-lp0-staging.md) | DN2 conditional cache setup, LP0 RX whole-line ownership gap, stock maintenance helper limits and unresolved Type 7a/7d conversion encoding; no hardware coherence or core-fix claim |
 | [`96-stereo-machine-processing.md`](findings/96-stereo-machine-processing.md) | Stereo machine output gap; current DN2 32-to-two-plane split corrects the historical 96 kHz interpretation; ten bounded stage proofs, source continuation, selected ordered replay and shared-reset provenance |
-
 | [`97-ddr-access-diagnostic.md`](findings/97-ddr-access-diagnostic.md) | Opt-in first-attempt DDR diagnostic, fast-pointer fallback and idle policy; native compiled-backend and ordered two-device RPC proofs; bounded stock observations, no ownership claim |
+| [`98-reciprocal-seed-fidelity.md`](findings/98-reciprocal-seed-fidelity.md) | Public RECIPS seed specification gap, bounded hardware measurement proposal and conditional effort; no core change or hardware probe executed |

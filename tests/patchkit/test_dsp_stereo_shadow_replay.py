@@ -1449,3 +1449,237 @@ def test_ordered_route_matches_isolated_mono(ordered_rig, fault):
     assert phases == [2, 2, 1, 1]
     if fault is not None:
         assert any(differences)
+
+
+RESET_WRITES = {
+    "snapshots": (
+        3,
+        4,
+        12,
+        13,
+        14,
+        17,
+        19,
+        20,
+        21,
+        24,
+        26,
+        27,
+        28,
+        31,
+        33,
+        34,
+        35,
+        38,
+        40,
+        41,
+        42,
+        45,
+    ),
+    "nine": (10, 11, *(12 + 7 * k + delta for k in range(9) for delta in (0, 1, 2, 5))),
+    "prepared": (*range(5, 13), *PREPARED_WRITES, *(22 + 7 * k for k in range(6))),
+    "held": tuple(range(5)),
+}
+RESET_SIZES = {"snapshots": 51, "nine": 75, "prepared": 59, "held": 5}
+RESET_HISTORIES = {
+    "snapshots": (3, 4, 48, 49, 50),
+    "nine": (10, 11),
+    "prepared": (5, 9, 10, 11, 12),
+    "held": (1, 2),
+}
+
+
+@pytest.fixture(scope="module")
+def reset_rig(filter_rig):
+    source = REPO_ROOT / "tests/fixtures/dsp/stereo-reset-shadow-replay.s"
+    linked = pk_sharc.link(
+        pk_sharc.assemble(
+            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+        ),
+        0xB9C000,
+        {
+            "_reset_snapshots": 0xB81D6D,
+            "_reset_nine": 0xB81C8D,
+            "_reset_prepared": 0xB811F1,
+            "_reset_held": 0xB82440,
+        },
+    )
+    return [filter_rig[0], linked], filter_rig[1]
+
+
+def reset_call(session, family, side):
+    regs = {**REGS, "I6": STACK * 4, "I7": STACK * 4, "M13": 0, "M15": 0xFFFFFFFF}
+    result = session.call(f"_reset_{side}_{family}", regs, max_steps=12000)
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert result["final_pc_sw"] == BACK
+    assert not session.runner.state.approx_recips_used
+    offset = 0x100 if side == "right" else 0
+    base = CONTROL + offset
+    mutable = {base + i for i in RESET_WRITES[family]}
+    writes = mutable | set(range(STACK - 64, STACK + 1))
+    addresses = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        ): a
+        for a in writes
+    }
+    stores = [e for e in session.stores if e.access == "write"]
+    assert all(e.width == 4 and e.address in addresses for e in stores), stores
+    assert {addresses[e.address] for e in stores} & mutable == mutable
+    readable = set(range(base, base + RESET_SIZES[family]))
+    readable |= set(range(STACK - 64, STACK + 1))
+    read_bytes = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        )
+        + j
+        for a in readable
+        for j in range(4)
+    }
+    if family == "snapshots":
+        table = _canonical_dm_address(session.runner.state, 0x26E5C0, 4)
+        read_bytes |= set(range(table, table + 128 * 4))
+    loads = [e for e in session.stores if e.access == "read"]
+    assert all(
+        e.width == 1 and e.new_value is not None and e.address in read_bytes
+        for e in loads
+    ), loads
+    return result
+
+
+def initialized_reset_session(reset_rig, family, channel=0):
+    linked, memory = reset_rig
+    session = pk_sharc.CallSession(
+        linked, BACK, base_memory=memory, approx_recips=False
+    )
+    session.record_stores()
+    session.runner.state.assume_nw32 = True
+    session.runner.attach_watchpoints(
+        [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
+    )
+    session.runner.set_watch_active(False)
+    size = RESET_SIZES[family]
+    for offset in (0, 0x100):
+        for i in range(size):
+            session.poke(CONTROL + offset + i, bits(0.01 + i / 512))
+        if family == "snapshots":
+            _, _, coefficients, values = FILTER_FAMILIES[family]
+            controls = dict(zip(coefficients, values, strict=True))
+            controls.update(
+                {
+                    9: 0.2,
+                    10: 0.25,
+                    11: 0.3,
+                    16: 0.4,
+                    23: 0.1,
+                    30: 0.15,
+                    37: 0.2,
+                    44: 0.25,
+                }
+            )
+        elif family == "nine":
+            controls = {
+                i: value
+                for i, value in enumerate(
+                    (0.1, 0.2, 0.1, 0.1, 0.05, 0.05, 0.1, 0.1, 0.1), start=1
+                )
+            }
+        elif family == "prepared":
+            controls = {0: 0.1, 1: 0.3, 2: 0.08, 3: 0.1, 4: 0.6, 14: 0.2}
+        else:
+            controls = {0: 0.25}
+            session.poke(CONTROL + offset + 3, 1)
+            session.poke(CONTROL + offset + 4, 1)
+        for i, value in controls.items():
+            session.poke(CONTROL + offset + i, bits(value))
+        side_channel = 1 if offset else channel
+        for n, i in enumerate(RESET_HISTORIES[family]):
+            session.poke(
+                CONTROL + offset + i, bits((n + 1) / (64 if side_channel == 0 else -89))
+            )
+    return session
+
+
+@pytest.mark.parametrize(
+    "family,fault",
+    [(family, fault) for family in RESET_SIZES for fault in (None, "missed-reset")]
+    + [("snapshots", "blanket-snapshots")],
+)
+def test_helper_reset_mirroring_matches_isolated_mono(reset_rig, family, fault):
+    """Helper boundaries only: no event-name, global writer or reset-hook claim.
+
+    b82440 is the held-sample record reset here, not an assumption that every
+    use of that helper has the same record layout as the source continuation.
+    """
+    stereo = initialized_reset_session(reset_rig, family)
+    left = initialized_reset_session(reset_rig, family)
+    right = initialized_reset_session(reset_rig, family, channel=1)
+    size = RESET_SIZES[family]
+    before_right = words(stereo, CONTROL + 0x100, size)
+    reset_call(stereo, family, "left")
+    authoritative = words(stereo, CONTROL, size)
+    reset_call(left, family, "left")
+    reset_call(right, family, "left")
+    if fault != "missed-reset":
+        reset_call(stereo, family, "right")
+    if fault == "blanket-snapshots":
+        # b81d6d resets3/4, but retains48..50. Their external consumers are
+        # unaudited, so check loss exactly at the reset boundary; the leaf
+        # renderer later overwrites these snapshots and can hide the error.
+        for i in (48, 49, 50):
+            stereo.poke(CONTROL + 0x100 + i, 0)
+    assert words(stereo, CONTROL, size) == authoritative == words(left, CONTROL, size)
+    actual, expected = words(stereo, CONTROL + 0x100, size), words(right, CONTROL, size)
+    if fault is None:
+        assert actual == expected
+    else:
+        assert actual != expected
+    if family == "snapshots":
+        assert [right.peek(CONTROL + i) for i in (48, 49, 50)] == [
+            before_right[i] for i in (48, 49, 50)
+        ]
+        assert [right.peek(CONTROL + i) for i in (3, 4)] == [0, 0]
+        assert all(before_right[i] != 0 for i in (48, 49, 50))
+    # Run each actual renderer after resetting. Prepared uses only the same
+    # qualified RECIPS model as its existing replay test; the reset uses none.
+    if family == "held":
+        # Capture an active post-reset control, retaining actual reset counters
+        # and held values. A missed reset must not be hidden by a copy bypass.
+        for session, offset in ((stereo, 0), (stereo, 0x100), (left, 0), (right, 0)):
+            session.poke(CONTROL + offset, bits(0.25))
+    elif family == "prepared":
+        for session in (stereo, left, right):
+            session.runner.state.approx_recips = True
+    for i in range(32):
+        lv, rv = bits((i - 11) / 128), bits((7 - i) / 163)
+        stereo.poke(LEFT + i, lv)
+        stereo.poke(RIGHT + i, rv)
+        left.poke(LEFT + i, lv)
+        right.poke(LEFT + i, rv)
+    if family in FILTER_FAMILIES:
+        _, histories, shared, _ = FILTER_FAMILIES[family]
+        shared_writes = ()
+    else:
+        histories = RESET_HISTORIES[family]
+        shared = (0, 3, 4) if family == "held" else PREPARED_SHARED
+        shared_writes = (3, 4) if family == "held" else PREPARED_WRITES
+    filter_call(stereo, family, "left", histories, shared, shared_writes)
+    authoritative = words(stereo, CONTROL, size)
+    filter_call(stereo, family, "right", histories, shared, shared_writes)
+    filter_call(left, family, "left", histories, shared, shared_writes)
+    filter_call(right, family, "left", histories, shared, shared_writes)
+    assert words(stereo, CONTROL, size) == authoritative == words(left, CONTROL, size)
+    assert words(stereo, LEFT, 32) == words(left, LEFT, 32)
+    actual_audio, expected_audio = words(stereo, RIGHT, 32), words(right, LEFT, 32)
+    if fault == "missed-reset":
+        assert actual_audio != expected_audio
+    else:
+        assert actual_audio == expected_audio
+    assert words(stereo, LEFT, 32) != actual_audio
+    assert any(v & 0x7FFFFFFF for v in expected_audio)
+    for session in (stereo, left, right):
+        assert session.runner.state.approx_recips_used == (family == "prepared")
+        for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
+            assert all(
+                (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
+            )

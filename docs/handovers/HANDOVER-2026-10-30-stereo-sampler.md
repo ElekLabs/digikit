@@ -19,8 +19,10 @@ these diagnostic checkpoints. DN2 configured 512 MiB geometry is not a free-pool
 proof. Bounded quiet observations do not establish ownership.
 
 The bounded stock DT2 paired-input pan audit agrees with diagonal left-A/right-B
-scaling; it does not prove UI or whole-pipeline equivalence. Next finish the local
-DN2 reset/helper map, actual engine context, cleanup and route integration. Memory work must establish pre-reclaim reader retirement and
+scaling; it does not prove UI or whole-pipeline equivalence. The local
+DN2 reset/helper map and bounded reset replay now pass. Next resolve production
+capture/commit stability, cleanup and route integration. The immediate AudioTask
+caller chain has no local exclusion proof; do not assume it serializes all writers. Memory work must establish pre-reclaim reader retirement and
 coexistence, not just search for an interval that appears quiet. DT2 release/reset
 can reclaim before header clear; existing findings 81/82 already demonstrate why
 header invalidation alone is inadequate.
@@ -30,7 +32,7 @@ header invalidation alone is inadequate.
 - [Finding 96](../findings/96-stereo-machine-processing.md): all ten identified
   post-source families have bounded numerical examples, plus the source
   continuation. The selected composed route adds original scratch blending and
-  output splitting. All 35 named replay tests pass without skips. The candidate
+  output splitting. All 44 named replay tests pass without skips, including actual reset helpers. The candidate
   output mapping remains a bounded synthetic route, not full stock integration.
 - [Finding 97](../findings/97-ddr-access-diagnostic.md): opt-in first-attempt DDR
   monitor, compiled native guard fallback, ordered diagnostic RPC, both native
