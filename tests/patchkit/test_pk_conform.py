@@ -5,6 +5,7 @@ import tomllib
 import pytest
 
 from tools.patchkit import pk_conform as c
+from tools.patchkit import pk_device
 
 
 def test_machine_parameters_come_from_the_manifest_and_the_device_frame():
@@ -40,7 +41,8 @@ def test_machines_are_found_and_the_framework_is_not():
 def test_the_budget_follows_the_headroom_of_the_device():
     for dev in c.DEVICES:
         b = c.budget(dev)
-        assert b.voice_block == b.headroom // c.VOICES > 0
+        voices = pk_device.load(dev)["adapter"]["machine"]["voices"]
+        assert b.voice_block == b.headroom // voices > 0
         assert b.note_on_block == b.headroom
     # the Digitone II stock load is higher, so its headroom is smaller
     assert c.budget("dn2").headroom < c.budget("dt2").headroom

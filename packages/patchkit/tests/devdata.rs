@@ -386,12 +386,29 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
             })
             .count() as u64
     };
+    let dyndsp = lib.get("core/dyndsp").unwrap();
+    let voices = |dev: &str| {
+        dyndsp
+            .manifest
+            .entry
+            .iter()
+            .filter(|e| {
+                e.registry == "voices"
+                    && (e.devices.is_empty() || e.devices.iter().any(|d| d == dev))
+            })
+            .count() as u64
+    };
     for (file, dev) in [("digitakt-ii", "dt2"), ("digitone-ii", "dn2")] {
         let t: toml::Value = toml::from_str(
             &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
         )
         .unwrap();
         let l = &t["limits"];
+        assert_eq!(
+            voices(dev),
+            l["machine_rows"].as_integer().unwrap() as u64,
+            "{dev} voice rows of core/dyndsp"
+        );
         assert_eq!(
             count("params", dev),
             l["param_rows"].as_integer().unwrap() as u64,

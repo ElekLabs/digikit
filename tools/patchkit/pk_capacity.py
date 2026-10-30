@@ -37,7 +37,8 @@ LOADED = "loaded"
 HDR = 16  # the arena's block header (arena.rs)
 DKM_HEADER = 0xA0  # a .dkm with no tables: the file is the header, then the image
 DSP_GRANULE = 64  # the DSP area is handed out in 64-byte granules (dsp.rs)
-MAX_VOICES = 8  # voices in one DSP section (dsp.rs)
+# voices in one DSP section: [limits.max] machine_rows (dkneeds::MAX_VOICES)
+MAX_VOICES = pk_device.contract_max()["machine_rows"]
 CODE = 4  # the synthetic module's code: moveq #0,d0; rts
 
 

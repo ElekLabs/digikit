@@ -17,10 +17,11 @@ def test_busy_per_block_is_executed_minus_idle_over_blocks():
 
 def test_stock_load_reproduces_the_report():
     # DN2 stock held note: 334,529 busy per block -> 50 % emulator, 57 % nominal, 67 % high
-    assert round(b.load_pct(334_529, "dn2", "nominal")) == 57
-    assert round(b.load_pct(334_529, "dn2", "high")) == 67
-    assert round(b.load_pct(208_640, "dt2", "nominal")) == 35
-    assert round(b.load_pct(208_640, "dt2", "high")) == 44
+    dn2, dt2 = b.FACTORS["dn2"]["stock_busy"], b.FACTORS["dt2"]["stock_busy"]
+    assert round(b.load_pct(dn2, "dn2", "nominal")) == 57
+    assert round(b.load_pct(dn2, "dn2", "high")) == 67
+    assert round(b.load_pct(dt2, "dt2", "nominal")) == 35
+    assert round(b.load_pct(dt2, "dt2", "high")) == 44
 
 
 def test_added_load_and_gate():
