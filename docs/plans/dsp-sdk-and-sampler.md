@@ -3058,3 +3058,27 @@ vector 99. Panel RX is 154 and MIDI RX is 156.
 Payoff: trustworthy storage-failure tests while the normal runtime remains stable.
 Confidence is high for the timer separation, moderate for the wider integration;
 full reset behavior and physical-source interactions remain unresolved.
+
+### Device PIT explicit event component — 2026-10-31
+
+- [x] Implement supplied timeout events, register-backed PIF/PIE requests and
+  aligned 16-bit PCSR/PMR acknowledgement, from MCF5441XRM p1156/p1157/p1159.
+- [x] Pass 26 named component/regression tests and all four actual-firmware
+  storage tests with both exact images. Seeded PIF survives storage ISR/RTE;
+  the actual scheduler's `$053f` word write clears it on both devices.
+- [x] Independent review found no issues; scoped coordinator path/layer and whitespace checks passed.
+
+This does not enable automatic timing, counter/phase/reset modeling, DTIM or
+shared/native delivery. Oracle behavior remains unchanged. Unsupported Device
+PIT access widths and registers reject before register mutation. The existing
+storage/force route excludes physical PIT requests. Logs and exact invocations:
+`out/runs/storage-fault-proof/pit-device-events*`. The full merge gate remains
+deferred; this is supplied status/acknowledgement evidence, not timer IRQ timing.
+
+**[D] DTIM3 discovery:** MMIO database references located setup/handler at
+DT2 `0x400c0b6e`/`0x400c0b40` and DN2 `0x400bb19e`/`0x400bb170`.
+Both setup bodies install vector 99, select level 2, clear DTCN, set DTRR to
+`0x43238` and DTMR to `0x001d`. Each handler writes byte 2 to DTER and calls
+`0x40001896`. No DTXMR write appears in those setup bodies; the complete mode
+history and repeated-reference rearming remain open. The earlier bounded
+first-64-KiB vector-slot scan missed these later functions and is not absence evidence.

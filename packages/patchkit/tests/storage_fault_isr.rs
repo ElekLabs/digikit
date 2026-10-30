@@ -1065,6 +1065,12 @@ fn scheduler_replay(
     extra_irq: u32,
 ) -> SchedulerResult {
     let mut m = delivery_machine(fw, linked, target, patched, 1);
+    const PIT0_PCSR: u32 = 0xfc08_0000;
+    // Explicit supplied timeout, with PIE disabled: the storage/force route
+    // does not deliver physical PIT requests. Only actual guest code may ack PIF.
+    m.board.write16(PIT0_PCSR, 0).unwrap();
+    m.board.time_mut().unwrap().device_pit_timeout(0).unwrap();
+    assert_eq!(m.board.read16(PIT0_PCSR).unwrap(), 4);
     let current_task = if target.sha == STOCK_SHA {
         0x47db_3f64
     } else {
@@ -1195,12 +1201,22 @@ fn scheduler_replay(
             );
             assert_eq!(m.cpu.pc, RETURN + 6);
             assert_eq!(
+                m.board.read16(PIT0_PCSR).unwrap() & 4,
+                4,
+                "storage ISR entry/RTE does not acknowledge PIT status"
+            );
+            assert_eq!(
                 m.board.read32(INTC2 + 0x14).unwrap() & (1 << 13),
                 1 << 13,
                 "actual signal helper requests scheduler"
             );
         }
         if pc == SCHEDULER_RTE {
+            assert_eq!(
+                m.board.read16(PIT0_PCSR).unwrap(),
+                0x053b,
+                "actual scheduler PCSR $053f word write acknowledges PIF"
+            );
             m.cpu.resolve_nzv();
             assert_eq!(m.cpu.d, task_d);
             assert_eq!(m.cpu.a, task_a);

@@ -24,7 +24,7 @@ pub enum TimerPolicy {
     /// Match the existing trace-oracle PIT and INTC models.
     #[default]
     Oracle,
-    /// Reserved for validated hardware timer delivery semantics.
+    /// Bounded explicit Device PIT events; automatic timer delivery is unsupported.
     Device,
 }
 
@@ -33,6 +33,15 @@ pub enum TimerPolicy {
 pub enum TimeError {
     /// Device-mode timer interrupt delivery has no validated implementation.
     DeviceInterruptDeliveryUnsupported,
+}
+
+/// Invalid use of the explicit Device PIT event/request component.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DevicePitError {
+    /// Explicit Device PIT APIs require Device timer policy.
+    DevicePolicyRequired,
+    /// PIT physical channels are numbered 0 through 3.
+    InvalidChannel { channel: usize },
 }
 
 /// INTC1 source 63: forced by the guest too, but delivered by the SSI model.
@@ -242,7 +251,32 @@ impl Time {
         self.intc.hw_candidate([(0, 0), (0, 0), (low, 0)])
     }
 
-    /// Write a PIT or INTC register. PIT handles PCSR PIF clearing.
+    /// Supply a Device PIT timeout event without clock advancement or delivery.
+    /// PIF latches independently of EN/PIE. Invalid policy/channel rejects before
+    /// register or cache mutation; this does not participate in storage arbitration.
+    pub fn device_pit_timeout(&mut self, channel: usize) -> Result<(), DevicePitError> {
+        if self.policy != TimerPolicy::Device {
+            return Err(DevicePitError::DevicePolicyRequired);
+        }
+        if !self.pit.device_latch_timeout(channel) {
+            return Err(DevicePitError::InvalidChannel { channel });
+        }
+        self.service_not_before = None;
+        self.blocked = None;
+        Ok(())
+    }
+
+    /// Raw register-backed Device PIT requests, independent of INTC/CPU masks.
+    /// No acknowledgement, timing, SR mutation or delivery occurs.
+    pub fn device_pit_requests(&self) -> Result<Vec<u16>, DevicePitError> {
+        if self.policy != TimerPolicy::Device {
+            return Err(DevicePitError::DevicePolicyRequired);
+        }
+        Ok(self.pit.device_pending_vectors())
+    }
+
+    /// Write a PIT or INTC register. Device PIT supports aligned 16-bit
+    /// PCSR/PMR writes only, with PIF acknowledgement; Oracle stays passthrough.
     /// Device mode additionally applies byte SIMR/CIMR writes selecting eSDHC
     /// source 31 or storage DMA source 0 on INTC2. Other INTC hardware
     /// semantics remain unsupported;
@@ -250,6 +284,14 @@ impl Time {
     /// directly before relying on this bounded path. This does not compose a
     /// whole-machine arbiter.
     pub fn write(&mut self, addr: u32, size: u8, value: u32) -> bool {
+        if self.policy == TimerPolicy::Device && PitBank::owns(addr) {
+            if !self.pit.device_write(addr, size, value) {
+                return false;
+            }
+            self.service_not_before = None;
+            self.blocked = None;
+            return true;
+        }
         self.service_not_before = None;
         self.blocked = None;
         if self.policy == TimerPolicy::Device

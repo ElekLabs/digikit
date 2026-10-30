@@ -386,12 +386,51 @@ MCF5441XRM p1156/p1159 describes PIT PIF setting at counter zero independently
 of PIE, and clearing by W1C or PMR write rather than CPU entry. DTIM REF/CAP
 report events independently of request enables, with W1C acknowledgement;
 ORRI/DMAEN gate requests (p1165/p1166). Stopping CLK differs from RST reset
-(p1164). These behaviors remain unimplemented in Device mode; Oracle's absent
+(p1164). The explicit PIT component below implements supplied-event status and
+acknowledgement only; Device DTIM behavior remains unimplemented. Oracle's absent
 PIF assertion and entry consumption of pending ticks remain compatibility rules.
-An explicit Device event/latch/acknowledgement component is the next bounded
-step, before timer timing or native integration. Repeated non-1588 REF rearming
+Timer timing and native integration remain separate. Repeated non-1588 REF rearming
 remains ambiguous between p1166 Table 39-4 and the p1167 EN1588 prose; this audit
 does not establish full timer fidelity.
+
+### Device PIT supplied events and acknowledgement
+
+**Implemented, bounded [D]:** `PitBank` now accepts explicit timeout events for
+all four physical channels, latching guest PCSR PIF independently of PIE/EN.
+Raw Device requests derive from PIF && PIE, independently of Oracle channel
+configuration/held state and INTC/CPU masks; reading requests does not consume
+status. Only aligned 16-bit PCSR/PMR Device writes are supported. PCSR PIF is
+W1C, zero preserves it, and every PMR write clears PIF regardless of OVW.
+Unsupported widths, unaligned/crossing accesses and PCNTR writes reject before
+register mutation. This bounded refusal does not model the manual's normal
+termination of ineffective PCNTR writes or establish byte/long access fidelity.
+
+`Time` requires Device policy for the explicit event and request APIs, reporting
+typed policy/channel errors before mutation. Device PIT writes use the bounded
+register path; Oracle write/service behavior is unchanged. No Oracle pending or
+fired bookkeeping, new snapshot state, clock advancement or interrupt delivery
+is added. Failed Device PIT writes preserve Time caches/registers; Board may
+already have advanced its MMIO epoch before rejection, so this is not whole-Board
+transactional rejection.
+
+The named Device PIT component and affected Oracle PIT/manual/Time tests pass
+**26 tests**, including real CPU interrupt entry that leaves PIF set until an
+ordinary guest word write acknowledges it. All four actual-firmware storage
+fixture tests pass with both exact DT2 1.17 and DN2 1.12 opt-ins. The eight
+initialized scheduler runs (both devices, stock/patched, CC/CC+CTOE) now seed
+PIT0 PIF with PIE disabled, observe retained PIF after the storage ISR/RTE, and
+verify actual scheduler `$053f` PCSR writes leave `$053b` by scheduler RTE.
+Existing vector order, task-context restore, marker, sticky-error and
+stock/patched comparisons remain asserted. This is supplied status, not a
+physical PIT interrupt: `step_storage_with_forced` still excludes PIT requests.
+
+Exact commands, environment and source/input hashes are recorded in
+`out/runs/storage-fault-proof/pit-device-events-invocation.json`; logs are
+`pit-device-events-tests.log` and `pit-device-events-firmware-tests.log` in the
+same directory. Independent review found no issues; coordinator scoped
+path/layer and whitespace checks passed. The full merge gate is deferred.
+Automatic timer timing, counters/phase/reset, Device DTIM, shared/native
+arbitration, hardware and the full merge gate remain outside this checkpoint.
 
 ### C — Explicit opt-in daemon and bounded fault-history proof
 

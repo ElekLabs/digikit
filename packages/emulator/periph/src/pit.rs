@@ -162,6 +162,55 @@ impl PitBank {
         true
     }
 
+    /// Supply a Device timeout event, latching PIF independently of PIE/EN.
+    /// The caller supplies the event: no counter, clock or reset is simulated.
+    /// MCF5441XRM p1156/p1159; Oracle scheduling/bookkeeping is untouched.
+    /// Invalid channels reject before mutation.
+    pub fn device_latch_timeout(&mut self, channel: usize) -> bool {
+        let Some(regs) = self.regs.get_mut(channel) else {
+            return false;
+        };
+        regs.set_u16_at(PCSR, regs.u16_at(PCSR) | PIF);
+        true
+    }
+
+    /// Raw Device requests from all four physical channels: PIF && PIE,
+    /// independently of EN, Oracle configuration/held state and INTC/CPU masks.
+    /// Reading requests never acknowledges status or advances a clock.
+    pub fn device_pending_vectors(&self) -> Vec<u16> {
+        self.regs
+            .iter()
+            .enumerate()
+            .filter(|(_, regs)| regs.u16_at(PCSR) & (PIF | PIE) == (PIF | PIE))
+            .map(|(channel, _)| VECTORS[channel])
+            .collect()
+    }
+
+    /// Bounded Device register writes: aligned 16-bit PCSR and PMR only.
+    /// PCSR PIF is W1C (zero preserves it); every PMR write clears PIF,
+    /// independently of OVW (MCF5441XRM p1156/p1159). Other control bits are
+    /// stored; counter/phase effects are not modeled. Unsupported accesses,
+    /// including PCNTR writes, reject before mutation, without fidelity claims.
+    pub fn device_write(&mut self, addr: u32, size: u8, value: u32) -> bool {
+        let Some(channel) = Self::slot(addr) else {
+            return false;
+        };
+        let offset = (addr - BASES[channel]) as usize;
+        if size != 2 || !matches!(offset, PCSR | PMR) {
+            return false;
+        }
+        let regs = &mut self.regs[channel];
+        if offset == PCSR {
+            let value = value as u16;
+            let pif = regs.u16_at(PCSR) & PIF & !value;
+            regs.set_u16_at(PCSR, (value & !PIF) | pif);
+        } else {
+            regs.set_u16_at(PMR, value as u16);
+            regs.set_u16_at(PCSR, regs.u16_at(PCSR) & !PIF);
+        }
+        true
+    }
+
     pub fn set_ips(&mut self, ips: f64) {
         self.ips = ips;
     }

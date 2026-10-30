@@ -569,3 +569,24 @@ compatibility behavior does not establish hardware semantics. Repeated non-1588
 DTIM REF rearming remains open. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md)
 and [the plan](../plans/dsp-sdk-and-sampler.md). No default-policy, snapshot,
 native-boot, SHARC or PCM changes were made.
+
+## Device PIT supplied-event component — 2026-10-31
+
+Device PIT now latches supplied timeout status for all four channels and exposes
+raw PIF && PIE requests without consumption, timing or delivery. Aligned word
+PCSR writes apply PIF W1C; PMR writes clear PIF independently of OVW. Other
+Device PIT write widths/registers reject before register mutation; Oracle remains
+unchanged. The typed Time API rejects Oracle policy and invalid event channels.
+
+Twenty-six named component/Oracle regression tests and all four actual-firmware
+storage tests pass with both exact images. The initialized scheduler fixture now
+seeds PIF with PIE disabled and proves it persists through storage ISR/RTE until
+the actual scheduler's `$053f` write clears it. Storage/force arbitration still
+excludes physical PIT requests. Commands/hashes/logs are under ignored
+`out/runs/storage-fault-proof/pit-device-events*`. Independent review and
+coordinator verification passed; the full gate remains deferred.
+
+Next address Device DTIM's event/status contract, including the open repeated
+REF rearming question, before automatic timing or shared/native arbitration.
+No hardware, snapshot format, default-policy, SHARC or PCM change is included.
+See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
