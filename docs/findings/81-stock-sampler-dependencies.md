@@ -228,3 +228,27 @@ The immediate loader predecessor `0x4015b616` only compares a four-word sample
 key, and busy-scope exit `0x40153896` only clears its flag. None of these
 inspected calls establishes a DSP drain acknowledgement. This bounded result
 does not exclude a barrier higher in the call chain or stock DSP slot validation.
+
+### Header receiver and immediate cached reader
+
+**[D]** A further original-byte audit follows marker `-1` through
+`0x1c7e35/38/39` to header handling at `0x1c7e83`. **[C]** Helper
+`0x1c400f` copies five sample guard shortwords; it is not slot invalidation.
+The actual slot update is `0x1c3fe5`, called at `0x1c7eb7`: it checks slot
+`< 0x401`, computes `slot*0x14 + 0x257810`, and writes five record fields
+at `0x1c4001..08`. This leaf does not walk voices or clear cached voice pointers.
+The following path constructs a receive descriptor and calls `0x1c834a`;
+its nested driver return has not been established as a reader-drain grant.
+
+The immediate renderer consumes cached voice state: `0x1c504a` loads I0 through
+I4/M5, `0x1c50a4` sets I4 from I0, and `0x1c50b4` reads the first PCM tap.
+The inspected non-Stretch dispatch at `0x1c6afd/0x1c6b00` passes the voice-state
+pointer to `0x1c4ecf`; entry-to-first-tap does not resolve the slot again.
+Earlier dispatcher/state updates remain outside this bounded proof.
+
+CF writers `0x400ccf04/0x400ccf90` set control `0x80`, poll status bit 0 before
+eight port writes, then return without reading a semantic response tuple.
+The enclosing sender's delay/mutex release is not a proven header-applied or
+old-readers-drained acknowledgement. These observations strengthen the need for
+an explicit pre-reclaim adapter fence; they do not prove that no broader stock
+coordination exists. The original DT2 1.17 image hashes match the audit above.

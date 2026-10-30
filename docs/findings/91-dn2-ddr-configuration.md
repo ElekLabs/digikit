@@ -265,3 +265,16 @@ preserves the bound. Allowing the finite rounding endpoint requires at least
 Public semantics: [Programming Reference](../sharc/SOURCES.md), Rev 1.5,
 printed pp. 6-9–12, 14-12–14, 20-13, 20-20 and 24-11. This narrows a stock
 buffer's use; it establishes neither free DDR nor a production sample pool.
+
+## Existing observation limits
+
+**[D]** The emulator's `SHARC_WWATCH` in
+`packages/emulator/sharc/src/write_watch.rs` samples at most 64 selected words
+after each dispatch unit. It detects changed values, not every access: reads,
+same-value writes and addresses outside the selection are invisible. Generated
+block/fast-tier observations identify the dispatch entry, not the exact writer.
+The [instrumentation guide](../INSTRUMENTATION.md) documents interpreter-only
+settings for finer attribution. Thus a quiet watch is not a range-exclusion proof.
+The bounded source scan found no existing complete CPU/DMA range guard; coverage
+would need to account for block fast paths and peripheral memory access as well
+as general read/write helpers. No instrumentation or core regeneration was done.

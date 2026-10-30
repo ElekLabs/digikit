@@ -1798,3 +1798,27 @@ linked dependency layout rejects `.pnpm` directory creation; equivalent installe
 tools were used directly without dependency changes. The first native attempt
 hit sandbox socket EPERM; the authorized local-socket rerun passed. No full merge
 gate, hardware test, PCM pin change or instruction-core regeneration was performed.
+
+### Next architecture decision — stock sharing versus owned reservation
+
+The bounded stock header/reader audit is complete (finding 81). Header receipt
+updates slot metadata; the immediate renderer uses a cached voice pointer. Neither
+the inspected CF sender nor receiver supplies a proven old-reader drain grant.
+This does not exclude wider stock coordination, but header clear is not a usable
+shortcut around the pre-reclaim lifetime obligation.
+
+Recommended next discovery: prove a runtime-owned pool for each device, keeping
+the shared reader and runtime-shipped adapters. For DT2, evaluate a 16 MiB tail
+reservation that would reduce the stock project's pool from 400 to 384 MiB.
+This remains unapproved and must not be implemented yet. Required evidence:
+consistent initial/append/gap/reset bounds, rejection of wrapping/negative sizes,
+disjoint preview/runtime regions, and bounded allocation/reload/coexistence tests.
+DN2 needs its own ownership proof; DT2's allocator cannot supply that proof.
+Existing selected-word watches cannot prove exclusion (finding 91).
+
+Alternative: preserve all DT2 stock project capacity and continue shared-pool
+integration. This requires a proven asynchronous pre-reclaim suspension/resume
+boundary and reader-drain completion across removal, replacement and project
+reset. Its immediate callers and header path do not yet establish that boundary.
+The user must choose the stock-capacity tradeoff before a reservation patch;
+neither option changes the one-engine, runtime-adapter SDK architecture.
