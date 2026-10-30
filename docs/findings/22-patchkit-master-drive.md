@@ -72,6 +72,9 @@ that is 0.3 % and 0.2 %. The routine has no division and no RECIPS.
   normal-word 14d form without a diagnostic. `tools/patchkit/pk_sharc.py` now assembles such a line as the normal-word load and
   rewrites its first parcel pair to the short-word form (opcode 0x1a, bits 38 and 36), so the re-decode sees
   `R0 = DM(0x256008) (swse)` exactly as the firmware's instruction. `tests/patchkit/test_master_drive.py` asserts the text.
+  **[D]** Fixed in the Selache fork (`fix/encodings`, "selas: encode (BW)/(BWSE)/(SW)/(SWSE) on a direct load or store as Type 14d"): `selas`
+  writes Type 14d itself, for loads and stores (a store takes no `SE`), and patchkit's rewrite is gone. The indirect forms
+  (`R1 = DM(I4, M5) (SW);`) are still assembled as normal-word accesses **[O]**.
 - An uninitialised `.VAR x;` is bss with no size: eight of them all got one address. Module data uses initialised
   `.VAR`.
 - The concrete core models `RECIPS` only with `approx_recips` (the seed table is unpublished), `run_call` takes it as

@@ -116,7 +116,7 @@ written this way runs as new code. Unmapped pages are mapped zeroed. Like `mem.c
 the daemon's process (`patchkit::build::build_module`; ColdFire C, assembly and Rust crates, and SHARC+ sources; gcc, as, ld and cargo run as child processes, the SHARC+ assembler is the Selache library in the process):
 a `core/*` module writes its committed `build/` objects, a content module writes `out/cache/dko`. The reply gets
 `build: {built: [{id, objects, ms}], skipped: [id], ms}`. A compiler error is the error message (`dev.reload: build of ID failed:` and the
-compiler output; for a SHARC+ source the assembler's or a guard's message, e.g. `known Selache encode bug`) and nothing is reloaded.
+compiler output; for a SHARC+ source the assembler's or a check's message, e.g. `the ISA does not allow`) and nothing is reloaded.
 The build runs on the controller thread, so the session is blocked while it runs.
 The module set is the patch record of the running image; the image is made again from the stock image (`modules_dir`: the repository root,
 default as for `firmware.load {runtime}`; the stock image is the load's base or the file of `firmware/` with the record's digest) and compared
