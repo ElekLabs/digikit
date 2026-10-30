@@ -2,18 +2,21 @@
 
 **[D/O]** Controlled Stage B checkpoint, 2026-10-31. Targets: DT2 OS 1.17 and
 DN2 OS 1.12. The user approved delivery from explicitly initialized registers,
-deferring full RSTA fidelity. The isolated controller-delivery and actual-waiter
-component now passes on both firmware images. Stage A remains incomplete on full
-reset; DMA/source-0 and global arbitration remain open within B. Stage C is
-unstarted. Full default native fault-history acceptance remains **failed/open**.
+deferring full RSTA fidelity. The controlled storage pair checkpoint now passes:
+INTC2 source 31/eSDHC and source 0/DMA59 ordering, actual firmware handlers and
+three-waiter ready-queue insertion on both images. Stage A remains incomplete on
+full reset; all-source scheduling and global cross-bank arbitration remain open.
+Stage C is unstarted. Full default native fault-history acceptance remains **failed/open**.
 The evidence remains **[D]**, not **[V]**.
 
 Normal Oracle completion, ordinary `Machine::step` and daemons retain their
 existing behavior. The payoff of the bounded component is observing sticky fault
 capture through real eSDHC/INTC registers and the firmware ISR instead of synthetic
 exception entry. It establishes waiter ready-queue insertion and a scheduling
-request, not resumed task execution, cold boot or full fault history. Runtime
-integration confidence remains low pending arbitration and policy/snapshot work.
+request, not resumed task execution, cold boot or full fault history. A genuine
+512-byte guest-triggered transfer precedes pair delivery; it is a controlled
+completion proof. Runtime integration confidence remains low pending all-source
+scheduling and policy/snapshot work.
 Earlier informal 1–3-day/week calendar estimates remain withdrawn.
 
 ## Evidence and boundary
@@ -49,17 +52,17 @@ uses this block-I/O transport.
 | --- | --- | --- |
 | [eSDHC](../../packages/emulator/periph/src/esdhc.rs) | Bounded Device status events, enable/signal gating and W1C are implemented; commands emit CC and readiness, with TC explicit | Full-controller reset remains unresolved; Oracle command behavior is preserved |
 | [Board](../../packages/emulator/machine/src/board.rs): 1075, 1637–1698 | Oracle completion directly posts semaphores; DMA service is synchronous | Integrated proof must not use host semaphore posting as ISR/waiter evidence |
-| [Runner](../../packages/emulator/machine/src/runner.rs) | Ordinary `step` retains configured DMA59 delivery; explicit `step_esdhc` delivers isolated eSDHC source 31 | Configured, pending and queued DMA major completions are rejected by the isolated path; arbitration is separate work |
+| [Runner](../../packages/emulator/machine/src/runner.rs) | Ordinary `step` retains configured DMA59 delivery; `step_esdhc` isolates source 31; `step_storage` orders sources 31 and 0 | The bounded pair uses shared IMR/ICR and CPU IPL; global arbitration remains open |
 | [INTC](../../packages/emulator/periph/src/intc.rs): 144, 167, 209 | Level/mask, hardware CIMR and IPR helpers exist | Reuse after checking actual mask/priority/CPU-IPL arbitration; `forced_candidate` near 235–258 omits source 0 and uses max(level, vector) across banks, so is not a ready universal arbiter |
 | [Boot runtime](../../packages/emulator/boot/src/runtime.rs): 483, 2253 | Board is fixed to Oracle; drain counts completion events | Opt-in runtime selection needs separate integration work |
 | Board snapshot near 410; boot runtime near 3357 | Save rejects undrained events and retains registers/card; restore checks firmware identity | Complete policy binding and pending-interrupt safety were not inspected/proved |
 
 ## Stages and acceptance gates
 
-Stage A is partially implemented. The user-approved controlled B delivery/waiter
-component passes from explicitly initialized registers despite unresolved RSTA.
-The remaining B arbitration work and Stage C are unstarted. Component success
-does not establish cold boot or complete fault history.
+Stage A is partially implemented. The user-approved controlled B storage pair
+checkpoint is complete from explicitly initialized registers despite unresolved
+RSTA. Stage C is unstarted. This does not establish all-source scheduler priority,
+global cross-bank arbitration, cold boot or complete fault history.
 
 ### A — Device-policy status and signal component
 
@@ -74,7 +77,8 @@ The manual's TC-over-DTOE interpretation precedence does not erase either bit.
 
 Device command response and data readiness remain synchronous. Commands emit CC
 and BRR/BWR as applicable, and no longer emit TC for every command; transfer/busy
-completion requires an explicit event. Contained big-endian 1-, 2- and 4-byte
+completion requires an explicit event. Board now supplies TC after actual data
+DMA completes, as described in the pair checkpoint below. Contained big-endian 1-, 2- and 4-byte
 writes receive the interrupt-register semantics; crossing writes are rejected
 before mutation. This is a model boundary, not a hardware alignment claim.
 Oracle host-write ordering and transfer effects are preserved by the code and
@@ -152,18 +156,21 @@ quiescent, isolated controller and erratum handling before a procedure is define
 
 ### B — Controller source delivery and actual waiter
 
+The earlier isolated-delivery checkpoint remains covered by the tests below.
 **Implemented, bounded [D]:** explicit
 [`Machine::step_esdhc`](../../packages/emulator/machine/src/runner.rs) requires
 `CompletionPolicy::Device` and an attached `Time` with `TimerPolicy::Device`.
 It samples the derived eSDHC line at an instruction boundary, reads source-31
 eligibility from the existing Time INTC bank (vector 223, actual IMR/ICR), checks
-the live CPU IPL and enters through `Cpu::take_interrupt`. Device Time adds only
-byte SIMR/CIMR writes selecting INTC2 source 31; other INTC accesses retain their
-existing passthrough behavior. Fixtures initialize IMR and all required registers
-explicitly. CALL/SALL, source 0 and full INTC hardware semantics are not added.
+the live CPU IPL and enters through `Cpu::take_interrupt`. Device Time supports
+byte SIMR/CIMR writes selecting INTC2 source 31 and, with the pair extension,
+source 0; other INTC accesses retain existing passthrough behavior. Fixtures
+initialize IMR and required registers explicitly. CALL/SALL and full INTC hardware
+semantics are not added.
 
 Invalid policies, missing Time, configured legacy DMA delivery and pending,
-queued or held Device DMA major completions are rejected before mutation. An
+queued or held Device DMA major completions, including latched source-0 group
+requests after events are drained, are rejected before mutation. An
 exception-entry failure has a separate poisoned-state error requiring the machine
 to be discarded. The line remains derived from register state, so masked status
 survives until unmasking and an unacknowledged line is eligible again after RTE.
@@ -202,19 +209,87 @@ external packages were added. Exact firmware hashes, both opt-in environment
 variables and reproduction commands are in the
 [adapter README](../../modules/core/adapters/storage-fault-proof/README.md).
 
-**Remaining [O]:** queue insertion and a forced scheduling request do not prove
-resumed task execution or the full scheduler. No complete read transfer, DMA
-ordering/quiescence, cold boot or native fault-history capture is proved. The next
-proposed slice is deliberate simultaneous DMA59/eSDHC ordering and source-0
-arbitration from initialized state before daemon integration. Manual p0354,
-section 17.3.2, gives same-level intercontroller priority INTC0 above INTC1 above
-INTC2; source 0 and cross-bank priority remain unproved and unimplemented here.
-The existing arbiter must not be treated as a validated global scheduler.
+### B — Controlled eSDHC/DMA59 pair checkpoint
+
+**Implemented, bounded [D]:** explicit
+[`Machine::step_storage`](../../packages/emulator/machine/src/runner.rs) requires
+Device Board and Device Time and offers only INTC2 source 31/vector 223 and
+source 0/vector 192 (eDMA channels 56–63, supported here for channel 59 only).
+It reuses the shared INTC bank: eligible higher level wins, then higher source
+number, so equal level 3 delivers 223 before 192; DMA level 4 reverses that order.
+IMR, zero ICR and CPU IPL defer delivery without losing the register-backed line.
+Configured or pending legacy DMA delivery is rejected before mutation; queued
+Board completions are accepted through the eDMA latch. Other pending channels
+56–63 are rejected explicitly rather than dispatched as DMA59. The route avoids
+the legacy pending boolean and invalidates queued DMA-written ranges before
+exception entry or instruction execution. Ordinary stepping, the old configured
+legacy route, Oracle behavior and daemon defaults remain unchanged.
+
+Device Board latches eDMA59 in INTH `0xfc044020` bit 27 only after
+`completion.done && completion.major_interrupt`. It supplies explicit eSDHC TC
+only after actual data DMA completion, not merely a command's data flag. Device
+byte CINT `0xfc04401c` honors NOP bit 7 first, CAIR bit 6 clearing INTH/INTL,
+otherwise only the selected channel. Contained big-endian 1/2/4-byte INTH/INTL
+writes are W1C; crossing writes reject before mutation. Unrelated channel bits
+and existing DSPI/SSI dispatch are preserved. Requests persist until CINT or W1C,
+not CPU entry. Existing serialized eDMA register backing round-trips the pending
+bit without a new snapshot format; runtime policy/snapshot compatibility is still
+unproved and belongs to Stage C.
+
+The targeted machine run passed **28 cases**: ten
+[pair tests](../../packages/emulator/machine/tests/storage_irq_pair.rs), nine
+isolated eSDHC, four runner and five SSI tests. Coverage includes both priority
+orders, source-0 SIMR/CIMR, masking/ICR/IPL, selective/all/NOP acknowledgement,
+repeated unacknowledged delivery, queued-effect preflight, instruction-cache
+invalidation, no host semaphore posts and the existing Board snapshot round-trip.
+Log: `out/runs/storage-fault-proof/stage-b-pair-tests.log`.
+
+The actual-firmware fixture's three named tests passed with both exact input
+images configured. The new pair case has four configurations: DMA level 3 or 4,
+no added error; level 3 with CTOE+DTOE; level 4 with DCE. Across DT2/DN2 and
+stock/patched copies this is **16 pair runs, 32 actual ISR/RTE invocations and
+48 waiter insertions**, bounded to 4,096 instructions per run. These counts are
+derived from the fixture loops/assertions, not individual replay counts printed
+in the log. The older tests contribute 96 no-waiter and 16 isolated-delivery
+invocations: **144 total across all three tests, not per image**.
+
+A real guest SERQ59 followed by CMD18 copies all 512 deterministic synthetic-card
+bytes before the first IRQ; the payload is checked again after both handlers.
+Three blocked semaphore waiters remain unposted until firmware executes. The
+actual DMA ISR (DT2 `0x4012d6a0`, RTE `0x4012d6c6`; DN2 `0x4012bd64`, RTE
+`0x4012bd8a`) clears CINT59 and signals DMA; the actual eSDHC ISR W1C clears its
+line and signals DATA/CMD. Exact vector-entry and RTE order, shared circular
+three-node bidirectional ready queue, bit-13 scheduling request, semaphore
+coalescing, status and interrupted context are asserted. The scheduling request
+is observed, never executed. Stock/patched selected observables match while
+patched raw errors remain sticky. DN2 hooks are in-memory test relocations only;
+the packaged manifest remains DT2-only.
+
+Error bits are injected **after a completed copy**. This is controlled completion
+plus error status, not proof of partial/corrupt DMA handling, physical quiescence
+or recovery. Independent static reviews reported no issues; evidence remains
+**[D]**, with no **[V]** upgrade. Log:
+`out/runs/storage-fault-proof/stage-b-pair-firmware-tests.log`. The ignored
+`out/runs/storage-fault-proof/stage-b-pair-invocation.json` records the actual
+successful command/environment overrides (including both firmware opt-ins),
+fixture/input hashes, target, lock and log paths. It was recorded from the tool
+invocation; the test log alone does not establish that opt-in inputs were set.
+Reproduction commands are in the
+[adapter README](../../modules/core/adapters/storage-fault-proof/README.md).
+
+**Remaining [O]:** full RSTA, physical DMA quiescence, global cross-bank and
+all-source priority, resumed tasks/full scheduler and native cold-boot fault
+history remain unproved. Manual p0354, section 17.3.2, gives intercontroller
+priority INTC0 above INTC1 above INTC2; the tested within-INTC2 storage pair does
+not establish that global contract. Before any daemon integration, a separately
+scoped bounded integration would need scheduler/all-source priority and runtime
+policy/snapshot safety audits. This records a requirement, not approval to start.
 
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
-Only after the remaining B arbitration proof, expose explicit opt-in daemon mode with snapshot identity and
-pending-state safety. Bound an actual read followed by a controlled fault on both
+Unstarted and not approved by this checkpoint. Before exposing explicit opt-in
+daemon mode, establish scheduler/all-source priority and runtime-policy snapshot
+identity/pending-state safety. Bound an actual read followed by a controlled fault on both
 current devices, including late/error completion and failure cleanup. Establish
 which boot/cache history the selected mode actually covers; an old Oracle
 snapshot does not establish prior controller fault history. Run default completion
@@ -223,7 +298,7 @@ regressions to demonstrate preserved normal behavior.
 The native observer assertions remain intact. A successful isolated read/IRQ
 experiment is not full early/reset coverage; full native fault-history acceptance
 remains a release blocker until its own assertions pass. Stage C is unstarted and has low
-confidence pending the remaining B work and the snapshot/policy audit.
+confidence pending scheduler/all-source integration and the snapshot/policy audit.
 
 ## Unknowns and exclusions
 
@@ -238,7 +313,8 @@ lifecycle/content-change witnesses and complete relevant fault history remain
 independent production gates. See [the sampler plan](../plans/dsp-sdk-and-sampler.md)
 and [stock storage audit](81-stock-sampler-dependencies.md).
 
-For this checkpoint, the coordinator's scoped `mise run test:changed` across the
-11 changed files passed pathcheck and layer checks. The full merge gate remains
+For the earlier isolated-delivery checkpoint, the coordinator's scoped
+`mise run test:changed` across 11 changed files passed pathcheck and layer checks. The coordinator's later
+scoped ten-file pair check also passed pathcheck/layers. The full merge gate remains
 deferred and has not run. Documentation pathcheck and diff checks cover this
 update; no additional build or emulator run was performed for the prose change.

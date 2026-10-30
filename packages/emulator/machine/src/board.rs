@@ -874,6 +874,11 @@ impl Board {
     pub fn esdhc_dma_bytes(&self) -> u64 {
         self.esdhc_dma_bytes
     }
+    /// Pending channels in INTC2 source 0's eDMA56..63 group.
+    pub fn storage_dma_pending(&self) -> u32 {
+        self.dma.edma_regs.read(edma::INTH, 4) & 0xff00_0000
+    }
+
     pub fn completion_policy(&self) -> CompletionPolicy {
         self.policy
     }
@@ -1083,6 +1088,14 @@ impl Board {
         if let Some(completion) = dma {
             if self.policy == CompletionPolicy::Oracle {
                 self.post(self.semaphores.dma_sem);
+            }
+            if self.policy == CompletionPolicy::Device && completion.done {
+                // The data copy and descriptor writeback have already succeeded.
+                self.esdhc.device_event(1 << 1).expect("validated TC event");
+                if completion.major_interrupt {
+                    let pending = self.dma.edma_regs.read(edma::INTH, 4);
+                    self.dma.edma_regs.write(edma::INTH, 4, pending | (1 << 27));
+                }
             }
             self.events.push(CompletionEvent::Dma59 {
                 policy: self.policy,
@@ -1547,6 +1560,27 @@ impl Board {
             return Err(BoardWriteError::Bus(Self::bus_error(addr, true)));
         }
         if DmaLink::owns(addr) {
+            // Device interrupt latches share the already checkpointed eDMA
+            // register file. Reject crossing accesses before changing anything.
+            let end = addr.checked_add(u32::from(size));
+            if self.policy == CompletionPolicy::Device
+                && addr < edma::INTL + 4
+                && end.is_some_and(|end| end > edma::INTH)
+            {
+                let base = if addr < edma::INTL {
+                    edma::INTH
+                } else {
+                    edma::INTL
+                };
+                if !matches!(size, 1 | 2 | 4) || addr < base || end.is_none_or(|end| end > base + 4)
+                {
+                    return Err(BoardWriteError::Bus(Self::bus_error(addr, true)));
+                }
+                self.bump_epoch(addr);
+                let pending = self.dma.edma_regs.read(addr, size);
+                self.dma.edma_regs.write(addr, size, pending & !value);
+                return Ok(());
+            }
             if !Self::in_dsp_port(addr) {
                 self.bump_epoch(addr);
             }
@@ -1607,6 +1641,22 @@ impl Board {
             }
             if let Some((dest, bytes)) = host_write {
                 self.write_dspi2_rx(dest, &bytes)?;
+            }
+            if self.policy == CompletionPolicy::Device && addr == edma::CINT && size == 1 {
+                let command = value as u8;
+                if command & 0x80 == 0 {
+                    if command & 0x40 != 0 {
+                        self.dma.edma_regs.write(edma::INTH, 4, 0);
+                        self.dma.edma_regs.write(edma::INTL, 4, 0);
+                    } else {
+                        let channel = command & 0x3f;
+                        let register = if channel < 32 { edma::INTL } else { edma::INTH };
+                        let pending = self.dma.edma_regs.read(register, 4);
+                        self.dma
+                            .edma_regs
+                            .write(register, 4, pending & !(1 << (channel % 32)));
+                    }
+                }
             }
             self.update_dma59_request(addr, size, value);
             if addr == edma::SERQ

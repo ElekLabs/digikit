@@ -224,9 +224,15 @@ impl Time {
         self.intc.level_for_vector(223)
     }
 
+    /// Eligibility of INTC2 source 0 (eDMA channels 56..63).
+    pub fn storage_dma_interrupt_level(&self) -> Option<u8> {
+        self.intc.level_for_vector(192)
+    }
+
     /// Write a PIT or INTC register. PIT handles PCSR PIF clearing.
     /// Device mode additionally applies byte SIMR/CIMR writes selecting eSDHC
-    /// source 31 on INTC2. Other INTC hardware semantics remain unsupported;
+    /// source 31 or storage DMA source 0 on INTC2. Other INTC hardware
+    /// semantics remain unsupported;
     /// other accesses retain existing passthrough behavior. Initialize IMR
     /// directly before relying on this bounded path. This does not compose a
     /// whole-machine arbiter.
@@ -236,9 +242,9 @@ impl Time {
         if self.policy == TimerPolicy::Device
             && size == 1
             && matches!(addr, 0xfc05_001c | 0xfc05_001d)
-            && value as u8 & 0x7f == 31
+            && matches!(value as u8 & 0x7f, 0 | 31)
         {
-            // The shared helper is validated here only for this low source.
+            // The shared helper is validated here only for these low sources.
             // Its high-source handling is not used by this bounded seam.
             return self.intc.hw_apply_simr_cimr(addr, value as u8);
         }

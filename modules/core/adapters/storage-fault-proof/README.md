@@ -77,10 +77,11 @@ this test only; `module.toml` remains DT2-only, with no DN2 packaged support.
 `Machine::step_esdhc` requires Device Board and attached Device Time. The fixture
 initializes IRQSTATEN/IRQSIGEN, IMR and ICR explicitly and unmasks source 31 through
 CIMR; the real shared INTC bank selects vector 223 at level 3 subject to CPU IPL.
-Device SIMR/CIMR support is limited to byte writes selecting source 31. Ordinary
+Device SIMR/CIMR support is limited to byte writes selecting source 31 or 0. Ordinary
 stepping and Oracle completion retain their existing behavior. Configured,
-pending, queued or held DMA major completion state is rejected before mutation;
-this path is isolated delivery, not DMA or global interrupt arbitration.
+pending, queued or held DMA major completion state, including register-latched
+source-0 group requests, is rejected before mutation; `step_esdhc` remains isolated.
+The explicit storage-pair route below handles DMA59 separately.
 
 An ordinary guest CMD13 first latches CC while the semaphore waiter remains
 blocked, proving no host post before interrupt entry. Immediate controlled Device
@@ -94,38 +95,91 @@ status zero while the observer retains CTOE; TC+DTOE/DCE leaves data status `-1`
 The observer preserves stock status, context and queue results.
 
 The scheduling request is observed, not serviced: no resumed task or full
-scheduler proof is claimed. These 16 invocations plus the original 96 no-waiter
-invocations make 112 total across the two tests, not 112 per image. The only new
-fixture dependency is the local `machine` dev-dependency; no external package was
-added. Route and fixture static reviews reported no issues.
+scheduler proof is claimed. This earlier checkpoint contributes 16 invocations;
+the original no-waiter fixture contributes 96. The pair proof below adds 32,
+for **144 total across three tests, not per image**. Fixture dependencies remain
+local; no external package was added. Independent route/fixture static reviews
+reported no issues; evidence remains **[D]**, not **[V]**.
+
+The controlled storage-pair checkpoint now also passes. Explicit
+`Machine::step_storage` requires Device Board/Time and offers only INTC2 eSDHC
+source 31/vector 223 and the source-0/vector-192 DMA56–63 group, supporting
+channel 59 here. It reuses shared IMR/ICR and live CPU IPL, choosing higher level,
+then higher source. Equal level 3 delivers 223 then 192; DMA level 4 reverses
+that order. Other pending channels 56–63 fail explicitly. Configured/pending
+legacy delivery fails before mutation; queued Board completions use the eDMA
+register latch without feeding the legacy pending boolean. DMA-written ranges
+are invalidated before exception entry or execution. Defaults remain unchanged.
+
+Device completion latches INTH `0xfc044020` bit 27 only for
+`completion.done && completion.major_interrupt`; TC follows actual data DMA
+completion, not a command data flag alone. Device byte CINT honors NOP bit 7,
+then CAIR bit 6 (both interrupt banks), otherwise the selected channel only.
+Contained big-endian 1/2/4-byte INTH/INTL writes are W1C; crossing accesses reject
+before mutation. Other channel bits and DSPI/SSI dispatch are preserved, as is
+Oracle passthrough. DMA requests persist until acknowledgement, not CPU entry.
+The existing Board snapshot round-trips the register-backed pending bit without
+new format; runtime policy/snapshot compatibility remains a Stage C question.
+
+The new fixture executes guest SERQ59 and CMD18 against deterministic synthetic
+media, checking all **512 bytes before the first IRQ and after both handlers**.
+Four cases (DMA level 3/4 without added errors, level 3 with CTOE+DTOE, level 4
+with DCE), both targets and stock/patched copies produce **16 pair runs, 32 actual
+ISR/RTE invocations and 48 waiter insertions**, each bounded to 4,096 instructions.
+Counts come from fixed source loops/assertions; the log reports named tests.
+Actual firmware CINT clears DMA59 and eSDHC W1C clears IRQSTAT. Vector-entry/RTE
+order, preserved context/status, semaphore coalescing and a shared circular
+three-node bidirectional ready queue match between stock and patched runs. All
+three waiters remain blocked before entry; the real signal helpers insert them.
+Scheduling-request bit 13 is observed without running the scheduler. Patched raw
+error bits remain sticky; the DN2 observer relocation is in-memory test-only.
+
+Error bits are injected after the genuine copy completes. This is controlled
+completion plus error status, not partial/corrupt DMA recovery or physical
+quiescence. All-source scheduling and global cross-bank arbitration remain open.
 
 From the repository root, using the original checkout's shared benchlock for
 this worktree:
 
 ```sh
+PATH=/Users/em/.cargo/bin:$PATH \
 UV_NO_SYNC=1 UV_CACHE_DIR="$PWD/out/cache/uv" \
+CARGO_BUILD_JOBS=2 \
 BENCHLOCK_PATH=/Users/em/src/digi/digitakt2/out/.benchlock \
 DIGI_STORAGE_FAULT_ISR_SYX="$PWD/firmware/Digitakt_II_OS1.17.syx" \
 DIGI_STORAGE_FAULT_ISR_DN2_SYX="$PWD/firmware/Digitone_II_OS1.12.syx" \
-uv run python -m tools.devtools.benchlock run --shared --timeout 120 \
-  --label storage-fault-isr -- rustup run 1.98.1 cargo test --offline --locked \
+uv run python -m tools.devtools.benchlock run --shared \
+  --label storage-pair-firmware-tests -- rustup run 1.98.1 cargo test --offline --locked \
   -p patchkit --test storage_fault_isr \
-  --target-dir out/native/target-wt/digikit-dsp-sampler/nogen/storage-fault-proof
+  --target-dir out/native/target-wt/digikit-dsp-sampler/nogen/storage-fault-proof \
+  > out/runs/storage-fault-proof/stage-b-pair-firmware-tests.log 2>&1
 ```
 
 Each unset firmware variable skips that target with an explicit reason; a
 configured missing, unreadable or wrong-hash input fails. Both variables were
-configured for the passing run recorded in
-`out/runs/storage-fault-proof/stage-b-firmware-tests.log`. The isolated machine
-route also passed nine new tests, four existing runner tests and four timer-storage
-tests, recorded in `out/runs/storage-fault-proof/stage-b-delivery-tests.log`.
+explicitly configured in the successful invocation: **all three firmware tests
+passed**. The exact executed command/environment overrides, fixture/input hashes,
+lock, target and log paths are recorded from that invocation in ignored
+`out/runs/storage-fault-proof/stage-b-pair-invocation.json`. This provenance
+establishes the opt-in configuration; the log alone does not.
 
-This remains **[D]** initialized-state component evidence. Full RSTA fidelity,
-DMA59/source-0 and cross-bank arbitration, complete reads, hardware, cold boot and
-native fault-history acceptance remain open. The default Oracle native run still
-has failed/open fault-history acceptance. Stage C daemon/snapshot integration has
-not started. The next proposed slice is deliberate DMA59/eSDHC ordering and
-source-0 arbitration before daemon integration. No public sample ABI, pool or
-hardware-flashing work follows. See the
+Logs: `out/runs/storage-fault-proof/stage-b-pair-firmware-tests.log` and
+`out/runs/storage-fault-proof/stage-b-pair-tests.log`. The latter records **28
+machine cases**: pair 10, isolated eSDHC 9, runner 4 and SSI 5, including source-0
+CIMR, level 3/4 ordering, acknowledgement, atomic preflight and snapshot backing.
+Earlier isolated-delivery logs remain
+`out/runs/storage-fault-proof/stage-b-delivery-tests.log` and
+`out/runs/storage-fault-proof/stage-b-firmware-tests.log`.
+
+This remains **[D]** initialized-state evidence; the controlled pair checkpoint
+is complete. Full RSTA fidelity, physical DMA quiescence, global cross-bank and
+all-source arbitration, resumed tasks, native cold boot and complete fault
+history remain open. Default native fault-history acceptance remains
+**failed/open**. Stage C daemon/snapshot integration is unstarted. Any next bounded
+integration would require scheduler/all-source priority and runtime-policy
+snapshot audits before daemon work; this checkpoint does not authorize starting
+that scope. The coordinator's scoped ten-file `mise run test:changed` passed
+pathcheck/layers; the full gate remains deferred and has not run. No public
+sample ABI, pool or hardware-flashing work follows. See the
 [plan](../../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
 and [scope finding](../../../../docs/findings/100-storage-interrupt-emulation-scope.md).

@@ -1,7 +1,9 @@
 //! Opt-in stock ISR proofs: the original DT2 replay uses a controlled W1C
 //! double; the DT2/DN2 delivery fixture uses real Board eSDHC/INTC registers and
 //! the actual signal helper with one waiter. Queue insertion and the scheduling
-//! request are observed, not task resumption, DMA or native-boot completion.
+//! request are observed, not task resumption or native-boot completion. The
+//! pair fixture additionally proves a controlled guest-triggered DMA59 copy
+//! before both actual ISRs; injected error bits do not model corrupt DMA.
 use coldfire::{Bus, BusError, Cpu, InterruptPolicy};
 use patchkit::build::{cf, toolchain::Env};
 use patchkit::error::sha256_hex;
@@ -335,6 +337,9 @@ struct DeliveryTarget {
     status: [u32; 2], // data, command
     sem: [u32; 2],
     high_ready: u32,
+    dma_isr: u32,
+    dma_rte: u32,
+    dma_sem: u32,
 }
 
 const DELIVERY_TARGETS: [DeliveryTarget; 2] = [
@@ -348,6 +353,9 @@ const DELIVERY_TARGETS: [DeliveryTarget; 2] = [
         status: STATUS,
         sem: SEM,
         high_ready: 0x4096_4914,
+        dma_isr: 0x4012_d6a0,
+        dma_rte: 0x4012_d6c6,
+        dma_sem: 0x44e3_feb8,
     },
     DeliveryTarget {
         name: "DN2 1.12",
@@ -359,6 +367,9 @@ const DELIVERY_TARGETS: [DeliveryTarget; 2] = [
         status: [0x4461_c6b8, 0x4461_c6bc],
         sem: [0x4461_c6d0, 0x4461_c6d8],
         high_ready: 0x4058_e15c,
+        dma_isr: 0x4012_bd64,
+        dma_rte: 0x4012_bd8a,
+        dma_sem: 0x4461_c6c8,
     },
 ];
 const WAITER: u32 = 0x4100_0100;
@@ -667,6 +678,349 @@ fn actual_firmware_delivery_readies_waiter_and_preserves_stock_results() {
                 "{} IRQ={:#x}: observer preserves status, queue and context",
                 target.name,
                 extra_irq | 1
+            );
+        }
+    }
+}
+
+// A controlled synchronous completion followed by optional error status bits:
+// this exercises actual firmware handlers, not card corruption, DMA abort,
+// interrupt timing, scheduler execution, native boot or sample-file loading.
+const PAIR_DEST: u32 = 0x4200_0000;
+const PAIR_CEILING: usize = 4096;
+const DMA_VECTOR: u32 = 192;
+const DMA_PENDING: u32 = 1 << 27;
+// MCF5441x eDMA59 descriptor and request/latch registers. Keep these fixture
+// inputs explicit rather than adding another test dependency.
+const PAIR_TCD: u32 = 0xfc04_5000 + 59 * 0x20;
+const PAIR_SERQ: u32 = 0xfc04_4018;
+const PAIR_INTH: u32 = 0xfc04_4020;
+const PAIR_XFERTYP: u32 = 0xfc0c_c00c;
+const PAIR_DATPORT: u32 = 0xfc0c_c020;
+
+struct PairMedia;
+
+fn pair_byte(offset: usize) -> u8 {
+    (offset as u8).wrapping_mul(37).wrapping_add(11)
+}
+
+impl emmc_card::RandomAccessRead for PairMedia {
+    fn len(&self) -> u64 {
+        512
+    }
+
+    fn read_at(&self, offset: u64, destination: &mut [u8]) -> usize {
+        let available = 512u64.saturating_sub(offset).min(destination.len() as u64) as usize;
+        for (i, byte) in destination[..available].iter_mut().enumerate() {
+            *byte = pair_byte(offset as usize + i);
+        }
+        available
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct PairResult {
+    d: [u32; 8],
+    a: [u32; 8],
+    sr: u16,
+    pc: u32,
+    other_a7: u32,
+    status: [u32; 2],
+    sem: [u32; 6],
+    queue: [u32; 11],
+    forced: u32,
+    irqstat: u32,
+    inth: u32,
+    entries: Vec<u32>,
+    rtes: Vec<u32>,
+    signal_entries: [usize; 2],
+    payload: Vec<u8>,
+}
+
+fn pair_payload(m: &mut machine::Machine) -> Vec<u8> {
+    (0..512)
+        .map(|i| m.board.read8(PAIR_DEST + i).unwrap())
+        .collect()
+}
+
+fn pair_replay(
+    fw: &Firmware,
+    linked: &Linked,
+    target: &DeliveryTarget,
+    patched: bool,
+    dma_level: u8,
+    extra_irq: u32,
+) -> PairResult {
+    use emmc_card::{Card, CardIdentity};
+
+    let mut m = delivery_machine(fw, linked, target, patched, 0);
+    *m.board.esdhc.card_mut() =
+        Card::with_backing(CardIdentity::Mlc4G, Some(Box::new(PairMedia))).unwrap();
+    m.board.map_ram_page(PAIR_DEST).unwrap();
+    m.board
+        .write32(VBR + DMA_VECTOR * 4, target.dma_isr)
+        .unwrap();
+    m.board.write8(INTC2 + 0x40, dma_level).unwrap();
+    m.board.write8(INTC2 + 0x1d, 0).unwrap();
+    let sems = [target.sem[0], target.sem[1], target.dma_sem];
+    let waiters = [WAITER, WAITER + 0x40, WAITER + 0x80];
+    for (sem, waiter) in sems.into_iter().zip(waiters) {
+        m.board.write32(sem, 0).unwrap();
+        m.board.write32(sem + 4, waiter).unwrap();
+        m.board.write32(waiter, 0).unwrap();
+        m.board.write32(waiter + 4, 0).unwrap();
+        m.board.write32(waiter + 8, READY_HEAD).unwrap();
+    }
+    m.board.write32(READY_HEAD, 0).unwrap();
+    m.board.write32(target.high_ready, 0).unwrap();
+    let tcd = PAIR_TCD;
+    m.board.write32(tcd, PAIR_DATPORT).unwrap();
+    m.board.write32(tcd + 0x10, PAIR_DEST).unwrap();
+    m.board.write32(tcd + 0x08, 512).unwrap();
+    m.board.write16(tcd + 0x14, 1).unwrap();
+    m.board.write16(tcd + 0x1c, 1).unwrap();
+    m.board.write16(tcd + 0x1e, 0x000a).unwrap();
+    // MOVE.B D1,(SERQ).L; MOVE.L D0,(XFERTYP).L; NOP.
+    m.board.write16(RETURN, 0x13c1).unwrap();
+    m.board.write32(RETURN + 2, PAIR_SERQ).unwrap();
+    m.board.write16(RETURN + 6, 0x23c0).unwrap();
+    m.board.write32(RETURN + 8, PAIR_XFERTYP).unwrap();
+    m.board.write16(RETURN + 12, 0x4e71).unwrap();
+    m.cpu.d[1] = 59;
+    m.cpu.d[0] = (18 << 24) | (1 << 21) | (1 << 4);
+    assert!(m.step_storage().unwrap().is_empty());
+    let events = m.step_storage().unwrap();
+    assert!(events.iter().any(|event| matches!(event, machine::CompletionEvent::Dma59 { completion, .. } if completion.done && completion.major_interrupt && completion.disable_request)));
+    assert_eq!(m.irqs_delivered, 0);
+    assert_eq!(m.cpu.pc, RETURN + 12);
+    let expected_payload: Vec<u8> = (0..512).map(pair_byte).collect();
+    assert_eq!(pair_payload(&mut m), expected_payload);
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), 3);
+    assert_eq!(m.board.read32(PAIR_INTH).unwrap(), DMA_PENDING);
+    for (sem, waiter) in sems.into_iter().zip(waiters) {
+        assert_eq!(
+            m.board.read32(sem).unwrap(),
+            0,
+            "Device does not host-post signals"
+        );
+        assert_eq!(m.board.read32(sem + 4).unwrap(), waiter);
+    }
+    assert_eq!(m.board.read32(READY_HEAD).unwrap(), 0);
+    assert_eq!(m.board.read32(target.high_ready).unwrap(), 0);
+    if extra_irq != 0 {
+        m.board.esdhc.device_event(extra_irq).unwrap();
+    }
+    let irq = 3 | extra_irq;
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), irq);
+    m.cpu.resolve_nzv();
+    let before = (m.cpu.d, m.cpu.a, m.cpu.sr, m.cpu.other_a7);
+    let mut entries = Vec::new();
+    let mut rtes = Vec::new();
+    let mut signal_entries = [0; 2];
+    let mut returned = false;
+    // Vector-table reads independently identify the actual exception entries.
+    m.board.set_guest_access_capture(true);
+    for _ in 0..PAIR_CEILING {
+        if m.irqs_delivered == 2 && m.cpu.pc == RETURN + 12 {
+            returned = true;
+            break;
+        }
+        if m.cpu.pc == target.rte {
+            rtes.push(DELIVERY_VECTOR);
+        }
+        if m.cpu.pc == target.dma_rte {
+            rtes.push(DMA_VECTOR);
+        }
+        if m.cpu.pc == 0x4000_155c {
+            signal_entries[0] += 1;
+        }
+        if m.cpu.pc == 0x4000_11ee {
+            signal_entries[1] += 1;
+        }
+        let pc = m.cpu.pc;
+        m.step_storage().unwrap_or_else(|error| {
+            panic!(
+                "{} patched={patched} DMA level={dma_level} IRQ={irq:#x} at {pc:#x}: {error:?}",
+                target.name
+            )
+        });
+        assert_eq!(
+            m.cpu.last_exception, None,
+            "unexpected instruction exception at {pc:#x}"
+        );
+        for read in m.board.take_guest_reads() {
+            for vector in [DELIVERY_VECTOR, DMA_VECTOR] {
+                if read.address == VBR + vector * 4 {
+                    assert_eq!(read.size, 4);
+                    entries.push(vector);
+                }
+            }
+        }
+        m.board.take_guest_writes();
+    }
+    m.board.set_guest_access_capture(false);
+    assert!(
+        returned,
+        "{} pair exceeded {PAIR_CEILING} instructions at {:#x}",
+        target.name, m.cpu.pc
+    );
+    m.cpu.resolve_nzv();
+    assert_eq!(
+        (m.cpu.d, m.cpu.a, m.cpu.sr, m.cpu.other_a7),
+        before,
+        "both ISRs preserve context"
+    );
+    let order = if dma_level == 3 {
+        vec![DELIVERY_VECTOR, DMA_VECTOR]
+    } else {
+        vec![DMA_VECTOR, DELIVERY_VECTOR]
+    };
+    assert_eq!(
+        entries, order,
+        "one entry to each actual ISR, ordered by INTC2"
+    );
+    assert_eq!(rtes, order, "one actual RTE per ISR");
+    assert_eq!(m.irqs_delivered, 2);
+    assert_eq!(signal_entries, [(irq.count_ones() + 1) as usize; 2]);
+    assert_eq!(
+        m.board.read32(PAIR_INTH).unwrap(),
+        0,
+        "actual DMA ISR CINT acknowledges channel59"
+    );
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), 0, "actual eSDHC ISR W1C");
+    assert!(!m.board.esdhc.interrupt_pending());
+    assert_eq!(m.board.storage_dma_pending(), 0);
+    let signal_counts = [
+        (irq & 0x0030_0002).count_ones(),
+        (irq & 0x0001_0001).count_ones(),
+        1,
+    ];
+    for (sem, count) in sems.into_iter().zip(signal_counts) {
+        assert_eq!(
+            m.board.read32(sem + 4).unwrap(),
+            0,
+            "waiter removed exactly once"
+        );
+        assert_eq!(
+            m.board.read32(sem).unwrap(),
+            (count - 1).min(1),
+            "first signal wakes waiter; later signals coalesce"
+        );
+    }
+    // Validate a circular doubly-linked ready list containing all three
+    // distinct waiters once, including the nonempty insertion path.
+    let head = m.board.read32(READY_HEAD).unwrap();
+    assert!(waiters.contains(&head));
+    let mut seen = Vec::new();
+    let mut node = head;
+    for _ in 0..waiters.len() {
+        assert!(waiters.contains(&node));
+        assert!(!seen.contains(&node), "waiter duplicated in ready queue");
+        seen.push(node);
+        let next = m.board.read32(node).unwrap();
+        let previous = m.board.read32(node + 4).unwrap();
+        assert_eq!(m.board.read32(next + 4).unwrap(), node);
+        assert_eq!(m.board.read32(previous).unwrap(), node);
+        node = next;
+    }
+    assert_eq!(node, head);
+    assert_eq!(m.board.read32(target.high_ready).unwrap(), READY_HEAD);
+    let forced = m.board.read32(INTC2 + 0x14).unwrap();
+    assert_eq!(
+        forced & (1 << 13),
+        1 << 13,
+        "scheduling requested, never executed"
+    );
+    assert_eq!(
+        m.board.read32(target.status[1]).unwrap(),
+        0,
+        "CC follows CTOE"
+    );
+    assert_eq!(
+        m.board.read32(target.status[0]).unwrap(),
+        if extra_irq & 0x0030_0000 != 0 {
+            u32::MAX
+        } else {
+            0
+        }
+    );
+    assert_eq!(
+        m.board
+            .read32(linked.symbols["storage_fault_bits"] as u32)
+            .unwrap(),
+        if patched { irq & MASK } else { 0 }
+    );
+    let payload = pair_payload(&mut m);
+    assert_eq!(
+        payload, expected_payload,
+        "handlers leave the complete DMA payload unchanged"
+    );
+    PairResult {
+        d: m.cpu.d,
+        a: m.cpu.a,
+        sr: m.cpu.sr,
+        pc: m.cpu.pc,
+        other_a7: m.cpu.other_a7,
+        status: target.status.map(|at| m.board.read32(at).unwrap()),
+        sem: [
+            sems[0],
+            sems[0] + 4,
+            sems[1],
+            sems[1] + 4,
+            sems[2],
+            sems[2] + 4,
+        ]
+        .map(|at| m.board.read32(at).unwrap()),
+        queue: [
+            READY_HEAD,
+            waiters[0],
+            waiters[0] + 4,
+            waiters[0] + 8,
+            waiters[1],
+            waiters[1] + 4,
+            waiters[1] + 8,
+            waiters[2],
+            waiters[2] + 4,
+            waiters[2] + 8,
+            target.high_ready,
+        ]
+        .map(|at| m.board.read32(at).unwrap()),
+        forced,
+        irqstat: m.board.read32(IRQSTAT).unwrap(),
+        inth: m.board.read32(PAIR_INTH).unwrap(),
+        entries,
+        rtes,
+        signal_entries,
+        payload,
+    }
+}
+
+#[test]
+fn actual_storage_pair_orders_both_isrs_and_readies_three_waiters() {
+    for target in DELIVERY_TARGETS {
+        let Some(path) = std::env::var_os(target.env) else {
+            eprintln!(
+                "SKIP controlled {} storage pair proof: set {} to its stock .syx",
+                target.name, target.env
+            );
+            continue;
+        };
+        let raw = std::fs::read(path).expect("configured stock image must be readable");
+        let fw = Firmware::parse(&raw).expect("parse configured stock image");
+        assert_eq!(
+            fw.syx_sha256, target.sha,
+            "requires exact stock {}",
+            target.name
+        );
+        // DN2 relocations are test-only; no packaged firmware port is added.
+        let linked = compiled_at(target.sites);
+        for (dma_level, extra_irq) in [(3, 0), (4, 0), (3, 0x0011_0000), (4, 0x0020_0000)] {
+            let stock = pair_replay(&fw, &linked, &target, false, dma_level, extra_irq);
+            let patched = pair_replay(&fw, &linked, &target, true, dma_level, extra_irq);
+            assert_eq!(
+                patched, stock,
+                "{} DMA level={dma_level} extra IRQ={extra_irq:#x}: observer preserves selected stock results",
+                target.name
             );
         }
     }

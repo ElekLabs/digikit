@@ -2841,10 +2841,13 @@ is not a production gate or DN2 implementation proof.
   on DT2 1.17 and DN2 1.12 from explicitly initialized state. The controlled B
   component below proves ready-queue insertion and a scheduling request, with
   stock/patched status/context equivalence; it does not execute the resumed task.
+- [x] **[D]** Complete the controlled eSDHC/DMA59 pair checkpoint below: genuine
+  guest DMA copy, both actual ISR orders and three waiter insertions, with
+  stock/patched selected-observable equality on both target images.
 - [ ] Complete the full native fault-history acceptance, which remains
   **failed/open** because zero observer writes were observed. Controlled component
-  success does not establish native-boot IRQ execution, hardware delivery, DMA
-  completion, resumed task/full-scheduler behavior or complete initialization/reset history.
+  success does not establish native-boot IRQ execution, hardware delivery, physical
+  DMA quiescence, resumed task/full-scheduler behavior or complete initialization/reset history.
   Do not weaken observer assertions, change emulator semantics or switch wholesale
   to Device mode to obtain a pass.
 - [ ] Establish complete relevant fault history and source lifecycle/content-change
@@ -2860,7 +2863,7 @@ remain **[D]**, not **[V]**.
 **[D] Default runtime boundary:** ordinary `Machine::step` retains its existing
 configured DMA59 route. Oracle Board completion posts semaphores and the daemon
 counts events; full native fault-history acceptance remains **failed/open**.
-The isolated opt-in delivery proof below does not change default runtime behavior.
+The explicit opt-in storage-pair proof below does not change default runtime behavior.
 
 **[D/O] User-approved Stage A is partially implemented:**
 [finding 100](../findings/100-storage-interrupt-emulation-scope.md) records the
@@ -2902,41 +2905,64 @@ for the primary driver links and limitations. Neither preserving, restoring the
 reset default nor zeroing IRQSTATEN after RSTA is proved. No component tests,
 builds or emulator runs were repeated for this evidence checkpoint.
 
-**[D/O] Controlled Stage B delivery/waiter component now passes:** the user
+**[D/O] Controlled Stage B storage-pair checkpoint is complete:** the user
 approved explicitly initialized registers while deferring full RSTA fidelity.
-`Machine::step_esdhc` opts into isolated eSDHC source 31/vector 223 using Device
-Board and Device Time, shared IMR/ICR and live CPU IPL. Device SIMR/CIMR handling
-is limited to byte writes selecting source 31. Invalid prerequisites and
-configured, pending, queued or held DMA major completions are rejected before
-mutation; failed exception entry reports poisoned state. Default stepping,
-Oracle completion, daemons and snapshot layout retain their existing behavior.
+`Machine::step_storage` uses Device Board/Time and the shared INTC bank for source
+31/vector 223 and source 0/vector 192 (DMA59 within the DMA56–63 group). Higher
+level wins, then higher source: level 3 ties deliver 223 then 192; DMA level 4
+reverses the order, subject to IMR/ICR and CPU IPL. Device byte SIMR/CIMR covers
+source 0 and 31. Other pending group channels fail explicitly; configured or
+pending legacy delivery fails before mutation. `step_esdhc` stays isolated and
+rejects live group requests. Ordinary stepping, Oracle and daemon defaults remain
+unchanged.
 
-Nine new machine tests, four existing runner tests and four timer-storage tests
-pass. The actual-firmware fixture passes four cases on stock/patched DT2 1.17 and
-DN2 1.12: 16 ISR/RTE invocations and actual waiter ready-queue insertions, plus
-36 entries each at the real signal wrapper/helper. Ordinary guest CMD13 creates
-CC with the waiter still blocked before IRQ entry; controlled fault events follow
-between boundaries. Actual W1C acknowledges the line. CTOE+CC clears command
-status to zero while the observer retains CTOE; TC+DTOE/DCE leaves data status
-`-1`. Stock/patched context, status, semaphore and queue results match. The
-original 96 DT2 no-waiter ISR invocations still pass. Independent static reviews
-of the route and fixture reported no issues. Logs are
-`out/runs/storage-fault-proof/stage-b-delivery-tests.log` and
-`out/runs/storage-fault-proof/stage-b-firmware-tests.log`.
+Device Board sets INTH bit 27 only for DMA59 `done && major_interrupt`, and TC
+only after actual data DMA completes. Device CINT NOP/CAIR/selected-channel and
+contained INTH/INTL W1C preserve unrelated channels and DSPI/SSI dispatch; crossing
+writes reject before mutation. Requests survive CPU entry until acknowledgement.
+The new route avoids the legacy pending boolean and invalidates queued DMA writes
+before execution/exception entry. Existing Board snapshot backing round-trips
+pending state without a format change; Stage C runtime-policy compatibility
+remains unknown.
 
-The fixture's DN2 observer relocation is test-only and in memory; the packaged
-observer remains DT2-only. Ready-queue insertion and scheduling-request bit 13
-are proved, not resumed task execution or the full scheduler. Stage A remains
-incomplete on RSTA. The controlled B delivery/waiter component is complete only;
-DMA59/source-0 and cross-bank arbitration remain open. Stage C is unstarted.
-The next proposed slice is deliberate DMA59/eSDHC ordering and source-0
-arbitration from initialized state before daemon integration. Full read transfer,
-native-boot fault capture and reset history remain unproved; full native
-fault-history release acceptance remains **failed/open**. No public ABI, pool, SHARC, recovery or
-hardware-flashing work follows from this checkpoint. Runtime integration
-confidence remains low; earlier calendar estimates remain withdrawn.
+All **28 machine cases** pass (pair 10, eSDHC 9, runner 4, SSI 5), and all **three
+actual-firmware tests** pass with both exact DT2 1.17 and DN2 1.12 inputs set.
+The new pair fixture performs a genuine guest SERQ59/CMD18 **512-byte copy** from
+deterministic synthetic media, checked before IRQ entry and after both handlers.
+Four cases per target/stock-patched combination produce **16 pair runs, 32 actual
+ISR/RTE invocations and 48 waiter insertions**, bounded to 4,096 instructions per
+run. These replay counts derive from fixed source loops/assertions, not individual
+counts printed in the log. Older tests add 96 no-waiter and 16 isolated-delivery
+invocations: **144 total across all three tests, not per image**.
 
-For this checkpoint, the coordinator's scoped `mise run test:changed` across the
-11 changed files passed pathcheck and layer checks. The full merge gate remains
-deferred and has not run. Documentation pathcheck and diff checks cover this
-update; no additional build or emulator run was performed for the prose change.
+Actual DMA CINT and eSDHC W1C acknowledge both lines. Vector-entry/RTE order,
+context/status, semaphore coalescing, the circular three-node bidirectional ready
+queue and scheduling-request bit 13 are checked; the scheduler is never executed.
+Stock/patched selected observables match, with sticky raw errors retained by the
+observer. Error bits are injected only after the copy completes: this is not
+partial/corrupt DMA recovery. DN2 hooks are in-memory test-only; the packaged
+manifest remains DT2-only. Independent static reviews reported no issues; no
+**[V]** upgrade is claimed.
+
+Logs: `out/runs/storage-fault-proof/stage-b-pair-tests.log` and
+`out/runs/storage-fault-proof/stage-b-pair-firmware-tests.log`. The ignored
+`out/runs/storage-fault-proof/stage-b-pair-invocation.json` records the actual
+successful command/environment overrides including both opt-ins, fixture and
+firmware hashes, shared lock, target and logs. It is recorded from the invocation;
+the log alone cannot establish that opt-in inputs were configured. Exact hashes
+and the command with both environment variables are in the
+[adapter README](../../modules/core/adapters/storage-fault-proof/README.md).
+
+Stage A remains incomplete on full RSTA. Physical DMA quiescence, global
+cross-bank/all-source priority, task resumption/full scheduler and native
+cold-boot fault history remain open; full native fault-history acceptance is
+**failed/open**. **Stage C is unstarted.** A next bounded integration would require
+scheduler/all-source priority and runtime-policy snapshot audits before daemon
+work; this states a requirement, not approval to start. No public ABI, pool,
+SHARC, recovery or hardware-flashing work follows. Runtime integration confidence
+remains low; earlier calendar estimates remain withdrawn.
+
+The coordinator's scoped ten-file `mise run test:changed` passed pathcheck and
+layer checks. The full merge gate remains deferred and has not run. Documentation
+pathcheck and diff checks cover this prose/provenance update; no new build or
+emulator run was performed for it.
