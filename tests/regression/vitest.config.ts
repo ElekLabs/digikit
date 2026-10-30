@@ -19,9 +19,7 @@ export default defineConfig({
             [
               'junit',
               {
-                outputFile:
-                  process.env.REGRESSION_JUNIT_FILE ??
-                  '../../out/regression/junit.xml',
+                outputFile: process.env.REGRESSION_JUNIT_FILE ?? '../../out/regression/junit.xml',
               },
             ],
           ]
