@@ -835,3 +835,319 @@ def test_gain_shadow_matches_isolated_mono(gain_rig, advanced_controls, hold_rel
     assert markers[5:8] == markers[:3]
     if advanced_controls:
         assert any(audio_differences)
+
+
+RING_LEFT, RING_RIGHT = 0x10040000, 0x10042000
+RING_WORDS = 8192
+RING_PRIVATE = (0, 13, 14, 16, 17)
+RING_SHARED = tuple(i for i in range(18) if i not in RING_PRIVATE)
+
+
+@pytest.fixture(scope="module")
+def ring_rig(rig):
+    source = REPO_ROOT / "tests/fixtures/dsp/stereo-ring-shadow-replay.s"
+    linked = pk_sharc.link(
+        pk_sharc.assemble(
+            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+        ),
+        0xB96000,
+        {"_ring": 0xB806F5, "_ring_init": 0xB80575},
+    )
+    return linked, rig[1]
+
+
+def ring_call(session, side, initialization=False):
+    regs = {**REGS, "I6": STACK * 4, "I7": STACK * 4, "M13": 0, "M15": 0xFFFFFFFF}
+    entry = f"_init_{side}_ring" if initialization else f"_{side}_ring"
+    result = session.call(entry, regs, max_steps=12000)
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert result["final_pc_sw"] == BACK
+    offset = 0x100 if side == "right" else 0
+    if side == "prepare":
+        allowed = {CONTROL + 0x100 + i for i in RING_SHARED}
+    else:
+        mutable = (
+            tuple(i for i in range(18) if i not in (13, 15, 16))
+            if initialization
+            else (0, 3, 4, 5, 13, 14, 17)
+        )
+        allowed = {CONTROL + offset + i for i in mutable}
+        allowed |= set(range(STACK - 64, STACK + 1))
+        if not initialization:
+            allowed |= {LEFT + offset + i for i in range(32)}
+        ring = RING_RIGHT if side == "right" else RING_LEFT
+        allowed |= set(range(ring, ring + RING_WORDS))
+    addresses = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        ): a
+        for a in allowed
+    }
+    stores = [e for e in session.stores if e.access == "write"]
+    fill_byte = _canonical_dm_address(
+        session.runner.state,
+        normal_word_to_byte(CONTROL + offset + 17),
+        1,
+        for_write=True,
+    )
+    invalid = [
+        e
+        for e in stores
+        if e.address not in addresses or e.width != (1 if e.address == fill_byte else 4)
+    ]
+    assert not invalid, (
+        "ring store bounds",
+        [(hex(e.pc_sw), hex(e.address), e.width) for e in invalid],
+    )
+    counts = Counter(addresses[e.address] for e in stores)
+    if side == "prepare":
+        assert set(counts) == allowed
+        assert set(counts.values()) == {1}
+    elif initialization:
+        assert [counts[ring + i] for i in range(RING_WORDS)] == [1] * RING_WORDS
+    else:
+        assert [counts[LEFT + offset + i] for i in range(32)] == [1] * 32
+        assert sum(counts[ring + i] for i in range(RING_WORDS)) == 32
+        # Check actual indexed load PCs against this channel's backing, not
+        # merely a read watch confined to the expected valid range.
+        pcs = (0xB8079B, 0xB8079E, 0xB807A4, 0xB807A7)
+        reads = [e for e in session.stores if e.access == "read" and e.pc_sw in pcs]
+        base = _canonical_dm_address(session.runner.state, normal_word_to_byte(ring), 4)
+        assert len(reads) == 32 * 4 * 4
+        assert all(
+            e.width == 1
+            and e.new_value is not None
+            and base <= e.address < base + RING_WORDS * 4
+            for e in reads
+        )
+    return result
+
+
+def initialized_ring_session(ring_rig, stereo=False, approximate=True):
+    # Constructor helpers and b806f5 divide through the existing 1c06ba RECIPS
+    # model. Default execution confirms the known 1c0706 unknown-AV fork;
+    # this is model state-separation equivalence, not hardware reciprocal bits.
+    session = fresh(ring_rig, approximate=approximate)
+    session.runner.state.assume_nw32 = True
+    session.runner.attach_watchpoints(
+        [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
+    )
+    session.runner.set_watch_active(False)
+    for side, offset, ring in (("left", 0, RING_LEFT), ("right", 0x100, RING_RIGHT)):
+        if side == "right" and not stereo:
+            break
+        for i in range(18):
+            session.poke(CONTROL + offset + i, 0)
+        # Constructor obtains this byte pointer from word16. Its actual SIMD
+        # clear and 48000-Hz coefficient initialization run on private memory.
+        session.poke(CONTROL + offset + 16, normal_word_to_byte(ring))
+        ring_call(session, side, initialization=True)
+        assert words(session, ring, RING_WORDS) == [0] * RING_WORDS
+    return session
+
+
+@pytest.mark.parametrize(
+    "shared_pointer", (False, True), ids=("private-rings", "shared-pointer")
+)
+def test_ring_shadow_matches_isolated_mono(ring_rig, shared_pointer):
+    stereo = initialized_ring_session(ring_rig, stereo=True)
+    left, right = (initialized_ring_session(ring_rig) for _ in range(2))
+    for session, offset, channel in (
+        (stereo, 0, 0),
+        (stereo, 0x100, 1),
+        (left, 0, 0),
+        (right, 0, 1),
+    ):
+        ring = RING_RIGHT if offset else RING_LEFT
+        for i in range(RING_WORDS):
+            session.poke(ring + i, bits(((i % 97) - 48) / (512 + 97 * channel)))
+        # Audited setter clamps delay to1..8191; exact integer32 avoids the
+        # float wrap-to8192 endpoint. Coordinates model a filled near-wrap ring.
+        for i, value in {
+            0: bits((1 - 2 * channel) / 32),
+            13: bits(8158),
+            14: 8190,
+            15: bits(32),
+            17: 0,
+        }.items():
+            session.poke(CONTROL + offset + i, value)
+    differences = []
+    for block in range(3):
+        for session in (stereo, left, right):
+            session.poke(CONTROL + 10, bits(0.1 + block / 32))
+        for i in range(32):
+            lv, rv = (
+                bits((i - 11) / 128 + block / 64),
+                bits((7 - i) / 163 - block / 128),
+            )
+            stereo.poke(LEFT + i, lv)
+            stereo.poke(RIGHT + i, rv)
+            left.poke(LEFT + i, lv)
+            right.poke(LEFT + i, rv)
+        private = [stereo.peek(CONTROL + 0x100 + i) for i in RING_PRIVATE]
+        ring_call(stereo, "prepare")
+        assert [stereo.peek(CONTROL + 0x100 + i) for i in RING_PRIVATE] == private
+        ring_call(stereo, "left")
+        authoritative = words(stereo, CONTROL, 18)
+        left_backing = words(stereo, RING_LEFT, RING_WORDS)
+        if shared_pointer:
+            stereo.poke(CONTROL + 0x100 + 16, normal_word_to_byte(RING_LEFT))
+            with pytest.raises(AssertionError, match="ring store bounds"):
+                ring_call(stereo, "right")
+            assert words(stereo, RING_LEFT, RING_WORDS) != left_backing
+            return
+        ring_call(stereo, "right")
+        ring_call(left, "left")
+        ring_call(right, "left")
+        assert words(stereo, CONTROL, 18) == authoritative == words(left, CONTROL, 18)
+        assert (
+            words(stereo, RING_LEFT, RING_WORDS)
+            == left_backing
+            == words(left, RING_LEFT, RING_WORDS)
+        )
+        assert words(stereo, RING_RIGHT, RING_WORDS) == words(
+            right, RING_LEFT, RING_WORDS
+        )
+        assert words(stereo, LEFT, 32) == words(left, LEFT, 32)
+        assert words(stereo, RIGHT, 32) == words(right, LEFT, 32)
+        assert words(stereo, LEFT, 32) != words(stereo, RIGHT, 32)
+        # Reference mono has an independently owned backing at another pointer.
+        for i in range(18):
+            if i != 16:
+                assert stereo.peek(CONTROL + 0x100 + i) == right.peek(CONTROL + i)
+        assert stereo.peek(CONTROL + 14) == (8190 + 32 * (block + 1)) % RING_WORDS
+        assert stereo.peek(CONTROL + 0x100 + 14) == stereo.peek(CONTROL + 14)
+        assert stereo.peek(CONTROL + 13) == bits((8158 + 32 * (block + 1)) % RING_WORDS)
+        assert stereo.peek(CONTROL + 0x100 + 13) == stereo.peek(CONTROL + 13)
+        assert stereo.peek(CONTROL) != bits(1 / 32)
+        for session in (stereo, left, right):
+            assert session.runner.state.approx_recips_used
+            for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
+                assert all(
+                    (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
+                )
+        differences.append(words(stereo, LEFT, 32) != words(stereo, RIGHT, 32))
+    assert all(differences)
+
+
+@pytest.fixture(scope="module")
+def source_rig(rig):
+    source = REPO_ROOT / "tests/fixtures/dsp/stereo-source-shadow-replay.s"
+    linked = pk_sharc.link(
+        pk_sharc.assemble(
+            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+        ),
+        0xB98000,
+        {"_source": 0xB8251B},
+    )
+    return linked, rig[1]
+
+
+def source_call(session, side, depth):
+    # Companion scratch is explicitly seeded, not treated as callee-preserved.
+    regs = {
+        **REGS,
+        "I6": STACK * 4,
+        "I7": STACK * 4,
+        "S0": 0x12340000,
+        "S5": 0x12340005,
+        "S9": 0x12340009,
+        "S14": 0x1234000E,
+    }
+    result = session.call(
+        f"_{side}_source",
+        regs,
+        max_steps=12000,
+        read_regs=("MODE1", "S0", "S5", "S9", "S14"),
+    )
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert result["final_pc_sw"] == BACK
+    assert result["regs"]["MODE1"] == 0
+    assert not session.runner.state.approx_recips_used
+    offset = 0x100 if side == "right" else 0
+    allowed = {LEFT + offset + i for i in range(32)}
+    allowed |= set(range(STACK - 64, STACK + 1))
+    addresses = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        ): a
+        for a in allowed
+    }
+    stores = [e for e in session.stores if e.access == "write"]
+    assert all(e.width == 4 and e.address in addresses for e in stores), stores
+    counts = Counter(addresses[e.address] for e in stores)
+    assert [counts[LEFT + offset + i] for i in range(32)] == [1] * 32
+    # Watch every read, then classify at the actual sample/table load PCs.
+    # An out-of-range access therefore fails instead of escaping the watch.
+    sample_pcs = (0xB8255F, 0xB8256E, 0xB825E3, 0xB825E6, 0xB82613)
+    reads = [e for e in session.stores if e.access == "read" and e.pc_sw in sample_pcs]
+    audio = _canonical_dm_address(
+        session.runner.state, normal_word_to_byte(LEFT + offset), 4
+    )
+    assert len(reads) == 32 * 4
+    assert all(
+        e.width == 1 and e.new_value is not None and audio <= e.address < audio + 32 * 4
+        for e in reads
+    )
+    table_reads = [
+        e
+        for e in session.stores
+        if e.access == "read" and e.pc_sw in (0xB825AF, 0xB825B3)
+    ]
+    base = _canonical_dm_address(session.runner.state, 0x26E7C8, 4)
+    assert len(table_reads) == (8 if depth else 0)
+    assert all(
+        e.width == 1 and e.new_value is not None and base <= e.address < base + 128 * 4
+        for e in table_reads
+    )
+    if depth:
+        assert result["regs"]["S9"] == (-depth) & 0xFFFFFFFF
+        assert result["regs"]["S14"] == (-depth - 1) & 0xFFFFFFFF
+    else:
+        assert all(
+            result["regs"][name] == regs[name] for name in ("S0", "S5", "S9", "S14")
+        )
+    return result
+
+
+@pytest.mark.parametrize(
+    "control,depth", ((0, 0), (0.25, 8), (0.5, 4), (0.75, 2), (1, 1))
+)
+def test_source_continuation_matches_isolated_mono(source_rig, control, depth):
+    stereo, left, right = (fresh(source_rig, approximate=False) for _ in range(3))
+    for session in (stereo, left, right):
+        # Byte pointers, 32-bit normal-word accesses, linear DAGs and SISD
+        # entry are explicit. The callee enables SIMD internally even for copy.
+        session.runner.state.assume_nw32 = True
+        session.runner.attach_watchpoints(
+            [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
+        )
+        session.runner.set_watch_active(False)
+        for offset in (0, 0x100):
+            session.poke(CONTROL + offset, bits(control))
+    inputs = []
+    for i in range(32):
+        lv, rv = bits((i - 15) / 21), bits((11 - i) / 27)
+        inputs.append((lv, rv))
+        stereo.poke(LEFT + i, lv)
+        stereo.poke(RIGHT + i, rv)
+        left.poke(LEFT + i, lv)
+        right.poke(LEFT + i, rv)
+    source_call(stereo, "left", depth)
+    authoritative = stereo.peek(CONTROL)
+    source_call(stereo, "right", depth)
+    source_call(left, "left", depth)
+    source_call(right, "left", depth)
+    assert stereo.peek(CONTROL) == authoritative == bits(control)
+    for session in (stereo, left, right):
+        assert session.peek(CONTROL) == session.peek(CONTROL + 0x100) == bits(control)
+    for output, reference, channel in ((LEFT, left, 0), (RIGHT, right, 1)):
+        result = words(stereo, output, 32)
+        assert result == words(reference, LEFT, 32)
+        original = [v[channel] for v in inputs]
+        if depth:
+            assert result != original
+        else:
+            assert result == original
+        assert all((v & 0x7F800000) != 0x7F800000 for v in result)
+    assert words(stereo, LEFT, 32) != words(stereo, RIGHT, 32)

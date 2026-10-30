@@ -365,3 +365,36 @@ the primary worktree received byte-identical tested files from the isolated gain
 worktree. Nine of ten local stage families now have bounded replay experiments.
 The ring-backed stage, complete ordered routing, scratch blend, pan/send integration,
 external writer coverage and production lifecycle still remain open.
+
+
+## Ring backing and source continuation replay
+
+**[D]** The ring fixture `tests/fixtures/dsp/stereo-ring-shadow-replay.s`
+executes the actual constructor at `0xb80575` at 48 kHz, checking all 8192
+initialized words in each independent 32 KiB backing. Three blocks through
+`0xb806f5` wrap the write position from 8190 with integer delay 32. Right audio,
+state and backing match an isolated mono reference and leave the left backing
+unchanged. Read and store bounds are checked; deliberately sharing the backing
+fails the ring-store boundary check and changes left memory. Private record words
+are 0,13,14,16,17; shared controls are captured before left execution. Word 17 has
+byte-wide fill stores. This case uses the existing qualified reciprocal
+approximation, avoiding the known floating endpoint at 8192. It does not establish
+all delay values, lifecycle coverage or production allocation.
+
+**[D]** The separate source continuation `0xb8251b` is outside the ten post-source
+families. Original-image inspection found no persistent state stores, nested calls
+or RNG in its reachable body. Its positive-control branch processes exactly 32
+samples and uses companion SIMD registers as scratch. The fixture
+`tests/fixtures/dsp/stereo-source-shadow-replay.s` exercises controls 0, 0.25, 0.5,
+0.75 and 1, with unequal finite input in [-0.8,0.8], explicit byte/NW32 pointers,
+linear address context and MODE1 initially zero. Both outputs match separate mono
+references; bypass is exact, positive outputs change and remain finite, record
+word 0 stays unchanged, and table/audio/store bounds hold. MODE1 returns to zero;
+S0/S5/S9/S14 are treated as scratch, not promised preserved. Reciprocal
+approximation is disabled. The positive controls cover depths 8,4,2,1; the depth-31
+shift edge and full control domain are not covered.
+
+All 29 integrated cases pass without skips. Independent source review of both
+additions found no issues. All ten identified post-source families now have
+bounded numerical examples, plus the source continuation. Complete ordered routing,
+inline scratch blend, pan/send integration and production lifecycle remain open.

@@ -163,6 +163,6 @@ occupied regions and the remaining production ownership questions.
 | [`93-sdk-file-catalogue.md`](findings/93-sdk-file-catalogue.md) | API 1.4 reusable listing, bounded store pages, DT2 directory/metadata adapter and public C boundary proofs on both devices |
 | [`94-sample-binding-lifetime.md`](findings/94-sample-binding-lifetime.md) | Two-track assembled PCM16 reader retirement and replacement; unaffected-track audio, cached ownership, preserved stack frames and remaining production boundaries |
 | [`95-dn2-cache-and-lp0-staging.md`](findings/95-dn2-cache-and-lp0-staging.md) | DN2 conditional cache setup, LP0 RX whole-line ownership gap, stock maintenance helper limits and unresolved Type 7a/7d conversion encoding; no hardware coherence or core-fix claim |
-| [`96-stereo-machine-processing.md`](findings/96-stereo-machine-processing.md) | Stereo machine output gap; current DN2 32-to-two-plane split corrects the historical 96 kHz interpretation; eight local stage replay proofs and bounded shared-reset provenance |
+| [`96-stereo-machine-processing.md`](findings/96-stereo-machine-processing.md) | Stereo machine output gap; current DN2 32-to-two-plane split corrects the historical 96 kHz interpretation; ten bounded local stage replay proofs, source continuation and shared-reset provenance |
 
 | [`97-ddr-access-diagnostic.md`](findings/97-ddr-access-diagnostic.md) | Opt-in first-attempt DDR diagnostic, fast-pointer fallback and idle policy; focused host proofs, compiled-backend and stock coexistence validation pending |

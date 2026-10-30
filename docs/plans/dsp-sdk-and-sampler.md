@@ -2151,3 +2151,19 @@ The gain proof was developed in `/private/tmp/digikit-sampler-gain-proof`, on it
 fix proceeded in the primary worktree. The coordinator applied and byte-compared
 its two tested files; no secondary-worktree commit or independent publication was
 made. The primary branch remains the integration and publication branch.
+
+
+### Ring and source-continuation checkpoint
+
+- [x] Prove independent ring backing with the actual constructor, wraparound,
+  bounded accesses and deliberately shared-backing corruption detection.
+- [x] Audit and replay the separate source continuation with explicit SIMD scratch
+  context and five controls; no new instruction-core gap or approximation needed.
+- [x] Independently review and integrate both additions; all 29 named replay tests
+  pass without skips in the primary worktree.
+- [ ] Integrate an ordered route including inline scratch blending and pan/send.
+
+Finding 96 records the bounded domains and remaining lifecycle limitations.
+The daemon DDR diagnostic route is implemented and source-reviewed; dual-core
+unit checks passed. A dual-core native build is running before device-model
+acceptance, so full daemon validation is not yet claimed.
