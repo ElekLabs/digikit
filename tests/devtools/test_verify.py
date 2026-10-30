@@ -377,6 +377,69 @@ def test_moved_paths_route() -> None:
     assert "dt2-tone" in verify.steps_for(["packages/emulator/machine/src/lib.rs"])
 
 
+def _lock(dep_version: str, shared_version: str = "1.0.0") -> str:
+    return f"""
+[[package]]
+name = "a"
+version = "0.1.0"
+dependencies = ["dep", "shared"]
+
+[[package]]
+name = "b"
+version = "0.1.0"
+dependencies = ["shared"]
+
+[[package]]
+name = "c"
+version = "0.1.0"
+dependencies = ["a"]
+
+[[package]]
+name = "dep"
+version = "{dep_version}"
+source = "registry+https://example.test/index"
+checksum = "c{dep_version}"
+
+[[package]]
+name = "shared"
+version = "{shared_version}"
+source = "registry+https://example.test/index"
+checksum = "s{shared_version}"
+"""
+
+
+def test_lock_change_reaches_only_the_member_that_uses_the_package() -> None:
+    # c uses a, but a's own route covers what depends on it
+    assert verify_route.lock_members(_lock("1.0.0"), _lock("1.1.0")) == {"a"}
+
+
+def test_lock_change_reaches_every_member_that_uses_the_package() -> None:
+    assert verify_route.lock_members(_lock("1.0.0"), _lock("1.0.0", "2.0.0")) == {
+        "a",
+        "b",
+    }
+
+
+def test_unparsable_lock_is_wide() -> None:
+    assert verify_route.lock_members(_lock("1.0.0"), "not [toml") is None
+
+
+def test_object_with_other_toolchain_and_source_hash_is_metadata_only() -> None:
+    old = json.dumps(
+        {"toolchain": {"cc": "1"}, "source_sha256": "a", "sections": ["00"]}
+    )
+    new = json.dumps(
+        {"toolchain": {"cc": "2"}, "source_sha256": "b", "sections": ["00"]}
+    )
+    assert verify_route.object_metadata_only(old, new)
+
+
+def test_object_with_other_code_is_a_change() -> None:
+    old = json.dumps({"toolchain": {}, "source_sha256": "a", "sections": ["00"]})
+    new = json.dumps({"toolchain": {}, "source_sha256": "a", "sections": ["01"]})
+    assert not verify_route.object_metadata_only(old, new)
+
+
 def test_full_and_empty() -> None:
     assert verify.python_tests([], False) == list(verify.PY_GATE)
     full = verify.python_tests([], True)

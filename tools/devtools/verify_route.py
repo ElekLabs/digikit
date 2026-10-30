@@ -33,6 +33,7 @@ Rules (docs/TESTING.md "What verify runs"):
 from __future__ import annotations
 
 import ast
+import json
 import re
 import shlex
 import tomllib
@@ -861,6 +862,71 @@ def paths_of_run(lines: list[str]) -> list[str] | None:
             return None
         found += mine
     return found
+
+
+def lock_members(old: str, new: str) -> set[str] | None:
+    """The workspace members (packages without a source) that a Cargo.lock change reaches: the members
+    that are new or changed, and the first members on the way up from a package that is new, removed or
+    changed (version, source, checksum or dependency list). None when a text does not parse or no member is
+    reached (the caller keeps the wide route)."""
+    try:
+        packages = [tomllib.loads(t).get("package", []) for t in (old, new)]
+        keyed = [
+            {(p["name"], p["version"], p.get("source")): p for p in pkgs}
+            for pkgs in packages
+        ]
+    except (tomllib.TOMLDecodeError, KeyError, TypeError):
+        return None
+    before, after = keyed
+
+    def content(p: dict) -> tuple:
+        return (p.get("checksum"), tuple(sorted(p.get("dependencies", ()))))
+
+    changed = {
+        k
+        for k, p in after.items()
+        if k not in before or content(before[k]) != content(p)
+    }
+    removed_names = {k[0] for k in before if k not in after}
+    changed |= {k for k in after if k[0] in removed_names and k not in changed}
+
+    def target(entry: str) -> list[tuple]:
+        parts = entry.split(" ", 2)
+        return [
+            k
+            for k in after
+            if k[0] == parts[0] and (len(parts) < 2 or k[1] == parts[1])
+        ]
+
+    users: dict[tuple, set[tuple]] = {}
+    for k, p in after.items():
+        for entry in p.get("dependencies", ()):
+            for t in target(entry):
+                users.setdefault(t, set()).add(k)
+    # the walk stops at a member: the members that use it are routed by that member's own route
+    reached, todo = set(changed), [k for k in changed if k[2] is not None]
+    while todo:
+        for user in users.get(todo.pop(), ()):
+            if user not in reached:
+                reached.add(user)
+                if user[2] is not None:
+                    todo.append(user)
+    members = {k[0] for k in reached if k[2] is None}
+    return members or None
+
+
+def object_metadata_only(old: str, new: str) -> bool:
+    """Whether two versions of a committed .dko.json differ only in metadata (`toolchain`, `source_sha256`):
+    the sections, symbols and relocations are the same. False when a text is not a JSON object."""
+    try:
+        a, b = json.loads(old), json.loads(new)
+    except ValueError:
+        return False
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    meta = ("toolchain", "source_sha256")
+    drop = lambda d: {k: v for k, v in d.items() if k not in meta}  # noqa: E731
+    return drop(a) == drop(b)
 
 
 def mise_paths(

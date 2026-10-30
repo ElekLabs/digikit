@@ -576,6 +576,55 @@ def expand_mise(
     return sorted(set(rest) | set(paths)), origin
 
 
+def member_dirs() -> dict[str, str]:
+    """Workspace member package name -> directory, from the root Cargo.toml (globs allowed)."""
+    members = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))[
+        "workspace"
+    ]["members"]
+    found: dict[str, str] = {}
+    for pattern in members:
+        for manifest in sorted(ROOT.glob(f"{pattern}/Cargo.toml")):
+            pkg = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package")
+            if pkg and "name" in pkg:
+                found[pkg["name"]] = manifest.parent.relative_to(ROOT).as_posix()
+    return found
+
+
+def expand_lock(
+    files: list[str], base: str, head: str | None
+) -> tuple[list[str], dict[str, str]]:
+    """Replace a changed Cargo.lock by the Cargo.toml of the workspace members the changed packages
+    reach (BASE's merge base against HEAD or the working tree). Wide (unchanged) when that cannot
+    be told. Also returns path -> origin note."""
+    if "Cargo.lock" not in files:
+        return files, {}
+    since = merge_base(base, head)
+    old, new = git_show(since, "Cargo.lock"), git_show(head, "Cargo.lock")
+    names = verify_route.lock_members(old, new) if old and new else None
+    dirs = member_dirs() if names else {}
+    if not names or not names <= dirs.keys():
+        return files, {}
+    paths = [f"{dirs[n]}/Cargo.toml" for n in sorted(names)]
+    rest = [f for f in files if f != "Cargo.lock"]
+    note = "Cargo.lock: " + ", ".join(dirs[n] for n in sorted(names))
+    return sorted(set(rest) | set(paths)), {p: note for p in paths}
+
+
+def drop_metadata_objects(files: list[str], base: str, head: str | None) -> list[str]:
+    """FILES without the committed .dko.json objects that were only rebuilt (same content, other
+    toolchain or source hash): they are no change."""
+    since = merge_base(base, head)
+    kept = []
+    for path in files:
+        if path.endswith(".dko.json"):
+            old, new = git_show(since, path), git_show(head, path)
+            if old and new and verify_route.object_metadata_only(old, new):
+                print(f"verify: object: metadata only: {path}", file=sys.stderr)
+                continue
+        kept.append(path)
+    return kept
+
+
 def base_route(path: str) -> tuple[str, tuple[str, ...]]:
     """How one changed path is routed: (matched prefix or "docs"/"fallback", steps)."""
     if path.endswith(".md"):
@@ -2048,6 +2097,9 @@ def main(argv: list[str] | None = None) -> int:
         files, origin = expand_mise(
             changed_files(args.base, args.head), args.base, args.head
         )
+        files, lock_origin = expand_lock(files, args.base, args.head)
+        origin |= lock_origin
+        files = drop_metadata_objects(files, args.base, args.head)
         steps = steps_for(files)
         if "rust-tests" in steps:
             rust_packages = rust_scope(files)
