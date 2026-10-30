@@ -294,9 +294,9 @@ uses `0xabc` bytes / `0x55e` halfwords, not an arbitrary DDR destination.
 Route `0x1ca59f` initializes auxiliary pointers `0x2c34c0`, `0x2c44c0`,
 `0x2c54c0`, `0x2c64c0` at `0x1ca5b3..da`, matching the main roots plus `0xaf0`
 in finding 88. The observed `0x100000` control writes denote DMA interrupt
-configuration, not a transfer extent. Auxiliary transfer direction/count and
-boot-only versus runtime lifetime remain unresolved. These fixed roots narrow
-the owner table; they establish no general free DDR region or sample capacity.
+configuration, not a transfer extent. The auxiliary setup audit below bounds
+transfer direction/count; actual invocation and runtime lifetime remain unresolved.
+These fixed roots narrow the owner table, not free DDR or sample capacity.
 
 ## Actual AudioTask entry versus database function ownership
 
@@ -381,3 +381,37 @@ external ring pointer is separate record word 16 in
 dereference it. **[O]** External ring ownership, corrupted-state behavior, complete
 writer reach and exact-entry query precision remain unproved. No database repair,
 production policy or reservation is selected.
+
+## Auxiliary SPI1 DMA configuration and remaining lifetime boundary
+
+**[D]** A bounded audit checked 334 original DN2 1.12 instruction heads plus
+original tables against the section-7 image above. Driver table `0x268d08`
+selects SPI1 base `0x3102f000`, DMA24 TX `0x3102d100` and DMA25 RX
+`0x3102d180`. Creator `0x1ca63e` uses device index 1. Table `0x2c0464` binds
+TX ring `0x2c0040 ↔ 0x2c005c` to source buffers `0x2c64c0/0x2c54c0`, and
+RX ring `0x2c0008 ↔ 0x2c0024` to destination buffers `0x2c44c0/0x2c34c0`.
+Setup `0x1ca5b3..0x1ca5e2` installs their starts and circular links.
+
+Creator `0x1ca648` takes the unsigned low 16 bits of `NbyteSize`, then
+`0x1ca698 → 0x1ca59f` configures C=N>>1 at `0x1ca5e5`. Sites
+`0x1ca603/606/609/60c/60f/612` establish XCNT=C and XMOD=2. SPI setup
+`0x1cb672` selects 16 bits; `0x1cb342..360` selects two-byte DMA memory and
+peripheral widths. For valid nonzero C=1..32767, each fixed root has configured
+contiguous span `[root,root+2*C)`, at most 65,534 bytes. That is not actual buffer
+size or coexistence proof: the roots are only `0x1000` bytes apart.
+
+**[D/O]** XCNT=0 is a configuration error, not an empty transfer or evidence of an
+inactive channel. The [public Hardware Reference](../sharc/SOURCES.md)
+(`adsp-2156x-hwr.pdf`, Rev 1.0) supplies DMA channel assignment in Table 27-2,
+printed p. 27-4 (PDF page 1239), count/modify fields in Table 27-10, printed
+p. 27-27 (page 1262), WNR direction at p. 27-57 (page 1292), and zero-count
+configuration error at p. 27-23 (page 1258). No hardware behavior was measured here.
+
+Submission follows `0x1ca62c → 0x1cc019`; circular hardware continuation is not
+inherently boot-only. Initialization registers DMA24/25 handlers `0x1cc656` and
+`0x1cc6b8` at `0x1cc847/862`. They acknowledge/reset through `0xb8e210`, clear
+request fields and can invoke an indirect callback. **[O]** Actual invocation and
+lifetime of creator `0x1ca63e`, plus later request/configuration replacement, remain
+the active next audit. Running on every boot or forever is not established. This
+narrows direction/count evidence, not free DDR, complete writer reach, backing
+ownership or a production reservation.

@@ -55,8 +55,10 @@ The bounded report has 93 functions/2,278 recorded stores, not ownership closure
 All 23 CALL rows missing target functions have concrete PCs; the one with no
 containing range, `0x1c125e`, now has a bounded store-free body audit. Its caller's
 R4 provenance closes the `0xb80e79` store as per-slot voice-state word 2, separate
-from external ring backing. The active next bounded audit is `0x1ca59f`
-auxiliary DMA direction/count/lifetime; external ring ownership, entry/dispatch
+from external ring backing. Auxiliary `0x1ca59f` setup now resolves SPI1 TX/RX
+fixed roots and two-byte count/modify configuration; XCNT=0 is an error, not an
+inactive/empty transfer. Actual creator `0x1ca63e` invocation/lifetime and later
+request/configuration replacement are next. External ring ownership, entry/dispatch
 precision and DT2 source mutation coverage remain open. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
@@ -2681,8 +2683,13 @@ and mypy pass. Source/report identity and commands are retained in ignored
 - [x] Establish incoming R4 provenance for caller `0xb80e54`'s `DM(I5+2)` store:
   valid slots 0..15 target voice-state word 2 at `0x2535e8 + 0x48*v`, not the
   external ring pointer/backing. The stride is `0x48` bytes (72 decimal).
-- [ ] Audit auxiliary DMA helper `0x1ca59f` direction/count/lifetime as the next
-  named boundary, without inferring a general allocator or free DDR region.
+- [x] Audit auxiliary DMA helper `0x1ca59f` direction/count setup: SPI1 DMA24 TX
+  and DMA25 RX use fixed circular roots, XCNT=N>>1, XMOD=2 and two-byte widths.
+  Valid nonzero count bounds a configured span, not actual size/coexistence;
+  XCNT=0 is a configuration error.
+- [ ] Trace actual creator `0x1ca63e` invocation/lifetime and later request/config
+  replacement. Circular continuation is not inherently boot-only, but every-boot
+  or perpetual activity is unproved; no general allocator/free-DDR inference.
 - [ ] Keep external ring ownership and explicit entry/dispatch precision separate
   from this closed destination family; corrupted state and complete writer reach
   remain open. No traversal-policy or production reservation is approved. See

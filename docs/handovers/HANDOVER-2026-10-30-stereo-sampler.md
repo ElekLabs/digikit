@@ -272,9 +272,12 @@ adjacent entry/other callers excluded. The subsequent R4 audit closes caller
 `0x2535e8 + 0x48*v` for valid slots 0..15 (`0x48` bytes = 72 decimal).
 It does not dereference the separate word-16 external ring pointer. External ring
 ownership, corrupted state and entry/dispatch precision remain open, with no
-policy expansion or reservation conclusion. The active next bounded audit is
-auxiliary DMA helper `0x1ca59f` direction/count/lifetime, not an exhaustive writer
-audit. See [finding 91](../findings/91-dn2-ddr-configuration.md).
+policy expansion or reservation conclusion. Auxiliary `0x1ca59f` setup now
+resolves SPI1 DMA24 TX/DMA25 RX fixed circular buffers and two-byte count/modify
+configuration. Valid nonzero counts bound configured spans only; XCNT=0 is a
+configuration error, not an empty/inactive transfer. The active next audit is
+actual creator `0x1ca63e` invocation/lifetime and later request/config replacement,
+not an exhaustive writer audit or proof of every-boot/perpetual activity. See [finding 91](../findings/91-dn2-ddr-configuration.md).
 
 The canonical packed-PCM16 parser already exists, but the current source/job
 contract is LE float32. Direct substitution would violate the consumer contract.
