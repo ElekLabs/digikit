@@ -1,6 +1,7 @@
-//! Opt-in component replay of the DT2 1.17 ISR and its real no-waiter signal helper.
-//! IRQSTAT is a controlled W1C test double: this does not prove controller
-//! delivery, DMA, scheduler/waiter behavior, or native-boot storage completion.
+//! Opt-in stock ISR proofs: the original DT2 replay uses a controlled W1C
+//! double; the DT2/DN2 delivery fixture uses real Board eSDHC/INTC registers and
+//! the actual signal helper with one waiter. Queue insertion and the scheduling
+//! request are observed, not task resumption, DMA or native-boot completion.
 use coldfire::{Bus, BusError, Cpu, InterruptPolicy};
 use patchkit::build::{cf, toolchain::Env};
 use patchkit::error::sha256_hex;
@@ -24,6 +25,10 @@ const VECTOR: u8 = 0x80;
 const CEILING: usize = 2048;
 
 fn compiled() -> Linked {
+    compiled_at(SITES)
+}
+
+fn compiled_at(sites: [u32; 3]) -> Linked {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let env = Env::new(&root);
     env.m68k("as")
@@ -36,7 +41,7 @@ fn compiled() -> Linked {
     .unwrap();
     let externs = ['a', 'b', 'c']
         .into_iter()
-        .zip(SITES)
+        .zip(sites)
         .map(|(name, site)| (format!("storage_fault_site_{name}"), u64::from(site)))
         .collect();
     let linked = patchkit::link::link(&object, u64::from(LOAD), &externs).unwrap();
@@ -313,6 +318,356 @@ fn actual_isr_preserves_stock_results_and_latches_errors() {
                 assert_eq!(patched.word(patched.latch), sticky);
                 assert_eq!(stock.word(stock.latch), 0);
             }
+        }
+    }
+}
+
+// Controlled initialized-state delivery through Board's real eSDHC registers,
+// shared INTC bank and Machine::step_esdhc. Queue insertion proves a waiter
+// becomes ready; the forced scheduling request is observed but never serviced.
+struct DeliveryTarget {
+    name: &'static str,
+    env: &'static str,
+    sha: &'static str,
+    sites: [u32; 3],
+    isr: u32,
+    rte: u32,
+    status: [u32; 2], // data, command
+    sem: [u32; 2],
+    high_ready: u32,
+}
+
+const DELIVERY_TARGETS: [DeliveryTarget; 2] = [
+    DeliveryTarget {
+        name: "DT2 1.17",
+        env: "DIGI_STORAGE_FAULT_ISR_SYX",
+        sha: STOCK_SHA,
+        sites: SITES,
+        isr: ISR,
+        rte: 0x4012_d69e,
+        status: STATUS,
+        sem: SEM,
+        high_ready: 0x4096_4914,
+    },
+    DeliveryTarget {
+        name: "DN2 1.12",
+        env: "DIGI_STORAGE_FAULT_ISR_DN2_SYX",
+        sha: "7e5b8a733d4ab1fdf7e5d22757f7d8eddaa3cbf71d0858874a791844c02ceb35",
+        sites: [0x4012_bc86, 0x4012_bcda, 0x4012_bd06],
+        isr: 0x4012_bc7e,
+        rte: 0x4012_bd62,
+        status: [0x4461_c6b8, 0x4461_c6bc],
+        sem: [0x4461_c6d0, 0x4461_c6d8],
+        high_ready: 0x4058_e15c,
+    },
+];
+const WAITER: u32 = 0x4100_0100;
+const READY_HEAD: u32 = 0x4100_0200;
+const INTC2: u32 = 0xfc05_0000;
+const DELIVERY_VECTOR: u32 = 223;
+
+#[derive(Debug, PartialEq, Eq)]
+struct DeliveryResult {
+    d: [u32; 8],
+    a: [u32; 8],
+    sr: u16,
+    pc: u32,
+    other_a7: u32,
+    status: [u32; 2],
+    sem: [u32; 4],
+    queue: [u32; 5],
+    forced: u32,
+    irqstat: u32,
+    signal_entries: [usize; 2],
+}
+
+fn import_delivery_main(board: &mut machine::Board, base: u32, data: &[u8]) {
+    let page_size = machine::state::PAGE_SIZE;
+    let first = base & !(page_size as u32 - 1);
+    let end = u64::from(base) + data.len() as u64;
+    for page in (u64::from(first)..end).step_by(page_size) {
+        let start = page.max(u64::from(base));
+        let stop = (page + page_size as u64).min(end);
+        let mut bytes = vec![0; page_size];
+        bytes[(start - page) as usize..(stop - page) as usize].copy_from_slice(
+            &data[(start - u64::from(base)) as usize..(stop - u64::from(base)) as usize],
+        );
+        board.import_ram_page(page as u32, &bytes).unwrap();
+    }
+}
+
+fn delivery_machine(
+    fw: &Firmware,
+    linked: &Linked,
+    target: &DeliveryTarget,
+    patched: bool,
+    waiter_sem: usize,
+) -> machine::Machine {
+    use machine::{Board, CompletionPolicy, Machine, SemaphoreAddresses, Time, TimerPolicy};
+    // Populate real firmware MAIN only; all other memory is controlled fixture
+    // RAM, not a restored boot or runtime state.
+    let main = fw.section(3).expect("stock MAIN section");
+    let mut board = Board::new(
+        Default::default(),
+        SemaphoreAddresses {
+            dma_sem: None,
+            data_sem: Some(target.sem[0]),
+            cmd_sem: Some(target.sem[1]),
+            status: None,
+        },
+        CompletionPolicy::Device,
+    );
+    import_delivery_main(&mut board, main.dest, &main.data);
+    for address in [0, WAITER, target.status[0], target.high_ready] {
+        board.map_ram_page(address & !0x000f_ffff).unwrap();
+    }
+    for (offset, byte) in linked.image.iter().enumerate() {
+        board.write8(LOAD + offset as u32, *byte).unwrap();
+    }
+    board
+        .write32(linked.symbols["storage_fault_bits"] as u32, 0)
+        .unwrap();
+    for (site, name) in target.sites.into_iter().zip(['a', 'b', 'c']) {
+        let offset = (site - main.dest) as usize;
+        assert_eq!(
+            sha256_hex(&main.data[offset..offset + 6]),
+            SITE_SHA,
+            "{} original IRQSTAT load {site:#x}",
+            target.name
+        );
+        if patched {
+            board.write16(site, 0x4ef9).unwrap();
+            board
+                .write32(
+                    site + 2,
+                    linked.symbols[&format!("storage_fault_hook_{name}")] as u32,
+                )
+                .unwrap();
+        }
+    }
+    board
+        .write32(VBR + DELIVERY_VECTOR * 4, target.isr)
+        .unwrap();
+    // MOVE.L D0,(XFERTYP).L creates CC as an ordinary guest instruction.
+    board.write16(RETURN, 0x23c0).unwrap();
+    board.write32(RETURN + 2, 0xfc0c_c00c).unwrap();
+    board.write16(RETURN + 6, 0x4e71).unwrap();
+    for address in target
+        .status
+        .into_iter()
+        .chain(target.sem)
+        .chain(target.sem.map(|at| at + 4))
+        .chain([target.high_ready, READY_HEAD])
+    {
+        board.write32(address, 0).unwrap();
+    }
+    board.write32(target.sem[waiter_sem] + 4, WAITER).unwrap();
+    board.write32(WAITER, 0).unwrap();
+    board.write32(WAITER + 4, 0).unwrap();
+    board.write32(WAITER + 8, READY_HEAD).unwrap();
+    board.attach_time(Time::new(TimerPolicy::Device, vec![], 1_000_000.0));
+    board.write32(INTC2 + 0x0c, u32::MAX).unwrap();
+    board.write8(INTC2 + 0x5f, 3).unwrap();
+    board.write8(INTC2 + 0x1d, 31).unwrap();
+    board.write32(0xfc0c_c034, 0x0031_0003).unwrap(); // explicit IRQSTATEN
+    board.write32(0xfc0c_c038, 0x0031_0003).unwrap(); // explicit IRQSIGEN
+    let mut cpu = context(0x2215);
+    cpu.d[0] = 13 << 24; // CMD13, no DMA
+    Machine::new(cpu, board)
+}
+
+fn delivered_replay(
+    fw: &Firmware,
+    linked: &Linked,
+    target: &DeliveryTarget,
+    patched: bool,
+    extra_irq: u32,
+    waiter_sem: usize,
+) -> DeliveryResult {
+    let mut m = delivery_machine(fw, linked, target, patched, waiter_sem);
+    assert!(
+        m.step_esdhc()
+            .unwrap()
+            .iter()
+            .all(|event| !matches!(event, machine::CompletionEvent::Dma59 { .. }))
+    );
+    // CC is already latched, but no ISR has run and Device completion has not
+    // posted the host semaphore or released the initialized blocked waiter.
+    assert_eq!(m.irqs_delivered, 0);
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), 1);
+    assert_eq!(m.board.read32(target.sem[waiter_sem]).unwrap(), 0);
+    assert_eq!(m.board.read32(target.sem[waiter_sem] + 4).unwrap(), WAITER);
+    assert_eq!(m.board.read32(READY_HEAD).unwrap(), 0);
+    assert_eq!(m.board.read32(target.high_ready).unwrap(), 0);
+    if extra_irq != 0 {
+        m.board.esdhc.device_event(extra_irq).unwrap();
+    }
+    let irq = 1 | extra_irq;
+    assert_eq!(m.board.read32(IRQSTAT).unwrap(), irq);
+    m.cpu.resolve_nzv();
+    let before = (m.cpu.d, m.cpu.a, m.cpu.sr, m.cpu.other_a7);
+    let mut signal_entries = [0; 2];
+    let mut rte_entries = 0;
+    let mut returned = false;
+    for _ in 0..CEILING {
+        if m.irqs_delivered == 1 && m.cpu.pc == RETURN + 6 {
+            returned = true;
+            break;
+        }
+        if m.cpu.pc == target.rte {
+            rte_entries += 1;
+        }
+        if m.cpu.pc == 0x4000_155c {
+            signal_entries[0] += 1;
+        }
+        if m.cpu.pc == 0x4000_11ee {
+            signal_entries[1] += 1;
+        }
+        let pc = m.cpu.pc;
+        m.step_esdhc().unwrap_or_else(|error| {
+            panic!(
+                "{} patched={patched} IRQ={irq:#x} at {pc:#x}: {error:?}",
+                target.name
+            )
+        });
+    }
+    assert!(
+        returned,
+        "{} ISR exceeded {CEILING} instructions at {:#x}",
+        target.name, m.cpu.pc
+    );
+    m.cpu.resolve_nzv();
+    assert_eq!(
+        (m.cpu.d, m.cpu.a, m.cpu.sr, m.cpu.other_a7),
+        before,
+        "{} preserves interrupted context",
+        target.name
+    );
+    assert_eq!(m.irqs_delivered, 1);
+    assert_eq!(rte_entries, 1, "actual ISR RTE");
+    assert_eq!(
+        signal_entries,
+        [irq.count_ones() as usize; 2],
+        "actual signal wrapper and helper"
+    );
+    assert_eq!(
+        m.board.read32(IRQSTAT).unwrap(),
+        0,
+        "actual ISR W1C acknowledgement"
+    );
+    assert!(!m.board.esdhc.interrupt_pending());
+    assert_eq!(m.board.read32(target.sem[waiter_sem] + 4).unwrap(), 0);
+    let sem_signals = if waiter_sem == 1 {
+        (irq & 0x0001_0001).count_ones()
+    } else {
+        (irq & 0x0030_0002).count_ones()
+    };
+    assert_eq!(
+        m.board.read32(target.sem[waiter_sem]).unwrap(),
+        sem_signals - 1,
+        "waiter consumes first signal"
+    );
+    assert_eq!(m.board.read32(READY_HEAD).unwrap(), WAITER);
+    assert_eq!(m.board.read32(WAITER).unwrap(), WAITER);
+    assert_eq!(m.board.read32(WAITER + 4).unwrap(), WAITER);
+    assert_eq!(m.board.read32(target.high_ready).unwrap(), READY_HEAD);
+    assert_eq!(
+        m.board.read32(INTC2 + 0x14).unwrap() & (1 << 13),
+        1 << 13,
+        "ready waiter requests scheduling; request is not serviced"
+    );
+    assert_eq!(
+        m.board.read32(target.status[1]).unwrap(),
+        0,
+        "CC clears command status after any CTOE"
+    );
+    assert_eq!(
+        m.board.read32(target.status[0]).unwrap(),
+        if irq & 0x0030_0000 != 0 { u32::MAX } else { 0 },
+        "data error follows TC in the actual ISR"
+    );
+    let other_sem = 1 - waiter_sem;
+    assert_eq!(m.board.read32(target.sem[other_sem] + 4).unwrap(), 0);
+    assert_eq!(
+        m.board.read32(target.sem[other_sem]).unwrap(),
+        if other_sem == 1 {
+            (irq & 0x0001_0001).count_ones()
+        } else {
+            (irq & 0x0030_0002).count_ones()
+        }
+    );
+    let latch = m
+        .board
+        .read32(linked.symbols["storage_fault_bits"] as u32)
+        .unwrap();
+    assert_eq!(latch, if patched { irq & MASK } else { 0 });
+    DeliveryResult {
+        d: m.cpu.d,
+        a: m.cpu.a,
+        sr: m.cpu.sr,
+        pc: m.cpu.pc,
+        other_a7: m.cpu.other_a7,
+        status: target
+            .status
+            .map(|address| m.board.read32(address).unwrap()),
+        sem: [
+            target.sem[0],
+            target.sem[0] + 4,
+            target.sem[1],
+            target.sem[1] + 4,
+        ]
+        .map(|address| m.board.read32(address).unwrap()),
+        queue: [
+            READY_HEAD,
+            WAITER,
+            WAITER + 4,
+            WAITER + 8,
+            target.high_ready,
+        ]
+        .map(|address| m.board.read32(address).unwrap()),
+        forced: m.board.read32(INTC2 + 0x14).unwrap(),
+        irqstat: m.board.read32(IRQSTAT).unwrap(),
+        signal_entries,
+    }
+}
+
+#[test]
+fn actual_firmware_delivery_readies_waiter_and_preserves_stock_results() {
+    for target in DELIVERY_TARGETS {
+        let Some(path) = std::env::var_os(target.env) else {
+            eprintln!(
+                "SKIP controlled {} eSDHC delivery/waiter proof: set {} to its stock .syx",
+                target.name, target.env
+            );
+            continue;
+        };
+        let raw = std::fs::read(path).unwrap_or_else(|error| {
+            panic!(
+                "configured {} must name a readable stock image: {error}",
+                target.env
+            )
+        });
+        let fw = Firmware::parse(&raw).expect("parse configured stock image");
+        assert_eq!(
+            fw.syx_sha256, target.sha,
+            "requires exact stock {}",
+            target.name
+        );
+        let linked = compiled_at(target.sites);
+        // Every case includes command-generated CC; data cases additionally
+        // drive explicit immediate Device events without DMA or physical timing.
+        for (extra_irq, waiter_sem) in
+            [(0, 1), (0x0001_0000, 1), (0x0010_0002, 0), (0x0020_0002, 0)]
+        {
+            let stock = delivered_replay(&fw, &linked, &target, false, extra_irq, waiter_sem);
+            let patched = delivered_replay(&fw, &linked, &target, true, extra_irq, waiter_sem);
+            assert_eq!(
+                patched,
+                stock,
+                "{} IRQ={:#x}: observer preserves status, queue and context",
+                target.name,
+                extra_irq | 1
+            );
         }
     }
 }

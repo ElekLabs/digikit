@@ -3092,6 +3092,7 @@ dependencies = [
  "dkupload",
  "dt2-firmware-loader",
  "emmc-card",
+ "machine",
  "midir",
  "object",
  "plusdrive-format",

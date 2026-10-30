@@ -56,6 +56,22 @@ pub enum TimedStepError {
     },
 }
 
+/// Why an isolated eSDHC instruction-boundary step could not run.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EsdhcStepError {
+    DeviceCompletionRequired,
+    TimerNotAttached,
+    DeviceTimerRequired,
+    LegacyDmaIrqConfigured,
+    LegacyDmaIrqPending,
+    Stop(Stop),
+    /// Exception entry failed after it may have mutated CPU/board state.
+    /// Discard the machine rather than retrying delivery.
+    InterruptDeliveryPoisoned {
+        stop: Stop,
+    },
+}
+
 pub struct Machine {
     pub cpu: Cpu,
     pub board: Board,
@@ -273,6 +289,52 @@ impl Machine {
         events.append(&mut new_events);
         self.clock += 1;
         Ok(events)
+    }
+
+    /// Opt in to isolated eSDHC delivery from explicitly initialized registers.
+    ///
+    /// This offers only INTC2 source 31 (vector 223), using the attached Time's
+    /// IMR/ICR and the live CPU IPL, then executes one instruction. It does not
+    /// service timers or arbitrate against DMA or any other interrupt source.
+    /// Configured or pending legacy DMA delivery is rejected before mutation.
+    /// The line is derived from eSDHC registers each boundary: only guest
+    /// acknowledgement/masking deasserts it, so an unacknowledged IRQ can recur
+    /// after RTE. No new mode or pending-line state is serialized, and callers
+    /// must explicitly choose this method on every step; daemons are unchanged.
+    pub fn step_esdhc(&mut self) -> Result<Vec<CompletionEvent>, EsdhcStepError> {
+        if self.board.completion_policy() != CompletionPolicy::Device {
+            return Err(EsdhcStepError::DeviceCompletionRequired);
+        }
+        let time = self.board.time().ok_or(EsdhcStepError::TimerNotAttached)?;
+        if time.policy() != TimerPolicy::Device {
+            return Err(EsdhcStepError::DeviceTimerRequired);
+        }
+        if self.dma_irq.is_some() {
+            return Err(EsdhcStepError::LegacyDmaIrqConfigured);
+        }
+        let pending_dma_event = |event: &CompletionEvent| {
+            matches!(event, CompletionEvent::Dma59 {
+                policy: CompletionPolicy::Device,
+                completion,
+            } if completion.done && completion.major_interrupt)
+        };
+        if self.pending_dma_irq
+            || self.board.completion_events().iter().any(pending_dma_event)
+            || self.held_events.iter().any(pending_dma_event)
+        {
+            return Err(EsdhcStepError::LegacyDmaIrqPending);
+        }
+        if self.board.esdhc.interrupt_pending()
+            && let Some(level) = time.esdhc_interrupt_level()
+            && ((self.cpu.sr >> 8) & 7) < u16::from(level)
+            && self
+                .cpu
+                .take_interrupt(&mut self.board, 223, Some(level), InterruptPolicy::Device)
+                .map_err(|stop| EsdhcStepError::InterruptDeliveryPoisoned { stop })?
+        {
+            self.irqs_delivered += 1;
+        }
+        self.step().map_err(EsdhcStepError::Stop)
     }
 
     /// Arm the PIT at the current boundary, execute one instruction, then

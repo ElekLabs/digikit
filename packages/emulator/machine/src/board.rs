@@ -412,7 +412,9 @@ impl Board {
     /// Fails if completion events or DMA ranges are still undrained.
     pub fn snap_save(&self, w: &mut periph::snap::Writer) -> Result<(), String> {
         if !self.events.is_empty() || !self.dma_written.is_empty() || self.dspi1_irq {
-            return Err("board has undrained completion events, DMA ranges or a DSPI1 interrupt".into());
+            return Err(
+                "board has undrained completion events, DMA ranges or a DSPI1 interrupt".into(),
+            );
         }
         const BLOCK: usize = 4096;
         w.tag("BORD");
@@ -531,6 +533,11 @@ impl Board {
     /// Route PIT and INTC MMIO through the supplied timer facade.
     pub fn attach_time(&mut self, time: Time) {
         self.time = Some(Box::new(time));
+    }
+
+    /// Read the timer facade without changing its registers or scheduling state.
+    pub fn time(&self) -> Option<&Time> {
+        self.time.as_deref()
     }
 
     /// Borrow the timer facade while retaining its stable allocation.

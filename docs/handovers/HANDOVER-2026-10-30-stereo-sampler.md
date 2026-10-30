@@ -388,8 +388,9 @@ union includes simultaneous error/completion. The
 the `DIGI_STORAGE_FAULT_ISR_SYX` opt-in command. Missing input skips only when the
 environment variable is unset; a configured invalid input fails.
 
-This **[D]** component result is not hardware/controller delivery, DMA completion,
-waiter/scheduler behavior or native-boot IRQ validation. Fault history,
+That earlier **[D]** no-waiter component result does not establish controller
+delivery, DMA completion, waiter/scheduler behavior or native-boot IRQ validation;
+the later controlled delivery/waiter result is recorded below. Fault history,
 whole-bootstrap/reset coverage and source witnesses remain open. Keep native
 assertions intact; no emulator semantics change or wholesale Device-mode switch
 is justified by this result. The earlier all-changed
@@ -399,14 +400,10 @@ full merge gate was deferred and has not run. These observations remain **[D]**,
 See the [next proof](../plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
 and [finding 81](../findings/81-stock-sampler-dependencies.md).
 
-**[D] Scoped runtime follow-up:** the inspected `Machine::step` Device interrupt
-route delivers only pending DMA59
-(`packages/emulator/machine/src/runner.rs:236–267`). Board `complete()` posts
-semaphores under Oracle policy; under Device policy it records completion events.
-No eSDHC command/data/error CPU interrupt delivery was found in this inspected
-runtime path. This gap is separate from DMA59; this is not an exhaustive absence
-claim. The controlled ISR proof remains passed and full native IRQ validation
-remains **failed/open**.
+**[D] Default runtime boundary:** ordinary `Machine::step` retains its existing
+configured DMA59 route. Oracle Board completion posts semaphores and the daemon
+counts events; full native fault-history acceptance remains **failed/open**.
+The isolated opt-in delivery proof below does not change default runtime behavior.
 
 **[D/O] User-approved Stage A is partially implemented:**
 [finding 100](../findings/100-storage-interrupt-emulation-scope.md) records the
@@ -443,24 +440,46 @@ do not resolve enable reset values in the bounded search. Linux's ColdFire reset
 path explicitly rewrites both enables after reset; the audited U-Boot path
 suggests reliance on nonzero status enables but cannot distinguish preservation
 from reset defaults. No trusted hardware readback was found. See
-[finding 100's reset investigation](../findings/100-storage-interrupt-emulation-scope.md#reset-investigation-and-pending-checkpoint-decision)
+[finding 100's reset investigation](../findings/100-storage-interrupt-emulation-scope.md#reset-investigation-and-controlled-checkpoint-decision)
 for the primary driver links and limitations. Neither preserving, restoring the
 reset default nor zeroing IRQSTATEN after RSTA is proved. No component tests,
 builds or emulator runs were repeated for this evidence checkpoint.
 
-Stage A remains incomplete on full RSTA. Stages B (controller-source delivery to
-the actual ISR/waiter) and C (opt-in runtime/snapshot and two-device fault-history
-proof) are unstarted. **Pending user decision:** recommend controlled Stage B
-from explicitly initialized registers, while full RSTA fidelity, cold boot and
-full native fault-history release acceptance remain blocked. This would change
-the earlier full-Stage-A prerequisite; it is not approved. Alternatively scope
-trusted hardware readback first: two nondefault IRQSTATEN seed patterns and both
-enables before/after RSTA could discriminate outcomes, but no execution is
-approved or performed. SECF215 requires that scope to address a quiescent,
-isolated controller and the erratum before any procedure is defined.
+**[D/O] Controlled Stage B delivery/waiter component now passes:** the user
+approved explicitly initialized registers while deferring full RSTA fidelity.
+`Machine::step_esdhc` opts into isolated eSDHC source 31/vector 223 using Device
+Board and Device Time, shared IMR/ICR and live CPU IPL. Device SIMR/CIMR handling
+is limited to byte writes selecting source 31. Invalid prerequisites and
+configured, pending, queued or held DMA major completions are rejected before
+mutation; failed exception entry reports poisoned state. Default stepping,
+Oracle completion, daemons and snapshot layout retain their existing behavior.
 
-Full native fault-history acceptance remains **failed/open** and a release
-blocker. Earlier informal 1–3-day/week estimates remain withdrawn; confidence is
-medium for the bounded experiment and low for runtime integration until it
-passes. No production API, pool, SHARC, recovery or hardware-flashing work follows
-from this checkpoint.
+Nine new machine tests, four existing runner tests and four timer-storage tests
+pass. The actual-firmware fixture passes four cases on stock/patched DT2 1.17 and
+DN2 1.12: 16 ISR/RTE invocations and actual waiter ready-queue insertions, plus
+36 entries each at the real signal wrapper/helper. Ordinary guest CMD13 creates
+CC with the waiter still blocked before IRQ entry; controlled fault events follow
+between boundaries. Actual W1C acknowledges the line. CTOE+CC clears command
+status to zero while the observer retains CTOE; TC+DTOE/DCE leaves data status
+`-1`. Stock/patched context, status, semaphore and queue results match. The
+original 96 DT2 no-waiter ISR invocations still pass. Independent static reviews
+of the route and fixture reported no issues. Logs are
+`out/runs/storage-fault-proof/stage-b-delivery-tests.log` and
+`out/runs/storage-fault-proof/stage-b-firmware-tests.log`.
+
+The fixture's DN2 observer relocation is test-only and in memory; the packaged
+observer remains DT2-only. Ready-queue insertion and scheduling-request bit 13
+are proved, not resumed task execution or the full scheduler. Stage A remains
+incomplete on RSTA. The controlled B delivery/waiter component is complete only;
+DMA59/source-0 and cross-bank arbitration remain open. Stage C is unstarted.
+The next proposed slice is deliberate DMA59/eSDHC ordering and source-0
+arbitration from initialized state before daemon integration. Full read transfer,
+native-boot fault capture and reset history remain unproved; full native
+fault-history release acceptance remains **failed/open**. No public ABI, pool, SHARC, recovery or
+hardware-flashing work follows from this checkpoint. Runtime integration
+confidence remains low; earlier calendar estimates remain withdrawn.
+
+For this checkpoint, the coordinator's scoped `mise run test:changed` across the
+11 changed files passed pathcheck and layer checks. The full merge gate remains
+deferred and has not run. Documentation pathcheck and diff checks cover this
+update; no additional build or emulator run was performed for the prose change.

@@ -68,19 +68,64 @@ nonobserver write traces and status/signal globals match; the observer latch and
 its checked temporary stack writes are excluded from the write comparison.
 Each replay has a 2,048-instruction ceiling.
 
-From the repository root, with the shared benchlock configured for the worktree:
+The same fixture now also exercises isolated controller delivery and an actual
+waiter on exact DT2 1.17 and DN2 1.12. DN2 input SHA-256 is
+`7e5b8a733d4ab1fdf7e5d22757f7d8eddaa3cbf71d0858874a791844c02ceb35`.
+The shared observer is linked directly to verified DN2 ISR sites in memory for
+this test only; `module.toml` remains DT2-only, with no DN2 packaged support.
+
+`Machine::step_esdhc` requires Device Board and attached Device Time. The fixture
+initializes IRQSTATEN/IRQSIGEN, IMR and ICR explicitly and unmasks source 31 through
+CIMR; the real shared INTC bank selects vector 223 at level 3 subject to CPU IPL.
+Device SIMR/CIMR support is limited to byte writes selecting source 31. Ordinary
+stepping and Oracle completion retain their existing behavior. Configured,
+pending, queued or held DMA major completion state is rejected before mutation;
+this path is isolated delivery, not DMA or global interrupt arbitration.
+
+An ordinary guest CMD13 first latches CC while the semaphore waiter remains
+blocked, proving no host post before interrupt entry. Immediate controlled Device
+fault/TC events then produce four cases: CC, CTOE+CC, TC+DTOE+CC and TC+DCE+CC.
+Stock/patched runs on both devices pass 16 actual ISR/RTE invocations and waiter
+ready-queue insertions, with 36 entries each at the actual signal wrapper
+`0x4000155c` and helper `0x400011ee`. They check semaphore counts/pointers,
+ready-head insertion, self-links, high-ready selection, bit-13 scheduling request,
+IRQSTAT W1C deassertion and preserved interrupted context. CTOE+CC leaves command
+status zero while the observer retains CTOE; TC+DTOE/DCE leaves data status `-1`.
+The observer preserves stock status, context and queue results.
+
+The scheduling request is observed, not serviced: no resumed task or full
+scheduler proof is claimed. These 16 invocations plus the original 96 no-waiter
+invocations make 112 total across the two tests, not 112 per image. The only new
+fixture dependency is the local `machine` dev-dependency; no external package was
+added. Route and fixture static reviews reported no issues.
+
+From the repository root, using the original checkout's shared benchlock for
+this worktree:
 
 ```sh
 UV_NO_SYNC=1 UV_CACHE_DIR="$PWD/out/cache/uv" \
+BENCHLOCK_PATH=/Users/em/src/digi/digitakt2/out/.benchlock \
 DIGI_STORAGE_FAULT_ISR_SYX="$PWD/firmware/Digitakt_II_OS1.17.syx" \
+DIGI_STORAGE_FAULT_ISR_DN2_SYX="$PWD/firmware/Digitone_II_OS1.12.syx" \
 uv run python -m tools.devtools.benchlock run --shared --timeout 120 \
   --label storage-fault-isr -- rustup run 1.98.1 cargo test --offline --locked \
   -p patchkit --test storage_fault_isr \
   --target-dir out/native/target-wt/digikit-dsp-sampler/nogen/storage-fault-proof
 ```
 
-Without `DIGI_STORAGE_FAULT_ISR_SYX`, the fixture skips with a reason; when set,
-a missing, unreadable or wrong-hash input fails. This is **[D]** component evidence,
-not controller delivery, DMA, waiter/scheduler behavior, hardware or native-boot
-IRQ validation. Full relevant fault history and the production sample-load gate
-remain open; see the [plan](../../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer).
+Each unset firmware variable skips that target with an explicit reason; a
+configured missing, unreadable or wrong-hash input fails. Both variables were
+configured for the passing run recorded in
+`out/runs/storage-fault-proof/stage-b-firmware-tests.log`. The isolated machine
+route also passed nine new tests, four existing runner tests and four timer-storage
+tests, recorded in `out/runs/storage-fault-proof/stage-b-delivery-tests.log`.
+
+This remains **[D]** initialized-state component evidence. Full RSTA fidelity,
+DMA59/source-0 and cross-bank arbitration, complete reads, hardware, cold boot and
+native fault-history acceptance remain open. The default Oracle native run still
+has failed/open fault-history acceptance. Stage C daemon/snapshot integration has
+not started. The next proposed slice is deliberate DMA59/eSDHC ordering and
+source-0 arbitration before daemon integration. No public sample ABI, pool or
+hardware-flashing work follows. See the
+[plan](../../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
+and [scope finding](../../../../docs/findings/100-storage-interrupt-emulation-scope.md).
