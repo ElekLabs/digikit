@@ -228,3 +228,63 @@ its reload. Neither interpretation may be used to place a reset hook.
 This establishes one concrete per-slot reset path, not complete initialization,
 retrigger/steal/filter-change coverage or an implemented shadow reset hook.
 The audit used original bytes with the project decoder, not a hardware trace.
+
+
+## Additional filter replay proofs
+
+**[D]** The replay fixture now covers the three isolated leaves `0xb82342`,
+`0xb81a16` and `0xb81526` in
+`tests/fixtures/dsp/stereo-filter-shadow-replay.s`. Each runs three unequal-channel
+blocks with changing captured coefficients and independent nonzero histories.
+The candidate matches two isolated mono sessions, keeps left state unchanged by
+the right pass, and bounds stores to declared audio, audited mutable fields and
+a 65-word stack window. Deliberately replacing right histories with left end-state
+must change actual right audio, so silence or a bypass cannot satisfy the proof.
+For `0xb82342`, all five audio-dependent fields, including snapshots 48..50, stay
+private. These six new cases and the six existing replay cases pass without skips;
+independent source review found no issues.
+
+The new leaves use byte-space state/audio/stack pointers with explicit
+`assume_nw32=True`, because their raw-byte MODIFY interiors are combined with
+normal-word loads/stores. Reciprocal approximation is disabled. This context is
+part of the proof, not an unqualified claim of arbitrary-mode equivalence. The
+preparation fixture accesses equivalent normal-word aliases, while stock callees
+receive byte pointers. No core semantics, public ABI or runtime code changed.
+
+Six of the ten local stage families now have replay experiments. Case-5 scratch
+and continuation blending, the remaining four families, complete routes, external
+writers, reset integration and actual pan/send output remain outside these tests.
+No hardware throughput conclusion follows from numerical leaf tests.
+
+
+## Shared reset predicate and first-order reset
+
+**[D]** A fresh original-byte audit closes another bounded lifecycle question.
+`0x1c9336` loads byte `DM(I2-17)`; LEFTZ at `0x1c9338` and `IF SV` at
+`0x1c933b` skip reset for zero. Otherwise `0x1c933e` loads `DM(I14+5)`;
+LEFTZ at `0x1c9340` and `IF NOT SV` at `0x1c9343` select the reset sequence
+for nonzero. Both inputs must therefore be nonzero. Public Programming Reference
+printed p. 19-66 describes unary LEFTZ with SV set for zero input; the rendered
+second operand R0 is unused. This is a zero test, not an arithmetic-overflow test.
+
+The same sequence also resets the first-order histories. `0x1c966c/6f/71`
+saves `I9+0xe088 = 0x24f320` in frame slot −3. `0x1c9681` loads R14 from
+frame slot −18; `0x1c96c7/c9/cb` reloads the base and calls `0xb80b93`
+with base+R14. The complete reset body, including return delays, zeros words
+24,25,26,27 at `0xb80b97/99/9b/9d`. Frame −18 starts at zero (`0x1c9035`)
+and advances by `0x70` at `0x1c9370/7b/86`, stored at `0x1c93a0`.
+Complete bounded callees `0xb811f1`, `0xb82440`, `0xb8135a`, `0xb805d8`
+with nested `0xb80e48`, and `0xb827d8` preserve R14 between load and reset.
+
+Local loop flow initializes R3/R10 to zero, increments R3, tests `R3>>4`, advances
+R10 by `0x20`, and loops while SZ. This supports sixteen physical record ordinals
+with U/Y offset `0x20*v` and first-order offset `0x70*v`. It does not establish
+user-facing voice identity. Local arithmetic suggests guard byte `0x254ba4+v`
+and word `0x2547b4+0x2c*v`; the former depends on correctly decoding the byte
+post-modifier at `0x1c911a`, which the listing's suffix omits.
+
+**[O]** Upstream indirect dispatches `0x1c90b0/0x1c91ad` and their complete
+register-preservation graphs are not exhausted. Keep full guard-address/ordinal
+propagation conditional on that gap. Neither guard is identified as note-on,
+retrigger, steal or filter change. Next bounded question: their actual producers.
+This is a concrete common reset path, not complete lifecycle coverage.

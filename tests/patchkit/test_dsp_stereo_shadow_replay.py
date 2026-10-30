@@ -3,7 +3,9 @@
 The full subset uses the existing approximate RECIPS seed model for 1c06ba.
 Bit equality is within this model, not hardware reciprocal exactness. Without
 that option, 1c0706 forks on an unknown AV predicate after RECIPS. The separate
-recurrence case uses the default core. No instruction semantics are modified.
+recurrence case uses the default core. The separate filter leaves use byte-space
+pointers with assume_nw32=True for their stock 32-bit DM access context and
+approx_recips=False. No instruction semantics are modified.
 
 Original firmware is supplied at runtime, never copied into a fixture. Reference
 channels execute independently on separate concrete cores with private state.
@@ -341,3 +343,158 @@ def test_base_image_overlay_and_decode_cache_isolation():
         session.call("_entry", {}, max_steps=10)["regs"]["R0"] for session in sessions
     ] == [7, 19]
     assert sessions[0].runner._cache is not sessions[1].runner._cache
+
+
+# These are isolated finite leaves, not dispatch routing or the case-5 blend.
+# snapshots = b82342, nine = b81a16, six = b81526. Small coefficients
+# and nonzero per-sample increments exercise their inspected float recurrences
+# without exceptional values; they are synthetic captured coefficients.
+FILTER_FAMILIES = {
+    "snapshots": (
+        51,
+        (3, 4, 48, 49, 50),
+        (5, 6, 7, 12, 14, 26, 28, 33, 35, 40, 42),
+        (0.2, 0.3, 0.1, 0.4, 0.0002, 0.2, 0.0001, 0.1, 0.0001, 0.1, 0.0001),
+    ),
+    "nine": (
+        75,
+        (10, 11),
+        tuple(12 + 7 * k + delta for k in range(9) for delta in (0, 2)),
+        tuple(
+            v
+            for v0 in (0.1, 0.2, 0.1, 0.1, 0.05, 0.05, 0.1, 0.1, 0.1)
+            for v in (v0, 0.0001)
+        ),
+    ),
+    "six": (
+        53,
+        (9, 10),
+        tuple(11 + 7 * k + delta for k in range(6) for delta in (0, 2)),
+        tuple(v for v0 in (0.6, 0.1, 0.15, 0.2, 0.1, 0.08) for v in (v0, 0.0001)),
+    ),
+}
+
+
+@pytest.fixture(scope="module")
+def filter_rig(rig):
+    source = REPO_ROOT / "tests/fixtures/dsp/stereo-filter-shadow-replay.s"
+    linked = pk_sharc.link(
+        pk_sharc.assemble(
+            pk_sharc.expand_includes(source.read_text(), [REPO_ROOT / "sdk"])
+        ),
+        0xB92000,
+        {"_snapshots": 0xB82342, "_nine": 0xB81A16, "_six": 0xB81526},
+    )
+    return linked, rig[1]
+
+
+def filter_call(session, family, side, histories, coefficients):
+    entry = f"_{side}_{family}"
+    regs = {**REGS, "I6": STACK * 4, "I7": STACK * 4}
+    result = session.call(entry, regs, max_steps=12000)
+    assert result["halt"]["reason"] == "breakpoint", result
+    assert result["final_pc_sw"] == BACK
+    if side == "prepare":
+        allowed = {CONTROL + 0x100 + i for i in coefficients}
+    else:
+        offset = 0x100 if side == "right" else 0
+        allowed = {LEFT + offset + i for i in range(32)}
+        allowed |= {CONTROL + offset + i for i in histories}
+        allowed |= set(range(STACK - 64, STACK + 1))
+    byte_addresses = {
+        _canonical_dm_address(
+            session.runner.state, normal_word_to_byte(a), 4, for_write=True
+        ): a
+        for a in allowed
+    }
+    assert all(
+        event.width == 4 and event.address in byte_addresses for event in session.stores
+    ), [
+        (hex(e.address), e.width)
+        for e in session.stores
+        if e.address not in byte_addresses
+    ]
+    counts = Counter(byte_addresses[e.address] for e in session.stores)
+    if side == "prepare":
+        assert {a for a, count in counts.items() if count} == allowed
+        assert set(counts.values()) == {1}
+    else:
+        assert [counts[LEFT + offset + i] for i in range(32)] == [1] * 32, (
+            result,
+            counts,
+        )
+        assert all(counts[CONTROL + offset + i] for i in histories)
+    return result
+
+
+@pytest.mark.parametrize("family", FILTER_FAMILIES)
+@pytest.mark.parametrize(
+    "corrupt_history", (False, True), ids=("independent", "bad-history")
+)
+def test_filter_leaf_shadow_matches_isolated_mono(filter_rig, family, corrupt_history):
+    size, histories, coefficients, values = FILTER_FAMILIES[family]
+    stereo, left, right = (fresh(filter_rig, approximate=False) for _ in range(3))
+    for session in (stereo, left, right):
+        # Stock raw-byte MODIFY interiors require byte-space frame/state pointers.
+        # Unqualified stock DM accesses are 32-bit normal words in this context.
+        session.runner.state.assume_nw32 = True
+    for session in (stereo, left, right):
+        for offset in (0, 0x100):
+            for i in range(size):
+                session.poke(CONTROL + offset + i, 0)
+    # Unequal nonzero initial histories also make block zero sensitive to aliasing.
+    for n, i in enumerate(histories):
+        lv, rv = bits((n + 1) / 64), bits(-(n + 1) / 89)
+        stereo.poke(CONTROL + i, lv)
+        left.poke(CONTROL + i, lv)
+        stereo.poke(CONTROL + 0x100 + i, rv)
+        right.poke(CONTROL + i, rv)
+    differences = []
+    audio_differences = []
+    for block in range(3):
+        for session in (stereo, left, right):
+            for i, value in zip(coefficients, values, strict=True):
+                session.poke(CONTROL + i, bits(value * (1 + block / 16)))
+        inputs = []
+        for i in range(32):
+            lv, rv = bits((i - 11) / 64 + block / 32), bits((7 - i) / 83 - block / 64)
+            inputs.append((lv, rv))
+            stereo.poke(LEFT + i, lv)
+            stereo.poke(RIGHT + i, rv)
+            left.poke(LEFT + i, lv)
+            right.poke(LEFT + i, rv)
+        before_right = [stereo.peek(CONTROL + 0x100 + i) for i in histories]
+        filter_call(stereo, family, "prepare", histories, coefficients)
+        assert [stereo.peek(CONTROL + 0x100 + i) for i in histories] == before_right
+        filter_call(stereo, family, "left", histories, coefficients)
+        authoritative = words(stereo, CONTROL, size)
+        if corrupt_history:
+            # Deliberately alias all audited histories/snapshots to the left end state.
+            for i in histories:
+                stereo.poke(CONTROL + 0x100 + i, stereo.peek(CONTROL + i))
+        filter_call(stereo, family, "right", histories, coefficients)
+        filter_call(left, family, "left", histories, coefficients)
+        filter_call(right, family, "left", histories, coefficients)
+        assert (
+            words(stereo, CONTROL, size) == authoritative == words(left, CONTROL, size)
+        )
+        assert words(stereo, LEFT, 32) == words(left, LEFT, 32)
+        assert words(left, LEFT, 32) != [v[0] for v in inputs]
+        assert words(right, LEFT, 32) != [v[1] for v in inputs]
+        assert words(stereo, LEFT, 32) != words(stereo, RIGHT, 32)
+        actual = (words(stereo, RIGHT, 32), words(stereo, CONTROL + 0x100, size))
+        expected = (words(right, LEFT, 32), words(right, CONTROL, size))
+        differences.append(actual != expected)
+        audio_differences.append(actual[0] != expected[0])
+        assert any(stereo.peek(CONTROL + i) != 0 for i in histories)
+        if not corrupt_history:
+            assert actual == expected
+        for session in (stereo, left, right):
+            assert not session.runner.state.approx_recips_used
+            for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
+                assert all(
+                    (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
+                )
+    if corrupt_history:
+        assert any(differences)
+        assert any(audio_differences)

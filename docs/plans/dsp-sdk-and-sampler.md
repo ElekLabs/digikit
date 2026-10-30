@@ -2051,3 +2051,27 @@ through delayed-call setup to `0x2533e0 + R10`, matching the U/Y processing-reco
 base and `0x20` stride. This closes one pointer question; slot ordinal, branch
 event semantics and complete reset/steal coverage remain open. Finding 96 records
 the evidence and rejects an intermediate database-only pointer interpretation.
+
+
+### Continued stereo integration discovery
+
+- [x] Extend assembled replay to isolated `0xb82342`, `0xb81a16`, `0xb81526`
+  leaves, with unequal audio, changing coefficients, private histories and
+  meaningful corruption controls. Twelve total replay tests pass without skips;
+  source review is clean. New leaves need explicit byte-pointer/32-bit NW context
+  and do not use approximate reciprocals.
+- [ ] Cover remaining control/processing families and case-5 scratch/blend, then
+  prove the real ordered route and pan/send integration rather than treating leaf
+  equivalence as a production stereo adapter.
+- [ ] Resolve bounded reset conditions and pair first-order/U-Y reset events with
+  shadow histories; retain explicit gaps for upstream dispatch and natural events.
+- [ ] Assess a complete diagnostic CPU/DMA access guard for candidate pool ranges,
+  including native and Wasm fast-tier bypasses. This is a feasibility investigation,
+  not a selected production reservation or a quiet-run ownership proof.
+
+
+Reset progress: the same conditional stock sequence resets both U/Y histories and
+first-order words 24..27. It executes when a byte and a control-record word are
+both nonzero. The local sixteen-record stride is identified; upstream indirect
+callee preservation and event meanings remain open. Follow the two producers
+before calling these note-on/retrigger/steal hooks (finding 96).
