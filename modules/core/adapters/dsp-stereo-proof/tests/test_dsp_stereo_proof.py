@@ -73,6 +73,9 @@ def rig():
     source = source.replace(
         "_sp_render_finish:", ".GLOBAL _sp_render_finish;\n_sp_render_finish:"
     )
+    source = source.replace(
+        "_sp_right_start:", ".GLOBAL _sp_right_start;\n_sp_right_start:"
+    )
     obj = pk_sharc.assemble(pk_sharc.expand_includes(source, [REPO_ROOT / "sdk"]))
     address, syms, inits = PRIVATE, {}, []
     for section, (payload, alignment, _) in obj.data.items():
@@ -132,6 +135,10 @@ def seed(session, slot=0):
     return state
 
 
+def relation_words(words):
+    return [0 if word & 0x7FFFFFFF == 0 else word for word in words]
+
+
 def values(session, start, count):
     return [session.peek(start + 4 * i) for i in range(count)]
 
@@ -172,12 +179,16 @@ def call(session, entry, registers, limit=12000):
     return result
 
 
+@pytest.mark.parametrize("mode", [0, 1])
 @pytest.mark.parametrize("slot,in_place", [(0, False), (7, True), (15, False)])
-def test_identity_private_histories_coefficients_and_left_context(rig, slot, in_place):
+def test_identity_private_histories_coefficients_and_left_context(
+    rig, slot, in_place, mode
+):
     left, proof = fresh(rig), fresh(rig)
     state = seed(left, slot)
     seed(proof, slot)
     syms = rig[2]
+    proof.poke(syms["_sp_mode"], mode)
     output = INPUT if in_place else OUTPUT
     for block in range(3):
         for session in (left, proof):
@@ -188,8 +199,10 @@ def test_identity_private_histories_coefficients_and_left_context(rig, slot, in_
         observed = call(proof, "_sp_render", regs(state, R12=output))
         assert values(proof, state, 28) == values(left, state, 28)
         assert values(proof, output, 32) == values(left, output, 32)
-        assert values(proof, syms["_sp_audio"] + 128 * slot, 32) == values(
-            left, output, 32
+        assert relation_words(
+            values(proof, syms["_sp_audio"] + 128 * slot, 32)
+        ) == relation_words(
+            [value ^ (mode << 31) for value in values(left, output, 32)]
         )
         for name in (
             "R3",
@@ -240,9 +253,12 @@ def test_identity_private_histories_coefficients_and_left_context(rig, slot, in_
         assert Counter(
             e.address for e in proof.stores if e.address in original_words
         ) == Counter(e.address for e in left.stores if e.address in original_words)
-        assert values(proof, syms["_sp_states"] + slot * 112, 28) == values(
-            left, state, 28
-        )
+        expected_state = values(left, state, 28)
+        for i in (24, 25):
+            expected_state[i] ^= mode << 31
+        assert relation_words(
+            values(proof, syms["_sp_states"] + slot * 112, 28)
+        ) == relation_words(expected_state)
         allowed = [
             (state, state + 112),
             (output, output + 128),
@@ -257,6 +273,11 @@ def test_identity_private_histories_coefficients_and_left_context(rig, slot, in_
             for a in range(lo, hi, 4)
         }
         assert all(e.width == 4 and e.address in allowed_words for e in proof.stores)
+    assert proof.peek(syms["_sp_active_mode"]) == mode
+    assert proof.peek(syms["_sp_mode_errors"]) == 0
+    assert proof.peek(syms["_sp_nonfinite"]) == 0
+    for counter in ("_sp_opposite_audio", "_sp_opposite_history"):
+        assert (proof.peek(syms[counter]) > 0) == bool(mode)
     assert proof.peek(syms["_sp_shadow_calls"]) == 3
     assert proof.peek(syms["_sp_nonzero_input"]) > 0
     assert proof.peek(syms["_sp_nonidentity_coeff"]) > 0
@@ -264,10 +285,12 @@ def test_identity_private_histories_coefficients_and_left_context(rig, slot, in_
     assert proof.peek(syms["_sp_low_entry_sp"]) == FRAME - 8
 
 
-def test_reset_deferred_clone_and_four_word_mirror(rig):
+@pytest.mark.parametrize("mode", [0, 1])
+def test_reset_deferred_clone_and_four_word_mirror(rig, mode):
     session = fresh(rig)
     state = seed(session, 7)
     syms = rig[2]
+    session.poke(syms["_sp_mode"], mode)
     result = call(session, "_sp_reset", regs(state))
     assert result["regs"]["R2"] == CALLER
     assert values(session, state + 24 * 4, 4) == [0] * 4
@@ -500,3 +523,143 @@ def test_divergent_right_does_not_leak_sticky_status(rig, fault, sticky_bit):
     assert observed["regs"]["STKYX"] == expected["regs"]["STKYX"]
     assert observed["regs"]["STKYY"] == expected["regs"]["STKYY"]
     assert proof.peek(rig[2]["_sp_mismatches"]) > 0
+
+
+@pytest.mark.parametrize("fault", ["copied_input", "copied_history"])
+def test_polarity_detects_left_alias_controls_without_left_mutation(rig, fault):
+    reference, proof = fresh(rig), fresh(rig)
+    state = seed(reference)
+    seed(proof)
+    syms = rig[2]
+    proof.poke(syms["_sp_mode"], 1)
+    context = regs(state, STKYX=0, STKYY=0x1234)
+    for block in range(2 if fault == "copied_history" else 1):
+        for session in (reference, proof):
+            for i in range(32):
+                session.poke(INPUT + 4 * i, bits(0.3 * math.sin(i * 0.31 + block)))
+        expected = call(reference, "stock_render", context)
+        if fault == "copied_history" and block == 0:
+            call(proof, "_sp_render", context)
+            assert proof.peek(syms["_sp_mismatches"]) == 0
+            continue
+        boundary = proof.symbols["_sp_right_start"]
+        proof.runner.breakpoints = frozenset((BACK, boundary))
+        paused = proof.call("_sp_render", context, max_steps=12000)
+        assert paused["final_pc_sw"] == boundary
+        if fault == "copied_input":
+            for i, word in enumerate(values(proof, INPUT, 32)):
+                proof.poke(syms["_sp_audio"] + 4 * i, word)
+        else:
+            # Deliberately replace independent histories AFTER a nonzero trajectory.
+            assert proof.peek(syms["_sp_opposite_history"]) > 0
+            for i in (24, 25):
+                proof.poke(syms["_sp_states"] + 4 * i, proof.peek(state + 4 * i))
+        proof.runner.breakpoints = frozenset((BACK,))
+        done = proof.runner.run(12000)
+        assert done.halt.reason == "breakpoint" and done.final_pc_sw == BACK
+        assert proof.peek(syms["_sp_mismatches"]) > 0
+        assert proof.peek(syms["_sp_nonfinite"]) == 0
+        assert values(proof, state, 28) == values(reference, state, 28)
+        assert values(proof, OUTPUT, 32) == values(reference, OUTPUT, 32)
+        for name in (
+            "ASTATX",
+            "ASTATY",
+            "STKYX",
+            "STKYY",
+            "MODE1",
+            "I6",
+            "I7",
+            "R3",
+            "R11",
+            "R15",
+        ):
+            assert (
+                proof.runner.state.uregs[proof._st.UREG_CODES[name]].value
+                == expected["regs"][name]
+            ), name
+
+
+@pytest.mark.parametrize("mode", [2, 0xFFFFFFFF])
+def test_invalid_mode_uses_stock_only(rig, mode):
+    proof = fresh(rig)
+    state = seed(proof)
+    proof.poke(rig[2]["_sp_mode"], mode)
+    call(proof, "_sp_render", regs(state))
+    assert proof.peek(rig[2]["_sp_mode_errors"]) == 1
+    assert proof.peek(rig[2]["_sp_shadow_calls"]) == 0
+
+
+@pytest.mark.parametrize("entry", ["render", "reset"])
+def test_mode_is_latched_before_first_use_and_cannot_switch(rig, entry):
+    proof = fresh(rig)
+    state = seed(proof)
+    syms = rig[2]
+    proof.poke(syms["_sp_mode"], 1)
+    for i in range(32):
+        proof.poke(INPUT + 4 * i, bits(0.2))
+    call(proof, f"_sp_{entry}", regs(state))
+    assert proof.peek(syms["_sp_active_mode"]) == 1
+    shadows = proof.peek(syms["_sp_shadow_calls"])
+    proof.poke(syms["_sp_mode"], 0)
+    call(proof, "_sp_render", regs(state))
+    assert proof.peek(syms["_sp_mode_errors"]) == 1
+    assert proof.peek(syms["_sp_shadow_calls"]) == shadows
+    proof.poke(syms["_sp_mode"], 1)
+    call(proof, "_sp_render", regs(state))
+    assert proof.peek(syms["_sp_shadow_calls"]) == shadows
+
+
+@pytest.mark.parametrize(
+    "source", ["input", "coefficient", "left_history", "right_history", "output"]
+)
+def test_polarity_nonfinite_trajectory_refuses_further_shadows(rig, source):
+    reference, proof = fresh(rig), fresh(rig)
+    state = seed(reference)
+    seed(proof)
+    syms = rig[2]
+    proof.poke(syms["_sp_mode"], 1)
+    for session in (reference, proof):
+        for i in range(32):
+            session.poke(INPUT + 4 * i, bits(0.2))
+    call(reference, "stock_render", regs(state, STKYX=0))
+    call(proof, "_sp_render", regs(state, STKYX=0))
+    if source == "right_history":
+        proof.poke(syms["_sp_states"] + 24 * 4, 0x7FC00001)
+    elif source == "output":
+        # Finite inputs/state overflow only the deliberately corrupted right.
+        proof.poke(syms["_sp_states"] + 24 * 4, 0x7F7FFFFF)
+        for session in (reference, proof):
+            session.poke(state + 22 * 4, bits(2.0))
+    else:
+        for session in (reference, proof):
+            address = {
+                "input": INPUT,
+                "coefficient": state + 21 * 4,
+                "left_history": state + 24 * 4,
+            }[source]
+            session.poke(address, 0x7FC00001)
+    expected = call(reference, "stock_render", regs(state, STKYX=0))
+    observed = call(proof, "_sp_render", regs(state, STKYX=0))
+    assert proof.peek(syms["_sp_nonfinite"]) > 0
+    assert values(proof, state, 28) == values(reference, state, 28)
+    assert values(proof, OUTPUT, 32) == values(reference, OUTPUT, 32)
+    for name in ("MODE1", "ASTATX", "STKYX", "I6", "I7"):
+        assert observed["regs"][name] == expected["regs"][name]
+    shadows = proof.peek(syms["_sp_shadow_calls"])
+    call(proof, "_sp_render", regs(state, STKYX=0))
+    assert proof.peek(syms["_sp_shadow_calls"]) == shadows
+
+
+def test_polarity_signed_zero_relation(rig):
+    proof = fresh(rig)
+    state = seed(proof)
+    syms = rig[2]
+    proof.poke(syms["_sp_mode"], 1)
+    for i in (24, 25):
+        proof.poke(state + 4 * i, 0)
+    for i in range(32):
+        proof.poke(INPUT + 4 * i, (i % 2) << 31)
+    call(proof, "_sp_render", regs(state))
+    assert proof.peek(syms["_sp_mismatches"]) == 0
+    assert proof.peek(syms["_sp_nonfinite"]) == 0
+    assert proof.peek(syms["_sp_opposite_audio"]) == 0

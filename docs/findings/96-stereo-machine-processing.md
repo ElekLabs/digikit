@@ -570,7 +570,7 @@ negative cross-reference search. These results support a bounded native prototyp
 without asserting universal DMA/NMI exclusion or changing interrupt policy.
 
 
-## Private first-order native identity checkpoint
+## Initial private first-order native identity checkpoint
 
 **[D]** The optional DN2 1.12 `core/dsp-stereo-proof` adapter retargets only
 engine render `0x1c94fd → 0xb80c39` and local reset `0x1c96cb → 0xb80b93`.
@@ -615,3 +615,51 @@ Original firmware and captured audio remain ignored runtime inputs/artifacts.
 This proves one exercised first-order caller/reset scenario. Full-route lifecycle,
 coherent capture/commit, cleanup, asynchronous writer exclusion, SDK ABI,
 production pool ownership, performance and hardware behavior remain open.
+
+
+## Private first-order polarity isolation checkpoint
+
+**[D]** The current observer adds an opt-in pre-first-use polarity mode while
+identity remains the default. It XORs the sign bit of copied right inputs and
+initial live histories 24/25; coefficients 21..23 and stock operation order stay
+unchanged. It compares inverse audio and live histories with signed-zero equality.
+Invalid/changed mode latches refusal until reload. Polarity mode also latches
+refusal on nonfinite coefficients, input, live histories or output; identity keeps
+its previous exceptional-value comparison behavior. Original left state, output
+and context remain authoritative, with unchanged SIMD/fallback guards. This is a
+finite, same-numeric-mode metamorphic relation, not an independent correctness
+oracle, a 40-bit model proof or a production exceptional-value policy.
+
+All 39 model cases pass, including deliberately copying left input into the
+private right buffer and copying left histories after a nonzero trajectory; both
+fault controls break the relation while retaining stock left state/output/context.
+Object build/conformance re-decodes 677 instructions; gen-check, regression
+TypeScript and scoped lint/format checks pass. Private data is 4,020 bytes, code is
+2,860 bytes, the largest observed identity fixture is 4,315 instructions and the
+model-exercised store depth remains 172 bytes. These are bounded fixture metrics,
+not performance or universal stack ceilings.
+
+Both native modes pass from forced reloads of the same hashed DN2 1.12 snapshot.
+Each records 2,400 render/shadow calls, one mirrored reset, 2,400 blocks with
+nonidentity coefficients, 76,799 nonzero inputs and zero mode errors, nonfinite
+observations, mismatches or fallbacks. Mode 1 additionally records 76,799 nonzero
+opposite-sign audio relations and 4,800 opposite-sign live-history relations;
+mode 0 records neither. Both latch numeric MODE1 `0x39011cf8`. Each original and
+patched capture contains 4,800 stereo frames/100 ms, with zero alignment shift and
+whole-WAV SHA-256
+`6be721f8b1649c0a037bd8bd1a0998ff5847ed80de31b1907f98b01604555b0c`.
+The audible stereo output therefore remains the original stock baseline in these
+scenarios; the inverted right data is diagnostic private data.
+
+The ignored native evidence is:
+
+- Mode 0: `out/runs/dsp-stereo-proof/native/4c8488cb-3275-4c6e-a6f6-0a9dccef49d2/result.json`.
+- Mode 1: `out/runs/dsp-stereo-proof/native/cefabd29-f00f-413c-a368-f8db89f1b179/result.json`.
+- Invocation, source/binary hashes and log: `out/runs/dsp-stereo-proof/commands.json`
+  and `out/runs/dsp-stereo-proof/native-polarity-acceptance.log`.
+
+The prior allocation/headroom qualification and legacy core-label distinction
+still apply. A U/Y-stage caller/context audit is pending; implementation is not
+approved by this checkpoint. Full-route capture/commit, cleanup, writer exclusion,
+production backing ownership, public SDK ABI, hardware and performance claims
+remain open. No new production policy was selected.

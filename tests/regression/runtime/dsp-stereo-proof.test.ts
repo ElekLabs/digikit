@@ -24,9 +24,23 @@ const counters = [
   'nonzero_input',
   'nonidentity_coeff',
   'fallbacks',
+  'mode_errors',
+  'nonfinite',
+  'opposite_audio',
+  'opposite_history',
 ] as const;
 const firstFailure = ['slot', 'state', 'input', 'output', 'sample', 'left', 'right', 'mode1'] as const;
-const contextFields = ['low_entry_frame', 'low_entry_sp', 'coeff_slot', 'coeff21', 'coeff22', 'coeff23'] as const;
+const contextFields = [
+  'mode',
+  'active_mode',
+  'numeric_mode',
+  'low_entry_frame',
+  'low_entry_sp',
+  'coeff_slot',
+  'coeff21',
+  'coeff22',
+  'coeff23',
+] as const;
 
 async function bounded<T>(operation: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -93,7 +107,7 @@ function alignedStereo(reference: Buffer, candidate: Buffer): number | null {
 
 // Explicit immutable daemon and existing registry-ready DN2 1.12 inputs only.
 // It applies only this proof module; no daemon build, ready-input regeneration or default-set change.
-describe.skipIf(!enabled)('private DN2 first-stage identity observer', () => {
+describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i', (mode) => {
   const runDir = path.join(root, 'out/runs/dsp-stereo-proof/native', randomUUID());
   if (enabled) {
     for (const file of [binary!, patchkit!]) {
@@ -106,7 +120,7 @@ describe.skipIf(!enabled)('private DN2 first-stage identity observer', () => {
 
   test('keeps audible stereo baseline and observes private histories/reset identity', async () => {
     const session = handle.session;
-    const evidence: Record<string, unknown> = {};
+    const evidence: Record<string, unknown> = { requestedMode: mode };
     let stopped = false;
     let failureDiagnostic: (() => Promise<Record<string, number>>) | undefined;
     const save = (name: string, value: unknown) =>
@@ -205,6 +219,19 @@ describe.skipIf(!enabled)('private DN2 first-stage identity observer', () => {
         return diagnostic;
       };
       failureDiagnostic = snapshotDiagnostic;
+      // The private knob is written only while paused, before any accepted entry.
+      const initial = await snapshotDiagnostic();
+      evidence.beforeMode = initial;
+      expect(initial.render_calls).toBe(0);
+      expect(initial.reset_calls).toBe(0);
+      expect(initial.active_mode).toBe(0xffff_ffff);
+      expect(initial.mode).toBe(0);
+      await rpc('dsp.patch', {
+        text: `BASE ${stockSha}\nDM ${planSymbol(plan, '_sp_mode').toString(16)} ${mode.toString(16).padStart(8, '0')} was 00000000\n`,
+      });
+      const armed = await snapshotDiagnostic();
+      expect(armed.mode).toBe(mode);
+      expect(armed.active_mode).toBe(0xffff_ffff);
       const observed = await capture('patched');
       const shift = alignedStereo(baseline, observed);
       evidence.stereoFrameShift = shift;
@@ -251,12 +278,20 @@ describe.skipIf(!enabled)('private DN2 first-stage identity observer', () => {
       expect(diagnostic.render_calls).toBeGreaterThan(0);
       expect(diagnostic.shadow_calls).toBe(diagnostic.render_calls);
       expect(diagnostic.nonzero_input, 'identity was exercised with real nonzero input').toBeGreaterThan(0);
+      expect(diagnostic.mode).toBe(mode);
+      expect(diagnostic.active_mode).toBe(mode);
+      expect(diagnostic.mode_errors).toBe(0);
+      expect(diagnostic.nonfinite).toBe(0);
       expect(diagnostic.mismatches).toBe(0);
+      for (const name of ['opposite_audio', 'opposite_history']) {
+        if (mode === 1) expect(diagnostic[name], name).toBeGreaterThan(0);
+        else expect(diagnostic[name], name).toBe(0);
+      }
       expect(diagnostic.fallbacks).toBe(0);
       expect(diagnostic.reset_mirrors, 'actual initialized private reset was exercised').toBeGreaterThan(0);
       expect(diagnostic.reset_calls).toBeGreaterThanOrEqual(diagnostic.reset_mirrors!);
       evidence.scope =
-        'Private first-order callsite identity only. Nonidentity coefficient count is observed, not assumed. No production routing, DDR ownership, IRQ exclusion or hardware claim.';
+        'Private first-order finite same-MODE1 identity/polarity relation only; metamorphic independence evidence, not an independent correctness oracle or40-bit proof. Nonidentity coefficient count is observed, not assumed. No production routing, DDR ownership, IRQ exclusion or hardware claim.';
     };
     try {
       await bounded(run(), 480000, 'private stereo proof');

@@ -2298,3 +2298,48 @@ slot metadata readable and the later publisher supplies neither generation nor
 READY-last. This is an interception seam, not successor identity, completion or
 admission. See [finding 81](../findings/81-stock-sampler-dependencies.md); no
 production memory policy follows from it.
+
+### Private first-stage polarity isolation follow-up
+
+- [x] Add a pre-first-use opt-in polarity mode, leaving identity as the default;
+  invert only copied right input and initial live histories, preserving stock left.
+- [x] Compare inverse right audio/live histories with signed-zero normalization,
+  reject nonfinite trajectories and expose bounded relation/guard counters.
+- [x] Add copied-left input/history negative controls and context/state assertions;
+  extend native acceptance to both modes from the same forced snapshot.
+- [x] Build/check/decode the object and run scoped model/type/lint/format checks.
+  Both native modes pass under coordinator-owned execution. This is a finite, same-mode metamorphic
+  independence test, not an independent numerical oracle, 40-bit proof, production
+  output route, public ABI or memory/interrupt policy.
+
+
+The polarity implementation passes 39 model cases, object build/conformance and
+677-instruction re-decode, gen-check, regression TypeScript and scoped lint/format
+checks. Private data is 4,020 bytes; the observed model identity-fixture maximum is
+4,315 instructions and the exercised store depth remains 172 bytes. Mode is
+latched by the first accepted render/reset; invalid or changed mode refuses future
+shadows until reload. Polarity mode rejects nonfinite inputs/coefficients/live
+histories and outputs with sticky refusal; identity retains its earlier exceptional
+comparison behavior. Both inverse audio and live histories are checked, treating
+signed zeros as equal.
+
+- [x] Run both native modes from the same forced snapshot with the immutable daemon.
+  Each mode records 2,400 render/shadow calls, one mirrored reset and zero mode
+  errors, nonfinite observations, mismatches or fallbacks. Both 100 ms captures
+  retain the stock whole-WAV hash, 4,800 stereo frames and zero alignment shift.
+  Polarity mode records 76,799 nonzero opposite-sign audio relations and 4,800
+  opposite-sign live-history relations; captured numeric MODE1 is `0x39011cf8`.
+  This is finite, same-mode metamorphic independence evidence, not an independent
+  numerical correctness oracle or whole-route acceptance. Details and result
+  paths are in [finding 96](../findings/96-stereo-machine-processing.md).
+
+Next pending work is a bounded U/Y-stage caller/context audit. No U/Y wrapper
+implementation, new production memory policy or output route is approved by this
+checkpoint. Full-route lifecycle, pool ownership and hardware acceptance remain
+open.
+
+**[D] DT2 direct-loader follow-up:** the general loader uses direct page/header
+sender `0x40153a10 → 0x400cd79c`, not queued-preview `0x40153f34`. Its per-packet
+mutex/wait does not supply a DSP-applied tuple or prove whole-load serialization.
+See [finding 81](../findings/81-stock-sampler-dependencies.md); successor identity,
+geometry validation and ownership/admission remain open.

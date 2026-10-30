@@ -1,5 +1,5 @@
 #include "dsp/call.inc"
-// Private DN2 1.12 identity observer. Left state/output stay authoritative.
+// Private DN2 1.12 identity/polarity observer. Left state/output stay authoritative.
 // Wrapper scratch Dregs are caller-clobbered R0/R1/R2/R4/R8/R12 only.
 // No previously untouched callee-saved floating register is narrowed.
 // STKYX R/W FP sticky fields (PRM29-88..90) are restored in scalar mode
@@ -80,6 +80,22 @@ _sp_render_slot:
     IF LT JUMP _sp_render_slot;
     JUMP _sp_render_fallback;
 _sp_render_slot_ok:
+    // Mode is private, set while paused before any accepted call; immutable thereafter.
+    R0 = DM(_sp_mode); R2 = 0; COMP(R0, R2);
+    IF LT JUMP _sp_render_mode_error;
+    R2 = 1; COMP(R0, R2); IF GT JUMP _sp_render_mode_error;
+    R2 = DM(_sp_active_mode); R4 = -1; COMP(R2, R4);
+    IF NE JUMP _sp_render_mode_check;
+    DM(_sp_active_mode) = R0;
+    R4 = MODE1; DM(_sp_numeric_mode) = R4;
+_sp_render_mode_check:
+    R4 = -1; COMP(R2, R4); IF EQ JUMP _sp_render_mode_ok;
+    COMP(R0, R2); IF NE JUMP _sp_render_mode_error;
+_sp_render_mode_ok:
+    R0 = LSHIFT R0 BY 31; DM(-29, I6) = R0;
+    R0 = DM(_sp_mode_errors); R2 = 0; COMP(R0, R2); IF NE JUMP _sp_render_fallback;
+    R0 = DM(_sp_nonfinite); R2 = 0; COMP(R0, R2);
+    IF NE JUMP _sp_render_fallback;
     DM(-15, I6) = R1;
     R0 = I1; DM(-16, I6) = R0;
     R0 = I0; DM(-17, I6) = R0;
@@ -92,12 +108,32 @@ _sp_clone:
     R0 = DM(0, I0); DM(0, I1) = R0;
     MODIFY(I0, 4); MODIFY(I1, 4);
     R1 = R1 - 1; IF NE JUMP _sp_clone;
+    // Only live audio histories24/25 participate in the odd recurrence.
+    I1 = DM(-16, I6); R2 = DM(-29, I6);
+    R0 = DM(24, I1); R0 = R0 XOR R2; DM(24, I1) = R0;
+    R0 = DM(25, I1); R0 = R0 XOR R2; DM(25, I1) = R0;
     I0 = DM(-18, I6); R0 = 1; DM(0, I0) = R0;
 _sp_render_coeff:
     I0 = DM(-6, I6); I1 = DM(-16, I6);
     R0 = DM(21, I0); DM(21, I1) = R0;
     R0 = DM(22, I0); DM(22, I1) = R0;
     R0 = DM(23, I0); DM(23, I1) = R0;
+    R0 = DM(-29, I6); R2 = 0; COMP(R0, R2); IF EQ JUMP _sp_finite_state_done;
+    R0 = DM(21, I0); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+    R0 = DM(22, I0); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+    R0 = DM(23, I0); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+    R0 = DM(24, I0); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+    R0 = DM(25, I0); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+    R0 = DM(24, I1); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+    R0 = DM(25, I1); R2 = 0x7f800000; R0 = R0 AND R2;
+    COMP(R0, R2); IF EQ JUMP _sp_render_nonfinite;
+_sp_finite_state_done:
     R0 = DM(21, I1); R1 = 0x3f800000; COMP(R0, R1);
     IF NE JUMP _sp_nonidentity;
     R0 = DM(22, I1); R1 = DM(23, I1); R0 = R0 OR R1;
@@ -114,7 +150,12 @@ _sp_nonidentity_count:
 _sp_copy_input:
     I0 = DM(-7, I6); I1 = DM(-17, I6); R1 = 32;
 _sp_input_loop:
-    R0 = DM(0, I0); DM(0, I1) = R0;
+    R0 = DM(0, I0); R2 = DM(-29, I6); R4 = 0; COMP(R2, R4);
+    IF EQ JUMP _sp_input_finite;
+    R2 = 0x7f800000; R4 = R0 AND R2;
+    COMP(R4, R2); IF EQ JUMP _sp_render_nonfinite;
+_sp_input_finite:
+    R2 = DM(-29, I6); R0 = R0 XOR R2; DM(0, I1) = R0;
     R2 = 0x7fffffff; R2 = R0 AND R2;
     R4 = 0; COMP(R2, R4); IF EQ JUMP _sp_input_zero;
     R0 = DM(_sp_nonzero_input); R0 = R0 + 1; DM(_sp_nonzero_input) = R0;
@@ -148,13 +189,43 @@ _sp_input_zero:
     R0 = STKYX; DM(-27, I6) = R0;
     R0 = 0; L0 = R0; L1 = R0;
     R0 = DM(_sp_shadow_calls); R0 = R0 + 1; DM(_sp_shadow_calls) = R0;
+_sp_right_start:
     R4 = DM(-16, I6); R8 = DM(-17, I6); R12 = R8;
     R0 = 32; DM(I7, M7) = R0;
     DK_CALL(_sp_stock_render, _sp_right_return); MODIFY(I7, 1) (NW);
     I0 = DM(-8, I6); I1 = DM(-17, I6); R1 = 0;
 _sp_compare:
-    R2 = DM(0, I0); R4 = DM(0, I1); COMP(R2, R4);
-    IF EQ JUMP _sp_equal;
+    R0 = 32; COMP(R1, R0); IF GE JUMP _sp_compare_history;
+    R2 = DM(0, I0); R4 = DM(0, I1); JUMP _sp_compare_pair;
+_sp_compare_history:
+    I0 = DM(-6, I6); I1 = DM(-16, I6);
+    IF NE JUMP _sp_compare_history25;
+    R2 = DM(24, I0); R4 = DM(24, I1); JUMP _sp_compare_pair;
+_sp_compare_history25:
+    R2 = DM(25, I0); R4 = DM(25, I1);
+_sp_compare_pair:
+    R8 = DM(-29, I6); R0 = 0; COMP(R8, R0); IF EQ JUMP _sp_compare_finite;
+    R8 = 0x7f800000; R0 = R2 AND R8; COMP(R0, R8);
+    IF EQ JUMP _sp_compare_nonfinite;
+    R0 = R4 AND R8; COMP(R0, R8); IF EQ JUMP _sp_compare_nonfinite;
+_sp_compare_finite:
+    DM(-30, I6) = R2;
+    R8 = DM(-29, I6); R2 = R2 XOR R8;
+    // +0 and -0 represent the same relation; all other finite bits must match.
+    R8 = 0x7fffffff; R0 = R2 AND R8; R12 = R4 AND R8;
+    R8 = 0; COMP(R0, R8); IF NE JUMP _sp_compare_bits;
+    COMP(R12, R8); IF EQ JUMP _sp_equal;
+_sp_compare_bits:
+    COMP(R2, R4); IF NE JUMP _sp_mismatch;
+    R8 = DM(-29, I6); R12 = 0; COMP(R8, R12); IF EQ JUMP _sp_equal;
+    COMP(R0, R12); IF EQ JUMP _sp_equal;
+    R0 = 32; COMP(R1, R0); IF GE JUMP _sp_count_opposite_history;
+    R0 = DM(_sp_opposite_audio); R0 = R0 + 1; DM(_sp_opposite_audio) = R0;
+    JUMP _sp_equal;
+_sp_count_opposite_history:
+    R0 = DM(_sp_opposite_history); R0 = R0 + 1; DM(_sp_opposite_history) = R0;
+    JUMP _sp_equal;
+_sp_mismatch:
     R0 = DM(_sp_mismatches); R8 = 0; COMP(R0, R8);
     IF NE JUMP _sp_count_mismatch;
     R0 = DM(-15, I6); DM(_sp_first_slot) = R0;
@@ -162,7 +233,7 @@ _sp_compare:
     R0 = DM(-7, I6); DM(_sp_first_input) = R0;
     R0 = DM(-8, I6); DM(_sp_first_output) = R0;
     DM(_sp_first_sample) = R1;
-    DM(_sp_first_left) = R2; DM(_sp_first_right) = R4;
+    R0 = DM(-30, I6); DM(_sp_first_left) = R0; DM(_sp_first_right) = R4;
     R0 = MODE1; DM(_sp_first_mode1) = R0;
 _sp_count_mismatch:
     R0 = DM(_sp_mismatches); R0 = R0 + 1; DM(_sp_mismatches) = R0;
@@ -170,6 +241,10 @@ _sp_equal:
     MODIFY(I0, 4); MODIFY(I1, 4);
     R1 = R1 + 1; R0 = 32; COMP(R1, R0);
     IF LT JUMP _sp_compare;
+    R0 = 34; COMP(R1, R0); IF LT JUMP _sp_compare;
+    JUMP _sp_render_finish;
+_sp_compare_nonfinite:
+    R0 = DM(_sp_nonfinite); R0 = R0 + 1; DM(_sp_nonfinite) = R0;
 _sp_render_finish:
     I12 = DM(-1, I6);
     R0 = DM(-13, I6); L0 = R0;
@@ -186,6 +261,11 @@ _sp_render_finish:
     R0 = DM(-26, I6); ASTATX = R0;
     R0 = DM(-19, I6);
     JUMP (M14, I12) (DB); NOP; RFRAME;
+_sp_render_nonfinite:
+    R0 = DM(_sp_nonfinite); R0 = R0 + 1; DM(_sp_nonfinite) = R0;
+    JUMP _sp_render_fallback;
+_sp_render_mode_error:
+    R0 = DM(_sp_mode_errors); R0 = R0 + 1; DM(_sp_mode_errors) = R0;
 _sp_render_fallback:
     R0 = DM(_sp_fallbacks); R0 = R0 + 1; DM(_sp_fallbacks) = R0;
     R0 = DM(-13, I6); L0 = R0;
@@ -262,6 +342,19 @@ _sp_reset_slot:
     IF LT JUMP _sp_reset_slot;
     JUMP _sp_reset_fallback;
 _sp_reset_slot_ok:
+    // Mode is private, set while paused before any accepted call; immutable thereafter.
+    R0 = DM(_sp_mode); R2 = 0; COMP(R0, R2);
+    IF LT JUMP _sp_reset_mode_error;
+    R2 = 1; COMP(R0, R2); IF GT JUMP _sp_reset_mode_error;
+    R2 = DM(_sp_active_mode); R4 = -1; COMP(R2, R4);
+    IF NE JUMP _sp_reset_mode_check;
+    DM(_sp_active_mode) = R0;
+    R4 = MODE1; DM(_sp_numeric_mode) = R4;
+_sp_reset_mode_check:
+    R4 = -1; COMP(R2, R4); IF EQ JUMP _sp_reset_mode_ok;
+    COMP(R0, R2); IF NE JUMP _sp_reset_mode_error;
+_sp_reset_mode_ok:
+    R0 = DM(_sp_mode_errors); R2 = 0; COMP(R0, R2); IF NE JUMP _sp_reset_fallback;
     DM(-15, I6) = R1;
     R0 = I1; DM(-16, I6) = R0;
     R0 = I0; DM(-17, I6) = R0;
@@ -313,6 +406,8 @@ _sp_reset_finish:
     R0 = DM(-26, I6); ASTATX = R0;
     R0 = DM(-19, I6);
     JUMP (M14, I12) (DB); NOP; RFRAME;
+_sp_reset_mode_error:
+    R0 = DM(_sp_mode_errors); R0 = R0 + 1; DM(_sp_mode_errors) = R0;
 _sp_reset_fallback:
     R0 = DM(_sp_fallbacks); R0 = R0 + 1; DM(_sp_fallbacks) = R0;
     R0 = DM(-13, I6); L0 = R0;
@@ -356,3 +451,14 @@ _sp_reset_fallback:
 .GLOBAL _sp_coeff21; .VAR _sp_coeff21 = 0;
 .GLOBAL _sp_coeff22; .VAR _sp_coeff22 = 0;
 .GLOBAL _sp_coeff23; .VAR _sp_coeff23 = 0;
+// Raw mode may be configured only before first accepted render/reset.
+.GLOBAL _sp_mode; .VAR _sp_mode = 0;
+.GLOBAL _sp_active_mode; .VAR _sp_active_mode = 0xffffffff;
+.GLOBAL _sp_mode_errors; .VAR _sp_mode_errors = 0;
+// Polarity-only finite trajectory refusal; reload to start a fresh proof.
+// Identity mode retains its earlier exceptional-value comparison behavior.
+.GLOBAL _sp_nonfinite; .VAR _sp_nonfinite = 0;
+.GLOBAL _sp_opposite_audio; .VAR _sp_opposite_audio = 0;
+.GLOBAL _sp_opposite_history; .VAR _sp_opposite_history = 0;
+
+.GLOBAL _sp_numeric_mode; .VAR _sp_numeric_mode = 0;

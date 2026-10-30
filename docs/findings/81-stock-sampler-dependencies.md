@@ -384,3 +384,17 @@ metadata remains readable. The slot publisher has no generation or READY-last
 protocol and validates the slot only after the guard writes. The pre-store spans
 therefore supply a calculable interception seam, not successor identity,
 completion or reader admission. No production memory policy is selected.
+
+
+**[D]** A bounded DT2 1.17 original-MAIN audit (SHA-256
+`a1e7b657b705eba1a19d81c33c1e11ba9c409816447ad74005d7bbf36da6d964`)
+identifies the general loader's direct page/header sender
+`0x40153a10 → 0x400cd79c`, with header calls `0x40153e54/eae`; it does not use
+queued-preview `0x40153f34`. The sender takes per-packet mutex `0x42948b14`,
+writes the tag and 1,024 words to MMIO, waits through `0x40136544(100)` and
+unlocks. This is more than enqueueing, but supplies no DSP-applied identity tuple.
+The new-load byte-count/file-size equality at `0x40154eba/ebe` gates header calls
+`0x40154ede/ef6`; it does not establish geometry or stable successor identity.
+Reload worker `0x4004e8be` does not prove whole-load serialization across other
+callers `0x4004b502/60a`. Header return is not proof of publication or admission;
+no production memory policy follows from this bounded sender audit.

@@ -35,14 +35,17 @@ header invalidation alone is inadequate.
   continuation. The selected composed route adds original scratch blending and
   output splitting. All 44 named replay tests pass without skips, including actual reset helpers. The candidate
   output mapping remains a bounded synthetic route, not full stock integration.
-- Optional `core/dsp-stereo-proof`, DN2 1.12 only: 23 model cases and the native
-  first-order identity scenario pass. Native observed 2,400 render/shadow calls,
-  one mirrored reset, zero mismatches/fallbacks, 2,400 nonidentity-coefficient
-  blocks and 76,799 nonzero input samples. The stock/patched 100 ms, 4,800-frame
-  stereo WAVs have identical hashes and zero shift, independently checked.
-  Original left state/output remain authoritative; sixteen private L2 slots
-  occupy 3,992 bytes, with no DDR reservation or default activation.
-  This is one stage/caller/reset scenario, not full-route or hardware acceptance.
+- Optional `core/dsp-stereo-proof`, DN2 1.12 only: 39 model cases and both native
+  identity/polarity modes pass. Each native mode records 2,400 render/shadow calls,
+  one mirrored reset and zero mode errors/nonfinite observations/mismatches/fallbacks.
+  Mode 1 observes 76,799 nonzero opposite-sign audio and 4,800 opposite-sign live
+  history relations, with numeric MODE1 `0x39011cf8`. Both stock/patched 100 ms,
+  4,800-frame stereo WAVs retain identical hashes and zero shift. This is finite
+  metamorphic independence evidence, not an independent numerical oracle.
+  Original left state/output remain authoritative; private L2 data occupies
+  4,020 bytes, with no DDR reservation or default activation.
+  Next is a pending U/Y-stage caller/context audit; implementation is not approved.
+  Full-route, production backing ownership and hardware acceptance remain open.
 - [Finding 97](../findings/97-ddr-access-diagnostic.md): opt-in first-attempt DDR
   monitor, compiled native guard fallback, ordered diagnostic RPC, both native
   device acceptance cases, and 49 focused Wasm/V8 cases from real lowering.
@@ -67,9 +70,11 @@ for native builds/runs; never overlap a gate with another build. Owner commands
 and exact environments/logs are retained under `out/runs/ddr-monitor-rpc/`,
 `out/runs/ddr-monitor-native/`, `out/runs/ddr-monitor-wasm/` and
 `out/runs/dsp-stereo-proof/commands.json`. The last records the exact exclusive
-benchlock/native invocation and immutable daemon/patchkit hashes; native result
-`out/runs/dsp-stereo-proof/native/7388abd1-c4a3-4fdf-8199-edc11d2bfc16/result.json`
-and `native-acceptance.log` retain the passing observation. The scenario asserts
+benchlock/native invocation and immutable daemon/patchkit hashes. Current results
+are `out/runs/dsp-stereo-proof/native/4c8488cb-3275-4c6e-a6f6-0a9dccef49d2/result.json`
+and `out/runs/dsp-stereo-proof/native/cefabd29-f00f-413c-a368-f8db89f1b179/result.json`;
+`out/runs/dsp-stereo-proof/native-polarity-acceptance.log` records both passes.
+The earlier identity-only run remains separately recorded in provenance. The scenario asserts
 forced snapshot reload, initial/patched snapshot/audio activation and ready hashes.
 Final TypeScript and scoped oxlint pass. The legacy DSP profile label `dn2-1.11`
 is not the firmware identity; CF/base/ready hashes establish the DN2 1.12 input.
