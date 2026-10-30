@@ -31,6 +31,7 @@ pub const METHODS: &[&str] = &[
     "cf.profile",
     "dsp.patch",
     "dsp.peek",
+    "dsp.peek_word",
     "guard.set",
     "guard.report",
     "guard.clear",

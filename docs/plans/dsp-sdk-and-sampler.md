@@ -19,6 +19,24 @@ No hardware action or emulator-core regeneration was performed. All native work
 used the shared exclusive benchlock and owned run directories; other sessions'
 processes were left untouched.
 
+## Current bounded discovery — production ownership and cache entry points
+
+- [x] Audit whether the L1 allocator has a recoverable entry; distinguish its
+  internal success pointer from an input flag before proposing allocation.
+- [x] Check existing stock cache-helper entries and callers for a callable path
+  that bypasses unresolved address conversion; retain whole-line ownership and
+  pre-/post-DMA obligations.
+- [x] Trace DT2's central project-pool capacity and reset initialization to
+  assess an explicit reserved tail, rather than borrowing resettable slot memory.
+- [ ] Reconcile these results with DN2's fixed-buffer map, then select the next
+  bounded implementation/proof. Do not treat an unreferenced range as owned.
+
+The payoff is a concrete adapter ownership boundary for ten-second per-track
+samples. Confidence in the investigation is moderate; no production memory or
+cache route is selected yet. These passes are read-only and bounded to existing
+helpers/callers. No new native execution, core regeneration or hardware work is
+planned until the evidence identifies a useful proof.
+
 ## Rebase checkpoint — main 409414f9
 
 The sampler branch was rebased onto `origin/main` at `409414f9`. Original tip
@@ -1584,3 +1602,53 @@ its pnpm-launched host/lint/format/type phases fail on the existing linked
 TypeScript checks. Logs are in `out/runs/lp0-voices-v3-run/`. Changed-document
 pathcheck and whitespace checks pass. Dependencies were not modified. This is a
 verified branch checkpoint, not a full merge gate or hardware acceptance.
+
+
+### Cache-probe prerequisite checkpoint
+
+The hidden nonfatal-allocator hypothesis is rejected by original bytes. DT2's
+single capacity literal is not an adequate tail-reservation boundary. The selected
+next bounded cache probe is an opt-in RR4 noncacheable DMA window configured by
+the stock L1 helper before startup cache enable; RR1 was rejected because its
+function is WBI/locking. RR4 ownership and silicon behavior remain separate limits.
+
+Before implementing that hook, fix two concrete emulator observation gaps:
+missing cache-range register names and byte-aligned inspection of compact MMRs.
+Metadata plus an exact-word read API are implemented, with 12 passing focused
+Python/native-library tests and independent source review. The generated-core
+fingerprint remains `864c2c9906882085a7a388543d6a032f55a9490108c1222ce275c5457301323d`.
+No instruction-core regeneration was needed; Cargo did recompile existing generated
+code (about five minutes). The LP0 module remains at its verified 0.4 checkpoint.
+
+- [x] Add register metadata; twelve focused Python/native-library checks pass.
+- [x] Compile and test the exact-word DSP worker path; focused Rust test passes.
+- [x] Build/freeze the daemon and pass live read-only DN2 1.12 RPC acceptance.
+- [ ] Repack image metadata and create a fresh cold state for range-register proof.
+- [ ] Implement the private RR4 startup window after resolving the preserved
+  startup frame/DAG/SIMD context; fail closed on configuration failure.
+- [ ] Prove the configured window and repeat the actual per-track reader proof.
+
+Live acceptance artifacts: `out/runs/cache-registers-proof/f9d605b0-13e7-4c90-8d4f-84d5c49f3b82/`.
+Daemon SHA-256 `6008bfb0ecd3a99fe539b660e48b9d7c2eee1f93d5c6bfa3d55a772403930dac`.
+CFG=`0x414141`, CFG2=`0xf0` remain unchanged, an address exceeding u32 is
+rejected, and DSP frames advance from 2 to 39 without a reported fault. The run
+held the exclusive shared-workspace lock and completed in 1.34 seconds after
+waiting 35.57 seconds. This is a functional check, not a performance claim.
+
+The first attempt exposed two test assumptions: RPC responses include evolving
+session/timing fields, and legacy unnamed RR4 addresses return overlapping RAM
+fallback bytes rather than null. Corrected comparisons isolate addr/value and
+retain those RR4 reads only as explicitly untrusted diagnostics. The failed run
+is retained at `out/runs/cache-registers-proof/19abfaea-9c76-47a2-be37-90f0af395de1/`.
+
+Changed-file routing passes Python lint/format, pathcheck and layercheck. Its pnpm
+host phases remain blocked by the existing linked worktree dependency layout;
+direct installed-tool lint/format/type checks pass, and the related-host-test
+selection contains no tests. No dependencies or generated instruction core were
+changed. This checkpoint is not the full merge gate or hardware acceptance.
+
+The DDR ownership investigation is bounded to an ownership table: stock owner,
+authoritative allocation/configuration boundary, reset/bypass paths and positive
+exclusion evidence. A profile-only declaration or absence of discovered writers
+does not reserve DDR. Continue only to close a named boundary gap; do not pursue
+an unbounded audit of arbitrary computed stores.

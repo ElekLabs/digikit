@@ -276,6 +276,20 @@ impl CoupledRuntime {
             Err("no DSP audio session".into())
         }
     }
+    /// Read one exact DSP word address, including unaligned compact MMRs.
+    pub fn peek_dsp_word(&mut self, addr: u32) -> Result<Option<u32>, String> {
+        #[cfg(feature = "coupled-audio")]
+        {
+            let audio = self.audio.as_mut().ok_or("no DSP audio session")?;
+            audio.sync();
+            audio.handle.peek_word(addr)
+        }
+        #[cfg(not(feature = "coupled-audio"))]
+        {
+            let _ = addr;
+            Err("no DSP audio session".into())
+        }
+    }
     fn attach(&mut self, options: Option<&AudioOptions>) -> Result<(), String> {
         let Some(options) = options else {
             return Ok(());

@@ -137,3 +137,21 @@ do not supply an independently owned DSP extent.
 **[O]** The stock loader remains useful evidence, but an adapter still needs
 an ownership contract and a reset/replacement fence before reusing its pool.
 The dossier observations do not establish either contract.
+
+
+## Explicit-tail reservation candidate
+
+**[D]** A bounded DT2 1.17 loader follow-up distinguishes the initial rounded
+block-size check at `0x40154aea` from a shared pool boundary. The loader also
+reuses gaps and grows/merges records. Helper `0x40154682`, called by
+`0x40154770` and the loader at `0x40154c10`, derives the next offset from the
+last vector record (or `0x400` for an empty vector) and compares the proposed
+end against `0x19000401`. Its decompiled return encoding is not a complete ABI
+proof. The vector's storage-end pointer `0x405a0f6c` concerns metadata capacity,
+not an independently owned sample tail.
+
+**[O]** Lowering a single 400-MiB literal does not establish a carveout.
+A reservation must constrain initial allocation, append/growth, gap reuse and
+reset/reinitialization consistently. The current pass identifies those enforcement
+questions; it has not implemented or validated a smaller stock pool. Borrowing a
+stock allocation remains another route only with a fence before reclamation.

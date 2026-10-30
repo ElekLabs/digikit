@@ -1812,6 +1812,7 @@ impl Actor {
                 })
                 .map(Some),
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
+            "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
             "dsp.patch" => self.rpc_dsp_patch(&p).map(Some),
             "card.load" => self.rpc_card_load(&p, &reply),
             "card.status" => Ok(Some(self.card_status())),
@@ -2820,6 +2821,18 @@ impl Actor {
             .collect();
         let unknown = bytes.iter().filter(|b| b.is_none()).count();
         Ok(json!({"addr": addr, "len": len, "hex": hex, "unknown": unknown}))
+    }
+
+    /// `dsp.peek_word {addr}`: one exact 32-bit DSP word, including compact
+    /// MMR addresses. Unknown/unmodeled words remain null; no byte alignment.
+    fn rpc_dsp_peek_word(&mut self, p: &Params) -> RpcResult {
+        let addr = u32::try_from(p.u64("addr")?)
+            .map_err(|_| RpcError::bad_params("addr is a 32-bit DSP word address"))?;
+        let value = self.with_runtime(|r| {
+            r.peek_dsp_word(addr)
+                .map_err(|e| RpcError::new(code::AUDIO_UNAVAILABLE, e))
+        })?;
+        Ok(json!({"addr": addr, "value": value}))
     }
 
     fn rpc_dsp_patch(&mut self, p: &Params) -> RpcResult {

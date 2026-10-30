@@ -258,3 +258,72 @@ write-back of stale dirty CPU lines remains unsafe. The sampler's cache and
 reservation obligations above are unchanged. The rebased private LP0 and DDR
 proof objects pass main's new hardware-loop legality check; LP0's exact patched
 firmware hash also remains identical to its audited native proof.
+
+
+## Bounded initialization alternative and observation prerequisites
+
+**[C]** R11 is not a hidden nonfatal allocation flag at `0xb89c9c`. A second
+original-byte audit confirms that `0xb89ca7` saves the caller's R11 and
+`0xb89cbd` replaces it with M5 (zero under the startup convention). Only the
+successful block path installs `block+8` at `0xb89d26`. LEFTZ at `0xb89d57`
+sets SV for zero; `0xb89d59` then reaches the fatal path. The nonzero branch
+checks pointer alignment. Supplying R11 cannot make allocation failure recoverable.
+
+**[D]** The existing L1 range-configuration entry `0x1c00da` offers a narrower
+initialization route than the address-normalizing maintenance helper. An independent
+original-byte audit establishes R4=start byte address, R8=end argument,
+R12=selector, and stack argument `DM(I6,M6)`=mode. Selector `0x604`, mode 1
+programs RR4 as enabled/noncacheable (CFG2 pair `0x300`). Descriptor row
+`0x240420` is `{0x3e018,0x3e019,8}`. Success returns R0=0; inspected errors
+return 1 for selector rejection or 3 for start≥end. There is no ACONV on this path.
+
+The actual rounded interval is `[R4 & ~63, (R8 + 63) & ~63)`. For a dedicated
+aligned window `[base,limit)`, pass base and limit−1, avoiding overflow. Do not
+call the end argument universally inclusive: an endpoint exactly on a line
+boundary behaves differently. **[C]** RR1 is unsuitable: its enabled selection
+means locking/WBI, not noncacheability. Public Rev. 1.5 Programming Reference
+Tables 33-3/33-5, printed pp. 33-6–8, distinguish the range functions and addresses.
+
+**[D]** A candidate startup hook is `0xb8b9ac`, after RR3 argument cleanup at
+`0xb8b9a9` and before the final CFG enable/invalidation. Under the existing
+startup constants CFG was cleared before RR2/RR3 configuration. Live R14 holds
+the final CFG mask and R15 its address; R10/R11/R13, the frame and DAG context
+must also survive. The configuration helper preserves its documented nonvolatile
+registers and incoming IRPTEN, but provides no SIMD guard. No new hook has been
+implemented at this checkpoint.
+
+**[O]** This is a private diagnostic proposal, not production RR4 ownership.
+The bounded indexed inventory finds only startup selectors `0x602/603`, while
+known range-0 maintenance changes only CFG2's low pair then restores CFG2.
+No conflicting RR4 reference or exact helper-pointer bytes were found; indirect
+or unresolved access is not excluded. Configuration itself does not invalidate
+cache contents; placement before first access and the later stock enable/invalidate
+step matters. Strict manual spacing wording around all cache-MMR accesses remains
+an independent silicon-conformance question. No physical cache claim follows.
+
+### Emulator register metadata and exact-word observation
+
+**[C]** The range registers were missing from `sharcimm.CORE_MMR_REGS`.
+Consequently their compact consecutive addresses could fall into byte-addressed
+RAM storage rather than independent 32-bit MMR entries. The new metadata names
+START0/END0 through START7/END7 at `0x3e010..0x3e01f`, with no invented reset
+values. Existing packed-image metadata loads these names into the native runtime's
+MMR set; the existing generic MMR implementation then keeps their values separate.
+No generated instruction core or core fingerprint input changes are required.
+Old packed images and historical snapshots retain the old metadata and must not
+be reused as proof of the corrected register model.
+
+The existing `dsp.peek` API reads bytes through aligned words, so asking for four
+bytes at `0x3e002` does not read the compact CFG2 word. A separate read-only
+`dsp.peek_word {addr}` API now forwards the exact address through the DSP worker
+and returns `{addr,value}`, preserving unknown values as null. The byte API is
+unchanged. Python/native-library tests cover all sixteen independent adjacent
+range words, absence of synthesized reset values, and independent CFG2. Compiled
+RPC verification now passes with the compiled daemon: CFG=`0x414141`,
+CFG2=`0xf0` remain stable, invalid addresses are rejected, and DSP frames advance
+2→39 without a reported fault. Evidence is retained in
+`out/runs/cache-registers-proof/f9d605b0-13e7-4c90-8d4f-84d5c49f3b82/`.
+The legacy packed fixture returns overlapping RAM fallback values for RR4,
+not meaningful range-register values; those reads are explicitly untrusted.
+Fresh packed-image/cold-state verification remains required before the startup
+probe. These functional observations do not establish physical cache behavior.

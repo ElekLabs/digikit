@@ -149,9 +149,6 @@ pub trait DspEngine {
     fn execution_profile(&self) -> Option<ExecutionProfile> {
         None
     }
-    /// One 32-bit word of DSP data memory at `addr`, a byte address as the
-    /// findings write them (e.g. 0x25f180; consecutive words are 4 apart).
-    /// None: unknown or unmodeled, or not supported by the engine.
     /// Memory bytes from `addr` (`None`: unknown to the engine), read through
     /// the aligned words of `peek_word`.
     fn peek_bytes(&self, addr: u32, n: usize) -> Vec<Option<u8>> {
@@ -172,6 +169,9 @@ pub trait DspEngine {
             })
             .collect()
     }
+    /// One 32-bit word at the exact DSP data address, including compact MMR
+    /// addresses that need not be byte-aligned. None means unknown,
+    /// unmodeled, or unsupported by the engine.
     fn peek_word(&self, _addr: u32) -> Option<u32> {
         None
     }
@@ -1035,6 +1035,11 @@ enum Msg {
         len: usize,
         ack: mpsc::Sender<Vec<Option<u8>>>,
     },
+    /// Read one exact DSP word address without byte alignment.
+    PeekWord {
+        addr: u32,
+        ack: mpsc::Sender<Option<u32>>,
+    },
 }
 
 /// Most per-period records the worker keeps (about 22 minutes of audio).
@@ -1315,6 +1320,9 @@ impl ThreadedPeer {
                         Msg::Peek { addr, len, ack } => {
                             let _ = ack.send(core.engine.peek_bytes(addr, len));
                         }
+                        Msg::PeekWord { addr, ack } => {
+                            let _ = ack.send(core.engine.peek_word(addr));
+                        }
                         Msg::Patch { patch, ack } => {
                             let result = core
                                 .engine
@@ -1478,6 +1486,23 @@ impl ThreadedHandle {
             .map_err(|_| "DSP worker stopped while reading".to_string())
     }
 
+    /// Read one exact DSP word address between frames, retaining unknowns.
+    pub fn peek_word(&self, addr: u32) -> Result<Option<u32>, String> {
+        let (ack_tx, ack_rx) = mpsc::channel();
+        let sent = self
+            .link
+            .borrow()
+            .tx
+            .as_ref()
+            .is_some_and(|c| c.send(Msg::PeekWord { addr, ack: ack_tx }).is_ok());
+        if !sent {
+            return Err("DSP worker has stopped".into());
+        }
+        ack_rx
+            .recv()
+            .map_err(|_| "DSP worker stopped while reading word".to_string())
+    }
+
     /// Commit completed frames without waiting; streaming hosts use this between steps.
     /// Call `sync` instead before reading final totals or exporting state.
     pub fn poll(&self) {
@@ -1611,6 +1636,47 @@ pub mod second {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct WordProbe;
+
+    impl DspEngine for WordProbe {
+        fn spi2_exchange(&mut self, frame: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(frame.to_vec())
+        }
+        fn step(&mut self, n: u32) -> u32 {
+            n
+        }
+        fn sport_block(&mut self) -> Result<Option<Vec<u8>>, String> {
+            Ok(None)
+        }
+        fn pc(&self) -> u32 {
+            DN2_IDLE_RANGE.0
+        }
+        fn halt_reason(&self) -> Option<String> {
+            None
+        }
+        fn peek_word(&self, addr: u32) -> Option<u32> {
+            match addr {
+                0x3e000 => Some(0x11223344),
+                0x3e002 => Some(0x55667788),
+                _ => None,
+            }
+        }
+    }
+
+    #[test]
+    fn exact_word_probe_keeps_unaligned_addresses_and_unknowns() {
+        let (_peer, handle, _shared) =
+            ThreadedPeer::spawn(|| Ok(WordProbe), 5000, DN2_IDLE_RANGE).unwrap();
+        assert_eq!(handle.peek_word(0x3e002).unwrap(), Some(0x55667788));
+        assert_eq!(handle.peek_word(0x3e003).unwrap(), None);
+        // The existing byte view still aligns each word and slices its bytes;
+        // it must not acquire compact-register semantics from the new API.
+        assert_eq!(
+            handle.peek_bytes(0x3e002, 4).unwrap(),
+            vec![Some(0x22), Some(0x11), None, None]
+        );
+    }
 
     struct Mock {
         pc: u32,
