@@ -104,16 +104,18 @@ and `out/runs/dsp-stereo-proof/native/a49fdec1-2e03-42a1-a0d0-58989c6c9ede/resul
 with `out/runs/dsp-stereo-proof/native-uy-acceptance.log`. Late-site positive
 coverage remains open despite both callsites being hooked.
 
-Next proposal, not implemented: a private per-stereo-frame fetch boundary admits
-cached generations and copies both channels' packed interpolation taps/scalars
-under the mask, releases the backing count, then computes outside. Denial zeros
-remaining frames without epoch relatch. Cursor/scratch lifetime must outlive the
-callback even after backing count reaches zero. Actual DDR NW32 mapping is
-`byte=0x80000000+4*(w-0x10000000)`; existing stand-in spans do not prove it.
-The plan retains this as unchecked private experimental work, not shipping policy. The scenario asserts
-forced snapshot reload, initial/patched snapshot/audio activation and ready hashes.
-Final TypeScript and scoped oxlint pass. The legacy DSP profile label `dn2-1.11`
-is not the firmware identity; CF/base/ready hashes establish the DN2 1.12 input.
+The private per-stereo-frame fetch experiment now passes 58 model tests, with no
+SDK/runtime/core changes: both channels' packed taps/scalars are copied in one
+admitted masked scope, count is released, and private compute/store/one cursor
+advance follows exact mask restore. Denial zeros the remaining block without epoch
+relatch. Actual DDR aliases and stock page geometry replace represented overlap
+spans for this proof; the original DT2 guard helper supplies exact ten-byte stores.
+All representative arrivals reduce to checked fetched-frame classes; a split-lock
+control tears a real frame. Reader masked spans 80/81 and totals 5,172/5,204 are
+model instructions only. Cursor/scratch must remain callback-owned after backing
+count zero; production lifetime, IRQ/cache/coexistence and ownership remain open.
+See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md) and ignored
+`out/runs/stereo-frame-fetch/commands.json` for scope, commands and evidence.
 
 **[C][D]** AudioTask requests 1,000 four-byte units, not `0x1000` bytes:
 `0x1ca009` loads `0x3e8`; creator shift `0xb88840` precedes allocation at

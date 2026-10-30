@@ -2411,21 +2411,53 @@ the tree/sentinel. It supplies no balanced slot-independent pin. See
 fake key or raw record pointer for a supported backing lifetime contract.
 
 
-### Proposed private per-stereo-frame fetch experiment
+### Private per-stereo-frame fetch experiment checkpoint
 
-These are next-slice proposal constraints, not implemented behavior or shipping
+The coordinator approved this private fixture/model experiment. It is not shipping
 memory/interrupt policy. The purpose is to reduce the current whole-block masked
 read scope while retaining coherent frame data and generation retirement.
 
-- [ ] Review a private fetch boundary per stereo frame: cached-generation admission,
+- [x] Review a private fetch boundary per stereo frame: cached-generation admission,
   both channels' packed interpolation taps and all required scalar copies occur
   under the mask; release the backing count before computing from private copies.
-- [ ] After denial, zero the remaining frames without relatching an epoch. Prove
+- [x] After denial, zero the remaining frames without relatching an epoch. Prove
   that no later computation dereferences backing after releasing its count.
-- [ ] Keep callback cursor/scratch storage owned until that callback is finished,
+- [x] Keep callback cursor/scratch storage owned until that callback is finished,
   even after its backing count reaches zero; backing retirement alone must not
   authorize reuse of callback state.
-- [ ] Test actual DDR NW32 aliasing: byte address is
-  `0x80000000 + 4*(w-0x10000000)`, not `4*w`. Current fixture stand-in spans do
-  not prove that alias mapping. Retain masked-scope bounds and fault controls;
-  no implementation or production ownership policy follows from this proposal.
+- [x] Test actual DDR NW32 aliasing: byte address is
+  `0x80000000 + 4*(w-0x10000000)`, not `4*w`. The new private fixture uses
+  actual aliases for page/guard stores and packed reads; prior stand-in spans
+  remain numerical only. No production ownership policy follows from this proof.
+
+
+The initial reader implementation paused for a pinned-tool store-width probe:
+both `DM(0, I4) = R0 (SW)` and `DM(I4, M6) = R0 (SW)` are
+accepted but emit ordinary four-byte stores at byte address `0x80001002` in the
+model. The existing assembler postprocessor handles absolute short-word loads,
+not these stores. The subsequently approved original DT2 guard helper supplies
+the exact ten-byte
+write; the unsupported wrapper source form remains a separate follow-up. This is
+not evidence of an emulator semantics bug; no width approximation,
+assembler/core change or production policy was introduced. Probe evidence remains
+under ignored `out/runs/stereo-frame-fetch/store-probe.json`.
+
+
+The private fixture now passes 58 owner model tests with no skips. Actual stock
+page geometry and five original-helper halfword guard stores affect the same DDR
+aliases read by both channels, including an odd terminal word's unused half.
+Every arrival boundary is enumerated for six representative page/guard/plane
+configurations (31,134 arrivals), reduced by explicit commutation to 33 fetched-frame
+classes each. Resumed and stale callbacks have no forbidden reads; an unsafe
+split-channel control tears a real frame. Maximum enabled-entry masked reader
+spans are 80/81 model instructions, totals 5,172/5,204; the existing whole-block
+reference measures 3,462/3,485. These are different-body instruction observations,
+not cycles, performance or IRQ latency. Incoming-disabled mode remains disabled.
+See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md) for the ownership
+assumption, exact helper provenance, negative controls and remaining production
+gaps. SDK/public ABI/runtime/core and current exclusion tests are unchanged.
+
+- [ ] Separately resolve unsupported `(SW)` store source-form handling; no assembler
+  or core change is part of this proof, and byte-store forms remain unprobed.
+- [ ] Establish production callback-private cursor/scratch lifetime independently
+  of backing count/drain before considering runtime integration.
