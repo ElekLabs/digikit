@@ -170,18 +170,22 @@ complete and independent of cache encoding and production backing ownership.
   (450/727 instructions). Diagnostic controls are not connected to audio readers.
 - [x] Complete independent code review and prepare the exact 0.3 boot fixture;
   cold idle and all four pre-exchange descriptor counts match. See finding 94.
-- [ ] Run the explicit `DIGI_LP0_CLOSE=1` native held-stock-audio/CLOSE case with
-  a newly prepared exact-0.3-hash boot fixture. Terminal receive is now armed;
-  historical 0.2 terminal-inactive evidence remains unchanged. Parent owns this
-  run; no new native, physical IRQ/cache or production ownership claim follows.
+- [x] Run the explicit `DIGI_LP0_CLOSE=1` native held-stock-audio/CLOSE case
+  with the exact 0.3 boot fixture: one pass, three skips, 60.350-second selected
+  test, exit 0. Full 235-page/960,000-byte transfer, exact diagnostic drain without
+  resend, bank/canaries and finite/non-silent stock-audio windows pass. This uses
+  count injection, not an actual paused native audio reader or other-track PCM
+  proof; physical IRQ/cache and production ownership remain open. See finding 94.
 
-**Current blocker:** native acceptance did not start. Its 600-second exclusive
-lock wait expired behind the other session's shared `verify runtime-fixture`
-process (observed PID 56574). The waiter has exited; no owned native daemon remains.
-Implementation/review checkpoint `b185fa1d` is pushed. The fixture audit passes,
-including independent current-object relinking and all 117 symbol addresses.
-Resume the single native case when the shared repository lock is available;
-do not stop the other session or treat this as a native test failure/pass.
+**Resolved launch blocker:** the initial 600-second exclusive lock wait expired
+behind another session's shared `verify runtime-fixture` process (observed PID
+56574), without starting a native daemon or producing a test verdict. The later
+resumed run passed at `out/runs/lp0-proof/27dbeea7-d1f2-415a-b98a-0a75c25fc3d1`;
+log: `out/runs/lp0-close-fixture/native-close.log`. Implementation/review checkpoint
+`b185fa1d` is pushed. The fixture audit passes, including independent current-object
+relinking and all 117 symbol addresses. Independent native artifact audit also
+passes payload/canaries, ordered journal, audio metrics and final status; the
+intermediate CLOSE snapshot retention limit is recorded in finding 94.
 
 **Exact native resume inputs:** ignored artifact
 `out/runs/lp0-close-fixture/native-command.json` records cwd, command, environment,
@@ -190,8 +194,8 @@ prebuilt daemon/patchkit selected there; do not rebuild a core or resize live DM
 Select only `sample-lp0-transfer.test.ts` / `closes diagnostic reader control`
 with `DIGI_LP0_CLOSE=1`, the private ready directory and its `provenance.json`.
 The fixture's patched image is `6ff3b5ec9d9ed80f1108746922a213a75c9827a867fb257c1690c419fa56a2c8`.
-A new module/object edit requires a newly matched fixture. After the run, audit
-its `out/runs/lp0-proof/<session>` artifacts before checking off native acceptance.
+These inputs are retained for reproducibility. A new module/object edit requires
+a newly matched fixture; the passing run does not authorize fixture reuse after edits.
 
 **Next integration seams (read-only scout):** both machine adapters already
 provide the latched source track in `dk_voice_in.track`. DT2 routes paired voices
