@@ -330,6 +330,27 @@ unaudited; this is not a claim of an exploited mismatch. Policy binding and
 pending-state safety must be resolved before daemon integration. No snapshot
 format migration is included or approved here.
 
+### Legacy runtime snapshot guard
+
+**Implemented, bounded [D]:** native runtime `save_state` and `load_state` now
+require Oracle completion and attached Oracle Time before CPU flag resolution,
+time-base changes or deserialization. Device completion, Device Time and missing
+Time reject explicitly. The `DT2SNP01` format and default Oracle behavior are
+unchanged; existing Oracle snapshots remain readable. This guards the legacy
+format, without completing construction/policy binding or enabling Device snapshots.
+Reference/Softfloat interchange and topology compatibility remain unknown.
+
+Both named runtime tests pass on both exact current images: Oracle magic and
+byte-identical roundtrip, plus all three unsupported constructions preserving
+CPU (including deferred flags), Board backing/deadlines and counters on failed
+save/restore. Independent static review found no issues. Exact command,
+environment, input hashes and final source hash are recorded in
+`out/runs/storage-fault-proof/legacy-snapshot-policy-invocation.json`; log:
+`legacy-snapshot-policy-tests.log` in the same directory. No format migration,
+cache-key change or Device runtime option is included. Future Device construction
+must start cold until its snapshot contract is validated. Full-reset implementation and native
+integration remain unstarted; the full merge gate remains deferred.
+
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in

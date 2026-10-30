@@ -3000,5 +3000,42 @@ passed pathcheck/layers before final prose; final docs pathcheck is coordinator-
 The full merge gate remains deferred. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md)
 for boundaries and evidence.
 
-Next: choose a compatible execution-policy binding design while preserving
-existing Oracle snapshot usability, before implementing or exposing Stage C.
+Remaining: resolve Device runtime construction and snapshot design, execution-
+policy/topology compatibility and reset before exposing Stage C. Existing Oracle
+snapshot usability must be preserved.
+
+
+**[D] Legacy runtime snapshot guard complete (2026-10-31):** native runtime
+`save_state`/`load_state` now require Oracle completion and attached Oracle Time
+before any CPU flag resolution, time-base change or deserialization. Device
+completion, Device Time and missing Time fail explicitly. Both named tests pass
+on exact DT2 1.17 and DN2 1.12: Oracle `DT2SNP01` magic and byte-identical roundtrip,
+and unsupported save/restore rejection preserving CPU, RAM, registers, deadlines
+and counters. Independent static review found no issues. Log and exact command,
+environment/input hashes: `out/runs/storage-fault-proof/legacy-snapshot-policy-tests.log`
+and `legacy-snapshot-policy-invocation.json` in the same directory.
+
+This preserves the legacy format and Oracle defaults; it does not complete policy
+binding. Reference/Softfloat interchange and topology compatibility remain unknown.
+Device runtime snapshots remain unsupported; no migration, cache-key change or
+Device runtime option is added. Future Device construction must start cold until
+its snapshot contract is separately validated. Full-reset implementation and native integration remain
+unstarted; the full merge gate remains deferred. The coordinator's scoped
+`test:changed`, final documentation pathcheck and whitespace checks passed.
+
+### Native integration scope decision — 2026-10-31
+
+The read-only runtime audit found separate ordered delivery paths for timers,
+software-force requests, SSI and other services. Adding storage to one path
+would not establish correct simultaneous-source priority. Fast execution windows
+also need to end when storage request state changes. The reusable INTC candidate
+selector is ready, but composing physical source eligibility and acknowledgement
+is still open; Device timer service currently rejects delivery.
+
+- [x] Audit the native boundary and identify why a storage-only mode switch is insufficient.
+- [ ] Decide whether to continue shared interrupt arbitration before sampler integration,
+  or return to SDK work while native storage acceptance stays blocked. The coordinator
+  recommends correctness-first emulator integration; a user scope question is pending.
+
+This scope choice does not authorize default-policy changes, hardware experiments,
+snapshot format migration or weakening the native fault-history assertions.

@@ -534,3 +534,19 @@ exploited mismatch. Policy binding, full reset, physical-source integration and
 native fault history remain open; no snapshot-format or daemon change is approved.
 The coordinator's scoped `test:changed` passed pathcheck/layers before final prose;
 final documentation pathcheck is coordinator-owned and the full gate is deferred.
+
+
+**[D] Legacy runtime snapshot guard complete (2026-10-31):** native runtime
+save/restore now rejects Device completion, Device Time or missing Time before
+mutation. Both named tests pass on exact DT2 1.17/DN2 1.12: unchanged `DT2SNP01`
+magic and byte-identical Oracle roundtrip, plus unsupported save/restore CPU,
+register/RAM/deadline and counter preservation. Independent review found no issues.
+Exact command/environment, input/final-source hashes and log are under
+`out/runs/storage-fault-proof/legacy-snapshot-policy-invocation.json` and
+`legacy-snapshot-policy-tests.log`.
+
+This protects legacy Oracle snapshots without completing policy binding.
+Reference/Softfloat interchange and topology compatibility remain unknown; Device
+snapshots remain unsupported. No format/cache-key change or Device runtime option
+was added. Future Device construction must start cold until separately validated.
+Full-reset implementation and native integration remain unstarted; the full merge gate is deferred.
