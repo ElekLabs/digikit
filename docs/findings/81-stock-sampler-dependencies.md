@@ -117,3 +117,23 @@ uv run python -m tools.coldfire.fw disasm 0x1c4e91 -i dt2-1.17 --cpu sharc --max
 
 Do not implicitly rebuild shared databases. Image-match results establish only the stated hash comparison;
 retain the distinction between database observations, historical semantics and a future controlled runtime proof.
+
+
+## Project invalidation follow-up
+
+**[D]** Current DT2 1.17 database dossiers retain the slot/path loader at
+`0x4015481c`, slot map `0x405b5368`, and loaded-block vector globals
+`0x405a0f64/68/6c`. Release `0x401543a2` removes a slot mapping and only
+releases/coalesces the associated block when its record reference count at
+`+0x30` is zero. `ReloadAllSamples` at `0x4004e8be` can queue the reload
+path through `0x40154634`, which clears the 1024 slot mappings via
+`0x40153ec6`, resets the vector and emits the stock sample event.
+These are concrete invalidation paths for any proposed borrowed view.
+
+**[C]** Candidate `0x401363d0` is a byte-fill helper (destination, byte value,
+length), not a sample allocator. Its repeated-byte word fill and tail stores
+do not supply an independently owned DSP extent.
+
+**[O]** The stock loader remains useful evidence, but an adapter still needs
+an ownership contract and a reset/replacement fence before reusing its pool.
+The dossier observations do not establish either contract.

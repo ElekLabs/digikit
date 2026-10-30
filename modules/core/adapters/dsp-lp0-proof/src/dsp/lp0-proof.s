@@ -1,6 +1,6 @@
 #include "dsp/call.inc"
 #include "dsp/sample_bank.inc"
-// DN2 1.12 private LP0 data/CLOSE diagnostic; no voice or backing integration.
+// DN2 1.12 private LP0 data/CLOSE diagnostic and two bounded SDK readers.
 .SECTION/PM seg_pmco;
 .GLOBAL _lp_hook;
 .GLOBAL _lp_callback;
@@ -222,10 +222,29 @@ _lp_hook:
     LCNTR = 1024, DO _lp_guard_init UNTIL LCE;
         DM(I0, M6) = R0 (NW);
 _lp_guard_init: DM(I1, M6) = R0 (NW);
-    // Two diagnostic controls only: epoch=1, open/ready=1, no audio readers.
+    // A remains unready until the complete payload, guards and terminal rearm.
     R0 = 1;
-    DM(_lp_close_a_open) = R0; DM(_lp_close_a_ready) = R0; DM(_lp_close_a_epoch) = R0;
-    DM(_lp_close_b_open) = R0; DM(_lp_close_b_ready) = R0; DM(_lp_close_b_epoch) = R0;
+    DM(_lp_close_a_epoch) = R0; DM(_lp_close_b_epoch) = R0;
+    // Separate bounded on-chip PCM16 bank B, including explicit guard words.
+    R0 = _lp_b_storage; R0 = LSHIFT R0 BY -2;
+    DM(_lp_b_lower) = R0; I0 = R0;
+    R1 = 4112; R1 = R0 + R1; DM(_lp_b_upper) = R1; I1 = R1;
+    R2 = 0xa55a3cc3; R5 = 16;
+_lp_b_guard_init:
+    DM(I0, M6) = R2 (NW); DM(I1, M6) = R2 (NW);
+    R5 = R5 - 1; R5 = PASS R5; IF GT JUMP _lp_b_guard_init;
+    R1 = 16; R0 = R0 + R1; I0 = R0;
+    NOP; NOP; NOP;
+    R4 = 0xf000e000; R8 = 0x10000000;
+    R12 = 0x10002000; R3 = 0xf0000000;
+    R5 = 1024;
+_lp_b_init:
+    DM(I0, M6) = R4; DM(I0, M6) = R8;
+    DM(I0, M6) = R12; DM(I0, M6) = R3;
+    R5 = R5 - 1; R5 = PASS R5; IF GT JUMP _lp_b_init;
+    DM(_lp_reader_b_source) = R0;
+    R0 = 8192; DM(_lp_reader_b_frames) = R0;
+    DK_SAMPLE_BANK_PUBLISH(_lp_close_b_open, _lp_close_b_ready, R0);
     R0 = 2;
     DM(_lp_status) = R0;
     DK_CALL(_lp_arm, _lp_after_arm);
@@ -570,6 +589,13 @@ _lp_guard_check:
     R0 = 3;
     DM(_lp_status) = R0;
     DK_CALL(_lp_arm, _lp_after_terminal_rearm);
+    R0 = DM(_lp_status); R1 = 4; COMP(R0, R1); IF EQ JUMP _lp_cb_done;
+    // CLOSED is sticky even if CLOSE arrived before the first payload page.
+    R0 = DM(_lp_close_a_closed); R0 = PASS R0; IF NE JUMP _lp_cb_done;
+    DK_SAMPLE_BANK_CHECK_DRAIN(_lp_close_a_count, _lp_close_a_fault, R0, R1, _lp_cb_bad);
+    R0 = 0x10200000; DM(_lp_reader_a_source) = R0;
+    R0 = 480000; DM(_lp_reader_a_frames) = R0;
+    DK_SAMPLE_BANK_PUBLISH(_lp_close_a_open, _lp_close_a_ready, R0);
     JUMP _lp_cb_done;
 _lp_cb_close:
     R0 = 1; DM(_lp_close_rearming) = R0;
@@ -664,7 +690,7 @@ _lp_cb_done:
 .GLOBAL _lp_handle;
 .VAR _lp_handle = 0;
 
-// Six contiguous words per diagnostic control: no actual audio voice binding.
+// The actual readers and LP0 CLOSE share these six-word control records.
 .GLOBAL _lp_close_a_open; .VAR _lp_close_a_open = 0;
 .GLOBAL _lp_close_a_ready; .VAR _lp_close_a_ready = 0;
 .GLOBAL _lp_close_a_closed; .VAR _lp_close_a_closed = 0;
@@ -687,3 +713,11 @@ _lp_cb_done:
 .VAR _lp_close_id = 0;
 .VAR _lp_close_track = 0;
 .VAR _lp_close_epoch = 0;
+
+.GLOBAL _lp_reader_a_source; .VAR _lp_reader_a_source = 0;
+.GLOBAL _lp_reader_a_frames; .VAR _lp_reader_a_frames = 0;
+.GLOBAL _lp_reader_b_source; .VAR _lp_reader_b_source = 0;
+.GLOBAL _lp_reader_b_frames; .VAR _lp_reader_b_frames = 0;
+.GLOBAL _lp_b_lower; .VAR _lp_b_lower = 0;
+.PKDATA _lp_b_storage, 16512;
+.GLOBAL _lp_b_upper; .VAR _lp_b_upper = 0;

@@ -1,6 +1,24 @@
 # DSP SDK and first sampler
 
 
+## Latest checkpoint — real two-track readers passed
+
+LP0 0.4 now passes the bounded DN2 1.12 native actual-reader proof: both tracks
+start, CLOSE A drains without injected counts, A emits fresh raw silence, and B
+continues its exact raw waveform and audible post-drain tone. All 92 owner tests
+pass; independent source and artifact reviews are clean. Evidence and the two
+corrected observation failures are recorded in finding 94. Successful run:
+`out/runs/lp0-proof/16929724-3d8c-49b4-bc79-b2161af79af9`; exact fixture:
+`out/runs/lp0-voices-v2-fixture`; command/log: `out/runs/lp0-voices-v3-run`.
+
+Next: establish production backing ownership/reset fences and supported DMA
+cache maintenance before exposing per-track binding and connecting the on-device
+picker. DT2 loader/reset and DN2 runtime-ring evidence is in findings 81/91;
+neither configured memory size nor a stock ring is an independent sample allocation.
+No hardware action or emulator-core regeneration was performed. All native work
+used the shared exclusive benchlock and owned run directories; other sessions'
+processes were left untouched.
+
 ## Rebase checkpoint — main 409414f9
 
 The sampler branch was rebased onto `origin/main` at `409414f9`. Original tip
@@ -243,7 +261,40 @@ note/render callback around backing access, but uses global bank controls. Its
 legacy payload transport replaces stock audio and must not become the new
 per-track route. Use its callback ABI as a reference and the isolated two-track
 fixture's cached owner/epoch checks; keep LP0 transport integration separate.
-No real per-track adapter, pool reservation or publication has been implemented.
+The bounded 0.4 adapter below adds private per-track readers; production pool reservation remains open.
+
+## Next bounded integration: real per-track machine readers
+
+- [x] Integrate actual machine `note_on`/`render` callbacks with the LP0 CLOSE
+  controls, using existing SDK PCM16/cursor and bank-lifetime primitives.
+- [x] Keep A unready until all 960,000 bytes, guards and terminal rearm succeed.
+  An earlier CLOSE must prevent later publication of the same epoch.
+- [x] Give B a distinct module-owned 16 KiB PCM16 bank (8,192 frames), populated
+  before publication. A diagnostic rate of 1/64 yields about 10.9 seconds without
+  another unreserved DDR range. This rate is a test choice, not a product limit.
+- [x] Route by source track, cache track plus epoch, acquire/release per callback,
+  and reject unready/stale/closed voices before any sample read. Preserve the
+  existing two-record wire tuple and single-use generation; no public binding ABI.
+- [x] Register an explicit DN2-only private diagnostic machine at unused type 12,
+  outside default module sets; preserve retired and dynamic type reservations.
+- [x] Prove both real native voice paths start, CLOSE A through CF/LP0, retain
+  explicit pending/final snapshots as applicable, observe A reads stop while B
+  progresses and produces its known waveform. No injected reader count in this
+  new case. Retain the separate interrupted-reader model and earlier transport
+  cases; native completion alone does not prove an IRQ landed inside a read.
+- [x] Audit new firmware/object/boot-fixture identities and native artifacts;
+  update this plan.
+- [x] Commit/push the verified real-reader checkpoint on the sampler discovery branch.
+
+This step remains an emulator diagnostic. A's fixed test bank is not production
+owned backing. It adds real reader integration while production pool reservation
+and hardware cache safety are investigated separately. Existing DT2 loader/reset
+queries establish slot-owned allocation and concrete project invalidation, not an
+independent adapter allocation. DN2 runtime ring inspection now establishes masked recurrence but leaves the first
+read conditional on producer range/rounding and SIMD state; see finding 91.
+Configured DDR size is not evidence of a free sample pool. The DT2 follow-up
+records project-reset invalidation in finding 81 and rejects a byte-fill helper
+as an allocator candidate.
 
 **Resume next:** connect the proved reader lifetime to owned backing and a
 device-side close/drain acknowledgement before exporting per-track bindings.
@@ -1475,3 +1526,61 @@ retry. Logs: `out/runs/ddr-proof/changed-checks.log`, `host-checks.log`, `host-s
 This is an emulator capacity/playback milestone, without hardware timing, coexistence,
 resource replacement/retirement or Transfer UI/user-selection API claims. Parent owns
 checkpoint, push and subsequent integration; no further coupled run is needed here.
+
+
+### 2026-10-30 — LP0 0.4 implementation checkpoint (native pending)
+
+The private machine now shares the actual LP0 CLOSE records, routes by latched
+source track, pins each descriptor/PCM callback, and uses the tested SDK reader.
+A publishes only after all pages, guards and terminal rearm; early CLOSE is sticky.
+B has an independently owned guarded 16 KiB triangle bank at diagnostic rate 1/64.
+DN2-only type 12 and the required machine/parameter/voice adapters are explicit
+opt-in dependencies. No SDK/public ABI, emulator core or production allocator changed.
+
+The existing native harness has an additional `DIGI_LP0_VOICES=1` case, with a
+panel dispatch pilot and retained CLOSE snapshots, direct B block/WAV evidence,
+and no reader-count injection. Preparing the exact 0.4 boot fixture, running
+that case, independent object/image/artifact audit and publication remain the
+parent's next steps. Historical 0.3 native evidence does not validate 0.4.
+
+
+Owner checks for 0.4 pass: 90 LP0 tests, Ruff, scoped TypeScript format/lint/types,
+changed-document pathcheck, object build/current/generation and whitespace checks.
+The routed changed-files command is blocked at mise trusted-config symlink creation
+by the checkout sandbox; the parent owns the routed check and merge gate.
+
+
+### 2026-10-30 — callback observation boundary correction
+
+The first actual-reader native attempt passed source dispatch and CLOSE/drain
+checks, then failed an invalid assertion about retained stock output bytes.
+The stock DN2 pipeline modifies those buffers after our callback returns.
+Private per-track sequence-protected raw snapshots now capture the SDK output
+and denied zero-fill before returning. The native test requires fresh A silence
+relative to pre-CLOSE and fresh B raw PCM after drain; post-drain mixed spectrum
+retains its separate capture origin. Failed v1 artifacts remain unchanged.
+Parent preparation of a new exact-hash v2 fixture and bounded native acceptance
+run remains the next step. This correction changes observation, not sampler
+behavior, public ABI, production ownership or cache conclusions.
+
+
+The corrected callback-snapshot implementation passes all 92 owner tests;
+rebuilt CF/DSP objects contain 450/1,475 decoded instructions. The 2,500 render
+instruction ceiling is conservative static budgeting, not a measured hardware
+timing result. Independent snapshot source review is clean. Native v2 passed
+fresh A-zero but the three-RPC B snapshot read timed out under continuous updates.
+The test now reads sequence and PCM together with one synchronous DSP-worker peek,
+retaining fresh/even sequence checks. No firmware change was required for that
+second harness correction; v3 uses the exact verified v2 boot fixture.
+
+
+### Checkpoint validation
+
+Final native acceptance and its independent artifact audit pass. Routed
+`mise run test:changed` passes Ruff, formatting of Python, path and layer checks;
+its pnpm-launched host/lint/format/type phases fail on the existing linked
+`node_modules/.pnpm` worktree layout. Direct installed-tool fallbacks pass:
+222 host tests (16 skipped), scoped oxlint/Prettier and all five workspace
+TypeScript checks. Logs are in `out/runs/lp0-voices-v3-run/`. Changed-document
+pathcheck and whitespace checks pass. Dependencies were not modified. This is a
+verified branch checkpoint, not a full merge gate or hardware acceptance.

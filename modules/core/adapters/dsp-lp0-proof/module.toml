@@ -1,6 +1,6 @@
 [module]
 id = "core/dsp-lp0-proof"
-version = "0.3.0"
+version = "0.4.0"
 name = "Private LP0 receive proof"
 category = "core"
 role = "adapter"
@@ -9,7 +9,7 @@ author = "digikit"
 status = "experimental"
 summary = "Emulator-only DN2 1.12 LP0 setup, callback and rearm diagnostic; explicit opt-in."
 ports = ["dn2-1.12"]
-requires = ["core/expansion"]
+requires = ["core/expansion", "core/machines", "core/params", "core/dsp-voice"]
 conflicts = ["core/dsp-link", "core/runtime", "core/dsp-ddr-proof"]
 
 [targets]
@@ -17,7 +17,7 @@ conflicts = ["core/dsp-link", "core/runtime", "core/dsp-ddr-proof"]
 
 [[object]]
 path = "build/lp0-proof-cf.dko.json"
-sources = ["src/cf/lp0-proof.c", "src/cf/tramp.s"]
+sources = ["src/cf/lp0-proof.c", "src/cf/tramp.s", "src/cf/machine.c"]
 place = "cf.expansion"
 devices = ["dn2"]
 
@@ -28,7 +28,7 @@ lp_stock_copy = "cf.link.fn.reply_copy"
 
 [[object]]
 path = "build/lp0-proof-dsp.dko.json"
-sources = ["src/dsp/lp0-proof.s"]
+sources = ["src/dsp/lp0-proof.s", "src/dsp/readers.s"]
 place = "dsp.l2"
 devices = ["dn2"]
 

@@ -82,7 +82,7 @@ interface BootFixture {
  * DSP execution, descriptor resizing or snapshot preparation happens here. */
 function readBootFixture(): BootFixture {
   const need = (ok: unknown, message: string) => {
-    if (!ok) throw new Error(`LP0 0.3 boot fixture: ${message}`);
+    if (!ok) throw new Error(`LP0 0.4 boot fixture: ${message}`);
   };
   const file = process.env.DIGI_LP0_BOOT_FIXTURE;
   need(file && path.isAbsolute(file), 'set DIGI_LP0_BOOT_FIXTURE to an absolute provenance JSON path');
@@ -225,19 +225,31 @@ const cases = [
     bodyMs: 300000,
     testMs: 360000,
   },
+  {
+    fullBank: true,
+    stockAudio: false,
+    closeControl: false,
+    label: 'actual-two-track-voices',
+    name: 'closes actual A SDK reader while independent B SDK reader continues',
+    bodyMs: 330000,
+    testMs: 390000,
+  },
 ] as const;
 for (const scenario of cases) {
   const { fullBank, stockAudio, closeControl } = scenario;
+  const voices = scenario.label === 'actual-two-track-voices';
   const validBytes = fullBank ? BANK_BYTES : PAGE_BYTES;
   const packets = Math.ceil(validBytes / PAGE_BYTES);
   // Explicit opt-in: importing this file never builds or starts a native case.
   describe.skipIf(
     !enabled ||
-      (closeControl
-        ? process.env.DIGI_LP0_CLOSE !== '1'
-        : stockAudio
-          ? process.env.DIGI_LP0_AUDIO !== '1'
-          : fullBank && process.env.DIGI_LP0_FULL_BANK !== '1'),
+      (voices
+        ? process.env.DIGI_LP0_VOICES !== '1'
+        : closeControl
+          ? process.env.DIGI_LP0_CLOSE !== '1'
+          : stockAudio
+            ? process.env.DIGI_LP0_AUDIO !== '1'
+            : fullBank && process.env.DIGI_LP0_FULL_BANK !== '1'),
   )(`DN2 1.12 private LP0 ${scenario.label} proof`, () => {
     const runDir = path.join(root, 'out/runs/lp0-proof', randomUUID());
     if (enabled) fs.mkdirSync(runDir, { recursive: true });
@@ -642,10 +654,13 @@ for (const scenario of cases) {
           expect(plan.base).toMatchObject({ device: 'dn2', version: '1.12', syx_sha256: stockSha });
           expect(plan.modules.map((module) => module.split('@')[0]).sort()).toEqual([
             'core/dsp-lp0-proof',
+            'core/dsp-voice',
             'core/expansion',
+            'core/machines',
+            'core/params',
           ]);
           expect(plan.output?.syx_sha256).toMatch(/^[a-f0-9]{64}$/);
-          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.3 patch').toBe(
+          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.4 patch').toBe(
             bootFixture!.patchedSyxSha256,
           );
           for (const name of [
@@ -726,7 +741,14 @@ for (const scenario of cases) {
           const tailBefore = fullBank ? undefined : await tail();
           if (tailBefore) save('tail-before.json', tailBefore);
           const expected = Buffer.alloc(validBytes);
-          const pattern = (index: number) => (Math.imul(index, 0x01010101) ^ 0x80ff3c5a) >>> 0;
+          const pcmA = (frame: number) => {
+            const n = frame % 240;
+            return Math.round((n < 120 ? -1 + n / 60 : 3 - n / 60) * 8192);
+          };
+          const pattern = (index: number) =>
+            voices
+              ? ((pcmA(index * 2) & 0xffff) | ((pcmA(index * 2 + 1) & 0xffff) << 16)) >>> 0
+              : (Math.imul(index, 0x01010101) ^ 0x80ff3c5a) >>> 0;
           // Multiplication by an odd word and XOR are bijections: all source words
           // have unique values, including the unused padding of the final packet.
           for (let i = 0; i < expected.length / 4; i++) expected.writeUInt32LE(pattern(i), i * 4);
@@ -814,6 +836,295 @@ for (const scenario of cases) {
               path.join(runDir, 'requests.jsonl'),
               JSON.stringify({ event: 'consumed', ...progress }) + '\n',
             );
+          }
+          if (voices) {
+            phase = 'actual two-track source dispatch pilot';
+            type Registry = {
+              name: string;
+              addr: number;
+              first: number;
+              row_size: number;
+              fields: [string, string, number][];
+              entries: { id: string; index: number; module: string }[];
+            };
+            const machines = (plan as RuntimePlan & { registries: Registry[] }).registries.find(
+              (registry) => registry.name === 'machines',
+            )!;
+            const machine = machines.entries.find((entry) => entry.id === 'lp_sampler')!;
+            expect(machine.module.split('@')[0]).toBe('core/dsp-lp0-proof');
+            const offset = machines.fields.find(([name]) => name === 'position')![2];
+            const position = await cfWord(
+              machines.addr + (machine.index - machines.first) * machines.row_size + offset,
+            );
+            expect(position).toBeLessThan(16);
+            const clock = async () => {
+              const elapsed = (await rpc<{ elapsed: number }>('status')).elapsed;
+              if (typeof elapsed !== 'number') throw new Error('panel requires elapsed instruction clock');
+              return elapsed;
+            };
+            const until = async (target: number) => {
+              await expect.poll(clock, { timeout: 20000, interval: 25 }).toBeGreaterThanOrEqual(target);
+            };
+            const settle = async (ms: number) => until((await clock()) + ms * 132000);
+            const tap = async (name: string) => {
+              const reply = await rpc<{ release_at: number }>('input.tap', { code: button(name), hold: 20 * 132000 });
+              expect(typeof reply.release_at).toBe('number');
+              await until(reply.release_at + 5 * 132000);
+            };
+            const voiceCleanup: Record<string, unknown> = {};
+            const releaseButton = async (name: string) => {
+              try {
+                voiceCleanup[name] = await bounded(
+                  session.client.call('input.button', { code: button(name), down: false }),
+                  2000,
+                  `release ${name}`,
+                );
+              } catch (error) {
+                voiceCleanup[name] = { error: String(error) };
+              }
+            };
+            const track = async (n: number) => {
+              try {
+                await rpc('input.button', { code: button('TRK'), down: true });
+                await settle(5);
+                await tap(`TRIG ${n}`);
+              } finally {
+                await releaseButton('TRK');
+              }
+              await settle(100);
+            };
+            const select = async (n: number) => {
+              await tap('NO');
+              await track(n);
+              try {
+                await rpc('input.button', { code: button('FUNC'), down: true });
+                await settle(5);
+                await tap('SRC');
+              } finally {
+                await releaseButton('FUNC');
+              }
+              await settle(200);
+              const menu: number[] = [];
+              for (let i = 0; i < machines.first + machines.entries.length; i++)
+                menu.push(await cfWord(symbol('mf_list_buf') + i * 4));
+              expect(menu[position], 'live menu position must identify private machine').toBe(machine.index);
+              save(`voices-track${n}-menu.json`, { machine, position, menu });
+              for (let i = 0; i < 16; i++) {
+                await tap('UP');
+                await settle(80);
+              }
+              for (let i = 0; i < position; i++) {
+                await tap('DOWN');
+                await settle(80);
+              }
+              await tap('YES');
+              await settle(300);
+              await tap('YES');
+              await settle(300);
+              save(`voices-track${n}-page.json`, await rpc('framebuffer.get', { hash: true, data: true }));
+            };
+            const counter = (t: string, name: string) => word(symbol(`_lp_reader_${t}_${name}`));
+            const callbackSnapshot = async (track: string, afterSequence = 0) => {
+              const sequenceAddress = symbol(`_lp_reader_${track}_snapshot_seq`);
+              expect(symbol(`_lp_reader_${track}_snapshot`)).toBe(sequenceAddress + 4);
+              let result: { sequence: number; hex: string; values: number[] } | undefined;
+              await expect
+                .poll(
+                  async () => {
+                    // Coupled Peek runs synchronously on the DSP worker without
+                    // guest execution inside peek_bytes (sharc_peer.rs).
+                    const observation = await bytes(sequenceAddress, 132);
+                    const sequence = observation.readUInt32LE(0);
+                    if (sequence <= afterSequence || sequence & 1) return false;
+                    const block = observation.subarray(4);
+                    result = {
+                      sequence,
+                      hex: block.toString('hex'),
+                      values: Array.from({ length: 32 }, (_, i) => block.readFloatLE(i * 4)),
+                    };
+                    return true;
+                  },
+                  { timeout: 15000, interval: 20 },
+                )
+                .toBe(true);
+              return result!;
+            };
+            const snapshot = async () => ({
+              a: (await bytes(symbol('_lp_close_a_open'), 24)).toString('hex'),
+              b: (await bytes(symbol('_lp_close_b_open'), 24)).toString('hex'),
+              aReads: await counter('a', 'reads'),
+              bReads: await counter('b', 'reads'),
+              aNotes: await counter('a', 'notes'),
+              bNotes: await counter('b', 'notes'),
+              aSnapshotSequence: await counter('a', 'snapshot_seq'),
+              bSnapshotSequence: await counter('b', 'snapshot_seq'),
+              mail: await Promise.all([0, 4, 8, 12, 16, 20].map((off) => cfWord(symbol('lp_close_mail') + off))),
+              ack: await Promise.all([0, 4, 8, 12, 16, 20].map((off) => cfWord(symbol('lp_close_ack') + off))),
+            });
+            await select(1);
+            await select(2);
+            await track(1);
+            const held = new Set<number>();
+            let voiceCapture = false;
+            try {
+              held.add(1);
+              await rpc('input.button', { code: button('TRIG 1'), down: true });
+              await expect.poll(() => counter('a', 'notes'), { timeout: 15000 }).toBeGreaterThan(0);
+              // Keep A held while switching source track and starting B. Failure
+              // here stops the pilot; no firmware control words are fabricated.
+              await track(2);
+              held.add(2);
+              await rpc('input.button', { code: button('TRIG 2'), down: true });
+              await expect.poll(() => counter('b', 'notes'), { timeout: 15000 }).toBeGreaterThan(0);
+              const pilot = await snapshot();
+              await expect
+                .poll(
+                  async () =>
+                    (await counter('a', 'reads')) > pilot.aReads && (await counter('b', 'reads')) > pilot.bReads,
+                  { timeout: 15000 },
+                )
+                .toBe(true);
+              const aState = await counter('a', 'state'),
+                bState = await counter('b', 'state');
+              expect(aState).not.toBe(bState);
+              // The machine adapter supplies byte-addressed state/output pointers.
+              const stateByte = (ptr: number) => ptr;
+              expect(await word(stateByte(aState) + 32)).toBe(0);
+              expect(await word(stateByte(bState) + 32)).toBe(1);
+              const file = path.join(runDir, 'actual-voices.wav');
+              await rpc('pcm.tap', { action: 'start' });
+              voiceCapture = true;
+              await rpc('pcm.tap', { action: 'capture', path: file });
+              const start = await frames();
+              await expect.poll(frames, { timeout: 15000 }).toBeGreaterThan(start + 160);
+              const before = await snapshot();
+              const captureSplit = (await rpc<{ audio: { pcm_capture_count: number } }>('audio.report')).audio
+                .pcm_capture_count;
+              save('voices-close-before.json', { ...before, captureSplit });
+              const mail = symbol('lp_close_mail');
+              for (const [off, value] of [
+                [8, 1],
+                [12, 0],
+                [16, 1],
+              ] as const)
+                await rpc('mem.cf.poke', { addr: mail + off, value });
+              await rpc('mem.cf.poke', { addr: mail, value: 1 });
+              // PENDING may be missed when CLOSE lands between callback blocks.
+              const intermediate = await snapshot();
+              save('voices-close-observed.json', intermediate);
+              await expect.poll(() => cfWord(mail), { timeout: 20000 }).toBe(3);
+              const ack = symbol('lp_close_ack');
+              await expect
+                .poll(
+                  async () => {
+                    const sequence = await cfWord(ack);
+                    const fields = await Promise.all([4, 8, 12, 16, 20].map((off) => cfWord(ack + off)));
+                    return (
+                      !(sequence & 1) &&
+                      sequence === (await cfWord(ack)) &&
+                      fields.every((value, i) => value === [1, 2, 1, 0, 1][i])
+                    );
+                  },
+                  { timeout: 20000 },
+                )
+                .toBe(true);
+              expect(await word(symbol('_lp_close_a_count'))).toBe(0);
+              expect(await word(symbol('_lp_close_a_closed'))).toBe(1);
+              expect(await word(symbol('_lp_close_a_ready'))).toBe(0);
+              const drained = await snapshot();
+              const postDrainCapture = (await rpc<{ audio: { pcm_capture_count: number } }>('audio.report')).audio
+                .pcm_capture_count;
+              save('voices-close-drained.json', { ...drained, captureSplit, postDrainCapture });
+              await expect.poll(() => counter('b', 'reads'), { timeout: 15000 }).toBeGreaterThan(drained.bReads + 160);
+              await expect
+                .poll(
+                  async () =>
+                    (await rpc<{ audio: { pcm_capture_count: number } }>('audio.report')).audio.pcm_capture_count,
+                  { timeout: 15000 },
+                )
+                .toBeGreaterThanOrEqual(postDrainCapture + 9600);
+              expect(await counter('a', 'reads')).toBe(drained.aReads);
+              for (const [field, value] of [
+                ['open', 1],
+                ['ready', 1],
+                ['closed', 0],
+                ['fault', 0],
+                ['epoch', 1],
+              ] as const)
+                expect(await word(symbol(`_lp_close_b_${field}`))).toBe(value);
+              expect(await word(stateByte(aState) + 20)).toBe(1);
+              const aOut = await counter('a', 'output');
+              // Stock stages mutate their output buffers after callback return.
+              // Private copies observe our raw callback boundary coherently.
+              const aRaw = await callbackSnapshot('a', before.aSnapshotSequence);
+              expect(aRaw.hex).toBe(Buffer.alloc(128).toString('hex'));
+              const bOut = await counter('b', 'output');
+              expect(aOut).not.toBe(bOut);
+              const bRaw = await callbackSnapshot('b', drained.bSnapshotSequence);
+              const values = bRaw.values;
+              expect(values.every(Number.isFinite)).toBe(true);
+              expect(Math.max(...values.map(Math.abs))).toBeLessThanOrEqual(0.25);
+              expect(values.some((value) => value !== 0)).toBe(true);
+              for (let i = 1; i < values.length; i++)
+                expect(Math.abs(values[i]! - values[i - 1]!)).toBeCloseTo(1 / 512, 6);
+              await rpc('pcm.tap', { action: 'capture_stop' });
+              voiceCapture = false;
+              const wav = fs.readFileSync(file);
+              const spectral = (lo: number, hi: number) => {
+                let re = 0,
+                  im = 0,
+                  sq = 0;
+                const n = Math.floor((hi - lo) / 2);
+                for (let i = 0; i < n; i++) {
+                  const value =
+                    (wav.readFloatLE(44 + (lo + 2 * i) * 4) + wav.readFloatLE(44 + (lo + 2 * i + 1) * 4)) / 2;
+                  expect(Number.isFinite(value)).toBe(true);
+                  const angle = (2 * Math.PI * 93.75 * i) / 48000;
+                  re += value * Math.cos(angle);
+                  im += value * Math.sin(angle);
+                  sq += value * value;
+                }
+                return { frames: n, component: (2 * Math.hypot(re, im)) / n, rms: Math.sqrt(sq / n) };
+              };
+              const total = (wav.length - 44) / 4;
+              const component = { before: spectral(0, captureSplit), after: spectral(postDrainCapture, total) };
+              for (const metric of Object.values(component)) {
+                expect(metric.frames).toBeGreaterThan(2048);
+                expect(metric.component).toBeGreaterThan(1e-7);
+                expect(metric.component).toBeGreaterThan(metric.rms * 0.01);
+              }
+              save('voices-close-final.json', {
+                component,
+                captureSplit,
+                postDrainCapture,
+                pilot,
+                before,
+                drained,
+                final: await snapshot(),
+                aRaw,
+                bRaw,
+                outputPointers: { a: aOut, b: bOut, externalBuffersMayBeModifiedByStock: true },
+                bBlock: values,
+                file,
+                sha256: sha256(fs.readFileSync(file)),
+                actualAudioReader: true,
+                limitation: 'Panel source-dispatch pilot and direct B block; mixed stock FX tails are retained.',
+              });
+            } finally {
+              for (const n of held) await releaseButton(`TRIG ${n}`);
+              if (voiceCapture) {
+                try {
+                  voiceCleanup.captureStop = await bounded(
+                    session.client.call('pcm.tap', { action: 'capture_stop' }),
+                    2000,
+                    'stop actual voice capture',
+                  );
+                } catch (error) {
+                  voiceCleanup.captureStop = { error: String(error) };
+                }
+              }
+              save('voices-cleanup.json', voiceCleanup);
+            }
           }
           if (closeControl) {
             phase = 'private diagnostic reader CLOSE, not an actual paused voice';

@@ -37,9 +37,11 @@ def dsp_objects():
         pytest.skip("assembler absent")
     objects = [
         pk_sharc.assemble(
-            pk_sharc.expand_includes(path.read_text(), [REPO_ROOT / "sdk"])
+            pk_sharc.expand_includes(
+                path.read_text(), [REPO_ROOT / "sdk/asm", REPO_ROOT / "sdk"]
+            )
         )
-        for path in (MOD / "src/dsp/lp0-proof.s", FIX)
+        for path in (MOD / "src/dsp/lp0-proof.s", FIX, MOD / "src/dsp/readers.s")
     ]
     return objects
 
@@ -56,9 +58,15 @@ def link_dsp(objects, data_address):
         for name, (sec, offset, _) in obj.data_symbols.items():
             syms[name] = sections[sec] + offset
     externs = {**syms, "_lp_back": BACK, "_test_return": BACK, "_lp_port_record": PORT}
-    bases = [0xB90000, 0xBA0000]
+    bases = [0xB90000, 0xBA0000, 0xBC0000]
     for obj, base in zip(objects, bases, strict=True):
-        externs.update({name: base + off for name, (off, _) in obj.symbols.items()})
+        externs.update(
+            {
+                name: base + off
+                for name, (off, _) in obj.symbols.items()
+                if name not in syms
+            }
+        )
     linked = [
         pk_sharc.link(obj, base, externs)
         for obj, base in zip(objects, bases, strict=True)
@@ -699,7 +707,8 @@ def test_close_invalid_identity_preserves_controls_and_history(dsp, fields):
     assert tail_reply(sess) == [0x03014241, *fields]
     assert val(sess, syms, "_lp_close_last_id") == 0
     assert (
-        val(sess, syms, "_lp_close_a_open") == val(sess, syms, "_lp_close_b_open") == 1
+        val(sess, syms, "_lp_close_a_open") == 0
+        and val(sess, syms, "_lp_close_b_open") == 1
     )
 
 
@@ -949,3 +958,246 @@ def test_cf_unrelated_malformed_frame_and_postclaim_rejection_do_not_poison_succ
     )
     assert cf_words(r[5], 4)[0] == cf_words(r[-1], 4)[0] == 3
     assert cf_words(r[-1], 1)[0] == 1
+
+
+# These consumers are the module's real callbacks, linked alongside the actual
+# LP0 callback and SDK kernel. No separately maintained reader model is used.
+VOICE_INPUT = 0x08034000
+VOICE_STATE = 0x08035000
+VOICE_OUT = 0x08036000
+VOICE_PARAMS = 0x08037000
+
+
+def voice(sess, action, track, *, state=None, mode=0x10000, reverse=False):
+    state = VOICE_STATE + track * 32 if state is None else state
+    inp = VOICE_INPUT + track * 16
+    sess.poke(VOICE_PARAMS, 256 if reverse else 0)
+
+    sess.poke(inp + 3, VOICE_OUT + track * 64)
+    sess.poke(inp + 4, track)
+    keep = {**REGS, "MODE1": mode, "I12": 0xB8AB00, "I13": BACK}
+    result = sess.call(
+        f"_lp_play_{action}",
+        {**keep, "R4": state, "R8": inp, "R12": VOICE_PARAMS},
+        max_steps=3000,
+        read_regs=tuple(keep),
+    )
+    assert result["halt"]["reason"] == "breakpoint", result["halt"]
+    assert all(result["regs"][name] == value for name, value in keep.items())
+    return result["regs"]["R0"]
+
+
+def ready_a(sess, syms):
+    # Use all 235 actual callbacks; the legacy transport helper preserves its
+    # unique payload words while this test validates publication sequencing.
+    for tag in range(235):
+        assert val(sess, syms, "_lp_close_a_ready") == 0
+        complete(sess, syms, tag)
+    assert val(sess, syms, "_lp_close_a_ready") == 1
+    assert val(sess, syms, "_lp_reader_a_source") == DEST
+    assert val(sess, syms, "_lp_reader_a_frames") == 480000
+
+
+@pytest.mark.parametrize("mode", [0x10000, 0x11000, 0x8000, 0x9000])
+def test_actual_readers_unready_a_and_exact_independent_b_pcm(dsp, mode):
+    sess, syms = fresh(dsp)
+    init(sess)
+    assert voice(sess, "note_on", 0, mode=mode) == 1
+    assert voice(sess, "render", 0, mode=mode) == 1
+    assert [sess.peek(VOICE_OUT + i) for i in range(32)] == [0] * 32
+    assert voice(sess, "note_on", 1, mode=mode) == 0
+    source = val(sess, syms, "_lp_reader_b_source")
+    sess.record_reads(source, 4096)
+    assert voice(sess, "render", 1, mode=mode) == 0
+    assert sess.stores
+    expected = [
+        struct.unpack("<I", struct.pack("<f", -0.25 + i / 512))[0] for i in range(32)
+    ]
+    assert [sess.peek(VOICE_OUT + 64 + i) for i in range(32)] == expected
+    assert val(sess, syms, "_lp_close_b_count") == 0
+    assert val(sess, syms, "_lp_reader_b_reads") == 1
+    assert val(sess, syms, "_lp_reader_a_reads") == 0
+    lower, upper = [val(sess, syms, name) for name in ("_lp_b_lower", "_lp_b_upper")]
+    assert lower + 16 == source
+    assert source + 4096 == upper
+    assert lower == syms["_lp_b_storage"] // 4
+    assert [sess.peek(lower + i) for i in range(16)] == [CANARY] * 16
+    assert [sess.peek(upper + i) for i in range(16)] == [CANARY] * 16
+
+
+def test_actual_a_full_transfer_publishes_once_and_reads_exact_pcm(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    ready_a(sess, syms)
+    # First packed transport words are 0x12340000, 0x12340001, ...
+    assert voice(sess, "note_on", 0) == 0
+    assert voice(sess, "render", 0) == 0
+    samples = [i // 2 if i % 2 == 0 else 0x1234 for i in range(32)]
+    assert [sess.peek(VOICE_OUT + i) for i in range(32)] == [
+        struct.unpack("<I", struct.pack("<f", n / 32768))[0] for n in samples
+    ]
+    assert val(sess, syms, "_lp_close_a_count") == 0
+    close_command(sess, syms)
+    assert voice(sess, "render", 0) == 1
+    assert [sess.peek(VOICE_OUT + i) for i in range(32)] == [0] * 32
+    assert val(sess, syms, "_lp_reader_a_reads") == 1
+
+
+@pytest.mark.parametrize("phase", [0, 42, 234])
+def test_actual_early_close_permanently_prevents_publication(dsp, phase):
+    sess, syms = fresh(dsp)
+    init(sess)
+    for tag in range(phase):
+        complete(sess, syms, tag)
+    close_command(sess, syms)
+    for tag in range(phase, 235):
+        complete(sess, syms, tag)
+    assert val(sess, syms, "_lp_close_a_closed") == 1
+    assert (
+        val(sess, syms, "_lp_close_a_ready") == val(sess, syms, "_lp_close_a_open") == 0
+    )
+    assert val(sess, syms, "_lp_reader_a_source") == 0
+    assert voice(sess, "note_on", 0) == 1
+
+
+def test_actual_terminal_rearm_failure_never_publishes(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    for tag in range(234):
+        complete(sess, syms, tag)
+    put(sess, syms, "_test_submit_result", 4)
+    complete(sess, syms, 234)
+    assert val(sess, syms, "_lp_status") == 4
+    assert (
+        val(sess, syms, "_lp_close_a_ready")
+        == val(sess, syms, "_lp_reader_a_source")
+        == 0
+    )
+
+
+@pytest.mark.parametrize("bad", ["epoch", "owner", "ready", "count"])
+def test_actual_denied_reader_never_reads_pcm(dsp, bad):
+    sess, syms = fresh(dsp)
+    init(sess)
+    voice(sess, "note_on", 1)
+    if bad == "epoch":
+        sess.poke(VOICE_STATE + 32 + 6, 2)
+    elif bad == "owner":
+        sess.poke(VOICE_STATE + 32 + 8, 0)
+    elif bad == "ready":
+        put(sess, syms, "_lp_close_b_ready", 0)
+    else:
+        put(sess, syms, "_lp_close_b_count", 0xFFFFFFFF)
+    sess.record_reads(val(sess, syms, "_lp_reader_b_source"), 4096)
+    assert voice(sess, "render", 1) == 1
+    assert not sess.stores
+    assert [sess.peek(VOICE_OUT + 64 + i) for i in range(32)] == [0] * 32
+    if bad == "count":
+        assert val(sess, syms, "_lp_close_b_count") == 0x7FFFFFFF
+        assert val(sess, syms, "_lp_close_b_fault") == 1
+
+
+def test_actual_paused_a_reader_keeps_close_pending_while_b_reads(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    ready_a(sess, syms)
+    voice(sess, "note_on", 0)
+    voice(sess, "note_on", 1)
+    pause = sess.symbols["_dk_sample_pcm16_neighbor"]
+    sess.runner.breakpoints = frozenset((BACK, pause))
+    consumer_stack = STACK - 0x2000
+    consumer_regs = {
+        **REGS,
+        "I6": consumer_stack,
+        "I7": consumer_stack,
+        "I12": 0xB8AB00,
+        "I13": BACK,
+    }
+    result = sess.call(
+        "_lp_play_render",
+        {**consumer_regs, "R4": VOICE_STATE, "R8": VOICE_INPUT},
+    )
+    assert result["final_pc_sw"] == pause
+    saved = sess.runner.state
+    frame_start = consumer_stack // 4 - 40
+    frame = [sess.peek(frame_start + i) for i in range(40)]
+    assert sum(value is not None for value in frame) >= 14
+    assert val(sess, syms, "_lp_close_a_count") == 1
+    sess.runner.breakpoints = frozenset((BACK,))
+    close_command(sess, syms, 1, 0)
+    assert val(sess, syms, "_lp_close_last_drained") == 0
+    assert tail_reply(sess)[0] == 0x01014241
+    assert voice(sess, "render", 1) == 0
+    assert val(sess, syms, "_lp_reader_b_reads") == 1
+    assert [sess.peek(frame_start + i) for i in range(40)] == frame
+    sess.runner.state = saved
+    sess.runner.set_watch_active(False)
+    assert sess.runner.run(3000).halt.reason == "breakpoint"
+    for name, expected in consumer_regs.items():
+        assert sess.runner.state.uregs[sess._st._seed_code(name)].value == expected
+    assert val(sess, syms, "_lp_close_a_count") == 0
+    assert tail_reply(sess) == [0x02014241, 1, 0, 1]
+    assert voice(sess, "render", 0) == 1
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_actual_b_reverse_and_end_clamping_read_only_owned_pcm(dsp, reverse):
+    sess, syms = fresh(dsp)
+    init(sess)
+    assert voice(sess, "note_on", 1, reverse=reverse) == 0
+    if not reverse:
+        # At the last frame, interpolation clamps its neighbor to that frame.
+        sess.poke(VOICE_STATE + 32 + 2, 8191)
+    assert voice(sess, "render", 1) == 0
+    values = [-0.125 + (i / 512 if reverse else 0) for i in range(32)]
+    assert [sess.peek(VOICE_OUT + 64 + i) for i in range(32)] == [
+        struct.unpack("<I", struct.pack("<f", value))[0] for value in values
+    ]
+    # Crossing either edge finishes and all subsequent output is zero.
+    sess.poke(VOICE_STATE + 32 + 2, 0xFFFFFFFF if reverse else 8192)
+    sess.record_reads(val(sess, syms, "_lp_reader_b_source"), 4096)
+    assert voice(sess, "render", 1) == 1
+    assert not sess.stores
+    assert [sess.peek(VOICE_OUT + 64 + i) for i in range(32)] == [0] * 32
+
+
+def test_actual_unbound_track_finishes_without_touching_b(dsp):
+    sess, syms = fresh(dsp)
+    init(sess)
+    assert voice(sess, "note_on", 2) == 1
+    sess.record_reads(val(sess, syms, "_lp_reader_b_source"), 4096)
+    assert voice(sess, "render", 2) == 1
+    assert not sess.stores
+    assert [sess.peek(VOICE_OUT + 128 + i) for i in range(32)] == [0] * 32
+
+
+@pytest.mark.parametrize("track", [0, 1])
+def test_actual_callback_snapshot_survives_downstream_output_overwrite(dsp, track):
+    sess, syms = fresh(dsp)
+    init(sess)
+    name = "ab"[track]
+    sequence = f"_lp_reader_{name}_snapshot_seq"
+    address = syms[f"_lp_reader_{name}_snapshot"] // 4
+    assert val(sess, syms, sequence) == 0  # Distinct from an emitted silent block.
+    if track == 0:
+        # No payload has published: the denied callback itself emits silence.
+        assert voice(sess, "note_on", track) == 1
+        assert voice(sess, "render", track) == 1
+    else:
+        assert voice(sess, "note_on", track) == 0
+        assert voice(sess, "render", track) == 0
+    emitted = [sess.peek(VOICE_OUT + track * 64 + i) for i in range(32)]
+    assert [sess.peek(address + i) for i in range(32)] == emitted
+    assert val(sess, syms, sequence) == 2
+    assert bool(any(emitted)) == (track == 1)
+    for i in range(32):
+        sess.poke(VOICE_OUT + track * 64 + i, 0x3F000000)
+    assert [sess.peek(address + i) for i in range(32)] == emitted
+    assert val(sess, syms, sequence) == 2
+    if track == 1:
+        # CLOSE turns a previously active raw snapshot into a fresh zero snapshot.
+        close_command(sess, syms, 1, 1)
+    assert voice(sess, "render", track) == 1
+    assert val(sess, syms, sequence) == 4
+    assert [sess.peek(address + i) for i in range(32)] == [0] * 32
+    assert val(sess, syms, f"_lp_close_{name}_count") == 0

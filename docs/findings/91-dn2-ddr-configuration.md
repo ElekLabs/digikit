@@ -229,3 +229,39 @@ path adds a positive initialization extent. It does not prove all runtime
 bounds, a usable sample allocation or free space. No explicit 8,192-word length
 or ring mask has been established in the descriptor. **[O]** Adjacent helpers
 `0xb80e48`/`0xb80e82` and runtime consumers remain to be audited.
+
+
+## Runtime ring consumer: conditional bounds
+
+**[D]** Independent original-byte inspection of DN2 1.12 section 7
+(SHA-256 `336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2`)
+follows consumer `0xb806f5`, called from `0x1c9b73`. It loads record word 16
+into I1 at `0xb80781`. Reads at `0xb8079b/9e/a4/a7` and the write at
+`0xb807dc` use 32-bit normal-word premodify accesses: four-byte DDR index
+scale, without advancing I1. Later read/write indices are masked to 13 bits
+at `0xb807e8/ee/f4/f7/fa`, and the write index is saved at `0xb80805`.
+
+The initial reads need a separate bound. R3 is TRUNC(record word 13), R5 is
+TRUNC(float(record word 14) minus record word 15, adding 8192 if negative),
+and the initial write index is record word 14. Only their adjacent read
+indices are initially masked. The loader's zero FILL extent
+`[0x28241290,0x2825d2b8)` covers word 13 for all sixteen records
+(byte alias `0x28253614 + 48 * track`); the checked constructors/reset omit
+that word. Adjacent `0xb80e48` clears record word 0, `0xb80e82` initializes
+coefficients, and `0xb805d8` resets record word 14: these are not allocators.
+
+**[O]** The delay clamp at `0xb80607` to 1..8191 alone does not prove the
+first read stays inside 32 KiB. With write index 1 and delay `1 + 2^-23`,
+round-to-nearest can turn the wrapped value into exactly 8192 before TRUNC.
+This is a counterexample to that inference, not an observed device overrun.
+Producer quantization, rounding mode, finite input guarantees and SIMD state
+across prior calls remain to be established. The dispatcher clears PEYEN at
+`0x1c94b0`, but that alone does not establish its value at every consumer call.
+
+Under SISD, the correct pointer, serialized initialized state and initial
+indices in 0..8191, accesses fit `[base,base+0x8000)` and the masked recurrence
+preserves the bound. Allowing the finite rounding endpoint requires at least
+`base+0x8004` for the first iteration; SIMD could add an adjacent lane.
+Public semantics: [Programming Reference](../sharc/SOURCES.md), Rev 1.5,
+printed pp. 6-9–12, 14-12–14, 20-13, 20-20 and 24-11. This narrows a stock
+buffer's use; it establishes neither free DDR nor a production sample pool.

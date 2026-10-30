@@ -1,7 +1,7 @@
 # Private DN2 LP0 receive and reply-extension diagnostic
 
-Version 0.3.0, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
-`core/expansion`; conflicts with `core/dsp-link`, `core/runtime` and
+Version 0.4.0, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
+`core/expansion`, `core/machines`, `core/params` and `core/dsp-voice`; conflicts with `core/dsp-link`, `core/runtime` and
 `core/dsp-ddr-proof`. Absent from device module sets. Never use on hardware.
 The earlier 0.1 memory-observed proof is retained in its committed checkpoints.
 
@@ -90,9 +90,10 @@ reject without replacing accepted history or changing controls. An exact retry
 rechecks the live epoch and drain; a new accepted ID clears the prior drained
 grant. No wrap is permitted.
 
-Two private six-word diagnostic records expose open, ready, closed, count, fault
-and epoch (`_lp_close_{a,b}_FIELD`). They initialize at epoch/open/ready 1 and
-closed/count/fault 0. **No audio reader is connected to them.** SDK close/drain
+Two private six-word records expose open, ready, closed, count, fault
+and epoch (`_lp_close_{a,b}_FIELD`). In 0.4 actual readers share these records.
+Both epochs initialize to 1; A initializes unready/open 0, closed/count/fault 0.
+B publishes only after its owned buffer initialization. SDK close/drain
 macros close admission and check exact count/fault. The callback rearms before
 its result becomes eligible for tail publication; rearm failure is global ERROR.
 The AudioTask tail checks a pending accepted request once per frame under its
@@ -121,9 +122,8 @@ One global sender owner serializes both paths. In-flight data finishes first;
 otherwise queued CLOSE has priority over queued data. No data begins while CLOSE
 is active. Separate bounded one-attempt CF seqlock reads and the IRQ-masked DSP
 snapshot cover this diagnostic's publication; READY-last alone is not a coherent
-multiword message protocol. No public ABI, physical cache or reader-retirement
-integration follows from these diagnostic controls. The separate 22-case logical
-fixture supplies actual PCM-reader interleavings, independently of this transport.
+multiword message protocol. No public ABI or physical cache safety follows from these controls. The separate
+22-case logical fixture remains independent of this transport and the real readers.
 
 ## Required private boot fixture
 
@@ -232,3 +232,80 @@ patchkit under the shared build lock. No emulator/core build occurred for this
 checkpoint; the native CLOSE run used the existing prebuilt daemon.
 For a shared prebuilt CF test runner, explicitly set `DIGI_LP0_CF_CALL`; otherwise
 the tests use `pk_cfcall.EXAMPLE` in the checkout and never implicitly build it.
+
+
+## 0.4 actual two-track diagnostic readers
+
+The explicitly selected DN2-only `lp_sampler` machine reserves private type 12.
+Its Reverse knob selects forward/backward bounded traversal. `dk_voice_in.track`,
+never the DN2 physical voice slot, selects A (track 0) or B (track 1); other tracks
+return DONE and zeros. Nine state words hold the six SDK cursor words and cached
+epoch/source/track. The real module callbacks use the existing SDK PCM16 kernel.
+Note-on pins descriptor reads; render pins source access. A masked admission,
+owner and epoch check precedes acquisition, and the exact MODE1 is restored before
+accessing descriptors or PCM. Release follows the final access. There is no note
+lifetime pin. Corrupt accounting poisons the count and closes admission.
+
+A uses the retained fixed private 960,000-byte experimental bank at `0x80800000`:
+480,000 frames at Q16 rate 65536. All 235 pages, full guards and successful
+terminal rearm must precede immutable descriptor publication and READY/open.
+CLOSE before or during loading sets sticky CLOSED; epoch 1 never reopens.
+Rearm failure cannot publish. Buffers remain until boot; no replacement exists.
+A's production ownership and hardware cache safety remain unproved.
+
+B uses one 16,512-byte module-owned reservation: a 64-byte lower guard, 16 KiB
+PCM16 payload (8,192 frames), then a 64-byte upper guard. Exported normal-word
+`_lp_b_lower`, `_lp_reader_b_source`, `_lp_b_upper` pointer values establish the
+layout independently of object section order. Its eight-frame triangle is
+`[-8192,-4096,0,4096,8192,4096,0,-4096]`, repeated after initialization. Q16 rate
+1024 gives 10.9227 seconds and 93.75 Hz. No additional DDR range is used.
+
+Per-track `_lp_reader_{a,b}_{notes,blocks,reads,state,output}` observations support
+the native diagnostic; `reads` counts admitted SDK kernel invocations, not memory
+transactions. Descriptor budgets are conservative instruction ceilings: 2500 for
+render (SDK ceiling 2148 plus bounded wrapper), 300 for note-on, depth 2 and
+128 stack bytes. These historical `cycles` fields are not hardware timing claims.
+New initialization/zero loops use software branches, with no new hardware loop.
+The bridge retains machine JUMP I12/I13, the kernel stack slot and exact MODE1.
+
+`DIGI_LP0_VOICES=1` selects the actual two-track case in the existing native test.
+It transfers known 200 Hz A PCM, selects both machines using live menu positions,
+and first requires independent source-track dispatch and concurrent counters.
+It stops on an ambiguous panel/held-note mapping. It then sends actual CLOSE A
+without reader-count injection, retains before/intermediate/final mail/ACK/control
+snapshots, and requires A reads to stop while B continues with its expected direct
+block and bounded 93.75 Hz WAV component. PENDING need not be observed between
+blocks. Mixed stock FX tails are retained. This case needs a new exact-hash 0.4
+boot fixture; **native execution remains pending parent preparation and review**.
+The injected-count 0.3 case remains separate. Historical 0.3 hashes/results above
+refer only to that checkpoint and must not be reused for 0.4.
+
+
+### Raw callback observation correction
+
+The first 0.4 native attempt established both source-track dispatches and actual
+CLOSE/drain, then failed an assertion that A's retained stock output buffer stayed
+zero. The DN2 gain/envelope/filter/overdrive chain subsequently modifies that buffer
+in place. It is not an immutable raw callback result; the earlier failed run and
+fixture remain historical evidence, not a passing 0.4 milestone.
+
+Each track now owns a private 32-float callback snapshot and
+`_lp_reader_{a,b}_snapshot_seq`. Sequence 0 means no block has been emitted; a
+writer publishes odd before copying and the next even value afterward. A snapshot
+is copied immediately after the SDK kernel or after this module's denied zero-fill,
+before returning to stock processing. The native reader obtains the adjacent
+sequence and 128 bytes in one synchronous DSP-worker peek, accepting only a
+positive even sequence newer than its baseline. Counters are monotonic
+within the bounded diagnostic run; wrap is not a supported observation interval.
+This private observation adds no backing lifetime pin or public ABI.
+
+The native test requires A's fresh zero snapshot to advance from its pre-CLOSE
+sequence and B's coherent raw triangle snapshot to advance after drain. External
+output pointers remain distinct observations, without immutable-content assertions.
+The mixed WAV's post-drain component still starts at the separate capture-origin
+marker after exact DRAINED/count zero. The 2,500-instruction render budget includes
+the SDK ceiling 2,148 and the bounded wrapper/snapshot copy; note budget remains
+300, depth 2 and stack 128 bytes. No hardware timing claim follows. A new exact-hash
+boot fixture is required for these new DSP bytes. The corrected native run
+`16929724-3d8c-49b4-bc79-b2161af79af9` passed with the exact v2 fixture;
+see finding 94 for hashes, raw snapshots, post-drain audio and proof limits.
