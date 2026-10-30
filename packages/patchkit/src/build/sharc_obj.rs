@@ -16,7 +16,7 @@
 //! 48-bit jump or call (low 24 bits of the instruction), type 12 the absolute 32-bit immediate or address (low 32 bits). Both carry the
 //! symbol's address; the addend is in the symbol name (`sym + 4`).
 
-use super::sharc_legal::legality_problems;
+use super::sharc_legal::{Placed, legality_problems, loop_end_problems};
 use crate::dko::{Dko, DkoReloc, DkoSection, DkoSymbol, FORMAT};
 use crate::error::*;
 use regex_lite::{Regex, RegexBuilder};
@@ -679,6 +679,8 @@ struct Linked {
     symbols: HashMap<String, i64>,
     checked: usize,
     ureg_class: Vec<String>,
+    /// Hardware loops whose end is not 48-bit (`sharc_legal::loop_end_problems`).
+    loop_end: Vec<String>,
 }
 
 /// Selache leaves a relocated field zero or holding the addend; anything else means we misread the relocation.
@@ -740,6 +742,7 @@ fn link(obj: &Obj, base_sw: i64, externs: &HashMap<String, i64>) -> Result<Linke
         symbols: syms,
         checked: 0,
         ureg_class: vec![],
+        loop_end: vec![],
     };
     verify(obj, &code, &mut out, externs)?;
     Ok(out)
@@ -789,6 +792,12 @@ fn verify(
         }
         by_parcel.insert(*parcel, d);
     }
+    let placed: Vec<Placed> = obj
+        .rows
+        .iter()
+        .filter_map(|(parcel, raw)| Some((*parcel, raw.len() as u8, *by_parcel.get(parcel)?)))
+        .collect();
+    linked.loop_end = loop_end_problems(&placed, "parcel ");
     // The emulator breaks the width tie with a lookahead over the successors; the silicon has no such choice. An instruction the emulator
     // would read with another extent than the assembler's runs differently there (finding 45).
     let boot = &linked.code_boot;
@@ -906,6 +915,14 @@ pub fn object_from_text(source: &str) -> Result<Dko> {
             "{} instruction(s) the ISA does not allow (finding 49 section 10): {}",
             linked.ureg_class.len(),
             linked.ureg_class.join("; ")
+        ));
+    }
+    if !linked.loop_end.is_empty() {
+        // a VISA instruction at the end of a hardware loop (sharc_legal, finding 91)
+        return Err(err!(
+            "{} hardware loop(s) end in instructions that are not 48-bit (finding 91; the last 11 instructions of a DO loop must be ISA, put .NOCOMPRESS; .COMPRESS; around a nested loop): {}",
+            linked.loop_end.len(),
+            linked.loop_end.join("; ")
         ));
     }
     let mut sections = vec![];
@@ -1038,6 +1055,7 @@ pub fn link_json(
         "symbols": syms.into_iter().map(|(n, a)| (n.clone(), serde_json::json!(a))).collect::<serde_json::Map<_, _>>(),
         "checked": l.checked,
         "ureg_class": l.ureg_class,
+        "loop_end": l.loop_end,
     }))
 }
 

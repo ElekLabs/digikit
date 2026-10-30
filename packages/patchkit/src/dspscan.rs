@@ -3,14 +3,15 @@
 //! A store through an index register (Types 3a, 3b, 3d, 15a, 15b) cannot take a source register of the same DAG: `DM(x, Ia) = Ureg`
 //! not a DAG1 register, `PM(x, Ic) = Ureg` not a DAG2 register (finding 49 section 10). The rule is
 //! `build::sharc_legal::legality_problems`, the same rules a module build fails on, with the post-modify load of a same-DAG register. The
-//! stock images have none.
+//! stock images have none. The scan also applies the loop-end rule (`build::sharc_legal::loop_end_problems`: no VISA instruction in the
+//! last 11 of a hardware loop).
 //!
 //! The scan decodes the code blocks of the boot stream with the aligned decode that built the sharcdb databases: every even offset
 //! decoded with the confident width, then the instructions a sweep from the start reaches, kept when at least [`MIN_DEPTH`] decoded
 //! instructions in a row end there. Code blocks are the stock ones (by target address; the DT2 and DN2 lists) and the run of blocks
 //! below 0x80000000 a patch appended before the final block. Data blocks are not scanned: decoded as code they give false stores.
 
-use crate::build::sharc_legal::legality_problems;
+use crate::build::sharc_legal::{Placed, legality_problems, loop_end_problems};
 use crate::dsp::{L2_BYTE_BASE, L2_BYTE_LIMIT, L2_SW_BASE, SW_ALIAS_BASE, Stream};
 use crate::error::*;
 use sharc_rt::decode::{self, DecodeKind};
@@ -146,14 +147,27 @@ pub fn scan(blob: &[u8]) -> Result<Vec<String>> {
         let Some(payload) = stream.read(b.target, b.count as usize) else {
             continue;
         };
-        for (off, d) in aligned(&payload) {
-            for msg in legality_problems(&d, "") {
+        let code = aligned(&payload);
+        for (off, d) in &code {
+            for msg in legality_problems(d, "") {
                 found.push(format!(
                     "block {idx} pc {:#x}{msg}",
                     base + (off / 2) as u32
                 ));
             }
         }
+        // the loop ends (finding 91): positions are short-word addresses
+        let placed: Vec<Placed> = code
+            .iter()
+            .map(|(off, d)| {
+                (
+                    (base + (off / 2) as u32) as u64,
+                    d.length_bytes.unwrap_or(2),
+                    *d,
+                )
+            })
+            .collect();
+        found.extend(loop_end_problems(&placed, &format!("block {idx} ")));
     }
     Ok(found)
 }

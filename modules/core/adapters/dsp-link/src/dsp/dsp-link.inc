@@ -229,17 +229,34 @@ _dl_copied:
     R5 = 0x2000000;
     R5 = R14 AND R5;                      // LAST
     IF EQ JUMP _dl_ack;
-    // The code is in place: drop what the instruction caches may hold for it. FLUSH CACHE clears the instruction-conflict
-    // cache; the ICAINV bit of SHL1C_CFG invalidates the L1 instruction cache (sc58x-2158x-prm, ch. 4 and 8, 33).
+    // The code is in place. The copy went through the data cache (write allocate, write back), so first write the dirty lines back to
+    // memory: a write-back invalidation of the DM and PM caches together, WB and INV set at the same time (sc58x-2158x-prm p. 8-11).
+    // It stalls the core until it is done. Then drop what the instruction caches hold: FLUSH CACHE clears the instruction-conflict
+    // cache (p. 4-50), the ICAINV bit of SHL1C_CFG invalidates the L1 instruction cache (p. 8-12, ch. 33). Invalidation and
+    // write-back invalidation are not mixed (p. 8-11), and twelve 48-bit instructions follow every cache MMR write (p. 8-9).
+    // The operation bits (ICAINV 6, DMCAINV 14, DMCAWB 15, PMCAINV 22, PMCAWB 23) are cleared from the value read: the stock start-up
+    // writes the INV bits together with the enables (0x414141), and the manual does not say whether they clear themselves or read back
+    // as 1. With C = the register without them, each operation is a write of C with its own bits set, and C is written between them
+    // (a 0 to 1 change for an edge trigger, no stale bit for a level trigger). Correct for both.
+    .NOCOMPRESS;
     FLUSH CACHE;
     R0 = DM(DL_SHL1C_CFG);
-    R3 = BSET R0 BY 6;
+    R3 = 0xFF3F3FBF;
+    R0 = R0 AND R3;                       // C
+    R3 = 0xC0C000;                        // DMCAWB, DMCAINV, PMCAWB, PMCAINV
+    R3 = R0 OR R3;
+    DM(DL_SHL1C_CFG) = R3;                // write-back invalidation of the DM and PM caches
+    NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
+    DM(DL_SHL1C_CFG) = R0;                // C
+    NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
+    R3 = BSET R0 BY 6;                    // ICAINV
     DM(DL_SHL1C_CFG) = R3;
     LCNTR = 40, DO _dl_wait UNTIL LCE;    // the invalidation takes about 32 cycles; keep the bit set that long
         NOP;
 _dl_wait: NOP;
-    DM(DL_SHL1C_CFG) = R0;                // the register as it was
+    DM(DL_SHL1C_CFG) = R0;                // C
     NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
+    .COMPRESS;
     R3 = 1;
     DM(_dl_status) = R3;
     JUMP _dl_ack;
