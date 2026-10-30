@@ -351,6 +351,48 @@ cache-key change or Device runtime option is included. Future Device constructio
 must start cold until its snapshot contract is validated. Full-reset implementation and native
 integration remain unstarted; the full merge gate remains deferred.
 
+### Shared interrupt prerequisite — Oracle timer collection
+
+**Implemented, bounded [D]:** PIT and DTIM banks now expose `advance_pending`
+separately from delivery, plus read-only `pending_vectors` in configured channel
+order. Held banks expose no requests. The existing `service_with` composes the
+same advancement and accepted-entry delivery logic in its original order.
+`Time::collect_oracle_timer_requests` advances both banks, collects raw vectors
+without INTC/CPU filtering, SR mutation or consumption, queues the existing DTIM
+REF host writes and invalidates Time's idle/blocked caches. Device policy rejects
+collection before mutation using the existing unsupported-delivery error.
+
+The named PIT/DTIM manual and machine Time suites pass **30 tests**, including
+five new collection cases; the three existing Time cache unit tests also pass.
+Coverage includes repeated collection at one boundary, no duplicate REF writes,
+later accepted delivery once, masked/IPL-blocked requests, guest clearing,
+disabling, held checkpoint state, explicit idle/blocked cache invalidation with no
+intervening writes, and rejection without mutation. Logs and exact
+commands/environment are recorded under
+`out/runs/storage-fault-proof/timer-collection-tests.log`,
+`timer-collection-cache-tests.log` and `timer-collection-invocation.json` in that
+directory. Independent review found no issues; coordinator scoped `test:changed`,
+documentation pathcheck and whitespace checks passed. The full gate is deferred.
+
+This is the Oracle scheduling model: PIT still does not assert guest PIF, and
+DTIM retains its existing REF host-write behavior. It establishes no Device timer
+status/acknowledgement semantics, shared arbitration, native integration or
+performance result. Default Time service ordering, Device storage routes,
+snapshots and daemon defaults are unchanged.
+
+**Next Device boundary [D/O]:** the independent manual audit identifies a
+separate event/status and acknowledgement contract before timing integration.
+MCF5441XRM p1156/p1159 describes PIT PIF setting at counter zero independently
+of PIE, and clearing by W1C or PMR write rather than CPU entry. DTIM REF/CAP
+report events independently of request enables, with W1C acknowledgement;
+ORRI/DMAEN gate requests (p1165/p1166). Stopping CLK differs from RST reset
+(p1164). These behaviors remain unimplemented in Device mode; Oracle's absent
+PIF assertion and entry consumption of pending ticks remain compatibility rules.
+An explicit Device event/latch/acknowledgement component is the next bounded
+step, before timer timing or native integration. Repeated non-1588 REF rearming
+remains ambiguous between p1166 Table 39-4 and the p1167 EN1588 prose; this audit
+does not establish full timer fidelity.
+
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in

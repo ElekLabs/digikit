@@ -268,10 +268,19 @@ impl PitBank {
         done: u64,
         intc: &IntcBank,
         sr: &mut SrTracker,
-        mut offer: impl FnMut(u16, u8) -> bool,
+        offer: impl FnMut(u16, u8) -> bool,
     ) -> Vec<(u16, u8)> {
+        self.advance_pending(done);
+        self.deliver_pending_with(intc, sr, offer)
+    }
+
+    /// Advance and latch pending ticks in the Oracle scheduling model.
+    /// Does not deliver interrupts or consult INTC/CPU masks. This preserves
+    /// Oracle behavior: PIT does not assert guest PIF; this is not Device
+    /// timer status/acknowledgement semantics.
+    pub fn advance_pending(&mut self, done: u64) {
         if self.held {
-            return Vec::new();
+            return;
         }
         let donef = done as f64;
         for channel_index in 0..self.channels.len() {
@@ -307,6 +316,31 @@ impl PitBank {
                     }
                 }
             }
+        }
+    }
+
+    /// Raw Oracle pending vectors in configured channel order, independent
+    /// of INTC/CPU masks. Held banks expose no requests. No state is changed.
+    pub fn pending_vectors(&self) -> Vec<u16> {
+        if self.held {
+            return Vec::new();
+        }
+        self.channels
+            .iter()
+            .filter(|&&ci| self.ch[ci].pending)
+            .map(|&ci| VECTORS[ci])
+            .collect()
+    }
+
+    // Preserve Oracle channel order and consume only accepted entries.
+    fn deliver_pending_with(
+        &mut self,
+        intc: &IntcBank,
+        sr: &mut SrTracker,
+        mut offer: impl FnMut(u16, u8) -> bool,
+    ) -> Vec<(u16, u8)> {
+        if self.held {
+            return Vec::new();
         }
         if !self.ch.iter().any(|c| c.pending) {
             return Vec::new();

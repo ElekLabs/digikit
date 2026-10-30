@@ -347,6 +347,29 @@ impl Time {
         }
     }
 
+    /// Advance both Oracle timer banks and collect raw pending vectors, without
+    /// delivery, INTC/CPU masking, SR changes or consumption. PIT vectors precede
+    /// DTIM vectors in each bank's configured order; this is not arbitration.
+    /// DTIM REF host writes remain queued for the CPU owner. This preserves the
+    /// Oracle scheduling model, not validated Device PIF/REF semantics.
+    pub fn collect_oracle_timer_requests(&mut self, done: u64) -> Result<Vec<u16>, TimeError> {
+        if self.policy == TimerPolicy::Device {
+            return Err(TimeError::DeviceInterruptDeliveryUnsupported);
+        }
+        self.service_not_before = None;
+        self.blocked = None;
+        self.pit.advance_pending(done);
+        let writes = self.dtim.advance_pending(done);
+        self.host_writes.extend(
+            writes
+                .into_iter()
+                .map(|(addr, byte)| HostWrite { addr, byte }),
+        );
+        let mut requests = self.pit.pending_vectors();
+        requests.extend(self.dtim.pending_vectors());
+        Ok(requests)
+    }
+
     /// Service PIT at the exact guest instruction boundary `done`.
     ///
     /// `PitBank::service` performs the sole `SrTracker::on_taken` call for

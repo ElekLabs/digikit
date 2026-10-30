@@ -550,3 +550,22 @@ Reference/Softfloat interchange and topology compatibility remain unknown; Devic
 snapshots remain unsupported. No format/cache-key change or Device runtime option
 was added. Future Device construction must start cold until separately validated.
 Full-reset implementation and native integration remain unstarted; the full merge gate is deferred.
+
+## Oracle timer collection prerequisite — 2026-10-31
+
+The shared interrupt work now separates existing PIT/DTIM advancement from
+accepted-entry delivery. `Time::collect_oracle_timer_requests` collects raw
+Oracle vectors and queues DTIM REF host writes without delivery or SR mutation;
+Device policy still rejects it. Thirty named timer/manual/Time tests and three
+existing Time cache unit tests pass, including direct idle/blocked cache
+invalidation checks without intervening writes. Commands and logs are under
+`out/runs/storage-fault-proof/timer-collection*`. Independent final review and
+coordinator verification passed; the full merge gate remains deferred.
+
+Next implement a bounded Device event/status/acknowledgement component from the
+independent manual audit before timing integration. PIT PIF and DTIM REF/CAP
+must remain distinct from enabled requests and CPU entry; current Oracle
+compatibility behavior does not establish hardware semantics. Repeated non-1588
+DTIM REF rearming remains open. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md)
+and [the plan](../plans/dsp-sdk-and-sampler.md). No default-policy, snapshot,
+native-boot, SHARC or PCM changes were made.

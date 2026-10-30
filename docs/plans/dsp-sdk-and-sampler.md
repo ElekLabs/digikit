@@ -3033,9 +3033,28 @@ selector is ready, but composing physical source eligibility and acknowledgement
 is still open; Device timer service currently rejects delivery.
 
 - [x] Audit the native boundary and identify why a storage-only mode switch is insufficient.
-- [ ] Decide whether to continue shared interrupt arbitration before sampler integration,
-  or return to SDK work while native storage acceptance stays blocked. The coordinator
-  recommends correctness-first emulator integration; a user scope question is pending.
+- [x] User approved correctness-first shared interrupt arbitration before further
+  sampler integration (2026-10-31). The scope question is resolved.
 
 This scope choice does not authorize default-policy changes, hardware experiments,
 snapshot format migration or weakening the native fault-history assertions.
+
+Implementation sequence: separate existing timer advancement/latching from
+delivery first, preserving Oracle behavior; then compose physical requests with
+storage and software force before a single selection/entry boundary. Timer
+status/acknowledgement semantics require manual-backed Device validation before
+claiming native integration. SSI, host input and fast/batched execution boundaries
+must participate too. Native TX35 uses vector 155 (INTC1 source 27), not DTIM3's
+vector 99. Panel RX is 154 and MIDI RX is 156.
+
+- [x] Expose non-delivering timer pending-request collection with Oracle regression checks.
+  PIT/DTIM advancement is separated from delivery; 30 named integration/manual
+  timer tests and three existing Time cache tests pass. Independent review found
+  no issues; coordinator path/layer and whitespace checks passed.
+- [ ] Establish Device timer status and guest acknowledgement behavior from the manual.
+- [ ] Compose physical sources and one shared delivery decision, including batching boundaries.
+- [ ] Validate explicit native storage execution and fault history on both firmware images.
+
+Payoff: trustworthy storage-failure tests while the normal runtime remains stable.
+Confidence is high for the timer separation, moderate for the wider integration;
+full reset behavior and physical-source interactions remain unresolved.

@@ -254,10 +254,19 @@ impl DtimBank {
         done: u64,
         intc: &IntcBank,
         sr: &mut SrTracker,
-        mut offer: impl FnMut(u16, u8) -> bool,
+        offer: impl FnMut(u16, u8) -> bool,
     ) -> DtimServiceResult {
+        let writes = self.advance_pending(done);
+        (self.deliver_pending_with(intc, sr, offer), writes)
+    }
+
+    /// Advance and latch pending ticks in the Oracle scheduling model.
+    /// Does not deliver interrupts or consult INTC/CPU masks. This preserves
+    /// Oracle REF register updates and returns their host writes; this is not
+    /// validated Device timer status/acknowledgement semantics.
+    pub fn advance_pending(&mut self, done: u64) -> Vec<(u32, u8)> {
         if self.held {
-            return (Vec::new(), Vec::new());
+            return Vec::new();
         }
         let donef = done as f64;
         let mut writes = Vec::new();
@@ -302,8 +311,34 @@ impl DtimBank {
                 }
             }
         }
+        writes
+    }
+
+    /// Raw Oracle pending vectors in configured channel order, independent
+    /// of INTC/CPU masks. Held banks expose no requests. No state is changed.
+    pub fn pending_vectors(&self) -> Vec<u16> {
+        if self.held {
+            return Vec::new();
+        }
+        self.channels
+            .iter()
+            .filter(|&&ci| self.ch[ci].pending)
+            .map(|&ci| VECTORS[ci])
+            .collect()
+    }
+
+    // Preserve Oracle channel order and consume only accepted entries.
+    fn deliver_pending_with(
+        &mut self,
+        intc: &IntcBank,
+        sr: &mut SrTracker,
+        mut offer: impl FnMut(u16, u8) -> bool,
+    ) -> Vec<(u16, u8)> {
+        if self.held {
+            return Vec::new();
+        }
         if !self.ch.iter().any(|c| c.pending) {
-            return (Vec::new(), writes);
+            return Vec::new();
         }
         let mut raised = Vec::new();
         for channel_index in 0..self.channels.len() {
@@ -326,7 +361,7 @@ impl DtimBank {
             self.ch[ci].fired += 1;
             raised.push((vec, lvl));
         }
-        (raised, writes)
+        raised
     }
 
     /// A guest write-1-to-clear of DTER's REF bit discards a pending tick
