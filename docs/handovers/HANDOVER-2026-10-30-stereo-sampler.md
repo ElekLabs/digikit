@@ -240,3 +240,11 @@ The routing delta passes 252 named Python checks, ten direct runtime host tests,
 and `mise run test:changed`. The explain-only gate plan retains the existing single
 Rust job. Commands/results are under `routing` in the cleanup provenance JSON;
 no full gate or native acceptance is repeated for this tooling-only change.
+
+DT2 source consistency now has a separate filesystem subsection in
+[finding 81](../findings/81-stock-sampler-dependencies.md). The original 1.17 audit
+finds per-read lookup/locking and a nonexclusive open bit, plus a bounded RPC
+writer path that can ignore busy deletion before opening the existing ID. This
+establishes no immutable source lease; it is not an observed race or a complete
+outer-admission audit. Next inspect mutation-under-mutex seams for partial-load
+invalidation, without selecting hooks, ABI or production policy.

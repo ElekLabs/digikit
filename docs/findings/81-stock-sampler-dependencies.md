@@ -411,3 +411,67 @@ and a duplicate existing key adds no reference. Record move `0x401e237a` also
 moves the tree/sentinel, so a raw record pointer is not stable. No balanced
 slot-independent pin is established in this family; this is not a production
 ownership decision or an exclusion proof for every holder.
+
+
+## DT2 file-source consistency, separate from pool references
+
+**[D]** A bounded original DT2 1.17 section 3 audit (SHA-256
+`a1e7b657b705eba1a19d81c33c1e11ba9c409816447ad74005d7bbf36da6d964`)
+checked 475 instructions across nine bodies, then 382 additional output-chain
+instructions and four sites. This is one original-byte audit, not [V]. The
+[path anchors](../../devices/fw/storage.toml) resolve open `0x40158902`, read
+`0x4015860a`, close `0x401588c0` and size `0x4015bcfe`. The four-word handle holds
+entry ID, position, write mode and open flag. Read body `0x4015824e` relooks up
+metadata/extents on each read under mutex `0x46f4deb0`, releasing its per-read
+references afterward. The API therefore supplies no immutable source lease for
+[the runtime source adapter](../../modules/core/runtime/src/rs/src/sample_source.rs).
+
+Open marking `0x4015bf40` sets an ID bit in `0x46f4ded0`; close `0x4015bf68`
+unconditionally clears it. Check `0x4015bf92` gates delete `0x40156e00` at
+`0x40156e18` and path move `0x40156b00` through call `0x40156b3a`. Open is not
+exclusive: the read/existing-write branches do not reject an already-open bit;
+`0x401589cc/ce/d4` retain ID, set mode and mark open. Create `0x4015ba88` allocates
+a new ID. A bit alone consequently does not establish balanced multi-handle
+ownership or prevent every writer from using an existing ID.
+
+The bounded RPC output chain is `0x40129424 → 0x401283e0 → 0x40128448 →
+0x4015946c → 0x40159506`, reaching File constructor `0x401590b2` in mode 1.
+Its delete attempt `0x4015910e → 0x40158e30 → 0x40157078 → 0x40156e94 →
+0x40156e00` ignores the delete result: the call at `0x40159114` overwrites it.
+It then opens mode `w` at `0x4015915c`; an existing ID can remain after a busy
+failed delete. Stream writes follow `0x40158c7a → 0x40158c18 → 0x4015866a`.
+
+**[O]** Outer RPC admission is not fully audited. These source-level facts do not
+establish an observed race or acceptance of every Transfer request. Per-read
+locking and open marking do not prove same-length replacement detection or
+consistent multi-read content. Next audit the mutation-under-mutex seams as
+possible points to invalidate a partial load on change; no hook, public ABI,
+product limit or production policy is selected. DN2 snapshot generation/SHA is
+already recorded in [the source inventory](../plans/dsp-sdk-and-sampler.md);
+it is a separate source path, not a lease claim for this DT2 filesystem or SHARC
+pool-reference family.
+
+### Mutation seams under the filesystem mutex
+
+**[D]** In the same original section 3 audit, 18 additional instruction heads
+were checked. Write `0x401586ae` acquires mutex `0x46f4deb0`; `0x401586b4`
+loads file ID from handle word 0 into D7. The first potential extent mutation is
+`0x401586e0 → 0x40158448`, whose allocation arms at `0x401584f0/58596` reach
+`0x401581dc`. Partial payload uses memcpy at `0x4015878a`; full blocks instead
+follow `0x40158758 → 0x40155e84 → 0x40155ed8 → 0x4012e39c` (block write),
+bypassing that memcpy. Length is stored at `0x401587bc`; unlock is `0x401587f8`.
+
+Delete `0x40156e00` does not acquire the mutex itself. Known path wrappers
+`0x401570a6..570bc`, handle wrapper `0x401570cc` and recursive `0x40157192`
+hold the same mutex. File ID is the second argument, in D2 at `0x40156e08`.
+Directory unlink `0x40156e52 → 0x40156bf6` stores at `0x40156c5a/60`;
+reclaim follows `0x40156e6e → 0x4015614e`. Visible additional paths include
+reserve `0x40158810 → 0x40158448` and recursive alternate reclaim
+`0x4015711a → 0x4015614e`.
+
+**[O]** These are candidate interception seams, not complete writer coverage.
+Create/ID reuse, reset and other block writers remain open. A proposed generation
+for the selected file could reject an unpublished load on mutation only if every
+mutation/reclaim/reset path is covered and counter wrap fails closed. No such
+mechanism, public API or product policy is implemented; neither file immutability
+nor DSP pool ownership follows from this audit.

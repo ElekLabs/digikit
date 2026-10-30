@@ -2605,3 +2605,20 @@ Routing validation passes 252 tests across the named selection/verify files and
 the ten-test direct runtime owner. `mise run test:changed` passes fast checks;
 `verify --only rust-tests --explain` retains one existing Rust job. No full gate,
 runtime source/object rebuild or device acceptance is repeated for this routing delta.
+
+### DT2 source consistency audit
+
+**[D/O]** The bounded original DT2 1.17 filesystem audit confirms per-read
+metadata/extent lookup and a nonexclusive open bit, not an immutable lease.
+The audited RPC output constructor can ignore failed deletion and then open the
+existing ID for writing; outer request admission remains incomplete and no race
+was observed. See [finding 81](../findings/81-stock-sampler-dependencies.md).
+Next audit mutation-under-mutex seams that could invalidate a partial load on
+source change, independently of SHARC pool references. No hook, ABI, product cap
+or production memory policy is selected; DN2 generation/SHA remains a separate path.
+
+- [ ] Complete mutation/reclaim/reset/ID-reuse coverage around the now-identified
+  filesystem mutex seams before considering per-selected-file generation for
+  rejecting unpublished loads; require fail-closed counter wrap. Seams found are
+  not complete coverage, an implementation or a DSP pool ownership claim. See
+  [finding 81](../findings/81-stock-sampler-dependencies.md).
