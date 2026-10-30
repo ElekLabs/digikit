@@ -97,6 +97,11 @@ pub const PH_IDLE: u32 = 0;
 pub const PH_SEND: u32 = 1;
 pub const PH_ROWS: u32 = 2;
 const PH_QUARANTINE: u32 = 3;
+// Cleanup could not establish row invalidation/CF drain. Keep every allocation
+// and transfer source untouched until reboot; unlike PH_QUARANTINE, never poll.
+const PH_RETAINED: u32 = 4;
+
+pub unsafe fn retained() -> bool { ds().phase == PH_RETAINED }
 
 // words of `dyndsp_info` (byte offset / 4)
 const I_MAGIC: usize = 0;
@@ -239,15 +244,18 @@ fn fn_addr(f: unsafe extern "C" fn()) -> usize {
 
 /// The info table of `core/dyndsp`, or null.
 unsafe fn info() -> *const u32 {
-    let a = fn_addr(dyndsp_info);
-    if a == 0 {
-        return core::ptr::null();
+    #[cfg(test)] { return crate::cleanup_tests::voice_info(); }
+    #[cfg(not(test))] {
+        let a = fn_addr(dyndsp_info);
+        if a == 0 {
+            return core::ptr::null();
+        }
+        let p = a as *const u32;
+        if read_volatile(p.add(I_MAGIC)) != INFO_MAGIC {
+            return core::ptr::null();
+        }
+        p
     }
-    let p = a as *const u32;
-    if read_volatile(p.add(I_MAGIC)) != INFO_MAGIC {
-        return core::ptr::null();
-    }
-    p
 }
 
 unsafe fn iw(k: usize) -> u32 {
@@ -256,18 +264,21 @@ unsafe fn iw(k: usize) -> u32 {
 
 /// The table of `core/dynfx`, or null (also when it is for another device or has another row size than the runtime knows).
 unsafe fn finfo() -> *const u32 {
-    let a = fn_addr(dynfx_info);
-    if a == 0 || info().is_null() {
-        return core::ptr::null();
+    #[cfg(test)] { return crate::cleanup_tests::fx_info(); }
+    #[cfg(not(test))] {
+        let a = fn_addr(dynfx_info);
+        if a == 0 || info().is_null() {
+            return core::ptr::null();
+        }
+        let p = a as *const u32;
+        if read_volatile(p.add(F_MAGIC)) != FX_INFO_MAGIC
+            || read_volatile(p.add(F_DEVICE)) != iw(I_DEVICE)
+            || read_volatile(p.add(F_WORDS)) != FX_ROW_WORDS
+        {
+            return core::ptr::null();
+        }
+        p
     }
-    let p = a as *const u32;
-    if read_volatile(p.add(F_MAGIC)) != FX_INFO_MAGIC
-        || read_volatile(p.add(F_DEVICE)) != iw(I_DEVICE)
-        || read_volatile(p.add(F_WORDS)) != FX_ROW_WORDS
-    {
-        return core::ptr::null();
-    }
-    p
 }
 
 unsafe fn fiw(k: usize) -> u32 {
@@ -372,19 +383,34 @@ unsafe fn have_link() -> bool {
 }
 
 unsafe fn call_send(dst: u32, buf: *const u8, len: u32) -> i32 {
-    let f: unsafe extern "C" fn(u32, *const u8, u32) -> i32 = core::mem::transmute(fn_addr(dl_send));
-    f(dst, buf, len)
+    if retained() { return -2; }
+    #[cfg(test)] { return crate::cleanup_tests::send_image(dst, buf, len); }
+    #[cfg(not(test))] {
+        let f: unsafe extern "C" fn(u32, *const u8, u32) -> i32 = core::mem::transmute(fn_addr(dl_send));
+        f(dst, buf, len)
+    }
 }
 
 unsafe fn call_send_win(win: u32, dst: u32, buf: *const u32, len: u32) -> i32 {
-    let f: unsafe extern "C" fn(u32, u32, *const u32, u32) -> i32 =
-        core::mem::transmute(fn_addr(dl_send_win));
-    f(win, dst, buf, len)
+    #[cfg(test)] { return crate::cleanup_tests::send_word(win, dst, buf, len); }
+    #[cfg(not(test))] {
+        let f: unsafe extern "C" fn(u32, u32, *const u32, u32) -> i32 =
+            core::mem::transmute(fn_addr(dl_send_win));
+        f(win, dst, buf, len)
+    }
 }
 
 unsafe fn call_poll(s: *mut DlStatus) -> i32 {
-    let f: unsafe extern "C" fn(*mut DlStatus) -> i32 = core::mem::transmute(fn_addr(dl_poll));
-    f(s)
+    #[cfg(test)] {
+        let (state, err) = crate::cleanup_tests::poll_state();
+        (*s).state = state;
+        (*s).err = err;
+        return 0;
+    }
+    #[cfg(not(test))] {
+        let f: unsafe extern "C" fn(*mut DlStatus) -> i32 = core::mem::transmute(fn_addr(dl_poll));
+        f(s)
+    }
 }
 
 pub unsafe fn init_once() {
@@ -840,6 +866,7 @@ unsafe fn put_le16(p: *mut u8, v: u32) {
 /// Reserve everything a module's DSP part needs: a range in the area, an arena block with the relocated image, the voice rows.
 /// Nothing is sent yet. On an error nothing is left reserved.
 pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
+    if retained() { return E_BUSY; }
     let d = ds();
     let len = (extent(job.image_size, job.bss, job.voices, job.nvoice, job.vstride, job.fxs, job.nfx) + GRANULE - 1) & !(GRANULE - 1);
     let off = match alloc_range(len, job.align) {
@@ -1124,6 +1151,7 @@ pub unsafe fn module_of_fx_table_row(r: u32) -> Option<usize> {
 
 /// Undo a `reserve` that was never started (the CF side failed after it).
 pub unsafe fn cancel(rec: usize) {
+    if retained() { return; }
     let d = ds();
     if d.send_buf != 0 {
         arena::free(d.send_buf as *mut u8);
@@ -1136,6 +1164,7 @@ pub unsafe fn cancel(rec: usize) {
 
 /// Start writing `value` into word `word` of window `win` (1 the voice rows, 2 the effect rows); false when the link refused (busy: try again).
 unsafe fn start_word(win: u32, word: u32, value: u32) -> bool {
+    if retained() { return false; }
     let d = ds();
     // the link sends the bytes of the buffer as little-endian DSP words; this is a big-endian ColdFire long
     d.word = (value << 24) | ((value & 0xff00) << 8) | ((value >> 8) & 0xff00) | (value >> 24); // byte swap by hand: no libgcc here
@@ -1191,65 +1220,82 @@ unsafe fn write_word_blocking(win: u32, word: u32, value: u32) -> bool {
 }
 
 /// Free the rows module record `rec` published: the type word first, so the scan skips the row at once.
-unsafe fn clear_rows(rec: usize) {
+unsafe fn clear_rows(rec: usize) -> bool {
     let d = ds();
     let first = iw(I_VFIRST);
     let mut k = 0;
     while k < MAX_ROWS {
         if d.row_owner[k] == rec as u8 + 1 && d.row_pub[k] != 0 {
-            write_word_blocking(WIN_VOICES, ROW_WORDS * (first + k as u32), FREE_TYPE);
+            if !write_word_blocking(WIN_VOICES, ROW_WORDS * (first + k as u32), FREE_TYPE) { return false; }
             d.row_pub[k] = 0;
         }
         k += 1;
     }
+    true
 }
 
 /// Free the effect rows module record `rec` published: the pc first, so the chain skips the row at once; then the adapter's words (`was`, `dis`, the fault
 /// window and its count) back to 0, so the next effect on the row starts clean.
-unsafe fn clear_fx_rows(rec: usize) {
+unsafe fn clear_fx_rows(rec: usize) -> bool {
     let d = ds();
     if finfo().is_null() {
-        return;
+        // Missing info is harmless only when no owned row was published.
+        let mut k = 0;
+        while k < MAX_FX {
+            if d.fx_owner[k] == rec as u8 + 1 && d.fx_pub[k] != 0 { return false; }
+            k += 1;
+        }
+        return true;
     }
     let first = fiw(F_FIRST);
     let mut k = 0;
     while k < MAX_FX {
         if d.fx_owner[k] == rec as u8 + 1 && d.fx_pub[k] != 0 {
             let at = FX_ROW_WORDS * (first + k as u32);
-            write_word_blocking(WIN_FX, at + FXW_PC, FX_FREE_PC);
+            if !write_word_blocking(WIN_FX, at + FXW_PC, FX_FREE_PC) { return false; }
             // the next effect on the row starts on the master route with no amounts (finding 62)
-            write_word_blocking(WIN_FX, at + FXW_ROUTE, 0);
+            if !write_word_blocking(WIN_FX, at + FXW_ROUTE, 0) { return false; }
             let mut w = 0;
             while w < 4 {
-                write_word_blocking(WIN_FX, at + FXW_AMT0 + w, 0);
+                if !write_word_blocking(WIN_FX, at + FXW_AMT0 + w, 0) { return false; }
                 w += 1;
             }
-            write_word_blocking(WIN_FX, at + FXW_WAS, 0);
-            write_word_blocking(WIN_FX, at + FXW_MIX, MIX_ONE);
-            write_word_blocking(WIN_FX, at + FXW_DIS, 0);
-            write_word_blocking(WIN_FX, at + FXW_WSTART, 0);
-            write_word_blocking(WIN_FX, at + FXW_WCOUNT, 0);
+            if !write_word_blocking(WIN_FX, at + FXW_WAS, 0) { return false; }
+            if !write_word_blocking(WIN_FX, at + FXW_MIX, MIX_ONE) { return false; }
+            if !write_word_blocking(WIN_FX, at + FXW_DIS, 0) { return false; }
+            if !write_word_blocking(WIN_FX, at + FXW_WSTART, 0) { return false; }
+            if !write_word_blocking(WIN_FX, at + FXW_WCOUNT, 0) { return false; }
             d.fx_pub[k] = 0;
         }
         k += 1;
     }
+    true
 }
 
-/// Take the DSP part of module record `rec` down (a failed boot-time load): its voice rows, then its range. (The machine row is already gone.)
-pub unsafe fn release(rec: usize) {
-    let d = ds();
-    if d.mod_len[rec] == 0 {
-        return;
-    }
-    clear_rows(rec);
-    clear_fx_rows(rec);
-    unreserve(rec);
+/// Invalidate published DSP rows; does not release code/state or transfer sources.
+pub unsafe fn quiesce(rec: usize) -> bool {
+    if retained() { return false; }
+    if ds().mod_len[rec] == 0 { return true; }
+    clear_rows(rec) && clear_fx_rows(rec)
+}
+
+/// Release only after the caller has confirmed invalidation and CF admission/drain.
+pub unsafe fn release_range(rec: usize) {
+    if !retained() { unreserve(rec); }
+}
+
+pub unsafe fn release(rec: usize) -> bool {
+    if !quiesce(rec) { ds().phase = PH_RETAINED; return false; }
+    release_range(rec);
+    true
 }
 
 // ---- the state machine --------------------------------------------------------------------------------------------------------
 
 /// Hand a load over to the state machine: the CF side is complete and described by `p`; `reserve` has run for `p.rec`.
 pub unsafe fn launch(mut p: Pending) {
+    // A prepared reservation, if any, must remain owned after global retention.
+    if retained() { return; }
     let d = ds();
     p.send_base = d.send_base;
     p.send_len = d.send_len;
@@ -1275,6 +1321,7 @@ unsafe fn start(p: Pending) {
 
 /// The load in progress is over: start the next waiting one, or go idle.
 unsafe fn next_job() {
+    if retained() { return; }
     let d = ds();
     if d.nwait > 0 {
         let p = d.waiting[0];
@@ -1293,17 +1340,19 @@ unsafe fn next_job() {
 unsafe fn fail(code: i32) {
     let d = ds();
     let rec = d.pending.rec as usize;
-    clear_rows(rec);
-    clear_fx_rows(rec);
+    // Teardown invalidates once, after closing/waiting CF slots, before any fini/free.
+    let reclaimed = crate::loader::undo_early(rec) == OK;
+    crate::boot::note_result(d.pending.boot_idx, code);
+    d.failures += 1;
+    crate::st().last_result = code;
+    if !reclaimed {
+        d.phase = PH_RETAINED;
+        return;
+    }
     if d.pending.send_buf != 0 {
         arena::free(d.pending.send_buf as *mut u8);
         d.pending.send_buf = 0;
     }
-    // the machine was published at boot: take it down again (rows, `fini`, memory)
-    crate::loader::undo_early(rec);
-    crate::boot::note_result(d.pending.boot_idx, code);
-    d.failures += 1;
-    crate::st().last_result = code;
     next_job();
 }
 
@@ -1313,7 +1362,7 @@ pub unsafe fn step() {
     if d.magic != STATE_MAGIC {
         return;
     }
-    if d.phase == PH_IDLE {
+    if d.phase == PH_IDLE || d.phase == PH_RETAINED {
         return;
     }
     d.ticks = d.ticks.saturating_add(1);
@@ -1497,4 +1546,9 @@ pub unsafe fn sample_poll() -> Option<bool> {
 }
 pub unsafe fn sample_idle() -> bool {
     ds().phase == PH_IDLE && ds().nwait == 0
+}
+
+#[cfg(test)]
+pub(super) unsafe fn cleanup_test_first_fit(len: u32, align: u32) -> Option<u32> {
+    alloc_range(len, align)
 }

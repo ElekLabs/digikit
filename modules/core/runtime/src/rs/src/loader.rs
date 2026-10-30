@@ -99,6 +99,7 @@ pub unsafe fn load(path: *const u8) -> i32 {
         return E_TABLE;
     }
     let r = load_inner(path);
+    #[cfg(not(test))]
     crate::table::check();
     r
 }
@@ -379,6 +380,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         m.used = 1;
         let r = complete(rec, reg, reg_size, initaddr, mask, &fns);
         if r != OK {
+            if dsp::retained() { return E_BUSY; }
             dsp::cancel(rec);
             if !crate::files::retire(rec) { return E_BUSY; }
             arena::free(mem);
@@ -402,7 +404,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
     }
     let r = complete(rec, reg, reg_size, initaddr, mask, &fns);
     if r != OK {
-        if !crate::files::retire(rec) { return E_BUSY; }
+        if dsp::retained() || !crate::files::retire(rec) { return E_BUSY; }
         arena::free(mem);
         m.used = 0;
     }
@@ -427,7 +429,7 @@ unsafe fn complete(
     if r != OK {
         crate::registry::remove(owner);
         crate::files::retire(rec);
-        dsp::release(rec);
+        if !dsp::release(rec) { return E_BUSY; }
         return r;
     }
     if init != 0 {
@@ -437,7 +439,7 @@ unsafe fn complete(
             crate::files::retire(rec);
             crate::upload::release_cmds(owner);
             crate::registry::remove(owner);
-            dsp::release(rec);
+            if !dsp::release(rec) { return E_BUSY; }
             return E_INIT;
         }
     }
@@ -457,8 +459,8 @@ unsafe fn complete(
 }
 
 /// The DSP part of a module published at boot failed (the machine rows, `init` and the slots are in already): take it down again.
-pub unsafe fn undo_early(rec: usize) {
-    unload_rec(rec);
+pub unsafe fn undo_early(rec: usize) -> i32 {
+    unload_rec(rec)
 }
 
 /// While the boot hook loads the selection: the CF part of a module with DSP code is published at once (the machine view is built
@@ -472,6 +474,7 @@ pub static mut BOOT_IDX: u32 = u32::MAX;
 /// it (with the in-use scan) is archived with hot reload. The tables are checked after it (`table::check`).
 pub unsafe fn unload_rec(rec: usize) -> i32 {
     let r = unload_rec_inner(rec);
+    #[cfg(not(test))]
     crate::table::check();
     r
 }
@@ -504,27 +507,26 @@ unsafe fn unload_rec_inner(rec: usize) -> i32 {
         }
         spin += 1;
         if spin > SPIN {
-            // give up: put the slots back, the module stays loaded
-            idx = 0;
-            while idx < SLOTS {
-                if m.slot_mask & (1 << idx) != 0 {
-                    write_volatile(addr_of_mut!(s.slots[idx]), m.slot_fn[idx]);
-                }
-                idx += 1;
-            }
+            // Failed boot teardown stays closed; retain storage until reboot.
             return E_BUSY;
         }
     }
+    // DSP rows must be invalidated before fini can mutate/release module state.
+    if !dsp::quiesce(rec) { return E_BUSY; }
     // 3. fini, 4. free
     if m.fini != 0 {
-        let call: unsafe extern "C" fn(*const Api) = core::mem::transmute(m.fini as usize);
-        crate::dlog::call_fini(rec as usize, call, addr_of!(dkrt_api));
+        #[cfg(test)] crate::cleanup_tests::fini(rec, m.fini);
+        #[cfg(not(test))] {
+            let call: unsafe extern "C" fn(*const Api) = core::mem::transmute(m.fini as usize);
+            crate::dlog::call_fini(rec as usize, call, addr_of!(dkrt_api));
+        }
     }
     // the SysEx commands it registered are released with it
     crate::upload::release_cmds(rec as u8 + 1);
     // the machine row first, then the DSP voice rows, then the range in the DSP area
-    crate::registry::remove(rec as u8 + 1);
-    dsp::release(rec);
+    #[cfg(test)] crate::cleanup_tests::registry_remove(rec as u8 + 1);
+    #[cfg(not(test))] crate::registry::remove(rec as u8 + 1);
+    dsp::release_range(rec);
     arena::free(m.base as *mut u8);
     m.used = 0;
     m.slot_mask = 0;

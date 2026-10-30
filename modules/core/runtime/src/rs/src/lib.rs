@@ -7,9 +7,10 @@
 //!
 //! Rules: task context only (never from an interrupt); no `core::fmt`; every `extern "C"` function takes and returns
 //! integers or pointers. Built with rustc_codegen_gcc for -mcpu=54418 (finding 26).
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![allow(static_mut_refs)]
 
+#[cfg(not(test))]
 use core::panic::PanicInfo;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
@@ -36,6 +37,7 @@ pub mod store;
 mod table;
 pub mod upload;
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     crate::crash::panic()
@@ -193,6 +195,7 @@ unsafe fn word_at_literal(lit: *const u32) -> Option<u32> {
 
 /// The firmware's DSP block counter (1500 per second, from boot; wraps), `None` when the anchor does not point at a DDR word.
 /// `BLOCK_COUNTER_LIT` is the 4-byte address literal in the firmware's code, whose value is the address of the word.
+#[cfg(not(test))]
 pub unsafe fn fw_blocks() -> Option<u32> {
     word_at_literal(addr_of!(dkfw::link::BLOCK_ISR_COUNTER_LIT) as *const u32)
 }
@@ -230,10 +233,12 @@ pub unsafe fn block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
     raw_block_write(sector, bytes, buf)
 }
 
+#[cfg(not(test))]
 pub fn irq_mask() -> u32 {
     unsafe { dkrt_irq_mask() }
 }
 
+#[cfg(not(test))]
 pub fn irq_restore(sr: u32) {
     unsafe { dkrt_irq_restore(sr) }
 }
@@ -1082,3 +1087,14 @@ unsafe fn mailbox_select(arg: *const u8, copy: u32) -> i32 {
         boot::selection_set_one(copy, &sel)
     }
 }
+
+#[cfg(test)]
+mod cleanup_tests;
+
+#[cfg(test)]
+pub fn irq_mask() -> u32 { 0 }
+#[cfg(test)]
+pub fn irq_restore(_: u32) {}
+
+#[cfg(test)]
+pub unsafe fn fw_blocks() -> Option<u32> { None }

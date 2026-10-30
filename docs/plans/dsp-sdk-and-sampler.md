@@ -2535,3 +2535,60 @@ proof of global gate stability, every lifecycle or production route integration.
 Exact commands and results are under `route_extension` in ignored
 `out/runs/dsp-stereo-proof/commands.json`; [finding 96](../findings/96-stereo-machine-processing.md)
 records the page/encoder calibration and profile identities.
+
+**[D/O] Callback lifetime next step:** the audited uninterrupted AudioTask call
+chain serializes only its own calls, and adapter output use continues after module
+return. Proposal: keep cursor/scratch boot-pinned and untouched by backing
+replacement; audit selection/row state reuse and the existing callback boundary
+before binding install/reset. Non-reentrancy remains open; tracing is optional
+and cannot prove safety from absence. See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
+
+**[D/O] Boot-load exception:** failed row invalidation can clear publication flags,
+then unreserve DSP/free CF storage, statically permitting erroneous reuse. Normal
+boot pinning is insufficient until this cleanup path is fixed; actual overlap is
+not observed and ACK/block-tail ordering remains under audit. See
+[finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
+
+### Failed DSP-load cleanup retention fix
+
+- [x] Make row invalidation report failure without discarding publication markers;
+  stop after the first failed write and separate invalidation from unreserve.
+- [x] Require confirmed DSP invalidation after CF admission/drain and before fini,
+  registry removal or DSP/CF free; uncertain cleanup retains ownership/storage.
+- [x] Stop the load queue in a distinct sticky retained phase on cleanup failure,
+  report the original error once and freeze shared transfer sources until reboot.
+- [x] Exercise actual runtime branches through bounded cfg(test)-only host boundary
+  injection, including refusal/error/no ACK, success and prepublication failure.
+  Unit state-machine evidence does not establish physical DSP callback quiescence.
+
+The ten actual-runtime host cleanup tests pass; the fresh ColdFire runtime object
+re-decodes and is source-current. Dedicated unchanged pluck artifacts for DT2/DN2
+pass coordinator-owned normal-loader acceptance on DT2 1.17 and DN2 1.12.
+Both upload/persist/select/reboot and DSP publication/no-fault cases pass; this is
+not rendered-audio correctness or native failure-injection coverage. The cfg(test) seam
+mocks hardware/link and CF pointer boundaries only; physical DSP quiescence,
+ACK/block-tail ordering and callback non-reentrancy remain open. Exact commands
+and artifacts: `out/runs/dsp-cleanup-retention/commands.json`.
+
+### Source-format inventory before the next integration slice
+
+**[D/O]** [WAV conversion](../../packages/dksample/src/wav.rs) accepts one/two
+channels and produces 48 kHz interleaved PCM16; the
+[canonical native file](../../packages/dksample/src/native.rs) has a 64-byte
+header, BE PCM and 16-byte trailer (header byte 1 stereo, +4 PCM bytes, +8 rate).
+The runtime [mono decoder](../../modules/core/runtime/sdk/src/sample.rs) and
+[job](../../modules/core/runtime/sdk/src/sample_job.rs) 8,192-frame bound are proof
+restrictions, not product caps. The allocation-free
+[stream parser](../../modules/core/runtime/sdk/src/sample_stream.rs) already checks
+mono/stereo extents, `pcm + 80` and a caller maximum, but is not wired to source/transport.
+[Source access](../../modules/core/runtime/src/rs/src/sample_source.rs) uses whole-file
+DT2 FS reads without a stable lease/same-length replacement check; DN2 store uses
+snapshot generation plus SHA. Stock DT2 pool planes differ from disk interleaving.
+The converter's 64 MiB input/128 MiB PCM ceilings are software constraints, not RAM
+ownership. Checked stereo extents, source consistency and an owned pool remain
+open end to end; no new ABI, product limit or production backing is selected.
+
+- [ ] Route the nested standalone dkrt cleanup tests into the normal owner/gate
+  selection; current root workspace Rust routing does not select this crate.
+  Until then use the explicit shared-lock owner command in
+  `out/runs/dsp-cleanup-retention/commands.json`.

@@ -149,3 +149,85 @@ DDR word twice, retaining its raw unused terminal half, preserving inputs and
 performing no stores; repeated inclusion/expansion is supported. The new primitive
 is reusable; exclusion, generation and callback-storage lifetime policy remain
 private experimental responsibilities. Existing mono/stereo kernels are untouched.
+
+## Callback-private lifetime audit
+
+**[D]** Both adapters run new-note state clear → `note_on` → `render` →
+`_dv_rback` sequentially (DN2 source 451..483, DT2 source 1238..1296). Returning
+from the module is distinct from adapter completion: the output guard still uses
+output afterward. Sources are
+`modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dn2.s` and
+`modules/core/adapters/dsp-voice/src/dsp/dsp-voice.s`. Save/context/input/parameter
+scratch is shared DM; saving starts before validation. DN2 MODE1 pinning at
+source 216/217 leaves IRPTEN/NESTM unchanged; neither adapter adds a recursion guard.
+
+**[D]** The DN2 1.12 path is AudioTask `0x1c9fe7` → dispatch `0x1c9d6b` →
+command 3 call `0x1c9fbc` → frame builder `0x1c2712` → call `0x1c3044` →
+engine `0x1c8ef1` → call `0x1c9459` → hooked entry `0xb8251b`.
+The slot loop decrements R15 at `0x1c9460` and advances at `0x1c9461` after
+return: one uninterrupted invocation serializes its calls only. Seventeen targeted
+instruction heads were checked once against original bytes; this remains [D].
+
+**[C]** Database caller `0xb82658` jumps to interior `0xb82570`, bypassing the
+patched entry `0xb8251b`; it does not establish a second hooked-entry path.
+The SEC wrapper sets IRPTEN in saved MODE1 at `0x1c02bb`, restores MODE1 at
+`0x1c03ea`, dispatches at `0x1c04b1` and clears IRPTEN at `0x1c04b7`. Known SPI/SPORT callbacks update
+ring selection/notify the task; no direct hook path is recorded. **[O]** Indirect
+callback replacement, other tasks/NMI and runtime non-reentrancy remain unresolved.
+Backing count zero still does not authorize cursor, scratch or output reuse.
+
+**[O]** Proposed next audit: retain callback-private cursor/scratch for the existing
+boot-pinned module/voice-storage lifetime, untouched by backing replacement, and
+install/reset bindings only at the existing audio callback boundary. Audit every
+selection/row update that can reuse that per-voice storage before relying on this.
+No mechanism is implemented or non-reentrancy fixed here. Selected-interpreter
+PCDUMP has I6/I7/MODE1 and PC-stack depth, not stack contents or definitive nesting.
+New trace/native runs are deferred; selection/row-publication reuse is the next audit.
+Finite absence cannot prove scheduler-wide safety or authorize allocator reuse.
+
+### Exceptional boot-load cleanup could make storage reusable
+
+**[D]** At pre-fix revision `dce0a3d7`,
+[dsp.rs](../../modules/core/runtime/src/rs/src/dsp.rs) `clear_rows` (1200–1201)
+ignored a false `write_word_blocking` result and cleared `row_pub`;
+`clear_fx_rows` (1219/1232) similarly discarded a failed PC-disable result before
+clearing `fx_pub`. After one row published, a later row-transfer failure
+(1468 → `fail`, 1296) could fail invalidation yet discard the publication marker.
+`loader::undo_early` → `release` skipped the now-unmarked row, then unreserved
+the DSP range (1244–1246). These line references describe that pre-fix revision.
+
+`unreserve` cleared ownership/`mod_len` (1010–1039), making the extent eligible
+for first-fit reuse (475–500). The
+[loader](../../modules/core/runtime/src/rs/src/loader.rs) also called `fini`
+(518 onward), released DSP storage and freed CF memory (527–529). This established
+static erroneous reuse eligibility, not observed reuse or callback overlap.
+Existing `PH_QUARANTINE` protected a pending transfer before `fail`, but did not
+protect failed cleanup writes. Normal successful boot-pinned allocation stability
+did not remove this exceptional path.
+
+**[C] [D]** The runtime now retains publication markers on failed invalidation and
+stops at the first unsuccessful write. Failed boot teardown closes CF slots,
+waits for entered calls, then requires successful DSP invalidation before `fini`,
+registry removal or storage release. An uncertain result enters sticky internal
+`PH_RETAINED`: pending/queued reservations and transfer sources remain owned until
+reboot; later steps, cancellation, reservation and word/image starts cannot reuse
+them. This is distinct from pending-transfer `PH_QUARANTINE`. The original boot
+failure is recorded once; teardown is not retried with the shared word buffer.
+
+Ten host tests in
+[cleanup_tests.rs](../../modules/core/runtime/src/rs/src/cleanup_tests.rs) execute
+actual loader/DSP cleanup, publication flags, owner/range allocator and queue code.
+Refusal, transport error, missing ACK, partial FX cleanup, absent FX info and CF
+entered timeout retain storage; confirmed and prepublication cleanup reclaim it.
+The host seam substitutes only firmware/link/info/IRQ and CF pointer side effects
+(fini, registry removal, arena free/table inspection), not the cleanup algorithm.
+The ColdFire object builds, re-decodes and passes its source-current check.
+**[D]** Coordinator-owned normal-load acceptance passes on DT2 1.17 and DN2 1.12
+(two cases, 235.08 s). It covers upload/persist/select/reboot, `MOD_DSP0`, nonzero
+DSP extent and voice row/type, with no fault. It does not test rendered-audio
+correctness or native failure injection. Commands/hashes are in ignored
+`out/runs/dsp-cleanup-retention/commands.json`.
+**[O]** Physical ACK/block-tail/callback ordering remains separate: host
+state-machine tests do not establish DSP quiescence or fix adapter non-reentrancy.
+The nested crate tests still need normal gate routing; no production backing
+policy is selected.

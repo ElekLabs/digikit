@@ -185,3 +185,48 @@ oxlint and formatting pass; the direct related-host selection finds zero test
 files, which is not host coverage. No dependency changes or full-gate pass are
 claimed. Next establish adapter render-return/state-reuse lifetime independently
 of backing-reader count before production integration.
+
+Callback-lifetime audit now distinguishes module return from adapter/output
+completion; backing count zero authorizes neither private-state nor output reuse.
+Next audit selection/row reuse with boot-pinned callback storage and binding
+updates at the existing audio callback boundary. This is an open proposal, not a
+non-reentrancy fix; optional bounded tracing cannot establish scheduler-wide safety.
+See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
+
+
+Failed DSP-load cleanup now fails closed: uncertain row invalidation or CF drain
+retains module/DSP/CF memory, publication ownership and queued transfer sources in
+sticky internal retained state until reboot. Ten actual-runtime host tests pass;
+only firmware/link/info/IRQ and host-incompatible CF pointer side effects are
+substituted. The fresh runtime ColdFire object builds/re-decodes and is current.
+DT2/DN2 pluck artifacts are under `out/runs/dsp-cleanup-retention/modules/` for the
+coordinator's `tests/regression/modules/pluck.test.ts` normal-loader acceptance.
+Commands/provenance are in `out/runs/dsp-cleanup-retention/commands.json`.
+Host cleanup evidence does not prove physical DSP ACK/block-tail quiescence or
+runtime non-reentrancy; those lifetime assumptions remain separate.
+
+For this runtime delta, `mise run test:changed` passes path/layer checks; its JS
+host/format/types wrappers stop at the existing `node_modules/.pnpm` hoist layout
+problem. Python checks are skipped because no Python source changed. The named
+Rust cleanup tests and runtime object source-current check pass independently.
+
+The nested standalone `dkrt` crate is not selected by the root workspace Rust gate.
+Run its explicit owner check:
+
+```sh
+cargo test --manifest-path modules/core/runtime/src/rs/Cargo.toml \
+  --target-dir out/native/target/dkrt-cleanup-host \
+  --lib cleanup_tests -- --test-threads=1
+```
+
+under the shared benchlock/environment recorded in `commands.json` above.
+**[O]** Wire this owner check into normal gate/routing separately; the default gate
+does not currently cover these tests.
+
+Coordinator normal-loader acceptance passes both DT2 1.17 and DN2 1.12 cases
+(235.08 s total; 80,037/154,845 ms respectively), using the fresh runtime object
+and dedicated pluck packs. This covers upload/persist/select/reboot, `MOD_DSP0`,
+nonzero DSP extent and voice row/type, with no fault; it is neither audio correctness
+nor native failure injection. Exact invocation/environment and whole-file hashes
+are in `out/runs/dsp-cleanup-retention/commands.json`, with
+`out/runs/dsp-cleanup-retention/native-pluck-acceptance.log` recording exit zero.
