@@ -14,12 +14,15 @@
 //! the records. The only input the answer needs from outside is the device's limits, which [`Needs`] is compared with elsewhere (`dkrt_fit`).
 #![no_std]
 
+mod gen_limits;
+/// The loader's format limits, from `[limits.format]` of sdk/sdk.toml (`HEADER`, `DSP_HEADER`, `MAX_RECORDS`, `MAX_RELOCS`, `MAX_IMPORTS`,
+/// `MAX_CF_IMPORTS`, `SLOTS`, `MAX_VOICES`, `MAX_FX`, `MAX_STATE_VOICES`, `MAX_STATE_BYTES`, `GRANULE`, `DSP_SLACK`, `ARENA_HDR`).
+pub use gen_limits::*;
+
 /// Magic of a `.dkm`, "DKMF".
 pub const MAGIC: u32 = 0x444b_4d46;
 /// The only `.dkm` format.
 pub const FORMAT: u32 = 1;
-/// The header size.
-pub const HEADER: u32 = 0xa0;
 /// The header size of a module with a `dkm_menu` (a menu address follows the 0xa0 bytes).
 pub const HEADER_MENU: u32 = 0xa4;
 /// Header offsets read.
@@ -52,30 +55,11 @@ pub const LEN_PAGE: u32 = 0x60;
 /// An effect's page: it takes no row of its own (it belongs to the effect's slot, counted by the DSP section's effect record).
 pub const KIND_EFFECT: u32 = 4;
 pub const LEN_EFFECT: u32 = 0x1a4;
-pub const MAX_RECORDS: u32 = 32;
 
 /// The DSP section: magic "DKDS", versions 1 to 4, header 0x40 bytes, voices of 16, 48 or 64 bytes (version 4: voices of 64 bytes and effect records).
 pub const DSP_MAGIC: u32 = 0x444b_4453;
-pub const DSP_HEADER: u32 = 0x40;
-pub const MAX_RELOCS: u32 = 4096;
-pub const MAX_IMPORTS: u32 = 32;
-/// The entries of the `.dkm` slot table (`[dkm.slot] count` of sdk/sdk.toml).
-pub const SLOTS: u32 = 8;
-/// The ColdFire import table's most entries (the DSP section's `MAX_IMPORTS` is a different table).
-pub const MAX_CF_IMPORTS: u32 = 64;
-pub const MAX_VOICES: u32 = 8;
-/// Effect records of a version 4 section: their size and the most the loader takes (`DK_FX_MAX`), and the state bytes of one (the loader's own limit).
+/// The size of an effect record of a version 4 section (the most the loader takes is `MAX_FX`).
 pub const FX_LEN: u32 = 64;
-pub const MAX_FX: u32 = 4;
-/// Voice states of one voice record, and the bytes of one state: the loader's own limits (`dsp.rs`), the second one at the loader's most (the DSP area).
-pub const MAX_STATE_VOICES: u32 = 64;
-pub const MAX_STATE_BYTES: u32 = 1 << 24;
-/// The DSP area's placement granule (`dsp.rs`).
-pub const GRANULE: u32 = 64;
-/// The bytes the DSP range may start before its alignment.
-pub const DSP_SLACK: u32 = 8;
-/// The arena's block header (`arena.rs`).
-pub const ARENA_HDR: u32 = 16;
 
 /// A source of the file's bytes: a slice on a host, the store's sector reads on the device.
 pub trait Bytes {

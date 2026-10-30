@@ -29,6 +29,8 @@ pub const C_FX_VIEW_OUT: &str = "sdk/include/dk/gen/fx.h";
 pub const C_API_OUT: &str = "sdk/include/dk/gen/api.h";
 /// The generated C header of the descriptor records, relative to the repository root.
 pub const C_DESC_OUT: &str = "sdk/include/dk/gen/desc.h";
+/// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
+pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
 /// The generated Python protocol numbers, relative to the repository root.
 pub const PROTO_PY_OUT: &str = "tools/device/dkproto.py";
 /// The generated Rust protocol numbers of the host client, relative to the repository root.
@@ -239,6 +241,54 @@ pub fn settings() -> Settings {
 #[serde(deny_unknown_fields)]
 struct LimitsSection {
     max: LimitsMax,
+    format: FormatLimits,
+}
+/// `[limits.format]`: the format limits of the `.dkm` loader that every host tool and the runtime share (`dkneeds`).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FormatLimits {
+    dkm_header: u32,
+    dsp_header: u32,
+    max_records: u32,
+    max_relocs: u32,
+    max_imports: u32,
+    max_cf_imports: u32,
+    max_state_voices: u32,
+    max_state_bytes: u32,
+    granule: u32,
+    dsp_slack: u32,
+    arena_hdr: u32,
+}
+/// The format limits in file order, then the ones that come from other keys: (generated name, value).
+/// `MAX_VOICES` and `MAX_FX` are the contract maxima `machine_rows` and `fx_slots`; `SLOTS` is `[dkm.slot] count`.
+fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
+    let f = &sdk.limits.format;
+    vec![
+        ("DKM_HEADER", f.dkm_header),
+        ("DSP_HEADER", f.dsp_header),
+        ("MAX_RECORDS", f.max_records),
+        ("MAX_RELOCS", f.max_relocs),
+        ("MAX_IMPORTS", f.max_imports),
+        ("MAX_CF_IMPORTS", f.max_cf_imports),
+        ("MAX_STATE_VOICES", f.max_state_voices),
+        ("MAX_STATE_BYTES", f.max_state_bytes),
+        ("GRANULE", f.granule),
+        ("DSP_SLACK", f.dsp_slack),
+        ("ARENA_HDR", f.arena_hdr),
+        ("SLOTS", sdk.dkm.slot.count),
+        ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
+        ("MAX_FX", sdk.limits.max.fx_slots as u32),
+    ]
+}
+
+/// `packages/dkneeds/src/gen_limits.rs`: the format limits as `u32`. The `.dkm` header is `HEADER` here (`dkneeds::HEADER`).
+fn rust_limits(sdk: &Sdk) -> String {
+    let mut s = format!("// {HEADER}\n\n");
+    for (n, v) in format_limits(sdk) {
+        let n = if n == "DKM_HEADER" { "HEADER" } else { n };
+        let _ = writeln!(s, "pub const {n}: u32 = {v};");
+    }
+    s
 }
 /// The contract maxima of the capacity limits: `[limits.max]` of `sdk/sdk.toml`. A device's `[limits]` value (and its `[digikit]`
 /// `dsp_area_bytes`) may not exceed them; `patchkit gen` refuses it (`devgen`).
@@ -748,6 +798,10 @@ fn python_proto(sdk: &Sdk) -> String {
     for (n, v) in p.limits.all() {
         let _ = writeln!(s, "{n} = {v}");
     }
+    s.push_str("\n# the .dkm loader's format limits ([limits.format])\n");
+    for (n, v) in format_limits(sdk) {
+        let _ = writeln!(s, "{n} = {v}");
+    }
     s.push('\n');
     s.push_str("CMD: dict[str, int] = {\n");
     for (n, v) in by_value(&p.commands) {
@@ -813,6 +867,10 @@ fn ts_proto(sdk: &Sdk) -> String {
         p.version
     );
     for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "export const {n} = {v};");
+    }
+    s.push_str("\n/** The `.dkm` loader's format limits (`[limits.format]`). */\n");
+    for (n, v) in format_limits(sdk) {
         let _ = writeln!(s, "export const {n} = {v};");
     }
     s.push('\n');
@@ -2061,6 +2119,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (PROTO_PY_OUT.to_string(), python_proto(&sdk)),
         (PROTO_RS_OUT.to_string(), rust_proto(&sdk)),
         (PROTO_TS_OUT.to_string(), ts_proto(&sdk)),
+        (LIMITS_RS_OUT.to_string(), rust_limits(&sdk)),
         (C_MACHINE_VIEW_OUT.to_string(), machine_h(&sdk)?),
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_API_OUT.to_string(), api_h(&sdk)?),

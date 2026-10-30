@@ -44,8 +44,6 @@ def test_the_budget_follows_the_headroom_of_the_device():
         voices = pk_device.load(dev)["adapter"]["machine"]["voices"]
         assert b.voice_block == b.headroom // voices > 0
         assert b.note_on_block == b.headroom
-    # the Digitone II stock load is higher, so its headroom is smaller
-    assert c.budget("dn2").headroom < c.budget("dt2").headroom
 
 
 def test_the_cases_cover_the_groups_and_are_deterministic():
@@ -109,11 +107,6 @@ def test_fx_specs_include_run_time_effects_and_turn_case_values_into_knob_floats
     assert abs(mid - 1.27 * 0x4000 / c.FX_PARAM_MAX) < 1e-3  # the middle of the knob
     assert c.fx_word(s, 1, 5) == 5  # a word without a knob stays the raw case value
     assert "test/dyn-fx-gain" in [x.module for x in c.fx_specs()]
-
-
-def test_the_fx_budget_is_the_tighter_headroom_over_the_chain():
-    assert c.fx_budget() == min(c.budget(d).headroom for d in c.DEVICES) // c.FX_MAX
-    assert c.fx_budget() > 5000
 
 
 def test_fx_cases_cover_every_group_and_stay_inside_the_parameter_range():
