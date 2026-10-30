@@ -680,5 +680,44 @@ No source-generation scheme or production DSP backing policy is implemented.
 **[O] Fault-history requirement:** a storage-fault record must not reset on a new
 load. Installation must cover the cache's relevant I/O history or establish fresh,
 quiescent cache initialization. Starting a clear token after an unobserved storage
-failure is not evidence of cache health. No implementation or recovery policy is
-selected.
+failure is not evidence of cache health. The first-release policy is accepted in
+[the plan](../plans/dsp-sdk-and-sampler.md); implementation/recovery mechanisms
+remain unselected.
+
+### Early patched-in BSS is a candidate boot-scoped fault record
+
+**[D]** A bounded DT2 1.17 audit checked 709 original MAIN instruction heads and
+eight reset bytes, against the section-3 SHA-256 above. The early reset route at
+`0x4000053e` reaches `pk_loader`: segment copy and BSS zeroing in
+[loader.s](../../modules/core/expansion/src/cf/loader.s) (source line 16) and
+[the expansion manifest](../../modules/core/expansion/module.toml) (line 30)
+precede the stock MAIN initialization at `0x4000045c` / BSS clear `0x400004b2`.
+The stock clear covers `[0x40312000,0x47e28470)`; expansion storage lies outside
+it, so the expansion loader performs its own BSS zeroing. Patchkit segment-BSS
+link/apply construction supports this source-level ordering, not an already-built
+storage-observer artifact.
+
+Loader return `0x40000546` precedes cache setup and continuation through
+`0x40000568 → 0x40196fda`, then scheduler/startup
+`0x400cce52 → 0x400cc8e4 → 0x400cc9c8`. Storage initialization follows
+`0x400ccc66 → 0x4012d718` and `0x400ccc74 → 0x4012d78e`. It installs fault ISR
+`0x4012d5ba` at `0x4012d860`, configures/resets the controller at
+`0x4012d8a8..d8f6`, enables IRQs at `0x4012d908`, then reaches the first
+positively traced command at `0x4012d90e`. DMA59 ISR `0x4012d6a0` is installed
+at `0x4012dd92` via `0x400ccc7a → 0x4012dd74`. FS init `0x400ccd4a` and
+format/mount `0x400ccd5a/64` precede main OS task creation
+`0x400cce4a → 0x4003324e`, targeting runtime-hook task `0x400337ba`.
+
+**[D/O]** Existing patched-in adapter BSS is therefore a plausible boot-scoped
+fault-record location before these traced storage events, unlike runtime-loaded
+DKM BSS. This checked chain needs neither crash-preserved storage nor a later
+clear hook for initial zeroing. Whole-bootstrap and all early-reset coverage
+remain open; no storage-observer artifact or complete fault coverage exists yet.
+
+Next is a bounded optional private DT2 patched-in storage-fault observer proof:
+verify actual symbol/BSS extent, segment header and loader relocation, then bounded
+native initialization/sticky-retention checks across early storage events and
+controlled fault capture, including error plus command-complete in one ISR.
+This is not the production sample-load gate. Source lifecycle/content witnesses,
+complete capture history and production backing remain unimplemented; no public
+ABI, reservation or recovery mechanism is approved by this evidence.

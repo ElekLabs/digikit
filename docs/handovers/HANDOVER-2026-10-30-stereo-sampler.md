@@ -354,3 +354,13 @@ not implemented by this documentation update, and proves neither DMA stopping no
 production pool readiness. Future automatic retry requires a separate abort/drain,
 cache-invalidation, FS-revalidation and bounded error-injection scope. No new
 reservation or public ABI is approved.
+
+The early DT2 MAIN audit places patched-in segment BSS zeroing before traced
+storage setup, fault-ISR installation/enable, first command and FS/runtime startup.
+Existing patched-in adapter BSS is a plausible boot-scoped fault record, unlike
+runtime-loaded DKM BSS; no observer artifact exists yet. Next is an optional private
+patched-in DT2 storage-fault observer proof: verify actual BSS/segment/loader
+placement, then bounded early initialization/sticky retention and controlled
+error+complete ISR capture. Whole-bootstrap/reset coverage and source witnesses
+remain open. This is not a production gate, new reservation or public ABI.
+See [finding 81](../findings/81-stock-sampler-dependencies.md).

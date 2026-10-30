@@ -72,8 +72,8 @@ DMA into stock cache/bounce storage, followed by a caller copy, with no direct
 caller-buffer branch or after-free-write evidence. Ignored I/O errors can still
 produce stale/incomplete cache copies with success counts. The next design
 requirement is lifecycle/content-change evidence plus independently latched
-low-level storage faults; recovery, full hook coverage and source consistency
-remain open, with no implementation selected. No hooks or complete
+low-level storage faults; recovery mechanisms, full hook coverage and source
+consistency remain open, with no implementation selected. No hooks or complete
 generation scheme are selected. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
@@ -88,6 +88,14 @@ required for the first release. Next technical work is correct low-level fault
 capture/history plus a lifecycle/content-change source witness before cache use.
 The accepted policy does not establish implementation completeness, DMA stopping,
 hook coverage or production backing/reservation approval.
+
+The early DT2 MAIN audit now places patched-in segment BSS zeroing before the
+traced storage ISR installation, first command and later FS/runtime task startup.
+It supports a candidate boot-scoped fault record, not runtime-loaded DKM storage
+or an existing observer artifact. Next proof: an optional private patched-in DT2
+observer, with actual BSS/segment/loader checks and bounded early-boot/sticky/fault
+capture including simultaneous error+complete. Whole-bootstrap/reset coverage and
+source witnesses remain open; this is not production gating or backing approval.
 
 Production backing ownership/coexistence, callback-private lifetime, full-route
 capture/commit/reset/cleanup, public stereo integration and picker publication
@@ -2787,3 +2795,18 @@ The prior documentation checkpoint passed auditor prose cross-checks, pathcheck,
 `git diff --check` and `mise run test:changed`. This policy-only update runs docs
 pathcheck and diff checks; no code change, emulator run, hardware experiment or
 full merge gate is claimed.
+
+### Next proof: private early DT2 storage-fault observer
+
+- [x] Bound the static early MAIN path: expansion-loader BSS zeroing precedes traced
+  storage setup/ISR enable/first command, FS initialization and runtime task entry.
+  Existing patched-in BSS is a candidate; no observer artifact is built yet.
+- [ ] Implement only an optional private patched-in DT2 observer, then verify its
+  actual symbol/BSS extent, segment header and loader relocation. Runtime-loaded
+  DKM BSS is too late for the traced early history.
+- [ ] Run a bounded native proof of initial zeroing, sticky retention through early
+  storage events, and controlled fault capture including error plus completion in
+  one ISR. No such native pass or complete early/reset coverage is claimed yet.
+- [ ] Establish complete relevant fault history and source lifecycle/content-change
+  witnesses before any production sample-load gate. No pool/reservation/public ABI
+  decision is made by this proof proposal.
