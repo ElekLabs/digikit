@@ -2798,6 +2798,28 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_func"
 
 [[anchor]]
+name = "dsp.voice.fn.uy_process"
+cpu = "sharc"
+kind = "code"
+addr = 0x200026d0
+pm = 0xb81368
+len = 6
+sha256 = "e0bb9c31d977272f74ffb07cb62f705baae18b14fd9a9c5444a59a79ab4436a6"
+mark = "D"
+rule = "fw/dsp/voice:sharc_func"
+
+[[anchor]]
+name = "dsp.voice.fn.uy_reset"
+cpu = "sharc"
+kind = "code"
+addr = 0x200026b4
+pm = 0xb8135a
+len = 6
+sha256 = "88c2162c20c0304b53aa8043382ac2f7c7e51ae063d7a5ba206f2d10210f3e7b"
+mark = "D"
+rule = "fw/dsp/voice:sharc_func"
+
+[[anchor]]
 name = "dsp.voice.site.first_order_process.call"
 cpu = "sharc"
 kind = "code"
@@ -2827,6 +2849,39 @@ addr = 0x20004a3c
 pm = 0xb8251e
 len = 6
 sha256 = "a235dd3cac08067a7da384b9ef7fe0e1962e04aa94852054af6ca2e940401d4c"
+mark = "D"
+rule = "fw/dsp/voice:sharc_func"
+
+[[anchor]]
+name = "dsp.voice.site.uy_process.early.call"
+cpu = "sharc"
+kind = "code"
+addr = 0x28392b3e
+pm = 0x1c959f
+len = 6
+sha256 = "4f5c2b403061f7ead586d611c89150e164b1c1d9f34c59afc0e0d5c430f3c817"
+mark = "D"
+rule = "fw/dsp/voice:sharc_func"
+
+[[anchor]]
+name = "dsp.voice.site.uy_process.late.call"
+cpu = "sharc"
+kind = "code"
+addr = 0x283936f4
+pm = 0x1c9b7a
+len = 6
+sha256 = "4f5c2b403061f7ead586d611c89150e164b1c1d9f34c59afc0e0d5c430f3c817"
+mark = "D"
+rule = "fw/dsp/voice:sharc_func"
+
+[[anchor]]
+name = "dsp.voice.site.uy_reset.call"
+cpu = "sharc"
+kind = "code"
+addr = 0x28392d54
+pm = 0x1c96aa
+len = 6
+sha256 = "a8b6da2a11b74dd594427b3989039b181dfee139d375cf5038fe08330e09fa6d"
 mark = "D"
 rule = "fw/dsp/voice:sharc_func"
 
@@ -3037,3 +3092,18 @@ mode = "retarget"
 name = "dsp.voice.hook.render_entry"
 site = "dsp.voice.fn.render_entry"
 mode = "replace"
+
+[[hook]]
+name = "dsp.voice.hook.uy_process.early.call"
+site = "dsp.voice.site.uy_process.early.call"
+mode = "retarget"
+
+[[hook]]
+name = "dsp.voice.hook.uy_process.late.call"
+site = "dsp.voice.site.uy_process.late.call"
+mode = "retarget"
+
+[[hook]]
+name = "dsp.voice.hook.uy_reset.call"
+site = "dsp.voice.site.uy_reset.call"
+mode = "retarget"

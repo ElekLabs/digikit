@@ -29,6 +29,18 @@ const counters = [
   'opposite_audio',
   'opposite_history',
 ] as const;
+const uyCounters = [...counters.filter((name) => name !== 'nonidentity_coeff'), 'coeff_blocks'] as const;
+const uyContextFields = [
+  'active_mode',
+  'numeric_mode',
+  'low_entry_frame',
+  'low_entry_sp',
+  'coeff_slot',
+  'coeff2',
+  'coeff3',
+  'coeff4',
+  'coeff5',
+] as const;
 const firstFailure = ['slot', 'state', 'input', 'output', 'sample', 'left', 'right', 'mode1'] as const;
 const contextFields = [
   'mode',
@@ -216,6 +228,8 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
         const diagnostic: Record<string, number> = {};
         for (const name of [...counters, ...contextFields]) diagnostic[name] = await read(`_sp_${name}`);
         for (const name of firstFailure) diagnostic[`first_${name}`] = await read(`_sp_first_${name}`);
+        for (const name of [...uyCounters, ...uyContextFields]) diagnostic[`uy_${name}`] = await read(`_uy_${name}`);
+        for (const name of firstFailure) diagnostic[`uy_first_${name}`] = await read(`_uy_first_${name}`);
         return diagnostic;
       };
       failureDiagnostic = snapshotDiagnostic;
@@ -226,12 +240,15 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
       expect(initial.reset_calls).toBe(0);
       expect(initial.active_mode).toBe(0xffff_ffff);
       expect(initial.mode).toBe(0);
+      for (const name of uyCounters) expect(initial[`uy_${name}`], name).toBe(0);
+      expect(initial.uy_active_mode).toBe(0xffff_ffff);
       await rpc('dsp.patch', {
         text: `BASE ${stockSha}\nDM ${planSymbol(plan, '_sp_mode').toString(16)} ${mode.toString(16).padStart(8, '0')} was 00000000\n`,
       });
       const armed = await snapshotDiagnostic();
       expect(armed.mode).toBe(mode);
       expect(armed.active_mode).toBe(0xffff_ffff);
+      expect(armed.uy_active_mode).toBe(0xffff_ffff);
       const observed = await capture('patched');
       const shift = alignedStereo(baseline, observed);
       evidence.stereoFrameShift = shift;
@@ -255,9 +272,9 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
       expect(stackBase % 4).toBe(0);
       expect(stackBase).toBeGreaterThan(0);
       expect(stackBase).toBeLessThan(0xffff_f060);
-      const exercisedDepth = 172;
-      const lowFrame = diagnostic.low_entry_frame!;
-      const lowSp = diagnostic.low_entry_sp!;
+      const exercisedDepth = 176; // Maximum exercised model store depth across both observers.
+      const lowFrame = Math.min(diagnostic.low_entry_frame!, diagnostic.uy_low_entry_frame!);
+      const lowSp = Math.min(diagnostic.low_entry_sp!, diagnostic.uy_low_entry_sp!);
       const stack = {
         tcb,
         base: stackBase,
@@ -290,8 +307,23 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
       expect(diagnostic.fallbacks).toBe(0);
       expect(diagnostic.reset_mirrors, 'actual initialized private reset was exercised').toBeGreaterThan(0);
       expect(diagnostic.reset_calls).toBeGreaterThanOrEqual(diagnostic.reset_mirrors!);
+      expect(diagnostic.uy_render_calls).toBeGreaterThan(0);
+      expect(diagnostic.uy_shadow_calls).toBe(diagnostic.uy_render_calls);
+      expect(diagnostic.uy_coeff_blocks).toBe(diagnostic.uy_render_calls);
+      expect(diagnostic.uy_nonzero_input).toBeGreaterThan(0);
+      expect(diagnostic.uy_reset_mirrors).toBeGreaterThan(0);
+      expect(diagnostic.uy_reset_calls).toBeGreaterThanOrEqual(diagnostic.uy_reset_mirrors!);
+      expect(diagnostic.uy_active_mode).toBe(mode);
+      for (const name of ['mode_errors', 'nonfinite', 'mismatches', 'fallbacks'])
+        expect(diagnostic[`uy_${name}`], name).toBe(0);
+      for (const name of ['opposite_audio', 'opposite_history']) {
+        if (mode === 1) expect(diagnostic[`uy_${name}`], name).toBeGreaterThan(0);
+        else expect(diagnostic[`uy_${name}`], name).toBe(0);
+      }
+      evidence.uyPlacementCoverage =
+        'Shared U/Y target covers both hook sites; this scenario does not prove late placement execution. Native profile is required for positive placement attribution.';
       evidence.scope =
-        'Private first-order finite same-MODE1 identity/polarity relation only; metamorphic independence evidence, not an independent correctness oracle or40-bit proof. Nonidentity coefficient count is observed, not assumed. No production routing, DDR ownership, IRQ exclusion or hardware claim.';
+        'Private first-order/U/Y finite same-MODE1 identity/polarity relation only; metamorphic independence evidence, not an independent correctness oracle or40-bit proof. Nonidentity coefficient count is observed, not assumed. No production routing, DDR ownership, IRQ exclusion or hardware claim.';
     };
     try {
       await bounded(run(), 480000, 'private stereo proof');

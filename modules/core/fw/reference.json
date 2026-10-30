@@ -12693,6 +12693,70 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x200026d0",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 private observer binding. Finite U/Y recurrence, R4=8-word record, R8=input, R12=output, DM(I6+1)=count.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.uy_process",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x200026b4",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 private observer binding. U/Y reset clears live history words6/7; R4=record.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.uy_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x283929fa",
             "pm": true
           }
@@ -12841,6 +12905,144 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x28392b3e",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.uy_process.early.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "r4",
+          "r8",
+          "r12",
+          "i4",
+          "i12",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.uy_process.early.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x283936f4",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.uy_process.late.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "r4",
+          "r8",
+          "r12",
+          "i4",
+          "i12",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.uy_process.late.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392d54",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.uy_reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "r4",
+          "r8",
+          "r12",
+          "i4",
+          "i12",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.uy_reset.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x283929fa",
             "len": 6,
             "pm": true
@@ -12951,6 +13153,102 @@
         "dsp.voice.render_next",
         "dsp.voice.site.render_next"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392b3e",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private U/Y observer callsite only; retain original delay instructions and other callers.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.uy_process.early.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1710
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x283936f4",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private U/Y observer callsite only; retain original delay instructions and other callers.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.uy_process.late.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 7
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392d54",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private U/Y observer callsite only; retain original delay instructions and other callers.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.uy_reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1977
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -13234,7 +13532,7 @@
       "name": "master"
     },
     {
-      "count": 12,
+      "count": 20,
       "cpu": "sharc",
       "file": "devices/fw/dsp/voice.toml",
       "meaning": "voice rendering",

@@ -398,3 +398,16 @@ The new-load byte-count/file-size equality at `0x40154eba/ebe` gates header call
 Reload worker `0x4004e8be` does not prove whole-load serialization across other
 callers `0x4004b502/60a`. Header return is not proof of publication or admission;
 no production memory policy follows from this bounded sender audit.
+
+
+**[D]** In the same original DT2 1.17 MAIN audit, this bounded reference-tree
+family stores unique slot IDs, not opaque leases: tree at record+`0x1c`, sentinel
++`0x20`, count +`0x30`, `0x14`-byte nodes with key +`0x10`. Deduplicating insert
+`0x401e24b0/0x401e4352` precedes inline count/slot-array `0x405b5368[slot]`
+updates and DSP publication. Release `0x401543a2` always clears the slot/header
+through `0x40153ec6` after erase/free/decrement. Rebuild `0x4015394a` uses every
+node key as an unchecked slot-array index at `0x4015399c/a0`: a fake key is unsafe,
+and a duplicate existing key adds no reference. Record move `0x401e237a` also
+moves the tree/sentinel, so a raw record pointer is not stable. No balanced
+slot-independent pin is established in this family; this is not a production
+ownership decision or an exclusion proof for every holder.

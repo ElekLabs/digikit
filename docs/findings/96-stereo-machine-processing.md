@@ -659,7 +659,116 @@ The ignored native evidence is:
   and `out/runs/dsp-stereo-proof/native-polarity-acceptance.log`.
 
 The prior allocation/headroom qualification and legacy core-label distinction
-still apply. A U/Y-stage caller/context audit is pending; implementation is not
-approved by this checkpoint. Full-route capture/commit, cleanup, writer exclusion,
+still apply. The U/Y-stage caller/context audit and separately approved bounded
+implementation are recorded below; its combined native acceptance now passes.
+Full-route capture/commit, cleanup, writer exclusion,
 production backing ownership, public SDK ABI, hardware and performance claims
 remain open. No new production policy was selected.
+
+
+## U/Y integration caller/context audit and positive profile
+
+**[D]** DN2 1.12 engine calls `0x1c959f` (early) and `0x1c9b7a` (late)
+both enter `0xb81368` with the same record `0x2533e0+0x20*v`. Coefficients
+occupy words 2..5 and live histories words 6/7. R4 supplies the record, R8=R12
+the slot audio buffer, and `[I6+1]=R9` the count (normally 32). Reset call
+`0x1c96aa → 0xb8135a` uses delayed setup R4=R5+R10 and clears words 6/7.
+The early placement selects G=0 and the late placement G=1 from table
+`0x254ac4+4*v` with R11=0. A stable gate would make the placements exclusive,
+but gate stability is not proved; both are reachable in the CFG. They therefore
+require one persistent private right history per slot, captured controls/input
+before each occurrence, and no reinitialization between placements. Both render
+hooks and the reset must be covered; the helper's other five callers stay stock.
+
+The immediate continuations do not consume returned I12/R2. The scalar predecessor
+is `0x1c94b0`; the existing SIMD/context fallbacks must remain. These are bounded
+caller facts, not a new public call ABI or all-context exclusion proof.
+
+**[D]** The first fast profile contained no call rows, so it supplied no absence
+evidence. A separately bounded interpreter profile disables AOT, fast regions and
+block translation. In both stock and patched observations it records 2,400 early
+callsite visits, one reset and 2,850 total helper-entry visits across all callers.
+The late site has no row in this scenario; that does not establish it is unused
+or that gate stability holds. The mode-0 native case passes, with mode 1
+intentionally filtered. Both status records report zero AOT/fast execution and
+zero traps; stock/patched stereo WAVs retain the same hash and zero shift.
+
+Ignored evidence is `out/runs/dsp-stereo-proof/uy-interpreter-profile.e45298-1`
+and `out/runs/dsp-stereo-proof/uy-interpreter-profile.e45298-2`, with
+`out/runs/dsp-stereo-proof/uy-interpreter-profile.log` and
+`out/runs/dsp-stereo-proof/native/fd1c110f-a444-4e5f-ad50-42d2b4a4d11d/result.json`.
+Exact profile environment, filtered invocation and counts are retained separately
+as `uy_coverage` in `out/runs/dsp-stereo-proof/commands.json`. The profile proves
+positive coverage of early/reset in one finite scenario; it does not exercise the
+late placement, install U/Y wrappers, establish full-route lifecycle or select
+production backing/interrupt policy. The coordinator subsequently approved the
+bounded implementation described below.
+
+
+### U/Y private observer owner-check checkpoint
+
+**[D]** The same opt-in proof module now hooks both audited U/Y render sites to
+one shared observer and the local reset to its mirror. A separate appended source
+retains the first-stage source unchanged; the combined model compares its linked
+instruction prefix against the original alone at fixed placement/bindings. Sixteen
+private 8-word records and 32-float buffers retain history across all occurrences.
+Each occurrence captures coefficient words 2..5 and input before stock left runs;
+first use alone clones the record and optionally inverts histories 6/7. Right
+execution uses the original helper/operation order. Reset mirrors only 6/7 after
+initialization. There is no per-site trampoline and no late-site execution claim.
+The other five render-helper callers, helper bodies and all selected call delays
+remain unchanged, including reset's computed argument delay instruction.
+
+The shared private mode must be set before first accepted use. Each stage records
+its own active/numeric mode; global mode errors refuse both until reload. U/Y
+rejects nonfinite trajectories in both modes, while the first-stage source retains
+its earlier identity exceptional comparison behavior. Finite identity/polarity
+checks include audio and live histories, with signed-zero normalization. Stock
+left state/output/status/frame remain authoritative; no audible output replacement,
+IRQ-mask policy or public ABI is added.
+
+The two named owner model files pass 75 cases: 39 first-stage and 36 U/Y. U/Y
+covers both modes at slots 0/7/15, repeated modeled early/late occurrences on the
+same record, changing controls, actual reset/retrigger and deferred initialization,
+input/history corruption controls, nonfinite refusal, cross-stage mode switching,
+count/slot/DAG fallbacks and SIMD handoff. Modeled occurrences are isolated helper
+calls, not a claim that stock CFG gates naturally exercise both placements.
+Combined private data is 6,760 bytes and code 5,830 bytes; all 1,375 instructions
+re-decode. Build/conformance, gen-check, regression TypeScript, scoped lint/format,
+layercheck and pathcheck pass. The observed U/Y fixture maximum is 3,038
+instructions and deepest exercised model store is 176 bytes below entry frame;
+first-stage metrics remain 4,315/172. None is a universal stack or timing bound.
+
+The native fixture gates U/Y calls, mirrored reset, finite/error-free relation and
+nonzero opposite-sign audio/history in mode 1 alongside the existing first-stage
+gates. It computes scenario-specific headroom using the lower observed entry of
+either stage minus the maximum exercised 176-byte model depth. Combined native
+execution is coordinator-owned and passes as recorded below. Exact commands/current hashes are
+retained under `uy_implementation` in ignored
+`out/runs/dsp-stereo-proof/commands.json`; the old pre-hook coverage profile and
+first-stage native passes remain separately qualified. Full-route lifecycle,
+production backing ownership, hardware and exceptional/40-bit correctness remain
+open; this is finite metamorphic independence evidence, not an independent oracle.
+
+
+**[D] Combined native checkpoint:** both identity/polarity modes pass with the
+first-order and U/Y observers installed. In each mode, each stage records 2,400
+render/shadow calls and one mirrored reset, with zero mode errors, nonfinite
+observations, mismatches or fallbacks. In mode 1, each stage records 76,799 nonzero
+opposite audio and 4,800 opposite live-history relations. Stock/patched WAVs in
+both modes have the same SHA-256
+`6be721f8b1649c0a037bd8bd1a0998ff5847ed80de31b1907f98b01604555b0c`,
+4,800 stereo frames/100 ms and zero alignment shift. The minimum observed entry
+minus the model-exercised 176-byte depth leaves 3,128 bytes in the AudioTask
+allocation. This is scenario-specific arithmetic, not a native store watermark or
+worst-case IRQ/scheduler headroom. Shared U/Y counters do not attribute placement;
+positive native late-site coverage remains OPEN.
+
+Ignored results are
+`out/runs/dsp-stereo-proof/native/5e1a8014-6b17-47b1-b3c6-c1d26d167f99/result.json`
+(mode 0) and
+`out/runs/dsp-stereo-proof/native/a49fdec1-2e03-42a1-a0d0-58989c6c9ede/result.json`
+(mode 1), with `out/runs/dsp-stereo-proof/native-uy-acceptance.log` and exact
+unchanged environment/invocation in `out/runs/dsp-stereo-proof/commands.json`.
+The finite same-MODE1, metamorphic, 40-bit/hardware, full-route and backing-ownership
+qualifications above remain; no production policy is selected by this result.

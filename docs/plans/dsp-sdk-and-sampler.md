@@ -2333,13 +2333,99 @@ signed zeros as equal.
   numerical correctness oracle or whole-route acceptance. Details and result
   paths are in [finding 96](../findings/96-stereo-machine-processing.md).
 
-Next pending work is a bounded U/Y-stage caller/context audit. No U/Y wrapper
-implementation, new production memory policy or output route is approved by this
-checkpoint. Full-route lifecycle, pool ownership and hardware acceptance remain
-open.
+The bounded U/Y caller/context audit and positive early/reset interpreter
+profile are complete; the next checklist records the implementation boundary.
+The coordinator approved the bounded private U/Y wrapper implementation below;
+no new production memory policy or output route follows from it. Full-route lifecycle, pool ownership and hardware
+acceptance remain open.
 
 **[D] DT2 direct-loader follow-up:** the general loader uses direct page/header
 sender `0x40153a10 → 0x400cd79c`, not queued-preview `0x40153f34`. Its per-packet
 mutex/wait does not supply a DSP-applied tuple or prove whole-load serialization.
 See [finding 81](../findings/81-stock-sampler-dependencies.md); successor identity,
 geometry validation and ownership/admission remain open.
+
+
+### Bounded U/Y integration next slice
+
+- [x] Audit both engine render callsites and local reset, including delayed argument
+  setup, shared record/history and continuation live-outs. Record positive early
+  and reset interpreter coverage without treating absent late/fast rows as dead code.
+- [x] Review the wrapper approach before implementation: cover BOTH early
+  `0x1c959f` and late `0x1c9b7a` calls to `0xb81368`, plus reset
+  `0x1c96aa → 0xb8135a`. Keep the other five helper callers unchanged.
+- [x] Preserve one right history per slot for shared record `0x2533e0+0x20*v`;
+  capture input and coefficient words 2..5 before every occurrence, retain live
+  histories 6/7 between placements, and mirror the actual two-word reset. Do not
+  infer stable exclusive placement from the G table or reinitialize between sites.
+- [x] Add bounded caller/context and model checks for both placements, sequential
+  placements sharing a slot, reset, left authority, identity/polarity controls and
+  fallbacks. Preserve original call/frame/delay semantics and scalar/SIMD guards.
+- [x] Run focused native acceptance only after review, retaining unchanged audible
+  stereo baseline and reporting which placements/reset actually execute. Existing
+  mode-0 interpreter profiling proves early/reset coverage only. This is not a
+  full-route, SDK ABI, ownership, IRQ-policy, hardware or performance decision.
+
+See [the audit and profile](../findings/96-stereo-machine-processing.md). The
+existing bounded interpreter run passes with 2,400 early visits, one reset and
+2,850 total helper-entry visits in each stock/patched profile. Late remains
+unexercised in that scenario, and gate stability remains unproved.
+
+
+Implementation checkpoint: U/Y is a separate appended module-local source in the
+same opt-in object. It captures every occurrence into one persistent right record
+per slot, with no per-site trampoline or claim of placement attribution. It shares
+the pre-first-use mode knob and global mode-error refusal; U/Y finite refusal is
+strict in both modes, while existing first-stage exceptional behavior is unchanged.
+The first-stage source is unchanged and the combined model asserts an identical
+linked instruction prefix at fixed placement/bindings.
+
+Both named model files pass 75 cases (39 first-stage, 36 U/Y), including shared-slot
+repeated modeled early/late occurrences, changing controls, reset/retrigger,
+finite-refusal, input/history corruption and cross-stage mode-switch controls.
+Packaging preserves all original delay instructions, including computed U/Y reset
+setup, and changes only the five selected calls. Combined private data is 6,760
+bytes and code 5,830 bytes/1,375 re-decoded instructions. The largest observed U/Y
+fixture is 3,038 instructions; its exercised store depth is 176 bytes (first-stage
+172), so native headroom arithmetic now uses the maximum 176. These are model
+fixture observations, not hardware performance or universal stack bounds.
+Build/conformance, gen-check, types, lint/format, layercheck and pathcheck pass.
+The native fixture now gates both stages in both modes, including U/Y reset and
+opposite-sign relations. The combined two-mode native acceptance now passes.
+Each stage records 2,400 render/shadow calls and one reset mirror per mode, with
+zero mode errors, nonfinite observations, mismatches or fallbacks. In mode 1 each
+stage records 76,799 opposite audio and 4,800 opposite history relations. All stock
+and patched WAVs retain hash `6be721f8b1649c0a037bd8bd1a0998ff5847ed80de31b1907f98b01604555b0c`,
+4,800 stereo frames/100 ms and zero shift. The minimum observed entry minus the
+176-byte model-exercised store depth leaves 3,128 bytes in this scenario; this is
+not a native store watermark or IRQ/scheduler bound. Native positive late-placement
+coverage remains OPEN; shared hook counters do not distinguish the sites. See
+[finding 96](../findings/96-stereo-machine-processing.md) for exact result paths.
+
+
+**[D] DT2 reference-tree follow-up:** the audited family stores unique slot IDs;
+rebuild uses node keys as unchecked slot-array indices, duplicate insertion adds
+no reference, release still clears the slot/header, and record moves relocate
+the tree/sentinel. It supplies no balanced slot-independent pin. See
+[finding 81](../findings/81-stock-sampler-dependencies.md); do not substitute a
+fake key or raw record pointer for a supported backing lifetime contract.
+
+
+### Proposed private per-stereo-frame fetch experiment
+
+These are next-slice proposal constraints, not implemented behavior or shipping
+memory/interrupt policy. The purpose is to reduce the current whole-block masked
+read scope while retaining coherent frame data and generation retirement.
+
+- [ ] Review a private fetch boundary per stereo frame: cached-generation admission,
+  both channels' packed interpolation taps and all required scalar copies occur
+  under the mask; release the backing count before computing from private copies.
+- [ ] After denial, zero the remaining frames without relatching an epoch. Prove
+  that no later computation dereferences backing after releasing its count.
+- [ ] Keep callback cursor/scratch storage owned until that callback is finished,
+  even after its backing count reaches zero; backing retirement alone must not
+  authorize reuse of callback state.
+- [ ] Test actual DDR NW32 aliasing: byte address is
+  `0x80000000 + 4*(w-0x10000000)`, not `4*w`. Current fixture stand-in spans do
+  not prove that alias mapping. Retain masked-scope bounds and fault controls;
+  no implementation or production ownership policy follows from this proposal.

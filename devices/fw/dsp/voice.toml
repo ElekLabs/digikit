@@ -123,3 +123,81 @@ rule = { kind = "sharc_literal", reloc_hash = "4cc8a46bca990a7bd883d1784307a9cd7
 mark = "D"
 users = ["core/dsp-stereo-proof"]
 doc = "DN2 1.12 engine argument from the builder; first-order records start at this base plus byte offset0xe088 with0x70 stride, sixteen records."
+
+[[fn]]
+name = "dsp.voice.fn.uy_process"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "5f4828e4b6fae3efee58feacb6f9006c792f26ef295df5a98e9965ee5de34d73", offset = 0, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 private observer binding. Finite U/Y recurrence, R4=8-word record, R8=input, R12=output, DM(I6+1)=count."
+
+[[fn]]
+name = "dsp.voice.fn.uy_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "e65cf01b431064ec8699f148c0f4b64244e8b0b2f6a14107220450561758f961", offset = 0, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 private observer binding. U/Y reset clears live history words6/7; R4=record."
+
+[[site]]
+name = "dsp.voice.site.uy_process.early.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x6ae, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "Private U/Y observer callsite only; retain original delay instructions and other callers."
+
+[[hook]]
+name = "dsp.voice.hook.uy_process.early.call"
+site = "dsp.voice.site.uy_process.early.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy."
+
+[[site]]
+name = "dsp.voice.site.uy_process.late.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "d72f9ef561f2cad4bd91f7ad3fb119338c8f0feba2cf0022874cfdd23f8dbbda", offset = 0x7, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "Private U/Y observer callsite only; retain original delay instructions and other callers."
+
+[[hook]]
+name = "dsp.voice.hook.uy_process.late.call"
+site = "dsp.voice.site.uy_process.late.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy."
+
+[[site]]
+name = "dsp.voice.site.uy_reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x7b9, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "Private U/Y observer callsite only; retain original delay instructions and other callers."
+
+[[hook]]
+name = "dsp.voice.hook.uy_reset.call"
+site = "dsp.voice.site.uy_reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy."

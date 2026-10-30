@@ -44,7 +44,23 @@ header invalidation alone is inadequate.
   metamorphic independence evidence, not an independent numerical oracle.
   Original left state/output remain authoritative; private L2 data occupies
   4,020 bytes, with no DDR reservation or default activation.
-  Next is a pending U/Y-stage caller/context audit; implementation is not approved.
+  U/Y caller/context audit is complete: both early/late calls share the same
+  per-slot record/history and require both hooks plus the local reset. A bounded
+  mode-0 interpreter profile positively observes early (2,400) and reset (one),
+  with 2,850 helper entries across all callers, zero AOT/fast/traps and unchanged
+  stock WAV. Late is unexercised here; gate stability is unproved. Implementation
+  approach is now approved and implemented with persistent right histories across
+  placements. Both owner model files pass 75 cases (39 first-stage +36 U/Y);
+  combined two-mode native acceptance passes. Each stage records 2,400 calls and
+  one reset mirror per mode, all errors zero; mode 1 observes 76,799 opposite audio
+  and 4,800 opposite history relations at each stage. All stereo WAVs retain the
+  stock hash, 4,800 frames/100 ms and zero shift. The appended source preserves the
+  first-stage source/instruction prefix. Combined private data is 6,760 bytes,
+  code 5,830 bytes/1,375 decoded instructions; the exercised U/Y model depth is
+  176 bytes. Minimum native entry minus that model depth leaves 3,128 bytes in
+  this scenario, not a native store watermark or universal stack bound. Both-stage
+  native gates require zero errors/nonfinite/mismatches/fallbacks, U/Y reset and
+  mode-1 opposite audio/history. Late-site native execution remains open.
   Full-route, production backing ownership and hardware acceptance remain open.
 - [Finding 97](../findings/97-ddr-access-diagnostic.md): opt-in first-attempt DDR
   monitor, compiled native guard fallback, ordered diagnostic RPC, both native
@@ -74,7 +90,27 @@ benchlock/native invocation and immutable daemon/patchkit hashes. Current result
 are `out/runs/dsp-stereo-proof/native/4c8488cb-3275-4c6e-a6f6-0a9dccef49d2/result.json`
 and `out/runs/dsp-stereo-proof/native/cefabd29-f00f-413c-a368-f8db89f1b179/result.json`;
 `out/runs/dsp-stereo-proof/native-polarity-acceptance.log` records both passes.
-The earlier identity-only run remains separately recorded in provenance. The scenario asserts
+The earlier identity-only run remains separately recorded in provenance.
+U/Y coverage has its own `uy_coverage` provenance entry, profile pair
+`out/runs/dsp-stereo-proof/uy-interpreter-profile.e45298-1` and
+`out/runs/dsp-stereo-proof/uy-interpreter-profile.e45298-2`, log
+`out/runs/dsp-stereo-proof/uy-interpreter-profile.log` and result
+`out/runs/dsp-stereo-proof/native/fd1c110f-a444-4e5f-ad50-42d2b4a4d11d/result.json`.
+That run intentionally filters mode 1; no absence claim follows from fast-profile
+missing call rows or this scenario's missing late row.
+Combined observer acceptance is in
+`out/runs/dsp-stereo-proof/native/5e1a8014-6b17-47b1-b3c6-c1d26d167f99/result.json`
+and `out/runs/dsp-stereo-proof/native/a49fdec1-2e03-42a1-a0d0-58989c6c9ede/result.json`,
+with `out/runs/dsp-stereo-proof/native-uy-acceptance.log`. Late-site positive
+coverage remains open despite both callsites being hooked.
+
+Next proposal, not implemented: a private per-stereo-frame fetch boundary admits
+cached generations and copies both channels' packed interpolation taps/scalars
+under the mask, releases the backing count, then computes outside. Denial zeros
+remaining frames without epoch relatch. Cursor/scratch lifetime must outlive the
+callback even after backing count reaches zero. Actual DDR NW32 mapping is
+`byte=0x80000000+4*(w-0x10000000)`; existing stand-in spans do not prove it.
+The plan retains this as unchecked private experimental work, not shipping policy. The scenario asserts
 forced snapshot reload, initial/patched snapshot/audio activation and ready hashes.
 Final TypeScript and scoped oxlint pass. The legacy DSP profile label `dn2-1.11`
 is not the firmware identity; CF/base/ready hashes establish the DN2 1.12 input.
