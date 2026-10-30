@@ -295,7 +295,8 @@ impl MockDevice {
             CMD_RENAME => {
                 // from NUL to NUL, as the runtime's `store::plan_rename` checks it
                 let mut parts = body.splitn(3, |&b| b == 0);
-                let (Some(f), Some(t), Some(rest)) = (parts.next(), parts.next(), parts.next()) else {
+                let (Some(f), Some(t), Some(rest)) = (parts.next(), parts.next(), parts.next())
+                else {
                     return r(Status::Msg);
                 };
                 let (Ok(from), Ok(to)) = (std::str::from_utf8(f), std::str::from_utf8(t)) else {
@@ -304,9 +305,15 @@ impl MockDevice {
                 if !rest.is_empty() || !path_ok(from) || !path_ok(to) || from == to {
                     return r(Status::Path);
                 }
-                let (fi, di) = (self.files.iter().position(|(p, _)| p == from), self.dirs.iter().position(|d| d == from));
+                let (fi, di) = (
+                    self.files.iter().position(|(p, _)| p == from),
+                    self.dirs.iter().position(|d| d == from),
+                );
                 let inside = |outer: &str, inner: &str| inner.starts_with(&format!("{outer}/"));
-                let taken = self.files.iter().any(|(p, _)| p == to || inside(to, p) || inside(p, to))
+                let taken = self
+                    .files
+                    .iter()
+                    .any(|(p, _)| p == to || inside(to, p) || inside(p, to))
                     || self.dirs.iter().any(|d| d == to || inside(to, d));
                 if taken {
                     return r(Status::Path);
@@ -332,7 +339,8 @@ impl MockDevice {
                 self.dirs.retain(|d| !inside(d, to));
                 if let Some(cut) = from.rfind('/') {
                     let parent = &from[..cut];
-                    let others = self.files.iter().any(|(p, _)| inside(parent, p)) || self.dirs.iter().any(|d| inside(parent, d));
+                    let others = self.files.iter().any(|(p, _)| inside(parent, p))
+                        || self.dirs.iter().any(|d| inside(parent, d));
                     if !others {
                         self.dirs.push(parent.into());
                     }
