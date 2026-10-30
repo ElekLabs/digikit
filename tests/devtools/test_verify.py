@@ -558,9 +558,129 @@ def test_load_last_result(tmp_path: Path) -> None:
 def test_rerun_plan() -> None:
     result = {"failed": ["pins", "check"], "py_tests": ["tests/a.py"]}
     expected = tuple(s for s in verify.STEPS if s in {"pins", "check"})
-    assert verify.rerun_plan(result) == (expected, ["tests/a.py"])
+    plan = verify.rerun_plan(result)
+    assert plan.steps == expected
+    assert plan.py_tests == []  # python-tests did not fail
     with pytest.raises(SystemExit):
         verify.rerun_plan({"failed": ["bogus"], "py_tests": []})
+
+
+def test_rerun_repeats_only_the_failed_python_file(tmp_path: Path) -> None:
+    gate = verify.Gate(tmp_path)
+    gate.failed = ["python-tests"]
+    gate.py_files = ["tests/a.py", "tests/b.py"]
+    gate.py_records = {"tests/a.py": {}, "tests/b.py": {}}
+    summary = tmp_path / "python-tests" / "summary.tsv"
+    summary.parent.mkdir()
+    summary.write_text(
+        "file\tstatus\trc\tseconds\n"
+        "tests/a.py\tOK\t0\t1.0\n"
+        "tests/b.py\tTIMEOUT\t-9\t5.0\n"
+    )
+    units = verify.failed_units(gate)
+    assert units == {"python-tests": ["tests/b.py"]}
+    result = {
+        "failed": ["python-tests"],
+        "py_tests": ["tests/a.py", "tests/b.py"],
+        "failed_units": units,
+        "run": "run1",
+        "head": "abcdef1234567",
+    }
+    plan = verify.rerun_plan(result)
+    assert plan.py_tests == ["tests/b.py"]
+    assert ("python-tests: tests/b.py", "failed in run1") in plan.reasons
+
+
+def test_rerun_adds_what_changed_since_the_failed_head() -> None:
+    result = {
+        "failed": ["python-tests"],
+        "py_tests": ["tests/a.py"],
+        "failed_units": {"python-tests": ["tests/a.py"]},
+        "run": "run1",
+        "head": "abcdef1234567",
+    }
+    changed_test = "tests/devtools/test_verify.py"
+    plan = verify.rerun_plan(result, ([changed_test], ("python-tests",), None))
+    assert plan.py_tests[0] == "tests/a.py"
+    assert changed_test in plan.py_tests
+    why = dict(plan.reasons)
+    assert why["python-tests: tests/a.py"] == "failed in run1"
+    assert why[f"python-tests: {changed_test}"] == "changed since abcdef1234"
+
+
+def test_rerun_repeats_failed_acceptance_files_or_the_whole_step() -> None:
+    result = {
+        "failed": ["runtime-fixture"],
+        "failed_units": {"runtime-fixture": ["runtime/a.test.ts"]},
+    }
+    only_failed = verify.rerun_plan(result)
+    assert only_failed.acceptance == {"runtime-fixture": ["runtime/a.test.ts"]}
+    # a failed step without known files repeats whole
+    whole = verify.rerun_plan({"failed": ["runtime-fixture"]})
+    assert whole.acceptance == {"runtime-fixture": []}
+
+
+JUNIT = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="1" errors="0" time="0.3">
+    <testsuite name="runtime/fault-trace.test.ts" tests="2" failures="1" errors="0" skipped="0" time="0.2">
+        <testcase classname="runtime/fault-trace.test.ts" name="fault &gt; reports" time="0.1"></testcase>
+        <testcase classname="runtime/fault-trace.test.ts" name="fault &gt; stops" time="0.1">
+            <failure message="expected 1 to be 2" type="AssertionError">trace</failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="runtime/ok.test.ts" tests="1" failures="0" errors="0" skipped="0" time="0.1">
+        <testcase classname="runtime/ok.test.ts" name="passes" time="0.1"></testcase>
+    </testsuite>
+</testsuites>
+"""
+
+
+def test_junit_reader_returns_the_failed_vitest_file(tmp_path: Path) -> None:
+    report = tmp_path / "runtime-fixture.junit.xml"
+    report.write_text(JUNIT)
+    assert verify.junit_failed_files(report) == ["runtime/fault-trace.test.ts"]
+    assert verify.junit_failed_files(tmp_path / "missing.xml") == []
+
+
+def test_named_python_file_must_exist() -> None:
+    with pytest.raises(SystemExit) as info:
+        verify.main(["--py-tests", "tests/devtools/test_no_such_file.py"])
+    assert info.value.code == 2
+
+
+def test_named_vitest_file_goes_to_the_step_of_its_directory() -> None:
+    py, by_step = verify.named_units([], ["runtime/fault-trace.test.ts"])
+    assert py == []
+    assert by_step == {"runtime-fixture": ["runtime/fault-trace.test.ts"]}
+    with pytest.raises(ValueError):
+        verify.named_units([], ["runtime/no-such.test.ts"])
+
+
+def test_named_files_exclude_rerun_and_full() -> None:
+    for other in ("--rerun-failed", "--full"):
+        with pytest.raises(SystemExit) as info:
+            verify.main(["--py-tests", "tests/devtools/test_verify.py", other])
+        assert info.value.code == 2
+
+
+def test_daemon_check_needs_variables_that_name_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for var in ("DIGI_EMUD_DT2", "DIGI_EMUD_DN2"):
+        monkeypatch.delenv(var, raising=False)
+    assert verify.missing_daemons(("runtime-fixture",), []) == [
+        "DIGI_EMUD_DT2",
+        "DIGI_EMUD_DN2",
+    ]
+    assert verify.main(["--only", "runtime-fixture"]) == 2
+    for var in ("DIGI_EMUD_DT2", "DIGI_EMUD_DN2"):
+        binary = tmp_path / var
+        binary.write_text("")
+        monkeypatch.setenv(var, str(binary))
+    assert verify.missing_daemons(("runtime-fixture",), []) == []
+    # a plan that builds the daemons needs no variables
+    monkeypatch.setenv("DIGI_EMUD_DT2", str(tmp_path / "gone"))
+    assert verify.missing_daemons(("runtime-fixture", "smoke"), []) == []
 
 
 def test_rerun_failed_excludes_only_and_full() -> None:
@@ -1470,9 +1590,8 @@ def test_failed_native_host_workflow_persists_for_rerun_and_blocks_web(
     assert (tmp_path / "host.log").read_text() == "bad format"
     assert gate.failed.count("host") == 1
     failed = [step for step in gate.failed if step in verify.STEPS]
-    assert verify.rerun_plan({"failed": failed, "py_tests": []}) == (
-        tuple(step for step in verify.STEPS if step in {"host", *steps}),
-        [],
+    assert verify.rerun_plan({"failed": failed, "py_tests": []}).steps == tuple(
+        step for step in verify.STEPS if step in {"host", *steps}
     )
     assert ("web" in gate.failed) == ("web" in steps)
 

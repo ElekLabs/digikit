@@ -29,6 +29,15 @@ def run_seconds(run: Path, files: Iterable[str]) -> dict[str, float]:
     return found
 
 
+def failed_files(run: Path) -> list[str]:
+    """The python-tests files of one verify run directory whose status is not OK."""
+    summary = run / "python-tests" / "summary.tsv"
+    if not summary.is_file():
+        return []
+    rows = (row.split("\t") for row in summary.read_text().splitlines()[1:])
+    return [cols[0] for cols in rows if len(cols) > 1 and cols[1] != "OK"]
+
+
 def file_seconds(
     verify_dir: Path, files: Iterable[str], exclude: Path | None = None
 ) -> dict[str, float]:

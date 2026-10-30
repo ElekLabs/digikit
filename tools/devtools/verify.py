@@ -62,6 +62,7 @@ import sys
 import threading
 import time
 import tomllib
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -1493,8 +1494,17 @@ def explain(
     budget: int = 1,
     all_no_aot: bool = False,
     budget_label: str | None = None,
+    acceptance: dict[str, list[str]] | None = None,
+    smoke_selection: list[str] | None = None,
+    reasons: list[tuple[str, str]] | None = None,
 ) -> None:
-    """Print the routing, the node plan, the worker plan and the python-tests files; run nothing."""
+    """Print the routing, the node plan, the worker plan and the python-tests files; run nothing.
+    ACCEPTANCE (files per step, empty: all) and SMOKE_SELECTION replace the routing of FILES;
+    REASONS (unit, why) are the units of a rerun."""
+    if reasons:
+        print("rerun units:")
+        for unit, why in reasons:
+            print(f"  {unit} <- {why}")
     if per_file:
         print("changed files:")
         for path in files:
@@ -1521,10 +1531,19 @@ def explain(
         if conservative:
             print(f"smoke: selected, conservative path: {', '.join(conservative)}")
     if not per_file and "smoke" in steps:
-        print("smoke: full matrix for explicit/full/rerun acceptance")
+        if smoke_selection:
+            print(
+                "smoke: selected dependent matrix cells: " + "; ".join(smoke_selection)
+            )
+        else:
+            print("smoke: full matrix for explicit/full/rerun acceptance")
     for step in verify_route.ACCEPTANCE_DIRS:
         if step in steps:
-            selected = acceptance_plan(step, files)
+            selected = (
+                acceptance.get(step, [])
+                if acceptance is not None
+                else acceptance_plan(step, files)
+            )
             print(
                 f"{step}: native Vitest files (relevant changes, or all for broad/explicit acceptance): "
                 + ", ".join(selected or ["all"])
@@ -1761,6 +1780,7 @@ def run_step(gate: Gate, step: str) -> None:
             "runtime-fixture": "test:runtime",
             "module-load": "test:modules",
         }[step]
+        env["REGRESSION_JUNIT_FILE"] = str(gate.out / f"{step}.junit.xml")
         gate.run(
             step, ["pnpm", "--filter", "@digi/regression", script, *selected], env=env
         )
@@ -1984,14 +2004,180 @@ def load_last_result(verify_dir: Path, exclude: Path | None) -> dict | None:
     return None
 
 
-def rerun_plan(result: dict) -> tuple[tuple[str, ...], list[str]]:
-    """(steps, python-tests files) to repeat the steps that failed in RESULT."""
+def junit_failed_files(path: Path) -> list[str]:
+    """The test files with a failed or errored case in a Vitest JUnit report, relative to
+    tests/regression. Vitest names the file (relative to its root) in the testsuite name and in
+    the classname of each case; a suite with failures but no failed case counts by its name."""
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    found: set[str] = set()
+    for suite in root.iter("testsuite"):
+        bad = [
+            case
+            for case in suite.iter("testcase")
+            if case.find("failure") is not None or case.find("error") is not None
+        ]
+        names = {case.get("classname") or suite.get("name") for case in bad}
+        if not bad and (
+            int(suite.get("failures") or 0) or int(suite.get("errors") or 0)
+        ):
+            names = {suite.get("name")}
+        for name in names:
+            rel = (name or "").split(" > ")[0].removeprefix("tests/regression/")
+            if rel.endswith(".test.ts"):
+                found.add(rel)
+    return sorted(found)
+
+
+def failed_units(gate: Gate) -> dict[str, list[str]]:
+    """The failed files of the steps a rerun can repeat alone: python-tests files (failed or never
+    run) and the Vitest files of a failed acceptance step. A step whose files are unknown has no
+    entry, so a rerun repeats it whole. Smoke has none: pk_harness writes no per-cell result."""
+    units: dict[str, list[str]] = {}
+    if "python-tests" in gate.failed:
+        lost = [f for f in gate.py_files if f not in gate.py_records]
+        if files := [*verify_times.failed_files(gate.out), *lost]:
+            units["python-tests"] = files
+    for step in verify_route.ACCEPTANCE_DIRS:
+        if step in gate.failed and (
+            files := junit_failed_files(gate.out / f"{step}.junit.xml")
+        ):
+            units[step] = files
+    return units
+
+
+@dataclass
+class Rerun:
+    """What --rerun-failed runs: the steps, python-tests entries, files per acceptance step (empty:
+    all), smoke cells (None: the matrix), Rust packages (None: the workspace), and why each unit is there."""
+
+    steps: tuple[str, ...]
+    py_tests: list[str]
+    acceptance: dict[str, list[str]]
+    smoke: list[str] | None
+    rust_packages: list[str] | None
+    reasons: list[tuple[str, str]]
+
+
+def changed_plan(
+    base: str, head: str | None = None
+) -> tuple[list[str], dict[str, str], tuple[str, ...], list[str] | None]:
+    """(files, origin notes, steps, Rust packages) the changes since BASE route to."""
+    files, origin = expand_mise(changed_files(base, head), base, head)
+    files, lock_origin = expand_lock(files, base, head)
+    origin |= lock_origin
+    files = drop_metadata_objects(files, base, head)
+    steps = steps_for(files)
+    rust_packages: list[str] | None = None
+    if "rust-tests" in steps:
+        rust_packages = rust_scope(files)
+        if rust_packages == []:  # no changed file reaches a Rust test
+            steps = tuple(s for s in steps if s != "rust-tests")
+        steps = with_desktop(steps, rust_packages)
+    return files, origin, steps, rust_packages
+
+
+def rerun_plan(
+    result: dict,
+    changed: tuple[list[str], tuple[str, ...], list[str] | None] | None = None,
+) -> Rerun:
+    """The failed units of RESULT plus what CHANGED (files, steps, Rust packages of changed_plan
+    since the failed run's head) routes to."""
     failed = tuple(result.get("failed", []))
     unknown = sorted(set(failed) - set(STEPS))
     if unknown:
         raise SystemExit(f"verify: unknown steps in last result: {', '.join(unknown)}")
-    steps = tuple(s for s in STEPS if s in failed)
-    return steps, list(result.get("py_tests", []))
+    files, new_steps, new_rust = changed or ([], (), None)
+    failed_why = f"failed in {result.get('run', '?')}"
+    changed_why = f"changed since {str(result.get('head', '?'))[:10]}"
+    units = result.get("failed_units", {})
+    steps = tuple(s for s in STEPS if s in failed or s in new_steps)
+    reasons = [(s, failed_why if s in failed else changed_why) for s in steps]
+    py_tests: list[str] = []
+    if "python-tests" in failed:
+        py_tests = list(units.get("python-tests") or result.get("py_tests", []))
+        reasons += [(f"python-tests: {p}", failed_why) for p in py_tests]
+    if "python-tests" in new_steps:
+        for path, _ in python_test_plan(files, False):
+            if path not in py_tests:
+                py_tests.append(path)
+                reasons.append((f"python-tests: {path}", changed_why))
+    acceptance: dict[str, list[str]] = {}
+    for step in verify_route.ACCEPTANCE_DIRS:
+        if step not in steps:
+            continue
+        named: dict[str, str] = {}
+        everything = False
+        if step in failed:
+            if units.get(step):
+                named.update({f: failed_why for f in units[step]})
+            else:
+                everything = True
+        if step in new_steps:
+            if selected := acceptance_plan(step, files):
+                named.update({f: named.get(f, changed_why) for f in selected})
+            else:
+                everything = True
+        acceptance[step] = [] if everything else sorted(named)
+        if not everything:
+            reasons += [(f"{step}: {f}", named[f]) for f in sorted(named)]
+    smoke = None if "smoke" in failed else smoke_cells(files) if files else None
+    rust = None if "rust-tests" in failed else new_rust
+    return Rerun(steps, py_tests, acceptance, smoke, rust, reasons)
+
+
+def named_units(
+    py_tests: list[str], tests: list[str]
+) -> tuple[list[str], dict[str, list[str]]]:
+    """The checked --py-tests files and the --tests files by acceptance step (by their directory in
+    tests/regression); ValueError names the first bad file."""
+    for path in py_tests:
+        if not (ROOT / path).is_file():
+            raise ValueError(f"--py-tests: no such file: {path}")
+    by_step: dict[str, list[str]] = {}
+    for path in tests:
+        if not (ROOT / "tests/regression" / path).is_file():
+            raise ValueError(f"--tests: no such file in tests/regression: {path}")
+        step = next(
+            (
+                s
+                for s, d in verify_route.ACCEPTANCE_DIRS.items()
+                if path.startswith(d + "/")
+            ),
+            None,
+        )
+        if step is None:
+            dirs = ", ".join(verify_route.ACCEPTANCE_DIRS.values())
+            raise ValueError(f"--tests: {path} is not under one of: {dirs}")
+        by_step.setdefault(step, []).append(path)
+    return list(py_tests), by_step
+
+
+def missing_daemons(steps: tuple[str, ...], py_tests: list[str]) -> list[str]:
+    """The DIGI_EMUD_<DEV> variables that are unset or name no file, when the plan has steps that
+    drive daemons but no build-daemons (--only never builds them). Stock needs the DT2 binary only."""
+    nodes, _ = plan(steps, py_tests)
+    if "build-daemons" in nodes:
+        return []
+    users = [
+        n
+        for n in nodes
+        if n in DAEMON_NODES
+        and (
+            n != "python-tests"
+            or any(needs_daemon(f) for f, _ in python_files(py_tests))
+        )
+    ]
+    if not users:
+        return []
+    devices = ("DT2",) if users == ["stock"] else ("DT2", "DN2")
+    return [
+        f"DIGI_EMUD_{d}"
+        for d in devices
+        if not os.path.isfile(os.environ.get(f"DIGI_EMUD_{d}", ""))
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2045,7 +2231,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--rerun-failed",
         action="store_true",
-        help="only the steps that failed in the most recent run",
+        help="the units that failed in the most recent run (failed python-tests files, failed Vitest "
+        "files) plus what changed since that run's HEAD",
+    )
+    ap.add_argument(
+        "--py-tests",
+        nargs="+",
+        metavar="FILE",
+        help="python-tests runs only these repo-relative test files (implies the step without --only)",
+    )
+    ap.add_argument(
+        "--tests",
+        nargs="+",
+        metavar="FILE",
+        help="Vitest files relative to tests/regression, e.g. runtime/fault-trace.test.ts; each runs in "
+        "the acceptance step of its directory (implies those steps without --only)",
     )
     ap.add_argument(
         "--no-cache",
@@ -2055,15 +2255,27 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.rerun_failed and (args.only or args.full):
         ap.error("--rerun-failed cannot be combined with --only or --full")
+    named = bool(args.py_tests or args.tests)
+    if named and (args.rerun_failed or args.full):
+        ap.error(
+            "--py-tests and --tests cannot be combined with --rerun-failed or --full"
+        )
     if args.head and not args.explain:
         ap.error("--head only explains a range: add --explain")
+    named_py: list[str] = []
+    named_acceptance: dict[str, list[str]] = {}
+    try:
+        named_py, named_acceptance = named_units(args.py_tests or [], args.tests or [])
+    except ValueError as exc:
+        ap.error(str(exc))
+    implied = (["python-tests"] if named_py else []) + list(named_acceptance)
     files: list[str] = []
     origin: dict[str, str] = {}
     rust_packages: list[str] | None = None
     full, dt2 = args.full, args.dt2
     if full:  # tests/digikit: every scenario (the gate runs the quick tier)
         os.environ["DIGIKIT_TIER"] = "full"
-    rerun_tests: list[str] | None = None
+    rerun: Rerun | None = None
     if args.rerun_failed:
         last = load_last_result(Path(digi_env.RUNS_ROOT) / "verify", None)
         if last is None:
@@ -2072,45 +2284,64 @@ def main(argv: list[str] | None = None) -> int:
         if not last.get("failed"):
             print("verify: the last run had no failed steps; nothing to do")
             return 0
-        steps, rerun_tests = rerun_plan(last)
         full, dt2 = bool(last.get("full")), bool(last.get("dt2"))
         old, new = str(last.get("head", "?")), git_lines("rev-parse", "HEAD")[0]
+        changed = None
         if old != new:
-            print(
-                f"verify: code changed since the failed run ({old[:10]} -> "
-                f"{new[:10]}); re-running the failed steps on the current tree"
-            )
+            try:
+                new_files, origin, new_steps, new_rust = changed_plan(old)
+            except subprocess.CalledProcessError:
+                print(
+                    f"verify: cannot compare with {old[:10]}; re-running the failed units only"
+                )
+            else:
+                print(
+                    f"verify: code changed since the failed run ({old[:10]} -> "
+                    f"{new[:10]}); adding what the {len(new_files)} changed files route to"
+                )
+                changed = (new_files, new_steps, new_rust)
+        rerun = rerun_plan(last, changed)
+        steps, rust_packages = rerun.steps, rerun.rust_packages
         why = "--rerun-failed"
     elif args.only:
         steps = tuple(args.only.split(","))
         unknown = sorted(set(steps) - set(STEPS))
         if unknown:
             ap.error(f"unknown steps: {', '.join(unknown)}")
+        for step in implied:
+            if step not in steps:
+                ap.error(f"--py-tests/--tests need the step {step}: add it to --only")
         why = "--only"
         if "python-tests" in steps:
             files = changed_files(args.base)
+    elif named:
+        steps = tuple(s for s in STEPS if s in implied)
+        why = "named files"
     elif args.full:
         skip = {"tier-quick", "dt2-tier-quick" if args.dt2 else "dt2-tier-sweep"}
         steps = tuple(s for s in STEPS if s not in skip)
         why = "--full"
     else:
-        files, origin = expand_mise(
-            changed_files(args.base, args.head), args.base, args.head
-        )
-        files, lock_origin = expand_lock(files, args.base, args.head)
-        origin |= lock_origin
-        files = drop_metadata_objects(files, args.base, args.head)
-        steps = steps_for(files)
-        if "rust-tests" in steps:
-            rust_packages = rust_scope(files)
-            if rust_packages == []:  # no changed file reaches a Rust test
-                steps = tuple(s for s in steps if s != "rust-tests")
-            steps = with_desktop(steps, rust_packages)
+        files, origin, steps, rust_packages = changed_plan(args.base, args.head)
         why = f"{len(files)} changed files since {args.base}"
-    if rerun_tests is not None:
-        py_plan = [(path, "rerun") for path in rerun_tests]
+    if rerun is not None:
+        py_plan = [(path, "rerun") for path in rerun.py_tests]
+        acceptance = rerun.acceptance
+        smoke_selection = rerun.smoke
     else:
-        py_plan = python_test_plan(files, args.full)
+        if named_py:
+            py_plan = [(path, "named") for path in named_py]
+        else:
+            py_plan = python_test_plan(files, args.full)
+        routed = why not in ("--only", "--full", "named files")
+        acceptance = (
+            named_acceptance
+            if named_acceptance
+            else {s: acceptance_plan(s, files) for s in verify_route.ACCEPTANCE_DIRS}
+            if routed
+            else {}
+        )
+        smoke_selection = smoke_cells(files) if routed else None
     budget = verify_budget.resolve_budget(args.jobs)
     budget_label = verify_budget.budget_text(args.jobs)
     if args.explain:
@@ -2118,14 +2349,27 @@ def main(argv: list[str] | None = None) -> int:
             steps,
             files,
             py_plan,
-            per_file=not (args.only or args.full or args.rerun_failed),
+            per_file=not (args.only or args.full or args.rerun_failed or named),
             origin=origin,
             rust_packages=rust_packages,
             budget=budget,
             all_no_aot=args.all_no_aot,
             budget_label=budget_label,
+            acceptance=acceptance if rerun or named_acceptance else None,
+            smoke_selection=smoke_selection if rerun else None,
+            reasons=rerun.reasons if rerun else None,
         )
         return 0
+    if missing := missing_daemons(steps, [path for path, _ in py_plan]):
+        print(
+            f"verify: the plan runs steps that drive digi-emud daemons without building them, "
+            f"and {', '.join(missing)} is unset or names no file. Build the daemons with "
+            "`uv run python -m tools.devtools.verify_build daemons --env-out FILE` and export "
+            "the variables it writes, or run a gate whose plan has build-daemons "
+            "(`mise run verify`; --only never builds them).",
+            file=sys.stderr,
+        )
+        return 2
     niced = verify_budget.lower_priority(args.foreground)
     # Every step, and no_aot_env(), inherits os.environ: set the cache env once.
     os.environ.update(cache_env(None, args.no_cache))
@@ -2141,14 +2385,8 @@ def main(argv: list[str] | None = None) -> int:
         rust_packages,
         all_no_aot=args.all_no_aot,
         budget=budget,
-        acceptance={
-            step: acceptance_plan(step, files) for step in verify_route.ACCEPTANCE_DIRS
-        }
-        if why not in ("--only", "--full", "--rerun-failed")
-        else {},
-        smoke_selection=smoke_cells(files)
-        if why not in ("--only", "--full", "--rerun-failed")
-        else None,
+        acceptance=acceptance,
+        smoke_selection=smoke_selection,
     )
     nodes, deps = plan(steps, gate.py_tests)
     print(
@@ -2179,6 +2417,8 @@ def main(argv: list[str] | None = None) -> int:
         "base": args.base,
         "head": git_lines("rev-parse", "HEAD")[0],
         "py_tests": gate.py_tests,
+        "failed_units": failed_units(gate),
+        "run": out.name,
         "root": str(ROOT),
     }
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
