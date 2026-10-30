@@ -410,8 +410,38 @@ configuration error at p. 27-23 (page 1258). No hardware behavior was measured h
 Submission follows `0x1ca62c → 0x1cc019`; circular hardware continuation is not
 inherently boot-only. Initialization registers DMA24/25 handlers `0x1cc656` and
 `0x1cc6b8` at `0x1cc847/862`. They acknowledge/reset through `0xb8e210`, clear
-request fields and can invoke an indirect callback. **[O]** Actual invocation and
-lifetime of creator `0x1ca63e`, plus later request/configuration replacement, remain
-the active next audit. Running on every boot or forever is not established. This
+request fields and can invoke an indirect callback. The lifecycle follow-up below
+finds a linked shutdown/control path, while actual creator invocation and N remain
+unresolved. Running on every boot or forever is not established. This
 narrows direction/count evidence, not free DDR, complete writer reach, backing
 ownership or a production reservation.
+
+### Bounded lifecycle audit: shutdown path found, creator still unresolved
+
+**[D]** A further audit checked 130 original DN2 1.12 instruction heads. No
+recorded CALL/JUMP into `0x1ca63e` or its interior, decoded instruction naming its
+entry, literal/data reference, or exact little-endian 32-bit entry pointer in final
+memory was found. These negative searches do not establish dead code: computed
+or external entry and missing decode remain open. Actual invocation and N remain
+unresolved.
+
+Positive path `0x1ca81b → 0x1ca6d9` registers callback `0x1ca6a7` at
+`0x1ca72d`, through `0xb8c33a` at `0x1ca734`. This follows separate main SPI2
+initialization at `0x1ca814` with R4=`0xabc`; that argument must not be attributed
+to auxiliary creator `0x1ca63e`. Callback `0x1ca6a7` reads the auxiliary handle
+from `DM(0x2c0078)` and calls `0x1cbac0`.
+
+That control path checks request-state fields `+7/+8`. Active paths clear TXCTL
+at `0x1cbb3f` or RXCTL at `0x1cbb22`, then reach cleanup `0x1cba88`.
+Successful continuation clears SPI_CTL enable bit 0 at `0x1cbb05/07`; complete
+error-path cleanup is not established. The same published auxiliary handle is
+therefore positively linked to shutdown/control, but its external trigger, valid
+publication and successful execution are not proven. No linked descriptor
+start/count replacement was identified in this bounded audit.
+
+**[O]** The static lifecycle slice is complete within that scope. The next boundary
+is external/computed creator entry or a capability-supported exact-entry R4
+observation; diagnostic tooling is being checked, with no new run selected here.
+The valid nonzero configured-span ceiling remains 65,534 bytes and XCNT=0 remains
+a configuration error. Neither every-boot/perpetual activity nor backing ownership,
+free DDR or a production reservation follows.

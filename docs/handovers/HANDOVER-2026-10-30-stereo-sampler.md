@@ -275,9 +275,12 @@ ownership, corrupted state and entry/dispatch precision remain open, with no
 policy expansion or reservation conclusion. Auxiliary `0x1ca59f` setup now
 resolves SPI1 DMA24 TX/DMA25 RX fixed circular buffers and two-byte count/modify
 configuration. Valid nonzero counts bound configured spans only; XCNT=0 is a
-configuration error, not an empty/inactive transfer. The active next audit is
-actual creator `0x1ca63e` invocation/lifetime and later request/config replacement,
-not an exhaustive writer audit or proof of every-boot/perpetual activity. See [finding 91](../findings/91-dn2-ddr-configuration.md).
+configuration error, not an empty/inactive transfer. The completed bounded static
+lifecycle audit links the published auxiliary handle to callback shutdown/control,
+but not actual creator entry/N, a valid external trigger or complete error cleanup.
+Main SPI2's R4=`0xabc` is separate and must not be used as auxiliary N. Next resolve
+external/computed creator entry or exact-entry R4 observation capability; negative
+reference searches do not prove dead code or every-boot/perpetual activity. See [finding 91](../findings/91-dn2-ddr-configuration.md).
 
 The canonical packed-PCM16 parser already exists, but the current source/job
 contract is LE float32. Direct substitution would violate the consumer contract.

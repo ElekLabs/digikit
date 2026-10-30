@@ -57,8 +57,10 @@ containing range, `0x1c125e`, now has a bounded store-free body audit. Its calle
 R4 provenance closes the `0xb80e79` store as per-slot voice-state word 2, separate
 from external ring backing. Auxiliary `0x1ca59f` setup now resolves SPI1 TX/RX
 fixed roots and two-byte count/modify configuration; XCNT=0 is an error, not an
-inactive/empty transfer. Actual creator `0x1ca63e` invocation/lifetime and later
-request/configuration replacement are next. External ring ownership, entry/dispatch
+inactive/empty transfer. The bounded static lifecycle audit links the published
+auxiliary handle to callback shutdown/control; creator invocation/N and complete
+error-path behavior remain unresolved. Next resolve external/computed creator
+entry or the capability for exact-entry R4 observation. External ring ownership, entry/dispatch
 precision and DT2 source mutation coverage remain open. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
@@ -2687,9 +2689,14 @@ and mypy pass. Source/report identity and commands are retained in ignored
   and DMA25 RX use fixed circular roots, XCNT=N>>1, XMOD=2 and two-byte widths.
   Valid nonzero count bounds a configured span, not actual size/coexistence;
   XCNT=0 is a configuration error.
-- [ ] Trace actual creator `0x1ca63e` invocation/lifetime and later request/config
-  replacement. Circular continuation is not inherently boot-only, but every-boot
-  or perpetual activity is unproved; no general allocator/free-DDR inference.
+- [x] Complete the bounded static lifecycle slice: callback `0x1ca6a7` reads the
+  published auxiliary handle and reaches shutdown/control. No creator reference
+  or linked descriptor start/count replacement was found; negatives are not dead
+  code, and main SPI2's R4=`0xabc` is not auxiliary N.
+- [ ] Resolve external/computed creator `0x1ca63e` entry/N, or capability-supported
+  exact-entry R4 observation. Valid handle publication, external trigger, success
+  and complete error cleanup remain open; no every-boot/perpetual activity or
+  allocator/free-DDR inference is established.
 - [ ] Keep external ring ownership and explicit entry/dispatch precision separate
   from this closed destination family; corrupted state and complete writer reach
   remain open. No traversal-policy or production reservation is approved. See
