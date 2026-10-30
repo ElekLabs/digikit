@@ -1,0 +1,1074 @@
+{
+ "arch": "sharc",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 7,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_scalar",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_render",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_calls",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_calls",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 85,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 91,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_new_frame",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 95,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_frame_done",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_sp",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 114,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_new_sp",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_sp_done",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 121,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_sp",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 129,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 143,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": "seg_pmco",
+   "symbol": "_sp_engine_base",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 156,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 161,
+   "section": "seg_pmco",
+   "symbol": "_sp_states",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": "seg_pmco",
+   "symbol": "_sp_audio",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 170,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_slot_ok",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 189,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_slot",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 192,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 208,
+   "section": "seg_pmco",
+   "symbol": "_sp_initialized",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 221,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_coeff",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 241,
+   "section": "seg_pmco",
+   "symbol": "_sp_clone",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 272,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonidentity",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 283,
+   "section": "seg_pmco",
+   "symbol": "_sp_copy_input",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonidentity_coeff",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 292,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonidentity_count",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 297,
+   "section": "seg_pmco",
+   "symbol": "_sp_coeff_slot",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 302,
+   "section": "seg_pmco",
+   "symbol": "_sp_coeff21",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 307,
+   "section": "seg_pmco",
+   "symbol": "_sp_coeff22",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 312,
+   "section": "seg_pmco",
+   "symbol": "_sp_coeff23",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 315,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonidentity_coeff",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 319,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonidentity_coeff",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 340,
+   "section": "seg_pmco",
+   "symbol": "_sp_input_zero",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 343,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonzero_input",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 347,
+   "section": "seg_pmco",
+   "symbol": "_sp_nonzero_input",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 357,
+   "section": "seg_pmco",
+   "symbol": "_sp_input_loop",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 403,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_render",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 407,
+   "section": "seg_pmco",
+   "symbol": "_sp_render_left_return",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 443,
+   "section": "seg_pmco",
+   "symbol": "_sp_shadow_calls",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 447,
+   "section": "seg_pmco",
+   "symbol": "_sp_shadow_calls",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 458,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_render",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 462,
+   "section": "seg_pmco",
+   "symbol": "_sp_right_return",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 479,
+   "section": "seg_pmco",
+   "symbol": "_sp_equal",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 482,
+   "section": "seg_pmco",
+   "symbol": "_sp_mismatches",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 488,
+   "section": "seg_pmco",
+   "symbol": "_sp_count_mismatch",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 493,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_slot",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 498,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_state",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 503,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_input",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 508,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_output",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 511,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_sample",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 514,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_left",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 517,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_right",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 522,
+   "section": "seg_pmco",
+   "symbol": "_sp_first_mode1",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 525,
+   "section": "seg_pmco",
+   "symbol": "_sp_mismatches",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 529,
+   "section": "seg_pmco",
+   "symbol": "_sp_mismatches",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 542,
+   "section": "seg_pmco",
+   "symbol": "_sp_compare",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 591,
+   "section": "seg_pmco",
+   "symbol": "_sp_fallbacks",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 595,
+   "section": "seg_pmco",
+   "symbol": "_sp_fallbacks",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 641,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_render",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 651,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_scalar",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 666,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_reset",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 720,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_calls",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 724,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_calls",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 729,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 735,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_new_frame",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 739,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_frame_done",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 742,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 752,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_sp",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 758,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_new_sp",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 762,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_sp_done",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 765,
+   "section": "seg_pmco",
+   "symbol": "_sp_low_entry_sp",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 773,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 778,
+   "section": "seg_pmco",
+   "symbol": "_sp_engine_base",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 786,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 791,
+   "section": "seg_pmco",
+   "symbol": "_sp_states",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 794,
+   "section": "seg_pmco",
+   "symbol": "_sp_audio",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 800,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_slot_ok",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 806,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 819,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_slot",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 822,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_fallback",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 838,
+   "section": "seg_pmco",
+   "symbol": "_sp_initialized",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 886,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_reset",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 890,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_left_return",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 932,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_finish",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 937,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_reset",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": -1,
+   "offset": 941,
+   "section": "seg_pmco",
+   "symbol": "_sp_right_reset_return",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 944,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_mirrors",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 948,
+   "section": "seg_pmco",
+   "symbol": "_sp_reset_mirrors",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 997,
+   "section": "seg_pmco",
+   "symbol": "_sp_fallbacks",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1001,
+   "section": "seg_pmco",
+   "symbol": "_sp_fallbacks",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1047,
+   "section": "seg_pmco",
+   "symbol": "_sp_stock_reset",
+   "type": "sharc.abs24"
+  }
+ ],
+ "sections": [
+  {
+   "align": 8,
+   "hex": "7f773f0e821420000000010001003a060000000022142000000001000100fe713f3b021420000000010001003e0600000000fe713f3b8715ffffe0ff089d7e00089dfd00089d7c01089d7a02089d7904089d78063e713f00089d77003e713f80089d76007e713f00089d75003e733f00089d73003e733f80089d7200fe713f00089d7400be773f00089d6400800f00003e703f183e70bf1800100000000000c50011000000007f713f00011000000000820f000012c300060000000001c32206000000000011000000007f713f888015000020003e713f00011000000000820f000012c300060000000001c3220600000000001100000000089c0100810f200001c32006000000003f733f807e73bf0001cd7e73bf8001cd810f000001c3200600000000089c7a00010f00000000020f000088e012c001c1020600000000810f0000110f00000000100f00000000820f000002c3000600000000820f700002c102060000000001160000700000160000800011c5820f100012c30206000000003e0600000000089df1003e713f80089d70003e713f00089d6f003e0200000102020f0000000002c03e703f08089d6e0008900000810f000001c3200600000000089c7a08089cf008810f1c00089000000893000000160000040001160000040011c6200600000000089c6e08800f010008910000089c7a08089cf00808901500089315000890160008931600089017000893170008921500010f803f000001c3200600000000089216000892970001cd810f000001c3000600000000001000000000810f000001c3200600000000089c710000110000000008921500001100000000089216000011000000000892170000110000000000100000000000c5001100000000089c7908089cef08810f20000890000008930000020fff7fffff84010202840f000024c300060000000000100000000000c500110000000000160000040001160000040011c6200600000000089c0100f09f089c73003e703f18089c72003e70bf18089c77003e703f08089c76003e70bf08089c75003e703f0a089cfd00089c7c01089c7a02089c7904089c7806089c64003e703f3c089c74003e703f3b089c7e00041800000000f29fc09fffffffff871500000100089d6d00089dec00089d6b01089d6a02089d6904089d68067e713f00089d67007f773f00089d6600be773f00089d6500800f00003e703f183e70bf1800100000000000c5001100000000089c7002089c6f04c8c2800f2000f09f041800000000f29fc09fffffffff871500000100089c7808089cef08810f0000089000010892000224c3000600000000001000000000880f000008c3200600000000089c7100001100000000089c7a00001100000000089c7900001100000000089c78000011000000000111000000000211000000000411000000003f773f0000110000000000100000000000c500110000000000160000040001160000040011c5800f200010c3020600000000089c7f0e089c73003e703f18089c72003e70bf18089c77003e703f08089c76003e70bf08089c67003e703f0a089cec00089c6b01089c6a02089c6904089c6806089c65003e703f3c089c66003e703f3b089c6d003f083f340100011900100000000000c5001100000000089c73003e703f18089c72003e70bf18089c77003e703f08089c76003e70bf08089c75003e703f0a089cfd00089c7c01089c7a02089c7904089c7806089c64003e703f3c089c74003e703f3b089c7e008715000020003e06000000007f773f0e821420000000010001003a060000000022142000000001000100fe713f3b021420000000010001003e0600000000fe713f3b8715ffffe0ff089d7e00089dfd00089d7c01089d7a02089d7904089d78063e713f00089d77003e713f80089d76007e713f00089d75003e733f00089d73003e733f80089d7200fe713f00089d7400be773f00089d6400800f00003e703f183e70bf1800100000000000c50011000000007f713f00011000000000820f000012c300060000000001c32206000000000011000000007f713f888015000020003e713f00011000000000820f000012c300060000000001c32206000000000011000000007e733f00810f000001c3200600000000089c7a00010f00000000020f000088e012c001c1020600000000810f0000110f00000000100f00000000820f000002c3000600000000820f700002c102060000000001160000700000160000800011c5820f100012c30206000000003e0600000000089df1003e713f80089d70003e713f00089d6f003e0200000102020f0000000002c03e703f08089d6e00089c73003e703f18089c72003e70bf18089c77003e703f08089c76003e70bf08089c75003e703f0a089cfd00089c7c01089c7a02089c7904089c7806089c64003e703f3c089c74003e703f3b089c7e00041800000000f29fc09fffffffff089c7c01089d6d00089dec00089d6b01089d6a02089d6904089d68067e713f00089d67007f773f00089d6600be773f00089d6500800f00003e703f183e70bf18089c6e0808900000810f000001c3000600000000089c7002041800000000f29fc09fffffffff00100000000000c5001100000000089c7f0e089c73003e703f18089c72003e70bf18089c77003e703f08089c76003e70bf08089c67003e703f0a089cec00089c6b01089c6a02089c6904089c6806089c65003e703f3c089c66003e703f3b089c6d003f083f340100011900100000000000c5001100000000089c73003e703f18089c72003e70bf18089c77003e703f08089c76003e70bf08089c75003e703f0a089cfd00089c7c01089c7a02089c7904089c7806089c64003e703f3c089c74003e703f3b089c7e008715000020003e0600000000",
+   "kind": "text",
+   "name": "seg_pmco",
+   "size": 2100
+  },
+  {
+   "align": 8,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "seg_dmda",
+   "size": 88
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__sp_states",
+   "size": 1792
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__sp_audio",
+   "size": 2048
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__sp_initialized",
+   "size": 64
+  }
+ ],
+ "source_sha256": "1846931808343b7e27e5bb0d304ec1c65670a967507fb40f1f4e6f2a484b642c",
+ "symbols": [
+  {
+   "global": false,
+   "name": "_sp_clone",
+   "section": "seg_pmco",
+   "value": 230
+  },
+  {
+   "global": false,
+   "name": "_sp_compare",
+   "section": "seg_pmco",
+   "value": 474
+  },
+  {
+   "global": false,
+   "name": "_sp_copy_input",
+   "section": "seg_pmco",
+   "value": 322
+  },
+  {
+   "global": false,
+   "name": "_sp_count_mismatch",
+   "section": "seg_pmco",
+   "value": 525
+  },
+  {
+   "global": false,
+   "name": "_sp_equal",
+   "section": "seg_pmco",
+   "value": 532
+  },
+  {
+   "global": false,
+   "name": "_sp_input_loop",
+   "section": "seg_pmco",
+   "value": 328
+  },
+  {
+   "global": false,
+   "name": "_sp_input_zero",
+   "section": "seg_pmco",
+   "value": 350
+  },
+  {
+   "global": false,
+   "name": "_sp_nonidentity",
+   "section": "seg_pmco",
+   "value": 286
+  },
+  {
+   "global": false,
+   "name": "_sp_nonidentity_count",
+   "section": "seg_pmco",
+   "value": 315
+  },
+  {
+   "global": true,
+   "name": "_sp_render",
+   "section": "seg_pmco",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_sp_render_coeff",
+   "section": "seg_pmco",
+   "value": 250
+  },
+  {
+   "global": false,
+   "name": "_sp_render_fallback",
+   "section": "seg_pmco",
+   "value": 591
+  },
+  {
+   "global": false,
+   "name": "_sp_render_frame_done",
+   "section": "seg_pmco",
+   "value": 101
+  },
+  {
+   "global": false,
+   "name": "_sp_render_left_return",
+   "section": "seg_pmco",
+   "value": 410
+  },
+  {
+   "global": false,
+   "name": "_sp_render_new_frame",
+   "section": "seg_pmco",
+   "value": 98
+  },
+  {
+   "global": false,
+   "name": "_sp_render_new_sp",
+   "section": "seg_pmco",
+   "value": 121
+  },
+  {
+   "global": false,
+   "name": "_sp_render_scalar",
+   "section": "seg_pmco",
+   "value": 25
+  },
+  {
+   "global": false,
+   "name": "_sp_render_slot",
+   "section": "seg_pmco",
+   "value": 167
+  },
+  {
+   "global": false,
+   "name": "_sp_render_slot_ok",
+   "section": "seg_pmco",
+   "value": 195
+  },
+  {
+   "global": false,
+   "name": "_sp_render_sp_done",
+   "section": "seg_pmco",
+   "value": 124
+  },
+  {
+   "global": true,
+   "name": "_sp_reset",
+   "section": "seg_pmco",
+   "value": 644
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_fallback",
+   "section": "seg_pmco",
+   "value": 997
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_finish",
+   "section": "seg_pmco",
+   "value": 951
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_frame_done",
+   "section": "seg_pmco",
+   "value": 745
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_left_return",
+   "section": "seg_pmco",
+   "value": 893
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_new_frame",
+   "section": "seg_pmco",
+   "value": 742
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_new_sp",
+   "section": "seg_pmco",
+   "value": 765
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_scalar",
+   "section": "seg_pmco",
+   "value": 669
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_slot",
+   "section": "seg_pmco",
+   "value": 797
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_slot_ok",
+   "section": "seg_pmco",
+   "value": 825
+  },
+  {
+   "global": false,
+   "name": "_sp_reset_sp_done",
+   "section": "seg_pmco",
+   "value": 768
+  },
+  {
+   "global": false,
+   "name": "_sp_right_reset_return",
+   "section": "seg_pmco",
+   "value": 944
+  },
+  {
+   "global": false,
+   "name": "_sp_right_return",
+   "section": "seg_pmco",
+   "value": 465
+  },
+  {
+   "global": true,
+   "name": "_sp_audio",
+   "section": "pkdata__sp_audio",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_sp_coeff21",
+   "section": "seg_dmda",
+   "value": 76
+  },
+  {
+   "global": true,
+   "name": "_sp_coeff22",
+   "section": "seg_dmda",
+   "value": 80
+  },
+  {
+   "global": true,
+   "name": "_sp_coeff23",
+   "section": "seg_dmda",
+   "value": 84
+  },
+  {
+   "global": true,
+   "name": "_sp_coeff_slot",
+   "section": "seg_dmda",
+   "value": 72
+  },
+  {
+   "global": true,
+   "name": "_sp_fallbacks",
+   "section": "seg_dmda",
+   "value": 28
+  },
+  {
+   "global": true,
+   "name": "_sp_first_input",
+   "section": "seg_dmda",
+   "value": 40
+  },
+  {
+   "global": true,
+   "name": "_sp_first_left",
+   "section": "seg_dmda",
+   "value": 52
+  },
+  {
+   "global": true,
+   "name": "_sp_first_mode1",
+   "section": "seg_dmda",
+   "value": 60
+  },
+  {
+   "global": true,
+   "name": "_sp_first_output",
+   "section": "seg_dmda",
+   "value": 44
+  },
+  {
+   "global": true,
+   "name": "_sp_first_right",
+   "section": "seg_dmda",
+   "value": 56
+  },
+  {
+   "global": true,
+   "name": "_sp_first_sample",
+   "section": "seg_dmda",
+   "value": 48
+  },
+  {
+   "global": true,
+   "name": "_sp_first_slot",
+   "section": "seg_dmda",
+   "value": 32
+  },
+  {
+   "global": true,
+   "name": "_sp_first_state",
+   "section": "seg_dmda",
+   "value": 36
+  },
+  {
+   "global": true,
+   "name": "_sp_initialized",
+   "section": "pkdata__sp_initialized",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_sp_low_entry_frame",
+   "section": "seg_dmda",
+   "value": 64
+  },
+  {
+   "global": true,
+   "name": "_sp_low_entry_sp",
+   "section": "seg_dmda",
+   "value": 68
+  },
+  {
+   "global": true,
+   "name": "_sp_mismatches",
+   "section": "seg_dmda",
+   "value": 16
+  },
+  {
+   "global": true,
+   "name": "_sp_nonidentity_coeff",
+   "section": "seg_dmda",
+   "value": 24
+  },
+  {
+   "global": true,
+   "name": "_sp_nonzero_input",
+   "section": "seg_dmda",
+   "value": 20
+  },
+  {
+   "global": true,
+   "name": "_sp_render_calls",
+   "section": "seg_dmda",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_sp_reset_calls",
+   "section": "seg_dmda",
+   "value": 8
+  },
+  {
+   "global": true,
+   "name": "_sp_reset_mirrors",
+   "section": "seg_dmda",
+   "value": 12
+  },
+  {
+   "global": true,
+   "name": "_sp_shadow_calls",
+   "section": "seg_dmda",
+   "value": 4
+  },
+  {
+   "global": true,
+   "name": "_sp_states",
+   "section": "pkdata__sp_states",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_sp_engine_base",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_sp_stock_render",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_sp_stock_reset",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "instructions_redecoded": "499",
+  "selache_rev": "926bfac9c8a7b51fcc7750498af3fd2521541b3e"
+ }
+}

@@ -366,3 +366,21 @@ this is an IRQ-reachable path, not an observed preemption. A DSP-side solution
 needs a proven read exclusion scope or deferred final writes with staging/rearm
 ownership. The CF asynchronous close/drain route remains another option. This
 bounded writer inventory is not an exclusion proof for every computed writer.
+
+
+## Calculable pre-store seam, without successor publication
+
+**[D]** A bounded original-byte audit of DT2 1.17 section 7 (SHA-256
+`0f514a12a2255f5c081e292c47f1f29462003177658da4bbae0a22fd737fffa2`)
+confirms event 4 reaches `0x1c7e35`. Its page call at `0x1c7e79` enters
+`0x1c403c`, checks unsigned page p < `0x19200` (hexadecimal), and writes
+`[0x8422b9c8+(p<<12), 0x8422b9c8+(p<<12)+4096)` at
+`0x1c4056/60/6a`. The header marker −1 path calls the guard helper at
+`0x1c7e89/96`, writing `[base+start+length, base+start+length+10)` through
+`0x1c4025/29/2d/31/35`, before slot publication `0x1c7eb7 → 0x1c3fe5`.
+
+The page path neither invalidates the slot nor records loading progress; old
+metadata remains readable. The slot publisher has no generation or READY-last
+protocol and validates the slot only after the guard writes. The pre-store spans
+therefore supply a calculable interception seam, not successor identity,
+completion or reader admission. No production memory policy is selected.

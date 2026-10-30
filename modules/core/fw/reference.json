@@ -12577,6 +12577,70 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x20001872",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 block recurrence wrapper; linked C frame, R4=record, R8=input, R12=output, DM(I6+1)=count.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.first_order_process",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x20001726",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 reset of words24..27, including return-delay behavior; R4=record.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.first_order_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x20004a36",
@@ -12624,6 +12688,98 @@
       "was": [
         "dsp.voice.render_entry"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x283929fa",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private identity observer; stock left call/output remains authoritative; no IRQ-mask policy.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.first_order_process.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "r4",
+          "r8",
+          "r12",
+          "i4",
+          "i12",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.first_order_process.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392d96",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private identity observer; stock left call/output remains authoritative; no IRQ-mask policy.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.first_order_reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "r4",
+          "r8",
+          "r12",
+          "i4",
+          "i12",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.first_order_reset.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -12683,6 +12839,70 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x283929fa",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 engine's one first_order_process call; retarget only this call, preserve both original frame/continuation delay slots.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.first_order_process.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1548
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392d96",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 engine's one first_order_reset call; retarget only this call, preserve both original frame/continuation delay slots.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.first_order_reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2010
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x20004a3c",
@@ -12731,6 +12951,36 @@
         "dsp.voice.render_next",
         "dsp.voice.site.render_next"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x241298",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 engine argument from the builder; first-order records start at this base plus byte offset0xe088 with0x70 stride, sixteen records.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.voice.value.engine_base",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_literal",
+          "offset": 2348
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-stereo-proof"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -12984,7 +13234,7 @@
       "name": "master"
     },
     {
-      "count": 5,
+      "count": 12,
       "cpu": "sharc",
       "file": "devices/fw/dsp/voice.toml",
       "meaning": "voice rendering",

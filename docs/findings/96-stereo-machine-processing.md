@@ -568,3 +568,50 @@ no concrete stock application binding was established. The missing evidence is
 an actual submitting/registering callsite and its descriptor owner, not another
 negative cross-reference search. These results support a bounded native prototype
 without asserting universal DMA/NMI exclusion or changing interrupt policy.
+
+
+## Private first-order native identity checkpoint
+
+**[D]** The optional DN2 1.12 `core/dsp-stereo-proof` adapter retargets only
+engine render `0x1c94fd → 0xb80c39` and local reset `0x1c96cb → 0xb80b93`.
+Other callers remain unchanged. Sixteen linker-owned private records/audio buffers
+consume 3,992 L2 bytes, with no DDR reservation or default activation. Exact slot
+validation uses R4=`0x24f320+0x70*v`, v=0..15; unsupported contexts tail-call stock.
+The original left call/output remain authoritative. First use clones the record;
+each block copies 32 input floats and coefficient words 21..23 before left, then
+runs stock right with private histories. Reset mirrors words 24..27 only after
+initialization. This observes identity; it does not replace audible output.
+
+The 23 owner model cases pass, including invalid-slot/count and unexpected-SIMD
+passthrough, private-history corruption and NaN-history detection. The SIMD case
+stops at stock entry and does not assert that stock supports SIMD. Scalar status
+restoration includes post-left ASTATX/STKYX; this is not a production floating-point
+exception policy. The wrapper avoids writing untouched callee-saved data registers
+rather than claiming that a 32-bit model proves their 40-bit precision. The largest
+identity fixture took 2,628 instructions; this is an observed fixture maximum.
+
+The bounded native acceptance passed: 2,400 render/shadow calls, one reset mirror,
+zero mismatches/fallbacks, 2,400 blocks with nonidentity coefficients and 76,799
+nonzero input samples. Original and patched captures each contain 4,800 stereo
+frames (100 ms), with identical whole-WAV SHA-256
+`6be721f8b1649c0a037bd8bd1a0998ff5847ed80de31b1907f98b01604555b0c`
+and zero alignment shift. Both real channels are finite and nonzero. Forced
+snapshot reload, successful snapshot/audio activation and ready-input hashes are
+asserted. An independent artifact review confirmed the identical WAV hashes.
+The daemon's legacy core profile label remains `dn2-1.11`; CF version 1.12 and
+original base/ready hashes identify the actual input, not a new generated core.
+Final regression TypeScript and scoped oxlint checks pass.
+
+The AudioTask allocation is 4,000 bytes, correcting the earlier stack-size claim
+in [finding 83](83-sample-retirement-design.md). In this native scenario the lowest
+entry frame minus the model-exercised 172-byte store depth leaves 3,132 bytes above
+the allocation base. This is not a measured native store watermark, a universal
+stack bound or IRQ/scheduler headroom proof.
+
+Exact commands, binary/source hashes and logs remain under ignored
+`out/runs/dsp-stereo-proof/commands.json` and `native-acceptance.log`; the result is
+`out/runs/dsp-stereo-proof/native/7388abd1-c4a3-4fdf-8199-edc11d2bfc16/result.json`.
+Original firmware and captured audio remain ignored runtime inputs/artifacts.
+This proves one exercised first-order caller/reset scenario. Full-route lifecycle,
+coherent capture/commit, cleanup, asynchronous writer exclusion, SDK ABI,
+production pool ownership, performance and hardware behavior remain open.

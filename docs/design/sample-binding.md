@@ -15,8 +15,10 @@ unchanged while this replacement lifecycle is developed.
 - Selection stops that track's old sample notes. Other tracks keep their bindings
   and playback. A failed replacement leaves the selected track silent with an error;
   retaining its old audio through replacement is not required.
-- The first target is about ten seconds of mono 48 kHz PCM16 per sample, with
-  start/end/reverse. Directory rows establish neither sample validity nor a lease.
+- The target is full stereo with start/end/reverse and long samples constrained
+  by actual shared backing capacity. Sixteen tracks share deduplicated project
+  backing; there is no arbitrary ten-second or 16 MiB cap. Directory rows
+  establish neither sample validity nor a lease.
 
 ## Ownership and ordering
 
@@ -93,10 +95,11 @@ See [reply ownership](../findings/88-dn2-reply-ownership.md) and
 
 The production pool still needs a reservation and lifetime contract on each
 device. DT2 project sample memory and DN2 configured DDR geometry cannot be
-treated as interchangeable allocators. Continue from the unresolved output-pointer
-provenance in [the DN2 DDR audit](../findings/91-dn2-ddr-configuration.md), rather
-than repeating the already bounded fixed-object rings or assuming a high address
-is free. Storage/source validation, checked destination extents, cache behavior,
+treated as interchangeable allocators. Output-pointer derivation is resolved in
+[the DN2 DDR audit](../findings/91-dn2-ddr-configuration.md); ownership, lifetime
+and coexistence remain unresolved. Continue from those obligations rather than
+repeating the bounded fixed-object rings or assuming a high address is free.
+Storage/source validation, checked destination extents, cache behavior,
 transport timeouts and recovery must be established before exposing usable bindings.
 
 ## Next proof

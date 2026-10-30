@@ -1,0 +1,43 @@
+[module]
+id = "core/dsp-stereo-proof"
+version = "0.1.0"
+name = "Private first-stage stereo identity proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Emulator-only DN2 1.12 callsite observer with private L2 histories and identity input; explicit opt-in."
+ports = ["dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/stereo-proof-dsp.dko.json"
+sources = ["src/dsp/stereo-proof.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
+[object.externs]
+_sp_stock_render = "dsp.voice.fn.first_order_process"
+_sp_stock_reset = "dsp.voice.fn.first_order_reset"
+_sp_engine_base = "dsp.voice.value.engine_base"
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.first_order_process.call"
+to = "_sp_render"
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.first_order_reset.call"
+to = "_sp_reset"
+
+[[claim]]
+resource = "dsp.voice.site.first_order_process.call"
+
+[[claim]]
+resource = "dsp.voice.site.first_order_reset.call"

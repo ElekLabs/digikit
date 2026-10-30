@@ -2237,25 +2237,23 @@ search, proposed 128-index raw-result measurement and conditional effort estimat
 A trusted full-register hardware readback path is the missing prerequisite; no
 hardware action, core edit or regeneration follows automatically from this result.
 
-### Next private native prototype: first processing stage
+### Completed private native prototype: first processing stage
 
-Root implementation direction: prefer a bounded callsite wrapper experiment over
-reimplementing the complete stock route now. Payoff is a real native caller-context
-and lifecycle check that the numerical fixtures cannot supply. Confidence is
-moderate until native identity passes; this may take a day including packaging and
-validation. Stop expansion if caller context, state ownership or dispatch cannot
-be bounded; do not turn a failing prototype into a production ABI change.
+The opt-in DN2 1.12 callsite wrapper now passes a bounded native identity check.
+This establishes an exercised caller context and reset, alongside the model
+fixtures. Stop expansion if caller context, state ownership or dispatch cannot
+be bounded; this checkpoint does not select a production ABI or backing pool.
 
-- [ ] Add an opt-in DN2 1.12 proof adapter for the first-order stage and its local
+- [x] Add an opt-in DN2 1.12 proof adapter for the first-order stage and its local
   reset callsite. Keep the original left call and output authoritative.
-- [ ] Use linker-owned private L2 records/audio for sixteen slots (roughly 4 KiB),
+- [x] Use linker-owned private L2 records/audio for sixteen slots (roughly 4 KiB),
   avoiding any new DDR reservation. Copy input for an identity right-channel proof;
   capture controls before left, preserve independent right histories and mirror
   the actual reset helper. Do not install this in default runtime builds.
-- [ ] Expose bounded diagnostic counters/context through existing proof mechanisms;
+- [x] Expose bounded diagnostic counters/context through existing proof mechanisms;
   require right/left identity, unchanged original state/output and preserved call
   context. Compare the original left output with an unmodified baseline.
-- [ ] Verify fault-detection controls and the owner checks before considering more
+- [x] Verify fault-detection controls and the owner checks before considering more
   stages. No public stereo SDK ABI, external ring allocation, full-route claim,
   hardware access or performance claim is part of this first prototype.
 
@@ -2267,3 +2265,36 @@ layer, while the private LP0 proof submits only its own fixed L2 receive buffer.
 Mutable callback registration, computed dispatch and complete writer exclusion
 remain qualified. The experiment preserves existing interrupt policy rather than
 inventing a whole-route exclusion guarantee from these observations.
+
+**[D] Native checkpoint:** `core/dsp-stereo-proof` retargets only the engine's
+first-order render/reset calls. Its private L2 data is 3,992 bytes. The 23 model
+cases pass; the opt-in native acceptance also passes with 2,400 left/shadow calls,
+one reset mirror, zero mismatches/fallbacks, 2,400 nonidentity-coefficient blocks
+and 76,799 nonzero input samples. The 100 ms stock/patched captures contain 4,800
+stereo frames each, identical whole-WAV hashes and zero alignment shift. Both
+snapshot loads and audio activation are asserted, with forced reload and hashed
+ready inputs. Final regression TypeScript and scoped oxlint checks pass.
+
+Evidence and exact commands are retained in ignored
+`out/runs/dsp-stereo-proof/commands.json`,
+`out/runs/dsp-stereo-proof/native-acceptance.log` and
+`out/runs/dsp-stereo-proof/native/7388abd1-c4a3-4fdf-8199-edc11d2bfc16/result.json`.
+The legacy core profile label `dn2-1.11` is not a firmware-version claim; the CF
+version, original base hash and ready-input hashes establish this DN2 1.12 run.
+The observed minimum entry frame minus the model-exercised 172-byte store depth
+leaves 3,132 bytes within the corrected 4,000-byte AudioTask allocation. This is
+scenario-specific arithmetic, not a native store watermark or IRQ/scheduler bound.
+See [the stage evidence](../findings/96-stereo-machine-processing.md) and
+[the stack correction](../findings/83-sample-retirement-design.md).
+
+Full-route integration, coherent capture/commit, cleanup, writer exclusion,
+production backing ownership, public SDK ABI, performance and hardware acceptance
+remain open. No production memory reservation or default activation was selected.
+
+
+**[D] DT2 pre-store follow-up:** original 1.17 bytes establish calculable page
+and ten-byte guard spans before the event-4 writes, but the page path leaves old
+slot metadata readable and the later publisher supplies neither generation nor
+READY-last. This is an interception seam, not successor identity, completion or
+admission. See [finding 81](../findings/81-stock-sampler-dependencies.md); no
+production memory policy follows from it.

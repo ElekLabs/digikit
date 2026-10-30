@@ -54,3 +54,72 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
 doc = "First instruction (I7 = MODIFY) of the per-voice render function; the hook point for rendering registered machine types with their own DSP routine (it runs the dropped MODIFY itself)."
+
+# Private callsite experiment: no default module set installs these hooks.
+
+[[fn]]
+name = "dsp.voice.fn.first_order_process"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "4c955337b83a3e3266fe4db9ac9463ba1deaec2a105d5fe4e5a465ce833984ac", ordinal = 1, offset = 0, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 block recurrence wrapper; linked C frame, R4=record, R8=input, R12=output, DM(I6+1)=count."
+
+[[fn]]
+name = "dsp.voice.fn.first_order_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "1e7a0e26e212d5911187aba6163f8371a9e79df80e8245c4a6049da0b6dcf20c", ordinal = 1, offset = 0, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 reset of words24..27, including return-delay behavior; R4=record."
+
+[[site]]
+name = "dsp.voice.site.first_order_process.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x60c, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 engine's one first_order_process call; retarget only this call, preserve both original frame/continuation delay slots."
+
+[[hook]]
+name = "dsp.voice.hook.first_order_process.call"
+site = "dsp.voice.site.first_order_process.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "Private identity observer; stock left call/output remains authoritative; no IRQ-mask policy."
+
+[[site]]
+name = "dsp.voice.site.first_order_reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x7da, len = 6 }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 engine's one first_order_reset call; retarget only this call, preserve both original frame/continuation delay slots."
+
+[[hook]]
+name = "dsp.voice.hook.first_order_reset.call"
+site = "dsp.voice.site.first_order_reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "Private identity observer; stock left call/output remains authoritative; no IRQ-mask policy."
+
+[[value]]
+name = "dsp.voice.value.engine_base"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_literal", reloc_hash = "4cc8a46bca990a7bd883d1784307a9cd72aa828a1ae846977e337fbc5c54c010", offset = 0x92c }
+mark = "D"
+users = ["core/dsp-stereo-proof"]
+doc = "DN2 1.12 engine argument from the builder; first-order records start at this base plus byte offset0xe088 with0x70 stride, sixteen records."

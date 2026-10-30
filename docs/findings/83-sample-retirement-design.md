@@ -132,7 +132,19 @@ AudioTask entry from the database's merged function extent:
 | DT2 1.17 | `0x1c7770`: R4=`0x1c7749`; `0x1c7775` calls `0xb8615d` | `0x2825f7b0` | `0x1c7524`, `0x1c75d8`, `0x1c763c`, `0x1c7671` |
 | DN2 1.12 | `0x1ca00e`: R4=`0x1c9fe7`; `0x1ca013` calls `0xb88839` | `0x28268a68` | `0x1c9dc2`, `0x1c9e76`, `0x1c9eda`, `0x1c9f0f` |
 
-R8 points to the AudioTask name and R12 is stack size `0x1000`. Command 3 renders and
+**[C][D]** R8 points to the AudioTask name. The earlier `R12=0x1000`
+stack-size claim was incorrect. On DN2 1.12, `0x1ca009` loads R12 with
+`0x3e8` (1,000 four-byte units); creator `0xb88839` shifts this left two bits at
+`0xb88840` before the allocator call at `0xb88853`, requesting 4,000 bytes.
+With `T=DM32(0x268a84)` and `S=DM32(T+0x30)`, the allocation is `[S,S+4000)`.
+TCB publication is at `0xb87c25`; `0x1ca14c` independently loads the task handle.
+This correction establishes allocation size, not available worst-case headroom.
+The private first-stage native scenario observed an entry minimum which, minus
+its model-exercised 172-byte store depth, leaves 3,132 bytes above S; it is not a
+native store watermark or an interrupt/scheduler nesting bound. See
+[the bounded native stage proof](96-stereo-machine-processing.md).
+
+Command 3 renders and
 rejoins the block-handler tail. The task loop is a separate entry inside the merged
 function extent; the earlier apparent same-parent conditional call is not the actual
 voice-to-tail chain. Existing `tools/sharc_dev/sharc_symbols.py` distinguishes these entries.

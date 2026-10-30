@@ -1,7 +1,8 @@
 # Stereo sampler: numerical routing and memory diagnostics
 
 Primary worktree: `/private/tmp/digikit-dsp-sampler`, sampler discovery branch.
-Current implemented checkpoint: `1df2325c`. The ongoing source of truth is
+Latest bounded native checkpoint: the private first-stage proof described below
+(source integration/publication is coordinator-owned). The ongoing source of truth is
 [the plan](../plans/dsp-sdk-and-sampler.md); this handover is a short resume guide.
 Other sessions may own the original checkout. Do not reset it or stop their runs.
 
@@ -34,6 +35,14 @@ header invalidation alone is inadequate.
   continuation. The selected composed route adds original scratch blending and
   output splitting. All 44 named replay tests pass without skips, including actual reset helpers. The candidate
   output mapping remains a bounded synthetic route, not full stock integration.
+- Optional `core/dsp-stereo-proof`, DN2 1.12 only: 23 model cases and the native
+  first-order identity scenario pass. Native observed 2,400 render/shadow calls,
+  one mirrored reset, zero mismatches/fallbacks, 2,400 nonidentity-coefficient
+  blocks and 76,799 nonzero input samples. The stock/patched 100 ms, 4,800-frame
+  stereo WAVs have identical hashes and zero shift, independently checked.
+  Original left state/output remain authoritative; sixteen private L2 slots
+  occupy 3,992 bytes, with no DDR reservation or default activation.
+  This is one stage/caller/reset scenario, not full-route or hardware acceptance.
 - [Finding 97](../findings/97-ddr-access-diagnostic.md): opt-in first-attempt DDR
   monitor, compiled native guard fallback, ordered diagnostic RPC, both native
   device acceptance cases, and 49 focused Wasm/V8 cases from real lowering.
@@ -56,7 +65,22 @@ behavior remains a separately scoped investigation, with regeneration costs.
 Use the repository's shared benchlock at the original checkout's `out/.benchlock`
 for native builds/runs; never overlap a gate with another build. Owner commands
 and exact environments/logs are retained under `out/runs/ddr-monitor-rpc/`,
-`out/runs/ddr-monitor-native/` and `out/runs/ddr-monitor-wasm/`.
+`out/runs/ddr-monitor-native/`, `out/runs/ddr-monitor-wasm/` and
+`out/runs/dsp-stereo-proof/commands.json`. The last records the exact exclusive
+benchlock/native invocation and immutable daemon/patchkit hashes; native result
+`out/runs/dsp-stereo-proof/native/7388abd1-c4a3-4fdf-8199-edc11d2bfc16/result.json`
+and `native-acceptance.log` retain the passing observation. The scenario asserts
+forced snapshot reload, initial/patched snapshot/audio activation and ready hashes.
+Final TypeScript and scoped oxlint pass. The legacy DSP profile label `dn2-1.11`
+is not the firmware identity; CF/base/ready hashes establish the DN2 1.12 input.
+
+**[C][D]** AudioTask requests 1,000 four-byte units, not `0x1000` bytes:
+`0x1ca009` loads `0x3e8`; creator shift `0xb88840` precedes allocation at
+`0xb88853`. For `T=DM32(0x268a84)`, `S=DM32(T+0x30)`, allocation is
+`[S,S+4000)`. Observed native entry minimum minus the model-exercised 172-byte
+store depth leaves 3,132 bytes in this scenario. This is not a native store
+watermark or worst-case interrupt/scheduler headroom. See
+[finding 83](../findings/83-sample-retirement-design.md).
 
 The normal changed-files wrapper encounters the existing worktree pnpm
 hoist/bootstrap layout for JS steps. Scoped installed-tool lint, formatting,
