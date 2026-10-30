@@ -278,3 +278,20 @@ settings for finer attribution. Thus a quiet watch is not a range-exclusion proo
 The bounded source scan found no existing complete CPU/DMA range guard; coverage
 would need to account for block fast paths and peripheral memory access as well
 as general read/write helpers. No instrumentation or core regeneration was done.
+
+## Named DMA boundary follow-up
+
+**[D]** Current DN2 1.12 database/source inspection narrows two candidate routes
+to local buffers, rather than finding a DDR allocator. In
+`0x1c9e76 → 0x1c9d6b → 0x1ca020`, the helper receives addresses of stack locals
+and fills them with ping-pong selections rooted at `0x2c29d0` and `0x2c49d0`.
+The toggle is `DM(0x2c0450)`; these are the stock L1 receive/reply roots already
+identified in [finding 88](88-dn2-reply-ownership.md). Their main reply descriptor
+uses `0xabc` bytes / `0x55e` halfwords, not an arbitrary DDR destination.
+
+Route `0x1ca59f` initializes auxiliary pointers `0x2c34c0`, `0x2c44c0`,
+`0x2c54c0`, `0x2c64c0` at `0x1ca5b3..da`, matching the main roots plus `0xaf0`
+in finding 88. The observed `0x100000` control writes denote DMA interrupt
+configuration, not a transfer extent. Auxiliary transfer direction/count and
+boot-only versus runtime lifetime remain unresolved. These fixed roots narrow
+the owner table; they establish no general free DDR region or sample capacity.

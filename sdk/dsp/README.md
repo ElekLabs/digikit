@@ -93,6 +93,7 @@ contains a tested bridge for both adapters; this fixture does not define a gener
 | `halfband.inc` | `_dk_halfband_down` | 20 per output (2 inputs) | 701 | 2x decimator, 23-tap half-band (Kaiser window), 64 inputs to 32 outputs; R12 = 2 words history ring base (32 words), offset (unchanged by a call); coefficient table 2 c_j in DM (`.SECTION/DM`); L1 is 0 on return |
 | `sample.inc` | `_dk_sample_linear` | path-dependent | ceiling 1,380 including three argument loads | bounded mono float32 view; split cursor, clamped linear interpolation, zero tail and completion |
 | `sample_pcm16.inc` | `_dk_sample_pcm16_linear` | path-dependent | ceiling 2,148 including three argument loads | packed signed PCM16 view; same cursor, interpolation and completion |
+| `sample_pcm16_stereo.inc` | `_dk_sample_pcm16_stereo_linear` | path-dependent | ceiling 4,396 including three argument loads | two packed PCM16 planes, one shared cursor, separate 32-float outputs |
 
 For the older block kernels, consult their headers and `tests/patchkit/test_dsp_kernels.py` for the distinction
 between static instruction counts and measured counts. The sample reader's measured evidence is described below.
@@ -139,6 +140,20 @@ contract. The numerical tests exercise packed transport bytes, signed extrema,
 odd boundaries, extreme rates, repeated calls, preserved registers and stack
 boundaries, guarded source reads and completion immediately after output 31.
 The ceiling above counts instructions, not hardware cycles.
+
+`sample_pcm16_stereo.inc`, included after the mono reader, composes that reader
+for two channel planes. R4 points to `[left_source, right_source]`, R8 to
+`[left_output, right_output]`, and R12 to the same six-word cursor. Each output
+contains 32 floats. Both channels start from the same cursor; the public cursor
+advances once. Source pointers may be equal for mono-to-stereo playback. Output
+buffers must be separate; all other source, output, descriptor, cursor and stack
+ranges must be disjoint and the sources/descriptors immutable during the call.
+The wrapper uses ten local stack words; with its nested mono call, the deepest
+write is entry I6−25 and the deepest stack pointer is I6−26. The calling convention
+and mono reader's numerical bounds still apply. This is a correctness baseline,
+not a measured optimization or a stereo machine-output ABI. Assembled coverage is
+in `tests/patchkit/test_dsp_sample_stereo_kernels.py`; actual memory ownership and
+stereo routing through each device's stock processing remain adapter obligations.
 
 ## Sample-bank lifecycle
 

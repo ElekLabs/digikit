@@ -1903,3 +1903,62 @@ file size/allocation validation. Production capacity and lifecycle remain open.
 Validation: focused SDK stream tests, independent source review, scoped rustfmt,
 `mise run test:changed` (path/layer checks) and changed-document pathcheck pass.
 No full merge gate, device run, firmware patch or generated-core change is claimed.
+
+### Stereo numerical reader and current adapter boundaries
+
+- [x] Implement a shared planar packed-PCM16 stereo block reader, composing the
+  unchanged mono primitive from identical initial cursor state. Both channels
+  share start/end, fractional pitch, reverse and completion; the cursor advances
+  once. Numerical descriptors are not a new public sample-resource ABI.
+- [x] Validate assembled stereo and existing mono tests: 142 pass, no skips;
+  independent source review is clean, Python lint and changed checks pass.
+- [ ] Extend machine output routing on both devices without silently duplicating
+  mono output or bypassing stock processing. Current machine 1.1 has one 32-float
+  output; DT2's adapter copies it to the paired voice, while DN2's hook feeds a
+  mono per-slot processing chain. A second SDK pointer alone cannot solve DN2.
+- [ ] Verify current DN2 channel/rate transitions and the first actual stereo mix
+  before selecting a backward-compatible machine contract extension.
+
+The numerical stereo ceiling is 4,396 instructions including caller argument
+loads and DK_CALL. Its ten local words plus the nested call reach entry I6−25
+for writes and I6−26 for SP. These are instruction/stack bounds, not hardware
+timing or proof of sixteen-track throughput. No instruction-core regeneration or
+module object changes are required by the unintegrated primitive.
+
+DT2 validation audit: the inspected loader compares bytes read with filesystem
+size but publishes a separate native-header PCM length. Nonempty-pool allocation
+and loading can use separately obtained metadata sizes. A safe adapter needs
+canonical checked geometry and stable asset identity, not just loader success.
+The potential DSP-side retirement shortcut also needs more work: stock LP0
+completion invokes page/guard copying inline from an IRQ-reachable handler.
+Invalidation alone cannot stop a reader already interrupted with a cached pointer.
+Root is evaluating an explicit exclusion/deferred-write proof, not assuming
+AudioTask serialization. Details are recorded in finding 81.
+
+### Bounded exclusion experiment and stereo processing audit
+
+- [x] Assemble a masked stereo-reader / overlap-writer experiment with a genuine
+  count pin and explicit exact-zero drain before overwrite; independent review clean.
+- [x] Enumerate all 3,486 arrival boundaries for each modeled page/guard event,
+  grouped into 24 equivalent first-enabled delivery states. All twelve tests pass.
+  The unlocked, deliberately unsafe invalidation-only control overwrites at count
+  one and demonstrates old-left/new-right tearing; the safe control refuses it.
+- [x] Restore an initially disabled mask exactly and keep the event pending until
+  explicit enable; stale subsequent callbacks produce silence without PCM reads.
+- [ ] Establish acceptable physical exclusion latency and complete writer coverage
+  before selecting whole-block masking as a production adapter policy.
+
+The modeled reader executes 3,485 instructions with a largest masked span of
+3,462, including wrapper work. This is one serialized maskable-event model with
+ideal context preservation, represented overlapping spans and architectural stack/
+bank models. It is not physical IRQ-pipeline, NMI, DMA, cache or hardware-timing
+evidence. The model preserves the existing LOCK/UNLOCK NOPs and does not alter
+instruction-core semantics. Metrics: `out/runs/stereo-exclusion.xml`.
+
+[Finding 96](../findings/96-stereo-machine-processing.md) records a current-image
+correction: DN2's downstream 64-float layout is two 32-sample channel planes,
+not 96 kHz temporal upsampling. Its source seam still feeds a mono chain. Two
+audited stages have independent recursive histories and read-only coefficients,
+so stereo can share coefficient/control values without sharing audio history.
+The remaining ordered chain/state inventory is in progress; no machine contract
+extension or late insertion bypassing stock processing has been implemented.

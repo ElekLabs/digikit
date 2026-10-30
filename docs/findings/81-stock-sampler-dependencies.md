@@ -311,3 +311,58 @@ Audit hashes match the original SYX/section-7 identities above; main section 3 i
 header PCM length versus actual file size/allocation remains the next bounded
 check. Ownership, usable SDK capacity, reader retirement and supported input-rate
 bounds remain separate questions. No new emulator or hardware run was performed.
+
+## Header validation and stable source requirements
+
+**[D]** Original DT2 1.17 main bytes (same hashes above) distinguish the loader's
+successful storage read from validated PCM geometry. Storage size F is read at
+`0x40154ab0` and rounded before the first header read at `0x40154d8a`. The next
+path copies 64 header bytes without a preceding read-count predicate in that
+slice. Initial page sends precede cumulative-read checks at `0x40154e06/e0a`;
+final equality at `0x40154eba/ebe` compares total read bytes with F. Header P is
+passed separately to the mono/stereo header builders at `0x40154eec/0x40154ed0`.
+No P-versus-F check was established in this bounded loader path. This does not
+exclude validation in an upstream importer.
+
+When the pool is nonempty, allocation uses metadata size M from key+8, loaded at
+`0x40154ba4`; the initial rounded F still controls stereo displacement at
+`0x40154dd2/dd4` and `0x40154df6/dfc`. Both metadata helper `0x4015ae6a` and path
+size helper `0x4015bd38` obtain filesystem node+4 at separate times. Individual
+reads are mutex-protected; a stable snapshot across lookup, allocation and all
+reads is not established. No M==F comparison was identified in these paths.
+
+**[O]** Runtime-originated loading therefore needs preflight before side effects:
+stable identity/version, full header, supported flags/rate, nonzero frame count,
+P divisible by twice the channel count, F=P+80, checked rounding/addition, and
+agreement with the resulting allocation and plane spans. Borrowing an already
+loaded asset needs validation of the resulting view but cannot undo earlier stock
+writes. Neither check establishes retention or reader retirement.
+
+## Pool writes are interrupt-reachable
+
+**[D]** Original section-7 bytes establish a positive interrupt route, not a
+render-boundary task handoff. Setup `0x1c88f0/f3/f6` registers handler `0x1c8705`
+for SID `0x51` with context `0x269468`. Registration through `0xb8afa2`,
+`0x1c066c` and `0xb89266` installs the trampoline and tables used by the SECI
+vector at loader `0x28240168`, targeting `0x1c0b7b`. Handler completion reaches
+`0x1c85ba`, which invokes registered receiver `0x1c7e1f` inline with event 4
+at `0x1c86a5..b0`. This receiver directly calls the page/guard copy family.
+
+DMA targets staging, not final sample backing: descriptor `0x268220` contains
+ADDRSTART `0x268240`, count `0x401`, XMOD 4. Submission converts the source address
+to byte alias `0x28268240` and programs the DMA registers at `0xb8c6c2/cc/d6`.
+The CPU then writes the pool:
+
+| Writer | Bounded footprint / ordering |
+| --- | --- |
+| `0x1c403c` page copy | Checks page <`0x19200`, copies 4096 bytes to `0x8422b9c8 + page*4096`; stores at `0x1c4056/60/6a` |
+| `0x1c400f` guard copy | Five 16-bit stores at `0x1c4025/29/2d/31/35` to base+start+per-channel-byte-length; no extent check in this leaf |
+| `0x1c3fe5` metadata update | Runs after both guard calls at `0x1c7e89/96`; does not precede their PCM writes |
+
+**[O]** Closing a binding immediately before a copy is insufficient if a reader
+was interrupted after acquiring its pointer. On interrupt return it could resume
+reading overwritten memory. Actual live interrupt masks/priorities remain unproved;
+this is an IRQ-reachable path, not an observed preemption. A DSP-side solution
+needs a proven read exclusion scope or deferred final writes with staging/rearm
+ownership. The CF asynchronous close/drain route remains another option. This
+bounded writer inventory is not an exclusion proof for every computed writer.
