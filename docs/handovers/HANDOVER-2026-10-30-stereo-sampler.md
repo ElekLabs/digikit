@@ -398,3 +398,17 @@ for the ISR fixture and four documentation files passed pathcheck/layers. The
 full merge gate was deferred and has not run. These observations remain **[D]**, not **[V]**.
 See the [next proof](../plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
 and [finding 81](../findings/81-stock-sampler-dependencies.md).
+
+**[D] Scoped runtime follow-up:** the inspected `Machine::step` Device interrupt
+route delivers only pending DMA59
+(`packages/emulator/machine/src/runner.rs:236–267`). Board `complete()` posts
+semaphores under Oracle policy; under Device policy it records completion events.
+No eSDHC command/data/error CPU interrupt delivery was found in this inspected
+runtime path. This gap is separate from DMA59; this is not an exhaustive absence
+claim. The controlled ISR proof remains passed and full native IRQ validation
+remains **failed/open**.
+
+**Priority decision pending:** recommend continuing storage/source consistency
+work with full native IRQ validation as a release blocker, or build the missing
+card-controller interrupt emulation first. The user has been asked to choose;
+this note authorizes no new behavior.

@@ -2852,3 +2852,17 @@ dependency layout. The later explicitly scoped changed-file check for the new IS
 fixture and these four documentation files passed pathcheck/layers; the full merge
 gate was deferred and has not run. The code/model and bounded observations above
 remain **[D]**, not **[V]**.
+
+**[D] Scoped runtime follow-up:** the inspected `Machine::step` Device interrupt
+route delivers only pending DMA59
+(`packages/emulator/machine/src/runner.rs:236–267`). Board `complete()` posts
+semaphores under Oracle policy; under Device policy it records completion events.
+No eSDHC command/data/error CPU interrupt delivery was found in this inspected
+runtime path. This is a separate gap from DMA59, not an exhaustive absence claim.
+The controlled ISR proof remains passed; full native IRQ validation remains
+**failed/open**.
+
+**Priority decision pending:** the recommendation is to continue storage/source
+consistency work while keeping full native IRQ validation a release blocker. The
+alternative is to build the missing card-controller interrupt emulation first.
+The user has been asked to choose; this note authorizes no new behavior.
