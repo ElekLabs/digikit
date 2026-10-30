@@ -511,3 +511,174 @@ helpers no longer receive it. The two-family audit is complete within this scope
 not complete mutation coverage. Create/ID reuse, reset/remount and other block
 writers remain open before any selected-file generation scheme could be complete.
 No hook implementation, public contract or production memory policy is selected.
+
+### Create/ID reuse exposes identity before mutation, not a complete generation
+
+**[D]** A bounded DT2 1.17 audit checked 508 original section-3 encodings against
+SHA-256 `a1e7b657b705eba1a19d81c33c1e11ba9c409816447ad74005d7bbf36da6d964`.
+Allocator `0x4015ba88` scans bitmap `0x46f58ed0`. Selected ID D5 is computed at
+`0x4015bab6..babc`, before the first bitmap store `0x4015bac6`; persistence is
+`0x4015bb0c`. It clears the reused `0x80`-byte node at `0x4015bb20`, sets
+node+1 to 2 at `0x4015bb26`, and initializes global `0x4099d68c` to 1 when zero, then always increments it
+at `0x4015bb2e..46` (the first assigned value after zero is 2). The value is stored at node+`0x10` at
+`0x4015bb4c`. This is incarnation-like metadata, not a fail-closed generation:
+no wrap rejection was found in this body.
+
+The allocator takes no lock itself. All four recorded call sites are inside
+filesystem mutex `0x46f4deb0` scopes: open `0x40158902` allocates at `0x40158a28`
+between lock `0x4015894e` and unlock `0x40158a84`; directory create `0x4015746e`
+allocates at `0x4015753e` between `0x401574a4` and `0x401575ac`; reset-like
+`0x4015a440` allocates at `0x4015a5d0/648` between `0x4015a452` and
+`0x4015a694`. This bounds the recorded callers, not every computed entry.
+
+Open receives the new ID in D2 at `0x40158a30`, calls link helper `0x40156bd8`
+at `0x40158a4e` with a separate parent ID and filename, then publishes handle
+word 0 at `0x40158a5e`. Link failure directly follows
+`0x40158a78 → 0x4015bb7e`, bypassing delete/reclaim wrappers. Identity is available
+before first mutation, but existing wrapper-only hooks would still be insufficient.
+
+**[O]** This bounded create/ID-reuse slice is complete. The lifecycle and I/O subsections
+below record the completed bounded follow-ups; directory-link, init/indirect and
+error/completion coverage remain open. No complete
+mutation-generation scheme, hook implementation or public API is selected, and
+this CF source evidence establishes no DSP pool ownership.
+
+### Format, mount and init are distinct global lifecycle boundaries
+
+**[D]** A bounded DT2 1.17 audit checked 622 original section-3 encodings across
+19 bodies and two windows, against the section-3 SHA-256 above. Format
+`0x4015a440` takes the FS mutex at `0x4015a452`; open-bit scan `0x4015bfc4`
+at `0x4015a458` rejects a nonzero result. Accepted boundary `0x4015a478`
+precedes mounted flag `0x44f2bd68` clearing at `0x4015a48a`, erase
+`0x4012e0ce` at `0x4015a490`, and 512-byte header zeroing at `0x4015a4a0`.
+
+Mount `0x4015a72c` locks at `0x4015a734`. Boundary `0x4015a73a` precedes
+flag clearing `0x4015a74a` and header replacement at `0x46f4dcb0` through
+`0x4015a750`. It checks magic/checksum/version 3 or 4, calls shared init
+`0x4015a400` with flags at `0x4015a7b0`, then sets mounted=1 at `0x4015a7cc`
+and unlocks at `0x4015a7de`. No local open-handle check was found. Separate
+init `0x4015a716` resets the mutex through `0x4000157c` at `0x4015a71c`, then
+clears the mounted flag at `0x4015a722`, without taking that mutex. Its mutex
+owner store was absent from the decompilation; waiter-word stores were present. Shared `0x4015a400`
+is therefore too late to serve as the sole global-invalidation boundary.
+
+Open bits occupy `[0x46f4ded0,0x46f58ed0)`; ID bitmap starts at `0x46f58ed0`
+with length `0xb000`. Format zeroes it through `0x4015b7cc` at `0x4015a512`
+and reserves IDs 0/1. Mount's `0x4015a400 → 0x4015b804` reloads it at
+`0x4015b816`; metadata reset is `0x4015b74c`. Block bitmap `0x46f39ca0`,
+length `0x14010`, follows format `0x40155900` / mount `0x40155954`.
+Shared init also recreates global directory handle `0x46f4debc` with ID 2 through
+`0x40157338`/store `0x4015733c`, another store missed by decompilation.
+Format ignores the shared-init return at `0x4015a634`, sets mounted=1 at
+`0x4015a63e`, optionally creates the incoming directory, then unlocks at
+`0x4015a694`. Mounted 0→1 is not a generation; no existing global epoch is
+established.
+
+Immediate format wrapper `0x4015a700` passes argument 1. Startup `0x400cc9c8`,
+when `0x42940a48` is zero, calls init at `0x400ccd4a`, then uses bit `0x10` of
+`0x4029eef0` to choose format `0x400ccd5a` or mount(0) `0x400ccd64`.
+Console `0x400caff0` recognizes `#FORMAT_FS` at `0x40241da0` and calls at
+`0x400cbedc` when unmounted or overridden. Callback `0x4009eb88` calls at
+`0x4009ec5a` when object byte +9 is nonzero; its +8 indirect branch is unaudited.
+Shared init `0x4015a400` with argument 0 reaches factory helper `0x4002cd6a`;
+downstream work is unexpanded. **[O]** Runtime/indirect init triggers, balanced open ownership and
+complete lifecycle coverage remain open. DSP pool reset `0x40154634` is separate.
+
+### Successful filesystem block I/O waits; error draining remains open
+
+**[D]** A separate audit checked 789 original section-3 encodings. Successful
+block read `0x4012e1b6` and write `0x4012e39c` hold mutex `0x47de3cac` and
+wait for three events through `0x4000141a` (blocking TRAP 0), rather than only
+enqueueing work. Write waits at `0x4012e53c`, `0x4012e550`, `0x4012e562`,
+with intervening status checks. Read waits at `0x4012e334`, `0x4012e348`,
+`0x4012e350`, then performs the bounce copy at `0x4012e370`.
+
+After partial-payload memcpy at `0x4015878a`, the path through `0x40158796`
+reaches `0x40155c34`. Its disk-backed branch follows `0x40155cbc → 0x4012e39c`;
+its separate RAM-backed branch copies directly inside `0x40155c34`. Cache release
+`0x4015879e` precedes FS mutex unlock `0x401587f8`;
+no deferred flush was found here. Read-cache miss `0x40155cd0 → 0x40155e70 →
+0x4012e1b6` precedes `0x4015824e`'s user copy and unlock at `0x40158654`.
+
+**[O]** Early error returns skip waits, and the filesystem wrappers ignore block
+status. Success-path completion therefore supplies no error-path DMA quiescence
+or reliable failure-reporting claim. The bounded error audit below narrows those
+paths; source consistency, full mutation/lifecycle coverage and any fail-closed
+generation mechanism remain unproved. No hook, public API or DSP backing policy is selected.
+
+
+### Error ISR signaling does not establish transfer draining
+
+**[D]** A bounded DT2 1.17 audit checked 416 original section-3 encodings and
+reference-scanned `0x4012d500..0x4012e5a0` with 100% decoded-byte coverage.
+In ISR `0x4012d5ba`, command-timeout IRQSTAT bit 16 is acknowledged at
+`0x4012d5d8`, sets `0x44e3feac=-1` at `0x4012d5e0`, and signals an event at
+`0x4012d5e6`. CRC bit 21 is acknowledged at `0x4012d62c`, sets the data-error
+flag at `0x4012d634` and signals at `0x4012d63a`; data-timeout bit 20 follows
+`0x4012d658/660/666`. These arms contain no DMA disable/reset, ACTIVE/DONE poll,
+abort or drain. Signal `0x4000155c → 0x400011ee` only updates event/runnable state.
+
+Channel-59 ISR `0x4012d6a0` writes EDMA_CINT=`0x3b` at `0x4012d6b0`, then
+signals at `0x4012d6b6`. Interrupt clearing is not transfer stopping. The public
+MCF54418 Reference Manual, catalogued in
+[the ColdFire source notes](../refs/MCF5441X-notes.md), describes CINT at printed
+p. 19-17 (local PDF page 0377). CSR=`0x000a` selects major-loop interrupt and
+DREQ request disable at count zero, pp. 19-31–32 (pages 0391–0392), not an
+error-path abort. IRQSTAT error definitions are at p. 25-24 (page 0640).
+
+Command-error paths in both block operations return without waiting for the DMA
+event. Write data error returns −2 before that wait; read data error is checked
+after the DMA gate. Common `0x401345a2` only unlocks `0x44e4ae98`, followed by
+block-mutex `0x47de3cac` unlock, without cancellation. D0 errors remain observable
+at read exit `0x4012e390` / write exit `0x4012e592`, though FS wrappers ignore
+them. Write also ignores the preliminary command return at `0x4012e456`.
+Error globals are not sticky: new requests overwrite them, and independently
+checked ISR bits allow a later command-complete arm to write zero. Simultaneous
+error/completion bits therefore need care.
+
+**[O]** The bounded error-path audit is complete, not controller-wide or physical
+DMA-quiescence proof. The pointer audit below resolves the full-block filesystem
+read destination as stock cache rather than runtime caller storage; no late write
+has been observed. Controller-state proof or conservative uncertain-completion
+handling remains unresolved. No hook, source-generation scheme, public API or
+production backing policy is selected.
+
+### Runtime read destination is copied from stock cache, not a DMA target
+
+**[D]** A bounded audit checked 398 original DT2 1.17 section-3 encodings.
+Runtime [source reads](../../modules/core/runtime/src/rs/src/sample_source.rs)
+pass `dst+done` in chunks of at most 4,096 bytes to `0x4015860a`.
+`0x40158644 → 0x4015824e` passes that caller destination as the fourth argument.
+The path `0x401582c0 → 0x40155ef2 → 0x40155cd0` selects stock cache;
+cache miss `0x40155e70 → 0x4012e1b6` uses destination
+`0x405d5770 + cache_slot_offset`, optionally through block bounce storage
+`0x4fe69300`, rather than the caller pointer. At `0x401582fe`, memcpy copies
+cache+offset into the caller using the computed/clamped chunk, the minimum of
+request remaining, block remaining and bytes to EOF; `0x40158306` then releases
+it. No full-block direct-to-caller branch was found: even `0x8000`-byte requests
+use this copy path. The final one-byte stack probe uses the same reader, but at
+EOF it returns before cache lookup or copying.
+
+This path supplies no evidence that DMA retains the runtime arena/input pointer,
+no observed after-free write, and no reason to retain that input buffer solely
+for this filesystem DMA route. It does not establish safety for other DMA paths.
+
+**[D/O]** `0x40155cd0` ignores the block-read error and still returns the cache
+pointer. Stale, incomplete or potentially changing stock-cache contents can
+therefore be copied with a filesystem success byte count. Neither reliable
+`E_READ` propagation nor physical DMA quiescence follows. The active bounded
+pointer/error audits are complete; exact controller recovery remains open.
+
+The resulting design requirement is a lifecycle/content-change witness plus an
+independently latched low-level storage fault. Filesystem byte counts and native
+header validation alone are insufficient source validation. This is a requirement/
+proposal, not a selected hook implementation or public ABI. Unknown completion
+must not be assumed retry-safe; recovery and complete hook coverage remain open.
+No source-generation scheme or production DSP backing policy is implemented.
+
+
+**[O] Fault-history requirement:** a storage-fault record must not reset on a new
+load. Installation must cover the cache's relevant I/O history or establish fresh,
+quiescent cache initialization. Starting a clear token after an unobserved storage
+failure is not evidence of cache health. No implementation or recovery policy is
+selected.

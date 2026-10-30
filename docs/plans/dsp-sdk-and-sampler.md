@@ -62,10 +62,32 @@ auxiliary handle to callback shutdown/control; creator invocation/N and complete
 error-path behavior remain unresolved. Next resolve external/computed creator
 entry or the capability for exact-entry R4 observation. External ring ownership, entry/dispatch
 precision remain open. The DT2 reserve/alternate-reclaim audit confirms that
-write/delete-only hooks miss allocation and multi-ID reclaim; create/ID reuse,
-reset/remount and remaining writer coverage are still open, with no hooks selected. See
+write/delete-only hooks miss allocation and multi-ID reclaim. The create/ID-reuse
+slice now identifies pre-mutation ID and incarnation-like node metadata without
+wrap rejection. Bounded format/mount/init and successful blocking-I/O audits now
+identify distinct lifecycle boundaries; shared init is too late and mounted state
+is not an epoch. The bounded error audit finds event signaling and early returns
+without local abort/drain, not physical quiescence. The pointer audit now shows
+DMA into stock cache/bounce storage, followed by a caller copy, with no direct
+caller-buffer branch or after-free-write evidence. Ignored I/O errors can still
+produce stale/incomplete cache copies with success counts. The next design
+requirement is lifecycle/content-change evidence plus independently latched
+low-level storage faults; recovery, full hook coverage and source consistency
+remain open, with no implementation selected. No hooks or complete
+generation scheme are selected. See
 [finding 91](../findings/91-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
+
+**Pending user decision — DT2 first-release storage-fault recovery:** for low-level
+faults with unproved completion, the coordinator recommends rejecting the active
+unpublished load and latching the fault for the remaining boot, refusing new sample
+loads until reboot or an independently proven reset. Existing published bindings
+are left alone, without an underlying-device-health guarantee. Ordinary source
+changes abort the load without permanent poisoning. Automatic retry instead needs
+proven abort/drain, cache invalidation, FS revalidation and bounded error injection
+as a separate larger scope. Both choices need correct fault capture/history before
+cache use; neither proves DMA stopping or approves hooks/production backing.
+No implementation is approved pending that recovery-scope decision.
 
 Production backing ownership/coexistence, callback-private lifetime, full-route
 capture/commit/reset/cleanup, public stereo integration and picker publication
@@ -2646,9 +2668,27 @@ or production memory policy is selected; DN2 generation/SHA remains a separate p
   bypasses write, and recursive/rollback reclaim bypasses delete or affects more
   IDs than its argument. File ID is available before first mutations, but not at
   lower bitmap helpers. This is CF source consistency, not DSP pool ownership.
-- [ ] Complete create/ID-reuse, reset/remount and remaining writer coverage before
-  considering selected-file generation; require fail-closed counter wrap and
-  account for every affected ID. No hook implementation is selected. See
+- [x] Audit create/ID reuse: selected ID precedes bitmap/node mutation, all four
+  recorded allocator calls hold the FS mutex, and failed linking can free the ID
+  directly. Incarnation-like node metadata has no audited fail-closed wrap check.
+- [x] Audit bounded format/mount/init paths: open-bit gating differs, mutex-reset
+  init is unlocked, shared init is too late for sole global invalidation, and
+  mounted 0→1 is not a generation.
+- [x] Audit successful filesystem block I/O: three blocking waits precede successful
+  completion, with no deferred flush in the checked write/read-cache paths.
+- [x] Complete bounded error ISR/drain auditing: error events and channel interrupt
+  clear do not locally abort/drain DMA; early errors skip waits and FS wrappers
+  ignore observable block errors. No physical/controller-wide quiescence claim.
+- [x] Trace full-block filesystem read pointers: DMA uses stock cache/bounce
+  storage, then memcpy reaches the caller; no direct-to-caller branch or observed
+  after-free write. This FS path alone does not justify retaining runtime input.
+- [ ] Define lifecycle/content-change evidence and an independent low-level fault
+  latch, with complete hook coverage and conservative uncertain-completion
+  recovery. FS counts/header validation alone are insufficient; unknown completion
+  is not assumed retry-safe, and no implementation/public ABI is selected.
+- [ ] Complete init/indirect triggers, directory links, balanced open ownership
+  and remaining writers before any source generation scheme; require fail-closed
+  wrap/every affected ID. No hooks selected. See
   [finding 81](../findings/81-stock-sampler-dependencies.md).
 
 ### Read-only reachable SHARC store inventory
@@ -2712,3 +2752,30 @@ whereas `NativePcm16Stream` emits packed PCM16. Its existing canonical parser is
 not a direct replacement for that job/consumer path. Production wiring awaits an
 explicit representation and destination byte-extent contract plus source
 consistency; no implementation, public ABI or product policy is selected.
+
+The proposed storage-fault record must survive new loads. Its installation must
+cover relevant cache I/O history or establish fresh/quiescent cache initialization;
+a clear token after an unobserved failure is not health proof. Implementation and
+recovery policy remain unselected.
+
+### Pending decision: DT2 first-release storage-fault recovery scope
+
+The bounded static audits above are complete within their recorded scopes. For a
+low-level storage fault with unproved completion, the coordinator recommends:
+
+- Reject the active unpublished load and latch the storage fault for the remaining
+  boot; reject new sample-load requests until reboot or independently proven reset.
+- Leave other published bindings alone, without guaranteeing the underlying device
+  remains healthy. Ordinary source-change detection without I/O fault aborts only
+  that load, without permanent poisoning.
+
+The alternative is a separate larger work scope: prove controller abort/drain,
+cache invalidation and FS revalidation, then perform bounded error injection before
+allowing automatic retry in the first release. Both options require correct fault
+capture and relevant cache-I/O history from before cache use. The recommendation
+does not prove DMA stops or approve production pools/hooks. **Awaiting the user's
+recovery-scope decision; no implementation is approved.**
+
+Validation for this documentation checkpoint: auditor prose cross-checks, pathcheck,
+`git diff --check`, and `mise run test:changed` pass. No code change, emulator run,
+hardware experiment or full merge gate is claimed.

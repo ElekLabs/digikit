@@ -295,3 +295,60 @@ helpers. Create/ID reuse, reset/remount and remaining writer coverage are the
 concrete residual work. This is CF source consistency, not DSP pool ownership;
 no hooks or selected-file generation implementation are chosen. See
 [finding 81](../findings/81-stock-sampler-dependencies.md).
+
+The DT2 create/ID-reuse slice is now audited: identity precedes bitmap/node writes,
+all four recorded allocator calls hold the FS mutex, and failed linking can free
+an ID without delete/reclaim wrappers. Existing incarnation-like node metadata
+has no audited wrap rejection. Directory links, reset/remount and I/O completion
+versus queued work remain the concrete next checks, with no hook/public API or
+complete generation scheme chosen. See
+[finding 81](../findings/81-stock-sampler-dependencies.md).
+
+Bounded DT2 format/mount/init auditing now identifies separate global boundaries:
+format checks open bits, mount does not locally do so, and init resets the mutex
+without locking it. Shared init is too late for sole invalidation; mounted state
+is not a generation. Successful block read/write paths wait for three events before
+completion, with no deferred flush in the checked cache paths. Early errors skip
+waits and FS wrappers ignore block status; the bounded error follow-up below
+finds no local abort/drain in the audited arms. Init/indirect triggers, directory links, balanced open ownership and full
+source consistency remain open; no hooks, public API or backing policy selected.
+See [finding 81](../findings/81-stock-sampler-dependencies.md).
+
+The bounded DT2 error ISR audit is complete: event signaling and channel-59
+interrupt clear do not establish stopping/draining; command errors and write data
+errors can return before the DMA event. Block errors are observable but ignored
+by FS wrappers, and error globals are not sticky. The completed pointer audit
+below resolves full-block DMA storage as stock cache/bounce, not caller input;
+no late write was observed.
+Controller-state proof or conservative uncertain-completion handling remains open,
+with no hook/public API/backing policy selected. See
+[finding 81](../findings/81-stock-sampler-dependencies.md).
+
+The final read-pointer audit closes direct runtime-input DMA exposure for this
+filesystem route: stock cache/bounce receives DMA, then clamped chunks are copied
+to the caller, including full-block requests. The final one-byte probe uses the
+same reader but returns before cache/copy at EOF. No after-free write was observed,
+and this path alone does not justify retaining the runtime input buffer. Ignored
+block errors can instead yield stale/incomplete/potentially changing cache copies
+with filesystem success counts. Source validation therefore needs lifecycle/
+content-change evidence plus an independently latched low-level storage fault;
+counts/native headers alone are insufficient. This is a design requirement, not
+selected hooks or public ABI. Recovery/full coverage remain open; uncertain
+completion is not assumed retry-safe. See
+[finding 81](../findings/81-stock-sampler-dependencies.md).
+
+A proposed storage-fault record must not reset on a new load, and its installation
+must cover relevant cache I/O history or establish fresh/quiescent initialization.
+A new clear token cannot prove health after an unobserved failure; no implementation
+or recovery policy is selected.
+
+Pending user decision: DT2 first-release recovery after low-level storage fault
+with unproved completion. The coordinator recommends rejecting the active
+unpublished load and latching the fault for the rest of the boot, refusing new
+sample loads until reboot or independently proven reset. Other published bindings
+are left alone, with no underlying-device-health guarantee. Source changes without
+I/O faults abort only that load. Automatic retry would instead require a separate
+larger abort/drain + cache-invalidate + FS-revalidate proof and bounded error
+injection. Both options require correct fault/history capture before cache use;
+no DMA-stop proof, production hooks/pool or implementation is approved by this
+recommendation. The user recovery-scope decision remains open.
