@@ -767,7 +767,8 @@ both modes have the same SHA-256
 minus the model-exercised 176-byte depth leaves 3,128 bytes in the AudioTask
 allocation. This is scenario-specific arithmetic, not a native store watermark or
 worst-case IRQ/scheduler headroom. Shared U/Y counters do not attribute placement;
-positive native late-site coverage remains OPEN.
+this Pre-only run did not observe the late site; the later panel-switch profile
+below supplies positive coverage.
 
 Ignored results are
 `out/runs/dsp-stereo-proof/native/5e1a8014-6b17-47b1-b3c6-c1d26d167f99/result.json`
@@ -777,3 +778,79 @@ Ignored results are
 unchanged environment/invocation in `out/runs/dsp-stereo-proof/commands.json`.
 The finite same-MODE1, metamorphic, 40-bit/hardware, full-route and backing-ownership
 qualifications above remain; no production policy is selected by this result.
+
+
+## Legitimate BW Routing switch and native late-site coverage
+
+**[C][D]** G is the byte table `DM8(0x254ac4+v)`, not a four-byte-stride table. The DN2
+1.12 UI parameter's audited formatter uses raw>>8: zero displays Pre and nonzero Post,
+with raw `0x100` selecting G=1. The current user manual
+`Digitone-2-User-Manual_ENG_OS1.12_260930.pdf` (SHA-256
+`53b4eec03935e4ab318449e474346712ec1ceffa2af0db91ec6b0404d024f9f3`), printed page 59,
+places BW.RT at ENC G on FLTR page 2/2; printed page 60 describes Pre/Post. This
+supplies a legitimate panel path rather than a routing-memory setter.
+
+Two bounded stock-only probes calibrate the actual UI. With TRIG 1 held, FLTR taps at
+100/150 ms (20 ms holds) followed by ENC G +1 at 200 ms, +8 at 300 ms and +32 at 400 ms
+leave the route Pre after the first two turns and Post after the third. No
+detent-to-raw-unit scale or acceleration is assumed. Early FLTR screenshots were stale
+until redraw; the confirmed run checks the visible BW.RT caption/value at 390 ms (PRE
+FLTR) and 500 ms (POST FLTR), matching byte gates 0/1 for all 16 slots. The initial
+automatic NO event at 0..2,000,000 CF instructions is retained in recorded inputs. Only
+two exploratory probes ran; each closed its own daemon. Evidence is under ignored
+`out/runs/dsp-stereo-proof/route-ui-probe/` in runs
+`6e78d99e-5bb6-4a42-80ef-75e1b56bf248` and `2246456e-0f72-400c-afef-aef08acbcf06`, with
+full frame readbacks/PNGs, gate/history snapshots and exact recorded events.
+
+The existing acceptance is parameterized by Pre/route-switch and identity/polarity,
+preserving the original Pre timing. The route variant uses the same forced hashed
+snapshot and exact instruction-scheduled panel changes for stock and patched captures;
+TRIG 1 remains held from 1 ms through 800 ms. Early and 390 ms snapshots contain finite
+nonzero histories; the initialized private slot, inverse/identity history relation and
+reset count 1 persist through the switch. Calls continue after Post without
+reinitializing the record. Pre/post diagnostic snapshots are read-only; the only routing
+changes are ordinary panel inputs. The existing private proof mode remains configured
+before first use, as in the earlier experiment.
+
+All four native cases pass. Both stages retain zero mode errors, nonfinite observations,
+mismatches and fallbacks, with one mirrored reset. The Pre cases retain 2,400 calls and
+the prior 100 ms/4,800-frame stock WAV hash. Each route case records 19,200
+render/shadow calls per stage and 38,400 stereo frames/800 ms. All four route WAV files
+have SHA-256 `f88b7d008d22c6364c1925a986bbd61615a0859afe2bc1c150ddc04e6ccda61c`,
+independently checked, with zero alignment shift. Mode 1 observes 614,399 opposite audio
+and 38,400 opposite history relations per stage. Minimum native entry minus the maximum
+176-byte model-exercised depth leaves 3,128 bytes in this scenario; this remains
+arithmetic rather than a native store watermark or IRQ nesting bound.
+
+Aggregate hook counters and gate bytes alone do not attribute a callsite. A separate
+filtered interpreter route run positively records both placements:
+
+| Site | Stock count | Patched count | MODE1 |
+| --- | ---: | ---: | --- |
+| Early `0x1c959f` | 10,160 | 10,160 | `0x39011cf8` |
+| Late `0x1c9b7a` | 9,040 | 9,040 | `0x39011cf8` |
+| Reset `0x1c96aa` | 1 | 1 | `0x39011cf8` |
+
+Both status records have zero `aot_block`, `fast_tier`, `fast_runs`, `block_entries` and
+traps. The interpreter case passes, with three other cases intentionally filtered,
+retaining the same route WAV hash and zero shift. This closes the prior late-placement
+evidence gap for this held-note scenario; it does not prove all routes, stable global
+gates, asynchronous exclusion or full lifecycle behavior.
+
+Ignored four-case results (Pre 0/Pre 1/route 0/route 1 respectively) are:
+
+- `out/runs/dsp-stereo-proof/native/7b5c4f4c-989d-4e36-8f04-d2464df6f5bd/result.json`.
+- `out/runs/dsp-stereo-proof/native/7a78de33-c497-4ea1-b6d9-91ffa6e63258/result.json`.
+- `out/runs/dsp-stereo-proof/native/8fd8f1f0-8786-41e5-b118-1f580edffba2/result.json`.
+- `out/runs/dsp-stereo-proof/native/d3bf40a3-f34b-4e72-9b0f-16b98c98bc64/result.json`.
+
+The interpreter result is
+`out/runs/dsp-stereo-proof/native/1ebcc4a6-1eb1-43e7-886f-a54a89a0b8b0/result.json`;
+profiles are `out/runs/dsp-stereo-proof/route-interpreter-profile.e39898-1` and
+`out/runs/dsp-stereo-proof/route-interpreter-profile.e39898-2`. Logs are
+`out/runs/dsp-stereo-proof/native-route-acceptance.log` and
+`out/runs/dsp-stereo-proof/route-interpreter-profile.log`. Exact environments, commands,
+probe calibration and TS hash are in `route_extension` under
+`out/runs/dsp-stereo-proof/commands.json`. No DSP, SDK or ABI change is made; finite
+same-mode/metamorphic, hardware, 40-bit, performance and production-backing
+qualifications remain as above.

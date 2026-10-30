@@ -60,7 +60,7 @@ header invalidation alone is inadequate.
   176 bytes. Minimum native entry minus that model depth leaves 3,128 bytes in
   this scenario, not a native store watermark or universal stack bound. Both-stage
   native gates require zero errors/nonfinite/mismatches/fallbacks, U/Y reset and
-  mode-1 opposite audio/history. Late-site native execution remains open.
+  mode-1 opposite audio/history. The later held-note BW.RT route profile now positively covers both placements.
   Full-route, production backing ownership and hardware acceptance remain open.
 - [Finding 97](../findings/97-ddr-access-diagnostic.md): opt-in first-attempt DDR
   monitor, compiled native guard fallback, ordered diagnostic RPC, both native
@@ -102,7 +102,7 @@ Combined observer acceptance is in
 `out/runs/dsp-stereo-proof/native/5e1a8014-6b17-47b1-b3c6-c1d26d167f99/result.json`
 and `out/runs/dsp-stereo-proof/native/a49fdec1-2e03-42a1-a0d0-58989c6c9ede/result.json`,
 with `out/runs/dsp-stereo-proof/native-uy-acceptance.log`. Late-site positive
-coverage remains open despite both callsites being hooked.
+coverage was open for those Pre-only runs; the later panel-switch profile below closes that scenario gap.
 
 The private per-stereo-frame fetch experiment now passes 59 model tests, with no
 runtime/core policy changes: both channels' packed taps/scalars are copied in one
@@ -120,8 +120,9 @@ See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md) and ignored
 **[C][D]** AudioTask requests 1,000 four-byte units, not `0x1000` bytes:
 `0x1ca009` loads `0x3e8`; creator shift `0xb88840` precedes allocation at
 `0xb88853`. For `T=DM32(0x268a84)`, `S=DM32(T+0x30)`, allocation is
-`[S,S+4000)`. Observed native entry minimum minus the model-exercised 172-byte
-store depth leaves 3,132 bytes in this scenario. This is not a native store
+`[S,S+4000)`. Current combined native entry minimum minus the maximum
+model-exercised 176-byte store depth leaves 3,128 bytes in this scenario.
+Historical first-stage-only 172/3,132 observations remain in the findings. This is not a native store
 watermark or worst-case interrupt/scheduler headroom. See
 [finding 83](../findings/83-sample-retirement-design.md).
 
@@ -153,3 +154,34 @@ cases retain their metrics, plus a focused shared-index-register/final-DDR-word
 edge case. Old PCM kernels, public resource/output ABI and production exclusion
 policy are unchanged. See [the SDK contract](../../sdk/dsp/README.md) and
 [finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
+
+
+The current native test defines Pre and held-note BW.RT route-switch variants in both
+modes; all four pass. The normal panel path is FLTR twice to 2/2 and calibrated ENC G
+events (+1,+8,+32 at 200/300/400 ms), with visible PRE/POST FLTR pixel readback and all
+sixteen byte gates checked at 390/500 ms. The existing automatic NO dismissal is
+recorded, TRIG 1 stays held, and initialized nonzero private histories retain one reset
+count through the switch. No routing-memory control write is used. Each route variant
+preserves the exact stock 800 ms stereo WAV (38,400 frames, zero shift), with 19,200
+calls per stage and zero errors. Mode 1 observes 614,399 opposite audio and 38,400
+opposite history relations per stage.
+
+The paired interpreter profile positively records early/late/reset counts 10,160/9,040/1
+with MODE1 `0x39011cf8`, zero AOT/fast/block execution and zero traps. Late U/Y
+execution is now observed in this held-note scenario; full-route lifecycle, writer
+exclusion and production backing/lifetime remain open. New evidence is
+`out/runs/dsp-stereo-proof/native-route-acceptance.log`,
+`out/runs/dsp-stereo-proof/route-interpreter-profile.log` and `route_extension` in
+`out/runs/dsp-stereo-proof/commands.json`; [finding
+96](../findings/96-stereo-machine-processing.md) lists exact result/profile paths.
+TypeScript, oxlint and formatting checks pass; this extension changes only tests/docs,
+with no DSP/SDK/ABI change.
+
+
+For this four-file extension, the coordinator's changed-files wrapper passes
+pathcheck/layers but its JS wrappers hit the existing pnpm hoist layout
+(`node_modules/.pnpm` is not a real directory). Direct regression TypeScript,
+oxlint and formatting pass; the direct related-host selection finds zero test
+files, which is not host coverage. No dependency changes or full-gate pass are
+claimed. Next establish adapter render-return/state-reuse lifetime independently
+of backing-reader count before production integration.

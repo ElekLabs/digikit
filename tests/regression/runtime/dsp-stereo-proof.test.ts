@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { button, repoRoot, resolveInputs } from '@digi/test-support';
+import { button, encoder, repoRoot, resolveInputs } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
@@ -119,7 +119,13 @@ function alignedStereo(reference: Buffer, candidate: Buffer): number | null {
 
 // Explicit immutable daemon and existing registry-ready DN2 1.12 inputs only.
 // It applies only this proof module; no daemon build, ready-input regeneration or default-set change.
-describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i', (mode) => {
+describe.skipIf(!enabled).each([
+  { mode: 0, routing: 'pre' },
+  { mode: 1, routing: 'pre' },
+  { mode: 0, routing: 'route-switch' },
+  { mode: 1, routing: 'route-switch' },
+])('private DN2 first-stage observer mode $mode $routing', ({ mode, routing }) => {
+  const routeSwitch = routing === 'route-switch';
   const runDir = path.join(root, 'out/runs/dsp-stereo-proof/native', randomUUID());
   if (enabled) {
     for (const file of [binary!, patchkit!]) {
@@ -128,11 +134,19 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
     }
     fs.mkdirSync(runDir, { recursive: true });
   }
-  const handle = withSession({ runDir, binary, device: 'dn2', firmware: '1.12', dsp: 'sharc', restart: false });
+  const handle = withSession({
+    runDir,
+    binary,
+    device: 'dn2',
+    firmware: '1.12',
+    dsp: 'sharc',
+    restart: false,
+    autoNo: true,
+  });
 
   test('keeps audible stereo baseline and observes private histories/reset identity', async () => {
     const session = handle.session;
-    const evidence: Record<string, unknown> = { requestedMode: mode };
+    const evidence: Record<string, unknown> = { requestedMode: mode, routing };
     let stopped = false;
     let failureDiagnostic: (() => Promise<Record<string, number>>) | undefined;
     const save = (name: string, value: unknown) =>
@@ -141,18 +155,104 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
       if (stopped) throw new Error('stereo proof has stopped');
       return bounded(session.client.call<T>(method, params), ms, method);
     };
-    const capture = async (name: string) => {
+    const capture = async (name: string, observe?: () => Promise<Record<string, number>>) => {
       await rpc('run.mode', { mode: 'paused' });
       const before = await rpc<{ elapsed: number }>('status');
       expect(Number.isSafeInteger(before.elapsed)).toBe(true);
       const file = path.join(runDir, `${name}.wav`);
+      const relativeEvents = [
+        { at_instr: 132_000, button: button('TRIG 1'), down: true },
+        ...(routeSwitch
+          ? [
+              { at_instr: 13_200_000, button: button('FLTR'), down: true },
+              { at_instr: 15_840_000, button: button('FLTR'), down: false },
+              { at_instr: 19_800_000, button: button('FLTR'), down: true },
+              { at_instr: 22_440_000, button: button('FLTR'), down: false },
+              { at_instr: 26_400_000, turn: encoder('ENC G'), detents: 1 },
+              { at_instr: 39_600_000, turn: encoder('ENC G'), detents: 8 },
+              { at_instr: 52_800_000, turn: encoder('ENC G'), detents: 32 },
+            ]
+          : []),
+      ];
+      const phases: Array<{ label: string; diagnostic?: Record<string, number> }> = [];
+      const routeSnapshot = async (label: string, gate: number, expectedUi?: string) => {
+        const diagnostic = observe ? await observe() : undefined;
+        const slot = diagnostic?.uy_coeff_slot ?? 0;
+        const gates = await rpc<{ hex: string; unknown: number }>('dsp.peek', { addr: 0x254ac4, len: 16 });
+        expect(gates.unknown).toBe(0);
+        expect(Buffer.from(gates.hex, 'hex')).toEqual(Buffer.alloc(16, gate)); // G is DM8(base+v).
+        const history = await rpc<{ hex: string; unknown: number }>('dsp.peek', {
+          addr: 0x2533e0 + 32 * slot + 24,
+          len: 8,
+        });
+        expect(history.unknown).toBe(0);
+        const bytes = Buffer.from(history.hex, 'hex');
+        const values = [bytes.readFloatLE(0), bytes.readFloatLE(4)];
+        expect(values.every(Number.isFinite)).toBe(true);
+        expect(
+          values.some((value) => value !== 0),
+          'held-note U/Y history is nonzero',
+        ).toBe(true);
+        const frame = await rpc<{ data_b64: string; sha256: string }>('framebuffer.get', { hash: true, data: true });
+        const bitmap = Buffer.from(frame.data_b64, 'base64');
+        // Only the BW.RT caption and PRE/POST FLTR value, calibrated visually on1.12.
+        const pixels: number[] = [];
+        for (const [x0, x1, y0, y1] of [
+          [76, 96, 40, 56],
+          [64, 96, 59, 64],
+        ])
+          for (let y = y0!; y < y1!; y++)
+            for (let x = x0!; x < x1!; x++) pixels.push((bitmap[7 - Math.floor(y / 8) + 8 * x]! >> (y % 8)) & 1);
+        const uiHash = createHash('sha256').update(Buffer.from(pixels)).digest('hex');
+        if (expectedUi) expect(uiHash, `${label} BW.RT panel label`).toBe(expectedUi);
+        if (diagnostic) {
+          expect(diagnostic.uy_initialized_slot).toBe(1);
+          expect(diagnostic.uy_render_calls).toBeGreaterThan(0);
+          for (const prefix of ['', 'uy_'])
+            for (const field of ['mode_errors', 'nonfinite', 'mismatches', 'fallbacks'])
+              expect(diagnostic[`${prefix}${field}`], `${label} ${prefix}${field}`).toBe(0);
+          for (const word of [6, 7]) {
+            const left = bytes.readUInt32LE((word - 6) * 4);
+            const expected = (left ^ (mode ? 0x8000_0000 : 0)) >>> 0;
+            const right = diagnostic[`uy_history${word}`]!;
+            const norm = (value: number) => ((value & 0x7fff_ffff) === 0 ? 0 : value);
+            expect(norm(right)).toBe(norm(expected));
+          }
+        }
+        const row = { label, diagnostic, slot, gates, history, frame, uiHash, status: await rpc('status') };
+        phases.push(row);
+        save(`${name}-${label}.json`, row);
+      };
       await rpc('pcm.tap', { action: 'start' });
       await rpc('pcm.tap', { action: 'capture', path: file });
       try {
         await rpc('input.schedule', {
-          events: [{ at_instr: before.elapsed + 132_000, button: button('TRIG 1'), down: true }],
+          events: relativeEvents.map((event) => ({ ...event, at_instr: before.elapsed + event.at_instr })),
         });
-        await rpc('step', { instructions: total, timeout_wall_s: 120 }, 125000);
+        if (routeSwitch) {
+          await rpc('step', { instructions: 13_200_000, timeout_wall_s: 120 }, 125000);
+          await routeSnapshot('early-held', 0);
+          await rpc('step', { instructions: 38_280_000, timeout_wall_s: 120 }, 125000);
+          await routeSnapshot('pre-ui', 0, '039f96545eccf5a476a4771d454015cbdc5fe797097b0d59871a3520f41696c6');
+          await rpc('step', { instructions: 14_520_000, timeout_wall_s: 120 }, 125000);
+          await routeSnapshot('post-ui', 1, 'bd26a17708dd86afbc3a5e602a5ac5090454ae5edc4ac84d0ff5ab8f75fd5446');
+          await rpc('step', { instructions: 39_600_000, timeout_wall_s: 120 }, 125000);
+          await routeSnapshot('end-held', 1);
+          if (observe) {
+            const pre = phases[1]!.diagnostic!;
+            const post = phases[2]!.diagnostic!;
+            const end = phases[3]!.diagnostic!;
+            expect(post.uy_coeff_slot).toBe(pre.uy_coeff_slot);
+            expect(post.uy_reset_calls, 'held routing switch preserves initialized history without reset').toBe(
+              pre.uy_reset_calls,
+            );
+            expect(end.uy_reset_calls).toBe(pre.uy_reset_calls);
+            expect(post.uy_shadow_calls).toBeGreaterThan(pre.uy_shadow_calls!);
+            expect(end.uy_shadow_calls).toBeGreaterThan(post.uy_shadow_calls!);
+          }
+        } else {
+          await rpc('step', { instructions: total, timeout_wall_s: 120 }, 125000);
+        }
         await rpc('run.mode', { mode: 'paused' });
       } finally {
         await rpc('input.button', { code: button('TRIG 1'), down: false });
@@ -160,7 +260,20 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
       }
       await bounded(session.expectNoFault(name), 5000, `${name} health`);
       const data = pcm(file);
-      evidence[name] = { file, sha256: hash(file), stereoFrames: data.length / 8, status: await rpc('status') };
+      evidence[name] = {
+        file,
+        sha256: hash(file),
+        stereoFrames: data.length / 8,
+        status: await rpc('status'),
+        ...(routeSwitch
+          ? {
+              relativeEvents,
+              phases,
+              recordedInputs: await rpc('inputs.recorded'),
+              startupDismissal: 'auto_no:true schedules NO; recordedInputs retains actual helper events',
+            }
+          : {}),
+      };
       return data;
     };
     const run = async () => {
@@ -230,6 +343,19 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
         for (const name of firstFailure) diagnostic[`first_${name}`] = await read(`_sp_first_${name}`);
         for (const name of [...uyCounters, ...uyContextFields]) diagnostic[`uy_${name}`] = await read(`_uy_${name}`);
         for (const name of firstFailure) diagnostic[`uy_first_${name}`] = await read(`_uy_first_${name}`);
+        if (routeSwitch && diagnostic.uy_shadow_calls! > 0) {
+          const slot = diagnostic.uy_coeff_slot!;
+          expect(slot).toBeGreaterThanOrEqual(0);
+          expect(slot).toBeLessThan(16);
+          const peek = async (address: number) => {
+            const result = await rpc<{ hex: string; unknown: number }>('dsp.peek', { addr: address, len: 4 });
+            expect(result.unknown).toBe(0);
+            return Buffer.from(result.hex, 'hex').readUInt32LE();
+          };
+          diagnostic.uy_initialized_slot = await peek(planSymbol(plan, '_uy_initialized') + 4 * slot);
+          for (const word of [6, 7])
+            diagnostic[`uy_history${word}`] = await peek(planSymbol(plan, '_uy_states') + 32 * slot + 4 * word);
+        }
         return diagnostic;
       };
       failureDiagnostic = snapshotDiagnostic;
@@ -249,7 +375,7 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
       expect(armed.mode).toBe(mode);
       expect(armed.active_mode).toBe(0xffff_ffff);
       expect(armed.uy_active_mode).toBe(0xffff_ffff);
-      const observed = await capture('patched');
+      const observed = await capture('patched', snapshotDiagnostic);
       const shift = alignedStereo(baseline, observed);
       evidence.stereoFrameShift = shift;
       expect(shift, 'unchanged active audio in both actual channels').not.toBeNull();
@@ -320,8 +446,9 @@ describe.skipIf(!enabled).each([0, 1])('private DN2 first-stage observer mode %i
         if (mode === 1) expect(diagnostic[`uy_${name}`], name).toBeGreaterThan(0);
         else expect(diagnostic[`uy_${name}`], name).toBe(0);
       }
-      evidence.uyPlacementCoverage =
-        'Shared U/Y target covers both hook sites; this scenario does not prove late placement execution. Native profile is required for positive placement attribution.';
+      evidence.uyPlacementCoverage = routeSwitch
+        ? 'Normal BW.RT panel switch and byte gates verified with persistent nonzero history. Aggregate counters still do not prove a callsite; coordinator interpreter profile must positively observe early and late sites.'
+        : 'Shared U/Y target covers both hook sites; this Pre scenario does not prove late placement execution. Native profile is required for positive placement attribution.';
       evidence.scope =
         'Private first-order/U/Y finite same-MODE1 identity/polarity relation only; metamorphic independence evidence, not an independent correctness oracle or40-bit proof. Nonidentity coefficient count is observed, not assumed. No production routing, DDR ownership, IRQ exclusion or hardware claim.';
     };

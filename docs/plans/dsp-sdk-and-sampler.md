@@ -24,13 +24,28 @@ there is no outstanding reservation-choice request and no approved reservation p
 
 ## Latest checkpoint
 
-The branch is rebased onto main `d6b5d4bb`; DT2 startup/cache and DN2 actual-reader
-proofs pass on the rebuilt daemon. All ten DN2 processing families have local
-state audits. Twenty-two assembled synthetic stereo replay cases cover nine local stage families,
-including changing controls, independent histories and bounded reset behavior. Production
-pool ownership, full route/reset coverage and stereo integration remain open.
-See [the rebase/replay checklist](#2026-10-30-rebase-and-stereo-replay-checkpoint)
-and [reciprocal follow-up](#reciprocal-emulator-follow-up) below.
+The sampler discovery branch was rebased onto main `d6b5d4bb`.
+
+All ten DN2 post-source families have bounded local examples; the selected ordered
+replay has 44 cases. The opt-in first-order/U/Y observer passes 75 model cases and
+four native cases: identity/polarity in Pre and a legitimate held-note BW.RT
+Pre→Post panel switch. Stock/patched stereo WAVs match exactly. The paired
+interpreter route profile positively observes both U/Y sites (early 10,160,
+late 9,040 each), closing the previously open late-placement scenario gap.
+These are two private stages and one held-note route, not full stock integration.
+See [finding 96](../findings/96-stereo-machine-processing.md).
+
+The private stereo-frame fetch proof and its reusable eight-instruction raw SDK
+fetch macro pass 59 model cases. Actual DDR aliases, whole packed-word footprints
+and original guard stores are covered; exclusion/callback-lifetime policy remains
+private. The DDR diagnostic has compiled-native, ordered-RPC and bounded Wasm
+proofs. See [finding 99](../findings/99-stereo-frame-fetch-exclusion.md) and
+[finding 97](../findings/97-ddr-access-diagnostic.md).
+
+Production backing ownership/coexistence, callback-private lifetime, full-route
+capture/commit/reset/cleanup, public stereo integration and picker publication
+remain open. No production reservation or new IRQ policy is selected. Hardware,
+40-bit/exceptional correctness and performance claims remain outside these proofs.
 
 ## Historical checkpoint — LP0 0.5 startup window and real readers passed
 
@@ -2398,8 +2413,9 @@ stage records 76,799 opposite audio and 4,800 opposite history relations. All st
 and patched WAVs retain hash `6be721f8b1649c0a037bd8bd1a0998ff5847ed80de31b1907f98b01604555b0c`,
 4,800 stereo frames/100 ms and zero shift. The minimum observed entry minus the
 176-byte model-exercised store depth leaves 3,128 bytes in this scenario; this is
-not a native store watermark or IRQ/scheduler bound. Native positive late-placement
-coverage remains OPEN; shared hook counters do not distinguish the sites. See
+not a native store watermark or IRQ/scheduler bound. This Pre-only run left late placement unexercised; the later held-note route
+profile below supplies positive coverage. Shared hook counters do not distinguish
+the sites. See
 [finding 96](../findings/96-stereo-machine-processing.md) for exact result paths.
 
 
@@ -2487,3 +2503,35 @@ instruction observations. A new shared-index-register/last-DDR-word case covers
 the macro's broader caller operand domain. See the
 [SDK contract](../../sdk/dsp/README.md) and
 [finding 99](../findings/99-stereo-frame-fetch-exclusion.md).
+
+### Native BW Routing late-placement acceptance extension
+
+- [x] Calibrate the legitimate DN2 1.12 panel path with a bounded stock probe:
+  FLTR page2/2, ENC G (BW.RT), observed Pre→Post readback and G byte1. No direct
+  parameter/control-memory writes; retain exact probe inputs and UI evidence.
+- [x] Add a held-note route-switch variant in both modes, preserving the original
+  Pre scenarios. Compare identical instruction-scheduled stock/patched panel
+  changes from forced snapshots, retaining early history and both-stage gates.
+- [x] Type/lint/format and record commands/provenance. Coordinator owns final
+  acceptance and interpreter callsite profile; aggregate counters or gate bytes
+  alone do not prove late-site execution. No DSP/SDK/ABI or production policy edit.
+
+
+All four native cases pass. The route variants retain nonzero early history, then
+use only scheduled FLTR/ENC G panel events during the same held note. Each stage
+records 19,200 render/shadow calls and one reset mirror per mode, with zero errors;
+the reset count remains one across the route switch. Mode 1 records 614,399
+opposite audio and 38,400 opposite history relations at each stage. Both 800 ms,
+38,400-frame stereo captures have identical stock/patched whole-WAV hashes and
+zero shift. The current combined model-depth arithmetic remains 176 bytes below
+the minimum observed entry, leaving 3,128 bytes; it is not a native watermark.
+
+The filtered interpreter route case also passes, with one case executed and three
+intentionally filtered. Paired stock/patched profiles each show early `0x1c959f`
+10,160, late `0x1c9b7a` 9,040 and reset `0x1c96aa` one, at MODE1 `0x39011cf8`.
+Both status records have zero AOT/fast/block execution and zero traps. This is
+positive native placement coverage for the calibrated held-note scenario, not
+proof of global gate stability, every lifecycle or production route integration.
+Exact commands and results are under `route_extension` in ignored
+`out/runs/dsp-stereo-proof/commands.json`; [finding 96](../findings/96-stereo-machine-processing.md)
+records the page/encoder calibration and profile identities.
