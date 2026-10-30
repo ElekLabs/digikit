@@ -26,7 +26,7 @@ use std::sync::OnceLock;
 
 /// The Selache commit this build links (`selas`, `selelf` and `selinstr` in Cargo.toml). `tools/patchkit/pk_toolchains.py` pins the same
 /// one for the command-line tools (`SELACHE_REV`); a test keeps the two equal.
-pub const SELACHE_REV: &str = "2b26d3b75c53063575bc5c820fa0d38879335187";
+pub const SELACHE_REV: &str = "926bfac9c8a7b51fcc7750498af3fd2521541b3e";
 const SECTION: &str = "seg_pmco";
 const PROCESSOR: &str = "ADSP-21569";
 const R_ABS24: u32 = 11;
@@ -920,7 +920,7 @@ pub fn object_from_text(source: &str) -> Result<Dko> {
     if !linked.loop_end.is_empty() {
         // a VISA instruction at the end of a hardware loop (sharc_legal, finding 91)
         return Err(err!(
-            "{} hardware loop(s) end in instructions that are not 48-bit (finding 91; the last 11 instructions of a DO loop must be ISA, put .NOCOMPRESS; .COMPRESS; around a nested loop): {}",
+            "{} hardware loop(s) end in instructions that are not 48-bit (finding 91; the last 11 instructions of a DO loop must be ISA, the assembler keeps a symbolic loop end 48-bit; any other end needs .NOCOMPRESS;): {}",
             linked.loop_end.len(),
             linked.loop_end.join("; ")
         ));

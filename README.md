@@ -122,7 +122,7 @@ The licence covers the code here only; it gives no rights to Elektron's software
 firmware. digikit is not affiliated with or endorsed by Elektron. Digitakt, Digitone and
 Syntakt are trademarks of Elektron Music Machines. Container format knowledge comes from
 `mischa85/elektron-firmware-tool` (MIT); some architecture facts from
-`lalzart/digitakt-ii-firmware-research-public`. The public SHARC+ assembler `js216/selache`
+`lalzart/digitakt-ii-firmware-research-public`. The public SHARC+ assembler `ElekLabs/selache` (a fork of `js216/selache`)
 is used only as a read-only cross-check. `tools/coldfire/ghidra/ColdfireEMAC` contains files from
 Ghidra under the Apache License 2.0.
 
