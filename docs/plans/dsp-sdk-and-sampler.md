@@ -2183,7 +2183,9 @@ identity and observation limits; no production memory ownership is established.
   gain/output-split route, with four blocks and six positive/corruption cases.
   It compares both private pairs against isolated mono references. Its candidate
   left-A/right-B mapping is not a finalized pan policy or production ABI.
-- [ ] Check stock DT2 stereo pan behavior before adopting that mapping on DN2.
+- [x] Audit the stock DT2 paired-input pan fragment: independent scaling agrees
+  with the candidate diagonal mapping at this boundary; UI/full-pipeline equivalence
+  is not claimed.
 - [ ] Complete original engine context, shared cleanup, full routing, reset and
   send integration before promoting the replay into a runtime adapter.
 
@@ -2194,3 +2196,11 @@ Full browser-engine fallback and RPC coverage remain separate from backend exits
 
 The integrated ordered replay suite passes all 35 tests without skips. No core
 semantics, generated firmware material or production sample allocation changed.
+
+
+Next bounded integration evidence: complete the local DN2 reset/initialization
+helper map for the private histories. Mirroring actual helper executions avoids
+inventing note-on/retrigger meanings for partially traced control flags. Complete
+external writer/lifetime coverage remains a separate obligation. The shared ABI
+will preserve the existing mono input prefix; no public extension is implemented
+before original routing, cleanup and reset boundaries are ready.

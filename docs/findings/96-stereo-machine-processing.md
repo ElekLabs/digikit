@@ -427,3 +427,30 @@ balance mapping, not a finalized pan policy or public ABI. Stock DT2 stereo pan
 behavior is being checked before adopting it. Send consumers, full engine entry
 context, natural reset/retrigger/steal, all slots and production routing remain
 outside this bounded proof. Independent source review found no issues.
+
+
+## DT2 paired-input pan comparison
+
+**[D]** Fresh DT2 1.17 section 7 (321,016 bytes, SHA-256
+`0f514a12a2255f5c081e292c47f1f29462003177658da4bbae0a22fd737fffa2`)
+shows independent scaling in the original pan fragment `0x1c711a..1c7155`.
+Inputs are separate pointer-table entries 2t/2t+1 at `0x24ef2c`; destination
+initialization at `0x1c1699/9c` with stride update `0x1c16d7` establishes entry
+v at `0x252df8 + 0x80*v`. Each pair therefore has two distinct 32-float buffers.
+The first sample is independently loaded/scaled/stored at `0x1c7124/25/2a` and
+`0x1c7129/2a/34`; subsequent samples remain separate at `0x1c7140..1c7155`.
+There is no cross-channel addition in this inspected fragment.
+
+The 128-entry coefficient tables at `0x8055c440/0x8055c640` have endpoints
+(1,0)/(0,1), with index 64 approximately (0.70710683,0.70710683). Each target
+also includes its own level squared and factor approximately 0.35479999.
+Control preparation clamps/interpolates separately and publishes start/target/
+increment state before audio processing. The audio loop reads those streams;
+conditional preparation can snap starts and zero increments. Consequently the
+candidate DN2 diagonal left-A/right-B mapping is consistent with this stock DT2
+boundary, without claiming identical complete processing or parameter policy.
+
+This does not establish UI hard-pan mapping, physical connector identity or full
+upstream/downstream routing. A zero coefficient removes its input here rather
+than folding it into the opposite output. The existing module adapter's even-to-
+odd copy is its current mono behavior, not evidence of native channel folding.
