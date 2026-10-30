@@ -1,5 +1,5 @@
 import type { Bar, KnownModule } from '../src/memory-core.ts';
-import type { Caps } from '../../../web/src/modules/dkfit.ts';
+import type { Caps } from '../../../web/src/modules/fit.ts';
 // The Memory panel's model (apps/desktop/ui/src/memory-core.ts): one bar per resource the device limits, a segment per loaded module coloured by its
 // type, "other" for the rest of what is used, and the texts.
 import assert from 'node:assert/strict';

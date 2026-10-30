@@ -6,7 +6,7 @@
 // the known modules (the runtime's own, a module that is not in the library) is one "other" segment. Nothing that is only ticked or pending
 // is shown: the bars are what the device holds now.
 
-import type { Caps, Needs } from '../../../web/src/modules/dkfit.ts';
+import type { Caps, Needs } from '../../../web/src/modules/fit.ts';
 
 /** The type of a module, which sets its colour: the library's groups. A module that is not in the library is `other`. */
 export type SegmentKind = 'machine' | 'effect' | 'tool' | 'other';

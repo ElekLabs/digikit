@@ -32,6 +32,7 @@ pub mod dko;
 pub mod dsp;
 pub mod dspscan;
 pub mod explain;
+pub mod fit;
 pub mod expr;
 pub mod link;
 pub mod live;

@@ -27,6 +27,9 @@ import {
 } from '../src/modules/dktransfer.ts';
 import { parseSoftwareVersion } from '../src/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from './fakedevice.mjs';
+import { useFitWasm } from './fit-wasm.ts';
+
+await useFitWasm();
 
 /** A .dkm with a valid header (docs/design/digikit-dkm.md) of `size` bytes. */
 function dkm(name, { machine = 0, fx = 0, service = 1, size = 700, dsp = 0, version = 0x000102, salt = 0 } = {}) {

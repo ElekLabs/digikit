@@ -70,7 +70,6 @@ files = [
     "tools/patchkit/pk_digikit_fxshift.py",
     "tools/patchkit/pk_idx65_poke.py",
     "modules/*/*/tests/freqshift_ref.py",
-    "tools/device/dkfit.py",
     "tools/device/dksettings.py",
     "tools/device/dkneeds.py",
     "tools/patchkit/pk_device.py",

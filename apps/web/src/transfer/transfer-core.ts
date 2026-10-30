@@ -5,7 +5,7 @@
 // selection, made in SETTINGS > DIGIKIT > MODULES on the device and applied there.
 
 import { formatBytes } from '../modules/backend.ts';
-import { describeShort, emptyCaps, fitsSet } from '../modules/dkfit.ts';
+import { fitsSet } from '../modules/fit.ts';
 import type { Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
 export const GROUPS: Group[] = ['Machines', 'Effects', 'Tools'];
@@ -134,7 +134,8 @@ export function tickedFit(view: TransferView, ticks: Set<string>): { text: strin
   if (!rows.length || !view.capacity) return null;
   const short = fitsSet(
     rows.map((r) => r.needs!),
-    emptyCaps(view.capacity),
+    view.capacity,
+    true,
   );
   if (!short)
     return {
@@ -148,8 +149,8 @@ export function tickedFit(view: TransferView, ticks: Set<string>): { text: strin
   return {
     text:
       short.index === 0
-        ? `${name} does not fit the device: ${describeShort(short)}`
-        : `${name} does not fit with the ticked modules before it: ${describeShort(short)}`,
+        ? `${name} does not fit the device: ${short.describe}`
+        : `${name} does not fit with the ticked modules before it: ${short.describe}`,
     tone: 'warn',
   };
 }

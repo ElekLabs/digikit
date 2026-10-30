@@ -19,7 +19,7 @@ read from CAPACITY.
       `dsp.rs`, `loader.rs`, `arena.rs` and patchkit `dkmdsp.rs` import them.
 - [ ] `dkm.rs MAX_FILE` comes from `stage_bytes`.
 - [ ] `sdk.toml [protocol.limits]` (chunk, read, peek, sector, wire sizes); the generated `gen_proto.*` files replace the copies in TypeScript, Rust and Python.
-- [ ] The fit rule's arena header and DSP slack come from `dkneeds` (wasm and CLI output), not from `dkfit.ts` and `dkfit.py` literals.
+- [x] The fit rule's arena header and DSP slack come from `dkneeds`, not from literals in host copies: the host copies are gone, the rule is only `dkrt_fit` (called through `pk_fit` and `patchkit fit`).
 - [ ] `pk_capacity.py` and `pk_conform.py` read the device files; the stock DSP busy counts move into `devices/cycle-factors.json`.
 - [ ] Tests: the dyndsp voice rows against `machine_rows`; every CAPACITY kind is judged or listed as not judged. Fix the stale count comments in the dynreg
       and dyndsp manifests.

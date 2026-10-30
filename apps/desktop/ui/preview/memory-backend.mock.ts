@@ -5,7 +5,7 @@
 //   empty  nothing loaded
 //   dsp    Pluck, Wavetable and FM 4-op: the DSP memory is nearly full
 // The figures go through the app's own `buildBars`, so the picture is what a device with these modules shows.
-import type { Caps } from '@web/modules/dkfit';
+import type { Caps } from '@web/modules/fit';
 import { buildBars, type KnownModule } from '../src/memory-core';
 import { PAUSED } from '../src/desktop-env';
 import { LIBRARY } from './sim';
