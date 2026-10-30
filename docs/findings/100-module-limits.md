@@ -65,4 +65,23 @@ level is fixed another way). On DN2 a machine can have several pages and up to 4
 | Module file (`stage_bytes`) | 64 KiB | ours only |
 | DDR for modules | none | DT2 sample pool; DN2 512 MiB configured, free range [O] |
 
+## 5. Known gap: arena fragmentation at boot
+
+Modules are transferred to the card over USB and enabled in the DIGIKIT menu; they load at the next boot. At boot the runtime loads the enabled modules in turn.
+A DSP send is the runtime sending the module's DSP code to the SHARC over core/dsp-link. The fit check (`dkrt-fit`) compares a module's needs with two
+numbers per resource: the free total and the largest free block. The loader does not place memory that way. For each module it allocates first-fit the module block, which stays
+(`modules/core/runtime/src/rs/src/loader.rs`, `arena::alloc(total)`), then a transfer buffer for the DSP image and a small steps list
+(`dsp.rs`, `reserve`), which are freed only when that module's DSP send has finished. DSP sends are queued, not waited for (`dsp.rs`, the
+`waiting` list), so the next module's block is placed above buffers that are freed later. That leaves holes, and several transfer buffers can be
+alive at once. A selection can therefore pass the fit check and still fail to load (`E_NOMEM` for that module, reported by the boot) **[D]**
+(read in the code, not reproduced).
+
+Ways to remove it, smallest first:
+
+1. Load one module at a time at boot: wait until the previous module's DSP send has finished and freed its buffers. Permanent blocks then pack from the bottom
+   and the current rule is exact. DSP sends already go one at a time over the link, so boot is barely slower.
+2. Allocate from both ends: permanent blocks from the bottom of the arena, temporary buffers from the top (or a separate scratch pool). The check
+   then also needs the peak of the temporary buffers alive at once.
+3. No full-size transfer buffer: stream and relocate the DSP image in chunks through the staging buffer.
+
 Plan: [module limits](../plans/module-limits.md).
