@@ -327,3 +327,71 @@ The legacy packed fixture returns overlapping RAM fallback values for RR4,
 not meaningful range-register values; those reads are explicitly untrusted.
 Fresh packed-image/cold-state verification remains required before the startup
 probe. These functional observations do not establish physical cache behavior.
+
+
+## LP0 0.5: startup range configuration
+
+**[D]** The private adapter now reserves 4,416 bytes and derives a 64-byte-aligned
+4,352-byte interval. Descriptor storage occupies the first 64-byte line, driver
+state the next 128 bytes, and the 4,100-byte receive buffer the following 4,160-byte
+rounded region. Metadata and save areas are outside the interval. All placement
+phases and the assembled call/admission behavior pass the 101-test owner suite.
+
+The new hash-resolved startup hook runs before the stock final cache enable. It
+first tests PEYEN, clears it, waits two NOPs and evaluates TF in SISD. Incoming SIMD
+is refused before register saves or helper calls, then restored before the original
+CFG load/resume. Otherwise M5=0, M6=1, M7=-1, M14=1 and L4=L5=0 are required.
+The existing circular stack is retained. A second agent checked the assembled
+predicate, outgoing argument, call, cleanup and both displaced-load paths against
+the public instruction descriptions and current-image helper bytes.
+
+A direct MODE1-to-memory save was rejected after the assembler emitted an incorrect
+address/register encoding. This is a limitation observed in our assembled output,
+not a claim that the public instruction is illegal. The register-free predicate
+avoids that form without changing the assembler or generated instruction core.
+
+**[D]** Fresh current-metadata DSP initialization with the exact 0.5 patch reached
+idle at `0xb88aa5` after 563,500,000 instructions. The native state reports helper
+success and interval `[0x2008b3c0,0x2008c4c0)`, RR4 START/END matching that interval,
+and CFG2=`0x3f0`. Actual stock RR2 `[0x200fa000,0x200fe000)` and RR3
+`[0x28240000,0x283a0000)` do not overlap it. Four pre-exchange transfer counts remain
+`0x566`. Independent artifact review checked hashes, initialized words and ranges.
+Evidence: `out/runs/lp0-cache-v5-fixture/provenance.json`.
+Patched SYX SHA-256: `161f374658148899461089d7d93dafe379e51c897bfd2abaf9151351022b3128`.
+
+**[C]** Coupled patched startup previously imported a DSP idle checkpoint and then
+applied the firmware diff. That erases boot-generated module state when the diff
+contains zero-valued initializers, and does not execute a newly patched startup
+hook from reset. The initial 0.5 coupled run refused LP0 with status 4/error 8;
+its independent fresh DSP initialization had status 1/error 0. The source call
+order and exact overlapping diff writes account for the discrepancy. Retained
+failure: `out/runs/lp0-proof/c2d01474-8064-481d-9321-777da63eec61/`.
+
+The correction initializes changed DSP firmware from raw `cold.state`, applies its
+patch once, and requires eight consecutive idle observations before ColdFire starts.
+Halt, cancellation, no progress, 800M instructions or 120 seconds prevent success.
+The initialized state is attached without another patch. The ready-pair key binds
+the raw state and a new startup-version marker. Unchanged DSP still restores its
+idle checkpoint. Raw-state shape is checked; exact reset entry identity remains
+trusted to the ready-input generator. Four focused initialization tests and the
+cache-key test pass. This is the existing DSP-first emulator boot model, not a
+claim about simultaneous hardware reset timing.
+
+**[O]** Physical coherence, silicon-conformant stock-helper spacing, production
+RR4 ownership and production DDR reservation remain separate obligations. The
+preexisting AudioTask-tail save sequence's handling of unexpected incoming SIMD
+also remains outside this boot-only change. No hardware acceptance follows from
+register values or emulator playback.
+
+
+**[D]** Final combined native acceptance passes in
+`out/runs/lp0-proof/b734a462-c9b0-4a67-a5a4-e0982c845d27/`: 235 packets/960,000
+bytes exactly match expected PCM, both 4 KiB guards remain unchanged, A reads stop
+at 667 after drain while B advances 436→740, A emits fresh raw zeros, and B retains
+its finite raw ramp and audible post-drain component. A subsequent stock restore
+and patched ready-pair restore reports `snapshot-cache`, retaining the same RR4
+interval and CFG2. A second agent checked the actual payload, guard, waveform,
+cache and identity artifacts. The final WAV SHA-256 is
+`9a69e4962b4c71dd0f08ce996f7e32db120f92dcfbcfc018c14b40efc1f2d06f`.
+These observations extend the prior actual-reader proof to the private startup
+window and corrected emulator boot ordering, with the limitations above unchanged.

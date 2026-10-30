@@ -11525,6 +11525,109 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x283801b4",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 L1 cache-range helper: R4=start, R8=end argument, R12=selector, DM(I6,M6)=mode; 0x604 and mode 1 select noncacheable RR4. Guard stock modifier constants, L4/L5 zero and scalar mode; zero R0 means success. Finding 95.",
+      "file": "devices/fw/dsp/cache.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.cache.fn.cache_range",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 8
+        }
+      },
+      "subsystem": "cache",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x20017358",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Private boot hook, preserving startup context and re-executing the displaced CFG load before resume.",
+      "file": "devices/fw/dsp/cache.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "dsp.cache.hook.cache_enable",
+      "regs": {
+        "clobbers": [
+          "astat"
+        ],
+        "in": [
+          "r10-r11",
+          "r13-r15",
+          "i5-i7",
+          "m5-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.cache.site.cache_enable",
+      "subsystem": "cache",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x20017358",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 boot cache configuration after RR3 argument cleanup, before final CFG enable/invalidate. Displaced R2=DM(CFG); live startup registers, stack, DAG and MODE1 must survive. Finding 95.",
+      "file": "devices/fw/dsp/cache.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.cache.site.cache_enable",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 114
+        }
+      },
+      "subsystem": "cache",
+      "users": [
+        "core/dsp-lp0-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x2838489a",
@@ -12844,6 +12947,13 @@
       "file": "devices/fw/window.toml",
       "meaning": "popups and dialogs",
       "name": "window"
+    },
+    {
+      "count": 3,
+      "cpu": "sharc",
+      "file": "devices/fw/dsp/cache.toml",
+      "meaning": "cache configuration and startup ranges",
+      "name": "cache"
     },
     {
       "count": 10,

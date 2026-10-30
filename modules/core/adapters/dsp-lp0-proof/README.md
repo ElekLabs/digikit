@@ -1,6 +1,6 @@
 # Private DN2 LP0 receive and reply-extension diagnostic
 
-Version 0.4.0, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
+Version 0.5.0, explicit opt-in for the emulator, DN2 OS 1.12 only. Requires
 `core/expansion`, `core/machines`, `core/params` and `core/dsp-voice`; conflicts with `core/dsp-link`, `core/runtime` and
 `core/dsp-ddr-proof`. Absent from device module sets. Never use on hardware.
 The earlier 0.1 memory-observed proof is retained in its committed checkpoints.
@@ -309,3 +309,37 @@ the SDK ceiling 2,148 and the bounded wrapper/snapshot copy; note budget remains
 boot fixture is required for these new DSP bytes. The corrected native run
 `16929724-3d8c-49b4-bc79-b2161af79af9` passed with the exact v2 fixture;
 see finding 94 for hashes, raw snapshots, post-drain audio and proof limits.
+
+
+## 0.5 private startup DMA window
+
+At the named boot cache-enable hook, the private adapter derives one aligned
+4,352-byte window within a 4,416-byte module reservation. The mutable 28-byte
+LP0 descriptor starts at offset 0, the 128-byte state at offset 64, and the
+4,100-byte RX at offset 192, rounded to 4,160 bytes. Metadata and saved contexts
+remain outside the entire window. `_lp_dma_base` and `_lp_dma_limit` export the
+expected half-open interval; `_lp_descriptor`, `_lp_state` and `_lp_rx` are pointers.
+
+The hook first tests and clears SIMD without a scratch register, then refuses
+an incoming SIMD context before any saves or calls. It restores that MODE1 bit
+and resumes stock boot with status 0 (unconfigured), denying LP0 admission.
+For SISD entry it guards M5=0, M6=1, M7=-1, M14=1 and L4=L5=0, and calls the existing stock L1 range helper with selector 0x604, mode 1, base
+and limit minus one. It retains the existing startup stack and circular DAG
+configuration and restores live registers and exact MODE1 before replaying the
+displaced CFG load. Boot status 1 means the helper returned zero; status 2 with
+`_lp_boot_error` records either the helper error or context error 0x100. A missing
+or failed boot setup prevents LP0 open, submit and both reader publications.
+
+The L2 hook adds no cache-MMR reads. Native acceptance reads exact RR4 start/end
+and CFG2 through `dsp.peek_word` and requires the expected interval and enabled
+noncacheable pair 0x300. It needs a new exact-hash 0.5 boot fixture with corrected
+range-register metadata. Owner stand-ins verify our call frame, preservation,
+fail-closed behavior and layout; they do not execute the stock helper. The native
+0.5 proof passes in run `b734a462-c9b0-4a67-a5a4-e0982c845d27`, including actual
+two-track retirement and cached ready-pair restoration (finding 95). Production
+RR4/DDR ownership and physical cache coherence remain unproved.
+
+Direct MODE1-to-memory forms were rejected for this implementation after their
+assembled encoding failed the focused execution check. The entry uses BIT TST,
+BIT CLR and a SISD TF condition instead; no assembler or instruction-core change
+is part of this private diagnostic.

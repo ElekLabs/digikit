@@ -3438,13 +3438,13 @@ struct PatchJob {
 }
 
 /// The file name stem of the ready pair of a (MAIN, DSP inputs, card): the
-/// SHA-256 of the MAIN digest, of the DSP image and cold-idle state files, and
+/// SHA-256 of the MAIN digest, of the DSP image and selected startup state, and
 /// of the card file's identity.
 #[cfg(feature = "coupled-audio")]
 fn patched_pair_key(
     main_sha: &str,
     image: &Path,
-    cold_idle: &Path,
+    cold_state: &Path,
     card: Option<&Path>,
     extra: &[u8],
 ) -> Result<String, String> {
@@ -3453,7 +3453,7 @@ fn patched_pair_key(
     hash.update(main_sha.as_bytes());
     // what else the cold boot started from: the DSP section it ran with, the card writes of a soft reset
     hash.update(extra);
-    for path in [image, cold_idle] {
+    for path in [image, cold_state] {
         let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         hash.update(Sha256::digest(&data));
     }
@@ -3476,10 +3476,8 @@ fn patched_pair_key(
 
 impl Actor {
     /// A patched MAIN with DSP audio. The ColdFire boots from the patched
-    /// bytes with the base's DSP (the ready inputs' image and cold-idle state)
-    /// attached, and the ready pair is cached under
-    /// `<run_dir>/patched/<MAIN>-<key>/`; a DSP section that differs from the
-    /// base's is applied hot afterwards (`firmware.load` semantics).
+    /// bytes with its DSP initialized before ColdFire startup. The ready pair
+    /// is cached under `<run_dir>/patched/<MAIN>-<key>/`.
     #[cfg(feature = "coupled-audio")]
     #[allow(clippy::too_many_arguments)]
     fn load_patched_coupled(
@@ -3504,12 +3502,6 @@ impl Actor {
         };
         let dir = image.parent().unwrap_or(Path::new(".")).to_path_buf();
         let cold_idle = dir.join("cold-idle.dsp");
-        if !cold_idle.is_file() {
-            return unavailable(format!(
-                "{} not found (run `mise run emu:ready -- <device>`)",
-                cold_idle.display()
-            ));
-        }
         // The ready inputs must be the base's: SOURCE.json names their .syx.
         if let Some(source) = std::fs::read_to_string(dir.join("SOURCE.json"))
             .ok()
@@ -3526,9 +3518,8 @@ impl Actor {
         let main_sha = new
             .main_sha256()
             .ok_or_else(|| rejected("the firmware has no MAIN section".into()))?;
-        // The cold boot runs the .syx's own DSP code from the first instruction, as a device does. (Until 2026-10-17 it booted
-        // the base's DSP and patched it after the ready state, so `mise run workbench -- PATCHED.syx` ran stock DSP code during the
-        // boot; a boot-time DSP load of the runtime, and any DSP code that initialises itself at boot, needs the real order.)
+        // A changed DSP starts from raw reset state with the diff applied once,
+        // reaches idle, then attaches to the ColdFire. Unchanged DSP restores idle.
         let mut boot_patch = None;
         if let (Some(base), Some(new_dsp)) = (
             base_bytes
@@ -3540,6 +3531,20 @@ impl Actor {
         {
             boot_patch = Some(firmware::dsp_diff(&base, new_dsp).map_err(&rejected)?.patch);
         }
+        let cold_state = boot_patch.as_ref().map(|_| dir.join("cold.state"));
+        let startup_state = cold_state.as_deref().unwrap_or(&cold_idle);
+        if !startup_state.is_file() {
+            if cold_state.is_none() {
+                return unavailable(format!(
+                    "{} not found (run `mise run emu:ready -- <device>`)",
+                    cold_idle.display()
+                ));
+            }
+            return Err(rejected(format!(
+                "{} not found; regenerate ready inputs with `mise run emu:ready -- <device> --force`",
+                startup_state.display()
+            )));
+        }
         let reset_out = Arc::new(Mutex::new(None));
         let mut extra_key = Vec::new();
         // DIGI_COLD_RELAX_FS=1: a cold boot on a card an earlier run used (a saved project) never runs the DT2 filesystem check
@@ -3550,7 +3555,7 @@ impl Actor {
         }
         if let (Some(_), Some(dsp)) = (&boot_patch, new.dsp.as_deref()) {
             use sha2::{Digest, Sha256};
-            extra_key.extend_from_slice(b"dsp-at-boot:");
+            extra_key.extend_from_slice(b"dsp-raw-init-v1:");
             extra_key.extend_from_slice(&Sha256::digest(dsp));
         }
         let reset_overlay = self.reset_overlay.take();
@@ -3564,7 +3569,11 @@ impl Actor {
         let keep_out = Arc::new(Mutex::new(None));
         let keep_range = plusdrive_format::device_profile::Registry::load()
             .ok()
-            .and_then(|reg| reg.identify(base_sha).ok().and_then(|(device, _)| device.keep_ram));
+            .and_then(|reg| {
+                reg.identify(base_sha)
+                    .ok()
+                    .and_then(|(device, _)| device.keep_ram)
+            });
         let keep_ram = match (keep_range, &reset_ram) {
             (Some((base, size)), r) => {
                 if let Some(r) = r {
@@ -3581,7 +3590,7 @@ impl Actor {
             }
             _ => None,
         };
-        let stem = patched_pair_key(main_sha, &image, &cold_idle, card.as_deref(), &extra_key)
+        let stem = patched_pair_key(main_sha, &image, startup_state, card.as_deref(), &extra_key)
             .map_err(&rejected)?;
         let pair = self.run_dir.join("patched").join(stem);
         let (snapshot, dsp_state) = (
@@ -3647,6 +3656,7 @@ impl Actor {
         let inputs = digi_coupled::cold::ColdInputs {
             image,
             cold_idle,
+            cold_state,
             dsp_patch: boot_patch,
             relax_fs_check: reset_overlay.is_some() || relax_fs,
             reset_out: Some(reset_out.clone()),
@@ -3945,6 +3955,7 @@ fn run_card_job(
                     &digi_coupled::cold::ColdInputs {
                         image,
                         cold_idle,
+                        cold_state: None,
                         dsp_patch: None,
                         relax_fs_check: false,
                         reset_out: None,
@@ -4301,6 +4312,16 @@ mod tests {
         std::fs::write(&idle, b"idle one").unwrap();
         std::fs::write(&image, b"image two").unwrap();
         assert_ne!(base, key(&main, None), "another DSP image");
+        let raw = dir.join("cold.state");
+        std::fs::write(&raw, b"raw reset one").unwrap();
+        let changed = patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:").unwrap();
+        std::fs::write(&raw, b"raw reset two").unwrap();
+        assert_ne!(changed, patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:").unwrap(), "changed DSP follows raw reset bytes");
+        std::fs::remove_file(&idle).unwrap();
+        assert!(patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:").is_ok(), "changed DSP does not use initialized idle state");
+        std::fs::write(&idle, b"idle one").unwrap();
+        std::fs::remove_file(&raw).unwrap();
+        assert!(key(&main, None).starts_with("abababababababab-"), "unchanged DSP does not require raw reset state");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

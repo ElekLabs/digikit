@@ -23,6 +23,7 @@ test = "anchors used only by test fixtures"
 util = "anything that fits nowhere else"
 
 [dsp]
+cache = "cache configuration and startup ranges"
 frame = "the frame orchestrator"
 voice = "voice rendering"
 fx = "the effect chain: sends, returns, buses"

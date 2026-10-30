@@ -82,7 +82,7 @@ interface BootFixture {
  * DSP execution, descriptor resizing or snapshot preparation happens here. */
 function readBootFixture(): BootFixture {
   const need = (ok: unknown, message: string) => {
-    if (!ok) throw new Error(`LP0 0.4 boot fixture: ${message}`);
+    if (!ok) throw new Error(`LP0 0.5 boot fixture: ${message}`);
   };
   const file = process.env.DIGI_LP0_BOOT_FIXTURE;
   need(file && path.isAbsolute(file), 'set DIGI_LP0_BOOT_FIXTURE to an absolute provenance JSON path');
@@ -596,7 +596,7 @@ for (const scenario of cases) {
                       await Promise.all(globals.map(async (name) => [name, await raw(symbol(name), 4, true)])),
                     ),
                   ),
-                  attempt('descriptor', () => raw(symbol('_lp_descriptor'), 28, true)),
+                  attempt('descriptor', async () => raw(await word(symbol('_lp_descriptor')), 28, true)),
                   attempt('savedHookContext', () => raw(symbol('_lp_save'), 292, true)),
                   attempt('cfAck', () => cfAck()),
                   attempt('mail', async () =>
@@ -660,13 +660,17 @@ for (const scenario of cases) {
             'core/params',
           ]);
           expect(plan.output?.syx_sha256).toMatch(/^[a-f0-9]{64}$/);
-          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.4 patch').toBe(
+          expect(plan.output?.syx_sha256, 'fixture must bind the exact current 0.5 patch').toBe(
             bootFixture!.patchedSyxSha256,
           );
           for (const name of [
             ...globals,
-            '_lp_rx_storage',
+            '_lp_dma_storage',
             '_lp_descriptor',
+            '_lp_dma_base',
+            '_lp_dma_limit',
+            '_lp_boot_status',
+            '_lp_boot_error',
             '_lp_save',
             'lp_mail',
             'lp_ack',
@@ -710,17 +714,37 @@ for (const scenario of cases) {
           const rx = await word(symbol('_lp_rx'));
           const state = await word(symbol('_lp_state'));
           expect(rx & 63).toBe(0);
-          expect(rx).toBeGreaterThanOrEqual(symbol('_lp_rx_storage'));
-          expect(rx + 4160).toBeLessThanOrEqual(symbol('_lp_rx_storage') + 4224);
+          const dmaBase = await word(symbol('_lp_dma_base'));
+          const dmaLimit = await word(symbol('_lp_dma_limit'));
+          expect(await word(symbol('_lp_boot_status'))).toBe(1);
+          expect(await word(symbol('_lp_boot_error'))).toBe(0);
+          expect(dmaBase & 63).toBe(0);
+          expect(dmaLimit).toBe(dmaBase + 4352);
+          expect(dmaBase).toBeGreaterThanOrEqual(symbol('_lp_dma_storage'));
+          expect(dmaLimit).toBeLessThanOrEqual(symbol('_lp_dma_storage') + 4416);
+          expect(await word(symbol('_lp_descriptor'))).toBe(dmaBase);
+          expect(state).toBe(dmaBase + 64);
+          expect(rx).toBe(dmaBase + 192);
+          const cache = await Promise.all(
+            [0x3e018, 0x3e019, 0x3e002].map((addr) =>
+              rpc<{ addr: number; value: number | null }>('dsp.peek_word', { addr }),
+            ),
+          );
+          save('cache-window.json', { dmaBase, dmaLimit, cache });
+          expect(cache[0]).toMatchObject({ addr: 0x3e018, value: dmaBase });
+          expect(cache[1]).toMatchObject({ addr: 0x3e019, value: dmaLimit });
+          expect(cache[2]).toMatchObject({ addr: 0x3e002 });
+          expect(cache[2]!.value).not.toBeNull();
+          expect(cache[2]!.value! & 0x300).toBe(0x300);
           for (const [start, size] of [
-            [symbol('_lp_descriptor'), 28] as const,
+            [await word(symbol('_lp_descriptor')), 28] as const,
             [symbol('_lp_save'), 292] as const,
             [state, 128] as const,
             ...globals.map((name) => [symbol(name), 4] as const),
           ]) {
             expect(start + size <= rx || rx + 4160 <= start, 'RX cache lines exclude other owners').toBe(true);
           }
-          expect(symbol('_lp_rx_storage')).toBeGreaterThanOrEqual(0x20000000);
+          expect(symbol('_lp_dma_storage')).toBeGreaterThanOrEqual(0x20000000);
           expect(rx + 4160).toBeLessThanOrEqual(0x20100000);
           expect(await word(PORT + 0x14)).toBe(state);
           expect(await word(symbol('_lp_handle'))).toBe(0x268ca8);
@@ -1259,6 +1283,46 @@ for (const scenario of cases) {
               : 'Ordinary DSP frames progress; no PCM amplitude or playback coexistence claim.',
             transferred: { pages: packets, bytes: validBytes },
           });
+          if (voices) {
+            phase = 'cached ready-pair restore';
+            // Restore the boot-ready checkpoint, not the transferred sample bank.
+            // A second initialization or patch application would erase boot state.
+            // Loading the already active image is a no-op, so restore stock first.
+            const stockRestore = await rpc<{ syx_sha256: string }>(
+              'firmware.load',
+              { syx: inputs.syx, start: 'snapshot', auto_no: true },
+              30000,
+            );
+            expect(stockRestore.syx_sha256).toBe(stockSha);
+            const restored = await rpc<{ cache_hit: boolean; start_used: string; syx_sha256: string }>(
+              'firmware.load',
+              { syx: output, base_sha256: stockSha, start: 'snapshot', auto_no: true },
+              30000,
+            );
+            expect(restored).toMatchObject({
+              cache_hit: true,
+              start_used: 'snapshot-cache',
+              syx_sha256: plan.output!.syx_sha256,
+            });
+            expect(await word(symbol('_lp_boot_status'))).toBe(1);
+            expect(await word(symbol('_lp_boot_error'))).toBe(0);
+            expect(await word(symbol('_lp_dma_base'))).toBe(dmaBase);
+            expect(await word(symbol('_lp_dma_limit'))).toBe(dmaLimit);
+            const restoredCache = await Promise.all(
+              [0x3e018, 0x3e019, 0x3e002].map((addr) =>
+                rpc<{ addr: number; value: number | null }>('dsp.peek_word', { addr }),
+              ),
+            );
+            expect(restoredCache[0]).toMatchObject({ addr: 0x3e018, value: dmaBase });
+            expect(restoredCache[1]).toMatchObject({ addr: 0x3e019, value: dmaLimit });
+            expect(restoredCache[2]!.value).not.toBeNull();
+            expect(restoredCache[2]!.value! & 0x300).toBe(0x300);
+            const restoredFrame = await frames();
+            await rpc('run.mode', { mode: 'free' });
+            await expect.poll(frames, { timeout: 10000 }).toBeGreaterThan(restoredFrame);
+            await session.expectNoFault('cached initialized DSP restore');
+            save('cached-restore.json', { restored, dmaBase, dmaLimit, cache: restoredCache });
+          }
         };
 
         try {

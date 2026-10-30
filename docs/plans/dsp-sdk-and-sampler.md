@@ -1,41 +1,45 @@
 # DSP SDK and first sampler
 
 
-## Latest checkpoint — real two-track readers passed
+## Latest checkpoint — LP0 0.5 startup window and real readers passed
 
-LP0 0.4 now passes the bounded DN2 1.12 native actual-reader proof: both tracks
-start, CLOSE A drains without injected counts, A emits fresh raw silence, and B
-continues its exact raw waveform and audible post-drain tone. All 92 owner tests
-pass; independent source and artifact reviews are clean. Evidence and the two
-corrected observation failures are recorded in finding 94. Successful run:
-`out/runs/lp0-proof/16929724-3d8c-49b4-bc79-b2161af79af9`; exact fixture:
-`out/runs/lp0-voices-v2-fixture`; command/log: `out/runs/lp0-voices-v3-run`.
+LP0 0.5 passes the bounded DN2 1.12 native actual-reader proof with fresh cache
+register metadata and a boot-configured private RR4 window. Both tracks start,
+CLOSE A drains without injected counts, A emits fresh raw silence, and B continues
+its raw waveform and audible post-drain tone. All 101 owner tests pass. Independent
+source, original-byte and artifact reviews are clean. The same run also restores
+stock and then the patched ready-pair cache, preserving the initialized window.
 
-Next: establish production backing ownership/reset fences and supported DMA
-cache maintenance before exposing per-track binding and connecting the on-device
-picker. DT2 loader/reset and DN2 runtime-ring evidence is in findings 81/91;
-neither configured memory size nor a stock ring is an independent sample allocation.
-No hardware action or emulator-core regeneration was performed. All native work
-used the shared exclusive benchlock and owned run directories; other sessions'
-processes were left untouched.
+Successful run: `out/runs/lp0-proof/b734a462-c9b0-4a67-a5a4-e0982c845d27/`.
+Fixture: `out/runs/lp0-cache-v5-fixture/`; command/log: `out/runs/lp0-cache-v5-run3/`.
+Finding 95 records the new evidence and a coupled-startup bug found and fixed:
+changed DSP firmware now initializes from raw reset state with its patch applied
+once, before ColdFire starts. No hardware work or instruction-core regeneration
+was performed; other sessions' processes were left untouched.
 
-## Current bounded discovery — production ownership and cache entry points
+Next: establish production backing ownership/reset fences before exposing per-track
+binding and connecting the on-device picker. The private staging window is not a
+production DDR reservation. DT2 loader/reset and DN2 runtime-ring evidence remains
+in findings 81/91. Physical cache behavior, broader firmware coexistence, and the
+existing AudioTask-tail SIMD save limitation remain open. The new runtime path has
+native DN2 acceptance; DT2/second-core integration and the full merge gate remain
+required before merging.
 
-- [x] Audit whether the L1 allocator has a recoverable entry; distinguish its
-  internal success pointer from an input flag before proposing allocation.
-- [x] Check existing stock cache-helper entries and callers for a callable path
-  that bypasses unresolved address conversion; retain whole-line ownership and
-  pre-/post-DMA obligations.
-- [x] Trace DT2's central project-pool capacity and reset initialization to
-  assess an explicit reserved tail, rather than borrowing resettable slot memory.
-- [ ] Reconcile these results with DN2's fixed-buffer map, then select the next
-  bounded implementation/proof. Do not treat an unreferenced range as owned.
+## Current bounded discovery — production ownership
+
+- [x] Reject the hidden recoverable L1 allocator hypothesis using original bytes.
+- [x] Identify a stock L1 cache-configuration helper that avoids address conversion.
+- [x] Implement and prove a private whole-window RR4 startup diagnostic.
+- [x] Trace DT2 project-pool capacity/reset paths; one size literal is not a
+  complete reservation boundary.
+- [ ] Reconcile a finite owner/boundary/reset/bypass table with DN2's fixed-buffer
+  map, then choose a production reservation mechanism. Absence of discovered
+  writers does not establish ownership.
 
 The payoff is a concrete adapter ownership boundary for ten-second per-track
-samples. Confidence in the investigation is moderate; no production memory or
-cache route is selected yet. These passes are read-only and bounded to existing
-helpers/callers. No new native execution, core regeneration or hardware work is
-planned until the evidence identifies a useful proof.
+samples. Confidence remains moderate; production memory ownership is not selected.
+Limit further investigation to named boundary gaps rather than arbitrary computed
+stores. Hardware testing still requires a separate decision.
 
 ## Rebase checkpoint — main 409414f9
 
@@ -1623,10 +1627,10 @@ code (about five minutes). The LP0 module remains at its verified 0.4 checkpoint
 - [x] Add register metadata; twelve focused Python/native-library checks pass.
 - [x] Compile and test the exact-word DSP worker path; focused Rust test passes.
 - [x] Build/freeze the daemon and pass live read-only DN2 1.12 RPC acceptance.
-- [ ] Repack image metadata and create a fresh cold state for range-register proof.
-- [ ] Implement the private RR4 startup window after resolving the preserved
+- [x] Repack image metadata and create a fresh cold state for range-register proof.
+- [x] Implement the private RR4 startup window after resolving the preserved
   startup frame/DAG/SIMD context; fail closed on configuration failure.
-- [ ] Prove the configured window and repeat the actual per-track reader proof.
+- [x] Prove the configured window and repeat the actual per-track reader proof.
 
 Live acceptance artifacts: `out/runs/cache-registers-proof/f9d605b0-13e7-4c90-8d4f-84d5c49f3b82/`.
 Daemon SHA-256 `6008bfb0ecd3a99fe539b660e48b9d7c2eee1f93d5c6bfa3d55a772403930dac`.
@@ -1652,3 +1656,70 @@ authoritative allocation/configuration boundary, reset/bypass paths and positive
 exclusion evidence. A profile-only declaration or absence of discovered writers
 does not reserve DDR. Continue only to close a named boundary gap; do not pursue
 an unbounded audit of arbitrary computed stores.
+
+
+### 2026-10-30 — LP0 0.5 boot window and coupled-startup blocker
+
+- [x] Implement the private 4,352-byte aligned RR4 window (descriptor/state/RX),
+  guarded startup helper call and fail-closed receiver admission.
+- [x] Pass all 101 owner tests, module build/redecode, generated/current-object
+  checks, lint/format/types, and independent source/assembled-byte review.
+- [x] Repack current cache-register metadata and execute the exact patched DSP
+  from preinitialization to idle with bounded existing native tooling.
+- [x] Fix coupled patched-DSP startup ordering, then repeat actual two-track proof.
+- [x] Confirm restoring its cached ready pair preserves the initialized window.
+
+Fresh fixture: `out/runs/lp0-cache-v5-fixture/provenance.json`. Patched SYX SHA-256
+`161f374658148899461089d7d93dafe379e51c897bfd2abaf9151351022b3128`.
+DSP reached idle `0xb88aa5` after 563,500,000 instructions (44.52 seconds).
+Boot status=1/error=0; RR4 interval `[0x2008b3c0,0x2008c4c0)` and CFG2=`0x3f0`.
+All four pre-exchange transfer counts remain `0x566`. This is initialization
+and register evidence, not hardware coherence or production DDR ownership.
+
+Full coupled run `out/runs/lp0-proof/c2d01474-8064-481d-9321-777da63eec61/`
+failed at receiver setup: CF observed status=4/error=8 (boot setup missing),
+so no transfer or playback acceptance is claimed. The daemon imports an already
+initialized cold-idle state then reapplies the DSP diff, including zero-valued
+initializers over the module's boot status and window pointers. Retained diagnosis:
+`out/runs/lp0-cache-v5-fixture/double-patch-diagnosis.json`.
+
+Selected correction: for changed DSP firmware, initialize from the base raw cold
+state with the exact patch applied once, reach verified idle before ColdFire starts,
+then attach without reapplying it. Preserve cancellation/halt/instruction/wall limits
+and invalidate old ready-pair cache keys. Missing raw cold inputs must fail clearly,
+not silently use an already initialized state. This follows the existing ready-tool
+DSP-first order; no module admission bypass, manual state repair or core regeneration.
+
+Startup wrapper refuses incoming SIMD before register saves, then guards M5/M6/M7,
+M14 and L4/L5 while preserving circular stack L6/L7. The initial direct MODE1 store
+alternative misencoded in the assembler; the final BIT TST/clear/SISD TF guard was
+independently decoded and checked. Existing AudioTask-tail SIMD save handling is
+outside this new boot seam and remains an explicit limitation to resolve separately.
+
+
+### LP0 0.5 final acceptance and validation
+
+The final run `b734a462-c9b0-4a67-a5a4-e0982c845d27` passes: 235 packets,
+960,000 bytes exactly equal to the expected payload, both 4 KiB guards unchanged,
+A reads fixed at 667 after drain while B advances 436→740, fresh A silence and
+finite B waveform/tone. Cached restore reports `cache_hit=true` and
+`start_used=snapshot-cache`, retaining RR4 bounds and CFG2=`0x3f0`.
+The preceding run `18fb98a6-266c-4fc5-830b-641afca9bb2f` passed playback but its
+new cache assertion loaded the already active image (a no-op); the final test
+switches to stock before restoring the patched snapshot. All failed evidence is
+retained. Final process wall time was 124.74 seconds, excluding lock wait; this
+is a bounded functional run, not a performance comparison.
+
+Frozen daemon SHA-256: `7cc6f7fc12cb7cc9fcdf2187a1907053b9556e1ce621877452696f5bb01f657f`.
+DSP object SHA-256: `c272ea94f435abf8ea31f089d965fb584a0f25cef9865c4c752c05d5cf061084`.
+WAV SHA-256: `9a69e4962b4c71dd0f08ce996f7e32db120f92dcfbcfc018c14b40efc1f2d06f`.
+
+Validation: 101 owner tests; four cold-initialization Rust tests and one cache-key
+test; native actual-reader/cache acceptance; generated/current-object checks;
+222 host tests (16 skipped); all five workspace TypeScript projects and scoped
+lint/format. Changed-file Python lint/format and layercheck pass. Pathcheck passed
+after staging the new declaration so its references were discoverable. The pnpm
+routing still cannot use this linked worktree dependency layout; direct installed
+tools were used. Six socket-based host tests initially hit sandbox EPERM and pass
+with socket access. No dependencies changed. The dual-core build and full merge
+gate were not run; this is a verified branch checkpoint, not merge acceptance.

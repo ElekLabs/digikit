@@ -1,6 +1,6 @@
 [module]
 id = "core/dsp-lp0-proof"
-version = "0.4.0"
+version = "0.5.0"
 name = "Private LP0 receive proof"
 category = "core"
 role = "adapter"
@@ -33,6 +33,8 @@ place = "dsp.l2"
 devices = ["dn2"]
 
 [object.externs]
+_lp_boot_back = "hook.dsp.cache.site.cache_enable.return"
+_lp_cache_range = "dsp.cache.fn.cache_range"
 _lp_back = "hook.dsp.link.site.block_tail.tail"
 _lp_open = "dsp.link.fn.lp0_open"
 _lp_set_callback = "dsp.link.fn.lp0_set_callback"
@@ -79,3 +81,15 @@ resource = "cf.link.site.reply_copy"
 
 [[claim]]
 resource = "dsp.link.site.boot_wire_size"
+
+# Private boot-only cache range; absent from standard device module sets.
+[[op]]
+op = "hook"
+hook = "dsp.cache.hook.cache_enable"
+to = "_lp_boot_hook"
+
+[[claim]]
+resource = "dsp.cache.site.cache_enable"
+
+[[claim]]
+resource = "dsp.cache.rr4"

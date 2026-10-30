@@ -15,6 +15,25 @@ from tools.firmware import config
 from tools.patchkit import patchkit, pk_cfcall, pk_sharc, pk_toolchains
 
 MOD = REPO_ROOT / "modules/core/adapters/dsp-lp0-proof"
+BOOT_DRIVER = """
+#include "dsp/call.inc"
+.SECTION/PM seg_pmco;
+.GLOBAL _lp_cache_range;
+_lp_cache_range:
+    DK_ENTER(1); DK_SAVE(2, R3);
+    DM(_test_cache_start) = R4; DM(_test_cache_end) = R8;
+    DM(_test_cache_selector) = R12;
+    R0 = DM(1, I6); DM(_test_cache_mode) = R0;
+    R0 = DM(_test_cache_calls); R0 = R0 + 1; DM(_test_cache_calls) = R0;
+    DM(0x3e018) = R4; R8 = R8 + 1; DM(0x3e019) = R8;
+    R0 = 0x300; DM(0x3e002) = R0;
+    R0 = DM(_test_cache_result);
+    DK_RETADDR; NOP; NOP; NOP; DK_LEAVE(R3, 2);
+.SECTION/DM seg_dmda;
+.VAR _test_cache_start = 0; .VAR _test_cache_end = 0;
+.VAR _test_cache_selector = 0; .VAR _test_cache_mode = 0;
+.VAR _test_cache_calls = 0; .VAR _test_cache_result = 0;
+"""
 FIX = REPO_ROOT / "tests/fixtures/dsp-lp0-proof/driver.s"
 BACK = 0xBB0000
 PORT = 0x20070000
@@ -38,7 +57,8 @@ def dsp_objects():
     objects = [
         pk_sharc.assemble(
             pk_sharc.expand_includes(
-                path.read_text(), [REPO_ROOT / "sdk/asm", REPO_ROOT / "sdk"]
+                (path.read_text() + (BOOT_DRIVER if path == FIX else "")),
+                [REPO_ROOT / "sdk/asm", REPO_ROOT / "sdk"],
             )
         )
         for path in (MOD / "src/dsp/lp0-proof.s", FIX, MOD / "src/dsp/readers.s")
@@ -57,7 +77,13 @@ def link_dsp(objects, data_address):
             address += len(data)
         for name, (sec, offset, _) in obj.data_symbols.items():
             syms[name] = sections[sec] + offset
-    externs = {**syms, "_lp_back": BACK, "_test_return": BACK, "_lp_port_record": PORT}
+    externs = {
+        **syms,
+        "_lp_boot_back": BACK,
+        "_lp_back": BACK,
+        "_test_return": BACK,
+        "_lp_port_record": PORT,
+    }
     bases = [0xB90000, 0xBA0000, 0xBC0000]
     for obj, base in zip(objects, bases, strict=True):
         externs.update(
@@ -87,9 +113,11 @@ def fresh(dsp):
             sess.poke(
                 (address + off) // 4, int.from_bytes(data[off : off + 4], "little")
             )
+    sess.poke(0x3E000, 0x414141)
     sess.poke((PORT + 20) // 4, 0)
     for address in (0x30FFE000, 0x30FFF008):
         sess.poke(address, 0)
+    sess.lp_syms = syms
     return sess, syms
 
 
@@ -105,7 +133,20 @@ CONSTS = {"M5": 0, "M6": 1, "M7": 0xFFFFFFFF, "M13": 0, "M14": 1, "M15": 0xFFFFF
 REGS = {**CONSTS, "I6": STACK, "I7": STACK, "MODE1": 0x10000, "IMASKP": 0}
 
 
+def boot(sess, regs=None):
+    regs = {**REGS, **(regs or {})}
+    result = sess.call("_lp_boot_hook", regs, max_steps=30000, read_regs=tuple(regs))
+    assert result["halt"]["reason"] == "breakpoint", result["halt"]
+    expected = {**regs}
+    if "R2" in expected:
+        expected["R2"] = 0x414141
+    assert {key: result["regs"][key] for key in regs} == expected
+    return result
+
+
 def init(sess, regs=None):
+    if sess.peek(sess.lp_syms["_lp_boot_status"] // 4) == 0:
+        boot(sess)
     regs = {**REGS, **(regs or {})}
     result = sess.call("_lp_hook", regs, max_steps=30000, read_regs=tuple(regs))
     assert result["halt"]["reason"] == "breakpoint", result["halt"]
@@ -177,8 +218,16 @@ def test_rx_owns_whole_cache_lines_at_every_data_placement(dsp_objects, phase):
     sess, syms = fresh(link_dsp(dsp_objects, 0x20080000 + phase))
     init(sess)
     rx = val(sess, syms, "_lp_rx")
-    storage = syms["_lp_rx_storage"]
-    section, offset, _ = dsp_objects[0].data_symbols["_lp_rx_storage"]
+    storage = syms["_lp_dma_storage"]
+    base = val(sess, syms, "_lp_dma_base")
+    limit = val(sess, syms, "_lp_dma_limit")
+    assert base % 64 == 0
+    assert limit == base + 4352
+    assert storage <= base and limit <= storage + 4416
+    assert val(sess, syms, "_lp_descriptor") == base
+    assert val(sess, syms, "_lp_state") == base + 64
+    assert rx == base + 192
+    section, offset, _ = dsp_objects[0].data_symbols["_lp_dma_storage"]
     reservation_bytes = len(dsp_objects[0].data[section][0]) - offset
     assert rx % 64 == 0
     assert storage <= rx
@@ -187,7 +236,7 @@ def test_rx_owns_whole_cache_lines_at_every_data_placement(dsp_objects, phase):
     assert state % 16 == 0
     for start, size in (
         (state, 128),
-        (syms["_lp_descriptor"], 28),
+        (val(sess, syms, "_lp_descriptor"), 28),
         (syms["_lp_save"], 292),
         *(
             (syms[name], 4)
@@ -203,6 +252,16 @@ def test_rx_owns_whole_cache_lines_at_every_data_placement(dsp_objects, phase):
         ),
     ):
         assert start + size <= rx or rx + 4160 <= start
+    for name, size in (
+        ("_lp_save", 292),
+        ("_lp_boot_save", 292),
+        ("_lp_dma_base", 4),
+        ("_lp_dma_limit", 4),
+        ("_lp_boot_status", 4),
+        ("_lp_boot_error", 4),
+    ):
+        start = syms[name]
+        assert start + size <= base or limit <= start
     assert val(sess, syms, "_test_desc1") == rx
     assert val(sess, syms, "_test_desc3") * val(sess, syms, "_test_desc4") == 4100
     # The simulated receive and assembled callback leave cache-line padding alone.
@@ -1201,3 +1260,87 @@ def test_actual_callback_snapshot_survives_downstream_output_overwrite(dsp, trac
     assert val(sess, syms, sequence) == 4
     assert [sess.peek(address + i) for i in range(32)] == [0] * 32
     assert val(sess, syms, f"_lp_close_{name}_count") == 0
+
+
+def test_boot_preserves_live_startup_context_and_stock_cfg_load(dsp):
+    sess, syms = fresh(dsp)
+    regs = {f"R{i}": 0x7100 + i for i in range(16)}
+    regs.update({f"I{i}": 0x20060000 + 16 * i for i in range(16) if i not in (6, 7)})
+    regs.update({f"B{i}": 0x20050000 + 16 * i for i in range(8)})
+    regs.update({f"L{i}": 17 + i for i in range(4)})
+    regs.update(
+        {
+            "MODE1": 0x10000,
+            "I6": STACK + 256,
+            "I7": STACK,
+            "L6": 0x1000,
+            "L7": 0x1000,
+            "B6": STACK - 512,
+            "B7": STACK - 512,
+        }
+    )
+    boot(sess, regs)
+    assert val(sess, syms, "_lp_boot_status") == 1
+    assert val(sess, syms, "_lp_boot_error") == 0
+    assert val(sess, syms, "_test_cache_calls") == 1
+    assert val(sess, syms, "_test_cache_start") == val(sess, syms, "_lp_dma_base")
+    assert val(sess, syms, "_test_cache_end") + 1 == val(sess, syms, "_lp_dma_limit")
+    assert val(sess, syms, "_test_cache_selector") == 0x604
+    assert val(sess, syms, "_test_cache_mode") == 1
+
+
+@pytest.mark.parametrize(
+    "modifier,value",
+    [("M5", 1), ("M6", 2), ("M7", 1), ("M14", 0), ("L4", 1), ("L5", 1)],
+)
+def test_boot_context_failure_resumes_stock_and_denies_lp0(dsp, modifier, value):
+    sess, syms = fresh(dsp)
+    boot(sess, {modifier: value})
+    assert val(sess, syms, "_lp_boot_status") == 2
+    assert val(sess, syms, "_lp_boot_error") == 0x100
+    assert val(sess, syms, "_test_cache_calls") == 0
+    init(sess)
+    assert val(sess, syms, "_lp_status") == 4
+    assert val(sess, syms, "_lp_error") == 8
+    assert val(sess, syms, "_test_open_calls") == 0
+    assert val(sess, syms, "_test_submit_calls") == 0
+    assert val(sess, syms, "_lp_close_a_ready") == 0
+    assert val(sess, syms, "_lp_close_b_ready") == 0
+
+
+def test_boot_helper_error_fails_closed(dsp):
+    sess, syms = fresh(dsp)
+    put(sess, syms, "_test_cache_result", 3)
+    boot(sess)
+    assert val(sess, syms, "_lp_boot_status") == 2
+    assert val(sess, syms, "_lp_boot_error") == 3
+    init(sess)
+    assert val(sess, syms, "_test_open_calls") == 0
+    assert val(sess, syms, "_test_submit_calls") == 0
+    assert val(sess, syms, "_lp_close_a_ready") == 0
+    assert val(sess, syms, "_lp_close_b_ready") == 0
+
+
+def test_boot_refuses_simd_before_saves_and_preserves_secondary_registers(dsp):
+    sess, syms = fresh(dsp)
+    regs = {**REGS, "MODE1": 0x210000}
+    regs.update({f"R{i}": 0x7100 + i for i in range(16)})
+    regs.update({f"S{i}": 0x8100 + i for i in range(16)})
+    sess.record_stores()
+    result = sess.call("_lp_boot_hook", regs, read_regs=tuple(regs))
+    assert result["halt"]["reason"] == "breakpoint", result["halt"]
+    assert result["regs"]["MODE1"] == regs["MODE1"]
+    for name, value in regs.items():
+        if name not in ("R2", "S2"):
+            assert result["regs"][name] == value
+    assert result["regs"]["R2"] == 0x414141
+    assert not sess.stores
+    assert val(sess, syms, "_lp_boot_status") == 0
+    assert val(sess, syms, "_test_cache_calls") == 0
+    result = sess.call("_lp_hook", REGS, max_steps=30000)
+    assert result["halt"]["reason"] == "breakpoint", result["halt"]
+    assert val(sess, syms, "_lp_error") == 8
+    assert val(sess, syms, "_test_open_calls") == 0
+    assert val(sess, syms, "_test_submit_calls") == 0
+    assert val(sess, syms, "_lp_close_a_ready") == 0
+    assert val(sess, syms, "_lp_close_b_ready") == 0

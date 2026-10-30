@@ -2567,6 +2567,28 @@ mark = "D"
 rule = "fw/window:cf_ptr"
 
 [[anchor]]
+name = "dsp.cache.fn.cache_range"
+cpu = "sharc"
+kind = "code"
+addr = 0x283801b4
+pm = 0x1c00da
+len = 6
+sha256 = "c66dbe16eb7fe4e55bd33c9dd4e06ce04f0caa261dbcbb20d08a207dc2cd4c1a"
+mark = "D"
+rule = "fw/dsp/cache:sharc_func"
+
+[[anchor]]
+name = "dsp.cache.site.cache_enable"
+cpu = "sharc"
+kind = "code"
+addr = 0x20017358
+pm = 0xb8b9ac
+len = 6
+sha256 = "11d399f08853f925d8e6da24a3e0f80a536f4cab991f983de99aa053acd3c94a"
+mark = "D"
+rule = "fw/dsp/cache:sharc_func"
+
+[[anchor]]
 name = "dsp.fx.fn.entry"
 cpu = "sharc"
 kind = "code"
@@ -2920,6 +2942,11 @@ mode = "before"
 name = "cf.view.hook.ui_loop"
 site = "cf.view.site.ui_loop"
 mode = "retarget"
+
+[[hook]]
+name = "dsp.cache.hook.cache_enable"
+site = "dsp.cache.site.cache_enable"
+mode = "replace"
 
 [[hook]]
 name = "dsp.fx.hook.entry"
