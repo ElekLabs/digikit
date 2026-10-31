@@ -312,6 +312,9 @@ pub mod api {
     /// `input_turn`: Turn an encoder by `delta`.
     pub type InputTurnFn = unsafe extern "C" fn(encoder: u32, delta: i32) -> i32;
 
+    /// `dl_set_tick_cb`: Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing.
+    pub type DlSetTickCbFn = unsafe extern "C" fn(cb: *mut u8);
+
     /// `dkrt_blocks`: The 1500 Hz block clock, for a module that wants to measure time.
     pub type DkrtBlocksFn = unsafe extern "C" fn() -> u32;
 }

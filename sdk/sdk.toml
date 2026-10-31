@@ -455,7 +455,6 @@ absent = "-1"
 name = "dl_set_tick_cb"
 sig = "void (u8 *cb)"
 doc = "Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing."
-kind = "helper"
 requires = "core/dsp-link"
 absent = "void"
 
