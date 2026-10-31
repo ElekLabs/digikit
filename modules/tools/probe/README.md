@@ -1,7 +1,7 @@
 # digikit/probe
 
 A ColdFire service module that collects the words of a DSP probe module (`test/sharc-probe`) and gives them to a computer. It needs `core/dsp-link` and the
-per-block callback `dl_set_tick_cb` of the runtime. In phase 3 of `docs/plans/debug-mode-and-probes.md` it becomes `digikit/debug`.
+per-block callback `dl_set_tick_cb` of the runtime.
 
 `dkm_init` sets the callback, which runs in the block interrupt every block with the copy of the previous DSP reply. When a module ran in that record,
 the callback keeps diagnostic word 25 (the module step) in a ring of 24,576 words. Every reply record carries the step word of its block (the block tail of `core/dsp-link` copies the module's `_dk_step` into it), so every block gives a word, 1500 a second; one run of the probe module (23,436 words) takes about 16 s. The ring stops taking words when it is full (overruns are counted). RESET empties it.
