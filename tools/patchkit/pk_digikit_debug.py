@@ -607,6 +607,31 @@ def run_debug(c: Any) -> None:
             and len(events(rig, "UPLOAD")) == len(n2) + 1,
             f"{r3} {rec}",
         )
+        # LOGCFG op 2: the host switch for the debug log
+        off = up.logcfg_debug(False)
+        rec = B.current(rig.sel_records())
+        st_bad, _ = up.request(DK.CMD_LOGCFG, bytes([2, 2]))
+        st_short, _ = up.request(DK.CMD_LOGCFG, bytes([2]))
+        c.check(
+            "LOGCFG op 2 off: the reply says off, the record's flags say off, INFO agrees; a value above 1 is E_PROTO, a missing byte E_MSG",
+            not off["debug"]
+            and rec is not None
+            and rec["flags"] & 2
+            and not up.info()["debug_on"]
+            and st_bad == -60
+            and st_short == -50,
+            f"{off} {rec} {st_bad} {st_short}",
+        )
+        on = up.logcfg_debug(True)
+        rec = B.current(rig.sel_records())
+        c.check(
+            "LOGCFG op 2 on: reply, record and INFO say on",
+            on["debug"]
+            and rec is not None
+            and not rec["flags"] & 2
+            and up.info()["debug_on"],
+            f"{on} {rec}",
+        )
         # dklog against the emulator
         out = c.work / "dklog.log"
         n = L.follow(up, out, once=True, echo=False)

@@ -452,6 +452,14 @@ requires = "core/ui"
 absent = "-1"
 
 [[import]]
+name = "dl_set_tick_cb"
+sig = "void (u8 *cb)"
+doc = "Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing."
+kind = "helper"
+requires = "core/dsp-link"
+absent = "void"
+
+[[import]]
 name = "dkrt_blocks"
 sig = "u32 ()"
 doc = "The 1500 Hz block clock, for a module that wants to measure time."
@@ -705,6 +713,7 @@ RESTART = 0x31
 [protocol.ranges]   # command numbers a run-time module may register with Api.register_cmds (a request number is 6 bits: bit 6 of the command byte marks a reply)
 remote = [0x38, 0x3d]   # digikit/remote: key and turn of the panel (docs/plans/remote-control.md)
 remote_state = [0x3e, 0x3f]   # digikit/remote: the state
+probe = [0x32, 0x35]   # digikit/probe (later digikit/debug): collector status, raw reads, reset (docs/plans/debug-mode-and-probes.md)
 
 [protocol.service]  # the commands of run-time service modules, by name; each lies in a range above (a module registers them with Api.register_cmds)
 REMOTE_KEY = 0x38      # digikit/remote: code (u8), down (u8)

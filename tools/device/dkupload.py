@@ -462,6 +462,14 @@ class Uploader:
         d = cur["default"] if default is None else default
         return parse(self._ok(CMD_LOGCFG, "logcfg", bytes([1, d, *lv])))
 
+    def logcfg_debug(self, on: bool) -> dict[str, Any]:
+        """LOGCFG op 2: switch the debug log on or off (saved in the selection record, as the menu does). E_PROTO from a runtime without op 2.
+        Returns the same dict as `logcfg`."""
+        b = self._ok(CMD_LOGCFG, "logcfg debug", bytes([2, 1 if on else 0]))
+        if len(b) < 10:
+            raise UploadError(-50, "logcfg: malformed reply")
+        return {"default": b[0], "modules": list(b[1:9]), "debug": bool(b[9])}
+
     def select(self, paths: list[str]) -> None:
         """SELECT (runtime 4): save the selection record (what the next boot loads); the menu's code path, so its card rules apply."""
         self._ok(CMD_SELECT, "select", select_body(paths))

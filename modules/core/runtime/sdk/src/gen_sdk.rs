@@ -164,10 +164,12 @@ pub mod proto {
     pub const CAPK_SETTINGS: u8 = 13;
     pub const CAPK_SEND_SLOTS: u8 = 14;
     /// The command ranges a module may register, as (first, last).
-    pub const RANGES: [(u8, u8); 2] = [
+    pub const RANGES: [(u8, u8); 3] = [
+        (0x32, 0x35), // probe
         (0x38, 0x3d), // remote
         (0x3e, 0x3f), // remote_state
     ];
+    pub const RANGE_PROBE: (u8, u8) = (0x32, 0x35);
     pub const RANGE_REMOTE: (u8, u8) = (0x38, 0x3d);
     pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
 }
@@ -258,7 +260,7 @@ pub mod api {
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 28] = [
+    pub const IMPORT_NAMES: [&str; 29] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -286,6 +288,7 @@ pub mod api {
         "dk_ui_confirm",
         "dk_ui_choice",
         "dk_ui_toast",
+        "dl_set_tick_cb",
         "dkrt_blocks",
     ];
 
@@ -339,6 +342,7 @@ macro_rules! optional_imports {
                 pub fn dk_ui_confirm(title: *const u8, text: *const u8, done: *mut u8, ctx: *mut u8) -> i32;
                 pub fn dk_ui_choice(title: *const u8, items: *mut u8, n: i32, done: *mut u8, ctx: *mut u8) -> i32;
                 pub fn dk_ui_toast(text: *const u8) -> i32;
+                pub fn dl_set_tick_cb(cb: *mut u8);
             }
 
             /// What an absent module's import calls: the failure value of the API.
@@ -359,10 +363,11 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_ui_confirm(_a0: *const u8, _a1: *const u8, _a2: *mut u8, _a3: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_choice(_a0: *const u8, _a1: *mut u8, _a2: i32, _a3: *mut u8, _a4: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_toast(_a0: *const u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dl_set_tick_cb(_a0: *mut u8) { }
             }
 
             /// (name, address from the module or 0, address of the stub or 0)
-            pub fn table() -> [(&'static str, usize, usize); 18] {
+            pub fn table() -> [(&'static str, usize, usize); 19] {
                 [
                     ("input_key", core::hint::black_box(input_key as usize), 0),
                     ("input_turn", core::hint::black_box(input_turn as usize), 0),
@@ -382,6 +387,7 @@ macro_rules! optional_imports {
                     ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize),
                     ("dk_ui_choice", core::hint::black_box(dk_ui_choice as usize), absent::dk_ui_choice as usize),
                     ("dk_ui_toast", core::hint::black_box(dk_ui_toast as usize), absent::dk_ui_toast as usize),
+                    ("dl_set_tick_cb", core::hint::black_box(dl_set_tick_cb as usize), absent::dl_set_tick_cb as usize),
                 ]
             }
         }

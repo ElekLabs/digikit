@@ -52,6 +52,11 @@ the device runs. Nothing changes for the player. Emulator only.
   static fallback, copied into word 25 at the block tail). The runtime points the stores of a module's DSP image at word 25 of the older reply record
   instead (the record addresses are words 29 and 30), so that a step stored just before the DSP stops is still in the record. The core clears word 25 in both
   records before each call; the module writes into one, so the ColdFire takes the non-zero value of the two replies. Finding 77 has the design.
+- Per-block callback: `dl_set_tick_cb(cb)` (a runtime import for modules, `requires core/dsp-link`; a no-op stub when the module is absent) sets one
+  function, `void cb(const volatile u16 *rec)`, that `dl_tick` calls every block in the block interrupt, before the transfer code, with the copy of the
+  previous reply record (diagnostic word j: see `dl_diag`). NULL is off and costs one pointer test per block. The callback must be a short C function with
+  no allocation and no logging, and its module clears it in `fini`; the runtime also clears it after a `fini` when it points into the module
+  (`dl_tick_cb_drop`).
 - Limits: the destination must lie in the module's area (`_dl_area`); the DSP code that runs from it must be linked for
   that address or relocated by the runtime (`docs/design/digikit-dkm.md`, "DSP section"). The emulator does not model the DSP caches, so the cache invalidate after the last chunk has not run on
   a device.

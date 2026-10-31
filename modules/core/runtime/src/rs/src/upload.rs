@@ -1095,8 +1095,9 @@ unsafe fn cmd_peek(seq: u32, body: *const u8, blen: usize) -> i32 {
     reply(CMD_PEEK, seq, OK, 6 + len as usize)
 }
 
-/// LOGCFG: body `u8 op` (0 get, 1 set); a set adds `u8 default` and 8 bytes, the level of module record 0 to 7 (0xff: use the default). Levels are 0 to 4.
-/// Reply (both ops): `u8 default`, 8 module levels, `u8 debug_on`.
+/// LOGCFG: body `u8 op` (0 get, 1 set, 2 debug); a set adds `u8 default` and 8 bytes, the level of module record 0 to 7 (0xff: use the default). Levels are 0 to 4.
+/// Op 2 takes one body byte, 1 (debug on) or 0 (off), and sets it through `boot::debug_set` (saved in the selection record).
+/// Reply (all ops): `u8 default`, 8 module levels, `u8 debug_on`.
 unsafe fn cmd_logcfg(seq: u32, body: *const u8, blen: usize) -> i32 {
     if blen < 1 {
         return reply(CMD_LOGCFG,seq, E_MSG, 0);
@@ -1123,6 +1124,18 @@ unsafe fn cmd_logcfg(seq: u32, body: *const u8, blen: usize) -> i32 {
         while i < 8 {
             dlog::set_level_module(i, *body.add(2 + i));
             i += 1;
+        }
+    } else if op == 2 {
+        if blen != 2 {
+            return reply(CMD_LOGCFG, seq, E_MSG, 0);
+        }
+        let v = *body.add(1);
+        if v > 1 {
+            return reply(CMD_LOGCFG, seq, E_PROTO, 0);
+        }
+        let r = boot::debug_set(v == 1);
+        if r != OK {
+            return reply(CMD_LOGCFG, seq, r, 0);
         }
     } else if op != 0 {
         return reply(CMD_LOGCFG,seq, E_PROTO, 0);
