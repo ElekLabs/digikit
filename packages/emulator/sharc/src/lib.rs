@@ -2128,6 +2128,14 @@ impl Engine {
                     f.note(self.s.pc_sw as u32);
                 }
             }
+            if self.s.pc_sw as u32 >= self.appended_from
+                && !(1..=3).contains(&(self.s.pc_sw - pc_before))
+                && let Some(f) = self.fast.as_mut()
+            {
+                // A landing in appended code: make it an entry (no generated
+                // block or root list names code a patch added).
+                f.note_appended(self.s.pc_sw as u32);
+            }
             if self.s.loops.n != loops_before || !self.s.loops_ok {
                 // Block code assumes every loop ends at a PC the generator
                 // saw (a loop the interpreter started in runtime-decoded code
