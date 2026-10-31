@@ -60,7 +60,10 @@ async function expectProbeTransport({ session, dk }: PatchedSession): Promise<vo
     patches.map((e) => e.args[0]),
     `STEP_PATCH outcomes: ${JSON.stringify(patches)}`,
   ).toEqual(expect.arrayContaining([STEP_PATCHED]));
-  expect(patches.every((e) => e.args[0] === STEP_PATCHED || e.args[0] === STEP_NONE), 'no static fallback').toBe(true);
+  expect(
+    patches.every((e) => e.args[0] === STEP_PATCHED || e.args[0] === STEP_NONE),
+    'no static fallback',
+  ).toBe(true);
 
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   // the effect starts a few thousand blocks after the boot; the collector then fills its ring

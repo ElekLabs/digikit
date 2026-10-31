@@ -88,6 +88,8 @@ DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "devrpc": ("upload",),
     "midisniff": ("upload", "menu", "debug", "crash", "card"),
     "mmon": (),
+    "dkprobe": (),  # the SHARC probe capture tool: no scenario kind runs it
+    "dkprobe_seq": (),
 }
 BROAD_TASK_GROUPS = ("verify", "build", "gen", "setup")
 ALL_SUITES = ("tests/patchkit", "tests/digikit")
