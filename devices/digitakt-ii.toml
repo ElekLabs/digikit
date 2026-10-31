@@ -85,6 +85,10 @@ dsp_blocks_per_second = 1500
 [digikit]
 id = 1
 name = "dt2"
+# Run-time modules (ids) that the workbench installs and enables together with the firmware, on a device after its flash and in the emulator
+# after it loads the patched image. Each is ticked by default in the Firmware pane and next to the emulator's firmware file; the user can untick it.
+# The list is data: add an id here (for example digikit/debug) and the workbench offers it. Desktop workbench only; the site does not install modules.
+default_modules = ["digikit/remote"]
 # The panel key held at power-on for safe mode: RECORD (a code of [[panel.group]] "transport", tools/patchkit/pk_harness.py BUTTONS).
 safe_key = 19
 # core/dsp-link: the reserved DSP area in L2 (window 0; a chunk's offset field is 17 bits, so at most 524288 bytes), and the geometry of

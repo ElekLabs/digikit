@@ -840,6 +840,81 @@ const SCENES = [
       p.say('first lines: ' + (await p.eval('(window.__saved?.[0]?.text ?? "").split("\\n").slice(0, 4).join(" | ")')));
     },
   },
+  // ---- the Level menu and the Debug indicator of the Log drawer (workbench-device-log.md "Log levels") ----
+  ...[
+    // [name, query, size, Source value (empty: leave All), steps after choosing it]
+    [
+      'log-level-menu',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click(/^Level/);
+        await p.wait(400);
+      },
+    ],
+    [
+      'log-level-menu-changed',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click(/^Level/);
+        await p.wait(400);
+        // the module row of freqshift: error; the default row: trace
+        await p.eval(
+          "(() => { const rows = [...document.querySelectorAll('.level-row')]; const pick = (row, name) => [...row.querySelectorAll('button')].find((b) => b.textContent === name)?.click(); pick(rows[0], 'trace'); pick(rows[2], 'error'); })()",
+        );
+        await p.wait(500);
+      },
+    ],
+    [
+      'log-level-menu-emulator',
+      'page=log&log=both&logspeed=3&logh=640',
+      MIN,
+      'emulator:all',
+      async (p) => {
+        await p.click(/^Level/);
+        await p.wait(400);
+      },
+    ],
+    ['log-debug-on', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+    ['log-debug-off', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'emulator:all', async () => {}],
+    // Source is All and both origins are followed: the menu does not know which one is meant
+    ['log-debug-disabled-all', 'page=log&log=both&logspeed=3&logh=640', WIDE, '', async () => {}],
+    // the device runtime has no LOGCFG capability
+    ['log-debug-disabled-nologcfg', 'page=log&log=nologcfg&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+  ].map(([name, q, size, source, after]) => ({
+    name,
+    q,
+    size,
+    steps: async (p) => {
+      await p.wait(5500);
+      if (source)
+        await p.eval(
+          `(() => { const s = document.querySelector('.log-drawer select'); s.value = ${JSON.stringify(source)}; s.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+        );
+      await p.wait(1500);
+      await after(p);
+      p.say(
+        'header: ' +
+          (await p.eval(
+            "[...document.querySelectorAll('.log-drawer header .tb')].map((b) => b.textContent.trim() + (b.disabled ? ' [off]' : '')).join(' | ')",
+          )),
+      );
+    },
+  })),
+  // the Default modules list next to the emulator's firmware file (the toolbar of Console.tsx, replicated in the preview)
+  {
+    name: 'emulator-defaults-open',
+    q: 'page=emulator',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(600);
+      await p.click(/^Default modules/);
+      await p.wait(300);
+    },
+  },
   { name: 'emulator-faceplate-wide', q: 'page=emulator', size: WIDE },
   { name: 'emulator-faceplate-narrow', q: 'page=emulator', size: MIN },
 ];

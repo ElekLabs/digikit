@@ -26,7 +26,7 @@ const lv = (level: number, src = 0, error = false) => (level << 1) | (src << 8) 
 class Device implements FollowSession {
   ring: DkLogEvent[] = [];
   caps: number | null = 1 << CAP.LOG;
-  debug = { level: 3, debug: true };
+  debug = { level: 3, modules: Array<number>(8).fill(0xff), debug: true };
   modulesLoaded: { index: number; name: string }[] = [];
   faultRecord: Fault | null = null;
   failWith: Error | null = null;
@@ -40,6 +40,10 @@ class Device implements FollowSession {
     return [this.ring[0]?.seq ?? 0, this.ring.at(-1)?.seq ?? 0, events];
   }
   async logConfig() {
+    return this.debug;
+  }
+  async setLogConfig(level: number, modules: number[]) {
+    this.debug = { ...this.debug, level, modules };
     return this.debug;
   }
   async modules() {
@@ -115,7 +119,7 @@ test('a poll shows the events of the ring with the module that wrote them, and r
 
 test('debug off says what the runtime keeps; a DEBUG_SET event with a change adds the line again', async () => {
   const d = new Device();
-  d.debug = { level: 0, debug: false };
+  d.debug = { ...d.debug, level: 0, debug: false };
   d.ring = [ev(1, 'BOOT_START')];
   const t = setup(d, 'emulator');
   await t.follower.tick();
@@ -126,7 +130,7 @@ test('debug off says what the runtime keeps; a DEBUG_SET event with a change add
         "emulator: debug logging off: the runtime keeps only errors (turn it on in the runtime's DEBUG setting)",
       ),
   );
-  d.debug = { level: 2, debug: true };
+  d.debug = { ...d.debug, level: 2, debug: true };
   d.ring.push(ev(2, 'DEBUG_SET', [1]));
   await t.follower.tick();
   assert.ok(t.texts().includes('emulator: debug logging on, level info'));
