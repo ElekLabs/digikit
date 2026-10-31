@@ -60,6 +60,15 @@
 .EXTERN _dv_table;
 
 _dv_entry:
+    // The cheap path when no row is registered (`_dv_mask` is 0): voice 0 (R14 = 32) keeps the full path for the heartbeat and the mask below; every other voice
+    // goes back to the stock renderer at once (R0 is free here). No module routine can run then, so the breadcrumb of the voices is not written either.
+    R0 = DM(_dv_mask);
+    R0 = PASS R0;
+    IF NE JUMP _dv_full;
+    R0 = 32;
+    COMP(R0, R14);
+    IF NE JUMP _dv_idle;
+_dv_full:
     R0 = L4;
     DM(_dv_sv_l4) = R0;                   // I4 is used below as a linear pointer: L4 = 0 until the stock path (put back there)
     L4 = 0;
@@ -93,6 +102,26 @@ _dv_entry:
     DM(10, I4) = R1;
     R1 = MODE1;
     DM(11, I4) = R1;
+    // and the mask of the registered types: bit t (bit 31: a type of 31 or more) is set when a row of that type is registered. A free row holds
+    // 0xffffffff, the zero row ends the table. A row written by the runtime is seen from the next block. (R0 accumulates, R1 and R2 are free)
+    I4 = _dv_table;
+    R0 = 0;
+_dv_mkl:
+    R1 = DM(0, I4);
+    MODIFY(I4, 24) (NW);
+    R1 = PASS R1;
+    IF EQ JUMP _dv_mke;
+    IF LT JUMP _dv_mkl;
+    R2 = 31;
+    COMP(R1, R2);
+    IF GT R1 = PASS R2;
+    R2 = 1;
+    R2 = LSHIFT R2 BY R1;
+    R0 = R0 OR R2;
+    JUMP _dv_mkl;
+_dv_mke:
+    DM(_dv_mask) = R0;
+    R0 = 0;                               // v
 _dv_nodiag:
     R1 = LSHIFT R0 BY 8;
     R1 = BSET R1 BY 0;                    // breadcrumb stage 1 (hook entered) | v << 8, kept in the DSP's own diagnostic word 12
@@ -111,6 +140,17 @@ _dv_nodiag:
     R0 = 0x400;
     R2 = R2 OR R0;
     R1 = FEXT R1 BY R2;                   // cache[t]
+    R2 = 31;                              // a type that no row registers takes the stock path without the table walk (`_dv_mask`, above)
+    R0 = R1;
+    COMP(R0, R2);
+    IF GT R0 = PASS R2;
+    R2 = 0;
+    R0 = R2 - R0;
+    R2 = DM(_dv_mask);
+    R2 = LSHIFT R2 BY R0;                 // a shift by a negative count moves bit t down to bit 0
+    R0 = 1;
+    R2 = R2 AND R0;
+    IF EQ JUMP _dv_stock;
     I4 = _dv_table;
 _dv_scan:
     R0 = DM(0, I4);                       // row type; 0 ends the table (the last row is always empty)
@@ -1329,6 +1369,10 @@ _dv_pw:
     R0 = MAX(R0, R13);
     RTS;
 
+_dv_idle:
+    MODIFY(I7, -26) (NW);                 // the displaced first instruction of the stock renderer
+    JUMP _fw_render_next;
+
 _dv_stock:
     R0 = 7;
     COMP(R1, R0);
@@ -1546,6 +1590,7 @@ _dv_frame_sw:
 
 .SECTION/DM seg_dmda;
 .PKDATA _dv_sv_l4, 4;
+.PKDATA _dv_mask, 4;                      // registered types (see _dv_nodiag)
 .PKDATA _dv_sv3, 4;
 .PKDATA _dv_sv5, 4;
 .PKDATA _dv_bcw, 4;
