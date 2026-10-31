@@ -63,3 +63,7 @@ Each with one proof run on DN2, then DT2.
       a Selache update the gate then fails on old objects in `out/cache` (seen 2026-10-31: freqshift, pluck, sine and 20 others). Fix: include
       the toolchain revision in the unchanged check. Workaround: `patchkit build --force` on the module.
 - [ ] Rust formatting: `rust_ws fmt` reports about 190 diffs on `main` in files this branch did not touch; the check is red regardless.
+- [ ] Gate: a failed python-tests file is not recorded in `failed_units` of `result.json` (the 2026-10-31 run listed three failed files in its
+      summary and an empty `failed_units["python-tests"]`), so `--rerun-failed` reruns no file. Fix in tools/devtools/verify.py.
+- [ ] Gate: `--rerun-failed` after a change of only docs and one web test helper added `smoke` with the full matrix ("full matrix for
+      explicit/full/rerun acceptance"). Check the routing of the changed files and whether a rerun needs the full matrix.
