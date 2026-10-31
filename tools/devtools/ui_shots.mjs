@@ -904,6 +904,17 @@ const SCENES = [
       );
     },
   })),
+  // the Default modules list next to the emulator's firmware file (the toolbar of Console.tsx, replicated in the preview)
+  {
+    name: 'emulator-defaults-open',
+    q: 'page=emulator',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(600);
+      await p.click(/^Default modules/);
+      await p.wait(300);
+    },
+  },
   { name: 'emulator-faceplate-wide', q: 'page=emulator', size: WIDE },
   { name: 'emulator-faceplate-narrow', q: 'page=emulator', size: MIN },
 ];

@@ -25,6 +25,7 @@ import {
   reloadFailureEntry,
   unseenErrors,
 } from './log-core';
+import { desktopDefaultModules } from './default-modules';
 import { createLogFollow, followSession } from './log-follow';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
@@ -35,6 +36,9 @@ import { transferEnv } from '@web/transfer/env';
 import { run as flashRun } from '@web/firmware/firmware-state';
 import { running as flashRunning } from '@web/firmware/firmware-core';
 import FirmwarePage from '@web/firmware/FirmwarePage';
+import DefaultModules from '@web/firmware/DefaultModules';
+import { DefaultModuleError } from '@web/firmware/default-modules-core';
+import { tickedFor } from '@web/firmware/default-modules-state';
 import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
@@ -206,6 +210,31 @@ export default function Console() {
       setInfo(undefined);
     }
   };
+  /**
+   * The ticked default modules of the device (devices/*.toml `[digikit] default_modules`) go on the emulator's card and are enabled, so the
+   * emulator has what a flashed device has. The card keeps them: a later load finds them there and only checks the files.
+   */
+  const installDefaultModules = async (deviceId: string) => {
+    const ids = tickedFor(deviceId);
+    if (ids.length === 0) return;
+    try {
+      const lines = await desktopDefaultModules.install('emulator', deviceId, ids, (p) =>
+        setReloadNote(`Default modules: ${p.text}`),
+      );
+      setReloadNote(`Default modules ready: ${ids.join(', ')}`);
+      logInput({
+        source: 'firmware',
+        level: 'info',
+        text: `default modules in the emulator: ${ids.join(', ')}`,
+        detail: lines.join('\n'),
+      });
+    } catch (e) {
+      const what = e instanceof DefaultModuleError ? `default module ${e.id}` : 'default modules';
+      setReloadNote(`${what} failed`);
+      logInput(failureEntry('firmware', what, e instanceof DefaultModuleError ? e.message : message(e)));
+    }
+    bumpCardRefresh();
+  };
   /** Start a new firmware session with `start` (every load goes through the controller's `firmware.load`). */
   const boot = async (start: (r: EmulatorRuntime) => Promise<RuntimeSnapshot>, name: string) => {
     const r = runtime();
@@ -234,6 +263,7 @@ export default function Console() {
       // another firmware may be another device: its card folder and its memory (the runtime needs a moment to load its modules)
       bumpCardRefresh();
       window.setTimeout(bumpCardRefresh, 2500);
+      if (s && bootRuntime()) void installDefaultModules(s.device);
     } catch (e) {
       setError(message(e));
       logInput(failureEntry('firmware', `loading ${name}`, message(e)));
@@ -583,6 +613,11 @@ export default function Console() {
           <Icon d={FOLDER} />
           <span class="lbl">Open…</span>
         </button>
+        <DefaultModules
+          device={device()}
+          off={bootRuntime() ? '' : 'Boot with digikit runtime is off: no module can be installed'}
+          note="Uploaded and enabled in the emulator after the firmware loads."
+        />
         <button
           type="button"
           class="tb"

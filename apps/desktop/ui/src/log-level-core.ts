@@ -1,5 +1,5 @@
 // The log levels of an origin (the Level menu of the Log drawer), the pure part: reading LOGCFG, the rows of the menu, and a change as the
-// 10-byte set request the runtime takes (default level, 8 module records, 0xff = the default). No DOM and no timers. Host tests: tests/log-level.test.ts.
+// 10-byte set request the runtime takes (default level, 8 module records, 0xff = the default). No DOM and no timers. Host tests: apps/desktop/ui/tests/log-level.test.ts.
 import type { DkModule, LogConfig } from '@digi/dk-session';
 import { CAP, LOG_LEVELS } from '@digi/dk-session/gen_proto';
 import type { Origin } from './log-core.ts';
