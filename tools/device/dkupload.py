@@ -11,12 +11,15 @@
     uv run python -m tools.device.dkupload --emu settings [-o FILE] [--json]   # the settings record (read only); FILE goes to `patchkit store dump --record FILE`
     uv run python -m tools.device.dkupload --emu --run-dir out/runs/patchkit/run-dev-DEVICE put build/m.dkm   # the daemon of `mise run patch:dev` (pk_dev), not the desktop app's
     uv run --with python-rtmidi python -m tools.device.dkupload --port Digitakt info    # a real device (not exercised in CI)
+    uv run python -m tools.device.dkupload --winmm "Digitone II" info      # a real device on Windows, winmm (tools/device/winmidi.py, no package)
+    uv run python -m tools.device.dkupload --winmm "Digitone II" put s.wav samples/s.wav --chunk 8192 --depth 1 --timing put.jsonl   # timed
     uv run python -m tools.device.dkupload --emu remote state              # digikit/remote (docs/plans/remote-control.md): the module state
     uv run python -m tools.device.dkupload --emu remote key 10             # press and release a key (the device file's panel code); --hold S keeps it down
     uv run python -m tools.device.dkupload --emu remote turn 1 -5          # turn encoder 1 by -5 detents
 
 `put FILE [PATH]` streams FILE (read from disk in chunks, so a large sample is not held in memory) to PATH (default: `modules/<file name>`) in chunks of at most 32 KiB, two requests in flight, and
-checks the file's sha256 on the device (END reads the staged file back from the card). It changes only the module store; an uploaded
+checks the file's sha256 on the device (END reads the staged file back from the card). `--chunk` and `--depth` set the chunk size and the
+requests in flight; `put` prints a timing line (tools/device/dktiming.py) and `--timing FILE` keeps every request and reply as JSON lines. It changes only the module store; an uploaded
 module appears in DIGIKIT > MODULES and loads after APPLY & RESTART (or `tools.device.dkrun`, which also selects and restarts).
 
 Python (the kept scenarios use it): ``Uploader(EmuTransport(emu))`` or ``Uploader(RtMidiTransport("Digitakt"))``. The framing is
@@ -774,6 +777,15 @@ def _emu(run_dir: Path | None = None) -> Any:
     return Emu.connect(run_dir=run_dir)
 
 
+def _chunk(s: str) -> int:
+    n = int(s)
+    if n <= 0 or n > MAX_CHUNK or n % 512:
+        raise argparse.ArgumentTypeError(
+            f"{n} is not a multiple of 512 up to {MAX_CHUNK}"
+        )
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -786,6 +798,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     where.add_argument(
         "--port", help="a MIDI port name substring (a real device; python-rtmidi)"
+    )
+    where.add_argument(
+        "--winmm",
+        metavar="NAME",
+        help="a MIDI port name substring (a real device on Windows; winmm, no package)",
     )
     ap.add_argument(
         "--run-dir",
@@ -802,6 +819,25 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("put")
     p.add_argument("file", type=Path)
     p.add_argument("path", nargs="?")
+    p.add_argument(
+        "--chunk",
+        type=_chunk,
+        default=MAX_CHUNK,
+        help=f"bytes per DATA request, a multiple of 512 up to {MAX_CHUNK} (default)",
+    )
+    p.add_argument(
+        "--depth",
+        type=int,
+        choices=(1, 2),
+        default=DEPTH,
+        help=f"DATA requests in flight (default {DEPTH})",
+    )
+    p.add_argument(
+        "--timing",
+        type=Path,
+        metavar="FILE",
+        help="write each request and reply (monotonic time, cmd, seq, length) here as JSON lines",
+    )
     p = sub.add_parser("rm")
     p.add_argument("path")
     sub.add_parser("clear")
@@ -838,10 +874,23 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("encoder", type=int)
     q.add_argument("delta", type=int)
     args = ap.parse_args(argv)
-    t: Any = (
-        EmuTransport(_emu(args.run_dir)) if args.emu else RtMidiTransport(args.port)
-    )
-    up = Uploader(t)
+    if args.emu:
+        t: Any = EmuTransport(_emu(args.run_dir))
+    elif args.winmm:
+        from tools.device.winmidi import WinMidiTransport
+
+        t = WinMidiTransport(args.winmm)
+    else:
+        t = RtMidiTransport(args.port)
+    timing = None
+    if args.cmd == "put":
+        from tools.device import dktiming
+
+        timing = open(args.timing, "w", encoding="utf-8") if args.timing else None  # noqa: SIM115
+        t = dktiming.TimedTransport(
+            t, sink=dktiming.jsonl_sink(timing) if timing else None
+        )
+    up = Uploader(t, args.chunk, args.depth) if args.cmd == "put" else Uploader(t)
     try:
         if args.cmd == "info":
             info = up.info()
@@ -864,9 +913,11 @@ def main(argv: list[str] | None = None) -> int:
             path = args.path or f"modules/{args.file.name}"
             t0 = time.monotonic()
             up.put_file(path, args.file)
+            size = args.file.stat().st_size
             print(
-                f"{path}: {args.file.stat().st_size} bytes in {time.monotonic() - t0:.1f} s (sha256 checked on the device)"
+                f"{path}: {size} bytes in {time.monotonic() - t0:.1f} s (sha256 checked on the device)"
             )
+            print(dktiming.summary_line(dktiming.summary(t.events, size)))
         elif args.cmd == "read":
             data = read_range(up, args.path, args.offset, args.length)
             if args.output:
@@ -916,6 +967,12 @@ def main(argv: list[str] | None = None) -> int:
     except UploadError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    finally:
+        if timing:
+            timing.close()
+        close = getattr(t, "close", None)
+        if close:
+            close()
     return 0
 
 
