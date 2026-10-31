@@ -88,6 +88,8 @@ DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "devrpc": ("upload",),
     "midisniff": ("upload", "menu", "debug", "crash", "card"),
     "mmon": (),
+    "dktiming": (),  # the timing of `dkupload put`; no runner calls it
+    "winmidi": (),  # the winmm transport of `dkupload --winmm`; a real device only
 }
 BROAD_TASK_GROUPS = ("verify", "build", "gen", "setup")
 ALL_SUITES = ("tests/patchkit", "tests/digikit")
