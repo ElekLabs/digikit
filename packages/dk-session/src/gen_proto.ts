@@ -198,6 +198,7 @@ export const LOG_KIND = {
   FX_FAULT: 34,
   FX_DISABLED: 35,
   FAULT_FOUND: 36,
+  STEP_PATCH: 37,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -238,6 +239,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   34: ['FX_FAULT', ['row', 'faults', '-', '-', '-']],
   35: ['FX_DISABLED', ['row', 'faults', '-', '-', '-']],
   36: ['FAULT_FOUND', ['kind_site_stage', 'id', 'step', 'at', 'module']],
+  37: ['STEP_PATCH', ['outcome', 'addr', 'waited', 'passes', 'stores']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

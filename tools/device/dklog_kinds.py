@@ -46,6 +46,7 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     34: ("FX_FAULT", ("row", "faults", "-", "-", "-")),
     35: ("FX_DISABLED", ("row", "faults", "-", "-", "-")),
     36: ("FAULT_FOUND", ("kind_site_stage", "id", "step", "at", "module")),
+    37: ("STEP_PATCH", ("outcome", "addr", "waited", "passes", "stores")),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

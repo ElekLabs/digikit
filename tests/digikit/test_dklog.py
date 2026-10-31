@@ -373,6 +373,17 @@ def test_the_stored_fault_gives_the_same_rows_as_the_menu():
     assert L.fault_value(fault_blob(2, 3, 4, 0, 0, 0, "x")[:39]) is None
 
 
+def test_a_step_patch_event_says_patched_or_why_it_fell_back():
+    ok = L.event_dict(ev(1, "STEP_PATCH", (0, 0x40A1_2398, 90, 3, 2)))
+    assert ok["fields"]["outcome"] == "patched"
+    assert ok["fields"]["record_addr"] == "40a12398"
+    late = L.event_dict(ev(2, "STEP_PATCH", (1, 0, 45000, 1400, 2), flags=1))
+    assert late["fields"]["outcome"].startswith("static")
+    assert (
+        late["fields"]["waited_ms"] == 30000 and late["fields"]["record_addr"] is None
+    )
+
+
 def test_a_hang_record_is_read_from_its_events():
     evs = [
         ev(1, "BOOT_START"),

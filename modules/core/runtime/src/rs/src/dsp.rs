@@ -168,6 +168,9 @@ pub struct DspState {
     pub magic: u32,
     pub phase: u32,
     pub ticks: u32,
+    /// The block counter when `patch_steps` began to wait for the reply record's addresses (valid when `step_t0_set` is 1).
+    pub step_t0: u32,
+    pub step_t0_set: u32,
     pub step: u32,
     /// A transfer has been started in this step.
     pub started: u32,
@@ -985,26 +988,66 @@ unsafe fn free_steps(rec: usize) {
     d.step_n[rec] = 0;
 }
 
-/// Passes (about 120 a second) a send waits for the DSP's reply record to name its two addresses before it falls back to the static word.
-const STEP_WAIT: u32 = 1500;
+/// DSP blocks (1500 a second, the firmware's block counter) a send waits for the DSP's reply record to name its two addresses before it falls back to the
+/// static word: 30 s. The wait is in block time because a UI-loop pass is not a time: the passes run 30 to 32 a second at idle (docs/findings/37-boot-load.md,
+/// "The clock"), and fewer than that when the UI task is busy.
+const STEP_WAIT_BLOCKS: u32 = 45_000;
+/// The same wait in UI-loop passes (about 2 minutes), used only when the firmware's block counter cannot be read. Below `GUARD_TICKS`, so the fallback comes first.
+const STEP_WAIT_PASSES: u32 = 4000;
+
+/// The outcome codes of the `STEP_PATCH` event (`outcome`).
+const STEP_PATCHED: u32 = 0;
+const STEP_STATIC_BLOCKS: u32 = 1;
+const STEP_STATIC_PASSES: u32 = 2;
+const STEP_NONE: u32 = 3;
+
+unsafe fn step_event(rec: usize, outcome: u32, addr: u32, waited: u32, stores: u32) {
+    let d = ds();
+    crate::dlog::ev(
+        logk::STEP_PATCH,
+        if outcome == STEP_PATCHED || outcome == STEP_NONE { crate::dlog::INFO } else { logk::F_ERROR } | (rec as u16 + 1) << logk::SOURCE_SHIFT,
+        [outcome, addr, waited, d.ticks, stores],
+    );
+}
 
 /// Before the first chunk of a module's image goes out: the stores of `_dk_step` (`DK_STEP` in the module) are pointed at the module step word of the DSP's reply
 /// record (dsp-link.inc, word 25), where the ColdFire can read them after the DSP has stopped inside the module; a DM word would be lost with the core. The record
-/// addresses come from the diagnostic block, so the DSP must be running: until it is, the send waits (`STEP_WAIT`), then the image keeps the static word, which
-/// the block tail copies into the record (the step is then visible only when the block ends). Returns false while it waits.
+/// addresses come from the diagnostic block, so the DSP must be running: until it is, the send waits (`STEP_WAIT_BLOCKS` of block time), then the image keeps the
+/// static word, which the block tail copies into the record (the step is then visible only when the block ends). One `STEP_PATCH` event says which happened.
+/// Returns false while it waits.
 unsafe fn patch_steps() -> bool {
     let d = ds();
     let rec = d.pending.rec as usize;
     if rec >= crate::MAX_MODULES || d.step_list[rec] == 0 {
+        step_event(rec.min(crate::MAX_MODULES - 1), STEP_NONE, 0, 0, 0);
         return true;
     }
     let Some(addr) = crate::dlog::record_step_addr() else {
-        if d.ticks < STEP_WAIT {
-            return false;
-        }
+        let waited = match crate::fw_blocks() {
+            Some(now) => {
+                if d.step_t0_set == 0 {
+                    d.step_t0 = now;
+                    d.step_t0_set = 1;
+                }
+                let w = now.wrapping_sub(d.step_t0);
+                if w < STEP_WAIT_BLOCKS {
+                    return false;
+                }
+                (w, STEP_STATIC_BLOCKS)
+            }
+            None => {
+                if d.ticks < STEP_WAIT_PASSES {
+                    return false;
+                }
+                (0, STEP_STATIC_PASSES)
+            }
+        };
+        step_event(rec, waited.1, 0, waited.0, d.step_n[rec]);
         free_steps(rec);
         return true;
     };
+    let waited = if d.step_t0_set != 0 { crate::fw_blocks().unwrap_or(0).wrapping_sub(d.step_t0) } else { 0 };
+    step_event(rec, STEP_PATCHED, addr, waited, d.step_n[rec]);
     let stat = dsp_symbol(b"_dk_step\0".as_ptr());
     let buf = d.pending.send_buf as *mut u8;
     let mut i = 0;
@@ -1194,6 +1237,7 @@ unsafe fn start(p: Pending) {
     d.pending = p;
     d.phase = PH_SEND;
     d.ticks = 0;
+    d.step_t0_set = 0;
     d.step = 0;
     d.started = 0;
     d.transfers += 1;

@@ -677,6 +677,13 @@ id = 36
 name = "FAULT_FOUND"
 args = ["kind_site_stage", "id", "step", "at", "module"]
 
+# one per module DSP load: how the module's `_dk_step` stores were handled (core/runtime dsp.rs `patch_steps`); `outcome` 0 patched to the record's step word at `addr`, 1 static word because the DSP's
+# reply record addresses were not valid after `waited` blocks, 2 the same without a block counter (`passes` is the UI-loop pass count), 3 the module has no step stores; the source is the module
+[[log.kind]]
+id = 37
+name = "STEP_PATCH"
+args = ["outcome", "addr", "waited", "passes", "stores"]
+
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 

@@ -155,6 +155,12 @@ CARD_STATES = {
     4: "unreadable",
     5: "too small",
 }
+STEP_OUTCOMES = {
+    0: "patched",
+    1: "static (reply record addresses not valid in time)",
+    2: "static (no block counter; pass limit)",
+    3: "no step stores",
+}
 SAFE_REASONS = {1: "counter", 2: "key", 3: "flag", 4: "dsp"}
 REFUSAL = {
     1: "outside the store range",
@@ -213,6 +219,14 @@ def fields_of(kind: int, a: tuple[int, ...]) -> dict[str, Any]:
                 "boot_was_stable": bool(a[1] >> 16),
                 "name": ascii_of(a[2], a[3], a[4]),
             }
+    elif name == "STEP_PATCH":
+        f = {
+            "outcome": STEP_OUTCOMES.get(a[0], a[0]),
+            "record_addr": f"{a[1]:08x}" if a[0] == 0 else None,
+            "waited_ms": round(a[2] / 1.5),
+            "passes": a[3],
+            "stores": a[4],
+        }
     elif name == "MOD_DSP":
         f["result"] = sx(a[1])
     elif name == "SAFE":
