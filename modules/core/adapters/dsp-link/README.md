@@ -49,15 +49,30 @@ the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.1
   writes only the stages 4 and 5 (the slot is the voice) and words 15 to 23 are 0 (the dispatch counts and the guard belong to the Digitakt II wrapper; the
   Digitone II wrapper only scans rows of the new size).
   The module step (word 25): `core/dyndsp` exports `_dk_step`, a 32-bit DM word of this module. A module that stores into it has its stores patched by the
-  runtime (`dsp.rs patch_steps`, before the first chunk) to word 25 of one fixed reply record, the record that was the older of the two when the module loaded
+  runtime (`dsp.rs patch_steps`, before the first chunk; it waits up to 30 s of block time for the addresses) to word 25 of one fixed reply record, the record that was the older of the two when the module loaded
   (the addresses are words 29 and 30). The two reply records alternate, one per block, so that record is sent every second block: **[D]** in the emulator (DN2,
   `digikit/probe`) the stores of every second block are delivered and the others are not (the core clears word 25 of both records before each call, and the
   other record never gets a store). A module that needs every word gives each value on two consecutive blocks and keeps only the replies whose word 29 is the
   address of the record that receives the stores (learned from the first value that is not 0); that is 750 values a second. The core clears word 25 in both
   records before each call. The point of the record store is that a step stored just before the DSP stops is still in the record. Finding 77 has the design.
-  **[O]** The static word, which the block tail should copy into word 25 of the current record (`src/dsp/dsp-link.inc`, about lines 376 to 381) when the stores
-  are not patched, did not deliver word 25 on the DN2: with `patch_steps` switched off in a test build the effect ran (its call counts rose) and word 25
-  stayed 0 in every record. The cause is not known.
+  The static word (`_dk_step`, used when `patch_steps` does not patch the stores) is copied by the block tail into word 25 of the current record when it is not 0
+  (`src/dsp/dsp-link.inc`, about lines 376 to 381), and then cleared. **[O]** It did not deliver word 25 on the DN2 in the emulator (with `patch_steps` switched off the
+  effect ran, its call counts rose, and word 25 stayed 0 in every record), and on a Digitakt II (1.17) word 25 was 0 in every record while the effect ran (2026-10-31; whether the stores were patched there was not logged). The cause is not known.
+  What the firmware and the code say about the order of events in one block **[D]** (read in the images, not run):
+  - The block handler function calls the frame orchestrator and then the function that ends in the link's tail hook, so the effect hooks run before the tail in
+    the same block. DT2 1.17: the handler `0x1c75d8` calls the orchestrator `0x1c2b24` at `0x1c771e` and the function `0x1c74cd` (hook site `0x1c75c1`) at
+    `0x1c7756`; the orchestrator calls the master hook site `0x1c80f2` at `0x1c311f` and the send hook site `0x1c207b` at `0x1c3099`. DN2 1.12: handler
+    `0x1c9e76`, orchestrator `0x1c2712` at `0x1c9fbc`, tail function `0x1c9d6b` at `0x1c9ff4`; effect sites `0x1c244d` (call `0x1c307b`) and `0x1c1f1e` (call
+    `0x1c305d`).
+  - `_fx_mark` stage 4 clears word 25 in both records through `_fx_rec`, which holds this block's record and the one before as the tail left them in the
+    previous block. So in block B the clear comes before the module call and before the tail copy; the clear does not remove a static step stored in the same block.
+    The order does not explain the missing word.
+  - Words 24 and 26 to 28 reach the host through the same tail code, so the tail does run and `I2` addresses the right record.
+  **[O]** Still open, and not tested: whether the module's stores reach the word that the tail reads (the relocation of the `_dk_step` import: `dyndsp-<dev>.s` exports the
+  address, the runtime finds the places in `patch_steps`/`dsp_symbol`), whether the module runs before the tail in a block with a send-route call, and whether
+  the tail's `DM(_dk_step)` read sees a cached value. A trace of the word in one block in the emulator, with `patch_steps` off, would settle it.
+  Every module DSP load logs one `STEP_PATCH` event: outcome patched (with the record address) or static (the reason), so the patch outcome of a
+  device is in its log.
 - Per-block callback: `dl_set_tick_cb(cb)` (a runtime import for modules, `requires core/dsp-link`; a no-op stub when the module is absent) sets one
   function, `void cb(const volatile u16 *rec)`, that `dl_tick` calls every block in the block interrupt, before the transfer code, with the copy of the
   previous reply record (diagnostic word j: see `dl_diag`). NULL is off and costs one pointer test per block. The callback must be a short C function with
