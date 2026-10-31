@@ -514,6 +514,16 @@ impl Mem {
         self.pages[(a >> PAGE_BITS) as usize].as_deref()
     }
 
+    /// The LEN bytes at A as one slice, when they lie in one existing page
+    /// (diagnostics that compare a record with a snapshot).
+    pub fn bytes_in_page(&self, a: u32, len: usize) -> Option<&[u8]> {
+        let off = (a as usize) & (PAGE_SIZE - 1);
+        if off + len > PAGE_SIZE {
+            return None;
+        }
+        self.page(a).map(|p| &p.data[off..off + len])
+    }
+
     #[inline(always)]
     pub fn present(&self, a: u32) -> bool {
         match self.page(a) {
