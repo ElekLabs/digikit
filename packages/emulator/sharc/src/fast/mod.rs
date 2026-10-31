@@ -458,6 +458,11 @@ struct Slot {
     tl_why: &'static str,
     /// Selected by `Auto` (dropped again on refusal or low yield).
     auto: bool,
+    /// Made an entry because the instruction before it cannot run in a kernel
+    /// (`FastEngine::chase`). Dropped when its calls retire few instructions
+    /// (`CHASE_MIN_INSNS`): a call that retires one or two costs more than
+    /// interpreting them.
+    chased: bool,
     calls: u64,
     insns: u64,
     cov: SlotCov,
@@ -482,6 +487,10 @@ const BLOOM_WORDS: usize = 1024;
 const MAX_VARIANTS: usize = 4;
 const REBUILD_BUDGET: u32 = 16;
 const WIN_BACKOFF_MAX: u8 = 8;
+/// A chased entry is dropped after `CHASE_TRIAL` calls that retired fewer than
+/// `CHASE_MIN_INSNS` instructions each on average.
+const CHASE_TRIAL: u64 = 64;
+const CHASE_MIN_INSNS: u64 = 3;
 /// Window declines of one entry before it is rebuilt with flat accesses.
 const WIN_FLAT_AFTER: u32 = 3;
 /// After the build budget is spent, the alternatives are no longer tried
@@ -527,7 +536,13 @@ pub struct FastEngine {
     /// code after it runs from a region again once the interpreter has run
     /// the stop instruction. Never dropped as unprofitable.
     follow: bool,
+    /// An entry that is refused at its first instruction, which then runs in
+    /// the interpreter, makes the next instruction an entry (on by default;
+    /// `SHARC_FAST_CHASE=0` turns it off).
+    chase: bool,
     follow_queue: Vec<u32>,
+    /// Entries to add as chased (`chase`).
+    chase_queue: Vec<u32>,
     /// `SHARC_FAST_ONLY=pc,pc,..|@file`: only these PCs may become entries
     /// at run time (`arm`, `add_entry`); `tools/sharc_dev/fast_ddmin.py` shrinks a set
     /// of regions that reproduces a divergence with it.
@@ -652,7 +667,9 @@ impl FastEngine {
             },
             summary: std::env::var_os("SHARC_FAST_LOG").is_some(),
             follow: std::env::var("SHARC_FAST_FOLLOW").is_ok_and(|v| v == "1"),
+            chase: std::env::var("SHARC_FAST_CHASE").map_or(true, |v| v != "0"),
             follow_queue: Vec::new(),
+            chase_queue: Vec::new(),
             win_backoff: std::env::var_os("SHARC_FAST_NOBACKOFF").is_none(),
             only: std::env::var("SHARC_FAST_ONLY").ok().map(|v| {
                 let text = match v.strip_prefix('@') {
@@ -954,7 +971,13 @@ impl FastEngine {
                 }
                 self.stats.refused += 1;
                 *self.stats.reasons.entry(reason_class(&e.0)).or_default() += 1;
+                let chase_to = if self.chase && !slot.auto {
+                    chase_target(s, pc, &e.0)
+                } else {
+                    None
+                };
                 slot.refused = Some(e.0);
+                self.chase_queue.extend(chase_to);
                 None
             }
             Ok(mut r) => {
@@ -998,7 +1021,8 @@ impl FastEngine {
                         if self.cov {
                             cov_built(s, pc, &r);
                         }
-                        if self.follow
+                        let chasing = self.chase && slot.chased;
+                        if (self.follow || chasing)
                             && let Some(c) = &r.cfg
                         {
                             for (at, why) in &c.stops {
@@ -1012,7 +1036,11 @@ impl FastEngine {
                                     continue;
                                 }
                                 if let Ok(d) = region::decode_one(s, *at) {
-                                    self.follow_queue.push(*at + d.len_sw);
+                                    if self.follow {
+                                        self.follow_queue.push(*at + d.len_sw);
+                                    } else {
+                                        self.chase_queue.push(*at + d.len_sw);
+                                    }
                                 }
                             }
                         }
@@ -1195,6 +1223,23 @@ impl FastEngine {
         self.bloom[w] |= m;
     }
 
+    fn drain_chase(&mut self) {
+        while let Some(next) = self.chase_queue.pop() {
+            self.add_chased(next);
+        }
+    }
+
+    /// Make PC an entry after a refused instruction (see `chase`).
+    fn add_chased(&mut self, pc: u32) {
+        if self.index(pc).is_some() {
+            return;
+        }
+        self.add_entry(pc);
+        if let Some(ix) = self.index(pc) {
+            self.slots[ix].chased = true;
+        }
+    }
+
     /// A counter reached the threshold: make the PC an entry.
     fn arm(&mut self, pc: u32) {
         if self.index(pc).is_some() || self.only.as_ref().is_some_and(|o| !o.contains(&pc)) {
@@ -1221,6 +1266,22 @@ impl FastEngine {
         let (w, m) = Self::bit(pc);
         self.bloom[w] |= m;
     }
+}
+
+/// The instruction after the refused entry PC, when the interpreter will run
+/// PC and then reach that address in sequence: the refusal is "the entry
+/// instruction cannot run here" and the instruction is neither a branch, a
+/// call, a return, a loop setup nor a delay slot (`cfg` builds those stops as
+/// their own kinds, and the instruction after them is not the next PC).
+fn chase_target(s: &St, pc: u32, why: &str) -> Option<u32> {
+    let why = why.strip_prefix("the entry instruction cannot run here: ")?;
+    if why.starts_with("delay slot") {
+        return None;
+    }
+    let d = region::decode_one(s, pc).ok()?;
+    let digits = d.form.len() - d.form.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    let control = matches!(&d.form[..digits], "8" | "9" | "10" | "11" | "12" | "13" | "25");
+    (!control).then(|| pc + d.len_sw)
 }
 
 impl Drop for FastEngine {
@@ -1289,6 +1350,7 @@ impl FastEngine {
         while let Some(next) = self.follow_queue.pop() {
             self.add_entry(next);
         }
+        self.drain_chase();
         let ix = self.index(pc)?;
         if chained {
             // Only a built, current region of the CFG shape; nothing is
@@ -1326,7 +1388,9 @@ impl FastEngine {
                 self.drop_slot(pc);
                 return None;
             }
-            if self.build(s, pc).is_none() {
+            let built = self.build(s, pc);
+            self.drain_chase();
+            if built.is_none() {
                 if self.slots[ix].auto && self.slots[ix].refused.is_some() {
                     let gen_ = s.mem.dec_gen;
                     if let Some(a) = &mut self.auto {
@@ -1633,6 +1697,13 @@ impl FastEngine {
             self.slots[ix].alts.clear();
             self.slots[ix].dyn_exits = 0;
             self.stats.dyn_flat += 1;
+        }
+        let sl = &mut self.slots[ix];
+        if sl.chased && sl.calls == CHASE_TRIAL && sl.insns < CHASE_MIN_INSNS * CHASE_TRIAL {
+            // Too little work per call to pay the fixed call cost.
+            sl.region = None;
+            sl.kernel = None;
+            sl.refused = Some("chased entry retires few instructions".into());
         }
         if drop_after {
             self.drop_slot(pc);
