@@ -26,6 +26,8 @@ export interface FollowSession {
   logConfig(quick?: boolean): Promise<LogConfig>;
   /** LOGCFG set (the Level menu of the Log drawer). */
   setLogConfig(level: number, modules: number[], quick?: boolean): Promise<LogConfig>;
+  /** LOGCFG op 2 (the Debug toggle of the Log drawer). */
+  setDebug(on: boolean, quick?: boolean): Promise<LogConfig>;
   /** The loaded modules; `index` is the module record index. */
   modules(): Promise<{ index: number; name: string }[]>;
   /** The fault record the runtime keeps on the card (`dk/fault`), or null. */

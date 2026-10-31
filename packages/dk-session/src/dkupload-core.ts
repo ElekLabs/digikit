@@ -901,7 +901,7 @@ export class DkSession {
   }
   /**
    * LOGCFG (set): the default level (0 to 4) and the level of each of the 8 module records (0 to 4, or 0xff for the default). The levels are
-   * in RAM only and start again at each boot. The reply is the state after the set. Debug logging has no host command: it is read only.
+   * in RAM only and start again at each boot. The reply is the state after the set. Debug logging has its own command, `setDebug`.
    */
   async setLogConfig(level: number, modules: number[], quick = false): Promise<LogConfig> {
     const bad = (v: number, allowDefault: boolean) =>
@@ -912,6 +912,13 @@ export class DkSession {
         kind: 'request',
       });
     return parseLogConfig(await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(1, level, ...modules), quick));
+  }
+  /**
+   * LOGCFG op 2: switch debug logging on or off. The runtime saves it in the selection record like the DEBUG row of its menu does, and logs a DEBUG_SET event.
+   * The reply is the state after the set. A runtime from before the op answers E_PROTO; a read-only card answers E_CARD_RO (the switch is then in RAM only).
+   */
+  async setDebug(on: boolean, quick = false): Promise<LogConfig> {
+    return parseLogConfig(await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(2, on ? 1 : 0), quick));
   }
   /** Every event of the log. */
   async readLog(quick = false): Promise<DkLogEvent[]> {

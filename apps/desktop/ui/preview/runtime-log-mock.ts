@@ -199,6 +199,11 @@ function session(script: Script): FollowSession {
       script.debug = { ...script.debug, level, modules };
       return script.debug;
     },
+    async setDebug(on) {
+      await gate();
+      script.debug = { ...script.debug, debug: on };
+      return script.debug;
+    },
     async modules() {
       await gate();
       return script.modules ?? [];
