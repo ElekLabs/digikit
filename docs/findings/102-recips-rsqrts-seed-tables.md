@@ -26,7 +26,7 @@ The model reproduces 6694 of 6694 items: the result word, ASTAT bits 0-13 and ST
 - +infinity gives +zero (AZ). +-zero gives +-infinity (AV, and AN for -zero). NaN and every negative nonzero input (including -infinity) give `0xFFFFFFFF` (AI).
 - AF is set on every item; AC and AS are cleared.
 
-**Sticky bits.** STKY bits 0 (AUS), 1 (AVS) and 5 (AIS) latch: AVS with AV, AIS with AI. AUS latches only when a finite `RECIPS` input underflows (exponent above +125); not for +infinity and not for the +zero result of `RSQRTS`. **[D]** The other float ALU operations do not latch their sticky bits in the core yet (the multiplier's do).
+**Sticky bits.** STKY bits 0 (AUS), 1 (AVS) and 5 (AIS) latch: AVS with AV, AIS with AI. AUS latches only when a finite `RECIPS` input underflows (exponent above +125); not for +infinity and not for the +zero result of `RSQRTS`. **[D]** The other float ALU operations latch AVS, AIS and (add, subtract, FIX) AUS the same way, and the fixed-point adder operations latch AOS (finding 103).
 
 STKY bits 24 and 26 (`0x05000000`) are set on every item. They are not an effect of the instruction: bit 24 is SSEM (status stack empty) and bit 26 is LSEM (loop stack empty) (PRM, status stack and loop resources). The check masks STKY to bits 0-9 and ASTAT to bits 0-13.
 
@@ -73,7 +73,6 @@ No pin was updated. **[O]** Em decides about the four pins:
 
 - DN2: the fixture was measured on a Digitakt II only. The DN2 core is assumed identical (same SHARC+ core, same MODE1 setting by the fx adapter); the emulator check runs the DT2 rows on the DN2 emulator. **[O]** Not measured on a Digitone II.
 - `RECIPS` and `RSQRTS` under other MODE1 settings (TRUNCATE, ALUSAT, RND32 clear) and in 40-bit mode are not measured; the core uses the same result for all. **[O]**
-- Sticky bits of the other float ALU operations. **[O]**
 
 ## 7. The fast tier **[D]**
 
