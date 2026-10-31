@@ -147,7 +147,7 @@ translation reproduces rather than fixes:
   the multiplier).
 - A NaN input, or a NaN the operation makes from ordinary inputs (infinity
   minus infinity), gives the all-ones result `0xFFFFFFFF` with AI set and AN
-  clear (measured on a Digitakt II, docs/findings/103). The multiplier's
+  clear (measured on a Digitakt II, docs/findings/103-dsp-facts-on-a-digitakt-ii.md). The multiplier's
   invalid result is `0x7FFFFFFF` with MI set and MN clear. The core tests
   `_isnan` on the double result, so no host NaN pattern shows.
 - Denormals follow the manuals (docs/findings/15, "Denormal flush"): every
