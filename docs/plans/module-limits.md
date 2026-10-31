@@ -58,6 +58,8 @@ Each with one proof run on DN2, then DT2.
 - [ ] Arena holes after boot: freed DSP code buffers leave holes for the session (finding 100, section 5); they affect only run-time `alloc` in
       modules and the largest free block shown. Fix if needed: allocate those temporary buffers from the top of the arena.
 - [ ] The steps list of a module with DSP code is not in its needs (tens of bytes): add it to `dkneeds`.
-- [ ] Build cache: `patchkit build` called two cached fixture objects (`out/cache/dko/test/dyn-fx-gain*`) unchanged while `--check` rebuilt them
-      with other bytes; the source hash may miss an input (toolchain or SDK header). Reproduce, then fix the hash.
+- [ ] Build cache: `patchkit build` keeps a cached object as "unchanged" when only the Selache revision changed (`toolchain/selache_rev`
+      is not part of the check in `object_unchanged`, packages/patchkit/src/build/mod.rs), while `--check` rebuilds and finds it stale. After
+      a Selache update the gate then fails on old objects in `out/cache` (seen 2026-10-31: freqshift, pluck, sine and 20 others). Fix: include
+      the toolchain revision in the unchanged check. Workaround: `patchkit build --force` on the module.
 - [ ] Rust formatting: `rust_ws fmt` reports about 190 diffs on `main` in files this branch did not touch; the check is red regardless.
