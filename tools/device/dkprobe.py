@@ -332,6 +332,8 @@ def capture(
             and fr.seq_errors == 0
             and fr.bad_checksum == 0
             and tab.table_checksum_ok,
+            # every item is there and the module is the one the host expects; a lost word costs one frame of one run (the sequence repeats)
+            "usable": len(tab.items) == total and tab.table_checksum_ok,
             "capture_seconds": round(elapsed, 1),
         },
         "run_info": {str(k): v for k, v in sorted(tab.run_info.items())},

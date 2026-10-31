@@ -66,6 +66,7 @@ STATE_BYTES = 4 * (L2_STRIDE * (L2_LINES - 1) + 16)
 # 0x10000000 is byte 0x80000000; stock code and sample data lie below 0x80a00000 on a DT2, the DN2 uses less)
 L1_ADDR = 0x2E0000
 DDR_ADDR = 0x10000000 + (0x80700000 - 0x80000000) // 4
+ASTAT_MASK = 0x3FFF
 MODE1_ALUSAT = 13
 MODE1_IRPTEN = 12
 
@@ -810,15 +811,19 @@ def _emit_val(f: Fact) -> list[str]:
 
 
 def _emit_reg(f: Fact) -> list[str]:
-    return [
+    """Two reads of the register. The cache registers (SHL1C, 0x3e000 to 0x3e0ff) get what the manual asks of any access to them: 48-bit instructions, and twelve
+    unrelated 48-bit instructions after it (sc58x-2158x-prm p. 8-9)."""
+    core = [
         "R14 = EMUCLK;",
         *f.body,
         "R15 = EMUCLK;",
         "R1 = R0;",
         *f.body,
         "R13 = R15 - R14;",
-        *_store3("R1", "R0", "R13"),
     ]
+    if f.op.startswith("mmr_shl1c_"):
+        core = [".NOCOMPRESS;", *core, *_nops(12), ".COMPRESS;"]
+    return [*core, *_store3("R1", "R0", "R13")]
 
 
 def _emit_record(r: int, facts_: list[Fact]) -> list[str]:
@@ -930,7 +935,8 @@ def derive(samples: dict[int, list[tuple[int, int, int]]]) -> dict[str, Any]:
             row["cycles_max"] = max(w[2] for w in s)
             row["cycles_median"] = int(statistics.median(w[0] for w in s))
         elif s and f.kind == VAL:
-            vals = sorted({(w[0], w[1], w[2]) for w in s})
+            # the item clears ASTAT bits 0 to 13 only: the bits above are the firmware's own state at that moment, so they are left out
+            vals = sorted({(w[0], w[1] & ASTAT_MASK, w[2]) for w in s})
             row["result"] = f"{vals[0][0]:#010x}"
             row["astat"] = f"{vals[0][1]:#010x}"
             row["stky"] = f"{vals[0][2]:#010x}"
@@ -979,7 +985,7 @@ def derive(samples: dict[int, list[tuple[int, int, int]]]) -> dict[str, Any]:
             derived["l2_conflict_over_lines"] = round(cf / ln, 2) if ln > 0 else None
     block = [b for b in block if b > 0]
     if block:
-        med = statistics.median(block)
+        med = statistics.median_low(block)
         # a delta far from the median is a block that was skipped or late; the rest gives the jitter
         near = [b for b in block if abs(b - med) <= med * 0.25]
         derived["block_cycles"] = {

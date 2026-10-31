@@ -49,6 +49,14 @@ runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler 
       returns records through its own SysEx range (reserved in `sdk/sdk.toml`). About 750-1500 words a second.
 - [ ] On the device: identity (firmware, runtime hash, loaded modules, a screenshot, one remote-control roundtrip), then the seed tables and
       DSP cycles per block from the health adapter (real headroom).
+- [x] One command for a capture (2026-10-31): `mise run dk:probe -- --port NAME --modules test/dsp-facts --capture OUT.json [--compare REF.json] [--keep]` (`tools/device/dkprobe_run.py`)
+      packs the probe modules with `digikit/remote` and `digikit/probe`, uploads what changed, selects, restarts, checks MOD_LOAD, MOD_DSP and the log for faults, captures,
+      compares and selects the previous modules again. `--spawn dt2|dn2` does the same on a private emulator daemon.
+- [x] `test/dsp-facts` (`tests/fixtures/modules/dsp-facts`, items in `tools/device/dkprobe_facts.py`): cycle counts with EMUCLK (NOP, ALU, MAC, loops, branches,
+      RECIPS and RSQRTS with Newton steps, L2, L1 and DDR loads, an L2 cache-conflict pair), FIX, float and fixed-point edge cases with ALUSAT clear and set (AI, AV, denormals),
+      core and cache registers (SHL1C configuration and the eight range registers, revision, interrupt masks) and the cycle counter at consecutive calls. A run is 143 items,
+      0.35 s, so one capture holds about 47 runs. Proven in the emulator on DT2 and DN2; the device run is open.
+- [ ] Device run of `test/dsp-facts` (the command is in `tests/fixtures/modules/dsp-facts/README.md`), then: fix the emulator where the values differ, record the results in `docs/findings/`.
 
 ## Phase 2: emulator fixes
 

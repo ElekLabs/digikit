@@ -198,7 +198,7 @@ def test_a_module_that_did_not_load_is_named_and_the_selection_comes_back(
 
 def test_a_capture_that_is_not_complete_is_an_error(tmp_path, monkeypatch):
     dev = FakeDevice({}, [], stream(300, CAP)[: CAP // 2] + [0] * (CAP // 2))
-    with pytest.raises(PR.ProbeRunError, match="not complete"):
+    with pytest.raises(PR.ProbeRunError, match="misses"):
         _run(tmp_path, monkeypatch, dev)
 
 
@@ -238,3 +238,46 @@ def test_the_selection_is_remote_modules_collector_without_repeats():
         "modules/dsp-facts.dkm",
         "modules/probe.dkm",
     ]
+
+
+def facts_stream(first: int, nwords: int) -> list[int]:
+    """The words of the dsp-facts stream from frame `first` on: record 0 and 1, then item i = (i, i + 1002, i + 2), then padding."""
+    n = len(F.items())
+    ws: list[int] = []
+    g = first
+    while len(ws) < nwords:
+        run, pos = g // F.frames_per_run() + 1, g % F.frames_per_run()
+        pl: list[int] = []
+        for k in range(F.RECORDS_PER_FRAME):
+            r = pos * F.RECORDS_PER_FRAME + k
+            if r == 0:
+                pl += [run, n, F.table_checksum()]
+            elif r == 1:
+                pl += [0x12345, 0x75000000, 0]
+            elif r < 2 + n:
+                pl += [r - 2, r + 1000, r]
+            else:
+                pl += [F.PAD] * 3
+        hdr = F.header_word(g)
+        ws += [hdr, *pl, F.fletcher([hdr, *pl])]
+        g += 1
+    return ws[:nwords]
+
+
+def test_a_lost_word_is_a_warning_when_other_runs_hold_the_items(tmp_path, monkeypatch):
+    ring = facts_stream(0, CAP)
+    del ring[
+        1000
+    ]  # one word lost: one frame of one run is spoiled, the other runs hold its items
+    ring += [0]
+    _, lines, out = _run(
+        tmp_path,
+        monkeypatch,
+        FakeDevice({}, [], ring),
+        modules=("test/dsp-facts",),
+    )
+    h = out["doc"]["host"]
+    assert h["usable"] and not h["complete"] and h["runs"]
+    assert any("WARNING framing errors" in x for x in lines)
+    row = out["doc"]["facts"]["items"][10]
+    assert row["op"] == "empty" or row["runs"] > 1

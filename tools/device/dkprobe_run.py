@@ -14,7 +14,7 @@ The selection is read back from the loaded modules (the device has no command fo
 `modules/<last part of its name>.dkm`, which is how every `dk run` and this tool store them. A module that is not in the store any more cannot be
 restored; the tool says so. The sequence (`--seq sharc|facts`) follows the probe module by default.
 
-The exit status is 0 when the capture is complete and the device shows no fault; a comparison that finds differences prints them and does not change it.
+The exit status is 0 when every item was captured (`usable`: a lost word spoils one frame of one run and is only a warning) and the device shows no fault; a comparison that finds differences prints them and does not change it.
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ def summary_line(doc: dict[str, Any]) -> str:
     return (
         f"{h['items_present']}/{doc['sequence']['items']} items, {h['frames']} frames, seq errors {h['seq_errors']}, "
         f"checksum errors {h['checksum_errors']}, runs {len(h['runs'])}, drops {doc['collector']['drops']}, "
-        f"complete {h['complete']} ({h['capture_seconds']} s)"
+        f"complete {h['complete']}, usable {h['usable']} ({h['capture_seconds']} s)"
     )
 
 
@@ -210,8 +210,14 @@ def run(
         if faults:
             raise ProbeRunError("fault during the capture: " + "; ".join(faults))
         log("no fault during the capture")
+        if not doc["host"]["usable"]:
+            raise ProbeRunError(
+                f"the capture misses {doc['host']['items_missing']} items or the table checksum is wrong"
+            )
         if not doc["host"]["complete"]:
-            raise ProbeRunError("the capture is not complete")
+            log(
+                "WARNING framing errors in the capture (a word was lost): the items are all there from other runs"
+            )
         if compare_path is not None:
             ref = json.loads(compare_path.read_text())
             out["compare"] = P.compare(doc, ref)
@@ -315,4 +321,4 @@ def main(args: Any) -> int:
     finally:
         if args.spawn and emu is not None:
             emu.__exit__(None, None, None)
-    return 0 if res["doc"]["host"]["complete"] else 1
+    return 0 if res["doc"]["host"]["usable"] else 1
