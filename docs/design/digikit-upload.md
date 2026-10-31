@@ -111,7 +111,7 @@ The runtime keeps its commands in a table (command number, flags, handler: one l
 flag marks a read-only command whose reply is not logged). A run-time module can add commands of its own with `Api.register_cmds(first, count, handler)`
 (api 1.2, `docs/design/module-sdk.md`). Only numbers in a range that `sdk/sdk.toml` `[protocol.ranges]` reserves can be registered; today `remote = [0x38, 0x3d]`
 (the panel's key, turn and release commands of `digikit/remote`) and `remote_state = [0x3e, 0x3f]` (its state). A request number is 6 bits (bit 6 of the command byte marks a reply), so ranges lie in 0x01 to 0x3f.
-A range that is empty, outside a reserved range or over a registered one is refused with `E_CMD_RANGE`; at most four ranges are registered; the module's ranges are released
+A range that is empty, outside a reserved range or over a registered one is refused with `E_CMD_RANGE`; at most eight ranges are registered (a module should register one range per command group, with one handler that dispatches on the command number); the module's ranges are released
 when it is taken down (`fini`). INFO's `caps` bit 9 (`CAP_SERVICE_CMDS`) says the runtime has them.
 
 A service module is on exactly when it is loaded: the check mark of DIGIKIT > MODULES is the only switch, and no range is guarded (there is no REMOTE switch). A module with settings

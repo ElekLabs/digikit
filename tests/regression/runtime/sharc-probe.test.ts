@@ -1,11 +1,17 @@
 import fs from 'node:fs';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { moduleArtifact, runtimeTests, settleLive } from './live.ts';
 
-/** The probe transport: the SHARC probe effect sends one framed word per block through the module step word, and the ColdFire collector keeps it. */
+/** The probe transport (with remote also selected): the SHARC probe effect sends one framed word per block through the module step word, and the ColdFire collector keeps it. */
 const PROBE = 'test/sharc-probe';
 const COLLECTOR = 'digikit/probe';
+/** Selected too: it takes service command slots (the collector got E_PROTO on a device when remote used all of them). */
+const REMOTE = 'digikit/remote';
+/** `STEP_PATCH` outcomes (sdk.toml log kinds). */
+const STEP_PATCHED = 0;
+const STEP_NONE = 3;
 const CMD_STATUS = 0x32;
 const CMD_RESET = 0x34;
 /** A run is 1674 frames and takes about 33 s of emulated time; the test checks this many frames from the start of the capture, not a whole run. */
@@ -34,7 +40,7 @@ function status(body: Uint8Array): Record<string, number> {
 async function expectProbeTransport({ session, dk }: PatchedSession): Promise<void> {
   await settleLive(session);
   const paths: string[] = [];
-  for (const id of [PROBE, COLLECTOR]) {
+  for (const id of [REMOTE, PROBE, COLLECTOR]) {
     const bytes = fs.readFileSync(moduleArtifact(session.options.device, id));
     const path = `modules/${id.split('/').at(-1)}.dkm`;
     await dk.put(path, bytes);
@@ -46,7 +52,15 @@ async function expectProbeTransport({ session, dk }: PatchedSession): Promise<vo
   await dk.waitForBoot();
   await expect
     .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
-    .toEqual(expect.arrayContaining([PROBE, COLLECTOR]));
+    .toEqual(expect.arrayContaining([REMOTE, PROBE, COLLECTOR]));
+
+  // the effect's step stores went to the DSP's reply record, not to the static word that the effect core clears
+  const patches = (await dk.readLog()).filter((e) => e.kind === LOG_KIND.STEP_PATCH);
+  expect(
+    patches.map((e) => e.args[0]),
+    `STEP_PATCH outcomes: ${JSON.stringify(patches)}`,
+  ).toEqual(expect.arrayContaining([STEP_PATCHED]));
+  expect(patches.every((e) => e.args[0] === STEP_PATCHED || e.args[0] === STEP_NONE), 'no static fallback').toBe(true);
 
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   // the effect starts a few thousand blocks after the boot; the collector then fills its ring

@@ -1431,7 +1431,8 @@ fn logged(cmd: u8, status: i32) -> bool {
 
 // ---- commands that modules register (Api::register_cmds) ------------------------------------------------------------------
 
-const SVC_MAX: usize = 4;
+/// Registered ranges at most (a module takes one per command group: digikit/remote 2, digikit/probe 1).
+const SVC_MAX: usize = 8;
 
 #[derive(Clone, Copy)]
 struct Svc {

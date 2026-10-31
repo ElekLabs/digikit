@@ -225,10 +225,17 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
 
 int32_t dkm_init(const dk_api *api)
 {
+    int r;
     pr.ring = (u32 *)api->alloc(RING_WORDS * 4u);
     if (!pr.ring)
         return -1;
-    api->register_cmds(CMD_FIRST, CMD_COUNT, cmd);
+    r = api->register_cmds(CMD_FIRST, CMD_COUNT, cmd);
+    if (r != 0) {
+        api->log((const u8 *)"probe: register_cmds refused", (u32)r);
+        api->free((u8 *)pr.ring);
+        pr.ring = 0;
+        return -1;
+    }
     dl_set_tick_cb((uint8_t *)tick);
     api->log((const u8 *)"probe ready", RING_WORDS);
     return 0;
