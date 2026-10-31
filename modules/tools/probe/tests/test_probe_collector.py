@@ -103,7 +103,7 @@ def run(exe, lines):
 
 def status(reply: str) -> dict:
     raw = bytes.fromhex(reply.split()[2])
-    f = struct.unpack(">17I", raw)
+    f = struct.unpack(">16I", raw)
     keys = [
         "format",
         "blocks",
@@ -121,7 +121,6 @@ def status(reply: str) -> dict:
         "last_seq",
         "last_beat",
         "synced",
-        "addr",
     ]
     return dict(zip(keys, f, strict=True))
 
@@ -139,33 +138,21 @@ def frame(seq, payload):
     return [hdr, *payload, fletcher([hdr, *payload])]
 
 
-GOOD, OTHER = 0x2C49D0, 0x2C59D0
-
-
 def feed(words, *, beat0=100):
-    """What the callback sees when a module stores each word on two blocks in a row: the record at GOOD carries it, the next one (OTHER) reads 0. A module call
+    """What the callback sees when a module stores one word on every block: every record carries it, the heartbeat steps by 1, and a module call
     counts in every block."""
-    out, beat, calls = [], beat0, 0
-    for w in words:
-        calls += 1
-        out.append(f"rec {beat} {calls} 0 {w} {GOOD}")
-        calls += 1
-        out.append(f"rec {beat + 1} {calls} 0 0 {OTHER}")
-        beat += 2
-    return out
+    return [f"rec {beat0 + i} {i + 1} 0 {w} 7" for i, w in enumerate(words)]
 
 
 def test_records_that_carry_a_word_and_the_counters(harness):
     lines = [
-        "rec 10 0 0 0 7",  # no address learned and the word is 0: nothing
-        "rec 11 1 0 111 9",  # the first word that is not 0 gives the address; as the first record it only sets the baseline
-        "rec 12 2 0 0 7",  # the other record: ignored
-        "rec 13 3 0 222 9",  # two beats later, a new call: word 222
-        "rec 15 4 0 333 9",
-        "rec 15 4 0 333 9",  # the same record again: a repeat
-        "rec 17 4 0 555 9",  # new but no new call: idle
-        "rec 21 5 0 666 9",  # a jump of 4: one record missed
-        "rec 23 5 1 777 9",  # the send route's counter also counts
+        "rec 11 1 0 111 9",  # the first record only sets the baseline
+        "rec 12 2 0 222 9",  # one beat later, a new call: word 222
+        "rec 13 3 0 333 9",
+        "rec 13 3 0 333 9",  # the same record again: a repeat
+        "rec 14 3 0 555 9",  # new but no new call: idle
+        "rec 18 4 0 666 9",  # a jump of 4: three records missed
+        "rec 19 4 1 777 9",  # the send route's counter also counts
         "cmd 50",
         "cmd 51 0000000000" + "05",
     ]
@@ -179,8 +166,7 @@ def test_records_that_carry_a_word_and_the_counters(harness):
         s["repeats"],
         s["idle"],
         s["words"],
-        s["addr"],
-    ) == (9, 5, 1, 1, 1, 4, 9)
+    ) == (7, 5, 3, 1, 1, 4)
     raw = bytes.fromhex(out[3].split()[2])
     assert struct.unpack(">2I", raw[:8]) == (4, 0)
     assert struct.unpack(">4I", raw[8:]) == (222, 333, 666, 777)

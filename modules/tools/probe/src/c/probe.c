@@ -1,17 +1,15 @@
 /* digikit/probe: collects the words of a DSP probe module (docs/plans/debug-mode-and-probes.md, phase 1).
  *
- * The DSP module stores one word per block in the module step word, which is diagnostic word 25 of the DSP reply record. dkm_init sets the
- * per-block callback of core/dsp-link; the callback runs in the block interrupt (1500 Hz) with the copy of the previous reply, and keeps word 25 in a
- * ring when the module ran in that record. The ring takes words until it is full (the rest count as overruns); RESET empties it. The words are framed by the
+ * The DSP module stores one word per block in the module step word; the block tail of core/dsp-link copies it into diagnostic word 25 of that block's reply
+ * record. dkm_init sets the per-block callback of core/dsp-link; the callback runs in the block interrupt (1500 Hz) with the copy of the previous reply, and keeps
+ * word 25 in a ring when the module ran in that record. The ring takes words until it is full (the rest count as overruns); RESET empties it. The words are framed by the
  * module (tools/device/dkprobe_seq.py): header 0xB0 << 24 | n << 16 | sequence, n payload words, checksum s1 ^ s2 (s1 += w; s2 += s1). STATUS checks the frames
  * in the MIDI task, a bounded number of words per request; the callback does no checking.
  *
- * Which blocks give a word: the runtime points the module's step stores at word 25 of ONE reply record, and the records alternate, so only the records with that
- * address (word 29) carry words, every second block; the probe module stores each word on two blocks in a row. The callback learns the address from the first
- * word that is not 0. For those records the heartbeat (word 1) steps by 2 (less: a repeat; more: records missed), and the module call counts (words 26 and 27)
- * say whether a module ran: a record without a new call adds no word.
+ * Every record carries the step word of its block, so every block gives a word (1500 words a second). The heartbeat (word 1) steps by 1 from record to record
+ * (less: a repeat; more: records missed), and the module call counts (words 26 and 27) say whether a module ran: a record without a new call adds no word.
  *
- *   0x32 STATUS  body: none            reply: 17 u32, big endian (format 2; the last is the record address, 0 until learned)
+ *   0x32 STATUS  body: none            reply: 16 u32, big endian (format 3)
  *   0x33 READ    body: u32 first word, u16 count (at most READ_MAX)   reply: u32 words in the ring, u32 first, then the words (big endian)
  *   0x34 RESET   body: none            reply: status 0
  */
@@ -41,7 +39,6 @@ typedef uint8_t u8;
 #define W_STEP 25u
 #define W_CALLS_MASTER 26u
 #define W_CALLS_SEND 27u
-#define W_ADDR 29u
 
 typedef struct Probe {
     u32 *ring;
@@ -53,8 +50,6 @@ typedef struct Probe {
     u32 repeats;  /* the same record again */
     u32 idle;     /* new records with no module call */
     u32 overruns; /* words that did not fit */
-    u32 have_addr; /* `addr` is learned */
-    u32 addr;      /* the reply record that receives the module's stores (word 29 of the records that carry words) */
     u32 have;     /* the next two are valid */
     u32 last_beat;
     u32 last_calls;
@@ -83,14 +78,6 @@ static void tick(const volatile u16 *rec)
     if (!rec)
         return;
     pr.blocks++;
-    if (!pr.have_addr || diag(rec, W_ADDR) != pr.addr) {
-        /* the runtime points a module's step stores at one reply record; the other one never carries a word. Learn the address from the first word that is not 0. */
-        if (pr.have_addr || diag(rec, W_STEP) == 0u)
-            return;
-        pr.have_addr = 1;
-        pr.addr = diag(rec, W_ADDR);
-        pr.have = 0;
-    }
     beat = diag(rec, W_BEAT);
     calls = diag(rec, W_CALLS_MASTER) + diag(rec, W_CALLS_SEND);
     if (!pr.have) {
@@ -99,13 +86,13 @@ static void tick(const volatile u16 *rec)
         pr.last_calls = calls;
         return;
     }
-    gap = beat - pr.last_beat; /* 2 between the records of one address */
-    if (gap < 2u) {
+    gap = beat - pr.last_beat; /* 1 between consecutive records */
+    if (gap < 1u) {
         pr.repeats++;
         return;
     }
-    if (gap > 2u)
-        pr.drops += (gap - 1u) / 2u;
+    if (gap > 1u)
+        pr.drops += gap - 1u;
     pr.last_beat = beat;
     pr.records++;
     if (calls == pr.last_calls) {
@@ -175,7 +162,7 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
     (void)seq;
     if (c == CMD_STATUS) {
         check_frames();
-        put32(out + 0, 2u); /* format */
+        put32(out + 0, 3u); /* format */
         put32(out + 4, pr.blocks);
         put32(out + 8, pr.records);
         put32(out + 12, pr.drops);
@@ -191,8 +178,7 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
         put32(out + 52, pr.have_seq ? pr.last_seq : 0xffffffffu);
         put32(out + 56, pr.last_beat);
         put32(out + 60, pr.synced);
-        put32(out + 64, pr.have_addr ? pr.addr : 0u);
-        return 68;
+        return 64;
     }
     if (c == CMD_READ) {
         u32 first, count, n = pr.n;
@@ -215,7 +201,7 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
     if (c == CMD_RESET) {
         pr.n = 0;
         pr.blocks = pr.records = pr.drops = pr.repeats = pr.idle = pr.overruns = 0;
-        pr.have = pr.have_addr = 0;
+        pr.have = 0;
         pr.parsed = pr.synced = pr.have_seq = pr.last_seq = 0;
         pr.frames_ok = pr.seq_errors = pr.cks_errors = 0;
         return 0;

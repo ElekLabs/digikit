@@ -6,7 +6,7 @@
     uv run python -m tools.device.dkprobe compare DEVICE.json EMULATOR.json
 
 The DSP probe module and the collector must be loaded already (upload, select, restart: `dk:run`, `dk:store`). `capture` resets the collector's ring, waits until it is
-full (about one run and a margin: 24,576 words, about 33 s at 750 words a second on a device; the emulator is stepped), polls STATUS until the collector has
+full (about one run and a margin: 24,576 words, about 16 s at 1500 words a second, one per block, on a device; the emulator is stepped), polls STATUS until the collector has
 checked every word, reads the ring, rebuilds the frames on the host (header, size, checksum, frame number) and writes one JSON table: the identity of the
 device (INFO, MODULES, hashes of the module files in the store), the collector's counters, the host's own counters, and one entry per item of the sequence
 (`tools/device/dkprobe_seq.py`) with the input, the result bits, ASTAT after and STKY after. An item is complete when some run in the capture holds it; items
@@ -50,7 +50,6 @@ STATUS_KEYS = (
     "last_seq",
     "last_beat",
     "synced",
-    "addr",
 )
 FORMAT = 1
 
@@ -60,7 +59,7 @@ class ProbeError(RuntimeError):
 
 
 def parse_status(body: bytes) -> dict[str, int]:
-    """STATUS reply (format 2: 17 big-endian u32)."""
+    """STATUS reply (format 3: 16 big-endian u32)."""
     n = len(STATUS_KEYS)
     if len(body) < 4 * n:
         raise ProbeError(f"STATUS reply of {len(body)} bytes, expected {4 * n}")

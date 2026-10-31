@@ -195,4 +195,4 @@ def test_status_needs_the_whole_reply():
 
     with pytest.raises(P.ProbeError):
         P.parse_status(bytes(10))
-    assert P.parse_status(struct.pack(">17I", *range(17)))["addr"] == 16
+    assert P.parse_status(struct.pack(">16I", *range(16)))["synced"] == 15

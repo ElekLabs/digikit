@@ -1,9 +1,8 @@
 // test/sharc-probe: an effect of the FX contract (<dk/fx.h>) that measures RECIPS and RSQRTS on the real core and reports through the module step word.
 //
 // The audio passes unchanged (the block is copied). Each block the routine stores ONE 32-bit word in `DM(_dk_step)`, diagnostic word 25 of the DSP reply
-// (`core/dsp-link`), which the ColdFire reads. The runtime points the stores at word 25 of one fixed reply record, and the two records alternate, so only
-// every second block's store is delivered (docs/findings, modules/core/adapters/dsp-link/README.md). Each word is therefore stored on two consecutive blocks:
-// exactly one of the two reaches the ColdFire, so the words arrive once each, at 750 words a second. The words form frames: a header (0xB0, payload word count 12, frame number), 12 payload words (4 records of 3
+// (`core/dsp-link`), which the ColdFire reads: the block tail copies it into that block's record, so every word arrives once, at 1500 words a second
+// (modules/core/adapters/dsp-link/README.md). The words form frames: a header (0xB0, payload word count 12, frame number), 12 payload words (4 records of 3
 // words) and a checksum. The format is in tools/device/dkprobe_seq.py. A frame is built in one block, then its 14 words go out one per block.
 //
 // A run is PR_NRECORDS records: record 0 (run counter, items, checksum of the input table), record 1 (MODE1, ASTAT, STKY as found), one record per item
@@ -28,9 +27,6 @@ _pr_process:                              // R4 = state, R8 = dk_fx_in, R12 = pa
     LCNTR = DK_FX_BLOCK, DO _pr_cp UNTIL LCE;
         R0 = DM(I0, M6);
 _pr_cp: DM(I1, M6) = R0;
-    R0 = DM(_pr_rep);                     // the word goes out twice, see below: the second time is no new word
-    R0 = PASS R0;
-    IF NE JUMP _pr_emit;
     R0 = DM(_pr_left);
     R0 = PASS R0;
     IF NE JUMP _pr_emit;
@@ -153,26 +149,14 @@ _pr_keep:
     STKY = R15;                           // put back what we found
     ASTAT = R14;
 
-_pr_emit:                                 // one word of the frame goes out, on two blocks in a row
-    R0 = DM(_pr_rep);
-    R0 = PASS R0;
-    IF NE JUMP _pr_again;
+_pr_emit:                                 // one word of the frame goes out
     I3 = DM(_pr_bp);
     R2 = DM(I3, M6);
     R0 = I3;
     DM(_pr_bp) = R0;
-    DM(_pr_cur) = R2;
     R0 = DM(_pr_left);
     R0 = R0 - 1;
     DM(_pr_left) = R0;
-    R0 = 1;
-    DM(_pr_rep) = R0;
-    JUMP _pr_out;
-_pr_again:
-    R2 = DM(_pr_cur);
-    R0 = 0;
-    DM(_pr_rep) = R0;
-_pr_out:
     DM(_dk_step) = R2;
     R0 = DK_FX_OK;
     JUMP (M13, I13);
@@ -194,8 +178,6 @@ _pr_out:
 .VAR _pr_rec = 0;
 .VAR _pr_tp = 0;
 .VAR _pr_run = 1;
-.VAR _pr_rep = 0;
-.VAR _pr_cur = 0;
 .VAR _pr_buf = 0;
 .VAR _pr_buf1 = 0;
 .VAR _pr_buf2 = 0;

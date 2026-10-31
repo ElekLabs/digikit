@@ -1,7 +1,7 @@
 # SHARC probe (test)
 
 An effect of the FX contract that measures what the SHARC+ core does for `RECIPS` and `RSQRTS`, and passes the audio unchanged. Each block it
-sends one 32-bit word through the module step word (diagnostic word 25 of the DSP reply, `core/dsp-link`). The words form frames
+sends one 32-bit word through the module step word (diagnostic word 25 of the DSP reply, `core/dsp-link`), 1500 words a second. The words form frames
 (header with a sequence number, 12 payload words, checksum) that carry the result bits and the ALU status and sticky bits of every item of a fixed
 input sequence. The sequence repeats from the start, with a run counter.
 
