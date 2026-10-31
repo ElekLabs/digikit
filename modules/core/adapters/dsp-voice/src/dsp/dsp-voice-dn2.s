@@ -347,7 +347,8 @@ _dv_done:
     JUMP _fw_render_next;
 
 // The core's mark of a module call (the breadcrumb of the Digitakt II wrapper, reduced to the call and the return). In: R6 = stage (4 the module is about to be
-// called, 5 it returned), R7 = the mask for the module step (0 clears it, -1 keeps it); the slot is `_dv_t`, the type `_dv_typ`. Writes stage | slot << 8 |
+// called, 5 it returned), R7 = the mask for the module step (0 clears it, -1 keeps it): the module step is the static word `_dk_step`, whose address is _dv_rec[2]
+// (written by core/dsp-link; 0 without it), and the block tail copies it into the block's record; the slot is `_dv_t`, the type `_dv_typ`. Writes stage | slot << 8 |
 // type << 16 into _dv_diag word 12 (core/dsp-link copies it into its word 14) and at once into both reply records (_dv_rec) with the header word, so that it is
 // there when the DSP stops inside the module (finding 48). Clobbers R1, R3, I1.
 _dv_mark:
@@ -359,14 +360,20 @@ _dv_mark:
     R1 = R1 OR R6;
     DM(_dv_diag + 48) = R1;
     I1 = _dv_rec;
+    R3 = DM(2, I1);
+    R3 = PASS R3;
+    IF EQ JUMP _dv_mk0;
+    I1 = R3;
+    R3 = DM(0, I1);
+    R3 = R3 AND R7;
+    DM(0, I1) = R3;
+    I1 = _dv_rec;
+_dv_mk0:
     R3 = DM(0, I1);
     R3 = PASS R3;
     IF EQ JUMP _dv_mk1;
     I1 = R3;
     DM(192, I1) = R1;
-    R3 = DM(298, I1);
-    R3 = R3 AND R7;
-    DM(298, I1) = R3;
     R3 = 0x20D1A6;                        // DL_DG_MAGIC | 32 << 16
     DM(45, I1) = R3;
     I1 = _dv_rec;
@@ -376,9 +383,6 @@ _dv_mk1:
     IF EQ RTS;
     I1 = R3;
     DM(192, I1) = R1;
-    R3 = DM(298, I1);
-    R3 = R3 AND R7;
-    DM(298, I1) = R3;
     R3 = 0x20D1A6;
     DM(45, I1) = R3;
     RTS;
@@ -731,8 +735,8 @@ _dv_frame_sw:
 // I6, I7, B7, L7, MODE1 as the firmware left them at slot 0. core/dsp-link copies the block into the record it sends to the
 // ColdFire each block (dl_diag).
 .PKDATA _dv_diag, 128;
-// Word 12 (the breadcrumb) holds only the call and the return stage here (_dv_mark), word 13 (the dispatch count of the Digitakt II wrapper, finding 48) stays 0; _dv_rec is written by core/dsp-link.
-.PKDATA _dv_rec, 8;
+// Word 12 (the breadcrumb) holds only the call and the return stage here (_dv_mark), word 13 (the dispatch count of the Digitakt II wrapper, finding 48) stays 0; _dv_rec is written by core/dsp-link: [0] and [1] the two reply records, [2] the address of the module step word.
+.PKDATA _dv_rec, 12;
 .PKDATA _dv_t, 4;
 .PKDATA _dv_typ, 4;
 .PKDATA _dv_buf, 4;

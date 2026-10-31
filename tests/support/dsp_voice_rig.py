@@ -28,8 +28,11 @@ TYPE_CACHE, FRAME, RECORDS, OUT, TABLE, STATE, STACK, DIAG = (
 )
 SV_L4 = DIAG + 0x100  # the wrapper's data symbols (the build places them in free L2)
 SV3, SV5, BCW, REC_PTRS = DIAG + 0x104, DIAG + 0x108, DIAG + 0x10C, DIAG + 0x110
+STEP_WORD = (
+    DIAG + 0x120
+)  # a stand-in for the module step word `_dk_step` (core/dsp-link's); its address is `_dv_rec[2]`
 MASK = (
-    DIAG + 0x118
+    DIAG + 0x11C
 )  # `_dv_mask`: the registered types, rebuilt by voice 0 from the table
 GUARD = DIAG + 0x200  # the guard's scalars and arrays (_dv_g, 128 bytes)
 # the contract adapter's data (`_dv_in` 16 bytes, `_dv_params` 32, `_dv_blk` 64, `_dv_c` 64): zero, and not used by a row of the old form
@@ -180,7 +183,7 @@ class Rig:
             self.dm[nw(RECORDS) + k] = 0
         self.dm[nw(TABLE)] = TYPE
         self.dm[nw(TABLE) + 1] = self.render_pc
-        for k in range(2):
+        for k in range(3):
             self.dm[nw(REC_PTRS) + k] = (
                 0  # no reply records yet (core/dsp-link has not run): the breadcrumbs stay in _dv_diag
             )
@@ -209,6 +212,7 @@ class Rig:
         """The two reply records core/dsp-link's block tail would have registered."""
         self.dm[nw(REC_PTRS)] = RING_A
         self.dm[nw(REC_PTRS) + 1] = RING_B
+        self.dm[nw(REC_PTRS) + 2] = STEP_WORD
 
     def hw(self, k: int, v: int) -> None:
         word = nw(FRAME) + k // 2

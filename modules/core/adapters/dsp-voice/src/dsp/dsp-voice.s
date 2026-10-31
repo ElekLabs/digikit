@@ -796,7 +796,7 @@ _dv_f3b:
 #else
     CALL _dv_crumb;                       // stage 4: the routine is about to be called (R3, R5, I4 are free here)
 #endif
-    CALL _dv_clrstep;                     // the module step (fault table word 25) is cleared in both reply records
+    CALL _dv_clrstep;                     // the module step word is cleared
     R3 = DM(_dv_g + 0);
     I4 = R3;
     R3 = DM(-8, I4);                      // row word 16: the note_on pc; 0 is a routine of the old form
@@ -1485,22 +1485,16 @@ _dv_cc:
     RTS;
 #endif
 
-// Clears the module step (fault table word 25, dsp-link.inc) in both reply records, before the core calls a module. Clobbers R3, R5, I4 (L4 must be 0).
+// Clears the module step, the static word `_dk_step` (fault table word 25, dsp-link.inc; its address is _dv_rec[2], written by core/dsp-link), before the core
+// calls a module. Clobbers R3, R5, I4 (L4 must be 0).
 _dv_clrstep:
-    R3 = 0;
     I4 = _dv_rec;
-    R5 = DM(0, I4);
-    R5 = PASS R5;
-    IF EQ JUMP _dv_cs1;
-    I4 = R5;
-    DM(298, I4) = R3;
-    I4 = _dv_rec;
-_dv_cs1:
-    R5 = DM(1, I4);
+    R5 = DM(2, I4);
     R5 = PASS R5;
     IF EQ RTS;
     I4 = R5;
-    DM(298, I4) = R3;
+    R3 = 0;
+    DM(0, I4) = R3;
     RTS;
 
 // ---- helpers for machine routines (ordinary subroutines: CALL _dv_..., return with RTS) ----
@@ -1603,8 +1597,9 @@ _dv_frame_sw:
 // dispatches to registered types, word 14 the routines that returned (finding 48). core/dsp-link copies the block into the record it sends to the ColdFire each block
 // (dl_diag): its words 2 to 15.
 .PKDATA _dv_diag, 128;
-// The addresses of the two reply records (rings): [0] the one the last block built, [1] the one before it. Written by core/dsp-link.
-.PKDATA _dv_rec, 8;
+// The addresses of the two reply records (rings): [0] the one the last block built, [1] the one before it, and [2] the address of the module step word
+// `_dk_step` (cleared before a module call). Written by core/dsp-link.
+.PKDATA _dv_rec, 12;
 // The contract adapter's data: the `dk_voice_in` it hands to the module, the parameter words (8), the blocks since the note-on per track (16), its scalars
 // (see `_dv_contract`) and the knob positions of the module's parameters in order (ADM_PARAM_SLOT0 .. 7; 255: none).
 .PKDATA _dv_in, 16;

@@ -32,6 +32,7 @@ from support.dsp_voice_rig import (  # noqa: E402
     RING_B,
     STACK,
     STATE,
+    STEP_WORD,
     STOCK_BP,
     TABLE,
     TYPE,
@@ -362,9 +363,9 @@ def test_breadcrumbs_name_each_step_and_reach_both_reply_records():
             assert sum(1 for x in r if x) == 4, (ring, v)
 
 
-def test_the_module_step_is_cleared_in_both_records_before_the_call():
-    """The fault table's module step (record word 298, dsp-link.inc) holds what the last module stored; the wrapper clears it in both reply records
-    right before it calls the routine, so a step read after a stop belongs to this call."""
+def test_the_module_step_word_is_cleared_before_the_call_and_the_records_are_left_alone():
+    """The module step is the static word `_dk_step` (its address is `_dv_rec[2]`, dsp-link.inc); the wrapper clears it right before it calls the routine,
+    so a step copied by the block tail belongs to a call of this block. The reply records' word 298 is the tail's, the wrapper does not touch it."""
     rig = CrumbRig()
     rig.set_rings()
     rig.set_type(1, TYPE)
@@ -372,10 +373,16 @@ def test_the_module_step_is_cleared_in_both_records_before_the_call():
     rig.rec_word(2, 0x1B8, 1)
     rig.dm[nw(RING_A) + 298] = 7
     rig.dm[nw(RING_B) + 298] = 9
-    reads = {"ra": (nw(RING_A) + 296, 4), "rb": (nw(RING_B) + 296, 4)}
+    rig.dm[nw(STEP_WORD)] = 5
+    reads = {
+        "ra": (nw(RING_A) + 296, 4),
+        "rb": (nw(RING_B) + 296, 4),
+        "step": (nw(STEP_WORD), 1),
+    }
     out = rig.call(2, extra_reads=reads, ctx="friendly")
     assert stops_at(out, RETURN_SW), out["halt"]
-    assert out["ra"][2] == 0 and out["rb"][2] == 0, (out["ra"], out["rb"])
+    assert out["step"] == [0], out["step"]
+    assert out["ra"][2] == 7 and out["rb"][2] == 9, (out["ra"], out["rb"])
 
 
 def test_the_routine_sees_the_called_breadcrumb():
