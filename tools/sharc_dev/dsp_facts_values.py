@@ -62,6 +62,7 @@ def load_items(path: Path) -> list[dict[str, Any]]:
                 continue
             out.append(
                 {
+                    "index": row["index"],
                     "op": row["op"],
                     "args": [int(a, 16) for a in row.get("args", [])],
                     "result": int(row["result"], 16),
@@ -71,9 +72,10 @@ def load_items(path: Path) -> list[dict[str, Any]]:
             )
         return out
     for row in doc["rows"]:
-        op, args, result, astat, stky = row.split(",")
+        index, op, args, result, astat, stky = row.split(",")
         out.append(
             {
+                "index": int(index),
                 "op": op,
                 "args": [int(a, 16) for a in args.split(" ") if a],
                 "result": int(result, 16),
@@ -138,10 +140,11 @@ def check(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return bad
 
 
-def write_fixture(items: list[dict[str, Any]], path: Path) -> None:
+def write_fixture(items: list[dict[str, Any]], path: Path, item_count: int = 0) -> None:
     rows = [
-        "%s,%s,%08x,%x,%x"
+        "%d,%s,%s,%08x,%x,%x"
         % (
+            it["index"],
             it["op"],
             " ".join("%08x" % a for a in it["args"]),
             it["result"],
@@ -152,8 +155,9 @@ def write_fixture(items: list[dict[str, Any]], path: Path) -> None:
     ]
     head = json.dumps(
         {
-            "about": "Value items of test/dsp-facts measured on a Digitakt II (OS 1.17, 2026-10-31): op,operands,result,ASTAT[13:0],STKY[9:0], all hex; "
-            "MODE1 RND32 set, ALUSAT set for the _sat ops; ASTATX and STKYX cleared before the instruction",
+            "about": "Value items of test/dsp-facts measured on a Digitakt II (OS 1.17, 2026-10-31): item index,op,operands,result,ASTAT[13:0],STKY[9:0]; "
+            "the index is decimal, the rest hex; MODE1 RND32 set, ALUSAT set for the _sat ops; ASTATX and STKYX cleared before the instruction",
+            "items": item_count,
             "masks": {"astat": ASTAT_MASK, "stky": STKY_MASK},
         },
         indent=1,
@@ -182,7 +186,9 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     items = load_items(args.probe)
     if args.cmd == "fixture":
-        write_fixture(items, args.out)
+        write_fixture(
+            items, args.out, len(json.loads(args.probe.read_text())["items_table"])
+        )
         print("wrote", args.out, len(items), "items")
         return 0
     bad = check(items)

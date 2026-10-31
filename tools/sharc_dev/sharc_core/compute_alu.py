@@ -25,7 +25,6 @@ from .flags import (
     _alu_arith_updates,
     _arith_flag_bits,
     _arith_flag_bits_ci,
-    _saturate_alu_result,
     _astatx_abs,
     _astatx_alu_arith,
     _astatx_alu_arith_ci,
@@ -37,6 +36,7 @@ from .flags import (
     _double_alu_updates,
     _float_alu_updates,
     _or_updates,
+    _saturate_alu_result,
 )
 from .floats import (
     _double_binary,
@@ -158,9 +158,7 @@ def alu_add(rn, rx, ry, left, right, values, special) -> tuple:
 def alu_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     same_source = rx == ry
     value = _subtract(left, right, "R%d - R%d" % (rx, ry), same_source=same_source)
-    value, flags = _alu_arith_saturated(
-        value, left, right, True, same_source, values
-    )
+    value, flags = _alu_arith_saturated(value, left, right, True, same_source, values)
     return rn, value, "subtract", flags
 
 
@@ -319,8 +317,8 @@ def alu_abs(rn, rx, ry, left, right, values, special) -> tuple:
         mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
         adder = (1 << AZ_BIT) | (1 << AV_BIT) | (1 << AN_BIT) | (1 << AC_BIT)
         bits = _arith_flag_bits(Const(0), left, negative) & adder
-        value, flags = _saturate_alu_result(value, bits, negative, mode1)
-        return rn, value, "abs", flags
+        result, flags = _saturate_alu_result(value, bits, negative, mode1)
+        return rn, result, "abs", flags
     return rn, Unknown("abs R%d" % rx), "abs", _astatx_abs(left)
 
 

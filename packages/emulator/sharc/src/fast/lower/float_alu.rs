@@ -34,7 +34,20 @@ impl Lower {
         let x = self.rd_f_op(rx)?;
         let y = self.rd_f_op(ry)?;
         let r = self.bin(b, x, y);
-        let r = self.flush_denormal_result(r);
+        // A denormal result (the operands are not denormal, so the sum is exact
+        // and nonzero) is a flushed underflow: the interpreter latches the
+        // sticky AUS for it (finding 103), so the kernel leaves before it.
+        let rb = self.to_i(r);
+        let m = self.ci(0x7fff_ffff);
+        let mag = self.bin(Bin::And, rb, m);
+        let one = self.ci(1);
+        let m1 = self.bin(Bin::Sub, mag, one);
+        let lim = self.ci(0x007f_ffff);
+        let not_tiny = self.bin(Bin::GeU, m1, lim);
+        self.guard(not_tiny);
+        if self.cond.is_none() {
+            self.ftz_ok.insert(r);
+        }
         self.float_result(rn, r)
     }
 
@@ -121,8 +134,8 @@ impl Lower {
     }
 
     /// RN = fmax / fmin (FX, FY) (`floats._float_max` / `_float_min`): FX
-    /// when it is strictly larger (smaller) than FY, else FY; both zero
-    /// (either sign) gives +0 for max and -0 for min. The operands are bit
+    /// when it is strictly larger (smaller) than FY, else FY; two zeros give
+    /// -0 for min if either is negative and +0 for max if either is positive. The operands are bit
     /// patterns the core compares as binary64, which orders every f32 value
     /// (infinities included) as the f32 compare does; the
     /// result is one of the operands or the signed zero, so it needs no
@@ -145,7 +158,15 @@ impl Lower {
         let z = self.ci(0);
         let both_zero = self.bin(Bin::Eq, mag, z);
         let picked = self.select(pick_a, abits, bbits);
-        let zero = self.ci(if max { 0 } else { 0x8000_0000 });
+        // Two zeros: min is -0 if either is negative, max is +0 if either is
+        // positive (the sign bits ORed, or ANDed, for the result's sign).
+        let sg = self.ci(0x8000_0000);
+        let sign_src = if max {
+            self.bin(Bin::And, abits, bbits)
+        } else {
+            both
+        };
+        let zero = self.bin(Bin::And, sign_src, sg);
         let rbits = self.select(both_zero, zero, picked);
         let r = self.to_f(rbits);
         self.wr_f(rn, r)?;
@@ -328,6 +349,12 @@ impl Lower {
         let i = self.un(Un::FToI, rounded);
         let z = self.ci(0);
         let r = self.select(zero_res, z, i);
+        if !trunc {
+            // FIX of a nonzero scaled value that returns zero latches the
+            // sticky AUS in the interpreter (finding 103): leave the kernel.
+            let nonzero = self.bin(Bin::Ne, r, z);
+            self.guard_any(zero_res, nonzero);
+        }
         self.wr_i(rn, r)?;
         self.pend_flag(FlagKind::Falu, vec![r]);
         Ok(())

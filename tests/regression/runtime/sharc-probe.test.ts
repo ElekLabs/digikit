@@ -259,3 +259,52 @@ async function expectSeedTables(patched: PatchedSession): Promise<void> {
 runtimeTests('RECIPS and RSQRTS give the measured result and flags for every probe item', expectSeedTables, {
   timeout: 600_000,
 });
+
+/** The value items of the dsp-facts probe (tests/fixtures/modules/dsp-facts) that the Digitakt II measured (tests/fixtures/sharc/dsp-facts-values-dt2-1.17.json): FIX, float ALU edge cases, fixed-point overflow with and without ALUSAT, the
+ * float multiplier's invalid result, MR reads. A run of the stream is 37 frames (one frame per block). */
+const FACTS = 'test/dsp-facts';
+const FACTS_WORDS_PER_RUN = 37 * (PAYLOAD_WORDS + 2);
+
+async function expectFactsValues(patched: PatchedSession): Promise<void> {
+  const { session, dk } = patched;
+  const fixture = JSON.parse(
+    fs.readFileSync(path.join(repoRoot(), 'tests/fixtures/sharc/dsp-facts-values-dt2-1.17.json'), 'utf8'),
+  ) as { items: number; rows: string[] };
+  await installProbe(patched, FACTS);
+  expect((await dk.request(CMD_RESET)).status).toBe(0);
+  let last: Record<string, number> = {};
+  const want = Math.min(3 * FACTS_WORDS_PER_RUN, 1200);
+  await expect
+    .poll(
+      async () => {
+        last = status((await dk.request(CMD_STATUS)).body);
+        return last.words! >= want && last.parsed! >= last.words! - (PAYLOAD_WORDS + 2);
+      },
+      { timeout: 300_000, interval: 2000, message: 'three runs of the facts stream' },
+    )
+    .toBe(true);
+  expect(last.seq_errors, `sequence errors: ${JSON.stringify(last)}`).toBe(0);
+  const words = await readRing(dk, Math.min(last.words!, last.cap!));
+  const items = probeItems(words, fixture.items);
+  const bad: string[] = [];
+  for (const row of fixture.rows) {
+    const [index, op, input, result, astat, stky] = row.split(',');
+    const got = items.get(parseInt(index!, 10));
+    if (!got) {
+      bad.push(`${index} ${op} ${input}: not in the capture`);
+      continue;
+    }
+    const wantRow = [parseInt(result!, 16), parseInt(astat!, 16), parseInt(stky!, 16)];
+    const have = [got[0], got[1] & ASTAT_MASK, got[2] & STKY_MASK];
+    if (wantRow.some((w, k) => w !== have[k]))
+      bad.push(
+        `${index} ${op} ${input}: device ${wantRow.map((w) => w.toString(16))} emulator ${have.map((w) => w.toString(16))}`,
+      );
+  }
+  expect(bad.slice(0, 8), `${bad.length} of ${fixture.rows.length} items differ`).toEqual([]);
+  await session.expectNoFault('dsp facts');
+}
+
+runtimeTests('the instruction facts of the Digitakt II hold for every value item of the dsp-facts probe', expectFactsValues, {
+  timeout: 600_000,
+});
