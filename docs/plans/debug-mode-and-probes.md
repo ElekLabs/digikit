@@ -25,7 +25,7 @@ runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler 
       after RSTA; no device read is needed. The fix goes on the sampler branch, with an update to its finding 100, after a second byte check.
 - [x] Runtime size (`runtime.dko.json`, 2026-10-31): text 110,290, data 3,547, bss 671,140 bytes, mostly the module arena (512 KiB), the stage
       (64 KiB) and the upload buffer (36 KiB). Log code is 4.2 KB, the log ring 16 KiB, the LOG, PEEK and LOGCFG handlers 0.9 KB. The split
-      saves about 20 KB; its main value is that debug and probe code lives outside the runtime. Parts of `dlog.rs` are not logging and stay:
+      saves about 15 KB; its main value is that debug and probe code lives outside the runtime. Parts of `dlog.rs` are not logging and stay:
       module-source tracking (the owner of command ranges), the DSP heartbeat watch, step addresses and guard faults.
 - [x] Probe path: a module cannot import `dl_send` or `dl_diag` (they are not in `sdk/sdk.toml`). Service modules run 30-32 times a second,
       so a handshake in slot 0 moves only 15-30 words a second. The per-block hook `dl_tick` (interrupt context, 1500 Hz) sees the previous
@@ -70,20 +70,32 @@ runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler 
 
 ## Phase 3: `digikit/debug` (branch `debug/digikit-debug-module`, agreed with Em 2026-11-01)
 
-Saves about 20 KB of runtime memory; debug code lives outside the runtime. One flash after the emulator proof.
+Saves about 15 KB of runtime memory (measured: 784,279 to 768,438 bytes of text, data and bss); debug code lives outside the runtime. One flash after the emulator proof.
 
-- [ ] Runtime keeps the fault record, `dk/fault`, safe mode, the DSP heartbeat watch, module-source tracking and the effect fault guards, plus a
+- [x] Runtime keeps the fault record, `dk/fault`, safe mode, the DSP heartbeat watch, module-source tracking and the effect fault guards, plus a
       ring of about 32 boot and error events (about 1 KB) that feeds the crash record's last events. Every log call site stays; the call goes
       to one sink pointer. Without `digikit/debug`, error events go to the small ring and the rest is dropped (one pointer test).
-- [ ] `digikit/debug` (a service module) holds the 512-event ring (16 KiB in its own memory), the level filter (default and per module), the
+      Done (2026-11-01, "Runtime: log sink and a 32-event ring instead of the 512-event log"): `dlog.rs` has the ring (32 events: error events and the boot's own kinds),
+      the sink (`dkrt_log_sink_set`, which replays the ring to a new sink; cleared after the owner's `fini`), `dkrt_log_ev`, `dkrt_peek_range` and
+      `dkrt_track_type` (module imports); the DSP watch, guards and snapshot moved to `watch.rs`. LOG, PEEK, LOGCFG, the debug-off flag, `dkrt_debug_set`,
+      `CMD_DEBUG` and the DIGIKIT menu's DEBUG row are gone; INFO reports CAP_LOG, CAP_PEEK and CAP_LOGCFG only while a sink is set. Runtime
+      text 109,624 to 108,406 bytes, data 3,547 to 2,736, bss 671,108 to 657,296.
+- [x] `digikit/debug` (a service module) holds the 512-event ring (16 KiB in its own memory), the level filter (default and per module), the
       LOG, PEEK and LOGCFG commands with their numbers kept (0x20-0x22, now a service range it owns, so `dklog`, the Log drawer and the tests
       work unchanged) and the track watches; at start it copies the boot events from the small ring.
-- [ ] Debug on or off means the module is loaded or not: delete the saved debug-off flag, the DIGIKIT menu toggle and LOGCFG op 2. The Log
+      Done (2026-11-01, "digikit/debug: the log, its levels, LOG, PEEK and LOGCFG as a service module"): `modules/tools/debug`, 1,724 bytes of file, 16,472 bytes of bss
+      (the 512-event ring), host tests in `modules/tools/debug/tests/test_debug_module.py`.
+- [x] Debug on or off means the module is loaded or not: delete the saved debug-off flag, the DIGIKIT menu toggle and LOGCFG op 2. The Log
       drawer's Debug switch becomes "debug module: loaded / not loaded".
-- [ ] Workbench: `digikit/debug` joins `digikit/remote` in `default_modules` of both device files; the Firmware pane and the emulator install it,
+      Done (2026-11-01, "Workbench and tools: the debug module state replaces the Debug switch; digikit/debug is a default module"): the drawer shows the read-only
+      state and, without the module, the line "The debug module is not loaded: only crash reports are available." with the fault record; `dklog crash` falls back to
+      `dk/fault`; `setDebug`, `logcfg_debug` and LOGCFG op 2 are removed.
+- [x] Workbench: `digikit/debug` joins `digikit/remote` in `default_modules` of both device files; the Firmware pane and the emulator install it,
       the drop-down lists it, ticked by default.
 - [ ] Proof in the emulator on DT2 and DN2 (boot events, logging, levels, crash record with and without the module, `dklog`, the Log drawer),
       the routed gate, then one DT2 flash and a check on the device.
+      Emulator part done on DT2 and DN2 (2026-11-01): `runtime/debug-module.test.ts` (with and without the module) and `runtime/fault-trace.test.ts` (the crash
+      tail comes from the small ring) pass; the routed gate and the device check are open.
 - Decided not now: dsp-link page mode (nothing needs more than 1500 words a second yet; it changes the DSP side of dsp-link); run-time
   ColdFire hooks ([capabilities](capabilities.md) step 2); the probe collector stays its own module `digikit/probe`.
 
