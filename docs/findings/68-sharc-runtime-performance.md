@@ -621,3 +621,45 @@ trained single-core PGO build.
 Artifacts: `out/native/runs/20261027-sharc-dual-default/` contains the frozen
 binaries, switch proof, matrix, and launcher checks. The initial branch gate was
 stopped when the user requested this new default; it is superseded, not a pass.
+
+## DT2 patched runtime: interpreted work by group (2026-10-31)
+
+**[D]** DT2 1.17 patched runtime (dsp-voice, converter, fx and link patches), `dt2-led-sweep`,
+3 audio seconds, ready state from a cold patched boot, `coupled scenario --diag hist`. The
+earlier figure of 19.4 M interpreted instructions per audio second (58.2 M in 3 s) was measured
+without the fast tier. The patched-image hash has no row in `tools/emulator/fast_regions.json`,
+so a run that passes the patched `.syx` gets no fallback root unless
+`SHARC_FAST_FALLBACK_REGIONS` is set. The workbench resolves the defaults from the stock
+firmware and does run root `0x1c2607`. With that root alone the same run interprets 18.0 M
+(6.0 M per audio second) and the fast tier runs 40.2 M (the converter, 279 instructions per
+call, 48,000 calls per audio second).
+
+Where the 18.0 M go (one root, before the change below), and why:
+
+| Group | M / 3 s | Share | Why interpreted |
+| --- | ---: | ---: | --- |
+| Stock voice prologue `0x1c4ecf..0x1c4f1d` | 5.47 | 30% | The hook replaces the word at `0x1c4ecf`, so its region is barred. The adapter returns to `0x1c4ed2`, which is no AOT entry. |
+| Blocks of `0x1c1f7d` (`0x1c1fe7`, `0x1c204b`, `0x1c207b`) | 3.16 | 18% | The fx adapter patches the words at `0x1c207a/b`; the regions before and after are barred. |
+| Interrupt-handler code (`0x1c02a4`, `0x1c0b1d`) | 3.11 | 17% | No generated entry on the path; the code uses MODE1STK, PCSTK and ACONV and the fast tier refuses its first instruction. Same code runs on stock. |
+| Appended adapter and module code (`0xb8d...`, `0xbcd...`, `0xbce...`) | 2.59 | 14% | Not in the generated image; no AOT entry can exist. Equals the `interp_appended` counter. |
+| Other stock code in `0xb8....` | 2.23 | 12% | Not examined: no generated entry on the executed path. |
+| Other stock code in `0x1c....` | 0.98 | 5% | Not examined. |
+| `0x1c06fe` zero-progress bail | 0.46 | 3% | Generated entry returns at once while a delayed transfer is pending. |
+
+Ceiling (finding 18: 60 to 105 ns per interpreted instruction, about 1 ns compiled): the
+6.0 M per audio second cost 0.36 to 0.63 DSP seconds per audio second. The prologue group
+alone is 0.11 to 0.19, the `0x1c1f7d` group 0.06 to 0.11. These are interpreter-rate
+estimates, not measured host time.
+
+Change: `tools/emulator/fast_regions.json` for DT2 1.17 gets regular root `0x1c4ed2` and
+fallback roots `0x1c1fe7`, `0x1c204b` next to `0x1c2607`. A fallback root alone cannot take the
+prologue, because a fallback root must be a barred AOT entry and `0x1c4ed2` is not one; on
+stock code nothing reaches `0x1c4ed2` through the interpreter. Interpreted instructions on
+`dt2-led-sweep` (3 s): 18.0 M to 10.2 M (6.0 M to 3.4 M per audio second); `dt2-rec-play`
+(6 s): 36.0 M to 20.4 M. PCM and the DSP state dump are equal to the one-root run on both.
+`pk_tiers` PCM is equal for stock, the voice hook and PLUCK held (3 s each); the PLUCK window
+goes from 14.9 M to 13.3 M interpreted per audio second, of which 4.1 M are PLUCK's own
+appended code. The ISR code, appended code and the `0x1c06fe` bail remain; they need
+generated-core, fast-tier or JIT work. **[O]** No timing was measured: the regular root makes
+the interpreter consult the fast tier for every PC, which needs one paired A/B on stock and
+patched replays before the change counts as a speed-up.
