@@ -4,6 +4,9 @@
     uv run python -m tools.device.dkprobe capture --emu [--run-dir DIR] --out FILE.json
     uv run python -m tools.device.dkprobe capture --port Digitakt --out FILE.json
     uv run python -m tools.device.dkprobe compare DEVICE.json EMULATOR.json
+    uv run --with python-rtmidi python -m tools.device.dkprobe run --port Digitakt --modules test/dsp-facts --capture OUT.json [--compare REF.json] [--keep]
+
+`run` does everything around a capture (pack, upload, select, restart, capture, compare, restore): `tools/device/dkprobe_run.py`.
 
 The DSP probe module and the collector must be loaded already (upload, select, restart: `dk:run`, `dk:store`). `capture` resets the collector's ring, waits until it is
 full (about one run and a margin: 24,576 words, about 16 s at 1500 words a second, one per block, on a device; the emulator is stepped), polls STATUS until the collector has
@@ -81,16 +84,16 @@ class Frames:
     seq_errors: int = 0  # accepted frames whose number is not the previous one plus 1
 
 
-def reassemble(words: list[int]) -> Frames:
+def reassemble(words: list[int], sq: Any = seq) -> Frames:
     out = Frames()
     p, n = 0, len(words)
     while p < n:
         h = words[p]
         cnt = (h >> 16) & 0xFF
-        if (h >> 24) == seq.HDR_MAGIC and cnt == seq.PAYLOAD_WORDS:
+        if (h >> 24) == sq.HDR_MAGIC and cnt == sq.PAYLOAD_WORDS:
             if p + cnt + 1 >= n:
                 break
-            if seq.fletcher(words[p : p + cnt + 1]) == words[p + cnt + 1]:
+            if sq.fletcher(words[p : p + cnt + 1]) == words[p + cnt + 1]:
                 num = h & 0xFFFF
                 if out.frames and ((num - out.frames[-1][0]) & 0xFFFF) != 1:
                     out.seq_errors += 1
@@ -127,27 +130,30 @@ class Table:
         default_factory=list
     )  # items whose records differ between two runs
     table_checksum_ok: bool = True
+    samples: dict[int, list[tuple[int, int, int]]] = field(
+        default_factory=dict
+    )  # item index -> the three words of its record in every run that holds it, in capture order
 
 
-def _records(payload: list[int]) -> list[list[int]]:
+def _records(payload: list[int], sq: Any = seq) -> list[list[int]]:
     return [
-        payload[i : i + seq.WORDS_PER_RECORD]
-        for i in range(0, len(payload), seq.WORDS_PER_RECORD)
+        payload[i : i + sq.WORDS_PER_RECORD]
+        for i in range(0, len(payload), sq.WORDS_PER_RECORD)
     ]
 
 
-def build_table(fr: Frames) -> Table:
+def build_table(fr: Frames, sq: Any = seq) -> Table:
     """Place every record of every frame in the run it belongs to. A frame whose run header is in the capture is placed from it (forwards or, for the frames
     before the first header, backwards from the next one)."""
-    its = seq.items()
-    fpr = seq.frames_per_run()
+    its = sq.items()
+    fpr = sq.frames_per_run()
     tab = Table()
     n = len(fr.frames)
     # position of every frame in its run: anchors are the frames that start with the run header
     anchors: list[
         tuple[int, int, int]
     ] = []  # (index in fr.frames, frame number, run counter)
-    want_sum = seq.table_checksum()
+    want_sum = sq.table_checksum()
     for i, (num, pl) in enumerate(fr.frames):
         if pl[1] == len(its) and pl[0] != 0xFFFFFFFF:
             if pl[2] == want_sum:
@@ -176,8 +182,8 @@ def build_table(fr: Frames) -> Table:
     for i, (_, pl) in enumerate(fr.frames):
         run, pos = placed[i]
         seen_runs.add(run)
-        for k, rec in enumerate(_records(pl)):
-            r = pos * seq.RECORDS_PER_FRAME + k
+        for k, rec in enumerate(_records(pl, sq)):
+            r = pos * sq.RECORDS_PER_FRAME + k
             if r == 1:
                 tab.run_info[run] = {"mode1": rec[0], "astat": rec[1], "stky": rec[2]}
             if r < 2 or r >= 2 + len(its):
@@ -185,6 +191,7 @@ def build_table(fr: Frames) -> Table:
             idx = r - 2
             op, inp = its[idx]
             item = Item(idx, op, inp, rec[0], rec[1], rec[2])
+            tab.samples.setdefault(idx, []).append((rec[0], rec[1], rec[2]))
             old = tab.items.get(idx)
             if old is None:
                 tab.items[idx] = item
@@ -275,7 +282,9 @@ def identity(up: Any) -> dict[str, Any]:
     return {"info": info, "modules": mods.get("modules", []), "store": store}
 
 
-def capture(up: Any, emu: Any | None = None, step: int = 100_000_000) -> dict[str, Any]:
+def capture(
+    up: Any, emu: Any | None = None, step: int = 100_000_000, sq: Any = seq
+) -> dict[str, Any]:
     pr = Probe(up, emu, step)
     ident = identity(up)
     t0 = time.monotonic()
@@ -283,9 +292,9 @@ def capture(up: Any, emu: Any | None = None, step: int = 100_000_000) -> dict[st
     s = pr.wait_full()
     words = pr.read_words(s["words"])
     elapsed = time.monotonic() - t0
-    fr = reassemble(words)
-    tab = build_table(fr)
-    total = len(seq.items())
+    fr = reassemble(words, sq)
+    tab = build_table(fr, sq)
+    total = len(sq.items())
     items = [
         {
             "index": it.index,
@@ -297,14 +306,15 @@ def capture(up: Any, emu: Any | None = None, step: int = 100_000_000) -> dict[st
         }
         for it in sorted(tab.items.values(), key=lambda x: x.index)
     ]
-    return {
+    doc = {
         "format": FORMAT,
         "identity": ident,
         "sequence": {
+            "kind": getattr(sq, "KIND", "sharc-recips"),
             "items": total,
-            "records_per_run": seq.records_per_run(),
-            "frames_per_run": seq.frames_per_run(),
-            "table_checksum": f"0x{seq.table_checksum():08x}",
+            "records_per_run": sq.records_per_run(),
+            "frames_per_run": sq.frames_per_run(),
+            "table_checksum": f"0x{sq.table_checksum():08x}",
         },
         "collector": s,
         "host": {
@@ -327,6 +337,9 @@ def capture(up: Any, emu: Any | None = None, step: int = 100_000_000) -> dict[st
         "run_info": {str(k): v for k, v in sorted(tab.run_info.items())},
         "items_table": items,
     }
+    if hasattr(sq, "derive"):
+        doc["facts"] = sq.derive(tab.samples)
+    return doc
 
 
 # ---- compare ------------------------------------------------------------------------------------------------------------------
@@ -337,7 +350,17 @@ def _by_index(doc: dict[str, Any]) -> dict[int, dict[str, Any]]:
 
 
 def compare(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
-    """Differences of two tables: per field counts, per op, and the first few items that differ."""
+    """Differences of two tables: per field counts, per op, and the first few items that differ. Tables of the dsp-facts sequence are
+    compared by `dkprobe_facts.compare` (cycle counts differ between a device and the emulator by design)."""
+    kind = a["sequence"].get("kind", "sharc-recips")
+    if kind != b["sequence"].get("kind", "sharc-recips"):
+        raise ProbeError(
+            f"tables of different sequences: {kind} and {b['sequence'].get('kind')}"
+        )
+    if kind == "dsp-facts":
+        from tools.device import dkprobe_facts
+
+        return dkprobe_facts.compare(a, b)
     ia, ib = _by_index(a), _by_index(b)
     common = sorted(set(ia) & set(ib))
     diffs: list[dict[str, Any]] = []
@@ -368,6 +391,7 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         "field_counts": counts,
         "per_op": per_op,
         "same_sequence": a["sequence"] == b["sequence"],
+        "same": not diffs and set(ia) == set(ib),
         "first_differences": diffs[:20],
         "identity": {
             "a": a["identity"]["info"].get("image_id"),
@@ -399,6 +423,53 @@ def main(argv: list[str] | None = None) -> int:
     )
     c.add_argument("--out", type=Path, required=True)
     c.add_argument(
+        "--seq",
+        choices=("sharc", "facts"),
+        default="sharc",
+        help="the sequence the probe module sends: sharc (test/sharc-probe) or facts (test/dsp-facts)",
+    )
+    c.add_argument(
+        "--step",
+        type=int,
+        default=100_000_000,
+        help="with --emu: instructions per wait",
+    )
+    r = sub.add_parser(
+        "run",
+        help="upload, select and restart the probe modules, capture, compare, restore (see tools/device/dkprobe_run.py)",
+    )
+    where = r.add_mutually_exclusive_group(required=True)
+    where.add_argument("--emu", action="store_true", help="the running emulator")
+    where.add_argument("--port", help="a MIDI port name substring (a real device)")
+    where.add_argument(
+        "--spawn",
+        choices=("dt2", "dn2"),
+        help="start a private emulator daemon of this device (stock firmware with the digikit runtime) and stop it at the end",
+    )
+    r.add_argument(
+        "--run-dir", type=Path, help="with --emu: the daemon's run directory"
+    )
+    r.add_argument(
+        "--modules",
+        required=True,
+        help="probe module ids, comma separated (test/sharc-probe, test/dsp-facts); digikit/remote and digikit/probe are added",
+    )
+    r.add_argument(
+        "--capture", type=Path, required=True, help="the JSON table to write"
+    )
+    r.add_argument(
+        "--compare", type=Path, help="a JSON table to compare the capture with"
+    )
+    r.add_argument(
+        "--keep",
+        action="store_true",
+        help="leave the probe modules selected and loaded",
+    )
+    r.add_argument(
+        "--seq", choices=("sharc", "facts"), help="default: by the probe module"
+    )
+    r.add_argument("--device", help="pack target (default: the device id INFO reports)")
+    r.add_argument(
         "--step",
         type=int,
         default=100_000_000,
@@ -414,16 +485,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "compare":
         res = compare(json.loads(args.a.read_text()), json.loads(args.b.read_text()))
         print(json.dumps(res, indent=1))
-        return (
-            0
-            if res["differing_items"] == 0 and not res["only_a"] and not res["only_b"]
-            else 1
-        )
+        return 0 if res["same"] else 1
+    if args.cmd == "run":
+        from tools.device import dkprobe_run
+
+        return dkprobe_run.main(args)
     from tools.device import dkupload as D
 
     emu = D._emu(args.run_dir) if args.emu else None
     transport: Any = D.EmuTransport(emu) if args.emu else D.RtMidiTransport(args.port)
-    doc = capture(D.Uploader(transport, skip_foreign=not args.emu), emu, args.step)
+    from tools.device import dkprobe_run
+
+    doc = capture(
+        D.Uploader(transport, skip_foreign=not args.emu),
+        emu,
+        args.step,
+        dkprobe_run.SEQUENCES[args.seq],
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(doc, indent=1) + "\n")
     h = doc["host"]
