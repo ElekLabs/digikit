@@ -637,6 +637,52 @@ on p1172 gives timeout as clock period × clock divisor × (PS+1) × (DTRR+1).
 Current firmware DTXMR history, bus frequency, emulator phase and automatic timer
 advancement remain unproved; no timing implementation is added here.
 
+### Device DTIM completed post-prescaler ticks
+
+**Implemented, bounded [D]:** `DtimBank::device_advance_ticks` and the Device-only
+`Time::device_dtim_advance_ticks` advance existing DTCN/REF registers from an
+explicit count of completed post-prescaler timer ticks. MCF5441XRM p1166 §39.2.4
+explicitly places an ordinary reference match after DTRR+1 intervals; p1163
+FRR=1 resets the counter immediately after reference. The supported phase
+abstraction therefore gives DTRR=2: 0→1→2→0+REF. This completed-tick boundary is
+supported by those passages; subcycle, simultaneous-MMIO and real hardware
+cycle-accuracy claims remain outside the component. The separately recorded
+five-poll example supports repeated ordinary REF after W1C without rewriting
+DTRR or resetting the timer, despite Table 39-4's generic rearm wording.
+
+Only DTXMR=0 and CE=0 states are admitted before checking inactivity, including
+for zero ticks. RST=0 or CLK=0 preserves counter/events. Active FRR=0, external
+CLK or DMAEN/advanced modes reject before mutation. Active DTCN>DTRR reports a
+typed `CounterOutOfRange` error instead of inventing live-reference-decrease
+behavior. Counting is independent of ORRI; late enabling exposes an already
+latched REF. Multiple periods coalesce into one sticky REF while CAP and other
+DTER bits remain intact. Wide arithmetic supports u64 tick and u32 reference
+maxima. No divider/prescaler conversion, frequency, deadline/fraction state or
+implicit advancement on writes is introduced. Oracle APIs/behavior and existing
+register/snapshot formats remain unchanged; the new state is entirely existing
+DTCN and DTER backing. This is no Device runtime snapshot-policy acceptance.
+
+All named tests pass separately: **6** new peripheral tick, **5** existing
+peripheral Device-event, **10** DTIM manual, **5** machine DTIM, **11** Time and
+**23** storage/shared-selection cases, **60 total**. Coverage includes first
+expiry, zero tick, maximum inputs, whole/chunked equivalence, five manual-example
+timeouts, W1C repeat, coalescence, late ORRI enable, inactive-state preservation,
+invalid-mode/out-of-range rejection even at zero ticks, unchanged Oracle
+behavior, no host writes/delivery and register-snapshot phase restoration.
+Commands/environment/source hashes are recorded in
+`out/runs/storage-fault-proof/dtim-device-ticks-invocation.json`; log:
+`dtim-device-ticks-tests.log` in the same directory. Independent review found no issues;
+coordinator scoped path/layer and whitespace checks passed. No existing firmware/native route calls the
+new API, so no firmware rerun was performed; earlier results remain prior evidence.
+
+**[O] Remaining:** real bus/instruction-clock conversion, selected device frequency,
+prescaler phase, live writes, full reset, DMA/capture and native integration.
+Eight existing database xref queries for DTXMR0–3 on both current images returned
+no recorded references; this bounded negative result proves neither absence of
+writes nor default/current firmware mode. Runtime admission must still validate
+supported register state. No default policy, snapshot migration, SHARC, PCM or
+hardware change is added; the full merge gate remains deferred.
+
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in

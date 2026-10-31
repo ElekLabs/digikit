@@ -58,6 +58,11 @@ pub const IDLE_STEP: u64 = crate::pit::IDLE_STEP;
 pub enum DeviceReferenceError {
     InvalidChannel { channel: usize },
     UnsupportedMode { channel: usize },
+    CounterOutOfRange {
+        channel: usize,
+        counter: u32,
+        reference: u32,
+    },
 }
 
 /// `DtimBank::service`'s result: (vectors raised, in delivery order with
@@ -193,6 +198,50 @@ impl DtimBank {
         self.device_reference_mode(channel)?;
         let regs = &mut self.regs[channel];
         regs.set_u8_at(DTER, regs.u8_at(DTER) | REF);
+        Ok(())
+    }
+
+    /// Advance ordinary restart mode by completed post-prescaler timer ticks.
+    /// Ticks are already divided by CLK and PS; no bus/instruction rate or phase
+    /// is inferred. MCF5441XRM p1166 gives DTRR+1 intervals and p1163 FRR restart:
+    /// for DTRR=2, DTCN advances 0 -> 1 -> 2 -> 0 with sticky REF on wrap.
+    /// Multiple periods coalesce; CAP and all other event bits are preserved.
+    ///
+    /// Requires DTXMR=0 and CE=0 before even an inactive no-op. RST=0/CLK=0
+    /// preserve state. Active free-run/external-clock modes and DTCN>DTRR reject
+    /// before mutation. No reset, capture, DMA, subcycle or MMIO-edge model.
+    pub fn device_advance_ticks(
+        &mut self,
+        channel: usize,
+        ticks: u64,
+    ) -> Result<(), DeviceReferenceError> {
+        self.device_reference_mode(channel)?;
+        let regs = &mut self.regs[channel];
+        let mode = regs.u16_at(DTMR);
+        if regs.u8_at(DTXMR) != 0 {
+            return Err(DeviceReferenceError::UnsupportedMode { channel });
+        }
+        if mode & RST == 0 || mode & CLK == 0 {
+            return Ok(());
+        }
+        if mode & FRR == 0 || mode & CLK == CLK {
+            return Err(DeviceReferenceError::UnsupportedMode { channel });
+        }
+        let counter = regs.u32_at(DTCN);
+        let reference = regs.u32_at(DTRR);
+        if counter > reference {
+            return Err(DeviceReferenceError::CounterOutOfRange {
+                channel,
+                counter,
+                reference,
+            });
+        }
+        let period = u128::from(reference) + 1;
+        let advanced = u128::from(counter) + u128::from(ticks);
+        regs.write(DTCN as u32, 4, (advanced % period) as u32);
+        if advanced >= period {
+            regs.set_u8_at(DTER, regs.u8_at(DTER) | REF);
+        }
         Ok(())
     }
 

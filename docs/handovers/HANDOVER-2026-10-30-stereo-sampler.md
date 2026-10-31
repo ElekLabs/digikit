@@ -679,3 +679,21 @@ clearing only, after one enable. Table 39-4's generic rearm prose still conflict
 reading it as EN1588-specific is consistent with §39.2.4 but is interpretation,
 not hardware readback. Eq. 39-1 supplies the timeout formula. No clock implementation,
 bus-frequency/phase or complete firmware DTXMR-history proof is included.
+
+## Device DTIM supplied completed ticks — 2026-10-31
+
+Ordinary Device restart mode now accepts explicitly supplied post-prescaler ticks,
+updating existing DTCN/REF registers only. Manual p1166 gives DTRR+1 intervals;
+p1163 FRR resets immediately, supporting completed-tick DTRR=2 phase
+0→1→2→0+REF. No subcycle/MMIO-edge or hardware cycle-accuracy claim follows.
+Active free-run/external/DMA/advanced modes and DTCN>DTRR reject before mutation;
+inactive RST/CLK preserves state, with advanced-mode validation first. ORRI gates
+requests only. CAP survives and repeated periods coalesce without new state.
+
+All 60 named tests pass (six peripheral tick, five peripheral event, ten manual,
+five machine DTIM, eleven Time, 23 storage pair). Commands/hashes/logs are under
+`out/runs/storage-fault-proof/dtim-device-ticks*`. Independent review found no
+issues; coordinator scoped path/layer and whitespace checks passed. No firmware/native consumer, clock conversion, implicit
+write advancement or snapshot format change is added. Bus rate/prescaler phase,
+full firmware DTXMR mode history, reset and native integration remain open; full
+gate deferred. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).

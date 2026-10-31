@@ -50,6 +50,11 @@ pub enum DeviceDtimError {
     DevicePolicyRequired,
     InvalidChannel { channel: usize },
     UnsupportedMode { channel: usize },
+    CounterOutOfRange {
+        channel: usize,
+        counter: u32,
+        reference: u32,
+    },
 }
 
 impl From<DeviceReferenceError> for DeviceDtimError {
@@ -57,6 +62,9 @@ impl From<DeviceReferenceError> for DeviceDtimError {
         match error {
             DeviceReferenceError::InvalidChannel { channel } => Self::InvalidChannel { channel },
             DeviceReferenceError::UnsupportedMode { channel } => Self::UnsupportedMode { channel },
+            DeviceReferenceError::CounterOutOfRange { channel, counter, reference } => {
+                Self::CounterOutOfRange { channel, counter, reference }
+            }
         }
     }
 }
@@ -335,6 +343,23 @@ impl Time {
             return Err(DeviceDtimError::DevicePolicyRequired);
         }
         self.dtim.device_latch_reference(channel)?;
+        self.service_not_before = None;
+        self.blocked = None;
+        Ok(())
+    }
+
+    /// Supply completed post-prescaler ticks to an ordinary Device DTIM.
+    /// Updates existing DTCN/REF registers only; no delivery, SR changes, host
+    /// writes, clock conversion or automatic scheduling. Errors precede mutation.
+    pub fn device_dtim_advance_ticks(
+        &mut self,
+        channel: usize,
+        ticks: u64,
+    ) -> Result<(), DeviceDtimError> {
+        if self.policy != TimerPolicy::Device {
+            return Err(DeviceDtimError::DevicePolicyRequired);
+        }
+        self.dtim.device_advance_ticks(channel, ticks)?;
         self.service_not_before = None;
         self.blocked = None;
         Ok(())

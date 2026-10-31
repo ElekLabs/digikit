@@ -24,6 +24,15 @@ there is no outstanding reservation-choice request and no approved reservation p
 
 ## Latest checkpoint
 
+**Current focus (2026-10-31):** emulator support for trustworthy sampler storage
+failure tests. Supplied storage/timer/audio interrupt selection, mask commands
+and ordinary DTIM tick advancement have focused component checks; real storage
+handlers and bounded scheduler fixtures run on both firmware images. Combined
+native execution and complete fault history are still open. These are validation
+prerequisites, not a finished sampler. Reusable file listing works on both devices;
+production pool ownership, full stereo/runtime integration and the picker remain
+open. Finish this bounded checkpoint before selecting further emulator scope.
+
 The sampler discovery branch was rebased onto main `d6b5d4bb`.
 
 All ten DN2 post-source families have bounded local examples; the selected ordered
@@ -3176,3 +3185,27 @@ interpretation of conflicting prose, not hardware readback. Eq. 39-1 (p1172) giv
 clock period × divisor × (PS+1) × (DTRR+1). This supports a future explicit-clock
 ordinary-mode component; current bus frequency/phase and full firmware DTXMR
 history remain unproved. No timing implementation or [V] claim is added here.
+
+### Device DTIM supplied post-prescaler ticks — 2026-10-31
+
+- [x] Implement ordinary restart-mode DTCN/REF advancement from explicitly supplied
+  completed post-prescaler ticks, using existing register state only.
+- [x] Pass six new peripheral tick, five peripheral event, ten DTIM manual, five
+  machine DTIM, eleven Time and 23 storage-pair tests (60 total).
+- [x] Independent review found no issues; coordinator scoped path/layer and whitespace checks passed.
+
+**[D] Completed-tick phase:** p1166 §39.2.4 explicitly states DTRR+1 intervals,
+and p1163 FRR resets DTCN immediately after reference. Thus DTRR=2 advances
+0→1→2→0+REF at this completed-tick abstraction. The earlier five-poll example
+supports repeated ordinary timeouts separately. No subcycle, simultaneous-MMIO
+or real hardware cycle accuracy is claimed.
+
+Only active DTXMR=0/CE=0/FRR=1/RST=1/internal-CLK states advance; ORRI gates the
+request, not counting. Inactive RST/CLK preserve state, unsupported advanced modes
+reject first, and active DTCN>DTRR rejects. Wide arithmetic handles u64 ticks and
+u32 reference maxima. CAP/other event bits survive; multiple periods coalesce.
+No implicit write advancement, bus/instruction-clock conversion, new snapshot
+fields or native consumer is added. Commands/source hashes/logs:
+`out/runs/storage-fault-proof/dtim-device-ticks*`. No firmware rerun is required
+absent a new consumer or uncertainty; prior results remain prior evidence.
+The full merge gate remains deferred.
