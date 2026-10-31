@@ -502,6 +502,18 @@ export interface DkInfoFull extends DkInfo {
   image_id: string | null;
 }
 
+/** The LOGCFG state: the default log level, the level of each module record (0xff: the default), and whether debug logging is on. */
+export interface LogConfig {
+  level: number;
+  modules: number[];
+  debug: boolean;
+}
+
+function parseLogConfig(b: Uint8Array): LogConfig {
+  if (b.length < 10) throw new DkError({ error: 'logcfg: malformed reply', kind: 'protocol' });
+  return { level: b[0]!, modules: Array.from(b.subarray(1, 9)), debug: b[9] !== 0 };
+}
+
 export interface DkModule {
   index: number;
   name: string;
@@ -884,10 +896,22 @@ export class DkSession {
     return [u32(b, 0), u32(b, 4), events];
   }
   /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether debug logging is on. */
-  async logConfig(quick = false): Promise<{ level: number; modules: number[]; debug: boolean }> {
-    const b = await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(0), quick);
-    if (b.length < 10) throw new DkError({ error: 'logcfg: malformed reply', kind: 'protocol' });
-    return { level: b[0]!, modules: Array.from(b.subarray(1, 9)), debug: b[9] !== 0 };
+  async logConfig(quick = false): Promise<LogConfig> {
+    return parseLogConfig(await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(0), quick));
+  }
+  /**
+   * LOGCFG (set): the default level (0 to 4) and the level of each of the 8 module records (0 to 4, or 0xff for the default). The levels are
+   * in RAM only and start again at each boot. The reply is the state after the set. Debug logging has no host command: it is read only.
+   */
+  async setLogConfig(level: number, modules: number[], quick = false): Promise<LogConfig> {
+    const bad = (v: number, allowDefault: boolean) =>
+      !Number.isInteger(v) || v < 0 || (v > 4 && !(allowDefault && v === 0xff));
+    if (bad(level, false) || modules.length !== 8 || modules.some((v) => bad(v, true)))
+      throw new DkError({
+        error: 'logcfg: a level is 0 to 4 (0xff: the default) for 8 module records',
+        kind: 'request',
+      });
+    return parseLogConfig(await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(1, level, ...modules), quick));
   }
   /** Every event of the log. */
   async readLog(quick = false): Promise<DkLogEvent[]> {

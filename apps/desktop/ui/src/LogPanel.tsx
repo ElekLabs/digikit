@@ -1,8 +1,10 @@
-// The inside of the Log drawer: the header (Source, Errors only, Follow, Save, Copy, Clear, Close) and the list. The dock around it (its height and
+// The inside of the Log drawer: the header (Source, Errors only, Follow, Debug, Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
 // its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
 import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { copyText, filterEntries, formatTime, saveName, saveText, sourceMenu, type Origin } from './log-core';
+import { levelOrigin, levelsOff } from './log-level-core';
+import LogLevelMenu from './LogLevelMenu';
 import type { LogFollow } from './log-follow';
 import type { OriginStatus } from './log-follow-core';
 import { clearLog, followOn, logOpen, logState, setFollowOn, setLogOpen } from './log-state';
@@ -59,6 +61,28 @@ export default function LogPanel(props: LogPanelProps) {
       setLogSource('all');
   });
   const canFollow = () => live('emulator') || live('device');
+  // the Level menu and the Debug indicator act on the origin chosen in Source
+  const levelTarget = () => levelOrigin(logSource(), { emulator: live('emulator'), device: live('device') });
+  const levelOff = () => {
+    const origin = levelTarget();
+    return levelsOff({
+      origin,
+      live: origin ? live(origin) : false,
+      supported: origin ? props.follow.logcfg()[origin] : undefined,
+    });
+  };
+  const debugState = () => {
+    const origin = levelTarget();
+    return origin && !levelOff() ? props.follow.config()[origin]?.debug : undefined;
+  };
+  const debugTitle = () => {
+    const origin = levelTarget();
+    const off = levelOff();
+    if (off) return off;
+    const on = debugState();
+    if (on === undefined) return `The ${origin} has not reported its debug state yet`;
+    return `${on ? 'Debug logging is on: the runtime keeps every event.' : 'Debug logging is off: the runtime keeps only errors.'} It is switched in the DIGIKIT menu of the ${origin} (SETTINGS > DIGIKIT, DEBUG); the host has no command for it.`;
+  };
 
   const toggleExpanded = (id: number) =>
     setExpanded((set) => {
@@ -110,7 +134,9 @@ export default function LogPanel(props: LogPanelProps) {
         </span>
         <span class="sp" />
         <select aria-label="Source" value={logSource()} onChange={(e) => setLogSource(e.currentTarget.value)}>
-          <option value="all">All</option>
+          <option value="all" selected={logSource() === 'all'}>
+            All
+          </option>
           <For each={menu()}>
             {(group) => (
               <optgroup label={group.label}>
@@ -148,6 +174,20 @@ export default function LogPanel(props: LogPanelProps) {
             <i class="follow-dot" aria-hidden="true" />
           </Show>
         </button>
+        <span
+          class="tb small chip"
+          classList={{
+            'dbg-on': debugState() === true,
+            'dbg-off': debugState() === false,
+            'dbg-unknown': debugState() === undefined,
+          }}
+          role="status"
+          aria-label={`Debug logging: ${debugState() === undefined ? 'unknown' : debugState() ? 'on' : 'off'}`}
+          title={debugTitle()}
+        >
+          Debug <i class="debug-dot" aria-hidden="true" />
+        </span>
+        <LogLevelMenu follow={props.follow} origin={levelTarget} off={levelOff} />
         <button
           type="button"
           class="tb small"
