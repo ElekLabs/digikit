@@ -33,7 +33,7 @@ numbers identify the manual sections independently.
 | Manual p0349, printed 17-17 | DMA56–63 group is INTC2 source 0, vector 192 | Source arbitration matters when both are pending |
 | Manual p0341/0344/0333, printed 17-9 and surrounding INTC/CPU sections | CIMR, configured interrupt level and CPU instruction-boundary sampling constrain delivery | No complete INTC implementation audit or exact timing proof |
 | DT2 setup `0x4012d78e`; DN2 setup `0x4012be52` | Vector slot `0x4000037c` holds ISR `0x4012d5ba` / `0x4012bc7e`; ICR `0xfc05005f` gets 3 at DT2 `0x4012d86c` / DN2 `0x4012bf30`; CIMR command `0xfc05001d` gets 31 at `0x4012d872` / `0x4012bf36` | Current-image bounded setup only |
-| DT2 `0x4012d8fc..0x4012d908`; DN2 `0x4012bfc0..0x4012bfcc` | IRQSIGEN `0xfc0cc038` is ORed with `0x00310003` | No IRQSTATEN write found in this bounded setup; not an exhaustive write search. Generic reset value `0x117f013f` enables those bits; post-RSTA state is unresolved |
+| DT2 `0x4012d8fc..0x4012d908`; DN2 `0x4012bfc0..0x4012bfcc` | IRQSIGEN `0xfc0cc038` is ORed with `0x00310003` | No IRQSTATEN write exists in any DT2 1.17 or DN2 1.12 section (all eSDHC accesses are absolute; none at `0xfc0cc034`). RSTA leaves IRQSTATEN at `0x117f013f`, which enables those bits [D] |
 | DMA59 setup DT2 `0x4012dd74`, DN2 `0x4012c438` | Separate DMA vector 192 path | Cannot substitute for controller command/data/error delivery |
 
 Runtime sample-store I/O on both devices reaches firmware eMMC block operations:
@@ -47,7 +47,7 @@ uses this block-I/O transport.
 
 | Existing seam | Observed behavior | Reuse or remaining work |
 | --- | --- | --- |
-| [eSDHC](../../packages/emulator/periph/src/esdhc.rs) | Bounded Device status events, enable/signal gating and W1C are implemented; commands emit CC and readiness, with TC explicit | Full-controller reset remains unresolved; Oracle command behavior is preserved |
+| [eSDHC](../../packages/emulator/periph/src/esdhc.rs) | Bounded Device status events, enable/signal gating and W1C are implemented; commands emit CC and readiness, with TC explicit | RSTA sets IRQSTATEN to `0x117f013f`; other full-controller reset effects remain open; Oracle command behavior is preserved |
 | [Board](../../packages/emulator/machine/src/board.rs): 1075, 1637–1698 | Oracle completion directly posts semaphores; DMA service is synchronous | Integrated proof must not use host semaphore posting as ISR/waiter evidence |
 | [Runner](../../packages/emulator/machine/src/runner.rs) | Ordinary `step` retains configured DMA59 delivery; `step_esdhc` isolates source 31; `step_storage` orders sources 31 and 0 | The bounded pair uses shared IMR/ICR and CPU IPL; global arbitration remains open |
 | [INTC](../../packages/emulator/periph/src/intc.rs): 144, 167, 209 | Level/mask, hardware CIMR and IPR helpers exist | Reuse after checking actual mask/priority/CPU-IPL arbitration; `forced_candidate` near 235–258 omits source 0 and uses max(level, vector) across banks, so is not a ready universal arbiter |
@@ -97,11 +97,11 @@ model boot was run.
 effects of individual RSTC (clear CC) and RSTD (clear BRR, BWR, DINT, BGE and TC).
 Other command/data-path reset effects remain unchanged. Manual p0637, printed
 25-21, says RSTA clears types ROC, RW, RW1C and RWAC: RW is explicitly included.
-That broad wording and the generic IRQSTATEN reset value `0x117f013f` leave the
-post-RSTA enable state unresolved. No safe post-enable state is assumed. RSTA,
-including combined reset writes, retains the legacy self-clear behavior unchanged;
-it is not a hardware-faithful full-controller reset implementation. Stage A
-therefore remains incomplete.
+The firmware never writes IRQSTATEN, so RSTA must leave the status enables
+set (see the result below). The Device model sets IRQSTATEN to `0x117f013f` on
+RSTA, including combined reset writes, and keeps the legacy self-clear for the
+other registers; it is not a full-controller reset. Stage A therefore remains
+incomplete for the other reset effects.
 
 ### Reset investigation and controlled checkpoint decision
 
@@ -119,9 +119,23 @@ MAIN scan covered `0x40000400..0x4031ff60`: 1,007,317 decoded instructions,
 Computed/indirect accesses and undecoded bytes remain outside that result;
 it does not prove global absence of IRQSTATEN writes.
 
-The manual's broad RSTA clearing rule explicitly includes RW, while the generic
-IRQSTATEN reset value is `0x117f013f`. The investigation cannot distinguish
-preservation, reset-default restoration or zeroing of enables after RSTA.
+**[D] Post-RSTA IRQSTATEN, checked twice independently:** no code in DT2 1.17
+or DN2 1.12 (all sections) reads or writes IRQSTATEN `0xfc0cc034`; all 128
+`0xfc0cc0xx` constants are absolute and none is at `0x34` or the base. RSTA
+(SYSCTL bit 24) sites: DT2 `0x4012d8a8` (in `0x4012d78e`) and `0x400f005c` (in
+`0x400effd8`); DN2 `0x4012bf6c` and `0x400f1a38`. After RSTA the code does INITA,
+`SYSCTL |= 0xE0004` and `IRQSIGEN |= 0x00310003` (CC, TC, CTOE, DTOE, DCE). The
+polled driver `0x400effd8` polls IRQSTAT CC (`0x400effa2`) then TC (`0x400effb6`)
+after RSTA in the same function, `0x400efeb6` polls CC with IRQSIGEN cleared, and
+the ISR `0x4012d5ba` tests IRQSTAT bits 16, 1, 21, 20, 0. These need the enable
+bits set. The manual gives reset value `0x117f013f` (p0621, figure p0643); p0637
+says RSTA clears ROC, RW, RW1C and RWAC bits, which read literally would zero
+IRQSTATEN and make those polls never finish. So after RSTA at least CC, TC and
+the error enables are set, and `0x117f013f` matches every bit the firmware uses.
+**Open [O]:** the exact full value after RSTA is not proven; a device read would
+settle it (planned in the debug-mode and probes plan on branch
+`debug/mode-and-probes`) but behaviour does not need it.
+
 The locally retained public errata (`out/refs/MCF54418DE/`) p0012,
 SECF215, describes an RSTA clock glitch and a disable-clock workaround. Page
 p0013, SECF218, concerns SDIO and does not clarify these reset values. This was
@@ -140,10 +154,9 @@ Two public driver paths provide context without resolving hardware state:
   reliance on nonzero status enables, not a measurement or a distinction between
   preservation and reset-default restoration.
 
-No trusted hardware readback was found in this bounded search. RSTA, including
-combined reset writes, remains unchanged legacy behavior with unsupported
-full-reset fidelity. The existing 21 passing component tests remain the current
-result; no tests, builds or emulator runs were repeated for this investigation.
+No trusted hardware readback was found in this bounded search. The model sets
+IRQSTATEN to `0x117f013f` on RSTA; `rsta_sets_status_enables_to_reset_value_so_completion_latches`
+in `packages/emulator/periph/tests/esdhc_device_events.rs` checks it.
 
 **Approved checkpoint decision:** proceed with controlled Stage B from explicitly
 initialized registers while deferring full RSTA fidelity. This relaxes the earlier
@@ -321,7 +334,7 @@ no issues. Log: `out/runs/storage-fault-proof/scheduler-continuation-tests.log`;
 exact command, environment, fixture/input hashes and results are recorded in
 `scheduler-continuation-invocation.json` in that directory.
 
-**Remaining [O]:** full RSTA, physical DMA quiescence, timer/physical-source
+**Remaining [O]:** full RSTA effects other than IRQSTATEN, physical DMA quiescence, timer/physical-source
 integration, full scheduler and native cold-boot fault history. The policy audit
 found Board/Time snapshot register backing does not bind CompletionPolicy,
 TimerPolicy or construction settings, while native boot hardcodes Oracle and
@@ -610,7 +623,7 @@ The full merge gate remains deferred.
 may retain explicit host peer producers, but cannot replace or weaken the
 existing full fault-history acceptance. Synthetic vector-86 acceptance causing
 vector-65 creation is an explicit modeling assumption requiring lifecycle and
-batching tests. Full EPORT is not a prerequisite; full RSTA remains open.
+batching tests. Full EPORT is not a prerequisite; full RSTA effects other than IRQSTATEN remain open.
 USB MIDI callback injection must reject, including prequeued/active callback
 state, until a distinct admission contract exists. The audit found USB and DIN
 share vector 156 while USB's fixed level 5 bypasses ICR/IMR, so USB cannot silently

@@ -373,9 +373,16 @@ impl<P: CardPort> Esdhc<P> {
                 // RM Table 25-13: only the bounded interrupt-state effects
                 // of command/data reset are modeled here. Other reset fields
                 // and data-path reset behavior remain outside this model.
-                // RSTA retains the legacy self-clear-only behavior, including
-                // combined reset writes. Full controller interrupt/enable reset
-                // poststate is unresolved; no RSTA fidelity is claimed.
+                // RSTA sets IRQSTATEN to its reset value 0x117F_013F (RM
+                // p0621). The manual's "RW bits are cleared" wording (p0637)
+                // would zero it, but the firmware polls IRQSTAT CC/TC right
+                // after RSTA without writing IRQSTATEN, so those enables must
+                // be set. The exact full value is not proven. Other registers
+                // keep the legacy self-clear-only behavior; no further RSTA
+                // fidelity is claimed.
+                if bits & (1 << 24) != 0 {
+                    self.regs.set_u32_at(IRQSTATEN as usize, 0x117F_013F);
+                }
                 let mut clear = 0;
                 if bits & (1 << 24) == 0 && bits & (1 << 25) != 0 {
                     clear |= CC;

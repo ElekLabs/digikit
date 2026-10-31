@@ -45,7 +45,7 @@ Remote control reproduces the scenario; dedicated telemetry supplies evidence.
 
 | Priority / area | Gap and source | Useful observation |
 | --- | --- | --- |
-| First: ColdFire storage reset | Post-RSTA IRQSTATEN/IRQSIGEN behavior remains unresolved. [Finding 100](../findings/100-storage-interrupt-emulation-scope.md) and [eSDHC model](../../packages/emulator/periph/src/esdhc.rs). | Capture selected non-destructive register reads before/after the firmware's normal reset completion and initialization, tagged with event order. Do not manually reset an active storage controller. |
+| First: ColdFire storage reset | Post-RSTA IRQSTATEN is answered statically: the model sets `0x117f013f` (finding 100); only the exact full value is open. [Finding 100](../findings/100-storage-interrupt-emulation-scope.md) and [eSDHC model](../../packages/emulator/periph/src/esdhc.rs). | Optional: read IRQSTATEN/IRQSIGEN after the firmware's normal reset completion and initialization, tagged with event order, to confirm the full value. Do not manually reset an active storage controller. |
 | ColdFire delivery/order | Default Oracle storage completion bypasses real handlers; isolated Device handlers/waiters pass, but native composition of storage, timers, SSI and host inputs is unfinished. [Board](../../packages/emulator/machine/src/board.rs), [Time](../../packages/emulator/machine/src/time.rs), [native runtime](../../packages/emulator/boot/src/runtime.rs), finding 100. | Small records of command issue, DMA/controller ISR entry, captured status, acknowledgement and waiter continuation during a known sample load. This provides an ordering reference, not complete interrupt coverage. |
 | SHARC cache/DMA visibility | Emulator proofs do not establish physical cache coherence or maintenance correctness for DMA buffers. [Cache/link finding](../findings/91-hardware-loop-ends-and-dsp-link-cache.md), [LP0/cache finding](../findings/95-dn2-cache-and-lp0-staging.md). | Producer sequence, DMA completion, consumer-visible sequence/checksum and relevant cache configuration at a deliberately owned buffer. DN2-specific helper addresses are not DT2 probe addresses. |
 | SHARC reader/interrupt lifetime | Frame-fetch tests supply controlled interleavings; physical IRQ/DMA exclusion, callback retirement and complete writer coverage remain open. [Finding 99](../findings/99-stereo-frame-fetch-exclusion.md), [retirement design](../findings/83-sample-retirement-design.md). | Correlate publication, reader admission/exit, stop acknowledgement and reclaim events under a repeatable remote-controlled selection/playback scenario. A quiet trace alone is not an ownership proof. |
@@ -77,8 +77,9 @@ DN2 addresses into DT2 simply because the devices share a DSP family.
 4. Choose one named blocker: observe **normal ColdFire RSTA initialization** and
    the associated IRQSTATEN (`0xfc0cc034`)/IRQSIGEN (`0xfc0cc038`) state. Plan a
    passive capture around the normal path, rather than an active controller-reset
-   experiment. The audited firmware ORs IRQSIGEN; post-RSTA IRQSTATEN remains
-   unresolved. An isolated late read cannot reconstruct initialization history.
+   experiment. The audited firmware ORs IRQSIGEN and never writes IRQSTATEN; the
+   static result (`0x117f013f`, finding 100) answers the blocker, so this read is
+   optional and only confirms the exact value. An isolated late read cannot reconstruct initialization history.
 5. Design the smallest triggered CF/SHARC records needed for that blocker and
    retrieve them after capture. Existing PEEK reads allowed ColdFire RAM only,
    1–512 bytes per request, and excludes MMIO; it is not a direct register probe
@@ -122,7 +123,7 @@ Create a separate hardware worktree/branch from the latest pushed source branch
 including this handover; 63a6ba13 is the code baseline. None exists yet.
 Preserve the other Claude checkout and PIDs; use one hardware owner.
 First inventory identity/transport and define a benign roundtrip, then scope one
-normal-RSTA IRQSTATEN/IRQSIGEN capture. Obtain hardware-session authority before
+optional normal-RSTA IRQSTATEN/IRQSIGEN capture. Obtain hardware-session authority before
 hardware actions; this handover itself authorizes no device operation or flash.
 Pause emulator expansion until the targeted evidence supports the next decision.
 ```

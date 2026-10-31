@@ -194,6 +194,17 @@ fn command_and_data_reset_clear_their_status_without_clearing_errors_or_enables(
 }
 
 #[test]
+fn rsta_sets_status_enables_to_reset_value_so_completion_latches() {
+    let mut h = device();
+    write(&mut h, esdhc::IRQSTATEN, 0);
+    write(&mut h, esdhc::SYSCTL, 1 << 24);
+    assert_eq!(read(&mut h, esdhc::IRQSTATEN), 0x117F_013F);
+    assert_eq!(read(&mut h, esdhc::SYSCTL) & (1 << 24), 0);
+    h.device_event(CC | TC).unwrap();
+    assert_eq!(read(&mut h, esdhc::IRQSTAT), CC | TC);
+}
+
+#[test]
 fn snapshot_restores_masked_status_and_host_write_queue_without_new_state() {
     let mut h = device();
     h.device_event(TC | DTOE).unwrap();
