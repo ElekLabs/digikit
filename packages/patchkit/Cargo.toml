@@ -39,6 +39,8 @@ sharc-rt = { path = "../emulator/sharc-rt" }
 regex-lite = "0.1"
 # The settings record's decoder (the code the runtime uses); no_std, builds for every target.
 dkrt-sdk = { path = "../../modules/core/runtime/sdk" }
+# The fit rule (the code the DIGIKIT menu runs); no_std, builds for every target.
+dkrt-fit = { path = "../../modules/core/runtime/fit" }
 
 # `patchkit store dump` reads card images, `patchkit flash` sends to a MIDI port: the binary only (not wasm32).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

@@ -1143,6 +1143,7 @@ version = "0.1.0"
 dependencies = [
  "dkneeds",
  "dkrt-sdk",
+ "serde_json",
 ]
 
 [[package]]
@@ -3088,6 +3089,7 @@ version = "0.1.0"
 dependencies = [
  "coldfire",
  "dkneeds",
+ "dkrt-fit",
  "dkrt-sdk",
  "dkupload",
  "dt2-firmware-loader",

@@ -11,7 +11,9 @@ import {
   CMD as GCMD,
   LOAD_STATUS,
   LOG_KIND,
+  MAX_CHUNK,
   PROTO_VERSION,
+  READ_MAX,
   SERVICE_CMD,
   STATUS as GSTATUS,
 } from './gen_proto.ts';
@@ -92,7 +94,7 @@ export const CMD = {
   CLEAR: 0x14,
   ABORT: 0x15,
 };
-export const MAX_CHUNK = 32768;
+export { MAX_CHUNK };
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -1022,7 +1024,7 @@ export class DkSession {
 /** The size of a .dkm header (docs/design/digikit-dkm.md). */
 export const HEADER_BYTES = 0xa0;
 /** The most bytes one READ returns. */
-export const READ_MAX = 768;
+export { READ_MAX };
 
 /**
  * Has the device booted since its RESTART was answered? True: this log has no RESTART request (a new boot, with BOOT_START); false: the

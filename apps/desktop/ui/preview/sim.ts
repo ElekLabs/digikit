@@ -2,11 +2,16 @@
 // device answers. The state can be set from the address (`?dev=empty&folder=files&speed=1.5`, see PARAMS) and while the page runs
 // (`window.__sim.set({ dev: 'noreply' })`), so a screenshot script (tools/devtools/ui_shots.mjs) reaches each state without clicking.
 import type { SampleEntry } from '@digi/dk-session/samples';
-import type { Caps, Needs } from '@web/modules/dkfit';
+import { DkNeeds } from '@web/modules/dkneeds';
+import { setFitReader, type Caps, type Needs } from '@web/modules/fit';
+import wasmUrl from '../../../web/public/patchkit.wasm?url';
 import { fitWarnings } from '@web/modules/dktransfer';
 import { noteActivity } from '@web/transfer/activity';
 import type { LocalEntry } from '../src/samples-core';
 import type { TransferRow, TransferView } from '@web/transfer/transfer-core';
+
+// the rows' fit verdicts come from the Rust rule in patchkit.wasm, as in the app
+setFitReader(await DkNeeds.create(await (await fetch(wasmUrl)).arrayBuffer()));
 
 /** dev: ok (answers), empty (nothing stored), noreply (never answers: the wait notice), error (every read fails), slow (2.5 s per read).
  *  folder: files (the samples folder of ~20 WAVs), empty, none (no folder chosen yet). speed: MiB/s of an upload. */

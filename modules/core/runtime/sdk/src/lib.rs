@@ -283,7 +283,7 @@ pub mod fault;
 /// off), five argument words.
 /// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the contract version numbers (`contract`).
 mod gen_sdk;
-pub use gen_sdk::{contract, logk, proto};
+pub use gen_sdk::{contract, limits, logk, proto};
 
 #[cfg(test)]
 mod tests {

@@ -30,9 +30,9 @@ const STATE_MAGIC: u32 = 0x444b_4453; // "DKDS"
 /// Free voice rows core/dyndsp reserves: one per run-time machine type (a module's voice takes a row).
 pub const MAX_ROWS: usize = DYN_TYPES as usize;
 const MAX_VOICES: usize = MAX_ROWS;
-const MAX_RELOCS: u32 = 4096;
-const MAX_IMPORTS: u32 = 32;
-const GRANULE: u32 = 64;
+const MAX_RELOCS: u32 = dkneeds::MAX_RELOCS;
+const MAX_IMPORTS: u32 = dkneeds::MAX_IMPORTS;
+const GRANULE: u32 = dkneeds::GRANULE;
 /// Words of a voice row of `core/dsp-voice`: 0 type, 1 pc, 2 to 9 the range of knob 0 to 7 (min | max << 16), 10 the type the guard disabled, then its counters,
 /// 16 note_on pc, 17 state base, 18 state stride, 19 clear bytes, 20 generation, 21 log level, 22 and 23 spare.
 const ROW_WORDS: u32 = 24;
@@ -42,12 +42,12 @@ const VOICE_V1: u32 = 16;
 const VOICE_V2: u32 = 48;
 const VOICE_V3: u32 = 64;
 /// Most voice states a module may reserve.
-const MAX_STATE_VOICES: u32 = 64;
+const MAX_STATE_VOICES: u32 = dkneeds::MAX_STATE_VOICES;
 /// Steps to publish a row: 8 ranges, the pc, note_on, state base, stride, clear, the cleared disabled word, the type.
 const ROW_STEPS: u32 = 15;
 /// Effect rows: the most a chain takes (`DK_FX_MAX`), the bytes of an effect record in a DSP section of version 4, the words of a row of `core/fx`, the pc of
 /// a free row and the steps to publish a row: 8 parameter words, desc, state, mix, enabled, the 4 amount words and the route (finding 62), the pc.
-pub const MAX_FX: usize = 4;
+pub const MAX_FX: usize = dkneeds::MAX_FX as usize;
 const FX_REC: u32 = 64;
 const FX_ROW_WORDS: u32 = 24;
 const FX_FREE_PC: u32 = 0xffff_ffff;

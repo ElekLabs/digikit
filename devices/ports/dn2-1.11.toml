@@ -35,7 +35,7 @@ name = "dsp.l2"
 cpu = "sharc"
 start = 0x2008823c
 end = 0x20100000
-excludes = []
+excludes = [[0x200fa000, 0x200fe000]]
 mark = "D"
 
 [[anchor]]

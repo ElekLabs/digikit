@@ -69,10 +69,6 @@ DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "dkupload": ("upload", "menu", "debug", "crash", "card", "settings"),
     "dksettings": ("settings",),
     "dkrun": ("menu",),
-    "dkfit": (
-        "menu",
-        "debug",
-    ),  # the fit rule: dktransfer and dkrun use it, the `fits` part of the debug scenarios
     "dkneeds": (
         "menu",
         "debug",

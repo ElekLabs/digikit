@@ -190,8 +190,8 @@ unsafe fn load_inner(path: *const u8) -> i32 {
     }
     if !in_file(image_off, image_size, size)
         || image_off & 15 != 0
-        || reloc_n > 4096
-        || import_n > 64
+        || reloc_n > dkneeds::MAX_RELOCS
+        || import_n > dkneeds::MAX_CF_IMPORTS
         || slot_n > SLOTS as u32
         || !in_file(reloc_off, reloc_n * 8, size)
         || !in_file(import_off, import_n * 32, size)

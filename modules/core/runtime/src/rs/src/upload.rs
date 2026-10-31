@@ -23,7 +23,7 @@ use dkrt_sdk::{logk, DkrtCap, CARD_TOO_SMALL, CAP_MAX, E_NOT_FOUND, OK, RUNTIME_
 // (finding 46). E_PEEK: the range is not inside a range the device file lists, or the length is 0 or over 512.
 
 /// Largest DATA chunk (INFO says so) and the unpacked body we accept: offset (4) + chunk.
-pub const MAX_CHUNK: u32 = 32768;
+pub const MAX_CHUNK: u32 = dkrt_sdk::proto::MAX_CHUNK as u32;
 /// The unpacked request body starts here in the buffer, so that a DATA chunk (after its 4-byte offset) is 16-byte aligned.
 const BODY_AT: usize = 12;
 const BODY_MAX: usize = 4 + MAX_CHUNK as usize;
@@ -44,7 +44,7 @@ const IN_AT: usize = 1024;
 const OUT_AT: usize = IN_AT + TBL_CAP;
 /// Wire bytes of a reply are at most 1 KiB: the unpacked body at most this.
 const REPLY_BODY_MAX: usize = 880;
-const REQ_WIRE_MAX: u32 = 40 * 1024;
+const REQ_WIRE_MAX: u32 = dkrt_sdk::proto::MAX_REQUEST_WIRE as u32;
 const CLEAR_MAGIC: u32 = 0x434c_5221;
 
 #[repr(C)]
@@ -863,7 +863,7 @@ unsafe fn cmd_delete(seq: u32, buf: *mut u8, body: *const u8, blen: usize) -> i3
 }
 
 /// Most bytes one READ returns: the reply body is a status, the u32 file size and the bytes, in at most `REPLY_BODY_MAX`.
-const READ_MAX: u32 = 768;
+const READ_MAX: u32 = dkrt_sdk::proto::READ_MAX as u32;
 
 /// The file `path` (NUL-terminated) of the store, or the status to reply.
 unsafe fn file_of(buf: *mut u8, path: *const u8) -> Result<Entry, i32> {
@@ -1080,7 +1080,7 @@ unsafe fn cmd_peek(seq: u32, body: *const u8, blen: usize) -> i32 {
     }
     let addr = rd32(body);
     let len = ((*body.add(4) as u32) << 8) | *body.add(5) as u32;
-    if len == 0 || len > 512 || !peek_allowed(addr, len) {
+    if len == 0 || len > dkrt_sdk::proto::PEEK_MAX as u32 || !peek_allowed(addr, len) {
         return reply(CMD_PEEK, seq, E_PEEK, 0);
     }
     let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);

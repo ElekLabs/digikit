@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 from tools import python_env
-from tools.device import dkfit as F
 from tools.device import dklog as L
 from tools.device import dkneeds as N
 from tools.device import dkupload as D
@@ -238,7 +237,7 @@ def module_results(
 def check_fit(up: D.Uploader, info: dict[str, Any], data: bytes) -> str | None:
     """Why the packed module DATA will not load on the device, or None. `run` selects it as the only module of the next boot, which loads it into
     an empty runtime: its needs, inferred from the file (`patchkit needs`, docs/design/digikit-dkm.md), against the device's limits (CAPACITY; the
-    fit rule, dkfit.py). A file that has no needs is one the loader refuses. A device without CAPACITY, or one that does not answer it, gets no
+    fit rule, `dkneeds.fit`). A file that has no needs is one the loader refuses. A device without CAPACITY, or one that does not answer it, gets no
     verdict on the limits."""
     try:
         needs = N.needs_of(data)
@@ -250,8 +249,8 @@ def check_fit(up: D.Uploader, info: dict[str, Any], data: bytes) -> str | None:
         caps = up.capacity()
     except D.UploadError:
         return None
-    short = F.fits_now(needs, F.empty_caps(caps))
-    return F.describe(short) if short else None
+    short = N.fit(caps, [needs], empty=True)["each"][0]
+    return short["describe"] if short else None
 
 
 def run(

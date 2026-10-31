@@ -803,12 +803,16 @@ export default function Console() {
             <dd>{audio() ? `${audio()!.source_audio_seconds.toFixed(2)} s` : '—'}</dd>
             <dt>CF load</dt>
             <dd>{load_() ? `${Math.round(load_()!.cf.real_pct)} %` : '—'}</dd>
-            <dt>DSP load</dt>
+            <dt title="Estimate for the real chip. The model figure counts one cycle per instruction, as the on-device HEALTH page does in the emulator.">
+              DSP load (est.)
+            </dt>
             <dd>
               {load_()?.dsp
-                ? `${Math.round(load_()!.dsp!.real_pct)} % (worst ${Math.round(load_()!.dsp!.real_high_pct)} %)`
+                ? `${Math.round(load_()!.dsp!.real_pct)} % est. (worst ${Math.round(load_()!.dsp!.real_high_pct)} %), model ${Math.round(load_()!.dsp!.model_pct)} %`
                 : '—'}
             </dd>
+            <dt title="Largest estimated DSP load of any window since the meter was reset">DSP window peak</dt>
+            <dd>{load_()?.dsp?.peak_pct !== undefined ? `${Math.round(load_()!.dsp!.peak_pct!)} % est.` : '—'}</dd>
           </dl>
           <Show when={reloadNote()}>
             <p class="note">{reloadNote()}</p>
@@ -880,8 +884,8 @@ export default function Console() {
             <Meter value={load_()!.cf.real_pct} />
           </span>
           <Show when={load_()!.dsp}>
-            <span>
-              DSP {Math.round(load_()!.dsp!.real_pct)}%
+            <span title="Estimated DSP load of the real chip. Model figure (as the HEALTH page shows in the emulator) and window peak are in the drawer">
+              DSP est. {Math.round(load_()!.dsp!.real_pct)}%
               <Meter value={load_()!.dsp!.real_pct} worst={load_()!.dsp!.real_high_pct} />
             </span>
           </Show>

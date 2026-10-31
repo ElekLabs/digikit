@@ -308,9 +308,9 @@ Not refused today: a `DEF` outside `MIN` .. `MAX`.
 
 Layout facts:
 
-- Digitakt II: the machine row holds the knobs as `f0..f7` and the level as `f8`. A page shows 8 of the 10 engine slots. An added machine has one
+- Digitakt II: the machine row holds the knobs as `f0..f7` and the level as `f8`. A page shows 8 of the 10 engine slots ([finding 100](findings/100-module-limits.md)). An added machine has one
   SRC page: TUNE on knob 0, sample slot on knob 3, level on knob 7.
-- Digitone II: a stock page holds eight knobs and the track level. A machine gets one page, from its `DK_PAGE` or named after the machine.
+- Digitone II: a stock page holds eight knobs and the track level. A machine gets one page for now (a patchkit rule; the firmware allows several, [finding 100](findings/100-module-limits.md)), from its `DK_PAGE` or named after the machine.
 - Limits per module (run-time pack): 16 parameters, 8 machines, 8 pages, 32 records in a register section.
 
 Persistence and modulation:
@@ -344,6 +344,7 @@ The generated files are in `sdk/include/dk/gen/` and `sdk/asm/`.
 | `sdk/asm/dk_machine.inc` | The machine constants and field offsets for assembly. | The machine's `.s`. |
 | `sdk/include/dk/gen/fx_consts.h` | The effect constants as C `#define`s. | `<dk/fx.h>`. |
 | `sdk/asm/dk_fx.inc` | The effect constants and field offsets for assembly. | The effect's `.s`. |
+| `sdk/include/dk/gen/limits.h` | The `.dkm` format limits (`[limits.format]`) as C `#define`s, such as `DK_ARENA_HDR`. | Core apps in C. |
 
 Do not include `dk_fx.inc` and `dk_machine.inc` in one assembly file. `DK_BLOCK` and `DK_LEVEL_BOUND_BITS` are in both.
 

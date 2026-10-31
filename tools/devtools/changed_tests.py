@@ -494,6 +494,11 @@ def plan(
         ("pathcheck", [*verify.PY, "-m", "tools.devtools.pathcheck"], ""),
         ("layercheck", [*verify.PY, "-m", "tools.devtools.layercheck"], ""),
         (
+            "gen-check",
+            [*verify.PY, "-m", "tools.patchkit.patchkit", "gen", "--check"],
+            "",
+        ),
+        (
             "python-tests",
             verify.python_tests_command(
                 out_dir, tests, verify.python_jobs(verify_budget.resolve_budget())

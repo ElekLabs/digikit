@@ -10,7 +10,7 @@ docs/CONTROL.md (`midi.in`, `midi.out`, `midi.usb.in`, `midi.usb.out`).
 ## Result
 
 **[D]** In 16 runs on DT2 1.16 and 15 on DN2 1.11 (table below) the firmware did not write the module RAM `cf.expansion`
-(DT2 0x47e8b000-0x47fe0000, DN2 0x46712000-0x47fe0000) and did not write a card sector in the module store 0x38000-0x3E000.
+(DT2 0x47e8b000-0x47fe0000, DN2 0x4671a000-0x47fe0000 (DN2 1.12; finding 100)) and did not write a card sector in the module store 0x38000-0x3E000.
 Per run: write-watch from the first CACR write (CPU stores and DMA) with 0 events; the canary pattern filled into the
 region (cached and uncached views) with 0 changed words; the flush check with 0 hits; the card overlay with 0 sectors in the
 store. The scripts reach the screens and replies named in the last column (frames checked by eye, then pinned by SHA-256 in

@@ -673,6 +673,13 @@ args = ["kind_site_stage", "id", "step", "at", "module"]
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
+[protocol.limits]   # sizes of the upload protocol; every host and the runtime take them from here
+max_chunk = 32768   # bytes of one PUT chunk (DATA body); the runtime's BEGIN reply sends it
+read_max = 768      # bytes of one READ (and SETTINGS) reply
+peek_max = 512      # bytes of one PEEK reply
+max_request_wire = 40960  # the largest request on the wire, SysEx-encoded (40 KiB)
+max_reply_wire = 1024     # the largest reply on the wire, SysEx-encoded
+
 [protocol.commands] # command numbers; never reuse or renumber (additive only)
 INFO = 0x01
 LIST = 0x02
@@ -766,6 +773,23 @@ send_slots = 2      # effects on a send bus: the Sound array's free indices a se
 dsp_area_bytes = 524288  # the 17-bit word offset of a core/dsp-link chunk reaches 2^17 words
 param_rows = 16     # parameter rows core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 page_rows = 8       # page rows core/dynreg reserves (Digitone II)
+machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
+stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
+
+[limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
+                    # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: SLOTS ([dkm.slot] count),
+                    # MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
+dkm_header = 160    # 0xa0: the header of a `.dkm` with no tables (a module with a `dkm_menu` has 4 bytes more); `dkneeds::HEADER`
+dsp_header = 64     # 0x40: the header of the DSP section
+max_records = 32    # records of the `register` table
+max_relocs = 4096   # ColdFire relocations
+max_imports = 32    # imports of the DSP section
+max_cf_imports = 64  # imports of the ColdFire import table (a different table from the DSP section's)
+max_state_voices = 64  # voice states of one voice record
+max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's most: the DSP area)
+granule = 64        # the DSP area's placement granule
+dsp_slack = 8       # bytes the DSP range may start before its alignment
+arena_hdr = 16      # the arena's block header
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection
 # record. `sectors` is the size of ONE copy; the runtime keeps the record in RAM and writes the copy that is not current. The area is part of the

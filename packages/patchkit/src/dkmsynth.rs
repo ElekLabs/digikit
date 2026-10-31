@@ -257,7 +257,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
     let max = if spec.oversize {
         usize::MAX
     } else {
-        dkm::MAX_FILE
+        dkm::max_file()
     };
     dkm::pack_full_max(Some(&obj), &reg_bytes, &dsp_bytes, &opts, max)
 }
@@ -355,7 +355,7 @@ mod tests {
         let e = synth(&Spec::parse(big).unwrap(), "dt2", &models()).unwrap_err();
         assert!(e.0.contains("runtime stages"), "{}", e.0);
         let f = make(&format!("{big}oversize = true\n"), "dt2");
-        assert!(f.len() > dkm::MAX_FILE);
+        assert!(f.len() > dkm::max_file());
         for bad in [
             "name = \"x\"\npad = 3\n",
             "name = \"\"\n",

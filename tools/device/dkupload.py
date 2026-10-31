@@ -59,6 +59,8 @@ from tools.device.dkproto import (
     CMD_SETTINGS,
     CMD_VERIFY,
     LOAD_STATUS,
+    MAX_CHUNK,
+    READ_MAX,
     VERSION,
 )
 from tools.device.midisniff import unpack_8in7
@@ -66,10 +68,8 @@ from tools.firmware.build import encode_8in7
 
 PREFIX = bytes((0xF0, 0x7D, 0x64, 0x6B))
 CLEAR_MAGIC = 0x434C5221
-MAX_CHUNK = 32768
 DEPTH = 2
 E_OFFSET = next(c for c, (n, _) in dkproto.STATUS.items() if n == "E_OFFSET")
-READ_MAX = 768  # most bytes one READ returns (the reply body is at most 880 bytes)
 HEADER_BYTES = 0xA0  # a .dkm header (docs/design/digikit-dkm.md)
 
 # status code -> name: the upload statuses, and the load and selection codes (SELECT answers them as the menu's APPLY gets them)

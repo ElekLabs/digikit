@@ -483,11 +483,10 @@ def fit_rows(names: list[str], files: list[bytes], cap: dict) -> list[str]:
 
 def run_fits(c: Any) -> None:
     """The MODULES list tells when a module will not load: a store of four modules, one small, two that each take a little over half of the DSP area, one
-    larger than the area. The rows (DK_LOAD) equal `fit_rows`, which uses the Python rule on the CAPACITY reply and the needs `patchkit needs` infers from the
-    packed files. YES on the largest checks nothing and opens a confirm `HUGE DOES NOT FIT` with the reason. With the first half-size one checked, the second
+    larger than the area. The rows (DK_LOAD) equal `fit_rows`, which sums the needs `patchkit needs` infers from the
+    packed files. The expected texts come from the fit rule (`dkneeds.fit`, the Rust code the menu runs). YES on the largest checks nothing and opens a confirm `HUGE DOES NOT FIT` with the reason. With the first half-size one checked, the second
     one is refused the same way (`DSP 164K > 155K FREE`); unchecking the first makes room."""
     from tools.coldfire import digikit_menu_proof as DP
-    from tools.device import dkfit as F
     from tools.device import dkneeds as N
 
     img = c.image_for(f"{B.RT},core/digikit-menu", "menu")
@@ -574,13 +573,12 @@ def run_fits(c: Any) -> None:
             tap(rig, "DOWN", 200)
         tap(rig, "YES", 700)  # the module larger than the DSP area: refused
         shot(rig, "huge-refused")
-        short = F.fits_now(N.needs_of(files[huge]), F.empty_caps(cap))
+        short = N.fit(cap, [N.needs_of(files[huge])], empty=True)["each"][0]
         c.check(
             "YES on the module larger than the DSP area checks nothing and opens a confirm with the reason",
             w(rig, "DK_POPUPS") == n0 + 1
             and checked(rig) == [0] * len(names)
-            and dialog(rig)
-            == ("HUGE DOES NOT FIT", F.menu_line(short) if short else "?"),
+            and dialog(rig) == ("HUGE DOES NOT FIT", short["text"] if short else "?"),
             f"{dialog(rig)} {checked(rig)}",
         )
         tap(rig, "YES", 500)  # the confirm is a notice
@@ -601,16 +599,16 @@ def run_fits(c: Any) -> None:
         n1 = w(rig, "DK_POPUPS")
         tap(rig, "YES", 700)  # half-b next to half-a: refused
         shot(rig, "refused")
-        short = F.fits_now(
-            N.needs_of(files[second]),
-            F.take(N.needs_of(files[first]), F.empty_caps(cap)),
-        )
+        short = N.fit(
+            cap,
+            [N.needs_of(files[first]), N.needs_of(files[second])],
+            empty=True,
+        )["set"]
         c.check(
             "the other half-size module is refused: the mark stays off and the confirm says which resource is short",
             w(rig, "DK_POPUPS") == n1 + 1
             and checked(rig) == want_checked
-            and dialog(rig)
-            == ("HALF-B DOES NOT FIT", F.menu_line(short) if short else "?"),
+            and dialog(rig) == ("HALF-B DOES NOT FIT", short["text"] if short else "?"),
             f"{dialog(rig)} {checked(rig)}",
         )
         tap(rig, "YES", 500)
@@ -642,7 +640,7 @@ def run_menu_open(c: Any) -> None:
     ColdFire-only, is opened; the same names with files that are not `.dkm` (the same sizes: the scan reads only their first sector) are opened as the
     baseline. Measured from the press that opens the page to the moment its last row is written (`DK_LOAD_N`): emulated milliseconds and busy ColdFire
     instructions, and the extra the needs cost, and the sector reads the needs reader made (`DK_NEEDS_READS`; the emulated card answers at once, so
-    the sector count, not the milliseconds, is what a device's card latency multiplies). Checked: the rows equal `fit_rows` (the Python rule on the needs `patchkit needs` infers), and the extra
+    the sector count, not the milliseconds, is what a device's card latency multiplies). Checked: the rows equal `fit_rows` (the sum of the needs `patchkit needs` infers), and the extra
     stays under `[debug] max_extra_ms` (twenty times the measured cost: the point is that a store of a dozen modules opens at once). The figures go in the report
     (`--keep`) and in docs/findings/60-what-fits.md."""
     from tools.coldfire import digikit_menu_proof as DP

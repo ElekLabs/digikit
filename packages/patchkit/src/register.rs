@@ -45,15 +45,12 @@ pub const EFFECT_TITLE: usize = 24;
 pub const EFFECT_NAME: usize = 24;
 pub const EFFECT_SHORT: usize = 8;
 pub const EFFECT_SHORT_MAX: usize = 6;
-pub const MAX_EFFECTS: usize = 4;
-pub const MAX_RECORDS: usize = 32;
+pub const MAX_RECORDS: usize = dkneeds::MAX_RECORDS as usize;
+/// Encoders on a page: an array length, so a const (the test `the_record_format_constants_come_from_the_contract_maxima` in packages/patchkit/tests/sdkgen.rs keeps it equal to `DK_PAGE_KNOBS` of sdk/sdk.toml).
 pub const KNOBS: usize = 8;
 pub const KNOB_PARAM: u32 = 0x8000_0000;
 /// `position` of a run-time machine: listed after the built-in machines, in type order.
 pub const POS_END: u32 = 255;
-pub const MAX_PARAMS: usize = 16;
-pub const MAX_MACHINES: usize = 8;
-pub const MAX_PAGES: usize = 8;
 pub const MACHINE_NAME: usize = 24;
 pub const PARAM_NAME: usize = 32;
 pub const PARAM_SHORT: usize = 16;
@@ -457,12 +454,18 @@ impl Register {
 
     /// The checks the runtime repeats on the file.
     pub fn check(&self) -> Result<()> {
-        if self.params.len() > MAX_PARAMS
-            || self.machines.len() > MAX_MACHINES
-            || self.pages.len() > MAX_PAGES
+        let max = crate::sdkgen::limits_max();
+        let (max_params, max_machines, max_pages) = (
+            max.param_rows as usize,
+            max.machine_rows as usize,
+            max.page_rows as usize,
+        );
+        if self.params.len() > max_params
+            || self.machines.len() > max_machines
+            || self.pages.len() > max_pages
         {
             return Err(err!(
-                "at most {MAX_PARAMS} params, {MAX_MACHINES} machines and {MAX_PAGES} pages per module"
+                "at most {max_params} params, {max_machines} machines and {max_pages} pages per module"
             ));
         }
         for p in &self.params {
@@ -486,12 +489,13 @@ impl Register {
                 }
             }
         }
-        if self.effects.len() > MAX_EFFECTS
+        let max_effects = max.fx_slots as usize;
+        if self.effects.len() > max_effects
             || self.params.len() + self.machines.len() + self.pages.len() + self.effects.len()
                 > MAX_RECORDS
         {
             return Err(err!(
-                "at most {MAX_EFFECTS} effect pages and {MAX_RECORDS} records per module"
+                "at most {max_effects} effect pages and {MAX_RECORDS} records per module"
             ));
         }
         let mut fxs = vec![];

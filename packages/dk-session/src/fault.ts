@@ -1,6 +1,6 @@
 // The fault record the runtime keeps on the card as the settings key `dk/fault` (core/runtime sdk `fault.rs`): reading the settings record over
 // SETTINGS, decoding the 40 bytes, and the ABOUT rows of the menu. The same rows are in `dkrt_sdk::fault::rows` and `tools/device/dklog.py`.
-import { CMD } from './gen_proto.ts';
+import { CMD, READ_MAX } from './gen_proto.ts';
 import type { DkSession } from './dkupload-core.ts';
 
 /** The settings key of the last fault. */
@@ -35,7 +35,7 @@ export async function readSettingsRecord(dk: Pick<DkSession, 'request'>): Promis
     const body = new Uint8Array(6);
     const view = new DataView(body.buffer);
     view.setUint32(0, out.length);
-    view.setUint16(4, 768);
+    view.setUint16(4, READ_MAX);
     const reply = await dk.request(CMD.SETTINGS, body);
     if (reply.status !== 0 || reply.body.length <= 10) throw new Error(`SETTINGS: status ${reply.status}`);
     const head = new DataView(reply.body.buffer, reply.body.byteOffset, reply.body.byteLength);

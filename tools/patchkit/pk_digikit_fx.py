@@ -11,7 +11,7 @@ machine `test/sine` on track 1, the effect `test/dyn-fx-gain` (p0 = 0.5, a count
          p0 = 0.5) and the other rows are free; the PCM is the dry PCM times 0.5 (the effect is in the DAC output); the state word counts the calls.
          Then the effect is taken out of the selection and the runtime restarted: the PCM is the dry PCM again, bit for bit, and every row is free.
   full   the sine and one more effect than the device has slots (the same file under other names): the effects fill the slots, the last is refused with
-         `E_DSP_ROWS` and leaves nothing behind; the PCM is the dry PCM times 0.5 per effect; the fit rule (`dkfit`, the DIGIKIT menu's) refuses one more
+         `E_DSP_ROWS` and leaves nothing behind; the PCM is the dry PCM times 0.5 per effect; the fit rule (`dkneeds.fit`, the DIGIKIT menu's) refuses one more
          effect, naming the effect slots, from the live CAPACITY and from an empty one.
 """
 
@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from tools.device import dkfit, dkneeds
+from tools.device import dkneeds
 from tools.patchkit import hook_ab, pk_device
 from tools.patchkit import pk_digikit_debug as D
 from tools.patchkit import pk_dkrt_machine as M
@@ -282,20 +282,29 @@ def run_fx(c: Any) -> None:
             )
             pcm["full"] = sound(rig, c.work / "full.wav")
             # the fit rule: one more effect does not fit the slots that are taken
-            short = dkfit.fits_now(dkneeds.needs_of(fx_bytes[slots]), cap)
+            short = dkneeds.fit(cap, [dkneeds.needs_of(fx_bytes[slots])])["each"][0]
             c.check(
                 "full: the fit rule refuses one more effect and names the effect slots",
-                short == ("FX_SLOTS", 1, 0)
-                and dkfit.describe(short) == "effect slots 1 needed, 0 free"
-                and dkfit.menu_line(short) == "FX 1 > 0 FREE",
+                short is not None
+                and (short["resource"], short["need"], short["free"])
+                == ("FX_SLOTS", 1, 0)
+                and short["describe"] == "effect slots 1 needed, 0 free"
+                and short["text"] == "FX 1 > 0 FREE",
                 f"{short}",
             )
-            set_short = dkfit.fits_set(
-                [dkneeds.needs_of(b) for b in fx_bytes], dkfit.empty_caps(cap)
-            )
+            set_short = dkneeds.fit(
+                cap, [dkneeds.needs_of(b) for b in fx_bytes], empty=True
+            )["set"]
             c.check(
                 f"full: from an empty runtime the set of {slots + 1} effects stops at effect {slots + 1} for the effect slots",
-                set_short == (slots, "FX_SLOTS", 1, 0),
+                set_short is not None
+                and (
+                    set_short["index"],
+                    set_short["resource"],
+                    set_short["need"],
+                    set_short["free"],
+                )
+                == (slots, "FX_SLOTS", 1, 0),
                 f"{set_short}",
             )
             c.done(rig)

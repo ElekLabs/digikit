@@ -2,6 +2,7 @@
 // What differs between the apps comes from the environment (env.ts): the library of built modules, patchkit.wasm and the transports.
 // Nothing is built here and no process is started.
 import { DkNeeds } from '../modules/dkneeds';
+import { setFitReader } from '../modules/fit';
 import { fmtVersion, hexSha256, storePath } from '@digi/dk-session';
 import {
   buildView,
@@ -19,11 +20,15 @@ import { transferEnv } from './env';
 import { session as running, target, targetLabel } from './target';
 
 let needsReader: Promise<DkNeeds> | undefined;
-/** What a .dkm takes of the device: patchkit.wasm's `pk_needs`, loaded once (a failed load is tried again at the next use). */
+/** What a .dkm takes of the device and whether it fits: patchkit.wasm's `pk_needs` and `pk_fit`, loaded once (a failed load is tried again at the next use). */
 function needs(): Promise<DkNeeds> {
   needsReader ??= transferEnv()
     .patchkitWasm()
     .then((b) => DkNeeds.create(b))
+    .then((r) => {
+      setFitReader(r); // the fit rule of the rows comes from the same wasm
+      return r;
+    })
     .catch((e) => {
       needsReader = undefined;
       throw e;
