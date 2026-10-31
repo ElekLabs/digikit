@@ -537,6 +537,12 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(host)
         .manage(midi_port::MidiPort::default())
+        // on the main thread, before any command: CoreMIDI refreshes the port list on the run loop of the thread of its first client
+        .setup(|app| {
+            use tauri::Manager;
+            app.manage(midi_port::MidiWatch::start());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             emu_call,
             emu_stage_syx,
