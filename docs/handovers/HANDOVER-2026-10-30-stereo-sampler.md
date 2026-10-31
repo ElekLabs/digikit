@@ -651,3 +651,31 @@ nonfinal mistargeted attempt are recorded under ignored
 Native SSI/service batching, automatic timer semantics, DSPI/host-input delivery
 and full fault-history acceptance remain open; full gate deferred. See
 [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+
+## Device INTC mask-command bytes — 2026-10-31
+
+Device SIMR/CIMR now cover all three banks/sources 0–63, SALL/CALL and zero byte
+readback. Reserved bit 7 and wrong-width/overlapping accesses reject before Time
+register/cache mutation. Oracle passthrough, IPR and controller level masking are
+unchanged. All 72 named tests pass (15 INTC, four mask-command, eleven Time,
+23 storage pair, nine eSDHC, ten SSI), plus four Time cache unit tests.
+Commands/hashes/logs: `out/runs/storage-fault-proof/intc-mask-commands*`.
+Independent review found no issues; coordinator scoped path/layer and whitespace
+checks passed. No firmware rerun was
+required by coordinator decision; prior firmware passes are prior evidence.
+
+Future private mixed-policy diagnostics may retain explicit host peers but must
+preserve full fault-history acceptance. Synthetic 86-accepted→65 creation needs
+lifecycle/batching proof. Reject USB MIDI injection, including prequeued/active
+callbacks, until a distinct admission contract exists: USB fixed level 5 bypasses
+ICR/IMR despite sharing vector 156 with DIN; it is not DIN source 28. Full EPORT
+is not a prerequisite; full RSTA remains open. No native admission implementation,
+Oracle USB, snapshot or default-policy change is included; full gate deferred.
+See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+
+[D/O] New manual evidence supports the next ordinary DTIM timing direction:
+p1169 FRR restart and p1171–p1172 §39.4.1 repeat five REF polls with DTER-2
+clearing only, after one enable. Table 39-4's generic rearm prose still conflicts;
+reading it as EN1588-specific is consistent with §39.2.4 but is interpretation,
+not hardware readback. Eq. 39-1 supplies the timeout formula. No clock implementation,
+bus-frequency/phase or complete firmware DTXMR-history proof is included.

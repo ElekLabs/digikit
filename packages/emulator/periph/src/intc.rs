@@ -166,44 +166,46 @@ impl IntcBank {
 
     // -- hardware-accurate extras (manual-only; not used in oracle replay) --
 
-    /// MCF5441XRM SS17.2.5/17.2.6 (p.340-341): a write to SIMR sets bits in
-    /// IMR (SALL sets all of it); a write to CIMR clears them (CALL clears
-    /// all of it). Reads of SIMR/CIMR return zero on real hardware, which
-    /// [`Self::read`] does NOT implement (see module docs): call this only
-    /// from a hardware-accurate model, never from the oracle-replay path.
+    /// Whether an access touches either mask-command byte in any controller.
+    /// Includes accesses starting at a command with invalid size zero, so Device
+    /// callers can reject unsupported widths before passthrough or cache mutation.
+    pub fn hw_touches_simr_cimr(addr: u32, size: u8) -> bool {
+        BASES.iter().any(|base| {
+            let first = u64::from(*base) + SIMR as u64;
+            let last = u64::from(*base) + CIMR as u64;
+            let start = u64::from(addr);
+            (first..=last).contains(&start) || start < first && start + u64::from(size) > first
+        })
+    }
+
+    /// MCF54418RM p0341/p0342: a byte SIMR sets its selected IMR bit;
+    /// CIMR clears it. Bit 6 acts on both halves and ignores the source field.
+    /// Sources 0..31 select IMRL, 32..63 select IMRH. Reserved bit 7 and
+    /// non-command addresses reject before mutation. Device callers separately
+    /// validate access width and return zero on reads; Oracle read/write remain
+    /// passthrough and never call this helper.
     pub fn hw_apply_simr_cimr(&mut self, addr: u32, value: u8) -> bool {
         let Some((i, off)) = Self::locate(addr) else {
             return false;
         };
         let off = off as usize;
-        let c = &mut self.ctrl[i];
-        match off {
-            SIMR => {
-                if value & 0x40 != 0 {
-                    c.set_u32_at(IMRL, IMR_RESET);
-                    c.set_u32_at(IMRH, IMR_RESET);
-                } else {
-                    let bits = 1u32 << (value & 0x3F).min(31);
-                    if value & 0x3F < 32 {
-                        c.set_u32_at(IMRL, c.u32_at(IMRL) | bits);
-                    }
-                }
-                true
-            }
-            CIMR => {
-                if value & 0x40 != 0 {
-                    c.set_u32_at(IMRL, 0);
-                    c.set_u32_at(IMRH, 0);
-                } else {
-                    let bits = 1u32 << (value & 0x3F).min(31);
-                    if value & 0x3F < 32 {
-                        c.set_u32_at(IMRL, c.u32_at(IMRL) & !bits);
-                    }
-                }
-                true
-            }
-            _ => false,
+        if !matches!(off, SIMR | CIMR) || value & 0x80 != 0 {
+            return false;
         }
+        let set = off == SIMR;
+        let c = &mut self.ctrl[i];
+        if value & 0x40 != 0 {
+            let mask = if set { IMR_RESET } else { 0 };
+            c.set_u32_at(IMRL, mask);
+            c.set_u32_at(IMRH, mask);
+        } else {
+            let source = value & 0x3f;
+            let register = if source < 32 { IMRL } else { IMRH };
+            let bit = 1u32 << (source % 32);
+            let mask = c.u32_at(register);
+            c.set_u32_at(register, if set { mask | bit } else { mask & !bit });
+        }
+        true
     }
 
     /// MCF5441XRM SS17.2.1/17.2.3 (p.336, 339): IPR is the logical OR of the

@@ -573,6 +573,70 @@ SSI: no automatic SSI clock, native service/batching policy, DSPI or host-input
 delivery, default policy, snapshot format, SHARC, PCM or hardware change is added.
 The full merge gate remains deferred.
 
+### Device SIMR/CIMR byte contract
+
+**Implemented, bounded [D]:** Device Time now applies byte SIMR/CIMR writes in
+all three INTC banks for all sources 0–63. Sources 0–31 select IMRL, 32–63 select
+IMRH; bit 6 sets/clears both halves and ignores the source field, per local
+MCF54418RM p0340–p0342. Device byte reads return zero even when imported backing
+contains stale command bytes. Reserved bit 7, wrong-width and accesses overlapping
+either byte reject before Time register/cache mutation. Rejection does not imply
+whole-Board atomicity: its MMIO epoch may already have advanced. A shared access
+recognizer keeps read/write overlap refusal consistent across all banks.
+
+Oracle raw reads/writes remain passthrough, including command-byte backing and
+overlapping accesses. Only the manual-only helper's Device caller invokes the
+mask operation; the caller audit found no Oracle invocation. IPR composition,
+EMASK/CLMASK, automatic timing and snapshots are unchanged. This is not a full
+INTC or native integration claim; simultaneous SIMR/CIMR writes are outside the
+supported byte-only contract.
+
+All named suites pass separately: **15** peripheral INTC manual, **4** machine
+mask-command, **11** Time, **23** storage-pair/shared-selection, **9** eSDHC and
+**10** SSI tests, **72 total**, plus **4** Time cache unit tests. New coverage
+checks all banks at sources 0/31/32/63, source-field ignore for SALL/CALL,
+other-bank preservation, candidate eligibility, zero readback of stale Device
+backing, rejected-access register/cache preservation and unchanged Oracle
+passthrough. Exact commands, environment and source hashes are recorded in
+`out/runs/storage-fault-proof/intc-mask-commands-invocation.json`; logs are
+`intc-mask-commands-tests.log` and `intc-mask-commands-cache-tests.log` in that
+directory. Independent review found no issues; coordinator scoped path/layer
+and whitespace checks passed. The
+coordinator agreed no firmware rerun was required for this mask-only patch;
+previous SSI firmware passes remain evidence for the previous checkpoint only.
+The full merge gate remains deferred.
+
+**Next diagnostic scope decision [D/O]:** a private mixed-policy native diagnostic
+may retain explicit host peer producers, but cannot replace or weaken the
+existing full fault-history acceptance. Synthetic vector-86 acceptance causing
+vector-65 creation is an explicit modeling assumption requiring lifecycle and
+batching tests. Full EPORT is not a prerequisite; full RSTA remains open.
+USB MIDI callback injection must reject, including prequeued/active callback
+state, until a distinct admission contract exists. The audit found USB and DIN
+share vector 156 while USB's fixed level 5 bypasses ICR/IMR, so USB cannot silently
+be represented as DIN source 28. Oracle USB is unchanged. These decisions add no
+native integration or admission implementation in this component.
+
+
+### Ordinary DTIM restart clarification — 2026-10-31
+
+**[D/O] Additional manual evidence:** MCF54418RM p1169 (printed 39-10)
+states that FRR starts a new count outside 1588 mode. The application example in
+p1171–p1172 (printed 39-12/39-13, §39.4.1) configures CE=0, FRR=1 and bus/16,
+enables RST once, then observes five REF events, clearing DTER with byte 2 between
+polls without rewriting DTRR or resetting the counter. This strongly supports
+repeated ordinary-mode events after acknowledgement. It is a polling example
+with ORRI=0, not an interrupt-delivery or hardware-readback proof.
+
+The earlier unqualified Table 39-4 rearming restriction remains literally
+inconsistent; interpreting it as 1588-specific agrees with §39.2.4 and this
+example. The example has apparent assembly naming/syntax errors and establishes
+documented intent, not executable hardware evidence. Independent read-only audit
+and coordinator inspection agree on this bounded interpretation. Equation 39-1
+on p1172 gives timeout as clock period × clock divisor × (PS+1) × (DTRR+1).
+Current firmware DTXMR history, bus frequency, emulator phase and automatic timer
+advancement remain unproved; no timing implementation is added here.
+
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in

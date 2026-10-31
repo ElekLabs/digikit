@@ -236,9 +236,12 @@ impl Time {
         addr & !0x3fff == end & !0x3fff && Self::owns(addr)
     }
 
-    /// Read an oracle PIT or INTC register, if this seam owns the complete,
-    /// slot-local access.
+    /// Read an owned, slot-local register. Device SIMR/CIMR byte reads return
+    /// zero; unsupported accesses overlapping those commands reject.
     pub fn read(&self, addr: u32, size: u8) -> Option<u32> {
+        if self.policy == TimerPolicy::Device && IntcBank::hw_touches_simr_cimr(addr, size) {
+            return (size == 1).then_some(0);
+        }
         Self::owns_access(addr, size).then(|| {
             self.pit
                 .read(addr, size)
@@ -350,12 +353,10 @@ impl Time {
     /// Write a PIT or INTC register. Device PIT supports aligned 16-bit
     /// PCSR/PMR writes only, with PIF acknowledgement; Oracle stays passthrough.
     /// Device DTIM accepts only its bounded reference-mode configuration and W1C.
-    /// Device mode additionally applies byte SIMR/CIMR writes selecting eSDHC
-    /// source 31 or storage DMA source 0 on INTC2. Other INTC hardware
-    /// semantics remain unsupported;
-    /// other accesses retain existing passthrough behavior. Initialize IMR
-    /// directly before relying on this bounded path. This does not compose a
-    /// whole-machine arbiter.
+    /// Device SIMR/CIMR byte commands support all three banks and sources;
+    /// reserved-bit, wrong-width and overlapping accesses reject before mutation.
+    /// Other INTC accesses retain existing passthrough behavior; this does not
+    /// add controller level masking or a whole-machine arbiter.
     pub fn write(&mut self, addr: u32, size: u8, value: u32) -> bool {
         if self.policy == TimerPolicy::Device && DtimBank::owns(addr) {
             if !self.dtim.device_write(addr, size, value) {
@@ -373,17 +374,16 @@ impl Time {
             self.blocked = None;
             return true;
         }
+        if self.policy == TimerPolicy::Device && IntcBank::hw_touches_simr_cimr(addr, size) {
+            if size != 1 || !self.intc.hw_apply_simr_cimr(addr, value as u8) {
+                return false;
+            }
+            self.service_not_before = None;
+            self.blocked = None;
+            return true;
+        }
         self.service_not_before = None;
         self.blocked = None;
-        if self.policy == TimerPolicy::Device
-            && size == 1
-            && matches!(addr, 0xfc05_001c | 0xfc05_001d)
-            && matches!(value as u8 & 0x7f, 0 | 31)
-        {
-            // The shared helper is validated here only for these low sources.
-            // Its high-source handling is not used by this bounded seam.
-            return self.intc.hw_apply_simr_cimr(addr, value as u8);
-        }
         Self::owns_access(addr, size)
             && (self.pit.write(addr, size, value)
                 || self.dtim.write(addr, size, value)
@@ -598,6 +598,20 @@ mod tests {
     fn level(time: &mut Time, vector: u16, value: u32) {
         let base = intc::BASES[usize::from(vector / 64 - 1)];
         time.write(base + 0x40 + u32::from(vector % 64), 1, value);
+    }
+
+    #[test]
+    fn rejected_device_mask_access_preserves_service_caches() {
+        let mut time = Time::new(TimerPolicy::Device, vec![], pit::F_BUS);
+        time.service_not_before = Some(123.0);
+        time.blocked = Some((456.0, 3));
+        for base in intc::BASES {
+            for (offset, size, value) in [(0x1c, 1, 0x80), (0x1d, 2, 0), (0x1b, 4, 0)] {
+                assert!(!time.write(base + offset, size, value));
+                assert_eq!(time.service_not_before, Some(123.0));
+                assert_eq!(time.blocked, Some((456.0, 3)));
+            }
+        }
     }
 
     #[test]

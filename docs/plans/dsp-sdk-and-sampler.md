@@ -3137,3 +3137,42 @@ service/batching policy, DSPI or host-input delivery is enabled. Correct-target
 final commands/hashes/logs: `out/runs/storage-fault-proof/device-ssi-events*`.
 A mistargeted initial build is separately archived and not final validation;
 metadata records its actual target and archive. The full gate remains deferred.
+
+### Device SIMR/CIMR byte contract — 2026-10-31
+
+- [x] Complete all three banks' source 0–63 and SALL/CALL mask commands, zero
+  byte readback and refusal of reserved-bit/wrong-width/overlapping accesses
+  before register/cache mutation. Preserve Oracle passthrough, IPR composition
+  and controller level-mask behavior.
+- [x] Pass 15 INTC manual, four new mask-command, eleven Time, 23 storage-pair,
+  nine eSDHC and ten SSI tests (72 total), plus four Time cache unit tests.
+- [x] Independent review found no issues; coordinator scoped path/layer and whitespace checks passed.
+
+Exact commands/environment/source hashes/logs:
+`out/runs/storage-fault-proof/intc-mask-commands*`. No firmware rerun was required
+for this mask-only patch by coordinator decision; previous SSI firmware results
+remain previous-checkpoint evidence. No native policy or snapshot format change;
+the full merge gate remains deferred.
+
+Diagnostic mixed-policy native integration may retain explicit host peer
+producers, but cannot replace or weaken existing full fault-history acceptance.
+Synthetic vector-86 acceptance causing vector-65 creation is a modeling assumption
+requiring lifecycle/batching tests. Full EPORT is not a prerequisite; RSTA remains
+open. This component does not enable native integration or change those gates.
+
+Private mixed-policy diagnostics must reject USB MIDI callback injection,
+including prequeued or active callback state, until a distinct admission contract
+exists. USB and DIN share vector 156, but the current USB callback uses fixed
+level 5 outside ICR/IMR; USB must not be silently represented as DIN source 28.
+Oracle USB behavior is unchanged; this is a future diagnostic admission decision,
+not native implementation in this mask component.
+
+**[D/O] Ordinary DTIM timing direction:** manual p1169 describes FRR restart,
+and p1171–p1172 §39.4.1 polls five successive REF events after enabling once,
+clearing DTER byte 2 without DTRR updates or reset. This strongly supports intended
+ordinary repeated-reference operation. Interpreting Table 39-4's generic rearm
+restriction as EN1588-specific matches qualified §39.2.4, but remains an
+interpretation of conflicting prose, not hardware readback. Eq. 39-1 (p1172) gives
+clock period × divisor × (PS+1) × (DTRR+1). This supports a future explicit-clock
+ordinary-mode component; current bus frequency/phase and full firmware DTXMR
+history remain unproved. No timing implementation or [V] claim is added here.

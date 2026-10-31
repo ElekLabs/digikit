@@ -219,3 +219,56 @@ fn hw_candidate_orders_levels_then_banks_then_sources_including_zero() {
     intc.write(BASES[0] + 0x14, 4, 0);
     assert_eq!(intc.hw_candidate([(0, 0); 3]), None);
 }
+
+#[test]
+fn hw_mask_commands_address_both_halves_in_every_bank() {
+    for (bank, base) in BASES.into_iter().enumerate() {
+        for source in [0_u8, 31, 32, 63] {
+            let mut intc = IntcBank::new();
+            let vector = VECTOR_BASE[bank] + u16::from(source);
+            intc.write(base + 0x40 + u32::from(source), 1, 3);
+            assert!(intc.hw_apply_simr_cimr(base + 0x1d, source));
+            assert_eq!(intc.level_for_vector(vector), Some(3));
+            for (other, other_base) in BASES.into_iter().enumerate() {
+                for (offset, high) in [(0x08, true), (0x0c, false)] {
+                    let expected = if other == bank && (source >= 32) == high {
+                        !(1 << (source % 32))
+                    } else {
+                        u32::MAX
+                    };
+                    assert_eq!(intc.read(other_base + offset, 4), Some(expected));
+                }
+            }
+            assert!(intc.hw_apply_simr_cimr(base + 0x1c, source));
+            assert_eq!(intc.level_for_vector(vector), None);
+            assert_eq!(intc.read(base + 0x08, 4), Some(u32::MAX));
+            assert_eq!(intc.read(base + 0x0c, 4), Some(u32::MAX));
+        }
+    }
+}
+
+#[test]
+fn hw_all_mask_commands_ignore_source_field_and_reserved_bit_rejects() {
+    for (bank, base) in BASES.into_iter().enumerate() {
+        for field in [0, 31, 32, 63] {
+            let mut intc = IntcBank::new();
+            assert!(intc.hw_apply_simr_cimr(base + 0x1d, 0x40 | field));
+            assert_eq!(intc.read(base + 0x08, 4), Some(0));
+            assert_eq!(intc.read(base + 0x0c, 4), Some(0));
+            for command in [0x1c, 0x1d] {
+                let mut before = periph::snap::Writer::new();
+                intc.snap_save(&mut before);
+                assert!(!intc.hw_apply_simr_cimr(base + command, 0x80 | 0x40 | field));
+                let mut after = periph::snap::Writer::new();
+                intc.snap_save(&mut after);
+                assert_eq!(after.buf, before.buf);
+            }
+            assert!(intc.hw_apply_simr_cimr(base + 0x1c, 0x40 | field));
+            for (other, other_base) in BASES.into_iter().enumerate() {
+                // Other banks never changed from reset, and SALL restored this one.
+                assert_eq!(intc.read(other_base + 0x08, 4), Some(u32::MAX), "{bank}/{other}");
+                assert_eq!(intc.read(other_base + 0x0c, 4), Some(u32::MAX), "{bank}/{other}");
+            }
+        }
+    }
+}
