@@ -59,7 +59,7 @@ Stock firmware uses `RECIPS` in its division helper (DN2 0x1c06ba: a seed and th
 - DN2 scenarios (`tests/scenarios/dn2.json`, 10): the four pins `exactness-100m`, `trig1-noqa-40m`, `trig1-taps` and `trig1-tap-release` changed (the runs report `ok=False`); the unpinned `trig1-hold`, `kb-chord16` and `dn2-rec-play` changed; `idle`, `dn2-rec-noplay` and `dn2-led-sweep` are unchanged.
 - DN2 FX scenarios (`tests/scenarios/dn2-fx.json`, 17): all 17 hashes changed. They have no pins; the 61 FX oracles of the quick tier (`mise run test:fx`) pass.
 
-No pin was updated. **[O]** Em decides about the four pins:
+Em approved the four new values on 2026-11-01; `tests/scenarios/dn2.json` holds them:
 
 | Pin (`tests/scenarios/dn2.json`) | Pinned | With the exact seeds |
 | --- | --- | --- |
