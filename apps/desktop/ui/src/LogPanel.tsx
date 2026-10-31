@@ -1,4 +1,4 @@
-// The inside of the Log drawer: the header (Source, Errors only, Follow, Debug (a switch), Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
+// The inside of the Log drawer: the header (Source, Errors only, Follow, the debug module state, Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
 // its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
 import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
@@ -61,7 +61,7 @@ export default function LogPanel(props: LogPanelProps) {
       setLogSource('all');
   });
   const canFollow = () => live('emulator') || live('device');
-  // the Level menu and the Debug indicator act on the origin chosen in Source
+  // the Level menu and the debug module indicator act on the origin chosen in Source
   const levelTarget = () => levelOrigin(logSource(), { emulator: live('emulator'), device: live('device') });
   const levelOff = () => {
     const origin = levelTarget();
@@ -71,43 +71,28 @@ export default function LogPanel(props: LogPanelProps) {
       supported: origin ? props.follow.logcfg()[origin] : undefined,
     });
   };
-  const debugState = () => {
+  // the debug module (digikit/debug) is the log: loaded while the origin follows, not loaded when its runtime has no LOG capability
+  const debugState = (): boolean | undefined => {
     const origin = levelTarget();
-    return origin && !levelOff() ? props.follow.config()[origin]?.debug : undefined;
+    const status = origin ? props.follow.status()[origin] : undefined;
+    return status === 'following' || status === 'frozen' ? true : status === 'no-debug' ? false : undefined;
   };
-  const [debugBusy, setDebugBusy] = createSignal(false);
-  const [debugProblem, setDebugProblem] = createSignal('');
-  // the Debug control is a switch when the origin has LOGCFG (levelOff is empty), else the read-only indicator with the reason
   const debugTitle = () => {
     const origin = levelTarget();
-    const off = levelOff();
-    if (off) return off;
     const on = debugState();
-    if (on === undefined) return `The ${origin} has not reported its debug state yet`;
-    if (debugProblem()) return debugProblem();
+    if (!origin) return 'Choose Emulator or Device in Source: the debug module is loaded on one of them';
+    if (on === undefined) return `The ${origin} has not reported whether the debug module is loaded`;
     return on
-      ? `Debug logging is on: the runtime keeps every event. Click to turn it off (the runtime of the ${origin} saves the switch).`
-      : `Debug logging is off: the runtime keeps only errors. Click to turn it on (the runtime of the ${origin} saves the switch).`;
+      ? `The debug module (digikit/debug) is loaded on the ${origin}: it keeps the log and answers the levels`
+      : `The debug module (digikit/debug) is not loaded on the ${origin}: only crash reports are available`;
   };
-  const switchDebug = async () => {
+  // an origin that answers but has no debug module: the list says so
+  const noDebugOrigin = () => {
+    const status = props.follow.status();
     const origin = levelTarget();
-    const on = debugState();
-    if (!origin || on === undefined || debugBusy()) return;
-    setDebugBusy(true);
-    setDebugProblem('');
-    try {
-      await props.follow.setDebug(origin, !on);
-    } catch (e) {
-      setDebugProblem(`Debug could not be switched: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setDebugBusy(false);
-    }
+    if (origin) return status[origin] === 'no-debug';
+    return status.emulator === 'no-debug' || status.device === 'no-debug';
   };
-  // another origin: an old refusal is not shown for it
-  createEffect(() => {
-    levelTarget();
-    setDebugProblem('');
-  });
 
   const toggleExpanded = (id: number) =>
     setExpanded((set) => {
@@ -199,42 +184,20 @@ export default function LogPanel(props: LogPanelProps) {
             <i class="follow-dot" aria-hidden="true" />
           </Show>
         </button>
-        <Show
-          when={!levelOff() && debugState() !== undefined}
-          fallback={
-            <span
-              class="tb small chip"
-              classList={{
-                'dbg-on': debugState() === true,
-                'dbg-off': debugState() === false,
-                'dbg-unknown': debugState() === undefined,
-              }}
-              role="status"
-              aria-label={`Debug logging: ${debugState() === undefined ? 'unknown' : debugState() ? 'on' : 'off'}`}
-              title={debugTitle()}
-            >
-              Debug <i class="debug-dot" aria-hidden="true" />
-            </span>
-          }
+        <span
+          class="tb small chip"
+          classList={{
+            'dbg-on': debugState() === true,
+            'dbg-off': debugState() === false,
+            'dbg-unknown': debugState() === undefined,
+          }}
+          role="status"
+          aria-label={`Debug module: ${debugState() === undefined ? 'unknown' : debugState() ? 'loaded' : 'not loaded'}`}
+          title={debugTitle()}
         >
-          <button
-            type="button"
-            class="tb small chip toggle"
-            classList={{
-              'dbg-on': debugState() === true,
-              'dbg-off': debugState() === false,
-              'dbg-failed': !!debugProblem(),
-            }}
-            role="switch"
-            aria-checked={debugState() === true}
-            aria-label="Debug logging"
-            disabled={debugBusy()}
-            title={debugTitle()}
-            onClick={() => void switchDebug()}
-          >
-            Debug <i class="debug-dot" aria-hidden="true" />
-          </button>
-        </Show>
+          {debugState() === false ? 'Debug module: not loaded' : debugState() ? 'Debug module: loaded' : 'Debug module'}{' '}
+          <i class="debug-dot" aria-hidden="true" />
+        </span>
         <LogLevelMenu follow={props.follow} origin={levelTarget} off={levelOff} />
         <button
           type="button"
@@ -282,10 +245,17 @@ export default function LogPanel(props: LogPanelProps) {
           stickToEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
         }}
       >
+        <Show when={noDebugOrigin()}>
+          <li class="empty notice">The debug module is not loaded: only crash reports are available.</li>
+        </Show>
         <For
           each={visibleLog()}
           fallback={
-            <li class="empty">{logState().entries.length ? 'No entry matches the filter.' : 'Nothing logged yet.'}</li>
+            <Show when={!noDebugOrigin()}>
+              <li class="empty">
+                {logState().entries.length ? 'No entry matches the filter.' : 'Nothing logged yet.'}
+              </li>
+            </Show>
           }
         >
           {(entry) => (

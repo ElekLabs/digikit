@@ -54,10 +54,6 @@ class Device implements FollowSession {
     this.debug = { ...this.debug, level, modules };
     return this.debug;
   }
-  async setDebug(on: boolean) {
-    this.debug = { ...this.debug, debug: on };
-    return this.debug;
-  }
   async modules() {
     return this.modulesLoaded;
   }
@@ -106,7 +102,7 @@ const fault = (over: Partial<Fault>): Fault => ({
   ...over,
 });
 
-test('a poll shows the events of the ring with the module that wrote them, and reads the debug state once', async () => {
+test('a poll shows the events of the ring with the module that wrote them, and reads the log configuration once', async () => {
   const d = new Device();
   d.modulesLoaded = [{ index: 1, name: 'freqshift' }];
   d.ring = [
@@ -125,27 +121,36 @@ test('a poll shows the events of the ring with the module that wrote them, and r
   assert.equal(rows.at(-1)!.rt!.module, 'freqshift');
   assert.equal(rows.at(-1)!.source, 'device');
   assert.deepEqual(t.moduleLists.at(-1), ['freqshift']);
-  assert.equal(t.texts().filter((x) => x.startsWith('device: debug logging')).length, 1);
-  assert.ok(t.texts().includes('device: debug logging on, level debug'));
+  assert.equal(t.texts().filter((x) => x.startsWith('device: debug module')).length, 1);
+  assert.ok(t.texts().includes('device: debug module loaded, level debug'));
 });
 
-test('debug off says what the runtime keeps; a DEBUG_SET event with a change adds the line again', async () => {
+test('without the debug module only the fault record is read, and the log starts when the module is there', async () => {
   const d = new Device();
-  d.debug = { ...d.debug, level: 0, debug: false };
-  d.ring = [ev(1, 'BOOT_START')];
-  const t = setup(d, 'emulator');
-  await t.follower.tick();
-  assert.ok(
-    t
-      .texts()
-      .includes(
-        "emulator: debug logging off: the runtime keeps only errors (turn it on in the runtime's DEBUG setting)",
-      ),
+  d.caps = 1 << CAP.SERVICE_CMDS; // a runtime without the LOG capability
+  d.faultRecord = fault({});
+  let pages = 0;
+  const page = d.logPage.bind(d);
+  d.logPage = async (from) => {
+    pages++;
+    return page(from);
+  };
+  const t = setup(d);
+  assert.equal(await t.follower.tick(), IDLE_MS);
+  assert.deepEqual(t.statuses, ['no-debug']);
+  assert.equal(pages, 0);
+  assert.deepEqual(
+    t.entries.filter((e) => e.text.startsWith('fault:')).map((e) => e.level),
+    ['error'],
   );
-  d.debug = { ...d.debug, level: 2, debug: true };
-  d.ring.push(ev(2, 'DEBUG_SET', [1]));
+  assert.equal(await t.follower.tick(), IDLE_MS);
+  assert.equal(t.entries.filter((e) => e.text.startsWith('fault:')).length, 1); // the same record is not shown twice
+  // the device restarts with the module loaded: the log is followed
+  d.caps = (1 << CAP.SERVICE_CMDS) | (1 << CAP.LOG);
+  d.ring = [ev(1, 'BOOT_START')];
   await t.follower.tick();
-  assert.ok(t.texts().includes('emulator: debug logging on, level info'));
+  assert.equal(t.statuses.at(-1), 'following');
+  assert.equal(t.entries.filter((e) => e.rt?.event).length, 1);
 });
 
 test('a DSP stop of the boot before is one error entry, with the crash events folded into its detail', async () => {

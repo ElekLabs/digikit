@@ -4,7 +4,7 @@ import { hexSha256 } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { liveArtifacts, record, runtimeTests, settleLive } from './live.ts';
+import { DEBUG_MODULE, liveArtifacts, record, runtimeTests, settleLive } from './live.ts';
 import { cliInstall, transferCommand } from './transfer-cli.ts';
 
 interface FolderResult {
@@ -18,6 +18,8 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   const artifacts = liveArtifacts(session, 'transfer-live');
   const mirror = path.join(session.runDir, 'mirror');
   const modulePath = 'modules/sine.dkm';
+  // the debug module is installed next to it: the log of the last boot is read at the end
+  const debugPath = 'modules/debug.dkm';
   const mirrored = path.join(mirror, 'digikit', modulePath);
   const sha256 = async () => (fs.existsSync(mirrored) ? await hexSha256(fs.readFileSync(mirrored)) : null);
 
@@ -25,15 +27,15 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   await settleLive(session);
   const epoch = (await session.status()).epoch;
   if (typeof epoch !== 'number') throw new Error('daemon status must report a numeric epoch');
-  await cliInstall(session, 'test/sine', artifacts, 300_000);
+  await cliInstall(session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
   expect((await session.status()).epoch, 'CLI RESTART boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);
   expect(
     entries.map((entry) => entry.path),
     'upload survives the soft reset',
-  ).toEqual([modulePath]);
-  const entry = entries[0]!;
+  ).toEqual([debugPath, modulePath]);
+  const entry = entries.find((e) => e.path === modulePath)!;
 
   // The store follows the guest's card writes after its quiet period (about two seconds).
   await expect
@@ -46,7 +48,10 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect(
     folder.files.map(({ path, sha256 }) => ({ path, sha256 })),
     'mirror metadata matches the card',
-  ).toEqual([{ path: modulePath, sha256: entry.sha256 }]);
+  ).toEqual([
+    { path: debugPath, sha256: entries.find((e) => e.path === debugPath)!.sha256 },
+    { path: modulePath, sha256: entry.sha256 },
+  ]);
 
   const deleted = await transferCommand(session, ['delete', modulePath], path.join(artifacts, 'delete.log'), 300_000);
   expect(
@@ -55,11 +60,17 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   ).toBe(true);
   const emptyStore = await dk.list();
   record(artifacts, 'deleted-store', emptyStore);
-  expect(emptyStore, 'CLI delete empties the module store').toEqual([]);
+  expect(
+    emptyStore.map((e) => e.path),
+    'CLI delete removes the module and leaves the debug module',
+  ).toEqual([debugPath]);
   const synced = await session.client.call<FolderResult>('card.sync');
   record(artifacts, 'deleted-folder', synced);
   expect(fs.existsSync(mirrored), 'card.sync removes the deleted module from the folder').toBe(false);
-  expect(synced.files, 'card.sync reports an empty mirror').toEqual([]);
+  expect(
+    synced.files.map((f) => f.path),
+    'card.sync reports the debug module only',
+  ).toEqual([debugPath]);
 
   // DELETE keeps the selection. Exactly one more protocol restart preserves the original
   // boot-loop history: another early restart could enter safe mode instead of trying the path.
@@ -79,7 +90,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect(
     modules.map((module) => module.name),
     'boot skips the missing selected module',
-  ).toEqual([]);
+  ).toEqual([DEBUG_MODULE]);
 }
 
 runtimeTests('CLI transfer survives restart, mirrors the store and skips a deleted selection', expectTransferLive, {

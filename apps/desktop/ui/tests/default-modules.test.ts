@@ -4,14 +4,15 @@ import { test } from 'vitest';
 import { DkError } from '@digi/dk-session';
 import { defaultModuleIds, entries, summaryOf, waitForRuntime } from '../src/default-modules-data.ts';
 
-test('both device files list digikit/remote, and the entry has the summary of its module.toml', () => {
+test('both device files list digikit/debug and digikit/remote, and each entry has the summary of its module.toml', () => {
   for (const device of ['dt2', 'dn2']) {
     const list = entries(device);
     assert.deepEqual(
       list.map((e) => e.id),
-      ['digikit/remote'],
+      ['digikit/debug', 'digikit/remote'],
     );
-    assert.match(list[0]!.summary, /USB MIDI/);
+    assert.match(list[0]!.summary, /log/);
+    assert.match(list[1]!.summary, /USB MIDI/);
   }
   assert.deepEqual(entries('st1'), []);
 });

@@ -43,7 +43,7 @@ class FakeDevice(FakeUp):
             "safe": False,
             "card_read_only": False,
             "crash_found": False,
-            "caps": 0,
+            "caps": 1 << R.D.CAP["LOG"],  # the debug module is selected: the log exists
         }
 
     def ls(self):
@@ -74,6 +74,7 @@ class FakeDevice(FakeUp):
         ids = {
             "remote": "digikit/remote",
             "probe": "digikit/probe",
+            "debug": "digikit/debug",
             "sharc-probe": "test/sharc-probe",
             "dsp-facts": "test/dsp-facts",
         }
@@ -147,12 +148,22 @@ def test_a_run_packs_uploads_only_what_changed_selects_captures_and_restores(
     fk, lines, out = _run(tmp_path, monkeypatch, dev)
     assert fk.packed == [
         ("digikit/remote", "dn2"),
+        ("digikit/debug", "dn2"),
         ("test/sharc-probe", "dn2"),
         ("digikit/probe", "dn2"),
     ]
-    assert dev.puts == ["modules/sharc-probe.dkm", "modules/probe.dkm"]
+    assert dev.puts == [
+        "modules/debug.dkm",
+        "modules/sharc-probe.dkm",
+        "modules/probe.dkm",
+    ]
     assert dev.selected == [
-        ["modules/remote.dkm", "modules/sharc-probe.dkm", "modules/probe.dkm"],
+        [
+            "modules/remote.dkm",
+            "modules/debug.dkm",
+            "modules/sharc-probe.dkm",
+            "modules/probe.dkm",
+        ],
         ["modules/pluck.dkm"],  # the selection of before comes back
     ]
     assert dev.restarts == 2 and dev.loaded == ["x/pluck"]
@@ -173,7 +184,12 @@ def test_keep_leaves_the_probe_modules_selected(tmp_path, monkeypatch):
     dev = _dev()
     _, lines, _ = _run(tmp_path, monkeypatch, dev, keep=True)
     assert len(dev.selected) == 1 and dev.restarts == 1
-    assert dev.loaded == ["digikit/remote", "test/sharc-probe", "digikit/probe"]
+    assert dev.loaded == [
+        "digikit/remote",
+        "digikit/debug",
+        "test/sharc-probe",
+        "digikit/probe",
+    ]
     assert any("--keep" in x for x in lines)
 
 
@@ -232,9 +248,10 @@ def test_the_probe_module_picks_the_sequence():
         PR.sequence_for(["fx/gain"], None)
 
 
-def test_the_selection_is_remote_modules_collector_without_repeats():
+def test_the_selection_is_remote_debug_modules_collector_without_repeats():
     assert PR.selection_paths(["test/dsp-facts", "digikit/remote"]) == [
         "modules/remote.dkm",
+        "modules/debug.dkm",
         "modules/dsp-facts.dkm",
         "modules/probe.dkm",
     ]

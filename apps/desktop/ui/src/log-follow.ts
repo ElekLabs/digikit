@@ -4,7 +4,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { readFault, type DkSession, type LogConfig } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';
-import { changeDebug, changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
+import { changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
 import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
 import { logInputs } from './log-state.ts';
 
@@ -14,7 +14,6 @@ export const followSession = (dk: DkSession): FollowSession => ({
   logPage: (from, quick) => dk.logPage(from, quick),
   logConfig: (quick) => dk.logConfig(quick),
   setLogConfig: (level, modules, quick) => dk.setLogConfig(level, modules, quick),
-  setDebug: (on, quick) => dk.setDebug(on, quick),
   modules: () => dk.modules(),
   fault: () => readFault(dk),
 });
@@ -39,16 +38,14 @@ export interface LogFollow {
   status(): Record<Origin, OriginStatus>;
   /** The names of the modules each origin has loaded. */
   modules(): Record<Origin, string[]>;
-  /** The LOGCFG state each origin last reported (the follower reads it at the start and when debug logging changes); undefined before that. */
+  /** The LOGCFG state each origin last reported (the follower reads it at the start and after a restart); undefined before that. */
   config(): Record<Origin, LogConfig | undefined>;
-  /** Whether each origin's runtime has the LOGCFG capability: undefined until INFO was read. */
+  /** Whether each origin has the LOGCFG capability (the debug module is loaded): undefined until INFO was read. */
   logcfg(): Record<Origin, boolean | undefined>;
   /** Read the levels of the origin now; null when it has no LOGCFG capability. Throws when it does not answer. */
   levels(origin: Origin): Promise<LevelView | null>;
   /** Set one level, then read LOGCFG again; the new state. The levels are in the runtime's RAM and start again at its next boot. */
   setLevel(origin: Origin, change: LevelChange): Promise<LevelView>;
-  /** Switch debug logging on or off, then read LOGCFG again; the new state. The runtime saves it (the DEBUG row of its menu). */
-  setDebug(origin: Origin, on: boolean): Promise<LogConfig>;
 }
 
 /** Start following. Call it where an owner exists (a component): the loops end with it. */
@@ -144,14 +141,7 @@ export function createLogFollow(env: FollowEnv): LogFollow {
     return view;
   };
 
-  const setDebug = async (origin: Origin, on: boolean) => {
-    const cfg = await changeDebug(await sourceOf(origin), on);
-    setLogcfg((all) => ({ ...all, [origin]: true }));
-    setCfg(origin, cfg);
-    return cfg;
-  };
-
   follow('emulator', () => (env.emulator.running() ? 'emulator' : undefined), env.emulator);
   follow('device', env.device.port, env.device);
-  return { status, modules, config, logcfg, levels, setLevel, setDebug };
+  return { status, modules, config, logcfg, levels, setLevel };
 }

@@ -51,11 +51,8 @@ from tools.device.dkproto import (
     CMD_END,
     CMD_INFO,
     CMD_LIST,
-    CMD_LOG,
-    CMD_LOGCFG,
     CMD_MKDIR,
     CMD_MODULES,
-    CMD_PEEK,
     CMD_READ,
     CMD_RESTART,
     CMD_SELECT,
@@ -320,7 +317,7 @@ class Uploader:
         end = b.index(0, 4)
         port = b[4:end].decode()
         free, max_chunk, flags = struct.unpack_from(">IIB", b, end + 1)
-        # runtime 3 appends the sequence numbers of the oldest and newest log event
+        # runtime 3 appends two words for the log range of the old runtime; the runtime now sends zeros (the LOG command of the debug module has the range)
         oldest, newest = (
             struct.unpack_from(">II", b, end + 10) if len(b) >= end + 18 else (0, 0)
         )
@@ -440,9 +437,9 @@ class Uploader:
     def log_page(
         self, from_seq: int
     ) -> tuple[int, int, list[tuple[int, int, int, int, tuple[int, ...]]]]:
-        """LOG (runtime 3): (oldest, newest, events) from `from_seq`; an event is (seq, time, kind, flags, (a0..a4)). Empty when the host has
+        """LOG (digikit/debug; capability LOG): (oldest, newest, events) from `from_seq`; an event is (seq, time, kind, flags, (a0..a4)). Empty when the host has
         read everything."""
-        b = self._ok(CMD_LOG, "log", struct.pack(">I", from_seq))
+        b = self._ok(dkproto.SERVICE_CMD["LOG"], "log", struct.pack(">I", from_seq))
         oldest, newest, n = struct.unpack_from(">IIB", b, 0)
         events = []
         for i in range(n):
@@ -451,8 +448,10 @@ class Uploader:
         return oldest, newest, events
 
     def peek(self, addr: int, length: int) -> bytes:
-        """PEEK (runtime 3): `length` (1 to 512) bytes of RAM at `addr`, inside the ranges the device file lists (`[digikit] peek`)."""
-        b = self._ok(CMD_PEEK, "peek", struct.pack(">IH", addr, length))
+        """PEEK (digikit/debug): `length` (1 to 512) bytes of RAM at `addr`, inside the ranges the device file lists (`[digikit] peek`)."""
+        b = self._ok(
+            dkproto.SERVICE_CMD["PEEK"], "peek", struct.pack(">IH", addr, length)
+        )
         got, n = struct.unpack_from(">IH", b, 0)
         if got != addr or n != length or len(b) < 6 + n:
             raise UploadError(-50, "peek: malformed reply")
@@ -461,7 +460,7 @@ class Uploader:
     def logcfg(
         self, default: int | None = None, modules: dict[int, int | None] | None = None
     ) -> dict[str, Any]:
-        """LOGCFG: the log levels. With no argument, read them; else set `default` and/or the levels of module records (`modules`: record index ->
+        """LOGCFG (digikit/debug): the log levels. With no argument, read them; else set `default` and/or the levels of module records (`modules`: record index ->
         level, None for the default). Returns {"default": int, "modules": [8 levels, 0xff = the default], "debug": bool}."""
 
         def parse(b: bytes) -> dict[str, Any]:
@@ -469,22 +468,16 @@ class Uploader:
                 raise UploadError(-50, "logcfg: malformed reply")
             return {"default": b[0], "modules": list(b[1:9]), "debug": bool(b[9])}
 
-        cur = parse(self._ok(CMD_LOGCFG, "logcfg", b"\x00"))
+        cur = parse(self._ok(dkproto.SERVICE_CMD["LOGCFG"], "logcfg", b"\x00"))
         if default is None and not modules:
             return cur
         lv = list(cur["modules"])
         for i, v in (modules or {}).items():
             lv[i] = 0xFF if v is None else v
         d = cur["default"] if default is None else default
-        return parse(self._ok(CMD_LOGCFG, "logcfg", bytes([1, d, *lv])))
-
-    def logcfg_debug(self, on: bool) -> dict[str, Any]:
-        """LOGCFG op 2: switch the debug log on or off (saved in the selection record, as the menu does). E_PROTO from a runtime without op 2.
-        Returns the same dict as `logcfg`."""
-        b = self._ok(CMD_LOGCFG, "logcfg debug", bytes([2, 1 if on else 0]))
-        if len(b) < 10:
-            raise UploadError(-50, "logcfg: malformed reply")
-        return {"default": b[0], "modules": list(b[1:9]), "debug": bool(b[9])}
+        return parse(
+            self._ok(dkproto.SERVICE_CMD["LOGCFG"], "logcfg", bytes([1, d, *lv]))
+        )
 
     def select(self, paths: list[str]) -> None:
         """SELECT (runtime 4): save the selection record (what the next boot loads); the menu's code path, so its card rules apply."""
