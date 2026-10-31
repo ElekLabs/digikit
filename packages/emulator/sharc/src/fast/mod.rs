@@ -312,6 +312,10 @@ pub trait FastTier: Send {
     /// boundary (the target of a taken branch, call or loop-back) or at a
     /// generated-block dispatch. Only called when `auto()`; must be cheap.
     fn note(&mut self, _pc: u32) {}
+    /// The interpreter landed by a taken branch, call, return or loop-back in
+    /// appended code (code a patch added after the generated image's code):
+    /// a candidate entry, which no generated block or root list can name.
+    fn note_appended(&mut self, _pc: u32) {}
     /// A line for logs about the engine as a whole (instructions per tier).
     fn engine_report(&self, _total: u64, _interp: u64, _aot: u64) -> String {
         String::new()
@@ -1788,6 +1792,12 @@ impl FastTier for FastEngine {
         e.1 += 1;
         if e.1 == a.threshold {
             self.arm(pc);
+        }
+    }
+
+    fn note_appended(&mut self, pc: u32) {
+        if self.chase && self.index(pc).is_none() {
+            self.add_chased(pc);
         }
     }
 
