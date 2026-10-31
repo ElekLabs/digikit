@@ -305,6 +305,10 @@ async function expectFactsValues(patched: PatchedSession): Promise<void> {
   await session.expectNoFault('dsp facts');
 }
 
-runtimeTests('the instruction facts of the Digitakt II hold for every value item of the dsp-facts probe', expectFactsValues, {
-  timeout: 600_000,
-});
+runtimeTests(
+  'the instruction facts of the Digitakt II hold for every value item of the dsp-facts probe',
+  expectFactsValues,
+  {
+    timeout: 600_000,
+  },
+);
