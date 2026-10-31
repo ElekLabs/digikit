@@ -1,7 +1,7 @@
 # DSP link
 
 `core/dsp-link` is a framework module: it lets the digikit runtime send bytes (DSP code and data) to the DSP while
-the device runs. Nothing changes for the player. Emulator only.
+the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.17), where `fx/freqshift` loaded through it and ran (2026-10-30, finding 91); the Digitone II has run it in the emulator only.
 
 - Firmware: Digitakt II 1.17 and Digitone II 1.12 (the same anchor rules on both).
 - What it adds: a hook on the ColdFire's per-block frame sender (to put a chunk in the unused end of the frame) and a hook
@@ -48,10 +48,16 @@ the device runs. Nothing changes for the player. Emulator only.
   does not need the core (finding 48). The effect site (word 24) and the module step (word 25) are written the same way. On the Digitone II the voice wrapper
   writes only the stages 4 and 5 (the slot is the voice) and words 15 to 23 are 0 (the dispatch counts and the guard belong to the Digitakt II wrapper; the
   Digitone II wrapper only scans rows of the new size).
-  The module step needs a place the ColdFire can read after the core has stopped. `core/dyndsp` exports `_dk_step` (a 32-bit DM word of this module, the
-  static fallback, copied into word 25 at the block tail). The runtime points the stores of a module's DSP image at word 25 of the older reply record
-  instead (the record addresses are words 29 and 30), so that a step stored just before the DSP stops is still in the record. The core clears word 25 in both
-  records before each call; the module writes into one, so the ColdFire takes the non-zero value of the two replies. Finding 77 has the design.
+  The module step (word 25): `core/dyndsp` exports `_dk_step`, a 32-bit DM word of this module. A module that stores into it has its stores patched by the
+  runtime (`dsp.rs patch_steps`, before the first chunk) to word 25 of one fixed reply record, the record that was the older of the two when the module loaded
+  (the addresses are words 29 and 30). The two reply records alternate, one per block, so that record is sent every second block: **[D]** in the emulator (DN2,
+  `digikit/probe`) the stores of every second block are delivered and the others are not (the core clears word 25 of both records before each call, and the
+  other record never gets a store). A module that needs every word gives each value on two consecutive blocks and keeps only the replies whose word 29 is the
+  address of the record that receives the stores (learned from the first value that is not 0); that is 750 values a second. The core clears word 25 in both
+  records before each call. The point of the record store is that a step stored just before the DSP stops is still in the record. Finding 77 has the design.
+  **[O]** The static word, which the block tail should copy into word 25 of the current record (`src/dsp/dsp-link.inc`, about lines 376 to 381) when the stores
+  are not patched, did not deliver word 25 on the DN2: with `patch_steps` switched off in a test build the effect ran (its call counts rose) and word 25
+  stayed 0 in every record. The cause is not known.
 - Per-block callback: `dl_set_tick_cb(cb)` (a runtime import for modules, `requires core/dsp-link`; a no-op stub when the module is absent) sets one
   function, `void cb(const volatile u16 *rec)`, that `dl_tick` calls every block in the block interrupt, before the transfer code, with the copy of the
   previous reply record (diagnostic word j: see `dl_diag`). NULL is off and costs one pointer test per block. The callback must be a short C function with
