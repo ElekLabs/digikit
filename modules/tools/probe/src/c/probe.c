@@ -40,6 +40,9 @@ typedef uint8_t u8;
 #define W_CALLS_MASTER 26u
 #define W_CALLS_SEND 27u
 
+/* The ring is module bss, not an `Api.alloc` block: the arena need is then what `dkneeds` reads from the file (docs/design/digikit-dkm.md, "Needs are inferred from the contents"). */
+static u32 ring_store[RING_WORDS];
+
 typedef struct Probe {
     u32 *ring;
     volatile u32 n; /* words in the ring */
@@ -212,13 +215,10 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
 int32_t dkm_init(const dk_api *api)
 {
     int r;
-    pr.ring = (u32 *)api->alloc(RING_WORDS * 4u);
-    if (!pr.ring)
-        return -1;
+    pr.ring = ring_store;
     r = api->register_cmds(CMD_FIRST, CMD_COUNT, cmd);
     if (r != 0) {
         api->log((const u8 *)"probe: register_cmds refused", (u32)r);
-        api->free((u8 *)pr.ring);
         pr.ring = 0;
         return -1;
     }
@@ -229,7 +229,7 @@ int32_t dkm_init(const dk_api *api)
 
 void dkm_fini(const dk_api *api)
 {
+    (void)api;
     dl_set_tick_cb(0);
-    api->free((u8 *)pr.ring);
     pr.ring = 0;
 }
