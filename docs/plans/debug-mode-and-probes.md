@@ -52,7 +52,7 @@ runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler 
 
 ## Phase 2: emulator fixes
 
-- [ ] Seed tables in `sharc_core`; remove `approx_recips`; regression tests from the captured tables; one batched core regeneration.
+- [x] Seed tables in `sharc_core`; remove `approx_recips`; regression tests from the captured tables; one batched core regeneration ([finding 102](../findings/102-recips-rsqrts-seed-tables.md)).
 - [ ] An optional cache checker that flags reads of DMA-written lines without cache maintenance. Test builds only, never the real-time path.
 
 ## Phase 3: debug mode (next planned flash)

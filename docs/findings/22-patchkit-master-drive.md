@@ -77,8 +77,7 @@ no cycle factors). The routine has no division and no RECIPS.
   (`R1 = DM(I4, M5) (SW);`) are still assembled as normal-word accesses **[O]**.
 - An uninitialised `.VAR x;` is bss with no size: eight of them all got one address. Module data uses initialised
   `.VAR`.
-- The concrete core models `RECIPS` only with `approx_recips` (the seed table is unpublished), `run_call` takes it as
-  an option. The routine does not use it.
+- The concrete core models `RECIPS` and `RSQRTS` with the measured seed tables ([102](102-recips-rsqrts-seed-tables.md)). The routine does not use them.
 - A stale `target/release/cfdis` (built before `--ranges`) made `pk_link.check_isa` fail with exit 2; rebuilding it
   fixed `tests/patchkit/test_pk_cf.py`. Data-only objects (no text) skip the ISA check.
 

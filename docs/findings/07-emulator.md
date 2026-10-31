@@ -4276,7 +4276,7 @@ SHARC_GEN_DIR="$PWD/out/native/runtime-core/gen" \
 .venv/bin/python -m tools.sharc_dev.sharc_reset_check dn2-1.11 \
   --lib /private/tmp/digi-runtime-core/release/libsharc_native.dylib \
   --runtime-decode --mmr-resets out/refs/adsp-2156x-hwr/all.txt \
-  --approx-recips --instruction-clock --steps 100000 \
+  --instruction-clock --steps 100000 \
   --compare --compare-every 1000 --seconds 60 --report /private/tmp/dsp-start.json
 ```
 
