@@ -5,7 +5,15 @@ import { test } from 'vitest';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { DkLogEvent, Fault } from '@digi/dk-session';
 import { autoOpens, type LogInput } from '../src/log-core.ts';
-import { FROZEN_MS, LogFollower, type FollowSession, type OriginStatus } from '../src/log-follow-core.ts';
+import {
+  FROZEN_MS,
+  IDLE_MS,
+  LogFollower,
+  POLL_MS,
+  pace,
+  type FollowSession,
+  type OriginStatus,
+} from '../src/log-follow-core.ts';
 import { createLogFollow } from '../src/log-follow.ts';
 
 const word = (s: string) => {
@@ -295,4 +303,12 @@ test('flash progress does not restart the loop: one pause note, and polling goes
   await wait(20);
   assert.ok(infos > 0);
   dispose();
+});
+
+test('pace: a hidden window asks nothing; a closed drawer reads the device slowly, the emulator keeps its pace', () => {
+  assert.equal(pace(true, false, true, POLL_MS).ask, false);
+  assert.deepEqual(pace(true, true, true, POLL_MS), { ask: true, wait: POLL_MS });
+  assert.deepEqual(pace(true, true, false, POLL_MS), { ask: true, wait: IDLE_MS });
+  assert.deepEqual(pace(false, true, false, POLL_MS), { ask: true, wait: POLL_MS });
+  assert.equal(pace(true, true, false, 30_000).wait, 30_000);
 });

@@ -66,6 +66,24 @@ export interface FollowOptions {
 /** No answer for this long: the device may be frozen. */
 export const FROZEN_MS = 5000;
 export const POLL_MS = 1000;
+/** Is the window on screen? A hidden window (minimized, on another desktop) asks nothing of the device. */
+export const windowShown = (): boolean => typeof document === 'undefined' || document.visibilityState !== 'hidden';
+/** The device is read this often while the Log drawer is closed (the badge and the auto-open for errors still work; the ring holds the events). */
+export const IDLE_MS = 5000;
+
+/**
+ * How a loop paces itself. A hidden window asks nothing (`ask` false; it looks again after `POLL_MS`). The device on the MIDI port is read
+ * at most every `IDLE_MS` while the drawer is closed; the emulator is a local call and keeps its pace.
+ */
+export function pace(
+  device: boolean,
+  shown: boolean,
+  drawerOpen: boolean,
+  wait: number,
+): { ask: boolean; wait: number } {
+  if (!shown) return { ask: false, wait: POLL_MS };
+  return { ask: true, wait: device && !drawerOpen ? Math.max(wait, IDLE_MS) : wait };
+}
 /** The events of the current boot that are kept for the detail of a fault. */
 const KEEP = 1100;
 
