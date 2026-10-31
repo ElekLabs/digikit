@@ -87,7 +87,7 @@ that does not know the bit ignores it). Traced and plain objects are cached apar
 What you see:
 
 - DIGIKIT, ABOUT: the module's result row ends in ` TRACE` (for example `- OK TRACE`).
-- The fault record: the core clears `_dk_step` before each call into a module and prints it with the fault, for example `FX SEND STEP 3`.
+- The fault record: the core clears `_dk_step` before each call into a module, the block tail copies it into the block's reply record, and the fault record prints the step of the last block that ended, for example `FX SEND STEP 3`. A step stored in the call that stops the DSP is lost with the core: put the mark before the call that you suspect on an earlier block, or make it a state that holds from block to block.
   A traced module imports `_dk_step` from `core/dyndsp`; a runtime without that export refuses it with `DSP IMPORT`.
 - The log: the `DK_TRACE_LOG` messages.
 

@@ -717,8 +717,11 @@ fn float_binary_slow(
         return (V::c(0xFFFF_FFFF), Some(false), Some(true));
     }
     let raw = op(a, b);
+    if raw.is_nan() {
+        return (V::c(0xFFFF_FFFF), Some(false), Some(true));
+    }
     let (bits, overflowed, _underflowed) = _float32_result(s, raw);
-    (V::c(bits), Some(overflowed), Some(raw.is_nan()))
+    (V::c(bits), Some(overflowed), Some(false))
 }
 
 macro_rules! float_binary_fast {
@@ -810,17 +813,16 @@ fn float_multiply_slow(
     std::hint::cold_path();
     let a = _f32_from_bits(s, ftz32(left.b) as Int);
     let b = _f32_from_bits(s, ftz32(right.b) as Int);
+    // The invalid result of the multiplier is 0x7FFFFFFF, not all ones (finding 103).
     if a.is_nan() || b.is_nan() {
-        return (V::c(0xFFFF_FFFF), Some(false), Some(false), Some(true));
+        return (V::c(0x7FFF_FFFF), Some(false), Some(false), Some(true));
     }
     let raw = fmul(a, b);
+    if raw.is_nan() {
+        return (V::c(0x7FFF_FFFF), Some(false), Some(false), Some(true));
+    }
     let (bits, overflowed, underflowed) = _float32_result(s, raw);
-    (
-        V::c(bits),
-        Some(overflowed),
-        Some(underflowed),
-        Some(raw.is_nan()),
-    )
+    (V::c(bits), Some(overflowed), Some(underflowed), Some(false))
 }
 
 /// floats._float32: a fully known value read as a computational unit reads
@@ -1818,8 +1820,11 @@ mod fast_diff {
             return (V::c(0xFFFF_FFFF), Some(false), Some(true));
         }
         let raw = op(a, b);
+        if raw.is_nan() {
+            return (V::c(0xFFFF_FFFF), Some(false), Some(true));
+        }
         let (bits, overflowed, _) = result_ref(s, raw);
-        (V::c(bits), Some(overflowed), Some(raw.is_nan()))
+        (V::c(bits), Some(overflowed), Some(false))
     }
 
     fn float_multiply_ref(
@@ -1833,16 +1838,14 @@ mod fast_diff {
         let a = operand_ref(s, left);
         let b = operand_ref(s, right);
         if a.is_nan() || b.is_nan() {
-            return (V::c(0xFFFF_FFFF), Some(false), Some(false), Some(true));
+            return (V::c(0x7FFF_FFFF), Some(false), Some(false), Some(true));
         }
         let raw = a * b;
+        if raw.is_nan() {
+            return (V::c(0x7FFF_FFFF), Some(false), Some(false), Some(true));
+        }
         let (bits, overflowed, underflowed) = result_ref(s, raw);
-        (
-            V::c(bits),
-            Some(overflowed),
-            Some(underflowed),
-            Some(raw.is_nan()),
-        )
+        (V::c(bits), Some(overflowed), Some(underflowed), Some(false))
     }
 
     #[test]

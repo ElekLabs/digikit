@@ -9,6 +9,7 @@ import { createLogFollow } from '../src/log-follow.ts';
 import type { FollowSession } from '../src/log-follow-core.ts';
 import {
   USE_DEFAULT,
+  changeDebug,
   changeLevel,
   levelChoices,
   levelLabel,
@@ -24,6 +25,7 @@ class Runtime implements FollowSession {
   caps: number | null = (1 << CAP.LOG) | (1 << CAP.LOGCFG);
   cfg: LogConfig = { level: 2, modules: off(), debug: true };
   sets: [number, number[]][] = [];
+  debugSets: boolean[] = [];
   async info() {
     return { caps: this.caps };
   }
@@ -36,6 +38,11 @@ class Runtime implements FollowSession {
   async setLogConfig(level: number, modules: number[]) {
     this.sets.push([level, modules]);
     this.cfg = { ...this.cfg, level, modules };
+    return { ...this.cfg };
+  }
+  async setDebug(on: boolean) {
+    this.debugSets.push(on);
+    this.cfg = { ...this.cfg, debug: on };
     return { ...this.cfg };
   }
   async modules() {
@@ -147,6 +154,36 @@ test('the follow object sets a level on the origin asked and keeps the state it 
     device.caps = 1 << CAP.LOG;
     assert.equal(await follow.levels('device'), null);
     assert.equal(follow.logcfg().device, false);
+    dispose();
+  });
+});
+
+test('the Debug switch sets op 2 and shows the state read back; an origin without LOGCFG is refused without a set', async () => {
+  const rt = new Runtime();
+  assert.equal((await changeDebug(rt, false)).debug, false);
+  assert.deepEqual(rt.debugSets, [false]);
+  assert.equal(rt.cfg.debug, false);
+  rt.caps = 1 << CAP.LOG;
+  await assert.rejects(changeDebug(rt, true), /no debug control/);
+  assert.deepEqual(rt.debugSets, [false]);
+});
+
+test('the follow object switches debug on the origin asked and keeps the state it read back', async () => {
+  const emulator = new Runtime();
+  const device = new Runtime();
+  await createRoot(async (dispose) => {
+    const follow = createLogFollow({
+      follow: () => false,
+      flashing: () => false,
+      emulator: { running: () => true, session: async () => emulator },
+      device: { port: () => 'Digitakt', session: async () => device, present: async () => true },
+    });
+    const cfg = await follow.setDebug('device', false);
+    assert.equal(cfg.debug, false);
+    assert.equal(follow.config().device?.debug, false);
+    assert.equal(follow.config().emulator, undefined);
+    assert.equal(emulator.cfg.debug, true);
+    assert.equal(follow.logcfg().device, true);
     dispose();
   });
 });

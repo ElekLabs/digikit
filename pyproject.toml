@@ -72,6 +72,10 @@ files = [
     "modules/*/*/tests/freqshift_ref.py",
     "tools/device/dksettings.py",
     "tools/device/dkneeds.py",
+    "tools/device/dkprobe_seq.py",
+    "tools/device/dkprobe.py",
+    "tools/device/dkprobe_facts.py",
+    "tools/device/dkprobe_run.py",
     "tools/patchkit/pk_device.py",
     "tools/patchkit/pk_modaudit.py",
     "tools/patchkit/pk_package.py",
@@ -135,6 +139,7 @@ files = [
     "tests/devtools/test_pathcheck.py",
     "tools/devtools/changed_tests.py",
     "tools/devtools/agent_guard.py",
+    "tools/sharc_dev/recip_tables.py",
 ]
 mypy_path = "."
 ignore_missing_imports = true

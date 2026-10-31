@@ -54,6 +54,17 @@ visit, so the DSP takes the kernel's tick (`400000`) or context-switch request (
 and the coupled model otherwise does not (it delivers peripheral events between runs of the core). The emulator prints the counters when it exits.
 Scenario key `[rungc] irq_probe` (finding 49 section 9).
 
+`SHARC_REPLY_INFLIGHT=1|fail` (default off, no cost when unset; set it before the daemon or coupled run starts) flags core writes into the SPI2 reply
+record while it is being sent. The emulator reads the record in one instant when the ColdFire frame arrives; on silicon the transmit DMA reads it while the
+ColdFire shifts the frame out (2748 bytes, DSPI2 at 44 MHz: about 0.5 ms of the 0.667 ms block). From each exchange for that time (in DSP instructions) the
+check compares the record with a snapshot after every dispatch unit and reports each changed 32-bit word: frame number, word index, PC, unit letter (`i`
+interpreter, `b` block, `f` fast tier: only `i` gives the writer's own PC, but patched code appended by the runtime always runs in the interpreter), and
+`EARLY` (before the DMA read the word: the wire carries the new value) or `late`. It sees changes of value, not stores of the value already there.
+`fail` also halts the engine at the first early change (the daemon reports it as a DSP halt). A summary with the per-PC counts and the record addresses goes to
+stderr and to `SHARC_REPLY_INFLIGHT_OUT` (default `$DIGI_DIAG_DIR/reply-inflight.txt`) when the engine is dropped. Knobs: `SHARC_REPLY_INFLIGHT_SCK` (Hz, default
+44000000), `SHARC_REPLY_INFLIGHT_IPS` (DSP instructions per second, default 1500 x `DIGI_DSP_PERIOD`), `SHARC_REPLY_INFLIGHT_SKIP=N` (leave out the first N
+exchanges: the stock firmware writes a few record words while it boots). The DMA's FIFO read-ahead is not modelled. Finding 31 has the record, finding 78 the results.
+
 `DSP_FRAME_POKE=OFF=VAL[/TRACKS][,...]` sets the big-endian 16-bit word at frame byte OFF (with `/N`, at
 OFF + 0x60*t for t < N) in every frame sent to the DSP, to drive a frame word no stock control reaches
 (finding 06, "Parameter channel"). `tools/patchkit/hook_ab.py` renders and compares paired runs with a DSP patch.

@@ -498,6 +498,12 @@ body {
 .tb.chip {
   cursor: default;
 }
+.tb.chip.toggle {
+  cursor: pointer;
+}
+.chip.dbg-failed {
+  border-color: var(--bad, #c0504d);
+}
 .chip .debug-dot {
   display: inline-block;
   width: 6px;

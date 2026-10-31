@@ -460,6 +460,20 @@ pub static mut EARLY: bool = false;
 /// The selection index of the module being loaded by the boot hook (`u32::MAX`: none).
 pub static mut BOOT_IDX: u32 = u32::MAX;
 
+extern "C" {
+    /// `core/dsp-link`: clears the per-block callback when it points into [lo, hi). Resolves to 0 when the module is not in the image.
+    fn dl_tick_cb_drop();
+}
+
+/// After a module's `fini`: no per-block callback of `core/dsp-link` may point into its memory (a module that forgot to clear it).
+unsafe fn drop_tick_cb(base: u32, size: u32) {
+    let a = core::hint::black_box(dl_tick_cb_drop as unsafe extern "C" fn() as usize);
+    if a != 0 {
+        let f: unsafe extern "C" fn(u32, u32) = core::mem::transmute(a);
+        f(base, base.wrapping_add(size));
+    }
+}
+
 /// Take module record `rec` down: slots, wait for tasks inside, `fini`, machine rows, DSP voice rows and range, memory. Used only
 /// by the DSP loader when the DSP part of a module published at boot fails (`undo_early`). The run-time `unload` that also called
 /// it (with the in-use scan) is archived with hot reload. The tables are checked after it (`table::check`).
@@ -514,6 +528,7 @@ unsafe fn unload_rec_inner(rec: usize) -> i32 {
     }
     // the SysEx commands it registered are released with it
     crate::upload::release_cmds(rec as u8 + 1);
+    drop_tick_cb(m.base, m.size);
     // the machine row first, then the DSP voice rows, then the range in the DSP area
     crate::registry::remove(rec as u8 + 1);
     dsp::release(rec);

@@ -388,9 +388,6 @@ def run_inferred_needs(c: Any) -> None:
     def one(mid: str, path: str) -> None:
         data = (c.env.folder / "digikit" / path).read_bytes()
         n = N.needs_of(data)
-        # this boot is cf_only: the DSP send never runs, so the step list that dsp.rs `reserve` allocates for a module with
-        # `_dk_step` relocations (freed by `patch_steps` at PH_SEND) stays taken
-        step_block = step_list_block(data)
         card = c.card([path])
         with c.rig(img, card, "needs-" + mid.replace("/", "-"), cf_only=True) as rig:
             res = rig.boot_info()["results"]
@@ -401,7 +398,7 @@ def run_inferred_needs(c: Any) -> None:
             loaded = bool(res) and res[0] in (0, B.E_LOADING)
             dsp = n["DSP_AREA"] != 0
             want = {
-                "ARENA": n["ARENA"] + n["ARENA_XFER"] + step_block,
+                "ARENA": n["ARENA"] + n["ARENA_XFER"],
                 "DSP_AREA": n["DSP_AREA"],
                 "VOICE_ROWS": n["VOICE_ROWS"],
                 "FX_SLOTS": n["FX_SLOTS"],  # the effect rows are claimed with the range
@@ -432,30 +429,6 @@ def run_inferred_needs(c: Any) -> None:
 
     c.parallel(*[functools.partial(one, mid, path) for mid, path in found])
     c.common_checks_upload(project_writes_ok=True)
-
-
-def step_list_block(dkm: bytes) -> int:
-    """The arena bytes of the step list of the module trace, as dsp.rs `reserve` allocates it: 4 bytes per DSP relocation that names
-    `_dk_step`, as an `arena::alloc` block (rounded up to 16, plus the 16-byte header). 0 for a module without such relocations."""
-    import struct
-
-    off, size = struct.unpack(">II", dkm[0x98:0xA0])
-    if size == 0:
-        return 0
-    d = dkm[off : off + size]
-    reloc_off, nreloc, import_off, nimport = struct.unpack(">IIII", d[0x1C:0x2C])
-    steps = {
-        i
-        for i in range(nimport)
-        if d[import_off + 32 * i : import_off + 32 * (i + 1)].split(b"\0")[0]
-        == b"_dk_step"
-    }
-    nstep = 0
-    for i in range(nreloc):
-        w = struct.unpack(">I", d[reloc_off + 8 * i + 4 : reloc_off + 8 * i + 8])[0]
-        if (w >> 24) & 15 == 2 and (w & 0xFFFF) in steps:
-            nstep += 1
-    return 0 if nstep == 0 else ((4 * nstep + 15) & ~15) + 16
 
 
 # ---- the MODULES page: size and a mark for a module that will not fit ---------------------------------------------------------

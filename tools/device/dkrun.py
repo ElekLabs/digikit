@@ -253,6 +253,23 @@ def check_fit(up: D.Uploader, info: dict[str, Any], data: bytes) -> str | None:
     return short["describe"] if short else None
 
 
+def check_results(res: list[dict[str, Any]]) -> None:
+    """Raise RunError unless the boot's MOD_LOAD and MOD_DSP events (as `module_results` returns them) show every module loaded."""
+    for d in res:
+        if d["kind"] == "MOD_LOAD" and d["args"][1] not in (0, 1):
+            raise RunError(
+                f"MOD_LOAD result {d['fields'].get('result')}: the module did not load"
+            )
+        if d["kind"] == "MOD_DSP" and d["args"][1] != 0:
+            raise RunError(
+                f"MOD_DSP result {d['fields'].get('result')}: the DSP part did not load"
+            )
+    if not any(d["kind"] == "MOD_LOAD" for d in res):
+        raise RunError(
+            "no MOD_LOAD event: the boot did not load the module (safe mode? see the log)"
+        )
+
+
 def run(
     up: D.Uploader,
     module: str,
@@ -306,19 +323,7 @@ def run(
         say(L.text_of(d).strip())
         if emit:
             emit(L.text_of(d), d)
-    for d in res:
-        if d["kind"] == "MOD_LOAD" and d["args"][1] not in (0, 1):
-            raise RunError(
-                f"MOD_LOAD result {d['fields'].get('result')}: the module did not load"
-            )
-        if d["kind"] == "MOD_DSP" and d["args"][1] != 0:
-            raise RunError(
-                f"MOD_DSP result {d['fields'].get('result')}: the DSP part did not load"
-            )
-    if not any(d["kind"] == "MOD_LOAD" for d in res):
-        raise RunError(
-            "no MOD_LOAD event: the boot did not load the module (safe mode? see the log)"
-        )
+    check_results(res)
     if seconds > 0:
         say(f"following the log for {seconds:g} s")
         fol = L.Follower(

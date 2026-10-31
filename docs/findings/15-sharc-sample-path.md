@@ -806,7 +806,7 @@ operand) is not an underflow; whether the device sets MU for 0 x x is not stated
 | `_float_binary`, `_float_unary` result (`_float32_bits`) | denormal results returned as denormals, AZ clear | `_float32_result`: zero of the sign, AZ set from the result bits |
 | `_float_scalb`, `_fixed_to_float_scaled` | already flushed results | same rule through `_float32_result` |
 | `_float_copysign`, `_float_round32` | explicit denormal checks | removed (the input flush covers them) |
-| `_float_mantissa`, `_float_logb`, `_approx_recips`, `_alu_recip_seed_impl` | already read exponent 0 as zero | unchanged |
+| `_float_mantissa`, `_float_logb`, `_alu_recip_seed_impl` | already read exponent 0 as zero | unchanged |
 | float multiply (`compute_mult.mult_float`, `compute_multi._float_multiply_parts`) | MU read from a denormal result; a product that underflowed fully to 0 did not set MU | new `floats._float_multiply` (4th value: underflowed); `_astatx_mult_float(result, overflowed, underflowed, invalid)`; MU = underflowed |
 | `_double_*`, `_double_alu_updates`, `_astatx_mult_double` | keep denormals | unchanged (rule 15) |
 | ALU stickies AUS AVS AOS AIS | not modelled | unchanged (rule 9) |

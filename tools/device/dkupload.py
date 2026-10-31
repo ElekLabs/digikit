@@ -255,12 +255,22 @@ class RtMidiTransport:
 
 
 class Uploader:
-    """The host side of docs/design/digikit-upload.md over a transport with `send(bytes)` and `recv() -> bytes`."""
+    """The host side of docs/design/digikit-upload.md over a transport with `send(bytes)` and `recv() -> bytes`.
 
-    def __init__(self, transport: Any, chunk: int = MAX_CHUNK, depth: int = DEPTH):
+    `skip_foreign` drops replies to other hosts' requests (another program polling the same MIDI port) instead of raising.
+    """
+
+    def __init__(
+        self,
+        transport: Any,
+        chunk: int = MAX_CHUNK,
+        depth: int = DEPTH,
+        skip_foreign: bool = False,
+    ):
         if chunk <= 0 or chunk > MAX_CHUNK or chunk % 512:
             raise ValueError("chunk is a multiple of 512 up to 32768")
         self.t, self.chunk, self.depth = transport, chunk, depth
+        self.skip_foreign = skip_foreign
         self.seq = 0
         self.log: list[tuple[str, int]] = []
 
@@ -275,10 +285,13 @@ class Uploader:
         return seq
 
     def wait(self, cmd: int, seq: int) -> tuple[int, bytes]:
-        r = parse_reply(self.t.recv())
-        assert r is not None
-        rcmd, rseq, status, body = r
-        if rcmd != cmd or rseq != seq:
+        for _ in range(64 if self.skip_foreign else 1):
+            r = parse_reply(self.t.recv())
+            assert r is not None
+            rcmd, rseq, status, body = r
+            if rcmd == cmd and rseq == seq:
+                break
+        else:
             raise UploadError(
                 status, f"reply for cmd {rcmd:#x} seq {rseq}, wanted {cmd:#x} seq {seq}"
             )
@@ -461,6 +474,14 @@ class Uploader:
             lv[i] = 0xFF if v is None else v
         d = cur["default"] if default is None else default
         return parse(self._ok(CMD_LOGCFG, "logcfg", bytes([1, d, *lv])))
+
+    def logcfg_debug(self, on: bool) -> dict[str, Any]:
+        """LOGCFG op 2: switch the debug log on or off (saved in the selection record, as the menu does). E_PROTO from a runtime without op 2.
+        Returns the same dict as `logcfg`."""
+        b = self._ok(CMD_LOGCFG, "logcfg debug", bytes([2, 1 if on else 0]))
+        if len(b) < 10:
+            raise UploadError(-50, "logcfg: malformed reply")
+        return {"default": b[0], "modules": list(b[1:9]), "debug": bool(b[9])}
 
     def select(self, paths: list[str]) -> None:
         """SELECT (runtime 4): save the selection record (what the next boot loads); the menu's code path, so its card rules apply."""

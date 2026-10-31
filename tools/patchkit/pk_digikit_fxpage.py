@@ -196,6 +196,15 @@ class Kit:
         self.rig.s.turn_burst(enc, -8, 80)
         self.rig.s.run_ms(60)
 
+    def to_max(self, enc: str, k: int, j: int) -> None:
+        """Turn ENC up in bursts until the value sits at the top (0x7f00). How many events of a burst the firmware takes depends on the
+        timing of its UI passes (the encoder accelerates by the time between events), so one burst may stop short."""
+        for _ in range(6):
+            self.rig.s.turn_burst(enc, 8, 80)
+            self.rig.s.run_ms(60)
+            if self.raw(k, j) == 0x7F00:
+                return
+
 
 def knob_float(lo: float, hi: float, raw: int) -> float:
     """The runtime's conversion in float32: min + span * (raw / 0x7f00)."""
@@ -457,8 +466,7 @@ def run_fxpage(c: Any) -> None:
             pcm["d"] = note_again(rig, "effect-d")
             # E: MIX back to the top
             back_to_page4()
-            rig.s.turn_burst(ENC_LEVEL, 8, 80)
-            rig.s.run_ms(60)
+            kit.to_max(ENC_LEVEL, 0, 7)
             c.check(
                 "effect: turning MIX to the top gives raw 0x7f00 and a mix word of exactly 1.0",
                 kit.raw(0, 7) == 0x7F00 and row_words()[1] == ONE,
