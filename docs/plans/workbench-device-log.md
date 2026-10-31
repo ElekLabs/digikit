@@ -10,11 +10,20 @@ The Log drawer of the desktop app (`apps/desktop/ui/src/LogPanel.tsx`) shows two
 - **emulator**: the runtime log of the running emulator.
 - **device**: the runtime log of the real device on the MIDI port last chosen in Transfer. It is followed also while Transfer is set to Emulator.
 
-Header: `Log  N entries  [Source] [Errors only] [Follow] [Save] [Copy] [Clear]`.
+Header: `Log  N entries  [Source] [Errors only] [Follow] [Debug ●] [Level: info ▾] [Save] [Copy] [Clear]`.
 
 - **Follow** reads both origins once a second. On by default, the choice is kept. It is disabled (title `The selected target has no digikit runtime`) when no origin can be followed.
 - **Save** writes the entries shown in the file format of `tools/device/dklog.py follow`: a `# ` line for each entry and, for a runtime event, the event as one JSON object on the next line (with `host_time`).
 - **Source** has the groups App (reload, build, firmware, card, transfer, reset), Emulator (all, emulator, runtime, each loaded module) and Device: MIDI port (all, runtime, each loaded module). A group with nothing to follow shows one disabled option.
+
+## Log levels (Level menu and Debug indicator)
+
+The controls act on the origin chosen in Source (`emulator:…` or `device:…`; `emulator` for the app's entries about it). With All or an app source they act on the one origin that is followed, and are off when both or neither are (title: `Choose Emulator or Device in Source`).
+
+- **Level: info ▾** opens a menu: a row `Default` with `error · warn · info · debug · trace`, and one row for each loaded module (module records 0 to 7) with `default` before the five levels. The button shows the default level and `+N` for the modules that have a level of their own. A click sends LOGCFG op 1 (`DkSession.setLogConfig`: the default, 8 module levels, `0xff` = default; the other records stay as they are), then reads LOGCFG again and shows what the runtime says.
+- The levels are in the runtime's RAM and start again at its next boot (`upload.rs` `cmd_logcfg`).
+- **Debug ●** shows whether debug logging is on (green dot), off (grey dot) or unknown (empty dot, when the control is off). It is **read only**: the switch is `boot::debug_set`, reachable only from the runtime's DIGIKIT menu and from the mailbox command `CMD_DEBUG` (a test knob of `tools/patchkit/pk_dkrt_boot.py`), with no SysEx command. A host command (for example a LOGCFG op 2, or a debug byte in the set request) needs a runtime change **[O]**.
+- Both controls are off, with the reason as title, when the origin is not followed or its INFO has no LOGCFG capability (`CAP.LOGCFG`).
 
 ## Rules
 
@@ -39,10 +48,11 @@ Header: `Log  N entries  [Source] [Errors only] [Follow] [Save] [Copy] [Clear]`.
 - [x] Regenerated with `patchkit gen` (`mise run gen:modules`); the diff of generated files is only the new table in `gen_proto.ts`.
 - [x] `mise run verify:host`, `mise run check:layers`, `cargo check -p digiemu-desktop`.
 - [x] Screenshots looked at (preview scenes `log-*` in `tools/devtools/ui_shots.mjs`).
+- [x] Log levels: `DkSession.setLogConfig` (`packages/dk-session/tests/logcfg.test.ts`), `log-level-core.ts`, `LogLevelMenu.tsx`, the Debug indicator, preview mode `log=nologcfg` and scenes `log-level-*`, `log-debug-*` in `tools/devtools/ui_shots.mjs`. Nothing ran against a real device [O].
 - [x] One bounded live check over a running emulator (`live.html?page=emulator&log=1`, scene `log-live`): the drawer shows the real boot events.
 
 ## Not in this plan
 
-- No control for the log level or for debug logging (`dklog level` stays the CLI).
+- No control for debug logging: the runtime has no host command for it (see "Log levels"). `dklog.py` keeps the CLI for levels too.
 - Nothing reads a frozen device; the log keeps what came before.
 - `dklog.py` stays as it is.

@@ -4,6 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { setFirmwareEnv, type FirmwareEnv } from '../../../web/src/firmware/env';
 import { PatchKit, preparedFromSummary, type FlashSummary } from '../../../web/src/patch/patchkit-core';
+import { desktopDefaultModules } from './default-modules';
 import { flashEntry } from './log-core';
 import { logInput } from './log-state';
 
@@ -50,6 +51,7 @@ export const desktopFirmwareEnv: FirmwareEnv = {
     );
   },
   log: (run) => logInput(flashEntry(run)),
+  defaultModules: desktopDefaultModules,
 };
 
 setFirmwareEnv(desktopFirmwareEnv);

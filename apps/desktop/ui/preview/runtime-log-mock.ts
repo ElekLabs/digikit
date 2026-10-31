@@ -1,11 +1,11 @@
-// A fake runtime log for the Log drawer in the preview (?page=log&log=both|fault|frozen|empty). Each origin is a script of events on a clock:
+// A fake runtime log for the Log drawer in the preview (?page=log&log=both|fault|frozen|empty|nologcfg: a runtime without the LOGCFG capability). Each origin is a script of events on a clock:
 // a boot, modules, MOD_LOG lines, then (log=both) a gap in the device's ring, a restart of the emulator, and a boot of the device that found a
 // stopped DSP. The sessions answer as the follower needs them (log-follow-core.ts); the events are the runtime's (docs/findings/46-digikit-debug.md).
-import type { DkLogEvent, Fault } from '@digi/dk-session';
+import type { DkLogEvent, Fault, LogConfig } from '@digi/dk-session';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { FollowSession } from '../src/log-follow-core';
 
-type Mode = 'both' | 'fault' | 'frozen' | 'empty';
+type Mode = 'both' | 'fault' | 'frozen' | 'empty' | 'nologcfg';
 const query = new URLSearchParams(location.search);
 export const logMode: Mode = (query.get('log') as Mode) ?? 'both';
 /** How much faster than real time the script runs (a screenshot does not wait ten seconds). */
@@ -137,7 +137,7 @@ const emulatorBoot1: Boot = {
 interface Script {
   boots: Boot[];
   caps: number;
-  debug: { level: number; debug: boolean };
+  debug: LogConfig;
   /** What MODULES answers: the modules loaded (the names the Log uses for the source of an event). */
   modules?: { index: number; name: string }[];
   /** The fault record the card holds after the boot with this index starts. */
@@ -193,6 +193,12 @@ function session(script: Script): FollowSession {
       await gate();
       return script.debug;
     },
+    // the fake runtime keeps the levels as the real one does (RAM, one state)
+    async setLogConfig(level, modules) {
+      await gate();
+      script.debug = { ...script.debug, level, modules };
+      return script.debug;
+    },
     async modules() {
       await gate();
       return script.modules ?? [];
@@ -209,13 +215,14 @@ const both = logMode === 'both';
 const emulatorScript: Script = {
   boots: both ? [emulatorBoot0, emulatorBoot1] : [emulatorBoot0],
   caps: LOG_CAPS,
-  debug: { level: 2, debug: false },
+  debug: { level: 2, modules: Array<number>(8).fill(0xff), debug: false },
+  modules: [{ index: 0, name: 'freqshift' }],
   faults: [],
 };
 const deviceScript: Script = {
   boots: logMode === 'fault' ? [{ ...deviceBoot1, start: 0 }] : both ? [deviceBoot0, deviceBoot1] : [deviceBoot0],
-  caps: LOG_CAPS,
-  debug: { level: 2, debug: true },
+  caps: logMode === 'nologcfg' ? LOG_CAPS & ~(1 << CAP.LOGCFG) : LOG_CAPS,
+  debug: { level: 2, modules: [0xff, 3, ...Array<number>(6).fill(0xff)], debug: true },
   modules: [
     { index: 0, name: 'dyn-fx-hang' },
     { index: 1, name: 'freqshift' },

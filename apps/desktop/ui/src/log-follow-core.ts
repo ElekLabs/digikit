@@ -13,15 +13,19 @@ import {
   sameFault,
   type DkLogEvent,
   type Fault,
+  type LogConfig,
 } from '@digi/dk-session';
 import { CAP, LOG_KIND, LOG_LEVELS } from '@digi/dk-session/gen_proto';
 import type { LogInput, Origin } from './log-core.ts';
+import { hasLogcfg } from './log-level-core.ts';
 
 /** What the follower needs of a protocol session (a `DkSession` with `followSession`, or a fake). */
 export interface FollowSession {
   info(quick?: boolean): Promise<{ caps: number | null }>;
   logPage(from: number, quick?: boolean): Promise<[number, number, DkLogEvent[]]>;
-  logConfig(quick?: boolean): Promise<{ level: number; debug: boolean }>;
+  logConfig(quick?: boolean): Promise<LogConfig>;
+  /** LOGCFG set (the Level menu of the Log drawer). */
+  setLogConfig(level: number, modules: number[], quick?: boolean): Promise<LogConfig>;
   /** The loaded modules; `index` is the module record index. */
   modules(): Promise<{ index: number; name: string }[]>;
   /** The fault record the runtime keeps on the card (`dk/fault`), or null. */
@@ -44,6 +48,10 @@ export interface FollowOut {
   /** The names of the modules the origin has loaded changed. */
   modules(names: string[]): void;
   status(status: OriginStatus): void;
+  /** The LOGCFG state the follower read (at the start, after a restart, after a DEBUG_SET event). */
+  config?(config: LogConfig): void;
+  /** Whether the origin's INFO has the LOGCFG capability (the Level menu works on it). */
+  logcfg?(supported: boolean): void;
 }
 
 export interface FollowOptions {
@@ -129,6 +137,7 @@ export class LogFollower {
       return false;
     }
     this.started = true;
+    this.o.out.logcfg?.(hasLogcfg(info.caps));
     this.o.out.status('following');
     this.lastAnswer = this.o.now();
     if (!this.everStarted) {
@@ -244,6 +253,7 @@ export class LogFollower {
     this.debugDue = false;
     const cfg = await this.aux(() => s.logConfig(true));
     if (!cfg) return;
+    this.o.out.config?.(cfg);
     const text = cfg.debug
       ? `${this.o.origin}: debug logging on, level ${LOG_LEVELS[cfg.level] ?? cfg.level}`
       : `${this.o.origin}: debug logging off: the runtime keeps only errors (turn it on in the runtime's DEBUG setting)`;
