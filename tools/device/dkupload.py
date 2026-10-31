@@ -255,12 +255,22 @@ class RtMidiTransport:
 
 
 class Uploader:
-    """The host side of docs/design/digikit-upload.md over a transport with `send(bytes)` and `recv() -> bytes`."""
+    """The host side of docs/design/digikit-upload.md over a transport with `send(bytes)` and `recv() -> bytes`.
 
-    def __init__(self, transport: Any, chunk: int = MAX_CHUNK, depth: int = DEPTH):
+    `skip_foreign` drops replies to other hosts' requests (another program polling the same MIDI port) instead of raising.
+    """
+
+    def __init__(
+        self,
+        transport: Any,
+        chunk: int = MAX_CHUNK,
+        depth: int = DEPTH,
+        skip_foreign: bool = False,
+    ):
         if chunk <= 0 or chunk > MAX_CHUNK or chunk % 512:
             raise ValueError("chunk is a multiple of 512 up to 32768")
         self.t, self.chunk, self.depth = transport, chunk, depth
+        self.skip_foreign = skip_foreign
         self.seq = 0
         self.log: list[tuple[str, int]] = []
 
@@ -275,10 +285,13 @@ class Uploader:
         return seq
 
     def wait(self, cmd: int, seq: int) -> tuple[int, bytes]:
-        r = parse_reply(self.t.recv())
-        assert r is not None
-        rcmd, rseq, status, body = r
-        if rcmd != cmd or rseq != seq:
+        for _ in range(64 if self.skip_foreign else 1):
+            r = parse_reply(self.t.recv())
+            assert r is not None
+            rcmd, rseq, status, body = r
+            if rcmd == cmd and rseq == seq:
+                break
+        else:
             raise UploadError(
                 status, f"reply for cmd {rcmd:#x} seq {rseq}, wanted {cmd:#x} seq {seq}"
             )

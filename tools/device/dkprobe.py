@@ -424,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
 
     emu = D._emu(args.run_dir) if args.emu else None
     transport: Any = D.EmuTransport(emu) if args.emu else D.RtMidiTransport(args.port)
-    doc = capture(D.Uploader(transport), emu, args.step)
+    doc = capture(D.Uploader(transport, skip_foreign=not args.emu), emu, args.step)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(doc, indent=1) + "\n")
     h = doc["host"]
