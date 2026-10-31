@@ -72,6 +72,7 @@ files = [
     "modules/*/*/tests/freqshift_ref.py",
     "tools/device/dksettings.py",
     "tools/device/dkneeds.py",
+    "tools/device/dkprobe_seq.py",
     "tools/patchkit/pk_device.py",
     "tools/patchkit/pk_modaudit.py",
     "tools/patchkit/pk_package.py",
