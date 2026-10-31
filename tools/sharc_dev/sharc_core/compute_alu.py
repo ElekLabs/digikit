@@ -23,6 +23,9 @@ from .encoding import (
 )
 from .flags import (
     _alu_arith_updates,
+    _arith_flag_bits,
+    _arith_flag_bits_ci,
+    _saturate_alu_result,
     _astatx_abs,
     _astatx_alu_arith,
     _astatx_alu_arith_ci,
@@ -53,6 +56,7 @@ from .floats import (
     _fixed_to_float_scaled,
     _float32_to_double,
     _float_binary,
+    _float_binary_underflowed,
     _float_clip,
     _float_copysign,
     _float_logb,
@@ -147,18 +151,36 @@ def dual_add_subtract(
 # PRM Table 17-5: ALUOP 00000001/00000010 are add/subtract.
 def alu_add(rn, rx, ry, left, right, values, special) -> tuple:
     value = _add(left, right, "R%d + R%d" % (rx, ry))
-    return rn, value, "add", _astatx_alu_arith(left, right, False)
+    value, flags = _alu_arith_saturated(value, left, right, False, False, values)
+    return rn, value, "add", flags
 
 
 def alu_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     same_source = rx == ry
     value = _subtract(left, right, "R%d - R%d" % (rx, ry), same_source=same_source)
-    return (
-        rn,
-        value,
-        "subtract",
-        _astatx_alu_arith(left, right, True, same_source=same_source),
+    value, flags = _alu_arith_saturated(
+        value, left, right, True, same_source, values
     )
+    return rn, value, "subtract", flags
+
+
+# The fixed-point adder operations saturate with MODE1.ALUSAT set (PRM
+# pp.19-1 ff.: "positive overflows return the maximum positive number
+# (0x7FFF FFFF), and negative overflows return the minimum negative number
+# (0x8000 0000)"); the flags describe the returned word
+# (flags._saturate_alu_result). Measured on a Digitakt II for add, subtract,
+# negate and abs; the carry, increment and decrement forms follow the manual.
+def _alu_arith_saturated(
+    value, a, b, subtract: bool, same_source: bool, values
+) -> tuple:
+    if same_source and subtract:
+        return value, _astatx_alu_arith(a, b, subtract, same_source=True)
+    if isinstance(a, Const) and isinstance(b, Const):
+        mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
+        return _saturate_alu_result(
+            value, _arith_flag_bits(a, b, subtract), False, mode1
+        )
+    return value, _astatx_alu_arith(a, b, subtract)
 
 
 # PRM p.438-439 / PGR Table 12-3 (p.573): ALUOP 00000101 is
@@ -189,12 +211,19 @@ def _alu_carry_impl(rn, rx, ry, left, right, values, subtract: bool) -> tuple:
         offset = (1 if carry_in else 0) - (1 if subtract else 0)
         value = _add(base, Const(offset), label)
     operation = "subtract-with-borrow" if subtract else "add-with-carry"
-    return (
-        rn,
-        value,
-        operation,
-        _astatx_alu_arith_ci(left, right, subtract, carry_in),
-    )
+    value, flags = _alu_carry_saturated(value, left, right, subtract, carry_in, values)
+    return rn, value, operation, flags
+
+
+def _alu_carry_saturated(
+    value, a, b, subtract: bool, carry_in: bool | None, values
+) -> tuple:
+    if isinstance(a, Const) and isinstance(b, Const) and carry_in is not None:
+        mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
+        return _saturate_alu_result(
+            value, _arith_flag_bits_ci(a, b, subtract, carry_in), False, mode1
+        )
+    return value, _astatx_alu_arith_ci(a, b, subtract, carry_in)
 
 
 def alu_add_with_carry(rn, rx, ry, left, right, values, special) -> tuple:
@@ -220,12 +249,10 @@ def _alu_carry_noy_impl(rn, rx, left, values, subtract: bool) -> tuple:
         offset = (1 if carry_in else 0) - (1 if subtract else 0)
         value = _add(left, Const(offset), label)
     operation = "subtract-with-borrow" if subtract else "add-with-carry"
-    return (
-        rn,
-        value,
-        operation,
-        _astatx_alu_arith_ci(left, Const(0), subtract, carry_in),
+    value, flags = _alu_carry_saturated(
+        value, left, Const(0), subtract, carry_in, values
     )
+    return rn, value, operation, flags
 
 
 def alu_add_with_carry_noy(rn, rx, ry, left, right, values, special) -> tuple:
@@ -261,18 +288,21 @@ def alu_pass(rn, rx, ry, left, right, values, special) -> tuple:
 # complement, with the same flags as 0 - RX.
 def alu_negate(rn, rx, ry, left, right, values, special) -> tuple:
     value = _subtract(Const(0), left, "-R%d" % rx)
-    return rn, value, "negate", _astatx_alu_arith(Const(0), left, True)
+    value, flags = _alu_arith_saturated(value, Const(0), left, True, False, values)
+    return rn, value, "negate", flags
 
 
 def alu_increment(rn, rx, ry, left, right, values, special) -> tuple:
     value = _add(left, Const(1), "R%d + 1" % rx)
-    return rn, value, "increment", _astatx_alu_arith(left, Const(1), False)
+    value, flags = _alu_arith_saturated(value, left, Const(1), False, False, values)
+    return rn, value, "increment", flags
 
 
 # PRM Table 18-5 and p. 19-9: ALUOP 00101010 is RN = RX - 1.
 def alu_decrement(rn, rx, ry, left, right, values, special) -> tuple:
     value = _add(left, Const(-1), "R%d - 1" % rx)
-    return rn, value, "decrement", _astatx_alu_arith(left, Const(1), True)
+    value, flags = _alu_arith_saturated(value, left, Const(1), True, False, values)
+    return rn, value, "decrement", flags
 
 
 # PGR p.11-13/11-14 (pgr.txt:20750), opcode 0011 0000: RN = ABS RX. Value
@@ -285,9 +315,13 @@ def alu_abs(rn, rx, ry, left, right, values, special) -> tuple:
     if isinstance(left, Const):
         signed = _signed32(left.value)
         value = left if signed >= 0 else _subtract(Const(0), left, "abs R%d" % rx)
-    else:
-        value = Unknown("abs R%d" % rx)
-    return rn, value, "abs", _astatx_abs(left)
+        negative = signed < 0
+        mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
+        adder = (1 << AZ_BIT) | (1 << AV_BIT) | (1 << AN_BIT) | (1 << AC_BIT)
+        bits = _arith_flag_bits(Const(0), left, negative) & adder
+        value, flags = _saturate_alu_result(value, bits, negative, mode1)
+        return rn, value, "abs", flags
+    return rn, Unknown("abs R%d" % rx), "abs", _astatx_abs(left)
 
 
 # PRM Table 18-5: ALUOP 01000000..01000010 are the integer logical
@@ -328,28 +362,31 @@ def alu_not(rn, rx, ry, left, right, values, special) -> tuple:
 # branch (PRM Table 3-3, pp.3-8/3-9, cross-checked against the classic
 # PGR's per-instruction pages, which spell out AZ/AN/AV/AI exactly where
 # the SHARC+ PRM only marks a column "*"/data-dependent).
+def _zero_result(value) -> bool:
+    return isinstance(value, Const) and (value.value & 0x7FFFFFFF) == 0
+
+
+# AUS latches when the result is a flushed denormal (finding 103: measured for
+# an add; the manual's Table 3-3 gives AUS to subtract too). The sticky latch
+# compares the operation name, so the underflow case has its own literal name.
 def alu_float_add(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_binary(
         left, right, "F%d + F%d" % (rx, ry), _f_add
     )
-    return (
-        rn,
-        value,
-        "float-add",
-        _float_alu_updates(value, av=overflow, ai=invalid),
-    )
+    updates = _float_alu_updates(value, av=overflow, ai=invalid)
+    if _zero_result(value) and _float_binary_underflowed(left, right, _f_add):
+        return rn, value, "float-add-underflow", updates
+    return rn, value, "float-add", updates
 
 
 def alu_float_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_binary(
         left, right, "F%d - F%d" % (rx, ry), _f_sub
     )
-    return (
-        rn,
-        value,
-        "float-subtract",
-        _float_alu_updates(value, av=overflow, ai=invalid),
-    )
+    updates = _float_alu_updates(value, av=overflow, ai=invalid)
+    if _zero_result(value) and _float_binary_underflowed(left, right, _f_sub):
+        return rn, value, "float-subtract-underflow", updates
+    return rn, value, "float-subtract", updates
 
 
 # PRM p.19-4 ("FN = (FX + FY) / 2;", opcode 1000 1001): "Adds the
@@ -559,10 +596,12 @@ def _alu_minmax_float_impl(rn, rx, ry, left, right, minimum: bool) -> tuple:
     value, overflow, invalid = _float_binary(
         left, right, "%s(F%d, F%d)" % (name, rx, ry), combine
     )
+    # literal names: the sticky latch compares them (see compute._apply_sticky)
+    operation = "float-min" if minimum else "float-max"
     return (
         rn,
         value,
-        "float-" + name,
+        operation,
         _float_alu_updates(value, av=False, ai=invalid),
     )
 
@@ -618,12 +657,22 @@ def alu_float_convert_scaled(rn, rx, ry, left, right, values, special) -> tuple:
 def alu_fix(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     value, overflow, invalid = _float_to_fixed(left, mode1, False, "fix F%d" % rx)
-    return (
-        rn,
-        value,
-        "fix",
-        _float_alu_updates(value, av=overflow, ai=invalid),
-    )
+    updates = _float_alu_updates(value, av=overflow, ai=invalid, integer_result=True)
+    if _fix_underflowed(left, value):
+        return rn, value, "fix-underflow", updates
+    return rn, value, "fix", updates
+
+
+# FIX of a nonzero input that returns zero (|x| of one half, measured, and
+# below) sets the sticky AUS (finding 103). A denormal input is a zero. The
+# rule is read from one measurement (+-0.5); whether 0.5 < |x| < 1 also sets
+# it is open. TRUNC does not latch AUS here (open: the manual's Table 3-3
+# gives it AUS).
+def _fix_underflowed(source, value) -> bool:
+    if isinstance(source, Const) and isinstance(value, Const):
+        exponent = (source.value >> 23) & 0xFF
+        return exponent != 0 and exponent != 0xFF and value.value == 0
+    return False
 
 
 # PRM p.427/PGR p.11-37: Rn = trunc Fx.
@@ -634,7 +683,7 @@ def alu_trunc(rn, rx, ry, left, right, values, special) -> tuple:
         rn,
         value,
         "trunc",
-        _float_alu_updates(value, av=overflow, ai=invalid),
+        _float_alu_updates(value, av=overflow, ai=invalid, integer_result=True),
     )
 
 
@@ -648,12 +697,10 @@ def alu_fix_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_to_fixed(
         scaled, mode1, False, "fix F%d by R%d" % (rx, ry)
     )
-    return (
-        rn,
-        value,
-        "fix-scaled",
-        _float_alu_updates(value, av=overflow, ai=invalid),
-    )
+    updates = _float_alu_updates(value, av=overflow, ai=invalid, integer_result=True)
+    if _fix_underflowed(scaled, value):
+        return rn, value, "fix-scaled-underflow", updates
+    return rn, value, "fix-scaled", updates
 
 
 # PGR p.11-36..11-38, opcode 1101 1101: Rn = trunc Fx by Ry -- Ry's
@@ -669,7 +716,7 @@ def alu_trunc_scaled(rn, rx, ry, left, right, values, special) -> tuple:
         rn,
         value,
         "trunc-scaled",
-        _float_alu_updates(value, av=overflow, ai=invalid),
+        _float_alu_updates(value, av=overflow, ai=invalid, integer_result=True),
     )
 
 

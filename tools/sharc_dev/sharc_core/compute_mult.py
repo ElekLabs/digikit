@@ -23,7 +23,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import NamedTuple
 
-from .flags import MULT_FLAGS_CLEAR, MULT_FLAGS_FORGET, FlagUpdate, _mult_flags
+from .flags import (
+    FLAGS_NONE,
+    MULT_FLAGS_CLEAR,
+    MULT_FLAGS_FORGET,
+    FlagUpdate,
+    _mult_flags,
+)
 from .floats import (
     _DOUBLE_ALL_ONES_HI,
     _DOUBLE_ALL_ONES_LO,
@@ -118,8 +124,11 @@ def _mr_data_move(
     foreground register ... and alternate or background" -- MRF/MRB).
     ``state._mr_read_word``/``_mr_write_word`` hold the actual word-slicing
     and MR1->MR2 sign-extension-on-write rule; this just picks which
-    accumulator and word. Flags: PRM p.493, MU/MN/MI/MV all cleared for
-    every direction and register."""
+    accumulator and word. Flags: PRM p.493 says MU/MN/MI/MV are cleared for
+    every direction and register. A Digitakt II leaves them as they were
+    when a register reads an MR word (`MRF = R1 * R2 (SSFR); R0 = MR1F;`
+    leaves MV set, finding 103); the write direction (register to MR) is
+    not measured and keeps the manual's clear."""
     reg_key, word = _MR_DATAMOVE_WORD[mr_name]
     op_name = "mr-data-move-%s" % mr_name.lower()
     specials = special if special is not None else NO_SPECIAL
@@ -128,7 +137,7 @@ def _mr_data_move(
         new_mr = _mr_write_word(current, word, _ureg(values, rn))
         return reg_key, new_mr, op_name, MULT_FLAGS_CLEAR
     value = _mr_read_word(current, word)
-    return rn, value, op_name, MULT_FLAGS_CLEAR
+    return rn, value, op_name, FLAGS_NONE
 
 
 def _mr_flags(

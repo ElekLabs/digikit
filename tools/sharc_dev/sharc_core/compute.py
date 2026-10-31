@@ -226,15 +226,64 @@ def _sticky_set(old: Value, bit: int, trigger: bool | None) -> Value:
     return _astatx_define(old, 1 << bit, 1 << bit)
 
 
-# The ALU sticky bits (STKYX bit 0 AUS, 1 AVS, 5 AIS) that recips and rsqrts latch, as measured on a Digitakt II (see
-# compute_alu._alu_recip_seed_impl): AVS from AV, AIS from AI, AUS only for the underflow case. The other float ALU
-# operations do not latch their stickies in this core yet.
-_AUS_BIT, _AVS_ALU_BIT, _AIS_ALU_BIT = 0, 1, 5
-_ALU_SEED_OPERATIONS = frozenset(
+# The ALU sticky bits (STKYX bit 0 AUS, 1 AVS, 2 AOS, 5 AIS) as measured on a Digitakt II (finding 103):
+#   AVS and AIS latch with AV and AI of a float ALU result; AOS latches with AV of a fixed-point adder result;
+#   AUS latches when a float add, subtract, FIX or RECIPS result is a flushed denormal or zero from a nonzero value.
+# The AUS cases have their own operation names ("...-underflow"): the translator erases a string built at run time, so
+# the names are literals (compute_alu). Float ALU operations that are not listed here (the ALU half of a
+# multifunction compute, TRUNC's AUS, the 64-bit operations) do not latch yet.
+_AUS_BIT, _AVS_ALU_BIT, _AOS_BIT, _AIS_ALU_BIT = 0, 1, 2, 5
+_ALU_FLOAT_STICKY_OPERATIONS = frozenset(
     {
+        "float-add",
+        "float-add-underflow",
+        "float-subtract",
+        "float-subtract-underflow",
+        "float-average",
+        "float-abs-subtract",
+        "float-compare",
+        "float-pass",
+        "float-negate",
+        "float-round32",
+        "mant",
+        "logb",
+        "float-abs",
+        "float-scalb",
+        "float-min",
+        "float-max",
+        "float-clip",
+        "float-copysign",
+        "float-convert-scaled",
+        "fix",
+        "fix-underflow",
+        "fix-scaled",
+        "fix-scaled-underflow",
+        "trunc",
+        "trunc-scaled",
         "float-recips-seed",
         "float-recips-seed-underflow",
         "float-rsqrts-seed",
+    }
+)
+_ALU_UNDERFLOW_OPERATIONS = frozenset(
+    {
+        "float-add-underflow",
+        "float-subtract-underflow",
+        "fix-underflow",
+        "fix-scaled-underflow",
+        "float-recips-seed-underflow",
+    }
+)
+_ALU_FIXED_STICKY_OPERATIONS = frozenset(
+    {
+        "add",
+        "subtract",
+        "add-with-carry",
+        "subtract-with-borrow",
+        "increment",
+        "decrement",
+        "negate",
+        "abs",
     }
 )
 
@@ -254,11 +303,14 @@ def _apply_sticky(state: State, stky_name: str, astatx: Value, operation: str) -
     elif operation in _MULT_MOS_OPERATIONS:
         value = _ureg_raw(state.uregs, code)
         value = _sticky_set(value, _MOS_BIT, _astatx_known_bit(astatx, MV_BIT))
-    elif operation in _ALU_SEED_OPERATIONS:
+    elif operation in _ALU_FLOAT_STICKY_OPERATIONS:
         value = _ureg_raw(state.uregs, code)
-        value = _sticky_set(value, _AUS_BIT, operation == "float-recips-seed-underflow")
+        value = _sticky_set(value, _AUS_BIT, operation in _ALU_UNDERFLOW_OPERATIONS)
         value = _sticky_set(value, _AVS_ALU_BIT, _astatx_known_bit(astatx, AV_BIT))
         value = _sticky_set(value, _AIS_ALU_BIT, _astatx_known_bit(astatx, AI_BIT))
+    elif operation in _ALU_FIXED_STICKY_OPERATIONS:
+        value = _ureg_raw(state.uregs, code)
+        value = _sticky_set(value, _AOS_BIT, _astatx_known_bit(astatx, AV_BIT))
     else:
         return
     state.uregs[code] = value

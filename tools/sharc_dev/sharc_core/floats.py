@@ -180,6 +180,9 @@ def _float32_result(value: float) -> tuple[int, bool, bool]:
 
 
 _FLOAT_ALL_ONES = Const(0xFFFFFFFF)
+# The multiplier's invalid result (a NaN operand, infinity times zero) is not all ones: 0x7FFFFFFF with MN clear and MI set
+# (Digitakt II, finding 103; measured with positive operands only).
+_FLOAT_MUL_INVALID = Const(0x7FFFFFFF)
 
 
 def _float_binary(
@@ -203,8 +206,27 @@ def _float_binary(
     if _isnan(a) or _isnan(b):
         return _FLOAT_ALL_ONES, False, True
     raw = operation(a, b)
+    if _isnan(raw):
+        return _FLOAT_ALL_ONES, False, True
     bits, overflowed, _underflowed = _float32_result(raw)
-    return Const(bits), overflowed, _isnan(raw)
+    return Const(bits), overflowed, False
+
+
+def _float_binary_underflowed(left: Value, right: Value, operation) -> bool | None:
+    """Whether the post-rounded result of ``_float_binary`` with OPERATION is a
+    flushed denormal: a nonzero result below the smallest normal, returned as a
+    zero (AUS latches for it on a Digitakt II, finding 103). An exact zero, a
+    NaN or an infinity is not an underflow. None when an operand is unknown."""
+    a, b = _float32(left), _float32(right)
+    if a is None or b is None:
+        return None
+    if _isnan(a) or _isnan(b):
+        return False
+    raw = operation(a, b)
+    if _isnan(raw):
+        return False
+    _bits, _overflowed, underflowed = _float32_result(raw)
+    return underflowed
 
 
 def _float_multiply(
@@ -220,10 +242,12 @@ def _float_multiply(
     if a is None or b is None:
         return Unknown(expression), None, None, None
     if _isnan(a) or _isnan(b):
-        return _FLOAT_ALL_ONES, False, False, True
+        return _FLOAT_MUL_INVALID, False, False, True
     raw = a * b
+    if _isnan(raw):
+        return _FLOAT_MUL_INVALID, False, False, True
     bits, overflowed, underflowed = _float32_result(raw)
-    return Const(bits), overflowed, underflowed, _isnan(raw)
+    return Const(bits), overflowed, underflowed, False
 
 
 def _float_unary(
@@ -236,8 +260,10 @@ def _float_unary(
     if _isnan(a):
         return _FLOAT_ALL_ONES, False, True
     raw = operation(a)
+    if _isnan(raw):
+        return _FLOAT_ALL_ONES, False, True
     bits, overflowed, _underflowed = _float32_result(raw)
-    return Const(bits), overflowed, _isnan(raw)
+    return Const(bits), overflowed, False
 
 
 def _f_add(a: float, b: float) -> float:
@@ -266,16 +292,23 @@ def _f_pass(a: float) -> float:
 
 
 def _float_min(a: float, b: float) -> float:
-    """PGR p.11-46: smaller operand; min(+0, -0) is documented as -0."""
+    """PGR p.11-46: smaller operand; min(+0, -0) is documented as -0. Two zeros
+    give -0 if either is negative; min(+0, +0) is +0 (a denormal operand is a
+    zero of its sign; Digitakt II, finding 103)."""
     if a == 0.0 and b == 0.0:
-        return -0.0
+        if _copysign(1.0, a) < 0.0 or _copysign(1.0, b) < 0.0:
+            return -0.0
+        return 0.0
     return a if a < b else b
 
 
 def _float_max(a: float, b: float) -> float:
-    """PGR p.11-47: larger operand; max(+0, -0) is documented as +0."""
+    """PGR p.11-47: larger operand; max(+0, -0) is documented as +0. Two zeros
+    give +0 if either is positive."""
     if a == 0.0 and b == 0.0:
-        return 0.0
+        if _copysign(1.0, a) > 0.0 or _copysign(1.0, b) > 0.0:
+            return 0.0
+        return -0.0
     return a if a > b else b
 
 
