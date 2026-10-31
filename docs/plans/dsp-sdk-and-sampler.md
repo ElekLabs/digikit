@@ -3082,3 +3082,21 @@ Both setup bodies install vector 99, select level 2, clear DTCN, set DTRR to
 `0x40001896`. No DTXMR write appears in those setup bodies; the complete mode
 history and repeated-reference rearming remain open. The earlier bounded
 first-64-KiB vector-slot scan missed these later functions and is not absence evidence.
+
+### Device DTIM reference-event component — 2026-10-31
+
+- [x] Implement supplied REF events, reference-only CPU requests, bounded register
+  configuration and DTER W1C from MCF5441XRM p1164–p1168.
+- [x] Pass 28 named component/Oracle regression tests and all five actual-firmware
+  storage tests with both exact images. The new vector-99 prefix case has four
+  runs: DT2/DN2 and REF/REF|CAP, each bounded to 64 instructions, stopping before
+  the actual `0x40001896` queue-helper call. REF clears and CAP is preserved.
+- [x] Independent review found no issues; coordinator scoped path/layer and whitespace checks passed.
+
+Capture delivery, automatic timing/rearming, reset, DMA execution and shared/native
+arbitration remain excluded. Device construction initializes DTRR to `0xffffffff`
+only; Oracle defaults stay zero, and no full reset fidelity is claimed. Unsupported
+capture/advanced modes, reset transitions and live nonzero CLK changes reject.
+Exact commands/hashes/logs: `out/runs/storage-fault-proof/dtim-device-events*`.
+The handler-prefix proof establishes no complete ISR/RTE or task behavior; the full
+merge gate remains deferred.

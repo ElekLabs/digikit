@@ -39,6 +39,10 @@ const DTMR: usize = 0x00;
 const DTXMR: usize = 0x02;
 const DTER: usize = 0x03;
 const DTRR: usize = 0x04;
+const DTCN: usize = 0x0C;
+const CE: u16 = 0xC0;
+const CLK: u16 = 0x06;
+const CAP: u8 = 0x01;
 
 const RST: u16 = 0x01;
 const FRR: u16 = 0x08;
@@ -48,6 +52,13 @@ const DMAEN: u8 = 0x80;
 
 pub const F_BUS: f64 = crate::pit::F_BUS;
 pub const IDLE_STEP: u64 = crate::pit::IDLE_STEP;
+
+/// Invalid use of the bounded Device reference-event component.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DeviceReferenceError {
+    InvalidChannel { channel: usize },
+    UnsupportedMode { channel: usize },
+}
 
 /// `DtimBank::service`'s result: (vectors raised, in delivery order with
 /// their ICR level; host writes performed as `(addr, byte)`).
@@ -107,6 +118,16 @@ impl DtimBank {
         }
     }
 
+    /// Device construction initializes the documented DTRR reset value only
+    /// (MCF5441XRM p1167). This is not a full timer reset implementation.
+    pub fn new_device(channels: Vec<usize>, ips: f64, held: bool) -> Self {
+        let mut bank = Self::new(channels, ips, held);
+        for regs in &mut bank.regs {
+            regs.write(DTRR as u32, 4, u32::MAX);
+        }
+        bank
+    }
+
     #[inline]
     pub fn owns(addr: u32) -> bool {
         BASES
@@ -152,6 +173,84 @@ impl DtimBank {
                 let byte = ((value >> (8 * shift as u32)) & 0xFF) as u8;
                 self.note_dter_write(ch, byte & REF != 0);
             }
+        }
+        true
+    }
+
+    fn device_reference_mode(&self, channel: usize) -> Result<(), DeviceReferenceError> {
+        let Some(regs) = self.regs.get(channel) else {
+            return Err(DeviceReferenceError::InvalidChannel { channel });
+        };
+        if regs.u8_at(DTXMR) & !DMAEN != 0 || regs.u16_at(DTMR) & CE != 0 {
+            return Err(DeviceReferenceError::UnsupportedMode { channel });
+        }
+        Ok(())
+    }
+
+    /// Supply REF independently of ORRI/DMAEN; no compare timing, rearming,
+    /// capture or DMA execution is modeled (MCF5441XRM p1165/p1166).
+    pub fn device_latch_reference(&mut self, channel: usize) -> Result<(), DeviceReferenceError> {
+        self.device_reference_mode(channel)?;
+        let regs = &mut self.regs[channel];
+        regs.set_u8_at(DTER, regs.u8_at(DTER) | REF);
+        Ok(())
+    }
+
+    /// Raw reference-only CPU requests from all physical channels:
+    /// REF && ORRI && !DMAEN. No status consumption or INTC/CPU filtering.
+    /// Capture-enabled and advanced modes reject even when loaded externally,
+    /// rather than silently hiding unmodeled requests. Oracle topology is unused.
+    pub fn device_reference_vectors(&self) -> Result<Vec<u16>, DeviceReferenceError> {
+        let mut requests = Vec::new();
+        for (channel, regs) in self.regs.iter().enumerate() {
+            self.device_reference_mode(channel)?;
+            if regs.u8_at(DTER) & REF != 0
+                && regs.u16_at(DTMR) & ORRI != 0
+                && regs.u8_at(DTXMR) & DMAEN == 0
+            {
+                requests.push(VECTORS[channel]);
+            }
+        }
+        Ok(requests)
+    }
+
+    /// Bounded Device writes, rejecting unsupported access/mode before mutation.
+    /// DTER byte REF/CAP are W1C; reserved set bits reject (p1165/p1166).
+    /// DTMR word rejects capture, reset transitions and nonzero CLK changes while
+    /// already enabled (p1164); stopping CLK preserves events. DTXMR byte allows
+    /// only ordinary mode or DMAEN. DTRR long stores without acknowledging REF;
+    /// DTCN long clears the counter (p1167/p1168). No other timing/phase effects,
+    /// reset or DMA acknowledgement are modeled; other widths/registers reject.
+    pub fn device_write(&mut self, addr: u32, size: u8, value: u32) -> bool {
+        let Some(channel) = Self::slot(addr) else {
+            return false;
+        };
+        if self.device_reference_mode(channel).is_err() {
+            return false;
+        }
+        let offset = (addr - BASES[channel]) as usize;
+        let regs = &mut self.regs[channel];
+        match (offset, size) {
+            (DTER, 1) if value as u8 & !(REF | CAP) == 0 => {
+                regs.set_u8_at(DTER, regs.u8_at(DTER) & !(value as u8));
+            }
+            (DTMR, 2) => {
+                let old = regs.u16_at(DTMR);
+                let new = value as u16;
+                if new & CE != 0
+                    || old & RST != 0 && new & RST == 0
+                    || old & RST != 0 && new & CLK != 0 && old & CLK != new & CLK
+                {
+                    return false;
+                }
+                regs.set_u16_at(DTMR, new);
+            }
+            (DTXMR, 1) if value as u8 & !DMAEN == 0 => {
+                regs.set_u8_at(DTXMR, value as u8);
+            }
+            (DTRR, 4) => regs.write(DTRR as u32, 4, value),
+            (DTCN, 4) => regs.write(DTCN as u32, 4, 0),
+            _ => return false,
         }
         true
     }

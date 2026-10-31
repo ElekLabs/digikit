@@ -386,8 +386,8 @@ MCF5441XRM p1156/p1159 describes PIT PIF setting at counter zero independently
 of PIE, and clearing by W1C or PMR write rather than CPU entry. DTIM REF/CAP
 report events independently of request enables, with W1C acknowledgement;
 ORRI/DMAEN gate requests (p1165/p1166). Stopping CLK differs from RST reset
-(p1164). The explicit PIT component below implements supplied-event status and
-acknowledgement only; Device DTIM behavior remains unimplemented. Oracle's absent
+(p1164). The explicit PIT and DTIM components below implement supplied-event
+status and bounded acknowledgement only. Oracle's absent
 PIF assertion and entry consumption of pending ticks remain compatibility rules.
 Timer timing and native integration remain separate. Repeated non-1588 REF rearming
 remains ambiguous between p1166 Table 39-4 and the p1167 EN1588 prose; this audit
@@ -431,6 +431,55 @@ same directory. Independent review found no issues; coordinator scoped
 path/layer and whitespace checks passed. The full merge gate is deferred.
 Automatic timer timing, counters/phase/reset, Device DTIM, shared/native
 arbitration, hardware and the full merge gate remain outside this checkpoint.
+
+### Device DTIM supplied reference events and acknowledgement
+
+**Implemented, bounded [D]:** `DtimBank` accepts supplied REF events independently
+of ORRI/DMAEN, preserving CAP. Raw reference-only CPU requests use
+REF && ORRI && !DMAEN for all four physical channels, without Oracle topology,
+INTC/CPU filtering or status consumption. Capture-enabled and advanced DTXMR
+modes reject, including externally loaded configuration, so this API does not
+silently omit capture requests. `Time` requires Device policy and reports typed
+policy/channel/mode errors through a separate `DeviceDtimError`.
+
+The bounded Device write path supports DTER byte W1C of REF/CAP (zero preserves;
+reserved set bits reject), ordinary-mode DTXMR byte writes with optional DMAEN,
+and DTMR word configuration with capture disabled. RST 1→0 transitions and
+nonzero CLK changes while already enabled reject before register mutation;
+stopping CLK preserves status. DTRR long writes store the reference without
+acknowledging REF; DTCN long writes clear the ordinary-mode counter. Other
+widths/registers reject. No compare timing/rearming, counter progression, capture,
+DMA execution/ACK, reset or phase behavior is simulated. Device construction
+initializes the documented DTRR `0xffffffff` value only, not a complete reset.
+Oracle zero defaults, passthrough, scheduling and bookkeeping remain unchanged.
+Rejected Device DTIM writes preserve Time registers/caches; as with PIT, Board
+may already have advanced its MMIO epoch and is not transactionally unchanged.
+
+The named Device DTIM, existing DTIM/manual and Time suites pass **28 tests**.
+Coverage includes independent event/request enables, DMAEN gating, all channels,
+REF/CAP W1C, DTRR non-acknowledgement, DTCN clearing, CLK stop versus rejected
+reset/live CLK changes, invalid policy/channel/mode/access rejection and actual
+CPU interrupt entry/RTE leaving REF set. All **five** actual-firmware storage
+tests pass with both exact DT2 1.17 and DN2 1.12 opt-ins.
+
+The new prefix case executes four stock-only runs (both images × REF/REF|CAP).
+Actual Device CPU entry uses vector 99 at DT2 `0x400c0b40` / DN2 `0x400bb170`.
+Each run observes the actual byte-2 write to DTER3 `0xfc07c003`, verifies REF is
+cleared and seeded CAP preserved, and stops within 64 instructions at DT2
+`0x400c0b5c` / DN2 `0x400bb18c`, before the actual JSR `0x40001896`.
+The queue helper is not executed: this is no full ISR/RTE, task-context,
+automatic timer or physical-source arbitration proof. Existing storage/scheduler
+assertions remain intact, and the storage/force route still excludes DTIM.
+
+Commands, environment and source/input hashes are recorded in
+`out/runs/storage-fault-proof/dtim-device-events-invocation.json`; component and
+firmware logs are `dtim-device-events-tests.log` and
+`dtim-device-events-firmware-tests.log` in the same directory. Independent review
+found no issues; coordinator scoped path/layer and whitespace checks passed.
+Repeated non-1588 REF rearming,
+full reset, capture/DMA and shared/native delivery remain open. No snapshot
+format, daemon default, SHARC, PCM or hardware change is included; the full merge
+gate remains deferred.
 
 ### C — Explicit opt-in daemon and bounded fault-history proof
 

@@ -1359,3 +1359,64 @@ fn actual_storage_isr_schedules_initialized_waiter_and_executes_guest_task() {
         }
     }
 }
+
+#[test]
+fn actual_dtim3_handler_prefix_acknowledges_reference_and_preserves_capture() {
+    for target in DELIVERY_TARGETS {
+        let Some(path) = std::env::var_os(target.env) else {
+            eprintln!(
+                "SKIP controlled {} DTIM prefix: set {} to its stock .syx",
+                target.name, target.env
+            );
+            continue;
+        };
+        let raw = std::fs::read(path).expect("configured stock image must be readable");
+        let fw = Firmware::parse(&raw).expect("parse configured stock image");
+        assert_eq!(fw.syx_sha256, target.sha, "requires exact stock image");
+        let linked = compiled_at(target.sites);
+        let (handler, helper_call) = if target.sha == STOCK_SHA {
+            (0x400c_0b40, 0x400c_0b5c)
+        } else {
+            (0x400b_b170, 0x400b_b18c)
+        };
+        for capture in [0_u8, 1] {
+            const DTIM3: u32 = 0xfc07_c000;
+            let mut m = delivery_machine(&fw, &linked, &target, false, 1);
+            // Test-only preexisting CAP. No capture event generation is modeled.
+            let mut page = [0; 16];
+            page[3] = capture;
+            assert!(m.board.time_mut().unwrap().load_page(DTIM3, &page));
+            m.board.write32(DTIM3 + 12, 0).unwrap();
+            m.board.write32(DTIM3 + 4, 0x43238).unwrap();
+            m.board.write16(DTIM3, 0x001d).unwrap();
+            m.board.time_mut().unwrap().device_dtim_reference(3).unwrap();
+            assert_eq!(m.board.read8(DTIM3 + 3).unwrap(), capture | 2);
+            assert_eq!(m.board.read16(helper_call).unwrap(), 0x4eb9);
+            assert_eq!(m.board.read32(helper_call + 2).unwrap(), 0x4000_1896);
+            m.board.write32(VBR + 99 * 4, handler).unwrap();
+            m.cpu.sr = 0x2000;
+            m.cpu.take_interrupt(&mut m.board, 99, Some(2), InterruptPolicy::Device).unwrap();
+            assert_eq!(m.cpu.pc, handler);
+            assert_eq!(m.board.read8(DTIM3 + 3).unwrap(), capture | 2);
+            m.board.set_guest_access_capture(true);
+            let mut acknowledged = false;
+            for _ in 0..64 {
+                if m.cpu.pc == helper_call {
+                    break; // queue helper/task context is deliberately outside this proof
+                }
+                m.cpu.step(&mut m.board).unwrap();
+                assert_eq!(m.cpu.last_exception, None);
+                for write in m.board.take_guest_writes() {
+                    if write.address == DTIM3 + 3 {
+                        assert_eq!((write.size, write.value), (1, 2));
+                        acknowledged = true;
+                    }
+                }
+            }
+            assert_eq!(m.cpu.pc, helper_call, "bounded actual handler prefix");
+            assert!(acknowledged, "actual DTER REF byte acknowledgement observed");
+            assert_eq!(m.board.read8(DTIM3 + 3).unwrap(), capture);
+            assert!(m.board.time().unwrap().device_dtim_reference_requests().unwrap().is_empty());
+        }
+    }
+}

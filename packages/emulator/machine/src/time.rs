@@ -6,7 +6,7 @@
 //! and `SrTracker` is updated by `PitBank::service` when an interrupt is taken.
 
 use periph::{
-    dtim::DtimBank,
+    dtim::{DeviceReferenceError, DtimBank},
     intc::IntcBank,
     machine::{HostWrite, Timers},
     pit::PitBank,
@@ -42,6 +42,23 @@ pub enum DevicePitError {
     DevicePolicyRequired,
     /// PIT physical channels are numbered 0 through 3.
     InvalidChannel { channel: usize },
+}
+
+/// Invalid use of the bounded Device DTIM reference-event component.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DeviceDtimError {
+    DevicePolicyRequired,
+    InvalidChannel { channel: usize },
+    UnsupportedMode { channel: usize },
+}
+
+impl From<DeviceReferenceError> for DeviceDtimError {
+    fn from(error: DeviceReferenceError) -> Self {
+        match error {
+            DeviceReferenceError::InvalidChannel { channel } => Self::InvalidChannel { channel },
+            DeviceReferenceError::UnsupportedMode { channel } => Self::UnsupportedMode { channel },
+        }
+    }
 }
 
 /// INTC1 source 63: forced by the guest too, but delivered by the SSI model.
@@ -87,7 +104,10 @@ impl Time {
     ) -> Self {
         Self {
             pit: PitBank::new(pit_channels, ips, false),
-            dtim: DtimBank::new(dtim_channels, ips, false),
+            dtim: match policy {
+                TimerPolicy::Oracle => DtimBank::new(dtim_channels, ips, false),
+                TimerPolicy::Device => DtimBank::new_device(dtim_channels, ips, false),
+            },
             // Fresh unknown MMIO is zero-mapped by the Python oracle. Keep
             // the hardware-reset IntcBank default for Device construction.
             intc: match policy {
@@ -275,8 +295,30 @@ impl Time {
         Ok(self.pit.device_pending_vectors())
     }
 
+    /// Supply a Device DTIM reference event, without timing or delivery.
+    /// Policy/channel/unsupported-mode errors precede register/cache mutation.
+    pub fn device_dtim_reference(&mut self, channel: usize) -> Result<(), DeviceDtimError> {
+        if self.policy != TimerPolicy::Device {
+            return Err(DeviceDtimError::DevicePolicyRequired);
+        }
+        self.dtim.device_latch_reference(channel)?;
+        self.service_not_before = None;
+        self.blocked = None;
+        Ok(())
+    }
+
+    /// Raw Device DTIM reference-only CPU requests; capture delivery, DMA
+    /// execution, timing and storage arbitration remain outside this component.
+    pub fn device_dtim_reference_requests(&self) -> Result<Vec<u16>, DeviceDtimError> {
+        if self.policy != TimerPolicy::Device {
+            return Err(DeviceDtimError::DevicePolicyRequired);
+        }
+        Ok(self.dtim.device_reference_vectors()?)
+    }
+
     /// Write a PIT or INTC register. Device PIT supports aligned 16-bit
     /// PCSR/PMR writes only, with PIF acknowledgement; Oracle stays passthrough.
+    /// Device DTIM accepts only its bounded reference-mode configuration and W1C.
     /// Device mode additionally applies byte SIMR/CIMR writes selecting eSDHC
     /// source 31 or storage DMA source 0 on INTC2. Other INTC hardware
     /// semantics remain unsupported;
@@ -284,6 +326,14 @@ impl Time {
     /// directly before relying on this bounded path. This does not compose a
     /// whole-machine arbiter.
     pub fn write(&mut self, addr: u32, size: u8, value: u32) -> bool {
+        if self.policy == TimerPolicy::Device && DtimBank::owns(addr) {
+            if !self.dtim.device_write(addr, size, value) {
+                return false;
+            }
+            self.service_not_before = None;
+            self.blocked = None;
+            return true;
+        }
         if self.policy == TimerPolicy::Device && PitBank::owns(addr) {
             if !self.pit.device_write(addr, size, value) {
                 return false;

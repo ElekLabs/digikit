@@ -590,3 +590,25 @@ Next address Device DTIM's event/status contract, including the open repeated
 REF rearming question, before automatic timing or shared/native arbitration.
 No hardware, snapshot format, default-policy, SHARC or PCM change is included.
 See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+
+## Device DTIM supplied-reference component — 2026-10-31
+
+Device DTIM now latches supplied REF events and exposes reference-only CPU
+requests from REF/ORRI/DMAEN, without timing or delivery. Bounded writes model
+DTER REF/CAP W1C, supported ordinary configuration, DTRR storage and DTCN clear.
+Capture/advanced modes, reset transitions, live nonzero CLK changes and unsupported
+accesses reject. Only Device DTRR initialization changes to `0xffffffff`; Oracle
+defaults and behavior remain unchanged. No capture, DMA, reset or rearm simulation.
+
+Twenty-eight component/Oracle regression tests and all five actual-firmware
+storage tests pass with both exact inputs. The new vector-99 handler-prefix case
+runs four stock-only REF/REF|CAP cases across both images, observes actual DTER3
+byte acknowledgement preserving CAP, and stops before JSR `0x40001896` within
+64 instructions. It does not execute the queue helper or prove a full ISR/RTE.
+Exact commands/hashes/logs are under ignored
+`out/runs/storage-fault-proof/dtim-device-events*`. Independent review and
+coordinator verification passed; the full gate remains deferred.
+
+Repeated non-1588 REF rearming, timing/reset and shared/native arbitration remain
+open. Storage/force stepping still excludes timer requests. See
+[finding 100](../findings/100-storage-interrupt-emulation-scope.md).
