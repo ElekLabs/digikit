@@ -34,7 +34,7 @@ STKY bits 24 and 26 (`0x05000000`) are set on every item. They are not an effect
 
 - `tools/sharc_dev/sharc_core/seed_tables.py`: the two 128-entry tables, written by `tools/sharc_dev/recip_tables.py fit PROBE.json --write`. The tool also verifies the core against a probe JSON or the fixture (`verify`) and writes the fixture (`fixture`).
 - `compute_alu._alu_recip_seed_impl`: the rules above; `compute._apply_sticky` latches the three sticky bits. The operation names are literals because the translator erases a string built at run time (the first regeneration lost every sticky bit this way: the latch compares the name).
-- `approx_recips` is removed from the core, the translator tables, the native run configuration (option 11 is unused), the native runtime default, the tools and the tests. The fast-region lowering of `RECIPS` is removed: a region with `RECIPS` is refused and runs in the generated blocks or the interpreter (**[O]** the lowering needs a table load; not done).
+- `approx_recips` is removed from the core, the translator tables, the native run configuration (option 11 is unused), the native runtime default, the tools and the tests. The fast-region lowering of `RECIPS` is replaced by an exact one for `RECIPS` and `RSQRTS` (section 7).
 - Test: `tests/sharc/semantics/test_sharc_recips.py` runs the core over all 6694 fixture rows. The emulator check is in `tests/regression/runtime/sharc-probe.test.ts` (section 4).
 
 ## 4. The emulator **[D]**
@@ -74,4 +74,15 @@ No pin was updated. **[O]** Em decides about the four pins:
 - DN2: the fixture was measured on a Digitakt II only. The DN2 core is assumed identical (same SHARC+ core, same MODE1 setting by the fx adapter); the emulator check runs the DT2 rows on the DN2 emulator. **[O]** Not measured on a Digitone II.
 - `RECIPS` and `RSQRTS` under other MODE1 settings (TRUNCATE, ALUSAT, RND32 clear) and in 40-bit mode are not measured; the core uses the same result for all. **[O]**
 - Sticky bits of the other float ALU operations. **[O]**
-- Fast-region lowering of `RECIPS`. **[O]**
+
+## 7. The fast tier **[D]**
+
+The fast tier (`packages/emulator/sharc/src/fast/lower/float_alu.rs`) lowers `RECIPS` (opcode `0xc4`) and `RSQRTS` (`0xc5`) for the ordinary inputs and leaves the kernel before the instruction for every other input, as the other float operations do:
+
+- `RECIPS`: exponent field 1 to 252. `RSQRTS`: positive input with exponent field 1 to 254. Zero, denormal, infinity, NaN, a negative `RSQRTS` input and the `RECIPS` underflow range go to the interpreter, which sets AV, AI and the sticky bits.
+- In range the result is nonzero, so the flags are those of any float ALU result (`FlagKind::Falu`: AF set, AZ and AN from the result, the rest clear) and no sticky bit latches.
+- The seed is a byte load from a 128-entry table at a host address held by the kernel. `packages/emulator/sharc/build.rs` writes both tables to `OUT_DIR` from `tools/sharc_dev/sharc_core/seed_tables.py`; there is no second copy. The wasm backend refuses a kernel with such an address (`Op::CI64`), as it does for a helper record above 4 GiB.
+
+Before this change a kernel with either operation was refused. On stock DN2 (`trig1-hold`, `kb-chord16`), stock DT2 (`dt2-led-sweep`) and the patched DN2 and DT2 replays no kernel contained one: no refusal named opcode `0xc4` or `0xc5`, and the instruction counts of each tier (interpreter, blocks, fast tier) and the PCM and DSP state hashes are equal before and after (the stock division helper at `0x1c06ba` starts with a MODE1 bit test, which the fast tier does not run, and the generated blocks run the rest).
+
+Exactness: `fast_diff forms` (random states, each result compared with the interpreter step: registers, flags, stacks, memory), `--filter recips` and `--filter rsqrts`, both backends, 20000 trials per form (150000 for `rsqrts`): 0 mismatches. On the five replays the PCM hash and the DSP state dump are byte-equal with the fast tier on and with `SHARC_FAST_REGIONS`, `SHARC_FAST_FALLBACK_REGIONS`, `SHARC_FAST_AUTO` empty and `SHARC_FAST_CHASE=0`. The third test of `tests/regression/runtime/sharc-probe.test.ts` passes on both devices with the fast tier on, but its probe code did not reach a kernel with either operation (the fast tier summary refuses the same number of entries as before), so `fast_diff` is the evidence for the lowering.

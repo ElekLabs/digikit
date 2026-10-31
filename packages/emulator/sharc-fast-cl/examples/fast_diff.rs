@@ -378,6 +378,8 @@ enum Check {
     FMinMax(u32, u32),
     Logb(u32),
     Scalb(u32, u32),
+    Recips(u32),
+    Rsqrts(u32),
     /// fix / trunc, optionally by a scale register.
     Fix(u32, Option<u32>),
     FloatBy(u32, u32),
@@ -407,6 +409,8 @@ fn compute_check(cu: u32, opcode: u32, rn: u32, rx: u32, ry: u32) -> Check {
         (0, 0xe1 | 0xe2) => Check::FMinMax(rx, ry),
         (0, 0xc1) => Check::Logb(rx),
         (0, 0xbd) => Check::Scalb(rx, ry),
+        (0, 0xc4) => Check::Recips(rx),
+        (0, 0xc5) => Check::Rsqrts(rx),
         (0, 0xc9) => Check::Fix(rx, None),
         (0, 0xd9 | 0xdd) => Check::Fix(rx, Some(ry)),
         (0, 0xda) => Check::FloatBy(rx, ry),
@@ -445,6 +449,8 @@ const FULL_OPS: &[(&str, u32, u32)] = &[
     ("fmax", 0, 0xe2),
     ("logb", 0, 0xc1),
     ("scalb", 0, 0xbd),
+    ("recips", 0, 0xc4),
+    ("rsqrts", 0, 0xc5),
     ("fix", 0, 0xc9),
     ("fix_by", 0, 0xd9),
     ("trunc_by", 0, 0xdd),
@@ -1293,6 +1299,11 @@ fn expect_special(c: Check, s: &St) -> bool {
             } else {
                 !(1..=254).contains(&e) || e + sh > 254
             }
+        }
+        Check::Recips(x) => !(1..=252).contains(&((s.r[x as usize].b >> 23) & 0xff)),
+        Check::Rsqrts(x) => {
+            let b = s.r[x as usize].b;
+            b >> 31 != 0 || !(1..=254).contains(&((b >> 23) & 0xff))
         }
         Check::Fix(x, by) => {
             let sh = by.map_or(0, |y| s.r[y as usize].b as i32 as i64);
