@@ -5,17 +5,49 @@ Three tools read rendered audio today. This note says what each one does, and ho
 
 ## The three tools
 
-| Measure | dn2_firmware `dnfw wav` | moveforge `palette.ts` | digikit `audiocheck.py` |
-|---|---|---|---|
-| Pitch, and the power between its harmonics | yes | no | harmonic levels of a decaying tone |
-| Power above 20 kHz, clipping, DC | yes | no | DC, level |
-| Clicks (isolated steps) | yes | no | onsets |
-| Two renders, sample for sample | yes | no | no |
-| Spectrogram | PNG sheet | no | PNG |
-| Knob sweeps and dead controls | no | yes | no |
-| Presets that are the same sound | no | yes | no |
-| T60, attack, flatness, stereo width | crest, stereo correlation | yes | RT60, L-R difference |
-| A page with audio on every row | no | yes | no |
+Each tool answers a different question:
+
+- **dn2_firmware `dnfw wav`:** "Is this oscillator clean, and did this render change?" It reads a held note.
+- **moveforge `palette.ts`:** "What does this module sound like, and does each control do something?" It reads
+  single hits, knob sweeps and presets, for a person to listen through.
+- **digikit `audiocheck.py`:** "Did the emulator run do what the scenario expects?" It reads a whole run, mostly
+  for effects: echoes, decay, sample-rate reduction.
+
+| Measure | `dnfw wav` | `palette.ts` | `audiocheck.py` | In this change |
+|---|---|---|---|---|
+| Pitch, and the power between its harmonics | **yes** | no | harmonic levels of a decaying tone | `audiotone` |
+| Power above 20 kHz | **yes** | no | no | `audiotone` |
+| Level: peak, RMS, DC, clipping | peak, RMS, crest, DC, clipped samples | peak, crest | peak, RMS, DC, non-finite samples, growth | `audiocheck` (as now) |
+| Clicks (isolated steps) | **yes** | no | onsets | `audiotone` |
+| Two renders, sample for sample | **yes** | no (a separate golden check with tolerances) | no | `audiotone` |
+| Spectrum | averaged Hann, or Blackman-Harris for fine detail | 48 log bands from the onset | Hann over the whole file, with peaks | each keeps its own |
+| Spectrogram | PNG sheet with waveform and close-up | no | PNG | `audiocheck` (sheet later) |
+| Decay | no | T60 of a 5 ms RMS envelope | RT60 (Schroeder), slope | both kept |
+| Attack, centroid, brightness, flatness | no | **yes** | centroid per segment | `palette` |
+| Stereo | correlation, balance | width (side over mid) | L-R difference | each keeps its own |
+| Knob sweeps and dead controls | no | **yes** | no | `palette` |
+| Presets that are the same sound | no | **yes** | no | `palette` |
+| Echoes, sample-rate images, bit depth, modulation rate | no | no | **yes** | `audiocheck` (as now) |
+| Output | JSON, PNG sheet, plain findings | Markdown and an HTML page with audio on every row | features.json, PNGs | JSON, findings, Markdown, HTML |
+
+### Where they overlap and where they differ
+
+- **What one reading covers.** `dnfw wav` reads the loudest half second of a held note. `palette.ts` reads the
+  first 250 ms of a hit from its onset. `audiocheck.py` reads the whole run. A measure moved from one tool to
+  another keeps its own window, because the window changes the answer.
+- **Spectrum.** All three take one, each for its own job. `palette.ts` draws a shape for the eye.
+  `audiocheck.py` finds peaks. `dnfw wav` needs side lobes far below the noise to see what lies between
+  harmonics. This change keeps all three and does not merge them into one.
+- **Decay.** `palette.ts` and `audiocheck.py` both measure it, in two ways. T60 of an RMS envelope suits a
+  single hit. Schroeder RT60 suits a reverb tail. Both stay.
+- **Stereo.** Width, correlation and L-R difference each show a different fault. Width shows a spread control
+  that does nothing. Correlation shows a phase fault. L-R difference shows that two channels that should match
+  do not.
+- **Change against a reference.** `dnfw wav compare` asks "are these the same samples?". moveforge's golden
+  check asks "is this within tolerance of last time?". digikit's scenario oracles ask "does this feature have
+  the expected value?". The three checks are three levels of strictness, and each has its use.
+- **Who reads the result.** `dnfw wav` and `audiocheck.py` write numbers for a test or an agent. `palette.ts`
+  writes a page for a person to listen through. Only `palette.ts` lets the reader hear each row.
 
 ## Why Python
 
