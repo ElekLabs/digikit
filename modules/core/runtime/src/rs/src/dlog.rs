@@ -203,7 +203,7 @@ extern "C" {
 /// context registers, word 14 the last breadcrumb (stage | voice << 8 | machine type << 16), word 15 the dispatches to registered machine types, word 16 the routines that returned,
 /// words 17 to 23 the guard of `core/dsp-voice` (finding 51): 17 faults (16 bits) | kind << 16 | machine types disabled << 24, 18 type | voice << 16 of the last fault, 19 to 22 the
 /// eight parameter words of that call in pairs, 23 the type disabled last. The fault table (always, even without `core/dsp-voice`): 24 `last` of `core/fx`
-/// (stage | site << 8 | row byte offset << 16: stage 4 the core is about to call the module, 5 it returned; site 2 master, 3 send), 25 the module step (`DK_STEP`),
+/// (stage | site << 8 | row byte offset << 16: stage 4 the core is about to call the module, 5 it returned; site 2 master, 3 send), 25 the module step (`DK_STEP`: the block tail copies the module's static word `_dk_step` into every record),
 /// 26 and 27 the module calls of the master and the send route, 28 effect faults (16 bits) | row of the last fault (byte offset + 1) << 16, 29 and 30 the
 /// addresses of this and of the previous reply record, 31 the effect row switched off last (byte offset + 1).
 /// If it moves the heartbeat, change `DIAG_HEARTBEAT` here and nothing else.
@@ -215,8 +215,6 @@ const D_FXFAULT: usize = 28;
 const D_REC0: usize = 29;
 const D_REC1: usize = 30;
 const D_FXDIS: usize = 31;
-/// Byte offset of the module step word from the start of a reply record (word 25 sits at word index 298 of the record, dsp-link.inc).
-const STEP_REC_OFF: u32 = 298 * 4;
 /// The effect table's row size in bytes.
 const FX_ROW_BYTES: u32 = 96;
 pub const DIAG_HEARTBEAT: usize = 1;
@@ -614,8 +612,8 @@ unsafe fn stall_check(w: &mut Watch, now: u32, buf: &[u32; DIAG_WORDS]) {
     }
 }
 
-/// What a reply of the stopped DSP adds to the picture: the module step (the DSP clears it before the call, the module stores it in one of the two records), and the
-/// sites with a call pending.
+/// What a reply of the stopped DSP adds to the picture: the module step (the block tail copies it into every record, so it is the step of the last block that
+/// ended; a step stored in the call that stopped the DSP is lost with the core), and the sites with a call pending.
 fn merge_stop(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
     if buf[D_STEP] != 0 {
         w.m_step = buf[D_STEP];
@@ -671,23 +669,6 @@ unsafe fn fx_event(kind: u16, row: u32, faults: u32) {
         None => 0,
     };
     ev(kind, logk::F_ERROR | src, [row, faults, 0, 0, 0]);
-}
-
-/// Where a module's step store goes: the module step word of the older of the DSP's two reply records, from the record addresses in the diagnostic block (words 29
-/// and 30). None until the DSP has run two blocks with the link.
-pub unsafe fn record_step_addr() -> Option<u32> {
-    if core::hint::black_box(dl_diag as usize) == 0 {
-        return None;
-    }
-    let mut buf = [0u32; DIAG_WORDS];
-    if read_diag(&mut buf) < DIAG_WORDS {
-        return None;
-    }
-    let (a, b) = (buf[D_REC0], buf[D_REC1]);
-    if a == 0 || b == 0 || a == b {
-        return None;
-    }
-    Some(a.min(b) + STEP_REC_OFF)
 }
 
 /// The loaded modules, one event each (`logk::MOD_LIST`, an error event when the DSP stopped): index, slots mask, 12 bytes of name.

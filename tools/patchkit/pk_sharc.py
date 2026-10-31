@@ -226,7 +226,6 @@ def run_call(
     reads: dict[str, tuple[int, int]] | None = None,
     max_steps: int = 100000,
     return_sw: int = 0xB9F000,
-    approx_recips: bool = False,
     others: tuple[Linked, ...] = (),
     read_regs: tuple[str, ...] = (),
     extra_breaks: tuple[int, ...] = (),
@@ -265,7 +264,6 @@ def run_call(
         start,
         regs=regs or {},
         breakpoints=[return_sw, *extra_breaks],
-        approx_recips=approx_recips,
     )
     runner._cache = _DECODE_CACHES.setdefault(cache_key, {})
     for addr, word in (dm_words or {}).items():
@@ -322,7 +320,6 @@ class CallSession:
         linked: list[Linked],
         return_sw: int,
         breaks: tuple[int, ...] = (),
-        approx_recips: bool = False,
     ) -> None:
         from tools.sharc_dev import sharc_run
         from tools.sharc_dev.sharcldr import LoadedMemory
@@ -353,7 +350,6 @@ class CallSession:
             linked[0].base_sw,
             regs={},
             breakpoints=[return_sw, *breaks],
-            approx_recips=approx_recips,
         )
         self.runner._cache = _DECODE_CACHES.setdefault(cache_key, {})
         self.symbols: dict[str, int] = {}

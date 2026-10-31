@@ -16,7 +16,7 @@ use dkrt_sdk::store::Io;
 use dkrt_sdk::*;
 
 /// Blocks (1500 a second) with no change before the record is written: 2 s. Without the firmware's block counter the UI-loop passes count instead
-/// (`DELAY_PASSES`: about 2 s at the loop's 120 Hz).
+/// (`DELAY_PASSES`: about 8 s at the loop's measured 30 to 32 passes a second, docs/findings/37-boot-load.md).
 pub const DELAY_BLOCKS: u32 = 3000;
 const DELAY_PASSES: u32 = 240;
 /// Failed writes after which the record is left dirty no more (the next change tries again).

@@ -14,6 +14,7 @@ export interface LevelSession {
   info(quick?: boolean): Promise<{ caps: number | null }>;
   logConfig(quick?: boolean): Promise<LogConfig>;
   setLogConfig(level: number, modules: number[], quick?: boolean): Promise<LogConfig>;
+  setDebug(on: boolean, quick?: boolean): Promise<LogConfig>;
   modules(): Promise<Pick<DkModule, 'index' | 'name'>[]>;
 }
 
@@ -29,7 +30,7 @@ export interface LevelModule {
 export interface LevelView {
   level: number;
   modules: LevelModule[];
-  /** Read only: the runtime has no host command for it. */
+  /** Debug logging is on (LOGCFG op 2 switches it). */
   debug: boolean;
 }
 
@@ -77,6 +78,14 @@ export async function changeLevel(s: LevelSession, change: LevelChange): Promise
   const { level, modules } = requestFor(now, change);
   await s.setLogConfig(level, modules);
   return viewOf(await s.logConfig(true), await s.modules().catch(() => []));
+}
+
+/** Switch debug logging, then read LOGCFG again: the state is what the runtime says. */
+export async function changeDebug(s: LevelSession, on: boolean): Promise<LogConfig> {
+  if (!hasLogcfg((await s.info(true)).caps))
+    throw new Error('This target has no debug control (no LOGCFG capability).');
+  await s.setDebug(on);
+  return s.logConfig(true);
 }
 
 export const levelName = (level: number): string => LOG_LEVELS[level] ?? String(level);

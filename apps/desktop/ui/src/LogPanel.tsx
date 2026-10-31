@@ -1,4 +1,4 @@
-// The inside of the Log drawer: the header (Source, Errors only, Follow, Debug, Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
+// The inside of the Log drawer: the header (Source, Errors only, Follow, Debug (a switch), Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
 // its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
 import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
@@ -75,14 +75,39 @@ export default function LogPanel(props: LogPanelProps) {
     const origin = levelTarget();
     return origin && !levelOff() ? props.follow.config()[origin]?.debug : undefined;
   };
+  const [debugBusy, setDebugBusy] = createSignal(false);
+  const [debugProblem, setDebugProblem] = createSignal('');
+  // the Debug control is a switch when the origin has LOGCFG (levelOff is empty), else the read-only indicator with the reason
   const debugTitle = () => {
     const origin = levelTarget();
     const off = levelOff();
     if (off) return off;
     const on = debugState();
     if (on === undefined) return `The ${origin} has not reported its debug state yet`;
-    return `${on ? 'Debug logging is on: the runtime keeps every event.' : 'Debug logging is off: the runtime keeps only errors.'} It is switched in the DIGIKIT menu of the ${origin} (SETTINGS > DIGIKIT, DEBUG); the host has no command for it.`;
+    if (debugProblem()) return debugProblem();
+    return on
+      ? `Debug logging is on: the runtime keeps every event. Click to turn it off (the runtime of the ${origin} saves the switch).`
+      : `Debug logging is off: the runtime keeps only errors. Click to turn it on (the runtime of the ${origin} saves the switch).`;
   };
+  const switchDebug = async () => {
+    const origin = levelTarget();
+    const on = debugState();
+    if (!origin || on === undefined || debugBusy()) return;
+    setDebugBusy(true);
+    setDebugProblem('');
+    try {
+      await props.follow.setDebug(origin, !on);
+    } catch (e) {
+      setDebugProblem(`Debug could not be switched: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDebugBusy(false);
+    }
+  };
+  // another origin: an old refusal is not shown for it
+  createEffect(() => {
+    levelTarget();
+    setDebugProblem('');
+  });
 
   const toggleExpanded = (id: number) =>
     setExpanded((set) => {
@@ -174,19 +199,42 @@ export default function LogPanel(props: LogPanelProps) {
             <i class="follow-dot" aria-hidden="true" />
           </Show>
         </button>
-        <span
-          class="tb small chip"
-          classList={{
-            'dbg-on': debugState() === true,
-            'dbg-off': debugState() === false,
-            'dbg-unknown': debugState() === undefined,
-          }}
-          role="status"
-          aria-label={`Debug logging: ${debugState() === undefined ? 'unknown' : debugState() ? 'on' : 'off'}`}
-          title={debugTitle()}
+        <Show
+          when={!levelOff() && debugState() !== undefined}
+          fallback={
+            <span
+              class="tb small chip"
+              classList={{
+                'dbg-on': debugState() === true,
+                'dbg-off': debugState() === false,
+                'dbg-unknown': debugState() === undefined,
+              }}
+              role="status"
+              aria-label={`Debug logging: ${debugState() === undefined ? 'unknown' : debugState() ? 'on' : 'off'}`}
+              title={debugTitle()}
+            >
+              Debug <i class="debug-dot" aria-hidden="true" />
+            </span>
+          }
         >
-          Debug <i class="debug-dot" aria-hidden="true" />
-        </span>
+          <button
+            type="button"
+            class="tb small chip toggle"
+            classList={{
+              'dbg-on': debugState() === true,
+              'dbg-off': debugState() === false,
+              'dbg-failed': !!debugProblem(),
+            }}
+            role="switch"
+            aria-checked={debugState() === true}
+            aria-label="Debug logging"
+            disabled={debugBusy()}
+            title={debugTitle()}
+            onClick={() => void switchDebug()}
+          >
+            Debug <i class="debug-dot" aria-hidden="true" />
+          </button>
+        </Show>
         <LogLevelMenu follow={props.follow} origin={levelTarget} off={levelOff} />
         <button
           type="button"

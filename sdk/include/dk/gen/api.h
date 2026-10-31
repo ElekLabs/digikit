@@ -69,6 +69,9 @@ int32_t input_key(uint32_t code, uint32_t down);
 /* Turn an encoder by `delta`. Needs core/input: the import is not found without it. */
 int32_t input_turn(uint32_t encoder, int32_t delta);
 
+/* Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing. Needs core/dsp-link: the import is not found without it. */
+void dl_set_tick_cb(uint8_t *cb);
+
 /* The 1500 Hz block clock, for a module that wants to measure time. */
 uint32_t dkrt_blocks(void);
 

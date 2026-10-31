@@ -68,7 +68,6 @@ fn open(image: &[u8], state: &[u8], clock_base: u64) -> Engine {
         (6, clock_base as i64),
         (9, 1),
         (10, 0),
-        (11, 1),
         (12, 1),
         (21, 1),
         (22, 1),
@@ -380,10 +379,19 @@ enum Check {
     Logb(u32),
     Scalb(u32, u32),
     Recips(u32),
+    Rsqrts(u32),
     /// fix / trunc, optionally by a scale register.
-    Fix(u32, Option<u32>),
+    Fix(u32, Option<u32>, bool),
     FloatBy(u32, u32),
     MulSsi(u32, u32),
+    /// Fixed-point add, subtract, increment, decrement, negate, abs: an overflow
+    /// leaves the kernel (the interpreter latches AOS and saturates with ALUSAT).
+    IAdd(u32, u32),
+    ISub(u32, u32),
+    IInc(u32),
+    IDec(u32),
+    INeg(u32),
+    IAbs(u32),
 }
 
 struct Unit {
@@ -397,6 +405,12 @@ struct Unit {
 fn compute_check(cu: u32, opcode: u32, rn: u32, rx: u32, ry: u32) -> Check {
     let _ = rn;
     match (cu, opcode) {
+        (0, 0x01) => Check::IAdd(rx, ry),
+        (0, 0x02) => Check::ISub(rx, ry),
+        (0, 0x22) => Check::INeg(rx),
+        (0, 0x29) => Check::IInc(rx),
+        (0, 0x2a) => Check::IDec(rx),
+        (0, 0x30) => Check::IAbs(rx),
         (0, 0x81) => Check::FAdd(rx, ry),
         (0, 0x82) => Check::FSub(rx, ry),
         (0, 0xa2) => Check::FNeg(rx),
@@ -410,8 +424,10 @@ fn compute_check(cu: u32, opcode: u32, rn: u32, rx: u32, ry: u32) -> Check {
         (0, 0xc1) => Check::Logb(rx),
         (0, 0xbd) => Check::Scalb(rx, ry),
         (0, 0xc4) => Check::Recips(rx),
-        (0, 0xc9) => Check::Fix(rx, None),
-        (0, 0xd9 | 0xdd) => Check::Fix(rx, Some(ry)),
+        (0, 0xc5) => Check::Rsqrts(rx),
+        (0, 0xc9) => Check::Fix(rx, None, false),
+        (0, 0xd9) => Check::Fix(rx, Some(ry), false),
+        (0, 0xdd) => Check::Fix(rx, Some(ry), true),
         (0, 0xda) => Check::FloatBy(rx, ry),
         (1, 0x70) => Check::MulSsi(rx, ry),
         _ => Check::None,
@@ -449,6 +465,7 @@ const FULL_OPS: &[(&str, u32, u32)] = &[
     ("logb", 0, 0xc1),
     ("scalb", 0, 0xbd),
     ("recips", 0, 0xc4),
+    ("rsqrts", 0, 0xc5),
     ("fix", 0, 0xc9),
     ("fix_by", 0, 0xd9),
     ("trunc_by", 0, 0xdd),
@@ -636,6 +653,10 @@ fn units() -> Vec<Unit> {
                 let mut raw = Raw((r.next() & 0xffff_ffff_ffff & !mask) | base);
                 raw.set(43, 32, ((opc << 8) | (rn << 4) | rx) as u64);
                 let check = match opc {
+                    0x0 => Check::IAdd(rn, rx),
+                    0x1 => Check::ISub(rn, rx),
+                    0x5 => Check::IInc(rx),
+                    0x6 => Check::IDec(rx),
                     0x8 => Check::FAdd(rn, rx),
                     0x9 => Check::FSub(rn, rx),
                     0xf => Check::FMul(rn, rx),
@@ -1242,13 +1263,33 @@ fn mul_leaves(x: f32, y: f32) -> bool {
     is_special(p.to_bits()) || (p == 0.0 && x != 0.0 && y != 0.0)
 }
 
+fn reg(s: &St, code: u32) -> i32 {
+    s.r[code as usize].b as i32
+}
+
 fn expect_special(c: Check, s: &St) -> bool {
     let f = |code: u32| f32::from_bits(s.r[code as usize].b);
     let dn = |code: u32| is_denormal(s.r[code as usize].b);
     match c {
         Check::None => false,
-        Check::FAdd(x, y) => dn(x) || dn(y) || not_finite((f(x) + f(y)).to_bits()),
-        Check::FSub(x, y) => dn(x) || dn(y) || not_finite((f(x) - f(y)).to_bits()),
+        // A denormal result is a flushed underflow: the interpreter latches AUS.
+        Check::FAdd(x, y) => {
+            let r = (f(x) + f(y)).to_bits();
+            dn(x) || dn(y) || not_finite(r) || is_denormal(r)
+        }
+        Check::FSub(x, y) => {
+            let r = (f(x) - f(y)).to_bits();
+            dn(x) || dn(y) || not_finite(r) || is_denormal(r)
+        }
+        Check::IAdd(x, y) => {
+            let r = reg(s, x).checked_add(reg(s, y));
+            r.is_none()
+        }
+        Check::ISub(x, y) => reg(s, x).checked_sub(reg(s, y)).is_none(),
+        Check::IInc(x) => reg(s, x).checked_add(1).is_none(),
+        Check::IDec(x) => reg(s, x).checked_sub(1).is_none(),
+        Check::INeg(x) => reg(s, x).checked_neg().is_none(),
+        Check::IAbs(x) => reg(s, x).checked_abs().is_none(),
         Check::FMul(x, y) => dn(x) || dn(y) || mul_leaves(f(x), f(y)),
         Check::FNeg(x) => dn(x) || not_finite((-f(x)).to_bits()),
         Check::Trunc(x) => s.r[x as usize].b & 0x7fff_ffff >= 0x4f00_0000,
@@ -1299,7 +1340,11 @@ fn expect_special(c: Check, s: &St) -> bool {
             }
         }
         Check::Recips(x) => !(1..=252).contains(&((s.r[x as usize].b >> 23) & 0xff)),
-        Check::Fix(x, by) => {
+        Check::Rsqrts(x) => {
+            let b = s.r[x as usize].b;
+            b >> 31 != 0 || !(1..=254).contains(&((b >> 23) & 0xff))
+        }
+        Check::Fix(x, by, trunc) => {
             let sh = by.map_or(0, |y| s.r[y as usize].b as i32 as i64);
             let bits = s.r[x as usize].b;
             let e = ((bits >> 23) & 0xff) as i64;
@@ -1308,7 +1353,19 @@ fn expect_special(c: Check, s: &St) -> bool {
             } else if bits & 0x7fff_ffff == 0 {
                 false
             } else {
-                !(1..=254).contains(&e) || e + sh >= 158
+                // A FIX (not a TRUNC) of a nonzero scaled value that returns zero
+                // latches AUS, so the kernel leaves. The scaled exponent below 1
+                // is flushed to zero (no AUS). To nearest: zero for a value up to
+                // one half; toward zero (MODE1.TRUNCATE): below one.
+                let ne = e + sh;
+                let toward_zero = s.r[114].b & (1 << 15) != 0;
+                let zero_result = if toward_zero {
+                    ne < 127
+                } else {
+                    ne < 126 || (ne == 126 && bits & 0x7f_ffff == 0)
+                };
+                let latches = !trunc && ne >= 1 && zero_result;
+                !(1..=254).contains(&e) || ne >= 158 || latches
             }
         }
         Check::FloatBy(x, y) => {

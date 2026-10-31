@@ -947,6 +947,9 @@ def test_device_tools_select_their_tests_only() -> None:
         "tests/digikit/test_upload_dt2.py",
     }
     assert selected("tools/device/dkrun.py") == {
+        "tests/digikit/test_dkprobe.py",  # the probe tools import dkrun
+        "tests/digikit/test_dkprobe_facts.py",
+        "tests/digikit/test_dkprobe_run.py",
         "tests/digikit/test_dkrun.py",
         "tests/digikit/test_dktransfer.py",  # dktransfer imports dkrun
         "tests/digikit/test_menu_dn2.py",
@@ -1476,7 +1479,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
         (
             "runtime-fixture",
             "modules/tools/remote/module.toml",
-            ["runtime/remote-input.test.ts"],
+            ["runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"],
         ),
         ("runtime-fixture", "tests/fixtures/modules/sine/module.toml", []),
         ("stock", "tests/regression/dt2/transport.test.ts", ["dt2/transport.test.ts"]),
@@ -1545,6 +1548,10 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             [
                 "test/input-probe",
                 "digikit/remote",
+                "digikit/probe",
+                "test/sharc-probe",
+                "test/step-beacon",
+                "test/dsp-facts",
                 "test/svc-echo",
                 "test/dyn-fx-hang",
                 "test/dyn-dsp-hang",
@@ -1554,6 +1561,16 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             ],
         ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
+        (
+            ["runtime/sharc-probe.test.ts"],
+            [
+                "digikit/remote",
+                "digikit/probe",
+                "test/sharc-probe",
+                "test/step-beacon",
+                "test/dsp-facts",
+            ],
+        ),
         (["runtime/service-commands.test.ts"], ["test/svc-echo"]),
         (["runtime/input-adapter.test.ts"], ["test/input-probe"]),
         (["runtime/transfer-live.test.ts", "runtime/samples-live.test.ts"], []),

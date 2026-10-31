@@ -138,6 +138,7 @@ export const CAP = {
 
 /** The command numbers a module may register: [first, last]. */
 export const RANGES = {
+  probe: [0x32, 0x35],
   remote: [0x38, 0x3d],
   remote_state: [0x3e, 0x3f],
 } as const;

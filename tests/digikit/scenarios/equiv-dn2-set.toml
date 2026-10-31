@@ -14,4 +14,4 @@ hint_run = 6   # the run-time machines follow MIDI: test/dyn-dn2 is the first, t
 trig_frame = 7000
 voices = 2   # dyn-dn2 and sine each claim a voice row
 ignore_run_machines = ["Sine"]   # test/sine has no twin: its machine row, parameter and page are not compared
-pcm_sha256 = "8741bbe9552b4b036724b6dcce37e3612cedcfa44fb4ab0d2f864eb818824804"   # onset 272, 24000 samples (DN2 1.12, note 60, 261.65 Hz); "record" prints the hash
+pcm_sha256 = "330e9725263aa2aab1da1c4f9b562b5b0d64c9896212106c4eddc3c4547db1d3"   # onset 400, 24000 samples (DN2 1.12, note 60, 261.65 Hz); approved by Em 2026-11-01 (exact RECIPS, finding 102)

@@ -160,6 +160,7 @@ CAP: dict[str, int] = {
 }
 
 RANGES: dict[str, tuple[int, int]] = {
+    "probe": (0x32, 0x35),
     "remote": (0x38, 0x3D),
     "remote_state": (0x3E, 0x3F),
 }

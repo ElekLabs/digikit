@@ -54,6 +54,10 @@ class Device implements FollowSession {
     this.debug = { ...this.debug, level, modules };
     return this.debug;
   }
+  async setDebug(on: boolean) {
+    this.debug = { ...this.debug, debug: on };
+    return this.debug;
+  }
   async modules() {
     return this.modulesLoaded;
   }

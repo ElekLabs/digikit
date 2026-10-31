@@ -162,8 +162,11 @@ def test_cli_put_with_chunk_depth_and_timing_over_the_emulator_transport(
         "END"
     ]
     assert all("stepped" in e for e in ev)
-    with pytest.raises(SystemExit):
-        D.main(["--emu", "put", str(src), "--depth", "3"])
+    bad = tmp_path / "bad.jsonl"
+    with pytest.raises(SystemExit) as e:
+        D.main(["--emu", "put", str(src), "--chunk", "100", "--timing", str(bad)])
+    assert e.value.code == 2 and "multiple of 512" in capsys.readouterr().err
+    assert not bad.exists()  # rejected before the timing file is opened
 
 
 def test_pick_takes_one_port_and_names_the_others():

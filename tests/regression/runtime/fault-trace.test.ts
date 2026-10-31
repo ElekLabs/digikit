@@ -90,7 +90,7 @@ async function expectFxHang(runtime: PatchedSession): Promise<void> {
     kind: 'dsp',
     site: SITE_FX_SEND,
     stage: STAGE_CALL,
-    step: 3,
+    step: 2, // the step of the last block that ended: the step 3 of the call that stopped the DSP is lost with the core
     module: 'dyn-fx-hang',
   });
 
@@ -101,7 +101,7 @@ async function expectFxHang(runtime: PatchedSession): Promise<void> {
     found.map((e) => e.args[0]! & 0xff),
     'FAULT_FOUND of kind DSP stopped',
   ).toEqual([2]);
-  expect(found[0]!.args[2], 'the module step in the event').toBe(3);
+  expect(found[0]!.args[2], 'the module step in the event').toBe(2);
   expect(log.filter((e) => e.kind === LOG_KIND.SAFE).map((e) => e.args[0])).toEqual([SAFE_DSP]);
   expect(
     log.some((e) => e.kind === LOG_KIND.CRASH_TAIL),
@@ -114,7 +114,7 @@ async function expectFxHang(runtime: PatchedSession): Promise<void> {
 
   const rows = await aboutRows(runtime, plan);
   expect(rows).toEqual(
-    expect.arrayContaining(['SAFE: DSP STOPPED', 'FAULT: DSP STOP', 'IN DYN-FX-HANG', 'FX SEND STEP 3']),
+    expect.arrayContaining(['SAFE: DSP STOPPED', 'FAULT: DSP STOP', 'IN DYN-FX-HANG', 'FX SEND STEP 2']),
   );
   for (const row of rows) expect(row.length, row).toBeLessThanOrEqual(22);
   await session.expectNoFault('fx hang');

@@ -208,16 +208,6 @@ impl Lower {
         self.bit(bits, b.trailing_zeros())
     }
 
-    /// ASTATX.AF as it is before the instruction, as the AF mask or 0, with
-    /// the entry requirement a condition reading AF would add.
-    pub fn af_mask(&mut self) -> Val {
-        self.read_mask |= AF;
-        self.need_flags_known |= AF & !self.fm_static;
-        let b = self.read_bit(AF);
-        let k = self.ci(AF.trailing_zeros());
-        self.bin(Bin::Shl, b, k)
-    }
-
     /// The execution condition `cond` (a 5-bit code) as a 0/1 value, and the
     /// ASTATX bits it reads recorded.
     pub fn cond_value(&mut self, cond: u32) -> LR<Val> {
@@ -421,23 +411,6 @@ impl Lower {
                     let nz = self.bin(Bin::Xor, is0, one);
                     let k = self.ci(11);
                     parts.push(self.bin(Bin::Shl, nz, k));
-                }
-            }
-            FlagKind::Recips => {
-                // Never noted: `falu_recips` notes `RecipsAf` in a kernel
-                // that tracks flags (`Recips` leaves AF as it was).
-                unreachable!("recips leaves AF unchanged and is not a lazy flag writer");
-            }
-            FlagKind::RecipsAf => {
-                // AN from the input sign (source 0), AF as found (source 1,
-                // the AF mask or 0); AC AS AI AV AZ cleared.
-                mask = ALU_MASK;
-                if want & AN != 0 {
-                    let r = self.to_i(srcs[0]);
-                    parts.push(self.sign_to(r, 2));
-                }
-                if want & AF != 0 {
-                    parts.push(self.to_i(srcs[1]));
                 }
             }
             FlagKind::Iabs => {

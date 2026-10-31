@@ -880,6 +880,27 @@ const SCENES = [
     ],
     ['log-debug-on', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
     ['log-debug-off', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'emulator:all', async () => {}],
+    // the Debug switch: a click turns it off on the device (debug was on), a second click turns it on again
+    [
+      'log-debug-switched-off',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click(/^Debug/);
+        await p.wait(800);
+      },
+    ],
+    [
+      'log-debug-switched-on',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'emulator:all',
+      async (p) => {
+        await p.click(/^Debug/);
+        await p.wait(800);
+      },
+    ],
     // Source is All and both origins are followed: the menu does not know which one is meant
     ['log-debug-disabled-all', 'page=log&log=both&logspeed=3&logh=640', WIDE, '', async () => {}],
     // the device runtime has no LOGCFG capability
