@@ -74,6 +74,8 @@ files = [
     "tools/device/dkneeds.py",
     "tools/device/dkprobe_seq.py",
     "tools/device/dkprobe.py",
+    "tools/device/dkprobe_facts.py",
+    "tools/device/dkprobe_run.py",
     "tools/patchkit/pk_device.py",
     "tools/patchkit/pk_modaudit.py",
     "tools/patchkit/pk_package.py",

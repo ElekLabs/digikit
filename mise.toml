@@ -382,6 +382,10 @@ description = "Resolve the anchors and regions of a firmware into devices/ports/
 run = "uv run --with python-rtmidi python -m tools.device.dkrun"
 description = "Build, pack, upload, select, restart and follow the log of a run-time module on a device with runtime 0.0.4 or newer or the emulator: mise run dk:run -- <author/name> --port Digitakt [--seconds 30] (the target is --emu or --port NAME)"
 
+[tasks."dk:probe"]
+run = "uv run --with python-rtmidi python -m tools.device.dkprobe run"
+description = "One command from a clean device to a probe capture and back: mise run dk:probe -- --port Digitakt --modules test/dsp-facts --capture out/probe/facts.json [--compare REF.json] [--keep] (packs the probe modules and digikit/remote and digikit/probe, uploads what changed, selects, restarts, checks for faults, captures, compares, restores the old selection; the target is --port NAME, --emu or --spawn dt2|dn2)"
+
 [tasks."dk:log"]
 run = "uv run --with python-rtmidi python -m tools.device.dklog"
 description = "The digikit runtime's debug log over USB: mise run dk:log -- --port Digitakt follow (or --emu follow; the target is --emu or --port NAME; also crash, peek ADDR LEN, info; `level` prints the log levels, `level debug` sets the default, `level --module NAME=trace` one module; `follow --level L --module NAME` filters)"

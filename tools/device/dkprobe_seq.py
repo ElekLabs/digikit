@@ -27,6 +27,7 @@ FRAME_WORDS = PAYLOAD_WORDS + 2
 HDR_MAGIC = 0xB0
 PAD = 0xFFFFFFFF
 
+KIND = "sharc-recips"
 OP_RECIPS = "recips"
 OP_RSQRTS = "rsqrts"
 
