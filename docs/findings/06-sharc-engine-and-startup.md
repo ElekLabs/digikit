@@ -5665,7 +5665,7 @@ instruction (48 bits, `1587 ffff ffee`, `I7 = MODIFY(I7, -18)`) with `JUMP _dv_e
 saves everything it touches in a DM area (the function's callers keep live registers), runs the registered routine
 for the slot's type and continues in the stock helper at its second instruction. A patched image with no registered type
 is **bit-identical** to stock (FM TONE, 62,176 active samples; the boot lands a DSP block away as on every patched
-image). Cost: 16 calls per block, about 70 instructions each when no type is registered, by count.
+image). Cost: 16 calls per block, about 10 instructions each when no type is registered (voice 0 about 90, with the mask build), by count.
 Anchors (rules in `modules/core/adapters/dsp-voice/module.toml`): `dsp.voice.render_entry` / `render_next` (`reloc_hash` of
 `FUN_b8251b`, offsets 0 and 3), `dsp.voice.frame_base` (the literal `I5 = 0x25c48c` at `0x1c2877` of `FUN_1c2712`, offset `0x165`; the second literal, at `0x1c301a`, is `I4` **[C]**).
 

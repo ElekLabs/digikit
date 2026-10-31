@@ -62,12 +62,13 @@
 _dv_entry:
     // The cheap path when no row is registered (`_dv_mask` is 0): voice 0 (R14 = 32) keeps the full path for the heartbeat and the mask below; every other voice
     // goes back to the stock renderer at once (R0 is free here). No module routine can run then, so the breadcrumb of the voices is not written either.
-    R0 = DM(_dv_mask);
-    R0 = PASS R0;
-    IF NE JUMP _dv_full;
+    // (voice 0 is tested first: it writes `_dv_mask` before any voice reads it)
     R0 = 32;
     COMP(R0, R14);
-    IF NE JUMP _dv_idle;
+    IF EQ JUMP _dv_full;
+    R0 = DM(_dv_mask);
+    R0 = PASS R0;
+    IF EQ JUMP _dv_idle;
 _dv_full:
     R0 = L4;
     DM(_dv_sv_l4) = R0;                   // I4 is used below as a linear pointer: L4 = 0 until the stock path (put back there)

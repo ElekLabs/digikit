@@ -1,7 +1,7 @@
 # Debug mode and hardware probes (plan, 2026-10-31)
 
 Goal: evidence from the real device to fix emulator gaps, with a small runtime. Debug logging becomes a loadable module, `digikit/debug`; the
-runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler gap map (`docs/handovers/HANDOVER-2026-10-31-sampler-hardware-observation.md` on branch `sdk/dsp-sampler-discovery`), [debug finding](../findings/46-digikit-debug.md), [dsp-link](../../modules/core/adapters/dsp-link/README.md),
+runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler gap map (the 2026-10-31 hardware-observation handover on the sampler branch), [debug finding](../findings/46-digikit-debug.md), [dsp-link](../../modules/core/adapters/dsp-link/README.md),
 [capabilities](capabilities.md), [workbench log](workbench-device-log.md).
 
 ## Rules
@@ -14,7 +14,7 @@ runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler 
   emulator, where all interleavings can be forced.
 - DT2 evidence holds for DT2 only.
 - No flash until the change works in the emulator. Phase 1 needs one flash.
-- Branches: a fix to code that exists only on `sdk/dsp-sampler-discovery` goes on a branch from it and merges back. A fix to code on `main` is its
+- Branches: a fix to code that exists only on the sampler branch goes on a branch from it and merges back. A fix to code on `main` is its
   own PR to `main`.
 
 ## Phase 0: static checks and measurements (no device)

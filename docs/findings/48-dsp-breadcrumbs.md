@@ -79,7 +79,7 @@ words are all that came through before. The first rung C halt on the device answ
 
 **Two limits of the breadcrumb.** A halt in stock code (a stock voice, the rest of the engine) leaves the last registered voice's breadcrumb, usually `EPILOGUE_DONE`:
 read `dispatches - returns` (0: no routine was running) and the frozen beats. The crumb word the ColdFire sees in a healthy run alternates between two values
-depending on which record the copy came from: the last voice entered (`HOOK_ENTERED voice=31`) and the last registered voice's `EPILOGUE_DONE`.
+depending on which record the copy came from: the last voice that wrote one and the last registered voice's `EPILOGUE_DONE`. With no registered type only voice 0 writes (`HOOK_ENTERED voice=0`).
 
 ## 3. Quieter log, full words on a stop
 
