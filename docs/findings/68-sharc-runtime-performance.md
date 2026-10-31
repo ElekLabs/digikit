@@ -640,7 +640,7 @@ Where the 18.0 M go (one root, before the change below), and why:
 | --- | ---: | ---: | --- |
 | Stock voice prologue `0x1c4ecf..0x1c4f1d` | 5.47 | 30% | The hook replaces the word at `0x1c4ecf`, so its region is barred. The adapter returns to `0x1c4ed2`, which is no AOT entry. |
 | Blocks of `0x1c1f7d` (`0x1c1fe7`, `0x1c204b`, `0x1c207b`) | 3.16 | 18% | The fx adapter patches the words at `0x1c207a/b`; the regions before and after are barred. |
-| Interrupt-handler code (`0x1c02a4`, `0x1c0b1d`) | 3.11 | 17% | No generated entry on the path; the code uses MODE1STK, PCSTK and ACONV and the fast tier refuses its first instruction. Same code runs on stock. |
+| Interrupt-handler code (`0x1c02a4`, `0x1c0b1d`) | 3.11 | 17% | No generated entry on the path. The wrapper starts with `BIT TST MODE1STK, 0x10000`; the fast tier has no lowering for a bit test of a system register (the generated form refuses it as a dynamic branch), and it refused the entry for good. Same code runs on stock. |
 | Appended adapter and module code (`0xb8d...`, `0xbcd...`, `0xbce...`) | 2.59 | 14% | Not in the generated image; no AOT entry can exist. Equals the `interp_appended` counter. |
 | Other stock code in `0xb8....` | 2.23 | 12% | Not examined: no generated entry on the executed path. |
 | Other stock code in `0x1c....` | 0.98 | 5% | Not examined. |
@@ -663,3 +663,55 @@ appended code. The ISR code, appended code and the `0x1c06fe` bail remain; they 
 generated-core, fast-tier or JIT work. **[O]** No timing was measured: the regular root makes
 the interpreter consult the fast tier for every PC, which needs one paired A/B on stock and
 patched replays before the change counts as a speed-up.
+
+## Interpreter exits: chase and appended entries (2026-10-31)
+
+**[D]** The fast tier consults an entry only at a PC that is in its entry list. A refused
+entry (its first instruction is one a kernel cannot run) stayed with the interpreter for good,
+and so did all code after it. `0x1c02a4` (context save of every interrupt) is the main case:
+its first instruction is `BIT TST MODE1STK, 0x10000` (form 18a, bit-test; the hand lowering
+handles only MODE1 set and clear), and the function goes on with PCSTK, LCNTR, CURLCNTR, ASTATX
+and status-stack moves, 20a PUSH and POP, MMR stores, ACONV and a delayed RTI, none of which a
+kernel runs. Between those instructions lie runs of 3 to 21 plain stores and moves.
+
+Two changes in `packages/emulator/sharc/src/fast/mod.rs` and `lib.rs`:
+
+- **Chase.** A refused entry, whose instruction is not a branch or delay slot, makes the next
+  instruction an entry; so does the instruction after a stop of such a region. The chain follows
+  straight-line code. A chased entry whose calls retire fewer than 3 instructions on average is
+  dropped after 64 calls. `SHARC_FAST_CHASE=0` turns it off. DT2 1.17 got 23 more regular roots in
+  `tools/emulator/fast_regions.json`: the places where the interpreter resumes after a branch
+  (found with the interpreter histogram and the instruction table).
+- **Appended entries.** When the interpreter lands in appended code (above the generated image's
+  code, set by the code check) by a taken branch, call, return or loop-back, that PC becomes a
+  chased entry. Appended code needs no unknown range and no moved data: the kernels are built
+  from the loaded words and checked against code stores as before (105 code generations in 3 s).
+
+Interpreted instructions, 3 audio s, same PCM hash and byte-equal DSP state dump before and after:
+
+| Replay | Before | After |
+| --- | ---: | ---: |
+| DT2 stock, `dt2-led-sweep` | 5.85 M | 3.28 M |
+| DT2 patched runtime, `dt2-led-sweep` | 10.66 M | 5.89 M (appended 2.60 M to 0.44 M) |
+| DN2 stock, `trig1-hold` | 1.92 M | 1.92 M |
+| DN2 patched runtime, `trig1-hold` | 7.79 M | 6.12 M (appended 2.74 M to 1.07 M) |
+
+DN2 stock does not move: its generated blocks already cover the interrupt code (the seeds gave
+-2%, so none were added). Fast-tier calls on DT2 patched rise from 0.30 M to 0.94 M per 3 s;
+the fast tier runs 6 M more instructions (about 9 per added call). **[O]** No timing was measured.
+
+What stays interpreted on DT2 stock (3.28 M), with causes, **[D]**:
+
+| Group | M / 3 s | Cause |
+| --- | ---: | --- |
+| `0x1c0b1d` dispatch | 0.57 | MMR accesses (14a outside the plain range), ACONV (7d), PCSTK moves, 20a, 11c |
+| `0x1c02a4` save and restore | 0.47 | PCSTK, LCNTR and CURLCNTR moves, 20a status-stack forms, MR data moves, 11c |
+| `0x1c06fe` | 0.46 | one NOP per consult while a delayed transfer is pending: the interpreter runs it and the failed consult adds cost; a pending check before the consult saves the consult, not the instruction |
+| `0xb8853a`, `0xb88200`, `0xb888d2` | 0.50, 0.26, 0.36 | task-switch save and restore: system-register moves, 20a, shift opcodes 0x14, 0x1d, 0x1f, MODE1 writes that change the bank selection |
+| `0xb8636d`, `0xb863ca` | 0.53 | a leaf called with the PC stack push still pending: block and kernel entries are gated until it completes |
+| `0x1c18a6`, `0x1c207b`, rest | 0.2 | not examined |
+
+Supporting PCSTK, LCNTR and status-stack forms in the kernel glue would make most of the first
+four rows runnable, at the cost of modelling the PC and loop stacks in kernel state: at most
+2 M instructions per 3 s (about 2 to 4% of one DSP thread at 60 to 105 ns each). Not worth it
+before a timing A/B shows the interpreter share.
