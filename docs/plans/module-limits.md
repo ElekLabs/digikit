@@ -48,9 +48,7 @@ Each with one proof run on DN2, then DT2.
 ## 5. Contract changes (after the sampler branch is merged)
 
 - [ ] DN2: several pages per machine and more than 8 parameters (per-machine slot maps; `DK_MAX_PARAMS`).
-- [ ] A formatter per parameter in the parameter record (value text: bipolar, names).
-- [ ] DT2 knob H as a parameter (fixed track level before the stock unpack; idea from PR #209).
-- [ ] DT2 stereo output (the track's two voices).
+- [ ] The adapters from PR #209 (value formatter, sample pointer, stereo voice, knob H, polynotes): [adapters plan](adapters.md).
 - [ ] L1 placement for hot code.
 - [ ] DT2 DSP area above 512 KiB (wider offset field or a second window).
 - [ ] DDR for modules: through the sampler branch's work.
