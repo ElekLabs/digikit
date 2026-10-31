@@ -8,5 +8,5 @@ export const WASM = new URL('../public/patchkit.wasm', import.meta.url);
 
 export async function useFitWasm(): Promise<void> {
   if (!existsSync(WASM)) throw new Error('apps/web/public/patchkit.wasm is not built: run `mise run wasm:patchkit`');
-  setFitReader(await DkNeeds.create(readFileSync(WASM)));
+  setFitReader(await DkNeeds.create(new Uint8Array(readFileSync(WASM))));
 }
