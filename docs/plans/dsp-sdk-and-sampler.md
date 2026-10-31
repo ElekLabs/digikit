@@ -24,14 +24,22 @@ there is no outstanding reservation-choice request and no approved reservation p
 
 ## Latest checkpoint
 
-**Current focus (2026-10-31):** emulator support for trustworthy sampler storage
-failure tests. Supplied storage/timer/audio interrupt selection, mask commands
-and ordinary DTIM tick advancement have focused component checks; real storage
-handlers and bounded scheduler fixtures run on both firmware images. Combined
-native execution and complete fault history are still open. These are validation
-prerequisites, not a finished sampler. Reusable file listing works on both devices;
-production pool ownership, full stereo/runtime integration and the picker remain
-open. Finish this bounded checkpoint before selecting further emulator scope.
+**Current direction (2026-10-31):** pause expansion of emulator scope and resume
+with one targeted hardware observation in a separate worktree/session. Remaining
+native execution, storage and memory ownership work has low confidence without
+hardware evidence.
+Start with [the hardware-observation handover](../handovers/HANDOVER-2026-10-31-sampler-hardware-observation.md):
+inventory the actual DT2 and existing transport, then plan a bounded capture of
+normal ColdFire RSTA initialization and IRQSTATEN/IRQSIGEN state. No hardware
+operation or flashing is authorized by this documentation checkpoint; the new
+worktree has not been created.
+
+The sampler discovery branch is clean and fully pushed at `63a6ba13`
+(DTIM completed ticks), following `6623d5a8` (SSI) and `0f38f288` (mask commands).
+The last tick checkpoint passed 60 named tests, independent static review and
+scoped path/layer checks. Full gate and native fault-history acceptance remain
+open. Reusable file listing passes on both devices; production backing ownership,
+full stereo/runtime integration, per-track binding and the picker remain open.
 
 The sampler discovery branch was rebased onto main `d6b5d4bb`.
 
