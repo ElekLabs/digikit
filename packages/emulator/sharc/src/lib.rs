@@ -37,6 +37,7 @@ mod live_capture;
 pub mod sha256;
 pub mod vectors;
 mod pc_dump;
+mod reply_watch;
 mod write_watch;
 pub use sharc_stats::{ModelStats, RegionCost, RegionEntryProfile, RegionProfile, TierCounters};
 
@@ -322,6 +323,8 @@ pub struct Engine {
     live_capture: Option<live_capture::LiveCapture>,
     /// SHARC_WWATCH / SHARC_WWATCH_OUT (diagnostic): see `write_watch`.
     wwatch: Option<Box<write_watch::WriteWatch>>,
+    /// SHARC_REPLY_INFLIGHT (diagnostic): see `reply_watch`.
+    rwatch: Option<Box<reply_watch::ReplyWatch>>,
     /// SHARC_PCDUMP / SHARC_PCDUMP_OUT (diagnostic): see `pc_dump`.
     pcdump: Option<Box<pc_dump::PcDump>>,
     /// SHARC_CYCMIX (diagnostic): see `cycmix`.
@@ -331,6 +334,8 @@ pub struct Engine {
     /// Any of `cov`, `hist`, `wwatch`, `pcdump` is set: the interpreter loop
     /// tests this one flag per instruction and nothing else when it is off.
     diag_on: bool,
+    /// `wwatch` or `rwatch` is set: one flag test per dispatch unit, as with `wwatch` alone before.
+    ww_any: bool,
 }
 
 /// The last code check that found a mismatch (`Engine::verify_code`).
@@ -672,10 +677,12 @@ impl Engine {
                 .map(|_| Box::<std::collections::HashMap<u32, u64>>::default()),
             live_capture: live_capture::LiveCapture::from_env(),
             wwatch: write_watch::WriteWatch::from_env(),
+            rwatch: reply_watch::ReplyWatch::from_env(),
             pcdump: pc_dump::PcDump::from_env(),
             cycmix: cycmix::CycMix::from_env(),
             irq_probe: irq_probe::IrqProbe::from_env(),
             diag_on: false,
+            ww_any: false,
         };
         // Live-daemon profile for sharc_rsgen (docs/INSTRUMENTATION.md): same maps as option 26.
         if std::env::var_os("SHARC_PROFILE_PREFIX").is_some() {
@@ -687,9 +694,11 @@ impl Engine {
 
     /// Recompute `diag_on` after any of the per-instruction diagnostics changed.
     fn refresh_diag(&mut self) {
+        self.ww_any = self.wwatch.is_some() || self.rwatch.is_some();
         self.diag_on = self.cov.is_some()
             || self.hist.is_some()
             || self.wwatch.is_some()
+            || self.rwatch.is_some()
             || self.pcdump.is_some()
             || self.cycmix.is_some();
     }
@@ -903,6 +912,13 @@ impl Engine {
         }
         self.host_event(|s| rt::periph::dma_done(s, TX, 69))?;
         self.host_event(|s| rt::periph::dma_done(s, RX, 70))?;
+        if self.rwatch.is_some() {
+            let reg = |s: &rt::St, o: u32| s.mmr_get(TX + o).map_or(0, |v| v.b as u32);
+            let dma = [reg(&self.s, 0x08), reg(&self.s, 0x0C), reg(&self.s, 0x10)];
+            if let Some(r) = &mut self.rwatch {
+                r.arm(self.s.icount, tx, frame.len(), dma, &self.s.mem);
+            }
+        }
         Ok(swap16(&reply))
     }
 
@@ -1648,7 +1664,7 @@ impl Engine {
         if let Some(h) = &mut self.hist {
             *h.entry(pc_before as u32).or_default() += 1;
         }
-        if self.wwatch.is_some() {
+        if self.ww_on() {
             self.ww_begin(pc_before as u64, 'i');
         }
         if let Some(d) = &mut self.pcdump {
@@ -1667,12 +1683,21 @@ impl Engine {
         if let Some(w) = &mut self.wwatch {
             w.pending = Some((pc, unit));
         }
+        if let Some(r) = &mut self.rwatch {
+            r.pending = Some((pc, unit));
+        }
+    }
+
+    /// A write-watch or the reply-record check is on.
+    #[inline(always)]
+    fn ww_on(&self) -> bool {
+        self.ww_any
     }
 
     /// Re-read the watched words for the pending unit and log changes.
     #[inline(always)]
     fn ww_flush(&mut self) {
-        if self.wwatch.is_some() {
+        if self.ww_on() {
             self.ww_flush_pending();
         }
     }
@@ -1689,6 +1714,13 @@ impl Engine {
                 w.record(self.s.icount, &now);
             }
             self.wwatch = Some(w);
+        }
+        if let Some(r) = &mut self.rwatch {
+            r.check(self.s.icount, &self.s.mem);
+            if let Some(why) = r.failure.take() {
+                self.halt = Some(why);
+                self.one_dispatch = true;
+            }
         }
     }
 
@@ -1807,7 +1839,7 @@ impl Engine {
                     _ => limit,
                 };
                 let before_skip = self.s.icount;
-                if self.wwatch.is_some() {
+                if self.ww_on() {
                     self.ww_begin(self.s.pc_sw as u64, 's');
                 }
                 self.idle_visit(head, skip_limit);
@@ -1846,7 +1878,7 @@ impl Engine {
                         f.note(entry_pc);
                     }
                     self.last_interp_next = -1;
-                    if self.wwatch.is_some() {
+                    if self.ww_on() {
                         self.ww_begin(entry_pc as u64, 'b');
                     }
                     let t0 = if self.prof.is_some() { ticks() } else { 0 };
@@ -1882,10 +1914,13 @@ impl Engine {
                             code = f.run(&mut self.s, entry_pc);
                         }
                     }
-                    if code.is_some()
-                        && let Some(w) = &mut self.wwatch
-                    {
-                        w.pending = Some((entry_pc as u64, 'f'));
+                    if code.is_some() {
+                        if let Some(w) = &mut self.wwatch {
+                            w.pending = Some((entry_pc as u64, 'f'));
+                        }
+                        if let Some(r) = &mut self.rwatch {
+                            r.pending = Some((entry_pc as u64, 'f'));
+                        }
                     }
                     if code == Some(EXIT_NEXT) && plan.bank_pre.is_none() {
                         code = self.fast_continue(plan.limit, code);
