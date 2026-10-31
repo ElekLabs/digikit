@@ -175,6 +175,19 @@ test('the runtime or the image id of another image is a failure', { skip: !have 
   );
 });
 
+test('a stale answer of the old image is not the verdict while time remains', { skip: !have }, async () => {
+  const OLD = { ...GOOD, imageId: 'a6b3d7b4a110ccb5' };
+  // the port never seemed to leave and the old image answers first
+  const stale = fake({ goneAfter: null, answers: (n) => (n < 2 ? OLD : GOOD) });
+  assert.equal((await run(stale, prepared())).phase, 'done');
+  assert.equal(stale.asks(), 3);
+  // a real mismatch is judged on the last answer, after askMs
+  const wrong = fake({ goneAfter: null, answers: () => OLD });
+  const end = await run(wrong, prepared());
+  assert.equal(code(end), 'image-id');
+  assert.ok(wrong.t.ms - 1000 >= SHORT.leaveMs + SHORT.askMs - SHORT.askEveryMs);
+});
+
 test('a device that answers late is waited for; one that never does is a failure', { skip: !have }, async () => {
   const late = fake({ answers: (n) => (n < 3 ? new Error('no reply') : GOOD) });
   assert.equal((await run(late, prepared())).phase, 'done');
