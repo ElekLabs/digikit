@@ -118,7 +118,6 @@ impl Compute {
                     b,
                     RegView::CUR,
                     SpecView::CUR,
-                    s.cfg.approx_recips,
                 )
                 .map_err(err)?;
                 (v, f)

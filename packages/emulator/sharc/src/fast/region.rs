@@ -172,7 +172,6 @@ fn env_of(s: &St, flag_v: bool) -> Env {
         assume_nw32: s.cfg.assume_nw32,
         mode1: s.r[MODE1].b,
         flag_v,
-        approx_recips: s.cfg.approx_recips,
         guarded_dyn: false,
         bank_model: s.cfg.bank_model,
         cacc_known: s.r[118].m & 0xff00_0000 == 0xff00_0000,

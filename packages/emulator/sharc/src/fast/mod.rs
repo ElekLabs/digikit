@@ -110,22 +110,13 @@ pub enum FlagKind {
     /// Register-amount shift (sources: shifted value, amount > 0): SZ from
     /// the shifted value, SV from the amount, SS cleared.
     ShiftDyn,
-    /// recips: AC AS AI AV AZ cleared, AN from the input sign (source: the
-    /// input); AF unchanged. It defines only part of the ALU group, so a
-    /// kernel that tracks flags lazily (one last writer per group) refuses it.
-    Recips,
     /// Fixed abs (source: the input): AC AV AN AZ of `0 - x` for a negative
     /// input and of `0 + x` otherwise, AS = the input's sign, AI AF cleared.
     Iabs,
-    /// recips in a kernel that tracks flags lazily (sources: the input and
-    /// the AF bit, as the AF mask or 0, that the instruction found): the
-    /// bits of `Recips`, with AF written back as it was, so that the group's
-    /// last writer alone defines every ALU bit.
-    RecipsAf,
 }
 
 /// The largest writer id within a flag group (`FlagKind::group_id`).
-pub const MAX_FLAG_ID: u32 = 12;
+pub const MAX_FLAG_ID: u32 = 11;
 
 impl FlagKind {
     /// The flag group the writer belongs to and its id there (1..=4), as the
@@ -141,9 +132,7 @@ impl FlagKind {
             FlagKind::Fabs => (0, 7),
             FlagKind::Compare { float: false } => (0, 8),
             FlagKind::Compare { float: true } => (0, 9),
-            FlagKind::Recips => (0, 10),
             FlagKind::Iabs => (0, 11),
-            FlagKind::RecipsAf => (0, 12),
             FlagKind::Fmul => (1, 1),
             FlagKind::FmulForget => (1, 2),
             FlagKind::Shift { sv: false } => (2, 1),
@@ -167,9 +156,7 @@ impl FlagKind {
             (0, 7) => FlagKind::Fabs,
             (0, 8) => FlagKind::Compare { float: false },
             (0, 9) => FlagKind::Compare { float: true },
-            (0, 10) => FlagKind::Recips,
             (0, 11) => FlagKind::Iabs,
-            (0, 12) => FlagKind::RecipsAf,
             (1, 1) => FlagKind::Fmul,
             (1, 2) => FlagKind::FmulForget,
             (2, 1) => FlagKind::Shift { sv: false },

@@ -798,7 +798,6 @@ pub struct Cfg {
     pub max_call_depth: Int,
     pub assume_nw32: bool,
     pub explicit_memory_model: bool,
-    pub approx_recips: bool,
     pub data_memory_tainted: bool,
     pub dossier_bytes: Int,
     /// Opt-in MODE1 alternate register banking.  AOT blocks are disabled
@@ -834,7 +833,6 @@ impl Default for Cfg {
             max_call_depth: 64,
             assume_nw32: true,
             explicit_memory_model: true,
-            approx_recips: true,
             data_memory_tainted: false,
             dossier_bytes: 0,
             bank_model: false,
@@ -863,7 +861,6 @@ impl Cfg {
             && self.max_call_depth == d.max_call_depth
             && self.assume_nw32 == d.assume_nw32
             && self.explicit_memory_model == gen_explicit_memory_model
-            && self.approx_recips == d.approx_recips
             && self.data_memory_tainted == d.data_memory_tainted
             && self.dossier_bytes == d.dossier_bytes
             && self.provisional_interp.is_empty()

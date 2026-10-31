@@ -137,6 +137,7 @@ files = [
     "tests/devtools/test_pathcheck.py",
     "tools/devtools/changed_tests.py",
     "tools/devtools/agent_guard.py",
+    "tools/sharc_dev/recip_tables.py",
 ]
 mypy_path = "."
 ignore_missing_imports = true

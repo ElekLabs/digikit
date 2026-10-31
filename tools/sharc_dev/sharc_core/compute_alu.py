@@ -36,14 +36,12 @@ from .flags import (
     _or_updates,
 )
 from .floats import (
-    _approx_recips,
     _double_binary,
     _double_compare,
     _double_scalb,
     _double_to_fixed,
     _double_to_float32,
     _double_unary,
-    _f32_from_bits,
     _f_add,
     _f_avg,
     _f_neg,
@@ -53,7 +51,6 @@ from .floats import (
     _fixed_to_double_scaled,
     _fixed_to_float,
     _fixed_to_float_scaled,
-    _float32_bits,
     _float32_to_double,
     _float_binary,
     _float_clip,
@@ -69,8 +66,8 @@ from .floats import (
     _float_unary,
     _scale_double_input,
     _scale_fixed_input,
-    _sqrt,
 )
+from .seed_tables import RECIPS_SEED, RSQRTS_SEED
 from .state import _ureg, _ureg_raw
 from .values import (
     Const,
@@ -99,7 +96,6 @@ Handler = Callable[
         Value,
         Mapping[int, Value],
         Mapping[str, Value] | None,
-        bool,
     ],
     tuple,
 ]
@@ -149,12 +145,12 @@ def dual_add_subtract(
 
 
 # PRM Table 17-5: ALUOP 00000001/00000010 are add/subtract.
-def alu_add(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_add(rn, rx, ry, left, right, values, special) -> tuple:
     value = _add(left, right, "R%d + R%d" % (rx, ry))
     return rn, value, "add", _astatx_alu_arith(left, right, False)
 
 
-def alu_subtract(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     same_source = rx == ry
     value = _subtract(left, right, "R%d - R%d" % (rx, ry), same_source=same_source)
     return (
@@ -201,15 +197,11 @@ def _alu_carry_impl(rn, rx, ry, left, right, values, subtract: bool) -> tuple:
     )
 
 
-def alu_add_with_carry(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_add_with_carry(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_carry_impl(rn, rx, ry, left, right, values, False)
 
 
-def alu_subtract_with_borrow(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_subtract_with_borrow(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_carry_impl(rn, rx, ry, left, right, values, True)
 
 
@@ -236,15 +228,11 @@ def _alu_carry_noy_impl(rn, rx, left, values, subtract: bool) -> tuple:
     )
 
 
-def alu_add_with_carry_noy(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_add_with_carry_noy(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_carry_noy_impl(rn, rx, left, values, False)
 
 
-def alu_subtract_with_borrow_noy(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_subtract_with_borrow_noy(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_carry_noy_impl(rn, rx, left, values, True)
 
 
@@ -257,36 +245,32 @@ def _alu_compare_impl(rn, rx, ry, left, right, signed: bool) -> tuple:
     return rn, value, "compare", _astatx_compare(value)
 
 
-def alu_compare_signed(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_compare_signed(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_compare_impl(rn, rx, ry, left, right, True)
 
 
-def alu_compare_unsigned(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_compare_unsigned(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_compare_impl(rn, rx, ry, left, right, False)
 
 
-def alu_pass(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_pass(rn, rx, ry, left, right, values, special) -> tuple:
     return rn, left, "pass", _astatx_alu_logical(left)
 
 
 # PRM Table 18-5 and p. 19-10: ALUOP 00100010 is RN = -RX, the two's
 # complement, with the same flags as 0 - RX.
-def alu_negate(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_negate(rn, rx, ry, left, right, values, special) -> tuple:
     value = _subtract(Const(0), left, "-R%d" % rx)
     return rn, value, "negate", _astatx_alu_arith(Const(0), left, True)
 
 
-def alu_increment(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_increment(rn, rx, ry, left, right, values, special) -> tuple:
     value = _add(left, Const(1), "R%d + 1" % rx)
     return rn, value, "increment", _astatx_alu_arith(left, Const(1), False)
 
 
 # PRM Table 18-5 and p. 19-9: ALUOP 00101010 is RN = RX - 1.
-def alu_decrement(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_decrement(rn, rx, ry, left, right, values, special) -> tuple:
     value = _add(left, Const(-1), "R%d - 1" % rx)
     return rn, value, "decrement", _astatx_alu_arith(left, Const(1), True)
 
@@ -297,7 +281,7 @@ def alu_decrement(rn, rx, ry, left, right, values, special, approx_recips) -> tu
 # makes sense if ABS always runs the 0-RX path, even for a positive RX);
 # unlike negate, AS is data-dependent here (RX's own sign) rather than
 # architecturally cleared.
-def alu_abs(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_abs(rn, rx, ry, left, right, values, special) -> tuple:
     if isinstance(left, Const):
         signed = _signed32(left.value)
         value = left if signed >= 0 else _subtract(Const(0), left, "abs R%d" % rx)
@@ -321,21 +305,21 @@ def _alu_logical_binary(opcode, rn, rx, ry, left, right) -> tuple:
     return rn, value, name, _astatx_alu_logical(value)
 
 
-def alu_and(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_and(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_logical_binary(0x40, rn, rx, ry, left, right)
 
 
-def alu_or(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_or(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_logical_binary(0x41, rn, rx, ry, left, right)
 
 
-def alu_xor(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_xor(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_logical_binary(0x42, rn, rx, ry, left, right)
 
 
 # PGR p.11-19 (pgr.txt:20918), opcode 0100 0011: RN = NOT RX. Same
 # AZ/AN-from-result, AC/AV/AS/AI-cleared rule as pass/and/or/xor.
-def alu_not(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_not(rn, rx, ry, left, right, values, special) -> tuple:
     value = _not(left, "not R%d" % rx)
     return rn, value, "not", _astatx_alu_logical(value)
 
@@ -344,7 +328,7 @@ def alu_not(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
 # branch (PRM Table 3-3, pp.3-8/3-9, cross-checked against the classic
 # PGR's per-instruction pages, which spell out AZ/AN/AV/AI exactly where
 # the SHARC+ PRM only marks a column "*"/data-dependent).
-def alu_float_add(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_add(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_binary(
         left, right, "F%d + F%d" % (rx, ry), _f_add
     )
@@ -356,9 +340,7 @@ def alu_float_add(rn, rx, ry, left, right, values, special, approx_recips) -> tu
     )
 
 
-def alu_float_subtract(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_float_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_binary(
         left, right, "F%d - F%d" % (rx, ry), _f_sub
     )
@@ -379,7 +361,7 @@ def alu_float_subtract(
 # operation), AN and AZ follow the result the same way every other float
 # ALU op's do, but AV is documented "Cleared" unconditionally rather than
 # tracking overflow the way float-add's AV does.
-def alu_float_average(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_average(rn, rx, ry, left, right, values, special) -> tuple:
     value, _overflow, invalid = _float_binary(
         left, right, "(F%d + F%d) / 2" % (rx, ry), _f_avg
     )
@@ -395,9 +377,7 @@ def alu_float_average(rn, rx, ry, left, right, values, special, approx_recips) -
 # Magnitude (and so AV/AZ) is identical to plain float-subtract above;
 # only the sign bit changes (cleared) and AN is architecturally fixed 0
 # rather than following the result's sign.
-def alu_float_abs_subtract(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_float_abs_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     diff, overflow, invalid = _float_binary(left, right, "F%d - F%d" % (rx, ry), _f_sub)
     value = Const(diff.value & 0x7FFFFFFF) if isinstance(diff, Const) else diff
     return (
@@ -409,14 +389,14 @@ def alu_float_abs_subtract(
 
 
 # PGR p.11-29: comp(Fx, Fy).
-def alu_float_compare(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_compare(rn, rx, ry, left, right, values, special) -> tuple:
     label = "comp F%d, F%d" % (rx, ry)
     value, invalid = _compare_flags_float(left, right, label)
     return rn, value, "float-compare", _astatx_compare_float(value, invalid)
 
 
 # PGR p.11-32: Fn = pass Fx.
-def alu_float_pass(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_pass(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_unary(left, "pass F%d" % rx, _f_pass)
     return (
         rn,
@@ -427,7 +407,7 @@ def alu_float_pass(rn, rx, ry, left, right, values, special, approx_recips) -> t
 
 
 # PGR p.11-30: Fn = -Fx.
-def alu_float_negate(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_negate(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_unary(left, "-F%d" % rx, _f_neg)
     return (
         rn,
@@ -439,7 +419,7 @@ def alu_float_negate(rn, rx, ry, left, right, values, special, approx_recips) ->
 
 # PRM Table 18-5 opcode 1010 0101 (p.20-8) / PGR Table 12-4 opcode
 # 1010 0101, p.11-33: Fn = rnd Fx.
-def alu_float_round32(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_round32(rn, rx, ry, left, right, values, special) -> tuple:
     value, invalid = _float_round32(left, "rnd F%d" % rx)
     return (
         rn,
@@ -454,7 +434,7 @@ def alu_float_round32(rn, rx, ry, left, right, values, special, approx_recips) -
 # word (no sign bit of its own to derive AZ/AN from), AN is
 # architecturally fixed 0 (PRM Table 3-3), and AS/AV/AI come from the
 # *input*'s sign/infinity/NAN rather than the result.
-def alu_float_mant(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_mant(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, negative, invalid = _float_mantissa(left, "mant F%d" % rx)
     updates = _flags_from_pairs(
         (
@@ -475,7 +455,7 @@ def alu_float_mant(rn, rx, ry, left, right, values, special, approx_recips) -> t
 # (not float), so AN/AZ come from its own bits rather than through
 # ``_float_alu_updates``, and AF is set (float-unit op with a
 # fixed-point result, same convention as ``mant``/``fix``/``trunc``).
-def alu_float_logb(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_logb(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     value, overflow, invalid = _float_logb(left, mode1, "logb F%d" % rx)
     updates = _flags_from_pairs(
@@ -496,7 +476,7 @@ def alu_float_logb(rn, rx, ry, left, right, values, special, approx_recips) -> t
 
 
 # PGR p.11-31: Fn = abs Fx. AN fixed 0; AS carries the *input*'s sign.
-def alu_float_abs(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_abs(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_unary(left, "abs F%d" % rx, abs)
     return (
         rn,
@@ -510,7 +490,7 @@ def alu_float_abs(rn, rx, ry, left, right, values, special, approx_recips) -> tu
 # follows the *result*'s sign (PRM Table 3-3 marks AN '*', not 0), so
 # this reuses ``_float_alu_updates``'s default (as_source=None,
 # an_zero=False) rather than the abs-style override.
-def alu_float_scalb(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_scalb(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_scalb(left, right, "scalb F%d by R%d" % (rx, ry))
     return (
         rn,
@@ -537,11 +517,11 @@ def _alu_minmax_fixed_impl(rn, rx, ry, left, right, minimum: bool) -> tuple:
     return rn, value, name, _astatx_alu_logical(value)
 
 
-def alu_min_fixed(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_min_fixed(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_minmax_fixed_impl(rn, rx, ry, left, right, True)
 
 
-def alu_max_fixed(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_max_fixed(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_minmax_fixed_impl(rn, rx, ry, left, right, False)
 
 
@@ -550,7 +530,7 @@ def alu_max_fixed(rn, rx, ry, left, right, values, special, approx_recips) -> tu
 # "|Ry| if Rx is negative", which its float twin at 0xE3 and the classic
 # manuals give as -|Ry|). Flags as min/max: AZ/AN from the result, the
 # rest cleared.
-def alu_clip_fixed(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_clip_fixed(rn, rx, ry, left, right, values, special) -> tuple:
     value: Operand
     if isinstance(left, Const) and isinstance(right, Const):
         a, b = _signed32(left.value), abs(_signed32(right.value))
@@ -562,9 +542,7 @@ def alu_clip_fixed(rn, rx, ry, left, right, values, special, approx_recips) -> t
 
 # PRM p.19-19, opcode 1110 0000 / PGR Table 12-4 p.574, same opcode: Fn =
 # Fx copysign Fy.
-def alu_float_copysign(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_float_copysign(rn, rx, ry, left, right, values, special) -> tuple:
     value, invalid = _float_copysign(left, right, "F%d copysign F%d" % (rx, ry))
     return (
         rn,
@@ -589,16 +567,16 @@ def _alu_minmax_float_impl(rn, rx, ry, left, right, minimum: bool) -> tuple:
     )
 
 
-def alu_min_float(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_min_float(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_minmax_float_impl(rn, rx, ry, left, right, True)
 
 
-def alu_max_float(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_max_float(rn, rx, ry, left, right, values, special) -> tuple:
     return _alu_minmax_float_impl(rn, rx, ry, left, right, False)
 
 
 # PGR p.11-48 / PRM p.3-6: Fn = clip Fx by Fy.
-def alu_float_clip(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_clip(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _float_binary(
         left, right, "clip F%d by F%d" % (rx, ry), _float_clip
     )
@@ -611,7 +589,7 @@ def alu_float_clip(rn, rx, ry, left, right, values, special, approx_recips) -> t
 
 
 # PRM p.427/PGR p.11-39 "without scaling factor": Fn = float Rx.
-def alu_float_convert(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_float_convert(rn, rx, ry, left, right, values, special) -> tuple:
     value, invalid = _fixed_to_float(left, "float R%d" % rx)
     return (
         rn,
@@ -624,9 +602,7 @@ def alu_float_convert(rn, rx, ry, left, right, values, special, approx_recips) -
 # PGR p.11-39 "with scaling factor" / PRM p.19-.. : Fn = float Rx by Ry.
 # AV is data-dependent here (unlike the unscaled form above, where an
 # int32 input can never overflow float32 range), per PGR Table 3-3.
-def alu_float_convert_scaled(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_float_convert_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow = _fixed_to_float_scaled(left, right, "float R%d by R%d" % (rx, ry))
     return (
         rn,
@@ -639,7 +615,7 @@ def alu_float_convert_scaled(
 # PRM p.24-.. / PGR p.11-36..11-38, opcode 1100 1001: Rn = fix Fx
 # (rounds to nearest or truncates per MODE1.TRUNCATE; see
 # ``_float_to_fixed``).
-def alu_fix(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_fix(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     value, overflow, invalid = _float_to_fixed(left, mode1, False, "fix F%d" % rx)
     return (
@@ -651,7 +627,7 @@ def alu_fix(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
 
 
 # PRM p.427/PGR p.11-37: Rn = trunc Fx.
-def alu_trunc(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_trunc(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     value, overflow, invalid = _float_to_fixed_trunc(left, mode1, "trunc F%d" % rx)
     return (
@@ -666,7 +642,7 @@ def alu_trunc(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
 # exponent-add (``_scale_fixed_input``) applied before the same fix
 # conversion as 0xC9; PGR Table 3-3 gives it the identical flag columns
 # as the unscaled form.
-def alu_fix_scaled(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_fix_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     scaled = _scale_fixed_input(left, right, "F%d * 2**R%d" % (rx, ry))
     value, overflow, invalid = _float_to_fixed(
@@ -683,7 +659,7 @@ def alu_fix_scaled(rn, rx, ry, left, right, values, special, approx_recips) -> t
 # PGR p.11-36..11-38, opcode 1101 1101: Rn = trunc Fx by Ry -- Ry's
 # exponent-add applied before the same truncation as 0xCD; PGR Table 3-3
 # again gives it the unscaled form's flag columns.
-def alu_trunc_scaled(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_trunc_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     scaled = _scale_fixed_input(left, right, "F%d * 2**R%d" % (rx, ry))
     value, overflow, invalid = _float_to_fixed(
@@ -698,29 +674,28 @@ def alu_trunc_scaled(rn, rx, ry, left, right, values, special, approx_recips) ->
 
 
 # PRM p.427 / PGR p.11-44/11-45: Fn = recips/rsqrts Fx -- iterative
-# reciprocal/reciprocal-sqrt seed instructions. The seed *mantissa* comes
-# from an unpublished ROM lookup table, so no numeric value can be claimed
-# for the ordinary (non-special-case) input. But recips's and rsqrts's own
-# ASTATx/y Flags tables (SHARC+ PRM pp.19-16/19-17 for recips,
-# pp.19-17/19-18 for rsqrts -- both quoted in full below) define every flag
-# -- and, for three documented special-case inputs, the exact *result* too
-# -- purely from classifying FX's IEEE-754 bit pattern (sign/exponent/
-# mantissa: NAN, +-zero, +infinity, "negative and nonzero", or "unbiased
-# exponent > +125"). None of that needs the ROM table, so it is claimed
-# unconditionally (not gated behind --approx-recips, which only covers
-# recips's *ordinary-case* seed value -- see floats._approx_recips).
-def _alu_recip_seed_impl(rn, rx, left, name: str, approx_recips: bool) -> tuple:
-    label = "%s F%d (ROM seed mantissa not numerically modeled)" % (name, rx)
-    op = "float-" + name + "-seed"
+# reciprocal/reciprocal-sqrt seed instructions. The seed mantissa comes from
+# a ROM table that the manual does not publish; seed_tables.py holds the two
+# 128-entry tables as measured on a Digitakt II (OS 1.17), and
+# tools/sharc_dev/recip_tables.py derives them from a probe capture and
+# checks this code against it (all 6694 probe items: result and flags).
+# Everything else follows the manual's own ASTATx/y Flags tables (SHARC+ PRM
+# pp.19-16/19-17 for recips, pp.19-17/19-18 for rsqrts) and the same
+# measurement, which adds three facts the manual leaves out:
+#   - AF is set (these are float ALU operations);
+#   - a NAN input leaves AN clear for recips too;
+#   - the sticky bits AVS and AIS latch with AV and AI, and AUS latches only
+#     when a finite input underflows (the result is +-zero from an unbiased
+#     exponent above +125), not for +infinity or for rsqrts's +-zero result
+#     (compute._apply_alu_sticky, which keys on the operation name).
+# Operation names: "float-recips-seed" / "float-rsqrts-seed", and
+# "float-recips-seed-underflow" for the underflow case. They are literals:
+# the translator erases a string built at run time, and the sticky latch
+# compares the name.
+def _alu_recip_seed_impl(rn, rx, left, name: str) -> tuple:
+    label = "%s F%d" % (name, rx)
+    op = "float-rsqrts-seed" if name == "rsqrts" else "float-recips-seed"
     if not isinstance(left, Const):
-        if name == "recips" and approx_recips:
-            # --approx-recips is usage-gated, not input-gated (see the
-            # docstring above _alu_recip_seed_impl's caller wiring, and
-            # compute.py's approx_recips_used calibration flag): a
-            # symbolic input still takes the approximated path, it just
-            # cannot resolve to a concrete value.
-            value, updates = _approx_recips(left)
-            return rn, value, "float-recips-seed-approx", updates
         updates = _float_alu_updates(Unknown(label), av=None, ai=None)
         return rn, Unknown(label), op, updates
     bits = left.value & 0xFFFFFFFF
@@ -729,17 +704,15 @@ def _alu_recip_seed_impl(rn, rx, left, name: str, approx_recips: bool) -> tuple:
     mantissa = bits & 0x7FFFFF
     is_nan = biased_exp == 0xFF and mantissa != 0
     # PRM p.417-418 (IEEE-754-compatibility bullet, general to every
-    # computational unit; also cited in floats._approx_recips's docstring):
-    # "Denormal operands ... flush to zero when input to a computational
-    # unit." A denormal (biased_exp == 0, mantissa != 0) is therefore
-    # classified with an exact +-zero input, not with "negative nonzero".
+    # computational unit): "Denormal operands ... flush to zero when input
+    # to a computational unit." A denormal (biased_exp == 0, mantissa != 0)
+    # is therefore classified with an exact +-zero input.
     is_zero = biased_exp == 0
-    is_pos_inf = biased_exp == 0xFF and mantissa == 0 and sign == 0
-    is_neg_nonzero = sign == 1 and not is_zero and not is_nan
     updates = _flags_from_pairs(
         (
             (AC_BIT, False),
             (AS_BIT, False),
+            (AF_BIT, True),
         )
     )
 
@@ -754,85 +727,69 @@ def _alu_recip_seed_impl(rn, rx, left, name: str, approx_recips: bool) -> tuple:
         # Same page, Function: "The input +-zero returns +-infinity and
         # sets the overflow flag. The input +infinity returns +zero. A NAN
         # input or a negative nonzero input returns a result of all 1s."
-        updates = _flags_put(updates, AI_BIT, is_nan or is_neg_nonzero)
+        # Ordinary input (measured): the seed exponent is -1 - (e >> 1)
+        # for the unbiased exponent e (the manual's formula has a lost
+        # operator), the mantissa is RSQRTS_SEED[exponent LSB, 6 MSBs].
+        invalid = is_nan or (sign == 1 and not is_zero)
+        updates = _flags_put(updates, AI_BIT, invalid)
         updates = _flags_put(updates, AN_BIT, bool(is_zero and sign))
         updates = _flags_put(updates, AV_BIT, is_zero)
-        if is_nan or is_neg_nonzero:
+        if invalid:
             updates = _flags_put(updates, AZ_BIT, False)
             return rn, Const(0xFFFFFFFF), op, updates
         if is_zero:
             updates = _flags_put(updates, AZ_BIT, False)
             result = Const((sign << 31) | (0xFF << 23))
             return rn, result, op, updates
-        if is_pos_inf:
+        if biased_exp == 0xFF:  # +infinity
             updates = _flags_put(updates, AZ_BIT, True)
             return rn, Const(0), op, updates
-        # Ordinary positive finite input: the seed mantissa comes from an
-        # unpublished ROM table, and the manual's own exponent formula
-        # ("the unbiased exponent of Fn = INT[e/2] <?> 1", p.19-18) has a
-        # missing operator glyph between "INT[e/2]" and "1" in the PDF
-        # itself (confirmed against the rendered page image, not just
-        # extracted text -- see out/refs/sharc-plus-prm/png/p0470.png),
-        # so no bit-for-bit reproduction of the documented rule is
-        # possible.
-        # --approx-recips instead approximates the seed the same way
-        # floats._approx_recips does for recips: the true mathematical
-        # reciprocal-square-root's IEEE-754 bit pattern, keeping only the
-        # documented number of accurate mantissa bits (rsqrts is "a 4-bit
-        # accurate seed", half of recips's 8, so the top 4 mantissa bits
-        # are kept and the low 19 zeroed, vs recips's top-8/low-15 split).
         updates = _flags_put(updates, AZ_BIT, False)
-        if approx_recips:
-            x = _f32_from_bits(bits)
-            seed_bits, _overflowed = _float32_bits(1.0 / _sqrt(x))
-            seed_bits &= 0xFFF80000
-            return (
-                rn,
-                Const(seed_bits),
-                "float-rsqrts-seed-approx",
-                updates,
-            )
-        return rn, Unknown(label), op, updates
+        unbiased = biased_exp - 127
+        seed_exp = 127 - 1 - (unbiased >> 1)
+        index = ((biased_exp & 1) << 6) | (mantissa >> 17)
+        seed = (seed_exp << 23) | (RSQRTS_SEED[index] << 15)
+        return rn, Const(seed), op, updates
 
-    # name == "recips": PRM pp.19-16/19-17 "FN = recips FX" ASTATx/y Flags
-    # (also quoted in full in floats._approx_recips's docstring):
+    # name == "recips": PRM pp.19-16/19-17 "FN = recips FX" ASTATx/y Flags:
     #   AI  Set if the input operand is a NAN, otherwise cleared
     #   AN  Set if the input operand is negative, otherwise cleared
     #   AV  Set if the input operand is +-zero, otherwise cleared
     #   AZ  Set if the floating-point result is +-zero (unbiased exponent
     #       of Fx is greater than +125), otherwise cleared
+    # Measured: AN stays clear for a NAN input. Ordinary input: the seed
+    # exponent is -e - 1 (biased 253 - e_biased), the mantissa is
+    # RECIPS_SEED[7 MSBs].
     updates = _flags_put(updates, AI_BIT, is_nan)
-    updates = _flags_put(updates, AN_BIT, bool(sign))
     if is_nan:
+        updates = _flags_put(updates, AN_BIT, False)
         updates = _flags_put(updates, AV_BIT, False)
         updates = _flags_put(updates, AZ_BIT, False)
         return rn, Const(0xFFFFFFFF), op, updates
+    updates = _flags_put(updates, AN_BIT, bool(sign))
     if is_zero:
         updates = _flags_put(updates, AV_BIT, True)
         updates = _flags_put(updates, AZ_BIT, False)
         result = Const((sign << 31) | (0xFF << 23))
         return rn, result, op, updates
     updates = _flags_put(updates, AV_BIT, False)
-    unbiased_exp = biased_exp - 127
-    if unbiased_exp > 125:
+    if biased_exp - 127 > 125:
         updates = _flags_put(updates, AZ_BIT, True)
-        return rn, Const(sign << 31), op, updates
+        if biased_exp == 0xFF:  # infinity: no sticky underflow
+            return rn, Const(sign << 31), op, updates
+        return rn, Const(sign << 31), "float-recips-seed-underflow", updates
     updates = _flags_put(updates, AZ_BIT, False)
-    if approx_recips:
-        # --approx-recips's own classification duplicates the above (kept
-        # separate in floats.py, verified independently); only its
-        # ordinary-case numeric mantissa approximation is used here.
-        value, _ = _approx_recips(left)
-        return rn, value, "float-recips-seed-approx", updates
-    return rn, Unknown(label), op, updates
+    seed = (sign << 31) | ((253 - biased_exp) << 23)
+    seed |= RECIPS_SEED[mantissa >> 16] << 15
+    return rn, Const(seed), op, updates
 
 
-def alu_recips_seed(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
-    return _alu_recip_seed_impl(rn, rx, left, "recips", approx_recips)
+def alu_recips_seed(rn, rx, ry, left, right, values, special) -> tuple:
+    return _alu_recip_seed_impl(rn, rx, left, "recips")
 
 
-def alu_rsqrts_seed(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
-    return _alu_recip_seed_impl(rn, rx, left, "rsqrts", approx_recips)
+def alu_rsqrts_seed(rn, rx, ry, left, right, values, special) -> tuple:
+    return _alu_recip_seed_impl(rn, rx, left, "rsqrts")
 
 
 # ---------------------------------------------------------------------------
@@ -851,7 +808,7 @@ def alu_rsqrts_seed(rn, rx, ry, left, right, values, special, approx_recips) -> 
 # or dn2-1.10E's aligned, in-function code (tools/sharc_dev/sharc.py census, lane F1)
 # -- implemented from the manual ahead of any observed use, like the
 # multiplier/shifter's own already-decoded-but-unobserved corners.
-def alu_double_add(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_add(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, overflow, invalid = _double_binary(
         _ureg(values, rx + 1),
         _ureg(values, rx),
@@ -868,9 +825,7 @@ def alu_double_add(rn, rx, ry, left, right, values, special, approx_recips) -> t
     )
 
 
-def alu_double_subtract(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_double_subtract(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, overflow, invalid = _double_binary(
         _ureg(values, rx + 1),
         _ureg(values, rx),
@@ -887,9 +842,7 @@ def alu_double_subtract(
     )
 
 
-def alu_double_compare(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_double_compare(rn, rx, ry, left, right, values, special) -> tuple:
     label = "comp F%d:%d, F%d:%d" % (rx + 1, rx, ry + 1, ry)
     value, invalid = _double_compare(
         _ureg(values, rx + 1),
@@ -901,7 +854,7 @@ def alu_double_compare(
     return rn, value, "double-compare", _astatx_compare_float(value, invalid)
 
 
-def alu_double_negate(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_negate(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, _overflow, invalid = _double_unary(
         _ureg(values, rx + 1),
         _ureg(values, rx),
@@ -916,7 +869,7 @@ def alu_double_negate(rn, rx, ry, left, right, values, special, approx_recips) -
     )
 
 
-def alu_double_abs(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_abs(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, _overflow, invalid = _double_unary(
         _ureg(values, rx + 1),
         _ureg(values, rx),
@@ -931,7 +884,7 @@ def alu_double_abs(rn, rx, ry, left, right, values, special, approx_recips) -> t
     )
 
 
-def alu_double_pass(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_pass(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, _overflow, invalid = _double_unary(
         _ureg(values, rx + 1),
         _ureg(values, rx),
@@ -946,7 +899,7 @@ def alu_double_pass(rn, rx, ry, left, right, values, special, approx_recips) -> 
     )
 
 
-def alu_double_fix(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_fix(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     value, overflow, invalid = _double_to_fixed(
         _ureg(values, rx + 1),
@@ -963,9 +916,7 @@ def alu_double_fix(rn, rx, ry, left, right, values, special, approx_recips) -> t
     )
 
 
-def alu_double_fix_scaled(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_double_fix_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     hi, lo = _scale_double_input(
         _ureg(values, rx + 1),
@@ -984,7 +935,7 @@ def alu_double_fix_scaled(
     )
 
 
-def alu_double_trunc(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_trunc(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     value, overflow, invalid = _double_to_fixed(
         _ureg(values, rx + 1),
@@ -1001,9 +952,7 @@ def alu_double_trunc(rn, rx, ry, left, right, values, special, approx_recips) ->
     )
 
 
-def alu_double_trunc_scaled(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_double_trunc_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     mode1 = _ureg_raw(values, UREG_CODES["MODE1"])
     hi, lo = _scale_double_input(
         _ureg(values, rx + 1),
@@ -1022,7 +971,7 @@ def alu_double_trunc_scaled(
     )
 
 
-def alu_double_float(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_float(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, invalid = _fixed_to_double(left, "float R%d" % rx)
     return (
         (rn + 1, rn),
@@ -1032,9 +981,7 @@ def alu_double_float(rn, rx, ry, left, right, values, special, approx_recips) ->
     )
 
 
-def alu_double_float_scaled(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_double_float_scaled(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, overflow = _fixed_to_double_scaled(
         left, right, "float R%d by R%d" % (rx, ry)
     )
@@ -1046,7 +993,7 @@ def alu_double_float_scaled(
     )
 
 
-def alu_double_scalb(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def alu_double_scalb(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, overflow, invalid = _double_scalb(
         _ureg(values, rx + 1),
         _ureg(values, rx),
@@ -1061,9 +1008,7 @@ def alu_double_scalb(rn, rx, ry, left, right, values, special, approx_recips) ->
     )
 
 
-def alu_double_to_float32(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_double_to_float32(rn, rx, ry, left, right, values, special) -> tuple:
     value, overflow, invalid = _double_to_float32(
         _ureg(values, rx + 1), _ureg(values, rx), "cvt F%d:%d" % (rx + 1, rx)
     )
@@ -1075,9 +1020,7 @@ def alu_double_to_float32(
     )
 
 
-def alu_float32_to_double(
-    rn, rx, ry, left, right, values, special, approx_recips
-) -> tuple:
+def alu_float32_to_double(rn, rx, ry, left, right, values, special) -> tuple:
     hi, lo, invalid = _float32_to_double(left, "cvt F%d" % rx)
     return (
         (rn + 1, rn),

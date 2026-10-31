@@ -63,7 +63,9 @@ from .compute_multi import (
 )
 from .compute_shift import SHIFT_OPS, _field_deposit_or, _shift_immediate
 from .encoding import (
+    AI_BIT,
     ALU_FLAGS_MASK,
+    AV_BIT,
     MI_BIT,
     MU_BIT,
     MV_BIT,
@@ -162,11 +164,11 @@ def _reserved_cu3(opcode: int, rn: int, rx: int, ry: int) -> tuple:
     )
 
 
-def _reserved_cu3_d6(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def _reserved_cu3_d6(rn, rx, ry, left, right, values, special) -> tuple:
     return _reserved_cu3(0xD6, rn, rx, ry)
 
 
-def _reserved_cu3_e0(rn, rx, ry, left, right, values, special, approx_recips) -> tuple:
+def _reserved_cu3_e0(rn, rx, ry, left, right, values, special) -> tuple:
     return _reserved_cu3(0xE0, rn, rx, ry)
 
 
@@ -224,9 +226,20 @@ def _sticky_set(old: Value, bit: int, trigger: bool | None) -> Value:
     return _astatx_define(old, 1 << bit, 1 << bit)
 
 
-def _apply_mult_sticky(
-    state: State, stky_name: str, astatx: Value, operation: str
-) -> None:
+# The ALU sticky bits (STKYX bit 0 AUS, 1 AVS, 5 AIS) that recips and rsqrts latch, as measured on a Digitakt II (see
+# compute_alu._alu_recip_seed_impl): AVS from AV, AIS from AI, AUS only for the underflow case. The other float ALU
+# operations do not latch their stickies in this core yet.
+_AUS_BIT, _AVS_ALU_BIT, _AIS_ALU_BIT = 0, 1, 5
+_ALU_SEED_OPERATIONS = frozenset(
+    {
+        "float-recips-seed",
+        "float-recips-seed-underflow",
+        "float-rsqrts-seed",
+    }
+)
+
+
+def _apply_sticky(state: State, stky_name: str, astatx: Value, operation: str) -> None:
     """Latch REGF_STKYX/REGF_STKYY from the ASTATX/ASTATY this instruction
     just computed (see ``_MOS_BIT`` group's docstring): a multiplier op's
     sticky bits are purely a function of its own new ASTATX bits, so no
@@ -241,6 +254,11 @@ def _apply_mult_sticky(
     elif operation in _MULT_MOS_OPERATIONS:
         value = _ureg_raw(state.uregs, code)
         value = _sticky_set(value, _MOS_BIT, _astatx_known_bit(astatx, MV_BIT))
+    elif operation in _ALU_SEED_OPERATIONS:
+        value = _ureg_raw(state.uregs, code)
+        value = _sticky_set(value, _AUS_BIT, operation == "float-recips-seed-underflow")
+        value = _sticky_set(value, _AVS_ALU_BIT, _astatx_known_bit(astatx, AV_BIT))
+        value = _sticky_set(value, _AIS_ALU_BIT, _astatx_known_bit(astatx, AI_BIT))
     else:
         return
     state.uregs[code] = value
@@ -263,8 +281,6 @@ def _compute(
     short: bool,
     values: Mapping[int, Value],
     special: Mapping[str, Operand | MR] | None = None,
-    *,
-    approx_recips: bool = False,
 ) -> Result | None:
     """Decode the small public-table subset, reading every operand from VALUES.
 
@@ -357,7 +373,7 @@ def _compute(
     single_handler = table.get(opcode) if table else None
     if single_handler is None:
         raise ValueError("unsupported full compute cu=%#x opcode=%#x" % (cu, opcode))
-    return single_handler(rn, rx, ry, left, right, values, special, approx_recips)
+    return single_handler(rn, rx, ry, left, right, values, special)
 
 
 def _apply_compute(
@@ -369,7 +385,7 @@ def _apply_compute(
     astatx_code = UREG_CODES["ASTATX"]
     new_astatx = _apply_flag_update(_ureg_raw(state.uregs, astatx_code), astatx_update)
     state.uregs[astatx_code] = new_astatx
-    _apply_mult_sticky(state, "STKYX", new_astatx, operation)
+    _apply_sticky(state, "STKYX", new_astatx, operation)
     if isinstance(rn, str):
         # A string RN never pairs with a tuple VALUE (see the tuple-RN
         # branch below for the only case that returns more than one
@@ -429,13 +445,6 @@ def _apply_compute(
             value=value,
         )
         state.uregs[rn] = value
-    if operation in ("float-recips-seed-approx", "float-rsqrts-seed-approx"):
-        # --approx-recips produced a numeric value with no ROM table behind
-        # it (see _approx_recips); mark this path and this instant so any
-        # report can find and discount it, matching how "predicate-assumption"
-        # tags a forked branch guess.
-        state.approx_recips_used = True
-        _event(state, insn, "approximate-recips", value=value)
 
 
 def _compute_pey_values(values: Mapping[int, Value]) -> dict[int, Value]:
@@ -453,8 +462,6 @@ def _compute_pey(
     short: bool,
     values: Mapping[int, Value],
     special: Mapping[str, Operand | MR] | None = None,
-    *,
-    approx_recips: bool = False,
 ) -> Result | None:
     """PEy's half of a SIMD compute (SHARC+ PRM p.101, "SIMD Mode":
     "Executes the same instruction simultaneously in both processing
@@ -473,7 +480,6 @@ def _compute_pey(
         short,
         _compute_pey_values(values),
         pey_special,
-        approx_recips=approx_recips,
     )
 
 
@@ -490,7 +496,7 @@ def _apply_compute_pey(
     astaty_code = UREG_CODES["ASTATY"]
     new_astaty = _apply_flag_update(_ureg_raw(state.uregs, astaty_code), astatx_update)
     state.uregs[astaty_code] = new_astaty
-    _apply_mult_sticky(state, "STKYY", new_astaty, operation)
+    _apply_sticky(state, "STKYY", new_astaty, operation)
     if isinstance(rn, str):
         # A string RN never pairs with a tuple VALUE, matching
         # _apply_compute's own invariant (see its comment there).
@@ -550,9 +556,6 @@ def _apply_compute_pey(
             value=value,
         )
         state.uregs[80 + rn] = value
-    if operation in ("float-recips-seed-approx", "float-rsqrts-seed-approx"):
-        state.approx_recips_used = True
-        _event(state, insn, "approximate-recips-pey", value=value)
 
 
 def _compute_simd(
@@ -561,8 +564,6 @@ def _compute_simd(
     short: bool,
     values: Mapping[int, Value],
     special: Mapping[str, Operand | MR] | None = None,
-    *,
-    approx_recips: bool = False,
 ) -> tuple[
     Result | None,
     Result | None,
@@ -573,10 +574,10 @@ def _compute_simd(
     mode, or an unresolved MODE1, returns a PEy result of None -- exactly
     like SISD, the tracer does not invent a PEy effect it cannot confirm.
     """
-    result_x = _compute(f, short, values, special, approx_recips=approx_recips)
+    result_x = _compute(f, short, values, special)
     if _simd_active(state) is not True:
         return result_x, None
-    result_y = _compute_pey(f, short, values, special, approx_recips=approx_recips)
+    result_y = _compute_pey(f, short, values, special)
     return result_x, result_y
 
 

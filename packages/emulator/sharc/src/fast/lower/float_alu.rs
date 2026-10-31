@@ -318,39 +318,4 @@ impl Lower {
         self.pend_flag(FlagKind::Falu, vec![r]);
         Ok(())
     }
-
-    /// RN = recips FX for an exponent field of 1..=252: the reciprocal seed
-    /// (`approx_recips` mode: 1/x rounded to f32, low 15 mantissa bits
-    /// cleared).
-    pub fn falu_recips(&mut self, rn: u32, rx: u32) -> LR<()> {
-        if !self.env.approx_recips {
-            return refuse("recips without approx_recips");
-        }
-        let x = self.rd_f(rx)?;
-        let xb = self.to_i(x);
-        let e = self.exp_field(xb);
-        let one = self.ci(1);
-        let em1 = self.bin(Bin::Sub, e, one);
-        let lim = self.ci(252);
-        let ok = self.bin(Bin::LtU, em1, lim);
-        self.guard(ok);
-        let c1 = self.cf(0x3f80_0000);
-        let q = self.bin(Bin::FDiv, c1, x);
-        let qb = self.to_i(q);
-        let keep = self.ci(0xffff_8000);
-        let seed = self.bin(Bin::And, qb, keep);
-        let r = self.to_f(seed);
-        self.wr_f(rn, r)?;
-        if self.flag_v() {
-            // Recips leaves AF as it was, so it is not a whole-group writer:
-            // the kernel records the AF it found (known at entry or from the
-            // writers before, `af_mask`) with the input, and the writer
-            // defines all the ALU bits (`FlagKind::RecipsAf`).
-            let af = self.af_mask();
-            self.pend_flag(FlagKind::RecipsAf, vec![xb, af]);
-        } else {
-            self.pend_flag(FlagKind::Recips, vec![xb]);
-        }
-        Ok(())
-    }
 }

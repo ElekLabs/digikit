@@ -138,7 +138,6 @@ impl Lower {
             (0, 0x8a) => self.falu_compare(rx, ry),
             (0, 0xc1) => self.falu_logb(rn, rx),
             (0, 0xbd) => self.falu_scalb(rn, rx, ry),
-            (0, 0xc4) => self.falu_recips(rn, rx),
             (0, 0xc9) => self.falu_fix(rn, rx, None, false),
             (0, 0xd9) => self.falu_fix(rn, rx, Some(ry), false),
             (0, 0xdd) => self.falu_fix(rn, rx, Some(ry), true),
