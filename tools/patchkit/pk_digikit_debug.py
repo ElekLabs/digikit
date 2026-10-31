@@ -25,7 +25,7 @@ from typing import Any
 
 from tools.device import dklog as L
 from tools.device import dkupload as DK
-from tools.device.dkproto import SETTINGS_SECTORS
+from tools.device.dkproto import SERVICE_CMD, SETTINGS_SECTORS
 from tools.patchkit import pk_device
 from tools.patchkit import pk_digikit_upload as U
 from tools.patchkit import pk_dkrt_boot as B
@@ -39,11 +39,25 @@ def uploader(rig: Any) -> DK.Uploader:
     return DK.Uploader(U.transport(rig))
 
 
+def small_ring(rig: Any) -> list[tuple[int, int, int, int, tuple[int, ...]]]:
+    """The runtime's own ring of boot and error events (`dlog.rs`, 32 events), read from guest memory: what exists when the debug module is not loaded."""
+    base = M.sym(rig.plan, "core/runtime", "DKRT_LOG")
+    count = rig.w(M.sym(rig.plan, "core/runtime", "DKRT_LOG_COUNT"))
+    out = []
+    for seq in range(max(1, count - 31), count + 1):
+        at = base + ((seq - 1) % 32) * 32
+        w = [rig.w(at + 4 * k) for k in range(8)]
+        if w[0] == seq:
+            out.append((seq, w[1], w[2] >> 16, w[2] & 0xFFFF, tuple(w[3:8])))
+    return out
+
+
 def events(
     rig: Any, kind: str | None = None
 ) -> list[tuple[int, int, int, int, tuple[int, ...]]]:
-    """Every event the device's log holds, read over SysEx (the way dklog reads it)."""
-    evs = L.read_all(uploader(rig))[2]
+    """Every event the device's log holds: over SysEx (the way dklog reads it) while the debug module is loaded, else the runtime's own small ring from memory."""
+    up = uploader(rig)
+    evs = L.read_all(up)[2] if DK.has_cap(up.info(), "LOG") else small_ring(rig)
     return [e for e in evs if kind is None or e[2] == L.K[kind]]
 
 
@@ -243,15 +257,13 @@ def run_card(c: Any) -> None:
             r_sel = rig.set_selection([mod])
             r_probe = rig.probe_write(FIRST + 5, 512)
             r_range = rig.probe_write(FIRST - 1, 512)
-            r_dbg = rig.set_debug(False)
             ci = rig.card_info()
             c.check(
-                "foreign card: a selection, a write at a sector in the range and the saving of the debug setting are refused (E_CARD_RO); one outside the range is E_RANGE",
-                (r_sel, r_probe, r_dbg, r_range)
-                == (B.E_CARD_RO, B.E_CARD_RO, B.E_CARD_RO, B.E_RANGE)
+                "foreign card: a selection and a write at a sector in the range are refused (E_CARD_RO); one outside the range is E_RANGE",
+                (r_sel, r_probe, r_range) == (B.E_CARD_RO, B.E_CARD_RO, B.E_RANGE)
                 and ci["refused"] == 3
                 and ci["writes"] == 0,
-                f"{(r_sel, r_probe, r_dbg, r_range)} {ci}",
+                f"{(r_sel, r_probe, r_range)} {ci}",
             )
             c.check(
                 "foreign card: no selection record was written",
@@ -460,8 +472,41 @@ def run_debug(c: Any) -> None:
 
         return MA.run_memaudit(c)
     img = c.image_for(B.RT, "run")
-    blank = c.card(None)
+    # the log (LOG, PEEK, LOGCFG) is the debug module's: a blank card with the module selected, and one without it
+    plain = c.card(None)
+    dbg_mod = c.pack("digikit/debug", "debug.dkm")
+    blank = c.card([dbg_mod])
     has_diag = any(k.endswith(":dl_diag") for k in img.plan["symbols"])
+    with c.rig(img, plain, "no-debug", cf_only=True) as rig:
+        up = uploader(rig)
+        info = up.info()
+        ring = small_ring(rig)
+        st = [
+            up.request(cmd, bytes(6))[0]
+            for cmd in (
+                SERVICE_CMD["LOG"],
+                SERVICE_CMD["PEEK"],
+                SERVICE_CMD["LOGCFG"],
+            )
+        ]
+        c.check(
+            "without the debug module INFO has no LOG, PEEK or LOGCFG capability, the three commands are E_PROTO, and the debug flag is off",
+            not any(DK.has_cap(info, n) for n in ("LOG", "PEEK", "LOGCFG"))
+            and DK.has_cap(info, "SERVICE_CMDS")
+            and st == [-60] * 3
+            and not info["debug_on"],
+            f"{info['caps']:#x} {st}",
+        )
+        kinds = [e[2] for e in ring]
+        c.check(
+            "without it the runtime's small ring (32 events) holds the boot's events and no periodic or module events",
+            0 < len(ring) <= 32
+            and L.K["BOOT_START"] in kinds
+            and L.K["UI_FIRST"] in kinds
+            and not {L.K["HEALTH"], L.K["DSP_DIAG"], L.K["MOD_LOG"]} & set(kinds),
+            str(sorted(kinds)),
+        )
+        c.done(rig)
     with c.rig(img, blank, "debug", cf_only=True) as rig:
         up = uploader(rig)
         evs = events(rig)
@@ -480,7 +525,7 @@ def run_debug(c: Any) -> None:
             set() if has_diag else {"DSP_ABSENT"}
         )
         c.check(
-            "the boot steps are logged: boot start, card check, RAM probe, record, first UI pass, and DSP_ABSENT when the link is absent",
+            "the boot steps are logged (handed over from the runtime's ring): boot start, card check, RAM probe, record, first UI pass, and DSP_ABSENT when the link is absent",
             all(L.K[k] in by_kind for k in want),
             str(sorted(L.KINDS[k][0] for k in by_kind)),
         )
@@ -492,9 +537,8 @@ def run_debug(c: Any) -> None:
         )
         info = up.info()
         c.check(
-            "INFO reports the oldest and newest sequence of the log, debug on, no crash",
-            info["log_oldest"] == 1
-            and info["log_newest"] >= newest
+            "INFO reports the LOG, PEEK and LOGCFG capabilities and the debug flag while the module is loaded, no crash",
+            all(DK.has_cap(info, n) for n in ("LOG", "PEEK", "LOGCFG"))
             and info["debug_on"]
             and not info["crash_found"]
             and not info["card_read_only"],
@@ -526,10 +570,10 @@ def run_debug(c: Any) -> None:
             "the gap between the ranges": (hi0, 16),
             "address wrap": (0xFFFFFFF0, 32),
         }.items():
-            st, _ = up.request(DK.CMD_PEEK, struct.pack(">IH", addr, n))
+            st, _ = up.request(SERVICE_CMD["PEEK"], struct.pack(">IH", addr, n))
             refused[name] = st
-        st0, _ = up.request(DK.CMD_PEEK, struct.pack(">IH", state_sym, 0))
-        st513, _ = up.request(DK.CMD_PEEK, struct.pack(">IH", state_sym, 513))
+        st0, _ = up.request(SERVICE_CMD["PEEK"], struct.pack(">IH", state_sym, 0))
+        st513, _ = up.request(SERVICE_CMD["PEEK"], struct.pack(">IH", state_sym, 513))
         c.check(
             "PEEK refuses everything outside the ranges of the device file, and lengths 0 and over 512 (E_PEEK)",
             all(v == E_PEEK for v in refused.values())
@@ -562,75 +606,14 @@ def run_debug(c: Any) -> None:
             back["default"] == 2 and len(events(rig, "UPLOAD")) == m1 + 1,
             str(back),
         )
-        # debug off: errors only
-        n0 = len(events(rig, "UPLOAD"))
-        up.request(DK.CMD_ABORT)
-        n1 = len(events(rig, "UPLOAD"))
-        c.check("debug ON: an upload command is logged", n1 == n0 + 1, f"{n0} {n1}")
-        r = rig.set_debug(False)
-        info = up.info()
+        # the old debug switch is gone: LOGCFG op 2 is E_PROTO, and the selection record keeps no debug flag
+        st_op2, _ = up.request(SERVICE_CMD["LOGCFG"], bytes([2, 1]))
+        r_sel = rig.set_selection([dbg_mod])
         rec = B.current(rig.sel_records())
         c.check(
-            "DEBUG OFF: saved in the record's flags (bit 1), INFO says off",
-            r == 0 and not info["debug_on"] and rec is not None and rec["flags"] & 2,
-            f"{r} {rec} {info}",
-        )
-        up.request(DK.CMD_ABORT)
-        bad = up.request(DK.CMD_DELETE, b"..\0")[0]
-        n2 = events(rig, "UPLOAD")
-        c.check(
-            "DEBUG OFF: the log keeps only errors (the abort is not logged, the refused path is)",
-            len(n2) == n1 + 1 and n2[-1][3] & 1 and bad != 0,
-            f"{len(n2) - n1} new, status {bad}",
-        )
-        dbg = events(rig, "DEBUG_SET")
-        c.check(
-            "the switch itself is logged (an error event, so it is kept when turned off)",
-            len(dbg) == 1 and dbg[0][4][0] == 0 and dbg[0][3] & 1,
-            str(dbg),
-        )
-        r2 = rig.set_selection([])
-        rec = B.current(rig.sel_records())
-        c.check(
-            "a selection saved afterwards keeps the DEBUG setting",
-            r2 == 0 and rec is not None and rec["flags"] & 2,
-            str(rec),
-        )
-        r3 = rig.set_debug(True)
-        rec = B.current(rig.sel_records())
-        up.request(DK.CMD_ABORT)
-        c.check(
-            "DEBUG ON again: saved, and logging resumes",
-            r3 == 0
-            and rec is not None
-            and not rec["flags"] & 2
-            and len(events(rig, "UPLOAD")) == len(n2) + 1,
-            f"{r3} {rec}",
-        )
-        # LOGCFG op 2: the host switch for the debug log
-        off = up.logcfg_debug(False)
-        rec = B.current(rig.sel_records())
-        st_bad, _ = up.request(DK.CMD_LOGCFG, bytes([2, 2]))
-        st_short, _ = up.request(DK.CMD_LOGCFG, bytes([2]))
-        c.check(
-            "LOGCFG op 2 off: the reply says off, the record's flags say off, INFO agrees; a value above 1 is E_PROTO, a missing byte E_MSG",
-            not off["debug"]
-            and rec is not None
-            and rec["flags"] & 2
-            and not up.info()["debug_on"]
-            and st_bad == -60
-            and st_short == -50,
-            f"{off} {rec} {st_bad} {st_short}",
-        )
-        on = up.logcfg_debug(True)
-        rec = B.current(rig.sel_records())
-        c.check(
-            "LOGCFG op 2 on: reply, record and INFO say on",
-            on["debug"]
-            and rec is not None
-            and not rec["flags"] & 2
-            and up.info()["debug_on"],
-            f"{on} {rec}",
+            "LOGCFG op 2 is refused (E_PROTO); a saved selection has the flag bit 1 clear",
+            st_op2 == -60 and r_sel == 0 and rec is not None and not rec["flags"] & 2,
+            f"{st_op2} {r_sel} {rec}",
         )
         # dklog against the emulator
         out = c.work / "dklog.log"
@@ -1030,14 +1013,17 @@ def run_guard_dn2(c: Any) -> None:
     from tools.patchkit import hook_ab
 
     nan = c.pack("test/dyn-guard-nan", "nan.dkm")
+    dbg_mod = c.pack(
+        "digikit/debug", "debug.dkm"
+    )  # last: the machine rows stay where they were; the log needs it (MACHINE_CHANGE is its)
     img = c.image_for(B.RT, "guard")
-    card = c.card([nan])
+    card = c.card([nan, dbg_mod])
     with c.rig(img, card, "guard") as rig:
         info = rig.boot_info()
         c.check(
-            "the fixture loaded at boot (CF part, DSP part, one voice row)",
-            info["count"] == 1
-            and info["results"] == [0]
+            "the fixture and the debug module loaded at boot (CF part, DSP part, one voice row)",
+            info["count"] == 2
+            and info["results"] == [0, 0]
             and len([r for r in rig.voice_rows() if r[0] != B.FREE_TYPE]) == 1,
             str(info["results"]),
         )
@@ -1122,14 +1108,17 @@ def run_guard(c: Any) -> None:
         return run_guard_dn2(c)
     nan = c.pack("test/dyn-guard-nan", "nan.dkm")
     plk = c.pack("test/sine", "sine.dkm")
+    dbg_mod = c.pack(
+        "digikit/debug", "debug.dkm"
+    )  # last: the machine rows stay where they were; the log needs it (MACHINE_CHANGE is its)
     img = c.image_for(B.RT, "guard")
-    card = c.card([plk, nan])
+    card = c.card([plk, nan, dbg_mod])
     with c.rig(img, card, "guard") as rig:
         info = rig.boot_info()
         c.check(
-            "both modules loaded at boot (CF part, DSP part, two voice rows)",
-            info["count"] == 2
-            and info["results"] == [0, 0]
+            "both modules and the debug module loaded at boot (CF part, DSP part, two voice rows)",
+            info["count"] == 3
+            and info["results"] == [0, 0, 0]
             and len([r for r in rig.voice_rows() if r[0] != B.FREE_TYPE]) == 2,
             str(info["results"]),
         )
@@ -1288,6 +1277,9 @@ def periodic(c: Any, img: Any, card: Path, has_diag: bool) -> None:
 def run_crash(c: Any) -> None:
     t = c.table()
     mod = c.pack(t["crash"], "crash.dkm")
+    dbg_mod = c.pack(
+        "digikit/debug", "debug.dkm"
+    )  # the log: the crash events are read over LOG, and the safe boot loads no module
     img = c.image_for(B.RT, "run")
     cfg = c.env.folder / "digikit" / "cfg"
     cfg.mkdir(parents=True, exist_ok=True)
@@ -1297,7 +1289,7 @@ def run_crash(c: Any) -> None:
             int(t[f"{kind}_blocks"]).to_bytes(4, "big")
             + bytes([int(t[f"{kind}_mode"])])
         )
-        cards[kind] = c.card([mod], stable_blocks=int(t["stable_blocks"]))
+        cards[kind] = c.card([dbg_mod, mod], stable_blocks=int(t["stable_blocks"]))
     want_vec = {0: 4, 1: 5}  # illegal instruction, divide by zero
 
     def sequence(kind: str) -> Callable[[], None]:
@@ -1316,7 +1308,8 @@ def run_crash(c: Any) -> None:
                         if e[2] == L.K["MOD_LOG"]
                         and L.ascii_of(*e[4][:4]) == "crash-pc"
                     ]
-                    rec = L.crash_record(evs)
+                    has_log = DK.has_cap(uploader(rig).info(), "LOG")
+                    rec = L.crash_record(evs) if has_log else None
                     seen.append(
                         {
                             "info": rig.boot_info(),
@@ -1324,6 +1317,7 @@ def run_crash(c: Any) -> None:
                             "card": rig.card_info(),
                             "rec": rec,
                             "evs": evs,
+                            "has_log": has_log,
                             "diag_info": uploader(rig).info(),
                             "sel": B.current(rig.sel_records()),
                         }
@@ -1351,38 +1345,47 @@ def run_crash(c: Any) -> None:
                 and b0["rec"] is None,
                 str(b0["crash"]),
             )
-            for n, b in ((2, b1), (3, b2)):
-                rec = b["rec"]
-                tail_pc = (b["tail_pcs"] or [None])[-1]
-                c.check(
-                    f"{kind}: boot {n} finds the crash record of the boot before, with the module's own PC (vector {want_vec[mode]}, in the module)",
-                    rec is not None
-                    and not rec.get("corrupt")
-                    and b["crash"]["found"] == 1
-                    and b["crash"]["pc"] == rec["pc"] == tail_pc
-                    and rec["vector"] == want_vec[mode]
-                    and rec["module"] is not None
-                    and rec["module"]["index"] == 0
-                    and bool(rec["module"]["name"])
-                    and b["crash"]["ram_kept"] == 1,
-                    f"found {b['crash']} rec pc {rec and rec.get('pc')} vec {rec and rec.get('vector')} tail pc {tail_pc} module {rec and rec.get('module')}",
-                )
-                c.check(
-                    f"{kind}: boot {n}: INFO says a crash was found; the crash events decode (registers, stack, events before the crash)",
-                    b["diag_info"]["crash_found"]
-                    and rec is not None
-                    and len(rec["regs"]) == 16
-                    and len(rec["stack"]) == 32
-                    and len(rec["tail"]) >= 2
-                    and rec["a7"] % 4 == 0,
-                    str(
-                        {
-                            k: v
-                            for k, v in (rec or {}).items()
-                            if k in ("regs", "a7", "sr", "frame_word")
-                        }
-                    ),
-                )
+            # boot 2 loads the debug module again, so its log has the whole crash record (the events of the replay); boot 3 is safe mode with no module
+            tail_n = [b["crash"]["tail"] for b in (b1, b2)]
+            rec = b1["rec"]
+            c.check(
+                f"{kind}: boot 2 finds the crash record of the boot before, with the module's own PC (vector {want_vec[mode]}, in the module)",
+                rec is not None
+                and not rec.get("corrupt")
+                and b1["crash"]["found"] == 1
+                and b1["crash"]["pc"] == rec["pc"]
+                and rec["vector"] == want_vec[mode]
+                and rec["module"] is not None
+                and rec["module"]["index"] == 1
+                and bool(rec["module"]["name"])
+                and b1["crash"]["ram_kept"] == 1,
+                f"found {b1['crash']} rec pc {rec and rec.get('pc')} vec {rec and rec.get('vector')} module {rec and rec.get('module')}",
+            )
+            c.check(
+                f"{kind}: boot 2: INFO says a crash was found; the crash events decode (registers, stack, events before the crash from the runtime's small ring)",
+                b1["diag_info"]["crash_found"]
+                and rec is not None
+                and len(rec["regs"]) == 16
+                and len(rec["stack"]) == 32
+                and len(rec["tail"]) >= 2
+                and rec["a7"] % 4 == 0,
+                str(
+                    {
+                        k: v
+                        for k, v in (rec or {}).items()
+                        if k in ("regs", "a7", "sr", "frame_word")
+                    }
+                ),
+            )
+            c.check(
+                f"{kind}: boot 3 (safe mode, no debug module) found the record of the boot before: same PC, tail kept, INFO says a crash was found, no LOG capability",
+                b2["crash"]["found"] == 1
+                and b2["crash"]["pc"] == b1["crash"]["pc"]
+                and all(n > 0 for n in tail_n)
+                and b2["diag_info"]["crash_found"]
+                and not b2["has_log"],
+                f"{b2['crash']} tails {tail_n}",
+            )
             c.report[f"crash_{kind}_text"] = (
                 L.crash_text(b1["rec"]) if b1["rec"] else ""
             )
@@ -1396,7 +1399,7 @@ def run_crash(c: Any) -> None:
                     ]
                     == [0, 1, 2]
                     and b1["info"]["safe"] == 0
-                    and b1["info"]["loaded"] == 1
+                    and b1["info"]["loaded"] == 2
                     and b2["info"]["safe"] == 1
                     and b2["info"]["reason"] == 1
                     and b2["info"]["loaded"] == 0
@@ -1409,7 +1412,7 @@ def run_crash(c: Any) -> None:
                     b0["info"]["counter"] == 0
                     and b1["info"]["counter"] == 1
                     and b1["info"]["safe"] == 0
-                    and b1["info"]["loaded"] == 1
+                    and b1["info"]["loaded"] == 2
                     and b1["crash"]["stable"] == 1
                     and b2["info"]["counter"] == 2
                     and b2["info"]["safe"] == 1
@@ -1430,7 +1433,7 @@ def run_crash(c: Any) -> None:
                 f"{kind}: the safe boot clears the counter at its first UI-loop pass and keeps the selection",
                 b2["info"]["ui_reached"] == 1
                 and b2["sel"] is not None
-                and b2["sel"]["paths"] == [mod],
+                and b2["sel"]["paths"] == [dbg_mod, mod],
                 str(b2["sel"]),
             )
 

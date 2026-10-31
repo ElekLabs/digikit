@@ -24,7 +24,6 @@ extern "C" {
     fn fk_put_key(i: c_int) -> *const c_char;
     fn fk_put_val(i: c_int) -> c_int;
     fn fk_flushes() -> c_int;
-    fn fk_debug() -> c_int;
     fn fk_tick(i: c_int) -> c_int;
 }
 
@@ -102,14 +101,8 @@ fn digikit_menu_rows() {
             "ABOUT",
             "HEALTH",
             "MEMORY",
-            "MODULES",
-            "DEBUG OFF"
+            "MODULES"
         ]
-    );
-    press_yes(4);
-    assert_eq!(
-        (render()[4].as_str(), unsafe { fk_debug() }),
-        ("DEBUG ON", 1)
     );
 }
 

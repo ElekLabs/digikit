@@ -330,7 +330,7 @@ def run_fx(c: Any) -> None:
 
 def table_ok(rig: Any, up: Any) -> bool:
     """The runtime's table check never failed (`DKRT_TABLE_BAD` is 0, no `TABLE_BAD` event)."""
-    bad = up.peek(M.sym(rig.plan, "core/runtime", "DKRT_TABLE_BAD"), 1)[0]
+    bad = rig.w(M.sym(rig.plan, "core/runtime", "DKRT_TABLE_BAD")) >> 24
     return bad == 0 and not D.events(rig, "TABLE_BAD")
 
 

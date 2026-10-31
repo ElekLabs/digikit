@@ -414,9 +414,9 @@ fields = [
     "u32 card_hash // a crc32 of it",
     "u32 card_refused // card writes refused (range or read-only)",
     "u32 card_read_errors // reads that failed in the check",
-    "u32 debug_on // 1 when the debug log keeps every event (SETTINGS > DIGIKIT > DEBUG), 0 when it keeps errors only",
-    "u32 log_oldest // sequence number of the oldest event in the log ring (0, 0: empty)",
-    "u32 log_newest // sequence number of the newest event",
+    "u32 debug_on // 1 while a debug module (the log sink) is loaded",
+    "u32 log_oldest // 0 (the log ring is the debug module's; its LOG command has the range)",
+    "u32 log_newest // 0",
     "u32 dsp_diag_ok // 1 when dl_diag is in the image and answered",
     "u32 dsp_stopped // 1 when the heartbeat watch decided the DSP stopped",
     "u32 dsp_heartbeat // the last heartbeat word",
@@ -526,11 +526,6 @@ doc = "Register (or, with 0, remove) a function that the UI loop calls once per 
 name = "dkrt_diag"
 sig = "void dkrt_diag(DkrtDiag *out)"
 doc = "The card check, the debug log, the DSP watch and the crash record (finding 46)."
-
-[[fn]]
-name = "dkrt_debug_set"
-sig = "i32 dkrt_debug_set(u32 on)"
-doc = "The debug log keeps every event (1) or errors only (0), now, and saved in the selection record. OK or an E_* code (E_CARD_RO: held until the next boot)."
 
 [[fn]]
 name = "dkrt_store_list"

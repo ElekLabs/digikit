@@ -143,7 +143,7 @@ def boot_checks(
         _cap_ok(cap, m, g, lim, rows, len(names), c.store.limit // 2),
         str(cap),
     )
-    bad = up.peek(M.sym(rig.plan, "core/runtime", "DKRT_TABLE_BAD"), 1)[0]
+    bad = rig.w(M.sym(rig.plan, "core/runtime", "DKRT_TABLE_BAD")) >> 24
     c.check(
         f"{tag}: the runtime's table check never failed (a refused module left nothing behind)",
         bad == 0 and not D.events(rig, "TABLE_BAD"),

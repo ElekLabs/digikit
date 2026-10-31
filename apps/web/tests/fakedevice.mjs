@@ -3,7 +3,7 @@
 // the screenshot run of the site's Transfer page (tools/devtools/web_transfer_shots.mjs).
 import { createHash } from 'node:crypto';
 import { decode8in7, encode8in7 } from '@digi/dk-session';
-import { CAP, CAPACITY_KINDS, CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { CAP, CAPACITY_KINDS, CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 export const sha = (b) => createHash('sha256').update(b).digest();
 export const hex = (b) => Buffer.from(b).toString('hex');
@@ -61,7 +61,7 @@ export class FakeDevice {
       if (this.silent === 0) this.boot();
       return;
     }
-    const name = Object.entries(CMD).find(([, v]) => v === cmd)?.[0] ?? `0x${cmd.toString(16)}`;
+    const name = Object.entries({ ...CMD, ...SERVICE_CMD }).find(([, v]) => v === cmd)?.[0] ?? `0x${cmd.toString(16)}`;
     this.seen.push(name);
     const r = this.handle(cmd, seq, body);
     if (r) this.queue.push(r);
@@ -243,7 +243,7 @@ export class FakeDevice {
           ),
         );
       }
-      case CMD.LOG: {
+      case SERVICE_CMD.LOG: {
         const from = new DataView(body.buffer, body.byteOffset).getUint32(0);
         const ev = this.log.filter((e) => e.seq >= from).slice(0, 3);
         const out = ev.map((e) =>

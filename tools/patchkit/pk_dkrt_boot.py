@@ -78,7 +78,7 @@ RUNTIME_VERSION = (
 SEL_MAGIC, SEL_VERSION = 0x444B534C, 1
 SEL_MAX, SEL_PATH = pk_device.contract_max()["sel_max"], 56
 # The store area differs per device (devices/*.toml [card.store]): `pk_device.store_of(device)` has first, sectors, sel_a, sel_b and header_b (all absolute).
-CMD_CARD_PROBE, CMD_DEBUG = 7, 8
+CMD_CARD_PROBE = 7
 CMD_SETTINGS_PUT, CMD_SETTINGS_GET, CMD_SETTINGS_REMOVE, CMD_SETTINGS_FLUSH = (
     9,
     10,
@@ -113,6 +113,10 @@ CRASH_FIELDS = [
     "ram_kept",
     "installed",
     "bad",
+    "hang",
+    "saved",
+    "panic",
+    "tail",
 ]  # DKRT_CRASH (crash.rs CrashSeen)
 E_RANGE, E_CARD_RO = -46, -47
 CMD_LOAD, CMD_SELECT, CMD_RESTART, CMD_SELECT_ONE = (
@@ -512,10 +516,6 @@ class BootRig(M.Rig):
         """Ask the runtime's one card-write function to write NBYTES at SECTOR (`CMD_CARD_PROBE`): 0, `E_RANGE` or `E_CARD_RO`.
         Only used with sectors outside the store range or on a card that is not ours: it would write the staging buffer."""
         return self.post_raw(CMD_CARD_PROBE, struct.pack(">II", sector, nbytes))
-
-    def set_debug(self, on: bool) -> int:
-        """`dkrt_debug_set` through the mailbox (the menu's DEBUG row calls the same function)."""
-        return self.post_raw(CMD_DEBUG, bytes([1 if on else 0]))
 
     def deliver_exceptions(self, on: bool = True) -> None:
         """A CPU exception runs the guest's handler instead of stopping the emulated run (the crash capture needs it; the controller keeps it

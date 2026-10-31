@@ -38,9 +38,6 @@ CMD: dict[str, int] = {
     "VERIFY": 0x17,
     "MKDIR": 0x18,
     "SETTINGS": 0x19,
-    "LOG": 0x20,
-    "PEEK": 0x21,
-    "LOGCFG": 0x22,
     "FAULT": 0x23,
     "SELECT": 0x30,
     "RESTART": 0x31,
@@ -59,14 +56,14 @@ CMD_READ = 0x16
 CMD_VERIFY = 0x17
 CMD_MKDIR = 0x18
 CMD_SETTINGS = 0x19
-CMD_LOG = 0x20
-CMD_PEEK = 0x21
-CMD_LOGCFG = 0x22
 CMD_FAULT = 0x23
 CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 
 SERVICE_CMD: dict[str, int] = {
+    "LOG": 0x20,
+    "PEEK": 0x21,
+    "LOGCFG": 0x22,
     "REMOTE_KEY": 0x38,
     "REMOTE_TURN": 0x39,
     "REMOTE_RELEASE": 0x3A,
@@ -160,6 +157,7 @@ CAP: dict[str, int] = {
 }
 
 RANGES: dict[str, tuple[int, int]] = {
+    "debug": (0x20, 0x22),
     "probe": (0x32, 0x35),
     "remote": (0x38, 0x3D),
     "remote_state": (0x3E, 0x3F),
