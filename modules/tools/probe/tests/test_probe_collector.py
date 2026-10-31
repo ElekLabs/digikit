@@ -36,11 +36,11 @@ int main(void)
     api.alloc = f_alloc; api.free = f_free; api.log = f_log; api.register_cmds = f_reg;
     printf("init %d\n", dkm_init(&api));
     while (fgets(line, sizeof line, stdin)) {
-        unsigned a, b, c, d;
+        unsigned a, b, c, d, e;
         char hex[2048];
-        if (sscanf(line, "rec %u %u %u %u", &a, &b, &c, &d) == 4) {
-            /* beat, master calls, send calls, step */
-            setw(rec, 1, a); setw(rec, 26, b); setw(rec, 27, c); setw(rec, 25, d);
+        if (sscanf(line, "rec %u %u %u %u %u", &a, &b, &c, &d, &e) == 5) {
+            /* beat, master calls, send calls, step, record address */
+            setw(rec, 1, a); setw(rec, 26, b); setw(rec, 27, c); setw(rec, 25, d); setw(rec, 29, e);
             the_cb(rec);
         } else if (sscanf(line, "cmd %u %2047s", &a, hex) == 2 || sscanf(line, "cmd %u", &a) == 1) {
             u8 body[200], out[1024];
@@ -103,7 +103,7 @@ def run(exe, lines):
 
 def status(reply: str) -> dict:
     raw = bytes.fromhex(reply.split()[2])
-    f = struct.unpack(">16I", raw)
+    f = struct.unpack(">17I", raw)
     keys = [
         "format",
         "blocks",
@@ -121,6 +121,7 @@ def status(reply: str) -> dict:
         "last_seq",
         "last_beat",
         "synced",
+        "addr",
     ]
     return dict(zip(keys, f, strict=True))
 
@@ -138,23 +139,33 @@ def frame(seq, payload):
     return [hdr, *payload, fletcher([hdr, *payload])]
 
 
+GOOD, OTHER = 0x2C49D0, 0x2C59D0
+
+
 def feed(words, *, beat0=100):
-    """One reply record per word, a module call each (the call count rises by 1)."""
-    out, beat = [], beat0
-    for i, w in enumerate(words):
-        beat += 1
-        out.append(f"rec {beat} {i + 1} 0 {w}")
+    """What the callback sees when a module stores each word on two blocks in a row: the record at GOOD carries it, the next one (OTHER) reads 0. A module call
+    counts in every block."""
+    out, beat, calls = [], beat0, 0
+    for w in words:
+        calls += 1
+        out.append(f"rec {beat} {calls} 0 {w} {GOOD}")
+        calls += 1
+        out.append(f"rec {beat + 1} {calls} 0 0 {OTHER}")
+        beat += 2
     return out
 
 
 def test_records_that_carry_a_word_and_the_counters(harness):
     lines = [
-        "rec 10 0 0 111",  # the first record only sets the baseline
-        "rec 11 1 0 222",  # new, a module call: word 222
-        "rec 11 1 0 999",  # the same record again: a repeat
-        "rec 12 1 0 999",  # new but no new call: idle
-        "rec 15 2 0 333",  # a jump of 3: two records missed
-        "rec 16 2 1 444",  # the send route's counter also counts
+        "rec 10 0 0 0 7",  # no address learned and the word is 0: nothing
+        "rec 11 1 0 111 9",  # the first word that is not 0 gives the address; as the first record it only sets the baseline
+        "rec 12 2 0 0 7",  # the other record: ignored
+        "rec 13 3 0 222 9",  # two beats later, a new call: word 222
+        "rec 15 4 0 333 9",
+        "rec 15 4 0 333 9",  # the same record again: a repeat
+        "rec 17 4 0 555 9",  # new but no new call: idle
+        "rec 21 5 0 666 9",  # a jump of 4: one record missed
+        "rec 23 5 1 777 9",  # the send route's counter also counts
         "cmd 50",
         "cmd 51 0000000000" + "05",
     ]
@@ -168,24 +179,24 @@ def test_records_that_carry_a_word_and_the_counters(harness):
         s["repeats"],
         s["idle"],
         s["words"],
-    ) == (6, 4, 2, 1, 1, 3)
+        s["addr"],
+    ) == (9, 5, 1, 1, 1, 4, 9)
     raw = bytes.fromhex(out[3].split()[2])
-    assert struct.unpack(">2I", raw[:8]) == (3, 0)
-    assert struct.unpack(">3I", raw[8:]) == (222, 333, 444)
+    assert struct.unpack(">2I", raw[:8]) == (4, 0)
+    assert struct.unpack(">4I", raw[8:]) == (222, 333, 666, 777)
 
 
 def test_the_ring_stops_when_full_and_counts_overruns_and_reset_empties_it(harness):
     cap = 24576
     lines = [
-        "rec 1 0 0 0",
-        *feed(range(cap + 5), beat0=1),
+        *feed(range(1, cap + 6), beat0=1),  # the first word only sets the baseline
         "cmd 50",
         "cmd 52",
         "cmd 50",
     ]
     out = run(harness, lines)
     s = status(out[2])
-    assert s["words"] == cap and s["overruns"] == 5 and s["cap"] == cap
+    assert s["words"] == cap and s["overruns"] == 4 and s["cap"] == cap
     assert out[3].startswith("reply 0")
     s = status(out[4])
     assert s["words"] == 0 and s["overruns"] == 0 and s["blocks"] == 0
@@ -210,22 +221,25 @@ def test_frames_are_checked_and_errors_are_counted(harness):
     stream += rep
     stream += f[9]
     stream += f[9][:6]  # an unfinished frame at the end waits
-    lines = ["rec 1 0 0 0", *feed(stream, beat0=1), "cmd 50"]
+    lines = [*feed(stream, beat0=1), "cmd 50"]
     s = status(run(harness, lines)[2])
     assert s["frames_ok"] == 4 + 1 + 1 + 1  # 0-3, 5, 7, 9
     assert s["seq_errors"] >= 1
     assert s["cks_errors"] == 2
-    assert s["parsed"] == len(stream) - 6  # the unfinished frame is left for later
+    assert (
+        s["parsed"] == len(stream) - 1 - 6
+    )  # the first word is the baseline; the unfinished frame is left for later
     # a clean stream: no error of either kind
-    clean = [w for n in range(20) for w in frame(n, [n] * 12)]
-    s = status(run(harness, ["rec 1 0 0 0", *feed(clean, beat0=1), "cmd 50"])[2])
+    clean = [0x77] + [
+        w for n in range(20) for w in frame(n, [n] * 12)
+    ]  # 0x77 is the baseline
+    s = status(run(harness, [*feed(clean, beat0=1), "cmd 50"])[2])
     assert (s["frames_ok"], s["seq_errors"], s["cks_errors"]) == (20, 0, 0)
 
 
 def test_read_limits_and_fini_clears_the_callback(harness):
     lines = [
-        "rec 1 0 0 0",
-        *feed([1, 2, 3], beat0=1),
+        *feed([1, 2, 3, 4], beat0=1),
         "cmd 51 00000001" + "0002",
         "cmd 51 00000009" + "0002",
         "cmd 51 00",
@@ -233,7 +247,7 @@ def test_read_limits_and_fini_clears_the_callback(harness):
         "fini",
     ]
     out = run(harness, lines)
-    assert struct.unpack(">4I", bytes.fromhex(out[2].split()[2])) == (3, 1, 2, 3)
+    assert struct.unpack(">4I", bytes.fromhex(out[2].split()[2])) == (3, 1, 3, 4)
     assert struct.unpack(">2I", bytes.fromhex(out[3].split()[2])) == (
         3,
         9,
