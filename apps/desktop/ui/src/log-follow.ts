@@ -1,11 +1,11 @@
 // Follows the runtime log of the emulator and of the device on the MIDI port chosen last, and puts what it finds in the workbench log.
-// One poll loop per origin, once a second (log-follow-core.ts has the rules). Both read through the shared sessions of
+// One poll loop per origin, once a second while the drawer is open, every 5 s for the device while it is closed, none while the window is hidden (log-follow-core.ts has the rules). Both read through the shared sessions of
 // apps/web/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { readFault, type DkSession, type LogConfig } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';
 import { changeDebug, changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
-import { LogFollower, POLL_MS, type FollowSession, type OriginStatus } from './log-follow-core.ts';
+import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
 import { logInputs } from './log-state.ts';
 
 /** The protocol session as the follower uses it. */
@@ -27,6 +27,10 @@ export interface FollowEnv {
   emulator: { running(): boolean; session(): Promise<FollowSession> };
   device: { port(): string | undefined; session(): Promise<FollowSession>; present(): Promise<boolean> };
   push?(inputs: LogInput[]): void;
+  /** The window is on screen (default: yes). A hidden window asks nothing of the device. */
+  shown?(): boolean;
+  /** The Log drawer is open (default: yes). A closed drawer reads the device less often. */
+  drawerOpen?(): boolean;
   now?(): number;
   sleep?(ms: number): Promise<void>;
 }
@@ -112,8 +116,12 @@ export function createLogFollow(env: FollowEnv): LogFollow {
             let wait = POLL_MS;
             if (origin === 'device' && env.flashing()) f.pause();
             else {
-              if (f.paused) f.resume();
-              wait = await f.tick();
+              const p = pace(origin === 'device', env.shown?.() ?? true, env.drawerOpen?.() ?? true, POLL_MS);
+              wait = p.wait;
+              if (p.ask) {
+                if (f.paused) f.resume();
+                wait = pace(origin === 'device', true, env.drawerOpen?.() ?? true, await f.tick()).wait;
+              }
             }
             if (!stopped) await sleep(wait);
           }

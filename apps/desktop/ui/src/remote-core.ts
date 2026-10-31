@@ -43,3 +43,10 @@ export function deviceOfPort(port: string): 'dt2' | 'dn2' | undefined {
   const d = port.split('-')[0];
   return d === 'dt2' || d === 'dn2' ? d : undefined;
 }
+
+/** The Remote page asks INFO (it only names the device) at most this often while the target stays the same. */
+export const INFO_EVERY_MS = 30_000;
+
+/** Is INFO due? When it was never asked (`lastAt` undefined), the target changed, or `INFO_EVERY_MS` have passed. */
+export const infoDue = (lastAt: number | undefined, now: number, targetChanged: boolean): boolean =>
+  lastAt === undefined || targetChanged || now - lastAt >= INFO_EVERY_MS;

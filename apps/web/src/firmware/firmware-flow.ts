@@ -264,6 +264,9 @@ async function afterSend(
     if (p.restore && !a.runtime && a.os === p.os && ++stockSeen < 2) continue;
     // a patched image answers SoftwareVersion before its runtime answers INFO: wait for the runtime
     if (!p.restore && !a.runtime) continue;
+    // The old image can still answer for a moment (also when the port never seemed to leave): keep asking while the answer is not
+    // the patch's, and judge the last answer when the time is up.
+    if (!p.restore && (a.runtime !== p.runtime || (a.imageId ?? null) !== p.imageId)) continue;
     return done(verdict(a));
   }
   if (last && !signal.aborted) return done(verdict(last));

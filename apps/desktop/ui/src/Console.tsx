@@ -27,6 +27,7 @@ import {
 } from './log-core';
 import { desktopDefaultModules } from './default-modules';
 import { createLogFollow, followSession } from './log-follow';
+import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
 import SidePanels from './SidePanels';
@@ -489,6 +490,8 @@ export default function Console() {
   const logFollow = createLogFollow({
     follow: followOn,
     flashing: () => flashRunning(flashRun()),
+    shown: windowShown,
+    drawerOpen: logOpen,
     emulator: {
       running: () => !!status() && !paused(),
       session: async () => followSession(await emulatorSession()),

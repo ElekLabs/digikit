@@ -68,6 +68,21 @@ pub struct MidiPort {
     cancel: Arc<AtomicU64>,
 }
 
+/// One MIDI client that lives as long as the app and is created on the main thread (`Builder::setup`).
+///
+/// CoreMIDI tells a process about ports that came or went on the run loop of the thread that created its first client (midir's
+/// `MidiInput::new` calls `MIDIClientCreate`; `ports()` only reads CoreMIDI's per-process list). The commands below create their
+/// clients on worker threads that never run a run loop, so a first client made there froze the list at its start state: a device plugged in
+/// later was not listed until the app restarted. The main thread runs the window's run loop, so a client made there keeps the list current.
+pub struct MidiWatch(#[allow(dead_code)] Mutex<Option<MidiInput>>);
+
+impl MidiWatch {
+    /// Call on the main thread, before any command can create a client. A failure leaves no client (listing still works as before).
+    pub fn start() -> Self {
+        Self(Mutex::new(MidiInput::new("digikit watch").ok()))
+    }
+}
+
 /// How a wait for the next message ended.
 #[derive(Debug, PartialEq)]
 pub enum Recv {
