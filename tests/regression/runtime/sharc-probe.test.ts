@@ -37,10 +37,10 @@ function status(body: Uint8Array): Record<string, number> {
   return Object.fromEntries(keys.map((key, i) => [key, view.getUint32(4 * i)]));
 }
 
-async function expectProbeTransport({ session, dk }: PatchedSession): Promise<void> {
+async function installProbe({ session, dk }: PatchedSession, effect: string): Promise<void> {
   await settleLive(session);
   const paths: string[] = [];
-  for (const id of [REMOTE, PROBE, COLLECTOR]) {
+  for (const id of [REMOTE, effect, COLLECTOR]) {
     const bytes = fs.readFileSync(moduleArtifact(session.options.device, id));
     const path = `modules/${id.split('/').at(-1)}.dkm`;
     await dk.put(path, bytes);
@@ -52,7 +52,7 @@ async function expectProbeTransport({ session, dk }: PatchedSession): Promise<vo
   await dk.waitForBoot();
   await expect
     .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
-    .toEqual(expect.arrayContaining([REMOTE, PROBE, COLLECTOR]));
+    .toEqual(expect.arrayContaining([REMOTE, effect, COLLECTOR]));
 
   // the effect's step stores went to the DSP's reply record, not to the static word that the effect core clears
   const patches = (await dk.readLog()).filter((e) => e.kind === LOG_KIND.STEP_PATCH);
@@ -64,7 +64,11 @@ async function expectProbeTransport({ session, dk }: PatchedSession): Promise<vo
     patches.every((e) => e.args[0] === STEP_PATCHED || e.args[0] === STEP_NONE),
     'no static fallback',
   ).toBe(true);
+}
 
+async function expectProbeTransport(patched: PatchedSession): Promise<void> {
+  const { session, dk } = patched;
+  await installProbe(patched, PROBE);
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   // the effect starts a few thousand blocks after the boot; the collector then fills its ring
   let last: Record<string, number> = {};
@@ -88,3 +92,34 @@ async function expectProbeTransport({ session, dk }: PatchedSession): Promise<vo
 runtimeTests('the SHARC probe sends framed words that the collector receives without errors', expectProbeTransport, {
   timeout: 600_000,
 });
+
+/** Diagnostic: the beacon stores 0xBE000000 plus a counter on every call; the collector must see its words (frames stay unparsed). */
+async function expectBeaconWords(patched: PatchedSession): Promise<void> {
+  const { session, dk } = patched;
+  await installProbe(patched, 'test/step-beacon');
+  expect((await dk.request(CMD_RESET)).status).toBe(0);
+  let last: Record<string, number> = {};
+  await expect
+    .poll(
+      async () => {
+        last = status((await dk.request(CMD_STATUS)).body);
+        return last.words;
+      },
+      { timeout: 120_000, interval: 2000, message: 'beacon words' },
+    )
+    .toBeGreaterThan(0);
+  await new Promise((resolve) => setTimeout(resolve, 10000));
+  const reply = await dk.request(CMD_STATUS);
+  last = status(reply.body);
+  const hex = [...reply.body].map((x) => x.toString(16).padStart(2, '0')).join('');
+  const log = await dk.readLog();
+  console.log('beacon STATUS', JSON.stringify(last), hex);
+  console.log('beacon STEP_PATCH', JSON.stringify(log.filter((e) => e.kind === LOG_KIND.STEP_PATCH)));
+  // DSP_DIAG chunk 6 carries diagnostic words 24 to 27 (module_step is word 25)
+  const diag = log.filter((e) => e.kind === LOG_KIND.DSP_DIAG && (e.args[0]! & 0xff) === 6);
+  console.log('beacon log size', log.length, 'diag chunk6', diag.length);
+  console.log('beacon module_step', JSON.stringify(diag.map((e) => [e.time, (e.args[2]! >>> 0).toString(16)])));
+  await session.expectNoFault('step beacon');
+}
+
+runtimeTests('the step beacon words reach the collector', expectBeaconWords, { timeout: 300_000 });
