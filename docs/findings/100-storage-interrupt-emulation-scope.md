@@ -481,6 +481,50 @@ full reset, capture/DMA and shared/native delivery remain open. No snapshot
 format, daemon default, SHARC, PCM or hardware change is included; the full merge
 gate remains deferred.
 
+### Shared selection for supplied Device events
+
+**Implemented, bounded [D]:** explicit `Machine::step_device_events` composes
+supplied Device PIT requests and DTIM reference-only CPU requests with real
+storage eSDHC/DMA59 lines and all three banks' software-force bits. The read-only
+`Time::device_event_candidate` requires Device policy, validates DTIM modes,
+combines source masks and makes one existing INTC `hw_candidate` selection.
+Higher level wins, then lower controller number, then higher source number within
+a controller. IMR, nonzero ICR and live CPU IPL defer requests without consuming
+status. PIT source 13 and its INTFRC alias are ORed into one request; clearing
+either assertion alone can leave the shared source pending.
+
+The new route reuses existing storage policy/legacy-DMA/group preflight,
+EMASK/CLMASK/level-7 refusal, DMA cache invalidation and poisoned-entry behavior.
+Invalid DTIM configuration is reported through the named
+`StorageStepError::DeviceTimerRequests` before CPU, queued completions or external
+write invalidations mutate. Each selected boundary enters at most one interrupt,
+then executes one instruction. Entry never acknowledges a source: guest PIF/REF,
+IRQSTAT, CINT and force clearing retain their respective contracts. Existing
+ordinary, eSDHC-only, pair-only and storage/force routes retain their behavior;
+the latter two still exclude supplied timer requests.
+
+The targeted run passes **66 tests**: 44 machine cases, 13 INTC cases, and nine
+peripheral Device-event tests also selected by Cargo's shared target names. Five
+new machine cases cover simultaneous DTIM/storage/PIT/force priority, masking/
+ICR/IPL, repeated status until acknowledgement, PIT/force alias clearing in both
+orders, old-route exclusion and read-only invalid-mode/controller/level-7
+preflight. Existing prerequisite tests also cover the new route, and the queued
+DMA cache test now covers its entry and normal-instruction paths. Advancing the
+machine instruction clock after acknowledgement creates no automatic ticks.
+All **five** unchanged actual-firmware storage tests pass with both exact input
+opt-ins. This rerun preserves the prior ISR/scheduler/prefix proofs; it is not
+actual-firmware acceptance of the new supplied-event stepping method.
+
+Commands, environment and source/input hashes are recorded in
+`out/runs/storage-fault-proof/device-event-arbitration-invocation.json`; logs are
+`device-event-arbitration-tests.log` and
+`device-event-arbitration-firmware-tests.log` in the same directory. Independent
+review found no issues; coordinator scoped path/layer and whitespace checks passed.
+Automatic timing/rearming,
+physical SSI/DSPI, host input, execution batching and the native runtime remain
+outside this supported subset. No default policy, snapshot format, SHARC, PCM or
+hardware changes are included; the full merge gate remains deferred.
+
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in

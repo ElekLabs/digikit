@@ -612,3 +612,21 @@ coordinator verification passed; the full gate remains deferred.
 Repeated non-1588 REF rearming, timing/reset and shared/native arbitration remain
 open. Storage/force stepping still excludes timer requests. See
 [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+
+## Shared supplied-event selection — 2026-10-31
+
+Explicit `Machine::step_device_events` now combines supplied PIT/DTIM reference
+requests, storage lines and all software-force bits through one INTC candidate.
+It shares storage preflight/entry/cache handling and refuses invalid DTIM modes
+before queued effects mutate. Entry preserves status; PIT and force aliases
+remain pending until both assertions clear. Existing stepping routes are unchanged.
+
+The targeted 66 tests and all five unchanged actual-firmware tests pass with both
+exact firmware inputs. Commands/environment/hashes/logs are under ignored
+`out/runs/storage-fault-proof/device-event-arbitration*`. Independent review and
+coordinator verification passed; the full gate remains deferred.
+
+This explicit subset advances no timers. Timing/rearming, physical SSI/DSPI,
+host input, batching and native integration remain open; the firmware rerun proves
+regression preservation rather than new-route firmware acceptance. See
+[finding 100](../findings/100-storage-interrupt-emulation-scope.md).

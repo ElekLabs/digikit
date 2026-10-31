@@ -271,9 +271,33 @@ impl Time {
         self.intc.hw_candidate([(0, 0), (0, 0), (low, 0)])
     }
 
+    /// Select once across supplied Device PIT/DTIM reference events, storage
+    /// lines and all software-force sources. Requires Device timer policy and
+    /// supported DTIM reference modes. No clock advancement, SR mutation or
+    /// acknowledgement occurs. Physical SSI/DSPI and host input are not included.
+    pub fn device_event_candidate(
+        &self,
+        esdhc: bool,
+        dma: bool,
+    ) -> Result<Option<(u16, u8)>, DeviceDtimError> {
+        let dtim = self.device_dtim_reference_requests()?;
+        let mut asserted = [(0, 0), (0, 0), ((u32::from(esdhc) << 31) | u32::from(dma), 0)];
+        // DTIM0..3 vectors 96..99 are INTC0 high sources 32..35.
+        for vector in dtim {
+            asserted[0].1 |= 1 << (vector - 96);
+        }
+        // PIT0..3 vectors 205..208 are INTC2 low sources 13..16.
+        // hw_candidate ORs INTFRC with these masks, deduplicating aliases.
+        for vector in self.pit.device_pending_vectors() {
+            asserted[2].0 |= 1 << (vector - 192);
+        }
+        Ok(self.intc.hw_candidate(asserted))
+    }
+
     /// Supply a Device PIT timeout event without clock advancement or delivery.
     /// PIF latches independently of EN/PIE. Invalid policy/channel rejects before
-    /// register or cache mutation; this does not participate in storage arbitration.
+    /// register or cache mutation. The supplied status participates only when
+    /// Machine::step_device_events is selected; storage-only routes exclude it.
     pub fn device_pit_timeout(&mut self, channel: usize) -> Result<(), DevicePitError> {
         if self.policy != TimerPolicy::Device {
             return Err(DevicePitError::DevicePolicyRequired);
@@ -308,7 +332,8 @@ impl Time {
     }
 
     /// Raw Device DTIM reference-only CPU requests; capture delivery, DMA
-    /// execution, timing and storage arbitration remain outside this component.
+    /// execution and timing remain outside this component. The supplied requests
+    /// participate in Machine::step_device_events, not storage-only routes.
     pub fn device_dtim_reference_requests(&self) -> Result<Vec<u16>, DeviceDtimError> {
         if self.policy != TimerPolicy::Device {
             return Err(DeviceDtimError::DevicePolicyRequired);

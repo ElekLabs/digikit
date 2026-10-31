@@ -11,7 +11,7 @@ use crate::{
     Board, CompletionEvent, CompletionPolicy, MachineState,
     host_state::{self, HostStateError},
     state::{MAX_MAPPED_PAGES, PAGE_SIZE},
-    time::{TimeError, TimerPolicy},
+    time::{DeviceDtimError, TimeError, TimerPolicy},
     timer_state::TimerStateError,
 };
 
@@ -83,8 +83,17 @@ pub enum StorageStepError {
     UnsupportedDmaGroupSources { pending: u32 },
     UnsupportedControllerLevelMasking,
     UnsupportedLevel7,
+    /// Invalid or unsupported supplied Device timer request configuration.
+    DeviceTimerRequests(DeviceDtimError),
     Stop(Stop),
     InterruptDeliveryPoisoned { stop: Stop },
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum StorageSources {
+    Pair,
+    Forced,
+    DeviceEvents,
 }
 
 pub struct Machine {
@@ -365,7 +374,7 @@ impl Machine {
     /// a global arbiter and models no DMA errors, abort timing or card recovery.
     /// Existing step/step_esdhc contracts and daemon defaults are unchanged.
     pub fn step_storage(&mut self) -> Result<Vec<CompletionEvent>, StorageStepError> {
-        self.step_storage_internal(false)
+        self.step_storage_internal(StorageSources::Pair)
     }
 
     /// Offer the actual storage lines together with all INTFRC sources across
@@ -377,12 +386,22 @@ impl Machine {
     /// preflight and poisoned-entry
     /// contract as step_storage; callers explicitly select this on each step.
     pub fn step_storage_with_forced(&mut self) -> Result<Vec<CompletionEvent>, StorageStepError> {
-        self.step_storage_internal(true)
+        self.step_storage_internal(StorageSources::Forced)
+    }
+
+    /// Select one interrupt from supplied Device PIT/DTIM reference events,
+    /// actual storage lines and all software-force bits, then execute one
+    /// instruction. Sources persist until guest acknowledgement. This explicit
+    /// supported subset advances no timers and includes no physical SSI/DSPI,
+    /// host input or native runtime integration. Same storage guards and poisoned
+    /// entry contract; invalid timer modes reject before queued effects mutate.
+    pub fn step_device_events(&mut self) -> Result<Vec<CompletionEvent>, StorageStepError> {
+        self.step_storage_internal(StorageSources::DeviceEvents)
     }
 
     fn step_storage_internal(
         &mut self,
-        include_forced: bool,
+        sources: StorageSources,
     ) -> Result<Vec<CompletionEvent>, StorageStepError> {
         if self.board.completion_policy() != CompletionPolicy::Device {
             return Err(StorageStepError::DeviceCompletionRequired);
@@ -407,11 +426,16 @@ impl Machine {
                 pending: unsupported,
             });
         }
+        let include_forced = sources != StorageSources::Pair;
         if include_forced && !time.storage_forced_config_supported() {
             return Err(StorageStepError::UnsupportedControllerLevelMasking);
         }
         let esdhc = self.board.esdhc.interrupt_pending();
-        let candidate = if include_forced {
+        let candidate = if sources == StorageSources::DeviceEvents {
+            time.device_event_candidate(esdhc, pending != 0)
+                .map_err(StorageStepError::DeviceTimerRequests)?
+                .map(|(vector, level)| (vector as u8, level))
+        } else if include_forced {
             time.storage_with_forced_candidate(esdhc, pending != 0)
                 .map(|(vector, level)| (vector as u8, level))
         } else {

@@ -3100,3 +3100,21 @@ capture/advanced modes, reset transitions and live nonzero CLK changes reject.
 Exact commands/hashes/logs: `out/runs/storage-fault-proof/dtim-device-events*`.
 The handler-prefix proof establishes no complete ISR/RTE or task behavior; the full
 merge gate remains deferred.
+
+### Shared supplied-event selection — 2026-10-31
+
+- [x] Add explicit `Machine::step_device_events`, combining supplied PIT and DTIM
+  reference requests with storage lines and all software-force sources before one
+  shared INTC selection. Reuse storage preflight/entry/cache handling.
+- [x] Pass 66 named tests (44 machine, 13 INTC and nine peripheral event cases
+  selected by the shared Cargo target names), plus all five actual-firmware
+  storage tests with both exact inputs and unchanged fixtures.
+- [x] Independent review found no issues; coordinator scoped path/layer and whitespace checks passed.
+
+Existing stepping routes retain their contracts; only the explicit new method
+includes supplied timer status. Sources persist until guest acknowledgement;
+PIT/force aliases share one source and either assertion can keep it pending.
+Invalid DTIM modes reject before CPU/queued-event/cache-invalidation mutation.
+No automatic timing, physical SSI/DSPI, host input, batching or native integration
+is added. The broader composition milestone remains open. Exact commands/hashes/
+logs: `out/runs/storage-fault-proof/device-event-arbitration*`; full gate deferred.

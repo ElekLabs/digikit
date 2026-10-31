@@ -237,7 +237,8 @@ fn reject_unchanged(m: &mut Machine, error: StorageStepError) {
     let inth = pending(m);
     let status = m.board.read32(esdhc::BASE + esdhc::IRQSTAT).unwrap();
     assert_eq!(m.step_storage(), Err(error.clone()));
-    assert_eq!(m.step_storage_with_forced(), Err(error));
+    assert_eq!(m.step_storage_with_forced(), Err(error.clone()));
+    assert_eq!(m.step_device_events(), Err(error));
     assert_eq!(
         regs,
         (
@@ -306,7 +307,7 @@ fn oracle_interrupt_register_writes_keep_passthrough_behavior() {
 
 #[test]
 fn queued_dma_invalidates_decoded_code_before_handler_or_normal_instruction() {
-    for (deliver, forced) in [(false, false), (true, false), (false, true), (true, true)] {
+    for (deliver, route) in [(false, 0), (true, 0), (false, 1), (true, 1), (false, 2), (true, 2)] {
         let mut m = device();
         let mut payload = [0u8; 512];
         payload[..2].copy_from_slice(&0x7002u16.to_be_bytes()); // MOVEQ #2,D0
@@ -327,11 +328,12 @@ fn queued_dma_invalidates_decoded_code_before_handler_or_normal_instruction() {
         } else {
             m.board.write8(INTC + 0x1c, 0).unwrap();
         }
-        if forced {
-            m.step_storage_with_forced().unwrap();
-        } else {
-            m.step_storage().unwrap();
-        }
+        match route {
+            0 => m.step_storage().unwrap(),
+            1 => m.step_storage_with_forced().unwrap(),
+            2 => m.step_device_events().unwrap(),
+            _ => unreachable!(),
+        };
         assert_eq!(m.cpu.d[0], 2);
         assert_eq!(m.irqs_delivered, u64::from(deliver));
     }
@@ -535,4 +537,228 @@ fn forced_entry_failure_is_poisoned() {
     ));
     assert_eq!(m.irqs_delivered, 0);
     assert_eq!(m.clock, 0);
+}
+
+fn supplied_timer(m: &mut Machine, pit: bool, channel: usize, level: u8) -> u32 {
+    let (bank, source, base) = if pit {
+        (2, 13 + channel as u32, periph::pit::BASES[channel])
+    } else {
+        (0, 32 + channel as u32, periph::dtim::BASES[channel])
+    };
+    forced_source(m, bank, source, level);
+    m.board.write16(base, if pit { 8 } else { 0x001d }).unwrap();
+    if pit {
+        m.board
+            .time_mut()
+            .unwrap()
+            .device_pit_timeout(channel)
+            .unwrap();
+    } else {
+        m.board
+            .time_mut()
+            .unwrap()
+            .device_dtim_reference(channel)
+            .unwrap();
+    }
+    let handler = RAM + 0x2200 + (u32::from(pit) * 4 + channel as u32) * 0x10;
+    let vector = u32::from(intc::VECTOR_BASE[bank]) + source;
+    m.board.write32(RAM + vector * 4, handler).unwrap();
+    m.board.write16(handler, 0x4e71).unwrap();
+    m.board.write16(handler + 2, 0x4e73).unwrap();
+    handler
+}
+
+#[test]
+fn supplied_events_share_level_bank_and_source_priority_with_storage_and_force() {
+    for winner in ["level", "bank", "source", "storage"] {
+        let mut m = device();
+        read_dma(&mut m, true);
+        let pit = supplied_timer(&mut m, true, 3, if winner == "level" { 4 } else { 3 });
+        let dtim0 = supplied_timer(&mut m, false, 0, 3);
+        let dtim3 = supplied_timer(&mut m, false, 3, 3);
+        let force = forced_source(&mut m, 1, 20, 3);
+        m.board.write32(force, 1 << 20).unwrap();
+        if winner == "bank" {
+            m.board.write8(periph::dtim::BASES[3] + 3, 2).unwrap();
+        }
+        if winner == "storage" {
+            for channel in [0, 3] {
+                m.board.write8(periph::dtim::BASES[channel] + 3, 2).unwrap();
+            }
+            m.board.write32(force, 0).unwrap();
+        }
+        let handler = match winner {
+            "level" => pit,
+            "bank" => dtim0,
+            "source" => dtim3,
+            "storage" => SD_HANDLER, // source31 outranks PIT3 source16 and DMA0
+            _ => unreachable!(),
+        };
+        m.step_device_events().unwrap();
+        assert_eq!(m.cpu.pc, handler + 2, "{winner}");
+        assert_eq!(m.irqs_delivered, 1); // only one selection at this boundary
+        assert_eq!(m.clock, 1);
+        assert_eq!(m.board.read16(periph::pit::BASES[3]).unwrap() & 4, 4);
+        assert_eq!(pending(&mut m), DMA59);
+    }
+}
+
+#[test]
+fn supplied_timer_mask_icr_and_ipl_defer_then_status_reasserts_until_ack() {
+    for pit in [false, true] {
+        let mut m = device();
+        let handler = supplied_timer(&mut m, pit, 0, 3);
+        let (bank, source) = if pit { (2, 13) } else { (0, 32) };
+        let mask = intc::BASES[bank] + if source < 32 { 0x0c } else { 8 };
+        let icr = intc::BASES[bank] + 0x40 + source;
+        m.board.write32(mask, u32::MAX).unwrap();
+        m.step_device_events().unwrap();
+        assert_eq!(m.irqs_delivered, 0);
+        m.board.write32(mask, !(1 << (source % 32))).unwrap();
+        m.board.write8(icr, 0).unwrap();
+        m.step_device_events().unwrap();
+        assert_eq!(m.irqs_delivered, 0);
+        m.board.write8(icr, 3).unwrap();
+        m.cpu.sr = 0x2300;
+        m.step_device_events().unwrap();
+        assert_eq!(m.irqs_delivered, 0);
+        m.cpu.sr = 0x2000;
+        m.step_device_events().unwrap();
+        assert_eq!(m.cpu.pc, handler + 2);
+        m.step_device_events().unwrap(); // RTE, same-level request blocked at entry
+        m.step_device_events().unwrap(); // status still asserted
+        assert_eq!(m.cpu.pc, handler + 2);
+        assert_eq!(m.irqs_delivered, 2);
+        if pit {
+            m.board.write16(periph::pit::BASES[0], 12).unwrap();
+        } else {
+            m.board.write8(periph::dtim::BASES[0] + 3, 2).unwrap();
+        }
+        m.step_device_events().unwrap(); // RTE
+        m.clock = 1_000_000; // elapsed instructions do not synthesize timer events
+        let resume = m.cpu.pc;
+        m.step_device_events().unwrap();
+        assert_eq!(m.cpu.pc, resume + 2);
+        assert_eq!(m.irqs_delivered, 2);
+        assert!(
+            m.board
+                .time()
+                .unwrap()
+                .device_pit_requests()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            m.board
+                .time()
+                .unwrap()
+                .device_dtim_reference_requests()
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn existing_pair_and_forced_routes_exclude_supplied_physical_timers() {
+    let mut m = device();
+    supplied_timer(&mut m, true, 0, 3);
+    let dtim = supplied_timer(&mut m, false, 0, 3);
+    m.step_storage().unwrap();
+    m.step_storage_with_forced().unwrap();
+    assert_eq!(m.irqs_delivered, 0);
+    m.step_device_events().unwrap();
+    assert_eq!(m.cpu.pc, dtim + 2);
+    assert_eq!(m.irqs_delivered, 1);
+}
+
+#[test]
+fn physical_pit_and_software_force_alias_one_entry_until_both_acknowledged() {
+    for clear_force_first in [false, true] {
+        let mut m = device();
+        let handler = supplied_timer(&mut m, true, 0, 3);
+        let force = INTC + 0x14;
+        m.board.write32(force, 1 << 13).unwrap();
+        m.step_device_events().unwrap();
+        assert_eq!(m.cpu.pc, handler + 2);
+        assert_eq!(m.irqs_delivered, 1);
+        if clear_force_first {
+            m.board.write32(force, 0).unwrap();
+        } else {
+            m.board.write16(periph::pit::BASES[0], 12).unwrap();
+        }
+        m.step_device_events().unwrap(); // RTE
+        m.step_device_events().unwrap();
+        assert_eq!(m.cpu.pc, handler + 2);
+        assert_eq!(m.irqs_delivered, 2);
+        if clear_force_first {
+            m.board.write16(periph::pit::BASES[0], 12).unwrap();
+        } else {
+            m.board.write32(force, 0).unwrap();
+        }
+        m.step_device_events().unwrap(); // RTE
+        m.step_device_events().unwrap();
+        assert_eq!(m.irqs_delivered, 2);
+    }
+}
+
+#[test]
+fn supplied_event_preflight_rejects_modes_before_cpu_events_or_cache_effects() {
+    for rejection in ["dtim", "level7", "emask", "clmask"] {
+        let mut m = device();
+        m.board.write16(DEST, 0x7001).unwrap();
+        m.cpu.pc = DEST;
+        m.cpu.step(&mut m.board).unwrap();
+        assert!(m.cpu.decoded_at(DEST));
+        read_dma(&mut m, true); // queue external write invalidation and completion
+        supplied_timer(&mut m, true, 0, if rejection == "level7" { 7 } else { 3 });
+        let error = match rejection {
+            "dtim" => {
+                let mut page = [0; 16];
+                page[2] = 0x20; // unsupported EN1588 loaded by a checkpoint
+                m.board
+                    .time_mut()
+                    .unwrap()
+                    .load_page(periph::dtim::BASES[3], &page);
+                StorageStepError::DeviceTimerRequests(machine::DeviceDtimError::UnsupportedMode {
+                    channel: 3,
+                })
+            }
+            "level7" => StorageStepError::UnsupportedLevel7,
+            "emask" => {
+                m.board.write16(intc::BASES[0] + 0x1a, 1 << 5).unwrap();
+                StorageStepError::UnsupportedControllerLevelMasking
+            }
+            "clmask" => {
+                m.board.write8(intc::BASES[0] + 0x1e, 3).unwrap();
+                StorageStepError::UnsupportedControllerLevelMasking
+            }
+            _ => unreachable!(),
+        };
+        let before = (
+            m.cpu.pc,
+            m.cpu.sr,
+            m.cpu.a,
+            m.cpu.d,
+            m.clock,
+            m.irqs_delivered,
+        );
+        let events = m.board.completion_events().to_vec();
+        assert_eq!(m.step_device_events(), Err(error));
+        assert_eq!(
+            (
+                m.cpu.pc,
+                m.cpu.sr,
+                m.cpu.a,
+                m.cpu.d,
+                m.clock,
+                m.irqs_delivered
+            ),
+            before
+        );
+        assert_eq!(m.board.completion_events(), events);
+        assert_eq!(pending(&mut m), DMA59);
+        assert!(m.cpu.decoded_at(DEST));
+        assert!(!m.board.take_dma_written_ranges().is_empty());
+    }
 }
