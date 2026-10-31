@@ -298,6 +298,8 @@ impl Machine {
         for (addr, len) in self.board.take_dma_written_ranges() {
             self.cpu.invalidate_external_write(addr, len);
         }
+        // Machine owns this invalidation pass; consume its paired diagnostic tags.
+        let _ = self.board.take_dma_sources();
         let mut new_events = self.board.take_completion_events();
         for event in &new_events {
             if let CompletionEvent::Dma59 {
@@ -390,9 +392,9 @@ impl Machine {
     }
 
     /// Select one interrupt from supplied Device PIT/DTIM reference events,
-    /// actual storage lines and all software-force bits, then execute one
+    /// actual storage lines, SSI50 and all software-force bits, then execute one
     /// instruction. Sources persist until guest acknowledgement. This explicit
-    /// supported subset advances no timers and includes no physical SSI/DSPI,
+    /// supported subset advances no timers or SSI service and includes no DSPI,
     /// host input or native runtime integration. Same storage guards and poisoned
     /// entry contract; invalid timer modes reject before queued effects mutate.
     pub fn step_device_events(&mut self) -> Result<Vec<CompletionEvent>, StorageStepError> {
@@ -432,7 +434,7 @@ impl Machine {
         }
         let esdhc = self.board.esdhc.interrupt_pending();
         let candidate = if sources == StorageSources::DeviceEvents {
-            time.device_event_candidate(esdhc, pending != 0)
+            time.device_event_candidate(esdhc, pending != 0, self.board.device_ssi50_pending())
                 .map_err(StorageStepError::DeviceTimerRequests)?
                 .map(|(vector, level)| (vector as u8, level))
         } else if include_forced {
@@ -461,6 +463,8 @@ impl Machine {
         for (addr, len) in self.board.take_dma_written_ranges() {
             self.cpu.invalidate_external_write(addr, len);
         }
+        // Machine owns this invalidation pass; consume its paired diagnostic tags.
+        let _ = self.board.take_dma_sources();
         if let Some((vector, level)) = candidate
             && ((self.cpu.sr >> 8) & 7) < u16::from(level)
             && self

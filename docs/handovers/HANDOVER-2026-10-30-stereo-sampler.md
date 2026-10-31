@@ -630,3 +630,24 @@ This explicit subset advances no timers. Timing/rearming, physical SSI/DSPI,
 host input, batching and native integration remain open; the firmware rerun proves
 regression preservation rather than new-route firmware acceptance. See
 [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+
+## Device SSI50 latch and shared selection — 2026-10-31
+
+Successful explicitly supplied Device SSI TX50 major completions with original
+INT_MAJOR now latch sticky/coalescing INTH bit 18. Only `step_device_events`
+includes that raw vector-170 source; CPU entry preserves it until guest CINT or
+INTH W1C acknowledgement. Force 191 remains independent. Oracle SSI and the old
+storage routes are unchanged; no automatic SSI service or native policy enabled.
+
+Device acknowledgements synchronize SSI diagnostics; CINT NOP also preserves
+legacy DSPI pending state. Device RX ranges queue decode invalidation and paired
+tags; Machine drains both on successful ownership while rejected preflight keeps
+them. All 61 named machine tests and five unchanged firmware tests pass with
+both exact inputs. Independent review found no issues; coordinator scoped
+path/layer and whitespace checks passed. Correct-target final commands/hashes/logs and the separately archived
+nonfinal mistargeted attempt are recorded under ignored
+`out/runs/storage-fault-proof/device-ssi-events*`.
+
+Native SSI/service batching, automatic timer semantics, DSPI/host-input delivery
+and full fault-history acceptance remain open; full gate deferred. See
+[finding 100](../findings/100-storage-interrupt-emulation-scope.md).

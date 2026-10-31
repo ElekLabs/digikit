@@ -525,6 +525,54 @@ physical SSI/DSPI, host input, execution batching and the native runtime remain
 outside this supported subset. No default policy, snapshot format, SHARC, PCM or
 hardware changes are included; the full merge gate remains deferred.
 
+### Device SSI50 latch and shared supplied-event selection
+
+**Implemented, bounded [D]:** explicitly supplied `Board::service_ssi` in Device
+mode now ORs eDMA INTH bit 18 after a successful TX50 major completion whose
+original descriptor requested INT_MAJOR, even when scatter/gather writeback
+replaces its CSR before latching. MCF5441XRM p0380 defines the sticky interrupt bit:
+multiple major completions coalesce until guest acknowledgement, without a
+per-completion IRQ queue. Non-major, non-INT_MAJOR and failed preflight requests
+create no new latch. Existing SSI scheduling and Oracle behavior are preserved.
+
+The raw Device latch participates as INTC1 source 42/vector 170 only through
+`step_device_events`, alongside PIT/DTIM reference requests, storage and force
+bits. The method still makes one shared selection, and CPU entry neither clears
+INTH nor consumes Oracle SSI diagnostic delivery flags. Unacknowledged status can
+reassert after RTE. Software-force vector 191 remains its existing INTFRC source,
+independent of SSI50; no second physical vector-191 request is synthesized.
+Existing pair/storage-force methods continue to exclude physical SSI50.
+
+Device CINT50/CAIR and contained INTH W1C acknowledgement clear the latch and
+synchronize SSI asserted/delivered diagnostics without clearing unrelated bits.
+SSI's existing callback already honors NOP; the Device Board path additionally
+returns before legacy callbacks because DSPI's Oracle callback lacks a NOP check.
+NOP and NOP|CAIR preserve SSI, INTH and queued DSPI completions; Oracle callback
+behavior is unchanged. Device RX ranges remain returned to the caller and are
+also queued for the existing DMA invalidation path with paired source tags.
+Machine drains tags whenever it owns invalidation, both before shared entry and
+after ordinary stepping; rejected preflight preserves both queues.
+
+All **61 named machine tests** pass: ten SSI, 23 storage pair/shared-selection,
+four runner, nine eSDHC, two PIT, two DTIM and eleven Time cases. New coverage
+uses real SSI minor service for major/non-major and original-CSR/SG latching,
+coalescence, failed preflight, CINT/CAIR/NOP/partial-W1C state and unrelated-bit
+preservation. Mixed-source tests cover SSI with timer/storage/force priority,
+reassertion, independent force-191 clearing, Device RX decode invalidation and
+repeated stepping without accumulating diagnostic tags. All **five unchanged
+actual-firmware tests** pass with both exact DT2 1.17 and DN2 1.12 inputs. This
+is regression preservation, not actual-firmware SSI/shared-route acceptance.
+
+Final correct-target commands, environment and source/input hashes are in
+`out/runs/storage-fault-proof/device-ssi-events-invocation.json`; final logs are
+`device-ssi-events-tests.log` and `device-ssi-events-firmware-tests.log` in that
+directory. An initial mistargeted build is separately archived as nonfinal in
+the metadata and is not used for these results. Independent review found no
+issues; coordinator scoped path/layer and whitespace checks passed. The caller explicitly services
+SSI: no automatic SSI clock, native service/batching policy, DSPI or host-input
+delivery, default policy, snapshot format, SHARC, PCM or hardware change is added.
+The full merge gate remains deferred.
+
 ### C — Explicit opt-in daemon and bounded fault-history proof
 
 Unstarted and not approved by this checkpoint. Before exposing explicit opt-in

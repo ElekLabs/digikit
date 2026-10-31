@@ -760,5 +760,147 @@ fn supplied_event_preflight_rejects_modes_before_cpu_events_or_cache_effects() {
         assert_eq!(pending(&mut m), DMA59);
         assert!(m.cpu.decoded_at(DEST));
         assert!(!m.board.take_dma_written_ranges().is_empty());
+        assert_eq!(m.board.take_dma_sources(), ["esdhc-dma59"]);
+    }
+}
+
+fn supplied_ssi50(m: &mut Machine, level: u8) -> u32 {
+    let base = edma::TCD_BASE + (periph::ssi::TX_CHAN * 0x20) as u32;
+    m.board.write16(base + edma::ATTR as u32, 0x0202).unwrap();
+    m.board.write32(base + edma::NBYTES as u32, 4).unwrap();
+    m.board
+        .write32(base + edma::SADDR as u32, DEST + 0x200)
+        .unwrap();
+    m.board.write16(base + edma::SOFF as u32, 4).unwrap();
+    m.board.write16(base + edma::CITER as u32, 1).unwrap();
+    m.board.write16(base + edma::BITER as u32, 1).unwrap();
+    m.board
+        .write16(base + edma::CSR as u32, edma::CSR_INT_MAJOR)
+        .unwrap();
+    m.board
+        .enable_ssi_diagnostic(periph::ssi::AUDIO_SSI0_REQUEST_HZ, 132_000_000);
+    m.board.write8(edma::SERQ, 50).unwrap();
+    let due = m.board.ssi_deadline(0).unwrap();
+    m.board.service_ssi(due);
+    assert!(m.board.device_ssi50_pending());
+    forced_source(m, 1, 42, level);
+    let handler = RAM + 0x2300;
+    m.board.write32(RAM + 170 * 4, handler).unwrap();
+    m.board.write16(handler, 0x4e71).unwrap();
+    m.board.write16(handler + 2, 0x4e73).unwrap();
+    handler
+}
+
+#[test]
+fn shared_selection_orders_ssi50_with_timers_storage_and_force191() {
+    for winner in ["level", "bank", "source", "physical"] {
+        let mut m = device();
+        read_dma(&mut m, true);
+        supplied_timer(&mut m, true, 0, 3);
+        let dtim = supplied_timer(&mut m, false, 0, 3);
+        let ssi = supplied_ssi50(&mut m, if winner == "level" { 4 } else { 3 });
+        let force = forced_source(&mut m, 1, 63, 3);
+        m.board.write32(force, 1 << 31).unwrap();
+        if matches!(winner, "source" | "physical") {
+            m.board.write8(periph::dtim::BASES[0] + 3, 2).unwrap();
+        }
+        if winner == "physical" {
+            m.board.write32(force, 0).unwrap();
+        }
+        let handler = match winner {
+            "level" | "physical" => ssi,
+            "bank" => dtim,
+            "source" => DMA_HANDLER, // force191 outranks SSI170 within INTC1
+            _ => unreachable!(),
+        };
+        m.step_device_events().unwrap();
+        assert_eq!(m.cpu.pc, handler + 2, "{winner}");
+        assert_eq!(m.irqs_delivered, 1);
+        assert!(m.board.device_ssi50_pending());
+    }
+}
+
+#[test]
+fn ssi50_persists_across_entry_and_rte_and_force191_acknowledges_independently() {
+    let mut m = device();
+    let ssi = supplied_ssi50(&mut m, 3);
+    m.step_storage().unwrap();
+    m.step_storage_with_forced().unwrap();
+    assert_eq!(m.irqs_delivered, 0);
+    // Oracle diagnostic delivery suppression must not hide the Device latch.
+    m.board.dma.ssi.as_mut().unwrap().mark_vector170_delivered();
+    m.step_device_events().unwrap();
+    assert_eq!(m.cpu.pc, ssi + 2);
+    m.step_device_events().unwrap(); // RTE
+    m.step_device_events().unwrap();
+    assert_eq!(m.cpu.pc, ssi + 2);
+    assert_eq!(m.irqs_delivered, 2);
+    let force = forced_source(&mut m, 1, 63, 3);
+    m.board.write32(force, 1 << 31).unwrap();
+    m.board.write8(edma::CINT, 50).unwrap();
+    assert!(!m.board.device_ssi50_pending());
+    assert!(m.board.dma.ssi.as_ref().unwrap().vector191_owed());
+    m.step_device_events().unwrap(); // RTE from SSI
+    m.step_device_events().unwrap();
+    assert_eq!(m.cpu.pc, DMA_HANDLER + 2);
+    assert_eq!(m.irqs_delivered, 3);
+    m.board.write32(force, 0).unwrap();
+    m.step_device_events().unwrap(); // RTE
+    let resume = m.cpu.pc;
+    m.step_device_events().unwrap();
+    assert_eq!(m.cpu.pc, resume + 2);
+    assert_eq!(m.irqs_delivered, 3);
+    assert!(!m.board.device_ssi50_pending());
+}
+
+#[test]
+fn device_ssi_rx_ranges_invalidate_cached_code_before_shared_entry_or_execution() {
+    for (deliver, shared) in [(false, false), (false, true), (true, true)] {
+        let mut m = device();
+        m.board.write16(DEST, 0x7001).unwrap();
+        m.cpu.pc = DEST;
+        m.cpu.step(&mut m.board).unwrap();
+        assert!(m.cpu.decoded_at(DEST));
+        m.cpu.pc = CODE;
+        let ssi_handler = supplied_ssi50(&mut m, 3);
+        let base = edma::TCD_BASE + (periph::ssi::RX_CHAN * 0x20) as u32;
+        m.board.write16(base + edma::ATTR as u32, 0x0202).unwrap();
+        m.board.write32(base + edma::NBYTES as u32, 4).unwrap();
+        m.board.write32(base + edma::DADDR as u32, DEST).unwrap();
+        m.board.write16(base + edma::DOFF as u32, 4).unwrap();
+        m.board.write16(base + edma::CITER as u32, 1).unwrap();
+        m.board.write16(base + edma::BITER as u32, 1).unwrap();
+        m.board.write8(edma::SERQ, 48).unwrap();
+        let due = m.board.ssi_deadline(0).unwrap();
+        assert_eq!(m.board.service_ssi(due), vec![(DEST, 4)]);
+        assert_eq!(
+            m.board.read32(DEST).unwrap(),
+            periph::ssi::RxHandoverPeer::MARKER
+        );
+        assert!(m.cpu.decoded_at(DEST)); // board writes alone cannot evict CPU decode
+        if !deliver {
+            m.board.write32(intc::BASES[1] + 8, u32::MAX).unwrap();
+        }
+        if shared {
+            m.step_device_events().unwrap();
+        } else {
+            m.step().unwrap();
+        }
+        assert!(!m.cpu.decoded_at(DEST));
+        assert!(m.board.take_dma_written_ranges().is_empty());
+        assert_eq!(m.cpu.pc, if deliver { ssi_handler + 2 } else { CODE + 2 });
+        assert_eq!(m.irqs_delivered, u64::from(deliver));
+        assert!(m.board.take_dma_sources().is_empty());
+        for _ in 0..3 {
+            let due = m.board.ssi_deadline(due).unwrap();
+            assert_eq!(m.board.service_ssi(due).len(), 1);
+            if shared {
+                m.step_device_events().unwrap();
+            } else {
+                m.step().unwrap();
+            }
+            assert!(m.board.take_dma_written_ranges().is_empty());
+            assert!(m.board.take_dma_sources().is_empty());
+        }
     }
 }

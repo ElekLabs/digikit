@@ -271,17 +271,23 @@ impl Time {
         self.intc.hw_candidate([(0, 0), (0, 0), (low, 0)])
     }
 
-    /// Select once across supplied Device PIT/DTIM reference events, storage
-    /// lines and all software-force sources. Requires Device timer policy and
+    /// Select once across supplied Device PIT/DTIM reference events, storage,
+    /// eDMA SSI50 and all software-force sources. Requires Device timer policy and
     /// supported DTIM reference modes. No clock advancement, SR mutation or
-    /// acknowledgement occurs. Physical SSI/DSPI and host input are not included.
+    /// acknowledgement occurs. No automatic SSI service, DSPI or host input.
     pub fn device_event_candidate(
         &self,
         esdhc: bool,
         dma: bool,
+        ssi50: bool,
     ) -> Result<Option<(u16, u8)>, DeviceDtimError> {
         let dtim = self.device_dtim_reference_requests()?;
-        let mut asserted = [(0, 0), (0, 0), ((u32::from(esdhc) << 31) | u32::from(dma), 0)];
+        // SSI50 is INTC1 source 42/vector 170, not software-force source 63.
+        let mut asserted = [
+            (0, 0),
+            (0, u32::from(ssi50) << 10),
+            ((u32::from(esdhc) << 31) | u32::from(dma), 0),
+        ];
         // DTIM0..3 vectors 96..99 are INTC0 high sources 32..35.
         for vector in dtim {
             asserted[0].1 |= 1 << (vector - 96);

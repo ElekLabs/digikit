@@ -3118,3 +3118,22 @@ Invalid DTIM modes reject before CPU/queued-event/cache-invalidation mutation.
 No automatic timing, physical SSI/DSPI, host input, batching or native integration
 is added. The broader composition milestone remains open. Exact commands/hashes/
 logs: `out/runs/storage-fault-proof/device-event-arbitration*`; full gate deferred.
+
+### Device SSI50 latch and shared selection — 2026-10-31
+
+- [x] Latch qualifying supplied SSI TX50 major completions in sticky/coalescing
+  INTH bit 18 after successful service; include vector 170 only in explicit
+  shared Device-event selection. Queue Device RX invalidation ranges.
+- [x] Synchronize CINT/CAIR/INTH W1C acknowledgement with SSI diagnostics;
+  Device CINT NOP returns before legacy callbacks, preserving pending DSPI too.
+  Machine consumes paired invalidation tags only when draining their ranges.
+- [x] Pass 61 named machine tests and all five unchanged actual-firmware storage
+  tests with both exact inputs; independent review found no issues.
+- [x] Coordinator scoped path/layer and whitespace checks passed.
+
+Oracle scheduling/delivery and existing storage routes remain unchanged. The
+caller explicitly supplies due SSI service; no automatic SSI clock, native
+service/batching policy, DSPI or host-input delivery is enabled. Correct-target
+final commands/hashes/logs: `out/runs/storage-fault-proof/device-ssi-events*`.
+A mistargeted initial build is separately archived and not final validation;
+metadata records its actual target and archive. The full gate remains deferred.

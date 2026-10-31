@@ -226,6 +226,8 @@ impl Board {
     /// Service one due SSI request using actual mapped guest RAM. Invalid
     /// descriptors and ranges are rejected before any TCD or RAM mutation.
     /// Returned ranges require CPU decode-cache invalidation by the owner.
+    /// Device mode also queues RX ranges and latches qualifying TX50 major
+    /// completions in INTH until guest acknowledgement; no IRQ is delivered here.
     pub fn service_ssi(&mut self, done: u64) -> Vec<(u32, usize)> {
         // Called after every interpreted instruction: decide "not due"
         // without moving the (large) SSI state out of and back into the Option.
@@ -347,6 +349,10 @@ impl Board {
                     let _ = self.ram_write(result.dest_addr + offset as u32, 1, u32::from(byte));
                 }
                 writes.push((result.dest_addr, n));
+                if self.policy == CompletionPolicy::Device {
+                    self.dma_written.push((result.dest_addr, n));
+                    self.dma_sources.push("ssi0-rx");
+                }
             } else {
                 ssi.tx_bytes += n as u64;
             }
@@ -358,6 +364,16 @@ impl Board {
                             .set_u8_at(edma::tcd_offset(channel) + offset, byte);
                     }
                 }
+            }
+            if self.policy == CompletionPolicy::Device
+                && channel == ssi::TX_CHAN
+                && result.major_complete
+                && plan.tcd.csr & edma::CSR_INT_MAJOR != 0
+            {
+                // MCF5441XRM p0380: one sticky request bit, not a completion queue.
+                // All payload and TCD/SG writeback above has completed.
+                let pending = self.dma.edma_regs.read(edma::INTH, 4);
+                self.dma.edma_regs.write(edma::INTH, 4, pending | (1 << 18));
             }
         }
         ssi.requests += 1;
@@ -879,16 +895,24 @@ impl Board {
         self.dma.edma_regs.read(edma::INTH, 4) & 0xff00_0000
     }
 
+    /// Raw Device eDMA channel-50 request, independent of SSI Oracle delivery
+    /// diagnostics and INTC/CPU eligibility. Entry does not clear this latch.
+    pub fn device_ssi50_pending(&self) -> bool {
+        self.policy == CompletionPolicy::Device
+            && self.dma.edma_regs.read(edma::INTH, 4) & (1 << 18) != 0
+    }
+
     pub fn completion_policy(&self) -> CompletionPolicy {
         self.policy
     }
     /// External DMA invalidates these CPU decode pages before the next
-    /// instruction fetch; only successful card-to-guest transfers appear.
+    /// instruction fetch; successful DMA writes, including Device SSI RX, appear.
     pub fn take_dma_written_ranges(&mut self) -> Vec<(u32, usize)> {
         std::mem::take(&mut self.dma_written)
     }
     /// The engine of each range the last `take_dma_written_ranges` returned,
-    /// in order (take it second; for the write-watch).
+    /// in order (take it second; for the write-watch). Machine consumes these
+    /// paired tags when it owns invalidation; they are not retained after stepping.
     pub fn take_dma_sources(&mut self) -> Vec<&'static str> {
         std::mem::take(&mut self.dma_sources)
     }
@@ -1577,12 +1601,27 @@ impl Board {
                     return Err(BoardWriteError::Bus(Self::bus_error(addr, true)));
                 }
                 self.bump_epoch(addr);
+                let ssi_pending = self.device_ssi50_pending();
                 let pending = self.dma.edma_regs.read(addr, size);
                 self.dma.edma_regs.write(addr, size, pending & !value);
+                if ssi_pending && !self.device_ssi50_pending()
+                    && let Some(ssi) = self.dma.ssi.as_mut()
+                {
+                    ssi.on_cint(ssi::TX_CHAN as u8);
+                }
                 return Ok(());
             }
             if !Self::in_dsp_port(addr) {
                 self.bump_epoch(addr);
+            }
+            // Device CINT NOP precedes all legacy callbacks (including DSPI's
+            // callback, which intentionally retains its Oracle behavior).
+            if self.policy == CompletionPolicy::Device
+                && addr == edma::CINT
+                && size == 1
+                && value as u8 & 0x80 != 0
+            {
+                return Ok(());
             }
             let tx35_citer =
                 edma::TcdView::new(&mut self.dma.edma_regs, self.dma.tx35.chan).citer();
