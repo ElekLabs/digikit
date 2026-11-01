@@ -149,8 +149,8 @@ The earlier estimate of 80 boots per device reduced to nine is unsupported and i
 | --- | ---: | ---: | ---: |
 | [fx](../../tools/patchkit/pk_digikit_fx.py) line 312 | 4 | 4 | 1 |
 | [fxsend](../../tools/patchkit/pk_digikit_fxsend.py) line 192 | 5 | 8 | 0 |
-| [fxroute](../../tools/patchkit/pk_digikit_fxroute.py) line 558 | 11 | 11 | 0 |
-| [fxroutes](../../tools/patchkit/pk_digikit_fxroutes.py) line 637 | 8 | 8 | 2 |
+| fxroute (retired runner, historical line 558) | 11 | 11 | 0 |
+| fxroutes (retired runner, historical line 637) | 8 | 8 | 2 |
 | [fxpage](../../tools/patchkit/pk_digikit_fxpage.py) line 513 | 3 | 3 | 1 |
 | [fxpersist](../../tools/patchkit/pk_digikit_fxpersist.py) line 275 | 1 | 1 | 0 |
 | [fxshift](../../tools/patchkit/pk_digikit_fxshift.py) line 499 | 4 | 4 | 0 |

@@ -2641,3 +2641,15 @@ def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
         "runtime/fx-send.test.ts",
         "runtime/fx-track-route.test.ts",
     ]
+
+
+@pytest.mark.parametrize("helper", ["pk_digikit_fxroute.py", "pk_digikit_fxroutes.py"])
+def test_retired_route_runners_keep_narrow_python_and_typescript_owners(
+    helper: str,
+) -> None:
+    path = f"tools/patchkit/{helper}"
+    fine = verify_route.runner_fine(path)
+    assert fine is not None
+    assert fine.tests == ()
+    assert fine.steps == ("python-tests",)
+    assert verify_route.acceptance_files("runtime-fixture", [path])

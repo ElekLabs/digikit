@@ -157,6 +157,11 @@ Device suites (`test:stock`, `test:fx*`, `test:runtime`, `test:modules`) also ne
 - DT2 card samples at `out/runs/patchkit/samples`.
 - plusdrive: `test:runtime` builds it through `build:plusdrive`. The gate builds it before samples-live.
 
+FX route and track SEND acceptance runs in `tests/regression/runtime/fx-routes-panel.test.ts`,
+`tests/regression/runtime/fx-routes-persist.test.ts` and `tests/regression/runtime/fx-track-route.test.ts`
+with `mise run test:runtime`. The legacy Python `fxroute` and `fxroutes` scenarios are retired;
+their offline data and comparison helpers remain.
+
 Details of the runtime and module fixtures: [tests/regression/README.md](../tests/regression/README.md).
 FX coverage: [tests/regression/scenarios/README.md](../tests/regression/scenarios/README.md).
 All regression device suites share `tests/regression/vitest.config.ts` with the projects `stock`,

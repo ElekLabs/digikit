@@ -62,7 +62,20 @@ UI scenarios"). A golden changes only with a reason; review the diff.
 ## Runtime workflows
 
 `runtime/*.test.ts`: `remote-input`, `service-commands`, `transfer-live`, `input-adapter`, `samples-live`
-(DT2) and `samples-store-live` (DN2). Each device case runs on its own fresh runtime daemon.
+(DT2) and `samples-store-live` (DN2). Those workflows use a fresh runtime daemon for each device case.
+
+FX route acceptance on both devices lives in `runtime/fx-routes-panel.test.ts` (route choices, defaults,
+capacity and pending changes), `runtime/fx-routes-persist.test.ts` (apply/restart persistence and PCM),
+and `runtime/fx-track-route.test.ts` (track SEND pages, amounts, kit loads and project-byte controls).
+These replace the Python `fxroute` and `fxroutes` scenarios. Independent cases reload clean card
+baselines in an owned daemon; apply/restart cases preserve the guest's writes. Track SEND's image
+without the page hook closes before its image with the hook starts. Offline profile, card settings,
+OLED and project-byte helpers remain in `tools/patchkit/pk_digikit_fxroute.py` and
+`tools/patchkit/pk_digikit_fxroutes.py`.
+
+For example, `mise run test:runtime -- fx-routes-panel.test.ts` runs the panel suite. The gate prepares
+the complete card inventories, including renamed effect packs; manual runs need those prepared
+artifacts, the plusdrive builder and the native patchkit CLI used by store dump.
 
 Helpers in `runtime/live.ts`:
 
