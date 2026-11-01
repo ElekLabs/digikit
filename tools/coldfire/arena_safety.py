@@ -108,17 +108,36 @@ def runtime_card_policy(
     }
 
 
+def runtime_policy(device: str, name: str = "default") -> dict:
+    """Fixed card allowances for a named acceptance scenario policy."""
+    if device not in ("dt2", "dn2"):
+        raise ValueError(f"unsupported runtime safety device: {device}")
+    if name == "default":
+        areas, extra = (), ()
+    elif name == "fx-routes":
+        from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
+
+        store = pk_device.store_of(device)
+        areas, extra = KIT_AREAS[device], (store.set_a, store.set_b)
+    else:
+        raise ValueError(f"unknown runtime safety policy: {name}")
+    return {"name": name, "firmware_areas": areas, "store_extra": extra}
+
+
 def runtime_safety(
     device: str,
     output: pathlib.Path,
     overlays: list[pathlib.Path],
     min_emulators: int = 1,
+    policy: str = "default",
 ) -> dict:
     """After the owned process exits: every sequenced watch log needs a complete clean summary."""
     if min_emulators < 1 or not overlays:
         raise ValueError(
             "runtime safety needs observed emulators and exported overlays"
         )
+
+    policy_facts = runtime_policy(device, policy)
 
     def indexed(suffix: str) -> dict[int, pathlib.Path]:
         files = {}
@@ -156,10 +175,16 @@ def runtime_safety(
             {
                 "path": str(file),
                 "sectors": len(sectors),
-                **runtime_card_policy(sectors, device),
+                **runtime_card_policy(
+                    sectors,
+                    device,
+                    policy_facts["firmware_areas"],
+                    frozenset(policy_facts["store_extra"]),
+                ),
             }
         )
     return {
+        "policy": policy_facts,
         "emulators": len(summaries),
         "write_events": events,
         "flush_hits": flush,
@@ -713,9 +738,14 @@ def main(argv=None) -> int:
     runtime.add_argument("--watch-output", type=pathlib.Path, required=True)
     runtime.add_argument("--min-emulators", type=int, default=1)
     runtime.add_argument("--overlay", type=pathlib.Path, action="append", required=True)
+    runtime.add_argument(
+        "--policy", choices=("default", "fx-routes"), default="default"
+    )
     a = ap.parse_args(argv)
     if a.cmd == "runtime-check":
-        result = runtime_safety(a.device, a.watch_output, a.overlay, a.min_emulators)
+        result = runtime_safety(
+            a.device, a.watch_output, a.overlay, a.min_emulators, a.policy
+        )
         print(json.dumps(result))
         return 0 if result["pass"] else 1
     if a.cmd == "list":

@@ -149,8 +149,8 @@ The earlier estimate of 80 boots per device reduced to nine is unsupported and i
 | --- | ---: | ---: | ---: |
 | [fx](../../tools/patchkit/pk_digikit_fx.py) line 312 | 4 | 4 | 1 |
 | [fxsend](../../tools/patchkit/pk_digikit_fxsend.py) line 192 | 5 | 8 | 0 |
-| [fxroute](../../tools/patchkit/pk_digikit_fxroute.py) line 558 | 11 | 11 | 0 |
-| [fxroutes](../../tools/patchkit/pk_digikit_fxroutes.py) line 637 | 8 | 8 | 2 |
+| fxroute (retired runner, historical line 558) | 11 | 11 | 0 |
+| fxroutes (retired runner, historical line 637) | 8 | 8 | 2 |
 | [fxpage](../../tools/patchkit/pk_digikit_fxpage.py) line 513 | 3 | 3 | 1 |
 | [fxpersist](../../tools/patchkit/pk_digikit_fxpersist.py) line 275 | 1 | 1 | 0 |
 | [fxshift](../../tools/patchkit/pk_digikit_fxshift.py) line 499 | 4 | 4 | 0 |
@@ -471,3 +471,62 @@ selects runtime files 13→3 with all 37 Python plan entries retained; its harne
 requires smoke. The final gate explanation selects host, three stock files, 13 runtime files,
 three module files, Python checks and smoke. That gate was not run. No measured speedup or new
 device proof is claimed.
+
+
+### FX route migration checkpoint (2026-11-01)
+
+PR #245 merged at `dd542a11` under Em's explicit focused-acceptance exception, with three prior
+baseline path errors retained. That decision was not a full-gate pass and does not transfer to
+this batch.
+
+The route port covers all eight `fxroutes` and eleven `fxroute` legacy legs per device: 19 independent
+baselines across four owned fixture contexts (panel, persistence, no-hook reference and hooked
+track cases). Each context has one exact prepared image, symbol plan and startup-to-close write-watch
+policy. The three image variants remain `RT + dynfx`, that set plus `fxpages`, and that set plus
+`fxpages + digikit-menu`. Independent cases use pristine cards; the two menu-driven route changes
+retain real guest restarts and before/after persistence evidence. Different images do not share
+allowed-PC sets. The hooked track context runs its ten legs sequentially, retaining the no-hook
+reference in its own process and preserving the final four-overlay project-lock comparison.
+
+Independent review of track port `cbe4566a` found no missing assertions. Fixes preserve paused
+protocol queries through the existing stepped USB transport (`fdb745ad`), initialize PCM observation
+before route inspection (`a0f52563`), and use the existing epoch/UI restart barrier (`761aebba`).
+Prepared loads retain the stock bytes needed to compute the DSP difference while still forcing
+firmware reconstruction with the explicit clean card (`f296f998`). Artifacts were repacked through
+the standard current-source SDK 1.2 wrapper after a shared-binary mismatch. Gate preparation/routing
+checkpoint `440f676a` is pushed. Restart inspection now receives the original captured epoch, while
+fresh baselines remain strict; only the combined ten-leg test has a 600-second wall budget
+(`9f0cad73`). Guest timing, note margins, PCM tolerances and assertions remain unchanged.
+
+All six device/family proofs passed:
+
+| Device / family | Wall duration | Artifact suffixes | Lifetime safety |
+| --- | --- | --- | --- |
+| DN2 panel | 151.99 s invocation / 146.644 s case | `rj0mZ0` | 11 watch windows, 5 overlays passed |
+| DN2 persistence | 121.88 s invocation / 115.753 s case | `cCWGMv` | 11 watch windows, 8 overlays passed |
+| DT2 panel | 179.062 s file / 173.855 s case | `XQjKMS` | 11 watch windows, 5 overlays passed |
+| DN2 track | 428.32 s invocation; 16.751 s reference + 401.264 s combined case | reference `8hTbj1`, hooked `dJ0EdG` | reference 3 windows / 1 overlay; hooked 15 windows / 13 overlays passed |
+| DT2 persistence | 151.408 s file / 146.082 s case | `lX6mnZ` | 11 watch windows, 8 overlays passed |
+| DT2 track | 360.238 s file; 24.078 s reference + 324.879 s combined case | reference `fgYuXW`, hooked `rGPXvd` | reference 3 windows / 1 overlay; hooked 15 windows / 13 overlays passed |
+
+The final DT2 persistence/track invocation took 511.90 s. All safety reports passed with zero
+write/flush hits. Watch windows are emulator summaries within the
+owned fixture lifecycle, not a count of operating-system processes. The DN2 panel load report confirms
+DSP application at cold boot. These durations establish correctness only: no paired A/B or measured
+speedup claim is made.
+
+Reviewed legacy retirement `eaf709b9` is integrated and pushed as `86e1a7ae` (23 files, +49/-1400;
+349 tests and 15 subtests reported for the retirement work). The legacy route device scenarios
+are removed; the independent analysis oracles remain. No device execution changed after the final
+proofs.
+
+Final preflight exited 1 only because pathcheck found three pre-existing references in
+[module-architecture.md](module-architecture.md), at lines 3, 4 and 284; the file is unchanged from
+`origin/main`. This is not a fully green preflight. All 666 Python cases (270 + 57 + 339) and
+95 host cases (4 + 91) passed. Ruff check/format, mypy on two sources, layer/generated checks,
+oxlint, Prettier and workspace types passed. Scoped pathchecks for the changed docs also passed.
+
+The gate explanation selected host, three stock files, 16 runtime files, three module files,
+54 Python files, smoke and native prerequisites. The broad routed gate was not run. The draft PR
+and a concrete single-PR focused-exception request are next; no new exception or broad-gate pass
+exists for this batch. Earlier focused exceptions do not transfer.

@@ -13,7 +13,14 @@ import {
   type LedsResult,
   type StatusResult,
 } from '@digi/control-client';
-import { coupledEnv, resolveInputs, validateRuntimeInputs, type Device } from './inputs.ts';
+import {
+  coupledEnv,
+  resolveInputs,
+  validateRuntimeInputs,
+  validatePreparedRuntimeImage,
+  type Device,
+  type PreparedRuntimeImage,
+} from './inputs.ts';
 import { button, encoder } from './keys.ts';
 
 /** ColdFire instructions per emulated millisecond (the oracle clock). */
@@ -46,6 +53,8 @@ export interface SessionOptions {
 /** A pristine image in a fixture-owned child directory of Session.runDir; not a sample directory. */
 export interface RuntimeBaseline {
   cardImage: string;
+  /** Load this exact offline-patched artifact instead of asking the daemon to patch stock. */
+  preparedImage?: PreparedRuntimeImage;
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
@@ -76,6 +85,7 @@ export class Session {
   #ownedDir: string | null;
   #load: FirmwareLoadResult | undefined;
   #card: string | undefined;
+  #preparedImage: PreparedRuntimeImage | undefined;
   #closing: Promise<void> | undefined;
   #reloading = false;
   #preserveDiagnostics = false;
@@ -103,6 +113,12 @@ export class Session {
   get loadResult(): FirmwareLoadResult {
     if (!this.#load) throw new Error('firmware not loaded');
     return this.#load;
+  }
+
+  /** Published only after a baseline's exact artifact and loaded firmware identity have been checked. */
+  get preparedRuntimeImage(): PreparedRuntimeImage | undefined {
+    const image = this.#preparedImage;
+    return image ? { ...image, modules: [...image.modules] } : undefined;
   }
 
   static async start(options: SessionOptions): Promise<Session> {
@@ -243,18 +259,26 @@ export class Session {
       if (typeof epoch !== 'number') throw new Error('runtime status has no epoch');
       this.#load = undefined;
       this.#card = undefined;
+      this.#preparedImage = undefined;
       this.client.drainEvents();
       this.#events = [];
       await checked(() => this.client.call('cpu.exceptions', { deliver: baseline.deliverExceptions ?? false }));
       await checked(() => this.client.watchdogConfig(this.options.stallMs ?? 1000));
       const inp = resolveInputs(this.options.device, this.options.firmware);
+      const prepared = baseline.preparedImage
+        ? { ...baseline.preparedImage, modules: [...baseline.preparedImage.modules] }
+        : undefined;
+      if (prepared) validatePreparedRuntimeImage(prepared, inp.syx);
       const load = await checked(() =>
         this.client.firmwareLoad({
-          syx: inp.syx,
+          syx: prepared?.syx ?? inp.syx,
           card: image,
-          runtime: true,
-          patch_set: this.options.runtime!.patchSet,
-          replace: true,
+          ...(prepared
+            ? { base_sha256: prepared.baseSha256 }
+            : { runtime: true, patch_set: this.options.runtime!.patchSet }),
+          // Prepared images need the daemon's retained stock bytes to derive the DSP patch.
+          // force still reconstructs the firmware and opens the explicit pristine card.
+          replace: !prepared,
           force: true,
           start: 'auto',
           auto_no: this.options.autoNo ?? true,
@@ -266,14 +290,28 @@ export class Session {
       if (typeof status.epoch !== 'number' || status.epoch <= epoch || !status.cf.ready || status.mode !== 'free') {
         throw new Error(`runtime baseline did not establish a new ready epoch: ${JSON.stringify(status)}`);
       }
+      if (prepared) {
+        validatePreparedRuntimeImage(prepared, inp.syx);
+        if (
+          load.syx_sha256 !== prepared.syxSha256 ||
+          status.firmware?.syx_sha256 !== prepared.syxSha256 ||
+          status.firmware?.base_sha256 !== prepared.baseSha256
+        ) {
+          throw new Error(
+            'prepared runtime loaded firmware identity does not match the exact artifact and stock image',
+          );
+        }
+      }
       this.#load = load;
       this.#card = image;
+      this.#preparedImage = prepared;
       this.#collect();
       return status.epoch;
     } catch (error) {
       // A rejected or unanswered reset never becomes the baseline of a later test.
       this.#load = undefined;
       this.#card = undefined;
+      this.#preparedImage = undefined;
       try {
         fs.writeFileSync(
           path.join(this.runDir, 'runtime-baseline-error.json'),

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DkSession } from '@digi/dk-session';
 import type { Session } from '@digi/test-support';
@@ -519,3 +520,56 @@ test('offline preparation returns a symbol plan before any loaded-image identity
     }),
   ).toThrow('output hash');
 });
+
+test('prepared plan checks exact closure and artifact without requiring or synthesizing runtime identity', () => {
+  const preparedSession = {
+    ...session,
+    loadResult: { syx_sha256: patchedSha256 },
+    preparedRuntimeImage: {
+      syx: '/prepared.syx',
+      baseSha256: plan.base.syx_sha256,
+      syxSha256: patchedSha256,
+      modules: ['core/runtime', 'core/digikit-menu'],
+    },
+  };
+  expect(() => validateRuntimePlan(plan, preparedSession)).not.toThrow();
+  expect(() => validateRuntimePlan({ ...plan, modules: ['core/runtime'] }, preparedSession)).toThrow(
+    'module membership',
+  );
+  expect(() => validateRuntimePlan({ ...plan, output: { syx_sha256: 'b'.repeat(64) } }, preparedSession)).toThrow(
+    'output hash',
+  );
+});
+
+for (const invalid of [null, 'root', 'artifact'] as const) {
+  test(`explicit offline preparation pins expanded membership and exact output (${invalid ?? 'valid'})`, async () => {
+    const digest = (text: string) => createHash('sha256').update(text).digest('hex');
+    const explicitPlan = {
+      ...plan,
+      base: { ...plan.base, syx_sha256: digest('stock') },
+      output: { syx_sha256: digest('prepared') },
+    };
+    fake.read.mockImplementation((file: string) => {
+      if (file.endsWith('.plan.json')) return JSON.stringify(explicitPlan);
+      if (file === '/stock.syx') return Buffer.from('stock');
+      return Buffer.from(invalid === 'artifact' ? 'changed' : 'prepared');
+    });
+    const preparing = prepareRuntimePlanOffline(
+      { device: 'dt2', firmware: '1.17' },
+      '/offline',
+      '/artifacts',
+      ['DKRT_BOOT'],
+      { modules: [invalid === 'root' ? 'core/missing' : 'core/digikit-menu'] },
+    );
+    if (invalid) await expect(preparing).rejects.toThrow();
+    else {
+      const prepared = await preparing;
+      expect(prepared.preparedImage).toEqual({
+        syx: '/offline/runtime-dt2.syx',
+        baseSha256: digest('stock'),
+        syxSha256: digest('prepared'),
+        modules: ['core/runtime', 'core/digikit-menu'],
+      });
+    }
+  });
+}

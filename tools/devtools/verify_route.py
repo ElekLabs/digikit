@@ -178,11 +178,19 @@ ACCEPTANCE_DIRS = {
 # Runtime test files by the fixture module they exercise; the gate packs a native artifact for each
 # module (DIGI_RUNTIME_MODULES). Paths are relative to tests/regression.
 RUNTIME_SEND_FILES = ("runtime/fx-send-dn2.test.ts", "runtime/fx-send.test.ts")
-RUNTIME_FX_FILES = ("runtime/fx-reuse.test.ts", *RUNTIME_SEND_FILES)
+RUNTIME_ROUTE_FILES = (
+    "runtime/fx-routes-panel.test.ts",
+    "runtime/fx-routes-persist.test.ts",
+)
+RUNTIME_TRACK_FILES = ("runtime/fx-track-route.test.ts",)
+RUNTIME_GAIN_FILES = ("runtime/fx-reuse.test.ts", *RUNTIME_SEND_FILES)
+RUNTIME_FX_FILES = (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES, *RUNTIME_TRACK_FILES)
 RUNTIME_PLUSDRIVE_FILES = ("runtime/samples-live.test.ts", *RUNTIME_FX_FILES)
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/sine": RUNTIME_FX_FILES,
-    "test/dyn-fx-gain": RUNTIME_FX_FILES,
+    "test/dyn-fx-gain": (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES),
+    "test/dyn-fx-gain-sendonly": RUNTIME_ROUTE_FILES,
+    "test/dyn-fx-gain-both": RUNTIME_TRACK_FILES,
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
     "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),
@@ -195,8 +203,14 @@ RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/dyn-fx-hang": ("runtime/fault-trace.test.ts",),
     "test/dyn-dsp-hang": ("runtime/fault-trace.test.ts",),
     "test/dyn-fx-nan": ("runtime/fault-trace.test.ts",),
-    "test/dyn-fx-gain-send": ("runtime/fault-trace.test.ts",),
+    "test/dyn-fx-gain-send": ("runtime/fault-trace.test.ts", *RUNTIME_ROUTE_FILES),
     "test/dyn-crash": ("runtime/fault-trace.test.ts",),
+}
+# Renamed packs share canonical source objects; these are card identities, not module sources.
+RUNTIME_PACK_ALIASES = {
+    "test/dyn-fx-gain-send-3": ("test/dyn-fx-gain-send", RUNTIME_ROUTE_FILES),
+    "test/dyn-fx-gain-both-2": ("test/dyn-fx-gain-both", RUNTIME_TRACK_FILES),
+    "test/dyn-fx-gain-both-3": ("test/dyn-fx-gain-both", RUNTIME_TRACK_FILES),
 }
 # Host sources and subprocess CLI helpers consumed by specific runtime files.
 RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
@@ -213,7 +227,17 @@ RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
     },
     "tools/patchkit/pk_dkrt_machine.py": RUNTIME_FX_FILES,
     "tools/coldfire/arena_safety.py": RUNTIME_FX_FILES,
-    "tools/patchkit/pk_digikit_fxsend.py": RUNTIME_SEND_FILES,
+    "tools/patchkit/pk_digikit_fxsend.py": (*RUNTIME_SEND_FILES, *RUNTIME_TRACK_FILES),
+    "tools/patchkit/hook_ab.py": (
+        *RUNTIME_GAIN_FILES,
+        "runtime/fx-routes-persist.test.ts",
+        *RUNTIME_TRACK_FILES,
+    ),
+    "tools/patchkit/pk_digikit_fxroutes.py": (
+        *RUNTIME_ROUTE_FILES,
+        *RUNTIME_TRACK_FILES,
+    ),
+    "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_TRACK_FILES,
 }
 ACCEPTANCE_SHARED = (
     "packages/test-support/src/",
@@ -256,6 +280,9 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.emulator.card_overlay",
                 "tools.patchkit.pk_dkrt_machine",
                 "tools.patchkit.pk_digikit_fxsend",
+                "tools.patchkit.pk_digikit_fxroutes",
+                "tools.patchkit.pk_digikit_fxroute",
+                "tools.patchkit.hook_ab",
                 "tools.patchkit.pk_dsplink",  # named anchor reader imported inside the SEND oracle
                 "tools.coldfire.arena_safety",
                 "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
@@ -502,8 +529,8 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_pages.py": ("pages",),
     "pk_digikit_fx.py": ("fx",),
     "pk_digikit_fxsend.py": (),
-    "pk_digikit_fxroute.py": ("fxroute",),
-    "pk_digikit_fxroutes.py": ("fxroutes",),
+    "pk_digikit_fxroute.py": (),  # retained offline TS oracles
+    "pk_digikit_fxroutes.py": (),  # retained TS profile/card/OLED helpers
     "pk_digikit_settings.py": ("settings",),
     "pk_digikit_fxpage.py": ("fxpage",),
     "pk_digikit_fxpersist.py": ("fxpersist",),

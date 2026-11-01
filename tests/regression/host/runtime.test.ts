@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -19,7 +20,8 @@ vi.mock('@digi/control-client', async (original) => ({
   ...(await original<object>()),
   spawnDaemon: fake.spawn,
 }));
-vi.mock('../../../packages/test-support/src/inputs.ts', () => ({
+vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
+  ...(await original<object>()),
   validateRuntimeInputs: vi.fn(),
   coupledEnv: fake.coupledEnv,
   resolveInputs: () => ({ syx: '/stock.syx', cfSnapshot: '/ready.snap', dspImage: '/dsp.bin', dspState: '/dsp.snap' }),
@@ -274,7 +276,7 @@ test('baseline reload replaces Session identity/card/events and reapplies actor 
     expect(session.loadResult).toBe(loaded);
     expect(await session.faults()).toEqual([]);
     expect(fake.client.firmwareLoad).toHaveBeenLastCalledWith(
-      expect.objectContaining({ card: fs.realpathSync(baseline.cardImage), replace: true, runtime: true }),
+      expect.objectContaining({ card: fs.realpathSync(baseline.cardImage), replace: true, runtime: true, force: true }),
     );
     expect(fake.client.call).toHaveBeenCalledWith('cpu.exceptions', { deliver: false });
     expect(fake.client.guardSet).toHaveBeenLastCalledWith(baseline.guard);
@@ -397,3 +399,65 @@ test('expired environment preparation cannot spawn a late daemon', async () => {
     vi.useRealTimers();
   }
 });
+
+for (const mismatch of [null, 'artifact', 'stock', 'load', 'status-image', 'status-base'] as const) {
+  test(`prepared baseline validates exact bytes and loaded identity (${mismatch ?? 'valid'})`, async () => {
+    const { session, baseline } = await reusableSession();
+    const syx = path.join(session.runDir, 'prepared.syx');
+    const hash = (text: string) => createHash('sha256').update(text).digest('hex');
+    fs.writeFileSync(syx, 'prepared bytes');
+    const preparedImage = {
+      syx,
+      baseSha256: hash('stock bytes'),
+      syxSha256: hash('prepared bytes'),
+      modules: ['core/runtime'],
+    };
+    const read = fs.readFileSync.bind(fs);
+    const spy = vi
+      .spyOn(fs, 'readFileSync')
+      .mockImplementation(((file: fs.PathOrFileDescriptor, ...args: unknown[]) =>
+        file === '/stock.syx'
+          ? Buffer.from(mismatch === 'stock' ? 'different stock' : 'stock bytes')
+          : read(file, ...(args as []))) as typeof fs.readFileSync);
+    try {
+      if (mismatch === 'artifact') fs.writeFileSync(syx, 'changed bytes');
+      fake.client.firmwareLoad.mockResolvedValueOnce({
+        syx_sha256: mismatch === 'load' ? 'bad' : preparedImage.syxSha256,
+        start_used: 'cold',
+      });
+      fake.client.status.mockResolvedValueOnce({ epoch: 2 }).mockResolvedValueOnce({
+        epoch: 3,
+        mode: 'free',
+        cf: { ready: true },
+        firmware: {
+          syx_sha256: mismatch === 'status-image' ? 'bad' : preparedImage.syxSha256,
+          base_sha256: mismatch === 'status-base' ? 'bad' : preparedImage.baseSha256,
+        },
+      });
+      if (mismatch) {
+        await expect(session.reloadRuntimeBaseline({ ...baseline, preparedImage })).rejects.toThrow('prepared runtime');
+        expect(() => session.loadResult).toThrow('not loaded');
+        expect(session.preparedRuntimeImage).toBeUndefined();
+        expect(fake.close).toHaveBeenCalledTimes(1);
+      } else {
+        await session.reloadRuntimeBaseline({ ...baseline, preparedImage });
+        expect(session.preparedRuntimeImage).toEqual(preparedImage);
+        const load = fake.client.firmwareLoad.mock.calls[0]![0];
+        expect(load.syx).toBe(syx);
+        expect(load.base_sha256).toBe(preparedImage.baseSha256);
+        expect(load.runtime).toBeUndefined();
+        // Retain the startup stock bytes for the daemon's DSP diff, while still reconstructing
+        // the firmware with this pristine card rather than taking its hot-load path.
+        expect(load.replace).toBe(false);
+        expect(load.force).toBe(true);
+        expect(load.start).toBe('auto');
+        expect(load.card).toBe(fs.realpathSync(baseline.cardImage));
+        expect(session.loadResult.runtime).toBeUndefined();
+      }
+    } finally {
+      spy.mockRestore();
+      await session.close();
+      fs.rmSync(session.runDir, { recursive: true, force: true });
+    }
+  });
+}

@@ -478,3 +478,17 @@ selects runtime files 13→3 with all 37 Python plan entries retained; its harne
 requires smoke. The final gate explanation selects host, three stock files, 13 runtime files,
 three module files, Python checks and smoke. That gate was not run. No measured speedup or new
 device proof is claimed.
+
+
+### FX route migration checkpoint (2026-11-01)
+
+The [route coverage and device evidence](test-architecture.md#fx-route-migration-checkpoint-2026-11-01)
+record all six device/family proofs passing, covering 19 legacy baselines per device across four
+owned fixture contexts, clean independent cards and two real menu restarts. Gate preparation/routing
+`440f676a` and the lifecycle fixes are pushed. Reviewed retirement `eaf709b9` is integrated as
+`86e1a7ae`: legacy route device scenarios are removed, retaining the analysis oracles, with no device
+execution change after proof. Final preflight passed 666 Python and 95 host cases plus static/type
+checks, but exited 1 on three unchanged baseline path references; the detailed checkpoint records
+the limits and gate selection. The gate explanation ran; the broad gate did not. A draft PR and
+single-PR focused-exception request are next, with no new exception in place. Earlier exceptions
+do not transfer. Timings are correctness evidence, with no paired A/B or measured speedup claim.
