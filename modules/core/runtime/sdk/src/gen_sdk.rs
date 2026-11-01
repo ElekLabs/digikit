@@ -4,7 +4,7 @@
 pub const RUNTIME_VERSION: u32 = 0x000504;
 
 pub mod contract {
-    pub const API: (u8, u8) = (1, 4);
+    pub const API: (u8, u8) = (1, 5);
     pub const MACHINE: (u8, u8) = (1, 2);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
@@ -191,6 +191,9 @@ pub mod load {
     pub const E_BUSY: i32 = -12;
     pub const E_TOO_BIG: i32 = -13;
     pub const E_TABLE_FULL: i32 = -14;
+    pub const E_LOST: i32 = -15;
+    pub const E_POOL: i32 = -16;
+    pub const E_CHANGED: i32 = -17;
     pub const E_NO_REGISTRY: i32 = -20;
     pub const E_REG_DEVICE: i32 = -21;
     pub const E_TYPE_RANGE: i32 = -22;
@@ -276,6 +279,16 @@ pub mod api {
         pub files_poll: unsafe extern "C" fn(client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32,
         /// (api 1.4) Invalidate matching request/results/queued notification without waiting for active work or callback. Does not free the module-owned client.
         pub files_cancel: unsafe extern "C" fn(client: u32, ticket: u32) -> i32,
+        /// (api 1.5) In init, resolve the module's 16-track sample table (DK_SAMPLE_TRACKS) to a positive opaque handle, or a negative DK_SAMPLE_E_* error. A module that also declares a bank gets DK_SAMPLE_E_CONTRACT.
+        pub sample_tracks: unsafe extern "C" fn(local_id: u32) -> i32,
+        /// (api 1.5) Queue a stereo-capable sample for one track (copies the path, no file IO here). Stops that track's old notes, supersedes a queued or loading request. Returns 0 or a negative DK_SAMPLE_E_* error (track >= 16: DK_SAMPLE_E_CONTRACT; no sample backing in the image: DK_SAMPLE_E_CONTRACT).
+        pub sample_select: unsafe extern "C" fn(handle: u32, track: u32, path: *const u8) -> i32,
+        /// (api 1.5) Close the track's generation, drop its reference and set it UNUSED. Returns 0 or a negative DK_SAMPLE_E_* error.
+        pub sample_unbind: unsafe extern "C" fn(handle: u32, track: u32) -> i32,
+        /// (api 1.5) Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error; an error is sticky until the next select or unbind.
+        pub sample_track_status: unsafe extern "C" fn(handle: u32, track: u32) -> i32,
+        /// (api 1.5) Copy a 16-byte dk_sample_info (frames, rate, channels, token; <dk/sample_track.h>) of a READY track; otherwise a negative error and `out` is untouched.
+        pub sample_track_info: unsafe extern "C" fn(handle: u32, track: u32, out: *mut u8) -> i32,
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
