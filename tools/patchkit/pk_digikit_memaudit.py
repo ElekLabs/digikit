@@ -21,7 +21,6 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from tools.device import dklog as L
 from tools.patchkit import pk_capacity as P
 from tools.patchkit import pk_dkrt_boot as B
 from tools.patchkit import pk_dkrt_machine as M
@@ -114,11 +113,13 @@ def arm(rig: Any, prot: list, code: list) -> None:
 
 
 def block_words(rig: Any, mods: list[dict]) -> dict[str, bytes]:
-    """The current bytes of every module's block, read over PEEK."""
-    from tools.patchkit import pk_digikit_debug as DBG
+    """The current bytes of every module's block, read from guest memory (PEEK is the debug module's, and this set does not load it)."""
 
-    up = DBG.uploader(rig)
-    return {m["name"]: L.peek_range(up, m["cf_base"], m["cf_size"]) for m in mods}
+    def block(base: int, size: int) -> bytes:
+        words = (rig.w(base + 4 * i) for i in range((size + 3) // 4))
+        return b"".join(w.to_bytes(4, "big") for w in words)[:size]
+
+    return {m["name"]: block(m["cf_base"], m["cf_size"]) for m in mods}
 
 
 def sweep(rig: Any, positions: int) -> None:

@@ -742,8 +742,8 @@ Scope: what the SDK contract and the adapter must provide. The tools and the tra
 
 | Item | Fact |
 | --- | --- |
-| log | 512 events of 32 bytes in RAM: `seq`, block-counter `time`, `kind`, `flags` (bit 0 error), five words; DEBUG off keeps errors only (`dlog.rs:13-60`; `46-digikit-debug.md:56-58`) |
-| switch | DEBUG on/off, remembered in the selection record (`FLAG_DEBUG_OFF`, `modules/core/runtime/sdk/src/lib.rs:337`); no levels, no categories |
+| log | events of 32 bytes: `seq`, block-counter `time`, `kind`, `flags` (bit 0 error), five words; a small ring of 32 in the runtime (`dlog.rs`), 512 in the module `digikit/debug` (`46-digikit-debug.md`) |
+| switch | the module `digikit/debug` loaded or not; levels by LOGCFG (RAM only), no categories |
 | transport | SysEx LOG 0x20, PEEK 0x21, INFO (`upload.rs:36-45`); the emulator answers the same (`dklog.py --emu`); one decoder, `tools/device/dklog.py` (`KINDS`, :111), a hand copy of `dkrt_sdk::logk` (`lib.rs:866`) |
 | module logging | ColdFire only: `Api.log(msg, value)`, 24 characters, kind MOD_LOG (14), no module id (`digikit-runtime.md:82`, `46-digikit-debug.md`, table row 14) |
 | DSP | no API. The wrapper writes fixed words: heartbeat, context registers, breadcrumb, dispatch and return counters, guard words, 24 words in the reply record (`dlog.rs:123-134`; `48-dsp-breadcrumbs.md:8-40`; `51:59-62`) |
@@ -758,8 +758,8 @@ Scope: what the SDK contract and the adapter must provide. The tools and the tra
 | source | `flags` bits 8 to 15: module record index + 1 (0 = the runtime); with `gen` in argument 4 where an event is module-scoped |
 | categories | the existing `kind` ranges are the categories: boot, card, upload, dsp-link, adapter, machine, module, crash. A `LogConfig` of one default level, one level per category (16 bytes) and one per module record (8 bytes) |
 | control | a new SysEx command `LOGCFG` (get, set): `dklog level debug`, `dklog level dsp-link=trace`, `dklog level module:pluck=debug`. No reflash |
-| memory | the default level and the category levels go in the selection record next to `FLAG_DEBUG_OFF` (which maps to default = error); per-module levels are not remembered (modules come and go), they reset at boot. Whether the record has room for 16 bytes is **[O]** (`digikit-store.md`) |
-| cost at off | one byte compare in `ev()` before any work, as the DEBUG test is today (`dlog.rs:44-46`) |
+| memory | the default level and the category levels would go in the selection record (bit 1 of its flags is reserved, once the debug-off flag); per-module levels are not remembered (modules come and go), they reset at boot. Whether the record has room for 16 bytes is **[O]** (`digikit-store.md`) |
+| cost at off | one pointer test in `ev()` before any work, when no sink is set (`dlog.rs`) |
 
 ### 13.3 Module logging API
 

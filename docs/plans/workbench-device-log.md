@@ -21,9 +21,9 @@ Header: `Log  N entries  [Source] [Errors only] [Follow] [Debug ●, a switch] [
 The controls act on the origin chosen in Source (`emulator:…` or `device:…`; `emulator` for the app's entries about it). With All or an app source they act on the one origin that is followed, and are off when both or neither are (title: `Choose Emulator or Device in Source`).
 
 - **Level: info ▾** opens a menu: a row `Default` with `error · warn · info · debug · trace`, and one row for each loaded module (module records 0 to 7) with `default` before the five levels. The button shows the default level and `+N` for the modules that have a level of their own. A click sends LOGCFG op 1 (`DkSession.setLogConfig`: the default, 8 module levels, `0xff` = default; the other records stay as they are), then reads LOGCFG again and shows what the runtime says.
-- The levels are in the runtime's RAM and start again at its next boot (`upload.rs` `cmd_logcfg`).
-- **Debug ●** is a switch for debug logging: green dot on, grey dot off. A click sends LOGCFG op 2 (`DkSession.setDebug`, one byte: 1 on, 0 off), which calls `boot::debug_set` (it saves the switch in the selection record, as the DEBUG row of the runtime's DIGIKIT menu does), then reads LOGCFG again and shows what the runtime says. A runtime from before op 2 answers `E_PROTO`; the button then keeps its state and the title says the switch failed. When the control is off, or the origin has not reported its state, it is a read-only indicator (empty dot) with the reason as title.
-- Both controls are off, with the reason as title, when the origin is not followed or its INFO has no LOGCFG capability (`CAP.LOGCFG`).
+- The levels are in the RAM of the debug module (`digikit/debug`) and start again at the next boot (`modules/tools/debug` `cmd_logcfg`).
+- **Debug module: loaded / not loaded** is a read-only state, from INFO: the origin has the LOG capability while `digikit/debug` is loaded (green dot), else the runtime answers INFO with no LOG capability (grey dot). The title says what it means. There is no switch: loading or unloading the module is the switch (DIGIKIT > MODULES, or the default modules of the Firmware pane). When the module is not loaded the list says `The debug module is not loaded: only crash reports are available.` and the follower reads only the fault record `dk/fault` (every 5 s, one entry for a new record).
+- Both controls are off, with the reason as title, when the origin is not followed or its INFO has no LOGCFG capability (`CAP.LOGCFG`: the debug module is not loaded).
 
 ## Rules
 
@@ -32,7 +32,7 @@ The controls act on the origin chosen in Source (`emulator:…` or `device:…`;
 - Gaps, restarts and frozen devices are noted with the texts of `dklog.py` `Follower.poll`. No answer for 5 s makes one note and the loop asks every 5 s. A cancelled request makes no entry.
 - The device loop pauses during a firmware flash (the Firmware page uses the port) and notes `paused during the firmware flash`.
 - Rows: `KIND`, the module, then `name=value`. A module's own `MOD_LOG` row is the module, the message in quotes and `value=0x…`. The detail has the sequence number, the device time, the level, the source and the raw arguments.
-- Debug state is read from LOGCFG when Follow starts and when a `DEBUG_SET` event shows a change, and after each switch from the drawer.
+- The log configuration is read from LOGCFG when Follow starts and after a restart.
 - The fault record `dk/fault` is read when Follow starts and after each restart. A record that differs from the last one shown makes one error entry; the `CRASH_REG`, `CRASH_STACK` and `CRASH_TAIL` events of that boot are folded into its detail.
 - Caps: 2000 entries for each runtime log, 500 for the app.
 
@@ -48,11 +48,11 @@ The controls act on the origin chosen in Source (`emulator:…` or `device:…`;
 - [x] Regenerated with `patchkit gen` (`mise run gen:modules`); the diff of generated files is only the new table in `gen_proto.ts`.
 - [x] `mise run verify:host`, `mise run check:layers`, `cargo check -p digiemu-desktop`.
 - [x] Screenshots looked at (preview scenes `log-*` in `tools/devtools/ui_shots.mjs`).
-- [x] Log levels: `DkSession.setLogConfig` and `setDebug` (`packages/dk-session/tests/logcfg.test.ts`), `log-level-core.ts`, `LogLevelMenu.tsx`, the Debug switch (`changeDebug`, `LogFollow.setDebug`), preview mode `log=nologcfg` and scenes `log-level-*`, `log-debug-*` (also `log-debug-switched-off` and `-on`) in `tools/devtools/ui_shots.mjs`. Nothing ran against a real device [O].
+- [x] Log levels: `DkSession.setLogConfig` (`packages/dk-session/tests/logcfg.test.ts`), `log-level-core.ts`, `LogLevelMenu.tsx`, the debug module state, preview mode `log=nodebug` and scenes `log-level-*`, `log-debug-module-*` in `tools/devtools/ui_shots.mjs`. Nothing ran against a real device [O].
 - [x] One bounded live check over a running emulator (`live.html?page=emulator&log=1`, scene `log-live`): the drawer shows the real boot events.
 
 ## Not in this plan
 
-- `dklog.py` keeps the CLI for levels; its debug switch is `Uploader.logcfg_debug` (no CLI word yet).
+- `dklog.py` keeps the CLI for levels; it has no debug switch.
 - Nothing reads a frozen device; the log keeps what came before.
 - `dklog.py` stays as it is.

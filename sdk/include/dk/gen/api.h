@@ -75,6 +75,18 @@ void dl_set_tick_cb(uint8_t *cb);
 /* The 1500 Hz block clock, for a module that wants to measure time. */
 uint32_t dkrt_blocks(void);
 
+/* Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked (short, no waiting, no logging). `dk_log_ev` is 32 bytes: `u32 seq` (0 here), `u32 time` (block counter), `u16 kind`, `u16 flags`, `u32 a[5]`. At the call the sink gets the events of the runtime's small ring (the boot and the errors so far), oldest first. `tick` (0: none) is `void tick(void)`, called once per pass of the UI task with this module as the source, outside the interrupt mask: it keeps the module off slot 0, which only one module can hold. The runtime clears a sink or a tick that points into a module's memory after its `fini`. Used by digikit/debug. */
+void dkrt_log_sink_set(uint8_t *sink, uint8_t *tick);
+
+/* Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` holds one. For a module that logs a kind of its own. */
+void dkrt_log_ev(uint32_t kind, uint32_t flags, const uint32_t *a);
+
+/* The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK. */
+uint32_t dkrt_peek_range(uint32_t i, uint32_t *out);
+
+/* The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet. */
+int32_t dkrt_track_type(uint32_t track);
+
 /* Entry points of a .dkm (symbols of its object). */
 
 /* Runs once after the copy, relocation and cache flush. Returns 0 = ok; the module is unloaded otherwise. */

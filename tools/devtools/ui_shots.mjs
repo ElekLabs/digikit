@@ -840,7 +840,7 @@ const SCENES = [
       p.say('first lines: ' + (await p.eval('(window.__saved?.[0]?.text ?? "").split("\\n").slice(0, 4).join(" | ")')));
     },
   },
-  // ---- the Level menu and the Debug indicator of the Log drawer (workbench-device-log.md "Log levels") ----
+  // ---- the Level menu and the debug module indicator of the Log drawer (workbench-device-log.md "Log levels") ----
   ...[
     // [name, query, size, Source value (empty: leave All), steps after choosing it]
     [
@@ -878,33 +878,12 @@ const SCENES = [
         await p.wait(400);
       },
     ],
-    ['log-debug-on', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
-    ['log-debug-off', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'emulator:all', async () => {}],
-    // the Debug switch: a click turns it off on the device (debug was on), a second click turns it on again
-    [
-      'log-debug-switched-off',
-      'page=log&log=both&logspeed=3&logh=640',
-      WIDE,
-      'device:all',
-      async (p) => {
-        await p.click(/^Debug/);
-        await p.wait(800);
-      },
-    ],
-    [
-      'log-debug-switched-on',
-      'page=log&log=both&logspeed=3&logh=640',
-      WIDE,
-      'emulator:all',
-      async (p) => {
-        await p.click(/^Debug/);
-        await p.wait(800);
-      },
-    ],
+    // the debug module is loaded on the device, and on the emulator in the other scene it is not
+    ['log-debug-module-loaded', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+    ['log-debug-module-not-loaded', 'page=log&log=nodebug&logh=640', WIDE, 'device:all', async () => {}],
+    ['log-debug-module-not-loaded-narrow', 'page=log&log=nodebug&logh=640', MIN, 'device:all', async () => {}],
     // Source is All and both origins are followed: the menu does not know which one is meant
     ['log-debug-disabled-all', 'page=log&log=both&logspeed=3&logh=640', WIDE, '', async () => {}],
-    // the device runtime has no LOGCFG capability
-    ['log-debug-disabled-nologcfg', 'page=log&log=nologcfg&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
   ].map(([name, q, size, source, after]) => ({
     name,
     q,

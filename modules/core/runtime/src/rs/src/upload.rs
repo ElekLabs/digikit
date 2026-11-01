@@ -12,7 +12,7 @@
 //! table, which is not ColdFire code), no `core::fmt`, no slice indexing (a bounds panic hangs the task).
 
 use crate::sha256::Sha;
-use crate::{block_read, block_write, boot, card, dlog, midi_send, rd32, tx_in_flight, wr32};
+use crate::{block_read, block_write, boot, card, dlog, midi_send, rd32, tx_in_flight, watch, wr32};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::store::{self, Edit, Entry, Hdr, Io, Layout, Table, KIND_DIR, KIND_FILE};
 use dkrt_sdk::proto::*;
@@ -420,15 +420,16 @@ unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     let flags = (boot::info().safe & 1)
         | if up().open { 2 } else { 0 }
         | if card::writable() { 0 } else { 4 }
-        | if dlog::debug_on() { 8 } else { 0 }
+        | if dlog::sink_present() { 8 } else { 0 }
         | if crate::crash::seen().found != 0 { 16 } else { 0 };
     *rb.add(16) = flags as u8;
-    let (oldest, newest) = dlog::range();
-    wr32(rb.add(17), oldest);
-    wr32(rb.add(21), newest);
+    // the log range (bytes 17 to 24) stays zero: the log is the debug module's, whose LOG command has the range
+    wr32(rb.add(17), 0);
+    wr32(rb.add(21), 0);
     // appended after the log range: the whole packed runtime version (bytes 2-3 keep its low 16 bits) and the capability bits
     wr32(rb.add(25), RUNTIME_VERSION);
-    wr32(rb.add(29), CAP_LOG | CAP_PEEK | CAP_LOGCFG | CAP_SELECT | CAP_RESTART | CAP_MODULES | CAP_CAPACITY | CAP_READ | CAP_VERIFY | CAP_SERVICE_CMDS | CAP_FOLDERS | CAP_SETTINGS);
+    let log_caps = if dlog::sink_present() { CAP_LOG | CAP_PEEK | CAP_LOGCFG } else { 0 };
+    wr32(rb.add(29), log_caps | CAP_SELECT | CAP_RESTART | CAP_MODULES | CAP_CAPACITY | CAP_READ | CAP_VERIFY | CAP_SERVICE_CMDS | CAP_FOLDERS | CAP_SETTINGS);
     // appended after the capability bits: the id of the flashed image (patchkit stamps it; zeros when there is none)
     let id = crate::image_id();
     let mut i = 0;
@@ -514,8 +515,8 @@ unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 {
         let mut j = 0;
         while j < nt {
             *rb.add(at + 66 + j) = types[j];
-            faults = faults.wrapping_add(dlog::guard_faults(types[j] as u32));
-            off |= dlog::guard_disabled(types[j] as u32);
+            faults = faults.wrapping_add(watch::guard_faults(types[j] as u32));
+            off |= watch::guard_disabled(types[j] as u32);
             j += 1;
         }
         wr32(rb.add(at + 66 + nt), faults);
@@ -1018,139 +1019,6 @@ unsafe fn highest_seq(buf: *mut u8) -> u32 {
     best
 }
 
-extern "C" {
-    /// Per-device data from the device file (`[digikit] peek`), defined by `src/cf/<dev>/device.s`: the number of ranges and `lo, hi` pairs.
-    static dkrt_peek_n: u32;
-    static dkrt_peek_ranges: [u32; 8];
-}
-
-/// Events in one LOG reply: the reply body holds a status byte, `oldest`, `newest`, a count and 32 bytes each, in at most `REPLY_BODY_MAX`.
-const LOG_PER_REPLY: u32 = ((REPLY_BODY_MAX - 1 - 9) / 32) as u32;
-
-/// LOG: body `u32 from_seq`. Reply: `u32 oldest, u32 newest, u8 n`, then `n` events of 32 bytes (`seq, time, kind u16, flags u16, a0..a4`, all
-/// big endian) from `from_seq` (or from the oldest kept, when `from_seq` is older), as many as fit one reply. Nothing is sent unless a host asks.
-unsafe fn cmd_log(seq: u32, body: *const u8, blen: usize) -> i32 {
-    if blen < 4 {
-        return reply(CMD_LOG, seq, E_MSG, 0);
-    }
-    let from = rd32(body);
-    let (oldest, newest) = dlog::range();
-    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
-    wr32(rb, oldest);
-    wr32(rb.add(4), newest);
-    let mut n = 0u32;
-    if newest != 0 {
-        let mut s = if from < oldest { oldest } else { from };
-        while s <= newest && n < LOG_PER_REPLY {
-            if dlog::copy_event(s, rb.add(9 + 32 * n as usize)) {
-                n += 1;
-            }
-            s += 1;
-        }
-    }
-    *rb.add(8) = n as u8;
-    reply(CMD_LOG, seq, OK, 9 + 32 * n as usize)
-}
-
-/// Is `[addr, addr + len)` inside one of the ranges of the device file?
-unsafe fn peek_allowed(addr: u32, len: u32) -> bool {
-    let n = core::ptr::read_volatile(addr_of!(dkrt_peek_n)) as usize;
-    let t = addr_of!(dkrt_peek_ranges) as *const u32;
-    let end = match addr.checked_add(len) {
-        Some(e) => e,
-        None => return false,
-    };
-    let mut i = 0;
-    while i < n && i < 4 {
-        let lo = core::ptr::read_volatile(t.add(2 * i));
-        let hi = core::ptr::read_volatile(t.add(2 * i + 1));
-        if addr >= lo && end <= hi {
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
-
-/// PEEK: body `u32 addr, u16 len` (1 to 512). Reply: `u32 addr, u16 len`, then the bytes. Reads RAM only, inside the ranges the device file lists
-/// (`[digikit] peek`): no peripheral registers.
-unsafe fn cmd_peek(seq: u32, body: *const u8, blen: usize) -> i32 {
-    if blen != 6 {
-        return reply(CMD_PEEK, seq, E_MSG, 0);
-    }
-    let addr = rd32(body);
-    let len = ((*body.add(4) as u32) << 8) | *body.add(5) as u32;
-    if len == 0 || len > dkrt_sdk::proto::PEEK_MAX as u32 || !peek_allowed(addr, len) {
-        return reply(CMD_PEEK, seq, E_PEEK, 0);
-    }
-    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
-    wr32(rb, addr);
-    *rb.add(4) = (len >> 8) as u8;
-    *rb.add(5) = len as u8;
-    let mut i = 0;
-    while i < len as usize {
-        *rb.add(6 + i) = core::ptr::read_volatile((addr as usize + i) as *const u8);
-        i += 1;
-    }
-    reply(CMD_PEEK, seq, OK, 6 + len as usize)
-}
-
-/// LOGCFG: body `u8 op` (0 get, 1 set, 2 debug); a set adds `u8 default` and 8 bytes, the level of module record 0 to 7 (0xff: use the default). Levels are 0 to 4.
-/// Op 2 takes one body byte, 1 (debug on) or 0 (off), and sets it through `boot::debug_set` (saved in the selection record).
-/// Reply (all ops): `u8 default`, 8 module levels, `u8 debug_on`.
-unsafe fn cmd_logcfg(seq: u32, body: *const u8, blen: usize) -> i32 {
-    if blen < 1 {
-        return reply(CMD_LOGCFG,seq, E_MSG, 0);
-    }
-    let op = *body;
-    if op == 1 {
-        if blen != 10 {
-            return reply(CMD_LOGCFG,seq, E_MSG, 0);
-        }
-        let mut i = 0;
-        while i < 9 {
-            let v = *body.add(1 + i);
-            if i == 0 {
-                if v > 4 {
-                    return reply(CMD_LOGCFG,seq, E_PROTO, 0);
-                }
-            } else if v > 4 && v != 0xff {
-                return reply(CMD_LOGCFG,seq, E_PROTO, 0);
-            }
-            i += 1;
-        }
-        dlog::set_level_default(*body.add(1));
-        i = 0;
-        while i < 8 {
-            dlog::set_level_module(i, *body.add(2 + i));
-            i += 1;
-        }
-    } else if op == 2 {
-        if blen != 2 {
-            return reply(CMD_LOGCFG, seq, E_MSG, 0);
-        }
-        let v = *body.add(1);
-        if v > 1 {
-            return reply(CMD_LOGCFG, seq, E_PROTO, 0);
-        }
-        let r = boot::debug_set(v == 1);
-        if r != OK {
-            return reply(CMD_LOGCFG, seq, r, 0);
-        }
-    } else if op != 0 {
-        return reply(CMD_LOGCFG,seq, E_PROTO, 0);
-    }
-    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
-    *rb = dlog::level_default();
-    let mut i = 0;
-    while i < 8 {
-        *rb.add(1 + i) = dlog::level_module(i);
-        i += 1;
-    }
-    *rb.add(9) = if dlog::debug_on() { 1 } else { 0 };
-    reply(CMD_LOGCFG,seq, OK, 10)
-}
-
 /// FAULT (dev): body `u8 what`; 1 makes the runtime panic with a failed bounds check, to test the fault path. It does not reply: the device resets.
 /// Other values: `E_PROTO`.
 unsafe fn cmd_fault(seq: u32, body: *const u8, blen: usize) -> i32 {
@@ -1366,15 +1234,6 @@ unsafe fn h_abort(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> i3
     up().open = false;
     reply(CMD_ABORT, seq, OK, 0)
 }
-unsafe fn h_log(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
-    cmd_log(seq, body, blen)
-}
-unsafe fn h_peek(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
-    cmd_peek(seq, body, blen)
-}
-unsafe fn h_logcfg(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
-    cmd_logcfg(seq, body, blen)
-}
 unsafe fn h_fault(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
     cmd_fault(seq, body, blen)
 }
@@ -1386,7 +1245,7 @@ unsafe fn h_restart(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> 
 }
 
 /// The built-in commands, looked up one after the other (a jump table is not ColdFire code).
-static CMDS: [Cmd; 20] = [
+static CMDS: [Cmd; 17] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG, h: h_info },
     Cmd { cmd: CMD_LIST, flags: 0, h: h_list },
     Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },
@@ -1401,9 +1260,6 @@ static CMDS: [Cmd; 20] = [
     Cmd { cmd: CMD_SETTINGS, flags: NOLOG, h: h_settings },
     Cmd { cmd: CMD_CLEAR, flags: 0, h: h_clear },
     Cmd { cmd: CMD_ABORT, flags: 0, h: h_abort },
-    Cmd { cmd: CMD_LOG, flags: NOLOG, h: h_log },
-    Cmd { cmd: CMD_PEEK, flags: NOLOG, h: h_peek },
-    Cmd { cmd: CMD_LOGCFG, flags: NOLOG, h: h_logcfg },
     Cmd { cmd: CMD_FAULT, flags: 0, h: h_fault },
     Cmd { cmd: CMD_SELECT, flags: BIG, h: h_select },
     Cmd { cmd: CMD_RESTART, flags: 0, h: h_restart },

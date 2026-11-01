@@ -1801,6 +1801,10 @@ def run_step(gate: Gate, step: str) -> None:
                 for m, f in verify_route.RUNTIME_UPLOADS.items()
                 if not selected or f.removeprefix("tests/regression/") in selected
             ]
+            if "digikit/debug" not in modules:
+                modules.append(
+                    "digikit/debug"
+                )  # every cell selects it next to its module (the log)
             env["DIGI_RUNTIME_MODULES"] = str(
                 prepare_acceptance_modules(gate, step, modules)
             )

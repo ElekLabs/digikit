@@ -1,6 +1,6 @@
 // The Level button of the Log drawer and its menu: the default log level and one row for each loaded module, set on the origin chosen in Source.
 // The rules (reading LOGCFG, the 10-byte set request, the texts) are in log-level-core.ts. The levels live in the runtime's RAM and start again at
-// its next boot. Debug logging has its own indicator in LogPanel.tsx: the runtime has no host command for it.
+// its next boot. The debug module's state has its own indicator in LogPanel.tsx; the levels exist only while the module is loaded.
 import { For, Show, createEffect, createSignal, onCleanup, on } from 'solid-js';
 import type { Origin } from './log-core';
 import type { LogFollow } from './log-follow';

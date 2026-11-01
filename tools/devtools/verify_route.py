@@ -179,7 +179,9 @@ ACCEPTANCE_DIRS = {
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
-    "digikit/probe": ("runtime/sharc-probe.test.ts",),
+    "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),
+    # the log: every cell that reads it installs this module with the one it tests (live.ts `installWithDebug`)
+    "digikit/debug": ("runtime/debug-module.test.ts", "runtime/fault-trace.test.ts"),
     "test/sharc-probe": ("runtime/sharc-probe.test.ts",),
     "test/step-beacon": ("runtime/sharc-probe.test.ts",),
     "test/dsp-facts": ("runtime/sharc-probe.test.ts",),

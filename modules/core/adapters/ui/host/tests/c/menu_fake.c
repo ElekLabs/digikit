@@ -32,7 +32,6 @@ static struct {
     char put_key[2][48];
     uint8_t put_val[2];
     int flushes;
-    int debug;
     uint32_t blocks;
 } fk;
 static int settings_runs, settings_acts;
@@ -107,13 +106,6 @@ void dkrt_poll_set(uintptr_t f)
 void dkrt_diag(DkrtDiag *out)
 {
     memset(out, 0, sizeof *out);
-    out->debug_on = (uint32_t)fk.debug;
-}
-
-int32_t dkrt_debug_set(uint32_t on)
-{
-    fk.debug = (int)on;
-    return DKRT_OK;
 }
 
 int32_t dkrt_scan(DkrtScan *out, uint32_t max)
@@ -328,5 +320,4 @@ int fk_puts(void) { return fk.puts; }
 const char *fk_put_key(int i) { return fk.put_key[i]; }
 int fk_put_val(int i) { return fk.put_val[i]; }
 int fk_flushes(void) { return fk.flushes; }
-int fk_debug(void) { return fk.debug; }
 int fk_tick(int i) { return TICK[i]; }

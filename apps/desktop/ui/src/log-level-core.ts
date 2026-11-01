@@ -14,7 +14,6 @@ export interface LevelSession {
   info(quick?: boolean): Promise<{ caps: number | null }>;
   logConfig(quick?: boolean): Promise<LogConfig>;
   setLogConfig(level: number, modules: number[], quick?: boolean): Promise<LogConfig>;
-  setDebug(on: boolean, quick?: boolean): Promise<LogConfig>;
   modules(): Promise<Pick<DkModule, 'index' | 'name'>[]>;
 }
 
@@ -30,7 +29,7 @@ export interface LevelModule {
 export interface LevelView {
   level: number;
   modules: LevelModule[];
-  /** Debug logging is on (LOGCFG op 2 switches it). */
+  /** The debug module is loaded (it always answers 1). */
   debug: boolean;
 }
 
@@ -73,19 +72,11 @@ export function requestFor(cfg: LogConfig, change: LevelChange): { level: number
 /** Make the change, then read LOGCFG again: the view is what the runtime says, not what was asked. */
 export async function changeLevel(s: LevelSession, change: LevelChange): Promise<LevelView> {
   if (!hasLogcfg((await s.info(true)).caps))
-    throw new Error('This target has no log level control (no LOGCFG capability).');
+    throw new Error('This target has no log level control (the debug module is not loaded).');
   const now = await s.logConfig(true);
   const { level, modules } = requestFor(now, change);
   await s.setLogConfig(level, modules);
   return viewOf(await s.logConfig(true), await s.modules().catch(() => []));
-}
-
-/** Switch debug logging, then read LOGCFG again: the state is what the runtime says. */
-export async function changeDebug(s: LevelSession, on: boolean): Promise<LogConfig> {
-  if (!hasLogcfg((await s.info(true)).caps))
-    throw new Error('This target has no debug control (no LOGCFG capability).');
-  await s.setDebug(on);
-  return s.logConfig(true);
 }
 
 export const levelName = (level: number): string => LOG_LEVELS[level] ?? String(level);
@@ -107,7 +98,7 @@ export function levelChoices(row: 'default' | 'module'): { value: number; label:
 export function levelsOff(o: { origin: string | undefined; live: boolean; supported: boolean | undefined }): string {
   if (!o.origin) return 'Choose Emulator or Device in Source: the levels are set on one of them';
   if (!o.live) return `The ${o.origin} is not followed: nothing answers for its log levels`;
-  if (o.supported === false) return `The ${o.origin} runtime has no log level control (no LOGCFG capability)`;
+  if (o.supported === false) return `The debug module is not loaded on the ${o.origin}: it has no log level control`;
   return '';
 }
 

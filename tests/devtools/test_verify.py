@@ -1549,6 +1549,7 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
                 "test/input-probe",
                 "digikit/remote",
                 "digikit/probe",
+                "digikit/debug",
                 "test/sharc-probe",
                 "test/step-beacon",
                 "test/dsp-facts",
@@ -1571,6 +1572,7 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
                 "test/dsp-facts",
             ],
         ),
+        (["runtime/debug-module.test.ts"], ["digikit/probe", "digikit/debug"]),
         (["runtime/service-commands.test.ts"], ["test/svc-echo"]),
         (["runtime/input-adapter.test.ts"], ["test/input-probe"]),
         (["runtime/transfer-live.test.ts", "runtime/samples-live.test.ts"], []),
@@ -1625,7 +1627,9 @@ def test_a_failed_module_build_stops_before_pack_or_acceptance(
     monkeypatch.setattr(gate, "run", fail)
     with pytest.raises(RuntimeError, match="module build objects"):
         verify.run_step(gate, "module-load")
-    assert len(calls) == 1  # the build of the one module; no pack ran after it
+    assert (
+        len(calls) == 2
+    )  # the builds of the module and of the debug module (every cell selects it); no pack ran after them
 
 
 def test_runtime_fixture_host_paths_do_not_select_device_acceptance() -> None:

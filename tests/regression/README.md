@@ -39,8 +39,8 @@ module artifacts. Missing prerequisites fail. `REGRESSION_JUNIT=1` writes `out/r
 - Ready inputs for the device, validated by `resolveInputs` (CF snapshot, DSP image and state). Runtime inputs
   must match the stock SHA-256 and `intc_force:false` in the ready directory's `SOURCE.json`.
 - Module artifacts: `out/regression/modules/<device>/<leaf>.dkm` (override the root with
-  `DIGI_RUNTIME_MODULES`). Runtime cases need `input-probe`, `remote` and `svc-echo`; module cells need
-  `pluck`, `freqshift` and `remote`. The gate packs them itself. By hand:
+  `DIGI_RUNTIME_MODULES`). Runtime cases need `input-probe`, `remote`, `svc-echo` and `debug` (the log: every cell that reads it
+  selects `digikit/debug` first, `installWithDebug` in `runtime/live.ts`); module cells need `pluck`, `freqshift`, `remote` and `debug`. The gate packs them itself. By hand:
   `uv run python -m tools.patchkit.patchkit pack digikit/pluck --device dt2 -o out/regression/modules/dt2/pluck.dkm`.
 - DT2 card samples at `out/runs/patchkit/samples` (`tools.emulator.card_check.make_samples`).
 - Sample cases also need `apps/web/public/dksample.wasm` (`mise run wasm:dksample`).

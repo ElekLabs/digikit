@@ -1,6 +1,6 @@
 /* core/digikit-menu: SETTINGS > DIGIKIT, written in C on <dk/ui.h> (core/ui draws it with the firmware's own views).
  *
- * DIGIKIT is a menu: ABOUT, HEALTH and MEMORY (text pages), MODULES (a list) and the DEBUG switch. MODULES has one
+ * DIGIKIT is a menu: ABOUT, HEALTH and MEMORY (text pages), and MODULES (a list). MODULES has one
  * row per .dkm file of the store. The check mark of a row means "load at the next restart"; it starts from the saved selection.
  * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a dkm_menu, INFO).
  * The check mark is the only on/off of a module. Nothing is saved until NO leaves the list with
@@ -83,7 +83,6 @@ static int8_t g_row_fx[MAX_ENT]; /* the first effect of a loaded row's module, -
 static uint8_t g_saved[MAX_ENT];
 static uint32_t g_saved_extra;
 static int g_info_row;
-static int g_debug;
 static int g_route_row;
 static uint32_t g_safe_shown, g_seen, g_last, g_calls;
 static char g_empty_text[24];
@@ -482,14 +481,6 @@ static int restart_pending(void)
 
 /* ---- the DIGIKIT menu ------------------------------------------------------------------------------------------------ */
 
-static void debug_changed(void *ctx, int v)
-{
-    (void)ctx;
-    int32_t r = dkrt_debug_set((uint32_t)v);
-    if (r != DKRT_OK)
-        fail_text("NOT SAVED", r);
-}
-
 static void safe_notice(void *ctx, int arg)
 {
     (void)ctx;
@@ -517,10 +508,6 @@ static void fill_main(dk_ui_menu *m, void *ctx)
     dk_ui_action(m, "HEALTH", open_health, 0, 0);
     dk_ui_submenu(m, "MEMORY", g_mem);
     dk_ui_action(m, "MODULES", open_modules, 0, 0);
-    DkrtDiag d;
-    dkrt_diag(&d);
-    g_debug = d.debug_on != 0;
-    dk_ui_toggle(m, "DEBUG", &g_debug, debug_changed, 0);
 }
 
 /* ---- ABOUT ----------------------------------------------------------------------------------------------------------- */

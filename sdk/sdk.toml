@@ -463,6 +463,26 @@ name = "dkrt_blocks"
 sig = "u32 ()"
 doc = "The 1500 Hz block clock, for a module that wants to measure time."
 
+[[import]]
+name = "dkrt_log_sink_set"
+sig = "void (u8 *sink, u8 *tick)"
+doc = "Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked (short, no waiting, no logging). `dk_log_ev` is 32 bytes: `u32 seq` (0 here), `u32 time` (block counter), `u16 kind`, `u16 flags`, `u32 a[5]`. At the call the sink gets the events of the runtime's small ring (the boot and the errors so far), oldest first. `tick` (0: none) is `void tick(void)`, called once per pass of the UI task with this module as the source, outside the interrupt mask: it keeps the module off slot 0, which only one module can hold. The runtime clears a sink or a tick that points into a module's memory after its `fini`. Used by digikit/debug."
+
+[[import]]
+name = "dkrt_log_ev"
+sig = "void (u32 kind, u32 flags, const u32 *a)"
+doc = "Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` holds one. For a module that logs a kind of its own."
+
+[[import]]
+name = "dkrt_peek_range"
+sig = "u32 (u32 i, u32 *out)"
+doc = "The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK."
+
+[[import]]
+name = "dkrt_track_type"
+sig = "i32 (u32 track)"
+doc = "The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet."
+
 # The entry points of a .dkm (docs/design/digikit-dkm.md); `api` is the dk_api table. At least one must exist.
 [dkm]
 init = { sig = "i32 (const api *api)", doc = "Runs once after the copy, relocation and cache flush. Returns 0 = ok; the module is unloaded otherwise." }
@@ -702,9 +722,6 @@ READ = 0x16         # a byte range of a store file: path, u32 offset, u32 length
 VERIFY = 0x17       # re-read a store file from the card and hash it: path; reply: sha256[32]
 MKDIR = 0x18        # make a folder (a folder entry with nothing in it): path; ok when it exists
 SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit-store.md, "The settings record"): u32 offset, u16 length (at most 768); reply: u8 copy (0 A, 1 B), u32 seq, u32 used, the bytes
-LOG = 0x20
-PEEK = 0x21
-LOGCFG = 0x22
 FAULT = 0x23        # dev: make the runtime fail on purpose to test the fault path; body byte 0 = 1: a Rust panic (a bounds check)
 SELECT = 0x30
 RESTART = 0x31
@@ -712,12 +729,16 @@ RESTART = 0x31
 [protocol.ranges]   # command numbers a run-time module may register with Api.register_cmds (a request number is 6 bits: bit 6 of the command byte marks a reply)
 remote = [0x38, 0x3d]   # digikit/remote: key and turn of the panel (docs/plans/remote-control.md)
 remote_state = [0x3e, 0x3f]   # digikit/remote: the state
-probe = [0x32, 0x35]   # digikit/probe (later digikit/debug): collector status, raw reads, reset (docs/plans/debug-mode-and-probes.md)
+probe = [0x32, 0x35]   # digikit/probe: collector status, raw reads, reset (docs/plans/debug-mode-and-probes.md)
+debug = [0x20, 0x22]   # digikit/debug: LOG, PEEK, LOGCFG (docs/findings/46-digikit-debug.md)
 
 [protocol.service]  # the commands of run-time service modules, by name; each lies in a range above (a module registers them with Api.register_cmds)
 REMOTE_KEY = 0x38      # digikit/remote: code (u8), down (u8)
 REMOTE_TURN = 0x39     # encoder (u8), delta (s8); the reply body is the delta taken (s8, at most 30 either way)
 REMOTE_RELEASE = 0x3a  # release every key the module holds
+LOG = 0x20             # digikit/debug: body u32 from_seq; reply u32 oldest, u32 newest, u8 n, then n events of 32 bytes
+PEEK = 0x21            # digikit/debug: body u32 addr, u16 len (1 to 512, inside the device file's `[digikit] peek` ranges); reply u32 addr, u16 len, the bytes
+LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded)
 REMOTE_STATE = 0x3e    # reply: enabled (u8, always 1 while the module is loaded), state format (u8), turn limit (u8)
 
 [protocol.status]   # reply status codes of the upload commands (0 = ok); never renumber

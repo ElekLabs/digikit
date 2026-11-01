@@ -38,9 +38,6 @@ export const CMD = {
   VERIFY: 0x17,
   MKDIR: 0x18,
   SETTINGS: 0x19,
-  LOG: 0x20,
-  PEEK: 0x21,
-  LOGCFG: 0x22,
   FAULT: 0x23,
   SELECT: 0x30,
   RESTART: 0x31,
@@ -48,6 +45,9 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
+  LOG: 0x20,
+  PEEK: 0x21,
+  LOGCFG: 0x22,
   REMOTE_KEY: 0x38,
   REMOTE_TURN: 0x39,
   REMOTE_RELEASE: 0x3a,
@@ -138,6 +138,7 @@ export const CAP = {
 
 /** The command numbers a module may register: [first, last]. */
 export const RANGES = {
+  debug: [0x20, 0x22],
   probe: [0x32, 0x35],
   remote: [0x38, 0x3d],
   remote_state: [0x3e, 0x3f],

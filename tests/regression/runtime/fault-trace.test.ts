@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import { decodeFault, readSettingsRecord, settingsValue } from '@digi/dk-session';
-import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { CAP, CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { button, MS } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { installModule, liveArtifacts, moduleArtifact, runtimeTests, settleUi } from './live.ts';
-import { openDigikitMenu, readAboutRows } from './runtime-menu.ts';
+import { DEBUG_MODULE, installWithDebug, liveArtifacts, moduleArtifact, runtimeTests, settleUi } from './live.ts';
+import { openDigikitMenu, readAboutRows, readCrashSeen, readSmallRing, RING_SYMBOLS } from './runtime-menu.ts';
 import { prepareRuntimePlan } from './runtime-plan.ts';
 
 const SOURCE_SHIFT = 8;
@@ -74,12 +74,26 @@ async function waitForSafeMode({ dk }: PatchedSession): Promise<void> {
     .toBe(true);
 }
 
+/** After a stop or a crash the boot is safe mode: INFO has no LOG capability (the debug module is not loaded). Returns the runtime's own ring. */
+async function expectNoDebugModule(runtime: PatchedSession, plan: Awaited<ReturnType<typeof prepareRuntimePlan>>) {
+  const { session, dk } = runtime;
+  const info = await dk.info(true);
+  expect(info.safe_mode).toBe(true);
+  expect(info.caps !== null && (info.caps >>> CAP.LOG) & 1, 'no LOG capability without the debug module').toBe(0);
+  expect((await dk.request(SERVICE_CMD.LOG, Uint8Array.of(0, 0, 0, 0), true)).status).toBe(-60);
+  return readSmallRing(session, plan);
+}
+
 /** An effect on the send route stops the DSP: the next boot is safe mode, and ABOUT, dk/fault and the log name the module, the site and the step. */
 async function expectFxHang(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', 'DK_ABOUT_N']);
-  await installModule(dk, 'test/dyn-fx-hang', moduleArtifact(session.options.device, 'test/dyn-fx-hang'));
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), [
+    'DK_ABOUT',
+    'DK_ABOUT_N',
+    ...RING_SYMBOLS,
+  ]);
+  await installWithDebug(runtime, 'test/dyn-fx-hang');
   await waitForSafeMode(runtime);
   await waitFrames(runtime, SETTLE_BLOCKS);
 
@@ -94,8 +108,9 @@ async function expectFxHang(runtime: PatchedSession): Promise<void> {
     module: 'dyn-fx-hang',
   });
 
-  // the log of the safe boot has the finding and the reason
-  const log = await dk.readLog();
+  // safe mode loads no module, so the debug module is not there to answer LOG: the log of the safe boot is the runtime's own ring, which has the
+  // finding and the reason, and the record's tail (taken from that ring at the stop) was found
+  const log = await expectNoDebugModule(runtime, plan);
   const found = log.filter((e) => e.kind === LOG_KIND.FAULT_FOUND);
   expect(
     found.map((e) => e.args[0]! & 0xff),
@@ -103,10 +118,7 @@ async function expectFxHang(runtime: PatchedSession): Promise<void> {
   ).toEqual([2]);
   expect(found[0]!.args[2], 'the module step in the event').toBe(2);
   expect(log.filter((e) => e.kind === LOG_KIND.SAFE).map((e) => e.args[0])).toEqual([SAFE_DSP]);
-  expect(
-    log.some((e) => e.kind === LOG_KIND.CRASH_TAIL),
-    'the last events of the boot before',
-  ).toBe(true);
+  expect((await readCrashSeen(session, plan)).tail, 'the last events of the boot before').toBeGreaterThan(0);
   expect(
     (await dk.modules()).map((m) => m.name),
     'safe mode loads no module',
@@ -124,7 +136,7 @@ async function expectFxHang(runtime: PatchedSession): Promise<void> {
 async function expectVoiceHang(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
-  await installModule(dk, 'test/dyn-dsp-hang', moduleArtifact(session.options.device, 'test/dyn-dsp-hang'));
+  await installWithDebug(runtime, 'test/dyn-dsp-hang');
   const tap = panelTap(runtime);
   await session.client.inputButton(button('FUNC'), true);
   await tap('SRC', 1200);
@@ -157,7 +169,7 @@ async function expectVoiceHang(runtime: PatchedSession): Promise<void> {
 async function expectFxFaultEvents(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
-  await installModule(dk, 'test/dyn-fx-nan', moduleArtifact(session.options.device, 'test/dyn-fx-nan'));
+  await installWithDebug(runtime, 'test/dyn-fx-nan');
   await expect
     .poll(async () => (await dk.readLog(true)).some((e) => e.kind === LOG_KIND.FX_DISABLED), {
       timeout: 600_000,
@@ -187,7 +199,7 @@ async function expectFxFaultEvents(runtime: PatchedSession): Promise<void> {
 async function expectNoFalseStop(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
-  await installModule(dk, 'test/dyn-fx-gain-send', moduleArtifact(session.options.device, 'test/dyn-fx-gain-send'));
+  await installWithDebug(runtime, 'test/dyn-fx-gain-send');
   const boot = (await dk.readLog()).find((e) => e.kind === LOG_KIND.BOOT_START);
   await waitFrames(runtime, BLOCKS_PAST_THE_LIMIT);
   const log = await dk.readLog();
@@ -207,25 +219,33 @@ async function expectCpuCrashFault(runtime: PatchedSession): Promise<void> {
   const cfg = Uint8Array.of(0, 0, 0x0b, 0xb8, 0); // 3000 blocks (2 s) after the first slot call, an illegal instruction
   await dk.put('cfg/crash-after.bin', cfg);
   const device = session.options.device;
-  const bytes = fs.readFileSync(moduleArtifact(device, 'test/dyn-crash'));
-  await dk.put('modules/dyn-crash.dkm', bytes);
-  await dk.select(['modules/dyn-crash.dkm']);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', ...RING_SYMBOLS]);
+  for (const id of [DEBUG_MODULE, 'test/dyn-crash']) {
+    await dk.put(`modules/${id.split('/')[1]}.dkm`, fs.readFileSync(moduleArtifact(device, id)));
+  }
+  await dk.select(['modules/debug.dkm', 'modules/dyn-crash.dkm']);
   await dk.restart();
   // the module crashes this boot and the next one; the third boot is safe mode (two bad boots)
   await waitForSafeMode(runtime);
   await waitFrames(runtime, SETTLE_BLOCKS);
   const fault = decodeFault(settingsValue(await readSettingsRecord(dk), 'dk/fault') ?? new Uint8Array());
   expect(fault).toMatchObject({ kind: 'cpu', module: 'dyn-crash' });
-  const log = await dk.readLog();
+  // the safe boot has no debug module: the runtime's own ring has the crash event, and the record's tail came from that ring
+  const log = await expectNoDebugModule(runtime, plan);
   const crash = log.find((e) => e.kind === LOG_KIND.CRASH_FOUND);
   expect(fault!.at, 'the PC of the crash record').toBe(crash!.args[0]);
+  expect((await readCrashSeen(session, plan)).tail, 'the last events before the crash').toBeGreaterThan(0);
 }
 
 /** A panic of the runtime (CMD_FAULT, a failed bounds check) writes a panic record and resets: the next boot is safe mode and ABOUT, dk/fault and the log name it. */
 async function expectRuntimePanic(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', 'DK_ABOUT_N']);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), [
+    'DK_ABOUT',
+    'DK_ABOUT_N',
+    ...RING_SYMBOLS,
+  ]);
   // the device resets inside the handler and never replies; one try (quick), since a retry would reach the safe boot and panic it too
   await dk.request(CMD.FAULT, Uint8Array.of(1), true).catch(() => undefined);
   await waitForSafeMode(runtime);
@@ -235,17 +255,14 @@ async function expectRuntimePanic(runtime: PatchedSession): Promise<void> {
   expect(fault, 'dk/fault is in the settings record').not.toBeNull();
   expect(fault).toMatchObject({ kind: 'panic', module: 'runtime', at: 0 });
 
-  const log = await dk.readLog();
+  const log = await expectNoDebugModule(runtime, plan);
   const found = log.filter((e) => e.kind === LOG_KIND.FAULT_FOUND);
   expect(
     found.map((e) => e.args[0]! & 0xff),
     'FAULT_FOUND of kind panic',
   ).toEqual([3]);
   expect(log.filter((e) => e.kind === LOG_KIND.SAFE).map((e) => e.args[0])).toEqual([SAFE_PANIC]);
-  expect(
-    log.some((e) => e.kind === LOG_KIND.CRASH_STACK),
-    'the stack of the panic',
-  ).toBe(true);
+  expect((await readCrashSeen(session, plan)).panic, 'the boot found a panic record').toBe(1);
 
   const rows = await aboutRows(runtime, plan);
   expect(rows).toEqual(expect.arrayContaining(['SAFE: CPU PANIC', 'FAULT: CPU PANIC', 'IN RUNTIME']));

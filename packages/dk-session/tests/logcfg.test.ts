@@ -1,8 +1,8 @@
-// LOGCFG in the pure TypeScript client against a fake runtime that keeps the levels as upload.rs `cmd_logcfg` does (set needs exactly 10 body bytes).
+// LOGCFG in the pure TypeScript client against a fake debug module that keeps the levels as modules/tools/debug `cmd_logcfg` does (set needs exactly 10 body bytes).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, DkSession, decode8in7, encode8in7 } from '@digi/dk-session';
-import { CMD as GCMD } from '@digi/dk-session/gen_proto';
+import { SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
 const PREFIX = [0xf0, 0x7d, 0x64, 0x6b, 1];
@@ -24,18 +24,14 @@ class FakeRuntime {
     const cmd = msg[5]!;
     const seq = msg[6]!;
     const body = decode8in7(msg.subarray(7, msg.length - 1));
-    assert.equal(cmd, GCMD.LOGCFG);
+    assert.equal(cmd, SERVICE_CMD.LOGCFG);
     this.bodies.push([...body]);
     if (body[0] === 1) {
       if (body.length !== 10) return void this.queue.push(reply(cmd, seq, -2));
       this.level = body[1]!;
       this.modules = [...body.subarray(2, 10)];
     }
-    if (body[0] === 2) {
-      if (body.length !== 2) return void this.queue.push(reply(cmd, seq, -50));
-      if (body[1]! > 1) return void this.queue.push(reply(cmd, seq, -60));
-      this.debug = body[1] === 1;
-    }
+    if (body[0]! > 1) return void this.queue.push(reply(cmd, seq, -60)); // op 2, the old debug switch, is gone
     this.queue.push(reply(cmd, seq, 0, [this.level, ...this.modules, this.debug ? 1 : 0]));
   }
   async recv() {
@@ -62,23 +58,4 @@ test('setLogConfig refuses a level or a module count the runtime would refuse, w
   await assert.rejects(s.setLogConfig(2, [...eight.slice(0, 7), 7]), DkError);
   await assert.rejects(s.setLogConfig(2, eight.slice(0, 7)), DkError);
   assert.equal(dev.bodies.length, 0);
-});
-
-test('setDebug sends op 2 with one byte, returns the new state, and leaves the levels alone', async () => {
-  const dev = new FakeRuntime();
-  const s = new DkSession(dev, { timeoutMs: 200 });
-  const off = await s.setDebug(false);
-  assert.deepEqual(dev.bodies.at(-1), [2, 0]);
-  assert.deepEqual(off, { level: 2, modules: Array(8).fill(0xff), debug: false });
-  assert.deepEqual((await s.logConfig()).debug, false);
-  const on = await s.setDebug(true);
-  assert.deepEqual(dev.bodies.at(-1), [2, 1]);
-  assert.equal(on.debug, true);
-});
-
-test('setDebug reports the runtime refusing the op', async () => {
-  const dev = new FakeRuntime();
-  dev.send = (msg: Uint8Array) => void dev.queue.push(reply(msg[5]!, msg[6]!, -60)); // a runtime from before op 2
-  const s = new DkSession(dev, { timeoutMs: 200 });
-  await assert.rejects(s.setDebug(true), DkError);
 });

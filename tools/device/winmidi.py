@@ -8,7 +8,7 @@ Windows lets one program at a time open a MIDI port: quit Elektron Transfer and 
 
 Both directions use event callbacks, so the times are close to the driver's: a reader thread waits on the input event and stamps each
 complete SysEx message when its last buffer comes back (`last_rx_t`, time.perf_counter); `send` returns when the driver hands back the
-message's buffer. The winmm calls follow dn2_firmware's tools/winmidi.py (derived from irpina/digihealth, GPL-2.0-or-later).
+message's buffer. The winmm calls follow the winmidi module of the dn2_firmware project (derived from irpina/digihealth, GPL-2.0-or-later).
 """
 
 from __future__ import annotations

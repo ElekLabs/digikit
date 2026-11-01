@@ -5,7 +5,7 @@
     mise run dk:probe -- --port Digitakt --modules test/dsp-facts --capture out/probe/facts.json
 
 Steps, one line each: INFO (the device id picks the pack target), the modules loaded now (the selection to restore), pack (`patchkit pack`) of the given
-modules, `digikit/remote` and `digikit/probe`, upload of the files whose size or sha256 differ from LIST, SELECT (remote, the modules, the collector),
+modules, `digikit/remote`, `digikit/debug` and `digikit/probe`, upload of the files whose size or sha256 differ from LIST, SELECT (remote, debug, the modules, the collector),
 RESTART, the wait for the new boot, the boot's MOD_LOAD and MOD_DSP results and the loaded modules, the fault check, the capture
 (`dkprobe capture`), the fault check again, the comparison with `--compare`, and the restore: SELECT of the previous modules and RESTART, unless `--keep`.
 The restore also runs after a failure, once the new selection is saved.
@@ -35,6 +35,7 @@ from tools.device import dkupload as D
 
 REMOTE = "digikit/remote"
 COLLECTOR = "digikit/probe"
+DEBUG = "digikit/debug"  # the log (the boot wait and the fault check read it) exists only while it is loaded
 # the sequence a probe module speaks
 SEQUENCES: dict[str, Any] = {"sharc": S, "facts": F}
 MODULE_SEQ = {"test/sharc-probe": "sharc", "test/dsp-facts": "facts"}
@@ -62,7 +63,7 @@ def say(msg: str) -> None:
 def selection_paths(modules: list[str]) -> list[str]:
     """The selection of one run: remote first, the modules, the collector last (the order of the regression test)."""
     out: list[str] = []
-    for m in [REMOTE, *modules, COLLECTOR]:
+    for m in [REMOTE, DEBUG, *modules, COLLECTOR]:
         if m not in out:
             out.append(m)
     return [R.module_path(m) for m in out]
@@ -170,7 +171,7 @@ def run(
     )
     store = {p: (n, h) for p, n, h in up.ls()}
     before = previous_selection(up, store, log)
-    ids = [REMOTE, *[m for m in modules if m != REMOTE], COLLECTOR]
+    ids = [REMOTE, DEBUG, *[m for m in modules if m not in (REMOTE, DEBUG)], COLLECTOR]
     files: list[tuple[str, bytes]] = []
     for mid in dict.fromkeys(ids):
         t0 = time.monotonic()

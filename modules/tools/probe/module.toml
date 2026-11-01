@@ -18,8 +18,7 @@ conflicts = []
 "dn2-1.12" = "experimental"
 
 # A run-time module (`.dkm`, `patchkit pack digikit/probe --device dt2`), built from C. dkm_init sets the per-block callback of core/dsp-link
-# (`dl_set_tick_cb`) and registers the probe range of sdk/sdk.toml with Api.register_cmds. It becomes `digikit/debug` in phase 3 of
-# docs/plans/debug-mode-and-probes.md.
+# (`dl_set_tick_cb`) and registers the probe range of sdk/sdk.toml with Api.register_cmds.
 [[object]]
 path = "build/probe.dko.json"
 sources = ["src/c/probe.c"]

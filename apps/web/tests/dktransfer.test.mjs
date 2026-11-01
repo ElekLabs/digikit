@@ -415,8 +415,9 @@ test('restart: RESTART, wait for the new boot in the log, then report what MODUL
     ['restart', 'wait', 'done'],
   );
   assert.deepEqual(events.at(-1), { event: 'done', restarted: true, loaded: ['mod:modules/machine.dkm'], missing: [] });
-  // the old boot's log (with the RESTART request) answered first, then two requests got nothing, then the new boot
-  assert.ok(dev.seen.filter((c) => c === 'LOG').length >= 2);
+  // the old boot answered INFO first (the LOG capability: the log decides), then two requests got nothing, then the new boot's log
+  assert.ok(dev.seen.filter((c) => c === 'INFO').length >= 2);
+  assert.ok(dev.seen.includes('LOG'));
   assert.equal(dev.log.length, 1);
   assert.equal(dev.log[0].kind, LOG_KIND.BOOT_START);
 });
