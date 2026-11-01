@@ -298,6 +298,11 @@ pub struct ModuleInfo {
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]
     pub dynamic: bool,
+    /// Names of Api entries (`[api]` of sdk/sdk.toml) that the module calls and the packer cannot see in the file. `pack` declares the
+    /// newest `since` of them as the Api minor, so a runtime without the entry refuses the module at load, and a runtime that has it
+    /// accepts it. Calls a module makes only after it checked `api->size` need no entry here.
+    #[serde(default)]
+    pub uses_api: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

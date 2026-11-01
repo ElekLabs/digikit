@@ -1408,3 +1408,23 @@ fn catalog_rewind_header_failure_is_sticky_and_incremental_padding_is_not_an_ent
     assert_eq!(unsafe { c.rewind(w.s.0.as_mut_ptr()) }, Err(E_READ));
     assert_eq!(unsafe { c.read_page(w.s.0.as_mut_ptr(), w.a.0.as_mut_ptr(), 1024, &mut out) }, Err(E_READ));
 }
+
+#[test]
+fn a_file_range_stays_inside_the_file_rounded_up_to_sectors() {
+    // 1,025 bytes are 3 sectors
+    assert_eq!(file_span(100, 1025, 0, 3), Ok(100));
+    assert_eq!(file_span(100, 1025, 2, 1), Ok(102));
+    assert_eq!(file_span(100, 1024, 1, 1), Ok(101));
+    assert_eq!(file_span(100, 1025, 2, 2), Err(crate::E_RANGE));
+    assert_eq!(file_span(100, 1024, 2, 1), Err(crate::E_RANGE), "1,024 bytes are 2 sectors");
+    assert_eq!(file_span(100, 1025, 3, 1), Err(crate::E_RANGE));
+    assert_eq!(file_span(100, 0, 0, 1), Err(crate::E_RANGE), "an empty file has no sector");
+    assert_eq!(file_span(100, 1025, 0, 0), Err(crate::E_RANGE));
+    // one call reads at most what the block read takes
+    assert_eq!(file_span(7, u32::MAX, 0, MAX_IO_SECTORS), Ok(7));
+    assert_eq!(file_span(7, u32::MAX, 0, MAX_IO_SECTORS + 1), Err(crate::E_RANGE));
+    // the end of a 4 GiB file does not overflow
+    assert_eq!(file_span(7, u32::MAX, 8_388_607, 1), Ok(7 + 8_388_607));
+    assert_eq!(file_span(7, u32::MAX, u32::MAX, 1), Err(crate::E_RANGE));
+    assert_eq!(file_span(u32::MAX, u32::MAX, 5, 1), Err(crate::E_RANGE));
+}

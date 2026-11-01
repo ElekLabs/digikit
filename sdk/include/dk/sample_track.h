@@ -1,4 +1,4 @@
-/* Per-track stereo samples. API contract 1.5 (docs/design/sample-api-1.5.md).
+/* Per-track stereo samples. API contract 1.5, sample_track_path 1.6 (docs/design/sample-api-1.5.md).
    Additive to <dk/sample.h> (1.3 bank, frozen, mono, 8192 frames, float): a module
    uses the bank family or the track family, never both (the second is refused with
    DK_SAMPLE_E_CONTRACT). A track holds one PCM16 sample, mono or stereo, in
@@ -18,6 +18,7 @@
 #define DK_SAMPLE_E_POOL (-16)    /* the pool is full */
 #define DK_SAMPLE_E_CHANGED (-17) /* the file differs from the selection snapshot */
 /* The design draft numbers E_CHANGED -14; -14 is E_TABLE_FULL, so it is -17. */
+#define DK_SAMPLE_E_SEL_PATH (-40) /* the path is empty, too long or bad; sample_track_path: buf too small */
 
 /* One record per track in the module's DSP data, eight normal words, the runtime
    writes and the module reads. `ready` is published last. `token` is nonzero,
@@ -63,7 +64,17 @@ _Static_assert(sizeof(dk_sample_info) == 16, "dk_sample_info layout");
      int32_t sample_unbind(h, track);
      int32_t sample_track_status(h, track);                    sticky errors until select/unbind
      int32_t sample_track_info(h, track, uint8_t *out);        out is a dk_sample_info
+     int32_t sample_track_path(h, track, uint8_t *buf, uint32_t cap);   (api 1.6) length, or error
    select while QUEUED or LOADING supersedes (status QUEUED again). Calls are legal
    from init and service/UI callbacks. A runtime image without a sample backing
-   returns DK_SAMPLE_E_CONTRACT from sample_select. */
+   returns DK_SAMPLE_E_CONTRACT from sample_select.
+
+   Paths (api 1.6). sample_select takes the root-relative path of a DK_FILES_SAMPLES listing
+   row, as <dk/files.h> gives it ("KICKS/K1", no leading slash); the runtime adds the device's
+   root. A DT2 path that already starts with '/' (the 1.5 form) is accepted as it is.
+   sample_track_path returns the current selection of a track in the root-relative form, in
+   every state but UNUSED (E_NOT_FOUND): it is what a UI shows after a project change
+   re-selected the tracks. It copies the NUL-terminated path into buf and returns its length
+   without the NUL; if length + 1 > cap it returns DK_SAMPLE_E_SEL_PATH and leaves buf alone.
+   A module that calls it checks that api->size covers sample_track_path (API 1.6) first. */
 #endif

@@ -1,6 +1,6 @@
 //! Per-track stereo samples (API 1.5, docs/design/sample-api-1.5.md). The state machine is
 //! `dkrt_sdk::sample_tracks` (device-neutral, host-tested); this file binds it to the runtime:
-//! the Api entries, the optional `dkpool_*` backing symbols (plug-in point `dkrt_pool.h`, version 1)
+//! the Api entries (1.6 adds `sample_track_path`), the optional `dkpool_*` backing symbols (plug-in point `dkrt_pool.h`, version 1)
 //! and the events adapters call (`dkrt_pool_done`, `dkrt_pool_lost`, `dkrt_project_changed`).
 //! No firmware address and no `cf.*` anchor is used here. Without the backing adapter every
 //! `sample_select` returns E_CONTRACT.
@@ -27,7 +27,9 @@ use crate::{dsp, irq_mask, irq_restore, sample};
 use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
-use dkrt_sdk::sample_tracks::{Core, Env, FileId, Handle, Inspect, Load, Strack, ID_HASH_VALID, TRACKS};
+use dkrt_sdk::sample_tracks::{
+    rooted, store_identity, store_inspect, unrooted, Core, Env, FileId, Handle, Inspect, Load, Strack, ID_HASH_VALID, ROOT_DN2, ROOT_DT2, TRACKS,
+};
 use dkrt_sdk::{E_CONTRACT, E_DSP_XFER, E_NOT_FOUND, E_READ, E_SEL_PATH};
 
 pub const DKPOOL_VERSION: u32 = 1;
@@ -43,6 +45,8 @@ extern "C" {
     fn dkpool_check(h: *const Handle) -> i32;
     fn dkpool_free_frames() -> u32;
     fn dkpool_tick();
+    // Optional growth of plug-in point version 1 (dkrt_pool.h): the runtime tests each for 0.
+    fn dkpool_cancel(req: u32);
     // Per-device tables of the runtime's assembly objects (DT2 1.17 anchors; zeros on DN2). Both are declared in sample_source.rs and files.rs too.
     static dkrt_sample_fs: [u32; 4];
     static dkrt_files_fs: [u32; 3];
@@ -220,9 +224,36 @@ type FsClose = unsafe extern "C" fn(*mut u32) -> i32;
 type FsSize = unsafe extern "C" fn(u32) -> u32;
 type FsMeta = unsafe extern "C" fn(u32, *mut u32) -> i32;
 
+/// The device's sample root (`select` paths are root-relative; the runtime keeps the rooted form).
+fn root() -> &'static [u8] {
+    if crate::device() == 2 {
+        ROOT_DN2
+    } else {
+        ROOT_DT2
+    }
+}
+
+/// DN2: a `samples/...` file of the digikit store. Identity is its size and the sha256 of its table entry (the listing row's), and `head` is
+/// the first 64 bytes of the file. `path` is not NUL-terminated.
+unsafe fn probe_store(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId, i32> {
+    if path.is_empty() || path.len() >= dkrt_sdk::sample_tracks::PATH {
+        return Err(E_SEL_PATH);
+    }
+    let mut z = [0u8; dkrt_sdk::sample_tracks::PATH + 1];
+    z[..path.len()].copy_from_slice(path);
+    let f = crate::store::find(z.as_ptr())?;
+    if let Some(h) = head {
+        crate::store::read_head(&f, h)?;
+    }
+    Ok(store_identity(f.size, &f.sha))
+}
+
 /// Open `path` (not NUL-terminated), take the identity of its listing row (size and the stored hash by entry id, as `files.rs` lists it)
-/// and, when `head` is given, read the 64 header bytes. DT2 only: DN2 has no sample backing, so `pool_ok` refuses before this runs.
+/// and, when `head` is given, read the 64 header bytes. DT2 only: the store route of DN2 is `probe_store`.
 unsafe fn probe(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId, i32> {
+    if crate::device() == 2 {
+        return probe_store(path, head);
+    }
     if crate::device() != 1 {
         return Err(E_CONTRACT);
     }
@@ -281,6 +312,9 @@ impl Env for Device {
         let mut head = [0u8; 64];
         let id = unsafe { probe(path, Some(&mut head))? };
         // Size and format only: no PCM is read here (it can be megabytes), the pool adapter reads it.
+        if crate::device() == 2 {
+            return store_inspect(id.size, &id.hash, &head);
+        }
         let (frames, channels) = dkrt_sdk::sample::native_header(&head, id.size)?;
         Ok(Inspect { id, frames, rate: dkrt_sdk::sample::RATE, channels })
     }
@@ -299,6 +333,13 @@ impl Env for Device {
     }
     fn release(&mut self, h: &Handle) {
         unsafe { dkpool_release(h) }
+    }
+    fn cancel(&mut self, req: u32) {
+        unsafe {
+            if black_box(dkpool_cancel as *const () as usize) != 0 {
+                dkpool_cancel(req);
+            }
+        }
     }
     fn check(&mut self, h: &Handle) -> i32 {
         unsafe { dkpool_check(h) }
@@ -473,8 +514,14 @@ pub unsafe fn select(handle: u32, track: u32, path: *const u8) -> i32 {
     if n == copy.len() {
         return E_SEL_PATH;
     }
+    // The path is root-relative (a listing row); the runtime keeps and checks the device-rooted form. A DT2 path that starts with '/' stays.
+    let mut full = [0u8; dkrt_sdk::sample_tracks::PATH];
+    let n = match rooted(root(), &copy[..n], &mut full) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     let sr = irq_mask();
-    let r = core_().select(c, track as usize, &copy[..n]);
+    let r = core_().select(c, track as usize, &full[..n]);
     irq_restore(sr);
     r
 }
@@ -494,6 +541,29 @@ pub unsafe fn unbind(handle: u32, track: u32) -> i32 {
 pub unsafe fn status(handle: u32, track: u32) -> i32 {
     match client(handle) {
         Ok(c) => core_().status(c, track as usize),
+        Err(e) => e,
+    }
+}
+
+/// `sample_track_path`: the track's current selection, root-relative, NUL-terminated, into `buf`; the length without the NUL.
+pub unsafe fn path(handle: u32, track: u32, buf: *mut u8, cap: u32) -> i32 {
+    let c = match client(handle) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    if buf.is_null() {
+        return E_SEL_PATH;
+    }
+    match core_().path(c, track as usize) {
+        Ok(stored) => {
+            let p = unrooted(root(), stored);
+            if p.len() + 1 > cap as usize {
+                return E_SEL_PATH;
+            }
+            core::ptr::copy_nonoverlapping(p.as_ptr(), buf, p.len());
+            *buf.add(p.len()) = 0;
+            p.len() as i32
+        }
         Err(e) => e,
     }
 }

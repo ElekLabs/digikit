@@ -607,6 +607,13 @@ plan.json {}",
                 },
                 trace: rest.iter().any(|a| a == "--trace"),
                 stereo: false,
+                api_minor: {
+                    let mut newest = 0;
+                    for name in &m.manifest.module.uses_api {
+                        newest = newest.max(patchkit::sdkgen::api_since(name)?);
+                    }
+                    newest
+                },
             };
             // a run-time module: its typed sections, lowered for one device, are the `register` records
             let mut dsp: Vec<u8> = vec![];

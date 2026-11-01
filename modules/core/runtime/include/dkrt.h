@@ -222,6 +222,13 @@ typedef struct DkrtStoreEntry {
     uint32_t size;
 } DkrtStoreEntry;
 
+/* A store file as dkrt_store_stat found it, for an adapter that streams it (dkrt_store_read): the first sector (relative to the store), the size in bytes and the sha256 of the table entry. The file's sectors are contiguous: sector n of the file is store sector first + n. */
+typedef struct DkrtStoreFile {
+    uint32_t first;
+    uint32_t size;
+    uint8_t sha[32];
+} DkrtStoreFile;
+
 /* dkrt_module result: one loaded module. */
 typedef struct DkrtModule {
     uint8_t name[32];
@@ -389,6 +396,10 @@ _Static_assert(sizeof(DkrtStoreEntry) == 72, "DkrtStoreEntry size");
 _Static_assert(offsetof(DkrtStoreEntry, path) == 0, "DkrtStoreEntry.path");
 _Static_assert(offsetof(DkrtStoreEntry, first) == 64, "DkrtStoreEntry.first");
 _Static_assert(offsetof(DkrtStoreEntry, size) == 68, "DkrtStoreEntry.size");
+_Static_assert(sizeof(DkrtStoreFile) == 40, "DkrtStoreFile size");
+_Static_assert(offsetof(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
+_Static_assert(offsetof(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
+_Static_assert(offsetof(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
 _Static_assert(sizeof(DkrtModule) == 124, "DkrtModule size");
 _Static_assert(offsetof(DkrtModule, name) == 0, "DkrtModule.name");
 _Static_assert(offsetof(DkrtModule, version) == 32, "DkrtModule.version");
@@ -507,6 +518,18 @@ void dkrt_diag(DkrtDiag *out);
 
 /* The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store). */
 int32_t dkrt_store_list(const uint8_t *prefix, DkrtStoreEntry *out, uint32_t max);
+
+/* Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick. */
+int32_t dkrt_poll_add(uintptr_t f);
+
+/* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
+void dkrt_poll_remove(uintptr_t f);
+
+/* Look a store file up by path (NUL-terminated) and fill out: OK, E_NOT_FOUND (no store, no such file, a folder), or a card error. It reads the store headers and scans the table through the runtime's staging buffer, so call it only at the start of a load, not while a staged module read is in progress. A file of size 0 is found. */
+int32_t dkrt_store_stat(const uint8_t *path, DkrtStoreFile *out);
+
+/* Read count sectors of the file f, starting at its sector `sector`, into dst (512 bytes per sector). dst must be 16-byte aligned (E_CONTRACT otherwise). count is 1 to 128 and the range lies inside the file, rounded up to whole sectors (E_RANGE otherwise). No sha check, no staging buffer: the caller owns dst. OK or E_READ. */
+int32_t dkrt_store_read(const DkrtStoreFile *f, uint32_t sector, uint32_t count, uint8_t *dst);
 
 /* The header fields of the .dkm that starts at store sector first (DkrtScan.first) into out: OK, E_FORMAT when the file is not a .dkm, or E_READ / E_NOT_FOUND when its first sector cannot be read. The runtime does the card read itself. */
 int32_t dkrt_module_header(uint32_t first, DkrtModuleHeader *out);

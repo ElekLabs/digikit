@@ -521,6 +521,7 @@ unsafe extern "C" fn api_sample_select(handle: u32, track: u32, path: *const u8)
 unsafe extern "C" fn api_sample_unbind(handle: u32, track: u32) -> i32 { tracks::unbind(handle, track) }
 unsafe extern "C" fn api_sample_track_status(handle: u32, track: u32) -> i32 { tracks::status(handle, track) }
 unsafe extern "C" fn api_sample_track_info(handle: u32, track: u32, out: *mut u8) -> i32 { tracks::info(handle, track, out) }
+unsafe extern "C" fn api_sample_track_path(handle: u32, track: u32, buf: *mut u8, cap: u32) -> i32 { tracks::path(handle, track, buf, cap) }
 unsafe extern "C" fn api_files_client() -> i32 { files::client() }
 unsafe extern "C" fn api_files_list(client: u32, root: u32, path: *const u8, notify: Option<dkrt_sdk::api::FileEvent>, context: *mut u8) -> i32 { files::list(client, root, path, notify, context) }
 unsafe extern "C" fn api_files_poll(client: u32, ticket: u32, out: *mut u8, cap: u32) -> i32 { files::poll(client, ticket, out, cap) }
@@ -559,6 +560,7 @@ pub static mut dkrt_api: Api = Api {
     sample_unbind: api_sample_unbind,
     sample_track_status: api_sample_track_status,
     sample_track_info: api_sample_track_info,
+    sample_track_path: api_sample_track_path,
 };
 
 pub unsafe fn log(msg: *const u8, value: u32) {
@@ -687,10 +689,54 @@ pub unsafe extern "C" fn dkrt_blocks() -> u32 {
     }
 }
 
-/// Register (or, with 0, remove) a function that `dkrt_tick` calls at the end of every UI-loop pass, in the UI task. One caller only.
+/// Register (or, with 0, remove) a function that `dkrt_tick` calls at the end of every UI-loop pass, in the UI task. One caller only (the
+/// DIGIKIT menu's HEALTH page); `dkrt_poll_add` has room for more.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_poll_set(f: usize) {
     write_volatile(addr_of_mut!(DKRT_POLL), f);
+}
+
+/// Functions of `dkrt_poll_add`, called after the one of `dkrt_poll_set`.
+const POLLS: usize = 4;
+static mut POLL_TABLE: [usize; POLLS] = [0; POLLS];
+
+/// Add a function that `dkrt_tick` calls once per UI-loop pass, in the UI task (`core/ui` keeps its `dk_ui_tick` timers with one). Adding one
+/// that is in the table is OK; `E_NOMEM` when it is full. Task context.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_poll_add(f: usize) -> i32 {
+    if f == 0 {
+        return E_CONTRACT;
+    }
+    let t = &mut *addr_of_mut!(POLL_TABLE);
+    let mut free = POLLS;
+    let mut i = 0;
+    while i < POLLS {
+        if t[i] == f {
+            return OK;
+        }
+        if t[i] == 0 && free == POLLS {
+            free = i;
+        }
+        i += 1;
+    }
+    if free == POLLS {
+        return E_NOMEM;
+    }
+    t[free] = f;
+    OK
+}
+
+/// Remove a function added with `dkrt_poll_add` (no effect when it is not there). Task context.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_poll_remove(f: usize) {
+    let t = &mut *addr_of_mut!(POLL_TABLE);
+    let mut i = 0;
+    while i < POLLS {
+        if f != 0 && t[i] == f {
+            t[i] = 0;
+        }
+        i += 1;
+    }
 }
 
 fn health_fn(f: unsafe extern "C" fn()) -> usize {
@@ -1106,6 +1152,15 @@ pub unsafe extern "C" fn dkrt_tick() {
     if p != 0 {
         let call: unsafe extern "C" fn() = core::mem::transmute(p);
         call();
+    }
+    let mut i = 0;
+    while i < POLLS {
+        let f = read_volatile(addr_of!(POLL_TABLE[i]));
+        if f != 0 {
+            let call: unsafe extern "C" fn() = core::mem::transmute(f);
+            call();
+        }
+        i += 1;
     }
 }
 

@@ -250,6 +250,18 @@ const _: () = assert!(offset_of!(DkrtStoreEntry, path) == 0, "DkrtStoreEntry.pat
 const _: () = assert!(offset_of!(DkrtStoreEntry, first) == 64, "DkrtStoreEntry.first");
 const _: () = assert!(offset_of!(DkrtStoreEntry, size) == 68, "DkrtStoreEntry.size");
 
+/// A store file as dkrt_store_stat found it, for an adapter that streams it (dkrt_store_read): the first sector (relative to the store), the size in bytes and the sha256 of the table entry. The file's sectors are contiguous: sector n of the file is store sector first + n.
+#[repr(C)]
+pub struct DkrtStoreFile {
+    pub first: u32,
+    pub size: u32,
+    pub sha: [u8; 32],
+}
+const _: () = assert!(size_of::<DkrtStoreFile>() == 40, "DkrtStoreFile size");
+const _: () = assert!(offset_of!(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
+const _: () = assert!(offset_of!(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
+const _: () = assert!(offset_of!(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
+
 /// dkrt_module result: one loaded module.
 #[repr(C)]
 pub struct DkrtModule {
@@ -553,6 +565,18 @@ pub mod sig {
 
     /// The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store).
     pub type dkrt_store_list = unsafe extern "C" fn(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32;
+
+    /// Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick.
+    pub type dkrt_poll_add = unsafe extern "C" fn(f: usize) -> i32;
+
+    /// Remove a function added with dkrt_poll_add; no effect when it is not in the table.
+    pub type dkrt_poll_remove = unsafe extern "C" fn(f: usize);
+
+    /// Look a store file up by path (NUL-terminated) and fill out: OK, E_NOT_FOUND (no store, no such file, a folder), or a card error. It reads the store headers and scans the table through the runtime's staging buffer, so call it only at the start of a load, not while a staged module read is in progress. A file of size 0 is found.
+    pub type dkrt_store_stat = unsafe extern "C" fn(path: *const u8, out: *mut DkrtStoreFile) -> i32;
+
+    /// Read count sectors of the file f, starting at its sector `sector`, into dst (512 bytes per sector). dst must be 16-byte aligned (E_CONTRACT otherwise). count is 1 to 128 and the range lies inside the file, rounded up to whole sectors (E_RANGE otherwise). No sha check, no staging buffer: the caller owns dst. OK or E_READ.
+    pub type dkrt_store_read = unsafe extern "C" fn(f: *const DkrtStoreFile, sector: u32, count: u32, dst: *mut u8) -> i32;
 
     /// The header fields of the .dkm that starts at store sector first (DkrtScan.first) into out: OK, E_FORMAT when the file is not a .dkm, or E_READ / E_NOT_FOUND when its first sector cannot be read. The runtime does the card read itself.
     pub type dkrt_module_header = unsafe extern "C" fn(first: u32, out: *mut DkrtModuleHeader) -> i32;

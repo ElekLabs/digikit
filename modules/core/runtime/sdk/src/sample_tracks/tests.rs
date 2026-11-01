@@ -7,6 +7,7 @@ struct Fake {
     files: Vec<(Vec<u8>, FileId, u32, u32)>, // path, id, frames, channels
     free: u32,
     queued: Vec<u32>,
+    cancelled: Vec<u32>,
     sync: bool,
     loads: u32,
     released: u32,
@@ -65,6 +66,9 @@ impl Env for Fake {
     }
     fn release(&mut self, _h: &Handle) {
         self.released += 1;
+    }
+    fn cancel(&mut self, req: u32) {
+        self.cancelled.push(req);
     }
     fn check(&mut self, _h: &Handle) -> i32 {
         if self.lost { E_LOST } else { 0 }
@@ -496,4 +500,179 @@ fn tokens_and_requests_do_not_wrap() {
     c.select(0, 0, b"a.wav");
     run(&mut c, &mut e, 4);
     assert_eq!(c.status(0, 0), E_NOMEM);
+}
+
+#[test]
+fn a_select_that_supersedes_a_running_load_cancels_it_once() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.sync = false;
+    e.add("a.wav", id(100, 1), 500, 2);
+    e.add("b.wav", id(200, 2), 300, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 3);
+    assert!(e.cancelled.is_empty());
+    c.select(0, 0, b"b.wav");
+    run(&mut c, &mut e, 3);
+    assert_eq!(e.cancelled, [e.queued[0]], "the request of the superseded load");
+    run(&mut c, &mut e, 5);
+    assert_eq!(e.cancelled.len(), 1, "once");
+    // the adapter still completes the cancelled request; the entry is reaped, the track is not touched
+    c.done(e.queued[0], E_LOST);
+    run(&mut c, &mut e, 3);
+    assert_eq!(c.status(0, 0), LOADING);
+    assert_eq!(c.entries_used(), 2 - 1, "the cancelled entry is free again");
+    c.done(e.queued[1], 0);
+    run(&mut c, &mut e, 3);
+    assert_eq!(c.status(0, 0), READY);
+    assert_eq!(c.info(0, 0).unwrap().frames, 300);
+}
+
+#[test]
+fn a_cancelled_load_is_not_shared_with_a_new_select_of_the_same_file() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.sync = false;
+    e.add("a.wav", id(100, 1), 500, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 3);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 4);
+    assert_eq!(e.cancelled.len(), 1);
+    assert_eq!(e.queued.len(), 2, "a new load, not the cancelled one");
+    c.done(e.queued[0], E_LOST);
+    c.done(e.queued[1], 0);
+    run(&mut c, &mut e, 4);
+    assert_eq!(c.status(0, 0), READY);
+    assert_eq!((e.loads, e.released), (2, 0));
+}
+
+#[test]
+fn a_load_another_track_shares_is_not_cancelled() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.sync = false;
+    e.add("a.wav", id(100, 1), 500, 2);
+    e.add("b.wav", id(200, 2), 300, 2);
+    c.select(0, 0, b"a.wav");
+    c.select(0, 1, b"a.wav");
+    run(&mut c, &mut e, 4);
+    assert_eq!(e.queued.len(), 1, "dedup: one load for both tracks");
+    c.select(0, 0, b"b.wav");
+    run(&mut c, &mut e, 4);
+    assert!(e.cancelled.is_empty(), "track 1 still waits for it");
+    c.unbind(0, 1);
+    run(&mut c, &mut e, 4);
+    assert_eq!(e.cancelled, [e.queued[0]], "the last waiter went");
+}
+
+#[test]
+fn unbind_of_a_loading_track_cancels_its_load() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.sync = false;
+    e.add("a.wav", id(100, 1), 500, 2);
+    c.select(0, 2, b"a.wav");
+    run(&mut c, &mut e, 3);
+    c.unbind(0, 2);
+    run(&mut c, &mut e, 3);
+    assert_eq!(e.cancelled, [e.queued[0]]);
+    assert_eq!(c.status(0, 2), UNUSED);
+}
+
+#[test]
+fn a_finished_load_is_never_cancelled() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.add("a.wav", id(100, 1), 500, 2);
+    e.add("b.wav", id(200, 2), 300, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 4);
+    c.select(0, 0, b"b.wav");
+    run(&mut c, &mut e, 4);
+    assert!(e.cancelled.is_empty());
+}
+
+#[test]
+fn the_track_path_is_there_in_every_state_but_unused() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.add("dir/a.wav", id(100, 1), 500, 2);
+    assert_eq!(c.path(0, 0), Err(E_NOT_FOUND));
+    assert_eq!(c.path(0, 16), Err(E_CONTRACT));
+    assert_eq!(c.path(1, 0), Err(E_NOT_FOUND));
+    c.select(0, 0, b"dir/a.wav");
+    assert_eq!(c.path(0, 0), Ok(&b"dir/a.wav"[..]), "queued");
+    run(&mut c, &mut e, 4);
+    assert_eq!(c.path(0, 0), Ok(&b"dir/a.wav"[..]), "ready");
+    c.select(0, 1, b"dir/missing.wav");
+    run(&mut c, &mut e, 2);
+    assert_eq!(c.status(0, 1), E_NOT_FOUND);
+    assert_eq!(c.path(0, 1), Ok(&b"dir/missing.wav"[..]), "a sticky error still names its file");
+    c.unbind(0, 0);
+    assert_eq!(c.path(0, 0), Err(E_NOT_FOUND));
+}
+
+#[test]
+fn the_track_path_follows_a_project_change() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.add("p1.wav", id(100, 1), 500, 2);
+    e.add("p2.wav", id(200, 2), 300, 2);
+    c.project_changed(1);
+    c.select(0, 0, b"p1.wav");
+    run(&mut c, &mut e, 4);
+    c.project_changed(2);
+    assert_eq!(c.path(0, 0), Err(E_NOT_FOUND), "the new project has no selection on track 0");
+    c.select(0, 0, b"p2.wav");
+    c.project_changed(1);
+    assert_eq!(c.path(0, 0), Ok(&b"p1.wav"[..]));
+}
+
+#[test]
+fn paths_get_the_device_root() {
+    let mut out = [0u8; PATH];
+    let n = rooted(ROOT_DT2, b"KICKS/K1", &mut out).unwrap();
+    assert_eq!(&out[..n], b"/KICKS/K1");
+    let n = rooted(ROOT_DT2, b"/KICKS/K1\0junk", &mut out).unwrap();
+    assert_eq!(&out[..n], b"/KICKS/K1", "the 1.5 absolute form stays as it is");
+    let n = rooted(ROOT_DN2, b"KICKS/K1", &mut out).unwrap();
+    assert_eq!(&out[..n], b"samples/KICKS/K1");
+    let n = rooted(ROOT_DN2, b"samples/x", &mut out).unwrap();
+    assert_eq!(&out[..n], b"samples/samples/x", "root-relative always on DN2: a folder may be called samples");
+    assert_eq!(rooted(ROOT_DT2, b"", &mut out), Err(E_SEL_PATH));
+    assert_eq!(rooted(ROOT_DT2, b"\0a", &mut out), Err(E_SEL_PATH));
+    // the result must fit: 255 bytes is the most
+    assert!(rooted(ROOT_DT2, &[b'a'; 254], &mut out).is_ok());
+    assert_eq!(rooted(ROOT_DT2, &[b'a'; 255], &mut out), Err(E_SEL_PATH));
+    assert!(rooted(ROOT_DN2, &[b'a'; 247], &mut out).is_ok());
+    assert_eq!(rooted(ROOT_DN2, &[b'a'; 248], &mut out), Err(E_SEL_PATH));
+}
+
+#[test]
+fn stored_paths_lose_the_device_root() {
+    assert_eq!(unrooted(ROOT_DT2, b"/KICKS/K1"), b"KICKS/K1");
+    assert_eq!(unrooted(ROOT_DN2, b"samples/KICKS/K1"), b"KICKS/K1");
+    assert_eq!(unrooted(ROOT_DN2, b"other/x"), b"other/x");
+    // a listing path survives the round trip on both devices
+    let mut out = [0u8; PATH];
+    for root in [ROOT_DT2, ROOT_DN2] {
+        let n = rooted(root, b"A/B.wav", &mut out).unwrap();
+        assert_eq!(unrooted(root, &out[..n]), b"A/B.wav");
+    }
+}
+
+#[test]
+fn a_store_file_is_inspected_with_the_native_header_and_its_table_sha() {
+    // 64-byte header: channels at byte 1 (0 mono, 1 stereo), PCM bytes at 4..8, rate at 8..12, 0x7f at 0x14
+    let mut head = [0u8; 64];
+    head[1] = 1;
+    head[4..8].copy_from_slice(&400u32.to_be_bytes());
+    head[8..12].copy_from_slice(&48000u32.to_be_bytes());
+    head[0x14] = 0x7f;
+    let sha = [7u8; 32];
+    let size = 64 + 400 + 16;
+    let i = store_inspect(size, &sha, &head).unwrap();
+    assert_eq!((i.frames, i.channels, i.rate), (100, 2, 48000));
+    assert_eq!((i.id.size, i.id.hash_kind, i.id.flags), (size, crate::files::HASH_SHA256, ID_HASH_VALID));
+    assert_eq!(i.id.hash, sha);
+    assert!(i.id.same(&store_identity(size, &sha)));
+    assert!(!i.id.same(&store_identity(size, &[8u8; 32])), "another sha is another file");
+    assert!(!i.id.same(&store_identity(size + 4, &sha)));
+    assert_eq!(store_inspect(size + 4, &sha, &head).err(), Some(E_FORMAT), "size does not match the header");
+    head[8] ^= 1;
+    assert_eq!(store_inspect(size, &sha, &head).err(), Some(E_FORMAT), "rate");
 }

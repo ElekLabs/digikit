@@ -5,7 +5,14 @@
    DK_SAMPLE_E_CONTRACT. docs/design/sample-api-1.5.md, section 2.2.
    All calls run in the runtime's task context. `id` and `path` belong to the runtime;
    the adapter does not keep them past the call. Additive growth only: new symbols are
-   optional, existing signatures never change. */
+   optional, existing signatures never change.
+
+   Versioning. DKPOOL_VERSION counts breaking changes of the required symbols (dkpool_version,
+   dkpool_load, dkpool_release, dkpool_check, dkpool_free_frames) and of the meaning of their
+   arguments; it stays 1. An optional symbol (dkpool_tick, dkpool_cancel) is added without a
+   version change: the runtime tests its address for 0 and does without it. The adapter lists
+   the optional symbols it implements in its manifest; the runtime lists them in its
+   `optional` imports. */
 #ifndef DKRT_POOL_H
 #define DKRT_POOL_H
 #include <stdint.h>
@@ -62,6 +69,15 @@ uint32_t dkpool_free_frames(void);
 /* Optional symbol. The runtime calls it once per UI-loop pass (it owns the hook). The adapter delivers finished loads with
    dkrt_pool_done there, and detects a stock reset and reports it with dkrt_pool_lost. Never call the runtime from another task. */
 void dkpool_tick(void);
+/* Optional symbol (added after version 1, no version change). The runtime no longer waits for the load `req`
+   of dkpool_load that returned DKPOOL_QUEUED: a select superseded it, or its last track was unbound, while it was
+   still loading. The adapter may stop early (drop a job that has not started, skip the rest of the pages). It must
+   still end the request the usual way, once: dkrt_pool_done(req, result) from dkpool_tick, with DKPOOL_E_LOST when
+   it stopped early. The runtime frees the entry after that (and calls dkpool_release if the load finished OK, so
+   the adapter may also report the real result and let the release follow). A load that is already finished is not
+   cancelled. An adapter without the symbol behaves as before: the load runs to its end and its result is released.
+   Runs in the UI-loop task, like every dkpool_* call. */
+void dkpool_cancel(uint32_t req);
 
 /* Adapter to runtime. result: 0, DKPOOL_E_POOL, DKPOOL_E_READ or DKPOOL_E_FORMAT. */
 void dkrt_pool_done(uint32_t req, int32_t result);

@@ -4,7 +4,7 @@
 pub const RUNTIME_VERSION: u32 = 0x000504;
 
 pub mod contract {
-    pub const API: (u8, u8) = (1, 5);
+    pub const API: (u8, u8) = (1, 6);
     pub const MACHINE: (u8, u8) = (1, 2);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
@@ -289,10 +289,12 @@ pub mod api {
         pub sample_track_status: unsafe extern "C" fn(handle: u32, track: u32) -> i32,
         /// (api 1.5) Copy a 16-byte dk_sample_info (frames, rate, channels, token; <dk/sample_track.h>) of a READY track; otherwise a negative error and `out` is untouched.
         pub sample_track_info: unsafe extern "C" fn(handle: u32, track: u32, out: *mut u8) -> i32,
+        /// (api 1.6) Copy the root-relative path (as a DK_FILES_SAMPLES listing row gives it, NUL-terminated) of the track's current selection into `buf` and return its length without the NUL. Works in every state except UNUSED (E_NOT_FOUND), so a sticky error still names its file. `cap` too small (length + 1 does not fit): DK_SAMPLE_E_SEL_PATH and `buf` is untouched.
+        pub sample_track_path: unsafe extern "C" fn(handle: u32, track: u32, buf: *mut u8, cap: u32) -> i32,
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 33] = [
+    pub const IMPORT_NAMES: [&str; 34] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -320,6 +322,7 @@ pub mod api {
         "dk_ui_confirm",
         "dk_ui_choice",
         "dk_ui_toast",
+        "dk_ui_tick",
         "dl_set_tick_cb",
         "dkrt_blocks",
         "dkrt_log_sink_set",
@@ -397,6 +400,7 @@ macro_rules! optional_imports {
                 pub fn dk_ui_confirm(title: *const u8, text: *const u8, done: *mut u8, ctx: *mut u8) -> i32;
                 pub fn dk_ui_choice(title: *const u8, items: *mut u8, n: i32, done: *mut u8, ctx: *mut u8) -> i32;
                 pub fn dk_ui_toast(text: *const u8) -> i32;
+                pub fn dk_ui_tick(cb: *mut u8, ctx: *mut u8, period_ms: u32) -> i32;
                 pub fn dl_set_tick_cb(cb: *mut u8);
             }
 
@@ -418,11 +422,12 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_ui_confirm(_a0: *const u8, _a1: *const u8, _a2: *mut u8, _a3: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_choice(_a0: *const u8, _a1: *mut u8, _a2: i32, _a3: *mut u8, _a4: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_toast(_a0: *const u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_tick(_a0: *mut u8, _a1: *mut u8, _a2: u32) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dl_set_tick_cb(_a0: *mut u8) { }
             }
 
             /// (name, address from the module or 0, address of the stub or 0)
-            pub fn table() -> [(&'static str, usize, usize); 19] {
+            pub fn table() -> [(&'static str, usize, usize); 20] {
                 [
                     ("input_key", core::hint::black_box(input_key as usize), 0),
                     ("input_turn", core::hint::black_box(input_turn as usize), 0),
@@ -442,6 +447,7 @@ macro_rules! optional_imports {
                     ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize),
                     ("dk_ui_choice", core::hint::black_box(dk_ui_choice as usize), absent::dk_ui_choice as usize),
                     ("dk_ui_toast", core::hint::black_box(dk_ui_toast as usize), absent::dk_ui_toast as usize),
+                    ("dk_ui_tick", core::hint::black_box(dk_ui_tick as usize), absent::dk_ui_tick as usize),
                     ("dl_set_tick_cb", core::hint::black_box(dl_set_tick_cb as usize), absent::dl_set_tick_cb as usize),
                 ]
             }

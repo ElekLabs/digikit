@@ -176,6 +176,17 @@ pub unsafe fn read_sectors(io: &Io, lay: &Layout, rel: u32, count: u32, buf: *mu
     OK
 }
 
+/// The store sector where `count` sectors of a file start, `sector` sectors into it (`first` and `size` are the file's table entry). The
+/// range must lie inside the file rounded up to whole sectors, and `count` is 1 to `MAX_IO_SECTORS`: `E_RANGE` otherwise. A file's sectors
+/// are contiguous.
+pub fn file_span(first: u32, size: u32, sector: u32, count: u32) -> Result<u32, i32> {
+    let sectors = (size as u64 + 511) / 512;
+    if count == 0 || count > MAX_IO_SECTORS || sector as u64 + count as u64 > sectors {
+        return Err(crate::E_RANGE);
+    }
+    first.checked_add(sector).ok_or(crate::E_RANGE)
+}
+
 /// One header copy as the sector holds it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Hdr {

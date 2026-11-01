@@ -88,6 +88,16 @@ pub const MACHINE_MONO_MINOR: u8 = 1;
 /// The newest minor of the Api contract before the per-track sample table (1.5). A module declares 1.5 only when its DSP section holds a
 /// track table (`DK_SAMPLE_TRACKS`); every other module declares 1.4, so a runtime of Api 1.4 still accepts it.
 pub const API_PRE_TRACKS_MINOR: u8 = 4;
+/// The Api minor of the per-track sample table (1.5).
+pub const API_TRACKS_MINOR: u8 = 5;
+
+/// The Api minor a module declares: the lowest that has everything it needs. 1.4 for a module that needs nothing newer; 1.5 when its DSP
+/// section holds a track table; the newest `since` of the entries its manifest lists in `uses_api` (`Options::api_minor`) when that is
+/// higher. Never above the Api of the SDK this packer was built with.
+pub fn api_minor(sdk_minor: u8, uses_tracks: bool, listed: u8) -> u8 {
+    let base = if uses_tracks { API_TRACKS_MINOR } else { API_PRE_TRACKS_MINOR };
+    base.max(listed).min(sdk_minor)
+}
 
 pub struct Options {
     pub name: String,
@@ -99,6 +109,8 @@ pub struct Options {
     /// A stereo machine (`DK_MACHINE_STEREO`): the file declares machine contract 1.2. A mono machine declares 1.1, so a runtime of
     /// machine contract 1.1 still accepts it.
     pub stereo: bool,
+    /// The newest Api minor of the entries the manifest lists in `uses_api` (0: none); see [`api_minor`].
+    pub api_minor: u8,
 }
 
 /// "1.2.3" -> 0x010203
@@ -377,11 +389,7 @@ pub fn pack_full_max(
             .and_then(|b| b.get(..4))
             .is_some_and(|b| u32::from_le_bytes(b.try_into().unwrap()) == crate::dkmdsp::SAMPLE_TRACKS_KIND);
     let pairs = [
-        if uses_tracks {
-            sdk.api
-        } else {
-            (sdk.api.0, sdk.api.1.min(API_PRE_TRACKS_MINOR))
-        },
+        (sdk.api.0, api_minor(sdk.api.1, uses_tracks, o.api_minor)),
         if (dsp.is_empty() || fx_only) && !has_machine_record(reg) {
             none
         } else if o.stereo {
@@ -656,6 +664,7 @@ mod tests {
             runtime_min: 1,
             trace: false,
             stereo: false,
+            api_minor: 0,
         }
     }
 
@@ -710,6 +719,23 @@ mod tests {
     }
 
     #[test]
+    fn the_api_minor_is_the_lowest_that_has_what_the_module_needs() {
+        // (sdk minor, track table, newest listed entry) -> declared minor
+        assert_eq!(api_minor(6, false, 0), 4);
+        assert_eq!(api_minor(6, true, 0), 5);
+        assert_eq!(api_minor(6, false, 6), 6);
+        assert_eq!(api_minor(6, true, 6), 6);
+        assert_eq!(api_minor(6, false, 3), 4, "an old entry never lowers the floor");
+        assert_eq!(api_minor(6, false, 5), 5);
+        assert_eq!(api_minor(5, false, 6), 5, "never above the SDK this packer was built with");
+        // the entries of the Api: the table of sdk.toml says when each came
+        assert_eq!(crate::sdkgen::api_since("sample_track_path").unwrap(), 6);
+        assert_eq!(crate::sdkgen::api_since("sample_select").unwrap(), 5);
+        assert_eq!(crate::sdkgen::api_since("store_read").unwrap(), 0);
+        assert!(crate::sdkgen::api_since("no_such_entry").is_err());
+    }
+
+    #[test]
     fn the_header_carries_the_contract_versions() {
         // 0x38..0x40: api, machine, fx, service as (major, minor)
         let c = |f: &[u8]| f[H_CONTRACT..H_CONTRACT + 8].to_vec();
@@ -739,6 +765,15 @@ mod tests {
         let f = pack_full(Some(&object()), &[], &tracks.encode(), &stereo).unwrap();
         assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
         needs(&f).expect("dkneeds accepts the kind 2 record the packer wrote");
+        // a manifest that lists an Api entry of 1.6 (`uses_api`): 1.6, with or without a table; a module of 1.4 stays 1.4 without it
+        let uses6 = Options { api_minor: 6, ..opts() };
+        let f = pack(&object(), &uses6).unwrap();
+        assert_eq!(c(&f), vec![1, 6, 0, 0, 0, 0, 1, 0]);
+        let f = pack_full(Some(&object()), &[], &tracks.encode(), &Options { api_minor: 6, ..stereo }).unwrap();
+        assert_eq!(c(&f), vec![1, 6, 1, 2, 0, 0, 1, 0]);
+        // an entry of 1.3 does not lower what the table needs
+        let f = pack_full(Some(&object()), &[], &tracks.encode(), &Options { api_minor: 3, stereo: true, ..opts() }).unwrap();
+        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
         // a data-only module with a DSP section: machine, no service
         let f = pack_full(None, &[], &[0u8; 16], &opts()).unwrap();
         assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);

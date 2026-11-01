@@ -44,10 +44,11 @@ typedef struct dk_api {
     int32_t (*sample_unbind)(uint32_t handle, uint32_t track); /* (api 1.5) Close the track's generation, drop its reference and set it UNUSED. Returns 0 or a negative DK_SAMPLE_E_* error. */
     int32_t (*sample_track_status)(uint32_t handle, uint32_t track); /* (api 1.5) Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error; an error is sticky until the next select or unbind. */
     int32_t (*sample_track_info)(uint32_t handle, uint32_t track, uint8_t *out); /* (api 1.5) Copy a 16-byte dk_sample_info (frames, rate, channels, token; <dk/sample_track.h>) of a READY track; otherwise a negative error and `out` is untouched. */
+    int32_t (*sample_track_path)(uint32_t handle, uint32_t track, uint8_t *buf, uint32_t cap); /* (api 1.6) Copy the root-relative path (as a DK_FILES_SAMPLES listing row gives it, NUL-terminated) of the track's current selection into `buf` and return its length without the NUL. Works in every state except UNUSED (E_NOT_FOUND), so a sticky error still names its file. `cap` too small (length + 1 does not fit): DK_SAMPLE_E_SEL_PATH and `buf` is untouched. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
-_Static_assert(sizeof(dk_api) == 116, "dk_api size");
+_Static_assert(sizeof(dk_api) == 120, "dk_api size");
 _Static_assert(offsetof(dk_api, version) == 0, "dk_api.version");
 _Static_assert(offsetof(dk_api, size) == 4, "dk_api.size");
 _Static_assert(offsetof(dk_api, device) == 8, "dk_api.device");
@@ -77,6 +78,7 @@ _Static_assert(offsetof(dk_api, sample_select) == 100, "dk_api.sample_select");
 _Static_assert(offsetof(dk_api, sample_unbind) == 104, "dk_api.sample_unbind");
 _Static_assert(offsetof(dk_api, sample_track_status) == 108, "dk_api.sample_track_status");
 _Static_assert(offsetof(dk_api, sample_track_info) == 112, "dk_api.sample_track_info");
+_Static_assert(offsetof(dk_api, sample_track_path) == 116, "dk_api.sample_track_path");
 #endif
 
 /* Imports: names the loader resolves in the runtime's table (Api.import gives the address at run time). */
@@ -134,6 +136,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 5
+#define DK_API_MINOR 6
 
 #endif /* DK_GEN_API_H */

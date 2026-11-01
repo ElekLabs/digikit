@@ -15,6 +15,9 @@ pub const TRACKS: usize = 16;
 pub const PATH: usize = 256;
 /// Selection paths kept per project (store paths are at most 159 bytes; longer ones are not remembered).
 pub const SEL_PATH: usize = 160;
+/// Where the device roots its sample paths. `select` takes a root-relative path (a listing row); the runtime adds the root.
+pub const ROOT_DT2: &[u8] = b"/";
+pub const ROOT_DN2: &[u8] = b"samples/";
 pub const UNUSED: i32 = 0;
 pub const QUEUED: i32 = 1;
 pub const LOADING: i32 = 2;
@@ -111,6 +114,9 @@ pub trait Env {
     /// `dkpool_load`. `out` stays valid until the load is terminal.
     fn load(&mut self, req: u32, id: &FileId, path: &[u8], out: &mut Handle) -> Load;
     fn release(&mut self, h: &Handle);
+    /// `dkpool_cancel`: no track waits for load `req` any more (a select superseded it, or an unbind). The backing may stop early; it
+    /// still reports the load once through `done`. Default: nothing (a backing without the optional symbol).
+    fn cancel(&mut self, _req: u32) {}
     /// `dkpool_check`: 0 valid.
     fn check(&mut self, h: &Handle) -> i32;
     fn free_frames(&mut self) -> u32;
@@ -141,6 +147,8 @@ struct Entry {
     pathkey: u32,
     req: u32,
     handle: Handle,
+    /// `Env::cancel` was called for `req`: the entry is not shared any more and only waits for its completion.
+    cancelled: bool,
 }
 const ENTRY0: Entry = Entry {
     state: EState::Free,
@@ -149,6 +157,7 @@ const ENTRY0: Entry = Entry {
     pathkey: 0,
     req: 0,
     handle: Handle { id: 0, token: 0, base_l: 0, base_r: 0, frames: 0, rate: 0, channels: 0 },
+    cancelled: false,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -219,6 +228,41 @@ struct Proj<const CL: usize> {
     slot: u32,
     age: u32,
     sel: [[Sel; TRACKS]; CL],
+}
+
+/// The device-rooted form of a path given to `sample_select`: the root, then the root-relative path. A path that already starts with
+/// the root `/` (the 1.5 form on DT2) is kept as it is. `E_SEL_PATH` for an empty path and for a result that does not fit `PATH` bytes.
+pub fn rooted(root: &[u8], path: &[u8], out: &mut [u8; PATH]) -> Result<usize, i32> {
+    let n = path.iter().position(|b| *b == 0).unwrap_or(path.len());
+    if n == 0 {
+        return Err(E_SEL_PATH);
+    }
+    let path = &path[..n];
+    let prefix: &[u8] = if root == ROOT_DT2 && path[0] == b'/' { b"" } else { root };
+    let total = prefix.len() + n;
+    if total >= PATH {
+        return Err(E_SEL_PATH);
+    }
+    out[..prefix.len()].copy_from_slice(prefix);
+    out[prefix.len()..total].copy_from_slice(path);
+    Ok(total)
+}
+
+/// Identity of a store file (DN2: `samples/...` of the digikit store): its size and the sha256 of its table entry, as the listing row gives them.
+pub fn store_identity(size: u32, sha: &[u8; 32]) -> FileId {
+    FileId { root: crate::files::SAMPLES, size, mtime: 0, flags: ID_HASH_VALID, hash_kind: crate::files::HASH_SHA256, hash: *sha }
+}
+
+/// Header check and identity of a store file from its table entry (`size`, `sha`) and its first 64 bytes: the native header parse that
+/// DT2 uses (`sample::native_header`), so both devices accept the same files. No PCM is read.
+pub fn store_inspect(size: u32, sha: &[u8; 32], head: &[u8; 64]) -> Result<Inspect, i32> {
+    let (frames, channels) = crate::sample::native_header(head, size)?;
+    Ok(Inspect { id: store_identity(size, sha), frames, rate: crate::sample::RATE, channels })
+}
+
+/// The root-relative form of a stored (device-rooted) path: the root cut off when it is there.
+pub fn unrooted<'a>(root: &[u8], stored: &'a [u8]) -> &'a [u8] {
+    stored.strip_prefix(root).unwrap_or(stored)
 }
 
 fn fnv(path: &[u8]) -> u32 {
@@ -346,6 +390,19 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             return Err(if s < 0 { s } else { E_NOT_FOUND });
         }
         Ok(self.tracks[client][track].published)
+    }
+
+    /// The stored path of the track's current selection, in the form `select` was given (the runtime's own, device-rooted form), in
+    /// every state but UNUSED: the sticky error of a failed select still names its file.
+    pub fn path(&self, client: usize, track: usize) -> Result<&[u8], i32> {
+        if track >= TRACKS {
+            return Err(E_CONTRACT);
+        }
+        if !self.is_open(client) || self.tracks[client][track].status == UNUSED {
+            return Err(E_NOT_FOUND);
+        }
+        let t = &self.tracks[client][track];
+        Ok(&t.path[..t.plen])
     }
 
     /// The backing finished load `req`. A completion with an unknown or stale `req` is ignored.
@@ -478,9 +535,15 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     }
 
     /// The release itself happens when the entry is reaped (after a pending load is terminal).
-    fn unref(&mut self, e: usize) {
+    fn unref(&mut self, e: usize, env: &mut impl Env) {
         let en = &mut self.entries[e];
         en.refs = en.refs.saturating_sub(1);
+        // Nobody waits for a load that is still running: ask the backing to stop it. The completion (`done`) still arrives once and
+        // `reap` then releases or frees the entry; `find` never shares a cancelled entry.
+        if en.refs == 0 && en.state == EState::Loading && !en.cancelled {
+            en.cancelled = true;
+            env.cancel(en.req);
+        }
     }
 
     fn reap(&mut self, env: &mut impl Env) {
@@ -520,9 +583,9 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         }
     }
 
-    fn fail(&mut self, c: usize, k: usize, code: i32) {
+    fn fail(&mut self, c: usize, k: usize, code: i32, env: &mut impl Env) {
         if let Some(e) = self.tracks[c][k].loading.take() {
-            self.unref(e);
+            self.unref(e, env);
         }
         let t = &mut self.tracks[c][k];
         t.status = code;
@@ -548,13 +611,13 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         } else if phase == Phase::Unbinding {
             // A superseded load's reference goes first; it never reached the DSP.
             if let Some(e) = self.tracks[c][k].loading.take() {
-                self.unref(e);
+                self.unref(e, env);
             }
             if self.tracks[c][k].bound.is_some() && !self.drain(c, k, env) {
                 return;
             }
             if let Some(e) = self.tracks[c][k].bound.take() {
-                self.unref(e);
+                self.unref(e, env);
             }
             let t = &mut self.tracks[c][k];
             t.phase = Phase::Idle;
@@ -584,7 +647,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             t.phase = Phase::Idle;
             t.reload = false;
             if let Some(e) = t.loading.take() {
-                self.unref(e);
+                self.unref(e, env);
             }
         }
         false
@@ -593,7 +656,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     fn step_queued(&mut self, c: usize, k: usize, env: &mut impl Env) {
         // A superseded load drops its reference before the new request starts.
         if let Some(e) = self.tracks[c][k].loading.take() {
-            self.unref(e);
+            self.unref(e, env);
         }
         let (plen, reload) = (self.tracks[c][k].plen, self.tracks[c][k].reload);
         let mut path = [0u8; PATH];
@@ -617,7 +680,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             return;
         }
         if reload && !self.tracks[c][k].snap.same(&info.id) {
-            self.fail(c, k, E_CHANGED);
+            self.fail(c, k, E_CHANGED, env);
             return;
         }
         let t = &mut self.tracks[c][k];
@@ -635,6 +698,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     fn find(&self, id: &FileId, pathkey: u32) -> Option<usize> {
         self.entries.iter().position(|e| {
             matches!(e.state, EState::Loading | EState::Ready)
+                && !e.cancelled
                 && e.id.same(id)
                 && (id.flags & ID_HASH_VALID != 0 || e.pathkey == pathkey)
         })
@@ -648,27 +712,27 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             self.tracks[c][k].loading = Some(e);
             self.tracks[c][k].fresh = false;
             if let Some(o) = self.tracks[c][k].bound.take() {
-                self.unref(o);
+                self.unref(o, env);
             }
             self.tracks[c][k].status = LOADING;
             self.tracks[c][k].phase = Phase::Loading;
             return;
         }
         if let Some(o) = self.tracks[c][k].bound.take() {
-            self.unref(o);
+            self.unref(o, env);
             self.reap(env);
         }
         let need = info.frames.saturating_mul(info.channels);
         if need > env.free_frames() {
-            self.fail(c, k, E_TOO_BIG);
+            self.fail(c, k, E_TOO_BIG, env);
             return;
         }
         let Some(slot) = self.entries.iter().position(|e| e.state == EState::Free) else {
-            self.fail(c, k, E_POOL);
+            self.fail(c, k, E_POOL, env);
             return;
         };
         let Some(next) = self.next_req.checked_add(1) else {
-            self.fail(c, k, E_NOMEM);
+            self.fail(c, k, E_NOMEM, env);
             return;
         };
         let req = self.next_req;
@@ -676,7 +740,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         let plen = self.tracks[c][k].plen;
         let mut path = [0u8; PATH];
         path[..plen].copy_from_slice(&self.tracks[c][k].path[..plen]);
-        self.entries[slot] = Entry { state: EState::Loading, refs: 1, id: info.id, pathkey, req, handle: Handle::default() };
+        self.entries[slot] = Entry { state: EState::Loading, refs: 1, id: info.id, pathkey, req, handle: Handle::default(), cancelled: false };
         let r = env.load(req, &info.id, &path[..plen], &mut self.entries[slot].handle);
         let reload = self.tracks[c][k].reload;
         match r {
@@ -684,7 +748,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             Load::Queued => {}
             Load::Err(e) => {
                 self.entries[slot] = ENTRY0;
-                self.fail(c, k, if reload { E_LOST } else { e });
+                self.fail(c, k, if reload { E_LOST } else { e }, env);
                 return;
             }
         }
@@ -705,12 +769,12 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         if st == EState::Loading {
         } else if let EState::Failed(code) = st {
             let code = if self.tracks[c][k].reload { E_LOST } else { code };
-            self.fail(c, k, code);
+            self.fail(c, k, code, env);
         } else if st == EState::Dead {
             // Lost while loading: start the request again from the path.
             self.tracks[c][k].phase = Phase::Queued;
         } else if st == EState::Free {
-            self.fail(c, k, E_LOST);
+            self.fail(c, k, E_LOST, env);
         } else {
             let h = self.entries[e].handle;
             if self.tracks[c][k].fresh {
@@ -720,7 +784,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
                 let snap = if self.tracks[c][k].reload { self.tracks[c][k].snap } else { self.tracks[c][k].pend.id };
                 match env.stat(&path[..plen]) {
                     Ok(id) if id.same(&snap) => {}
-                    _ => return self.fail(c, k, E_CHANGED),
+                    _ => return self.fail(c, k, E_CHANGED, env),
                 }
             }
             if h.token == 0 || env.check(&h) != 0 || h.frames == 0 {
@@ -729,7 +793,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
                 return;
             }
             let Some(next) = self.next_token.checked_add(1) else {
-                return self.fail(c, k, E_NOMEM);
+                return self.fail(c, k, E_NOMEM, env);
             };
             let token = self.next_token;
             self.next_token = next;
