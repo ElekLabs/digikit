@@ -325,6 +325,13 @@ See [finding 95](../findings/95-dn2-cache-and-lp0-staging.md) for exact extents,
 conditional configuration and public-manual citations. The emulator has no dirty
 cache model and cannot prove physical coherence.
 
+[D] On DT2 1.17 the stock sample path is DMA into non-cacheable staging, then a
+SHARC CPU copy into cached DDR. Writer and reader are the same core, so the data
+cache cannot make PCM stale and no maintenance is needed. An owned buffer filled
+the same way needs no device test. Only direct DMA into cached memory needs
+maintenance and one device test. See
+[finding 108](../findings/108-dt2-sample-cache-visibility.md).
+
 **[D] STOP callback ownership narrowed:** independent original-byte audit now
 supports private single-descriptor STOP RX ownership from successful IRQ DONE
 callback entry until explicit rearm, under private port ownership with no other
