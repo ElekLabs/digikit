@@ -12,8 +12,8 @@ import { installWithDebug, liveArtifacts, panel, record, runtimeTests, settleUi 
 // and digikit/spark playing a stereo sample that a fixture module selected by path (docs/design/sample-api-1.5.md).
 //
 // The sample files have a different sine on each channel, so the tones in the captured PCM say which source channel reached the output.
-// Everything is measured on the coupled PCM of the stock chain (pcm.tap). The stock chain mixes the two voices of a track at the track's
-// pan position: both sources reach both channels (`expectSummedPair`), so the tones are checked on the mono sum.
+// Everything is measured on the coupled PCM of the stock chain (pcm.tap). With the pair gate set by core/dsp-voice the stock pan stage keeps
+// the two voices apart: the pair is split (`expectSplitPair`); the other checks take the louder channel of each tone.
 
 const RATE = 48000;
 const FOLDER = 'sparkproof';
@@ -50,7 +50,6 @@ function stereoWav(seconds: number, left: number, right: number): Uint8Array {
 interface Capture {
   l: Float32Array;
   r: Float32Array;
-  mono: Float32Array;
 }
 
 function readCapture(file: string): Capture {
@@ -62,13 +61,11 @@ function readCapture(file: string): Capture {
   const frames = Math.floor((wav.length - 44) / 8);
   const l = new Float32Array(frames);
   const r = new Float32Array(frames);
-  const mono = new Float32Array(frames);
   for (let i = 0; i < frames; i++) {
     l[i] = wav.readFloatLE(44 + i * 8);
     r[i] = wav.readFloatLE(44 + i * 8 + 4);
-    mono[i] = (l[i]! + r[i]!) / 2;
   }
-  return { l, r, mono };
+  return { l, r };
 }
 
 const peak = (x: Float32Array, from: number, to: number) => {
@@ -76,6 +73,19 @@ const peak = (x: Float32Array, from: number, to: number) => {
   for (let i = Math.max(0, from); i < Math.min(x.length, to); i++) p = Math.max(p, Math.abs(x[i]!));
   return p;
 };
+
+/** Longest run of frames in [from, last sound) where both channels stay under the threshold. */
+function longestSilence(c: Capture, from: number, threshold: number): number {
+  let best = 0;
+  let run = 0;
+  for (let i = Math.max(0, from); i < c.l.length; i++) {
+    if (Math.abs(c.l[i]!) > threshold || Math.abs(c.r[i]!) > threshold) {
+      best = Math.max(best, run);
+      run = 0;
+    } else run++;
+  }
+  return best;
+}
 
 /** First frame where either channel exceeds the threshold, or -1. */
 function onset(c: Capture, threshold = 0.01): number {
@@ -99,19 +109,19 @@ function tone(x: Float32Array, hz: number, from: number, to: number): number {
 const AUDIBLE = 0.015;
 const ABSENT = 0.004;
 
-/** The mono sum holds each tone of `want` and none of `absent` over frames [from, to). Returns the measured levels. */
+/** The louder channel holds each tone of `want` and none of `absent` over frames [from, to). Returns the measured levels. */
 function expectTones(name: string, c: Capture, from: number, to: number, want: number[], absent: number[]) {
-  const levels = Object.fromEntries([...want, ...absent].map((hz) => [hz, tone(c.mono, hz, from, to)]));
-  for (const hz of want) expect(levels[hz]!, `${name}: ${hz} Hz in the mono sum (${JSON.stringify(levels)})`).toBeGreaterThan(AUDIBLE);
+  const levels = Object.fromEntries([...want, ...absent].map((hz) => [hz, Math.max(tone(c.l, hz, from, to), tone(c.r, hz, from, to))]));
+  for (const hz of want) expect(levels[hz]!, `${name}: ${hz} Hz in the louder channel (${JSON.stringify(levels)})`).toBeGreaterThan(AUDIBLE);
   for (const hz of absent) expect(levels[hz]!, `${name}: ${hz} Hz absent (${JSON.stringify(levels)})`).toBeLessThan(ABSENT);
   return levels;
 }
 
-/** What the stock chain does with the two voices of a track today: both sources reach L and R at the same level (the track's pan applies to
- * both voices alike, finding 96 "Two slots of one track land at the same pan position"). So DT2 plays a stereo sample as its centred mono
- * mix, not as a left/right pair. This is a characterisation, not the goal: when a hard-pan route for the pair exists, it becomes a split check
- * (L has only the left source, R only the right source). */
-function expectSummedPair(name: string, c: Capture, from: number, to: number, left: number, right: number) {
+/** The pair is split: the left source (`left` Hz) is in L and the right source (`right` Hz) is in R, each with the other tone at least 20 dB
+ * lower in the same channel. The stock pan stage takes the stereo-pair path when the even voice's gate word is 1 (core/dsp-voice sets it;
+ * finding 96). The 20 dB limit is 0.1 of the wanted tone. Measured: the other tone is 1e-8 (A) and 1.3e-4 (B, window leakage) against 0.076, that is 55 dB
+ * and more down; a summed pair (the old behaviour) gives a ratio of 1. 20 dB leaves a margin of 35 dB for noise without hiding a partial leak. */
+function expectSplitPair(name: string, c: Capture, from: number, to: number, left: number, right: number) {
   const measured = {
     lLeft: tone(c.l, left, from, to),
     lRight: tone(c.l, right, from, to),
@@ -119,10 +129,10 @@ function expectSummedPair(name: string, c: Capture, from: number, to: number, le
     rRight: tone(c.r, right, from, to),
   };
   const text = JSON.stringify(measured);
-  expect(measured.lLeft, `${name}: L ${text}`).toBeGreaterThan(AUDIBLE);
-  expect(measured.lRight, `${name}: L ${text}`).toBeGreaterThan(AUDIBLE);
-  expect(Math.abs(measured.lLeft - measured.rLeft) / measured.lLeft, `${name}: the left source is as loud in R as in L ${text}`).toBeLessThan(0.02);
-  expect(Math.abs(measured.lRight - measured.rRight) / measured.lRight, `${name}: the right source is as loud in R as in L ${text}`).toBeLessThan(0.02);
+  expect(measured.lLeft, `${name}: the left source is in L ${text}`).toBeGreaterThan(AUDIBLE);
+  expect(measured.rRight, `${name}: the right source is in R ${text}`).toBeGreaterThan(AUDIBLE);
+  expect(measured.lRight, `${name}: the right source is at least 20 dB down in L ${text}`).toBeLessThan(measured.lLeft * 0.1);
+  expect(measured.rLeft, `${name}: the left source is at least 20 dB down in R ${text}`).toBeLessThan(measured.rRight * 0.1);
   return measured;
 }
 
@@ -284,7 +294,7 @@ runtimeTests(
       expect(onsetA, 'the note is audible').toBeGreaterThanOrEqual(0);
       const winA: [number, number] = [onsetA + 4800, onsetA + RATE];
       log.noteALevels = expectTones('A', noteA, ...winA, [440, 660], []);
-      log.noteASplit = expectSummedPair('A', noteA, ...winA, 440, 660);
+      log.noteASplit = expectSplitPair('A', noteA, ...winA, 440, 660);
       await session.expectNoFault('first note');
 
       // 6. Select B while a note of A plays: the old note stops. B is not retriggered because the key is held.
@@ -318,7 +328,7 @@ runtimeTests(
       expect(onsetB, 'B is audible').toBeGreaterThanOrEqual(0);
       const winB: [number, number] = [onsetB + 4800, onsetB + RATE];
       log.noteBLevels = expectTones('B', noteB, ...winB, [330, 495], [440, 660]);
-      log.noteBSplit = expectSummedPair('B', noteB, ...winB, 330, 495);
+      log.noteBSplit = expectSplitPair('B', noteB, ...winB, 330, 495);
 
       // 7. The stock reset (ReloadAllSamples with 1) wipes the pool; the runtime reloads the track from the remembered path.
       const before = await api.status();
@@ -354,7 +364,10 @@ runtimeTests(
       const onsetS = onset(noteReset);
       expect(onsetS, 'B played before the reset').toBeGreaterThanOrEqual(0);
       expectTones('before the reset', noteReset, onsetS + 4800, RATE / 2 - 2400, [330, 495], [440, 660]);
-      expect.soft(noteReset.l.length, 'the capture ends well inside the sample, so a silent tail is the stopped note').toBeLessThan((SECONDS - 1) * RATE);
+      // The old note stops at the wipe and the track plays again after the reload: a silent gap lies inside the capture (measured: 2.3 s).
+      const gap = longestSilence(noteReset, onsetS, 0.002);
+      log.resetGap = gap;
+      expect(gap, 'the note of the old token stopped for a while at the wipe').toBeGreaterThan(RATE / 2);
       const endPeak = Math.max(
         peak(noteReset.l, noteReset.l.length - RATE / 2, noteReset.l.length),
         peak(noteReset.r, noteReset.r.length - RATE / 2, noteReset.r.length),
@@ -369,9 +382,9 @@ runtimeTests(
       expect(onsetAfter, 'plays again after the reload').toBeGreaterThanOrEqual(0);
       log.noteAfterLevels = expectTones('after the reset', noteAfter, onsetAfter + 4800, onsetAfter + RATE, [330, 495], [440, 660]);
 
-      // 5. Pitch: PITCH is 0.375 semitone per unit, so +32 units are one octave (knob D of the SPK page).
+      // 5. Pitch: PITCH is 0.375 semitone per unit, so +32 units are one octave (ENC F: PITCH is knob 5, the second row of the SRC page under START; knob 3 is the sample slot).
       const ui = panel(session);
-      for (let i = 0; i < 32; i++) await ui.turn('ENC D', 1);
+      for (let i = 0; i < 32; i++) await ui.turn('ENC F', 1);
       const noteUp = await captureNote(runtime, path.join(artifacts, 'octave.wav'), async (clock) => {
         await until(clock, 1.5 * RATE);
       });
