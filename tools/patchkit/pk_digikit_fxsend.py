@@ -14,13 +14,16 @@ step): the scenario writes the row's words 18 to 22 with `dsp.patch` after the b
 
 from __future__ import annotations
 
+import argparse
+import json
 import struct
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from tools.patchkit import pk_device
+from tools.patchkit import hook_ab, pk_device
 from tools.patchkit import pk_dkrt_machine as M
 from tools.patchkit.pk_digikit_fx import (
     FX,
@@ -258,3 +261,78 @@ def run_fxsend(c: Any) -> None:
             f"peak {float(np.abs(pcm['idle']).max()):.2e}",
         )
     c.common_checks()
+
+
+def _read_pcm(path: Path) -> np.ndarray:
+    """Read completed capture samples with the existing shared WAV reader."""
+    samples = hook_ab.read_wav(path)
+    if not len(samples):
+        raise ValueError(f"{path}: empty PCM")
+    if not np.isfinite(samples).all():
+        raise ValueError(f"{path}: PCM contains nonfinite samples")
+    return samples
+
+
+def slot_bus_address(device: str, firmware: str) -> int:
+    """Read the current DN2 send-slot bus from its named port anchor."""
+    from tools.patchkit.pk_dsplink import plan_anchors
+
+    if (device, firmware) != ("dn2", "1.12"):
+        raise ValueError("slot-bus supports only dn2 firmware 1.12")
+    name = "dsp.fx.value.send.slot_bus"
+    anchors = [a for a in plan_anchors(device, firmware) if a.get("name") == name]
+    if len(anchors) != 1:
+        raise ValueError(f"expected exactly one {name} anchor, found {len(anchors)}")
+    address = anchors[0].get("addr")
+    if type(address) is not int or address <= 0:
+        raise ValueError(f"{name}: invalid address")
+    return address
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Small JSON analysis interface for host-owned FX send scenarios."""
+    parser = argparse.ArgumentParser(description=main.__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    factor = commands.add_parser("added-factor")
+    factor.add_argument("base", type=Path)
+    factor.add_argument("out", type=Path)
+    pcm = commands.add_parser("pcm")
+    pcm.add_argument("file", type=Path)
+    slot = commands.add_parser("slot-bus")
+    slot.add_argument("--device", required=True)
+    slot.add_argument("--firmware", required=True)
+    args = parser.parse_args(argv)
+    result: dict[str, int | float | bool]
+    try:
+        if args.command == "slot-bus":
+            result = {"address": slot_bus_address(args.device, args.firmware)}
+        elif args.command == "pcm":
+            samples = _read_pcm(args.file)
+            result = {
+                "samples": len(samples),
+                "finite": True,
+                "peak": float(np.abs(samples).max()),
+            }
+        else:
+            base, out = _read_pcm(args.base), _read_pcm(args.out)
+            n = min(len(base), len(out)) - 1200
+            if n <= 0:
+                raise ValueError("added-factor requires more than 1200 samples per WAV")
+            dry = base[600 : 600 + n].astype(np.float64)
+            if float(np.dot(dry, dry)) == 0:
+                raise ValueError(
+                    "added-factor requires a non-silent reference fit window"
+                )
+            value = added_factor(base, out)
+            if not np.isfinite(value):
+                raise ValueError("added-factor produced a nonfinite result")
+            result = {"added_factor": value}
+    except (OSError, ValueError, KeyError, SystemExit) as error:
+        print(f"{parser.prog}: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, allow_nan=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
