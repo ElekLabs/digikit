@@ -527,6 +527,34 @@ Final preflight exited 1 only because pathcheck found three pre-existing referen
 oxlint, Prettier and workspace types passed. Scoped pathchecks for the changed docs also passed.
 
 The gate explanation selected host, three stock files, 16 runtime files, three module files,
-54 Python files, smoke and native prerequisites. The broad routed gate was not run. The draft PR
-and a concrete single-PR focused-exception request are next; no new exception or broad-gate pass
-exists for this batch. Earlier focused exceptions do not transfer.
+54 Python files, smoke and native prerequisites. The broad routed gate was not run. PR #246 merged
+at `e8c0e8ace2572f9a43a1d58f1f4c5343c7db3cde` on 2026-11-01T19:00:08Z under Em's explicit
+PR-246-only focused exception, using the both-device and scoped validation above. This is not a
+broad-gate pass, and the exception does not transfer to the next batch.
+
+### BASIC FX and FUNC + FX pages checkpoint (2026-11-02)
+
+The approved next batch ports the remaining BASIC chain and FXPAGE assertions together. Shared
+`fx-session.ts` accepts explicit image roots, inventory, required symbols and safety policy; these
+ports choose `default` explicitly. Plain/reference images remain independent, while hooked legs
+run sequentially in kept contexts with pristine baseline cards. Fresh readiness remains strict;
+only loader result words are interpreted as signed int32, including expected `-34`. The generic
+extraction preserves the existing route configurations and their route-specific policy.
+Legacy note margins, guest timing, PCM tolerances and audibility thresholds remain in their owners;
+FXPAGE relative PCM oracles retain audibility responsibility without relaxing finite/safety checks.
+
+| Legacy assertion group | Committed replacement ledger |
+| --- | --- |
+| BASIC capacity, selected type, free/live rows, overflow refusal and unchanged serial-gain PCM | [fx-chain.test.ts](../../tests/regression/runtime/fx-chain.test.ts), with separate plain reference and sequential dry/full baselines |
+| FXPAGE stock hashes, free-index poke invariance, page/index metadata, GAIN/MIX and A–E controls, SELECT/restart removal | [fx-pages.test.ts](../../tests/regression/runtime/fx-pages.test.ts), with independent reference and sequential stock/effect/deselect context |
+
+Both ports and the reviewed parity fixes are committed and pushed through `f7895788`; scoped
+host/static/type checks passed. DN2 BASIC passed: 58.75 s invocation, 16.462 s plain / 34.285 s
+hooked cases, with artifact suffixes `FYLTlZ` / `6wyS5t`. Default-policy lifetime safety passed
+3 + 5 watch windows and 1 + 2 overlays with zero write/flush hits. These are correctness durations.
+DN2 FXPAGE proof is running; no other new device pass is claimed. BASIC/FXPAGE legacy retirement
+has not happened, and no gate exception exists for this batch. Remaining device proof and final
+acceptance are ahead; no performance claim is made.
+
+Deleted-scenario routing remains deferred because path-only callers need merge-base ownership
+evidence. No cache or tombstone tooling is introduced by this batch.
