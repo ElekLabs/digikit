@@ -1,8 +1,7 @@
 # Two-core PGO profile for the desktop build
 
-**Status:** plan, not started (2026-10-31). Estimated 1 to 1.5 days of agent time, plus
-about 1 hour of quiet-machine time for builds and training. Outcome risk: medium (see
-Risks). Not contained enough to do as a side change.
+**Status:** in progress (2026-11-01). Code, fixture tool and unit tests done (commits
+49652c26, 5a6d9e55). Next: instrumented build, training, crate check, then the timed A/B.
 
 ## Problem
 
@@ -20,6 +19,14 @@ build against non-PGO single-core binaries only.
      feature `second-core`; the workload name is `both-v1`.
    - `GUARDED_CRATES` gets `sharc_native_2` and `sharc_gen_2`, so `crate_mismatches` checks the
      second engine instance. `CRATE_NAME_RE` already builds its pattern from the list.
+   - The slot order is fixed and part of the key: slot 1 (`SHARC_GEN_DIR`, `sharc_native`) is
+     always the DN2 core, slot 2 (`SHARC_GEN_DIR_2`, `sharc_native_2`) always the DT2 core,
+     whichever firmware launches. A profile matches symbols by crate hash, and the crate hash
+     depends on which generated core is in the crate, so each launch order would otherwise be a
+     separate binary and profile. The fast-region lists follow the firmware's device (DN2
+     unsuffixed, DT2 `_2`, `digi_env.slot_env`).
+   - `local_package_dirs` reads `cargo metadata` with the `second-core` feature, so the
+     second-core crates are in the key.
    - `check_state`, `pgo_state`, `plan_for` and `pgo_binary` take the second core into account;
      the target dir comes from `native_target.target_dir(gen, variant, second)`, which already
      keys on both cores.
@@ -29,22 +36,29 @@ build against non-PGO single-core binaries only.
    shows that the engine crates of `coupled-run` and the app already match; the check in step 5
    proves it for the two-core pair.
 3. Workload (`DT2_WORKLOAD` style list, one process per item, firmware picks the core):
-   - DN2: the existing `coupled_ready_exactness` scenario set (stock) and one DN2 runtime replay.
+   - DN2: the `exactness-100m` scenario of `tests/scenarios/dn2.json` (the coupled-run copy of
+     the `coupled_ready_exactness` gate), not the desktop app workload, and one DN2 runtime
+     replay.
    - DT2: `dt2-sample-trig` and the FX scenarios of `DT2_WORKLOAD`, plus one DT2 runtime replay
      with sound (patched image, the dsp-voice and converter patches, one voice held).
    - Runtime replays need a ready dir with a patched snapshot pair and the matching patched
-     `.syx`. `tools/devtools/sharc_matrix.py` already prepares and records such cells; reuse its
-     replay fixture preparation. The fixture must be regenerated when the patch set changes (the
-     snapshot is tied to the patched image hash), so the training step takes a fixture path and
-     records its hashes in the manifest.
+     `.syx`. Replay fixtures come from `mise run perf:fixture -- --device dn2|dt2`
+     (`tools/devtools/runtime_fixture.ts`). It cold-boots the patched runtime through `Session`
+     and writes `out/fixtures/runtime/<dev>/` with `provenance.json` (file hashes, source
+     head). Training checks the hashes and records the provenance in the manifest;
+     `--fixture-dn2` and `--fixture-dt2` override the paths. Replays: DN2 `trig1-hold` 5 s,
+     DT2 `dt2-sample-trig` 3 s with the fixture card. Regenerate the fixtures from a clean tree
+     after a patch-set change.
    - Set the fast-tier defaults of each device through `digi_env.fast_env` for the stock
      firmware, as the workbench does, so training sees the same tiers as use.
 4. `native_emu.pgo_plan`: remove the early return; for a two-core launch use device `both`.
    Missing or stale profile keeps the current fallback to the plain two-core build and its
-   notice. `perf:pgo` gains the third training (`--device both`).
+   notice. The new task `perf:pgo:both` trains the two-core profile. `perf:pgo` runs dn2, dt2,
+   both, then the launcher build.
 5. Verify: `native_pgo check --device both`; after the profile-use build run
    `verify_binary` (crate hashes) on `digiemu-desktop`. A mismatch on `sharc_native_2` means the
-   profile did nothing for core 2.
+   profile did nothing for core 2. `verify --device both` ignores `elektron_native_boot`, like
+   the DT2 check. `GUARDED_CRATES` includes `sharc_native_2` and `sharc_gen_2`.
 
 ## Cost
 
@@ -81,8 +95,10 @@ differs (`docs/TESTING.md` "Resumable SHARC matrix"): in the matrix configuratio
 with cells `dt2-stock`, a DT2 runtime idle replay and a DT2 runtime sample replay, then:
 
 ```sh
-mise run perf:matrix -- run PERF/config.json --baseline PERF/frozen --candidate PERF/frozen --out PERF/results
+mise run perf:matrix -- run out/native/runs/<date>-two-core-pgo/config.json --baseline out/native/runs/<date>-two-core-pgo/frozen --candidate out/native/runs/<date>-two-core-pgo/frozen --out out/native/runs/<date>-two-core-pgo/results
 ```
+
+The runtime cells use the fixture inputs in `out/fixtures/runtime/<dev>/`.
 
 Training for the existing single-device profiles, to compare against the two-core build later:
 
