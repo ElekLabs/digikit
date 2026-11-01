@@ -1,0 +1,37 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "module-freqshift",
+  "targets": {
+    "test-device": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "outputs": [],
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/tests/regression/**/*",
+        "{workspaceRoot}/packages/**/*",
+        "{workspaceRoot}/modules/core/**/*",
+        "{workspaceRoot}/tests/fixtures/modules/sine/**/*",
+        "{workspaceRoot}/sdk/**/*",
+        "{workspaceRoot}/devices/**/*",
+        "{workspaceRoot}/tools/**/*",
+        "{workspaceRoot}/package.json",
+        "{workspaceRoot}/pnpm-lock.yaml",
+        "{workspaceRoot}/pnpm-workspace.yaml",
+        "{workspaceRoot}/nx.json",
+        "{workspaceRoot}/mise.toml",
+        "{workspaceRoot}/pyproject.toml",
+        "{workspaceRoot}/uv.lock",
+        "{workspaceRoot}/tsconfig*.json",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/.cargo/**/*"
+      ],
+      "options": {
+        "forwardAllArgs": false,
+        "cwd": ".",
+        "command": "uv run python -m tools.devtools.verify --tests runtime/fx-freqshift.test.ts"
+      }
+    }
+  }
+}

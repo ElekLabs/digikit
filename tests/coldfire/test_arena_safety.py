@@ -257,12 +257,10 @@ def test_runtime_safety_fails_real_watch_or_flush_hits(tmp_path, dirty):
 
 @pytest.mark.parametrize("device", ["dt2", "dn2"])
 def test_runtime_fx_kit_accepts_exact_kit_ranges_without_settings(tmp_path, device):
-    from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
-
     output = _watch_process(tmp_path, 1)
     store = a.pk_device.store_of(device)
     overlay = tmp_path / "kit.bin"
-    boundaries = [sector for lo, hi in KIT_AREAS[device] for sector in (lo, hi - 1)]
+    boundaries = [sector for lo, hi in a.KIT_AREAS[device] for sector in (lo, hi - 1)]
     overlay.write_bytes(_overlay(store.sel_a, store.sel_b, *boundaries))
     assert not a.runtime_safety(device, output, [overlay])["pass"]
     result = a.runtime_safety(device, output, [overlay], policy="fx-kit")
@@ -282,11 +280,9 @@ def test_runtime_fx_kit_accepts_exact_kit_ranges_without_settings(tmp_path, devi
 def test_runtime_fx_kit_rejects_unrelated_low_and_store_writes(
     tmp_path, device, outside
 ):
-    from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
-
     output = _watch_process(tmp_path, 1)
     store = a.pk_device.store_of(device)
-    lo, hi = KIT_AREAS[device][0]
+    lo, hi = a.KIT_AREAS[device][0]
     sector = {"low": 7, "before-kit": lo - 1, "after-kit": hi, "store": store.first}[
         outside
     ]

@@ -1339,17 +1339,11 @@ def test_other_patchkit_files_keep_the_wide_route() -> None:
         assert "smoke" in verify.steps_for([path])
 
 
-def test_a_scenario_runner_selects_the_tests_of_its_kind() -> None:
-    assert selected("tools/patchkit/pk_digikit_fxshift.py") == {
-        "tests/digikit/test_fxshift_dn2.py",
-        "tests/digikit/test_fxshift_dt2.py",
-    }
-    assert "tests/digikit" not in selected("tools/patchkit/pk_digikit_fxpage.py")
-    # a runner others import also selects their kinds
-    assert {
-        "tests/digikit/test_fxshift_dt2.py",
-        "tests/digikit/test_fxpersist_dt2.py",
-    } <= selected("tools/patchkit/pk_digikit_fxpage.py")
+def test_retired_fx_device_runners_have_no_legacy_python_consumers() -> None:
+    for helper in ("pk_digikit_fx", "pk_digikit_fxpage", "pk_digikit_fxshift"):
+        owners = selected(f"tools/patchkit/{helper}.py")
+        assert not any(path.startswith("tests/digikit/") for path in owners)
+        assert "tests/digikit" not in owners
 
 
 def test_shared_digikit_helpers_keep_the_wide_route() -> None:
@@ -2616,13 +2610,15 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
                 ],
             )
             for helper in (
-                "pk_digikit_fx",
-                "pk_digikit_fxpage",
-                "pk_digikit_fxpersist",
                 "pk_digikit_fxroutes",
                 "pk_digikit_fxroute",
             )
         ],
+        ("tools/patchkit/pk_digikit_fx.py", ["runtime/fx-chain.test.ts"]),
+        (
+            "tools/patchkit/pk_digikit_fxpage.py",
+            ["runtime/fx-kit-persist.test.ts", "runtime/fx-pages.test.ts"],
+        ),
         (
             "tests/fixtures/modules/dyn-fx-gain-both/module.toml",
             ["runtime/fx-track-route.test.ts"],
@@ -2648,7 +2644,7 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     assert "tools/device/dksettings.py" in dependencies
     assert "tools/patchkit/pk_digikit_fx.py" in dependencies
     assert "tools/device/dkneeds.py" in dependencies
-    assert "tools/patchkit/pk_digikit_fxpersist.py" in dependencies
+    assert "tools/patchkit/pk_digikit_fxpersist.py" not in dependencies
     assert {
         "runtime/fx-chain.test.ts",
         "runtime/fx-freqshift.test.ts",
@@ -2659,7 +2655,7 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
         "runtime/fx-track-route.test.ts",
     } <= set(
         verify_route.acceptance_files(
-            "runtime-fixture", ["tools/patchkit/pk_digikit_fxpersist.py"]
+            "runtime-fixture", ["tools/patchkit/pk_digikit_fxroutes.py"]
         )
     )
 
@@ -2725,6 +2721,7 @@ def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
     [
         "pk_digikit_fx.py",
         "pk_digikit_fxpage.py",
+        "pk_digikit_fxshift.py",
         "pk_digikit_fxroute.py",
         "pk_digikit_fxroutes.py",
     ],
@@ -2735,11 +2732,7 @@ def test_retired_route_runners_keep_narrow_python_and_typescript_owners(
     path = f"tools/patchkit/{helper}"
     fine = verify_route.runner_fine(path)
     assert fine is not None
-    if helper in {"pk_digikit_fx.py", "pk_digikit_fxpage.py"}:
-        assert "tests/digikit/test_fxshift_dt2.py" in fine.tests
-        assert "tests/digikit/test_fxpersist_dt2.py" in fine.tests
-    else:
-        assert fine.tests == ()
+    assert fine.tests == ()
     assert fine.steps == ("python-tests",)
     assert verify_route.acceptance_files("runtime-fixture", [path])
 

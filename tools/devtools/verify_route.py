@@ -256,9 +256,11 @@ RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
         *RUNTIME_SHIFT_FILES,
     ),
     "tools/patchkit/hook_ab.py": RUNTIME_FX_FILES,
-    "tools/patchkit/pk_digikit_fx.py": RUNTIME_PROFILE_FILES,
-    "tools/patchkit/pk_digikit_fxpage.py": RUNTIME_PROFILE_FILES,
-    "tools/patchkit/pk_digikit_fxpersist.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fx.py": ("runtime/fx-chain.test.ts",),
+    "tools/patchkit/pk_digikit_fxpage.py": (
+        "runtime/fx-pages.test.ts",
+        *RUNTIME_KIT_FILES,
+    ),
     "tools/patchkit/pk_digikit_fxshift.py": RUNTIME_SHIFT_FILES,
     "tools/patchkit/pk_digikit_fxroutes.py": RUNTIME_PROFILE_FILES,
     "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_PROFILE_FILES,
@@ -306,7 +308,6 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.patchkit.pk_digikit_fx",
                 "tools.patchkit.pk_digikit_fxsend",
                 "tools.patchkit.pk_digikit_fxpage",
-                "tools.patchkit.pk_digikit_fxpersist",
                 "tools.patchkit.pk_digikit_fxshift",
                 "tools.patchkit.pk_digikit_fxroutes",
                 "tools.patchkit.pk_digikit_fxroute",
@@ -565,9 +566,8 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_fxroute.py": (),  # retained offline TS oracles
     "pk_digikit_fxroutes.py": (),  # retained TS profile/card/OLED helpers
     "pk_digikit_settings.py": ("settings",),
-    "pk_digikit_fxpage.py": (),  # retained profile/PCM and legacy UI helpers
-    "pk_digikit_fxpersist.py": ("fxpersist",),
-    "pk_digikit_fxshift.py": ("fxshift",),
+    "pk_digikit_fxpage.py": (),  # retained PCM comparison CLI
+    "pk_digikit_fxshift.py": (),  # retained PCM/model analysis CLI
     "pk_digikit_capacity.py": ("debug",),
     "pk_digikit_memaudit.py": ("debug",),
     "pk_digikit_cost.py": ("debug",),

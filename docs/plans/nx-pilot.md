@@ -523,6 +523,8 @@ remain conservative. Exact graph and selection proof are pending; this audit doe
 next migration implemented or adopted, expand caching, or claim performance gains.
 
 The current persistence/shifter batch is pushed through `8b7c248e`, with source reviews reporting
-no issues. DN2 persistence and shifter proofs passed; both DT2 proofs are running. The
+no issues. All four persistence/shifter device proofs passed. The
 [architecture checkpoint](test-architecture.md#fx-kit-persistence-and-frequency-shifter-design-2026-11-02)
-records timings and safety evidence. Legacy coverage remains; no new gate exception exists.
+records proof and retirement evidence; legacy device runners are removed while offline analyzers
+and module tests remain. Final preflight/gate acceptance is pending, with no new exception. The
+proposed Nx family-project migration remains unimplemented.

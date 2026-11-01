@@ -152,8 +152,8 @@ The earlier estimate of 80 boots per device reduced to nine is unsupported and i
 | fxroute (retired runner, historical line 558) | 11 | 11 | 0 |
 | fxroutes (retired runner, historical line 637) | 8 | 8 | 2 |
 | fxpage (retired runner, historical line 513) | 3 | 3 | 1 |
-| [fxpersist](../../tools/patchkit/pk_digikit_fxpersist.py) line 275 | 1 | 1 | 0 |
-| [fxshift](../../tools/patchkit/pk_digikit_fxshift.py) line 499 | 4 | 4 | 0 |
+| fxpersist (retired runner; `REF:tools/patchkit/pk_digikit_fxpersist.py`, historical line 275) | 1 | 1 | 0 |
+| fxshift (retired device runner, historical line 499) | 4 | 4 | 0 |
 | Total | 36 | 39 | 4 |
 
 Quick totals are therefore 40 DT2 and 43 DN2 static operations. Full tier adds one DT2 persistence
@@ -605,11 +605,40 @@ The policy prerequisite `9b23b0ff`, kit/UI helpers `6f12384f`, persistence/shift
 DN2 persistence passed in 129.50 s invocation / 123.760 s case (`zDOVuw`), with three watch windows
 and two overlays under `fx-kit`. DN2 shifter passed in 215.72 s / 209.578 s (`WDkalo`), with nine
 windows and four overlays under `fx-routes`. Both lifetime reports had zero write/flush hits.
-DT2 persistence and shifter proofs are running. No legacy deletion or new gate exception has
-occurred; these timings are correctness evidence, not a performance comparison.
+DT2 shifter passed in 398.171 s file / 375.478 s case (`acXXAd`), and DT2 persistence in
+328.322 s / 320.201 s (`86nKeR`), with a combined invocation of 726.77 s. DT2 persistence passed
+seven watch windows/four overlays under `fx-kit`; DN2 persistence passed three/two. Both shifter
+reports passed nine/four under `fx-routes`. All four lifetime reports passed with zero write/flush
+hits and empty invalid-store/low-sector lists. These timings are correctness evidence, not a
+performance comparison; no new gate exception exists.
 
 The Nx audit confirms safe use of the five current cached host targets and partial adoption.
 Caching and affected-test routing are separate concerns. A next family-project migration remains
 unimplemented and needs an exact folder layout, validated project graph and selection matrix;
 see the [Nx audit checkpoint](nx-pilot.md#family-project-audit-checkpoint-2026-11-02). No custom
 plugin, cache expansion or selector deletion is authorized by this audit alone.
+
+The proved migration retires the four fxpersist/fxshift wrappers, three persistence scenario TOMLs
+(including full DT2 restart) and two module-owned shifter scenario TOMLs. Historical inputs:
+`REF:tests/digikit/test_fxpersist_dt2.py`, `REF:tests/digikit/test_fxpersist_dn2.py`,
+`REF:tests/digikit/test_fxshift_dt2.py`, `REF:tests/digikit/test_fxshift_dn2.py`,
+`REF:tests/digikit/scenarios/fx-persist-dt2.toml`, `REF:tests/digikit/scenarios/fx-persist-dn2.toml`,
+`REF:tests/digikit/scenarios/fx-persist-restart-dt2.toml`,
+`REF:modules/fx/freqshift/tests/scenarios/fx-freqshift-dt2.toml`, and
+`REF:modules/fx/freqshift/tests/scenarios/fx-freqshift-dn2.toml`.
+The persistence runner module is deleted after moving its exact kit ranges into arena safety.
+FXPAGE retains only its PCM CLI; BASIC retains range/fit/peak analysis; the shifter retains its
+unchanged spectral/model PCM oracles with an explicit model argument. Module unit, reference and
+conformance tests remain. Source ownership follows the reduced imports, with pack/aliases,
+production module coverage and conservative unknown/deleted-source fallbacks retained. Final
+preflight and gate acceptance remain pending; no device execution changed after the final proof.
+
+The frequency-shifter module's own `project.json` declares its uncached Nx `test-device` target,
+reusing the existing named verify selection/preparation workflow. `module:check` runs this target
+after Python tests (also for an owned target without Python tests), propagates failures and reports
+size/fit only after both pass. Both-device daemon/ready resolution uses the existing harness and
+overrides, with a shared lock around resolution only. The parent module-tests project's dependency
+retains prior host ownership after introducing the nested project. Conservative bounded target
+source inputs cover acceptance, preparation and model code; this is not the proposed family-wide
+routing replacement or a cache-closure claim. The command's device acceptance is preserved while
+retiring its old TOML discovery path; no second Python module-ownership registry is introduced.

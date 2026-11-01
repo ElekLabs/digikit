@@ -37,6 +37,8 @@ from tools.patchkit import pk_device
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SECTOR_RECORD = 8 + 64 + 512
+# The existing firmware kit-library sector ranges (hi exclusive), shared by fixed FX policies.
+KIT_AREAS = {"dt2": ((0x16000, 0x17000),), "dn2": ((0x2000, 0x2100),)}
 
 
 def card_store(device: str) -> tuple[int, int]:
@@ -115,8 +117,6 @@ def runtime_policy(device: str, name: str = "default") -> dict:
     if name == "default":
         areas, extra = (), ()
     elif name in ("fx-kit", "fx-routes"):
-        from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
-
         areas, extra = KIT_AREAS[device], ()
         if name == "fx-routes":
             store = pk_device.store_of(device)

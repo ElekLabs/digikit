@@ -87,7 +87,7 @@ only the support/session pair was timed, not whole preflight. Rust and runtime t
 | `mise run test:runtime [-- FILTER]` | Project `runtime`: remote-input, service-commands, transfer-live, input-adapter, samples-live (DT2), samples-store-live (DN2). Runs `build:plusdrive` first. |
 | `mise run test:modules [-- FILTER]` | Project `modules`: PLUCK, freqshift, remote on DT2 1.17 and DN2 1.12. |
 | `mise run build:plusdrive` | Builds the plusdrive CLI into `out/native/target/nogen`. |
-| `mise run module:check ID` | Machine or effect conformance and the module's own tests in one pytest process. Own tests may build or launch an emulator. Not an all-module load proof. |
+| `mise run module:check ID` | Machine/effect conformance and own Python tests, then any module-owned Nx `test-device` target. May build or emulate; size/fit follows both. Not an all-module load proof. |
 | `mise run module:audit NAME` | ColdFire memory audit of one run-time module. |
 | `mise run patch:test` | Smoke tour over `tests/patchkit/smoke/matrix.toml` (`-- --cell dt2-1.17:core/fx`, `-- --update`). |
 | `mise run patch:proofs` | Every emulator proof on its quick tier. |
@@ -354,7 +354,15 @@ The `capacity` and `isolation` parts fill every runtime limit with synthetic mod
 ### Machine and FX conformance (`tests/modules`)
 
 `mise run module:check NAME [--device dt2|dn2]` (NAME: `<author/name>` or the name alone) selects the suite by
-module type and runs the module's own tests. The suite alone:
+module type and runs the module's own Python tests. A module's own `project.json` can declare its
+uncached Nx `test-device` target; `module:check` runs it only after Python success, propagates a
+failure, and reports size/fit only after both stages pass. With no Python tests, the existing source
+check still precedes an owned target. Frequency shifter owns the exact existing TypeScript shifter
+suite on both devices, including when `--device` limits other checks. Its daemons and ready inputs
+use the existing harness resolution/overrides; only resolution holds a shared benchlock, released
+before the target. The target reuses the existing named verify workflow and does not run the broad
+gate. Its bounded source inputs are conservative affected-selection inputs, not a cache-closure or
+fine-routing claim. This does not replace automatic gate routing. The suite alone:
 `DIGI_CONFORM_MODULES=<author/name> uv run python -m pytest tests/modules/test_machine_conformance.py -rf`.
 
 Machine rules (`pk_conform.py`, rig `tests/support/machine_rig.py`, workers `tests/support/conform_worker.py`),
