@@ -77,6 +77,22 @@
     COMP(R0, R1); \
     IF NE JUMP BAD
 
+// ---- the refusal of an unsupported context by a twin (L3, L4 or L5 nonzero, block count not 32): clears the stamp (the slot plays R = L), counts it in CNT, in `_gs_nbad`
+// and raises bits 0 and 1 of `_gs_hacc`. In: I4 = the slot's stamp word. Clobbers R1, R2. ----
+#define GS_REFUSE(CNT) \
+    R1 = 0; \
+    DM(0, I4) = R1; \
+    R1 = DM(CNT); \
+    R1 = R1 + 1; \
+    DM(CNT) = R1; \
+    R1 = DM(_gs_nbad); \
+    R1 = R1 + 1; \
+    DM(_gs_nbad) = R1; \
+    R1 = DM(_gs_hacc); \
+    R2 = 3; \
+    R1 = R1 OR R2; \
+    DM(_gs_hacc) = R1
+
 // A stereo twin saves I0 (callee-saved) in frame slot 4 and uses I0 and I4 as the copy pointers (a DM access takes a DAG1 register: I0 to I7).
 // Frame: -2 the R record, -3 the R buffer, -4 I0, -5 I1, -6 I5, -7 R3, -8 R6 (case 5), -9 the R scratch (case 5).
 #define GS_SAVE_I0 \
@@ -125,8 +141,7 @@ _gs_fo:
     I0 = DM(-4, I6);
     JUMP _gs_leave;
 _gs_fo_bad:
-    R1 = 0;
-    DM(0, I4) = R1;
+    GS_REFUSE(_gs_cnt + 36);
     JUMP _gs_fo_stock;
 
 // ---- U/Y recurrence (0xb81368, calls 0x1c959f early and 0x1c9b7a late): L record 8 words at engine + 0x12148 + 0x20 v; control words 2 to 5 ----
@@ -171,8 +186,7 @@ _gs_uy:
     I0 = DM(-4, I6);
     JUMP _gs_leave;
 _gs_uy_bad:
-    R1 = 0;
-    DM(0, I4) = R1;
+    GS_REFUSE(_gs_cnt + 40);
     JUMP _gs_uy_stock;
 
 // ---- the gain stage (0xb80345, call 0x1c99cc): L record 11 words at engine + 0x12508 + 0x2c v, all captured; stack arguments: control, byte control, count ----
@@ -228,8 +242,7 @@ _gs_gain_cap:
     I0 = DM(-4, I6);
     JUMP _gs_leave;
 _gs_gain_bad:
-    R1 = 0;
-    DM(0, I4) = R1;
+    GS_REFUSE(_gs_cnt + 44);
     JUMP _gs_gain_stock;
 
 // ---- dispatch case 5 (0xb81526, call 0x1c9c08) and the blend that follows it (0x1c9c12 to 0x1c9c44): L record 53 words at engine + 0x12a10... ----
@@ -312,8 +325,7 @@ _gs_c5_blend: DM(I1, M6) = R6;
     R6 = DM(-8, I6);
     JUMP _gs_leave;
 _gs_c5_bad:
-    R1 = 0;
-    DM(0, I4) = R1;
+    GS_REFUSE(_gs_cnt + 48);
     JUMP _gs_c5_stock;
 
 // ---- the common return of a stereo twin: pops the twin's frame and returns to the caller of the retargeted call ----
@@ -381,18 +393,34 @@ _gs_uy_reset:
     DM(7, I4) = R1;
     JUMP _gs_uy_reset_stock;
 
-// ---- stages without an R twin: clear the stamp, then the stock function ----
-// In: R8 = the voice buffer, R2 = the caller's frame. R0, R1, I4 and the flags are scratch. `_gs_nbad` counts the stamped slots this clears.
-#define GS_BAD(NAME, STOCK) \
+// ---- stages without an R twin: count, clear the stamp, then the stock function ----
+// In: R8 = the voice buffer, R2 = the caller's frame. R0-R2, I4 and the flags are scratch. A slot that is stereo in this block (`_gs_seen`, set by `_gs_post`
+// whatever the stamp says) is counted in the stage's own counter CNT (`_gs_cnt`), so the stage is visible even after an earlier stage has cleared the stamp.
+// `_gs_nbad` counts the stamps this clears. Bit 0 of `_gs_hacc` (published in `_gs_health`): some stereo slot played R = L.
+#define GS_BAD(NAME, STOCK, CNT) \
 .GLOBAL NAME; \
 NAME: \
     GS_SLOT4; \
-    R1 = _gs_stamp; \
-    R0 = R0 + R1; \
-    I4 = R0; \
+    R1 = _gs_seen; \
+    R1 = R1 + R0; \
+    I4 = R1; \
     R1 = DM(0, I4); \
-    R0 = DM(_dv_diag); \
-    COMP(R0, R1); \
+    R2 = DM(_dv_diag); \
+    COMP(R1, R2); \
+    IF NE JUMP STOCK; \
+    R1 = DM(CNT); \
+    R1 = R1 + 1; \
+    DM(CNT) = R1; \
+    R1 = DM(_gs_hacc); \
+    R2 = 3; \
+    R1 = R1 OR R2; \
+    DM(_gs_hacc) = R1; \
+    R1 = _gs_stamp; \
+    R1 = R1 + R0; \
+    I4 = R1; \
+    R1 = DM(0, I4); \
+    R2 = DM(_dv_diag); \
+    COMP(R1, R2); \
     IF NE JUMP STOCK; \
     R1 = 0; \
     DM(0, I4) = R1; \
@@ -401,12 +429,25 @@ NAME: \
     DM(_gs_nbad) = R1; \
     JUMP STOCK
 
-GS_BAD(_gs_bad_held, _gs_held_stock);
-GS_BAD(_gs_bad_shaper, _gs_shaper_stock);
-GS_BAD(_gs_bad_case1, _gs_case1_stock);
-GS_BAD(_gs_bad_case2, _gs_case2_stock);
-GS_BAD(_gs_bad_case3, _gs_case3_stock);
-GS_BAD(_gs_bad_ring, _gs_ring_stock);
+GS_BAD(_gs_bad_held_early, _gs_held_stock, _gs_cnt + 0);
+GS_BAD(_gs_bad_held_late, _gs_held_stock, _gs_cnt + 4);
+GS_BAD(_gs_bad_shaper_early, _gs_shaper_stock, _gs_cnt + 8);
+GS_BAD(_gs_bad_shaper_late, _gs_shaper_stock, _gs_cnt + 12);
+GS_BAD(_gs_bad_case1, _gs_case1_stock, _gs_cnt + 16);
+GS_BAD(_gs_bad_case2, _gs_case2_stock, _gs_cnt + 20);
+GS_BAD(_gs_bad_case3, _gs_case3_stock, _gs_cnt + 24);
+GS_BAD(_gs_bad_ring4, _gs_ring_stock, _gs_cnt + 28);
+GS_BAD(_gs_bad_ring6, _gs_ring_stock, _gs_cnt + 32);
+
+// ---- once per block, from the heartbeat code of slot 0 (dsp-voice-dn2.s): publishes the events of the block that has just ended ----
+// Plain subroutine; clobbers R0 and R1 only.
+.GLOBAL _gs_block;
+_gs_block:
+    R0 = DM(_gs_hacc);
+    DM(_gs_health) = R0;
+    R0 = 0;
+    DM(_gs_hacc) = R0;
+    RTS;
 
 // ---- the two inline gain stages of the engine that have no call: the block ramp (0x1c99ed to 0x1c9a31) and the conditional fade (0x1c9a59 to 0x1c9aac) ----
 // Hook at 0x1c9aaf (`BIT SET MODE1 0x200000`, the first instruction after the fade loop), once per block, before the metadata clear that zeroes the fade's flags.
@@ -564,6 +605,13 @@ _gs_post:
     R2 = PASS R2;
     IF EQ RTS;
     R4 = DM(_dv_c + 4);
+    // the slot is stereo in this block, whatever the checks below say (read by the stages without a twin: `_gs_seen`)
+    R1 = LSHIFT R4 BY 2;
+    R0 = _gs_seen;
+    R0 = R0 + R1;
+    I3 = R0;
+    R0 = DM(_dv_diag);
+    DM(0, I3) = R0;
     R5 = LSHIFT R4 BY 7;
     R6 = _gs_rbuf;
     R5 = R5 + R6;
@@ -576,7 +624,7 @@ _gs_post:
 _gs_gchk: R13 = MAX(R13, R0);
     R0 = 0x41000000;
     COMP(R13, R0);
-    IF GT RTS;
+    IF GT JUMP _gs_badr;
     // the cap: the first _GS_MAX_STEREO stereo slots of a block
     R0 = DM(_dv_diag);
     R1 = DM(_gs_nhb);
@@ -589,7 +637,7 @@ _gs_samehb:
     R1 = DM(_gs_ns);
     R2 = 8;
     COMP(R1, R2);
-    IF GE RTS;
+    IF GE JUMP _gs_capped;
     R1 = R1 + 1;
     DM(_gs_ns) = R1;
     // the engine multiplies every voice buffer by 0x3fcade01 right after the render hook (the loop at 0x1c9478); R takes the same factor
@@ -648,6 +696,24 @@ _gs_stamped:
     DM(0, I2) = R0;
     RTS;
 
+// a slot that is stereo but not stamped plays R = L: counted (`_gs_cnt` 64 = bad R, 68 = cap) and raised in `_gs_hacc` (bit 0 any reason, bit 2 bad R, bit 3 cap)
+_gs_badr:
+    R1 = DM(_gs_cnt + 64);
+    R1 = R1 + 1;
+    DM(_gs_cnt + 64) = R1;
+    R2 = 5;
+    JUMP _gs_raise;
+_gs_capped:
+    R1 = DM(_gs_cnt + 68);
+    R1 = R1 + 1;
+    DM(_gs_cnt + 68) = R1;
+    R2 = 9;
+_gs_raise:
+    R1 = DM(_gs_hacc);
+    R1 = R1 OR R2;
+    DM(_gs_hacc) = R1;
+    RTS;
+
 .SECTION/DM seg_dmda;
 .PKDATA _gs_stamp, 64;                     // per slot: the block (heartbeat) in which the slot has R; 0 or an older block: R = L
 .PKDATA _gs_rbuf, 2048;                    // per slot: 32 floats of R (a machine's out_r)
@@ -659,3 +725,7 @@ _gs_stamped:
 .PKDATA _gs_ns, 4;                         // stereo slots stamped in the block _gs_nhb
 .PKDATA _gs_nhb, 4;
 .PKDATA _gs_nbad, 4;                       // stamped slots a stage without a twin has cleared (diagnostic)
+.PKDATA _gs_seen, 64;                      // per slot: the block (heartbeat) in which the slot was stereo at adapter time (never cleared by a stage)
+.PKDATA _gs_cnt, 128;                      // 32 counters: 0 to 8 stages without a twin on a stereo slot (held early and late, shaper early and late, case 1, 2, 3, ring 4 and 6), 9 to 12 unsupported context of the first-order, U/Y, gain and case 5 twins, 16 bad R, 17 cap
+.PKDATA _gs_hacc, 4;                       // events of the running block: bit 0 some stereo slot plays R = L, bit 1 a stage without a twin or an unsupported context, bit 2 bad R, bit 3 cap
+.PKDATA _gs_health, 4;                     // `_gs_hacc` of the last completed block, published by `_gs_block` at the heartbeat of slot 0

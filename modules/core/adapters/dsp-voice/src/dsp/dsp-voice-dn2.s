@@ -56,6 +56,7 @@
 .EXTERN _dv_table;
 .EXTERN _gs_rbuf;
 .EXTERN _gs_post;
+.EXTERN _gs_block;
 
 _dv_entry:
     DM(_dv_s_r0) = R0;
@@ -197,6 +198,7 @@ _dv_full:
     DM(10, I4) = R1;
     R1 = MODE1;
     DM(11, I4) = R1;
+    CALL _gs_block;                       // publishes the stereo events of the block that has ended (dsp-voice-dn2-stereo.s); clobbers R0 and R1 only
     // the mask of the registered types: R0-R3 are saved above and free (a free row holds 0xffffffff, the zero row ends the table)
     I4 = _dv_table;
     R3 = 0;

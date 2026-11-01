@@ -119,22 +119,36 @@ def test_a_reset_of_a_record_that_is_no_slot_only_runs_the_stock_reset(
 
 # ---- stages without an R twin ----
 
+# (wrapper, stock function, counter word in `_gs_cnt`)
 BAD = [
-    ("_gs_bad_held", "_gs_held_stock"),
-    ("_gs_bad_shaper", "_gs_shaper_stock"),
-    ("_gs_bad_case1", "_gs_case1_stock"),
-    ("_gs_bad_case2", "_gs_case2_stock"),
-    ("_gs_bad_case3", "_gs_case3_stock"),
-    ("_gs_bad_ring", "_gs_ring_stock"),
+    ("_gs_bad_held_early", "_gs_held_stock", 0),
+    ("_gs_bad_held_late", "_gs_held_stock", 1),
+    ("_gs_bad_shaper_early", "_gs_shaper_stock", 2),
+    ("_gs_bad_shaper_late", "_gs_shaper_stock", 3),
+    ("_gs_bad_case1", "_gs_case1_stock", 4),
+    ("_gs_bad_case2", "_gs_case2_stock", 5),
+    ("_gs_bad_case3", "_gs_case3_stock", 6),
+    ("_gs_bad_ring4", "_gs_ring_stock", 7),
+    ("_gs_bad_ring6", "_gs_ring_stock", 8),
 ]
 
 
-@pytest.mark.parametrize("entry,stock", BAD)
+def seen(rig, session, slots):
+    for v in range(16):
+        session.poke(rig.data["_gs_seen"] + 4 * v, HEARTBEAT if v in slots else 0)
+
+
+def counters(rig, session):
+    return words(session, rig.data["_gs_cnt"], 32)
+
+
+@pytest.mark.parametrize("entry,stock,index", BAD)
 def test_a_stage_without_a_twin_clears_the_stamp_of_its_slot_and_calls_the_stock_function(
-    stub_rig, entry, stock
+    stub_rig, entry, stock, index
 ):
     session = new_session(stub_rig)
     stamps(stub_rig, session, {SLOT, OTHER})
+    seen(stub_rig, session, {SLOT, OTHER})
     session.poke(stub_rig.data["_gs_nbad"], 0)
     call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, ())
     log = stub_log(session)
@@ -148,25 +162,53 @@ def test_a_stage_without_a_twin_clears_the_stamp_of_its_slot_and_calls_the_stock
         "no other slot is touched"
     )
     assert session.peek(stub_rig.data["_gs_nbad"]) == 1
+    assert counters(stub_rig, session) == [int(i == index) for i in range(32)]
+    assert session.peek(stub_rig.data["_gs_hacc"]) == 3
+    assert [session.peek(stub_rig.data["_gs_seen"] + 4 * v) for v in range(16)] == [
+        HEARTBEAT if v in (SLOT, OTHER) else 0 for v in range(16)
+    ], "the stereo latch is never cleared by a stage"
 
 
-@pytest.mark.parametrize("entry,stock", BAD)
-def test_a_stage_without_a_twin_leaves_an_unstamped_slot_alone(stub_rig, entry, stock):
+@pytest.mark.parametrize("entry,stock,index", BAD)
+def test_a_stage_without_a_twin_counts_a_stereo_slot_whose_stamp_an_earlier_stage_cleared(
+    stub_rig, entry, stock, index
+):
+    """Both stages are active on the slot, only the first clears the stamp: the second is visible in its own counter."""
     session = new_session(stub_rig)
     stamps(stub_rig, session, {OTHER})
+    seen(stub_rig, session, {SLOT, OTHER})
+    session.poke(stub_rig.data["_gs_nbad"], 0)
+    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, ())
+    assert stub_log(session)[3] == 1
+    assert session.peek(stub_rig.data["_gs_nbad"]) == 0, "no stamp was left to clear"
+    assert counters(stub_rig, session)[index] == 1
+    assert session.peek(stub_rig.data["_gs_hacc"]) == 3
+
+
+@pytest.mark.parametrize("entry,stock,index", BAD)
+def test_a_stage_without_a_twin_leaves_a_mono_slot_alone(
+    stub_rig, entry, stock, index
+):
+    session = new_session(stub_rig)
+    stamps(stub_rig, session, {OTHER})
+    seen(stub_rig, session, {OTHER})
     session.poke(stub_rig.data["_gs_stamp"] + 4 * SLOT, HEARTBEAT - 1)
+    session.poke(stub_rig.data["_gs_seen"] + 4 * SLOT, HEARTBEAT - 1)
     session.poke(stub_rig.data["_gs_nbad"], 0)
     call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, ())
     assert stub_log(session)[3] == 1
     assert session.peek(stub_rig.data["_gs_stamp"] + 4 * SLOT) == HEARTBEAT - 1
     assert session.peek(stub_rig.data["_gs_nbad"]) == 0
+    assert counters(stub_rig, session) == [0] * 32
+    assert session.peek(stub_rig.data["_gs_hacc"]) == 0
 
 
 def test_every_slot_is_found_by_its_voice_buffer(stub_rig):
     for slot in range(16):
         session = new_session(stub_rig)
         stamps(stub_rig, session, set(range(16)))
-        call(session, stub_rig.sym["_gs_bad_ring"], 0, BUFFERS + 0x80 * slot, 0, ())
+        seen(stub_rig, session, set(range(16)))
+        call(session, stub_rig.sym["_gs_bad_ring4"], 0, BUFFERS + 0x80 * slot, 0, ())
         assert [
             session.peek(stub_rig.data["_gs_stamp"] + 4 * v) for v in range(16)
         ] == [0 if v == slot else HEARTBEAT for v in range(16)]
@@ -174,21 +216,22 @@ def test_every_slot_is_found_by_its_voice_buffer(stub_rig):
 
 # ---- twins in a context the twin does not support ----
 
+# (twin, arguments, counter word in `_gs_cnt`)
 TWINS = [
-    ("_gs_fo", (32,)),
-    ("_gs_uy", (32,)),
-    ("_gs_c5", (32,)),
-    ("_gs_gain", (0, 0, 32)),
+    ("_gs_fo", (32,), 9),
+    ("_gs_uy", (32,), 10),
+    ("_gs_c5", (32,), 12),
+    ("_gs_gain", (0, 0, 32), 11),
 ]
 
 
-@pytest.mark.parametrize("entry,args", TWINS)
+@pytest.mark.parametrize("entry,args,index", TWINS)
 @pytest.mark.parametrize(
     "context",
     ["circular-l4", "circular-l3", "circular-l5", "block-16"],
 )
 def test_an_unsupported_context_clears_the_stamp_and_runs_the_stock_stage_once(
-    stub_rig, entry, args, context
+    stub_rig, entry, args, index, context
 ):
     session = new_session(stub_rig)
     stamps(stub_rig, session, {SLOT})
@@ -205,3 +248,6 @@ def test_an_unsupported_context_clears_the_stamp_and_runs_the_stock_stage_once(
     call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, call_args, **regs)
     assert stub_log(session)[3] == 1 and stub_log(session)[:3] == [0x1234, LBUF, LBUF]
     assert session.peek(stub_rig.data["_gs_stamp"] + 4 * SLOT) == 0
+    assert counters(stub_rig, session) == [int(i == index) for i in range(32)]
+    assert session.peek(stub_rig.data["_gs_nbad"]) == 1
+    assert session.peek(stub_rig.data["_gs_hacc"]) == 3

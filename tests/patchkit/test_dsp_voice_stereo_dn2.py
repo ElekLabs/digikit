@@ -60,6 +60,14 @@ def stamp(rig, v):
     return rig.sess.peek(nw(data(rig, "_gs_stamp")) + v)
 
 
+def word(rig, name, index=0):
+    return rig.sess.peek(nw(data(rig, name)) + index) or 0
+
+
+def seen(rig, v):
+    return word(rig, "_gs_seen", v)
+
+
 def r_block(rig, v):
     return [rig.sess.peek(nw(data(rig, "_gs_rbuf") + 128 * v) + k) for k in range(32)]
 
@@ -213,6 +221,50 @@ def test_the_cap_is_eight_stereo_slots_per_block_the_others_play_r_equals_l():
         7,
         8,
     ]
+
+
+def test_every_stereo_slot_is_latched_and_the_cap_is_counted_and_published():
+    rig = stereo_rig()
+    slots = list(range(10))
+    start(rig, slots)
+    assert [seen(rig, v) for v in slots] == [heartbeat(rig)] * 10, (
+        "stereo at adapter time, stamped or not"
+    )
+    assert [seen(rig, v) for v in range(10, 16)] == [0] * 6
+    assert word(rig, "_gs_cnt", 17) == 2, "slots 8 and 9 are over the cap"
+    assert word(rig, "_gs_cnt", 16) == 0
+    play(rig, slots)
+    assert word(rig, "_gs_health") == 0b1001, (
+        "the last block: some slot played R = L, reason cap"
+    )
+    play(rig, slots[:3])
+    play(rig, slots[:3])
+    assert word(rig, "_gs_health") == 0, "a clean block clears the word"
+
+
+def test_a_bad_r_block_is_counted_and_raised_in_the_health_word():
+    rig = stereo_rig()
+    start(rig, [0], select=1)
+    assert seen(rig, 0) == heartbeat(rig), "stereo, though not stamped"
+    assert word(rig, "_gs_cnt", 16) == 1
+    play(rig, [0])
+    assert word(rig, "_gs_health") == 0b0101
+    rig.set_params({"sine_level": 0})
+    play(rig, [0])
+    play(rig, [0])
+    assert word(rig, "_gs_health") == 0
+
+
+def test_a_mono_machine_leaves_the_latch_the_counters_and_the_health_word_alone():
+    rig = MachineRig("test/sine", "dn2")
+    rig.set_params({"sine_level": 0x7F00})
+    rig.set_note(60, 100)
+    rig.trigger()
+    for _ in range(4):
+        rig.block("friendly")
+    assert [seen(rig, v) for v in range(16)] == [0] * 16
+    assert [word(rig, "_gs_cnt", i) for i in range(32)] == [0] * 32
+    assert word(rig, "_gs_health") == 0
 
 
 def test_the_private_observer_cannot_be_installed_with_the_adapter(tmp_path):
