@@ -191,17 +191,24 @@ fn fx_def(what: &str, spec: &DescSpec, b: &[u8], rec: &DescRecord) -> Result<Rec
 
 fn machine_def(what: &str, b: &[u8], rec: &DescRecord) -> Result<Rec> {
     let id = req(what, b, rec, "id")?;
+    let stereo = match word(b, rec, "stereo")? {
+        0 => false,
+        1 => true,
+        n => return Err(err!("{what}: stereo {n} is not 0 or 1")),
+    };
     Ok(Rec::Machine {
         def: MachineDef {
             id: id.clone(),
             name: req(what, b, rec, "name")?,
             short: req(what, b, rec, "short_name")?,
+            stereo,
         },
         voice: VoiceDef {
             machine: id,
             render: req(what, b, rec, "render")?,
             note_on: req(what, b, rec, "note_on")?,
             desc: req(what, b, rec, "desc")?,
+            stereo,
         },
     })
 }
@@ -312,7 +319,9 @@ fn records(obj: &Dko, spec: &DescSpec) -> Result<Vec<Rec>> {
                 .iter()
                 .find(|r| r.kind == Some(kind))
                 .ok_or_else(|| err!("{what}: unknown record kind {kind}"))?;
-            if size != rec.size {
+            // A machine record of contract 1.1 ends before `stereo`: mono.
+            let legacy = rec.name == "dk_desc_machine" && size + 4 == rec.size;
+            if size != rec.size && !legacy {
                 return Err(err!(
                     "{what}: size {size} is not the {} bytes of {}",
                     rec.size,
@@ -326,7 +335,14 @@ fn records(obj: &Dko, spec: &DescSpec) -> Result<Vec<Rec>> {
                     b.len() - at
                 ));
             }
-            let rb = &b[at..at + size];
+            let mut padded;
+            let rb = if legacy {
+                padded = b[at..at + size].to_vec();
+                padded.resize(rec.size, 0);
+                &padded[..]
+            } else {
+                &b[at..at + size]
+            };
             out.push(match rec.name.as_str() {
                 "dk_desc_sample_bank" => Rec::SampleBank(crate::typed::SampleBankDef {
                     local_id: word(rb, rec, "local_id")?,
@@ -727,7 +743,8 @@ mod tests {
             .text("short_name", "PLK")
             .text("render", "_pk_render")
             .text("note_on", "_pk_note_on")
-            .text("desc", "_pk_desc");
+            .text("desc", "_pk_desc")
+            .num("stereo", 0);
         r
     }
 

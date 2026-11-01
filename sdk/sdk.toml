@@ -10,7 +10,7 @@ version = "0.5.4"   # 0.x: MINOR may break (contract major, store format, SysEx 
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
                     # An appended Api function is a minor bump; a changed or removed one is a major bump.
 api = [1, 4]        # the ColdFire Api table (every module, `raw` included); minor 1: `log_lv` appended; minor 2: `register_cmds` appended; minor 3: sample bank API appended; minor 4: read-only listing
-machine = [1, 1]    # minor 1: source track appended to voice_in, latched at note_on
+machine = [1, 2]    # minor 1: source track appended to voice_in, latched at note_on; minor 2: stereo machines (out_r appended to voice_in, DK_MACHINE_STEREO, DK_STEREO)
 fx = [1, 0]         # run-time effects (sdk/include/dk/gen/fx.h, DSP section version 4 of a .dkm); 0.4.0; effect pages (register kind 4) 0.5.0
 service = [1, 0]
 
@@ -64,6 +64,8 @@ consts = [
     { name = "DK_MAX_VOICES", value = 16, doc = "Voices a machine runs at once on any device." },
     { name = "DK_OK", value = 0, doc = "Returned by render: block written, voice continues." },
     { name = "DK_DONE", value = 1, doc = "Returned by render: block written (may be silence), voice has ended." },
+    { name = "DK_STEREO", value = 2, doc = "Or-ed into the status of render by a stereo machine (contract 1.2): `out_r` was written this block. DK_OK | DK_STEREO and DK_DONE | DK_STEREO. Without it the adapter treats the block as mono (L copied to R)." },
+    { name = "DK_MACHINE_STEREO", value = 256, doc = "Or-ed into dk_machine_desc.contract by a stereo machine (contract 1.2): the major number is the low byte (DK_MACHINE_V1)." },
     { name = "DK_P_PERCENT", value = 0, doc = "Word 0 .. 0x7f00, UI 0 .. 127." },
     { name = "DK_P_BIPOLAR", value = 1, doc = "0x4000 at rest, UI -64 .. +63." },
     { name = "DK_P_ENUM", value = 2, doc = "n steps, word = step * 256." },
@@ -71,7 +73,7 @@ consts = [
     { name = "DK_LEVEL_BOUND_BITS", value = 1090519040, doc = "|sample| above DK_LEVEL_BOUND is a fault (+18 dB over full scale)." },  # 8.0f
     { name = "DK_MAGIC", value = 1145785665, doc = "'DKMA', the first word of dk_machine_desc." },             # 'DKMA' = 0x444b4d41
 ]
-voice_in = ["pitch", "velocity", "block", "out", "track"]           # struct dk_voice_in, DK_IN_*
+voice_in = ["pitch", "velocity", "block", "out", "track", "out_r"]           # struct dk_voice_in, DK_IN_*
 desc = [
     "magic", "contract", "n_params", "voices", "state_bytes",
     "state_clear_bytes", "max_cycles_block", "max_cycles_note_on", "max_call_depth", "stack_bytes",
@@ -92,10 +94,11 @@ voice_in = [
     "u32 block // blocks since note-on, 0 on the note-on block",
     "float *out // render writes DK_BLOCK floats here",
     "u32 track // source track 0 .. 15, latched at note_on; machine contract 1.1",
+    "float *out_r // machine contract 1.2: a stereo machine writes the right channel, DK_BLOCK floats, and returns DK_STEREO; a mono machine never touches it",
 ]
 desc = [
     "u32 magic // DK_MAGIC",
-    "u32 contract // DK_MACHINE_V1",
+    "u32 contract // DK_MACHINE_V1 (low byte); a stereo machine (contract 1.2) or-s in DK_MACHINE_STEREO",
     "u32 n_params // 0 .. DK_MAX_PARAMS, the manifest's `params` order",
     "u32 voices // 1 .. DK_MAX_VOICES the module supports",
     "u32 state_bytes // per voice, a multiple of 4",
@@ -237,6 +240,7 @@ fields = [
     "char render[32] // the SHARC+ symbol of the render routine",
     "char note_on[32] // the SHARC+ symbol of the note-on routine",
     "char desc[32] // the SHARC+ symbol of the dk_machine_desc",
+    "u32 stereo // 0 mono, 1 stereo (contract 1.2); must agree with DK_MACHINE_STEREO in the dk_machine_desc",
 ]
 
 [[desc.record]]

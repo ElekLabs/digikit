@@ -654,6 +654,7 @@ plan.json {}",
                         render: v.entry.clone(),
                         note_on: v.note_on.clone(),
                         desc: v.desc.clone(),
+                        stereo: v.stereo,
                         ranges,
                     });
                 }

@@ -432,7 +432,9 @@ fn reserve_voice_state(m: &mut Module) -> Result<()> {
                 )
             })?;
         let w = |i: usize| u32::from_le_bytes(words[i * 4..i * 4 + 4].try_into().unwrap());
-        if w(0) != crate::dkmdsp::DESC_MAGIC || w(1) != crate::dkmdsp::DESC_CONTRACT {
+        if w(0) != crate::dkmdsp::DESC_MAGIC
+            || w(1) & !crate::dkmdsp::DESC_STEREO != crate::dkmdsp::DESC_CONTRACT
+        {
             return Err(err!(
                 "voice {machine}: desc {desc} is no dk_machine_desc of contract {}",
                 crate::dkmdsp::DESC_CONTRACT

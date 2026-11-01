@@ -63,6 +63,8 @@ pub const VOICE_LEN_V3: usize = 64;
 /// `dk_machine_desc` (SDK contract): magic "DKMA" and the contract number the packer accepts, and its size in u32 words.
 pub const DESC_MAGIC: u32 = 0x444b_4d41;
 pub const DESC_CONTRACT: u32 = 1;
+/// Bit 8 of the desc's contract word: a stereo machine (contract 1.2, `DK_MACHINE_STEREO`). The low byte is the major number.
+pub const DESC_STEREO: u32 = 0x100;
 pub const DESC_WORDS: usize = 10;
 pub const VOICE_LEN_V1: usize = 16;
 pub const FX_LEN: usize = 64;
@@ -133,6 +135,8 @@ pub struct VoiceSpec {
     pub render: String,
     pub note_on: Option<String>,
     pub desc: Option<String>,
+    /// Declared stereo in `DK_MACHINE`; the desc must carry `DESC_STEREO` too.
+    pub stereo: bool,
     pub ranges: [u32; 8],
 }
 
@@ -144,6 +148,7 @@ impl VoiceSpec {
             render,
             note_on: None,
             desc: None,
+            stereo: false,
             ranges,
         }
     }
@@ -472,10 +477,17 @@ pub fn pack_with_bank(
                     w(0)
                 ));
             }
-            if w(1) != DESC_CONTRACT {
+            if w(1) & !DESC_STEREO != DESC_CONTRACT {
                 return Err(err!(
-                    "voice desc {d}: contract {}, this packer takes {DESC_CONTRACT}",
+                    "voice desc {d}: contract {:#x}, this packer takes {DESC_CONTRACT} (optionally with {DESC_STEREO:#x}, stereo)",
                     w(1)
+                ));
+            }
+            if (w(1) & DESC_STEREO != 0) != v.stereo {
+                return Err(err!(
+                    "voice desc {d}: DK_MACHINE says stereo = {}, the desc's contract word says {}",
+                    v.stereo as u32,
+                    (w(1) & DESC_STEREO != 0) as u32
                 ));
             }
             voices_n = w(3);
