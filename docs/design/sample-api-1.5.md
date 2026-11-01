@@ -1,6 +1,6 @@
-# Draft: stereo sample binding, API 1.5
+# Stereo sample binding, API 1.5
 
-Status: draft for Em's review (revised 2026-11-01: device code moved out of core/runtime into core/adapters/sample-pool). No code. Sources: sdk/include/dk/sample.h (1.3 bank), files.h (1.4), gen/machine.h (contract 1.1, `track`), sdk/dsp/sample_bank.inc, sample_pcm16*.inc, docs/design/sample-binding.md, findings 84, 87, 94, 105, 81 (and 96, 99 for the stereo kernels).
+Status: accepted by Em on 2026-11-01, with the recommendations in section 5 (device code in core/adapters/sample-pool, not core/runtime). No code. Sources: sdk/include/dk/sample.h (1.3 bank), files.h (1.4), gen/machine.h (contract 1.1, `track`), sdk/dsp/sample_bank.inc, sample_pcm16*.inc, docs/design/sample-binding.md, findings 84, 87, 94, 105, 81 (and 96, 99 for the stereo kernels).
 
 ## 1. Module-facing API (C header sketch)
 
@@ -86,7 +86,7 @@ Guarantees the adapter gives: PCM of a valid handle does not move; `token` chang
 
 ### 2.3 core/adapters/sample-pool (per device)
 
-Anchors live in a new `devices/fw/samples.toml` (rule kinds as in `fw/storage`: `cf_func` hashes, `users = ["core/sample-pool"]`) and resolve per firmware through `devices/ports/*.toml`. The adapter binds them through the generated `dk_fw_samples.h` / crate `dkfw`, like `storage-fault-proof` binds `cf.storage.site.*` through `[object.externs]`. Values below are DT2 1.17; the port files hold the real per-image addresses.
+Anchors live in a new firmware anchor file `samples.toml` next to `devices/fw/storage.toml` (rule kinds as in `fw/storage`: `cf_func` hashes, `users = ["core/sample-pool"]`) and resolve per firmware through `devices/ports/*.toml`. The adapter binds them through the generated `dk_fw_samples.h` / crate `dkfw`, like `storage-fault-proof` binds `cf.storage.site.*` through `[object.externs]`. Values below are DT2 1.17; the port files hold the real per-image addresses.
 
 **DT2 1.17: borrow the stock sample pool** (emulator-confirmed, `tests/regression/runtime/stock-pool-borrow.test.ts`).
 - Loader `0x4015481c(keyptr, slot)`. It runs as a queued job on the SampleLoaderBgWorker (getter `0x4019e65c`, queue `0x400f0c1c`), as ReloadAllSamples does; `dkpool_load` queues and completes asynchronously.

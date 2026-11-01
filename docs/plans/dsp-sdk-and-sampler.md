@@ -37,8 +37,9 @@ there is no outstanding reservation-choice request and no approved reservation p
 - DN2 stereo: the shadow stages go to production. The two-slot route is rejected
   ([finding 96](../findings/96-stereo-machine-processing.md)).
 - Project identity: [finding 110](../findings/110-project-identity.md).
-- API 1.5 draft (stereo descriptor, per-track binding, device-neutral runtime plus
-  sample-pool adapter) awaits Em's review.
+- API 1.5 accepted by Em (2026-11-01): [sample API 1.5](../design/sample-api-1.5.md)
+  (stereo descriptor, per-track binding, device-neutral runtime plus a
+  core/adapters/sample-pool backing adapter), with the recommendations in its section 5.
 - Re-proof after the merge (2026-11-01): `test_dsp_sample_stereo_kernels.py` and
   `test_dsp_sample_bank.py` pass (61). `sample-ddr-transfer` (12/12, both
   devices), `file-catalog` and `stock-pool-borrow` pass on daemons built from the
