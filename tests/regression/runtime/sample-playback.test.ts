@@ -6,7 +6,7 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { button, repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { installModule, liveArtifacts, moduleArtifact, record, runtimeTests, settleUi } from './live.ts';
+import { installWithDebug, liveArtifacts, moduleArtifact, record, runtimeTests, settleUi } from './live.ts';
 import { planSymbol, prepareRuntimePlan } from './runtime-plan.ts';
 
 /** Deterministic exact PCM16 fixture: mono48k avoids converter/resampler rounding. */
@@ -134,7 +134,8 @@ async function captureProofNote(
   return { peak, samples: pcm.length / 4 };
 }
 
-async function expectTransferredBank({ session, dk }: PatchedSession): Promise<void> {
+async function expectTransferredBank(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
   await settleUi(session);
   const artifacts = liveArtifacts(session, 'sample-playback');
   const dispatchSymbol = session.options.device === 'dt2' ? '_dv_g' : '_dv_c';
@@ -150,7 +151,7 @@ async function expectTransferredBank({ session, dk }: PatchedSession): Promise<v
   expect(dsp.readUInt32LE(bank + 12)).toBe(8192);
   const bankOffset = dsp.readUInt32LE(bank + 8);
   const viewOffset = dsp.readUInt32LE(bank + 16);
-  await installModule(dk, 'test/sample-proof', artifact);
+  await installWithDebug(runtime, 'test/sample-proof');
   async function bankBase(): Promise<number> {
     await expect
       .poll(
@@ -205,7 +206,7 @@ async function expectTransferredBank({ session, dk }: PatchedSession): Promise<v
   expect(await bytes(base + viewOffset, 16), 'oversized source never publishes any descriptor words').toEqual(
     Buffer.alloc(16),
   );
-  expect((await dk.modules()).map((m) => ({ faults: m.faults, off: m.guard_off }))).toEqual([
+  expect((await dk.modules()).filter((m) => m.name === 'test/sample-proof').map((m) => ({ faults: m.faults, off: m.guard_off }))).toEqual([
     { faults: 0, off: false },
   ]);
   await session.expectNoFault('oversized sample acquisition');
@@ -303,7 +304,7 @@ async function expectTransferredBank({ session, dk }: PatchedSession): Promise<v
     ready,
     retrigger,
   });
-  expect((await dk.modules()).map((m) => ({ faults: m.faults, off: m.guard_off }))).toEqual([
+  expect((await dk.modules()).filter((m) => m.name === 'test/sample-proof').map((m) => ({ faults: m.faults, off: m.guard_off }))).toEqual([
     { faults: 0, off: false },
   ]);
   await session.expectNoFault('transferred sample bank');
