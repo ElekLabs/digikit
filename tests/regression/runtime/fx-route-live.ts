@@ -4,7 +4,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect } from 'vitest';
-import { button, MS, repoRoot, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
+import { DkSession, EmuUsbTransport } from '@digi/dk-session';
+import {
+  button,
+  MS,
+  repoRoot,
+  withinRuntimeDeadline,
+  type Device,
+  type RuntimeBaseline,
+  type Session,
+} from '@digi/test-support';
 import { withReusablePatchedSession, type PatchedSession } from '../support.ts';
 import { FIRMWARE, expectRuntimeUi, moduleArtifact, record } from './live.ts';
 import { advance, analysisJson, bounded, evidence, options, word } from './fx-live.ts';
@@ -30,6 +39,8 @@ export interface RouteProfile {
   fx_slots: number;
   send_slots: number;
   track_type_word: number;
+  value_classes: number;
+  selection: { copy_a: number; copy_b: number };
   settings: { copy_a: number; copy_b: number };
   kit_areas: [number, number][];
   fx: {
@@ -107,6 +118,31 @@ export async function readTextRows(session: Session, address: number, count: num
   return result;
 }
 
+/** Read protocol state while paused using the existing USB transport's legacy 400,000-instruction poll step. */
+export async function routeProtocol<T>(runtime: PatchedSession, operation: (dk: DkSession) => Promise<T>): Promise<T> {
+  const deadline = Date.now() + 30_000;
+  const status = await withinRuntimeDeadline(deadline, () => runtime.session.status());
+  if (status.mode !== 'paused') throw new Error('route protocol reads require a paused runtime');
+  let active = true;
+  const dk = new DkSession(
+    new EmuUsbTransport(
+      async <R>(method: string, params?: Record<string, unknown>) => {
+        if (!active) throw new Error('route protocol is no longer active');
+        const result = await withinRuntimeDeadline(deadline, () => runtime.session.client.call<R>(method, params));
+        if (!active) throw new Error('route protocol is no longer active');
+        return result;
+      },
+      { stepInstructions: 400_000 },
+    ),
+  );
+  try {
+    return await withinRuntimeDeadline(deadline, () => operation(dk));
+  } finally {
+    active = false;
+    dk.cancelPending();
+  }
+}
+
 /** Shared ready/boot observations; scenario assertions retain their own capacity and routing expectations. */
 export async function inspectRouteBoot(
   runtime: PatchedSession,
@@ -133,6 +169,7 @@ export async function inspectRouteBoot(
       { timeout: 30_000, interval: 500 },
     )
     .toEqual({ names: expectedNames, results: expectedResults });
+  const capacity = await bounded(() => dk.capacity());
   await expect
     .poll(
       async () => {
@@ -146,7 +183,6 @@ export async function inspectRouteBoot(
   const fields = await Promise.all(Array.from({ length: 10 }, (_, i) => word(session, boot + i * 4)));
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([expectedResults.length, expectedNames.length, 1]);
-  const capacity = await bounded(() => dk.capacity());
   const status = await bounded(() => session.status());
   expect(status.mode).toBe('paused');
   expect(status.cf.input_pending).toBe(0);
@@ -198,6 +234,10 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
             'DKRT_ASSIGN',
             'fx.rows',
             '_dl_area',
+            ...(config.image === 'track' || config.image === 'track-base' ? ['dynreg_info'] : []),
+            ...(config.image === 'track'
+              ? ['fxpages_info', 'fxp_send_row', 'fxp_send_count', 'fxp_nload', 'DKRT_FXS']
+              : []),
             ...(config.image === 'routes'
               ? [
                   'DK_FXR_PEND',

@@ -7,7 +7,7 @@ import { button, repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { advance, analysisJson, bounded, frames, pickSine, rpc, word } from './fx-live.ts';
-import { inspectRouteBoot, SEND, SINE, tap, withRouteFxSession } from './fx-route-live.ts';
+import { inspectRouteBoot, routeProtocol, SEND, SINE, tap, withRouteFxSession } from './fx-route-live.ts';
 import { MASTER, routeUi, SEND_ROUTE } from './fx-routes-ui.ts';
 import { DEVICES, expectRuntimeUi, FIRMWARE, record } from './live.ts';
 import { planSymbol } from './runtime-plan.ts';
@@ -88,7 +88,7 @@ for (const device of DEVICES) {
         await rpc(session, 'run.mode', { mode: 'paused' });
         await rpc(session, 'pcm.tap', { action: 'start' });
         const hint = device === 'dt2' ? 7 : 5;
-        const sine = (await bounded(() => runtime.dk.modules())).find((module) => module.name === SINE);
+        const sine = (await routeProtocol(runtime, (dk) => dk.modules())).find((module) => module.name === SINE);
         expect(sine?.types).toHaveLength(1);
         if (device === 'dt2') {
           let selected = -1;

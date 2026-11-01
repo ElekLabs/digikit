@@ -1,6 +1,6 @@
 import type { PatchedSession } from '../support.ts';
-import { bounded, rows, word } from './fx-live.ts';
-import { readTextRows, shot, tap } from './fx-route-live.ts';
+import { rows, word } from './fx-live.ts';
+import { readTextRows, routeProtocol, shot, tap } from './fx-route-live.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 export const MASTER = 1;
@@ -8,7 +8,7 @@ export const SEND_ROUTE = 2;
 
 /** The MODULES route panel's published diagnostics and its real front-panel navigation. */
 export function routeUi(runtime: PatchedSession, plan: RuntimePlan, artifacts: string, slots: number) {
-  const { session, dk } = runtime;
+  const { session } = runtime;
   const sym = (name: string) => planSymbol(plan, name);
   const cell = (name: string) => word(session, sym(name));
   const bytes = (value: number, count: number) =>
@@ -71,7 +71,7 @@ export function routeUi(runtime: PatchedSession, plan: RuntimePlan, artifacts: s
         defaults: bytes(await word(session, base + 44), count),
       };
     },
-    sendUsed: async () => (await bounded(() => dk.capacity())).SEND_SLOTS,
+    sendUsed: async () => (await routeProtocol(runtime, (dk) => dk.capacity())).SEND_SLOTS,
     fxPageOrder: async () => {
       const base = sym('fxpages_info');
       const first = await word(session, base + 4 * 5);
