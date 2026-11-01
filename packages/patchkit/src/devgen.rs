@@ -13,6 +13,8 @@
 //!   macro text, which breaks `0x` literals after `+`).
 //! - `sharc-adapter`: `#define ADM_*` lines for the machine adapter's SHARC+ assembly, one file per device, from `[adapter.machine]`
 //!   and `[modules.frame]` of the device file (docs/design/module-sdk.md 5.2). Only those names, no other constant.
+//! - `gas-sample-pool`: `.equ SP_*` lines for the sample pool adapter's ColdFire assembly, one file per device, from
+//!   `[adapter.sample_pool]` (slot floor and the reserved DDR range; docs/design/sample-api-1.5.md 2.3). Only those names.
 //!
 //! The files carry no firmware bytes, only numbers of the device files.
 
@@ -95,6 +97,17 @@ struct PanelDoc {
 #[derive(Deserialize)]
 struct AdapterDoc {
     machine: Option<AdapterMachine>,
+    sample_pool: Option<AdapterSamplePool>,
+}
+/// `[adapter.sample_pool]`: where the sample pool adapter puts samples. A device borrows the stock pool (a slot floor) or owns a DDR range
+/// (base and bytes); the unused fields are 0.
+#[derive(Deserialize)]
+struct AdapterSamplePool {
+    /// The lowest stock sample slot the adapter may take (it takes slots from 0x3ff down; 0: not used).
+    slot_floor: u64,
+    /// The reserved DDR range of an own allocator (base is a physical byte address; 0, 0: not used).
+    ddr_base: u64,
+    ddr_bytes: u64,
 }
 /// `[adapter.machine]`: the machine adapter's device facts. The strings are checked, the numbers become `ADM_*` defines.
 #[derive(Deserialize)]
@@ -188,6 +201,7 @@ struct Entry {
     store: StoreF,
     limits: LimitsF,
     adapter: Option<AdapterF>,
+    sample_pool: Option<SamplePoolF>,
     input: InputF,
     fx: FxF,
 }
@@ -220,6 +234,12 @@ struct InputF {
     encoders: u64,
     /// (code, channel, bit)
     exceptions: Vec<[u64; 3]>,
+}
+#[derive(Debug)]
+struct SamplePoolF {
+    slot_floor: u64,
+    ddr_base: u64,
+    ddr_bytes: u64,
 }
 #[derive(Debug)]
 struct AdapterF {
@@ -323,12 +343,13 @@ impl Facts {
             check_limits(&short, &l, k.dsp_area_bytes, &crate::sdkgen::limits_max())?;
             let input = input_facts(&short, d.input, d.panel)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
-            let adapter = adapter_facts(
-                &short,
-                d.adapter.and_then(|a| a.machine),
-                d.modules.and_then(|m| m.frame),
-                &b,
-            )?;
+            let (adapter_machine, sample_pool) = match d.adapter {
+                Some(a) => (a.machine, a.sample_pool),
+                None => (None, None),
+            };
+            let sample_pool = sample_pool_facts(&short, sample_pool)?;
+            let adapter =
+                adapter_facts(&short, adapter_machine, d.modules.and_then(|m| m.frame), &b)?;
             if docs
                 .insert(
                     short.clone(),
@@ -371,6 +392,7 @@ impl Facts {
                             page_rows: l.page_rows,
                         },
                         adapter,
+                        sample_pool,
                         input,
                         fx,
                     },
@@ -670,6 +692,71 @@ fn adapter_facts(
         gap: f.gap.unwrap_or(0),
         block_cycles: (b.dsp_clock_hz + b.dsp_blocks_per_second / 2) / b.dsp_blocks_per_second,
     }))
+}
+
+/// Check `[adapter.sample_pool]`: a stock slot floor or a DDR range of the DSP's DDR, not both.
+fn sample_pool_facts(short: &str, p: Option<AdapterSamplePool>) -> Result<Option<SamplePoolF>> {
+    let Some(p) = p else {
+        return Ok(None);
+    };
+    if p.slot_floor != 0 && (p.slot_floor > 0x3ff || p.slot_floor & 0x7f == 0) {
+        return Err(err!(
+            "{short}: [adapter.sample_pool] slot_floor is 0 or a stock slot 1 to 0x3ff that is not a multiple of 0x80"
+        ));
+    }
+    if (p.ddr_base == 0) != (p.ddr_bytes == 0) {
+        return Err(err!(
+            "{short}: [adapter.sample_pool] ddr_base and ddr_bytes are both 0 or both set"
+        ));
+    }
+    if p.ddr_bytes != 0 {
+        if p.ddr_base & 0xfff != 0
+            || p.ddr_bytes & 0xfff != 0
+            || p.ddr_base < DSP_DDR_BASE
+            || p.ddr_base
+                .checked_add(p.ddr_bytes)
+                .is_none_or(|e| e > 0x1_0000_0000)
+        {
+            return Err(err!(
+                "{short}: [adapter.sample_pool] the DDR range must be 4 KiB aligned, in the DSP's DDR (from 0x80000000) and below 4 GiB"
+            ));
+        }
+    }
+    if p.slot_floor != 0 && p.ddr_bytes != 0 {
+        return Err(err!(
+            "{short}: [adapter.sample_pool] a device borrows the stock pool or owns a range, not both"
+        ));
+    }
+    Ok(Some(SamplePoolF {
+        slot_floor: p.slot_floor,
+        ddr_base: p.ddr_base,
+        ddr_bytes: p.ddr_bytes,
+    }))
+}
+
+/// The first byte of the DSP's DDR in its physical byte addresses (docs/findings/99). It is not the ColdFire's DDR of `[board]`.
+const DSP_DDR_BASE: u64 = 0x8000_0000;
+
+/// The `SP_*` constants of one device.
+fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
+    let v = |name, value: u64, note| c(name, value, Scope::PerDevice, note);
+    vec![
+        v(
+            "SP_SLOT_FLOOR",
+            p.slot_floor,
+            "[adapter.sample_pool] slot_floor (lowest stock slot the adapter takes; 0: not used)",
+        ),
+        v(
+            "SP_DDR_BASE",
+            p.ddr_base,
+            "[adapter.sample_pool] ddr_base (reserved DDR range; 0: not used)",
+        ),
+        v(
+            "SP_DDR_BYTES",
+            p.ddr_bytes,
+            "[adapter.sample_pool] ddr_bytes",
+        ),
+    ]
 }
 
 const ADM_SLOT_NAMES: [&str; ADM_SLOTS] = [
@@ -1416,6 +1503,23 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     out.push((
                         g.path.replace("{dev}", dev),
                         sharc(module, dev, &adapter_constants(a)),
+                    ));
+                }
+            }
+            "gas-sample-pool" => {
+                if !g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `gas-sample-pool` gen is one file per device: put {{dev}} in the path"
+                    ));
+                }
+                for (dev, e) in &facts.docs {
+                    let p = e
+                        .sample_pool
+                        .as_ref()
+                        .ok_or_else(|| err!("{module}: {dev} has no [adapter.sample_pool]"))?;
+                    out.push((
+                        g.path.replace("{dev}", dev),
+                        gas(module, dev, &sample_pool_constants(p)),
                     ));
                 }
             }

@@ -9420,6 +9420,294 @@
     },
     {
       "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4015481c",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_samples_loader_load",
+        "rust": "dkfw::samples::loader_load"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "The stock sample loader (finding 109 section 2): slot <= 0x3ff and (slot & 0x7f) != 0; releases the slot's old block, deduplicates by the 16-byte key, appends to the pool, 0 = ok, -1 = pool full. Writes RAM tables only; never the project settings. Call it on the SampleLoaderBgWorker.",
+      "file": "devices/fw/samples.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.samples.fn.loader.load",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "i32 (const u32 *key, u32 slot)",
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x401543a2",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_samples_slot_release",
+        "rust": "dkfw::samples::slot_release"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Release one slot (finding 109 section 2; the loader calls it first): drops the slot from its record, frees the record when no slot shares it, rebuilds the slot map, resets the slot's key to -1. Moves only 0x34-byte records, never PCM. Same locking as the loader: call it on the SampleLoaderBgWorker.",
+      "file": "devices/fw/samples.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.samples.fn.slot.release",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u32 slot)",
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x4019e65c",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_samples_worker_get",
+        "rust": "dkfw::samples::worker_get"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Getter of the SampleLoaderBgWorker singleton (finding 109 section 3); its task id is the word at +0x20.",
+      "file": "devices/fw/samples.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.samples.fn.worker.get",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 ()",
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x400f0c1c",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_samples_worker_queue",
+        "rust": "dkfw::samples::worker_queue"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Queue a job on a worker: `job` and `done` are std::function objects (storage, manager, invoker), as ReloadAllSamples passes them. The job runs in the worker task.",
+      "file": "devices/fw/samples.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.samples.fn.worker.queue",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 (u32 worker, const char *name, void *job, void *done)",
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x40153b44",
+            "len": 4
+          }
+        ]
+      },
+      "bind": "static",
+      "bindings": {
+        "c": "dk_fw_samples_record_vector",
+        "rust": "dkfw::samples::RECORD_VECTOR"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "The 4-byte address literal of the record vector (the pointer pair: begin and end); record stride 0x34: +0x10 pool block offset, +0x14 rounded extent, +0x30 count of sharing slots (finding 109 section 1).",
+      "file": "devices/fw/samples.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.samples.site.record.vector",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 36
+        }
+      },
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x40153f04",
+            "len": 4
+          }
+        ]
+      },
+      "bind": "static",
+      "bindings": {
+        "c": "dk_fw_samples_slot_keys",
+        "rust": "dkfw::samples::SLOT_KEYS"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "The 4-byte address literal of the key array of the loader, 16 bytes per slot (0x400 slots). Word 0 is 0xffffffff after a slot is released or the pool is reset (finding 109 section 3).",
+      "file": "devices/fw/samples.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.samples.site.slot.keys",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 62
+        }
+      },
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x40153b2e",
+            "len": 4
+          }
+        ]
+      },
+      "bind": "static",
+      "bindings": {
+        "c": "dk_fw_samples_slot_map",
+        "rust": "dkfw::samples::SLOT_MAP"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "The 4-byte address literal of the slot to record index map, one i32 per slot. Valid only while the slot is loaded: it reads 0 (not -1) after a reset, so loss is not detected with it.",
+      "file": "devices/fw/samples.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.samples.site.slot.map",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 14
+        }
+      },
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x40153ab2",
+            "len": 4
+          }
+        ]
+      },
+      "bind": "static",
+      "bindings": {
+        "c": "dk_fw_samples_slot_stereo",
+        "rust": "dkfw::samples::SLOT_STEREO"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "The 4-byte address literal of the stereo flags of loaded slots, one byte per slot (the stock accessor reads it).",
+      "file": "devices/fw/samples.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.samples.site.slot.stereo",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 6
+        }
+      },
+      "subsystem": "samples",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4012c59a",
@@ -9610,7 +9898,8 @@
       "sig": "i32 (u32 entry_id, u32 *output)",
       "subsystem": "storage",
       "users": [
-        "core/runtime"
+        "core/runtime",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -9720,7 +10009,8 @@
       "sig": "i32 (u32 *handle)",
       "subsystem": "storage",
       "users": [
-        "core/runtime"
+        "core/runtime",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -9756,7 +10046,8 @@
       "sig": "i32 (const u8 *path, const u8 *mode, u32 *handle)",
       "subsystem": "storage",
       "users": [
-        "core/runtime"
+        "core/runtime",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -13518,6 +13809,66 @@
       "at": {
         "dt2-1.17": [
           {
+            "addr": "0x8422b9c8",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 base of the sample pool in the DSP's view (0x8422b9c8): the literal added to a slot record's start fields in the slot lookup. PCM address = base + pool block offset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.voice.value.sample.pool_base",
+      "rule": {
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 30
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x257810",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 DSP slot record table (0x257810, stride 0x14: startL, startR, length bytes per channel, rate, stereo byte at +16): the literal of the slot lookup. The ColdFire cannot read it; a test reads it to check the borrowed slot.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.voice.value.sample.slot_table",
+      "rule": {
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 16
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
             "addr": "0x255970",
             "len": 6
           }
@@ -13644,6 +13995,13 @@
       "name": "rtos"
     },
     {
+      "count": 8,
+      "cpu": "cf",
+      "file": "devices/fw/samples.toml",
+      "meaning": "the stock sample pool: loader, worker queue, slot tables and records",
+      "name": "samples"
+    },
+    {
       "count": 16,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
@@ -13721,7 +14079,7 @@
       "name": "master"
     },
     {
-      "count": 20,
+      "count": 22,
       "cpu": "sharc",
       "file": "devices/fw/dsp/voice.toml",
       "meaning": "voice rendering",
