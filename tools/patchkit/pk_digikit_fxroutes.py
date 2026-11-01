@@ -26,6 +26,7 @@ Screenshots go to the scenario's work folder; `DIGIKIT_SHOTS=DIR` copies them to
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ from typing import Any
 import numpy as np
 
 from tools.coldfire import digikit_menu_proof as D
+from tools.device import dksettings
 from tools.device.dksettings import encode as encode_record
 from tools.patchkit import pk_device
 from tools.patchkit import pk_digikit_project as P
@@ -40,6 +42,7 @@ from tools.patchkit import pk_dkrt_machine as M
 from tools.patchkit.pk_digikit_debug import uploader
 from tools.patchkit.pk_digikit_fx import SINE, chain_rows, scaled
 from tools.patchkit.pk_digikit_fxpage import Shots, open_send_fx, page_down
+from tools.patchkit.pk_digikit_fxpage import profile as fx_profile
 from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
 from tools.patchkit.pk_harness import text_rows
 
@@ -673,3 +676,90 @@ def run_fxroutes(c: Any) -> None:
     if not only or {"dry", "apply", "back"} <= set(only):
         across()
     c.common_checks(KIT_AREAS[c.device], store_extra=frozenset({st.set_a, st.set_b}))
+
+
+def profile(device: str) -> dict[str, Any]:
+    """Device facts used by the FX routing acceptance scenarios (sectors, hi exclusive)."""
+    limits = pk_device.limits(device)
+    store = pk_device.store_of(device)
+    return {
+        "fx_slots": limits.fx_slots,
+        "send_slots": limits.send_slots,
+        "settings": {"copy_a": store.set_a, "copy_b": store.set_b},
+        "kit_areas": KIT_AREAS[device],
+        "fx": fx_profile(device),
+    }
+
+
+def seed_card(card: Path, device: str, entries: Any) -> dict[str, Any]:
+    """Seed copy A on an existing caller-owned card with empty settings copies."""
+    if not isinstance(entries, list):
+        raise ValueError("entries must be a JSON array of {key, value_hex} objects")
+    pairs: list[tuple[bytes, bytes]] = []
+    for entry in entries:
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"key", "value_hex"}
+            or not isinstance(entry["key"], str)
+            or not isinstance(entry["value_hex"], str)
+        ):
+            raise ValueError("each entry must contain string key and value_hex fields")
+        try:
+            key = entry["key"].encode("ascii")
+            value = bytes.fromhex(entry["value_hex"])
+        except (UnicodeError, ValueError) as exc:
+            raise ValueError("entry needs an ASCII key and hexadecimal value") from exc
+        if not dksettings.valid_key(key) or len(value) > dksettings.VALUE_MAX:
+            raise ValueError("entry exceeds settings key or value limits")
+        pairs.append((key, value))
+    record = encode_record(1, pairs)
+    reason = dksettings.why(record)
+    if reason != "ok":
+        raise ValueError(f"invalid settings record: {reason}")
+    padded = record.ljust(((len(record) + 511) // 512) * 512, b"\0")
+    store = pk_device.store_of(device)
+    if len(padded) > store.set_copy_sectors * 512:
+        raise ValueError("settings record exceeds the device's copy area")
+    with card.open("r+b") as file:
+        file.seek(0, 2)
+        if file.tell() < (store.set_b + store.set_copy_sectors) * 512:
+            raise ValueError("card is too small for the device settings copies")
+        for sector in (store.set_a, store.set_b):
+            file.seek(sector * 512)
+            if any(file.read(store.set_copy_sectors * 512)):
+                raise ValueError("card settings copies must be empty before seeding")
+        file.seek(store.set_a * 512)
+        file.write(padded)
+    return {
+        "card": str(card),
+        "sector": store.set_a,
+        "bytes": len(padded),
+        "seq": 1,
+        "entries": len(pairs),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="FX routing scenario data helpers")
+    commands = parser.add_subparsers(dest="command", required=True)
+    facts = commands.add_parser("profile")
+    facts.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    seed = commands.add_parser("seed-card")
+    seed.add_argument("card", type=Path)
+    seed.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    seed.add_argument("--entries", type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        result = (
+            profile(args.device)
+            if args.command == "profile"
+            else seed_card(args.card, args.device, json.loads(args.entries.read_text()))
+        )
+    except (OSError, ValueError) as exc:
+        parser.exit(1, f"error: {exc}\n")
+    print(json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
