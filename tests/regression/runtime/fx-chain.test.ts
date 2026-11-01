@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { button } from '@digi/test-support';
@@ -18,6 +17,7 @@ import {
   slotsFor,
   word,
 } from './fx-live.ts';
+import { chainCheck, fxExpectations } from './dkm.ts';
 import { inspectFxBoot, selectSine, withPreparedFxSession } from './fx-session.ts';
 import { DEVICES, FIRMWARE, record } from './live.ts';
 import { readSmallRing } from './runtime-menu.ts';
@@ -130,23 +130,16 @@ for (const device of DEVICES) {
         );
         for (const [index, effect] of fullState.modules.slice(1).entries()) {
           const base = planSymbol(plan, '_dl_area') + effect.dsp_off;
-          const oracle = await analysisJson<{ row: number[] }>(
-            'tools.patchkit.pk_dkrt_machine',
-            ['fx-expectations', effectFiles[index]!, `0x${base.toString(16)}`],
-            artifacts,
-            `full-row-${index}-oracle`,
-          );
+          const oracle = await fxExpectations(effectFiles[index]!, base);
+          record(artifacts, `full-row-${index}-oracle`, oracle);
           expect(chain[index]!.slice(0, 12), `row ${index}: exact pc/descriptor/state/enabled/defaults`).toEqual(
             oracle.row,
           );
         }
-        const snapshot = path.join(artifacts, 'full-capacity.json');
-        fs.writeFileSync(snapshot, JSON.stringify({ modules: fullState.modules, capacity: fullState.capacity }));
-        const fit = await analysisJson<{
-          ranges_ok: boolean;
-          live: { each: { resource: string; need: number; free: number; describe: string; text: string }[] };
-          empty: { set: { index: number; resource: string; need: number; free: number } };
-        }>('tools.patchkit.pk_digikit_fx', ['chain-check', snapshot, ...effectFiles], artifacts, 'full-fit');
+        const snapshot = { modules: fullState.modules, capacity: fullState.capacity };
+        record(artifacts, 'full-capacity', snapshot);
+        const fit = await chainCheck(snapshot, effectFiles);
+        record(artifacts, 'full-fit', fit);
         expect(fit.ranges_ok, 'overflow leaves pairwise disjoint DSP ranges').toBe(true);
         expect((await word(full.session, planSymbol(plan, 'DKRT_TABLE_BAD'))) >>> 24).toBe(0);
         const events = await bounded(() => readSmallRing(full.session, plan));

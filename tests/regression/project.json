@@ -13,18 +13,138 @@
         "command": "pnpm exec vitest run --config vitest.host.config.ts --project regression-host",
         "cwd": "."
       }
-    },
-    "service-commands": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "parallelism": false,
-      "outputs": [],
-      "options": {
-        "forwardAllArgs": false,
-        "command": "pnpm --filter @digi/regression exec vitest run --project runtime runtime/service-commands.test.ts",
-        "cwd": ".",
-        "env": { "REGRESSION_JOBS": "1" }
-      }
     }
+  },
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["runtime/debug-module.test.ts"],
+        "modules": ["digikit/debug", "digikit/probe"]
+      },
+      {
+        "files": ["runtime/fault-trace.test.ts"],
+        "modules": [
+          "digikit/debug",
+          "test/dyn-crash",
+          "test/dyn-dsp-hang",
+          "test/dyn-fx-gain-send",
+          "test/dyn-fx-hang",
+          "test/dyn-fx-nan"
+        ]
+      },
+      {
+        "files": ["runtime/fx-chain.test.ts"],
+        "modules": ["test/dyn-fx-gain", "test/sine"],
+        "aliases": {
+          "test/dyn-fx-gain-2": "test/dyn-fx-gain",
+          "test/dyn-fx-gain-3": "test/dyn-fx-gain",
+          "test/dyn-fx-gain-4": "test/dyn-fx-gain"
+        },
+        "sources": [
+          "tools/patchkit/hook_ab.py",
+          "tools/patchkit/pk_digikit_fx.py",
+          "tools/patchkit/pk_digikit_fxroute.py",
+          "tools/patchkit/pk_digikit_fxroutes.py"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/fx-kit-persist.test.ts"],
+        "modules": ["test/dyn-fx-gain", "test/dyn-fx-gain-b", "test/sine"],
+        "sources": [
+          "tools/patchkit/hook_ab.py",
+          "tools/patchkit/pk_digikit_fxpage.py",
+          "tools/patchkit/pk_digikit_fxroute.py",
+          "tools/patchkit/pk_digikit_fxroutes.py"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/fx-pages.test.ts"],
+        "modules": ["test/dyn-fx-gain", "test/sine"],
+        "sources": [
+          "tools/patchkit/hook_ab.py",
+          "tools/patchkit/pk_digikit_fxpage.py",
+          "tools/patchkit/pk_digikit_fxroute.py",
+          "tools/patchkit/pk_digikit_fxroutes.py"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/fx-reuse.test.ts"],
+        "modules": ["test/dyn-fx-gain", "test/sine"],
+        "sources": ["tools/patchkit/hook_ab.py"],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/fx-routes-panel.test.ts", "runtime/fx-routes-persist.test.ts"],
+        "modules": ["test/dyn-fx-gain", "test/dyn-fx-gain-send", "test/dyn-fx-gain-sendonly", "test/sine"],
+        "aliases": {
+          "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
+        },
+        "sources": [
+          "tools/patchkit/hook_ab.py",
+          "tools/patchkit/pk_digikit_fxroute.py",
+          "tools/patchkit/pk_digikit_fxroutes.py"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/fx-send-dn2.test.ts", "runtime/fx-send.test.ts"],
+        "modules": ["test/dyn-fx-gain", "test/sine"],
+        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_digikit_fxsend.py"],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/fx-track-route.test.ts"],
+        "modules": ["test/dyn-fx-gain-both", "test/sine"],
+        "aliases": {
+          "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
+          "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
+        },
+        "sources": [
+          "tools/patchkit/hook_ab.py",
+          "tools/patchkit/pk_digikit_fxroute.py",
+          "tools/patchkit/pk_digikit_fxroutes.py",
+          "tools/patchkit/pk_digikit_fxsend.py"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/input-adapter.test.ts"],
+        "modules": ["test/input-probe"]
+      },
+      {
+        "files": ["runtime/remote-input.test.ts"],
+        "modules": ["digikit/remote"]
+      },
+      {
+        "files": ["runtime/samples-live.test.ts"],
+        "modules": [],
+        "sources": [
+          "packages/dk-session/src/dksample.ts",
+          "packages/dk-session/src/rpcfiles.ts",
+          "packages/dk-session/src/samples.ts"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": ["runtime/samples-store-live.test.ts"],
+        "modules": [],
+        "sources": [
+          "packages/dk-session/src/dksample.ts",
+          "packages/dk-session/src/rpcfiles.ts",
+          "packages/dk-session/src/samples.ts"
+        ]
+      },
+      {
+        "files": ["runtime/service-commands.test.ts"],
+        "modules": ["test/svc-echo"]
+      },
+      {
+        "files": ["runtime/sharc-probe.test.ts"],
+        "modules": ["digikit/probe", "digikit/remote", "test/dsp-facts", "test/sharc-probe", "test/step-beacon"]
+      }
+    ]
   }
 }

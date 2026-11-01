@@ -24,6 +24,7 @@ import {
   type PreparedRuntimePlan,
   type RuntimePlan,
 } from './runtime-plan.ts';
+import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -259,12 +260,9 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           'profile',
         );
         watchOutput = path.join(artifacts, 'writewatch.jsonl');
-        return analysisJson<Record<string, string>>(
-          'tools.patchkit.pk_dkrt_machine',
-          ['watch-env', prepared.planFile, watchOutput],
-          artifacts,
-          'watch-environment',
-        );
+        const env = runtimeWatchEnv(prepared.planFile, watchOutput);
+        record(artifacts, 'watch-environment', env);
+        return env;
       },
     },
     {
@@ -317,23 +315,8 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       afterClose: async () => {
         const results = await Promise.allSettled([
           (async () => {
-            const report = await analysisJson<{ pass: boolean }>(
-              'tools.coldfire.arena_safety',
-              [
-                'runtime-check',
-                '--device',
-                device,
-                '--policy',
-                policy,
-                '--watch-output',
-                watchOutput,
-                '--min-emulators',
-                String(epochs.size),
-                ...overlays.flatMap((file) => ['--overlay', file]),
-              ],
-              artifacts,
-              'lifetime-safety',
-            );
+            const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy);
+            record(artifacts, 'lifetime-safety', report);
             expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
           })(),
           analysisJson('tools.patchkit.pk_digikit_fxroutes', ['render-shots', artifacts], artifacts, 'rendered-shots'),

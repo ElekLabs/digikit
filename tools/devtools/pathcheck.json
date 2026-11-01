@@ -105,43 +105,33 @@
       "reason": "fixture paths"
     },
     {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
-      "token": "modules/fx/effect",
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "modules/fx/effect/tests",
       "reason": "temporary repository fixture path, not a real repository path"
     },
     {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
-      "token": "tests/fixtures/modules/source",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "file": "tests/devtools/test_acceptance_records.py",
       "token": "tools/oracle.py",
       "reason": "temporary repository fixture path, not a real repository path"
     },
     {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "modules/fx/effect",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
       "token": "tests/effect.device.test.ts",
       "reason": "temporary repository fixture path, not a real repository path"
     },
     {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
-      "token": "modules/fx/effect/tests/effect.device.test.ts",
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "tests/fixtures/modules/source",
       "reason": "temporary repository fixture path, not a real repository path"
     },
     {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
-      "token": "modules/fx/effect/module.toml",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
-      "token": "tests/fixtures/modules/source/module.toml",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/patchkit/test_modroots_acceptance.py",
-      "token": "tests/extra.device.test.ts",
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "modules/fx/effect/tests/extra.device.test.ts",
       "reason": "temporary repository fixture path, not a real repository path"
     },
     {
@@ -317,6 +307,36 @@
       "pattern": "sdk/src/.*",
       "file": "tests/patchkit/test_patchkit_dkrt_boot.py",
       "reason": "relative to modules/core/runtime"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "tools/missing.py",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "modules/fx/effect/tests/plain.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "tests/plain.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "docs/plans/module-architecture.md",
+      "token": "docs/module-architecture",
+      "reason": "branch name, not a path"
+    },
+    {
+      "file": "docs/plans/module-architecture.md",
+      "token": "sdk/dsp-sampler-discovery",
+      "reason": "branch name, not a path"
+    },
+    {
+      "file": "docs/plans/module-architecture.md",
+      "token": "modules/machines/spark/module.toml",
+      "reason": "path on the sdk/dsp-sampler-discovery branch until it merges"
     }
   ],
   "moved_local": {

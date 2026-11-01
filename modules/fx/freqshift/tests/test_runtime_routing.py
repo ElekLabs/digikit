@@ -3,7 +3,6 @@
 import pytest
 
 from tools.devtools import verify, verify_route
-from tools.patchkit import modroots
 
 
 @pytest.mark.parametrize(
@@ -54,8 +53,6 @@ def test_module_device_cli_packs_and_normalizes_registered_file():
     assert selected == ["../../" + file]
     assert verify.runtime_pack_modules(selected) == ["test/sine", "digikit/freqshift"]
     assert set(selected) <= verify_route.runtime_plusdrive_files()
-    assert next(
-        record
-        for record in modroots.runtime_acceptance()
-        if record.owner == "digikit/freqshift"
-    ).files == (file,)
+    assert (
+        verify_route.acceptance_records()["../../" + file].owner == "digikit/freqshift"
+    )

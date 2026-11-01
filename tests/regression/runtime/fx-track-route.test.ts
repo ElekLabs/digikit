@@ -10,6 +10,7 @@ import { inspectFxBoot, withPausedFxProtocol, selectSine, shot, tap } from './fx
 import { amountShown, kitMenu, kitSlotOne, selectTrack, setAmount, soundImage, trackNote } from './fx-track-ui.ts';
 import { DEVICES, FIRMWARE, record } from './live.ts';
 import { planSymbol } from './runtime-plan.ts';
+import { overlayWrites } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const names = [FX, `${FX}-2`, `${FX}-3`];
@@ -227,12 +228,8 @@ for (const device of DEVICES) {
           expect(stored.seq).toBeGreaterThan(1);
           expect(stored.entries.get(sendKey)).toBe('2864' + '00'.repeat(14));
           expect(stored.entries.get(routeKey(FX))).toBe('01');
-          const writes = await analysisJson<{ store_sectors: number[] }>(
-            'tools.patchkit.pk_digikit_fxroute',
-            ['overlay-writes', stored.overlay, '--device', device],
-            artifacts,
-            'send-store-writes',
-          );
+          const writes = overlayWrites(stored.overlay, device);
+          record(artifacts, 'send-store-writes', writes);
           const allowed = [
             profile.settings.copy_a,
             profile.settings.copy_b,

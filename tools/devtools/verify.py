@@ -84,7 +84,7 @@ from tools.emulator import (  # noqa: E402
     coupled,  # noqa: E402
     digi_env,  # noqa: E402
 )
-from tools.patchkit import modroots  # noqa: E402
+from tools.patchkit import modroots, patchkit  # noqa: E402
 
 PY = ["uv", "run", "python"]
 FX_FILES = (
@@ -1767,7 +1767,7 @@ def runtime_pack_aliases(selected: list[str]) -> dict[str, str]:
     """Extra card identities required by the complete inventory of each selected FX suite."""
     return {
         alias: source
-        for alias, (source, files) in verify_route.RUNTIME_PACK_ALIASES.items()
+        for alias, (source, files) in verify_route.runtime_aliases().items()
         if not selected or set(files) & set(selected)
     }
 
@@ -1811,6 +1811,8 @@ def run_step(gate: Gate, step: str) -> None:
             raise RuntimeError(f"{step} requires a shared budget of at least two cores")
         selected = getattr(gate, "acceptance", {}).get(step, [])
         env = gate.step_env()
+        if step in ("runtime-fixture", "module-load"):
+            env["DIGI_PATCHKIT"] = str(patchkit.binary())
         if step == "stock":
             # Stock uses one stepped ColdFire thread per worker and the DT2 binary only.
             if binary := env.get("DIGI_EMUD_DT2"):
@@ -2224,7 +2226,8 @@ def named_units(
     by_step: dict[str, list[str]] = {}
     registered = {
         file.removeprefix("../../"): file
-        for file in verify_route.module_runtime_files()
+        for file in verify_route.acceptance_records()
+        if file.startswith("../../")
     }
     for path in tests:
         if path in registered:

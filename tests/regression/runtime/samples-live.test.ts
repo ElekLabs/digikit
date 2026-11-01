@@ -8,6 +8,7 @@ import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import { RpcFiles, putVerified, verifyWritten } from '@digi/dk-session/rpcfiles';
 import type { PatchedSession } from '../support.ts';
 import { liveArtifacts, liveCheck as check, liveProtocol, runtimeTests, sampleWav, settleLive } from './live.ts';
+import { applyOverlay } from './write-safety.ts';
 
 const exec = promisify(execFile);
 
@@ -20,10 +21,7 @@ async function expectSampleCard(session: Session, out: string, hash: number): Pr
   const overlay = join(out, 'samples.ov.bin');
   await session.client.call('card.overlay', { path: overlay });
   const after = join(out, 'samples-after.img');
-  await exec('uv', ['run', 'python', '-m', 'tools.emulator.card_overlay', 'apply', base, overlay, after], {
-    cwd: repoRoot(),
-    timeout: 30_000,
-  });
+  applyOverlay(base, overlay, after);
   const run = (args: string[]) =>
     exec(plusdrive, args, { cwd: repoRoot(), timeout: 30_000, encoding: 'buffer', maxBuffer: 4 * 1024 * 1024 });
   const got = (await run(['fs', 'cat', after, '/live/test'])).stdout;

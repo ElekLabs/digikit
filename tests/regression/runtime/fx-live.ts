@@ -16,7 +16,10 @@ import {
 import { expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession } from '../support.ts';
 import { FIRMWARE, expectRuntimeUi, moduleArtifact, record } from './live.ts';
+import { deviceProfile } from './device-data.ts';
+import { fxExpectations, type FxExpectations } from './dkm.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
+import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -36,10 +39,7 @@ export function options(device: Device) {
 }
 
 export function slotsFor(device: Device): number {
-  const file = path.join(root, 'devices', device === 'dt2' ? 'digitakt-ii.toml' : 'digitone-ii.toml');
-  const slots = /^fx_slots\s*=\s*(\d+)/m.exec(fs.readFileSync(file, 'utf8'))?.[1];
-  if (!slots) throw new Error(`missing fx_slots in ${file}`);
-  return Number(slots);
+  return deviceProfile(device).limits.fx_slots;
 }
 
 /** Native plusdrive owns all card/store/selection encoding. Each image has its own overlay-free directory. */
@@ -104,11 +104,6 @@ export async function analysisJson<T>(module: string, args: string[], artifacts:
   }
 }
 
-interface FxExpectations {
-  image_hex: string;
-  row: number[];
-  needs: Record<string, number>;
-}
 export function expectGainRow(row: number[], oracle: FxExpectations): void {
   expect(row.slice(0, 12), 'exact process/descriptor/state/default words').toEqual(oracle.row);
   expect(row[12], 'adapter ran the effect').toBe(1);
@@ -333,12 +328,8 @@ export async function inspect(
     expect(effect.rows).toBe(0);
     const base = planSymbol(plan, '_dl_area') + effect.dsp_off;
     const artifact = path.join(path.dirname(session.cardPath!), 'seed/digikit/modules/dyn-fx-gain.dkm');
-    oracle = await analysisJson<FxExpectations>(
-      'tools.patchkit.pk_dkrt_machine',
-      ['fx-expectations', artifact, `0x${base.toString(16)}`],
-      artifacts,
-      `${tag}-expected-gain`,
-    );
+    oracle = await fxExpectations(artifact, base);
+    record(artifacts, `${tag}-expected-gain`, oracle);
     expect(effect.dsp_len, 'MODULES range agrees with independently inferred needs').toBe(oracle.needs.DSP_AREA);
     expect(oracle.needs.FX_SLOTS).toBe(1);
     expect(capacity.FX_SLOTS!.used).toBe(oracle.needs.FX_SLOTS);
@@ -433,12 +424,9 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
         ]);
         plan = prepared.plan;
         watchOutput = path.join(artifacts, 'writewatch.jsonl');
-        return analysisJson<Record<string, string>>(
-          'tools.patchkit.pk_dkrt_machine',
-          ['watch-env', prepared.planFile, watchOutput],
-          artifacts,
-          'watch-environment',
-        );
+        const env = runtimeWatchEnv(prepared.planFile, watchOutput);
+        record(artifacts, 'watch-environment', env);
+        return env;
       },
     },
     {
@@ -450,21 +438,8 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
       },
       finishCase: (runtime) => collectEvidence(runtime, `case-${++closed}`),
       afterClose: async () => {
-        const report = await analysisJson<{ pass: boolean }>(
-          'tools.coldfire.arena_safety',
-          [
-            'runtime-check',
-            '--device',
-            device,
-            '--watch-output',
-            watchOutput,
-            '--min-emulators',
-            String(epochs.size),
-            ...overlays.flatMap((file) => ['--overlay', file]),
-          ],
-          artifacts,
-          'lifetime-safety',
-        );
+        const report = runtimeSafety(device, watchOutput, overlays, epochs.size);
+        record(artifacts, 'lifetime-safety', report);
         expect(report.pass, 'every emulator and exported overlay meets legacy safety policy').toBe(true);
       },
     },

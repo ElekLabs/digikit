@@ -16,6 +16,7 @@ import {
   rpc,
   withGainFxSession,
 } from './fx-live.ts';
+import { slotBusAddress } from './device-data.ts';
 import { FIRMWARE, record } from './live.ts';
 import { planSymbol } from './runtime-plan.ts';
 
@@ -90,12 +91,8 @@ describe(`DN2 ${FIRMWARE.dn2} FX send voice slots`, () => {
 
   test('sums a release-tail chord and leaves free voice slots silent on the send route', async () => {
     const { fixture, plan, slots, artifacts, wet, rememberEpoch } = context;
-    const { address: slotBus } = await analysisJson<{ address: number }>(
-      analyzer,
-      ['slot-bus', '--device', 'dn2', '--firmware', FIRMWARE.dn2],
-      artifacts,
-      'send-slot-bus',
-    );
+    const slotBus = slotBusAddress('dn2', FIRMWARE.dn2);
+    record(artifacts, 'send-slot-bus', { address: slotBus });
     const files: Record<string, string> = {};
     const initial = fixture.runtime;
     let previous = initial;

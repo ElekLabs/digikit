@@ -4,13 +4,13 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect } from 'vitest';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
 import {
-  repoRoot,
   Session,
   withinRuntimeDeadline,
   type Device,
   type RuntimeBaseline,
   type SessionOptions,
 } from '@digi/test-support';
+import { portFile } from './runtime/device-data.ts';
 import { setTimingContext, timePhase, timingContext } from './timing.ts';
 
 export interface SessionHandle {
@@ -286,36 +286,19 @@ export interface FreeRegion {
   hi: number;
 }
 
-/** Free ColdFire regions of devices/ports/<device>-<firmware>.toml: every `[[region]]` block with
- * `cpu = "cf"` (e.g. `cf.flash_cave`, `cf.expansion`). Only the keys `name`, `cpu`, `start`, `end`
- * and `excludes` (a list of `[lo, hi]` pairs, cut out of the region) are read, by regex on the block
- * text; everything else in the file is ignored. `hi` is the file's `end`. */
+/** Free ColdFire regions of devices/ports/<device>-<firmware>.toml: every `[[region]]` with
+ * `cpu = "cf"` (e.g. `cf.flash_cave`, `cf.expansion`), minus its `excludes` (`[lo, hi]` pairs).
+ * `hi` is the file's `end`. */
 export function freeRegions(device: Device, firmware: string): FreeRegion[] {
-  const file = path.join(repoRoot(), 'devices', 'ports', `${device}-${firmware}.toml`);
-  const text = fs.readFileSync(file, 'utf8');
+  const file = `${device}-${firmware}.toml`;
   const out: FreeRegion[] = [];
-  for (const block of text.split(/^\[\[/m).slice(1)) {
-    if (!block.startsWith('region]]')) continue;
-    const str = (key: string) => new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm').exec(block)?.[1];
-    const num = (key: string) => {
-      const m = new RegExp(`^${key}\\s*=\\s*(0x[0-9a-fA-F]+|\\d+)`, 'm').exec(block);
-      return m ? Number(m[1]) : undefined;
-    };
-    const name = str('name');
-    const start = num('start');
-    const end = num('end');
-    if (str('cpu') !== 'cf') continue;
+  for (const { name, cpu, start, end, excludes = [] } of portFile(device, firmware).region ?? []) {
+    if (cpu !== 'cf') continue;
     if (name === undefined || start === undefined || end === undefined) {
       throw new Error(`${file}: malformed region block`);
     }
-    const excludes: [number, number][] = [];
-    const exc = /^excludes\s*=\s*(\[.*\])\s*$/m.exec(block)?.[1] ?? '[]';
-    for (const m of exc.matchAll(/\[\s*(0x[0-9a-fA-F]+|\d+)\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*\]/g)) {
-      excludes.push([Number(m[1]), Number(m[2])]);
-    }
-    excludes.sort((a, b) => a[0] - b[0]);
     let lo = start;
-    for (const [xl, xh] of excludes) {
+    for (const [xl, xh] of [...excludes].sort((a, b) => a[0] - b[0])) {
       if (xl > lo) out.push({ name, lo, hi: xl });
       lo = Math.max(lo, xh);
     }

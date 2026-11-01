@@ -11,6 +11,8 @@ const fake = vi.hoisted(() => ({
   fixture: vi.fn(),
   prepare: vi.fn(),
   analysis: vi.fn(),
+  watchEnv: vi.fn(),
+  safety: vi.fn(),
   evidence: vi.fn(),
   exec: vi.fn(),
   ready: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock('../runtime/runtime-plan.ts', async (original) => ({
   ...(await original<object>()),
   prepareRuntimePlanOffline: fake.prepare,
 }));
+vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, runtimeSafety: fake.safety }));
 vi.mock('../runtime/fx-live.ts', async (original) => ({
   ...(await original<object>()),
   options: (device: string) => ({ device, firmware: device === 'dt2' ? '1.17' : '1.12' }),
@@ -84,12 +87,10 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
     };
     fake.prepare.mockResolvedValue({ plan, preparedImage, planFile: '/prepared.plan.json', syx: '/prepared.syx' });
     fake.analysis.mockImplementation(async (_module: string, args: string[]) =>
-      args[0] === 'profile'
-        ? { fx_slots: 3, send_slots: 2, track_type_word: 1234 }
-        : args[0] === 'runtime-check'
-          ? { pass: true }
-          : {},
+      args[0] === 'profile' ? { fx_slots: 3, send_slots: 2, track_type_word: 1234 } : {},
     );
+    fake.watchEnv.mockReturnValue({ DIGI_WRITE_WATCH: '0x1000-0x2000' });
+    fake.safety.mockReturnValue({ pass: true });
     fake.exec.mockResolvedValue({ stdout: '', stderr: '' });
     const presets = {
       dry: { selection: ['modules/m0.dkm'] },
@@ -185,10 +186,8 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       await lifecycle.finishCase({ session });
       expect(fake.evidence).toHaveBeenCalledWith({ session }, artifacts, 'case-1', [], false);
       await lifecycle.afterClose();
-      const safetyCall = fake.analysis.mock.calls.find(([, args]) => args[0] === 'runtime-check')!;
-      expect(safetyCall[1][safetyCall[1].indexOf('--policy') + 1]).toBe(
-        image === 'kit' ? 'fx-kit' : plain ? 'default' : 'fx-routes',
-      );
+      const safetyCall = fake.safety.mock.calls[0]!;
+      expect(safetyCall[4]).toBe(image === 'kit' ? 'fx-kit' : plain ? 'default' : 'fx-routes');
       if (plain) {
         fake.prepare.mockResolvedValueOnce({
           plan: { ...plan, symbols: {} },
@@ -201,6 +200,11 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       if (image === 'routes') {
         for (const failing of ['runtime-check', 'render-shots']) {
           const observed: string[] = [];
+          fake.safety.mockImplementation(() => {
+            observed.push('runtime-check');
+            if (failing === 'runtime-check') throw new Error('runtime-check failed');
+            return { pass: true };
+          });
           fake.analysis.mockImplementation(async (_module: string, args: string[]) => {
             observed.push(args[0]!);
             if (args[0] === failing) throw new Error(`${failing} failed`);

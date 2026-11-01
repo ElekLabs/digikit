@@ -66,7 +66,7 @@ require Rust toolchains or Cargo metadata. Explicit Rust targets retain their ow
 See the [Nx migration boundary](plans/nx-pilot.md#host-preflight-migration).
 
 Control-client, test-support, dk-session, desktop-host and regression-host targets use local result
-caching; web-transfer and the empty module-tests group remain uncached. Web tests retain ignored
+caching; web-transfer and the per-module `test-host` targets remain uncached. tools/nx/modules.mjs infers a `test-host` target for each module with host tests (none today). Web tests retain ignored
 generated WASM and optional inputs outside the cache boundary. Cache use assumes a frozen installation. New test helpers, environment
 reads or external inputs require an input audit before relying on cached results. The
 [bounded cache observations](findings/nx-pilot.md) include dependency failure/restoration probes;
@@ -154,6 +154,7 @@ Device suites (`test:stock`, `test:fx*`, `test:runtime`, `test:modules`) also ne
 - Complete ready inputs for each device, including the validated DSP files.
 - Module artifacts for `test:runtime` and `test:modules`: `out/regression/modules/<device>/<leaf>.dkm`.
   `DIGI_RUNTIME_MODULES` overrides the directory. The gate packs input-probe, remote and svc-echo itself.
+- `DIGI_PATCHKIT` (optional) names the patchkit binary for `test:runtime` and `test:modules`. The gate sets it; without it the tests build patchkit once through `patchkit.py bin`.
 - DT2 card samples at `out/runs/patchkit/samples`.
 - plusdrive: `test:runtime` builds it through `build:plusdrive`. The gate builds it before samples-live.
 
