@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "cacheDirectory": ".nx/cache",
+  "neverConnectToCloud": true,
+  "plugins": [
+    {
+      "plugin": "@monodon/rust",
+      "include": ["packages/dkneeds/Cargo.toml"]
+    }
+  ],
+  "namedInputs": {
+    "jsToolchain": [
+      "{workspaceRoot}/package.json",
+      "{workspaceRoot}/pnpm-lock.yaml",
+      "{workspaceRoot}/pnpm-workspace.yaml",
+      "{workspaceRoot}/mise.toml",
+      "{workspaceRoot}/nx.json",
+      { "runtime": "node -p 'JSON.stringify({versions:process.versions,platform:process.platform,arch:process.arch})'" },
+      { "runtime": "pnpm --version" },
+      { "env": "NODE_OPTIONS" },
+      { "env": "NODE_ENV" },
+      { "env": "CI" },
+      { "env": "TZ" },
+      { "env": "LANG" },
+      { "env": "LC_ALL" }
+    ]
+  }
+}

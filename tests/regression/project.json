@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "regression",
+  "targets": {
+    "service-commands": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "parallelism": false,
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm --filter @digi/regression exec vitest run --project runtime runtime/service-commands.test.ts",
+        "cwd": ".",
+        "env": { "REGRESSION_JOBS": "1" }
+      }
+    }
+  }
+}
