@@ -1366,6 +1366,20 @@ _dv_rback:
     R1 = DK_STEREO;
     R2 = R0 AND R1;
     DM(0, I1) = R2;
+    // DT2 1.17: the stock pan stage (FUN_1c642a, loop 0x1c7040) reads its per-pair gate (1: stereo pair, pan = balance; 0: matrix, both
+    // voices summed into both planes) from the even voice's param record word +0xd8 (byte 0x2506ec + 0xdc * 2t + 0xd8 = 0x2507c4 + 0x1b8 * t),
+    // one frame late (copy at 0x1c7158). Only the stock sample note-on (0x1c335b) writes it. A stereo machine sets it every block.
+    R2 = PASS R2;
+    IF EQ JUMP _dv_nogate;
+    R3 = DM(_dv_g + 12);
+    R4 = 0x1b8;
+    R3 = R3 * R4 (SSI);
+    R4 = 0x2507c4;
+    R3 = R3 + R4;
+    I1 = R3;
+    R4 = 1;
+    DM(0, I1) = R4;
+_dv_nogate:
     R1 = NOT R1;
     R0 = R0 AND R1;
     R1 = DK_DONE;

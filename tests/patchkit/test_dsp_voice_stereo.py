@@ -103,3 +103,26 @@ def test_a_flag_left_by_an_even_voice_whose_odd_voice_did_not_run_does_not_leak(
     assert flag(rig) != 0
     again = rig.block("friendly")  # no odd block in between
     assert again.faults == 0 and set(again.samples) == {0.25}
+
+
+# DT2 1.17 stock pan stage: the pair gate is word +0xd8 of the even voice's param record (byte 0x2506ec + 0xdc * 2t + 0xd8).
+def gate_word(rig):
+    return rig.sess.peek(nw(0x2506EC + 0xDC * 2 * rig.track + 0xD8)) or 0
+
+
+def test_a_stereo_machine_sets_the_stock_pair_gate_a_mono_machine_leaves_it():
+    rig = stereo_rig()
+    assert gate_word(rig) == 0
+    run(rig)
+    assert gate_word(rig) == 1, "stereo pair path of the stock pan stage"
+    rig.sess.poke(nw(0x2506EC + 0xDC * 2 * rig.track + 0xD8), 0)
+    run(rig)
+    assert gate_word(rig) == 1, "every block, a stale 0 cannot stay"
+
+    mono = MachineRig("test/sine", "dt2")
+    mono.set_params({"sine_level": 0x7F00})
+    mono.set_note(60, 100)
+    mono.trigger()
+    mono.block("friendly")
+    mono.block("friendly")
+    assert gate_word(mono) == 0
