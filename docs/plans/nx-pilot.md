@@ -292,3 +292,203 @@ production code, the targeted retry passed all three cases in 1.67 seconds. All 
 passed across the gate and retry. Ruff, format, mypy, path, layer and generated-source checks all
 passed; final independent review reported no issues. The gate's 87-second wall time describes this
 routed run; it is neither a benchmark nor evidence of a full-suite pass or gate speedup.
+
+
+## Bounded runtime readiness checkpoint (2026-11-01)
+
+The readiness batch changes only remote-input and input-adapter workflows and their shared helpers.
+It replaces selected startup/post-install sleeps with bounded observations of the current runtime
+UI hook and normal boot, a newer epoch after the single install restart, and remote command readiness.
+Fresh pre-install boots must have zero selected modules and a zero boot-counter snapshot; this does
+not claim that a stability flag proves a persisted card update. ABOUT now requires an empty buffer
+before opening and a complete runtime/BOOT/final RAM row snapshot. Awaited readiness RPCs share
+absolute observation deadlines, including stalled reads; input hold/release behavior is unchanged.
+
+Focused device proof passed: DN2 OS 1.12 ran all three selected cases in 203.62 s; DT2 OS 1.17 retried
+all three in 278.20 s. Each invocation passed two files, with the other device's three cases skipped.
+Local logs are `/private/tmp/runtime-readiness-dn2.log` and
+`/private/tmp/runtime-readiness-dt2-retry.log`. The initial DT2 remote-UI case failed because post-restart
+status reported `cf.ready=false` and an unobserved filesystem check despite a newer epoch and current
+UI hooks. The reviewed restart contract preserves the card and relaxes that filesystem-worker check:
+initial readiness still requires `cf.ready`; post-restart readiness permits an unobserved check but
+rejects an explicit filesystem failure, retaining all current boot/UI/epoch guards. No filesystem
+verification is claimed by a null result.
+
+Before that adjustment, 49 host cases and static/type checks passed. The final helper file passed
+25 tests, regression types passed, and independent review reported no issues. The removed scheduled
+waits total at most 269 s across eight sessions (171 s initial, 80 s post-install, 18 s ABOUT); this is
+a static ceiling, not an A/B measurement or measured speedup. Protocol-only startup, navigation,
+key holds, remote refill pacing and faulttrace waits remain. Global settle helpers are unchanged.
+
+This partial readiness migration merged in [PR #241](https://github.com/ElekLabs/digikit/pull/241)
+at `0feb02cb` under Em's explicit acceptance of the focused runtime checks. The broad routed gate
+(host, runtime-fixture across all ten runtime files, and smoke) remains unrun. This specific merge
+exception is separate from the earlier routing-only exception and is not a broad-gate pass. The [timing finding](../findings/69-runtime-test-timing.md)
+records the same scope and a future completion-event direction; no event facility is implemented here.
+
+
+## Static coverage and cache audit checkpoint (2026-11-01)
+
+**[D]** Provisional static reading corrects the proposed safe/crash deletion premise; it does not
+verify firmware semantics against image bytes. Independent static review confirmed all three scenario
+gaps; synthetic TypeScript decoder tests do not prove guest capture or cross-boot persistence. The [safe runners](../../tools/patchkit/pk_digikit_scen.py)
+(lines 774–953) retain unique init-reset/safe-once, counter/result/selection and three-boot early/late
+stability assertions on both devices. The [crash runner](../../tools/patchkit/pk_digikit_debug.py)
+(lines 1277–1443) adds DT2 vectors 4/5, 16 registers, 32 stack words, cold-RAM behavior, record replay
+and selection across boots absent from the [TypeScript crash case](../../tests/regression/runtime/fault-trace.test.ts)
+(lines 213–237). Inputs are [safe-fault](../../tests/digikit/scenarios/safe-fault.toml),
+[safe-late-fault](../../tests/digikit/scenarios/safe-late-fault.toml) and
+[crash-capture](../../tests/digikit/scenarios/crash-capture.toml).
+
+There is no established deletion-only set. Retain the four safe-cut/debug device wrappers, which
+also own cut/card/debug coverage. Migration requires a fact-by-fact coverage comparison and device
+proof before removing assertions. The [router](../../tools/devtools/verify_route.py) currently sends
+a generic deleted scenario TOML to the full digikit family; no routing change is justified without
+an actual deletion. A contract-coverage guard enables safer thin tests, but neither proves duplicate
+coverage nor blocks separately demonstrated equivalent consolidation.
+
+Further readiness work should replace only waits with proven observable completion conditions;
+deliberate input pacing and stability-boundary tests stay. PR #241 completes a bounded subset, not
+the roadmap's whole readiness goal. Existing Cargo incremental builds and
+[packed-module reuse](../../tools/device/dktransfer.py) already avoid work. Build-cache input closure
+is broad, and incremental ROI has not been established: rebuild byte identity alone proves neither
+saved work nor worthwhile caching. No new benchmark, plugin or implementation is authorized by this
+checkpoint; broader build/pack caching remains conditional on a justified candidate and input audit.
+
+The remaining cheap readiness candidate using an existing symbol plan is debug-module
+`expectWithoutDebugModule` (57 s static scheduled-wait ceiling across its cases), deferred rather
+than opened as a separate small PR. Em first chose FX consolidation design, then approved its first fixture/PCM implementation;
+the [current fixture-first FX design](test-architecture.md#fx-consolidation-design-2026-11-01) records
+the approved direction and the [first implementation checkpoint](test-architecture.md#first-implementation-checkpoint-2026-11-01).
+The fixture/PCM pilot is implemented; focused host/type checks and both first-run device proofs passed
+(DT2 89.66 s, DN2 62.06 s invocation), as correctness evidence rather than a speedup benchmark.
+Final `mise run test:changed` passed 612 Python tests and 301 host cases (one skipped), with lint,
+format, types, path, layer and generated checks; log `/private/tmp/fx-reuse-preflight.log`.
+The gate plan was explained only; the broad gate remains unrun.
+Native preboot-card seeding and the existing PCM comparator resolved the first slice's seed/analysis
+choices without a new codec or RPC. Legacy coverage remains intact; no speedup or full migration is claimed.
+
+The first checkpoint left inferred needs, relocated DSP bytes/row pointers, selected-track type
+and launch-time write-watch/flush/card-sector policy as legacy facts. The current increment below
+adds safety/oracle checks; the approved gain-leg replacement below records the subsequent coverage decision.
+
+
+The [PR #242 safety increment](test-architecture.md#safety-increment-in-pr-242-2026-11-01) now adds
+startup-lifetime write/flush summaries, exact overlay policy and independent inferred-needs/DSP
+relocation/row oracles, including post-note adapter checks. Revised DT2 and DN2 cases both passed
+first run (63.62 s / 50.16 s invocation), with eight clean emulator summaries and four policy-valid
+overlays each. The 11 new Python synthetic cases, 57 affected host cases, types and scoped lint
+passed. Required fast preflight also passed: 612 audited Python routing tests and 75 host cases
+(four test-support, 71 regression), with lint/format/path/layers/generated and all workspace TS types.
+Mypy was skipped (no changed typed files); log `/private/tmp/fx-safety-preflight.log`. The fresh-process reference above is historical
+one-time proof, removed from default acceptance. Only the redundant SDK patched load was removed;
+CLI stock startup remains. At that checkpoint legacy `one()` was intact and selected-type coverage
+awaited a decision; the approved replacement below records the later decision.
+
+
+The [approved gain-leg replacement](test-architecture.md#approved-gain-leg-replacement-2026-11-01)
+removes only Python `one()` and its two PCM comparisons after Em accepted the audible-input FX
+contract. TS does not directly observe selected-track type during gain or deselection; legacy
+dry/full retain that DT2 proof. All gain boot/metadata/needs/relocation/row/state/PCM/restart/safety
+assertions map to the already verified runtime case; its execution is unchanged. Plain/dry/full,
+fit/overflow and other families remain. The owner is `test:runtime -- fx-reuse`, not the stock-FX tasks.
+Remaining legacy quick counts subtract one rig plus one restart per device: 35/38 rig entries and
+three restarts each (38/41 static operations), excluding TS and preserving the historical counts
+above. No measured-speedup claim follows. Follow-up fast preflight passed; acceptance was still pending at that pre-merge checkpoint.
+
+The existing runtime-source map/import closure now includes the consumed machine/arena CLI helpers
+and needs wrapper, so replacement coverage follows its real dependencies. Three focused routing
+cases passed; final deletion fast preflight passed 345 Python and 71 regression-host cases, with
+Ruff/mypy/path/layers/generated/oxlint/Prettier/all types (`/private/tmp/fx-gain-deletion-preflight.log`).
+
+The actual-PR-base gate explanation (`origin/main` at `0feb02cb`) selects host/web, three stock,
+11 runtime, three module-load and 49 Python files, smoke and an implicit daemon build. Its log
+`/private/tmp/fx-gain-merge-explain-origin-main.txt` supersedes the stale-local-main (`365b45b`)
+explanation. At that pre-merge checkpoint the broad gate was not run and focused acceptance was
+still pending; the merge checkpoint below supersedes that status. No device rerun
+was needed for this TS wording/comment-only follow-up to the prior both-device safety proof.
+
+
+PR #242 merged at `a41699e5` (2026-11-01T09:46:15Z) under Em's explicit one-time focused exception
+using the prior both-device, helper/host/routing and static/type proofs. The broad routed gate was
+not run; no measured speedup follows. Next-batch bookkeeping maps the remaining basic-FX/fxpage and
+other families for independent workers, as already endorsed after the first proof/deletion. The
+shared fixture and assertion mapping carry forward; this is not a broad bulk-deletion plan.
+
+FX SEND is the chosen next migration: five DT2/eight DN2 same-image legs. The mechanical shared
+`fx-live.ts` extraction is the prerequisite for independent common-SEND/DN2 work, without changing
+gain execution or basic plain/dry/full/fxpage coverage. No new device result or speedup is claimed.
+
+
+The [SEND implementation checkpoint](test-architecture.md#fx-send-implementation-and-device-proof-2026-11-01)
+now maps 13 independent baselines into three owned processes (five common DT2, five common DN2,
+three DN2 extras), retaining the independent PCM, state/counter, voice/idle and lifetime safety
+oracles. The accepted audible-input contract leaves direct type proof in basic legacy dry/full;
+plain/fxpage and other families remain. This is not a measured-speedup claim.
+
+Final common proofs passed: DT2 87.51 s invocation / 82.090 s case; DN2 67.634 s file / 65.074 s
+case. Both identity shifts were 0 and lifetime checks passed eight summaries/five overlays each.
+Earlier relative-frame attempts failed shift/setup guards; final captures restore legacy absolute
+frames 7500/7000 without relaxing margins or PCM tolerances. Final DN2 extras also passed at fixed
+frame 7000: 42.055 s file / 39.564 s case (109.92 s DN2 invocation), exactly two sounding buses per
+chord, added factor 0.5000029707401741, 48,000 finite idle samples at peak 0, and lifetime safety
+five summaries/three overlays with zero write/flush hits. All three final cases pass. Retirement
+`42028b59` is integrated as `804bdae2`, after runtime/routing `da4fdf7f`; the SEND
+wrappers/scenarios and device runner are removed, retaining the analysis CLI. No device execution
+changed after proof. Static review found no issues; the broad gate is unrun and no exception exists
+for this new batch. PR #242's focused exception does not transfer.
+
+Final fast preflight passed: `mise run test:changed -- --base origin/main` ran 621 Python cases
+(270 + 57 + 294) and 73 host cases, with Ruff check/format, mypy (one source), pathcheck (zero stale
+references), layer/generated checks, oxlint, Prettier and workspace types. Earlier 21 analyzer and
+two shared-helper tests also passed. The gate explanation selects host, all 13 runtime fixtures,
+47 Python files, smoke and daemon prerequisites; that routed gate was not run. Focused acceptance
+for this batch is pending Em's decision after the concrete PR; PR #242's exception
+does not transfer.
+
+
+### Routing ownership checkpoint (2026-11-01)
+
+PR #244 merged at `097eefa2`. The next routing change uses Vitest's existing import discovery
+for TypeScript helpers inside the stock, runtime and module acceptance directories. It discovers
+filenames without collecting tests or executing hooks; it adds no separate dependency graph.
+`runtime/fx-live.ts` selects the three FX files, while `runtime/live.ts` selects all 13 runtime
+files and retains all module lifecycle files through its explicit shared ownership. Missing tools,
+discovery failures, unconsumed helpers and deleted files retain the whole owner suite. Production, shared session and configuration routes remain conservative.
+
+Runtime TypeScript and digikit scenario TOMLs no longer select the unrelated smoke matrix by
+themselves. Production sources, module-owned scenarios, smoke inputs and shared/configuration
+files retain smoke. The gain fixture's two TOML sine hints remain explicit runtime data owners,
+because filesystem reads are outside Vitest's import discovery. Deleted digikit scenarios still
+select the whole Python suite; historical ownership recovery is deferred. These are static
+selection changes, with no measured execution speedup or new device proof.
+
+
+Validation for this routing checkpoint: 648 Python cases and 73 host cases passed across the
+final preflight and the single stale-expectation retry. Lint, formatting, layers, generated checks
+and workspace TypeScript types passed; mypy was skipped. The overall preflight is not a clean
+pass: pathcheck retains three pre-existing references in `docs/plans/module-architecture.md`
+(lines 3, 4 and 284), unchanged from `origin/main`. The new adapter references were resolved by
+staging the file, and scoped pathcheck then reported zero stale references.
+
+The 15-case static comparison selects FX helper files 13→3 and remote helper files 13→1;
+`live.ts` and `runtime-plan.ts` remain 13→13. Production and configuration selections remain
+unchanged, apart from correcting `live.ts`'s shared module lifecycle coverage. Replaying PR #244
+selects runtime files 13→3 with all 37 Python plan entries retained; its harness change still
+requires smoke. The final gate explanation selects host, three stock files, 13 runtime files,
+three module files, Python checks and smoke. That gate was not run. No measured speedup or new
+device proof is claimed.
+
+
+### FX route migration checkpoint (2026-11-01)
+
+The [route coverage and device evidence](test-architecture.md#fx-route-migration-checkpoint-2026-11-01)
+record all six device/family proofs passing, covering 19 legacy baselines per device across four
+owned fixture contexts, clean independent cards and two real menu restarts. Gate preparation/routing
+`440f676a` and the lifecycle fixes are pushed. Reviewed retirement `eaf709b9` is integrated as
+`86e1a7ae`: legacy route device scenarios are removed, retaining the analysis oracles, with no device
+execution change after proof. Final preflight passed 666 Python and 95 host cases plus static/type
+checks, but exited 1 on three unchanged baseline path references; the detailed checkpoint records
+the limits and gate selection. The gate explanation ran; the broad gate did not. A draft PR and
+single-PR focused-exception request are next, with no new exception in place. Earlier exceptions
+do not transfer. Timings are correctness evidence, with no paired A/B or measured speedup claim.

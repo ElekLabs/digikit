@@ -61,6 +61,28 @@ export function resolveInputs(device: Device, firmware: string): ReadyInputs {
   return ready;
 }
 
+/** Exact offline artifact identity; modules are the prepared plan's complete dependency closure. */
+export interface PreparedRuntimeImage {
+  syx: string;
+  baseSha256: string;
+  syxSha256: string;
+  modules: string[];
+}
+
+export function validatePreparedRuntimeImage(image: PreparedRuntimeImage, stockSyx: string): void {
+  const digest = (file: string) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  if (
+    !/^[a-f0-9]{64}$/.test(image.baseSha256) ||
+    !/^[a-f0-9]{64}$/.test(image.syxSha256) ||
+    digest(stockSyx) !== image.baseSha256 ||
+    digest(image.syx) !== image.syxSha256 ||
+    image.modules.length === 0 ||
+    new Set(image.modules).size !== image.modules.length
+  ) {
+    throw new Error('prepared runtime image does not match its stock/artifact hashes or module membership');
+  }
+}
+
 /** Runtime boots require ready inputs from this stock image, without forced interrupt state. */
 export function validateRuntimeInputs(inputs: ReadyInputs): void {
   const source = JSON.parse(fs.readFileSync(path.join(inputs.readyDir, 'SOURCE.json'), 'utf8'));

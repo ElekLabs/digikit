@@ -5,7 +5,9 @@ Static checks: the committed objects are current, the DSP section is determinist
 DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (tests/digikit, equiv-dyn-* and equiv-dn2-set: a selected
 module against the patched-in one, PCM sample for sample); the hot-load proof that was here is archived."""
 
+import json
 import re
+import struct
 import tomllib
 
 import pytest
@@ -91,3 +93,82 @@ def test_dsp_section_is_deterministic_and_relocates_like_the_reference(tmp_path)
     # a placement that is not 8-aligned is refused by the reference loader
     r = tools.run(tools.patchkit, "--root", ROOT, "dkm-dsp-image", a, "2000004")
     assert r.returncode != 0
+
+
+def test_runtime_watch_env_preserves_dma_holes_and_sequential_mode(
+    tmp_path, monkeypatch
+):
+    from tools.coldfire import arena_safety
+
+    plan = tmp_path / "runtime.plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "base": {"device": "dt2", "version": "1.17"},
+                "regions": {"cf.expansion": [0x180]},
+                "symbols": {"core/runtime@0.1.0:DKRT_STAGE": 0x20000},
+            }
+        )
+    )
+    monkeypatch.setattr(arena_safety, "expansion", lambda _image: (0x1000, 0x80000))
+    env = pk_dkrt_machine.runtime_watch_env(
+        plan, tmp_path / "watch.jsonl", sequential=True
+    )
+    assert env["DIGI_WRITE_WATCH"] == "0x1000-0x20000,0x30000-0x80000"
+    assert env["DIGI_WRITE_WATCH_ALLOW_PC"] == "0x1000-0x1180"
+    assert env["DIGI_WRITE_WATCH_AFTER"] == "cacr" and env["DIGI_FLUSH_CHECK"] == "1"
+    assert env["DIGI_WRITE_WATCH_SEQ"] == "1"
+    assert "DIGI_WRITE_WATCH_SEQ" not in pk_dkrt_machine.runtime_watch_env(
+        plan, tmp_path / "watch.jsonl"
+    )
+
+
+def test_fx_expectations_keeps_independent_relocation_and_exact_row_oracle(monkeypatch):
+    from tools.device import dkneeds
+
+    # A tiny version-four section with one byte-address relocation and one effect.
+    section = bytearray(64 + 16 + 8 + 64)
+    for offset, value in {
+        0: 0x444B4453,
+        4: 4,
+        8: 1,
+        12: 16,
+        16: 8,
+        20: 8,
+        24: 64,
+        28: 80,
+        32: 1,
+        52: 88,
+        56: 1,
+    }.items():
+        struct.pack_into(">I", section, offset, value)
+    section[68] = 0x10
+    struct.pack_into(">II", section, 80, 0, 0x11000000)  # kind 1, byte-address class
+    struct.pack_into(">IIIII", section, 88, 0, 8, 4, 1, 0)
+    struct.pack_into(">I", section, 108, 0x3F000000)
+    dkm = bytearray(160) + section
+    struct.pack_into(">II", dkm, 0x98, 160, len(section))
+    seen = []
+
+    def needs(data):
+        seen.append(data)
+        return {"DSP_AREA": 32, "FX_SLOTS": 1}
+
+    monkeypatch.setattr(dkneeds, "needs_of", needs)
+    result = pk_dkrt_machine.fx_expectations(bytes(dkm), 0x20000100)
+    assert result["image_hex"] == "00000000100100000000000000000000"
+    assert result["row"] == [
+        0xB80080,
+        0x20000108,
+        0x20000118,
+        1,
+        0x3F000000,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    assert result["needs"] == {"DSP_AREA": 32, "FX_SLOTS": 1} and seen == [bytes(dkm)]

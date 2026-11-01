@@ -3,20 +3,51 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import type { DkSession } from '@digi/dk-session';
 import { button, repoRoot, type Session } from '@digi/test-support';
+import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { installModule, liveArtifacts, moduleArtifact, tap } from './live.ts';
+import {
+  beforeReadinessDeadline,
+  expectRuntimeUi,
+  installModule,
+  liveArtifacts,
+  moduleArtifact,
+  record,
+  tap,
+} from './live.ts';
 import { prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
 /** Prepare an exact loaded-image ABOUT plan, then install only the remote module. */
 export async function prepareRemote(runtime: PatchedSession): Promise<RuntimePlan> {
-  const plan = await prepareRuntimePlan(runtime.session, liveArtifacts(runtime.session, 'remote-input'), [
-    'DK_ABOUT',
-    'DK_ABOUT_N',
-  ]);
+  const { session, dk } = runtime;
+  const artifacts = liveArtifacts(session, 'remote-input');
+  const plan = await prepareRuntimePlan(session, artifacts, ['DKRT_BOOT', 'DK_ABOUT', 'DK_ABOUT_N']);
+  const epoch = await expectRuntimeUi(session, plan, artifacts, { fresh: true });
   await installRemote(runtime);
+  await expectRuntimeUi(session, plan, artifacts, { afterEpoch: epoch });
+  await expectRemoteEnabled(session, dk);
   return plan;
+}
+
+/** Registration is retained by installRemote; command readiness is a separate bounded observation. */
+export async function expectRemoteEnabled(session: Session, dk: DkSession, timeout = 10_000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  let state: Awaited<ReturnType<DkSession['remoteState']>> | undefined;
+  try {
+    await expect
+      .poll(async () => (state = await beforeReadinessDeadline(deadline, () => dk.remoteState())).enabled, {
+        timeout,
+        interval: 500,
+        message: 'installed remote module enables its commands',
+      })
+      .toBe(true);
+  } finally {
+    record(liveArtifacts(session, 'remote-input'), 'remote-readiness', {
+      state: state ?? null,
+      expired: Date.now() >= deadline,
+    });
+  }
 }
 
 /** Install only: negative device-set cases need no offline ABOUT symbol plan. */

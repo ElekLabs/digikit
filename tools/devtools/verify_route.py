@@ -36,6 +36,7 @@ import ast
 import json
 import re
 import shlex
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from functools import cache
@@ -176,7 +177,30 @@ ACCEPTANCE_DIRS = {
 }
 # Runtime test files by the fixture module they exercise; the gate packs a native artifact for each
 # module (DIGI_RUNTIME_MODULES). Paths are relative to tests/regression.
+RUNTIME_SEND_FILES = ("runtime/fx-send-dn2.test.ts", "runtime/fx-send.test.ts")
+RUNTIME_ROUTE_FILES = (
+    "runtime/fx-routes-panel.test.ts",
+    "runtime/fx-routes-persist.test.ts",
+)
+RUNTIME_TRACK_FILES = ("runtime/fx-track-route.test.ts",)
+RUNTIME_BASIC_FILES = ("runtime/fx-chain.test.ts", "runtime/fx-pages.test.ts")
+RUNTIME_PROFILE_FILES = (
+    *RUNTIME_BASIC_FILES,
+    *RUNTIME_ROUTE_FILES,
+    *RUNTIME_TRACK_FILES,
+)
+RUNTIME_GAIN_FILES = (
+    "runtime/fx-reuse.test.ts",
+    *RUNTIME_SEND_FILES,
+    *RUNTIME_BASIC_FILES,
+)
+RUNTIME_FX_FILES = (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES, *RUNTIME_TRACK_FILES)
+RUNTIME_PLUSDRIVE_FILES = ("runtime/samples-live.test.ts", *RUNTIME_FX_FILES)
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
+    "test/sine": RUNTIME_FX_FILES,
+    "test/dyn-fx-gain": (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES),
+    "test/dyn-fx-gain-sendonly": RUNTIME_ROUTE_FILES,
+    "test/dyn-fx-gain-both": RUNTIME_TRACK_FILES,
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
     "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),
@@ -189,17 +213,37 @@ RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/dyn-fx-hang": ("runtime/fault-trace.test.ts",),
     "test/dyn-dsp-hang": ("runtime/fault-trace.test.ts",),
     "test/dyn-fx-nan": ("runtime/fault-trace.test.ts",),
-    "test/dyn-fx-gain-send": ("runtime/fault-trace.test.ts",),
+    "test/dyn-fx-gain-send": ("runtime/fault-trace.test.ts", *RUNTIME_ROUTE_FILES),
     "test/dyn-crash": ("runtime/fault-trace.test.ts",),
 }
-# Host sources only these runtime test files read.
+# Renamed packs share canonical source objects; these are card identities, not module sources.
+RUNTIME_PACK_ALIASES = {
+    **{
+        f"test/dyn-fx-gain-{index}": ("test/dyn-fx-gain", ("runtime/fx-chain.test.ts",))
+        for index in (2, 3, 4)
+    },
+    "test/dyn-fx-gain-send-3": ("test/dyn-fx-gain-send", RUNTIME_ROUTE_FILES),
+    "test/dyn-fx-gain-both-2": ("test/dyn-fx-gain-both", RUNTIME_TRACK_FILES),
+    "test/dyn-fx-gain-both-3": ("test/dyn-fx-gain-both", RUNTIME_TRACK_FILES),
+}
+# Host sources and subprocess CLI helpers consumed by specific runtime files.
 RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
-    path: ("runtime/samples-live.test.ts", "runtime/samples-store-live.test.ts")
-    for path in (
-        "packages/dk-session/src/dksample.ts",
-        "packages/dk-session/src/rpcfiles.ts",
-        "packages/dk-session/src/samples.ts",
-    )
+    **{
+        path: ("runtime/samples-live.test.ts", "runtime/samples-store-live.test.ts")
+        for path in (
+            "packages/dk-session/src/dksample.ts",
+            "packages/dk-session/src/rpcfiles.ts",
+            "packages/dk-session/src/samples.ts",
+        )
+    },
+    "tools/patchkit/pk_dkrt_machine.py": RUNTIME_FX_FILES,
+    "tools/coldfire/arena_safety.py": RUNTIME_FX_FILES,
+    "tools/patchkit/pk_digikit_fxsend.py": (*RUNTIME_SEND_FILES, *RUNTIME_TRACK_FILES),
+    "tools/patchkit/hook_ab.py": RUNTIME_FX_FILES,
+    "tools/patchkit/pk_digikit_fx.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxpage.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxroutes.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_PROFILE_FILES,
 }
 ACCEPTANCE_SHARED = (
     "packages/test-support/src/",
@@ -209,6 +253,7 @@ ACCEPTANCE_SHARED = (
     "tests/regression/support.ts",
 )
 RUNTIME_SHARED = (
+    "tests/regression/runtime/live.ts",  # lifecycle shared by runtime and module suites
     "sdk/",
     "packages/dk-session/src/",
     "packages/patchkit/",
@@ -239,6 +284,15 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.device.dktransfer",
                 "tools.control.digi_client",
                 "tools.emulator.card_overlay",
+                "tools.patchkit.pk_dkrt_machine",
+                "tools.patchkit.pk_digikit_fx",
+                "tools.patchkit.pk_digikit_fxsend",
+                "tools.patchkit.pk_digikit_fxroutes",
+                "tools.patchkit.pk_digikit_fxroute",
+                "tools.patchkit.hook_ab",
+                "tools.patchkit.pk_dsplink",  # named anchor reader imported inside the SEND oracle
+                "tools.coldfire.arena_safety",
+                "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
             }
         )
     graph = changed_tests.graph()
@@ -285,7 +339,62 @@ def module_smoke_cells(ids: set[str]) -> list[str] | None:
     return selected
 
 
-def acceptance_files(step: str, paths: list[str]) -> list[str]:
+@cache
+def related_acceptance(step: str, paths: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Vitest's import discovery only; any unproven helper keeps the owner suite.
+
+    One bounded subprocess handles the helpers together. Process-local memoization avoids
+    repeating discovery when the plan and explanation ask about the same changed paths.
+    """
+    directory = ACCEPTANCE_DIRS[step]
+    project = {
+        "stock": "stock",
+        "runtime-fixture": "runtime",
+        "module-load": "modules",
+    }[step]
+    try:
+        done = subprocess.run(
+            [
+                "mise",
+                "exec",
+                "--",
+                "node",
+                "tests/regression/scripts/related-tests.mjs",
+                project,
+                *paths,
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if done.returncode:
+            return None
+        found = json.loads(done.stdout)
+        if not isinstance(found, dict) or set(found) != set(paths):
+            return None
+        selected: set[str] = set()
+        for files in found.values():
+            if not isinstance(files, list) or not files:
+                return None
+            for path in files:
+                if (
+                    not isinstance(path, str)
+                    or not path.startswith(f"{directory}/")
+                    or not path.endswith(".test.ts")
+                    or ".." in Path(path).parts
+                    or not (ROOT / "tests/regression" / path).is_file()
+                ):
+                    return None
+                selected.add(path)
+        return tuple(sorted(selected))
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+
+
+def acceptance_files(
+    step: str, paths: list[str], *, resolve_helpers: bool = True
+) -> list[str]:
     """Native Vitest filenames affected by PATHS, relative to tests/regression.
 
     Framework/upload dependencies are partly implicit in patched firmware, so shared code keeps
@@ -298,6 +407,7 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
         for p in (ROOT / "tests/regression" / directory).rglob("*.test.ts")
     )
     selected: set[str] = set()
+    helpers: list[str] = []
     for path in paths:
         if (
             emulator_test_path(path)
@@ -318,11 +428,18 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
             rel = path.removeprefix("tests/regression/")
             if path.endswith(".test.ts") and rel in all_files:
                 selected.add(rel)
+            elif (
+                path.endswith(".ts")
+                and not path.endswith(".test.ts")
+                and (ROOT / path).is_file()
+            ):
+                helpers.append(path)
             else:
-                # Helpers may serve several devices and cases; deleted cases keep their owner suite.
+                # Unknown scripts and deleted cases keep their owner suite.
                 selected.update(all_files)
         elif (
             path == config
+            or path == "tests/regression/scripts/related-tests.mjs"
             or path
             in ("tests/regression/package.json", "tests/regression/tsconfig.json")
             or path.startswith(ACCEPTANCE_SHARED)
@@ -361,6 +478,15 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
                             selected.update(files)
         elif step == "stock" and path.startswith("tests/regression/goldens/"):
             selected.update(all_files)
+    if helpers and selected != set(all_files):
+        # Step-only routing needs membership, not filename discovery: an unproven helper
+        # already retains this suite. Resolve once the caller needs the actual file plan.
+        related = (
+            related_acceptance(step, tuple(sorted(set(helpers))))
+            if resolve_helpers
+            else None
+        )
+        selected.update(all_files if related is None else related)
     return sorted(selected)
 
 
@@ -408,12 +534,12 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_debug.py": ("card", "debug", "crash"),
     "pk_digikit_upload.py": ("upload",),
     "pk_digikit_pages.py": ("pages",),
-    "pk_digikit_fx.py": ("fx",),
-    "pk_digikit_fxsend.py": ("fxsend",),
-    "pk_digikit_fxroute.py": ("fxroute",),
-    "pk_digikit_fxroutes.py": ("fxroutes",),
+    "pk_digikit_fx.py": (),  # retained offline TS and legacy shared oracles
+    "pk_digikit_fxsend.py": (),
+    "pk_digikit_fxroute.py": (),  # retained offline TS oracles
+    "pk_digikit_fxroutes.py": (),  # retained TS profile/card/OLED helpers
     "pk_digikit_settings.py": ("settings",),
-    "pk_digikit_fxpage.py": ("fxpage",),
+    "pk_digikit_fxpage.py": (),  # retained profile/PCM and legacy UI helpers
     "pk_digikit_fxpersist.py": ("fxpersist",),
     "pk_digikit_fxshift.py": ("fxshift",),
     "pk_digikit_capacity.py": ("debug",),

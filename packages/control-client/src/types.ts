@@ -45,6 +45,8 @@ export interface FirmwareLoadParams {
   card?: string;
   dsp_patch?: string;
   force?: boolean;
+  /** Reconstruct firmware/card state instead of injecting into the running image. */
+  replace?: boolean;
   auto_no?: boolean;
   /** Patch the stock image with the device profile patch set (cached by content). */
   runtime?: boolean;
