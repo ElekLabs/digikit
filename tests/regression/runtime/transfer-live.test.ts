@@ -31,10 +31,9 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect((await session.status()).epoch, 'CLI RESTART boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);
-  expect(
-    entries.map((entry) => entry.path).sort(),
-    'upload survives the soft reset',
-  ).toEqual([debugPath, modulePath].sort());
+  expect(entries.map((entry) => entry.path).sort(), 'upload survives the soft reset').toEqual(
+    [debugPath, modulePath].sort(),
+  );
   const entry = entries.find((e) => e.path === modulePath)!;
 
   // The store follows the guest's card writes after its quiet period (about two seconds).
