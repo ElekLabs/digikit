@@ -14,11 +14,11 @@ Sources: sdk/include/dk/{ui,files,sample_track}.h, docs/design/sample-api-1.5.md
 
 ## 1. Entry and track capture
 
-Entry: the module's settings menu. SPARK exports `DK_MENU(spark_menu)`; path on the device is SETTINGS > DIGIKIT > MODULES > (SPARK) RIGHT > SETTINGS... > `SAMPLES...`. A shortcut on the SPARK page is not possible: `dk/ui.h` has no hook into a machine page, and the UI layer cannot learn the sequencer's selected track. So the track is chosen explicitly, as the plan says.
+Entry: the module's settings menu. SHOT exports `DK_MENU(shot_menu)`; path on the device is SETTINGS > DIGIKIT > MODULES > (SHOT) RIGHT > SETTINGS... > `SAMPLES...`. A shortcut on the SHOT page is not possible: `dk/ui.h` has no hook into a machine page, and the UI layer cannot learn the sequencer's selected track. So the track is chosen explicitly, as the plan says.
 
 Capture: the track list (screen 1) is the first screen. YES on track row n stores n in a static `g_pick_track` (0..15) and opens the browser. The browser never changes `g_pick_track`. Browsing changes nothing on the track. Only the select action calls `sample_select`. Closing with NO leaves the old sample playing.
 
-Recommendation for the code location (answers "UI module"): build the picker as a shared C source in the SDK (`sdk/src/sample_picker.c` plus `sdk/include/dk/sample_picker.h`), compiled into SPARK (and any later sampler) and entered from its `dkm_menu`. Reason: SPARK owns the table and the handle, so the picker needs no new runtime call. A stand-alone UI-layer module needs the API additions in G1 and G2. If Em wants the stand-alone module, build G1 first. The picker source does not change either way: it takes `(api, handle)`.
+Recommendation for the code location (answers "UI module"): build the picker as a shared C source in the SDK (`sdk/src/sample_picker.c` plus `sdk/include/dk/sample_picker.h`), compiled into SHOT (and any later sampler) and entered from its `dkm_menu`. Reason: SHOT owns the table and the handle, so the picker needs no new runtime call. A stand-alone UI-layer module needs the API additions in G1 and G2. If Em wants the stand-alone module, build G1 first. The picker source does not change either way: it takes `(api, handle)`.
 
 ## 2. Screens and keys
 
@@ -128,10 +128,10 @@ Error state: the line `STATE` shows the INFO text from 2.4. Needs G2 for the nam
 | `sample_unbind(h,t)` | CLEAR action | section 2.5 |
 | `sample_track_status(h,t)`, `sample_track_info(h,t,out)` | fill of screen 1 and 4 | state, frames/rate/channels |
 
-Check the Api `size` covers `sample_track_info` and `files_poll` before use (as SPARK does).
+Check the Api `size` covers `sample_track_info` and `files_poll` before use (as SHOT does).
 
 Handle source. The runtime does not check ownership: `client(handle)` accepts any open client slot 1..CLIENTS, so a picker that guesses `handle = 1` works by accident and breaks as soon as two modules have tables or the load order changes. Not acceptable. Clean sources:
-- (chosen for slice 2) the host machine passes its own handle: SPARK stores it in `dkm_init` already (`static uint32_t tracks`); its `dkm_menu` calls `dk_picker_open(m, api, tracks)`.
+- (chosen for slice 2) the host machine passes its own handle: SHOT stores it in `dkm_init` already (`static uint32_t tracks`); its `dkm_menu` calls `dk_picker_open(m, api, tracks)`.
 - (stand-alone picker, flagged) **G1: the API lacks a way to find another module's table.** Add `sample_tracks_find(index)` (0-based over open tables, returns a handle or `E_NOT_FOUND`) plus `sample_tracks_owner(handle, out_id, cap)` for the title, and make `select/unbind` check that a handle is valid for the call, not only open. Runtime change in tracks.rs; minor API 1.6.
 
 Other gaps (all additive, none blocks the host-menu route except G4 for live progress):
@@ -146,18 +146,18 @@ Files:
 - `sdk/include/dk/sample_picker.h`: `dk_picker_open(dk_ui_menu *m, const dk_api *api, uint32_t handle)`.
 - `sdk/src/sample_picker.c`: screens, callbacks, statics.
 - `sdk/src/picker_logic.h` and `sdk/src/picker_logic.c`: pure functions, no API calls: sort order, leaf-name truncation, path join/parent, size/length text, error text for a code, row text for track state.
-- `modules/machines/spark/src/module.c`: `DK_MENU(spark_menu)` and the `[[object]]` sources list gets `sdk/src/sample_picker.c`. `requires = ["core/ui"]` is added to the manifest (imports `dk_ui_*`); the module still loads without core/ui (calls return failure values; then the entry row is simply absent).
+- `modules/machines/shot/src/module.c`: `DK_MENU(shot_menu)` and the `[[object]]` sources list gets `sdk/src/sample_picker.c`. `requires = ["core/ui"]` is added to the manifest (imports `dk_ui_*`); the module still loads without core/ui (calls return failure values; then the entry row is simply absent).
 - No new manifest for a picker module in this route.
 
 Limits: code about 4 to 6 KB; statics about 8 KB (128 rows x 56 bytes, 16 track contexts, path buffers 256 bytes x 2). Menus are never freed: build each menu once (track list, browser, INFO page, panels), kept in statics, rebuilt by `dk_ui_refresh`. All ctx and descriptors in module memory. Rows 23 characters. One browser instance (not re-entrant): a second open reuses it.
 
 Tests:
 1. Host unit tests of `picker_logic` and the screen logic against a fake `dk_api` and the host fake of core/ui (same pattern as `modules/core/adapters/ui/host/tests/menu.rs`, which compiles a C source against a fake runtime): sort order (folders first, case-insensitive), 128-row cap and `+N MORE`, long-name truncation, path join and parent at the root and at the 254/151 limit, error-code to text mapping for every code of 2.4, track-row text per state. No test of third-party behaviour or argv.
-2. `dk:dev` screenshot sheet on DN2 (SPARK change reloads by boot, DN2 5 s; a pure `core/ui` change swaps in about 4 s). Per screen a `shot:`:
-   `mise run dk:dev -- digikit/spark --device dn2 --store 'digikit/spark*' --keys 'tap:NO,tap:SETTINGS,wait:400,<tap steps to DIGIKIT > MODULES > RIGHT > SETTINGS...>,shot:tracks,tap:YES,wait:800,shot:browse,tap:DOWN*2,tap:RIGHT,shot:panel,tap:LEFT,tap:YES,wait:600,shot:refused,tap:YES,tap:NO,tap:DOWN,tap:RIGHT,tap:DOWN,tap:YES,shot:info'`
+2. `dk:dev` screenshot sheet on DN2 (SHOT change reloads by boot, DN2 5 s; a pure `core/ui` change swaps in about 4 s). Per screen a `shot:`:
+   `mise run dk:dev -- digikit/shot --device dn2 --store 'digikit/shot*' --keys 'tap:NO,tap:SETTINGS,wait:400,<tap steps to DIGIKIT > MODULES > RIGHT > SETTINGS...>,shot:tracks,tap:YES,wait:800,shot:browse,tap:DOWN*2,tap:RIGHT,shot:panel,tap:LEFT,tap:YES,wait:600,shot:refused,tap:YES,tap:NO,tap:DOWN,tap:RIGHT,tap:DOWN,tap:YES,shot:info'`
    (step lists are tuned when the screens exist). Shots: `tracks`, `browse`, `panel`, `refused` (DN2: NO SAMPLE POOL), `info`, `empty`, `error` (needs a DT2 run with a bad file). Check DT2 at the end with the same script. Look at every PNG before handoff.
-3. One DT2 runtime test, `spark-picker.test.ts` in tests/regression/runtime (not written yet), built on the helpers of `sample-playback.test.ts`: put a stereo PCM16 file in +Drive, drive the keys to select it on track 1 through the picker, wait for the `dk_strack` record of track 1 to show `ready == 1` (observe the runtime record and `sample_track_status`, not the framebuffer), then play the note and check the MOD_DSP event of SPARK's own index as that test does. Also CLEAR: record `ready == 0`. One device, one pass; no all-cell sweep.
-4. Gate: `mise run module:check digikit/spark`, `mise run test:host`, then the owner's runtime test above. No gate run until the end of the slice.
+3. One DT2 runtime test, `shot-picker.test.ts` in tests/regression/runtime (not written yet), built on the helpers of `sample-playback.test.ts`: put a stereo PCM16 file in +Drive, drive the keys to select it on track 1 through the picker, wait for the `dk_strack` record of track 1 to show `ready == 1` (observe the runtime record and `sample_track_status`, not the framebuffer), then play the note and check the MOD_DSP event of SHOT's own index as that test does. Also CLEAR: record `ready == 0`. One device, one pass; no all-cell sweep.
+4. Gate: `mise run module:check digikit/shot`, `mise run test:host`, then the owner's runtime test above. No gate run until the end of the slice.
 
 ## 5. Open questions for Em (with recommendations)
 

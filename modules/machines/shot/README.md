@@ -1,8 +1,8 @@
-# SPARK
+# SHOT
 
-digikit/spark: a stereo sample-playback machine for the Digitakt II and the Digitone II, loaded at run time. It plays the sample bound to its
+digikit/shot: a stereo sample-playback machine for the Digitakt II and the Digitone II, loaded at run time. It plays the sample bound to its
 track once per note (a one-shot) through the per-track sample table of API 1.5 (`<dk/sample_track.h>`). It never selects a file: the runtime or a
-picker binds a PCM16 file (mono or stereo) to a track, SPARK reads it.
+picker binds a PCM16 file (mono or stereo) to a track, SHOT reads it.
 
 | Word | Parameter | Range and default | Meaning |
 | --- | --- | --- | --- |
@@ -18,17 +18,17 @@ picker binds a PCM16 file (mono or stereo) to a track, SPARK reads it.
   production (adapter TODO).
 - Lifecycle: `note_on` copies the track's `dk_strack` record under the admission and epoch macros; every `render` checks the epoch and acquires and
   releases the track. A stale token (select, unbind, stock reset) or a track that is not ready gives a silent block and `DK_DONE`.
-- Packing: `patchkit pack digikit/spark --device dt2|dn2` carries the track table in the DSP section (kind 2 record) and declares API 1.5 and machine
+- Packing: `patchkit pack digikit/shot --device dt2|dn2` carries the track table in the DSP section (kind 2 record) and declares API 1.5 and machine
   contract 1.2. The runtime reserves it when the module loads and writes the records over the DSP link once the DSP image is in.
 - Selecting a sample (test route, no picker yet): the fixture `test/track-select` (`tests/fixtures/modules/track-select`) calls `sample_select` for
   the first table in the image (handle 1). Request 0x3e with body `[1, track, ...path bytes]` selects (status 0 = queued); request 0x3f with body
   `[1, track]` returns the BE32 status (3 = ready) and, when ready, frames, rate, channels, token.
 
 - `src/module.c`: the machine, parameters, page and the track table declaration; `dkm_init` resolves the table handle.
-- `src/dsp/spark.s`: `render`, `note_on`, the table storage and the descriptor. Every sample, mono or stereo, is read by the SDK stereo kernel
+- `src/dsp/shot.s`: `render`, `note_on`, the table storage and the descriptor. Every sample, mono or stereo, is read by the SDK stereo kernel
   `_dk_sample_pcm16_stereo_linear` (a mono sample passes `base_r = base_l`); there is no mono path.
-- `tests/test_spark_playback.py`: the DSP on the concrete core through the real adapter, against a float32 model.
+- `tests/test_shot_playback.py`: the DSP on the concrete core through the real adapter, against a float32 model.
 
 ```sh
-mise run module:check -- digikit/spark
+mise run module:check -- digikit/shot
 ```

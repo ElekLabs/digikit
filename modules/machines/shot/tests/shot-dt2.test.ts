@@ -10,16 +10,16 @@ import { installWithDebug, liveArtifacts, memory, panel, record, runtimeTests, s
 import { planSymbol, prepareRuntimePlan } from '../../../../tests/regression/runtime/runtime-plan.ts';
 
 // End to end, DT2 1.17: the device-neutral runtime (API 1.5 track table), core/sample-pool (the borrowed stock pool), machine contract 1.2
-// and digikit/spark playing a stereo sample that a fixture module selected by path (docs/design/sample-api-1.5.md).
+// and digikit/shot playing a stereo sample that a fixture module selected by path (docs/design/sample-api-1.5.md).
 //
 // The sample files have a different sine on each channel, so the tones in the captured PCM say which source channel reached the output.
 // Everything is measured on the coupled PCM of the stock chain (pcm.tap). With the pair gate set by core/dsp-voice the stock pan stage keeps
 // the two voices apart: the pair is split (`expectSplitPair`); the other checks take the louder channel of each tone.
 
 const RATE = 48000;
-const FOLDER = 'sparkproof';
+const FOLDER = 'shotproof';
 const TRACK = 0; // TRIG 1
-const HANDLE = 1; // the first module with a track table (digikit/spark)
+const HANDLE = 1; // the first module with a track table (digikit/shot)
 const SECONDS = 6;
 
 /** A stereo 48 kHz PCM16 WAV: a sine of `left` Hz on L and of `right` Hz on R. 48 kHz keeps the converter exact. */
@@ -253,18 +253,18 @@ async function until(clock: () => Promise<number>, frames: number, timeoutMs = 1
 // ---- the test ------------------------------------------------------------------------------------------------------------------
 
 runtimeTests(
-  'SPARK plays a user-selected stereo sample through the runtime track table and the borrowed stock pool',
+  'SHOT plays a user-selected stereo sample through the runtime track table and the borrowed stock pool',
   async (runtime) => {
     const { session, dk } = runtime;
-    const artifacts = liveArtifacts(session, 'spark-dt2');
+    const artifacts = liveArtifacts(session, 'shot-dt2');
     const api = trackApi(runtime);
     const log: Record<string, unknown> = {};
     try {
       await settleUi(session);
-      await installWithDebug(runtime, 'digikit/spark', 'test/track-select', 'test/stock-pool');
+      await installWithDebug(runtime, 'digikit/shot', 'test/track-select', 'test/stock-pool');
       await settleUi(session);
       expect((await dk.modules()).map((m) => m.name)).toEqual(
-        expect.arrayContaining(['digikit/spark', 'test/track-select', 'test/stock-pool']),
+        expect.arrayContaining(['digikit/shot', 'test/track-select', 'test/stock-pool']),
       );
       const srcPageHash = await selectDynamicMachine(runtime, artifacts);
 
@@ -434,8 +434,8 @@ runtimeTests(
 
       // 5. Pitch: PITCH is 0.375 semitone per unit (0x100 raw), so +32 units (0x6000 from 0x4000) are one octave. ENC F: PITCH is knob 5, the second
       // row of the SRC page under START (knob 3 is the sample slot). The stock encoder accelerates by event rate, so the knob is turned in fast
-      // bursts. The read-back is word 3 (PITCH) of `_dv_params`, the parameter words that core/dsp-voice builds every block and passes to SPARK
-      // as R12 (the words SPARK actually reads). The buffer is rewritten only while a voice renders, so TRIG 1 is held during the turn.
+      // bursts. The read-back is word 3 (PITCH) of `_dv_params`, the parameter words that core/dsp-voice builds every block and passes to SHOT
+      // as R12 (the words SHOT actually reads). The buffer is rewritten only while a voice renders, so TRIG 1 is held during the turn.
       const PITCH_OCTAVE = 0x6000;
       const ui = panel(session);
       const mem = memory(session);
@@ -491,10 +491,10 @@ runtimeTests(
       const modules = await dk.modules();
       log.modules = modules.map((m) => ({ name: m.name, faults: m.faults, off: m.guard_off }));
       for (const m of modules) expect(m.faults, `${m.name} faults`).toBe(0);
-      await session.expectNoFault('SPARK stereo sample');
+      await session.expectNoFault('SHOT stereo sample');
     } finally {
       record(artifacts, 'measurements', log);
-      console.info('spark-dt2 measurements', JSON.stringify(log));
+      console.info('shot-dt2 measurements', JSON.stringify(log));
       try {
         record(artifacts, 'runtime-log', await dk.readLog());
       } catch {

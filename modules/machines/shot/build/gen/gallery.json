@@ -6,28 +6,28 @@
           "clone_of": 0,
           "knobs": [
             {
-              "param": "spark_start",
+              "param": "shot_start",
               "slot": 25
             },
             {
-              "param": "spark_end",
+              "param": "shot_end",
               "slot": 26
             },
             {
-              "param": "spark_reverse",
+              "param": "shot_reverse",
               "slot": 27
             },
             {
-              "param": "spark_pitch",
+              "param": "shot_pitch",
               "slot": 28
             }
           ],
           "level": 10,
-          "name": "SPARK",
+          "name": "SHOT",
           "own_dsp": true,
           "page": {
             "name": "SPK",
-            "title": "SPARK"
+            "title": "SHOT"
           },
           "position": null,
           "short": "SPK",
@@ -41,20 +41,20 @@
               "stock": 202
             },
             {
-              "param": "spark_start",
+              "param": "shot_start",
               "slot": 1
             },
             {
-              "param": "spark_end",
+              "param": "shot_end",
               "slot": 2
             },
             null,
             {
-              "param": "spark_reverse",
+              "param": "shot_reverse",
               "slot": 4
             },
             {
-              "param": "spark_pitch",
+              "param": "shot_pitch",
               "slot": 5
             },
             null,
@@ -64,7 +64,7 @@
             }
           ],
           "level": 10,
-          "name": "SPARK",
+          "name": "SHOT",
           "own_dsp": false,
           "page": null,
           "position": null,
@@ -72,17 +72,17 @@
           "type": null
         }
       },
-      "id": "spark",
-      "name": "SPARK",
+      "id": "shot",
+      "name": "SHOT",
       "short": "SPK"
     }
   ],
-  "module": "digikit/spark",
+  "module": "digikit/shot",
   "params": {
     "dn2": [
       {
         "default": 0,
-        "id": "spark_start",
+        "id": "shot_start",
         "max": 32512,
         "min": 0,
         "name": "Start",
@@ -92,7 +92,7 @@
       },
       {
         "default": 32512,
-        "id": "spark_end",
+        "id": "shot_end",
         "max": 32512,
         "min": 0,
         "name": "End",
@@ -102,7 +102,7 @@
       },
       {
         "default": 0,
-        "id": "spark_reverse",
+        "id": "shot_reverse",
         "max": 32512,
         "min": 0,
         "name": "Reverse",
@@ -112,7 +112,7 @@
       },
       {
         "default": 16384,
-        "id": "spark_pitch",
+        "id": "shot_pitch",
         "max": 32512,
         "min": 0,
         "name": "Pitch",
@@ -124,7 +124,7 @@
     "dt2": [
       {
         "default": 0,
-        "id": "spark_start",
+        "id": "shot_start",
         "max": 32512,
         "min": 0,
         "name": "Start",
@@ -134,7 +134,7 @@
       },
       {
         "default": 32512,
-        "id": "spark_end",
+        "id": "shot_end",
         "max": 32512,
         "min": 0,
         "name": "End",
@@ -144,7 +144,7 @@
       },
       {
         "default": 0,
-        "id": "spark_reverse",
+        "id": "shot_reverse",
         "max": 32512,
         "min": 0,
         "name": "Reverse",
@@ -154,7 +154,7 @@
       },
       {
         "default": 16384,
-        "id": "spark_pitch",
+        "id": "shot_pitch",
         "max": 32512,
         "min": 0,
         "name": "Pitch",

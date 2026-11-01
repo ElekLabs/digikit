@@ -1,6 +1,6 @@
-"""digikit/spark on the concrete SHARC+ core through core/dsp-voice (the real adapter), against a float32 model of the stereo PCM16 reader.
+"""digikit/shot on the concrete SHARC+ core through core/dsp-voice (the real adapter), against a float32 model of the stereo PCM16 reader.
 
-The track table (`_spark_rec` records and `_spark_ctl` control sets) is written the way the runtime does: PCM planes in free L2, the
+The track table (`_shot_rec` records and `_shot_ctl` control sets) is written the way the runtime does: PCM planes in free L2, the
 record published with `ready` last. Checks: start, end, reverse and pitch; L and R differ for a stereo sample; a mono sample plays centred;
 the voice ends after the sample; a stale token or a closed track is silent with no PCM read; every block leaves the count at 0.
 Skips when Selache is not built."""
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(
     reason="selache not built (tools/patchkit/pk_toolchains.py selache)",
 )
 
-MODULE = "digikit/spark"
+MODULE = "digikit/shot"
 PLANE_L = nw(0x200F0000)  # normal-word addresses of the test PCM planes (free L2)
 PLANE_R = nw(0x200F8000)
 FRAMES = 200
@@ -40,7 +40,7 @@ def pack(plane: np.ndarray) -> list[int]:
     return [int(lo | hi << 16) for lo, hi in pairs]
 
 
-class Spark:
+class Shot:
     def __init__(self, device="dt2", track=0, channels=2, frames=FRAMES, rate=RATE_HZ):
         self.rig = MachineRig(MODULE, device, track=track)
         self.track = track
@@ -50,8 +50,8 @@ class Spark:
         self.left = LEFT[:frames]
         self.right = self.left if channels == 1 else RIGHT[:frames]
         d = self.rig.built.data
-        self.rec = nw(d["_spark_rec"]) + 8 * track
-        self.ctl = nw(d["_spark_ctl"]) + 4 * track
+        self.rec = nw(d["_shot_rec"]) + 8 * track
+        self.ctl = nw(d["_shot_ctl"]) + 4 * track
         self.state = nw(self.rig.built.state) + (self.rig.built.stride // 4) * track
         poke = self.rig.sess.poke
         for k, w in enumerate(pack(self.left)):
@@ -79,10 +79,10 @@ class Spark:
         r = self.rig
         r.set_params(
             {
-                "spark_start": 0,
-                "spark_end": 0x7F00,
-                "spark_reverse": 0,
-                "spark_pitch": 0x4000,
+                "shot_start": 0,
+                "shot_end": 0x7F00,
+                "shot_reverse": 0,
+                "shot_pitch": 0x4000,
                 **(params or {}),
             }
         )
@@ -138,19 +138,19 @@ def expected_rate(note, pitch_word, src_rate=RATE_HZ, reverse=False):
 
 def check(s, note=60, blocks=8, **params):
     p = {
-        "spark_start": 0,
-        "spark_end": 0x7F00,
-        "spark_reverse": 0,
-        "spark_pitch": 0x4000,
+        "shot_start": 0,
+        "shot_end": 0x7F00,
+        "shot_reverse": 0,
+        "shot_pitch": 0x4000,
         **params,
     }
     got_l, got_r = s.play(note, blocks, params)
-    reverse = p["spark_reverse"] >= 0x4000
-    start = frames_of(p["spark_start"], s.frames)
-    end = frames_of(p["spark_end"], s.frames)
+    reverse = p["shot_reverse"] >= 0x4000
+    start = frames_of(p["shot_start"], s.frames)
+    end = frames_of(p["shot_end"], s.frames)
     cur = s.cursor()
     rate = cur[4] - (1 << 32) if cur[4] >= 1 << 31 else cur[4]
-    want = expected_rate(note, p["spark_pitch"], s.src_rate, reverse)
+    want = expected_rate(note, p["shot_pitch"], s.src_rate, reverse)
     assert abs(rate - want) <= max(2, abs(want) >> 17), (
         rate,
         want,
@@ -166,7 +166,7 @@ DEVICES = ["dt2", "dn2"]
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_default_params_play_the_whole_sample_with_distinct_channels(device):
-    s = Spark(device)
+    s = Shot(device)
     gl, gr, wl, wr, (start, end, rate) = check(s)
     assert (start, end) == (0, FRAMES) and rate == 65536
     assert np.array_equal(gl, wl)
@@ -179,15 +179,15 @@ def test_default_params_play_the_whole_sample_with_distinct_channels(device):
 @pytest.mark.parametrize(
     "params",
     [
-        {"spark_start": 40 * 256, "spark_end": 100 * 256},
-        {"spark_start": 0, "spark_end": 50 * 256},
-        {"spark_start": 0, "spark_end": 90 * 256, "spark_reverse": 0x7F00},
-        {"spark_start": 20 * 256, "spark_end": 127 * 256, "spark_reverse": 0x4000},
+        {"shot_start": 40 * 256, "shot_end": 100 * 256},
+        {"shot_start": 0, "shot_end": 50 * 256},
+        {"shot_start": 0, "shot_end": 90 * 256, "shot_reverse": 0x7F00},
+        {"shot_start": 20 * 256, "shot_end": 127 * 256, "shot_reverse": 0x4000},
     ],
     ids=["window", "end-only", "reverse", "reverse-start"],
 )
 def test_start_end_and_reverse_select_the_frames(params):
-    s = Spark("dt2")
+    s = Shot("dt2")
     gl, gr, wl, wr, (start, end, rate) = check(s, **params)
     assert 0 <= start < end <= FRAMES
     assert np.array_equal(gl, wl) and np.array_equal(gr, wr)
@@ -201,34 +201,34 @@ def test_start_end_and_reverse_select_the_frames(params):
     ids=["note+12", "note-12", "pitch+12", "pitch-12", "note+7,pitch+2.25"],
 )
 def test_pitch_is_the_note_plus_the_pitch_parameter(note, pitch):
-    s = Spark("dt2")
-    gl, gr, wl, wr, (_, _, rate) = check(s, note=note, spark_pitch=pitch)
+    s = Shot("dt2")
+    gl, gr, wl, wr, (_, _, rate) = check(s, note=note, shot_pitch=pitch)
     assert np.array_equal(gl, wl) and np.array_equal(gr, wr)
     semis = (note - 60) + (pitch - 0x4000) * 3 / 2048
     assert abs(rate / 65536 / 2 ** (semis / 12) - 1) < 3e-5
 
 
 def test_a_source_rate_other_than_48k_scales_the_cursor():
-    s = Spark("dt2", rate=24000)
+    s = Shot("dt2", rate=24000)
     gl, gr, wl, wr, (_, _, rate) = check(s, blocks=12)
     assert abs(rate - 32768) <= 2
     assert np.array_equal(gl, wl) and np.array_equal(gr, wr)
 
 
 def test_a_mono_sample_plays_centred():
-    s = Spark("dt2", channels=1)
+    s = Shot("dt2", channels=1)
     gl, gr, wl, wr, _ = check(s)
     assert np.array_equal(gl, wl) and np.array_equal(gl, gr)
 
 
 def test_another_track_reads_its_own_record():
-    s = Spark("dt2", track=3)
+    s = Shot("dt2", track=3)
     gl, gr, wl, wr, _ = check(s)
     assert np.array_equal(gl, wl) and np.array_equal(gr, wr)
 
 
 def test_the_voice_ends_after_the_sample():
-    s = Spark("dt2")
+    s = Shot("dt2")
     r = s.rig
     s.play(blocks=1)
     for _ in range(10):  # 200 frames = 7 blocks
@@ -240,7 +240,7 @@ def test_the_voice_ends_after_the_sample():
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_a_stale_token_is_silent_and_ends_the_voice(device):
-    s = Spark(device)
+    s = Shot(device)
     r = s.rig
     left, _ = s.play(blocks=2)
     assert np.any(left)  # playing
@@ -257,7 +257,7 @@ def test_a_stale_token_is_silent_and_ends_the_voice(device):
 
 @pytest.mark.parametrize("what", ["not-ready", "closed", "bad-fmt", "empty"])
 def test_a_track_that_is_not_playable_is_silent_with_no_pcm_read(what):
-    s = Spark("dt2")
+    s = Shot("dt2")
     r = s.rig
     poke = r.sess.poke
     if what == "not-ready":
@@ -277,7 +277,7 @@ def test_a_track_that_is_not_playable_is_silent_with_no_pcm_read(what):
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_instruction_count_is_inside_the_declared_ceiling(device):
-    s = Spark(device)
+    s = Shot(device)
     s.rig.set_note(60, 100)
     s.rig.trigger()
     first = s.rig.block("friendly")
@@ -291,7 +291,7 @@ def test_instruction_count_is_inside_the_declared_ceiling(device):
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_the_module_stores_only_inside_its_own_memory(device):
-    s = Spark(device)
+    s = Shot(device)
     s.rig.record_stores = True
     s.rig.sess.record_stores()
     s.rig.set_note(60, 100)
@@ -313,7 +313,7 @@ def sine_plane(frames, period):
 def test_a_pure_tone_keeps_its_level_at_any_pitch(note):
     """The reader moves only the pitch: a sine of 16000/32768 keeps its amplitude one octave up or down (stock gain is not applied here)."""
     frames = 1600
-    s = Spark("dt2", frames=frames)
+    s = Shot("dt2", frames=frames)
     plane = sine_plane(
         frames, 160
     )  # 300 Hz at 48 kHz, well below the Nyquist limit of the 2x read

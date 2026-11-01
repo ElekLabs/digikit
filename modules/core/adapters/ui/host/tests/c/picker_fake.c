@@ -112,7 +112,7 @@ static void fill_settings(dk_ui_menu *m, void *ctx)
     (void)ctx;
     dk_picker_open(m);
 }
-static const dk_ui_menu_desc settings_desc = {.name = "Settings", .title = "SPARK", .fill = fill_settings};
+static const dk_ui_menu_desc settings_desc = {.name = "Settings", .title = "SHOT", .fill = fill_settings};
 
 /* Clears every static of the picker and the fakes. with_path: the runtime has sample_track_path (api 1.6). */
 void pf_reset(int with_path)

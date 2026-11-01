@@ -20,16 +20,16 @@ import {
   trackRecord,
   until,
   wav,
-} from './spark-support.ts';
+} from './shot-support.ts';
 
 // End to end, DN2 OS 1.12: the sample pool (core/sample-pool: allocator, LP0 page transport into DDR), the runtime track table (API 1.5/1.6),
-// the dsp-voice stereo hooks (docs/design/dn2-stereo.md) and digikit/spark. The `sample-tracks` patch set of devices/digitone-ii.toml.
+// the dsp-voice stereo hooks (docs/design/dn2-stereo.md) and digikit/shot. The `sample-tracks` patch set of devices/digitone-ii.toml.
 //
-// Samples are uploaded to the digikit store (`samples/sparkdn2/...`) and selected by the root-relative path through test/track-select (handle 1).
+// Samples are uploaded to the digikit store (`samples/shotdn2/...`) and selected by the root-relative path through test/track-select (handle 1).
 // Observed: the runtime's `dk_strack` records and the pool's DSP counters (the firmware's own records), DDR through dsp.peek, and the coupled
 // PCM (pcm.tap). Phases do not stop at the first failure; the failures are collected and asserted at the end, so one run reports every phase.
 
-const FOLDER = 'sparkdn2';
+const FOLDER = 'shotdn2';
 const PAGE = 4096;
 const FRAMES_PER_PAGE = 2048; // one page of one plane
 const DDR_BASE = 0x80531000; // [adapter.sample_pool] ddr_base of devices/digitone-ii.toml
@@ -48,10 +48,10 @@ interface Fixture {
 }
 
 runtimeTests(
-  'DN2 sample pool, stereo and dsp-link coexistence with SPARK through the runtime track table',
+  'DN2 sample pool, stereo and dsp-link coexistence with SHOT through the runtime track table',
   async (runtime) => {
     const { session, dk } = runtime;
-    const artifacts = liveArtifacts(session, 'spark-dn2');
+    const artifacts = liveArtifacts(session, 'shot-dn2');
     const api = trackApi(runtime);
     // The daemon answers every peek on the emulation thread; a tight poll loop starves the guest (stall faults), so polls are 60 ms apart.
     const settle = (track: number, timeoutMs = 120_000, each?: Parameters<typeof api.settle>[2]) => api.settle(track, timeoutMs, each, 60);
@@ -83,10 +83,10 @@ runtimeTests(
     try {
       log.stage = 'install';
       await settleUi(session);
-      await installWithDebug(runtime, 'digikit/spark', 'test/track-select');
+      await installWithDebug(runtime, 'digikit/shot', 'test/track-select');
       await settleUi(session);
       expect((await dk.modules()).map((m) => m.name)).toEqual(
-        expect.arrayContaining(['digikit/spark', 'test/track-select']),
+        expect.arrayContaining(['digikit/shot', 'test/track-select']),
       );
       log.stage = 'plan';
       const plan = await prepareRuntimePlan(session, artifacts, [
@@ -260,7 +260,7 @@ runtimeTests(
             padBytes: pad.length,
           };
           expect(matches.length, `${f.name} plane ${channel} equals the file's plane in some byte layout ${JSON.stringify(result)}`).toBeGreaterThan(0);
-          // dsp.peek shows the DDR words of the DSP as the file's big-endian 32-bit words with the bytes reversed (run 1 and 2 of this test); SPARK reads
+          // dsp.peek shows the DDR words of the DSP as the file's big-endian 32-bit words with the bytes reversed (run 1 and 2 of this test); SHOT reads
           // them as a clean tone, so this is the layout the DSP wants.
           expect(matches, `${f.name} plane ${channel}: layout`).toContain(layoutSeen);
           expect(
@@ -313,7 +313,7 @@ runtimeTests(
         expect(r1.baseR, 'same base_r').toBe(aRecord!.baseR);
       });
 
-      // ---- 3. stereo audio: SPARK playing L 440 Hz / R 660 Hz through the stock filter and pan -----------------------------------
+      // ---- 3. stereo audio: SHOT playing L 440 Hz / R 660 Hz through the stock filter and pan -----------------------------------
       const holdNote = async (name: string, seconds: number) =>
         captureNote(runtime, path.join(artifacts, `${name}.wav`), async (clock) => {
           await until(clock, (await clock()) + seconds * RATE);
@@ -638,7 +638,7 @@ runtimeTests(
         log.statusAtEnd = `unavailable: ${error instanceof Error ? error.message : String(error)}`;
       }
       record(artifacts, 'measurements', log);
-      console.info('spark-dn2 measurements', JSON.stringify(log));
+      console.info('shot-dn2 measurements', JSON.stringify(log));
       try {
         record(artifacts, 'runtime-log', await dk.readLog());
       } catch {

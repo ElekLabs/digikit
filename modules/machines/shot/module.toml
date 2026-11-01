@@ -1,7 +1,7 @@
 [module]
-id = "digikit/spark"
+id = "digikit/shot"
 version = "0.1.0"
-name = "SPARK"
+name = "SHOT"
 category = "machines"
 type = "machine"
 author = "digikit"
@@ -16,14 +16,14 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A stereo sample-playback machine (machine contract 1.2, track samples API 1.5). `patchkit pack digikit/spark --device dt2|dn2 -o spark.dkm` makes
-# the .dkm. The machine declaration, the parameters and the track table are in src/module.c; the DSP in src/dsp/spark.s.
+# A stereo sample-playback machine (machine contract 1.2, track samples API 1.5). `patchkit pack digikit/shot --device dt2|dn2 -o shot.dkm` makes
+# the .dkm. The machine declaration, the parameters and the track table are in src/module.c; the DSP in src/dsp/shot.s.
 [[object]]
-path = "build/spark-cf.dko.json"
+path = "build/shot-cf.dko.json"
 sources = ["src/module.c", "../../../sdk/src/sample_picker.c", "../../../sdk/src/picker_logic.c"]
 place = "cf.expansion"
 
 [[object]]
-path = "build/spark-dsp.dko.json"
-sources = ["src/dsp/spark.s"]
+path = "build/shot-dsp.dko.json"
+sources = ["src/dsp/shot.s"]
 place = "dsp.l2"

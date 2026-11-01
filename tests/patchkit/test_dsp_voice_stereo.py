@@ -87,7 +87,7 @@ def test_a_mono_machine_is_unchanged_the_odd_voice_copies_l():
 
 
 def test_the_status_bit_is_not_confused_with_the_voice_end():
-    """DK_OK | DK_STEREO continues the voice (DK_DONE | DK_STEREO ending it is in the SPARK tests)."""
+    """DK_OK | DK_STEREO continues the voice (DK_DONE | DK_STEREO ending it is in the SHOT tests)."""
     rig = stereo_rig()
     run(rig)
     assert rig.read_rec_word(rig.voice, 0x1B8) & 0xFF != 0, "DK_OK | DK_STEREO: running"

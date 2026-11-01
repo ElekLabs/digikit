@@ -1,4 +1,4 @@
-/* test/track-select: the test-only route to `sample_select` for a module that owns a track table (digikit/spark has no picker).
+/* test/track-select: the test-only route to `sample_select` for a module that owns a track table (digikit/shot has no picker).
  * It owns no table. The runtime does not check which module a handle belongs to, and the first module with a table gets handle 1
  * (client slot 0), so the test passes the handle in the request. Not a product picker. Commands (the remote_state range of sdk/sdk.toml):
  *

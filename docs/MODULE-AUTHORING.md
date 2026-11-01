@@ -390,7 +390,7 @@ Stereo machines (machine contract 1.2, additive). A machine that has two output 
 `DK_DONE | DK_STEREO`) on every block. A mono 1.1 machine is unchanged: it never touches `out_r` and the adapter copies L to R. On the Digitakt II
 the adapter writes R into the odd voice of the stock voice pair (the stock engine pans the two buffers independently); the guard checks both
 blocks. On the Digitone II `out_r` is a scratch block for now and the status bit is dropped, so a stereo machine plays its L only until the shadow
-right-channel stages are production (TODO in `dsp-voice-dn2.s`). `digikit/spark` is the example.
+right-channel stages are production (TODO in `dsp-voice-dn2.s`). `digikit/shot` is the example.
 Do not place `note_on` at offset 0 of the image: an offset of 0 reads as "no note_on".
 
 The `dk_machine_desc` has 10 words: magic, contract, parameter count, voices (1 to 16), state bytes per voice (a multiple of 4), bytes cleared at
@@ -525,7 +525,7 @@ and is then refused by a runtime that lacks it.
 
 A module with a track table can add the on-device sample picker with `<dk/sample_picker.h>`: list `../../../sdk/src/sample_picker.c` and
 `../../../sdk/src/picker_logic.c` in the `[[object]]` sources, call `dk_picker_init(api, handle)` in `dkm_init`, `dk_picker_open(m)` in the fill of
-its `DK_MENU` settings menu (it adds a `SAMPLES...` row) and `dk_picker_fini()` in `dkm_fini`. `modules/machines/spark` is the example. The picker
+its `DK_MENU` settings menu (it adds a `SAMPLES...` row) and `dk_picker_fini()` in `dkm_fini`. `modules/machines/shot` is the example. The picker
 needs no manifest field: it checks the Api `size` before it calls `sample_track_path`, and without `core/ui` the row is absent.
 
 For reusable browsing, include `<dk/files.h>` and acquire a positive `files_client()` handle during init.

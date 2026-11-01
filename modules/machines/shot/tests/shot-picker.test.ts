@@ -18,10 +18,10 @@ import {
   trackRecord,
   until,
   wav,
-} from './spark-support.ts';
+} from './shot-support.ts';
 
-// DT2 1.17: the on-device sample picker of digikit/spark (docs/design/sample-picker.md), driven with the panel keys:
-//   SETTINGS > DIGIKIT > MODULES > (SPARK) RIGHT > SETTINGS... > SAMPLES... > YES on track 1 > folder > YES on the file.
+// DT2 1.17: the on-device sample picker of digikit/shot (docs/design/sample-picker.md), driven with the panel keys:
+//   SETTINGS > DIGIKIT > MODULES > (SHOT) RIGHT > SETTINGS... > SAMPLES... > YES on track 1 > folder > YES on the file.
 // The result is read from the runtime's own records (`dk_strack` of track 1, `sample_track_status` through test/track-select), not from the
 // framebuffer; the screens are saved in the artifacts for a look. Menus keep their selected row, so every list is reset with UP first and the row
 // is counted from the listing (the browser) or read from the menu's own row tables (MODULES: DK_LOAD, the side panel: DK_PANEL).
@@ -50,10 +50,10 @@ const pickerOrder = (entries: { name: string; kind: 'file' | 'folder' }[]) =>
   });
 
 runtimeTests(
-  'the SPARK picker selects, plays, clears and refuses on track 1 through the panel keys',
+  'the SHOT picker selects, plays, clears and refuses on track 1 through the panel keys',
   async (runtime) => {
     const { session, dk } = runtime;
-    const artifacts = liveArtifacts(session, 'spark-picker');
+    const artifacts = liveArtifacts(session, 'shot-picker');
     const api = trackApi(runtime);
     const ui = panel(session);
     const mem = memory(session);
@@ -61,7 +61,7 @@ runtimeTests(
     const shot = async (name: string) => record(artifacts, `screen-${name}`, await session.client.framebufferGet({ hash: true, data: true }));
     try {
       await settleUi(session);
-      await installWithDebug(runtime, 'digikit/spark', 'test/track-select');
+      await installWithDebug(runtime, 'digikit/shot', 'test/track-select');
       await settleUi(session);
       const plan = await prepareRuntimePlan(session, artifacts, ['RECORDS', 'DK_LOAD', 'DK_LOAD_N', 'DK_PANEL', 'DK_PANEL_N']);
       const sym = (name: string) => planSymbol(plan, name);
@@ -95,7 +95,7 @@ runtimeTests(
         for (let i = 0; i < rows; i++) await ui.tap('UP');
       };
 
-      // ---- navigation: SETTINGS > DIGIKIT > MODULES > SPARK > RIGHT > SETTINGS... > SAMPLES... --------------------------------------
+      // ---- navigation: SETTINGS > DIGIKIT > MODULES > SHOT > RIGHT > SETTINGS... > SAMPLES... --------------------------------------
       // From the main screen to the track list of the picker (the menus keep their rows, so each list is reset with UP first).
       async function openTracks(first: boolean) {
         for (let i = 0; i < 8; i++) await ui.tap('NO');
@@ -107,11 +107,11 @@ runtimeTests(
         await down(3); // ABOUT, HEALTH, MEMORY, MODULES
         await ui.tap('YES', 800);
         const modules = await menuRows(session, sym('DK_LOAD'), sym('DK_LOAD_N'));
-        const sparkRow = modules.findIndex((r) => /^spark/i.test(r.trim()));
+        const shotRow = modules.findIndex((r) => /^shot/i.test(r.trim()));
         if (first) log.modules = modules;
-        expect(sparkRow, `SPARK in the MODULES list ${JSON.stringify(modules)}`).toBeGreaterThanOrEqual(0);
+        expect(shotRow, `SHOT in the MODULES list ${JSON.stringify(modules)}`).toBeGreaterThanOrEqual(0);
         await toTop(modules.length + 2);
-        await down(sparkRow);
+        await down(shotRow);
         await ui.tap('RIGHT', 600);
         const side = await menuRows(session, sym('DK_PANEL'), sym('DK_PANEL_N'));
         if (first) log.sidePanel = side;
@@ -219,7 +219,7 @@ runtimeTests(
       void AUDIBLE;
     } finally {
       record(artifacts, 'measurements', log);
-      console.info('spark-picker measurements', JSON.stringify(log));
+      console.info('shot-picker measurements', JSON.stringify(log));
       try {
         record(artifacts, 'runtime-log', await dk.readLog());
       } catch {

@@ -1,10 +1,10 @@
-// digikit/spark: one-shot playback of the stereo sample bound to the track, a stereo machine of the SDK contract (<dk/machine.h>, contract 1.2),
-// one body for both devices. The adapter of core/dsp-voice calls `_spark_note_on` once per note and `_spark_render` once per block with
+// digikit/shot: one-shot playback of the stereo sample bound to the track, a stereo machine of the SDK contract (<dk/machine.h>, contract 1.2),
+// one body for both devices. The adapter of core/dsp-voice calls `_shot_note_on` once per note and `_shot_render` once per block with
 // R4 = this voice's state, R8 = the `dk_voice_in` (pitch in semitones << 8 with the tune folded in, the track, the outputs `out` (L) and `out_r` (R)),
 // R12 = the four parameter words START, END, REVERSE, PITCH (0 .. 0x7f00 = UI 0 .. 127).
 //
-// The sample is the track's `dk_strack` record (<dk/sample_track.h>), written by the runtime into `_spark_rec` (16 records of 8 words; the control
-// sets of 4 words are in `_spark_ctl`). `note_on` takes the track from the voice input and, in one masked scope, checks the admission (the record
+// The sample is the track's `dk_strack` record (<dk/sample_track.h>), written by the runtime into `_shot_rec` (16 records of 8 words; the control
+// sets of 4 words are in `_shot_ctl`). `note_on` takes the track from the voice input and, in one masked scope, checks the admission (the record
 // is ready, not closed, count in range), latches the epoch (the record's token) in the voice and acquires the track. It copies the plane
 // bases, the frame count, the channels and the source rate, releases the track and sets up the cursor. Every `render` checks the admission and
 // the cached epoch in one masked scope, acquires the track, reads, and releases it. A refused admission or a stale token (select, unbind, a
@@ -32,24 +32,24 @@
 
 // I5 = the record and I1 = the control set of the track in R0 (normal-word addresses); the DAG registers are ready 3 instructions later.
 // Clobbers R1, R2.
-#define SPARK_TRACK_PTRS \
-    R1 = _spark_rec; \
+#define SHOT_TRACK_PTRS \
+    R1 = _shot_rec; \
     R1 = LSHIFT R1 BY -2; \
     R2 = LSHIFT R0 BY 3; \
     R1 = R1 + R2; \
     I5 = R1; \
-    R1 = _spark_ctl; \
+    R1 = _shot_ctl; \
     R1 = LSHIFT R1 BY -2; \
     R2 = LSHIFT R0 BY 2; \
     R1 = R1 + R2; \
     I1 = R1
 
 .SECTION/PM seg_pmco;
-.GLOBAL _spark_render;
-.GLOBAL _spark_note_on;
+.GLOBAL _shot_render;
+.GLOBAL _shot_note_on;
 .EXTERN _dv_exp2;
 
-_spark_render:
+_shot_render:
     I3 = R4;                              // the state
     I2 = R8;                              // the voice input
     I4 = R12;                             // the parameter words
@@ -93,15 +93,15 @@ _spark_render:
     IF NE R0 = -R0;
     DM(4, I3) = R0;
     R0 = DM(12, I3);                      // the track
-    SPARK_TRACK_PTRS;
+    SHOT_TRACK_PTRS;
     NOP; NOP; NOP;
     DK_SAMPLE_BANK_LOCK(R13);
-    DK_STRACK_CHECK_ADMISSION(I5, I1, R0, R1, _spark_render_denied, _spark_render_fault);
-    DK_STRACK_CHECK_EPOCH(I5, I3, 6, R0, R1, _spark_render_denied);
+    DK_STRACK_CHECK_ADMISSION(I5, I1, R0, R1, _shot_render_denied, _shot_render_fault);
+    DK_STRACK_CHECK_EPOCH(I5, I3, 6, R0, R1, _shot_render_denied);
     DK_STRACK_ACQUIRE(I1, R0);
     DK_SAMPLE_BANK_UNLOCK(R13);
-.GLOBAL _spark_render_acquired;
-_spark_render_acquired:
+.GLOBAL _shot_render_acquired;
+_shot_render_acquired:
     // One stereo read: R4 = the plane bases [base_l, base_r] (state words 7, 8), R8 = the output pointers [out, out_r] (state words 16, 17),
     // R12 = the cursor (state words 0 .. 5). The pointers are byte addresses of the state, which is how the adapters enter (finding 111).
     R0 = DM(DK_IN_W_OUT, I2);
@@ -114,14 +114,14 @@ _spark_render_acquired:
     R4 = R12 + R0;
     R0 = 64;                              // word 16 is 64 bytes on
     R8 = R12 + R0;
-    DK_CALL(_dk_sample_pcm16_stereo_linear, _spark_after_stereo);
+    DK_CALL(_dk_sample_pcm16_stereo_linear, _shot_after_stereo);
     MODIFY(I7, 1) (NW);
     DK_SAMPLE_BANK_LOCK(R13);
-    DK_STRACK_RELEASE(I1, R0, _spark_render_release_fault, _spark_render_released);
-_spark_render_release_fault:
+    DK_STRACK_RELEASE(I1, R0, _shot_render_release_fault, _shot_render_released);
+_shot_render_release_fault:
     DK_STRACK_FAIL_CLOSED(I5, I1, R0);
     DK_STRACK_POISON_COUNT(I1, R0);
-_spark_render_released:
+_shot_render_released:
     DK_SAMPLE_BANK_UNLOCK(R13);
     R0 = DM(5, I3);                       // done: DK_DONE (1) or DK_OK (0)
     R1 = DK_STEREO;
@@ -129,10 +129,10 @@ _spark_render_released:
     I13 = DM(14, I3);
     NOP; NOP; NOP;
     JUMP (M13, I13);
-_spark_render_fault:
+_shot_render_fault:
     DK_STRACK_FAIL_CLOSED(I5, I1, R0);
     DK_STRACK_POISON_COUNT(I1, R0);
-_spark_render_denied:
+_shot_render_denied:
     DK_SAMPLE_BANK_UNLOCK(R13);
     R1 = DM(DK_IN_W_OUT, I2);             // a silent block on both outputs, the voice ends
     I0 = R1;
@@ -140,9 +140,9 @@ _spark_render_denied:
     I4 = R1;
     R0 = 0;
     NOP; NOP; NOP;
-    LCNTR = 32, DO _spark_zero UNTIL LCE;
+    LCNTR = 32, DO _shot_zero UNTIL LCE;
         DM(I4, M6) = R0;
-_spark_zero: DM(I0, M6) = R0;
+_shot_zero: DM(I0, M6) = R0;
     R0 = 1;
     DM(5, I3) = R0;
     I13 = DM(14, I3);
@@ -153,7 +153,7 @@ _spark_zero: DM(I0, M6) = R0;
     JUMP (M13, I13);
 
 // (not at offset 0 of the image: an offset of 0 reads as "no note_on" in the manifest and the pack)
-_spark_note_on:
+_shot_note_on:
     I3 = R4;                              // the state (cleared by the adapter)
     I2 = R8;                              // the voice input
     I4 = R12;                             // the parameter words
@@ -163,17 +163,17 @@ _spark_note_on:
     R0 = DM(DK_IN_W_TRACK, I2);
     R1 = 15;
     COMP(R0, R1);
-    IF GT JUMP _spark_note_return;        // not a track of the table: no epoch, render ends the voice
+    IF GT JUMP _shot_note_return;        // not a track of the table: no epoch, render ends the voice
     DM(12, I3) = R0;
-    SPARK_TRACK_PTRS;
+    SHOT_TRACK_PTRS;
     NOP; NOP; NOP;
     DK_SAMPLE_BANK_LOCK(R13);
-    DK_STRACK_CHECK_ADMISSION(I5, I1, R0, R1, _spark_note_denied, _spark_note_fault);
-    DK_STRACK_LATCH_EPOCH(I5, I3, 6, R0, R1, _spark_note_denied);
+    DK_STRACK_CHECK_ADMISSION(I5, I1, R0, R1, _shot_note_denied, _shot_note_fault);
+    DK_STRACK_LATCH_EPOCH(I5, I3, 6, R0, R1, _shot_note_denied);
     DK_STRACK_ACQUIRE(I1, R0);
     DK_SAMPLE_BANK_UNLOCK(R13);
-.GLOBAL _spark_note_acquired;
-_spark_note_acquired:
+.GLOBAL _shot_note_acquired;
+_shot_note_acquired:
     R0 = DM(2, I5);                       // frames
     R1 = DM(3, I5);                       // source rate
     R2 = DM(4, I5);                       // channels
@@ -188,7 +188,7 @@ _spark_note_acquired:
     DM(8, I3) = R10;
     R1 = 1;                               // DK_STRACK_FMT_PCM16
     COMP(R3, R1);
-    IF NE JUMP _spark_note_release;       // not PCM16: stay done
+    IF NE JUMP _shot_note_release;       // not PCM16: stay done
     R9 = DM(0, I4);                       // START word
     R10 = DM(1, I4);                      // END word
     F11 = FLOAT R0;                       // frames
@@ -206,53 +206,53 @@ _spark_note_acquired:
     DM(0, I3) = R2;
     DM(1, I3) = R3;
     COMP(R2, R3);
-    IF GE JUMP _spark_note_release;       // empty: stay done
+    IF GE JUMP _shot_note_release;       // empty: stay done
     DM(2, I3) = R2;                       // forward: the first frame is START
     R0 = DM(2, I4);                       // REVERSE word
     R1 = 0x4000;
     COMP(R0, R1);
-    IF LT JUMP _spark_note_forward;
+    IF LT JUMP _shot_note_forward;
     R0 = R3 - 1;
     DM(2, I3) = R0;                       // reverse: the first frame is END - 1
     R0 = 1;
     DM(13, I3) = R0;
-_spark_note_forward:
+_shot_note_forward:
     R0 = 0;
     DM(5, I3) = R0;                       // playing
-_spark_note_release:
+_shot_note_release:
     DK_SAMPLE_BANK_LOCK(R13);
-    DK_STRACK_RELEASE(I1, R0, _spark_note_release_fault, _spark_note_released);
-_spark_note_release_fault:
+    DK_STRACK_RELEASE(I1, R0, _shot_note_release_fault, _shot_note_released);
+_shot_note_release_fault:
     DK_STRACK_FAIL_CLOSED(I5, I1, R0);
     DK_STRACK_POISON_COUNT(I1, R0);
-_spark_note_released:
+_shot_note_released:
     DK_SAMPLE_BANK_UNLOCK(R13);
-    JUMP _spark_note_return;
-_spark_note_fault:
+    JUMP _shot_note_return;
+_shot_note_fault:
     DK_STRACK_FAIL_CLOSED(I5, I1, R0);
     DK_STRACK_POISON_COUNT(I1, R0);
-_spark_note_denied:
+_shot_note_denied:
     DK_SAMPLE_BANK_UNLOCK(R13);
-_spark_note_return:
+_shot_note_return:
     R0 = 0;
     NOP;
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
 // The track table (<dk/sample_track.h>): the runtime fills the records and moves the control words; the module only reads them.
-.PKDATA _spark_rec, 512;                  // 16 dk_strack records of 8 words
-.PKDATA _spark_ctl, 256;                  // 16 control sets of 4 words: closed, count, fault, reserved
+.PKDATA _shot_rec, 512;                  // 16 dk_strack records of 8 words
+.PKDATA _shot_ctl, 256;                  // 16 control sets of 4 words: closed, count, fault, reserved
 // dk_machine_desc: magic, contract (machine contract 1.2: stereo), n_params, voices, state_bytes, state_clear_bytes, max_cycles_block,
 // max_cycles_note_on, max_call_depth, stack_bytes. Cycles are instruction ceilings: the stereo kernel's 4,396 with its call, the rate (exp2 and
 // about 60 more) and the two masked scopes; note-on adds about 150 and one render.
-.GLOBAL _spark_desc;
-.VAR _spark_desc = DK_MAGIC;
-.VAR _spark_desc1 = 257;                  // DK_MACHINE_V1 | DK_MACHINE_STEREO (an expression is not accepted here)
-.VAR _spark_desc2 = 4;
-.VAR _spark_desc3 = DK_MAX_VOICES;
-.VAR _spark_desc4 = 72;
-.VAR _spark_desc5 = 72;
-.VAR _spark_desc6 = 4800;
-.VAR _spark_desc7 = 5000;
-.VAR _spark_desc8 = 3;
-.VAR _spark_desc9 = 192;
+.GLOBAL _shot_desc;
+.VAR _shot_desc = DK_MAGIC;
+.VAR _shot_desc1 = 257;                  // DK_MACHINE_V1 | DK_MACHINE_STEREO (an expression is not accepted here)
+.VAR _shot_desc2 = 4;
+.VAR _shot_desc3 = DK_MAX_VOICES;
+.VAR _shot_desc4 = 72;
+.VAR _shot_desc5 = 72;
+.VAR _shot_desc6 = 4800;
+.VAR _shot_desc7 = 5000;
+.VAR _shot_desc8 = 3;
+.VAR _shot_desc9 = 192;

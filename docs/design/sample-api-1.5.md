@@ -116,7 +116,7 @@ Key = (device, slot, project name). The current project slot byte is an anchor: 
 
 ### 2.5 Content modules
 
-A SPARK machine or picker sees only `dk/sample_track.h`: no slot, no address, no device.
+A SHOT machine or picker sees only `dk/sample_track.h`: no slot, no address, no device.
 
 ## 3. Lifecycle (per track)
 
@@ -185,7 +185,7 @@ Copies the NUL-terminated, root-relative path of the track's current selection i
 | DT2 | `/` (+Drive) | `/KICKS/K1` | a path that starts with `/` (the 1.5 form) is kept as it is |
 | DN2 | `samples/` (digikit store) | `samples/KICKS/K1` | nothing: always root-relative, so a folder called `samples` works |
 
-The rooted path must stay under 256 bytes (`E_SEL_PATH` otherwise). The stored selections keep the rooted form; `sample_track_path` cuts the root off again. The spark-dt2 test and the `test/track-select` fixture pass absolute DT2 paths and keep working.
+The rooted path must stay under 256 bytes (`E_SEL_PATH` otherwise). The stored selections keep the rooted form; `sample_track_path` cuts the root off again. The shot-dt2 test and the `test/track-select` fixture pass absolute DT2 paths and keep working.
 
 ### 6.3 `dk_ui_tick` (G4, `<dk/ui.h>`, `DK_UI_CAP_TICK`)
 
@@ -228,4 +228,4 @@ int32_t dkrt_store_read(const DkrtStoreFile *f, uint32_t sector, uint32_t count,
 
 ### 6.7 Api minor of a `.dkm`
 
-`pack` declares the lowest Api minor that has what the module needs: 1.4; 1.5 when the DSP section holds a track table (as before); the newest `since` of the entries the manifest lists in `[module] uses_api = ["sample_track_path"]` when that is higher; never above the SDK's. A module declares 1.6 only when it lists a 1.6 entry. The packer cannot see a call through `api->...`, so a module that calls `sample_track_path` without a check lists it; a module that checks `api->size` first (the SPARK picker route) lists nothing and stays loadable on a 1.5 runtime. `dk_ui_tick` is an import of `core/ui`, not an Api entry: it needs no `uses_api` and no minor.
+`pack` declares the lowest Api minor that has what the module needs: 1.4; 1.5 when the DSP section holds a track table (as before); the newest `since` of the entries the manifest lists in `[module] uses_api = ["sample_track_path"]` when that is higher; never above the SDK's. A module declares 1.6 only when it lists a 1.6 entry. The packer cannot see a call through `api->...`, so a module that calls `sample_track_path` without a check lists it; a module that checks `api->size` first (the SHOT picker route) lists nothing and stays loadable on a 1.5 runtime. `dk_ui_tick` is an import of `core/ui`, not an Api entry: it needs no `uses_api` and no minor.

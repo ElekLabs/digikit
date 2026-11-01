@@ -1,5 +1,5 @@
-/* The machine declaration of digikit/spark: one stereo machine `spark` that plays the sample bound to the track it runs on, with four
-   parameters on one page. patchkit pack reads these records; the device never sees them. The DSP symbols are in src/dsp/spark.s;
+/* The machine declaration of digikit/shot: one stereo machine `shot` that plays the sample bound to the track it runs on, with four
+   parameters on one page. patchkit pack reads these records; the device never sees them. The DSP symbols are in src/dsp/shot.s;
    the parameter words are read there in this order: START, END, REVERSE, PITCH.
    The sample comes from the runtime's per-track table (<dk/sample_track.h>): the module only plays; it never selects a file. */
 #include <dk/api.h>
@@ -8,16 +8,16 @@
 #include <dk/sample_track.h>
 #include <dk/ui.h>
 
-DK_MACHINE(spark, .name = "SPARK", .short_name = "SPK", .render = "_spark_render",
-           .note_on = "_spark_note_on", .desc = "_spark_desc", .stereo = 1);
+DK_MACHINE(shot, .name = "SHOT", .short_name = "SPK", .render = "_shot_render",
+           .note_on = "_shot_note_on", .desc = "_shot_desc", .stereo = 1);
 /* START and END: 0 .. 127 spread over the whole sample (127 is its last frame boundary). REVERSE: 64 and above plays backwards.
    PITCH: 64 is the played note unchanged, each unit is 0.375 semitones, so 0 .. 127 is -24 .. +23.6 semitones. */
-DK_PARAM(spark, 0, spark_start, "Start", "START", 0, 127, 0);
-DK_PARAM(spark, 1, spark_end, "End", "END", 0, 127, 127);
-DK_PARAM(spark, 2, spark_reverse, "Reverse", "REV", 0, 127, 0);
-DK_PARAM(spark, 3, spark_pitch, "Pitch", "PITCH", 0, 127, 64);
-DK_PAGE(spark, "SPK", "SPARK", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2), DK_KNOB(3));
-DK_SAMPLE_TRACKS(0, _spark_rec, _spark_ctl);
+DK_PARAM(shot, 0, shot_start, "Start", "START", 0, 127, 0);
+DK_PARAM(shot, 1, shot_end, "End", "END", 0, 127, 127);
+DK_PARAM(shot, 2, shot_reverse, "Reverse", "REV", 0, 127, 0);
+DK_PARAM(shot, 3, shot_pitch, "Pitch", "PITCH", 0, 127, 64);
+DK_PAGE(shot, "SPK", "SHOT", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2), DK_KNOB(3));
+DK_SAMPLE_TRACKS(0, _shot_rec, _shot_ctl);
 
 static uint32_t tracks; /* the runtime's handle of the 16-track table; the picker and the store select files with it */
 
@@ -43,9 +43,9 @@ void dkm_fini(const dk_api *api)
 }
 
 /* SETTINGS... of this module in DIGIKIT > MODULES: the sample picker (sdk/src/sample_picker.c). */
-static void spark_menu(dk_ui_menu *m, void *ctx)
+static void shot_menu(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
     dk_picker_open(m);
 }
-DK_MENU(spark_menu)
+DK_MENU(shot_menu)

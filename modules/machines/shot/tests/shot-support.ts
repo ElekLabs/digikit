@@ -5,11 +5,11 @@ import { expect } from 'vitest';
 import type { PatchedSession } from '../../../../tests/regression/support.ts';
 import { memory, panel, record } from '../../../../tests/regression/runtime/live.ts';
 
-// Helpers of the SPARK device tests (spark-dn2, spark-picker): WAV fixtures, the track table requests of test/track-select, PCM capture with the
-// key held and the tone measurements on it. spark-dt2.test.ts has its own copies of the same code (it passed before they were split out).
+// Helpers of the SHOT device tests (shot-dn2, shot-picker): WAV fixtures, the track table requests of test/track-select, PCM capture with the
+// key held and the tone measurements on it. shot-dt2.test.ts has its own copies of the same code (it passed before they were split out).
 
 export const RATE = 48000;
-export const HANDLE = 1; // the first module with a track table (digikit/spark)
+export const HANDLE = 1; // the first module with a track table (digikit/shot)
 
 /** A PCM16 48 kHz WAV: one sine per channel (`hz` has one entry for mono, two for stereo), amplitude 14000 times `shape(frame)`.
  * `hz` can also be a function of the frame (a sample that changes its tones over time). */

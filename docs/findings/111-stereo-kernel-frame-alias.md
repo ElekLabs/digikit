@@ -1,6 +1,6 @@
 # Stereo PCM16 kernel and the adapter's byte-alias frame
 
-**[D]** Found while building `digikit/spark` on the concrete SHARC+ core through `core/dsp-voice` (model tests, no emulator). Fixed in the kernel.
+**[D]** Found while building `digikit/shot` on the concrete SHARC+ core through `core/dsp-voice` (model tests, no emulator). Fixed in the kernel.
 
 - The adapters enter a module with a byte-alias `I6` (byte addresses, `0x2009...`; see `tests/fixtures/modules/sample-proof`, "actual adapters
   enter through JUMP with byte-alias I6"). A `DM(-n, I6)` offset counts words (4 bytes each); pointer arithmetic on `I6` or on a state pointer
@@ -13,7 +13,7 @@
   byte-alias `I6` and `I7` (`4 * normal-word address`).
 - Guard: `test_right_channel_is_not_silent_under_the_adapter_byte_alias_frame` and the parametrised kernel test fail on the old `I6 - 11`
   (40 of 47 tests fail with it).
-- SPARK uses this kernel for every sample. A mono sample plays with `base_r = base_l`. The earlier workaround (two mono calls over a state copy of
+- SHOT uses this kernel for every sample. A mono sample plays with `base_r = base_l`. The earlier workaround (two mono calls over a state copy of
   the cursor) is removed.
-- Related adapter facts used by SPARK: the state pointer (`R4`) and `in->out` are byte addresses; a `dk_strack` record and the PCM planes are
+- Related adapter facts used by SHOT: the state pointer (`R4`) and `in->out` are byte addresses; a `dk_strack` record and the PCM planes are
   normal-word addresses (`LSHIFT BY -2` of a data symbol gives one).

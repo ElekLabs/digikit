@@ -49,12 +49,12 @@ there is no outstanding reservation-choice request and no approved reservation p
   helper). Fix in the build phase.
 - Working rule for the design phase: static work, docs and design only. Run the
   emulator only when the run decides a design question.
-- First slice proven on DT2 in the emulator (`spark-dt2.test.ts`): API 1.5
+- First slice proven on DT2 in the emulator (`shot-dt2.test.ts`): API 1.5
   select in about 0.7-0.8 s, borrowed pool, stop-old-notes on reselect, stock
   reset detected and reloaded with a new token, contract 1.2 stereo split via
   the pair gate ([finding 112](../findings/112-dt2-pair-gate.md)).
 - Open: the pitch phase (the PITCH knob has no effect; being investigated), the
-  gate anchor, the finding 111 decision (fix the stereo kernel or keep SPARK's
+  gate anchor, the finding 111 decision (fix the stereo kernel or keep SHOT's
   double-mono workaround), the DN2 stereo cost, the picker (slice 2).
 - Proposed, not yet decided by Em: the minimal first-release recovery scope.
 
@@ -959,7 +959,7 @@ pass with the changed consumer; no actual bank reopening is claimed.
 ## Objective and scope
 
 Extend the device-independent module SDK with reusable DSP operations, migrate existing machines and effects,
-and build a first one-shot sampler for Digitakt II OS 1.17 and Digitone II OS 1.12. Working name: SPARK (not final).
+and build a first one-shot sampler for Digitakt II OS 1.17 and Digitone II OS 1.12. Name: SHOT.
 Initial musical scope: full-stereo sample selection, start/end, reverse, and normal note pitch
 on both devices, with 16 tracks sharing a deduplicated project pool and no fixed
 per-track partitions. Long-sample limits follow real capacity and supported formats;
