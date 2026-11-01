@@ -95,6 +95,8 @@ for (const device of DEVICES) {
           policy: 'default',
         },
         initial: 'dry',
+        // Dry audibility and full relative PCM below own the legacy level thresholds.
+        requireAudible: false,
         presets: {
           dry: { selection: ['modules/m0.dkm'] },
           full: { selection: inventory.map((_, index) => `modules/m${index}.dkm`) },
