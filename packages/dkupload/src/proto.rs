@@ -327,7 +327,7 @@ pub fn path_body(path: &str) -> Result<Vec<u8>, Error> {
 }
 
 /// Most bytes one READ returns (the device caps the reply body at 880 bytes).
-pub const READ_MAX: u32 = 768;
+pub const READ_MAX: u32 = crate::gen_proto::READ_MAX as u32;
 /// The size of a .dkm header (docs/design/digikit-dkm.md).
 pub const HEADER_BYTES: u32 = 0xa0;
 

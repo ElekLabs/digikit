@@ -106,8 +106,7 @@ pub const CMD_HEALTH: u32 = 6;
 /// buffer and answers its result (0, `E_RANGE` or `E_CARD_RO`). The proof uses it with sectors outside the store range and on a card that
 /// is not ours; it never targets a sector of a store that is ours.
 pub const CMD_CARD_PROBE: u32 = 7;
-/// Test hook: `arg[0]` = 1 or 0: `dkrt_debug_set` (the menu's DEBUG row); the answer is its result.
-pub const CMD_DEBUG: u32 = 8;
+// Mailbox command 8 was the debug switch (removed: the debug module being loaded is the switch).
 /// Test hooks of the settings store (`settings.rs` of the runtime): `arg` = `u8 key_len`, the key, `u8 value_len`, the value (96 bytes in all). `CMD_SETTINGS_PUT` and
 /// `CMD_SETTINGS_REMOVE` answer their result; `CMD_SETTINGS_GET` answers the value's length (or a negative code) and leaves the value at the start of `arg`;
 /// `CMD_SETTINGS_FLUSH` writes the record now (the runtime writes it 2 s after the last change).
@@ -129,10 +128,8 @@ pub mod sel {
     pub const VERSION: u32 = 1;
     // The absolute sectors of the two copies are `store::Layout::sel_a` and `sel_b`: the end of the store area, which differs per device.
 
-    /// `Record::flags` bit 0: start in safe mode once. Bit 1: the debug log is OFF (the zero value of the field means ON, so an older record
-    /// and a card with no record log by default).
+    /// `Record::flags` bit 0: start in safe mode once. Bit 1 is reserved (it was the debug-off flag; the runtime ignores it and does not write it).
     pub const FLAG_SAFE_ONCE: u32 = 1;
-    pub const FLAG_DEBUG_OFF: u32 = 2;
 
     #[derive(Clone, Copy)]
     pub struct Record {
@@ -292,7 +289,7 @@ pub mod fault;
 /// off), five argument words.
 /// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the contract version numbers (`contract`).
 mod gen_sdk;
-pub use gen_sdk::{contract, logk, proto};
+pub use gen_sdk::{contract, limits, logk, proto};
 
 #[cfg(test)]
 mod tests {

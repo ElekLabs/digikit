@@ -1,11 +1,11 @@
-# Reciprocal seed fidelity: documentation and measurement boundary
+# Reciprocal seed fidelity: what the public documentation says
 
-**[D]** The inspected public documentation does not specify a uniquely
-reconstructible RECIPS seed table. The SHARC+ Programming Reference Rev. 1.5,
-printed page 20-17 (PDF page 472), describes a ROM indexed by the seven leading
-fraction bits, result exponent -e-1, and preserved input sign. It provides neither
-128 mantissa values nor an exact selection/rounding prescription. An accuracy
-bound alone does not select the exact bits.
+**[D]** The inspected public documentation does not specify the RECIPS seed table.
+The SHARC+ Programming Reference Rev. 1.5, printed page 20-17 (PDF page 472),
+describes a ROM indexed by the seven leading fraction bits, result exponent -e-1,
+and preserved input sign. It provides neither 128 mantissa values nor an exact
+selection/rounding prescription. An accuracy bound alone does not select the exact
+bits.
 
 Primary sources:
 
@@ -15,29 +15,7 @@ Primary sources:
 
 Four targeted official-domain searches found no exact table or rounding rule.
 This is a bounded search result, not proof that no public specification exists.
-No vendor toolchain material was used. No instruction semantics were changed.
+No vendor toolchain material was used.
 
-## Smallest useful measurement
-
-**[O]** A trusted one-instruction device diagnostic could cover all documented
-indices with 128 positive normal input words `0x3f800000 | (index << 16)`.
-Capture the full raw 40-bit result immediately after RECIPS, before arithmetic
-or format conversion. Newton-refined outputs do not reliably recover the seed.
-A trustworthy full-register readback path has not yet been established here.
-
-For a credible exact implementation, also check within-bin endpoints (input OR
-`0xffff`), precision/rounding settings, and a small sign/exponent/special-value
-matrix. Record modes, device identity, raw outputs and repeatability. Differences
-between modes would expand the model. This is a proposed measurement, not a
-built or executed hardware probe, and it does not authorize hardware access.
-
-Effort estimate, conditional on the missing path: a few hours for collection if
-trusted instruction execution and full-register readback already exist; roughly
-a day to establish that path otherwise. Exact implementation plus both-device
-regeneration and validation could then take another one to three days if the
-measurements are sufficient. These are planning estimates, not completion dates.
-
-The existing qualified approximation remains useful for bounded replay cases;
-it is not an exact ROM model. Fixing the exact seed is a separate workstream with
-hardware-input and regeneration prerequisites, not a reason to silently alter
-core semantics during sampler integration.
+The seed tables of RECIPS and RSQRTS come from a measurement on a Digitakt II, not
+from documentation: see [finding 102](102-recips-rsqrts-seed-tables.md).

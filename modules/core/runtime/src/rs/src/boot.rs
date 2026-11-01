@@ -128,24 +128,6 @@ unsafe fn path_ok(p: *const u8) -> bool {
     false
 }
 
-/// `dkrt_debug_set`: the debug log level now, and in the selection record's flags (bit 1 set = OFF, so the card's zero is ON).
-pub unsafe fn debug_set(on: bool) -> i32 {
-    dlog::set_debug(on);
-    dlog::ev(logk::DEBUG_SET, logk::F_ERROR, [on as u32, 0, 0, 0, 0]);
-    if !card::writable() {
-        return E_CARD_RO;
-    }
-    let (cur, copy) = current();
-    let valid = cur.is_some();
-    let mut r = cur.unwrap_or(Record::empty());
-    let want = if on { r.flags & !sel::FLAG_DEBUG_OFF } else { r.flags | sel::FLAG_DEBUG_OFF };
-    if valid && want == r.flags {
-        return OK;
-    }
-    r.flags = want;
-    update(r, copy, valid)
-}
-
 /// `dkrt_selection_get`.
 pub unsafe fn selection_get(out: *mut DkrtSelection) -> i32 {
     let (r, _) = current();
@@ -177,7 +159,7 @@ pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
     r.boot_counter = cur.boot_counter;
     r.stable_blocks = cur.stable_blocks;
     r.map = cur.map; // the sticky machine types survive a new selection
-    r.flags = (s.flags & sel::FLAG_SAFE_ONCE) | (cur.flags & sel::FLAG_DEBUG_OFF);
+    r.flags = s.flags & sel::FLAG_SAFE_ONCE;
     r.count = s.count;
     k = 0;
     while k < s.count as usize {
@@ -205,7 +187,7 @@ pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
     r.boot_counter = cur.boot_counter;
     r.stable_blocks = cur.stable_blocks;
     r.map = cur.map; // the sticky machine types survive a new selection
-    r.flags = (s.flags & sel::FLAG_SAFE_ONCE) | (cur.flags & sel::FLAG_DEBUG_OFF);
+    r.flags = s.flags & sel::FLAG_SAFE_ONCE;
     r.count = s.count;
     let mut k = 0;
     while k < s.count as usize {
@@ -277,7 +259,6 @@ pub unsafe extern "C" fn dkrt_boot() {
     let (rec, copy) = current();
     let valid = rec.is_some();
     let mut r = rec.unwrap_or(Record::empty());
-    dlog::set_debug(r.flags & sel::FLAG_DEBUG_OFF == 0);
     dlog::ev(logk::BOOT_START, dlog::INFO, [RUNTIME_VERSION, crate::device(), r.stable_blocks, r.seq, r.boot_counter]);
     // the card's area: ours, blank or neither (read-only), before anything is written
     card::check();

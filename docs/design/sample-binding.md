@@ -96,7 +96,7 @@ See [reply ownership](../findings/88-dn2-reply-ownership.md) and
 The production pool still needs a reservation and lifetime contract on each
 device. DT2 project sample memory and DN2 configured DDR geometry cannot be
 treated as interchangeable allocators. Output-pointer derivation is resolved in
-[the DN2 DDR audit](../findings/91-dn2-ddr-configuration.md); ownership, lifetime
+[the DN2 DDR audit](../findings/106-dn2-ddr-configuration.md); ownership, lifetime
 and coexistence remain unresolved. Continue from those obligations rather than
 repeating the bounded fixed-object rings or assuming a high address is free.
 Storage/source validation, checked destination extents, cache behavior,

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tools.device import dkneeds
+from tools.device.dkproto import ARENA_HDR, DKM_HEADER, GRANULE, MAX_VOICES
 from tools.patchkit import pk_device
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,10 +35,9 @@ E_DSP_FORMAT, E_DSP_NOSPACE, E_DSP_ROWS, E_DSP_TYPE = -31, -33, -34, -37
 E_SEL_PATH, E_SEL_COUNT = -40, -41
 LOADED = "loaded"
 
-HDR = 16  # the arena's block header (arena.rs)
-DKM_HEADER = 0xA0  # a .dkm with no tables: the file is the header, then the image
-DSP_GRANULE = 64  # the DSP area is handed out in 64-byte granules (dsp.rs)
-MAX_VOICES = 8  # voices in one DSP section (dsp.rs)
+# the loader's format limits ([limits.format] of sdk/sdk.toml)
+HDR = ARENA_HDR  # the arena's block header
+DSP_GRANULE = GRANULE  # the DSP area is handed out in granules
 CODE = 4  # the synthetic module's code: moveq #0,d0; rts
 
 

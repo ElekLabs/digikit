@@ -66,7 +66,7 @@ class SharcObject:
     # Data sections (DM): name -> (bytes in memory order, alignment, is_bss); data symbols: name -> (section, byte offset, global)
     data: dict[str, tuple[bytes, int, bool]] = field(default_factory=dict)
     data_symbols: dict[str, tuple[str, int, bool]] = field(default_factory=dict)
-    # what `link` hands to `patchkit sharc link`: ("text", source) or ("elf", object bytes, source, assembly)
+    # what `link` hands to `patchkit sharc link`: ("text", source) or ("elf", object bytes, source)
     origin: tuple = ()
 
 
@@ -100,18 +100,10 @@ def _input_args(origin: tuple, tmp: Path) -> list[str]:
     if origin[0] == "text":
         (tmp / "m.s").write_text(origin[1])
         return ["--text", str(tmp / "m.s")]
-    _, elf, source, asm = origin
+    _, elf, source = origin
     (tmp / "m.doj").write_bytes(elf)
     (tmp / "m.src").write_text(source)
-    (tmp / "m.asm").write_text(asm)
-    return [
-        "--elf",
-        str(tmp / "m.doj"),
-        "--source",
-        str(tmp / "m.src"),
-        "--asm",
-        str(tmp / "m.asm"),
-    ]
+    return ["--elf", str(tmp / "m.doj"), "--source", str(tmp / "m.src")]
 
 
 def _object(origin: tuple) -> SharcObject:
@@ -134,13 +126,13 @@ def _object(origin: tuple) -> SharcObject:
 
 
 def assemble(source: str) -> SharcObject:
-    """Selache assembles `source` (an expanded text); the guards, the fix-ups and the instruction check of the build apply."""
+    """Selache assembles `source` (an expanded text); the instruction check of the build applies."""
     return _object(("text", source))
 
 
 def compile_c(source: str) -> SharcObject:
-    """Selache's C compiler (selcc); evaluated in docs/findings/20-patch-toolchains.md. Its assembly passes the same source check as
-    hand-written assembly."""
+    """Selache's C compiler (selcc); evaluated in docs/findings/20-patch-toolchains.md. Its object passes the same instruction check as
+    an assembled one."""
     sel = pk_toolchains.selache_dir()
     if sel is None:
         raise PkSharcError(
@@ -148,17 +140,16 @@ def compile_c(source: str) -> SharcObject:
         )
     selcc = str(sel / "target" / "release" / "selcc")
     with tempfile.TemporaryDirectory(prefix="pk-sharc-") as d:
-        src, obj, asm = Path(d) / "m.c", Path(d) / "m.doj", Path(d) / "m.s"
+        src, obj = Path(d) / "m.c", Path(d) / "m.doj"
         src.write_text(source)
-        for flag, out in (("-S", asm), ("-c", obj)):
-            r = subprocess.run(
-                [selcc, "-proc", PROCESSOR, flag, "-o", str(out), str(src)],
-                capture_output=True,
-                text=True,
-            )
-            if r.returncode:
-                raise PkSharcError(f"selcc failed:\n{r.stdout}{r.stderr}")
-        return _object(("elf", obj.read_bytes(), source, asm.read_text()))
+        r = subprocess.run(
+            [selcc, "-proc", PROCESSOR, "-c", "-o", str(obj), str(src)],
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode:
+            raise PkSharcError(f"selcc failed:\n{r.stdout}{r.stderr}")
+        return _object(("elf", obj.read_bytes(), source))
 
 
 def link(
@@ -239,7 +230,6 @@ def run_call(
     reads: dict[str, tuple[int, int]] | None = None,
     max_steps: int = 100000,
     return_sw: int = 0xB9F000,
-    approx_recips: bool = False,
     others: tuple[Linked, ...] = (),
     read_regs: tuple[str, ...] = (),
     extra_breaks: tuple[int, ...] = (),
@@ -278,7 +268,6 @@ def run_call(
         start,
         regs=regs or {},
         breakpoints=[return_sw, *extra_breaks],
-        approx_recips=approx_recips,
     )
     runner._cache = _DECODE_CACHES.setdefault(cache_key, {})
     for addr, word in (dm_words or {}).items():
@@ -338,7 +327,6 @@ class CallSession:
         linked: list[Linked],
         return_sw: int,
         breaks: tuple[int, ...] = (),
-        approx_recips: bool = False,
         base_memory: LoadedMemory | None = None,
     ) -> None:
         from tools.sharc_dev import sharc_run
@@ -373,7 +361,6 @@ class CallSession:
             linked[0].base_sw,
             regs={},
             breakpoints=[return_sw, *breaks],
-            approx_recips=approx_recips,
         )
         if base_memory is None:
             self.runner._cache = _DECODE_CACHES.setdefault(cache_key, {})

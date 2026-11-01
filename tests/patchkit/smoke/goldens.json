@@ -1,6 +1,6 @@
 {
  "dn2-1.12/core/digikit-menu/boot/main": "c7f7475bd43858a16bd173a05aab441e0bff2ba148a58b874457b2bf111e0b86",
- "dn2-1.12/core/digikit-menu/core.digikit-menu.menu/digikit": "6faa5637088254d93afe1e2ac38c7285ab1d8ab51f3b5f3625d66e3158bdfaf8",
+ "dn2-1.12/core/digikit-menu/core.digikit-menu.menu/digikit": "79c3bf7e5fcd32cf05ff2f049510d2edfae5732c29502ddcf8d620f0fa0609ef",
  "dn2-1.12/core/digikit-menu/core.digikit-menu.menu/digikit_memory": "9711386eb869d9f5f2061b214020d4313986965efa758bd39fa2ca5db4cd821b",
  "dn2-1.12/core/digikit-menu/core.digikit-menu.menu/settings_digikit": "be52a179611a778a52cfe20dc52553580acc28efcb5fdd304789cea21aaccaf3",
  "dn2-1.12/core/digikit-menu/machine_menu/closed": "c7f7475bd43858a16bd173a05aab441e0bff2ba148a58b874457b2bf111e0b86",
@@ -123,7 +123,7 @@
  "dn2-1.12/test/cf-demo/track/track1": "2b0b0903810ba7df34ea4a421f2cf37571117dae52b3151e1610a25264736abb",
  "dn2-1.12/test/cf-demo/track/track2": "a8ce60f553cb545e99e2b9567003a25d96afd16eeb0fbbcd30db90e6db548a97",
  "dt2-1.17/core/digikit-menu/boot/main": "101c51af5a051a953867e4ffa7b0141e175ecf077351f2ec89a0da4a73e7cf50",
- "dt2-1.17/core/digikit-menu/core.digikit-menu.menu/digikit": "6faa5637088254d93afe1e2ac38c7285ab1d8ab51f3b5f3625d66e3158bdfaf8",
+ "dt2-1.17/core/digikit-menu/core.digikit-menu.menu/digikit": "79c3bf7e5fcd32cf05ff2f049510d2edfae5732c29502ddcf8d620f0fa0609ef",
  "dt2-1.17/core/digikit-menu/core.digikit-menu.menu/digikit_memory": "9711386eb869d9f5f2061b214020d4313986965efa758bd39fa2ca5db4cd821b",
  "dt2-1.17/core/digikit-menu/core.digikit-menu.menu/settings_digikit": "be52a179611a778a52cfe20dc52553580acc28efcb5fdd304789cea21aaccaf3",
  "dt2-1.17/core/digikit-menu/machine_menu/closed": "101c51af5a051a953867e4ffa7b0141e175ecf077351f2ec89a0da4a73e7cf50",

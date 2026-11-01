@@ -116,7 +116,7 @@ folder. This is documented stock capacity from that manual version, not a measur
 our DT2 1.17 adapter. The 512 KiB DT2 / 320 KiB DN2 reservations above are digikit module-pool choices, **not
 hardware sample-memory limits**. The ten-second target cannot fit even raw PCM16 in either current reservation.
 
-**[D]** Current DT2 1.17 static candidates in [finding 77](77-dsp-sdk-sampler-discovery.md) are slot table
+**[D]** Current DT2 1.17 static candidates in [finding 104](104-dsp-sdk-sampler-discovery.md) are slot table
 `0x257810`, rebased DSP address `0x8422b9c8`, and page-copy routine `0x1c403c`. **[O]** Slot lifetime, reclamation,
 allocation ownership and cache/coherence rules remain unproved. These candidates do not verify an allocator;
 older [V] marks or observations on other images do not transfer to this adapter.

@@ -2,7 +2,7 @@
 
 2026-10-29, following SDK checkpoint `4cd29a3c`. DT2 1.17 and DN2 1.12. **[D]** source/database
 observations; **[O]** design or unresolved behavior. No new firmware execution or hardware timing.
-Nothing here is [V]. See [finding 77](77-dsp-sdk-sampler-discovery.md) and
+Nothing here is [V]. See [finding 104](104-dsp-sdk-sampler-discovery.md) and
 [the implementation plan](../plans/dsp-sdk-and-sampler.md).
 
 ## DT2 source acquisition

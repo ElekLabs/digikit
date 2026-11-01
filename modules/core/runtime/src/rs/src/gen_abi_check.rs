@@ -12,7 +12,6 @@ const _: sig::dkrt_capacity = crate::dkrt_capacity;
 const _: sig::dkrt_blocks = crate::dkrt_blocks;
 const _: sig::dkrt_poll_set = crate::dkrt_poll_set;
 const _: sig::dkrt_diag = crate::dkrt_diag;
-const _: sig::dkrt_debug_set = crate::dkrt_debug_set;
 const _: sig::dkrt_store_list = crate::dkrt_store_list;
 const _: sig::dkrt_module_header = crate::dkrt_module_header;
 const _: sig::dkrt_selection_get = crate::dkrt_selection_get;

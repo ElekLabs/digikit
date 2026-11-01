@@ -11,12 +11,15 @@
     uv run python -m tools.device.dkupload --emu settings [-o FILE] [--json]   # the settings record (read only); FILE goes to `patchkit store dump --record FILE`
     uv run python -m tools.device.dkupload --emu --run-dir out/runs/patchkit/run-dev-DEVICE put build/m.dkm   # the daemon of `mise run patch:dev` (pk_dev), not the desktop app's
     uv run --with python-rtmidi python -m tools.device.dkupload --port Digitakt info    # a real device (not exercised in CI)
+    uv run python -m tools.device.dkupload --winmm "Digitone II" info      # a real device on Windows, winmm (tools/device/winmidi.py, no package)
+    uv run python -m tools.device.dkupload --winmm "Digitone II" put s.wav samples/s.wav --chunk 8192 --depth 1 --timing put.jsonl   # timed
     uv run python -m tools.device.dkupload --emu remote state              # digikit/remote (docs/plans/remote-control.md): the module state
     uv run python -m tools.device.dkupload --emu remote key 10             # press and release a key (the device file's panel code); --hold S keeps it down
     uv run python -m tools.device.dkupload --emu remote turn 1 -5          # turn encoder 1 by -5 detents
 
 `put FILE [PATH]` streams FILE (read from disk in chunks, so a large sample is not held in memory) to PATH (default: `modules/<file name>`) in chunks of at most 32 KiB, two requests in flight, and
-checks the file's sha256 on the device (END reads the staged file back from the card). It changes only the module store; an uploaded
+checks the file's sha256 on the device (END reads the staged file back from the card). `--chunk` and `--depth` set the chunk size and the
+requests in flight; `put` prints a timing line (tools/device/dktiming.py) and `--timing FILE` keeps every request and reply as JSON lines. It changes only the module store; an uploaded
 module appears in DIGIKIT > MODULES and loads after APPLY & RESTART (or `tools.device.dkrun`, which also selects and restarts).
 
 Python (the kept scenarios use it): ``Uploader(EmuTransport(emu))`` or ``Uploader(RtMidiTransport("Digitakt"))``. The framing is
@@ -48,17 +51,16 @@ from tools.device.dkproto import (
     CMD_END,
     CMD_INFO,
     CMD_LIST,
-    CMD_LOG,
-    CMD_LOGCFG,
     CMD_MKDIR,
     CMD_MODULES,
-    CMD_PEEK,
     CMD_READ,
     CMD_RESTART,
     CMD_SELECT,
     CMD_SETTINGS,
     CMD_VERIFY,
     LOAD_STATUS,
+    MAX_CHUNK,
+    READ_MAX,
     VERSION,
 )
 from tools.device.midisniff import unpack_8in7
@@ -66,10 +68,8 @@ from tools.firmware.build import encode_8in7
 
 PREFIX = bytes((0xF0, 0x7D, 0x64, 0x6B))
 CLEAR_MAGIC = 0x434C5221
-MAX_CHUNK = 32768
 DEPTH = 2
 E_OFFSET = next(c for c, (n, _) in dkproto.STATUS.items() if n == "E_OFFSET")
-READ_MAX = 768  # most bytes one READ returns (the reply body is at most 880 bytes)
 HEADER_BYTES = 0xA0  # a .dkm header (docs/design/digikit-dkm.md)
 
 # status code -> name: the upload statuses, and the load and selection codes (SELECT answers them as the menu's APPLY gets them)
@@ -255,12 +255,22 @@ class RtMidiTransport:
 
 
 class Uploader:
-    """The host side of docs/design/digikit-upload.md over a transport with `send(bytes)` and `recv() -> bytes`."""
+    """The host side of docs/design/digikit-upload.md over a transport with `send(bytes)` and `recv() -> bytes`.
 
-    def __init__(self, transport: Any, chunk: int = MAX_CHUNK, depth: int = DEPTH):
+    `skip_foreign` drops replies to other hosts' requests (another program polling the same MIDI port) instead of raising.
+    """
+
+    def __init__(
+        self,
+        transport: Any,
+        chunk: int = MAX_CHUNK,
+        depth: int = DEPTH,
+        skip_foreign: bool = False,
+    ):
         if chunk <= 0 or chunk > MAX_CHUNK or chunk % 512:
             raise ValueError("chunk is a multiple of 512 up to 32768")
         self.t, self.chunk, self.depth = transport, chunk, depth
+        self.skip_foreign = skip_foreign
         self.seq = 0
         self.log: list[tuple[str, int]] = []
 
@@ -275,10 +285,13 @@ class Uploader:
         return seq
 
     def wait(self, cmd: int, seq: int) -> tuple[int, bytes]:
-        r = parse_reply(self.t.recv())
-        assert r is not None
-        rcmd, rseq, status, body = r
-        if rcmd != cmd or rseq != seq:
+        for _ in range(64 if self.skip_foreign else 1):
+            r = parse_reply(self.t.recv())
+            assert r is not None
+            rcmd, rseq, status, body = r
+            if rcmd == cmd and rseq == seq:
+                break
+        else:
             raise UploadError(
                 status, f"reply for cmd {rcmd:#x} seq {rseq}, wanted {cmd:#x} seq {seq}"
             )
@@ -304,7 +317,7 @@ class Uploader:
         end = b.index(0, 4)
         port = b[4:end].decode()
         free, max_chunk, flags = struct.unpack_from(">IIB", b, end + 1)
-        # runtime 3 appends the sequence numbers of the oldest and newest log event
+        # runtime 3 appends two words for the log range of the old runtime; the runtime now sends zeros (the LOG command of the debug module has the range)
         oldest, newest = (
             struct.unpack_from(">II", b, end + 10) if len(b) >= end + 18 else (0, 0)
         )
@@ -424,9 +437,9 @@ class Uploader:
     def log_page(
         self, from_seq: int
     ) -> tuple[int, int, list[tuple[int, int, int, int, tuple[int, ...]]]]:
-        """LOG (runtime 3): (oldest, newest, events) from `from_seq`; an event is (seq, time, kind, flags, (a0..a4)). Empty when the host has
+        """LOG (digikit/debug; capability LOG): (oldest, newest, events) from `from_seq`; an event is (seq, time, kind, flags, (a0..a4)). Empty when the host has
         read everything."""
-        b = self._ok(CMD_LOG, "log", struct.pack(">I", from_seq))
+        b = self._ok(dkproto.SERVICE_CMD["LOG"], "log", struct.pack(">I", from_seq))
         oldest, newest, n = struct.unpack_from(">IIB", b, 0)
         events = []
         for i in range(n):
@@ -435,8 +448,10 @@ class Uploader:
         return oldest, newest, events
 
     def peek(self, addr: int, length: int) -> bytes:
-        """PEEK (runtime 3): `length` (1 to 512) bytes of RAM at `addr`, inside the ranges the device file lists (`[digikit] peek`)."""
-        b = self._ok(CMD_PEEK, "peek", struct.pack(">IH", addr, length))
+        """PEEK (digikit/debug): `length` (1 to 512) bytes of RAM at `addr`, inside the ranges the device file lists (`[digikit] peek`)."""
+        b = self._ok(
+            dkproto.SERVICE_CMD["PEEK"], "peek", struct.pack(">IH", addr, length)
+        )
         got, n = struct.unpack_from(">IH", b, 0)
         if got != addr or n != length or len(b) < 6 + n:
             raise UploadError(-50, "peek: malformed reply")
@@ -445,7 +460,7 @@ class Uploader:
     def logcfg(
         self, default: int | None = None, modules: dict[int, int | None] | None = None
     ) -> dict[str, Any]:
-        """LOGCFG: the log levels. With no argument, read them; else set `default` and/or the levels of module records (`modules`: record index ->
+        """LOGCFG (digikit/debug): the log levels. With no argument, read them; else set `default` and/or the levels of module records (`modules`: record index ->
         level, None for the default). Returns {"default": int, "modules": [8 levels, 0xff = the default], "debug": bool}."""
 
         def parse(b: bytes) -> dict[str, Any]:
@@ -453,14 +468,16 @@ class Uploader:
                 raise UploadError(-50, "logcfg: malformed reply")
             return {"default": b[0], "modules": list(b[1:9]), "debug": bool(b[9])}
 
-        cur = parse(self._ok(CMD_LOGCFG, "logcfg", b"\x00"))
+        cur = parse(self._ok(dkproto.SERVICE_CMD["LOGCFG"], "logcfg", b"\x00"))
         if default is None and not modules:
             return cur
         lv = list(cur["modules"])
         for i, v in (modules or {}).items():
             lv[i] = 0xFF if v is None else v
         d = cur["default"] if default is None else default
-        return parse(self._ok(CMD_LOGCFG, "logcfg", bytes([1, d, *lv])))
+        return parse(
+            self._ok(dkproto.SERVICE_CMD["LOGCFG"], "logcfg", bytes([1, d, *lv]))
+        )
 
     def select(self, paths: list[str]) -> None:
         """SELECT (runtime 4): save the selection record (what the next boot loads); the menu's code path, so its card rules apply."""
@@ -753,6 +770,15 @@ def _emu(run_dir: Path | None = None) -> Any:
     return Emu.connect(run_dir=run_dir)
 
 
+def _chunk(s: str) -> int:
+    n = int(s)
+    if n <= 0 or n > MAX_CHUNK or n % 512:
+        raise argparse.ArgumentTypeError(
+            f"{n} is not a multiple of 512 up to {MAX_CHUNK}"
+        )
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -765,6 +791,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     where.add_argument(
         "--port", help="a MIDI port name substring (a real device; python-rtmidi)"
+    )
+    where.add_argument(
+        "--winmm",
+        metavar="NAME",
+        help="a MIDI port name substring (a real device on Windows; winmm, no package)",
     )
     ap.add_argument(
         "--run-dir",
@@ -781,6 +812,25 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("put")
     p.add_argument("file", type=Path)
     p.add_argument("path", nargs="?")
+    p.add_argument(
+        "--chunk",
+        type=_chunk,
+        default=MAX_CHUNK,
+        help=f"bytes per DATA request, a multiple of 512 up to {MAX_CHUNK} (default)",
+    )
+    p.add_argument(
+        "--depth",
+        type=int,
+        choices=(1, 2),
+        default=DEPTH,
+        help=f"DATA requests in flight (default {DEPTH})",
+    )
+    p.add_argument(
+        "--timing",
+        type=Path,
+        metavar="FILE",
+        help="write each request and reply (monotonic time, cmd, seq, length) here as JSON lines",
+    )
     p = sub.add_parser("rm")
     p.add_argument("path")
     sub.add_parser("clear")
@@ -817,10 +867,23 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("encoder", type=int)
     q.add_argument("delta", type=int)
     args = ap.parse_args(argv)
-    t: Any = (
-        EmuTransport(_emu(args.run_dir)) if args.emu else RtMidiTransport(args.port)
-    )
-    up = Uploader(t)
+    if args.emu:
+        t: Any = EmuTransport(_emu(args.run_dir))
+    elif args.winmm:
+        from tools.device.winmidi import WinMidiTransport
+
+        t = WinMidiTransport(args.winmm)
+    else:
+        t = RtMidiTransport(args.port)
+    timing = None
+    if args.cmd == "put":
+        from tools.device import dktiming
+
+        timing = open(args.timing, "w", encoding="utf-8") if args.timing else None  # noqa: SIM115
+        t = dktiming.TimedTransport(
+            t, sink=dktiming.jsonl_sink(timing) if timing else None
+        )
+    up = Uploader(t, args.chunk, args.depth) if args.cmd == "put" else Uploader(t)
     try:
         if args.cmd == "info":
             info = up.info()
@@ -843,9 +906,11 @@ def main(argv: list[str] | None = None) -> int:
             path = args.path or f"modules/{args.file.name}"
             t0 = time.monotonic()
             up.put_file(path, args.file)
+            size = args.file.stat().st_size
             print(
-                f"{path}: {args.file.stat().st_size} bytes in {time.monotonic() - t0:.1f} s (sha256 checked on the device)"
+                f"{path}: {size} bytes in {time.monotonic() - t0:.1f} s (sha256 checked on the device)"
             )
+            print(dktiming.summary_line(dktiming.summary(t.events, size)))
         elif args.cmd == "read":
             data = read_range(up, args.path, args.offset, args.length)
             if args.output:
@@ -895,6 +960,12 @@ def main(argv: list[str] | None = None) -> int:
     except UploadError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    finally:
+        if timing:
+            timing.close()
+        close = getattr(t, "close", None)
+        if close:
+            close()
     return 0
 
 

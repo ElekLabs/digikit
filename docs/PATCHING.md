@@ -323,7 +323,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 |---|---|---|---|
 | `cf.flash_cave` | zero padding at the end of the MAIN OS image | about 2 KB | the 54-byte expansion loader only |
 | `cf.expansion` | RAM above the DMA arena: DT2 `0x47e8b000-0x47fe0000`, DN2 1.12 `0x4671a000-0x47fe0000` | 1.33 MiB (DT2), 24.8 MiB (DN2) | module ColdFire code, data, bss, registry tables |
-| `dsp.l2` | free SHARC+ L2 behind the loaded stream | 922,756 B (DT2), 491,972 B (DN2) | module DSP code and data |
+| `dsp.l2` | free SHARC+ L2 behind the loaded stream | 914,564 B (DT2), 466,372 B (DN2), below the cache range at 0x200fa000 (finding 100) | module DSP code and data |
 
 **Expansion segment and loader.** ColdFire code does not fit in the image, so patchkit appends the module payloads
 to the MAIN OS image as a chain `[len][dest][bss][payload] ... [0xffffffff]` and adds the built-in `core/expansion`

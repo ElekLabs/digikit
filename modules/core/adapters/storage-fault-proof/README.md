@@ -212,4 +212,4 @@ format migration or daemon change is included. The coordinator's scoped
 `test:changed` passed pathcheck/layers before final prose; final docs pathcheck is
 coordinator-owned and the full gate remains deferred. See the
 [plan](../../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
-and [scope finding](../../../../docs/findings/100-storage-interrupt-emulation-scope.md).
+and [scope finding](../../../../docs/findings/107-storage-interrupt-emulation-scope.md).

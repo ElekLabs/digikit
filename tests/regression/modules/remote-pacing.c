@@ -32,8 +32,11 @@ int input_turn(u32 encoder, int delta)
 
 static int32_t register_cmds(u32 first, u32 count, dk_service_cmd *handler)
 {
-    assert(first < 256 && count == 1 && !handlers[first]);
-    handlers[first] = handler;
+    assert(count >= 1 && first + count <= 256);
+    for (u32 c = first; c < first + count; c++) {
+        assert(!handlers[c]);
+        handlers[c] = handler;
+    }
     return 0;
 }
 static void log_message(const u8 *message, u32 value) { (void)message; assert(value == 0); }

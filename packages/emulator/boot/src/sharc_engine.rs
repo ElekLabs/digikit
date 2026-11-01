@@ -383,7 +383,7 @@ pub fn open_engine_patched(
     e.import(state)
         .map_err(|c| format!("state import error {c}"))?;
     // 4 runtime decode, 5 instruction clock, 6 clock base, 9 software IRQs,
-    // 10 explicit memory model off, 11 approx recips, 12 assume NW32,
+    // 10 explicit memory model off, 12 assume NW32,
     // 21 core timer, 22 peripheral model (19/20 come from the state).
     let mut options = vec![
         (4, 1),
@@ -391,7 +391,6 @@ pub fn open_engine_patched(
         (6, clock_base as i64),
         (9, 1),
         (10, 0),
-        (11, 1),
         (12, 1),
         (21, 1),
         (22, 1),

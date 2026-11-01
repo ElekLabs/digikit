@@ -9705,7 +9705,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 78).",
+      "doc": "Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 105).",
       "file": "devices/fw/storage.toml",
       "kind": "fn",
       "mark": "D",
@@ -9741,7 +9741,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 78).",
+      "doc": "Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 105).",
       "file": "devices/fw/storage.toml",
       "kind": "fn",
       "mark": "D",
@@ -9777,7 +9777,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 78).",
+      "doc": "Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 105).",
       "file": "devices/fw/storage.toml",
       "kind": "fn",
       "mark": "D",
@@ -9813,7 +9813,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 78).",
+      "doc": "File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 105).",
       "file": "devices/fw/storage.toml",
       "kind": "fn",
       "mark": "D",

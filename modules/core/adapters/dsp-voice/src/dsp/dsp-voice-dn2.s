@@ -57,6 +57,58 @@
 
 _dv_entry:
     DM(_dv_s_r0) = R0;
+    // The cheap path for a slot that no module renders (every slot of a patched image with no registered type): `_dv_mask` has bit t set when a
+    // row of type t is registered (bit 31: a type of 31 or more), and slot 0 rebuilds it from the table once per block below. Slot 0 always
+    // takes the full path (the heartbeat). With a registered type, a slot looks its own type up in the mask and takes the full path only on a hit.
+    // A row written by the runtime is seen from the next block; a row freed after the mask was built still ends in the scan, which finds no match.
+    R0 = 16;
+    COMP(R0, R15);
+    IF EQ JUMP _dv_full;                  // slot 0
+    R0 = DM(_dv_mask);
+    R0 = PASS R0;
+    IF EQ JUMP _dv_out;                   // no registered type
+    DM(_dv_q1) = R1;
+    DM(_dv_q2) = R2;
+    R0 = I4;
+    DM(_dv_q4) = R0;
+    R0 = L4;
+    DM(_dv_ql4) = R0;
+    L4 = 0;
+    R0 = 90;                              // 74 + 16: the slot's type halfword is 74 + v = 90 - R15 (as in the full path; the full path checks the caller)
+    R0 = R0 - R15;
+    R1 = 0xffe;
+    R1 = R0 AND R1;
+    R1 = LSHIFT R1 BY 1;
+    R2 = _fw_frame;
+    R1 = R2 + R1;
+    I4 = R1;
+    R1 = DM(0, I4);
+    R2 = FEXT R0 BY 0:1;
+    R2 = LSHIFT R2 BY 4;
+    R0 = 0x400;
+    R2 = R2 OR R0;
+    R1 = FEXT R1 BY R2;                   // the type
+    R2 = 31;
+    COMP(R1, R2);
+    IF GT R1 = PASS R2;
+    R2 = 0;
+    R1 = R2 - R1;
+    R2 = DM(_dv_mask);
+    R2 = LSHIFT R2 BY R1;                 // a shift by a negative count moves bit t down to bit 0
+    R1 = 1;
+    R2 = R2 AND R1;
+    R0 = DM(_dv_ql4);
+    L4 = R0;
+    R0 = DM(_dv_q4);
+    I4 = R0;
+    R1 = DM(_dv_q1);
+    R2 = DM(_dv_q2);                      // (the loads leave the flags of the AND above)
+    IF NE JUMP _dv_full;
+_dv_out:
+    R0 = DM(_dv_s_r0);
+    MODIFY(I7, -18) (NW);                 // the displaced first instruction of the stock helper
+    JUMP _fw_render_next;
+_dv_full:
     R0 = I4;
     DM(_dv_s_i4) = R0;
     R0 = L4;
@@ -143,6 +195,24 @@ _dv_entry:
     DM(10, I4) = R1;
     R1 = MODE1;
     DM(11, I4) = R1;
+    // the mask of the registered types: R0-R3 are saved above and free (a free row holds 0xffffffff, the zero row ends the table)
+    I4 = _dv_table;
+    R3 = 0;
+_dv_mkl:
+    R0 = DM(0, I4);
+    MODIFY(I4, 24) (NW);
+    R0 = PASS R0;
+    IF EQ JUMP _dv_mke;
+    IF LT JUMP _dv_mkl;
+    R2 = 31;
+    COMP(R0, R2);
+    IF GT R0 = PASS R2;
+    R1 = 1;
+    R1 = LSHIFT R1 BY R0;
+    R3 = R3 OR R1;
+    JUMP _dv_mkl;
+_dv_mke:
+    DM(_dv_mask) = R3;
     R1 = DM(_dv_t);
 _dv_nodiag:
     R0 = 74;
@@ -278,7 +348,8 @@ _dv_done:
     JUMP _fw_render_next;
 
 // The core's mark of a module call (the breadcrumb of the Digitakt II wrapper, reduced to the call and the return). In: R6 = stage (4 the module is about to be
-// called, 5 it returned), R7 = the mask for the module step (0 clears it, -1 keeps it); the slot is `_dv_t`, the type `_dv_typ`. Writes stage | slot << 8 |
+// called, 5 it returned), R7 = the mask for the module step (0 clears it, -1 keeps it): the module step is the static word `_dk_step`, whose address is _dv_rec[2]
+// (written by core/dsp-link; 0 without it), and the block tail copies it into the block's record; the slot is `_dv_t`, the type `_dv_typ`. Writes stage | slot << 8 |
 // type << 16 into _dv_diag word 12 (core/dsp-link copies it into its word 14) and at once into both reply records (_dv_rec) with the header word, so that it is
 // there when the DSP stops inside the module (finding 48). Clobbers R1, R3, I1.
 _dv_mark:
@@ -290,14 +361,20 @@ _dv_mark:
     R1 = R1 OR R6;
     DM(_dv_diag + 48) = R1;
     I1 = _dv_rec;
+    R3 = DM(2, I1);
+    R3 = PASS R3;
+    IF EQ JUMP _dv_mk0;
+    I1 = R3;
+    R3 = DM(0, I1);
+    R3 = R3 AND R7;
+    DM(0, I1) = R3;
+    I1 = _dv_rec;
+_dv_mk0:
     R3 = DM(0, I1);
     R3 = PASS R3;
     IF EQ JUMP _dv_mk1;
     I1 = R3;
     DM(192, I1) = R1;
-    R3 = DM(298, I1);
-    R3 = R3 AND R7;
-    DM(298, I1) = R3;
     R3 = 0x20D1A6;                        // DL_DG_MAGIC | 32 << 16
     DM(45, I1) = R3;
     I1 = _dv_rec;
@@ -307,9 +384,6 @@ _dv_mk1:
     IF EQ RTS;
     I1 = R3;
     DM(192, I1) = R1;
-    R3 = DM(298, I1);
-    R3 = R3 AND R7;
-    DM(298, I1) = R3;
     R3 = 0x20D1A6;
     DM(45, I1) = R3;
     RTS;
@@ -674,13 +748,18 @@ _dv_frame_sw:
 .PKDATA _dv_s_r0, 4;
 .PKDATA _dv_s_i4, 4;
 .PKDATA _dv_s_l4, 4;
+.PKDATA _dv_mask, 4;                       // registered types: bit t (bit 31: 31 or more), rebuilt by slot 0 (see _dv_entry)
+.PKDATA _dv_q1, 4;
+.PKDATA _dv_q2, 4;
+.PKDATA _dv_q4, 4;
+.PKDATA _dv_ql4, 4;
 .PKDATA _dv_ctx, 48;                       // M5, M6, M7, M13, M14, M15, L0-L3, L5, MODE1 of the context
 // The diagnostic block (finding 45): word 0 counts the blocks that reached the hook, words 1-11 are M5, M6, M7, M13, M14, M15,
 // I6, I7, B7, L7, MODE1 as the firmware left them at slot 0. core/dsp-link copies the block into the record it sends to the
 // ColdFire each block (dl_diag).
 .PKDATA _dv_diag, 128;
-// Word 12 (the breadcrumb) holds only the call and the return stage here (_dv_mark), word 13 (the dispatch count of the Digitakt II wrapper, finding 48) stays 0; _dv_rec is written by core/dsp-link.
-.PKDATA _dv_rec, 8;
+// Word 12 (the breadcrumb) holds only the call and the return stage here (_dv_mark), word 13 (the dispatch count of the Digitakt II wrapper, finding 48) stays 0; _dv_rec is written by core/dsp-link: [0] and [1] the two reply records, [2] the address of the module step word.
+.PKDATA _dv_rec, 12;
 .PKDATA _dv_t, 4;
 .PKDATA _dv_typ, 4;
 .PKDATA _dv_buf, 4;

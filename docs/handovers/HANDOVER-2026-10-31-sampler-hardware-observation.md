@@ -19,7 +19,7 @@ preserve the other Claude checkout, edits and PIDs.
 
 Read the [master plan](../plans/dsp-sdk-and-sampler.md),
 [previous handover](HANDOVER-2026-10-30-stereo-sampler.md) and
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md) for prior
+[finding 107](../findings/107-storage-interrupt-emulation-scope.md) for prior
 commands, evidence and limits. Firmware inputs and generated `out/` artifacts
 are ignored and absent from the remote; tracked plans/findings preserve the
 commands and evidence references, not the artifacts themselves.
@@ -45,12 +45,11 @@ Remote control reproduces the scenario; dedicated telemetry supplies evidence.
 
 | Priority / area | Gap and source | Useful observation |
 | --- | --- | --- |
-| First: ColdFire storage reset | Post-RSTA IRQSTATEN is answered statically: the model sets `0x117f013f` (finding 100); only the exact full value is open. [Finding 100](../findings/100-storage-interrupt-emulation-scope.md) and [eSDHC model](../../packages/emulator/periph/src/esdhc.rs). | Optional: read IRQSTATEN/IRQSIGEN after the firmware's normal reset completion and initialization, tagged with event order, to confirm the full value. Do not manually reset an active storage controller. |
+| First: ColdFire storage reset | Post-RSTA IRQSTATEN is answered statically: the model sets `0x117f013f` (finding 107); only the exact full value is open. [Finding 100](../findings/107-storage-interrupt-emulation-scope.md) and [eSDHC model](../../packages/emulator/periph/src/esdhc.rs). | Optional: read IRQSTATEN/IRQSIGEN after the firmware's normal reset completion and initialization, tagged with event order, to confirm the full value. Do not manually reset an active storage controller. |
 | ColdFire delivery/order | Default Oracle storage completion bypasses real handlers; isolated Device handlers/waiters pass, but native composition of storage, timers, SSI and host inputs is unfinished. [Board](../../packages/emulator/machine/src/board.rs), [Time](../../packages/emulator/machine/src/time.rs), [native runtime](../../packages/emulator/boot/src/runtime.rs), finding 100. | Small records of command issue, DMA/controller ISR entry, captured status, acknowledgement and waiter continuation during a known sample load. This provides an ordering reference, not complete interrupt coverage. |
 | SHARC cache/DMA visibility | Emulator proofs do not establish physical cache coherence or maintenance correctness for DMA buffers. [Cache/link finding](../findings/91-hardware-loop-ends-and-dsp-link-cache.md), [LP0/cache finding](../findings/95-dn2-cache-and-lp0-staging.md). | Producer sequence, DMA completion, consumer-visible sequence/checksum and relevant cache configuration at a deliberately owned buffer. DN2-specific helper addresses are not DT2 probe addresses. |
 | SHARC reader/interrupt lifetime | Frame-fetch tests supply controlled interleavings; physical IRQ/DMA exclusion, callback retirement and complete writer coverage remain open. [Finding 99](../findings/99-stereo-frame-fetch-exclusion.md), [retirement design](../findings/83-sample-retirement-design.md). | Correlate publication, reader admission/exit, stop acknowledgement and reclaim events under a repeatable remote-controlled selection/playback scenario. A quiet trace alone is not an ownership proof. |
-| SHARC arithmetic, separately scoped | Ordinary RECIPS/RSQRTS ROM seed values are not numerically exact in the analysis model; RECIPS has an explicit approximation. [compute_alu.py](../../tools/sharc_dev/sharc_core/compute_alu.py), [floats.py](../../tools/sharc_dev/sharc_core/floats.py), [stereo finding](../findings/96-stereo-machine-processing.md). | A small instruction probe with known input bit patterns, output bits, flags and mode, covering table indices and boundaries. Live memory dumps alone cannot identify instruction input/output reliably. Core changes require separate regeneration/validation planning. |
-| Product memory ownership, not just emulator fidelity | Safe shared project backing, allocator/reclaim boundaries and coexistence are not established. [Stock sampler dependencies](../findings/81-stock-sampler-dependencies.md), [DN2 DDR finding](../findings/91-dn2-ddr-configuration.md). | Observe stock DT2 allocation/publication/retirement across repeatable load, replace and project-change scenarios, then reconcile with static firmware evidence. DT2 cannot establish DN2's available pool or ownership. |
+| Product memory ownership, not just emulator fidelity | Safe shared project backing, allocator/reclaim boundaries and coexistence are not established. [Stock sampler dependencies](../findings/81-stock-sampler-dependencies.md), [DN2 DDR finding](../findings/106-dn2-ddr-configuration.md). | Observe stock DT2 allocation/publication/retirement across repeatable load, replace and project-change scenarios, then reconcile with static firmware evidence. DT2 cannot establish DN2's available pool or ownership. |
 
 Start with the first row. Treat SHARC arithmetic as a separate experiment, and
 prioritize cache/lifetime observations for sampler integrity. Do not advertise a
@@ -78,7 +77,7 @@ DN2 addresses into DT2 simply because the devices share a DSP family.
    the associated IRQSTATEN (`0xfc0cc034`)/IRQSIGEN (`0xfc0cc038`) state. Plan a
    passive capture around the normal path, rather than an active controller-reset
    experiment. The audited firmware ORs IRQSIGEN and never writes IRQSTATEN; the
-   static result (`0x117f013f`, finding 100) answers the blocker, so this read is
+   static result (`0x117f013f`, finding 107) answers the blocker, so this read is
    optional and only confirms the exact value. An isolated late read cannot reconstruct initialization history.
 5. Design the smallest triggered CF/SHARC records needed for that blocker and
    retrieve them after capture. Existing PEEK reads allowed ColdFire RAM only,
@@ -103,7 +102,7 @@ accuracy or native clock integration is established. PIT counter/phase advanceme
 is **not implemented**. Manual p1158 wording suggests PIF at the 1→0 transition;
 a PMR+1 period formula alone does not settle initial phase. Inspect the waveform
 visually before implementing PIT phase. Do not copy the DTIM phase by analogy.
-See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+See [finding 107](../findings/107-storage-interrupt-emulation-scope.md).
 
 ## Copyable resume instructions
 
@@ -115,7 +114,7 @@ Resume sampler hardware-observation planning from:
 Read:
   docs/handovers/HANDOVER-2026-10-31-sampler-hardware-observation.md
   docs/plans/dsp-sdk-and-sampler.md
-  docs/findings/100-storage-interrupt-emulation-scope.md
+  docs/findings/107-storage-interrupt-emulation-scope.md
   docs/plans/remote-control.md
   docs/findings/46-digikit-debug.md
   docs/design/digikit-upload.md

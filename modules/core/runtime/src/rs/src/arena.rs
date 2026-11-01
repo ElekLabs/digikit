@@ -5,7 +5,7 @@
 use crate::{st, ARENA_BYTES, DKRT_ARENA};
 use core::ptr::{addr_of_mut, null_mut};
 
-const HDR: u32 = 16;
+const HDR: u32 = dkneeds::ARENA_HDR;
 const USED: u32 = 0xa110_c8ed;
 
 pub unsafe fn init() {

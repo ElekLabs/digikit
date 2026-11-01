@@ -18,13 +18,13 @@ int32_t dk_fw_storage_directory_metadata(uint32_t entry_id, uint32_t *output) __
 int32_t dk_fw_storage_directory_next(uint32_t *state, uint8_t *output) __asm__("cf.storage.fn.directory.next");
 /* DT2 1.17 read-only path directory open, 0 success/-1 failure; caller-owned four-word state. Task context; may block under filesystem locking (finding 93). */
 int32_t dk_fw_storage_directory_open(const uint8_t *path, uint32_t *state) __asm__("cf.storage.fn.directory.open");
-/* Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 78). */
+/* Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 105). */
 int32_t dk_fw_storage_path_close(uint32_t *handle) __asm__("cf.storage.fn.path.close");
-/* Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 78). */
+/* Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 105). */
 int32_t dk_fw_storage_path_open(const uint8_t *path, const uint8_t *mode, uint32_t *handle) __asm__("cf.storage.fn.path.open");
-/* Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 78). */
+/* Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 105). */
 int32_t dk_fw_storage_path_read(uint8_t *buf, uint32_t bytes, uint32_t *handle) __asm__("cf.storage.fn.path.read");
-/* File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 78). */
+/* File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 105). */
 uint32_t dk_fw_storage_path_size(uint32_t entry_id) __asm__("cf.storage.fn.path.size");
 
 #endif

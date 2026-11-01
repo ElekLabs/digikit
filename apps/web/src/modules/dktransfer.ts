@@ -5,7 +5,7 @@
 //
 // The app does not build: its modules are built `.dkm` files of a folder (`mise run module:pack-all`).
 import { DkError, DkSession, HEADER_BYTES, fmtVersion, hasCap, hexOf, storeFree } from '@digi/dk-session';
-import { describeShortBy, emptyCaps, fitsNow, type Caps, type Needs } from './dkfit.ts';
+import { fitsNow, type Caps, type Needs } from './fit.ts';
 import type { DkEntry, DkInfoFull } from '@digi/dk-session';
 
 export type Group = 'Machines' | 'Effects' | 'Tools';
@@ -123,7 +123,7 @@ export async function libraryModule(
 export const GROUP_ORDER: Group[] = ['Machines', 'Effects', 'Tools'];
 
 /**
- * What would not fit on the target (CAPACITY): `[]` when it fits next to what is loaded now (the fit rule, dkfit.ts), else one line that says what is
+ * What would not fit on the target (CAPACITY): `[]` when it fits next to what is loaded now (the fit rule, fit.ts), else one line that says what is
  * short and whether the module fits the device when the loaded ones are left out (the next boot loads the selection into an empty runtime).
  * Only a warning: the device refuses a load that does not fit.
  */
@@ -131,9 +131,9 @@ export function fitWarnings(row: { loaded: boolean; needs?: Needs }, cap: Caps |
   if (!cap || row.loaded || !row.needs) return [];
   const now = fitsNow(row.needs, cap);
   if (!now) return [];
-  const alone = fitsNow(row.needs, emptyCaps(cap)) === null;
+  const alone = fitsNow(row.needs, cap, true) === null;
   return [
-    `${describeShortBy(now)}${alone ? '; fits when the modules loaded now are not selected' : '; more than this device has'}`,
+    `${now.describe_by}${alone ? '; fits when the modules loaded now are not selected' : '; more than this device has'}`,
   ];
 }
 

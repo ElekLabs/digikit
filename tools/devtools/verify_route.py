@@ -69,10 +69,6 @@ DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "dkupload": ("upload", "menu", "debug", "crash", "card", "settings"),
     "dksettings": ("settings",),
     "dkrun": ("menu",),
-    "dkfit": (
-        "menu",
-        "debug",
-    ),  # the fit rule: dktransfer and dkrun use it, the `fits` part of the debug scenarios
     "dkneeds": (
         "menu",
         "debug",
@@ -92,6 +88,12 @@ DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "devrpc": ("upload",),
     "midisniff": ("upload", "menu", "debug", "crash", "card"),
     "mmon": (),
+    "dkprobe": (),  # the SHARC probe capture tool: no scenario kind runs it
+    "dkprobe_seq": (),
+    "dkprobe_facts": (),
+    "dkprobe_run": (),
+    "dktiming": (),  # the timing of `dkupload put`; no runner calls it
+    "winmidi": (),  # the winmm transport of `dkupload --winmm`; a real device only
 }
 BROAD_TASK_GROUPS = ("verify", "build", "gen", "setup")
 ALL_SUITES = ("tests/patchkit", "tests/digikit")
@@ -176,7 +178,13 @@ ACCEPTANCE_DIRS = {
 # module (DIGI_RUNTIME_MODULES). Paths are relative to tests/regression.
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/input-probe": ("runtime/input-adapter.test.ts",),
-    "digikit/remote": ("runtime/remote-input.test.ts",),
+    "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
+    "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),
+    # the log: every cell that reads it installs this module with the one it tests (live.ts `installWithDebug`)
+    "digikit/debug": ("runtime/debug-module.test.ts", "runtime/fault-trace.test.ts"),
+    "test/sharc-probe": ("runtime/sharc-probe.test.ts",),
+    "test/step-beacon": ("runtime/sharc-probe.test.ts",),
+    "test/dsp-facts": ("runtime/sharc-probe.test.ts",),
     "test/svc-echo": ("runtime/service-commands.test.ts",),
     "test/dyn-fx-hang": ("runtime/fault-trace.test.ts",),
     "test/dyn-dsp-hang": ("runtime/fault-trace.test.ts",),

@@ -197,20 +197,8 @@ fn device_texts() -> (String, String) {
 
 #[test]
 fn a_limit_above_the_contract_maximum_is_refused() {
-    let max = patchkit::sdkgen::limits_max();
     let (dt2, dn2) = device_texts();
-    // the committed files are within the maxima (and the maxima are the ones this test knows)
-    assert_eq!(
-        (
-            max.modules,
-            max.map_entries,
-            max.fx_slots,
-            max.param_rows,
-            max.page_rows
-        ),
-        (8, 8, 4, 16, 8)
-    );
-    assert_eq!(max.send_slots, 2);
+    // the committed files are within the maxima
     Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
     for (what, from, to) in [
         ("modules", "modules = 8", "modules = 9"),
@@ -386,12 +374,29 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
             })
             .count() as u64
     };
+    let dyndsp = lib.get("core/dyndsp").unwrap();
+    let voices = |dev: &str| {
+        dyndsp
+            .manifest
+            .entry
+            .iter()
+            .filter(|e| {
+                e.registry == "voices"
+                    && (e.devices.is_empty() || e.devices.iter().any(|d| d == dev))
+            })
+            .count() as u64
+    };
     for (file, dev) in [("digitakt-ii", "dt2"), ("digitone-ii", "dn2")] {
         let t: toml::Value = toml::from_str(
             &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
         )
         .unwrap();
         let l = &t["limits"];
+        assert_eq!(
+            voices(dev),
+            l["machine_rows"].as_integer().unwrap() as u64,
+            "{dev} voice rows of core/dyndsp"
+        );
         assert_eq!(
             count("params", dev),
             l["param_rows"].as_integer().unwrap() as u64,

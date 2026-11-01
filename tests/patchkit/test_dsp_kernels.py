@@ -1,8 +1,8 @@
 """SDK DSP step macros (sdk/dsp/*.inc): each macro in a 32-sample block loop on the concrete core, against the float32
 models of tools/patchkit/dsp_ref.py, plus the instruction count of the loop.
 
-recip, div and rsqrt run with the core's approximate seed (approx_recips: the seed ROM is not published), so they are
-compared within the bounds stated in dsp_ref.py. Skips when Selache is not built."""
+recip, div and rsqrt run with the core's measured seed tables (8-bit seeds), so they are compared within the bounds stated in
+dsp_ref.py. Skips when Selache is not built."""
 
 import numpy as np
 import pytest
@@ -52,9 +52,7 @@ WIDE = np.concatenate(
 POS = np.geomspace(1e-3, 1e3, N).astype(f32)
 
 
-def kernel(
-    inc, setup, setup_n, macro, macro_n, consts, inputs, out_reg="F8", approx=False
-):
+def kernel(inc, setup, setup_n, macro, macro_n, consts, inputs, out_reg="F8"):
     """Build and run one loop: load the inputs (F0, F1), the macro, the store of `out_reg`; 32 samples.
 
     Returns (output words, executed instructions, ceiling). The ceiling documents the cost:
@@ -96,7 +94,6 @@ def kernel(
         regs=consts,
         dm_words=dm,
         reads={"out": (OUT, N)},
-        approx_recips=approx,
     )
     assert r["halt"]["reason"] == "breakpoint", r["halt"]
     ceiling = len(pointers) + 1 + setup_n + 1 + N * per_sample + 1
@@ -669,7 +666,6 @@ def test_recip():
         7,
         {"R4": b(2.0)},  # two
         [WIDE],
-        approx=True,
     )
     assert dsp_ref.max_rel_error(out, dsp_ref.recip(WIDE)) <= dsp_ref.REL_RECIP
     assert n <= ceiling
@@ -684,7 +680,6 @@ def test_div():
         8,
         {"R4": b(2.0)},  # two
         [X[::-1].copy() + f32(0.125), WIDE],
-        approx=True,
     )
     num = X[::-1].copy() + f32(0.125)
     got, want = out.astype(np.float64), dsp_ref.div(num, WIDE)
@@ -701,7 +696,6 @@ def test_rsqrt():
         16,
         {"R4": b(0.5), "R5": b(1.5)},  # half, k15
         [POS],
-        approx=True,
     )
     assert dsp_ref.max_rel_error(out, dsp_ref.rsqrt(POS)) <= dsp_ref.REL_RSQRT
     assert n <= ceiling

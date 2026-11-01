@@ -11,12 +11,12 @@ core through the wrapper (core/dsp-voice) by tests/support/machine_rig.py. This 
 Parameter kinds do not exist in the manifest yet, so every parameter is treated as possibly pitch-like.
 
 The budget rule. A machine shares the DSP block with the stock firmware. The block is `dsp_clock_hz / dsp_blocks_per_second`
-cycles (devices/*.toml `[board]`). The stock firmware with one held note uses STOCK_BUSY instructions per block
-(tools/patchkit/pk_dsp_budget.py, held-note scenarios); tools/patchkit/pk_dsp_budget.py projects instructions to cycles with the
-"high" factor of devices/cycle-factors.json, and a patched image stays under DEFAULT_BUDGET_PCT of the block. The headroom
-(instructions) is what is left between the stock load and that limit. VOICES machine voices share it:
+cycles (devices/*.toml `[board]`). The stock firmware with one held note uses `stock_busy` instructions per block
+(devices/cycle-factors.json); tools/patchkit/pk_dsp_budget.py projects instructions to cycles with the
+"high" factor of the same file, and a patched image stays under DEFAULT_BUDGET_PCT of the block. The headroom
+(instructions) is what is left between the stock load and that limit. The `voices` of the device's `[adapter.machine]` share it:
 
-    voice-block budget  = headroom / VOICES        (every block that is not a note-on)
+    voice-block budget  = headroom / voices        (every block that is not a note-on)
     note-on budget      = headroom                 (the block of a trigger may take the whole headroom once)
 
 The manifest may declare `[conformance] voice_block = N` and `note_on_block = M` (instructions) to replace either number; no
@@ -42,9 +42,6 @@ DEVICES = ("dt2", "dn2")
 # Stock rows of the knob list that a DSP routine reads (a code in `knobs`, not a `[[param]]` id): name, min, max, default.
 # 0xca is TUNE of SAMPLE (a pitch offset in semitones, 64.0 at rest; the routines read it as 64 * 256 at rest).
 STOCK_KNOBS = {0xCA: ("tune", 0, 0x7F00, 0x4000)}
-# Stock DSP busy instructions per block, held note (the numbers of tests/patchkit/test_pk_dsp_budget.py).
-STOCK_BUSY = {"dt2": 208_640, "dn2": 334_529}
-VOICES = 16  # voices a machine runs at once: 16 tracks (Digitakt II), 16 voice slots (Digitone II)
 # Level bound of a block: full scale is +-1.0; a bound 18 dB above it flags a runaway (a state that grows by orders of magnitude),
 # not a loud but valid sound. The engine's amp stage and the master limit after the machine.
 LEVEL_BOUND = 8.0
@@ -338,13 +335,16 @@ def budget(device: str, sp: MachineSpec | None = None) -> Budget:
         // pk_device.load(device)["board"]["dsp_blocks_per_second"]
     )
     high = pk_dsp_budget.FACTORS[device]["high"]
-    stock_pct = 100.0 * STOCK_BUSY[device] * high / block_cycles
+    stock_pct = (
+        100.0 * pk_dsp_budget.FACTORS[device]["stock_busy"] * high / block_cycles
+    )
+    voices = pk_device.load(device)["adapter"]["machine"]["voices"]
     headroom = int(
         (pk_dsp_budget.DEFAULT_BUDGET_PCT - stock_pct) / 100.0 * block_cycles / high
     )
     declared = sp.declared if sp else {}
     return Budget(
-        int(declared.get("voice_block", headroom // VOICES)),
+        int(declared.get("voice_block", headroom // voices)),
         int(declared.get("note_on_block", headroom)),
         headroom,
     )

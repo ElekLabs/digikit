@@ -265,8 +265,6 @@ pub struct Env {
     /// see `cond`); otherwise flag writers are replayed at exit from
     /// remembered sources.
     pub flag_v: bool,
-    /// `cfg.approx_recips`: the recips seed is a numeric value (else unknown).
-    pub approx_recips: bool,
     /// Block-translator clusters (`SHARC_BLOCKTRANS`): a pre-modify load or
     /// store whose modifier register has no known range, through an index
     /// register that is an unchanged entry anchor, is lowered with a dynamic
@@ -2078,7 +2076,6 @@ mod tests {
             assume_nw32: true,
             mode1: 0,
             flag_v: false,
-            approx_recips: false,
             guarded_dyn: false,
             bank_model: false,
             cacc_known: true,

@@ -395,6 +395,10 @@ class MachineRig:
             self.sess.poke(nw(out_addr) + k, NAN)
         self.sess.poke(nw(dv.STACK) - 1, dv.RETURN_SW - 1)
         self.sess.poke(nw(dv.STACK), 0x20000FF0)
+        # the mask of the registered types, as voice 0 of an earlier block leaves it (the table holds the one row)
+        self.sess.poke(
+            nw(self.built.data["_dv_mask"]), 1 << min(self.spec.machine_type, 31)
+        )
         res = self.sess.call(
             "_dv_entry",
             regs,

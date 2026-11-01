@@ -5,7 +5,7 @@ import { hexSha256, type DkLogEvent } from '@digi/dk-session';
 import { LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { installModule, liveArtifacts, record, settleUi } from '../runtime/live.ts';
+import { DEBUG_MODULE, installWithDebug, liveArtifacts, record, settleUi } from '../runtime/live.ts';
 
 export interface RuntimeModule {
   id: string;
@@ -92,28 +92,34 @@ export async function expectModuleLoad(
   }
   const epoch = (await session.status()).epoch;
   if (typeof epoch !== 'number') throw new Error('daemon status must report a numeric epoch');
-  await installModule(dk, module.id, artifact);
+  // the debug module is selected first: the log (LOG) exists only while it is loaded, and this cell reads it
+  await installWithDebug(runtime, module.id);
   expect(
     (await dk.modules()).map((entry) => entry.name),
-    'only the uploaded module is registered',
-  ).toEqual([module.id]);
+    'only the uploaded module and the debug module are registered',
+  ).toEqual([DEBUG_MODULE, module.id]);
   expect((await session.status()).epoch, 'protocol restart boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'store', entries);
-  expect(entries).toEqual([{ path: storePath, size: bytes.length, sha256: hash }]);
+  expect(entries.find((entry) => entry.path === storePath)).toEqual({
+    path: storePath,
+    size: bytes.length,
+    sha256: hash,
+  });
+  expect(entries.map((entry) => entry.path)).toEqual(['modules/debug.dkm', storePath].sort());
   expect(await dk.verifyFile(storePath, bytes), 'module bytes survive reboot').toBe(true);
 
   try {
     if (module.dsp) {
       // MOD_LOAD publishes the CF module before its DSP part completes over UI-loop passes.
-      // This cell selects one path, so boot's selection index is zero (not MODULES' registry index).
+      // This cell selects the debug module (index 0) and then this module's path, so boot's selection index is one (not MODULES' registry index).
       let completionLog: DkLogEvent[] = [];
       try {
         await expect
           .poll(
             async () => {
               completionLog = await dk.readLog();
-              return completionLog.some((event) => event.kind === LOG_KIND.MOD_DSP && event.args[0] === 0);
+              return completionLog.some((event) => event.kind === LOG_KIND.MOD_DSP && event.args[0] === 1);
             },
             { timeout: 30_000, interval: 500, message: 'selected module DSP completion' },
           )
@@ -123,12 +129,12 @@ export async function expectModuleLoad(
       }
       expect(
         completionLog
-          .filter((event) => event.kind === LOG_KIND.MOD_DSP && event.args[0] === 0)
+          .filter((event) => event.kind === LOG_KIND.MOD_DSP && event.args[0] === 1)
           .map((event) => event.args[1]),
         'DSP loader completes the selected module successfully',
       ).toEqual([0]);
     }
-    const loaded = (await dk.modules())[0]!;
+    const loaded = (await dk.modules()).find((entry) => entry.name === module.id)!;
     expect(loaded.version, 'loader reports the prepared module version').toBe(bytes.readUInt32BE(0x34));
     const contracts = Array.from({ length: 4 }, (_, index) => [bytes[0x38 + 2 * index], bytes[0x39 + 2 * index]]);
     expect(loaded.contracts, 'loader reports the prepared SDK contracts').toEqual(contracts);
@@ -153,6 +159,7 @@ export async function expectModuleLoad(
     const modules = await dk.modules();
     record(artifacts, 'modules', modules);
     expect(modules.map(({ name, faults, guard_off }) => ({ name, faults, guard_off }))).toEqual([
+      { name: DEBUG_MODULE, faults: 0, guard_off: false },
       { name: module.id, faults: 0, guard_off: false },
     ]);
     await expect

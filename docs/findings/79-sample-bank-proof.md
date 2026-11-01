@@ -2,7 +2,7 @@
 
 2026-10-29. Targets: Digitakt II OS 1.17 and Digitone II OS 1.12.
 **[D]** means source read or local measurement; **[O]** means incomplete. No new firmware claim is marked [V].
-This records implementation evidence following [the lifetime investigation](78-sample-loading-lifetime.md);
+This records implementation evidence following [the lifetime investigation](105-sample-loading-lifetime.md);
 the [plan](../plans/dsp-sdk-and-sampler.md) retains decisions, build sessions and detailed history.
 
 ## API and ownership
@@ -138,7 +138,7 @@ OS images. These suite durations are not loading-latency or performance measurem
 implementation checkpoint commit.
 
 **[O]** Em requested focused stock DT2 OS 1.17 OneShot dispatch → note/render → sample access/ownership tracing.
-Finding 77 covered metadata/pages; finding 15 concerns 1.16. **[D]** Current database candidates are render dispatch
+Finding 104 covered metadata/pages; finding 15 concerns 1.16. **[D]** Current database candidates are render dispatch
 `0x1c6b00` → `0x1c4ecf`, stretch branch `0x1c6af1` → `0x1c5576`, and Type 16a immediate post-modify return
 stores as a comparator. These are database observations, not [V] byte audits or a completed ownership path.
 

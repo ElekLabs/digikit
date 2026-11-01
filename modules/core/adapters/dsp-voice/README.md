@@ -8,6 +8,10 @@ example). On its own it changes nothing: a patched image with no registered mach
 - What changes on the device: nothing you can hear. The first instruction of the DSP's per-voice render function is
   replaced by a jump into this module, which looks the voice's machine type up in a table and runs the registered routine,
   or continues in the stock code.
+- Cost without a registered machine: voice 0 builds a mask of the registered types once per block (type t sets bit t; 31 or more set bit 31; free rows
+  of `core/dyndsp` are no type). With an empty mask every other voice goes back to the stock code after one check (about 10 instructions instead of
+  about 100). With a registered type a voice looks its own type up in the mask and runs the table scan only on a hit. A row that the runtime writes
+  takes effect from the next block. On the Digitakt II the voices write no breadcrumb while the mask is empty.
 - The DSP records, once per block, a heartbeat and the context registers it found (see `core/dsp-link`, `dl_diag`).
   It also writes a breadcrumb (the step, the voice and the machine type) before each step of a registered machine's path, and counts the calls and
   returns of the routines, so that a halt inside a routine names its place ([docs/findings/48-dsp-breadcrumbs.md](../../../../docs/findings/48-dsp-breadcrumbs.md)).

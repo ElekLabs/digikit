@@ -115,6 +115,43 @@ def test_uploader_select_and_restart_send_the_commands():
     assert seen == [(D.CMD_SELECT, b"\x01modules/a.dkm\0"), (D.CMD_RESTART, b"")]
 
 
+def _foreign_replies(count: int):
+    from tools.firmware.build import encode_8in7
+
+    class Fake:
+        def __init__(self):
+            self.q: list[bytes] = []
+
+        def send(self, msg: bytes) -> None:
+            # replies to another host's requests (other seq), then ours
+            for i in range(count):
+                self.q.append(
+                    msg[:4]
+                    + bytes([1, msg[5] | 0x40, (msg[6] + 1 + i) & 0x7F])
+                    + encode_8in7(b"\x00")
+                    + b"\xf7"
+                )
+            self.q.append(
+                msg[:4]
+                + bytes([1, msg[5] | 0x40, msg[6]])
+                + encode_8in7(b"\x00")
+                + b"\xf7"
+            )
+
+        def recv(self) -> bytes:
+            return self.q.pop(0)
+
+    return Fake()
+
+
+def test_skip_foreign_drops_replies_to_other_hosts_up_to_a_bound():
+    D.Uploader(_foreign_replies(3), skip_foreign=True).restart()
+    with pytest.raises(D.UploadError):
+        D.Uploader(_foreign_replies(3)).restart()
+    with pytest.raises(D.UploadError):
+        D.Uploader(_foreign_replies(64), skip_foreign=True).restart()
+
+
 def _info_of(runtime: int, tail: bytes) -> dict:
     import struct
 

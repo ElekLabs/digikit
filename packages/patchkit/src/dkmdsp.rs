@@ -74,18 +74,18 @@ pub const FXF_SEND: u32 = 1;
 pub const FXF_NOMASTER: u32 = 2;
 pub const FXF_DEFAULT_SEND: u32 = 4;
 /// Effects a module may carry (`DK_FX_MAX` of <dk/fx.h>).
-pub const MAX_FX: usize = 4;
+pub const MAX_FX: usize = dkneeds::MAX_FX as usize;
 /// `dk_fx_desc` (<dk/fx.h>): magic "DKFX", the contract number the packer accepts, its size in u32 words and the most parameter words.
 pub const FX_DESC_MAGIC: u32 = 0x444b_4658;
 pub const FX_DESC_CONTRACT: u32 = 1;
 pub const FX_DESC_WORDS: usize = 7;
 pub const FX_MAX_PARAMS: u32 = 8;
 pub const IMPORT_LEN: usize = 32;
-pub const MAX_RELOCS: usize = 4096;
-pub const MAX_IMPORTS: usize = 32;
-pub const MAX_VOICES: usize = 8;
+pub const MAX_RELOCS: usize = dkneeds::MAX_RELOCS as usize;
+pub const MAX_IMPORTS: usize = dkneeds::MAX_IMPORTS as usize;
+pub const MAX_VOICES: usize = dkneeds::MAX_VOICES as usize;
 /// Placement granule of the runtime's area allocator (bytes).
-pub const GRANULE: u32 = 64;
+pub const GRANULE: u32 = dkneeds::GRANULE;
 
 pub const KIND_ABS24: u32 = 0;
 pub const KIND_ABS32: u32 = 1;

@@ -75,10 +75,9 @@ header invalidation alone is inadequate.
   Both current firmware inputs are hash-bound in the acceptance artifacts;
   legacy generated profile labels do not identify firmware versions.
 
-The default reciprocal seed remains unknown for some Python-model routines.
-Specific replay cases explicitly use the existing approximation; the new
-composed route does not. No instruction semantics were changed. Exact reciprocal
-behavior remains a separately scoped investigation, with regeneration costs.
+RECIPS and RSQRTS use the measured seed tables of the core (finding 102), so the
+Python-model routines that divide are exact. The sampler branch changed no
+instruction semantics.
 
 ## Validation and resume commands
 
@@ -280,7 +279,7 @@ lifecycle audit links the published auxiliary handle to callback shutdown/contro
 but not actual creator entry/N, a valid external trigger or complete error cleanup.
 Main SPI2's R4=`0xabc` is separate and must not be used as auxiliary N. Next resolve
 external/computed creator entry or exact-entry R4 observation capability; negative
-reference searches do not prove dead code or every-boot/perpetual activity. See [finding 91](../findings/91-dn2-ddr-configuration.md).
+reference searches do not prove dead code or every-boot/perpetual activity. See [finding 106](../findings/106-dn2-ddr-configuration.md).
 
 The canonical packed-PCM16 parser already exists, but the current source/job
 contract is LE float32. Direct substitution would violate the consumer contract.
@@ -406,7 +405,7 @@ counts events; full native fault-history acceptance remains **failed/open**.
 The explicit opt-in storage-pair proof below does not change default runtime behavior.
 
 **[D/O] User-approved Stage A is partially implemented:**
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md) records the
+[finding 107](../findings/107-storage-interrupt-emulation-scope.md) records the
 bounded Device component and remaining gates. Immediate host events accept only
 `0x00310033`; raw completion/error bits latch independently through IRQSTATEN,
 with enable-clear effects, W1C and a separate IRQSIGEN gate on the derived shared
@@ -433,14 +432,14 @@ command helpers on DT2 1.17 / DN2 1.12 show IRQSIGEN (`0xfc0cc038`) OR
 The expanded DT2 MAIN raw scan `0x40000400..0x4031ff60` decoded 1,007,317
 instructions at 96.81% coverage, with zero absolute references to IRQSTATEN
 `0xfc0cc034`. Computed/indirect accesses remain outside the scan; this is not
-absence proof. Finding 100 records the exact helper addresses and source limits.
+absence proof. Finding 107 records the exact helper addresses and source limits.
 
 The public errata's SECF215 RSTA clock glitch/workaround and SECF218 SDIO entry
 do not resolve enable reset values in the bounded search. Linux's ColdFire reset
 path explicitly rewrites both enables after reset; the audited U-Boot path
 suggests reliance on nonzero status enables but cannot distinguish preservation
 from reset defaults. No trusted hardware readback was found. See
-[finding 100's reset investigation](../findings/100-storage-interrupt-emulation-scope.md#reset-investigation-and-controlled-checkpoint-decision)
+[finding 107's reset investigation](../findings/107-storage-interrupt-emulation-scope.md#reset-investigation-and-controlled-checkpoint-decision)
 for the primary driver links and limitations. Neither preserving, restoring the
 reset default nor zeroing IRQSTATEN after RSTA is proved. No component tests,
 builds or emulator runs were repeated for this evidence checkpoint.
@@ -566,7 +565,7 @@ Next implement a bounded Device event/status/acknowledgement component from the
 independent manual audit before timing integration. PIT PIF and DTIM REF/CAP
 must remain distinct from enabled requests and CPU entry; current Oracle
 compatibility behavior does not establish hardware semantics. Repeated non-1588
-DTIM REF rearming remains open. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md)
+DTIM REF rearming remains open. See [finding 107](../findings/107-storage-interrupt-emulation-scope.md)
 and [the plan](../plans/dsp-sdk-and-sampler.md). No default-policy, snapshot,
 native-boot, SHARC or PCM changes were made.
 
@@ -589,7 +588,7 @@ coordinator verification passed; the full gate remains deferred.
 Next address Device DTIM's event/status contract, including the open repeated
 REF rearming question, before automatic timing or shared/native arbitration.
 No hardware, snapshot format, default-policy, SHARC or PCM change is included.
-See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+See [finding 107](../findings/107-storage-interrupt-emulation-scope.md).
 
 ## Device DTIM supplied-reference component — 2026-10-31
 
@@ -611,7 +610,7 @@ coordinator verification passed; the full gate remains deferred.
 
 Repeated non-1588 REF rearming, timing/reset and shared/native arbitration remain
 open. Storage/force stepping still excludes timer requests. See
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+[finding 107](../findings/107-storage-interrupt-emulation-scope.md).
 
 ## Shared supplied-event selection — 2026-10-31
 
@@ -629,7 +628,7 @@ coordinator verification passed; the full gate remains deferred.
 This explicit subset advances no timers. Timing/rearming, physical SSI/DSPI,
 host input, batching and native integration remain open; the firmware rerun proves
 regression preservation rather than new-route firmware acceptance. See
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+[finding 107](../findings/107-storage-interrupt-emulation-scope.md).
 
 ## Device SSI50 latch and shared selection — 2026-10-31
 
@@ -650,7 +649,7 @@ nonfinal mistargeted attempt are recorded under ignored
 
 Native SSI/service batching, automatic timer semantics, DSPI/host-input delivery
 and full fault-history acceptance remain open; full gate deferred. See
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+[finding 107](../findings/107-storage-interrupt-emulation-scope.md).
 
 ## Device INTC mask-command bytes — 2026-10-31
 
@@ -671,7 +670,7 @@ callbacks, until a distinct admission contract exists: USB fixed level 5 bypasse
 ICR/IMR despite sharing vector 156 with DIN; it is not DIN source 28. Full EPORT
 is not a prerequisite; full RSTA remains open. No native admission implementation,
 Oracle USB, snapshot or default-policy change is included; full gate deferred.
-See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+See [finding 107](../findings/107-storage-interrupt-emulation-scope.md).
 
 [D/O] New manual evidence supports the next ordinary DTIM timing direction:
 p1169 FRR restart and p1171–p1172 §39.4.1 repeat five REF polls with DTER-2
@@ -696,4 +695,4 @@ five machine DTIM, eleven Time, 23 storage pair). Commands/hashes/logs are under
 issues; coordinator scoped path/layer and whitespace checks passed. No firmware/native consumer, clock conversion, implicit
 write advancement or snapshot format change is added. Bus rate/prescaler phase,
 full firmware DTXMR mode history, reset and native integration remain open; full
-gate deferred. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md).
+gate deferred. See [finding 107](../findings/107-storage-interrupt-emulation-scope.md).

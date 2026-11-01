@@ -103,7 +103,7 @@ the eight additional footprints are now classified below. Their placements are:
 | `0xb82342` | `0x2505a0 + 0xcc*v` | Dispatch case 1 |
 | `0xb81a16` | `0x251260 + 0x12c*v` | Dispatch case 2 |
 | `0xb80f2e` | `0x252520 + 0xec*v` | Dispatch case 3 |
-| `0xb806f5` | `0x2535e0 + 0x48*v` | Dispatch cases 4 and 6; existing ring bounds in finding 91 |
+| `0xb806f5` | `0x2535e0 + 0x48*v` | Dispatch cases 4 and 6; existing ring bounds in finding 106 |
 | `0xb81526` | `0x253a60 + 0xd4*v` | Dispatch case 5, scratch output then blend |
 | `0xb80345` | `0x2547a0 + 0x2c*v` | After selected processing stages |
 
@@ -196,11 +196,10 @@ initial controls between repeated occurrences. The harness also checks original
 image preservation, linked-code overlay priority and per-image decode-cache
 isolation. Independent source review found no issues.
 
-**[O]** The combined test uses existing `approx_recips=True`: default execution
-stops at `0x1c0706` on an unknown AV predicate after an unmodeled ordinary RECIPS
-seed. Candidate and references use the same approximation. A separate three-block
-recurrence-only test passes with approximation disabled. This establishes model
-state-separation equivalence, not hardware-exact reciprocal arithmetic, complete
+**[O]** The combined test runs on the default core. RECIPS and RSQRTS use the
+measured seed tables (finding 102), so the division helpers are exact. A separate
+three-block recurrence-only test covers the recurrences alone. This establishes
+model state-separation equivalence, complete
 routing, pan/send integration, natural reset/retrigger/steal coverage, external
 writer serialization, throughput or production stereo ABI.
 
@@ -246,7 +245,7 @@ independent source review found no issues.
 
 The new leaves use byte-space state/audio/stack pointers with explicit
 `assume_nw32=True`, because their raw-byte MODIFY interiors are combined with
-normal-word loads/stores. Reciprocal approximation is disabled. This context is
+normal-word loads/stores. This context is
 part of the proof, not an unqualified claim of arbitrary-mode equivalence. The
 preparation fixture accesses equivalent normal-word aliases, while stock callees
 receive byte pointers. No core semantics, public ABI or runtime code changed.
@@ -307,9 +306,8 @@ table-load PCs are watched over the full address space, so a load outside the
 128-entry or 1,024-entry tables fails rather than disappearing from the watch.
 Canonical store bounds include only permitted state, audio and stack locations.
 
-The held stage runs without reciprocal approximation. The preparation stage uses
-the same explicitly qualified approximation as the earlier nonlinear proof after
-confirming the known default-core stop at `0x1c0706`. Byte-space pointers and
+Both stages run on the default core with the measured RECIPS seed table
+(finding 102). Byte-space pointers and
 32-bit normal-word accesses are explicit, as in the filter-leaf tests. These are
 bounded captured-control cases, not complete parameter domains or live routes.
 Eight of ten stage families now have replay tests; the ring-backed stage and
@@ -351,8 +349,8 @@ Its consumed-count calculation divides a byte-pointer difference by four, so the
 proof uses byte-space audio pointers, explicit 32-bit normal-word access context
 and in-place buffers. Table-load PCs are checked against 128-word table bounds;
 state writes are restricted to words 7,9,10, plus audio and bounded stack stores.
-The hold path may leave existing in-place audio untouched. Reciprocal approximation
-is disabled and the trajectories avoid the phase-5 division helper.
+The hold path may leave existing in-place audio untouched. The trajectories
+avoid the phase-5 division helper.
 
 The synthetic record begins with indices 7,1,7,4th-word float 0.5, then 7,1,0,5,
 0,0,0. Constructor/setter provenance was separately inspected. Word 9 is explicitly
@@ -415,7 +413,7 @@ Four blocks compare all four intermediate buffers and both output planes from
 each channel with independent mono references. Controls are captured before left
 execution; first-order and case-5 histories remain private. Read/store bounds cover
 state, stack, table, scratch and audio accesses. Gain traverses phases 2,2,1,1.
-All values remain finite; no reciprocal approximation is enabled. Negative controls
+All values remain finite. Negative controls
 catch shared histories, advanced gain state, scratch overwritten before blending,
 and swapped or duplicated terminal planes. The scratch fault first verifies an
 otherwise-correct filter result, then detects the numerical blend mismatch.
@@ -525,8 +523,8 @@ snapshots and could otherwise hide the mistake.
 Right execution leaves left state unchanged. Record and stack accesses are bounded;
 the first helper's 128-entry coefficient-table reads are bounded too. The held
 helper is explicitly bound to its held-sample record, and its return-delay store
-is included. Reset calls require no reciprocal approximation; only the previously
-qualified prepared-stage rendering enables the existing approximation. Independent
+is included. Reset calls do not divide; the prepared-stage rendering divides with the
+measured seed table (finding 102). Independent
 source review found no issues. These tests establish finite helper behavior, not
 natural event coverage, all asynchronous writers or an installed reset hook.
 

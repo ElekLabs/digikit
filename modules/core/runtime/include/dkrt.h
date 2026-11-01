@@ -188,13 +188,13 @@ typedef struct DkrtHealth {
     uint32_t flags;                              /* HEALTH_* */
     uint32_t blocks;                             /* DSP blocks seen since boot (1500 per second) */
     uint32_t windows;                            /* windows (one second each) closed */
-    uint32_t cpu_x10;                            /* CPU load of the last window, tenths of a percent (HEALTH_CPU) */
+    uint32_t cpu_x10;                            /* CPU load of the last window, tenths of a percent, relative to the quietest window since boot (HEALTH_CPU) */
     uint32_t idle_win;                           /* the idle-loop iterations in the last window */
     uint32_t idle_ref;                           /* the best window so far (100 % idle) */
     uint32_t dsp_avg;                            /* DSP block handler, cycles per block, average of the last window (the DSP's own EMUCLK difference) */
     uint32_t dsp_max;                            /* maximum of the last window */
     uint32_t dsp_period;                         /* the cycles a block has (DSP_BLOCK_CYCLES) */
-    uint32_t dsp_avg_x10;                        /* dsp_avg as tenths of a percent of dsp_period (HEALTH_DSP) */
+    uint32_t dsp_avg_x10;                        /* dsp_avg as tenths of a percent of dsp_period, an assumed 1 GHz block (finding 100) (HEALTH_DSP) */
     uint32_t dsp_max_x10;                        /* dsp_max as tenths of a percent of dsp_period */
     uint32_t heap_total;                         /* the firmware heap (HEALTH_HEAP): bytes in all */
     uint32_t heap_free;
@@ -276,9 +276,9 @@ typedef struct DkrtDiag {
     uint32_t card_hash;                          /* a crc32 of it */
     uint32_t card_refused;                       /* card writes refused (range or read-only) */
     uint32_t card_read_errors;                   /* reads that failed in the check */
-    uint32_t debug_on;                           /* 1 when the debug log keeps every event (SETTINGS > DIGIKIT > DEBUG), 0 when it keeps errors only */
-    uint32_t log_oldest;                         /* sequence number of the oldest event in the log ring (0, 0: empty) */
-    uint32_t log_newest;                         /* sequence number of the newest event */
+    uint32_t debug_on;                           /* 1 while a debug module (the log sink) is loaded */
+    uint32_t log_oldest;                         /* 0 (the log ring is the debug module's; its LOG command has the range) */
+    uint32_t log_newest;                         /* 0 */
     uint32_t dsp_diag_ok;                        /* 1 when dl_diag is in the image and answered */
     uint32_t dsp_stopped;                        /* 1 when the heartbeat watch decided the DSP stopped */
     uint32_t dsp_heartbeat;                      /* the last heartbeat word */
@@ -501,9 +501,6 @@ void dkrt_poll_set(uintptr_t f);
 
 /* The card check, the debug log, the DSP watch and the crash record (finding 46). */
 void dkrt_diag(DkrtDiag *out);
-
-/* The debug log keeps every event (1) or errors only (0), now, and saved in the selection record. OK or an E_* code (E_CARD_RO: held until the next boot). */
-int32_t dkrt_debug_set(uint32_t on);
 
 /* The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store). */
 int32_t dkrt_store_list(const uint8_t *prefix, DkrtStoreEntry *out, uint32_t max);

@@ -92,7 +92,7 @@ requirement is lifecycle/content-change evidence plus independently latched
 low-level storage faults; recovery mechanisms, full hook coverage and source
 consistency remain open, with no implementation selected. No hooks or complete
 generation scheme are selected. See
-[finding 91](../findings/91-dn2-ddr-configuration.md) and
+[finding 106](../findings/106-dn2-ddr-configuration.md) and
 [finding 81](../findings/81-stock-sampler-dependencies.md).
 
 **Accepted first-release recovery policy:** missing, invalid or changed samples
@@ -309,7 +309,7 @@ Both runs pass independent artifact review. Direct host checks pass 195 tests
 pnpm launcher failure. No merge gate, hardware run or performance claim is made.
 
 **Audit checkpoint (2026-10-30): owned backing and cache safety remain open.**
-[D] Finding 91 now establishes a positive 512 KiB initialization extent at
+[D] Finding 106 now establishes a positive 512 KiB initialization extent at
 `[0x804ad790,0x8052d790)` (sixteen 32 KiB per-track clears), not universal
 runtime bounds or free space. Adjacent helpers/consumers remain open.
 [D]/[C] Private 0.2 LP0 RX is `dsp.l2` module BSS, not the L1 allocator;
@@ -461,7 +461,7 @@ owned backing. It adds real reader integration while production pool reservation
 and hardware cache safety are investigated separately. Existing DT2 loader/reset
 queries establish slot-owned allocation and concrete project invalidation, not an
 independent adapter allocation. DN2 runtime ring inspection now establishes masked recurrence but leaves the first
-read conditional on producer range/rounding and SIMD state; see finding 91.
+read conditional on producer range/rounding and SIMD state; see finding 106.
 Configured DDR size is not evidence of a free sample pool. The DT2 follow-up
 records project-reset invalidation in finding 81 and rejects a byte-fill helper
 as an allocator candidate.
@@ -483,7 +483,7 @@ checked against original bytes: sixteen 128-byte output buffers at
 pool. The apparent later writer `0x1c9118 → 0x254a84` is now corrected on its
 audited first-pass path: byte-width addressing writes `0x254ab4`, outside the
 table. Other callees/loop paths and consumer bounds still need tracing; see
-finding 91. Do not repeat the initializer or this bounded width correction.
+finding 106. Do not repeat the initializer or this bounded width correction.
 The old sample API still owns one nonreplaceable 8,192-frame bank per module;
 it cannot implement this product by changing a path alone. Existing
 `sdk/dsp/sample_bank.inc` supplies admission, epoch and reader-drain primitives.
@@ -602,7 +602,7 @@ no general reservable DDR arena has been established. Keep the experimental bank
 private and unpublished to voices until ownership is resolved.
 The following smaller ring object is also locally bounded; a lookup index is
 bounded by a signed-halfword load, correcting the initial unbounded-word reading
-(finding 91). The explicit reply extension is now proved in the private diagnostic,
+(finding 106). The explicit reply extension is now proved in the private diagnostic,
 with boot-time counts and unchanged stock-copy bounds.
 No stock header/trailer bytes are approved for reuse.
 
@@ -623,7 +623,7 @@ Current parallel work (source cursor reviewed; 59 SDK tests, no_std and owner py
 - [x] Trace the current DN2 frame's source-track producer and same-handler assignment ordering ([finding 90](../findings/90-dn2-track-owner-and-worker.md)); dynamic reassignment proof remains open.
 - [x] Trace DN2 background-worker callbacks against current image bytes ([finding 90](../findings/90-dn2-track-owner-and-worker.md)); no sample allocator follows from generic worker dispatch.
 - [x] Add bounded DN2 store reads with generation checks and mandatory digest completion ([finding 87](../findings/87-pcm16-streaming.md)).
-- [x] Audit DN2 DDR configuration: 512 MiB configured geometry, stock scratch beyond loaded extent ([finding 91](../findings/91-dn2-ddr-configuration.md)).
+- [x] Audit DN2 DDR configuration: 512 MiB configured geometry, stock scratch beyond loaded extent ([finding 106](../findings/106-dn2-ddr-configuration.md)).
 - [ ] Establish explicit DN2 pool reservation from runtime pointer origins/bounds; configuration is not ownership.
 - [x] Implement machine contract 1.1 source-track input (runtime 0.5.3), with DN2
   delayed-note latching and invalid-owner isolation; 17 focused + 8 adapter tests,
@@ -865,14 +865,14 @@ pass with the changed consumer; no actual bank reopening is claimed.
 
 - Worktree: `/private/tmp/digikit-dsp-sampler`; branch: `refs/heads/sdk/dsp-sampler-discovery`.
   Keep Claude's original checkout on its cleanup branch untouched.
-- Read this plan, then [finding 77](../findings/77-dsp-sdk-sampler-discovery.md). Check git status and the
+- Read this plan, then [finding 104](../findings/104-dsp-sdk-sampler-discovery.md). Check git status and the
   cleanup checkpoint before implementation; the module inventory is pinned to `219570ca`, not final cleanup.
 - First approved implementation is now integrated: exact xorshift and BD/PD sine-polynomial SDK macros with
   consumer replacements; split cursor and bounded mono linear-reader kernel with numerical references/tests.
   Read the implementation checkpoint below for verification status. Sample transport, stereo ABI and hardware
   work remain separate decisions. Em has now approved the bounded sample transport/lifetime proof below.
 - SDK checkpoint: `4cd29a3c`. The resumed loading/lifetime investigation is in
-  [finding 78](../findings/78-sample-loading-lifetime.md). Read the next proof proposal below before changing runtime
+  [finding 105](../findings/105-sample-loading-lifetime.md). Read the next proof proposal below before changing runtime
   code. It preserves Transfer destinations and uses a module-owned, session-pinned DSP bank. The proof is approved;
   do not ask for its approval again. Source, packaging and runtime patches are integrated.
   Both DN2 1.12 and DT2 1.17 transferred-file acceptance now pass after the ColdFire byte-swap helper and explicit-label
@@ -984,7 +984,7 @@ the implementation decision, reviewers audit. One writer per worktree; children 
 - [x] Confirm the distinction between transferred/stored samples and DSP playback access.
 - [x] Locate existing SQLite/NetworkX graph helpers and DSP reference tests.
 - [x] Inventory pluck, bd, analog, pd and freqshift: initial source inventory below; measurements and final cleanup reconciliation remain open.
-- [x] Audit the machine/FX ABI: source-level gaps and device adapter behavior recorded in finding 77; firmware-owned buffer lifetime remains open below.
+- [x] Audit the machine/FX ABI: source-level gaps and device adapter behavior recorded in finding 104; firmware-owned buffer lifetime remains open below.
 - [x] Record current checks, timing-model limits and memory constraints from authoritative code/configuration; measurements remain pending.
 
 Acceptance: an evidence-backed gap matrix and migration order, with implemented behavior separated from proposals.
@@ -1015,7 +1015,7 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 - [ ] Decide resident versus streaming feasibility, with explicit bounds and missing evidence.
 
 Initial bounded investigation is complete with precise blockers; the remaining boxes require deeper traces or an
-approved proof. Findings: [77](../findings/77-dsp-sdk-sampler-discovery.md). DT2 slot metadata and page-copy arithmetic
+approved proof. Findings: [104](../findings/104-dsp-sdk-sampler-discovery.md). DT2 slot metadata and page-copy arithmetic
 were re-read on 1.17; stock allocation/retention is not yet safe to reuse. DN2's existing link is suitable to investigate
 for resident data, but its 72,000 B/s theoretical payload ceiling is below mono 48 kHz int16 streaming's 96,000 B/s.
 This rules out that representation through that link, not every possible streaming design. No general DSP work
@@ -1146,7 +1146,7 @@ Names below are conceptual, not new exported ABI commitments:
 ## Historical approved proof — loading and lifetime
 
 Em approved this bounded bank API on 2026-10-29, narrower than the earlier general prepare/bind/release sketch.
-Evidence and exact current-image mappings are in finding 78. Runtime implementation is integrated below;
+Evidence and exact current-image mappings are in finding 105. Runtime implementation is integrated below;
 the transferred-file bounded emulator proof passes on both current OS images. The first SDK milestone is checkpointed at `4cd29a3c`.
 
 **Scope:** prove an actual transferred mono sample can reach the existing numerical reader on both devices,
@@ -1248,7 +1248,7 @@ ownership/coherency protocol. Hoist conversions/coefficient work out of sample l
 - [x] Port DT2 filesystem candidates by strict function hashes, then read current Ghidra dossiers. Correct the
   initial mistaken nearby-address inference and worktree input-link gap; record only the actual mapped entries.
 - [x] Inspect UI job context, source snapshots, allocator ownership, transport source retention and READY ordering.
-- [x] Obtain independent evidence audit; record caveats and the bounded next implementation proposal in finding 78.
+- [x] Obtain independent evidence audit; record caveats and the bounded next implementation proposal in finding 105.
 - [x] Em agrees to the loading/lifetime proof scope above before core runtime/adapter or packaging edits (2026-10-29).
 
 ### 2026-10-29 — approved loading/lifetime implementation in progress
@@ -1445,7 +1445,7 @@ capacity, arbitrary module coexistence, stock quality or performance. Use git lo
 - [x] Run three disjoint read-only investigations: DT2 stock sample path, DN2 delivery/memory, and general DSP on both.
 - [x] Parent audits voice lifecycle/format and uses existing SQLite-backed NetworkX call graphs for both target images.
 - [x] Independent evidence auditor checks DN2 payload/capacity arithmetic, mono ABI and DT2 page-copy listing.
-- [x] Record source/listing results and unresolved lifetime/coherency questions in finding 77; index it in `docs/FINDINGS.md`.
+- [x] Record source/listing results and unresolved lifetime/coherency questions in finding 104; index it in `docs/FINDINGS.md`.
 - [ ] Independently decode relevant original instruction bytes before using [V]; matching the DT2 blob hash alone is insufficient.
 
 Corrections caught during integration: filling the same DSP byte area takes the same transfer time for mono and
@@ -1456,7 +1456,7 @@ header and trailer. No implementation or performance measurement was performed.
 Parent source comparison confirms a first exact extraction candidate: BD/pluck share xorshift shifts 13, -17, 5;
 their float conversion paths differ and should initially remain with the caller. BD/PD share sine coefficient words
 and polynomial operation order after folding, but their phase/modulation code remains distinct. Preserve scheduling
-and rounding first; optimization is a later measured change. Finding 77 records this narrower scope.
+and rounding first; optimization is a later measured change. Finding 104 records this narrower scope.
 
 ### Initial module inventory (pinned baseline; source inspection, not execution)
 
@@ -1527,7 +1527,7 @@ Keep symbol-name matches as candidates until their actual behavior is establishe
 
 Validation (2026-10-29, historical resumed discovery documentation, before proof approval):
 
-- Targeted pathcheck for the plan, finding 78 and findings index passes; `git diff --check HEAD` passes.
+- Targeted pathcheck for the plan, finding 105 and findings index passes; `git diff --check HEAD` passes.
 - `mise run test:changed` passes layercheck and fails only on the same 10 stale references in five
   unchanged baseline files recorded below. No code, firmware or hardware checks were needed for this
   documentation-only checkpoint. The runtime proof was awaiting agreement then; Em subsequently approved it.
@@ -2099,27 +2099,17 @@ replay tests execute. No full merge gate or hardware acceptance is claimed.
 The shadow replay is a synthetic subset, not a verified stock preset. Shared
 controls are snapshotted before the left pass; right mutations remain live within
 the replay, while independent right audio histories survive between blocks.
-Combined equality uses the existing reciprocal approximation; the separate
-recurrence-only test uses the default core. See finding 96 for scope and evidence.
+All replay tests use the default core, with the measured RECIPS and RSQRTS seed
+tables (finding 102). See finding 96 for scope and evidence.
 
 ### Reciprocal emulator follow-up
 
 - [x] Identify the current gap: ordinary RECIPS numeric seed, rather than a broad
   missing instruction/flag implementation. Public PRM 19-17 describes a ROM
   indexed by seven mantissa bits, but its table contents are not supplied.
-- [ ] Audit approximation compliance with documented index/exponent rules and
-  final firmware division error over bounded representative/edge inputs. Current
-  truncation of mathematical reciprocal is an explicitly approximate model.
-- [ ] If warranted, propose a separate core change with exact/approximate behavior
-  kept distinct, then regenerate and validate both device cores and shared core.
-  Do not silently turn the existing approximation into claimed hardware truth.
-
-A finite source/manual audit and numerical characterization is hours-to-day scale;
-exact table recovery is unbounded without a trustworthy table or measurements.
-With such evidence available, implementation, regeneration and validation are
-roughly a 1–3 engineering-day estimate, not a commitment. Hardware measurement and
-core regeneration are separate decision points; no core edit is part of this
-sampler checkpoint. This follow-up does not block the model-based replay proof.
+- [x] Measure the seed tables on a Digitakt II and put them in the core
+  ([finding 102](../findings/102-recips-rsqrts-seed-tables.md)); the approximation
+  option is removed. The replay proofs run on the exact core.
 
 
 Checkpoint preflight: Ruff, layercheck, 281 routed Python tooling tests and changed
@@ -2148,7 +2138,7 @@ the evidence and rejects an intermediate database-only pointer interpretation.
   leaves, with unequal audio, changing coefficients, private histories and
   meaningful corruption controls. Twelve total replay tests pass without skips;
   source review is clean. New leaves need explicit byte-pointer/32-bit NW context
-  and do not use approximate reciprocals.
+  and run on the default core.
 - [ ] Cover remaining control/processing families and case-5 scratch/blend, then
   prove the real ordered route and pan/send integration rather than treating leaf
   equivalence as a production stereo adapter.
@@ -2319,12 +2309,9 @@ The reciprocal follow-up is read-only: determine whether public documentation
 specifies exact seed recovery or a hardware measurement is required. No
 instruction-core changes or regeneration are authorized by this follow-up.
 
-Reciprocal follow-up complete: the inspected public manuals specify ROM indexing
-and exponent/sign behavior, but not exact seed values or a rounding prescription.
-[Finding 98](../findings/98-reciprocal-seed-fidelity.md) records the bounded source
-search, proposed 128-index raw-result measurement and conditional effort estimate.
-A trusted full-register hardware readback path is the missing prerequisite; no
-hardware action, core edit or regeneration follows automatically from this result.
+The inspected public manuals specify ROM indexing and exponent/sign behavior, but
+not the seed values ([finding 98](../findings/98-reciprocal-seed-fidelity.md)). The
+values come from the device measurement in finding 102.
 
 ### Completed private native prototype: first processing stage
 
@@ -2772,7 +2759,7 @@ and mypy pass. Source/report identity and commands are retained in ignored
 - [ ] Keep external ring ownership and explicit entry/dispatch precision separate
   from this closed destination family; corrupted state and complete writer reach
   remain open. No traversal-policy or production reservation is approved. See
-  [finding 91](../findings/91-dn2-ddr-configuration.md).
+  [finding 106](../findings/106-dn2-ddr-configuration.md).
 
 **[O] Parser wiring boundary:** the existing source contract supplies LE float32,
 whereas `NativePcm16Stream` emits packed PCM16. Its existing canonical parser is
@@ -2883,7 +2870,7 @@ counts events; full native fault-history acceptance remains **failed/open**.
 The explicit opt-in storage-pair proof below does not change default runtime behavior.
 
 **[D/O] User-approved Stage A is partially implemented:**
-[finding 100](../findings/100-storage-interrupt-emulation-scope.md) records the
+[finding 107](../findings/107-storage-interrupt-emulation-scope.md) records the
 bounded Device component and remaining gates. Immediate host events accept only
 `0x00310033`; raw completion/error bits latch independently through IRQSTATEN,
 with enable-clear effects, W1C and a separate IRQSIGEN gate on the derived shared
@@ -2910,14 +2897,14 @@ command helpers on DT2 1.17 / DN2 1.12 show IRQSIGEN (`0xfc0cc038`) OR
 The expanded DT2 MAIN raw scan `0x40000400..0x4031ff60` decoded 1,007,317
 instructions at 96.81% coverage, with zero absolute references to IRQSTATEN
 `0xfc0cc034`. Computed/indirect accesses remain outside the scan; this is not
-absence proof. Finding 100 records the exact helper addresses and source limits.
+absence proof. Finding 107 records the exact helper addresses and source limits.
 
 The public errata's SECF215 RSTA clock glitch/workaround and SECF218 SDIO entry
 do not resolve enable reset values in the bounded search. Linux's ColdFire reset
 path explicitly rewrites both enables after reset; the audited U-Boot path
 suggests reliance on nonzero status enables but cannot distinguish preservation
 from reset defaults. No trusted hardware readback was found. See
-[finding 100's reset investigation](../findings/100-storage-interrupt-emulation-scope.md#reset-investigation-and-controlled-checkpoint-decision)
+[finding 107's reset investigation](../findings/107-storage-interrupt-emulation-scope.md#reset-investigation-and-controlled-checkpoint-decision)
 for the primary driver links and limitations. Neither preserving, restoring the
 reset default nor zeroing IRQSTATEN after RSTA is proved. No component tests,
 builds or emulator runs were repeated for this evidence checkpoint.
@@ -3014,7 +3001,7 @@ in the same directory. These are controlled initialized-state proofs, not a
 native boot or complete relevant fault history. The coordinator's scoped
 `mise run test:changed` for the five arbiter Rust files, firmware fixture and plan
 passed pathcheck/layers before final prose; final docs pathcheck is coordinator-owned.
-The full merge gate remains deferred. See [finding 100](../findings/100-storage-interrupt-emulation-scope.md)
+The full merge gate remains deferred. See [finding 107](../findings/107-storage-interrupt-emulation-scope.md)
 for boundaries and evidence.
 
 Remaining: resolve Device runtime construction and snapshot design, execution-

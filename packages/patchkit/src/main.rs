@@ -36,6 +36,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
+  fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
   needs   [--json] FILE.dkm...           what a load of each file takes (arena, DSP area, rows), inferred from its contents; `-` reads stdin;
                                          --json: one object, file -> the needs or {\"error\": text}; exit 1 when a file has none
   dkm-dsp-image FILE BASE [NAME=VALUE..]  the relocated DSP image of a .dkm at the L2 byte address BASE (hex)
@@ -824,6 +825,16 @@ plan.json {}",
             if failed {
                 std::process::exit(1);
             }
+        }
+        "fit" => {
+            // the fit rule for the device tools: the request on stdin (`-`), the answer as JSON
+            if !rest.iter().any(|a| a == "--json") || !rest.iter().any(|a| a == "-") {
+                return Err(Error(USAGE.into()));
+            }
+            let mut req = vec![];
+            std::io::Read::read_to_end(&mut std::io::stdin(), &mut req)
+                .map_err(|e| Error(format!("stdin: {e}")))?;
+            println!("{}", patchkit::fit::fit_json(&req)?);
         }
         "dkm-info" => {
             let raw = read(need(rest)?)?;

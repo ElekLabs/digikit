@@ -4,11 +4,9 @@ use sha2::{Digest, Sha256};
 
 pub const HEAD: [u8; 5] = [0xF0, 0x7D, 0x64, 0x6B, 0x01];
 pub const REPLY_BIT: u8 = 0x40;
-pub const MAX_CHUNK: usize = 32768;
-/// A request is at most 40 KiB on the wire; a reply at most 1 KiB.
-pub const MAX_REQUEST_WIRE: usize = 40 * 1024;
-pub const MAX_REPLY_WIRE: usize = 1024;
 
+/// `MAX_CHUNK`: a PUT chunk. `MAX_REQUEST_WIRE` and `MAX_REPLY_WIRE`: the most a request (40 KiB) and a reply (1 KiB) take on the wire.
+pub use crate::gen_proto::{MAX_CHUNK, MAX_REPLY_WIRE, MAX_REQUEST_WIRE};
 pub use crate::gen_proto::{
     CMD_ABORT, CMD_BEGIN, CMD_CLEAR, CMD_DATA, CMD_DELETE, CMD_END, CMD_INFO, CMD_LIST, CMD_MKDIR,
     CMD_READ, CMD_VERIFY,

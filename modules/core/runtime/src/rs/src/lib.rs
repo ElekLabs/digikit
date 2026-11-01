@@ -36,6 +36,7 @@ mod sha256;
 pub mod store;
 mod table;
 pub mod upload;
+mod watch;
 
 #[cfg(not(test))]
 #[panic_handler]
@@ -294,7 +295,7 @@ pub struct Import {
     pub name: [u8; 28],
     pub addr: *const (),
 }
-pub struct Imports(pub [Import; 10]);
+pub struct Imports(pub [Import; 14]);
 unsafe impl Sync for Imports {}
 
 const fn nm(s: &[u8]) -> [u8; 28] {
@@ -308,7 +309,7 @@ const fn nm(s: &[u8]) -> [u8; 28] {
 }
 
 /// The names of `IMPORTS`, in its order; checked against the `[[import]]` entries of `sdk/sdk.toml` without `requires` below.
-const NAMES: [&[u8]; 10] = [
+const NAMES: [&[u8]; 14] = [
     b"fw_block_read",
     b"fw_alloc",
     b"fw_free",
@@ -319,6 +320,10 @@ const NAMES: [&[u8]; 10] = [
     b"__udivdi3",
     b"__umoddi3",
     b"dkrt_blocks",
+    b"dkrt_log_sink_set",
+    b"dkrt_log_ev",
+    b"dkrt_peek_range",
+    b"dkrt_track_type",
 ];
 
 const fn names_match(ours: &[&[u8]], sdk: &[&str]) -> bool {
@@ -345,6 +350,10 @@ const fn names_match(ours: &[&[u8]], sdk: &[&str]) -> bool {
 
 const _: () = assert!(names_match(&NAMES, &dkrt_sdk::api::BUILTIN_NAMES), "IMPORTS names differ from [[import]] of sdk/sdk.toml");
 const _: dkrt_sdk::api::DkrtBlocksFn = dkrt_blocks;
+const _: dkrt_sdk::api::DkrtLogSinkSetFn = dlog::dkrt_log_sink_set;
+const _: dkrt_sdk::api::DkrtLogEvFn = dlog::dkrt_log_ev;
+const _: dkrt_sdk::api::DkrtPeekRangeFn = dkrt_peek_range;
+const _: dkrt_sdk::api::DkrtTrackTypeFn = dkrt_track_type;
 
 /// The names a module may import. Firmware functions come from patch-time anchors (`dkfw`); the helpers are this
 /// object's own copies, so a module need not carry them.
@@ -390,7 +399,54 @@ pub static IMPORTS: Imports = Imports([
         name: nm(NAMES[9]),
         addr: dkrt_blocks as *const (),
     },
+    Import {
+        name: nm(NAMES[10]),
+        addr: dlog::dkrt_log_sink_set as *const (),
+    },
+    Import {
+        name: nm(NAMES[11]),
+        addr: dlog::dkrt_log_ev as *const (),
+    },
+    Import {
+        name: nm(NAMES[12]),
+        addr: dkrt_peek_range as *const (),
+    },
+    Import {
+        name: nm(NAMES[13]),
+        addr: dkrt_track_type as *const (),
+    },
 ]);
+
+extern "C" {
+    /// Per-device data from the device file (`[digikit] peek`), defined by `src/cf/<dev>/device.s`: the number of ranges and `lo, hi` pairs.
+    static dkrt_peek_n: u32;
+    static dkrt_peek_ranges: [u32; 8];
+}
+
+/// Import `dkrt_peek_range`: how many RAM ranges the device file allows PEEK to read; for `i` below that, range `i` as `lo, hi` into `out`.
+unsafe extern "C" fn dkrt_peek_range(i: u32, out: *mut u32) -> u32 {
+    let n = read_volatile(addr_of!(dkrt_peek_n)).min(4);
+    if i < n {
+        let t = addr_of!(dkrt_peek_ranges) as *const u32;
+        *out = read_volatile(t.add(2 * i as usize));
+        *out.add(1) = read_volatile(t.add(2 * i as usize + 1));
+    }
+    n
+}
+
+/// Import `dkrt_track_type`: the machine type of a track of the active kit, from the firmware's own accessors (read-only); -1 past track 15 or when the
+/// firmware has no type for it, -2 when there is no project yet.
+unsafe extern "C" fn dkrt_track_type(track: u32) -> i32 {
+    // `Project *f(void)`, `Kit *f(Project *)` (the active kit), `int f(Kit *, int track)` (-1: no such track)
+    let p = dkfw::project::singleton();
+    if p == 0 {
+        return -2;
+    }
+    if track >= 16 {
+        return -1;
+    }
+    dkfw::project::track_type(dkfw::project::active_kit(p), track as i32) as i32
+}
 
 // ---- imports of other modules --------------------------------------------------------------------------------------------
 
@@ -821,8 +877,7 @@ pub unsafe extern "C" fn dkrt_diag(out: *mut DkrtDiag) {
     init_once();
     let o = &mut *out;
     let c = card::info();
-    let (oldest, newest) = dlog::range();
-    let (dsp_ok, hb) = dlog::heartbeat();
+    let (dsp_ok, hb) = watch::heartbeat();
     let k = crash::seen();
     *o = DkrtDiag {
         magic: DIAG_MAGIC,
@@ -832,17 +887,17 @@ pub unsafe extern "C" fn dkrt_diag(out: *mut DkrtDiag) {
         card_hash: c.hash,
         card_refused: c.refused,
         card_read_errors: c.read_errors,
-        debug_on: dlog::debug_on() as u32,
-        log_oldest: oldest,
-        log_newest: newest,
+        debug_on: dlog::sink_present() as u32,
+        log_oldest: 0,
+        log_newest: 0,
         dsp_diag_ok: dsp_ok as u32,
-        dsp_stopped: dlog::dsp_stopped() as u32,
+        dsp_stopped: watch::dsp_stopped() as u32,
         dsp_heartbeat: hb,
         crash_found: k.found,
         crash_pc: k.pc,
         crash_vec: k.vec,
         ram_kept: k.ram_kept,
-        dsp_crumb: dlog::stop_crumb(),
+        dsp_crumb: watch::stop_crumb(),
         fault_rows: 0,
         fault_text: [[0; 24]; FAULT_ROWS],
     };
@@ -860,14 +915,6 @@ pub unsafe extern "C" fn dkrt_diag(out: *mut DkrtDiag) {
             o.fault_rows = k as u32;
         }
     }
-}
-
-/// `dkrt_debug_set(on)`: the debug log keeps every event (1) or errors only (0), now, and saved in the selection record's flags for the next
-/// boot. Returns the result of the save (`E_CARD_RO` on a card the runtime does not write: the setting then holds until the next boot).
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_debug_set(on: u32) -> i32 {
-    init_once();
-    boot::debug_set(on != 0)
 }
 
 /// The `index`th loaded module (in load-slot order) into `out`; returns 0, or `E_NOT_FOUND` past the end.
@@ -999,7 +1046,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     files::tick();
     fxpage::tick();
     settings::tick();
-    dlog::tick();
+    watch::tick();
     let mb = &mut *addr_of_mut!(DKRT_MAILBOX);
     let cmd = read_volatile(addr_of!(mb.cmd));
     if cmd != 0 {
@@ -1017,8 +1064,6 @@ pub unsafe extern "C" fn dkrt_tick() {
             OK
         } else if cmd == CMD_CARD_PROBE {
             card::probe(mb.arg.as_ptr())
-        } else if cmd == CMD_DEBUG {
-            boot::debug_set(*mb.arg.as_ptr() != 0)
         } else if cmd >= CMD_SETTINGS_PUT && cmd <= CMD_SETTINGS_FLUSH {
             settings::mailbox(cmd, mb.arg.as_mut_ptr())
         } else {

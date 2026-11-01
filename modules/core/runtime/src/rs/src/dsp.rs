@@ -30,9 +30,9 @@ const STATE_MAGIC: u32 = 0x444b_4453; // "DKDS"
 /// Free voice rows core/dyndsp reserves: one per run-time machine type (a module's voice takes a row).
 pub const MAX_ROWS: usize = DYN_TYPES as usize;
 const MAX_VOICES: usize = MAX_ROWS;
-const MAX_RELOCS: u32 = 4096;
-const MAX_IMPORTS: u32 = 32;
-const GRANULE: u32 = 64;
+const MAX_RELOCS: u32 = dkneeds::MAX_RELOCS;
+const MAX_IMPORTS: u32 = dkneeds::MAX_IMPORTS;
+const GRANULE: u32 = dkneeds::GRANULE;
 /// Words of a voice row of `core/dsp-voice`: 0 type, 1 pc, 2 to 9 the range of knob 0 to 7 (min | max << 16), 10 the type the guard disabled, then its counters,
 /// 16 note_on pc, 17 state base, 18 state stride, 19 clear bytes, 20 generation, 21 log level, 22 and 23 spare.
 const ROW_WORDS: u32 = 24;
@@ -42,12 +42,12 @@ const VOICE_V1: u32 = 16;
 const VOICE_V2: u32 = 48;
 const VOICE_V3: u32 = 64;
 /// Most voice states a module may reserve.
-const MAX_STATE_VOICES: u32 = 64;
+const MAX_STATE_VOICES: u32 = dkneeds::MAX_STATE_VOICES;
 /// Steps to publish a row: 8 ranges, the pc, note_on, state base, stride, clear, the cleared disabled word, the type.
 const ROW_STEPS: u32 = 15;
 /// Effect rows: the most a chain takes (`DK_FX_MAX`), the bytes of an effect record in a DSP section of version 4, the words of a row of `core/fx`, the pc of
 /// a free row and the steps to publish a row: 8 parameter words, desc, state, mix, enabled, the 4 amount words and the route (finding 62), the pc.
-pub const MAX_FX: usize = 4;
+pub const MAX_FX: usize = dkneeds::MAX_FX as usize;
 const FX_REC: u32 = 64;
 const FX_ROW_WORDS: u32 = 24;
 const FX_FREE_PC: u32 = 0xffff_ffff;
@@ -225,10 +225,6 @@ pub struct DspState {
     pub fx_flags: [u32; MAX_FX],
     /// Per module record: the effect rows it owns (bit mask).
     pub mod_fx: [u32; crate::MAX_MODULES],
-    /// Per module record: an arena block with the places in the relocated image that hold the address of `_dk_step` (offset << 1 | 1 for a 32-bit field, offset << 1
-    /// for a 24-bit one) and their number. The send patches them to the module step word in the DSP's reply record (`patch_steps`).
-    pub step_list: [u32; crate::MAX_MODULES],
-    pub step_n: [u32; crate::MAX_MODULES],
 }
 
 #[no_mangle]
@@ -886,21 +882,6 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     }
     let pc_shift = (base - L2_BYTE_BASE) / 2;
     let byte_shift = base - L2_BYTE_BASE;
-    // the places that hold `_dk_step`, for `patch_steps`
-    let step_static = dsp_symbol(b"_dk_step\0".as_ptr());
-    let mut nstep = 0u32;
-    if step_static != 0 {
-        i = 0;
-        while i < job.nreloc as usize {
-            let w = rd32(job.relocs.add(8 * i + 4));
-            if (w >> 24) & 15 == 2 && job.import_vals[(w & 0xffff) as usize] == step_static {
-                nstep += 1;
-            }
-            i += 1;
-        }
-    }
-    let steps = if nstep > 0 { arena::alloc(4 * nstep) as *mut u32 } else { core::ptr::null_mut() };
-    let mut sfilled = 0u32;
     i = 0;
     while i < job.nreloc as usize {
         let e = job.relocs.add(8 * i);
@@ -912,18 +893,11 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
             1 => byte_shift,
             _ => job.import_vals[imp],
         };
-        if class == 2 && !steps.is_null() && add == step_static && sfilled < nstep {
-            *steps.add(sfilled as usize) = (o as u32) << 1 | kind;
-            sfilled += 1;
-        }
         let p = buf.add(o);
         if kind == 0 {
             let v = (((*p.add(2)) as u32) << 16 | le16(p.add(4))).wrapping_add(add);
             if v >= 1 << 24 {
                 arena::free(buf);
-                if !steps.is_null() {
-                    arena::free(steps as *mut u8);
-                }
                 return E_DSP_FORMAT;
             }
             *p.add(2) = (v >> 16) as u8;
@@ -1019,8 +993,6 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     d.mod_off[rec] = off;
     d.mod_len[rec] = len;
     d.mod_rows[rec] = claimed;
-    d.step_list[rec] = steps as u32;
-    d.step_n[rec] = sfilled;
     d.send_base = base;
     d.send_len = job.image_size;
     d.send_buf = buf as u32;
@@ -1066,57 +1038,6 @@ unsafe fn unreserve(rec: usize) {
     d.mod_len[rec] = 0;
     d.mod_rows[rec] = 0;
     d.mod_fx[rec] = 0;
-    free_steps(rec);
-}
-
-unsafe fn free_steps(rec: usize) {
-    let d = ds();
-    if d.step_list[rec] != 0 {
-        arena::free(d.step_list[rec] as *mut u8);
-        d.step_list[rec] = 0;
-    }
-    d.step_n[rec] = 0;
-}
-
-/// Passes (about 120 a second) a send waits for the DSP's reply record to name its two addresses before it falls back to the static word.
-const STEP_WAIT: u32 = 1500;
-
-/// Before the first chunk of a module's image goes out: the stores of `_dk_step` (`DK_STEP` in the module) are pointed at the module step word of the DSP's reply
-/// record (dsp-link.inc, word 25), where the ColdFire can read them after the DSP has stopped inside the module; a DM word would be lost with the core. The record
-/// addresses come from the diagnostic block, so the DSP must be running: until it is, the send waits (`STEP_WAIT`), then the image keeps the static word, which
-/// the block tail copies into the record (the step is then visible only when the block ends). Returns false while it waits.
-unsafe fn patch_steps() -> bool {
-    let d = ds();
-    let rec = d.pending.rec as usize;
-    if rec >= crate::MAX_MODULES || d.step_list[rec] == 0 {
-        return true;
-    }
-    let Some(addr) = crate::dlog::record_step_addr() else {
-        if d.ticks < STEP_WAIT {
-            return false;
-        }
-        free_steps(rec);
-        return true;
-    };
-    let stat = dsp_symbol(b"_dk_step\0".as_ptr());
-    let buf = d.pending.send_buf as *mut u8;
-    let mut i = 0;
-    while i < d.step_n[rec] as usize {
-        let e = *(d.step_list[rec] as *const u32).add(i);
-        let p = buf.add((e >> 1) as usize);
-        if e & 1 == 0 {
-            let v = (((*p.add(2)) as u32) << 16 | le16(p.add(4))).wrapping_sub(stat).wrapping_add(addr);
-            *p.add(2) = (v >> 16) as u8;
-            put_le16(p.add(4), v & 0xffff);
-        } else {
-            let v = (le16(p.add(2)) << 16 | le16(p.add(4))).wrapping_sub(stat).wrapping_add(addr);
-            put_le16(p.add(2), v >> 16);
-            put_le16(p.add(4), v & 0xffff);
-        }
-        i += 1;
-    }
-    free_steps(rec);
-    true
 }
 
 /// The module record (index) that owns machine type `t`.
@@ -1385,9 +1306,6 @@ pub unsafe fn step() {
         match d.phase {
             PH_SEND => {
                 if d.started == 0 {
-                    if !patch_steps() {
-                        return;
-                    }
                     let r = call_send(d.pending.send_base, d.pending.send_buf as *const u8, d.pending.send_len);
                     if r == -2 {
                         fail(E_DSP_XFER);

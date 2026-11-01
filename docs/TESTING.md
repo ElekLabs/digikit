@@ -2,7 +2,8 @@
 
 Reference for the test levels, commands, inputs and gate. The gate is `mise run verify`. Other docs
 link here. Results of runs belong in `docs/findings/`, not here. Planned changes:
-[docs/plans/test-architecture.md](plans/test-architecture.md).
+[docs/plans/test-architecture.md](plans/test-architecture.md); gate speed:
+[docs/plans/gate-speed.md](plans/gate-speed.md).
 
 ## Test levels
 
@@ -215,7 +216,7 @@ tier-quick, tier-sweep, python-tests, rust-tests, card, smoke, dt2-tone, dt2-che
 dt2-tier-sweep.
 
 - `host` runs `pnpm verify:host`. `web` depends on `host`.
-- `python-tests` runs ruff, ruff format, mypy, pathcheck and layercheck as commands, then
+- `python-tests` runs ruff, ruff format, mypy, pathcheck, layercheck and `patchkit gen --check` (generated sources) as commands, then
   `tests/patchkit/test_pk_current.py` (module and port staleness), then the selected test files, one
   process per file. Selected files are the tests that reach a changed module in the import graph
   (`changed_tests.gate_tests`), the files changed, and the `PY_SUITES` the change triggers.

@@ -10,7 +10,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 
-from tools.device import dkfit, dkneeds  # noqa: E402
+from tools.device import dkneeds  # noqa: E402
 from tools.patchkit import (  # noqa: E402
     modroots,
     pk_device,
@@ -136,13 +136,13 @@ def test_the_fit_rule_counts_the_effect_slots_of_the_device(packed):
     slots = pk_device.limits("dt2").fx_slots
     assert slots == 3  # the Digitakt II profile: three run-time effects
     caps = {"FX_SLOTS": {"limit": slots, "used": 0, "largest": 0}}
-    assert dkfit.fits_now(n, caps) is None
+    assert dkneeds.fit(caps, [n])["each"][0] is None
     caps["FX_SLOTS"]["used"] = slots
-    short = dkfit.fits_now(n, caps)
-    assert short == ("FX_SLOTS", 1, 0)
-    assert dkfit.describe(short) == "effect slots 1 needed, 0 free"
-    assert dkfit.menu_line(short) == "FX 1 > 0 FREE"
-    # (a set of four effects stops at the fourth: the "sets" vector of sdk/vectors/fit-vectors.json, read by tests/digikit/test_dkfit.py)
+    short = dkneeds.fit(caps, [n])["each"][0]
+    assert (short["resource"], short["need"], short["free"]) == ("FX_SLOTS", 1, 0)
+    assert short["describe"] == "effect slots 1 needed, 0 free"
+    assert short["text"] == "FX 1 > 0 FREE"
+    # (a set of four effects stops at the fourth: the "sets" vectors of sdk/vectors/fit-vectors.json, tested in modules/core/runtime/fit)
 
 
 def test_the_effect_packs_for_the_digitone_too(packed, tmp_path):

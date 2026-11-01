@@ -308,9 +308,9 @@ Not refused today: a `DEF` outside `MIN` .. `MAX`.
 
 Layout facts:
 
-- Digitakt II: the machine row holds the knobs as `f0..f7` and the level as `f8`. A page shows 8 of the 10 engine slots. An added machine has one
+- Digitakt II: the machine row holds the knobs as `f0..f7` and the level as `f8`. A page shows 8 of the 10 engine slots ([finding 100](findings/100-module-limits.md)). An added machine has one
   SRC page: TUNE on knob 0, sample slot on knob 3, level on knob 7.
-- Digitone II: a stock page holds eight knobs and the track level. A machine gets one page, from its `DK_PAGE` or named after the machine.
+- Digitone II: a stock page holds eight knobs and the track level. A machine gets one page for now (a patchkit rule; the firmware allows several, [finding 100](findings/100-module-limits.md)), from its `DK_PAGE` or named after the machine.
 - Limits per module (run-time pack): 16 parameters, 8 machines, 8 pages, 32 records in a register section.
 
 Persistence and modulation:
@@ -344,6 +344,7 @@ The generated files are in `sdk/include/dk/gen/` and `sdk/asm/`.
 | `sdk/asm/dk_machine.inc` | The machine constants and field offsets for assembly. | The machine's `.s`. |
 | `sdk/include/dk/gen/fx_consts.h` | The effect constants as C `#define`s. | `<dk/fx.h>`. |
 | `sdk/asm/dk_fx.inc` | The effect constants and field offsets for assembly. | The effect's `.s`. |
+| `sdk/include/dk/gen/limits.h` | The `.dkm` format limits (`[limits.format]`) as C `#define`s, such as `DK_ARENA_HDR`. | Core apps in C. |
 
 Do not include `dk_fx.inc` and `dk_machine.inc` in one assembly file. `DK_BLOCK` and `DK_LEVEL_BOUND_BITS` are in both.
 
@@ -532,16 +533,18 @@ Names a module may import (from `[[import]]` in `sdk/sdk.toml`):
 | `input_key`, `input_turn` | Press a key or turn an encoder. They need `core/input`. Without it the import is not found. |
 | `dk_ui_*` | The calls of `<dk/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads and each call returns its failure value (`dk_ui_menu_new` 0, the int calls -1, `dk_ui_has`, `dk_ui_is_open` and `dk_ui_checked` 0, the void calls nothing). |
 | `dkrt_blocks` | The 1500 Hz block clock. |
+| `dl_set_tick_cb` | Sets one per-block callback in the block interrupt (`core/dsp-link`; a stub without it): `void cb(const volatile u16 *rec)` gets the previous DSP reply record. Short C only; clear it in `dkm_fini`. |
 
 A load fails with `E_IMPORT` when a name is not in the runtime's table.
 
 `register_cmds` adds SysEx commands. Call it from `dkm_init`. The range is released after `dkm_fini`. The range must lie inside a range reserved in
-`sdk/sdk.toml` under `[protocol.ranges]`. Two ranges exist today, and `digikit/remote` uses both:
+`sdk/sdk.toml` under `[protocol.ranges]`. Three ranges exist today; `digikit/remote` uses the first two and the probe module (`digikit/probe`) the third:
 
 | Range | Numbers |
 | --- | --- |
 | `remote` | `0x38` to `0x3d` |
 | `remote_state` | `0x3e` to `0x3f` |
+| `probe` | `0x32` to `0x35` |
 
 Another range is a change to `sdk/sdk.toml`. Run `mise run gen:modules` after it. A handler runs in the firmware's MIDI task. Keep it short and never
 wait. The request body is at most 160 bytes. The reply body is at most 879 bytes. Return the reply length, or a negative status.

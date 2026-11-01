@@ -29,6 +29,10 @@ pub const C_FX_VIEW_OUT: &str = "sdk/include/dk/gen/fx.h";
 pub const C_API_OUT: &str = "sdk/include/dk/gen/api.h";
 /// The generated C header of the descriptor records, relative to the repository root.
 pub const C_DESC_OUT: &str = "sdk/include/dk/gen/desc.h";
+/// The generated C header of the format limits, relative to the repository root.
+pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
+/// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
+pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
 /// The generated Python protocol numbers, relative to the repository root.
 pub const PROTO_PY_OUT: &str = "tools/device/dkproto.py";
 /// The generated Rust protocol numbers of the host client, relative to the repository root.
@@ -177,6 +181,29 @@ struct Protocol {
     /// command byte marks a reply), so a range lies in 0x01..=0x3f and overlaps no command and no other range.
     #[serde(default)]
     ranges: BTreeMap<String, [u8; 2]>,
+    limits: ProtoLimits,
+}
+/// `[protocol.limits]`: the sizes of the upload protocol, generated into every language.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProtoLimits {
+    max_chunk: u32,
+    read_max: u32,
+    peek_max: u32,
+    max_request_wire: u32,
+    max_reply_wire: u32,
+}
+impl ProtoLimits {
+    /// (generated name, value) in file order.
+    fn all(&self) -> [(&'static str, u32); 5] {
+        [
+            ("MAX_CHUNK", self.max_chunk),
+            ("READ_MAX", self.read_max),
+            ("PEEK_MAX", self.peek_max),
+            ("MAX_REQUEST_WIRE", self.max_request_wire),
+            ("MAX_REPLY_WIRE", self.max_reply_wire),
+        ]
+    }
 }
 /// `[capacity]`: the kinds of a CAPACITY entry.
 #[derive(Deserialize)]
@@ -216,6 +243,54 @@ pub fn settings() -> Settings {
 #[serde(deny_unknown_fields)]
 struct LimitsSection {
     max: LimitsMax,
+    format: FormatLimits,
+}
+/// `[limits.format]`: the format limits of the `.dkm` loader that every host tool and the runtime share (`dkneeds`).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FormatLimits {
+    dkm_header: u32,
+    dsp_header: u32,
+    max_records: u32,
+    max_relocs: u32,
+    max_imports: u32,
+    max_cf_imports: u32,
+    max_state_voices: u32,
+    max_state_bytes: u32,
+    granule: u32,
+    dsp_slack: u32,
+    arena_hdr: u32,
+}
+/// The format limits in file order, then the ones that come from other keys: (generated name, value).
+/// `MAX_VOICES` and `MAX_FX` are the contract maxima `machine_rows` and `fx_slots`; `SLOTS` is `[dkm.slot] count`.
+fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
+    let f = &sdk.limits.format;
+    vec![
+        ("DKM_HEADER", f.dkm_header),
+        ("DSP_HEADER", f.dsp_header),
+        ("MAX_RECORDS", f.max_records),
+        ("MAX_RELOCS", f.max_relocs),
+        ("MAX_IMPORTS", f.max_imports),
+        ("MAX_CF_IMPORTS", f.max_cf_imports),
+        ("MAX_STATE_VOICES", f.max_state_voices),
+        ("MAX_STATE_BYTES", f.max_state_bytes),
+        ("GRANULE", f.granule),
+        ("DSP_SLACK", f.dsp_slack),
+        ("ARENA_HDR", f.arena_hdr),
+        ("SLOTS", sdk.dkm.slot.count),
+        ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
+        ("MAX_FX", sdk.limits.max.fx_slots as u32),
+    ]
+}
+
+/// `packages/dkneeds/src/gen_limits.rs`: the format limits as `u32`. The `.dkm` header is `HEADER` here (`dkneeds::HEADER`).
+fn rust_limits(sdk: &Sdk) -> String {
+    let mut s = format!("// {HEADER}\n\n");
+    for (n, v) in format_limits(sdk) {
+        let n = if n == "DKM_HEADER" { "HEADER" } else { n };
+        let _ = writeln!(s, "pub const {n}: u32 = {v};");
+    }
+    s
 }
 /// The contract maxima of the capacity limits: `[limits.max]` of `sdk/sdk.toml`. A device's `[limits]` value (and its `[digikit]`
 /// `dsp_area_bytes`) may not exceed them; `patchkit gen` refuses it (`devgen`).
@@ -229,6 +304,23 @@ pub struct LimitsMax {
     pub dsp_area_bytes: u64,
     pub param_rows: u64,
     pub page_rows: u64,
+    pub machine_rows: u64,
+    pub stage_bytes: u64,
+}
+
+/// `DK_PAGE_KNOBS` of `[desc]` in `sdk/sdk.toml`: the encoders on a page.
+fn page_knobs_of(sdk: &Sdk) -> usize {
+    sdk.desc
+        .consts
+        .iter()
+        .find(|c| c.name == "DK_PAGE_KNOBS")
+        .expect("sdk/sdk.toml [desc] has DK_PAGE_KNOBS")
+        .value as usize
+}
+
+/// `DK_PAGE_KNOBS` of the `sdk/sdk.toml` this crate was built with.
+pub fn page_knobs() -> usize {
+    page_knobs_of(&parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses"))
 }
 
 /// The contract maxima of the `sdk/sdk.toml` this crate was built with.
@@ -540,6 +632,9 @@ fn proto_consts(sdk: &Sdk, indent: &str, status_ty: &str) -> String {
     let p = &sdk.protocol;
     let mut s = String::new();
     let _ = writeln!(s, "{indent}pub const VERSION: u8 = {};", p.version);
+    for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "{indent}pub const {n}: usize = {v};");
+    }
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "{indent}pub const CMD_{n}: u8 = {v:#04x};");
     }
@@ -634,10 +729,19 @@ fn rust(sdk: &Sdk) -> String {
     for (i, n) in LEVELS.iter().enumerate() {
         let _ = writeln!(s, "    pub const L_{}: u16 = {i};", n.to_uppercase());
     }
-    s.push_str("}\n\n/// The selection record's format limits (`[limits.max]`): paths and sticky map entries.\npub mod limits {\n");
+    s.push_str("}\n\n/// Format and table limits (`[limits.max]` and `DK_PAGE_KNOBS`): array sizes of the runtime.\npub mod limits {\n");
     let m = &sdk.limits.max;
     let _ = writeln!(s, "    pub const SEL_MAX: usize = {};", m.modules);
     let _ = writeln!(s, "    pub const MAP_N: usize = {};", m.map_entries);
+    let _ = writeln!(s, "    pub const MACHINE_ROWS: usize = {};", m.machine_rows);
+    let _ = writeln!(s, "    pub const PARAM_ROWS: usize = {};", m.param_rows);
+    let _ = writeln!(s, "    pub const PAGE_ROWS: usize = {};", m.page_rows);
+    let _ = writeln!(s, "    pub const STAGE_BYTES: usize = {};", m.stage_bytes);
+    let _ = writeln!(
+        s,
+        "    pub const PAGE_KNOBS: usize = {};",
+        page_knobs_of(sdk)
+    );
     s.push_str("}\n\n");
     s.push_str(&rust_settings(sdk));
     s.push_str("\npub mod proto {\n");
@@ -692,7 +796,15 @@ fn py_status(s: &mut String, name: &str, st: &Status) {
 fn python_proto(sdk: &Sdk) -> String {
     let p = &sdk.protocol;
     let mut s = format!("# {HEADER}\n\n");
-    let _ = writeln!(s, "VERSION = {}\n", p.version);
+    let _ = writeln!(s, "VERSION = {}", p.version);
+    for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "{n} = {v}");
+    }
+    s.push_str("\n# the .dkm loader's format limits ([limits.format])\n");
+    for (n, v) in format_limits(sdk) {
+        let _ = writeln!(s, "{n} = {v}");
+    }
+    s.push('\n');
     s.push_str("CMD: dict[str, int] = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "    {n:?}: 0x{v:02X},");
@@ -753,9 +865,17 @@ fn rust_proto(sdk: &Sdk) -> String {
 fn ts_proto(sdk: &Sdk) -> String {
     let p = &sdk.protocol;
     let mut s = format!(
-        "// {HEADER}\n\nexport const PROTO_VERSION = {};\n\n",
+        "// {HEADER}\n\nexport const PROTO_VERSION = {};\n",
         p.version
     );
+    for (n, v) in p.limits.all() {
+        let _ = writeln!(s, "export const {n} = {v};");
+    }
+    s.push_str("\n/** The `.dkm` loader's format limits (`[limits.format]`). */\n");
+    for (n, v) in format_limits(sdk) {
+        let _ = writeln!(s, "export const {n} = {v};");
+    }
+    s.push('\n');
     s.push_str("export const CMD = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "  {n}: {v:#04x},");
@@ -994,6 +1114,16 @@ fn c_consts(
         let _ = writeln!(s, "#define {prefix}{name}_WORDS {}", fields.len());
     }
     let _ = writeln!(s, "\n#endif /* {guard} */");
+    s
+}
+
+/// `sdk/include/dk/gen/limits.h`: the format limits as C `#define`s, `DK_` plus the generated name (`DK_ARENA_HDR`).
+fn limits_h(sdk: &Sdk) -> String {
+    let mut s = format!("/* {HEADER} */\n#ifndef DK_GEN_LIMITS_H\n#define DK_GEN_LIMITS_H\n\n");
+    for (n, v) in format_limits(sdk) {
+        let _ = writeln!(s, "#define DK_{n} {v}");
+    }
+    s.push_str("\n#endif /* DK_GEN_LIMITS_H */\n");
     s
 }
 
@@ -1998,9 +2128,11 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (FX_INC_OUT.to_string(), fx_inc(&sdk)),
         (C_MACHINE_OUT.to_string(), machine_consts_h(&sdk)),
         (C_FX_OUT.to_string(), fx_consts_h(&sdk)),
+        (C_LIMITS_OUT.to_string(), limits_h(&sdk)),
         (PROTO_PY_OUT.to_string(), python_proto(&sdk)),
         (PROTO_RS_OUT.to_string(), rust_proto(&sdk)),
         (PROTO_TS_OUT.to_string(), ts_proto(&sdk)),
+        (LIMITS_RS_OUT.to_string(), rust_limits(&sdk)),
         (C_MACHINE_VIEW_OUT.to_string(), machine_h(&sdk)?),
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_API_OUT.to_string(), api_h(&sdk)?),

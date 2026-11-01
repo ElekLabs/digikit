@@ -2,8 +2,9 @@
 //!
 //! The runtime's CAPACITY entries (`dkrt_capacity`) give limit, used and largest free piece per resource; `dkneeds::needs_of` (docs/design/digikit-dkm.md,
 //! "Needs are inferred from the contents") gives what a load takes. `fits_now` compares them and names the first short resource; `take` takes a module's needs out of a capacity,
-//! so a set is checked by loading its modules in turn (the sum rule: fragmentation is not modelled, so it is conservative). The rule is written
-//! again in apps/web/src/modules/dkfit.ts and tools/device/dkfit.py; `sdk/vectors/fit-vectors.json` keeps the three equal.
+//! so a set is checked by loading its modules in turn (the sum rule: fragmentation is not modelled, so it is conservative). The rule exists only here:
+//! the web app uses it through patchkit.wasm and the device tools through `patchkit fit` (packages/patchkit/src/fit.rs).
+//! `sdk/vectors/fit-vectors.json` holds its test vectors.
 //!
 //! The runtime's module set is fixed per session, so the menu checks a selection against the limits with the other ticked modules taken out
 //! (the next boot loads them into an empty runtime), and a host checks against CAPACITY as the device reports it.
@@ -108,7 +109,7 @@ pub fn empty(caps: &mut [DkrtCap]) {
         c.largest = if c.kind == CAPK_ARENA as u32 {
             c.limit.saturating_sub(ARENA_HDR)
         } else if c.kind == CAPK_DSP_AREA as u32 {
-            c.limit.saturating_sub(8)
+            c.limit.saturating_sub(dkneeds::DSP_SLACK)
         } else {
             c.limit
         };
@@ -134,6 +135,18 @@ pub fn take(n: &Needs, caps: &mut [DkrtCap]) {
     use_(CAPK_PARAM_ROWS, n.param_rows);
     use_(CAPK_PAGE_ROWS, n.page_rows);
     use_(CAPK_FX_SLOTS, n.fx_slots);
+}
+
+/// Load the modules of a set in order: None when all fit, else the index of the first that does not and what it is short of. `caps` is left as
+/// the capacity after the modules that fit.
+pub fn fits_set(set: &[Needs], caps: &mut [DkrtCap]) -> Option<(usize, Short)> {
+    for (i, n) in set.iter().enumerate() {
+        if let Some(s) = fits_now(n, caps) {
+            return Some((i, s));
+        }
+        take(n, caps);
+    }
+    None
 }
 
 /// The resources the load line shows, in this order, with the label the device shows: the two a user can act on (DSP memory, CPU memory).

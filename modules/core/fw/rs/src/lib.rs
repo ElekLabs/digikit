@@ -540,25 +540,25 @@ pub mod storage {
     }
 
     unsafe extern "C" {
-        /// Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 78).
+        /// Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 105).
         #[link_name = "cf.storage.fn.path.close"]
         pub fn path_close(handle: *mut u32) -> i32;
     }
 
     unsafe extern "C" {
-        /// Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 78).
+        /// Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 105).
         #[link_name = "cf.storage.fn.path.open"]
         pub fn path_open(path: *const u8, mode: *const u8, handle: *mut u32) -> i32;
     }
 
     unsafe extern "C" {
-        /// Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 78).
+        /// Read at the handle position and advance it; byte count, zero at EOF, negative on failure. Task context; takes the filesystem mutex internally (finding 105).
         #[link_name = "cf.storage.fn.path.read"]
         pub fn path_read(buf: *mut u8, bytes: u32, handle: *mut u32) -> i32;
     }
 
     unsafe extern "C" {
-        /// File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 78).
+        /// File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 105).
         #[link_name = "cf.storage.fn.path.size"]
         pub fn path_size(entry_id: u32) -> u32;
     }

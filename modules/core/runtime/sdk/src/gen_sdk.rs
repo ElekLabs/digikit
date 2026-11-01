@@ -62,10 +62,15 @@ pub mod logk {
     pub const L_TRACE: u16 = 4;
 }
 
-/// The selection record's format limits (`[limits.max]`): paths and sticky map entries.
+/// Format and table limits (`[limits.max]` and `DK_PAGE_KNOBS`): array sizes of the runtime.
 pub mod limits {
     pub const SEL_MAX: usize = 8;
     pub const MAP_N: usize = 8;
+    pub const MACHINE_ROWS: usize = 8;
+    pub const PARAM_ROWS: usize = 16;
+    pub const PAGE_ROWS: usize = 8;
+    pub const STAGE_BYTES: usize = 65536;
+    pub const PAGE_KNOBS: usize = 8;
 }
 
 /// The settings record (`[settings]`): the area of one copy, the key and value limits and the keys by owner.
@@ -83,6 +88,11 @@ pub mod settings {
 
 pub mod proto {
     pub const VERSION: u8 = 1;
+    pub const MAX_CHUNK: usize = 32768;
+    pub const READ_MAX: usize = 768;
+    pub const PEEK_MAX: usize = 512;
+    pub const MAX_REQUEST_WIRE: usize = 40960;
+    pub const MAX_REPLY_WIRE: usize = 1024;
     pub const CMD_INFO: u8 = 0x01;
     pub const CMD_LIST: u8 = 0x02;
     pub const CMD_MODULES: u8 = 0x03;
@@ -97,12 +107,12 @@ pub mod proto {
     pub const CMD_VERIFY: u8 = 0x17;
     pub const CMD_MKDIR: u8 = 0x18;
     pub const CMD_SETTINGS: u8 = 0x19;
-    pub const CMD_LOG: u8 = 0x20;
-    pub const CMD_PEEK: u8 = 0x21;
-    pub const CMD_LOGCFG: u8 = 0x22;
     pub const CMD_FAULT: u8 = 0x23;
     pub const CMD_SELECT: u8 = 0x30;
     pub const CMD_RESTART: u8 = 0x31;
+    pub const SVC_LOG: u8 = 0x20;
+    pub const SVC_PEEK: u8 = 0x21;
+    pub const SVC_LOGCFG: u8 = 0x22;
     pub const SVC_REMOTE_KEY: u8 = 0x38;
     pub const SVC_REMOTE_TURN: u8 = 0x39;
     pub const SVC_REMOTE_RELEASE: u8 = 0x3a;
@@ -154,10 +164,14 @@ pub mod proto {
     pub const CAPK_SETTINGS: u8 = 13;
     pub const CAPK_SEND_SLOTS: u8 = 14;
     /// The command ranges a module may register, as (first, last).
-    pub const RANGES: [(u8, u8); 2] = [
+    pub const RANGES: [(u8, u8); 4] = [
+        (0x20, 0x22), // debug
+        (0x32, 0x35), // probe
         (0x38, 0x3d), // remote
         (0x3e, 0x3f), // remote_state
     ];
+    pub const RANGE_DEBUG: (u8, u8) = (0x20, 0x22);
+    pub const RANGE_PROBE: (u8, u8) = (0x32, 0x35);
     pub const RANGE_REMOTE: (u8, u8) = (0x38, 0x3d);
     pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
 }
@@ -265,7 +279,7 @@ pub mod api {
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 28] = [
+    pub const IMPORT_NAMES: [&str; 33] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -293,11 +307,16 @@ pub mod api {
         "dk_ui_confirm",
         "dk_ui_choice",
         "dk_ui_toast",
+        "dl_set_tick_cb",
         "dkrt_blocks",
+        "dkrt_log_sink_set",
+        "dkrt_log_ev",
+        "dkrt_peek_range",
+        "dkrt_track_type",
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`.
-    pub const BUILTIN_NAMES: [&str; 10] = [
+    pub const BUILTIN_NAMES: [&str; 14] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -308,6 +327,10 @@ pub mod api {
         "__udivdi3",
         "__umoddi3",
         "dkrt_blocks",
+        "dkrt_log_sink_set",
+        "dkrt_log_ev",
+        "dkrt_peek_range",
+        "dkrt_track_type",
     ];
 
     /// `input_key`: Press or release a panel key.
@@ -316,8 +339,23 @@ pub mod api {
     /// `input_turn`: Turn an encoder by `delta`.
     pub type InputTurnFn = unsafe extern "C" fn(encoder: u32, delta: i32) -> i32;
 
+    /// `dl_set_tick_cb`: Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing.
+    pub type DlSetTickCbFn = unsafe extern "C" fn(cb: *mut u8);
+
     /// `dkrt_blocks`: The 1500 Hz block clock, for a module that wants to measure time.
     pub type DkrtBlocksFn = unsafe extern "C" fn() -> u32;
+
+    /// `dkrt_log_sink_set`: Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked (short, no waiting, no logging). `dk_log_ev` is 32 bytes: `u32 seq` (0 here), `u32 time` (block counter), `u16 kind`, `u16 flags`, `u32 a[5]`. At the call the sink gets the events of the runtime's small ring (the boot and the errors so far), oldest first. `tick` (0: none) is `void tick(void)`, called once per pass of the UI task with this module as the source, outside the interrupt mask: it keeps the module off slot 0, which only one module can hold. The runtime clears a sink or a tick that points into a module's memory after its `fini`. Used by digikit/debug.
+    pub type DkrtLogSinkSetFn = unsafe extern "C" fn(sink: *mut u8, tick: *mut u8);
+
+    /// `dkrt_log_ev`: Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` holds one. For a module that logs a kind of its own.
+    pub type DkrtLogEvFn = unsafe extern "C" fn(kind: u32, flags: u32, a: *const u32);
+
+    /// `dkrt_peek_range`: The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK.
+    pub type DkrtPeekRangeFn = unsafe extern "C" fn(i: u32, out: *mut u32) -> u32;
+
+    /// `dkrt_track_type`: The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet.
+    pub type DkrtTrackTypeFn = unsafe extern "C" fn(track: u32) -> i32;
 }
 
 /// The imports that another module provides (`[[import]] requires`): the external functions, the stubs for an absent module and
@@ -346,6 +384,7 @@ macro_rules! optional_imports {
                 pub fn dk_ui_confirm(title: *const u8, text: *const u8, done: *mut u8, ctx: *mut u8) -> i32;
                 pub fn dk_ui_choice(title: *const u8, items: *mut u8, n: i32, done: *mut u8, ctx: *mut u8) -> i32;
                 pub fn dk_ui_toast(text: *const u8) -> i32;
+                pub fn dl_set_tick_cb(cb: *mut u8);
             }
 
             /// What an absent module's import calls: the failure value of the API.
@@ -366,10 +405,11 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_ui_confirm(_a0: *const u8, _a1: *const u8, _a2: *mut u8, _a3: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_choice(_a0: *const u8, _a1: *mut u8, _a2: i32, _a3: *mut u8, _a4: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_toast(_a0: *const u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dl_set_tick_cb(_a0: *mut u8) { }
             }
 
             /// (name, address from the module or 0, address of the stub or 0)
-            pub fn table() -> [(&'static str, usize, usize); 18] {
+            pub fn table() -> [(&'static str, usize, usize); 19] {
                 [
                     ("input_key", core::hint::black_box(input_key as usize), 0),
                     ("input_turn", core::hint::black_box(input_turn as usize), 0),
@@ -389,6 +429,7 @@ macro_rules! optional_imports {
                     ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize),
                     ("dk_ui_choice", core::hint::black_box(dk_ui_choice as usize), absent::dk_ui_choice as usize),
                     ("dk_ui_toast", core::hint::black_box(dk_ui_toast as usize), absent::dk_ui_toast as usize),
+                    ("dl_set_tick_cb", core::hint::black_box(dl_set_tick_cb as usize), absent::dl_set_tick_cb as usize),
                 ]
             }
         }

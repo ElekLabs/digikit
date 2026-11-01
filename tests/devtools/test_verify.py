@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -69,7 +70,7 @@ HOST_TEST_FILES = [
         (["packages/dk-session/tests/new.test.ts"], {"host"}, False, "host-only test"),
         (["tests/regression/host/new.test.ts"], {"host"}, False, "host-only test"),
         (["packages/dk-session/tests/fake.ts"], {"host"}, True, None),
-        (["tests/regression/runtime/x.test.ts"], {"runtime-fixture"}, True, None),
+        (["tests/regression/runtime/x.ts"], {"runtime-fixture"}, True, None),
         (["vitest.host.config.ts"], {"host"}, True, None),
         (
             [*HOST_TEST_FILES, "docs/x.md", "tools/devtools/pathcheck.py"],
@@ -102,7 +103,7 @@ HOST_TEST_FILES = [
                 "modules/core/runtime/src/rs/src/upload.rs",
             )
         ],
-        (["tools/devtools/pathchecks.py"], set(), True, None),
+        (["tools/devtools/pathchecks.py"], set(), False, "test-only"),
         (
             ["tools/devtools/pathcheck.py", "apps/web/src/components/PatchGallery.tsx"],
             {"python-tests", "web"},
@@ -325,6 +326,40 @@ def test_explain_says_why_smoke_is_skipped(capsys: pytest.CaptureFixture[str]) -
     assert "smoke: skipped, host-only test change" in run(
         ["packages/control-client/tests/client.test.ts"]
     )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/devtools/test_verify.py",
+        "tools/devtools/verify.py",
+        "tests/patchkit/test_pk_x.py",
+        "tests/digikit/test_x.py",
+        "tests/regression/scenarios/dn2-sendfx.test.ts",
+    ],
+)
+def test_test_only_changes_select_no_smoke(path: str) -> None:
+    assert "smoke" not in verify.steps_for([path])
+    assert (
+        verify.smoke_cells([path]) is None
+    )  # no cell filter either: nothing is selected
+    assert verify.smoke_reason([path])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "modules/machines/sine/src/module.c",
+        "tools/patchkit/pk_harness.py",
+        "tests/patchkit/smoke/matrix.toml",
+        "tests/patchkit/smoke/test_pk_harness_units.py",
+        "devices/ports/dn2.toml",
+    ],
+)
+def test_images_and_smoke_harness_keep_smoke_next_to_tests(path: str) -> None:
+    files = ["tests/devtools/test_verify.py", path]
+    assert verify.smoke_reason(files) is None
+    assert "smoke" in verify.steps_for(files)
 
 
 def test_changed_pk_test_runs_itself_and_the_gate() -> None:
@@ -591,6 +626,65 @@ def test_rerun_repeats_only_the_failed_python_file(tmp_path: Path) -> None:
     assert ("python-tests: tests/b.py", "failed in run1") in plan.reasons
 
 
+def test_rerun_after_a_failed_check_runs_that_check_and_no_passed_file(
+    tmp_path: Path,
+) -> None:
+    gate = verify.Gate(tmp_path)
+    gate.failed = ["python-tests:pathcheck", "python-tests"]
+    gate.py_files = ["tests/a.py"]
+    gate.py_records = {"tests/a.py": {}}
+    gate.py_checks_ran = True
+    summary = tmp_path / "python-tests" / "summary.tsv"
+    summary.parent.mkdir()
+    summary.write_text("file\tstatus\trc\tseconds\ntests/a.py\tOK\t0\t1.0\n")
+    units = verify.failed_units(gate)
+    assert units == {"python-tests:checks": ["pathcheck"], "python-tests": []}
+    result = {
+        "failed": ["python-tests"],
+        "py_tests": ["tests/a.py"],
+        "failed_units": units,
+        "run": "run1",
+        "head": "abcdef1234567",
+    }
+    plan = verify.rerun_plan(result)
+    assert plan.py_tests == []
+    assert plan.py_checks == ["pathcheck"]
+    assert ("python-tests:pathcheck", "failed in run1") in plan.reasons
+    # a file that failed too is repeated; changed code can break any check
+    units["python-tests"] = ["tests/a.py"]
+    assert verify.rerun_plan(result).py_tests == ["tests/a.py"]
+    changed = verify.rerun_plan(
+        result, (["tests/devtools/test_verify.py"], ("python-tests",), None)
+    )
+    assert changed.py_checks is None
+
+
+def test_finish_python_runs_only_the_named_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ok = [sys.executable, "-c", "pass"]
+    bad = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(verify, "PY_CHECKS", (("fine", ok), ("broken", bad)))
+    gate = verify.Gate(tmp_path, py_tests=[], py_checks=["fine"])
+    verify.finish_python(gate)
+    assert gate.failed == []  # a rerun of passing checks alone passes
+    gate = verify.Gate(tmp_path, py_tests=[], py_checks=["broken"])
+    verify.finish_python(gate)
+    assert "python-tests:broken" in gate.failed
+    assert "python-tests:fine" not in gate.failed
+
+
+def test_rerun_explain_for_a_test_only_change_selects_no_smoke(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    test = "tests/devtools/test_verify.py"
+    result = {"failed": ["python-tests"], "py_tests": [test], "failed_units": {}}
+    plan = verify.rerun_plan(result, ([test], verify.steps_for([test]), None))
+    assert "smoke" not in plan.steps
+    verify.explain(plan.steps, [test], [], per_file=False, reasons=plan.reasons)
+    assert "smoke <-" not in capsys.readouterr().out
+
+
 def test_rerun_adds_what_changed_since_the_failed_head() -> None:
     result = {
         "failed": ["python-tests"],
@@ -715,6 +809,23 @@ def test_explain_runs_nothing(
     assert "pins" in capsys.readouterr().out
 
 
+def test_result_records_the_head_the_run_started_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    heads = iter(["a" * 40, "b" * 40, "c" * 40])
+    real = verify.git_lines
+
+    def fake(*args: str) -> list[str]:
+        return [next(heads)] if args == ("rev-parse", "HEAD") else real(*args)
+
+    monkeypatch.setattr(verify, "git_lines", fake)
+    monkeypatch.setattr(verify.digi_env, "run_dir", lambda _name: str(tmp_path))
+    monkeypatch.setattr(verify.verify_budget, "lower_priority", lambda _fg: None)
+    monkeypatch.setattr(verify, "run_steps", lambda _gate, _steps: [])
+    assert verify.main(["--only", "pins"]) == 0
+    assert json.loads((tmp_path / "result.json").read_text())["head"] == "a" * 40
+
+
 # ---- finer routing (tools/devtools/verify_route.py) ----------------------------------------------
 
 PCM_STEPS = {
@@ -836,6 +947,9 @@ def test_device_tools_select_their_tests_only() -> None:
         "tests/digikit/test_upload_dt2.py",
     }
     assert selected("tools/device/dkrun.py") == {
+        "tests/digikit/test_dkprobe.py",  # the probe tools import dkrun
+        "tests/digikit/test_dkprobe_facts.py",
+        "tests/digikit/test_dkprobe_run.py",
         "tests/digikit/test_dkrun.py",
         "tests/digikit/test_dktransfer.py",  # dktransfer imports dkrun
         "tests/digikit/test_menu_dn2.py",
@@ -1169,15 +1283,13 @@ def test_web_only_for_what_it_reads() -> None:
 
 
 def test_routing_changes_select_everything() -> None:
+    everything = tuple(s for s in verify.EVERYTHING if s != "smoke")
     for path in ("tools/devtools/verify.py", "tools/devtools/verify_route.py"):
-        assert verify.steps_for([path]) == verify.EVERYTHING
+        assert verify.steps_for([path]) == everything
         got = verify.python_tests([path], False)
         assert set(verify.python_tests([], True)) <= set(got)
     # the lane helper is checked by the routing tests only
-    assert verify.steps_for(["tools/devtools/changed_tests.py"]) == (
-        "python-tests",
-        "smoke",
-    )
+    assert verify.steps_for(["tools/devtools/changed_tests.py"]) == ("python-tests",)
     assert "tests/devtools/test_verify.py" in verify.python_tests(
         ["tools/devtools/changed_tests.py"], False
     )
@@ -1340,7 +1452,8 @@ def test_relevant_native_acceptance_retains_existing_owners(
 ) -> None:
     steps = set(verify.steps_for([path]))
     assert steps & {"stock", "runtime-fixture", "module-load"} == expected
-    assert set(verify.base_route(path)[1]) <= steps
+    # a test-only or gate-tooling path may drop smoke from its base route
+    assert set(verify.base_route(path)[1]) - {"smoke"} <= steps
 
 
 @pytest.mark.parametrize(
@@ -1366,7 +1479,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
         (
             "runtime-fixture",
             "modules/tools/remote/module.toml",
-            ["runtime/remote-input.test.ts"],
+            ["runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"],
         ),
         ("runtime-fixture", "tests/fixtures/modules/sine/module.toml", []),
         ("stock", "tests/regression/dt2/transport.test.ts", ["dt2/transport.test.ts"]),
@@ -1435,6 +1548,11 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             [
                 "test/input-probe",
                 "digikit/remote",
+                "digikit/probe",
+                "digikit/debug",
+                "test/sharc-probe",
+                "test/step-beacon",
+                "test/dsp-facts",
                 "test/svc-echo",
                 "test/dyn-fx-hang",
                 "test/dyn-dsp-hang",
@@ -1444,6 +1562,17 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             ],
         ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
+        (
+            ["runtime/sharc-probe.test.ts"],
+            [
+                "digikit/remote",
+                "digikit/probe",
+                "test/sharc-probe",
+                "test/step-beacon",
+                "test/dsp-facts",
+            ],
+        ),
+        (["runtime/debug-module.test.ts"], ["digikit/probe", "digikit/debug"]),
         (["runtime/service-commands.test.ts"], ["test/svc-echo"]),
         (["runtime/input-adapter.test.ts"], ["test/input-probe"]),
         (["runtime/transfer-live.test.ts", "runtime/samples-live.test.ts"], []),
@@ -1498,7 +1627,9 @@ def test_a_failed_module_build_stops_before_pack_or_acceptance(
     monkeypatch.setattr(gate, "run", fail)
     with pytest.raises(RuntimeError, match="module build objects"):
         verify.run_step(gate, "module-load")
-    assert len(calls) == 1  # the build of the one module; no pack ran after it
+    assert (
+        len(calls) == 2
+    )  # the builds of the module and of the debug module (every cell selects it); no pack ran after them
 
 
 def test_runtime_fixture_host_paths_do_not_select_device_acceptance() -> None:
@@ -1596,8 +1727,8 @@ def test_failed_native_host_workflow_persists_for_rerun_and_blocks_web(
     assert ("web" in gate.failed) == ("web" in steps)
 
 
-DN2_FX_STEPS = {"host", "check", "check-no-aot", "tier-quick", "smoke"}
-DT2_FX_STEPS = {"host", "dt2-check", "dt2-tier-quick", "python-tests", "smoke"}
+DN2_FX_STEPS = {"host", "check", "check-no-aot", "tier-quick"}
+DT2_FX_STEPS = {"host", "dt2-check", "dt2-tier-quick", "python-tests"}
 
 
 @pytest.mark.parametrize(

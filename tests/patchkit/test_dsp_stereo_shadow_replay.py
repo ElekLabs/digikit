@@ -1,11 +1,9 @@
 """Assembled synthetic DN2 subset; no claim about the stock default route.
 
-The full subset uses the existing approximate RECIPS seed model for 1c06ba.
-Bit equality is within this model, not hardware reciprocal exactness. Without
-that option, 1c0706 forks on an unknown AV predicate after RECIPS. The separate
-recurrence case uses the default core. The separate filter leaves use byte-space
-pointers with assume_nw32=True for their stock 32-bit DM access context and
-approx_recips=False. No instruction semantics are modified.
+RECIPS and RSQRTS use the measured seed tables of the core (finding 102), so
+the divisions of 1c06ba are exact. The separate filter leaves use byte-space
+pointers with assume_nw32=True for their stock 32-bit DM access context. No
+instruction semantics are modified.
 
 Original firmware is supplied at runtime, never copied into a fixture. Reference
 channels execute independently on separate concrete cores with private state.
@@ -67,11 +65,9 @@ def rig():
     return linked, original
 
 
-def fresh(rig, approximate=True):
+def fresh(rig):
     linked, memory = rig
-    session = pk_sharc.CallSession(
-        [linked], BACK, base_memory=memory, approx_recips=approximate
-    )
+    session = pk_sharc.CallSession([linked], BACK, base_memory=memory)
     session.record_stores()
     return session
 
@@ -193,11 +189,10 @@ def test_multiblock_shadow_matches_isolated_mono(rig):
             first_snapshot = snapshot
         elif iteration == 3:
             assert snapshot == first_snapshot
-    assert stereo.runner.state.approx_recips_used
 
 
 def test_recurrences_default_core_matches_independent_channels(rig):
-    stereo, left, right = (fresh(rig, approximate=False) for _ in range(3))
+    stereo, left, right = (fresh(rig) for _ in range(3))
     for session in (stereo, left, right):
         initialize(session)
     for base, indices in ((FIRST + 0x100, (24, 25)), (UY + 0x100, (6, 7))):
@@ -227,7 +222,6 @@ def test_recurrences_default_core_matches_independent_channels(rig):
                 assert [stereo.peek(base + offset + i) for i in indices] == [
                     reference.peek(base + i) for i in indices
                 ]
-    assert not stereo.runner.state.approx_recips_used
 
 
 @pytest.mark.parametrize(
@@ -456,7 +450,7 @@ def filter_call(session, family, side, histories, coefficients, shared_writes=()
 )
 def test_filter_leaf_shadow_matches_isolated_mono(filter_rig, family, corrupt_history):
     size, histories, coefficients, values = FILTER_FAMILIES[family]
-    stereo, left, right = (fresh(filter_rig, approximate=False) for _ in range(3))
+    stereo, left, right = (fresh(filter_rig) for _ in range(3))
     for session in (stereo, left, right):
         # Stock raw-byte MODIFY interiors require byte-space frame/state pointers.
         # Unqualified stock DM accesses are 32-bit normal words in this context.
@@ -513,7 +507,6 @@ def test_filter_leaf_shadow_matches_isolated_mono(filter_rig, family, corrupt_hi
         if not corrupt_history:
             assert actual == expected
         for session in (stereo, left, right):
-            assert not session.runner.state.approx_recips_used
             for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
                 assert all(
                     (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
@@ -527,8 +520,8 @@ PREPARED_WRITES = tuple(17 + 7 * k + delta for k in range(6) for delta in (0, 1,
 PREPARED_SHARED = (0, 1, 2, 3, 4, 14, *PREPARED_WRITES)
 
 
-def initialized_prepared_sessions(filter_rig, family, approximate=False):
-    sessions = tuple(fresh(filter_rig, approximate=approximate) for _ in range(3))
+def initialized_prepared_sessions(filter_rig, family):
+    sessions = tuple(fresh(filter_rig) for _ in range(3))
     histories = (1, 2) if family == "held" else (5, 9, 10, 11, 12)
     size = 5 if family == "held" else 59
     for session in sessions:
@@ -577,11 +570,7 @@ def initialized_prepared_sessions(filter_rig, family, approximate=False):
 @pytest.mark.parametrize("family", ("held", "prepared"))
 @pytest.mark.parametrize("fault", (None, "advanced-controls", "shared-history"))
 def test_prepared_shadow_matches_isolated_mono(filter_rig, family, fault):
-    # b80f2e's 1c06ba division by block count uses the previously qualified
-    # RECIPS approximation; b8265b and its 1c07cc helper do not need it.
-    sessions, histories, size = initialized_prepared_sessions(
-        filter_rig, family, approximate=family == "prepared"
-    )
+    sessions, histories, size = initialized_prepared_sessions(filter_rig, family)
     stereo, left, right = sessions
     shared = (0, 3, 4) if family == "held" else PREPARED_SHARED
     writes = (3, 4) if family == "held" else PREPARED_WRITES
@@ -658,7 +647,6 @@ def test_prepared_shadow_matches_isolated_mono(filter_rig, family, fault):
         assert current_histories != previous_histories
         previous_histories = current_histories
         for session in sessions:
-            assert session.runner.state.approx_recips_used == (family == "prepared")
             for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
                 assert all(
                     (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
@@ -693,7 +681,6 @@ def gain_call(session, side, control=0, byte_control=0):
     result = session.call(f"_{side}_gain", regs, max_steps=12000)
     assert result["halt"]["reason"] == "breakpoint", result
     assert result["final_pc_sw"] == BACK
-    assert not session.runner.state.approx_recips_used
     if side == "prepare":
         allowed = {CONTROL + 0x100 + i for i in range(11)}
     else:
@@ -744,7 +731,7 @@ def gain_call(session, side, control=0, byte_control=0):
     "hold_release", (False, True), ids=("attack-decay", "hold-release")
 )
 def test_gain_shadow_matches_isolated_mono(gain_rig, advanced_controls, hold_release):
-    stereo, left, right = (fresh(gain_rig, approximate=False) for _ in range(3))
+    stereo, left, right = (fresh(gain_rig) for _ in range(3))
     sessions = (stereo, left, right)
     # b8030c/b80338 initialize words8,7,10, but do not initialize9.
     # Captured b8028c setter arguments yield words0..6 below; word9 is
@@ -923,11 +910,8 @@ def ring_call(session, side, initialization=False):
     return result
 
 
-def initialized_ring_session(ring_rig, stereo=False, approximate=True):
-    # Constructor helpers and b806f5 divide through the existing 1c06ba RECIPS
-    # model. Default execution confirms the known 1c0706 unknown-AV fork;
-    # this is model state-separation equivalence, not hardware reciprocal bits.
-    session = fresh(ring_rig, approximate=approximate)
+def initialized_ring_session(ring_rig, stereo=False):
+    session = fresh(ring_rig)
     session.runner.state.assume_nw32 = True
     session.runner.attach_watchpoints(
         [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
@@ -1021,7 +1005,6 @@ def test_ring_shadow_matches_isolated_mono(ring_rig, shared_pointer):
         assert stereo.peek(CONTROL + 0x100 + 13) == stereo.peek(CONTROL + 13)
         assert stereo.peek(CONTROL) != bits(1 / 32)
         for session in (stereo, left, right):
-            assert session.runner.state.approx_recips_used
             for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
                 assert all(
                     (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)
@@ -1063,7 +1046,6 @@ def source_call(session, side, depth):
     assert result["halt"]["reason"] == "breakpoint", result
     assert result["final_pc_sw"] == BACK
     assert result["regs"]["MODE1"] == 0
-    assert not session.runner.state.approx_recips_used
     offset = 0x100 if side == "right" else 0
     allowed = {LEFT + offset + i for i in range(32)}
     allowed |= set(range(STACK - 64, STACK + 1))
@@ -1114,7 +1096,7 @@ def source_call(session, side, depth):
     "control,depth", ((0, 0), (0.25, 8), (0.5, 4), (0.75, 2), (1, 1))
 )
 def test_source_continuation_matches_isolated_mono(source_rig, control, depth):
-    stereo, left, right = (fresh(source_rig, approximate=False) for _ in range(3))
+    stereo, left, right = (fresh(source_rig) for _ in range(3))
     for session in (stereo, left, right):
         # Byte pointers, 32-bit normal-word accesses, linear DAGs and SISD
         # entry are explicit. The callee enables SIMD internally even for copy.
@@ -1236,7 +1218,6 @@ def ordered_call(session, side, phase, control=0):
     assert result["halt"]["reason"] == "breakpoint", result
     assert result["final_pc_sw"] == stop
     assert result["regs"]["MODE1"] == 0
-    assert not session.runner.state.approx_recips_used
     write_bytes = {
         _canonical_dm_address(
             session.runner.state, normal_word_to_byte(a), 4, for_write=True
@@ -1283,7 +1264,7 @@ def ordered_call(session, side, phase, control=0):
 
 
 def initialized_ordered_session(ordered_rig, channel=0):
-    session = fresh(ordered_rig, approximate=False)
+    session = fresh(ordered_rig)
     session.runner.state.assume_nw32 = True
     session.runner.attach_watchpoints(
         [session._run.Watchpoint(0, 1 << 40, stop=False, label="access")]
@@ -1512,7 +1493,6 @@ def reset_call(session, family, side):
     result = session.call(f"_reset_{side}_{family}", regs, max_steps=12000)
     assert result["halt"]["reason"] == "breakpoint", result
     assert result["final_pc_sw"] == BACK
-    assert not session.runner.state.approx_recips_used
     offset = 0x100 if side == "right" else 0
     base = CONTROL + offset
     mutable = {base + i for i in RESET_WRITES[family]}
@@ -1549,9 +1529,7 @@ def reset_call(session, family, side):
 
 def initialized_reset_session(reset_rig, family, channel=0):
     linked, memory = reset_rig
-    session = pk_sharc.CallSession(
-        linked, BACK, base_memory=memory, approx_recips=False
-    )
+    session = pk_sharc.CallSession(linked, BACK, base_memory=memory)
     session.record_stores()
     session.runner.state.assume_nw32 = True
     session.runner.attach_watchpoints(
@@ -1640,16 +1618,12 @@ def test_helper_reset_mirroring_matches_isolated_mono(reset_rig, family, fault):
         ]
         assert [right.peek(CONTROL + i) for i in (3, 4)] == [0, 0]
         assert all(before_right[i] != 0 for i in (48, 49, 50))
-    # Run each actual renderer after resetting. Prepared uses only the same
-    # qualified RECIPS model as its existing replay test; the reset uses none.
+    # Run each actual renderer after resetting.
     if family == "held":
         # Capture an active post-reset control, retaining actual reset counters
         # and held values. A missed reset must not be hidden by a copy bypass.
         for session, offset in ((stereo, 0), (stereo, 0x100), (left, 0), (right, 0)):
             session.poke(CONTROL + offset, bits(0.25))
-    elif family == "prepared":
-        for session in (stereo, left, right):
-            session.runner.state.approx_recips = True
     for i in range(32):
         lv, rv = bits((i - 11) / 128), bits((7 - i) / 163)
         stereo.poke(LEFT + i, lv)
@@ -1678,7 +1652,6 @@ def test_helper_reset_mirroring_matches_isolated_mono(reset_rig, family, fault):
     assert words(stereo, LEFT, 32) != actual_audio
     assert any(v & 0x7FFFFFFF for v in expected_audio)
     for session in (stereo, left, right):
-        assert session.runner.state.approx_recips_used == (family == "prepared")
         for output in (LEFT, RIGHT) if session is stereo else (LEFT,):
             assert all(
                 (v & 0x7F800000) != 0x7F800000 for v in words(session, output, 32)

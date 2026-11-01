@@ -4,6 +4,7 @@
 //   desktop: apps/desktop/ui/src/desktop-firmware.ts (patchkit in process through a Tauri command, the system's save dialog)
 //   site:    apps/web/src/firmware/web-env.ts (patchkit.wasm in a worker, a download link)
 import type { FlashSender, PreparedFlash, RpcMachine } from '../patch/patchkit-core';
+import type { DefaultModuleEntry, DefaultProgress } from './default-modules-core';
 
 /** One run of the page (a flash, a restore, a download), for the app's log. */
 export interface FirmwareRun {
@@ -29,6 +30,21 @@ export interface FirmwareEnv {
   runInEmulator?(name: string, device: string, bytes: Uint8Array): Promise<void>;
   /** The app's log of what happened. */
   log(run: FirmwareRun): void;
+  /**
+   * The desktop app only: modules that are installed and enabled together with the firmware (`[digikit] default_modules` of the device file), on
+   * the flashed device after its flash and in the emulator after it loads the patched image. The site leaves it out (it has no module install).
+   */
+  defaultModules?: {
+    /** The list for the device id (`dt2`, `dn2`); the data is the device file's. */
+    entries(device: string): DefaultModuleEntry[];
+    /** Install and enable `ids` (all ticked) on the selected MIDI device or on the emulator. Throws `DefaultModuleError` for the module that failed. */
+    install(
+      where: 'device' | 'emulator',
+      device: string,
+      ids: string[],
+      progress: (p: DefaultProgress) => void,
+    ): Promise<string[]>;
+  };
 }
 
 let current: FirmwareEnv | undefined;

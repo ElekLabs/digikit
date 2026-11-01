@@ -1143,6 +1143,7 @@ version = "0.1.0"
 dependencies = [
  "dkneeds",
  "dkrt-sdk",
+ "serde_json",
 ]
 
 [[package]]
@@ -3088,6 +3089,7 @@ version = "0.1.0"
 dependencies = [
  "coldfire",
  "dkneeds",
+ "dkrt-fit",
  "dkrt-sdk",
  "dkupload",
  "dt2-firmware-loader",
@@ -3667,7 +3669,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "selas"
 version = "0.1.0"
-source = "git+https://github.com/ElekLabs/selache?rev=926bfac9c8a7b51fcc7750498af3fd2521541b3e#926bfac9c8a7b51fcc7750498af3fd2521541b3e"
+source = "git+https://github.com/ElekLabs/selache?rev=02d6d785b8e3a125ab237a00bb89503aff835f5d#02d6d785b8e3a125ab237a00bb89503aff835f5d"
 dependencies = [
  "selelf",
  "selinstr",
@@ -3695,12 +3697,12 @@ dependencies = [
 [[package]]
 name = "selelf"
 version = "0.1.0"
-source = "git+https://github.com/ElekLabs/selache?rev=926bfac9c8a7b51fcc7750498af3fd2521541b3e#926bfac9c8a7b51fcc7750498af3fd2521541b3e"
+source = "git+https://github.com/ElekLabs/selache?rev=02d6d785b8e3a125ab237a00bb89503aff835f5d#02d6d785b8e3a125ab237a00bb89503aff835f5d"
 
 [[package]]
 name = "selinstr"
 version = "0.1.0"
-source = "git+https://github.com/ElekLabs/selache?rev=926bfac9c8a7b51fcc7750498af3fd2521541b3e#926bfac9c8a7b51fcc7750498af3fd2521541b3e"
+source = "git+https://github.com/ElekLabs/selache?rev=02d6d785b8e3a125ab237a00bb89503aff835f5d#02d6d785b8e3a125ab237a00bb89503aff835f5d"
 
 [[package]]
 name = "semver"

@@ -143,7 +143,7 @@ def boot_checks(
         _cap_ok(cap, m, g, lim, rows, len(names), c.store.limit // 2),
         str(cap),
     )
-    bad = up.peek(M.sym(rig.plan, "core/runtime", "DKRT_TABLE_BAD"), 1)[0]
+    bad = rig.w(M.sym(rig.plan, "core/runtime", "DKRT_TABLE_BAD")) >> 24
     c.check(
         f"{tag}: the runtime's table check never failed (a refused module left nothing behind)",
         bad == 0 and not D.events(rig, "TABLE_BAD"),
@@ -388,9 +388,6 @@ def run_inferred_needs(c: Any) -> None:
     def one(mid: str, path: str) -> None:
         data = (c.env.folder / "digikit" / path).read_bytes()
         n = N.needs_of(data)
-        # this boot is cf_only: the DSP send never runs, so the step list that dsp.rs `reserve` allocates for a module with
-        # `_dk_step` relocations (freed by `patch_steps` at PH_SEND) stays taken
-        step_block = step_list_block(data)
         card = c.card([path])
         with c.rig(img, card, "needs-" + mid.replace("/", "-"), cf_only=True) as rig:
             res = rig.boot_info()["results"]
@@ -401,7 +398,7 @@ def run_inferred_needs(c: Any) -> None:
             loaded = bool(res) and res[0] in (0, B.E_LOADING)
             dsp = n["DSP_AREA"] != 0
             want = {
-                "ARENA": n["ARENA"] + n["ARENA_XFER"] + step_block,
+                "ARENA": n["ARENA"] + n["ARENA_XFER"],
                 "DSP_AREA": n["DSP_AREA"],
                 "VOICE_ROWS": n["VOICE_ROWS"],
                 "FX_SLOTS": n["FX_SLOTS"],  # the effect rows are claimed with the range
@@ -434,30 +431,6 @@ def run_inferred_needs(c: Any) -> None:
     c.common_checks_upload(project_writes_ok=True)
 
 
-def step_list_block(dkm: bytes) -> int:
-    """The arena bytes of the step list of the module trace, as dsp.rs `reserve` allocates it: 4 bytes per DSP relocation that names
-    `_dk_step`, as an `arena::alloc` block (rounded up to 16, plus the 16-byte header). 0 for a module without such relocations."""
-    import struct
-
-    off, size = struct.unpack(">II", dkm[0x98:0xA0])
-    if size == 0:
-        return 0
-    d = dkm[off : off + size]
-    reloc_off, nreloc, import_off, nimport = struct.unpack(">IIII", d[0x1C:0x2C])
-    steps = {
-        i
-        for i in range(nimport)
-        if d[import_off + 32 * i : import_off + 32 * (i + 1)].split(b"\0")[0]
-        == b"_dk_step"
-    }
-    nstep = 0
-    for i in range(nreloc):
-        w = struct.unpack(">I", d[reloc_off + 8 * i + 4 : reloc_off + 8 * i + 8])[0]
-        if (w >> 24) & 15 == 2 and (w & 0xFFFF) in steps:
-            nstep += 1
-    return 0 if nstep == 0 else ((4 * nstep + 15) & ~15) + 16
-
-
 # ---- the MODULES page: size and a mark for a module that will not fit ---------------------------------------------------------
 
 
@@ -483,11 +456,10 @@ def fit_rows(names: list[str], files: list[bytes], cap: dict) -> list[str]:
 
 def run_fits(c: Any) -> None:
     """The MODULES list tells when a module will not load: a store of four modules, one small, two that each take a little over half of the DSP area, one
-    larger than the area. The rows (DK_LOAD) equal `fit_rows`, which uses the Python rule on the CAPACITY reply and the needs `patchkit needs` infers from the
-    packed files. YES on the largest checks nothing and opens a confirm `HUGE DOES NOT FIT` with the reason. With the first half-size one checked, the second
+    larger than the area. The rows (DK_LOAD) equal `fit_rows`, which sums the needs `patchkit needs` infers from the
+    packed files. The expected texts come from the fit rule (`dkneeds.fit`, the Rust code the menu runs). YES on the largest checks nothing and opens a confirm `HUGE DOES NOT FIT` with the reason. With the first half-size one checked, the second
     one is refused the same way (`DSP 164K > 155K FREE`); unchecking the first makes room."""
     from tools.coldfire import digikit_menu_proof as DP
-    from tools.device import dkfit as F
     from tools.device import dkneeds as N
 
     img = c.image_for(f"{B.RT},core/digikit-menu", "menu")
@@ -574,13 +546,12 @@ def run_fits(c: Any) -> None:
             tap(rig, "DOWN", 200)
         tap(rig, "YES", 700)  # the module larger than the DSP area: refused
         shot(rig, "huge-refused")
-        short = F.fits_now(N.needs_of(files[huge]), F.empty_caps(cap))
+        short = N.fit(cap, [N.needs_of(files[huge])], empty=True)["each"][0]
         c.check(
             "YES on the module larger than the DSP area checks nothing and opens a confirm with the reason",
             w(rig, "DK_POPUPS") == n0 + 1
             and checked(rig) == [0] * len(names)
-            and dialog(rig)
-            == ("HUGE DOES NOT FIT", F.menu_line(short) if short else "?"),
+            and dialog(rig) == ("HUGE DOES NOT FIT", short["text"] if short else "?"),
             f"{dialog(rig)} {checked(rig)}",
         )
         tap(rig, "YES", 500)  # the confirm is a notice
@@ -601,16 +572,16 @@ def run_fits(c: Any) -> None:
         n1 = w(rig, "DK_POPUPS")
         tap(rig, "YES", 700)  # half-b next to half-a: refused
         shot(rig, "refused")
-        short = F.fits_now(
-            N.needs_of(files[second]),
-            F.take(N.needs_of(files[first]), F.empty_caps(cap)),
-        )
+        short = N.fit(
+            cap,
+            [N.needs_of(files[first]), N.needs_of(files[second])],
+            empty=True,
+        )["set"]
         c.check(
             "the other half-size module is refused: the mark stays off and the confirm says which resource is short",
             w(rig, "DK_POPUPS") == n1 + 1
             and checked(rig) == want_checked
-            and dialog(rig)
-            == ("HALF-B DOES NOT FIT", F.menu_line(short) if short else "?"),
+            and dialog(rig) == ("HALF-B DOES NOT FIT", short["text"] if short else "?"),
             f"{dialog(rig)} {checked(rig)}",
         )
         tap(rig, "YES", 500)
@@ -642,7 +613,7 @@ def run_menu_open(c: Any) -> None:
     ColdFire-only, is opened; the same names with files that are not `.dkm` (the same sizes: the scan reads only their first sector) are opened as the
     baseline. Measured from the press that opens the page to the moment its last row is written (`DK_LOAD_N`): emulated milliseconds and busy ColdFire
     instructions, and the extra the needs cost, and the sector reads the needs reader made (`DK_NEEDS_READS`; the emulated card answers at once, so
-    the sector count, not the milliseconds, is what a device's card latency multiplies). Checked: the rows equal `fit_rows` (the Python rule on the needs `patchkit needs` infers), and the extra
+    the sector count, not the milliseconds, is what a device's card latency multiplies). Checked: the rows equal `fit_rows` (the sum of the needs `patchkit needs` infers), and the extra
     stays under `[debug] max_extra_ms` (twenty times the measured cost: the point is that a store of a dozen modules opens at once). The figures go in the report
     (`--keep`) and in docs/findings/60-what-fits.md."""
     from tools.coldfire import digikit_menu_proof as DP

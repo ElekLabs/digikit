@@ -33,7 +33,7 @@ for tier-quick, all for tier-sweep), cut their (default/no-aot x file) groups in
 them from one shared queue, longest first, on the step's share of the budget in emulator processes (DIGI_TIER_JOBS replaces it).
 check-no-aot runs 17 native FX assertions even with --full (--all-no-aot: 61 normally, 191 with --full).
 Normal routing includes relevant stock, runtime and module acceptance; full tier sweeps stay explicit.
-python-tests runs the PY_CHECKS commands (ruff, ruff format, mypy, pathcheck, layercheck), the PY_GATE files, the tests that reach a changed Python module of tools/ or tests/ in the
+python-tests runs the PY_CHECKS commands (ruff, ruff format, mypy, pathcheck, layercheck, gen-check), the PY_GATE files, the tests that reach a changed Python module of tools/ or tests/ in the
 import graph (changed_tests.gate_tests), the PY_SUITES whose trigger prefixes match a changed file (a suite with
 a test directory only for the other files),
 every changed tests/**/test_*.py, and the
@@ -102,7 +102,7 @@ DT2_FX_FILES = (
 # reach them in the import graph instead (changed_tests.gate_tests). Test paths may be globs or
 # directories; one that matches nothing is an error.
 PY_GATE = ("tests/patchkit/test_pk_current.py",)
-# Plain commands python-tests runs as sub-checks (label "python-tests:NAME"): lint, format, types, paths.
+# Plain commands python-tests runs as sub-checks (label "python-tests:NAME"): lint, format, types, paths, generated sources.
 # ruff and mypy read their file lists from pyproject.toml.
 PY_CHECKS: tuple[tuple[str, list[str]], ...] = (
     ("ruff", [sys.executable, "-m", "ruff", "check", "--no-cache"]),
@@ -111,6 +111,8 @@ PY_CHECKS: tuple[tuple[str, list[str]], ...] = (
     ("pathcheck", [sys.executable, "-m", "tools.devtools.pathcheck"]),
     # the module layering (docs/ARCHITECTURE.md): reads manifests, sources and built objects, under a second
     ("layercheck", [sys.executable, "-m", "tools.devtools.layercheck"]),
+    # the generated sources match sdk/sdk.toml, devices/*.toml and abi.toml (mise run gen:modules)
+    ("gen-check", [sys.executable, "-m", "tools.patchkit.patchkit", "gen", "--check"]),
 )
 PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     (
@@ -330,6 +332,16 @@ SMOKE_EXEMPT: dict[str, str] = {
     "tools/devtools/layercheck.py": "layer checker",
     ".claude/settings.json": "agent settings",
 }
+# Test files and gate tooling that cannot change a patched image or the smoke harness: the tests of the
+# devtools, patchkit and digikit Python suites (not tests/patchkit/smoke or pk_harness*), the device
+# acceptance tests, and tools/devtools (the gate itself). Same matching as UI_ONLY.
+TEST_ONLY: tuple[str, ...] = (
+    "tests/devtools/*",
+    "tests/patchkit/test_*.py",
+    "tests/digikit/test_*.py",
+    "tests/regression/*.test.ts",
+    "tools/devtools/*",
+)
 # Host Vitest test files (vitest.host.projects.json). The host config runs them without a device, so
 # a change that only touches them cannot change the smoke matrix. Helpers, config and new files that
 # match no glob stay conservative.
@@ -749,6 +761,11 @@ def ui_only(files: list[str]) -> bool:
     return bool(files) and all(ui_only_path(path) for path in files)
 
 
+def test_only_path(path: str) -> bool:
+    """Whether one path matches the test-only smoke exemption (TEST_ONLY)."""
+    return any(fnmatch.fnmatchcase(path, pattern) for pattern in TEST_ONLY)
+
+
 def host_test_path(path: str) -> bool:
     """Whether one path is a host Vitest test file (vitest.host.projects.json)."""
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in host_test_globs())
@@ -758,7 +775,12 @@ def smoke_cells(files: list[str]) -> list[str] | None:
     """Filter only the three audited production leaves plus existing exemptions; None means full."""
     leaves: set[str] = set()
     for path in files:
-        if ui_only_path(path) or path in SMOKE_EXEMPT or host_test_path(path):
+        if (
+            ui_only_path(path)
+            or path in SMOKE_EXEMPT
+            or host_test_path(path)
+            or test_only_path(path)
+        ):
             continue
         mid = modroots.module_id(path)
         if mid not in verify_route.RUNTIME_UPLOADS:
@@ -774,6 +796,7 @@ def smoke_reason(files: list[str]) -> str | None:
     maintenance: list[str] = []
     ui = False
     host = False
+    tests = False
     for path in files:
         if ui_only_path(path):
             ui = True
@@ -783,10 +806,14 @@ def smoke_reason(files: list[str]) -> str | None:
             maintenance.append(group)
         elif host_test_path(path):
             host = True
+        elif test_only_path(path):
+            tests = True
         else:
             if smoke_cells(files) == []:
                 return "audited production leaves have no dependent cells in the smoke matrix"
             return None
+    if tests:
+        maintenance.append("test-only")
     if maintenance:
         if host:
             maintenance.append("host-only test")
@@ -812,7 +839,9 @@ def steps_for(files: list[str]) -> tuple[str, ...]:
         wanted.add("host")
     # The patchkit smoke matrix runs whenever the gate runs anything, except for the narrowly
     # documented complete change sets above (docs-only: nothing at all).
-    if wanted and not smoke_reason(files):
+    if smoke_reason(files):
+        wanted.discard("smoke")
+    elif wanted:
         wanted.add("smoke")
     return tuple(s for s in STEPS if s in wanted)
 
@@ -888,8 +917,11 @@ class Gate:
         budget: int = 1,
         acceptance: dict[str, list[str]] | None = None,
         smoke_selection: list[str] | None = None,
+        py_checks: list[str] | None = None,
     ) -> None:
         self.out = out
+        # the PY_CHECKS labels python-tests runs (None: all); a rerun names the checks that failed
+        self.py_checks = py_checks
         self.rust_packages = rust_packages
         self.all_no_aot = all_no_aot
         self.budget = budget
@@ -905,6 +937,7 @@ class Gate:
             str
         ] = []  # the files of py_tests (directories expanded), set by run_steps
         self.py_started: float | None = None
+        self.py_checks_ran = False
         self.local = threading.local()
         self.lock = threading.Lock()
 
@@ -1527,6 +1560,7 @@ def explain(
             and not verify_route.patchkit_no_smoke(path)
             and not ui_only_path(path)
             and not host_test_path(path)
+            and not test_only_path(path)
         ]
         if conservative:
             print(f"smoke: selected, conservative path: {', '.join(conservative)}")
@@ -1625,8 +1659,12 @@ def finish_python(gate: Gate) -> None:
     bad = test_outcomes.write_reports(out, records, python_timeout()) if records else []
     text = "\n".join(test_outcomes.record_line(r) for r in records)
     (gate.out / "python-tests.log").write_text(text + "\n")
-    for label, cmd in PY_CHECKS:
+    ran = [
+        (n, c) for n, c in PY_CHECKS if gate.py_checks is None or n in gate.py_checks
+    ]
+    for label, cmd in ran:
         gate.run(f"python-tests:{label}", cmd)
+    gate.py_checks_ran = True
     checks = [n for n in gate.failed if n.startswith("python-tests:")]
     problem: str | None = None
     if checks:
@@ -1636,6 +1674,8 @@ def finish_python(gate: Gate) -> None:
         problem = f"{len(bad) + len(lost)} files failed: {shown}"
     elif records:
         problem = python_tests_passed(out)
+    elif not gate.py_files and ran:  # a rerun of failed checks alone
+        problem = None
     else:
         problem = "no test file ran"
     began = gate.py_started if gate.py_started is not None else time.monotonic()
@@ -1761,6 +1801,10 @@ def run_step(gate: Gate, step: str) -> None:
                 for m, f in verify_route.RUNTIME_UPLOADS.items()
                 if not selected or f.removeprefix("tests/regression/") in selected
             ]
+            if "digikit/debug" not in modules:
+                modules.append(
+                    "digikit/debug"
+                )  # every cell selects it next to its module (the log)
             env["DIGI_RUNTIME_MODULES"] = str(
                 prepare_acceptance_modules(gate, step, modules)
             )
@@ -2038,7 +2082,16 @@ def failed_units(gate: Gate) -> dict[str, list[str]]:
     units: dict[str, list[str]] = {}
     if "python-tests" in gate.failed:
         lost = [f for f in gate.py_files if f not in gate.py_records]
-        if files := [*verify_times.failed_files(gate.out), *lost]:
+        files = [*verify_times.failed_files(gate.out), *lost]
+        if gate.py_checks_ran:
+            # the failed checks alone: a rerun then needs no file that passed
+            units["python-tests:checks"] = [
+                n.removeprefix("python-tests:")
+                for n in gate.failed
+                if n.startswith("python-tests:")
+            ]
+            units["python-tests"] = files
+        elif files:
             units["python-tests"] = files
     for step in verify_route.ACCEPTANCE_DIRS:
         if step in gate.failed and (
@@ -2059,6 +2112,7 @@ class Rerun:
     smoke: list[str] | None
     rust_packages: list[str] | None
     reasons: list[tuple[str, str]]
+    py_checks: list[str] | None = None  # the PY_CHECKS to run (None: all)
 
 
 def changed_plan(
@@ -2096,10 +2150,17 @@ def rerun_plan(
     steps = tuple(s for s in STEPS if s in failed or s in new_steps)
     reasons = [(s, failed_why if s in failed else changed_why) for s in steps]
     py_tests: list[str] = []
+    py_checks: list[str] | None = None
     if "python-tests" in failed:
-        py_tests = list(units.get("python-tests") or result.get("py_tests", []))
+        if "python-tests:checks" in units:  # the run knew which checks and files failed
+            py_checks = list(units["python-tests:checks"])
+            py_tests = list(units.get("python-tests", []))
+        else:
+            py_tests = list(units.get("python-tests") or result.get("py_tests", []))
         reasons += [(f"python-tests: {p}", failed_why) for p in py_tests]
+        reasons += [(f"python-tests:{c}", failed_why) for c in py_checks or []]
     if "python-tests" in new_steps:
+        py_checks = None  # changed code can break any check
         for path, _ in python_test_plan(files, False):
             if path not in py_tests:
                 py_tests.append(path)
@@ -2125,7 +2186,7 @@ def rerun_plan(
             reasons += [(f"{step}: {f}", named[f]) for f in sorted(named)]
     smoke = None if "smoke" in failed else smoke_cells(files) if files else None
     rust = None if "rust-tests" in failed else new_rust
-    return Rerun(steps, py_tests, acceptance, smoke, rust, reasons)
+    return Rerun(steps, py_tests, acceptance, smoke, rust, reasons, py_checks)
 
 
 def named_units(
@@ -2275,6 +2336,9 @@ def main(argv: list[str] | None = None) -> int:
     full, dt2 = args.full, args.dt2
     if full:  # tests/digikit: every scenario (the gate runs the quick tier)
         os.environ["DIGIKIT_TIER"] = "full"
+    # The head the run starts on: a commit that lands during the run must not
+    # replace it in result.json, or --rerun-failed misses what changed since.
+    start_head = git_lines("rev-parse", "HEAD")[0]
     rerun: Rerun | None = None
     if args.rerun_failed:
         last = load_last_result(Path(digi_env.RUNS_ROOT) / "verify", None)
@@ -2285,7 +2349,7 @@ def main(argv: list[str] | None = None) -> int:
             print("verify: the last run had no failed steps; nothing to do")
             return 0
         full, dt2 = bool(last.get("full")), bool(last.get("dt2"))
-        old, new = str(last.get("head", "?")), git_lines("rev-parse", "HEAD")[0]
+        old, new = str(last.get("head", "?")), start_head
         changed = None
         if old != new:
             try:
@@ -2387,6 +2451,7 @@ def main(argv: list[str] | None = None) -> int:
         budget=budget,
         acceptance=acceptance,
         smoke_selection=smoke_selection,
+        py_checks=rerun.py_checks if rerun else None,
     )
     nodes, deps = plan(steps, gate.py_tests)
     print(
@@ -2415,7 +2480,7 @@ def main(argv: list[str] | None = None) -> int:
         "full": full,
         "dt2": dt2,
         "base": args.base,
-        "head": git_lines("rev-parse", "HEAD")[0],
+        "head": start_head,
         "py_tests": gate.py_tests,
         "failed_units": failed_units(gate),
         "run": out.name,

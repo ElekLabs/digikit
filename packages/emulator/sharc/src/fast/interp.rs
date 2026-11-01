@@ -201,7 +201,9 @@ impl InterpKernel {
                             }
                         }
                         Op::LoadN { base, off, bytes } => {
-                            self.check_window(ctx, v(base), v(off) as u32, bytes as u32);
+                            if !super::lower::float_alu::is_seed_table(v(base)) {
+                                self.check_window(ctx, v(base), v(off) as u32, bytes as u32);
+                            }
                             let p = (v(base) as usize).wrapping_add(v(off) as u32 as usize);
                             if bytes == 1 {
                                 unsafe { (p as *const u8).read() as u64 }

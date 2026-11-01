@@ -99,8 +99,8 @@ def device_caps(dev: str) -> dict[str, dict[str, int]]:
 
 def needs_lines(dkm: bytes, dev: str) -> list[str]:
     """What a load of a packed module takes, inferred from the file (docs/design/digikit-dkm.md: `patchkit needs`, packages/dkneeds), and whether it
-    fits the empty device DEV (the fit rule, tools/device/dkfit.py)."""
-    from tools.device import dkfit, dkneeds
+    fits the empty device DEV (the fit rule, `dkneeds.fit`)."""
+    from tools.device import dkneeds
 
     try:
         n = dkneeds.needs_of(dkm)
@@ -123,11 +123,11 @@ def needs_lines(dkm: bytes, dev: str) -> list[str]:
         if n[k]
     )
     caps = device_caps(dev)
-    short = dkfit.fits_now(n, dkfit.empty_caps(caps))
+    short = dkneeds.fit(caps, [n], empty=True)["each"][0]
     verdict = (
         "fits an empty device"
         if short is None
-        else f"DOES NOT FIT even an empty device: {dkfit.describe(short)}"
+        else f"DOES NOT FIT even an empty device: {short['describe']}"
     )
     return [
         f"{dev}: needs    {shown or 'nothing but its code'}",

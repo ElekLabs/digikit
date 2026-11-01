@@ -1,6 +1,6 @@
 //! Complete private source snapshots for the bounded mono sample proof. UI task
 //! only. DT2 file reads are synchronous and require no simultaneous Transfer
-//! writes: an open handle is not yet a proven immutable-file lease (finding 78).
+//! writes: an open handle is not yet a proven immutable-file lease (finding 105).
 use crate::{arena, sha256, store};
 use core::ptr::{addr_of, read_volatile};
 use dkrt_sdk::{sample, E_FORMAT, E_NOMEM, E_NOT_FOUND, E_READ, E_TOO_BIG};
@@ -83,7 +83,7 @@ pub unsafe fn load(path: *const u8) -> Result<Source, i32> {
     result
 }
 
-// Signatures from devices/fw/storage.toml, finding 78: size takes entry id,
+// Signatures from devices/fw/storage.toml, finding 105: size takes entry id,
 // all other routines take a pointer to the four-word handle. ColdFire cdecl.
 type FsOpen = unsafe extern "C" fn(*const u8, *const u8, *mut u32) -> i32;
 type FsRead = unsafe extern "C" fn(*mut u8, u32, *mut u32) -> i32;

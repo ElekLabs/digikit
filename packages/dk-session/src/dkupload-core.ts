@@ -11,7 +11,9 @@ import {
   CMD as GCMD,
   LOAD_STATUS,
   LOG_KIND,
+  MAX_CHUNK,
   PROTO_VERSION,
+  READ_MAX,
   SERVICE_CMD,
   STATUS as GSTATUS,
 } from './gen_proto.ts';
@@ -92,7 +94,7 @@ export const CMD = {
   CLEAR: 0x14,
   ABORT: 0x15,
 };
-export const MAX_CHUNK = 32768;
+export { MAX_CHUNK };
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -500,6 +502,18 @@ export interface DkInfoFull extends DkInfo {
   image_id: string | null;
 }
 
+/** The LOGCFG state: the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded (it always answers 1). */
+export interface LogConfig {
+  level: number;
+  modules: number[];
+  debug: boolean;
+}
+
+function parseLogConfig(b: Uint8Array): LogConfig {
+  if (b.length < 10) throw new DkError({ error: 'logcfg: malformed reply', kind: 'protocol' });
+  return { level: b[0]!, modules: Array.from(b.subarray(1, 9)), debug: b[9] !== 0 };
+}
+
 export interface DkModule {
   index: number;
   name: string;
@@ -864,9 +878,9 @@ export class DkSession {
   async restart(): Promise<void> {
     await this.ok(GCMD.RESTART, 'restart');
   }
-  /** LOG: events from `from` on (the log of this boot), `[oldest, newest, events]`. */
+  /** LOG (the debug module `digikit/debug`): events from `from` on (the log of this boot), `[oldest, newest, events]`. */
   async logPage(from: number, quick = false): Promise<[number, number, DkLogEvent[]]> {
-    const b = await this.ok(GCMD.LOG, 'log', be32(from), quick);
+    const b = await this.ok(SERVICE_CMD.LOG, 'log', be32(from), quick);
     const n = b[8]!;
     const events: DkLogEvent[] = [];
     for (let i = 0; i < n; i++) {
@@ -881,11 +895,23 @@ export class DkSession {
     }
     return [u32(b, 0), u32(b, 4), events];
   }
-  /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether debug logging is on. */
-  async logConfig(quick = false): Promise<{ level: number; modules: number[]; debug: boolean }> {
-    const b = await this.ok(GCMD.LOGCFG, 'logcfg', Uint8Array.of(0), quick);
-    if (b.length < 10) throw new DkError({ error: 'logcfg: malformed reply', kind: 'protocol' });
-    return { level: b[0]!, modules: Array.from(b.subarray(1, 9)), debug: b[9] !== 0 };
+  /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded. */
+  async logConfig(quick = false): Promise<LogConfig> {
+    return parseLogConfig(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(0), quick));
+  }
+  /**
+   * LOGCFG (set): the default level (0 to 4) and the level of each of the 8 module records (0 to 4, or 0xff for the default). The levels are
+   * in RAM only and start again at each boot. The reply is the state after the set. Needs the debug module (`digikit/debug`).
+   */
+  async setLogConfig(level: number, modules: number[], quick = false): Promise<LogConfig> {
+    const bad = (v: number, allowDefault: boolean) =>
+      !Number.isInteger(v) || v < 0 || (v > 4 && !(allowDefault && v === 0xff));
+    if (bad(level, false) || modules.length !== 8 || modules.some((v) => bad(v, true)))
+      throw new DkError({
+        error: 'logcfg: a level is 0 to 4 (0xff: the default) for 8 module records',
+        kind: 'request',
+      });
+    return parseLogConfig(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(1, level, ...modules), quick));
   }
   /** Every event of the log. */
   async readLog(quick = false): Promise<DkLogEvent[]> {
@@ -993,9 +1019,10 @@ export class DkSession {
   }
 
   /**
-   * After `restart()`: wait until the device has booted again. A reboot is seen in the log: the old boot's log holds the RESTART request
-   * (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw it. The port may be
-   * silent for a while (the emulator boots on a worker): a failed read is a reason to wait and try again.
+   * After `restart()`: wait until the device has booted again. With the debug module loaded a reboot is seen in the log: the old boot's log holds the RESTART request
+   * (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw it. Without it there is no log (INFO has no LOG
+   * capability): the device is then taken as booted when it answers again after a failed read (the port is silent while it resets). The port may be silent for
+   * a while (the emulator boots on a worker): a failed read is a reason to wait and try again.
    */
   async waitForBoot(
     sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -1003,12 +1030,16 @@ export class DkSession {
   ): Promise<void> {
     const end = Date.now() + timeoutMs;
     let last = 'no answer';
+    let silent = false;
     while (Date.now() < end) {
       try {
-        const verdict = restarted(await this.readLog(true));
-        if (verdict) return;
+        const info = await this.info(true);
+        if (info.caps !== null && ((info.caps >>> GCAP.LOG) & 1) === 1) {
+          if (restarted(await this.readLog(true))) return;
+        } else if (silent) return;
         last = 'the old boot still runs';
       } catch (e) {
+        silent = true;
         if (e instanceof DkError && e.kind === 'device' && e.status === 'E_PROTO') throw e;
         last = e instanceof Error ? e.message : String(e);
         if (e instanceof DkError && e.kind === 'refused') throw e;
@@ -1022,7 +1053,7 @@ export class DkSession {
 /** The size of a .dkm header (docs/design/digikit-dkm.md). */
 export const HEADER_BYTES = 0xa0;
 /** The most bytes one READ returns. */
-export const READ_MAX = 768;
+export { READ_MAX };
 
 /**
  * Has the device booted since its RESTART was answered? True: this log has no RESTART request (a new boot, with BOOT_START); false: the

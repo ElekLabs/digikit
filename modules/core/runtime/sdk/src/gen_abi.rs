@@ -169,7 +169,7 @@ pub struct DkrtHealth {
     pub blocks: u32,
     /// windows (one second each) closed
     pub windows: u32,
-    /// CPU load of the last window, tenths of a percent (HEALTH_CPU)
+    /// CPU load of the last window, tenths of a percent, relative to the quietest window since boot (HEALTH_CPU)
     pub cpu_x10: u32,
     /// the idle-loop iterations in the last window
     pub idle_win: u32,
@@ -181,7 +181,7 @@ pub struct DkrtHealth {
     pub dsp_max: u32,
     /// the cycles a block has (DSP_BLOCK_CYCLES)
     pub dsp_period: u32,
-    /// dsp_avg as tenths of a percent of dsp_period (HEALTH_DSP)
+    /// dsp_avg as tenths of a percent of dsp_period, an assumed 1 GHz block (finding 100) (HEALTH_DSP)
     pub dsp_avg_x10: u32,
     /// dsp_max as tenths of a percent of dsp_period
     pub dsp_max_x10: u32,
@@ -380,11 +380,11 @@ pub struct DkrtDiag {
     pub card_refused: u32,
     /// reads that failed in the check
     pub card_read_errors: u32,
-    /// 1 when the debug log keeps every event (SETTINGS > DIGIKIT > DEBUG), 0 when it keeps errors only
+    /// 1 while a debug module (the log sink) is loaded
     pub debug_on: u32,
-    /// sequence number of the oldest event in the log ring (0, 0: empty)
+    /// 0 (the log ring is the debug module's; its LOG command has the range)
     pub log_oldest: u32,
-    /// sequence number of the newest event
+    /// 0
     pub log_newest: u32,
     /// 1 when dl_diag is in the image and answered
     pub dsp_diag_ok: u32,
@@ -550,9 +550,6 @@ pub mod sig {
 
     /// The card check, the debug log, the DSP watch and the crash record (finding 46).
     pub type dkrt_diag = unsafe extern "C" fn(out: *mut DkrtDiag);
-
-    /// The debug log keeps every event (1) or errors only (0), now, and saved in the selection record. OK or an E_* code (E_CARD_RO: held until the next boot).
-    pub type dkrt_debug_set = unsafe extern "C" fn(on: u32) -> i32;
 
     /// The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store).
     pub type dkrt_store_list = unsafe extern "C" fn(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32;

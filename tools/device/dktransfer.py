@@ -45,7 +45,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from tools.device import dkfit as F
 from tools.device import dkneeds as N
 from tools.device import dkrun as R
 from tools.device import dkupload as D
@@ -209,21 +208,21 @@ def repo_rows(
 def fit_warnings(
     row: dict[str, Any], cap: dict[str, dict[str, int]] | None
 ) -> list[str]:
-    """What would not fit on the target (CAPACITY): none when the module fits next to what is loaded now (the fit rule, dkfit.py), else one line
+    """What would not fit on the target (CAPACITY): none when the module fits next to what is loaded now (the fit rule, `dkneeds.fit`), else one line
     that says what is short and whether the module fits the device when the loaded ones are left out (the next boot loads the selection into an
     empty runtime). Only a warning: the device refuses a load that does not fit."""
     if cap is None or row["loaded"] or "needs" not in row:
         return []
-    short = F.fits_now(row["needs"], cap)
+    short = N.fit(cap, [row["needs"]])["each"][0]
     if short is None:
         return []
-    alone = F.fits_now(row["needs"], F.empty_caps(cap)) is None
+    alone = N.fit(cap, [row["needs"]], empty=True)["each"][0] is None
     why = (
         "fits when the modules loaded now are not selected"
         if alone
         else "more than this device has"
     )
-    return [f"{F.describe(short)}; {why}"]
+    return [f"{short['describe']}; {why}"]
 
 
 def merge(
