@@ -32,13 +32,22 @@ there is no outstanding reservation-choice request and no approved reservation p
 - DT2 backing: borrow the stock sample pool through a `core/adapters/sample-pool`
   adapter. This is emulator-confirmed ([finding 109](../findings/109-dt2-stock-pool-borrowing.md)).
 - DN2 backing: reserved high DDR. The canary soak saw no stock writes in
-  `[0x80531000, 0xa0000000)` in 14 runs. An extended soak is running
-  (`tools/emulator/ddrcanary.py`).
+  `[0x80531000, 0xa0000000)` in 20 scenarios
+  ([finding 106](../findings/106-dn2-ddr-configuration.md#canary-map-of-stock-ddr-writes-2026-11-01)).
 - DN2 stereo: the shadow stages go to production. The two-slot route is rejected
   ([finding 96](../findings/96-stereo-machine-processing.md)).
 - Project identity: [finding 110](../findings/110-project-identity.md).
 - API 1.5 draft (stereo descriptor, per-track binding, device-neutral runtime plus
   sample-pool adapter) awaits Em's review.
+- Re-proof after the merge (2026-11-01): `test_dsp_sample_stereo_kernels.py` and
+  `test_dsp_sample_bank.py` pass (61). `sample-ddr-transfer` (12/12, both
+  devices), `file-catalog` and `stock-pool-borrow` pass on daemons built from the
+  merged tree. `sample-playback.test.ts` fails on both devices with
+  `log: E_PROTO`: main (`985aab04`) made the log commands exist only while
+  `digikit/debug` is loaded, and the test does not select it (`live.ts` has the
+  helper). Fix in the build phase.
+- Working rule for the design phase: static work, docs and design only. Run the
+  emulator only when the run decides a design question.
 - Next: the first slice (one track, one 5 s stereo sample, DT2 emulator).
 - Proposed, not yet decided by Em: the minimal first-release recovery scope.
 

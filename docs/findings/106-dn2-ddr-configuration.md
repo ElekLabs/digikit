@@ -445,3 +445,41 @@ observation; diagnostic tooling is being checked, with no new run selected here.
 The valid nonzero configured-span ceiling remains 65,534 bytes and XCNT=0 remains
 a configuration error. Neither every-boot/perpetual activity nor backing ownership,
 free DDR or a production reservation follows.
+
+## Canary map of stock DDR writes (2026-11-01)
+
+**[D]** Tool `tools/emulator/ddrcanary.py`: `fill` writes an address-derived
+canary into every DDR word the ready state has not written; `map` lists the 4 KiB
+pages where the canary changed. Both work on the DSP state of coupled runs
+(`--dump-dsp`, which includes DDR). Ready input: `out/snapshots/dn2-audio-ready-cold-2026-10-20`,
+DN2 OS 1.12. The ready state wrote these ranges: `[0x80000018,0x80459247)`,
+`[0x80459248,0x8045a6c4)`, `[0x804ace90,0x8052d790)`, `[0x8052fbe0,0x80530be4)`.
+
+**[D]** The gap `[0x8052d790,0x8052fbe0)` (9.3 KiB) was never written. It is
+stock-owned: with a canary in it, the DSP halts within 3 s (indirect jump to the
+undecoded address `0xf682b3`). Stock code reads this gap and expects zero. This
+fits the `0x8052dbe0` table noted above. The fill excludes the gap.
+
+**[D]** 20 stock scenarios wrote no page in `[0x80531000, 0xa0000000)`
+(518,972 KiB, about 507 MiB):
+
+- 14 from `tests/scenarios/dn2.json` and `dn2-fx.json` (2.4-10.5 s each): idle,
+  trig1-hold, kb-chord16, trig1-taps, trig1-tap-release, dn2-rec-play,
+  dn2-rec-noplay, fx-del-hold, fx-dmp-rev, fx-chr-127, fx-over-127, fx-srr-127,
+  fx-br-127, fx-dmp-chr.
+- 6 from `tests/scenarios/dn2-soak.json` (generator `tools/emulator/dn2_soak.py`):
+  save project, load project, new project, menus, FX combination, and a 60 s
+  four-track pattern with p-locks, sound locks, LFO and sends.
+
+Stores were seen elsewhere: 90-633 changed stock words per run, and 90,882 for
+reverb. All are inside the ready-written ranges.
+
+**[O]** Limits. Reads are not seen. A store of exactly the canary value is not
+seen. Not covered: arpeggiator, song mode, audio input sampling, manage projects,
+format, OS upgrade, loading a large project, play longer than 62 s. The 1,136
+unresolved stores are not ruled out. This measures reachable behaviour, not
+ownership.
+
+**[O]** Proposed DN2 reserved range for the sample pool: start with 256 MiB
+inside `[0x80531000, 0xa0000000)` in the device profile, with a hardware
+read-back check later.
