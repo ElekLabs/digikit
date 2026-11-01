@@ -28,12 +28,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from tools.coldfire import digikit_menu_proof as D
+from tools.control.digi_client import oled_png
 from tools.device import dksettings
 from tools.device.dksettings import encode as encode_record
 from tools.patchkit import pk_device
@@ -683,6 +686,7 @@ def profile(device: str) -> dict[str, Any]:
     limits = pk_device.limits(device)
     store = pk_device.store_of(device)
     return {
+        "track_type_word": M.TRACK_OBJ_WORD,
         "fx_slots": limits.fx_slots,
         "send_slots": limits.send_slots,
         "settings": {"copy_a": store.set_a, "copy_b": store.set_b},
@@ -739,6 +743,29 @@ def seed_card(card: Path, device: str, entries: Any) -> dict[str, Any]:
     }
 
 
+def render_shots(directory: Path) -> dict[str, Any]:
+    """Render saved raw OLED frames, copying diagnostics as the legacy Shots helper does."""
+    if not directory.is_dir():
+        raise ValueError(f"not a shots directory: {directory}")
+    frames = [(path, path.read_bytes()) for path in sorted(directory.glob("*.oled"))]
+    for path, raw in frames:
+        if len(raw) != 1024:
+            raise ValueError(f"{path}: expected 1024 OLED bytes, got {len(raw)}")
+    copy_dir = Path(out) if (out := os.environ.get("DIGIKIT_SHOTS")) else None
+    if copy_dir is not None:
+        copy_dir.mkdir(parents=True, exist_ok=True)
+    files = []
+    for path, raw in frames:
+        destination = path.with_suffix(".png")
+        destination.write_bytes(oled_png(raw, 3))
+        if copy_dir is not None:
+            copied = copy_dir / destination.name
+            if copied.resolve() != destination.resolve():
+                shutil.copy(destination, copied)
+        files.append(str(destination))
+    return {"files": files, "count": len(files)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="FX routing scenario data helpers")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -748,13 +775,18 @@ def main(argv: list[str] | None = None) -> int:
     seed.add_argument("card", type=Path)
     seed.add_argument("--device", choices=("dt2", "dn2"), required=True)
     seed.add_argument("--entries", type=Path, required=True)
+    shots = commands.add_parser("render-shots")
+    shots.add_argument("directory", type=Path)
     args = parser.parse_args(argv)
     try:
-        result = (
-            profile(args.device)
-            if args.command == "profile"
-            else seed_card(args.card, args.device, json.loads(args.entries.read_text()))
-        )
+        if args.command == "profile":
+            result = profile(args.device)
+        elif args.command == "render-shots":
+            result = render_shots(args.directory)
+        else:
+            result = seed_card(
+                args.card, args.device, json.loads(args.entries.read_text())
+            )
     except (OSError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")
     print(json.dumps(result))
