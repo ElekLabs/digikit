@@ -25,6 +25,7 @@ pub const DRAIN_GUARD: u32 = 6000;
 const NO_SLOT: u32 = u32::MAX;
 
 /// File identity snapshot (`dk_file_id` of dkrt_pool.h).
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FileId {
     pub root: u32,
@@ -61,6 +62,7 @@ pub struct Inspect {
 }
 
 /// `dkpool_handle` of dkrt_pool.h.
+#[repr(C)]
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Handle {
     pub id: u32,

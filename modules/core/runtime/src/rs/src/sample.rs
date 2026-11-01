@@ -49,12 +49,18 @@ pub unsafe fn remove(rec: usize) {
     BANKS[rec] = EMPTY;
     irq_restore(sr);
 }
+pub unsafe fn has_bank(rec: usize) -> bool {
+    BANKS[rec].capacity != 0
+}
 pub unsafe fn bank(id: u32) -> i32 {
     let owner = crate::dlog::current_source();
     if owner == 0 {
         return E_NOT_FOUND;
     }
     let rec = owner as usize - 1;
+    if crate::tracks::has(rec) {
+        return dkrt_sdk::E_CONTRACT;
+    }
     if BANKS[rec].capacity == 0 || BANKS[rec].id != id {
         return E_NOT_FOUND;
     }

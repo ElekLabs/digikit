@@ -31,6 +31,7 @@ pub mod scan;
 pub mod settings;
 mod sample;
 mod sample_source;
+mod tracks;
 mod files;
 mod sha256;
 pub mod store;
@@ -515,6 +516,11 @@ unsafe extern "C" fn api_register_cmds(first: u32, count: u32, handler: Option<d
 unsafe extern "C" fn api_sample_bank(id: u32) -> i32 { sample::bank(id) }
 unsafe extern "C" fn api_sample_load(handle: u32, path: *const u8) -> i32 { sample::load(handle, path) }
 unsafe extern "C" fn api_sample_status(handle: u32) -> i32 { sample::status(handle) }
+unsafe extern "C" fn api_sample_tracks(id: u32) -> i32 { tracks::tracks(id) }
+unsafe extern "C" fn api_sample_select(handle: u32, track: u32, path: *const u8) -> i32 { tracks::select(handle, track, path) }
+unsafe extern "C" fn api_sample_unbind(handle: u32, track: u32) -> i32 { tracks::unbind(handle, track) }
+unsafe extern "C" fn api_sample_track_status(handle: u32, track: u32) -> i32 { tracks::status(handle, track) }
+unsafe extern "C" fn api_sample_track_info(handle: u32, track: u32, out: *mut u8) -> i32 { tracks::info(handle, track, out) }
 unsafe extern "C" fn api_files_client() -> i32 { files::client() }
 unsafe extern "C" fn api_files_list(client: u32, root: u32, path: *const u8, notify: Option<dkrt_sdk::api::FileEvent>, context: *mut u8) -> i32 { files::list(client, root, path, notify, context) }
 unsafe extern "C" fn api_files_poll(client: u32, ticket: u32, out: *mut u8, cap: u32) -> i32 { files::poll(client, ticket, out, cap) }
@@ -548,6 +554,11 @@ pub static mut dkrt_api: Api = Api {
     files_list: api_files_list,
     files_poll: api_files_poll,
     files_cancel: api_files_cancel,
+    sample_tracks: api_sample_tracks,
+    sample_select: api_sample_select,
+    sample_unbind: api_sample_unbind,
+    sample_track_status: api_sample_track_status,
+    sample_track_info: api_sample_track_info,
 };
 
 pub unsafe fn log(msg: *const u8, value: u32) {
@@ -1043,6 +1054,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     crash::install();
     dsp::step();
     sample::tick();
+    tracks::tick();
     files::tick();
     fxpage::tick();
     settings::tick();
