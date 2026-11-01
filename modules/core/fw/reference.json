@@ -13073,6 +13073,102 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x20003ada",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 dispatch case 1 reset 0xb81d6d (zeroes histories 3 and 4, re-initialises coefficients; R4 = record).",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.case1_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x2000391a",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 dispatch case 2 reset 0xb81c8d (zeroes histories 10 and 11, re-initialises coefficients; R4 = record).",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.case2_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x200023e2",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 dispatch case 3 reset 0xb811f1 (clears words 5 to 12, re-initialises coefficients; R4 = record).",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.case3_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x20002a4c",
             "len": 6,
             "pm": true
@@ -13088,6 +13184,38 @@
       "kind": "fn",
       "mark": "D",
       "name": "dsp.voice.fn.case5_filter",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x2000318e",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 dispatch case 5 reset 0xb818c7 (zeroes histories 9 and 10, re-initialises coefficients; R4 = record).",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.case5_reset",
       "rule": {
         "dn2": {
           "kind": "sharc_func",
@@ -13299,6 +13427,38 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x20004880",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 held-sample reset 0xb82440 (zeroes the five words of the record; R4 = record). Also called by another function; only the engine's call sites are retargeted.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.held_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x20004cb6",
             "len": 6,
             "pm": true
@@ -13376,6 +13536,38 @@
       "was": [
         "dsp.voice.render_entry"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x20000bb0",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 ring stage reset 0xb805d8 (history and cursor 0, fill status M14, no clear of the backing; R4 = record).",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "dsp.voice.fn.ring_reset",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -13553,6 +13745,48 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x28393084",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.case5.reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.case5.reset.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x2839315e",
             "pm": true
           }
@@ -13589,6 +13823,48 @@
         ]
       },
       "site": "dsp.voice.site.filter_case1.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392e2c",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.filter_case1.reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.filter_case1.reset.call",
       "subsystem": "voice",
       "users": [
         "core/dsp-voice"
@@ -13645,6 +13921,48 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x28392e8e",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.filter_case2.reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.filter_case2.reset.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x283937a2",
             "pm": true
           }
@@ -13681,6 +13999,48 @@
         ]
       },
       "site": "dsp.voice.site.filter_case3.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392ede",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.filter_case3.reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.filter_case3.reset.call",
       "subsystem": "voice",
       "users": [
         "core/dsp-voice"
@@ -13909,6 +14269,48 @@
         ]
       },
       "site": "dsp.voice.site.held_sample.late.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x2839238a",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.held_sample.reset.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.held_sample.reset.call",
       "subsystem": "voice",
       "users": [
         "core/dsp-voice"
@@ -14148,6 +14550,90 @@
         ]
       },
       "site": "dsp.voice.site.ring_stage.case6.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392f9a",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.ring_stage.reset.case4.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.ring_stage.reset.case4.call",
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x2839313e",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "dsp.voice.hook.ring_stage.reset.case6.call",
+      "regs": {
+        "clobbers": [
+          "r0-r2",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "r4",
+          "r8",
+          "r12",
+          "i6-i7",
+          "m6-m7",
+          "m14",
+          "mode1"
+        ]
+      },
+      "site": "dsp.voice.site.ring_stage.reset.case6.call",
       "subsystem": "voice",
       "users": [
         "core/dsp-voice"
@@ -14423,6 +14909,38 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x28393084",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c9842: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.case5.reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2385
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x2839315e",
             "len": 6,
             "pm": true
@@ -14443,6 +14961,38 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 2494
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392e2c",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c9716: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.filter_case1.reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2085
         }
       },
       "subsystem": "voice",
@@ -14487,6 +15037,38 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x28392e8e",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c9747: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.filter_case2.reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2134
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x283937a2",
             "len": 6,
             "pm": true
@@ -14507,6 +15089,38 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 94
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392ede",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c976f: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.filter_case3.reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2174
         }
       },
       "subsystem": "voice",
@@ -14669,6 +15283,38 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 28
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x2839238a",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c91c5: reset of the stage after a SRR routing byte change in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.held_sample.reset.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 724
         }
       },
       "subsystem": "voice",
@@ -14944,6 +15590,70 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 220
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x28392f9a",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c97cd: reset of the stage after a ring delay change (case 4) in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.ring_stage.reset.case4.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2268
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x2839313e",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 call at 0x1c989f: reset of the stage after a ring delay change (case 6) in the middle of a note. Retarget only this call; both delay slots of the linked call stay.",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.voice.site.ring_stage.reset.case6.call",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2478
         }
       },
       "subsystem": "voice",
@@ -15495,7 +16205,7 @@
       "name": "master"
     },
     {
-      "count": 60,
+      "count": 80,
       "cpu": "sharc",
       "file": "devices/fw/dsp/voice.toml",
       "meaning": "voice rendering",

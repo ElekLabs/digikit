@@ -46,6 +46,12 @@ STOCK = {
     "_gs_case2_stock": 0xB81A16,
     "_gs_case3_stock": 0xB80F2E,
     "_gs_ring_stock": 0xB806F5,
+    "_gs_held_reset_stock": 0xB82440,
+    "_gs_case1_reset_stock": 0xB81D6D,
+    "_gs_case2_reset_stock": 0xB81C8D,
+    "_gs_case3_reset_stock": 0xB811F1,
+    "_gs_ring_reset_stock": 0xB805D8,
+    "_gs_case5_reset_stock": 0xB818C7,
 }
 
 # test addresses (L2 bytes)

@@ -28,6 +28,12 @@
 .EXTERN _gs_uy_reset_stock;
 .EXTERN _gs_gain_stock;
 .EXTERN _gs_c5_stock;
+.EXTERN _gs_held_reset_stock;
+.EXTERN _gs_case5_reset_stock;
+.EXTERN _gs_ring_reset_stock;
+.EXTERN _gs_case3_reset_stock;
+.EXTERN _gs_case2_reset_stock;
+.EXTERN _gs_case1_reset_stock;
 .EXTERN _gs_held_stock;
 .EXTERN _gs_shaper_stock;
 .EXTERN _gs_case1_stock;
@@ -599,6 +605,90 @@ _gs_uy_reset:
     DM(6, I4) = R1;
     DM(7, I4) = R1;
     JUMP _gs_uy_reset_stock;
+
+
+// ---- the resets in the middle of a note: the same mirror for the other stages (sites in voice.toml: the engine's calls after a change of the SRR routing, the filter
+// type or the ring delay; the note-on resets are covered by the clear of `_gs_post`) ----
+// R4 = the L record. When it is the start of a slot's record (offset OFF from the engine base, STRIDE bytes per slot, exact quotient with the multiplier MULT >> 16), the R
+// private words that the stock reset sets are set for R too, then the stock reset runs on L. Any other pointer reaches the stock reset only. Clobbers R0, R1, R2, I4.
+#define GS_RESET_HEAD(STOCK, OFF, MULT, STRIDE, REC) \
+    R0 = _gs_engine_base; \
+    R1 = OFF; \
+    R0 = R0 + R1; \
+    R0 = R4 - R0; \
+    IF LT JUMP STOCK; \
+    R2 = R0; \
+    R1 = MULT; \
+    R0 = R0 * R1 (SSI); \
+    R0 = LSHIFT R0 BY -16; \
+    R1 = 16; \
+    COMP(R0, R1); \
+    IF GE JUMP STOCK; \
+    R1 = STRIDE; \
+    R0 = R0 * R1 (SSI); \
+    COMP(R0, R2); \
+    IF NE JUMP STOCK; \
+    R1 = REC; \
+    R0 = R0 + R1; \
+    I4 = R0; \
+    R1 = 0
+
+// held sample (0xb82440, call 0x1c91c5): the stock reset zeroes words 0 to 4
+.GLOBAL _gs_held_reset;
+_gs_held_reset:
+    GS_RESET_HEAD(_gs_held_reset_stock, 0xeec8, 3277, 20, _gs_hd_rec);
+    DM(0, I4) = R1;
+    DM(1, I4) = R1;
+    DM(2, I4) = R1;
+    DM(3, I4) = R1;
+    DM(4, I4) = R1;
+    JUMP _gs_held_reset_stock;
+
+// case 1 (0xb81d6d, call 0x1c9716): histories 3 and 4 (the snapshots 48 to 50 survive a stock reset)
+.GLOBAL _gs_case1_reset;
+_gs_case1_reset:
+    GS_RESET_HEAD(_gs_case1_reset_stock, 0xf308, 322, 204, _gs_c1_rec);
+    DM(3, I4) = R1;
+    DM(4, I4) = R1;
+    JUMP _gs_case1_reset_stock;
+
+// case 2 (0xb81c8d, call 0x1c9747): histories 10 and 11
+.GLOBAL _gs_case2_reset;
+_gs_case2_reset:
+    GS_RESET_HEAD(_gs_case2_reset_stock, 0xffc8, 219, 300, _gs_c2_rec);
+    DM(10, I4) = R1;
+    DM(11, I4) = R1;
+    JUMP _gs_case2_reset_stock;
+
+// case 3 (0xb811f1, call 0x1c976f): histories 5, 9, 10, 11 and 12
+.GLOBAL _gs_case3_reset;
+_gs_case3_reset:
+    GS_RESET_HEAD(_gs_case3_reset_stock, 0x11288, 278, 236, _gs_c3_rec);
+    DM(5, I4) = R1;
+    DM(9, I4) = R1;
+    DM(10, I4) = R1;
+    DM(11, I4) = R1;
+    DM(12, I4) = R1;
+    JUMP _gs_case3_reset_stock;
+
+// case 5 (0xb818c7, call 0x1c9842): histories 9 and 10
+.GLOBAL _gs_case5_reset;
+_gs_case5_reset:
+    GS_RESET_HEAD(_gs_case5_reset_stock, 0x127c8, 310, 212, _gs_c5_rec);
+    DM(9, I4) = R1;
+    DM(10, I4) = R1;
+    JUMP _gs_case5_reset_stock;
+
+// ring (0xb805d8, calls 0x1c97cd and 0x1c989f): history (word 0) and write cursor (word 14) to 0, fill status (word 17) to M14 as the stock reset stores it; the read
+// coordinate (word 13) and the backing stay as they are, as in L
+.GLOBAL _gs_ring_reset;
+_gs_ring_reset:
+    GS_RESET_HEAD(_gs_ring_reset_stock, 0x12348, 911, 72, _gs_rg_rec);
+    DM(0, I4) = R1;
+    DM(14, I4) = R1;
+    R1 = M14;
+    DM(17, I4) = R1;
+    JUMP _gs_ring_reset_stock;
 
 // ---- stages without an R twin: count, clear the stamp, then the stock function ----
 // In: R8 = the voice buffer, R2 = the caller's frame. R0-R2, I4 and the flags are scratch. A slot that is stereo in this block (`_gs_seen`, set by `_gs_post`

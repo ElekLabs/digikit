@@ -45,32 +45,90 @@ def stub_log(session):
 # ---- reset mirrors ----
 
 
+# (mirror, stock reset, L record of slot 0, bytes per slot, R records, words, the R words the reset sets: word -> value)
+MIRRORS = [
+    (
+        "_gs_fo_reset",
+        "_gs_fo_reset_stock",
+        ENGINE + 0xE088,
+        112,
+        "_gs_fo_rec",
+        28,
+        {24: 0, 25: 0, 26: 0, 27: 0},
+    ),
+    (
+        "_gs_uy_reset",
+        "_gs_uy_reset_stock",
+        ENGINE + 0x12148,
+        32,
+        "_gs_uy_rec",
+        8,
+        {6: 0, 7: 0},
+    ),
+    (
+        "_gs_held_reset",
+        "_gs_held_reset_stock",
+        ENGINE + 0xEEC8,
+        20,
+        "_gs_hd_rec",
+        5,
+        dict.fromkeys(range(5), 0),
+    ),
+    (
+        "_gs_case1_reset",
+        "_gs_case1_reset_stock",
+        ENGINE + 0xF308,
+        204,
+        "_gs_c1_rec",
+        51,
+        {3: 0, 4: 0},
+    ),
+    (
+        "_gs_case2_reset",
+        "_gs_case2_reset_stock",
+        ENGINE + 0xFFC8,
+        300,
+        "_gs_c2_rec",
+        75,
+        {10: 0, 11: 0},
+    ),
+    (
+        "_gs_case3_reset",
+        "_gs_case3_reset_stock",
+        ENGINE + 0x11288,
+        236,
+        "_gs_c3_rec",
+        59,
+        dict.fromkeys((5, 9, 10, 11, 12), 0),
+    ),
+    (
+        "_gs_case5_reset",
+        "_gs_case5_reset_stock",
+        ENGINE + 0x127C8,
+        212,
+        "_gs_c5_rec",
+        53,
+        {9: 0, 10: 0},
+    ),
+    (
+        "_gs_ring_reset",
+        "_gs_ring_reset_stock",
+        ENGINE + 0x12348,
+        72,
+        "_gs_rg_rec",
+        18,
+        # history and cursor 0, fill status M14 (1); the read coordinate (13) and the pointer (16) stay
+        {0: 0, 14: 0, 17: 1},
+    ),
+]
+MIRROR_IDS = [m[0].removeprefix("_gs_").removesuffix("_reset") for m in MIRRORS]
+
+
 @pytest.mark.parametrize(
-    "entry,stock,record,stride,rrec,size,cleared",
-    [
-        (
-            "_gs_fo_reset",
-            "_gs_fo_reset_stock",
-            ENGINE + 0xE088,
-            112,
-            "_gs_fo_rec",
-            28,
-            (24, 25, 26, 27),
-        ),
-        (
-            "_gs_uy_reset",
-            "_gs_uy_reset_stock",
-            ENGINE + 0x12148,
-            32,
-            "_gs_uy_rec",
-            8,
-            (6, 7),
-        ),
-    ],
-    ids=["first-order", "uy"],
+    "entry,stock,record,stride,rrec,size,sets", MIRRORS, ids=MIRROR_IDS
 )
-def test_the_reset_clears_the_stage_histories_of_r_too_and_only_of_its_slot(
-    rig, entry, stock, record, stride, rrec, size, cleared
+def test_the_reset_sets_the_private_words_of_r_as_it_does_for_l_and_only_for_its_slot(
+    rig, entry, stock, record, stride, rrec, size, sets
 ):
     mirrored, plain = new_session(rig), new_session(rig)
     for session in (mirrored, plain):
@@ -83,26 +141,30 @@ def test_the_reset_clears_the_stage_histories_of_r_too_and_only_of_its_slot(
     assert [words(mirrored, record + stride * v, size) for v in range(16)] == [
         words(plain, record + stride * v, size) for v in range(16)
     ], "L is the stock reset"
-    assert all(words(mirrored, record + stride * SLOT, size)[i] == 0 for i in cleared)
     for v in range(16):
         r = words(mirrored, rig.data[rrec] + stride * v, size)
         expected = [0x3F800000 + v] * size
         if v == SLOT:
-            for i in cleared:
-                expected[i] = 0
+            for i, value in sets.items():
+                expected[i] = value
         assert r == expected, f"R record of slot {v}"
+    # the words the stock reset sets in L for the private ones are the same values (the ring's fill status is the stock's byte, 1)
+    for i, value in sets.items():
+        assert words(plain, record + stride * SLOT, size)[i] & 0xFF == value & 0xFF
 
 
 @pytest.mark.parametrize(
     "entry,record,stride",
-    [("_gs_fo_reset", ENGINE + 0xE088, 112), ("_gs_uy_reset", ENGINE + 0x12148, 32)],
+    [(m[0], m[2], m[3]) for m in MIRRORS],
+    ids=MIRROR_IDS,
 )
 @pytest.mark.parametrize("where", ["below", "past the last slot", "unaligned"])
 def test_a_reset_of_a_record_that_is_no_slot_only_runs_the_stock_reset(
     stub_rig, entry, record, stride, where
 ):
     session = new_session(stub_rig)
-    for name, size in (("_gs_fo_rec", 1792), ("_gs_uy_rec", 512)):
+    records = {m[4]: 4 * m[5] * 16 for m in MIRRORS}
+    for name, size in records.items():
         poke_words(session, stub_rig.data[name], [0x55555555] * (size // 4))
     address = {
         "below": record - 64,
@@ -111,7 +173,7 @@ def test_a_reset_of_a_record_that_is_no_slot_only_runs_the_stock_reset(
     }[where]
     call(session, stub_rig.sym[entry], address, 0, 0, ())
     assert stub_log(session)[3] == 1 and stub_log(session)[0] == address
-    for name, size in (("_gs_fo_rec", 1792), ("_gs_uy_rec", 512)):
+    for name, size in records.items():
         assert words(session, stub_rig.data[name], size // 4) == [0x55555555] * (
             size // 4
         ), name
