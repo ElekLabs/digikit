@@ -1,11 +1,15 @@
 /* core/sample-pool on the Digitone II: the page transport (docs/design/dn2-sample-pool.md section 2).
  *
- * One load runs at a time. Its pages go to the DSP over the stock LP0 sender (`sp_stock_send`, format 1) one at a time: a page is sent only
- * when the receiver reported itself armed, and it counts as written when the receiver's acknowledgement names it (stop and wait, bounded
- * by wall time in DSP blocks, resent up to three times). The acknowledgement rides in a 16-byte extension of the DSP's reply record; the
- * hook `sp_copy_reply` on the stock reply copy decodes it in the interrupt into a snapshot that dkpool_tick reads (pool_wire.h has the
- * format). Everything else runs in the UI-loop task from sp_xfer_tick: one send and one card read plus conversion per pass, so the read of
- * the next page overlaps the round trip of the one in flight. The result goes to the runtime only from there (dkrt_pool_done). */
+ * One load runs at a time, as a job on the stock SampleLoader worker task (the task stock Digitakt II sends its pages from). The job reads the
+ * store file in 64 KiB ranges, converts one chunk into one page (mono) or two (stereo), and sends each page with our own bounded sender
+ * (`sp_raw_send`, send.c). A page counts as written when the receiver's acknowledgement names it (stop and wait, bounded by wall time in
+ * DSP blocks and by a count of sleeps, resent up to three times). The acknowledgement rides in a 16-byte extension of the DSP's reply record;
+ * the hook `sp_copy_reply` on the stock reply copy decodes it in the interrupt into a snapshot that the job reads (pool_wire.h has the
+ * format). The job sleeps 100 us between looks at the snapshot, so the UI task runs meanwhile.
+ *
+ * Who runs what: the UI-loop task (sp_xfer_tick, every dkpool_* call) starts a job, sets `cancelled`, and delivers the result (dkrt_pool_done)
+ * and all allocator calls; the worker task runs the job and touches only its own buffers, the snapshot and the card read; the interrupt only
+ * writes the snapshot. `job.state` hands the job over: the UI task sets RUN last, the job sets DONE last. */
 
 #include <stdint.h>
 #include "cf/dn2/xfer.h"
@@ -15,26 +19,35 @@ typedef int32_t i32;
 typedef uint8_t u8;
 typedef uint16_t u16;
 
-extern void sp_stock_send(u32 tag, const volatile u32 *source, u32 format);
 extern void *sp_stock_copy(void *destination, const void *source, u32 length);
+extern void sp_stock_sleep(u32 us);                                                         /* task context; blocks the task */
+extern u32 sp_worker_get(void);                                                             /* the SampleLoader worker singleton */
+extern u32 sp_worker_queue(u32 worker, const char *name, void *job, void *done);
 
-#define SP_SLOTS 4u            /* 4 KiB output pages: a stereo chunk takes two, the next chunk is converted while the first one goes out */
 #define SP_STOCK_REPLY 0xabcu  /* the stock reply copy is this long; the extension follows it (the wire is 0xacc bytes long) */
+#define SP_SLEEP_US 100u       /* between two looks at the acknowledgement (stock sleeps 100 after each page) */
+#define SP_WAIT_SLEEPS 6000u   /* sleeps in one wait (an armed receiver, one page's acknowledgement with its resends): a hard bound when the block clock stands still */
 
-static u8 rbuf[SPW_RBUF_SECTORS * SPW_SECTOR] __attribute__((aligned(16)));   /* one chunk as it is in the file */
-static u8 pages[SP_SLOTS][SPA_PAGE_BYTES] __attribute__((aligned(16)));       /* converted pages, FIFO */
+#define J_IDLE 0u
+#define J_RUN 1u    /* posted to the worker, or running there */
+#define J_DONE 2u   /* the job ended; sp_xfer_tick delivers `result` */
+
+static u8 rbuf[SPW_RBUF_SECTORS * SPW_SECTOR] __attribute__((aligned(16)));   /* one card read: whole chunks as they are in the file */
+static u8 pages[2][SPA_PAGE_BYTES] __attribute__((aligned(16)));              /* the converted pages of one chunk */
 
 static spw_snap snap;           /* the last good acknowledgement; written by sp_copy_reply in the interrupt */
 
+volatile u32 sp_stuck_sends;    /* pages whose send ended on the port-ready bound (a diagnostic; xfer.h) */
+
 static struct {
+    volatile u32 state;         /* J_*: the hand-over between the UI task and the job */
+    volatile i32 result;        /* valid when state == J_DONE */
     SpReq *r;
-    spw_x x;
+    spw_x x;                    /* the page state machine: the job only */
+    u32 armed;                  /* the receiver was seen armed and idle (set on READY, kept by an acknowledgement) */
     u32 channels, plane_pages, first_page, frames;
-    u32 chunks_total, chunk_next;   /* chunks read and converted so far */
-    u32 pages_total, pages_done;    /* pages acknowledged */
-    u32 head, n;                    /* FIFO of the converted pages: oldest slot and count */
-    i32 fail;                       /* a card read failed: end the load when no page is in flight */
-    u32 page_index[SP_SLOTS];       /* destination page of each slot */
+    uintptr_t fn[4];            /* the std::function of the job: storage (2 words), manager, invoker (words on the ColdFire; pointers on the host) */
+    u32 done[8];                /* an empty std::function */
 } job;
 
 /* ---- The two hooks on the stock link ---------------------------------------------------------------------------------------------------- */
@@ -63,7 +76,116 @@ void *sp_copy_reply(void *destination, const void *source, u32 length)
     return result;
 }
 
-/* ---- One load --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- The job, in the worker task ------------------------------------------------------------------------------------------------------- */
+
+static int cancelled(void) { return job.r->cancelled != 0; }
+
+static i32 map_error(i32 poll)
+{
+    if (poll == SPW_E_DEAD)
+        sp_link_dead = 1;
+    return poll == SPW_E_TAG ? DKPOOL_E_FORMAT : DKPOOL_E_READ;
+}
+
+/* One look at the link. */
+static i32 look(void)
+{
+    spw_ack a;
+    int have = spw_snap_read(&snap, &a);
+    return spw_poll(&job.x, dkrt_blocks(), have ? &a : 0);
+}
+
+/* Send one page and wait for its acknowledgement; 0, a DKPOOL_E_* code, or DKPOOL_E_LOST when the load was cancelled before the page went
+ * out. A page in flight is always settled first (acknowledged or failed), so the receiver's counters are known when the next load starts. */
+static i32 send_page(const u8 *page, u32 index)
+{
+    u32 n = 0, tag;
+    i32 p;
+    while (!job.armed) {
+        if (cancelled())
+            return DKPOOL_E_LOST;
+        p = look();
+        if (p == SPW_READY)
+            job.armed = 1;
+        else if (p < 0)
+            return map_error(p);
+        else if (++n > SP_WAIT_SLEEPS)
+            return DKPOOL_E_READ;
+        else
+            sp_stock_sleep(SP_SLEEP_US);
+    }
+    if (cancelled())
+        return DKPOOL_E_LOST;
+    tag = spw_next_tag(&job.x, index);
+    if (sp_raw_send(tag, page))
+        sp_stuck_sends++;   /* the page is lost: the acknowledgement times out and the page is sent again */
+    spw_sent(&job.x, tag, dkrt_blocks());
+    for (n = 0; n < SP_WAIT_SLEEPS; n++) {
+        sp_stock_sleep(SP_SLEEP_US);
+        p = look();
+        if (p == SPW_ACKED)
+            return 0;
+        if (p == SPW_RESEND) {
+            if (sp_raw_send(job.x.tag, page))
+                sp_stuck_sends++;
+            spw_resent(&job.x, dkrt_blocks());
+        } else if (p < 0) {
+            return map_error(p);
+        }
+    }
+    return DKPOOL_E_READ;
+}
+
+/* The whole load. */
+static i32 run_job(void)
+{
+    u32 c = 0, j, k, ch = job.channels, chunk_bytes = SPA_PAGE_BYTES * ch;
+    spw_begin(&job.x, dkrt_blocks());
+    job.armed = 0;
+    while (c < job.plane_pages) {
+        spw_span s;
+        if (cancelled())
+            return DKPOOL_E_LOST;
+        spw_span_of(ch, job.frames, c, &s);
+        if (dkrt_store_read(&job.r->file, s.sector, s.sectors, rbuf) != 0)
+            return DKPOOL_E_READ;
+        for (j = 0; j < s.chunks; j++, c++) {
+            spw_chunk ck;
+            const u8 *pcm = rbuf + s.skip + j * chunk_bytes;
+            i32 rc;
+            spw_chunk_of(ch, job.frames, c, &ck);
+            if (ch == 1)
+                spw_page_mono(pcm, ck.frames, pages[0]);
+            else
+                spw_page_stereo(pcm, ck.frames, pages[0], pages[1]);
+            for (k = 0; k < ch; k++) {
+                rc = send_page(pages[k], job.first_page + k * job.plane_pages + c);
+                if (rc != 0)
+                    return rc;
+            }
+        }
+    }
+    return 0;
+}
+
+/* std::function plumbing for the worker (the same layout the DT2 adapter queues): the invoker gets the function's storage, whose first word
+ * is unused here: there is one job. */
+static void invoker(const void *storage)
+{
+    (void)storage;
+    job.result = run_job();
+    __asm__ volatile("" ::: "memory");
+    job.state = J_DONE;
+}
+
+static int manager(u32 *dest, const u32 *src, int op)
+{
+    if (op == 1 || op == 2)
+        dest[0] = src[0];
+    return 0;
+}
+
+/* ---- The UI task ------------------------------------------------------------------------------------------------------------------------ */
 
 static void finish(i32 result)
 {
@@ -79,57 +201,36 @@ static void finish(i32 result)
     }
     r->state = RQ_FREE;
     job.r = 0;
+    job.state = J_IDLE;
     dkrt_pool_done(req, result);
 }
 
-/* Read the next chunk from the card and convert it into one page (mono) or two (stereo). */
-static i32 prepare(void)
-{
-    spw_chunk c;
-    u32 c_idx = job.chunk_next, slot, l;
-    spw_chunk_of(job.channels, job.frames, c_idx, &c);
-    if (dkrt_store_read(&job.r->file, c.sector, c.sectors, rbuf) != 0)
-        return DKPOOL_E_READ;
-    slot = (job.head + job.n) % SP_SLOTS;
-    l = job.first_page + c_idx;
-    if (job.channels == 1) {
-        spw_page_mono(rbuf + c.skip, c.frames, pages[slot]);
-        job.page_index[slot] = l;
-        job.n++;
-    } else {
-        u32 slot_r = (slot + 1u) % SP_SLOTS;
-        spw_page_stereo(rbuf + c.skip, c.frames, pages[slot], pages[slot_r]);
-        job.page_index[slot] = l;
-        job.page_index[slot_r] = job.first_page + job.plane_pages + c_idx;
-        job.n += 2;
-    }
-    job.chunk_next++;
-    return 0;
-}
-
+/* Post the load of `r` to the worker. */
 static void start_job(SpReq *r)
 {
     const spa_block *b = &sp_pool.blk[r->blk];
-    spw_begin(&job.x, dkrt_blocks());
+    u32 worker, i;
     job.r = r;
     job.channels = b->channels;
     job.plane_pages = b->plane_pages;
     job.first_page = b->first_page;
     job.frames = b->frames;
-    job.chunks_total = b->plane_pages;
-    job.chunk_next = 0;
-    job.pages_total = b->plane_pages * b->channels;
-    job.pages_done = 0;
-    job.head = job.n = 0;
-    job.fail = 0;
+    job.fn[0] = 0;
+    job.fn[1] = 0;
+    job.fn[2] = (uintptr_t)manager;
+    job.fn[3] = (uintptr_t)invoker;
+    for (i = 0; i < 8; i++)
+        ((volatile u32 *)job.done)[i] = 0;   /* volatile: the compiler would turn a plain loop into a memset call */
     r->state = RQ_ACTIVE;
-}
-
-static i32 map_error(i32 poll)
-{
-    if (poll == SPW_E_TAG)
-        return DKPOOL_E_FORMAT;
-    return DKPOOL_E_READ;
+    worker = sp_worker_get();
+    if (!worker) {   /* no worker: nothing was posted */
+        job.state = J_RUN;
+        job.result = DKPOOL_E_READ;
+        job.state = J_DONE;
+        return;
+    }
+    job.state = J_RUN;   /* last: the worker may run the job before the queue call returns */
+    sp_worker_queue(worker, "SamplePool", job.fn, job.done);
 }
 
 /* The oldest queued request, or 0. A queued request nobody waits for is finished here without touching the link. */
@@ -155,59 +256,14 @@ static SpReq *next_queued(void)
 
 void sp_xfer_tick(void)
 {
-    spw_ack a;
-    int have;
-    int32_t p;
-    u32 now, armed = 0;
-    if (!job.r) {
+    if (job.state == J_DONE)
+        finish(job.result);
+    if (job.state == J_IDLE) {
         SpReq *r = next_queued();
-        if (!r)
-            return;
-        start_job(r);
-    }
-    now = dkrt_blocks();
-    have = spw_snap_read(&snap, &a);
-    /* A cancelled load that has no page in flight stops here; one with a page in flight waits for that page's outcome, so the link
-     * and the receiver's counters are settled when the next load starts. */
-    if ((job.r->cancelled || job.fail) && !job.x.inflight) {
-        finish(job.r->cancelled ? DKPOOL_E_LOST : job.fail);
-        return;
-    }
-    p = spw_poll(&job.x, now, have ? &a : 0);
-    if (p < 0) {
-        if (p == SPW_E_DEAD)
-            sp_link_dead = 1;
-        finish(map_error(p));
-        return;
-    }
-    if (p == SPW_ACKED) {
-        job.head = (job.head + 1u) % SP_SLOTS;
-        job.n--;
-        job.pages_done++;
-        if (job.pages_done == job.pages_total) {
-            finish(0);
-            return;
-        }
-        armed = 1;   /* the acknowledging snapshot is armed and idle */
-    } else if (p == SPW_READY) {
-        armed = 1;
-    } else if (p == SPW_RESEND) {
-        sp_stock_send(job.x.tag, (const volatile u32 *)pages[job.head], 1);
-        spw_resent(&job.x, now);
-    }
-    /* 2. one send, only to an armed receiver */
-    if (armed && !job.r->cancelled && !job.fail && !job.x.inflight && job.n > 0) {
-        u32 tag = spw_next_tag(&job.x, job.page_index[job.head]);
-        sp_stock_send(tag, (const volatile u32 *)pages[job.head], 1);
-        spw_sent(&job.x, tag, now);
-    }
-    /* 3. read and convert the next chunk while the sent page waits for its acknowledgement */
-    if (!job.r->cancelled && !job.fail && job.chunk_next < job.chunks_total && job.n + job.channels <= SP_SLOTS) {
-        i32 rc = prepare();
-        if (rc != 0)
-            job.fail = rc;   /* ends at the next pass, when no page is in flight */
+        if (r)
+            start_job(r);
     }
 }
 
-/* dkpool_cancel found the request: nothing to do here beyond the flag, which the tick reads. */
+/* dkpool_cancel found the request: nothing to do here beyond the flag, which the job reads between pages. */
 void sp_xfer_cancel(SpReq *r) { r->cancelled = 1; }

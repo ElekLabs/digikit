@@ -2,11 +2,12 @@
  *
  * The range is [sp_dev_ddr_base, + sp_dev_ddr_bytes) of the device file. pool_alloc.h hands out 4 KiB pages first fit, shares a block of an
  * equal file identity (size and sha256 of the store entry), and keeps released blocks as a cache until an allocation needs the room.
- * A load reads the 64-byte header of the store file, reserves the block and queues the transfer; xfer.c sends the pages over LP0, one load
- * at a time, from dkpool_tick. Nothing else resets this range, so dkrt_pool_lost is never called.
+ * A load reads the 64-byte header of the store file, reserves the block and queues the transfer; dkpool_tick starts it, one load at a time,
+ * as a job on the stock SampleLoader worker task, which sends the pages over LP0 (xfer.c, send.c). Nothing else resets this range, so
+ * dkrt_pool_lost is never called.
  *
- * Tasks: every dkpool_* call and xfer.c's tick run in the runtime's UI-loop task. Only sp_copy_reply (xfer.c) runs in an interrupt, and it
- * only writes the acknowledgement snapshot. */
+ * Tasks: every dkpool_* call and xfer.c's tick run in the runtime's UI-loop task, and so do the allocator and dkrt_pool_done. The job runs in
+ * the worker task. Only sp_copy_reply (xfer.c) runs in an interrupt, and it only writes the acknowledgement snapshot. */
 
 #include <stdint.h>
 #include "cf/dn2/xfer.h"
