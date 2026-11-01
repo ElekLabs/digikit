@@ -17,6 +17,10 @@ struct Fake {
     next_tok: u32,
     load_err: Option<i32>,
     drain_forever: bool,
+    /// Ticks the publish writes take to land (0: at once), the ticks left for the one in flight, and a fixed failure code.
+    land_after: u32,
+    landing: u32,
+    publish_err: i32,
 }
 fn id(size: u32, hash: u8) -> FileId {
     let mut h = [0; 32];
@@ -75,6 +79,17 @@ impl Env for Fake {
     fn publish(&mut self, c: usize, k: usize, r: &Strack) {
         self.closed[c][k] = false;
         self.published.push((c, k, *r));
+        self.landing = self.land_after;
+    }
+    fn published(&mut self, _c: usize, _k: usize) -> i32 {
+        if self.publish_err != 0 {
+            return self.publish_err;
+        }
+        if self.landing == 0 {
+            return 1;
+        }
+        self.landing -= 1;
+        0
     }
 }
 type C = Core<2, 8, 3>;
@@ -102,6 +117,48 @@ fn select_reaches_ready_and_publishes_one_record() {
     assert_eq!((r.ready, r.frames, r.channels, r.fmt), (1, 500, 2, FMT_PCM16));
     assert_ne!(r.base_l, r.base_r);
     assert_eq!(c.info(0, 3).unwrap().token, r.token);
+}
+
+#[test]
+fn ready_waits_until_the_record_has_landed_in_the_dsp() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.land_after = 3;
+    e.add("a.wav", id(100, 1), 500, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 3);
+    assert_eq!(c.status(0, 0), LOADING, "published, but the writes are on their way");
+    assert_eq!(c.info(0, 0), Err(E_NOT_FOUND));
+    run(&mut c, &mut e, 4);
+    assert_eq!(c.status(0, 0), READY);
+    assert_eq!(e.published.len(), 1);
+}
+
+#[test]
+fn a_publish_the_link_gave_up_is_a_track_error_and_a_new_select_recovers() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.publish_err = E_DSP_XFER;
+    e.add("a.wav", id(100, 1), 500, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 6);
+    assert_eq!(c.status(0, 0), E_DSP_XFER);
+    e.publish_err = 0;
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 8);
+    assert_eq!(c.status(0, 0), READY);
+}
+
+#[test]
+fn backing_lost_while_the_record_is_on_its_way_reloads() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.land_after = 2;
+    e.add("a.wav", id(100, 1), 500, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 3);
+    assert_eq!(c.status(0, 0), LOADING);
+    c.lost();
+    run(&mut c, &mut e, 20);
+    assert_eq!(c.status(0, 0), READY);
+    assert_eq!(e.loads, 2, "reloaded from the remembered path");
 }
 
 #[test]

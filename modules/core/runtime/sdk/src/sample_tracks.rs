@@ -120,6 +120,8 @@ pub trait Env {
     fn drained(&mut self, client: usize, track: usize) -> bool;
     /// Write the record, clear CLOSED, `ready` last.
     fn publish(&mut self, client: usize, track: usize, rec: &Strack);
+    /// The publish writes have all landed in the DSP: 1; still on their way: 0; given up: a negative code. The track is READY only then.
+    fn published(&mut self, client: usize, track: usize) -> i32;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -160,6 +162,8 @@ enum Phase {
     Binding,
     /// Waiting for the entry in `loading`.
     Loading,
+    /// The record is queued for the DSP; READY when the writes have landed.
+    Publishing,
     /// `unbind`: close, drain, drop the reference.
     Unbinding,
 }
@@ -535,6 +539,8 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             self.step_bind(c, k, env);
         } else if phase == Phase::Loading {
             self.step_loading(c, k, env);
+        } else if phase == Phase::Publishing {
+            self.step_publishing(c, k, env);
         } else if phase == Phase::Unbinding {
             // A superseded load's reference goes first; it never reached the DSP.
             if let Some(e) = self.tracks[c][k].loading.take() {
@@ -740,10 +746,38 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             t.snap = t.pend.id;
             t.token = token;
             t.published = Info { frames: rec.frames, rate: rec.rate, channels: rec.channels, token };
-            t.status = READY;
-            t.phase = Phase::Idle;
+            t.phase = Phase::Publishing;
+            t.ticks = 0;
             t.reload = false;
             t.closed = false;
+            self.step_publishing(c, k, env);
+        }
+    }
+
+    /// READY only when the record is in the DSP: a note triggered the moment a poller sees READY must find it published.
+    fn step_publishing(&mut self, c: usize, k: usize, env: &mut impl Env) {
+        let r = env.published(c, k);
+        let t = &mut self.tracks[c][k];
+        if r == 0 {
+            t.ticks = t.ticks.saturating_add(1);
+            if t.ticks > DRAIN_GUARD {
+                t.status = E_DSP_XFER;
+                t.phase = Phase::Idle;
+            }
+            return;
+        }
+        t.phase = Phase::Idle;
+        if r < 0 {
+            // The track keeps its reference: PCM that a voice may still read is never released. A new select closes and starts again.
+            t.status = r;
+            return;
+        }
+        t.status = READY;
+        // The backing was lost while the record was on its way (`invalidate` skips a track that is not idle).
+        if let Some(e) = t.bound {
+            if self.entries[e].state == EState::Dead {
+                self.invalidate(e);
+            }
         }
     }
 

@@ -28,7 +28,7 @@ use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
 use dkrt_sdk::sample_tracks::{Core, Env, FileId, Handle, Inspect, Load, Strack, ID_HASH_VALID, TRACKS};
-use dkrt_sdk::{E_CONTRACT, E_NOT_FOUND, E_READ, E_SEL_PATH};
+use dkrt_sdk::{E_CONTRACT, E_DSP_XFER, E_NOT_FOUND, E_READ, E_SEL_PATH};
 
 pub const DKPOOL_VERSION: u32 = 1;
 const CLIENTS: usize = 2;
@@ -319,6 +319,19 @@ impl Env for Device {
     }
     fn drained(&mut self, client: usize, track: usize) -> bool {
         unsafe { FORCE == client || (*addr_of!(OPS))[client][track].kind == OP_NONE }
+    }
+    fn published(&mut self, client: usize, track: usize) -> i32 {
+        unsafe {
+            let kind = (*addr_of!(OPS))[client][track].kind;
+            if kind == OP_FAILED {
+                return E_DSP_XFER;
+            }
+            if kind == OP_NONE {
+                1
+            } else {
+                0
+            }
+        }
     }
     fn publish(&mut self, client: usize, track: usize, rec: &Strack) {
         unsafe {
