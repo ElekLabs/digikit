@@ -1,0 +1,41 @@
+[module]
+id = "core/sample-pool"
+version = "0.1.0"
+name = "Sample pool"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "The sample backing behind the runtime's per-track samples (dkrt_pool.h, version 1): DT2 borrows the stock sample pool; DN2 will own a DDR range"
+ports = ["dt2-1.17"]
+requires = ["core/runtime"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "untested"
+
+# One adapter, one object per device (docs/design/sample-api-1.5.md 2.3 and recommendation 9). Both export the same symbols of
+# src/dkrt_pool.h: dkpool_version, dkpool_load, dkpool_release, dkpool_check, dkpool_free_frames and dkpool_tick. The runtime lists them as
+# optional imports; without this module they resolve to 0 and `sample_select` returns E_CONTRACT.
+#
+# DT2 (src/cf/dt2): borrows the stock pool through the stock loader, queued on the SampleLoaderBgWorker (finding 109). No hook: the runtime
+# calls dkpool_tick from its UI loop pass, which delivers the completions and finds a stock reset.
+#
+# DN2: the seam is a second [[object]] with `devices = ["dn2"]` and `sources = ["src/cf/dn2/..."]` (an allocator over
+# [adapter.sample_pool] ddr_base and ddr_bytes of devices/digitone-ii.toml, first fit, no reset, so no dkrt_pool_lost). Not written yet.
+# The shared logic that does not touch the firmware is src/cf/pool_core.h.
+
+# The device's slot floor and reserved DDR range, from [adapter.sample_pool] of the device files (`patchkit gen`).
+[[gen]]
+kind = "gas-sample-pool"
+path = "build/gen/sample-pool-{dev}.inc"
+
+[[object]]
+path = "build/sample-pool-dt2.dko.json"
+sources = ["src/cf/dt2/pool.c", "src/cf/dt2/device.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+sp_dsp_pool_base = "dsp.voice.value.sample.pool_base"
