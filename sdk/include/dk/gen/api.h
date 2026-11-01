@@ -39,10 +39,15 @@ typedef struct dk_api {
     int32_t (*files_list)(uint32_t client, uint32_t root, const uint8_t *path, dk_file_event *notify, uint8_t *context); /* (api 1.4) Copy a canonical root-relative directory request; positive ticket or negative error. Supersedes prior results. Optional deferred UI-task notify/context remain module-owned until retirement quiesces. No I/O here. */
     int32_t (*files_poll)(uint32_t client, uint32_t ticket, uint8_t *out, uint32_t capacity); /* (api 1.4) No I/O: 0 pending, 1 copied 304-byte dk_file_entry, 2 end, negative error. Validate output/capacity before consumption; output unchanged unless 1. Stored metadata is not content validation or a lease. */
     int32_t (*files_cancel)(uint32_t client, uint32_t ticket); /* (api 1.4) Invalidate matching request/results/queued notification without waiting for active work or callback. Does not free the module-owned client. */
+    int32_t (*sample_tracks)(uint32_t local_id); /* (api 1.5) In init, resolve the module's 16-track sample table (DK_SAMPLE_TRACKS) to a positive opaque handle, or a negative DK_SAMPLE_E_* error. A module that also declares a bank gets DK_SAMPLE_E_CONTRACT. */
+    int32_t (*sample_select)(uint32_t handle, uint32_t track, const uint8_t *path); /* (api 1.5) Queue a stereo-capable sample for one track (copies the path, no file IO here). Stops that track's old notes, supersedes a queued or loading request. Returns 0 or a negative DK_SAMPLE_E_* error (track >= 16: DK_SAMPLE_E_CONTRACT; no sample backing in the image: DK_SAMPLE_E_CONTRACT). */
+    int32_t (*sample_unbind)(uint32_t handle, uint32_t track); /* (api 1.5) Close the track's generation, drop its reference and set it UNUSED. Returns 0 or a negative DK_SAMPLE_E_* error. */
+    int32_t (*sample_track_status)(uint32_t handle, uint32_t track); /* (api 1.5) Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error; an error is sticky until the next select or unbind. */
+    int32_t (*sample_track_info)(uint32_t handle, uint32_t track, uint8_t *out); /* (api 1.5) Copy a 16-byte dk_sample_info (frames, rate, channels, token; <dk/sample_track.h>) of a READY track; otherwise a negative error and `out` is untouched. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
-_Static_assert(sizeof(dk_api) == 96, "dk_api size");
+_Static_assert(sizeof(dk_api) == 116, "dk_api size");
 _Static_assert(offsetof(dk_api, version) == 0, "dk_api.version");
 _Static_assert(offsetof(dk_api, size) == 4, "dk_api.size");
 _Static_assert(offsetof(dk_api, device) == 8, "dk_api.device");
@@ -67,6 +72,11 @@ _Static_assert(offsetof(dk_api, files_client) == 80, "dk_api.files_client");
 _Static_assert(offsetof(dk_api, files_list) == 84, "dk_api.files_list");
 _Static_assert(offsetof(dk_api, files_poll) == 88, "dk_api.files_poll");
 _Static_assert(offsetof(dk_api, files_cancel) == 92, "dk_api.files_cancel");
+_Static_assert(offsetof(dk_api, sample_tracks) == 96, "dk_api.sample_tracks");
+_Static_assert(offsetof(dk_api, sample_select) == 100, "dk_api.sample_select");
+_Static_assert(offsetof(dk_api, sample_unbind) == 104, "dk_api.sample_unbind");
+_Static_assert(offsetof(dk_api, sample_track_status) == 108, "dk_api.sample_track_status");
+_Static_assert(offsetof(dk_api, sample_track_info) == 112, "dk_api.sample_track_info");
 #endif
 
 /* Imports: names the loader resolves in the runtime's table (Api.import gives the address at run time). */
@@ -124,6 +134,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 4
+#define DK_API_MINOR 5
 
 #endif /* DK_GEN_API_H */

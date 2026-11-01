@@ -8,6 +8,8 @@
 
 /* Record kind of dk_desc_sample_bank. */
 #define DK_DESC_SAMPLE_BANK 6
+/* Record kind of dk_desc_sample_tracks. */
+#define DK_DESC_SAMPLE_TRACKS 7
 /* Record kind of dk_desc_fx. */
 #define DK_DESC_FX 1
 /* Record kind of dk_desc_machine. */
@@ -40,6 +42,15 @@ typedef struct {
     char descriptor[32];                     /* module DSP initialized data symbol, four zero words */
     uint32_t capacity_frames;                /* mono float frames, 1 .. 8192 */
 } dk_desc_sample_bank;
+
+/* Per-track stereo sample table (API 1.5): 16 initially zero dk_strack records and one control set per track. At most one per module; not with a sample bank. */
+typedef struct {
+    uint32_t kind;                           /* DK_DESC_SAMPLE_TRACKS */
+    uint32_t size;                           /* sizeof(dk_desc_sample_tracks) */
+    uint32_t local_id;                       /* module-local numeric id */
+    char records[32];                        /* module DSP data symbol: 16 dk_strack records, 8 words each, zero */
+    char control[32];                        /* module DSP data symbol: 16 control sets of 4 words (closed, count, fault, reserved), zero */
+} dk_desc_sample_tracks;
 
 /* One effect. The process routine and its dk_fx_desc are symbols of the module's SHARC+ object. */
 typedef struct {
@@ -117,6 +128,12 @@ _Static_assert(offsetof(dk_desc_sample_bank, local_id) == 8, "dk_desc_sample_ban
 _Static_assert(offsetof(dk_desc_sample_bank, bank) == 12, "dk_desc_sample_bank.bank");
 _Static_assert(offsetof(dk_desc_sample_bank, descriptor) == 44, "dk_desc_sample_bank.descriptor");
 _Static_assert(offsetof(dk_desc_sample_bank, capacity_frames) == 76, "dk_desc_sample_bank.capacity_frames");
+_Static_assert(sizeof(dk_desc_sample_tracks) == 76, "dk_desc_sample_tracks size");
+_Static_assert(offsetof(dk_desc_sample_tracks, kind) == 0, "dk_desc_sample_tracks.kind");
+_Static_assert(offsetof(dk_desc_sample_tracks, size) == 4, "dk_desc_sample_tracks.size");
+_Static_assert(offsetof(dk_desc_sample_tracks, local_id) == 8, "dk_desc_sample_tracks.local_id");
+_Static_assert(offsetof(dk_desc_sample_tracks, records) == 12, "dk_desc_sample_tracks.records");
+_Static_assert(offsetof(dk_desc_sample_tracks, control) == 44, "dk_desc_sample_tracks.control");
 _Static_assert(sizeof(dk_desc_fx) == 100, "dk_desc_fx size");
 _Static_assert(offsetof(dk_desc_fx, kind) == 0, "dk_desc_fx.kind");
 _Static_assert(offsetof(dk_desc_fx, size) == 4, "dk_desc_fx.size");
