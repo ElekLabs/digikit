@@ -157,14 +157,12 @@ baseline pathcheck reports. This is not a full-gate pass and does not transfer t
 
 ## Continue from here
 
-1. Check PR #248's merged state and merge commit (also recorded in the external roadmap).
-   Em authorized its merge using the focused evidence and accepted baseline pathcheck reports.
-   Do not repeat completed device proofs without a behavioral change or unresolved concern.
-2. Start subsequent work from current main in an isolated lane; preserve the Claude checkout.
-   The PR-248-only exception does not apply to another batch.
-3. Next, pursue the bounded static Nx family-graph spike described in the Nx plan. The proposed
-   18-project candidate remains unimplemented. Prove graph/selection equivalence and justify any
-   expensive sibling grouping before adoption. Delete old routing only after every consumer moves.
+1. PR #248 merged at `7cb81ee5`. Its focused-check exception does not transfer.
+2. Current work is on lane `/Users/em/src/digi/lanes/nx-integration`, branch `test/nx-family-design`
+   from `origin/main`. The Claude checkout is separate; do not use it.
+3. The agreed design and stages are in the
+   [Nx plan](../plans/nx-pilot.md#module-graph-and-staged-selection-design-2026-11-02). Stage 1 is next.
+   Do not repeat completed device proofs; stage 1 is proved by identical selection.
 
 The five audited cached host targets remain separate from this uncached device target. Broader
 Nx acceptance routing, Python/Rust plugins and device/build caching are not implemented or justified

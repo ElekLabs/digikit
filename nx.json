@@ -2,6 +2,8 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "cacheDirectory": ".nx/cache",
   "neverConnectToCloud": true,
+  "analytics": false,
+  "plugins": ["./tools/nx/modules.mjs"],
   "namedInputs": {
     "hostTests": [
       "{projectRoot}/**/*",

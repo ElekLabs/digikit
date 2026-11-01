@@ -61,10 +61,10 @@ separate from the focused migration checks below.
 | `@digi/web` | `web-transfer` |
 | `@digi/desktop` | `desktop-host` |
 | `regression` | `regression-host` |
-| `module-tests` | `module-tests` |
+| each module with host tests | `module-tests` |
 
 Control-client, test-support, dk-session, desktop-host and regression-host result caching is enabled.
-Web-transfer and the empty module-tests group still use `cache: false`.
+Web-transfer and the per-module `test-host` targets still use `cache: false`.
 Each fixed command runs its whole Vitest project; preflight supplies all changed paths on standard
 Nx `--stdin`, rejecting newlines rather than splitting a pathname. `--parallel=1` preserves the
 previous one-worker host budget. There is no root project covering the repository. Existing package
@@ -75,9 +75,9 @@ Shared host inputs include the registry/config/toolchain files and desktop `ui/s
 preserving the conservative all-host trigger for filesystem reads. Known package/relative-import
 edges are explicit where needed; desktop also declares device TOMLs and module manifests, and
 dk-session declares the SDK format source. Deleted paths remain inputs to affected selection.
-The distributed module-tests group currently has no tests: it retains its modules root and uses
-`--passWithNoTests`. Add real helper/dependency inputs when introducing its first TypeScript tests;
-there are no speculative dependencies on all host projects.
+The module-tests group is replaced by per-module `test-host` targets that tools/nx/modules.mjs
+infers for modules with host tests (none today). Add real helper/dependency inputs when introducing
+the first TypeScript module test; there are no speculative dependencies on all host projects.
 
 The web host target clears `DIGI_FW_EMU_SOCKET` so fast preflight cannot opt into the firmware
 emulator test through inherited environment. That test remains available through its direct owner
@@ -558,3 +558,37 @@ Em explicitly approved merging PR #248 using the recorded focused checks, accept
 baseline pathcheck reports. The full routed gate remains unrun; this is a PR-248-only exception,
 not a full-gate pass or permission to skip later gates. The PR and external testing roadmap
 record the final merge state/commit; earlier draft/pending statements above are superseded.
+
+### Module graph and staged selection design (2026-11-02)
+
+Em agreed this design. Projects are the things under test: modules, packages and the regression
+harness. Test files are not projects. Nx answers which modules a change affects; Vitest's import
+graph and one per-file needs record answer which test files run.
+
+The 18-project family candidate is rejected. Nx affected selection works per project, so keeping
+the current per-file precision would need one project per test file.
+
+Static spike, uncommitted on lane branch `test/nx-family-design`: a 35-line local plugin
+(`createNodesV2` and `createDependencies`) made one project per `module.toml`, named by module id,
+58 modules over `modules/` and `tests/fixtures/modules/`. Direct edges equal
+`verify_route.manifests()` for all 58 modules. The reverse closure equals `dependents()` for 57; the
+difference is the hand-written implicit dependency in `modules/project.json`.
+`nx show projects --affected --files` works in Nx 22.7.12. A TypeScript plugin needs a root
+`tsconfig.json`, so the plugin uses `.mjs`; `smol-toml` becomes a root devDependency. The freqshift
+`test-device` inputs (`tools/**`, `devices/**`, `tests/regression/**`) widen affected selection.
+
+Stages:
+
+1. Module graph plugin `tools/nx/modules.mjs`. Python routing takes the module closure from Nx and
+   deletes `manifests()` and `dependents()`. One per-file needs schema (`runtimeAcceptance`:
+   modules, aliases, sources, plusdrive) in each owning `project.json` replaces the `RUNTIME_*`
+   tables. The freqshift target loses its broad inputs. Explain output comes from the plan. Proof:
+   identical selection over the spike paths and the 25-commit audit replay; no device runs.
+2. Device tests move to the module they test. `tests/regression` keeps the shared harness, exported
+   as a package, and the stock DT2 tests. Per-file `modules` still narrows fixture-module changes.
+3. Per-module `pack` targets replace the `verify.py` build/pack loop; uncached until an input audit.
+
+Follow-up: a small Cargo plugin (workspace members and path dependencies, no `cargo metadata`)
+replaces `rust_ws.affected_packages`, then cached results for crates without generated code.
+Caching: none in stages 1 and 2. Stage 3 measures the pack ceiling before any cache. Device test
+results are not cached.

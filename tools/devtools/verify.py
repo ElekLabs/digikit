@@ -1767,7 +1767,7 @@ def runtime_pack_aliases(selected: list[str]) -> dict[str, str]:
     """Extra card identities required by the complete inventory of each selected FX suite."""
     return {
         alias: source
-        for alias, (source, files) in verify_route.RUNTIME_PACK_ALIASES.items()
+        for alias, (source, files) in verify_route.runtime_aliases().items()
         if not selected or set(files) & set(selected)
     }
 
@@ -2224,7 +2224,8 @@ def named_units(
     by_step: dict[str, list[str]] = {}
     registered = {
         file.removeprefix("../../"): file
-        for file in verify_route.module_runtime_files()
+        for file in verify_route.acceptance_records()
+        if file.startswith("../../")
     }
     for path in tests:
         if path in registered:
