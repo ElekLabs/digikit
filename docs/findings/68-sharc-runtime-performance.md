@@ -614,8 +614,9 @@ The combined desktop's first native build took 5m19s; both generated crates
 compiled, and the remaining DN2 compilation used about 15 CPU cores after DT2
 finished. That is a separate combined target cache, not regeneration. Subsequent
 validation runners reused it (14.70s coupled-run, 4.17s daemon). The combined
-build has no trained PGO profile; per-device PGO profiles are intentionally not
-applied. Comparison here is against the measured non-PGO binaries, not a freshly
+build now has its own PGO profile (device `both`, `mise run perf:pgo:both`); see
+"Two-core PGO profile (2026-11-01)" below. Per-device profiles are not applied to it.
+The comparison here is against the measured non-PGO binaries, not a freshly
 trained single-core PGO build.
 
 Artifacts: `out/native/runs/20261027-sharc-dual-default/` contains the frozen
@@ -660,9 +661,23 @@ stock code nothing reaches `0x1c4ed2` through the interpreter. Interpreted instr
 `pk_tiers` PCM is equal for stock, the voice hook and PLUCK held (3 s each); the PLUCK window
 goes from 14.9 M to 13.3 M interpreted per audio second, of which 4.1 M are PLUCK's own
 appended code. The ISR code, appended code and the `0x1c06fe` bail remain; they need
-generated-core, fast-tier or JIT work. **[O]** No timing was measured: the regular root makes
-the interpreter consult the fast tier for every PC, which needs one paired A/B on stock and
-patched replays before the change counts as a speed-up.
+generated-core, fast-tier or JIT work.
+
+**[D]** Timing of the root change (2026-11-01), `perf:matrix`, 3 alternating pairs per cell, 3 s
+audio, DSP-thread CPU, ratio B/A (lower is faster). Both sides use the same two-core PGO binary;
+only the environment differs. A: `SHARC_FAST_REGIONS_2` unset,
+`SHARC_FAST_FALLBACK_REGIONS_2=0x1c2607`. B: `SHARC_FAST_REGIONS_2=0x1c4ed2`,
+`SHARC_FAST_FALLBACK_REGIONS_2=0x1c2607,0x1c1fe7,0x1c204b` (DT2 is slot 2, so the lists carry
+the `_2` suffix).
+
+| Cell | Ratio B/A (range) | Interpreted instructions, A to B |
+| --- | ---: | ---: |
+| DT2 runtime idle, `dt2-led-sweep` | 0.905 (0.880-0.913) | 18.19 M to 8.50 M |
+| DT2 runtime sample, `dt2-sample-trig` | 0.876 (0.869-0.882) | 18.01 M to 8.15 M |
+| DT2 stock, `dt2-sample-trig` (control, new roots not reached) | 1.014 (0.991-1.026) | 5.93 M both |
+
+The new roots save 9-12% DSP-thread CPU on the patched DT2 runtime. On stock the extra
+fast-tier lookup per PC is within noise.
 
 ## Interpreter exits: chase and appended entries (2026-10-31)
 
@@ -715,3 +730,36 @@ Supporting PCSTK, LCNTR and status-stack forms in the kernel glue would make mos
 four rows runnable, at the cost of modelling the PC and loop stacks in kernel state: at most
 2 M instructions per 3 s (about 2 to 4% of one DSP thread at 60 to 105 ns each). Not worth it
 before a timing A/B shows the interpreter share.
+
+## Two-core PGO profile (2026-11-01)
+
+**[D]** Setup: `perf:matrix` (`tools/devtools/sharc_matrix.py`), 3 alternating pairs per cell,
+3 s audio, DSP-thread CPU, ratio B/A (lower is faster), quiet machine. Both binaries are
+two-core coupled-run builds (`--features second-core`, slot 1 DN2 core, slot 2 DT2 core). A is
+plain (`native_pgo coupled-build --device both --variant ab-plain`). B uses the two-core profile
+(`--profile current --variant ab-pgo`, profile key `6db98eed3f895b45`). Runtime cells use the
+patched-runtime fixtures from `mise run perf:fixture` (`out/fixtures/runtime/<dev>/`). PCM, DSP
+state, instruction count and duration were identical between A and B in every cell.
+
+A/B 1, plain against PGO, scenarios in the training set:
+
+| Cell | Ratio B/A (range) |
+| --- | ---: |
+| DT2 runtime, `dt2-sample-trig` | 0.829 (0.826-0.836) |
+| DN2 runtime, `trig1-hold` | 0.795 (0.787-0.837) |
+
+A/B 3, same binaries, scenarios not in the training set:
+
+| Cell | Ratio B/A (range) |
+| --- | ---: |
+| DT2 runtime, `dt2-led-sweep` | 0.824 (0.822-0.828) |
+| DN2 runtime, `kb-chord16` | 0.821 (0.816-0.822) |
+
+The two-core PGO profile cuts DSP-thread CPU by about 18% on both devices, also on scenarios
+outside the training set. DN2 gains far more than with the single-core DN2 profile (3%). The
+two-core profile also trains on the patched runtime. The single-core DN2 profile trains only on
+the stock exactness scenario. The DT2 root change is timed in the 2026-10-31 section "DT2
+patched runtime: interpreted work by group" (A/B 2).
+
+Artifacts: `out/native/runs/20261101-two-core-pgo/ab/` (`config-ab1.json`, `config-ab2.json`,
+`config-ab3.json`, `results-ab1`, `results-ab2`, `results-ab3`).

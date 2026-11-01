@@ -1,7 +1,6 @@
 # Two-core PGO profile for the desktop build
 
-**Status:** in progress (2026-11-01). Code, fixture tool and unit tests done (commits
-49652c26, 5a6d9e55). Next: instrumented build, training, crate check, then the timed A/B.
+**Status:** done (2026-11-01). Results in finding 68, section 'Two-core PGO profile (2026-11-01)'.
 
 ## Problem
 
