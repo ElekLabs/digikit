@@ -577,10 +577,11 @@ pathchecks passed. The original preflight was not a fully green run.
 
 The authoritative gate explanation uses `origin/main` at `e8c0e8ac` and selects eight FX runtime
 files, 41 Python files, host checks, smoke and native prerequisites. The initial `--base main`
-explanation used a stale local ref and is superseded. The broad gate was not run. Draft
-[PR #247](https://github.com/ElekLabs/digikit/pull/247) awaits a PR-specific focused-validation
-decision; no exception or broad-gate pass is claimed for this batch. Timings remain correctness
-evidence only, without a paired speedup claim.
+explanation used a stale local ref and is superseded. The broad gate was not run.
+[PR #247](https://github.com/ElekLabs/digikit/pull/247) merged at `4bd50f5b` on
+2026-11-01T19:45:12Z under Em's PR-247-only focused exception, accepting the three baseline path
+errors and the focused evidence. This was not a broad-gate pass; the exception does not transfer.
+Timings remain correctness evidence only, without a paired speedup claim.
 
 Deleted-scenario routing remains deferred because path-only callers need merge-base ownership
 evidence. No cache or tombstone tooling is introduced by this batch.
@@ -597,5 +598,18 @@ PCM/model, parameter, send and settings observations without changing thresholds
 
 The shared prerequisite is the fixed `fx-kit` card-safety policy: exactly the existing per-device
 `KIT_AREAS` firmware ranges, with no settings-sector allowance. Default and `fx-routes` policies
-retain their existing behavior; callers cannot supply arbitrary allowlists. Device proof and the
-Nx dependency audit remain pending. No new UI helpers or measured speedup are part of this step.
+retain their existing behavior; callers cannot supply arbitrary allowlists.
+
+The policy prerequisite `9b23b0ff`, kit/UI helpers `6f12384f`, persistence/shifter ports
+`73711a01` / `01594832` and gate ownership `8b7c248e` are pushed. Source reviews found no issues.
+DN2 persistence passed in 129.50 s invocation / 123.760 s case (`zDOVuw`), with three watch windows
+and two overlays under `fx-kit`. DN2 shifter passed in 215.72 s / 209.578 s (`WDkalo`), with nine
+windows and four overlays under `fx-routes`. Both lifetime reports had zero write/flush hits.
+DT2 persistence and shifter proofs are running. No legacy deletion or new gate exception has
+occurred; these timings are correctness evidence, not a performance comparison.
+
+The Nx audit confirms safe use of the five current cached host targets and partial adoption.
+Caching and affected-test routing are separate concerns. A next family-project migration remains
+unimplemented and needs an exact folder layout, validated project graph and selection matrix;
+see the [Nx audit checkpoint](nx-pilot.md#family-project-audit-checkpoint-2026-11-02). No custom
+plugin, cache expansion or selector deletion is authorized by this audit alone.

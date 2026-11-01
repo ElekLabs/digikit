@@ -489,6 +489,40 @@ owned fixture contexts, clean independent cards and two real menu restarts. Gate
 `86e1a7ae`: legacy route device scenarios are removed, retaining the analysis oracles, with no device
 execution change after proof. Final preflight passed 666 Python and 95 host cases plus static/type
 checks, but exited 1 on three unchanged baseline path references; the detailed checkpoint records
-the limits and gate selection. The gate explanation ran; the broad gate did not. A draft PR and
-single-PR focused-exception request are next, with no new exception in place. Earlier exceptions
-do not transfer. Timings are correctness evidence, with no paired A/B or measured speedup claim.
+the limits and gate selection. The gate explanation ran; the broad gate did not. PR #246 merged
+at `e8c0e8ac` under its PR-only focused exception; later BASIC/FXPAGE PR #247 merged at `4bd50f5b`
+under a separate PR-247-only exception. Neither decision was a broad-gate pass or transfers to the
+current persistence/shifter batch. Timings are correctness evidence, with no measured speedup claim.
+
+### Family-project audit checkpoint (2026-11-02)
+
+The current five cached host targets remain safe within their audited inputs; Nx adoption is
+partial. Cache replay, project dependency edges, hashing inputs, affected selection and artifact
+inventories have distinct responsibilities. The installed standard Nx locator
+(`workspace-projects.js`, lines 17–73) confirms that workspace-root target inputs participate in
+affected-project selection even when `cache: false`; disabling cache does not isolate that scope.
+
+Validated selector probes with the pinned environment selected: `fx-session.ts` seven files,
+`fx-route-live.ts` three, `fx-live.ts` ten, `runtime-plan.ts` twenty, `runtime-menu.ts` five
+(debug, fault, chain, input and remote), and `transfer-cli.ts` one. The earlier scout's all-twenty
+helper probes were environment-error fallbacks and are retracted. These observations establish
+selection behavior, not a measured speedup.
+
+A proposed next coherent family-project migration is unimplemented. It needs a static spike with
+an exact folder layout, validated project graph and before/after selection matrix, using standard
+Nx configuration rather than a custom plugin. The scout's candidate has 18 projects: one stock,
+14 runtime and three module families, each owning one to three files. Grouping may not introduce
+expensive sibling execution without an explicit decision; keep unrelated remote and probe
+lifecycles separate. Project counts alone do not establish a sound boundary.
+
+The eventual deletion target is `related_acceptance`, `related-tests.mjs` and the TypeScript
+selector branches, only after every acceptance consumer migrates. Preserve domain-module closure,
+pack/alias preparation and Python fallback ownership. Broad regression-root or shared-helper edges
+can erase precision; manual input lists can miss new imports. Unknown/deleted-source fallbacks must
+remain conservative. Exact graph and selection proof are pending; this audit does not mark the
+next migration implemented or adopted, expand caching, or claim performance gains.
+
+The current persistence/shifter batch is pushed through `8b7c248e`, with source reviews reporting
+no issues. DN2 persistence and shifter proofs passed; both DT2 proofs are running. The
+[architecture checkpoint](test-architecture.md#fx-kit-persistence-and-frequency-shifter-design-2026-11-02)
+records timings and safety evidence. Legacy coverage remains; no new gate exception exists.
