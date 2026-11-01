@@ -228,6 +228,55 @@
   },
   {
    "addend": 0,
+   "offset": 10,
+   "section": ".text.ui_poll",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 166,
+   "section": ".text.ui_poll",
+   "symbol": "dkrt_poll_remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 172,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 8,
    "section": ".text.invalidate.isra.0",
    "symbol": "cf.view.fn.invalidate",
@@ -1093,6 +1142,69 @@
    "section": ".text.dk_ui_toast",
    "symbol": "cf.window.fn.toast",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_ui_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 116,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..text.ui_poll",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.dk_ui_tick",
+   "symbol": "dkrt_poll_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 274,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
   }
  ],
  "sections": [
@@ -1189,6 +1301,13 @@
   },
   {
    "align": 2,
+   "hex": "4fefffe448d70c3c4eb9000000004a80660000aa203900000000528023c000000000767847f9000000004282244b20524a88673e222a00084c0318000681000003e70c81000003e7637c283c000003e84c441001224093ea000cb28962142540000c2f2a00042f40001c4e90588f202f0018528245ea00107204b28266b0428042814a9367025280528147eb00107404b48166ee4a80661a4ab9000000006712487aff5e4eb90000000042b900000000588f4cd70c3c4fef001c4e75263c000005dc6000ff607201608a",
+   "kind": "text",
+   "name": ".text.ui_poll",
+   "size": 202
+  },
+  {
+   "align": 2,
    "hex": "7038d1af00044ef900000000",
    "kind": "text",
    "name": ".text.invalidate.isra.0",
@@ -1273,7 +1392,7 @@
   },
   {
    "align": 2,
-   "hex": "202f000472075380b28054c0710044804e75",
+   "hex": "202f000472085380b28054c0710044804e75",
    "kind": "text",
    "name": ".text.dk_ui_has",
    "size": 18
@@ -1364,6 +1483,34 @@
   },
   {
    "align": 2,
+   "hex": "4fefffe448d70c7c242f0020262f0024282f00284eb9000000004a80660e203900000000528023c0000000004a82670000b22a040c84000f424063062a3c000f424045f90000000091c8224a4281264a2c11bc82666cb6a900046670e9894a84665642b318002039000000004a80660000a843f900000000428191c84a9167025281528843e900107804b88866ee4a8167524879000000004eb900000000588f4a80676a4280b4926656b6aa00046650e98842b30800602a278518082780180c60a44a8666064a8866022049528143e900107c04bc816600ff784a8467884a88660c70ff4cd70c7c4fef001c4e75208221430004214500082140000c6000ff68528045ea00107c04bc80669a60d4720123c10000000060cc428060c8",
+   "kind": "text",
+   "name": ".text.dk_ui_tick",
+   "size": 284
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_polling",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_passes",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_ticks",
+   "size": 64
+  },
+  {
+   "align": 2,
    "hex": "",
    "kind": "bss",
    "name": ".bss.g_serial",
@@ -1426,7 +1573,7 @@
    "size": 4
   }
  ],
- "source_sha256": "9d1d6c702124ca068412a98552f12fecedfd45f13aad3ef2edb1c294e607b965",
+ "source_sha256": "1c562fa6a82c93ffa44a081812b9c2cdb58b8b9da14453d8146f21c0cc29c01b",
  "symbols": [
   {
    "global": false,
@@ -1460,6 +1607,18 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.g_passes",
+   "section": ".bss.g_passes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_polling",
+   "section": ".bss.g_polling",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.g_serial",
    "section": ".bss.g_serial",
    "value": 0
@@ -1474,6 +1633,12 @@
    "global": false,
    "name": ".sec..bss.g_text_vt",
    "section": ".bss.g_text_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_ticks",
+   "section": ".bss.g_ticks",
    "value": 0
   },
   {
@@ -1624,6 +1789,12 @@
    "global": false,
    "name": ".sec..text.text_paint",
    "section": ".text.text_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_poll",
+   "section": ".text.ui_poll",
    "value": 0
   },
   {
@@ -1934,6 +2105,12 @@
   },
   {
    "global": true,
+   "name": "dk_ui_tick",
+   "section": ".text.dk_ui_tick",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dk_ui_toast",
    "section": ".text.dk_ui_toast",
    "value": 0
@@ -1948,6 +2125,24 @@
    "global": true,
    "name": "dk_ui_value",
    "section": ".text.dk_ui_value",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_blocks",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_poll_add",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_poll_remove",
+   "section": null,
    "value": 0
   },
   {
@@ -1994,6 +2189,18 @@
   },
   {
    "global": false,
+   "name": "g_passes",
+   "section": ".bss.g_passes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_polling",
+   "section": ".bss.g_polling",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "g_serial",
    "section": ".bss.g_serial",
    "value": 0
@@ -2008,6 +2215,12 @@
    "global": false,
    "name": "g_text_vt",
    "section": ".bss.g_text_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_ticks",
+   "section": ".bss.g_ticks",
    "value": 0
   },
   {
@@ -2093,14 +2306,20 @@
    "name": "typeinfo_dummy",
    "section": ".rodata.typeinfo_dummy",
    "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_poll",
+   "section": ".text.ui_poll",
+   "value": 0
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "1548",
-  "isa_check": "18da9efffe97e8f6dd156f94f4817a1fc6890177a8baaf6fd2a88ae3f7d4acb2",
+  "instructions_redecoded": "1707",
+  "isa_check": "56b04ab323eb4963096615b6f509e842beb4ae5b1d7667f5190452001a6481c6",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

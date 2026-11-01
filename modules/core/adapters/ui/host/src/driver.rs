@@ -223,3 +223,35 @@ pub fn pick_choice(index: usize) {
         f(dlg.ctx, index as c_int)
     }
 }
+
+/// Moves the clock of the model by `ms` milliseconds, one millisecond at a time, and runs every timer of `dk_ui_tick` when its period is
+/// over (in the order set). A timer that an earlier callback stopped does not run.
+pub fn advance_ms(ms: u32) {
+    for _ in 0..ms {
+        with(|s| s.now_ms += 1);
+        let mut i = 0;
+        loop {
+            let due = with(|s| {
+                let now = s.now_ms;
+                let t = s.ticks.get_mut(i)?;
+                if now - t.last >= t.ms as u64 {
+                    t.last = now;
+                    Some(Some((t.f, t.ctx)))
+                } else {
+                    Some(None)
+                }
+            });
+            match due {
+                None => break,
+                Some(Some((f, ctx))) => f(ctx),
+                Some(None) => {}
+            }
+            i += 1;
+        }
+    }
+}
+
+/// The periods (ms) of the running timers, in the order set.
+pub fn tick_periods() -> Vec<u32> {
+    with(|s| s.ticks.iter().map(|t| t.ms).collect())
+}

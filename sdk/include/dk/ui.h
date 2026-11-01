@@ -84,6 +84,7 @@ enum {
     DK_UI_CAP_CONFIRM,
     DK_UI_CAP_CHOICE,
     DK_UI_CAP_TOAST,
+    DK_UI_CAP_TICK,
 };
 
 /* 1 when this device has the capability. A missing one makes its calls do nothing and return -1. */
@@ -121,6 +122,20 @@ int dk_ui_choice(const char *title, const char *const *items, int n, void (*done
                  void *ctx);
 /* A short message on the main screen that goes away by itself. */
 int dk_ui_toast(const char *text);
+
+/* A timer in the UI task (DK_UI_CAP_TICK). fn(ctx) runs about every period_ms, in the same task as the fill and action callbacks, so it
+   may call dk_ui_refresh and read module state without a lock. Use it to redraw a screen that shows a change nobody triggers with a key
+   (a load that is still running). Rules:
+   - The accuracy is the UI loop (about 8 ms) at best; a callback runs late when the task is busy. Do not count calls: read the state.
+   - Keep fn short. It runs between key events and delays them. It must not wait.
+   - fn and ctx stay in use: static module code and memory, never the stack.
+   - A timer is identified by (fn, ctx). Calling again with the same pair changes its period (the next call is one period away).
+     period_ms 0 stops it, also from inside fn; stopping a timer that does not run is not an error. Stop the timer when its screen
+     closes: a running timer costs a call per period.
+   - Room for 4 timers in the image, shared by all modules. A longer period than 1,000,000 ms is cut.
+   Returns 0 when set or stopped, -1 when it could not be (no core/ui or no DK_UI_CAP_TICK, fn 0, or the table is full). */
+typedef void dk_ui_tick_fn(void *ctx);
+int dk_ui_tick(dk_ui_tick_fn *fn, void *ctx, uint32_t period_ms);
 
 /* The module settings entry point: defines dkm_menu (docs/design/digikit-dkm.md) with fill as its body. The DIGIKIT
    menu passes the menu to fill and 0 as ctx. */
