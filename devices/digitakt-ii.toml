@@ -419,3 +419,11 @@ pair            = "copy-even"             # the odd voice copies the even block;
 tune_slot       = 0                       # the stock tune is knob 0 of the track (a frame halfword; pluck.s "0 TUNE"), folded into `pitch`
 param_slots     = [1, 2, 4, 5]            # knob positions for module parameters, in order (a saved project stores values by slot)
 reserved_slots  = [3]                     # knob 3 is the sample slot of a SAMPLE clone (module-sdk.md D1)
+
+# The sample pool adapter's device facts (docs/design/sample-api-1.5.md 2.3); generated into core/sample-pool build/gen/sample-pool-{dev}.inc.
+# DT2 borrows the stock pool: the adapter takes stock sample slots from 0x3ff down to slot_floor (finding 109). 0x3f0 gives 16 slots, one
+# for each track; the value is a placeholder until one more stock project load test (Em's recommendation 5 of the 1.5 design).
+[adapter.sample_pool]
+slot_floor = 0x3f0
+ddr_base   = 0
+ddr_bytes  = 0

@@ -570,3 +570,46 @@ fn a_content_modules_gallery_needs_its_objects() {
     assert!(path.ends_with("build/gen/gallery.json"));
     assert_eq!(&std::fs::read_to_string(path).unwrap(), text, "{} is stale", path.display());
 }
+
+#[test]
+fn the_sample_pool_facts_are_checked() {
+    let (dt2, dn2) = device_texts();
+    // the committed files: DT2 borrows stock slots, DN2 owns a DDR range of the DSP
+    Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let on_dt2 = |from: &str, to: &str| (dt2.replace(from, to), dn2.clone());
+    let on_dn2 = |from: &str, to: &str| (dt2.clone(), dn2.replace(from, to));
+    for (what, (a, b)) in [
+        (
+            "a slot floor that is a multiple of 0x80 (the loader refuses those slots)",
+            on_dt2("slot_floor = 0x3f0", "slot_floor = 0x380"),
+        ),
+        (
+            "a slot floor above the last stock slot",
+            on_dt2("slot_floor = 0x3f0", "slot_floor = 0x400"),
+        ),
+        (
+            "a range with a base and no size",
+            on_dn2("ddr_bytes  = 0x10000000", "ddr_bytes  = 0"),
+        ),
+        (
+            "a range below the DSP's DDR",
+            on_dn2("ddr_base   = 0x80531000", "ddr_base   = 0x40531000"),
+        ),
+        (
+            "an unaligned range",
+            on_dn2("ddr_base   = 0x80531000", "ddr_base   = 0x80531800"),
+        ),
+        (
+            "a range past 4 GiB",
+            on_dn2("ddr_bytes  = 0x10000000", "ddr_bytes  = 0x90000000"),
+        ),
+        (
+            "a stock floor and an own range together",
+            on_dn2("slot_floor = 0", "slot_floor = 0x3f0"),
+        ),
+    ] {
+        assert!(a != dt2 || b != dn2, "{what}: the test text did not change");
+        let e = Facts::from_texts([a.as_str(), b.as_str()]).unwrap_err().0;
+        assert!(e.contains("sample_pool"), "{what}: {e}");
+    }
+}
