@@ -394,6 +394,7 @@ export async function evidence(
 }
 
 export interface GainFxSessionOptions {
+  initial?: 'dry' | 'wet';
   /** Idle cases may be silent; guard, nonfinite, fault and overlay checks always remain mandatory. */
   requireAudible?: boolean | ((runtime: PatchedSession) => boolean);
 }
@@ -446,7 +447,7 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
         rememberEpoch((await bounded(() => session.status())).epoch);
         dry = await baseline(session, plan, false, artifacts);
         wet = await baseline(session, plan, true, artifacts);
-        return dry;
+        return config.initial === 'wet' ? wet : dry;
       },
       finishCase: (runtime) => collectEvidence(runtime, `case-${++closed}`),
       afterClose: async () => {
