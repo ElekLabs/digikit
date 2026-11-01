@@ -296,7 +296,7 @@ dt2-tier-sweep.
   the direct runtime owner task acquires the shared lock itself. Extra arguments
   in workspace/mixed runs go only to nextest; standalone tests still run in full.
   With `--packages dkrt` alone, extras are Cargo test filters/options instead.
-- `smoke` runs the patchkit smoke matrix (`pk_harness run`, 17 cells, one daemon each).
+- `smoke` runs the patchkit smoke matrix (`pk_harness run`, 16 cells, one daemon each).
 
 Smoke is skipped when every changed path is:
 
