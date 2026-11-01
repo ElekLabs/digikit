@@ -76,6 +76,8 @@ Bounds, all wall time from the runtime's tick clock, not poll counts: armed wait
 
 ### 2.4 Abort and supersede
 
+Built: `dkpool_cancel` and `dkrt_store_stat` / `dkrt_store_read` exist with the final signatures in sample-api-1.5.md section 6 (the runtime calls cancel when no track waits for a load; the DN2 probe works). The text below is the design they follow.
+
 `dkpool_load` has no cancel today and the design says the old transfer finishes and its result is dropped. For 30 s samples that is up to 1 to 3 s of wasted link time. Recommend an additive optional symbol `void dkpool_cancel(uint32_t req)`: marks the load cancelled; the in-flight page finishes (it cannot be recalled), no further page is read or sent, the block is freed, and the adapter calls `dkrt_pool_done(req, DKPOOL_E_LOST)` once (the runtime drops a stale req). Old content in a freed block is harmless: nothing reads an unpublished block.
 
 ### 2.5 Coexistence

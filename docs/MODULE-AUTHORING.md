@@ -515,9 +515,13 @@ A stereo or mono sample per track (API 1.5, [design](design/sample-api-1.5.md)) 
 `DK_SAMPLE_TRACKS(LOCAL_ID, RECORDS, CONTROL)` instead of a bank (a module has one family): 16 `dk_strack` records (512 bytes) and 16
 control sets (256 bytes) in the DSP data (`.PKDATA`, zero, no relocations in them). `pack` writes them as the kind 2 record of the
 DSP section and declares API 1.5; a module without a table declares 1.4. `sample_tracks(local_id)` gives the handle in init;
-`sample_select(handle, track, path)` queues a PCM16 native file (mono or stereo, 48 kHz) from a service or UI callback. A DT2 path is an
-absolute +Drive path like the bank's. The runtime closes the track's old generation before it publishes the new record. A module that
-only calls these entries (a picker) has no table and must check the table `size` before it calls them.
+`sample_select(handle, track, path)` queues a PCM16 native file (mono or stereo, 48 kHz) from a service or UI callback. The path is the
+root-relative path of a `DK_FILES_SAMPLES` listing row (`KICKS/K1`); the runtime adds the device root (DT2 `/`, DN2 `samples/`), and a DT2 path
+that already starts with `/` stays as it is. `sample_track_path(handle, track, buf, cap)` (API 1.6) gives the current selection back in the same
+form, in every state but UNUSED. The runtime closes the track's old generation before it publishes the new record. A module that
+only calls these entries (a picker) has no table and must check the table `size` before it calls them. `pack` declares the lowest Api minor
+that has what a module needs; a module that calls a newer entry without checking `size` lists it in `[module] uses_api = ["sample_track_path"]`
+and is then refused by a runtime that lacks it.
 
 For reusable browsing, include `<dk/files.h>` and acquire a positive `files_client()` handle during init.
 `files_list` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
@@ -547,7 +551,7 @@ Names a module may import (from `[[import]]` in `sdk/sdk.toml`):
 | `fw_block_read`, `fw_alloc`, `fw_free` | The firmware's eMMC block read and allocator. |
 | `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` | Runtime helpers. |
 | `input_key`, `input_turn` | Press a key or turn an encoder. They need `core/input`. Without it the import is not found. |
-| `dk_ui_*` | The calls of `<dk/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads and each call returns its failure value (`dk_ui_menu_new` 0, the int calls -1, `dk_ui_has`, `dk_ui_is_open` and `dk_ui_checked` 0, the void calls nothing). |
+| `dk_ui_*` | The calls of `<dk/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads and each call returns its failure value (`dk_ui_menu_new` 0, the int calls -1, `dk_ui_has`, `dk_ui_is_open` and `dk_ui_checked` 0, the void calls nothing). `dk_ui_tick(fn, ctx, period_ms)` is a timer in the UI task (`DK_UI_CAP_TICK`): redraw a screen while a load runs; 0 stops it. |
 | `dkrt_blocks` | The 1500 Hz block clock. |
 | `dl_set_tick_cb` | Sets one per-block callback in the block interrupt (`core/dsp-link`; a stub without it): `void cb(const volatile u16 *rec)` gets the previous DSP reply record. Short C only; clear it in `dkm_fini`. |
 

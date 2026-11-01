@@ -1,4 +1,4 @@
-# Stereo sample binding, API 1.5
+# Stereo sample binding, API 1.5 (and the 1.6 additions, section 6)
 
 Status: accepted by Em on 2026-11-01, with the recommendations in section 5 (device code in core/adapters/sample-pool, not core/runtime). No code. Sources: sdk/include/dk/sample.h (1.3 bank), files.h (1.4), gen/machine.h (contract 1.1, `track`), sdk/dsp/sample_bank.inc, sample_pcm16*.inc, docs/design/sample-binding.md, findings 84, 87, 94, 105, 81 (and 96, 99 for the stereo kernels).
 
@@ -163,3 +163,69 @@ Resolved by the split and the emulator results (dropped): where the DT2 slot map
 12. New: who raises "backing lost" on DT2, a tick in the adapter or the runtime polling `dkpool_check`? Recommend both: the adapter tick for latency (reset is about 1.5 s late), runtime check before each publish as the safety net.
 13. New: DN2 reserved range size. Recommend 256 MiB in the profile now, raise after the extended canary soak; the soak result goes in `docs/findings/`.
 14. New: project-name accessor (2.4). Recommend static search for the stock name getter first; fall back to hashing the project's first serialized block only if none exists.
+
+## 6. API 1.6: additions for the picker and the DN2 pool (built)
+
+Api minor 5 -> 6 (`api = [1, 6]`). One Api entry, one UI call and three runtime exports. Everything is additive: a 1.5 module runs on a 1.6 runtime unchanged.
+
+### 6.1 Api entry `sample_track_path` (G2, `since = 6`)
+
+```c
+int32_t sample_track_path(uint32_t handle, uint32_t track, uint8_t *buf, uint32_t cap);
+```
+
+Copies the NUL-terminated, root-relative path of the track's current selection into `buf` and returns its length without the NUL. It works in every state except UNUSED (`E_NOT_FOUND`), so a track with a sticky error still names its file, and after a project change it names the file the runtime re-selected. `length + 1 > cap` gives `E_SEL_PATH` (-40, `DK_SAMPLE_E_SEL_PATH`) and leaves `buf` alone. `track >= 16` gives `E_CONTRACT`. The form is the one a `DK_FILES_SAMPLES` listing row has, so `sample_select(path)` accepts it back.
+
+### 6.2 Path form of `sample_select` (G5)
+
+`sample_select` takes the root-relative path of a listing row. The runtime keeps and checks the device-rooted form and adds the root (`core/runtime` `tracks.rs`, pure functions `rooted` and `unrooted` in `dkrt_sdk::sample_tracks`):
+
+| Device | Root | Given `KICKS/K1` | Also accepted |
+| --- | --- | --- | --- |
+| DT2 | `/` (+Drive) | `/KICKS/K1` | a path that starts with `/` (the 1.5 form) is kept as it is |
+| DN2 | `samples/` (digikit store) | `samples/KICKS/K1` | nothing: always root-relative, so a folder called `samples` works |
+
+The rooted path must stay under 256 bytes (`E_SEL_PATH` otherwise). The stored selections keep the rooted form; `sample_track_path` cuts the root off again. The spark-dt2 test and the `test/track-select` fixture pass absolute DT2 paths and keep working.
+
+### 6.3 `dk_ui_tick` (G4, `<dk/ui.h>`, `DK_UI_CAP_TICK`)
+
+```c
+typedef void dk_ui_tick_fn(void *ctx);
+int dk_ui_tick(dk_ui_tick_fn *fn, void *ctx, uint32_t period_ms);   /* 0, or -1 */
+```
+
+A timer in the UI task: `fn(ctx)` runs about every `period_ms`, in the task of the fill and action callbacks (it may call `dk_ui_refresh`). A timer is the pair (fn, ctx); the same pair again changes the period (next call one period away); `period_ms` 0 stops it, also from inside `fn`, and is not an error when nothing runs. Room for 4 timers in the image, shared by all modules; -1 when full, `fn` is 0, or `core/ui` is absent (the import's `absent` value), so a module checks `dk_ui_has(DK_UI_CAP_TICK)` or the result. `ctx` and `fn` stay in use: static module data only.
+
+Implementation: `core/ui` keeps the table (`src/tick.h`, host-tested) and one function on the runtime's per-pass list. The runtime has one poll slot, `dkrt_poll_set`, which the DIGIKIT HEALTH page owns and clears, so `core/ui` cannot share it. The runtime therefore gets a second, small list: `dkrt_poll_add(f)` (room for 4, `E_NOMEM` when full) and `dkrt_poll_remove(f)`. `dkrt_poll_set` is unchanged. The function is on the list only while a timer runs. Time comes from `dkrt_blocks()` (1500 per second); without a block clock the UI-loop passes (about 120 per second) are the clock. Accuracy is the UI-loop pass (about 8 ms) at best.
+
+### 6.4 Plug-in point: optional `dkpool_cancel` (`dkrt_pool.h`)
+
+```c
+void dkpool_cancel(uint32_t req);   /* optional symbol; DKPOOL_VERSION stays 1 */
+```
+
+The runtime calls it, once per request, when no track waits for a load that is still Loading: a `select` superseded it, or the last track of the entry was unbound. A load that another track still shares is not cancelled, and a cancelled entry is never shared with a new select (the same file starts a new load). The adapter may stop early, but it still ends the request once with `dkrt_pool_done(req, result)` from `dkpool_tick` (`DKPOOL_E_LOST` when it stopped early); the runtime then frees the entry, and releases the handle if the load finished OK. Without the symbol nothing changes: the load runs to its end and its result is released.
+
+Versioning: `DKPOOL_VERSION` counts breaking changes of the required symbols (`dkpool_version`, `_load`, `_release`, `_check`, `_free_frames`). An optional symbol (`dkpool_tick`, `dkpool_cancel`) is added without a version change; the runtime tests its address for 0, and the runtime's `module.toml` lists it in `optional`.
+
+DT2 object: the stock worker queue cannot be edited. `dkpool_cancel` flags the request; the worker job checks the flag when it starts and does nothing (the slot stays free). A job that already runs finishes; `dkpool_tick` then releases its slot (`sp_finish` in `pool_core.h`) and reports `DKPOOL_E_LOST`.
+
+### 6.5 Runtime exports for adapters: `dkrt_store_stat`, `dkrt_store_read`
+
+```c
+typedef struct DkrtStoreFile { uint32_t first; uint32_t size; uint8_t sha[32]; } DkrtStoreFile;
+int32_t dkrt_store_stat(const uint8_t *path, DkrtStoreFile *out);
+int32_t dkrt_store_read(const DkrtStoreFile *f, uint32_t sector, uint32_t count, uint8_t *dst);
+```
+
+`stat` looks a digikit store file up by path (NUL-terminated, store form `samples/...`): `first` is the first sector relative to the store, `size` in bytes, `sha` the table entry's sha256. A file's sectors are contiguous: file sector n is store sector `first + n`. It scans the table through the runtime's staging buffer, so call it at the start of a load only. `E_NOT_FOUND` for no store, no such file or a folder.
+
+`read` reads `count` sectors (1 to 128) from file sector `sector` into `dst`: no staging buffer, no sha check. `dst` must be 16-byte aligned (`E_CONTRACT`); the range must lie inside the file rounded up to whole sectors (`E_RANGE`); a card error gives `E_READ`. Mono page k of the DN2 transport (file bytes `64 + 4096k` to `64 + 4096(k+1)`) is file sectors `8k .. 8k+8`, 9 sectors, as the pool design says. Both run in the UI-loop task. The range arithmetic is `dkrt_sdk::store::file_span` (host-tested). DT2 has no use for them (the stock loader reads +Drive).
+
+### 6.6 DN2 probe
+
+`tracks.rs` `inspect` and `stat` work on DN2: the file is `samples/...` in the digikit store; identity is its size and the sha256 of its table entry (`hash_kind = DK_FILE_HASH_SHA256`, the same values a DN2 listing row has, so the pool dedups by it); the header is the first 64 bytes, parsed by `sample::native_header` as on DT2 (`store_inspect`). `sample_select` on DN2 now reaches the pool plug-in; it still returns `E_CONTRACT` while no DN2 pool adapter is in the image.
+
+### 6.7 Api minor of a `.dkm`
+
+`pack` declares the lowest Api minor that has what the module needs: 1.4; 1.5 when the DSP section holds a track table (as before); the newest `since` of the entries the manifest lists in `[module] uses_api = ["sample_track_path"]` when that is higher; never above the SDK's. A module declares 1.6 only when it lists a 1.6 entry. The packer cannot see a call through `api->...`, so a module that calls `sample_track_path` without a check lists it; a module that checks `api->size` first (the SPARK picker route) lists nothing and stays loadable on a 1.5 runtime. `dk_ui_tick` is an import of `core/ui`, not an Api entry: it needs no `uses_api` and no minor.
