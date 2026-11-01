@@ -447,6 +447,63 @@ _gs_held_late_bad:
     GS_REFUSE(_gs_cnt + 4);
     JUMP _gs_held_stock;
 
+// ---- dispatch cases 1, 2 and 3 (0xb82342 call 0x1c98af, 0xb81a16 call 0x1c9bb6, 0xb80f2e call 0x1c9bd1): in place on the voice buffer ----
+// Only the words the stage reads are copied from the L record before the L call (the audited read sets of docs/findings/96); the audio histories are private to
+// R. The call itself advances the shared control words of case 3 (current coefficients {17, 18, 19} + 7k and the prior values 46 and 53), so R starts from the
+// state L saw.
+// case 1: L record 51 words at engine + 0xf308 + 0xcc v; reads 3, 4 (histories), 5, 6, 7, 12, 14, 26, 28, 33, 35, 40, 42; writes 3, 4 and the snapshots 48 to 50.
+.GLOBAL _gs_case1;
+_gs_case1:
+    GS_TWIN_HEAD(_gs_case1_stock, _gs_case1_bad, 51, _gs_c1_rec);
+    GS_COPY(5); GS_COPY(6); GS_COPY(7); GS_COPY(12); GS_COPY(14); GS_COPY(26);
+    GS_COPY(28); GS_COPY(33); GS_COPY(35); GS_COPY(40); GS_COPY(42);
+    GS_L1(_gs_case1_stock, _gs_case1_l);
+    GS_R1(_gs_case1_stock, _gs_case1_r);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_case1_bad:
+    GS_REFUSE(_gs_cnt + 16);
+    JUMP _gs_case1_stock;
+
+// case 2: L record 75 words at engine + 0xffc8 + 0x12c v; reads 10, 11 (histories) and 12 + 7k, 14 + 7k for k = 0 to 8 (coefficient and step).
+.GLOBAL _gs_case2;
+_gs_case2:
+    GS_TWIN_HEAD(_gs_case2_stock, _gs_case2_bad, 75, _gs_c2_rec);
+    MODIFY(I4, 48);
+    MODIFY(I0, 48);
+    R1 = 9;
+_gs_case2_cap:
+    R0 = DM(0, I4);
+    DM(0, I0) = R0;
+    R0 = DM(2, I4);
+    DM(2, I0) = R0;
+    MODIFY(I4, 28);
+    MODIFY(I0, 28);
+    R1 = R1 - 1;
+    IF NE JUMP _gs_case2_cap;
+    GS_L1(_gs_case2_stock, _gs_case2_l);
+    GS_R1(_gs_case2_stock, _gs_case2_r);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_case2_bad:
+    GS_REFUSE(_gs_cnt + 20);
+    JUMP _gs_case2_stock;
+
+// case 3: L record 59 words at engine + 0x11288 + 0xec v; reads 5, 9, 10, 11, 12 (histories), 0, 1, 2, 3, 4, 14 (controls) and 18, 25, 32, 39, 46, 53 (current
+// coefficients and the prior values); the call writes {17, 18, 19} + 7k for k = 0 to 5.
+.GLOBAL _gs_case3;
+_gs_case3:
+    GS_TWIN_HEAD(_gs_case3_stock, _gs_case3_bad, 59, _gs_c3_rec);
+    GS_COPY(0); GS_COPY(1); GS_COPY(2); GS_COPY(3); GS_COPY(4); GS_COPY(14);
+    GS_COPY(18); GS_COPY(25); GS_COPY(32); GS_COPY(39); GS_COPY(46); GS_COPY(53);
+    GS_L1(_gs_case3_stock, _gs_case3_l);
+    GS_R1(_gs_case3_stock, _gs_case3_r);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_case3_bad:
+    GS_REFUSE(_gs_cnt + 24);
+    JUMP _gs_case3_stock;
+
 // ---- the common return of a stereo twin: pops the twin's frame and returns to the caller of the retargeted call ----
 _gs_leave:
     I12 = DM(-1, I6);
@@ -548,9 +605,6 @@ NAME: \
     DM(_gs_nbad) = R1; \
     JUMP STOCK
 
-GS_BAD(_gs_bad_case1, _gs_case1_stock, _gs_cnt + 16);
-GS_BAD(_gs_bad_case2, _gs_case2_stock, _gs_cnt + 20);
-GS_BAD(_gs_bad_case3, _gs_case3_stock, _gs_cnt + 24);
 GS_BAD(_gs_bad_ring4, _gs_ring_stock, _gs_cnt + 28);
 GS_BAD(_gs_bad_ring6, _gs_ring_stock, _gs_cnt + 32);
 
@@ -813,6 +867,27 @@ _gs_z4: DM(I3, M6) = R0;
     I3 = R1;
     LCNTR = 5, DO _gs_z5 UNTIL LCE;
 _gs_z5: DM(I3, M6) = R0;
+    R1 = 204;
+    R1 = R1 * R4 (SSI);
+    R2 = _gs_c1_rec;
+    R1 = R1 + R2;
+    I3 = R1;
+    LCNTR = 51, DO _gs_z6 UNTIL LCE;
+_gs_z6: DM(I3, M6) = R0;
+    R1 = 300;
+    R1 = R1 * R4 (SSI);
+    R2 = _gs_c2_rec;
+    R1 = R1 + R2;
+    I3 = R1;
+    LCNTR = 75, DO _gs_z7 UNTIL LCE;
+_gs_z7: DM(I3, M6) = R0;
+    R1 = 236;
+    R1 = R1 * R4 (SSI);
+    R2 = _gs_c3_rec;
+    R1 = R1 + R2;
+    I3 = R1;
+    LCNTR = 59, DO _gs_z8 UNTIL LCE;
+_gs_z8: DM(I3, M6) = R0;
 _gs_stamped:
     R0 = DM(_dv_diag);
     DM(0, I2) = R0;
@@ -846,6 +921,9 @@ _gs_raise:
 .PKDATA _gs_c5_scr, 2048;
 .PKDATA _gs_sh_rec, 1536;                  // R records of the shaper (24 words) and the held-sample stage (5 words), per slot
 .PKDATA _gs_hd_rec, 320;
+.PKDATA _gs_c1_rec, 3264;                  // R records of dispatch case 1 (51 words), 2 (75) and 3 (59), per slot
+.PKDATA _gs_c2_rec, 4800;
+.PKDATA _gs_c3_rec, 3776;
 .PKDATA _gs_ns, 4;                         // stereo slots stamped in the block _gs_nhb
 .PKDATA _gs_nhb, 4;
 .PKDATA _gs_nbad, 4;                       // stamped slots a stage without a twin has cleared (diagnostic)

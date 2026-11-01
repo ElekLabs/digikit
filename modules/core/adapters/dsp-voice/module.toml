@@ -314,7 +314,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.filter_case1.call"
-to = "_gs_bad_case1"
+to = "_gs_case1"
 devices = ["dn2"]
 
 [[claim]]
@@ -324,7 +324,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.filter_case2.call"
-to = "_gs_bad_case2"
+to = "_gs_case2"
 devices = ["dn2"]
 
 [[claim]]
@@ -334,7 +334,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.filter_case3.call"
-to = "_gs_bad_case3"
+to = "_gs_case3"
 devices = ["dn2"]
 
 [[claim]]

@@ -195,6 +195,66 @@ STAGES["held-late"] = dataclasses.replace(
     STAGES["held"], name="held-late", entry="_gs_held_late"
 )
 
+# dispatch cases 1, 2 and 3: the controls and values of the replay fixtures (test_dsp_stereo_shadow_replay.py: small finite coefficients, a nonzero step each block)
+C1_CONTROLS = (5, 6, 7, 12, 14, 26, 28, 33, 35, 40, 42)
+C1_BASE = (0.2, 0.3, 0.1, 0.4, 0.0002, 0.2, 0.0001, 0.1, 0.0001, 0.1, 0.0001)
+STAGES["case1"] = Stage(
+    "case1",
+    "_gs_case1",
+    "_gs_case1_stock",
+    ENGINE + 0xF308,
+    204,
+    51,
+    C1_CONTROLS,
+    (3, 4, 48, 49, 50),
+    dict(zip(C1_CONTROLS, C1_BASE, strict=True)) | {3: 0.01, 4: -0.02},
+    extra={
+        "rrec": "_gs_c1_rec",
+        "values": {i: (v, v / 16) for i, v in zip(C1_CONTROLS, C1_BASE, strict=True)},
+    },
+)
+C2_CONTROLS = tuple(12 + 7 * k + d for k in range(9) for d in (0, 2))
+C2_BASE = tuple(
+    v for v0 in (0.1, 0.2, 0.1, 0.1, 0.05, 0.05, 0.1, 0.1, 0.1) for v in (v0, 0.0001)
+)
+STAGES["case2"] = Stage(
+    "case2",
+    "_gs_case2",
+    "_gs_case2_stock",
+    ENGINE + 0xFFC8,
+    300,
+    75,
+    C2_CONTROLS,
+    (10, 11),
+    dict(zip(C2_CONTROLS, C2_BASE, strict=True)) | {10: 0.01, 11: -0.02},
+    extra={
+        "rrec": "_gs_c2_rec",
+        "values": {i: (v, v / 16) for i, v in zip(C2_CONTROLS, C2_BASE, strict=True)},
+    },
+)
+C3_CONTROLS = {0: 0.12, 1: 0.32, 2: 0.1, 3: 0.12, 4: 0.65, 14: 0.22}
+C3_WRITES = tuple(17 + 7 * k + d for k in range(6) for d in (0, 1, 2))
+C3_CURRENT = (0.32, 0.12, 0.1 / 4, 0.12, 0.65, -0.22 / 8)
+STAGES["case3"] = Stage(
+    "case3",
+    "_gs_case3",
+    "_gs_case3_stock",
+    ENGINE + 0x11288,
+    236,
+    59,
+    tuple(C3_CONTROLS),
+    (5, 9, 10, 11, 12),
+    C3_CONTROLS
+    | {17 + 7 * k + d: v for k, v in enumerate(C3_CURRENT) for d in (0, 1)}
+    | {5: 0.004, 9: 0.003, 10: -0.002, 11: 0.001, 12: -0.003},
+    checked=(*C3_CONTROLS, 5, 9, 10, 11, 12, *C3_WRITES),
+    blocks=3,
+    extra={
+        "rrec": "_gs_c3_rec",
+        "values": {i: (v, v / 16) for i, v in C3_CONTROLS.items()},
+    },
+)
+
 
 def init_record(session, address, size, initial, words_=None):
     poke_words(session, address, list(words_) if words_ else [0] * size)

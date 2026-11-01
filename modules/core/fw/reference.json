@@ -13115,7 +13115,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 dispatch case 1 stage 0xb82342 (record 0x2505a0 + 0xcc v); no R twin in phase 1.",
+      "doc": "DN2 1.12 dispatch case 1 stage 0xb82342 (record 0x2505a0 + 0xcc v); R twin in core/dsp-voice.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "fn",
       "mark": "D",
@@ -13147,7 +13147,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 dispatch case 2 stage 0xb81a16 (record 0x251260 + 0x12c v); no R twin in phase 1.",
+      "doc": "DN2 1.12 dispatch case 2 stage 0xb81a16 (record 0x251260 + 0x12c v); R twin in core/dsp-voice.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "fn",
       "mark": "D",
@@ -13179,7 +13179,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 dispatch case 3 stage 0xb80f2e (record 0x252520 + 0xec v); no R twin in phase 1.",
+      "doc": "DN2 1.12 dispatch case 3 stage 0xb80f2e (record 0x252520 + 0xec v); R twin in core/dsp-voice.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "fn",
       "mark": "D",
@@ -13562,7 +13562,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of dispatch case 1: the audio histories are private to R, the words the stage reads are copied before the L call; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -13571,6 +13571,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -13580,8 +13583,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.filter_case1.call",
@@ -13604,7 +13608,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of dispatch case 2: the audio histories are private to R, the words the stage reads are copied before the L call; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -13613,6 +13617,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -13622,8 +13629,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.filter_case2.call",
@@ -13646,7 +13654,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of dispatch case 3: the audio histories are private to R, the words the stage reads are copied before the L call; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -13655,6 +13663,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -13664,8 +13675,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.filter_case3.call",
