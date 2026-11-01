@@ -92,10 +92,16 @@ Saves about 15 KB of runtime memory (measured: 784,279 to 768,438 bytes of text,
       `dk/fault`; `setDebug`, `logcfg_debug` and LOGCFG op 2 are removed.
 - [x] Workbench: `digikit/debug` joins `digikit/remote` in `default_modules` of both device files; the Firmware pane and the emulator install it,
       the drop-down lists it, ticked by default.
-- [ ] Proof in the emulator on DT2 and DN2 (boot events, logging, levels, crash record with and without the module, `dklog`, the Log drawer),
+- [x] Proof in the emulator on DT2 and DN2 (boot events, logging, levels, crash record with and without the module, `dklog`, the Log drawer),
       the routed gate, then one DT2 flash and a check on the device.
-      Emulator part done on DT2 and DN2 (2026-11-01): `runtime/debug-module.test.ts` (with and without the module) and `runtime/fault-trace.test.ts` (the crash
-      tail comes from the small ring) pass; the routed gate and the device check are open.
+      Emulator (2026-11-01): `runtime/debug-module.test.ts` (with and without the module) and `runtime/fault-trace.test.ts` (the crash tail comes
+      from the small ring) pass on DT2 and DN2. Gate: `verify --only build,desktop,host,web,runtime-fixture,module-load,python-tests,rust-tests,card,smoke`
+      (the SHARC-only steps left out: no SHARC core or DSP adapter change), then the failed steps rerun after fixes ("Gate fixes: menu frame
+      without the DEBUG row, store order in transfer-live, unused import, winmidi source wording"). Device (DT2 1.17, image `4a0465b00d65c475`):
+      the flash installed `digikit/debug` next to the kept selection; boot events, a level change and PEEK work; without the module the device
+      boots, INFO drops the LOG, PEEK and LOGCFG capabilities (caps 4095 to 4088), LOG answers E_PROTO and remote still works.
+- [ ] Load `digikit/debug` before the other modules, so the info events modules log at their start reach the log (on the device the remote's
+      start message was dropped because remote loaded first). The runtime size went from 784,279 to 768,438 bytes (15.8 KB saved).
 - Decided not now: dsp-link page mode (nothing needs more than 1500 words a second yet; it changes the DSP side of dsp-link); run-time
   ColdFire hooks ([capabilities](capabilities.md) step 2); the probe collector stays its own module `digikit/probe`.
 
