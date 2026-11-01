@@ -4,7 +4,7 @@ import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import type { PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
 import { liveArtifacts, liveCheck as check, liveProtocol, runtimeTests, sampleWav, settleLive } from './live.ts';
-import { repoRoot } from '@digi/test-support';
+import { deviceProfile } from './device-data.ts';
 import { hexSha256 } from '@digi/dk-session';
 import { openSamples } from '@digi/dk-session/samples';
 
@@ -13,15 +13,9 @@ async function expectSamplesStore({ session }: PatchedSession): Promise<void> {
   const out = liveArtifacts(session, 'samples-store-live');
   const wav = sampleWav(2);
   const storage = 'digikit';
-  const profile = readFileSync(join(repoRoot(), 'devices/digitone-ii.toml'), 'utf8');
-  const section = (name: string) => profile.split(`[${name}]`)[1]?.split('\n[')[0] ?? '';
-  check('the device profile selects the digikit samples backend', /^samples\s*=\s*"digikit"/m.test(section('storage')));
-  const sector = (key: string) => {
-    const value = new RegExp(`^${key}\\s*=\\s*(0x[0-9a-f]+|[0-9]+)`, 'm').exec(section('card.store'))?.[1];
-    if (!value) throw new Error(`missing DN2 card.store ${key}`);
-    return Number(value);
-  };
-  const totalKib = Math.floor((sector('header_b_sector') - sector('first_sector')) / 2);
+  const profile = deviceProfile('dn2');
+  check('the device profile selects the digikit samples backend', profile.storage?.samples === 'digikit');
+  const totalKib = Math.floor((profile.card.store.header_b_sector - profile.card.store.first_sector) / 2);
   const sample = await Sample.create(
     Uint8Array.from(readFileSync(new URL('../../../apps/web/public/dksample.wasm', import.meta.url))),
   );

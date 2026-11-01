@@ -365,7 +365,6 @@ def acceptance_python(step: str) -> set[str]:
             {
                 "tools.device.dktransfer",
                 "tools.control.digi_client",
-                "tools.emulator.card_overlay",
                 "tools.patchkit.pk_dkrt_machine",
                 "tools.patchkit.pk_digikit_fx",
                 "tools.patchkit.pk_digikit_fxsend",
@@ -373,8 +372,6 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.patchkit.pk_digikit_fxroutes",
                 "tools.patchkit.pk_digikit_fxroute",
                 "tools.patchkit.hook_ab",
-                "tools.patchkit.pk_dsplink",  # named anchor reader imported inside the SEND oracle
-                "tools.coldfire.arena_safety",
                 "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
             }
         )

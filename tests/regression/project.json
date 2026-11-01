@@ -41,7 +41,6 @@
           "test/dyn-fx-gain-4": "test/dyn-fx-gain"
         },
         "sources": [
-          "tools/coldfire/arena_safety.py",
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fx.py",
           "tools/patchkit/pk_digikit_fxroute.py",
@@ -54,7 +53,6 @@
         "files": ["runtime/fx-kit-persist.test.ts"],
         "modules": ["test/dyn-fx-gain", "test/dyn-fx-gain-b", "test/sine"],
         "sources": [
-          "tools/coldfire/arena_safety.py",
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxpage.py",
           "tools/patchkit/pk_digikit_fxroute.py",
@@ -67,7 +65,6 @@
         "files": ["runtime/fx-pages.test.ts"],
         "modules": ["test/dyn-fx-gain", "test/sine"],
         "sources": [
-          "tools/coldfire/arena_safety.py",
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxpage.py",
           "tools/patchkit/pk_digikit_fxroute.py",
@@ -79,7 +76,7 @@
       {
         "files": ["runtime/fx-reuse.test.ts"],
         "modules": ["test/dyn-fx-gain", "test/sine"],
-        "sources": ["tools/coldfire/arena_safety.py", "tools/patchkit/hook_ab.py", "tools/patchkit/pk_dkrt_machine.py"],
+        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_dkrt_machine.py"],
         "plusdrive": true
       },
       {
@@ -89,7 +86,6 @@
           "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
         },
         "sources": [
-          "tools/coldfire/arena_safety.py",
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py",
@@ -101,7 +97,6 @@
         "files": ["runtime/fx-send-dn2.test.ts", "runtime/fx-send.test.ts"],
         "modules": ["test/dyn-fx-gain", "test/sine"],
         "sources": [
-          "tools/coldfire/arena_safety.py",
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxsend.py",
           "tools/patchkit/pk_dkrt_machine.py"
@@ -116,7 +111,6 @@
           "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
         },
         "sources": [
-          "tools/coldfire/arena_safety.py",
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py",

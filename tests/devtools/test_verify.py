@@ -2484,9 +2484,7 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
     assert ("prerequisite plusdrive CLI build" in capsys.readouterr().out) is required
 
 
-@pytest.mark.parametrize(
-    "path", ["tools/patchkit/pk_dkrt_machine.py", "tools/coldfire/arena_safety.py"]
-)
+@pytest.mark.parametrize("path", ["tools/patchkit/pk_dkrt_machine.py"])
 def test_fx_cli_helpers_select_only_runtime_fx_owners(path: str) -> None:
     assert verify_route.acceptance_files("runtime-fixture", [path]) == sorted(
         [
@@ -2524,15 +2522,6 @@ def test_send_cli_selects_only_runtime_send_owners() -> None:
             "runtime/fx-track-route.test.ts",
         ]
     )
-    assert "runtime-fixture" in verify.steps_for([path])
-
-
-def test_send_function_local_anchor_dependency_keeps_runtime_coverage() -> None:
-    path = "tools/patchkit/pk_dsplink.py"
-    assert path in verify_route.acceptance_python("runtime-fixture")
-    selected = verify_route.acceptance_files("runtime-fixture", [path])
-    assert "runtime/fx-send.test.ts" in selected
-    assert "runtime/fx-send-dn2.test.ts" in selected
     assert "runtime-fixture" in verify.steps_for([path])
 
 

@@ -607,3 +607,15 @@ TypeScript equivalent are called directly; small test-only oracles move to TypeS
 results come as data. Python modules used elsewhere stay and are cleaned up later. This deletes
 `sources`, `acceptance_python` and their routing tests.
 
+Stage 1b plumbing (2026-11-02): the device tests no longer run Python for the DN2 slot-bus anchor,
+the write-watch environment, the runtime safety check, overlay store writes and overlay apply.
+`tests/regression/runtime/device-data.ts` is the one reader of `devices/*.toml` and
+`devices/ports/*.toml`; `runtime/write-safety.ts` holds the safety code with host tests. Outputs
+equal the Python outputs on eight saved proof directories (and all written sectors for overlay
+apply). Python code used only by those calls is deleted; code with other users stays.
+`KIT_AREAS` stays in both languages for now: the Rust device-profile loader rejects new card keys,
+and the Python copy goes when the legacy scenarios and the `profile` subcommand stop using it.
+Deferred: calls that need the Rust `patchkit` binary (runtime-plan patch, chain-check,
+fx-expectations) need a fresh-binary handoff first; audio analysis moves to the audio-QA crate
+([plan](audio-qa.md)).
+

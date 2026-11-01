@@ -16,7 +16,9 @@ import {
 import { expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession } from '../support.ts';
 import { FIRMWARE, expectRuntimeUi, moduleArtifact, record } from './live.ts';
+import { deviceProfile } from './device-data.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
+import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -36,10 +38,7 @@ export function options(device: Device) {
 }
 
 export function slotsFor(device: Device): number {
-  const file = path.join(root, 'devices', device === 'dt2' ? 'digitakt-ii.toml' : 'digitone-ii.toml');
-  const slots = /^fx_slots\s*=\s*(\d+)/m.exec(fs.readFileSync(file, 'utf8'))?.[1];
-  if (!slots) throw new Error(`missing fx_slots in ${file}`);
-  return Number(slots);
+  return deviceProfile(device).limits.fx_slots;
 }
 
 /** Native plusdrive owns all card/store/selection encoding. Each image has its own overlay-free directory. */
@@ -433,12 +432,9 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
         ]);
         plan = prepared.plan;
         watchOutput = path.join(artifacts, 'writewatch.jsonl');
-        return analysisJson<Record<string, string>>(
-          'tools.patchkit.pk_dkrt_machine',
-          ['watch-env', prepared.planFile, watchOutput],
-          artifacts,
-          'watch-environment',
-        );
+        const env = runtimeWatchEnv(prepared.planFile, watchOutput);
+        record(artifacts, 'watch-environment', env);
+        return env;
       },
     },
     {
@@ -450,21 +446,8 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
       },
       finishCase: (runtime) => collectEvidence(runtime, `case-${++closed}`),
       afterClose: async () => {
-        const report = await analysisJson<{ pass: boolean }>(
-          'tools.coldfire.arena_safety',
-          [
-            'runtime-check',
-            '--device',
-            device,
-            '--watch-output',
-            watchOutput,
-            '--min-emulators',
-            String(epochs.size),
-            ...overlays.flatMap((file) => ['--overlay', file]),
-          ],
-          artifacts,
-          'lifetime-safety',
-        );
+        const report = runtimeSafety(device, watchOutput, overlays, epochs.size);
+        record(artifacts, 'lifetime-safety', report);
         expect(report.pass, 'every emulator and exported overlay meets legacy safety policy').toBe(true);
       },
     },

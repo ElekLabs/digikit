@@ -565,19 +565,11 @@ def main(argv: list[str] | None = None) -> int:
         description="Runtime proof's existing offline oracles"
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    watch = sub.add_parser("watch-env")
-    watch.add_argument("plan", type=Path)
-    watch.add_argument("out", type=Path)
     effect = sub.add_parser("fx-expectations")
     effect.add_argument("dkm", type=Path)
     effect.add_argument("base", type=lambda value: int(value, 0))
     args = parser.parse_args(argv)
-    result = (
-        runtime_watch_env(args.plan, args.out, sequential=True)
-        if args.command == "watch-env"
-        else fx_expectations(args.dkm.read_bytes(), args.base)
-    )
-    print(json.dumps(result))
+    print(json.dumps(fx_expectations(args.dkm.read_bytes(), args.base)))
     return 0
 
 
