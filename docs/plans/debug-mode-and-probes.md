@@ -119,7 +119,11 @@ Saves about 15 KB of runtime memory (measured: 784,279 to 768,438 bytes of text,
 - Interrupt order traces for storage (a probe image).
 - Sampler cache and reader-lifetime experiments; page mode if they need more than 1500 words a second.
 - A cycle-cost model for the emulator's DSP meter from the measured cycle table (finding 103).
-- Digitone II bring-up on hardware: flash, beacon, `dk:probe` captures.
+- [x] Digitone II bring-up on hardware (2026-11-01, OS 1.12): the patched image boots with `digikit/remote` and `digikit/debug`, both DSP
+  heartbeats run, the RECIPS and RSQRTS table and the dsp-facts capture equal the Digitakt II ([finding 102](../findings/102-recips-rsqrts-seed-tables.md),
+  [finding 103](../findings/103-dsp-facts-on-a-digitakt-ii.md) section 10).
+- The DN2 DSP_DIAG breadcrumb reads `NONE` where the DT2 shows `HOOK_ENTERED voice=0` with no module voice type registered; the heartbeat shows
+  voice 0 runs. Check where the DN2 voice code writes its breadcrumb.
 
 ## Docs to correct
 
