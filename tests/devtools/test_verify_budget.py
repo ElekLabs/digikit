@@ -108,7 +108,7 @@ def test_no_build_node_without_a_step_that_needs_it() -> None:
     nodes, deps = verify.plan(("rust-tests", "web"), None)
     assert sorted(nodes) == ["host", "rust-tests", "web"]
     assert deps["rust-tests"] == ()
-    nodes, _ = verify.plan(("python-tests",), ["tests/devtools/test_verify.py"])
+    nodes, _ = verify.plan(("python-tests",), ["tests/devtools/test_layercheck.py"])
     assert "build-daemons" not in nodes
     for tests in (
         ["tests/digikit"],
@@ -381,19 +381,19 @@ def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
         [
             "tests/digikit/test_menu_dt2.py",
             "tests/emulator/test_native_pgo.py",
-            "tests/devtools/test_verify.py",
+            "tests/devtools/test_layercheck.py",
         ],
     )
     secs = {
         "tests/digikit/test_menu_dt2.py": 372.0,
         "tests/emulator/test_native_pgo.py": 2.0,
-        "tests/devtools/test_verify.py": 1.0,
+        "tests/devtools/test_layercheck.py": 1.0,
     }
     nodes, deps = verify.expand_python(nodes, deps, list(secs), secs, {})
     daemon, plain, fast = (
         FILE + "tests/digikit/test_menu_dt2.py",
         FILE + "tests/emulator/test_native_pgo.py",
-        FILE + "tests/devtools/test_verify.py",
+        FILE + "tests/devtools/test_layercheck.py",
     )
     assert deps[daemon] == ("build-daemons",)  # not the DT2 build behind it
     assert deps[plain] == ("build", "build-daemons", "build-dt2")
@@ -402,9 +402,9 @@ def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
     # the long file starts before the steps, the short one after them, the judge is last
     assert nodes.index(daemon) < nodes.index("tier-quick") < nodes.index(plain)
     assert nodes[-1] == "python-tests"
-    nodes, deps = verify.plan(("python-tests",), ["tests/devtools/test_verify.py"])
+    nodes, deps = verify.plan(("python-tests",), ["tests/devtools/test_layercheck.py"])
     nodes, deps = verify.expand_python(
-        nodes, deps, ["tests/devtools/test_verify.py"], {}, {}
+        nodes, deps, ["tests/devtools/test_layercheck.py"], {}, {}
     )
     assert deps[fast] == ()  # no daemon build in the plan: nothing to wait for
 
@@ -412,11 +412,11 @@ def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
 def test_long_steps_start_with_the_long_files() -> None:
     nodes, deps = verify.plan(
         verify.EVERYTHING,
-        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_verify.py"],
+        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_layercheck.py"],
     )
     secs = {
         "tests/digikit/test_menu_dt2.py": 372.0,
-        "tests/devtools/test_verify.py": 2.0,
+        "tests/devtools/test_layercheck.py": 2.0,
     }
     daemon = FILE + "tests/digikit/test_menu_dt2.py"
     nodes, _ = verify.expand_python(
@@ -425,7 +425,7 @@ def test_long_steps_start_with_the_long_files() -> None:
     assert nodes.index("runtime-fixture") < nodes.index(daemon) < nodes.index("smoke")
     nodes, deps = verify.plan(
         verify.EVERYTHING,
-        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_verify.py"],
+        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_layercheck.py"],
     )
     nodes, _ = verify.expand_python(nodes, deps, list(secs), secs, {})
     assert nodes.index(daemon) < nodes.index(

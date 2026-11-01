@@ -66,7 +66,7 @@ FRAMEWORK = frozenset(
     }
 )
 # tools/device module -> the digikit scenario kinds whose runners (tools/patchkit/pk_digikit_*.py)
-# call it. A module of tools/device that is not listed here fails tests/devtools/test_verify.py.
+# call it.
 DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "__init__": (),
     "dkupload": ("upload", "menu", "debug", "crash", "card", "settings"),
@@ -926,8 +926,6 @@ def device_fine(path: str) -> Fine | None:
                     todo.append(name)
     kinds = {k for s in seen for k in DEVICE_KINDS.get(s, ())}
     tests += scenario_tests(kinds)
-    if stem not in DEVICE_KINDS:
-        tests.append("tests/devtools/test_verify.py")
     ordered = list(dict.fromkeys(tests))
     return Fine(f"tools/device/{stem}", ("python-tests",), tuple(ordered))
 

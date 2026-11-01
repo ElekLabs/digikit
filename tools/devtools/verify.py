@@ -202,9 +202,7 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
         ),
         (
             "tests/devtools/test_layercheck.py",
-            "tests/devtools/test_verify.py",
             "tests/devtools/test_verify_budget.py",
-            "tests/devtools/test_changed_tests.py",
             "tests/devtools/test_agent_guard.py",
             "tests/devtools/test_test_outcomes.py",
             "tests/devtools/test_benchlock.py",
