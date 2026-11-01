@@ -179,11 +179,11 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # Named module sets, as roots (the modules they require are added). `patchkit apply` without --modules applies `device`
 # (`--set NAME` picks another); `firmware.load {runtime: true}` patches the stock image with `emulator` (`patch_set` picks
 # another). Both are the flash-image roots of the rt021 images for now. The two sets are the same
-# today (core/input is in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
+# today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input"]
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input"]
-# `emulator` plus the stock sample pool adapter (core/sample-pool), for the per-track sample tests (API 1.5).
+emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
+device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
+# Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
 sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
