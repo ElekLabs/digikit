@@ -683,25 +683,21 @@ plan.json {}",
                         pages.push(p);
                     }
                 }
-                if m.manifest.sample_tracks.is_some() {
-                    // TODO(API 1.5 runtime): the DSP section has no record for the track table yet (the runtime owner adds it with the loader).
-                    return Err(Error(format!(
-                        "{id}: DK_SAMPLE_TRACKS is read by `desc` and the conformance rigs, but a .dkm cannot carry the track table yet"
-                    )));
-                }
                 match sharc.first() {
                     Some((o, _)) => {
-                        dsp = patchkit::dkmdsp::pack_with_bank(
+                        dsp = patchkit::dkmdsp::pack_with_samples(
                             o,
                             patchkit::register::device_id(&dev)?,
                             &voices,
                             &fxs,
                             m.manifest.sample_bank.as_ref(),
+                            m.manifest.sample_tracks.as_ref(),
                         )?
                     }
                     None if !voices.is_empty()
                         || !fxs.is_empty()
-                        || m.manifest.sample_bank.is_some() =>
+                        || m.manifest.sample_bank.is_some()
+                        || m.manifest.sample_tracks.is_some() =>
                     {
                         return Err(Error(format!(
                             "{id}: a voice or an effect needs a DSP object for {dev}"

@@ -237,6 +237,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
             }
             DspSection {
                 sample_bank: None,
+                sample_tracks: None,
                 device,
                 image: vec![spec.fill; d.image as usize],
                 bss: d.bss,

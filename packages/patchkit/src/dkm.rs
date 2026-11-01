@@ -85,6 +85,9 @@ pub const RUNTIME_DSP: u32 = 5; // DSP sections of version 2 (voices with knob r
 
 /// The newest minor of the machine contract that has no stereo machines (1.1: `track` appended to `voice_in`).
 pub const MACHINE_MONO_MINOR: u8 = 1;
+/// The newest minor of the Api contract before the per-track sample table (1.5). A module declares 1.5 only when its DSP section holds a
+/// track table (`DK_SAMPLE_TRACKS`); every other module declares 1.4, so a runtime of Api 1.4 still accepts it.
+pub const API_PRE_TRACKS_MINOR: u8 = 4;
 
 pub struct Options {
     pub name: String,
@@ -367,8 +370,18 @@ pub fn pack_full_max(
     };
     let has_fx = matches!(word(4), crate::dkmdsp::VERSION_4 | crate::dkmdsp::VERSION_5) && word(0x38) > 0;
     let fx_only = has_fx && word(0x30) == 0;
+    // a version 5 DSP section whose record has kind 2 holds the per-track sample table: the module uses Api 1.5
+    let uses_tracks = word(4) == crate::dkmdsp::VERSION_5
+        && dsp
+            .get(word(0x3c) as usize..)
+            .and_then(|b| b.get(..4))
+            .is_some_and(|b| u32::from_le_bytes(b.try_into().unwrap()) == crate::dkmdsp::SAMPLE_TRACKS_KIND);
     let pairs = [
-        sdk.api,
+        if uses_tracks {
+            sdk.api
+        } else {
+            (sdk.api.0, sdk.api.1.min(API_PRE_TRACKS_MINOR))
+        },
         if (dsp.is_empty() || fx_only) && !has_machine_record(reg) {
             none
         } else if o.stereo {
@@ -702,20 +715,35 @@ mod tests {
         let c = |f: &[u8]| f[H_CONTRACT..H_CONTRACT + 8].to_vec();
         // ColdFire code with slots and init, no DSP section: api and service
         let f = pack(&object(), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 1, 0]);
+        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 1, 0]);
         // with a DSP section: machine too (the section's bytes are not parsed by pack)
         let f = pack_full(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 1, 0, 0, 1, 0]);
+        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 1, 0]);
         // a stereo machine: contract 1.2
         let stereo = Options { stereo: true, ..opts() };
         let f = pack_full(Some(&object()), &[], &[0u8; 16], &stereo).unwrap();
+        assert_eq!(c(&f), vec![1, 4, 1, 2, 0, 0, 1, 0]);
+        // a DSP section with a track table: Api 1.5, and nothing else changes
+        let tracks = crate::dkmdsp::DspSection {
+            sample_bank: None,
+            sample_tracks: Some(crate::dkmdsp::SampleTracks { local_id: 0, records_byte_offset: 0, control_byte_offset: 512 }),
+            device: 1,
+            image: vec![0; 768],
+            bss: 0,
+            align: 16,
+            imports: vec![],
+            relocs: vec![],
+            voices: vec![],
+            fxs: vec![],
+        };
+        let f = pack_full(Some(&object()), &[], &tracks.encode(), &stereo).unwrap();
         assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
         // a data-only module with a DSP section: machine, no service
         let f = pack_full(None, &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);
         // a data-only module without DSP code: api only
         let f = pack_with(None, &[], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 0, 0]);
         // register records that hold a machine: machine too (a data-only machine module); param and page records alone: not
         let rec = |kind: u32, len: usize| {
             let mut r = kind.to_be_bytes().to_vec();
@@ -733,15 +761,16 @@ mod tests {
         let param = rec(crate::register::KIND_PARAM, crate::register::LEN_PARAM);
         let machine = rec(crate::register::KIND_MACHINE, crate::register::LEN_MACHINE);
         let f = pack_with(None, &table(&[param.clone(), machine]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);
         let f = pack_with(None, &table(&[param]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 0, 0]);
     }
 
     /// A DSP section of an 8-byte image with BSS bytes of bss and one version 3 voice with `voices` states of 20 bytes (0: version 2).
     fn dsp_section(bss: u32, voices: u32) -> Vec<u8> {
         crate::dkmdsp::DspSection {
             sample_bank: None,
+            sample_tracks: None,
             device: 1,
             image: vec![0; 8],
             bss,
