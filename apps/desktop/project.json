@@ -5,8 +5,13 @@
   "targets": {
     "test-host": {
       "executor": "nx:run-commands",
-      "cache": false,
-      "inputs": ["hostTests", "{workspaceRoot}/devices/**/*.toml", "{workspaceRoot}/modules/*/*/module.toml"],
+      "cache": true,
+      "inputs": [
+        "hostTests",
+        "^hostTests",
+        "{workspaceRoot}/devices/**/*.toml",
+        "{workspaceRoot}/modules/*/*/module.toml"
+      ],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,

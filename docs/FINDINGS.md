@@ -29,8 +29,8 @@ measured separately; no waits or test isolation were changed.
 Host test cache pilot: [Nx cache isolation and input probes](findings/nx-pilot.md)
 (**[D] [O]**, 2026-11-01): local host repeat/unrelated-change hits, intentional-failure miss and
 restored-input hit observed; named Rust execution passed ten tests and runtime service commands passed
-both device cases. Host preflight now uses Nx affected selection; support/session cache probes passed,
-with one bounded two-target timing pair. Rust/runtime cache audits and whole-gate performance remain open.
+both device cases. Host preflight uses Nx affected selection; five host groups passed cache probes,
+with one bounded support/session timing pair. Rust/runtime cache audits and merge-gate setup remain open.
 
 | file | covers |
 | --- | --- |

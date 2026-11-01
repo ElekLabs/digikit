@@ -65,11 +65,12 @@ The evaluated Rust discovery plugin is unregistered for host preflight, so host 
 require Rust toolchains or Cargo metadata. Explicit Rust targets retain their own pinned commands.
 See the [Nx migration boundary](plans/nx-pilot.md#host-preflight-migration).
 
-Control-client, test-support and dk-session host targets use local result caching; the other four
-host targets remain uncached. Cache use assumes a frozen installation. New test helpers, environment
+Control-client, test-support, dk-session, desktop-host and regression-host targets use local result
+caching; web-transfer and the empty module-tests group remain uncached. Web tests retain ignored
+generated WASM and optional inputs outside the cache boundary. Cache use assumes a frozen installation. New test helpers, environment
 reads or external inputs require an input audit before relying on cached results. The
-[bounded cache observations](findings/nx-pilot.md#support-and-session-cache-extension) cover the support
-dependency and session failure probes, not a whole-preflight speedup.
+[bounded cache observations](findings/nx-pilot.md) include dependency failure/restoration probes;
+only the support/session pair was timed, not whole preflight. Rust and runtime targets remain uncached.
 
 | Command | What runs |
 | --- | --- |

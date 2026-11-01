@@ -13,8 +13,9 @@ caching disabled. All three execution checks are complete; Rust/runtime cache in
 open. The host preflight migration below passed focused validation; no gate speedup
 is proven. Existing full-host commands and merge-gate routing remain the
 owners of merge acceptance. The parked `--only` routing change is independent of this pilot.
-Control-client, test-support and dk-session now enable local result caching; the support/session
-extension passed failure/restoration probes and one locked two-target timing pair (details in the finding).
+Five host groups now enable local result caching: control-client, test-support, dk-session, desktop-host
+and regression-host. Both extensions passed dependency failure/restoration probes; only the earlier
+support/session extension has a bounded timing pair. Merge-gate input setup and execution remain pending.
 
 ## Boundary
 
@@ -58,8 +59,8 @@ separate from the focused migration checks below.
 | `regression` | `regression-host` |
 | `module-tests` | `module-tests` |
 
-Control-client, test-support and dk-session result caching is enabled. Web-transfer, desktop-host,
-regression-host and module-tests still use `cache: false`.
+Control-client, test-support, dk-session, desktop-host and regression-host result caching is enabled.
+Web-transfer and the empty module-tests group still use `cache: false`.
 Each fixed command runs its whole Vitest project; preflight supplies all changed paths on standard
 Nx `--stdin`, rejecting newlines rather than splitting a pathname. `--parallel=1` preserves the
 previous one-worker host budget. There is no root project covering the repository. Existing package
@@ -96,6 +97,11 @@ The support/session extension passed all 34 original tests, repeat hits, intenti
 failure probes and exact restoration. The [extension evidence](../findings/nx-pilot.md#support-and-session-cache-extension)
 records its single locked timing pair and input-audit limits. Local caching assumes a frozen install;
 audit new helpers, environment reads or external artifacts before extending the cache boundary.
+
+The desktop/regression extension passed 140 original tests (99 desktop across 13 files, 41 regression
+across five), repeat hits, imported dependency failure probes and byte-exact restoration hits. Both
+use `^hostTests` with their existing explicit data inputs; see the
+[extension evidence](../findings/nx-pilot.md#desktop-and-regression-cache-extension). No new timing was measured.
 
 ## Initial pilot targets and graph
 
@@ -225,3 +231,9 @@ Before integration, run the applicable formatting, path and routed merge checks 
 coordinator's budget. Do not remove existing routing until the pilot is validated, a unit's full input
 and acceptance contract has migrated, and that unit's old selection logic is explicitly retired.
 Any failure of graph isolation, input invalidation or fresh/cached agreement blocks migration.
+
+The latest `verify --base main --explain` selected 19 steps and 57 Python files with conservative root
+dependency routing. The gate has not run: this isolated worktree currently lacks its native build tree
+and ready directories; the earlier explicit runtime overrides do not provide full-gate setup. Prepare
+a [warm lane](../../tools/devtools/lane.sh) and the [owner inputs](../TESTING.md#inputs), then run the gate
+once. Do not substitute another session's mutable target tree for that setup. No merge is approved yet.

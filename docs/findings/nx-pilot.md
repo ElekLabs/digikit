@@ -163,3 +163,26 @@ with corresponding `.log` and `.time` files. The unused Rust plugin dependency w
 with scripts disabled, deleting 1,171 lockfile lines without version updates; `@nx/devkit` remains.
 The frozen scripts-disabled install reconciliation fetched policy metadata, reused 576 packages and
 downloaded none. Static review reported no issues. No probe files or generated inputs were committed.
+
+## Desktop and regression cache extension
+
+**[D]** On base `2b6ceffc` plus this extension, desktop-host and regression-host enabled caching
+with standard `^hostTests` dependency inputs and their explicit tracked data inputs retained.
+Fresh execution passed 99 desktop tests across 13 files and 41 regression tests across five files.
+
+| Target | Original hash: fresh pass, repeat hit, restored hit | Dependency-probe hash: miss, exit 1 |
+| --- | --- | --- |
+| `@digi/desktop:test-host` | `13066639354666026902` | `9304580470596112005` |
+| `regression:test-host` | `11137627996833255939` | `2770010914756785979` |
+
+Throws in imported web `runtime/reload.ts` and support `keys.ts` caused the respective intentional
+import failures; byte-exact restoration recovered successful local hits at both original hashes.
+Evidence is `.nx/desktop-regression-validation/01-fresh.json`, `02-repeat.json`, `03-failing-probes.json`
+and `04-restored.json`, with logs. Targeted config formatting passed; static review reported no issues.
+No new timing or whole-suite claim follows. Five host groups now cache results; web-transfer,
+empty module-tests, Rust and runtime remain uncached.
+
+**[O]** Gate explanation selected 19 steps and 57 Python files; execution/setup remain pending.
+The isolated worktree's current native build and ready-state inputs are incomplete for that gate and can be prepared
+through the documented lane and owner workflows. Earlier explicit runtime overrides are not full-gate
+setup. No merge or gate performance claim is established.
