@@ -66,7 +66,9 @@ class Block:
     foreign: list[str] = field(
         default_factory=list
     )  # stores of the module's code outside the memory it may write (rig with record_stores), one text each
-    right: tuple[float, ...] = ()  # DT2: the odd voice's block after the call (a stereo machine's R; NaN when nothing wrote it)
+    right: tuple[
+        float, ...
+    ] = ()  # DT2: the odd voice's block after the call (a stereo machine's R; NaN when nothing wrote it)
 
 
 @dataclass
@@ -476,7 +478,9 @@ class MachineRig:
         out = [(out_addr, 4 * 32, "output block")]
         if self.device == "dt2":  # a stereo machine writes R into the odd voice's block
             out.append((out_addr + 0x80, 4 * 32, "right output block"))
-        elif "_dv_rscr" in self.built.data:  # DN2: the adapter's scratch block for a stereo machine's R
+        elif (
+            "_dv_rscr" in self.built.data
+        ):  # DN2: the adapter's scratch block for a stereo machine's R
             out.append((self.built.data["_dv_rscr"], 4 * 32, "right output scratch"))
         if b.desc:
             out.append(

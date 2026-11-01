@@ -43,7 +43,8 @@ ADAPTER = {
     "_dv_blk": DIAG + 0x360,
     "_dv_c": DIAG + 0x3A0,
     "_dv_slots": DIAG + 0x3E0,
-    "_dv_st": DIAG + 0x400,  # 16 words: the per-track stereo flag (machine contract 1.2)
+    "_dv_st": DIAG
+    + 0x400,  # 16 words: the per-track stereo flag (machine contract 1.2)
 }
 ROW = 24  # words of a registry row: type, pc, the ranges of knobs 0 to 7, the guard fields, the contract fields (words 16 to 19)
 RING_A, RING_B = (
@@ -195,7 +196,9 @@ class Rig:
         for k in range(32):
             self.dm[nw(GUARD) + k] = 0
         for k in range(16):
-            self.dm[nw(ADAPTER["_dv_st"]) + k] = 0  # no track has written R (machine contract 1.2)
+            self.dm[nw(ADAPTER["_dv_st"]) + k] = (
+                0  # no track has written R (machine contract 1.2)
+            )
         for k, w in enumerate((1, 2, 4, 5, 255, 255, 255, 255)):
             self.dm[nw(ADAPTER["_dv_slots"]) + k] = (
                 w  # the Digitakt II's knob positions of the parameters (ADM_PARAM_SLOT*)

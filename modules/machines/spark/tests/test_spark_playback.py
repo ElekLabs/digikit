@@ -89,7 +89,9 @@ class Spark:
         r.set_note(note, vel)
         r.trigger()
         left, right = [], []
-        if r.device == "dn2":  # the trig edge block is silent; note_on runs in the next one
+        if (
+            r.device == "dn2"
+        ):  # the trig edge block is silent; note_on runs in the next one
             r.block("friendly")
         for _ in range(blocks):
             b = r.block("friendly")
@@ -113,7 +115,9 @@ def model(plane, start, end, rate, reverse, blocks):
             break
         a = np.float32(plane[index] / 32768)
         b = np.float32(plane[min(index + 1, end - 1)] / 32768)
-        out[n] = np.float32(a + np.float32(np.float32(frac / 65536) * np.float32(b - a)))
+        out[n] = np.float32(
+            a + np.float32(np.float32(frac / 65536) * np.float32(b - a))
+        )
         pos += rate
         if not start * 65536 <= pos < end * 65536:
             done = True
@@ -147,7 +151,10 @@ def check(s, note=60, blocks=8, **params):
     cur = s.cursor()
     rate = cur[4] - (1 << 32) if cur[4] >= 1 << 31 else cur[4]
     want = expected_rate(note, p["spark_pitch"], s.src_rate, reverse)
-    assert abs(rate - want) <= max(2, abs(want) >> 17), (rate, want)  # the device's exp2 is a polynomial
+    assert abs(rate - want) <= max(2, abs(want) >> 17), (
+        rate,
+        want,
+    )  # the device's exp2 is a polynomial
     mag = abs(rate)
     wl = model(s.left, start, end, -mag if reverse else mag, reverse, blocks)
     wr = model(s.right, start, end, -mag if reverse else mag, reverse, blocks)
@@ -237,7 +244,9 @@ def test_a_stale_token_is_silent_and_ends_the_voice(device):
     r = s.rig
     left, _ = s.play(blocks=2)
     assert np.any(left)  # playing
-    s.rig.sess.poke(s.rec + 1, TOKEN + 1)  # a select: the old token is no longer current
+    s.rig.sess.poke(
+        s.rec + 1, TOKEN + 1
+    )  # a select: the old token is no longer current
     b = r.block("friendly")
     assert all(x == 0.0 for x in b.samples)
     if device == "dt2":
@@ -246,9 +255,7 @@ def test_a_stale_token_is_silent_and_ends_the_voice(device):
     assert s.count() == 0
 
 
-@pytest.mark.parametrize(
-    "what", ["not-ready", "closed", "bad-fmt", "empty"]
-)
+@pytest.mark.parametrize("what", ["not-ready", "closed", "bad-fmt", "empty"])
 def test_a_track_that_is_not_playable_is_silent_with_no_pcm_read(what):
     s = Spark("dt2")
     r = s.rig
@@ -276,7 +283,9 @@ def test_instruction_count_is_inside_the_declared_ceiling(device):
     first = s.rig.block("friendly")
     steady = s.rig.block("friendly")
     desc = s.rig.built.desc
-    assert first.instructions < desc[7] + 1500, first.instructions  # note_on + render + the adapter
+    assert first.instructions < desc[7] + 1500, (
+        first.instructions
+    )  # note_on + render + the adapter
     assert steady.instructions < desc[6] + 1500, steady.instructions
 
 
@@ -290,3 +299,32 @@ def test_the_module_stores_only_inside_its_own_memory(device):
     for _ in range(3):
         b = s.rig.block("friendly")
         assert b.returned and b.foreign == [], b.foreign
+
+
+def sine_plane(frames, period):
+    return np.rint(16000 * np.sin(2 * np.pi * np.arange(frames) / period)).astype(
+        np.int16
+    )
+
+
+@pytest.mark.parametrize(
+    "note", [60, 72, 48], ids=["unison", "octave-up", "octave-down"]
+)
+def test_a_pure_tone_keeps_its_level_at_any_pitch(note):
+    """The reader moves only the pitch: a sine of 16000/32768 keeps its amplitude one octave up or down (stock gain is not applied here)."""
+    frames = 1600
+    s = Spark("dt2", frames=frames)
+    plane = sine_plane(
+        frames, 160
+    )  # 300 Hz at 48 kHz, well below the Nyquist limit of the 2x read
+    poke = s.rig.sess.poke
+    for k, w in enumerate(pack(plane)):
+        poke(PLANE_L + k, w)
+        poke(PLANE_R + k, w)
+    got_l, _ = s.play(note=note, blocks=20)
+    n = np.arange(64, 576)  # inside the sample at every pitch
+    w = 2 * np.pi * 2 ** ((note - 60) / 12) / 160
+    basis = np.stack([np.sin(w * n), np.cos(w * n)], 1)
+    c = np.linalg.lstsq(basis, got_l[64:576], rcond=None)[0]
+    amp = np.hypot(*c)
+    assert abs(amp / (16000 / 32768) - 1) < 0.02, amp

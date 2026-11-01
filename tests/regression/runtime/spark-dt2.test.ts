@@ -51,6 +51,8 @@ function stereoWav(seconds: number, left: number, right: number): Uint8Array {
 interface Capture {
   l: Float32Array;
   r: Float32Array;
+  /** The frame of the key press (set by captureNote); a capture can start in the tail of an earlier note. */
+  pressedAt?: number;
 }
 
 function readCapture(file: string): Capture {
@@ -88,9 +90,10 @@ function longestSilence(c: Capture, from: number, threshold: number): number {
   return best;
 }
 
-/** First frame where either channel exceeds the threshold, or -1. */
+/** First frame at or after the key press where either channel exceeds the threshold, or -1. */
 function onset(c: Capture, threshold = 0.01): number {
-  for (let i = 0; i < c.l.length; i++) if (Math.abs(c.l[i]!) > threshold || Math.abs(c.r[i]!) > threshold) return i;
+  for (let i = c.pressedAt ?? 0; i < c.l.length; i++)
+    if (Math.abs(c.l[i]!) > threshold || Math.abs(c.r[i]!) > threshold) return i;
   return -1;
 }
 
@@ -253,7 +256,7 @@ async function captureNote(
   const from = pressedAt - RATE / 5;
   const before = Math.max(peak(capture.l, from, pressedAt - 480), peak(capture.r, from, pressedAt - 480));
   expect(before, `silent before the press at frame ${pressedAt}`).toBeLessThan(0.002);
-  return capture;
+  return { ...capture, pressedAt };
 }
 
 async function until(clock: () => Promise<number>, frames: number, timeoutMs = 120_000): Promise<void> {
@@ -439,8 +442,10 @@ runtimeTests(
         await session.client.inputButton(button('TRIG 1'), false);
       }
       log.pitchTurn = { address: pitchAddress, value: turned.value, bursts: turned.bursts, trace: turned.trace };
+      // The clock counts from the start of the capture, which can lie seconds before the press (the capture waits for the tail of the turn note to
+      // end), so the hold is measured from the press.
       const noteUp = await captureNote(runtime, path.join(artifacts, 'octave.wav'), async (clock) => {
-        await until(clock, 1.5 * RATE);
+        await until(clock, (await clock()) + 1.5 * RATE);
       });
       const onsetUp = onset(noteUp);
       expect(onsetUp, 'the note is audible').toBeGreaterThanOrEqual(0);
@@ -454,7 +459,11 @@ runtimeTests(
       const oldL = tone(noteUp.l, 330, fromUp, toUp);
       const oldR = tone(noteUp.r, 495, fromUp, toUp);
       log.octaveLevels = { upL, upR, crossLR, crossRL, oldL, oldR };
+      // The level is compared with the same source at its own pitch (note B): a pitch change must not change it.
       const text = JSON.stringify(log.octaveLevels);
+      const refB = (log.noteBLevels as Record<string, number>)['330']!;
+      expect(upL.amp / refB, `the octave keeps the level of the unison note (${refB}) ${text}`).toBeGreaterThan(0.85);
+      expect(upL.amp / refB, `the octave keeps the level of the unison note (${refB}) ${text}`).toBeLessThan(1.15);
       expect(upL.amp, `L holds the octave of the left source ${text}`).toBeGreaterThan(AUDIBLE);
       expect(upR.amp, `R holds the octave of the right source ${text}`).toBeGreaterThan(AUDIBLE);
       expect(Math.abs(upL.hz / 660 - 1), `L pitch ${upL.hz} Hz`).toBeLessThan(0.01);
