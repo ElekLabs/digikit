@@ -17,7 +17,7 @@ export const createNodesV2 = [
       const hostTests = globSync('tests/**/*.test.ts', { cwd: join(ctx.workspaceRoot, root) }).filter(
         (t) => !t.endsWith('.device.test.ts'),
       );
-      if (hostTests.length)
+      if (root.startsWith('modules/') && hostTests.length)
         project.targets = {
           'test-host': {
             executor: 'nx:run-commands',
@@ -25,7 +25,7 @@ export const createNodesV2 = [
             inputs: ['hostTests'],
             outputs: [],
             options: {
-              command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests ${root}`,
+              command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests ${root}/`,
               cwd: '.',
             },
           },

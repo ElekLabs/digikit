@@ -161,7 +161,7 @@ baseline pathcheck reports. This is not a full-gate pass and does not transfer t
 2. Current work is on lane `/Users/em/src/digi/lanes/nx-integration`, branch `test/nx-family-design`
    from `origin/main`. The Claude checkout is separate; do not use it.
 3. The agreed design and stages are in the
-   [Nx plan](../plans/nx-pilot.md#module-graph-and-staged-selection-design-2026-11-02). Stage 1 is next.
+   [Nx plan](../plans/nx-pilot.md#module-graph-and-staged-selection-design-2026-11-02). Stage 1 is implemented; stage 1b is next.
    Do not repeat completed device proofs; stage 1 is proved by identical selection.
 
 The five audited cached host targets remain separate from this uncached device target. Broader

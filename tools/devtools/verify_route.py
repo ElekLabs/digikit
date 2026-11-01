@@ -131,16 +131,28 @@ class RuntimeAcceptance:
 
 @cache
 def nx_graph() -> dict:
-    """The Nx project graph; module projects come from tools/nx/modules.mjs."""
+    """The Nx project graph, built with a private daemon-free cache; module projects come from tools/nx/modules.mjs."""
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "graph.json"
-        subprocess.run(
-            ["mise", "exec", "--", "pnpm", "run", "nx:pilot", "graph", f"--file={out}"],
+        env = {
+            **os.environ,
+            "NX_DAEMON": "false",
+            "NX_NO_CLOUD": "true",
+            "NX_WORKSPACE_DATA_DIRECTORY": str(Path(tmp) / "data"),
+        }
+        done = subprocess.run(
+            ["mise", "exec", "--", "pnpm", "exec", "nx", "graph", f"--file={out}"],
             cwd=ROOT,
-            check=True,
+            env=env,
+            check=False,
             capture_output=True,
+            text=True,
             timeout=300,
         )
+        if done.returncode:
+            raise RuntimeError(
+                f"nx graph failed (exit {done.returncode}): {done.stderr[-2000:]}"
+            )
         return json.loads(out.read_text())["graph"]
 
 
@@ -154,7 +166,7 @@ def manifests() -> dict[str, tuple[str, ...]]:
         for name, node in graph["nodes"].items()
         if "module" in node["data"].get("tags", [])
     }
-    return {
+    out = {
         name: tuple(
             sorted(
                 dep["target"]
@@ -164,6 +176,12 @@ def manifests() -> dict[str, tuple[str, ...]]:
         )
         for name in sorted(mods)
     }
+    disk = set(modroots.manifests())
+    if set(out) != disk:
+        raise ValueError(
+            f"Nx module projects differ from module manifests: missing in Nx={sorted(disk - set(out))}, missing on disk={sorted(set(out) - disk)}"
+        )
+    return out
 
 
 def _invalid(root: str, why: str) -> ValueError:
@@ -176,6 +194,7 @@ def acceptance_records() -> dict[str, RuntimeAcceptance]:
     lists in the metadata of the Nx projects. Fails closed on any invalid or missing record."""
     known = manifests()
     out: dict[str, RuntimeAcceptance] = {}
+    alias_owner: dict[str, str] = {}
     for name, node in sorted(nx_graph()["nodes"].items()):
         data = node["data"]
         root = data["root"]
@@ -206,19 +225,31 @@ def acceptance_records() -> dict[str, RuntimeAcceptance]:
                 or type(meta.get("plusdrive", False)) is not bool
             ):
                 raise _invalid(root, "types")
-            if "module" in data.get("tags", []) and name not in modules:
+            is_module = "module" in data.get("tags", [])
+            if is_module and name not in modules:
                 modules = [*modules, name]
-            if any(m not in known for m in [*modules, *aliases.values()]):
+            if (
+                len(set(modules)) != len(modules)
+                or any(m not in known for m in [*modules, *aliases.values()])
+                or any(a in known or a in alias_owner for a in aliases)
+            ):
                 raise _invalid(root, "modules")
+            alias_owner.update(dict.fromkeys(aliases, name))
             for source in sources:
-                if Path(source).is_absolute() or ".." in Path(source).parts:
+                if (
+                    Path(source).is_absolute()
+                    or ".." in Path(source).parts
+                    or not (ROOT / source).is_file()
+                ):
                     raise _invalid(root, f"source {source}")
             keys = []
             for filename in files:
                 if (
                     Path(filename).is_absolute()
                     or ".." in Path(filename).parts
-                    or not filename.endswith(".test.ts")
+                    or not filename.endswith(
+                        ".device.test.ts" if is_module else ".test.ts"
+                    )
                     or not (ROOT / root / filename).is_file()
                 ):
                     raise _invalid(root, f"file {filename}")
@@ -237,14 +268,18 @@ def acceptance_records() -> dict[str, RuntimeAcceptance]:
                 meta.get("plusdrive", False),
             )
             out.update(dict.fromkeys(keys, record))
-    registered = {os.path.normpath(f"tests/regression/{key}") for key in out}
+    registered = {
+        os.path.normpath(f"tests/regression/{key}")
+        for key in out
+        if key.startswith("../../")
+    }
     discovered = {
         p.relative_to(ROOT).as_posix()
         for p in ROOT.glob("modules/*/*/tests/**/*.device.test.ts")
     }
-    if not discovered <= registered:
+    if registered != discovered:
         raise ValueError(
-            f"module device acceptance registration differs: unregistered={sorted(discovered - registered)}"
+            f"module device acceptance registration differs: unregistered={sorted(discovered - registered)}, undiscovered={sorted(registered - discovered)}"
         )
     return out
 

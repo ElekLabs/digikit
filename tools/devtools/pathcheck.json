@@ -307,6 +307,21 @@
       "pattern": "sdk/src/.*",
       "file": "tests/patchkit/test_patchkit_dkrt_boot.py",
       "reason": "relative to modules/core/runtime"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "tools/missing.py",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "modules/fx/effect/tests/plain.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/devtools/test_acceptance_records.py",
+      "token": "tests/plain.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
     }
   ],
   "moved_local": {

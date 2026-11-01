@@ -592,3 +592,18 @@ Follow-up: a small Cargo plugin (workspace members and path dependencies, no `ca
 replaces `rust_ws.affected_packages`, then cached results for crates without generated code.
 Caching: none in stages 1 and 2. Stage 3 measures the pack ceiling before any cache. Device test
 results are not cached.
+
+Stage 1 status (2026-11-02): implemented on `test/nx-family-design` (`449b8444` plus review fixes).
+Selection and preparation are identical before and after over 129 paths and all 58 module
+closures. `verify_route.nx_graph()` builds the graph with private Nx workspace data per call
+(about 0.8 s cold) and fails with Nx's error text. `manifests()` fails closed when the Nx modules
+differ from `modroots` (for example `PATCHKIT_MODULES` roots). `test:changed` passes except the
+pre-existing reports: three pathcheck lines in `docs/plans/module-architecture.md` (resolved by the
+sampler branch) and the `pk_digikit_fxshift.py` layer report (resolved when stage 1b moves the
+freqshift oracle into its module).
+
+Stage 1b (next): the TypeScript tests stop calling Python. Front-ends with a Rust, daemon or
+TypeScript equivalent are called directly; small test-only oracles move to TypeScript; firmware
+results come as data. Python modules used elsewhere stay and are cleaned up later. This deletes
+`sources`, `acceptance_python` and their routing tests.
+
