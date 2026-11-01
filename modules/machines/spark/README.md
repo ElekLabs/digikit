@@ -18,8 +18,11 @@ picker binds a PCM16 file (mono or stereo) to a track, SPARK reads it.
   production (adapter TODO).
 - Lifecycle: `note_on` copies the track's `dk_strack` record under the admission and epoch macros; every `render` checks the epoch and acquires and
   releases the track. A stale token (select, unbind, stock reset) or a track that is not ready gives a silent block and `DK_DONE`.
-- Packing: `DK_SAMPLE_TRACKS` is read by `patchkit desc` and the conformance rigs; `pack` refuses until the DSP section can carry the track table
-  (the API 1.5 runtime work).
+- Packing: `patchkit pack digikit/spark --device dt2|dn2` carries the track table in the DSP section (kind 2 record) and declares API 1.5 and machine
+  contract 1.2. The runtime reserves it when the module loads and writes the records over the DSP link once the DSP image is in.
+- Selecting a sample (test route, no picker yet): the fixture `test/track-select` (`tests/fixtures/modules/track-select`) calls `sample_select` for
+  the first table in the image (handle 1). Request 0x3e with body `[1, track, ...path bytes]` selects (status 0 = queued); request 0x3f with body
+  `[1, track]` returns the BE32 status (3 = ready) and, when ready, frames, rate, channels, token.
 
 - `src/module.c`: the machine, parameters, page and the track table declaration; `dkm_init` resolves the table handle.
 - `src/dsp/spark.s`: `render`, `note_on`, the table storage and the descriptor.

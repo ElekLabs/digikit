@@ -511,6 +511,14 @@ The [sample-proof fixture](../tests/fixtures/modules/sample-proof/README.md) dem
 calls and tested DSP bridge. Transferred-file playback acceptance passes in the emulator on DT2 OS 1.17 and
 DN2 OS 1.12. Hardware behavior and product capacity/replacement/selection remain unproved; this is not a product sampler.
 
+A stereo or mono sample per track (API 1.5, [design](design/sample-api-1.5.md)) uses `<dk/sample_track.h>` and
+`DK_SAMPLE_TRACKS(LOCAL_ID, RECORDS, CONTROL)` instead of a bank (a module has one family): 16 `dk_strack` records (512 bytes) and 16
+control sets (256 bytes) in the DSP data (`.PKDATA`, zero, no relocations in them). `pack` writes them as the kind 2 record of the
+DSP section and declares API 1.5; a module without a table declares 1.4. `sample_tracks(local_id)` gives the handle in init;
+`sample_select(handle, track, path)` queues a PCM16 native file (mono or stereo, 48 kHz) from a service or UI callback. A DT2 path is an
+absolute +Drive path like the bank's. The runtime closes the track's old generation before it publishes the new record. A module that
+only calls these entries (a picker) has no table and must check the table `size` before it calls them.
+
 For reusable browsing, include `<dk/files.h>` and acquire a positive `files_client()` handle during init.
 `files_list` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
 empty path lists the root. `DK_FILES_SAMPLES` maps to DT2 +Drive or DN2 store `samples/`, and
@@ -626,7 +634,7 @@ Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `modul
 
   | Contract | Version | Covers |
   | --- | --- | --- |
-  | `api` | `[1, 2]` | The `dk_api` table. Every module has it, `raw` included. |
+  | `api` | `[1, 5]` | The `dk_api` table. Every module has it, `raw` included. `pack` declares 1.5 only for a module with a track table, else 1.4. |
   | `machine` | `[1, 2]` | `<dk/machine.h>`; minor 1: `track`; minor 2: stereo machines |
   | `fx` | `[1, 0]` | `<dk/fx.h>` |
   | `service` | `[1, 0]` | Service modules |
