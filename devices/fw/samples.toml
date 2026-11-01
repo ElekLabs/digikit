@@ -13,6 +13,16 @@ users = ["core/sample-pool"]
 doc = "The stock sample loader (finding 109 section 2): slot <= 0x3ff and (slot & 0x7f) != 0; releases the slot's old block, deduplicates by the 16-byte key, appends to the pool, 0 = ok, -1 = pool full. Writes RAM tables only; never the project settings. Call it on the SampleLoaderBgWorker."
 
 [[fn]]
+name = "cf.samples.fn.slot.release"
+cpu = "cf"
+sig = "void (u32 slot)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "dc40a364e367135add72b2eabf2974d6", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/sample-pool"]
+doc = "Release one slot (finding 109 section 2; the loader calls it first): drops the slot from its record, frees the record when no slot shares it, rebuilds the slot map, resets the slot's key to -1. Moves only 0x34-byte records, never PCM. Same locking as the loader: call it on the SampleLoaderBgWorker."
+
+[[fn]]
 name = "cf.samples.fn.worker.get"
 cpu = "cf"
 sig = "u32 ()"

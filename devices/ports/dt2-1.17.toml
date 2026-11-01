@@ -2320,6 +2320,16 @@ mark = "D"
 rule = "fw/samples:cf_func"
 
 [[anchor]]
+name = "cf.samples.fn.slot.release"
+cpu = "cf"
+kind = "code"
+addr = 0x401543a2
+len = 4
+sha256 = "7694646addf9bf72b639ece8ba990d8e101955de2d4cecd4d9e1bd66b670ef41"
+mark = "D"
+rule = "fw/samples:cf_func"
+
+[[anchor]]
 name = "cf.samples.fn.worker.get"
 cpu = "cf"
 kind = "code"
@@ -2955,7 +2965,7 @@ rule = "fw/dsp/voice:sharc_literal"
 name = "dsp.voice.value.sample.pool_base"
 cpu = "sharc"
 kind = "value"
-addr = -2078099000
+addr = 0x8422b9c8
 src = 0x28387f8c
 len = 6
 sha256 = "d5b13bfc7e8e2eef4119f95da2405c1509c9737bf98a39886232d3f7a3af3c75"

@@ -502,6 +502,56 @@ pub mod rtos {
     pub type MainOsTaskHook = unsafe extern "C" fn();
 }
 
+pub mod samples {
+    unsafe extern "C" {
+        /// The stock sample loader (finding 109 section 2): slot <= 0x3ff and (slot & 0x7f) != 0; releases the slot's old block, deduplicates by the 16-byte key, appends to the pool, 0 = ok, -1 = pool full. Writes RAM tables only; never the project settings. Call it on the SampleLoaderBgWorker.
+        #[link_name = "cf.samples.fn.loader.load"]
+        pub fn loader_load(key: *const u32, slot: u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Release one slot (finding 109 section 2; the loader calls it first): drops the slot from its record, frees the record when no slot shares it, rebuilds the slot map, resets the slot's key to -1. Moves only 0x34-byte records, never PCM. Same locking as the loader: call it on the SampleLoaderBgWorker.
+        #[link_name = "cf.samples.fn.slot.release"]
+        pub fn slot_release(slot: u32);
+    }
+
+    unsafe extern "C" {
+        /// Getter of the SampleLoaderBgWorker singleton (finding 109 section 3); its task id is the word at +0x20.
+        #[link_name = "cf.samples.fn.worker.get"]
+        pub fn worker_get() -> u32;
+    }
+
+    unsafe extern "C" {
+        /// Queue a job on a worker: `job` and `done` are std::function objects (storage, manager, invoker), as ReloadAllSamples passes them. The job runs in the worker task.
+        #[link_name = "cf.samples.fn.worker.queue"]
+        pub fn worker_queue(worker: u32, name: *const u8, job: *mut core::ffi::c_void, done: *mut core::ffi::c_void) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte address literal of the record vector (the pointer pair: begin and end); record stride 0x34: +0x10 pool block offset, +0x14 rounded extent, +0x30 count of sharing slots (finding 109 section 1).
+        #[link_name = "cf.samples.site.record.vector"]
+        pub static RECORD_VECTOR: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte address literal of the key array of the loader, 16 bytes per slot (0x400 slots). Word 0 is 0xffffffff after a slot is released or the pool is reset (finding 109 section 3).
+        #[link_name = "cf.samples.site.slot.keys"]
+        pub static SLOT_KEYS: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte address literal of the slot to record index map, one i32 per slot. Valid only while the slot is loaded: it reads 0 (not -1) after a reset, so loss is not detected with it.
+        #[link_name = "cf.samples.site.slot.map"]
+        pub static SLOT_MAP: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte address literal of the stereo flags of loaded slots, one byte per slot (the stock accessor reads it).
+        #[link_name = "cf.samples.site.slot.stereo"]
+        pub static SLOT_STEREO: u8;
+    }
+}
+
 pub mod storage {
     unsafe extern "C" {
         /// The firmware's eMMC block read: int f(u32 sector, u32 bytes, void *buf), 0 = ok (finding 23 S6).
