@@ -17,8 +17,9 @@ Five host groups now enable local result caching: control-client, test-support, 
 and regression-host. Both extensions passed dependency failure/restoration probes; only the earlier
 support/session extension has a bounded timing pair. The integration gate was attempted and aborted;
 [PR #237](https://github.com/ElekLabs/digikit/pull/237) merged at `a150cac5` after focused verification
-and the authorized one-time full-gate exception, without a full-gate pass. The small `--only`
-selection follow-up is active on `test/gate-selection`; automatic gate-routing changes remain pending.
+and the authorized one-time full-gate exception, without a full-gate pass. Follow-up
+[PR #238](https://github.com/ElekLabs/digikit/pull/238) adds diff-preserving explicit selection;
+automatic gate-routing changes remain pending.
 
 ## Boundary
 
@@ -245,5 +246,5 @@ The next priority is tighter gate selection using static dependency ownership an
 evidence, not more caches or custom tracing. Existing runtime evidence already identifies fixed waits;
 do not repeat broad acceptance for observation or timing. Focused checks are complete and the user
 authorized the one-time full-gate exception for PR #237, now merged at `a150cac5`. The exception is not
-evidence that the aborted gate passed. The active `--only` follow-up changes explicit selection;
+evidence that the aborted gate passed. The `--only` follow-up adds diff-preserving explicit selection;
 automatic routing remains separate pending work.
