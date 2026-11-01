@@ -103,7 +103,7 @@ rule = { kind = "cf_func", hash = "9a4120e12f9b5eb84887e090794f55b7", offset = 0
 sig = "void (u32 tag, const u32 *source, u32 format)"
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait (core/sample-pool sends only to a receiver that reported itself armed). Used by core/sample-pool (DN2 sample pages) and the private core/dsp-lp0-proof; emulator only until the hardware steps of docs/design/dn2-sample-pool.md. Format 1 sends numeric source words least-significant byte first."
+doc = "DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first."
 
 [[site]]
 name = "cf.link.site.boot_wire_size"
@@ -112,7 +112,7 @@ devices = ["dn2"]
 rule = { kind = "cf_func", hash = "ca0006cf073207083d26359db1321886", offset = 0x290, len = 6 }
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "DN2 1.12 boot-only size getter CALL, before the transfer size setter and DMA arming. Retargeting this call leaves the original getter and stock 0xabc reply copy unchanged. Boot-only, for the 16-byte acknowledgement extension of core/sample-pool (and the private core/dsp-lp0-proof)."
+doc = "DN2 1.12 boot-only size getter CALL, before the transfer size setter and DMA arming. Retargeting this call leaves the original getter and stock 0xabc reply copy unchanged. Private diagnostic only."
 
 [[hook]]
 name = "cf.link.hook.boot_wire_size"
@@ -124,7 +124,7 @@ handler = { sig = "u32 ()", args = [] }
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "Boot-only replacement for the wire-length getter call (0xabc to 0xacc)."
+doc = "Private boot-only replacement for the wire-length getter call."
 
 [[site]]
 name = "cf.link.site.reply_copy"
@@ -145,7 +145,7 @@ handler = { sig = "u8 *(u8 *destination, const u8 *source, u32 length)", args = 
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "Wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming."
+doc = "Private wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming."
 
 [[fn]]
 name = "cf.link.fn.reply_copy"
@@ -155,4 +155,4 @@ rule = { kind = "cf_func", hash = "15dd6d0fca20a82c6d39d15a7971a3af", offset = 0
 sig = "u8 *(u8 *destination, const u8 *source, u32 length)"
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "Original DN2 reply memcpy, returning destination in D0; retained by the extension wrapper of core/sample-pool."
+doc = "Original DN2 reply memcpy, returning destination in D0; retained by the private extension wrapper."

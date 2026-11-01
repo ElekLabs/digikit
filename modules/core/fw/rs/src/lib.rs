@@ -39,7 +39,7 @@ pub mod link {
     // cf.link.fn.block_isr: no sig yet
 
     unsafe extern "C" {
-        /// DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait (core/sample-pool sends only to a receiver that reported itself armed). Used by core/sample-pool (DN2 sample pages) and the private core/dsp-lp0-proof; emulator only until the hardware steps of docs/design/dn2-sample-pool.md. Format 1 sends numeric source words least-significant byte first.
+        /// DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first.
         #[link_name = "cf.link.fn.bulk_send"]
         pub fn bulk_send(tag: u32, source: *const u32, format: u32);
     }
@@ -47,7 +47,7 @@ pub mod link {
     // cf.link.fn.frame: no sig yet
 
     unsafe extern "C" {
-        /// Original DN2 reply memcpy, returning destination in D0; retained by the extension wrapper of core/sample-pool.
+        /// Original DN2 reply memcpy, returning destination in D0; retained by the private extension wrapper.
         #[link_name = "cf.link.fn.reply_copy"]
         pub fn reply_copy(destination: *mut u8, source: *const u8, length: u32) -> *mut u8;
     }
@@ -64,10 +64,10 @@ pub mod link {
     /// The jsr abs.l with which the block interrupt handler calls the stock frame driver (four arguments on the stack); the hook point for the DSP link's per-block sender.
     pub type BlockIsrFrameCallHook = unsafe extern "C" fn(len: i32, src: *const u16, reclen: i32, rec: *const u16);
 
-    /// Boot-only replacement for the wire-length getter call (0xabc to 0xacc).
+    /// Private boot-only replacement for the wire-length getter call.
     pub type BootWireSizeHook = unsafe extern "C" fn() -> u32;
 
-    /// Wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming.
+    /// Private wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming.
     pub type ReplyCopyHook = unsafe extern "C" fn(destination: *mut u8, source: *const u8, length: u32) -> *mut u8;
 }
 

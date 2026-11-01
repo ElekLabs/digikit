@@ -66,4 +66,4 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "a95cb4e7dc05e772358467386ca46cac960ca34168dccce3afa7c8834de8087d", offset = 0xa7, len = 4 }
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "DN2 1.12 R4=0xabc before SPI2 descriptor construction. Boot-only wire-size change (core/sample-pool, and the private core/dsp-lp0-proof); never resize armed descriptors."
+doc = "DN2 1.12 R4=0xabc before SPI2 descriptor construction. Private boot-only wire-size change; never resize armed descriptors."

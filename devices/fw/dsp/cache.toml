@@ -27,4 +27,4 @@ regs = { in = ["r10-r11", "r13-r15", "i5-i7", "m5-m7", "m14", "mode1"], clobbers
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-lp0-proof", "core/sample-pool"]
-doc = "Boot hook, preserving startup context and re-executing the displaced CFG load before resume."
+doc = "Private boot hook, preserving startup context and re-executing the displaced CFG load before resume."
