@@ -3,8 +3,11 @@
 Status: dependencies installed without lifecycle scripts; all three resolved targets inspected with
 Nx 22.7.12 and the project graph exported to `.nx/pilot-graph.json`, with `Cargo.lock` unchanged.
 Targeted Prettier checks passed for six configuration files; independent review reported no issues.
-No tests or builds have run. Host cache hit/miss validation and functional test execution remain
-pending. No speedup has been measured. Existing mise commands and verification routing remain the
+The bounded host proof is complete after cache/workspace metadata isolation: six tests passed fresh,
+repeat and unrelated-README probes hit the cache, a temporary failing test caused a miss and failure,
+and restoring the original files recovered the original successful cache entry. See the
+[observations and limits](../findings/nx-pilot.md). Rust/runtime functional execution and their cache
+input audits remain pending. No speedup has been measured. Existing mise commands and verification routing remain the
 owners of merge acceptance. The parked `--only` routing change is independent of this pilot.
 
 ## Boundary
@@ -13,6 +16,12 @@ Pin Nx and `@nx/devkit` to 22.7.12 and `@monodon/rust` to 3.0.0. Use the existin
 pnpm 12.8.2 and Rust 1.98.1 pins in [mise.toml](../../mise.toml). The root `nx:pilot` script disables
 the Nx daemon and Cloud, and sets Cargo offline mode and `RUSTUP_TOOLCHAIN=1.98.1` before graph
 discovery. Use that entrypoint rather than a bare Nx invocation. There is no remote cache or new gate.
+The script sets `NX_CACHE_DIRECTORY="$PWD/.nx/cache"` and
+`NX_WORKSPACE_DATA_DIRECTORY="$PWD/.nx/workspace-data"` to absolute paths in the current checkout.
+Nx 22 otherwise shares its cache and task database with the main worktree, even when this worktree's
+`nx.json` sets `cacheDirectory`. Run the script from the repository root so cache and metadata stay
+within this checkout. The initial shared Nx artifacts were preserved intact under
+`.nx/pilot-validation/shared-cache-before-isolation`; the main checkout is clean again.
 The local cache and isolated Cargo build files live under ignored `.nx/`; do not share or upload them.
 
 The Rust plugin discovers the Cargo project and its dependency graph. Its include filter admits only
@@ -104,14 +113,15 @@ See [regression prerequisites](../../tests/regression/README.md#prerequisites) a
 the Nx target invokes Vitest directly and never builds daemons, module artifacts, plusdrive or PGO.
 Do not substitute `mise run test:runtime`: it also builds plusdrive.
 
-## Deferred validation
+## Validation and remaining work
 
 The coordinator owns installation and the dependency-only lockfile update. Offline project discovery,
 all three resolved targets and the exported project graph have passed inspection. Preserve the named
 commands without workspace-wide Cargo tests, generated-core builds, implicit runtime preparation,
 Cloud connections or added dependency tasks.
 
-For the cached `control-client:test-host` target, in a disposable checkout with fixed toolchains and environment:
+The following bounded protocol completed for `control-client:test-host` with fixed toolchains and
+environment; config/lock/toolchain coverage was reviewed statically rather than individually probed:
 
 1. Run normally once to execute tests and populate the local cache, then repeat normally. Record
    the task hash, fresh result and explicit cache-hit evidence; they must agree for the same inputs.

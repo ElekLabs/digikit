@@ -26,6 +26,10 @@ Runtime test follow-up: [phase timing and bounded DT2 pilot](findings/69-runtime
 (**[D] [C]**, 2026-10-27): startup, settling, restarts and scenario work are now
 measured separately; no waits or test isolation were changed.
 
+Host test cache pilot: [Nx cache isolation and input probes](findings/nx-pilot.md)
+(**[D] [O]**, 2026-11-01): local host repeat/unrelated-change hits, intentional-failure miss and
+restored-input hit observed; Rust/runtime execution and cache input audits remain pending.
+
 | file | covers |
 | --- | --- |
 | [`01-container-and-patching.md`](findings/01-container-and-patching.md) | Scope and the 2.01 firmwares, the ELE3 container format, integrity, packing, the version gate, recovery, what is patchable, the 1.16 rebuild, flash caves that survive a cold boot, cavefind, the RAM map and a ColdFire expansion region, the reset-path loader hook, the aPLib compressor |
