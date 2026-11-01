@@ -147,11 +147,11 @@ The earlier estimate of 80 boots per device reduced to nine is unsupported and i
 
 | Family / source anchor | Quick DT2 rig entries | Quick DN2 rig entries | Explicit restarts per device |
 | --- | ---: | ---: | ---: |
-| [fx](../../tools/patchkit/pk_digikit_fx.py) line 312 | 4 | 4 | 1 |
+| fx (retired runner, historical line 312) | 4 | 4 | 1 |
 | [fxsend](../../tools/patchkit/pk_digikit_fxsend.py) line 192 | 5 | 8 | 0 |
 | fxroute (retired runner, historical line 558) | 11 | 11 | 0 |
 | fxroutes (retired runner, historical line 637) | 8 | 8 | 2 |
-| [fxpage](../../tools/patchkit/pk_digikit_fxpage.py) line 513 | 3 | 3 | 1 |
+| fxpage (retired runner, historical line 513) | 3 | 3 | 1 |
 | [fxpersist](../../tools/patchkit/pk_digikit_fxpersist.py) line 275 | 1 | 1 | 0 |
 | [fxshift](../../tools/patchkit/pk_digikit_fxshift.py) line 499 | 4 | 4 | 0 |
 | Total | 36 | 39 | 4 |
@@ -527,6 +527,60 @@ Final preflight exited 1 only because pathcheck found three pre-existing referen
 oxlint, Prettier and workspace types passed. Scoped pathchecks for the changed docs also passed.
 
 The gate explanation selected host, three stock files, 16 runtime files, three module files,
-54 Python files, smoke and native prerequisites. The broad routed gate was not run. The draft PR
-and a concrete single-PR focused-exception request are next; no new exception or broad-gate pass
-exists for this batch. Earlier focused exceptions do not transfer.
+54 Python files, smoke and native prerequisites. The broad routed gate was not run. PR #246 merged
+at `e8c0e8ace2572f9a43a1d58f1f4c5343c7db3cde` on 2026-11-01T19:00:08Z under Em's explicit
+PR-246-only focused exception, using the both-device and scoped validation above. This is not a
+broad-gate pass, and the exception does not transfer to the next batch.
+
+### BASIC FX and FUNC + FX pages checkpoint (2026-11-02)
+
+The approved next batch ports the remaining BASIC chain and FXPAGE assertions together. Shared
+`fx-session.ts` accepts explicit image roots, inventory, required symbols and safety policy; these
+ports choose `default` explicitly. Plain/reference images remain independent, while hooked legs
+run sequentially in kept contexts with pristine baseline cards. Fresh readiness remains strict;
+only loader result words are interpreted as signed int32, including expected `-34`. The generic
+extraction preserves the existing route configurations and their route-specific policy.
+Legacy note margins, guest timing, PCM tolerances and audibility thresholds remain in their owners;
+FXPAGE relative PCM oracles retain audibility responsibility without relaxing finite/safety checks.
+
+| Legacy assertion group | Committed replacement ledger |
+| --- | --- |
+| BASIC capacity, selected type, free/live rows, overflow refusal and unchanged serial-gain PCM | [fx-chain.test.ts](../../tests/regression/runtime/fx-chain.test.ts), with separate plain reference and sequential dry/full baselines |
+| FXPAGE stock hashes, free-index poke invariance, page/index metadata, GAIN/MIX and A–E controls, SELECT/restart removal | [fx-pages.test.ts](../../tests/regression/runtime/fx-pages.test.ts), with independent reference and sequential stock/effect/deselect context |
+
+Both ports and the reviewed parity fixes passed their four family/device proofs. DN2 BASIC took
+58.75 s and DN2 FXPAGE 293.71 s. The combined DT2 invocation took 201.23 s, with BASIC 76.193 s
+and FXPAGE 124.770 s per file. These are correctness durations, not a speedup comparison.
+On each device BASIC passed 3 + 5 lifetime watch windows and 1 + 2 overlays; FXPAGE passed
+3 + 7 windows and 1 + 4 overlays. All eight lifetime-safety reports passed the default policy,
+with zero write/flush hits and no invalid sectors.
+
+The four legacy wrappers and four scenario TOMLs are retired after those proofs:
+`REF:tests/digikit/test_fx_dt2.py`, `REF:tests/digikit/test_fx_dn2.py`,
+`REF:tests/digikit/test_fxpage_dt2.py`, `REF:tests/digikit/test_fxpage_dn2.py`,
+`REF:tests/digikit/scenarios/fx-dyn-dt2.toml`, `REF:tests/digikit/scenarios/fx-dyn-dn2.toml`,
+`REF:tests/digikit/scenarios/fx-pages-dt2.toml`, and `REF:tests/digikit/scenarios/fx-pages-dn2.toml`.
+The Python kind dispatch and runner bodies are removed. Shared row/PCM oracles and profile,
+kit, screenshot and knob utilities remain for `fxpersist`, `fxshift` and the TypeScript suites.
+Gain aliases 2/3/4 are prepared only for the complete BASIC inventory, and sine selection now
+uses the same numeric 7/5 defaults without reading the retired TOMLs. Retirement `bb3972ee`
+is committed (21 files, +61/-737, eight deleted). Focused checks passed 14 offline tests plus
+15 subtests, 14 routing tests and 12 changed-test cases; independent review reported no issues.
+
+The final required `test:changed` invocation exited 1 on three baseline path errors in
+[module-architecture.md](module-architecture.md) (lines 3, 4 and 284, unchanged from `origin/main`)
+and two stale expected-list failures. Commit `0adc052d` corrected those two expectations, and both
+retry cases passed. Across the run/retry, 674 Python cases passed (270 budget + 57 changed +
+345 verify + two retries), along with 99 host cases. Ruff check/format, mypy on two sources,
+layers/generated checks, oxlint, Prettier and workspace types passed. Scoped changed-doc
+pathchecks passed. The original preflight was not a fully green run.
+
+The authoritative gate explanation uses `origin/main` at `e8c0e8ac` and selects eight FX runtime
+files, 41 Python files, host checks, smoke and native prerequisites. The initial `--base main`
+explanation used a stale local ref and is superseded. The broad gate was not run. Draft
+[PR #247](https://github.com/ElekLabs/digikit/pull/247) awaits a PR-specific focused-validation
+decision; no exception or broad-gate pass is claimed for this batch. Timings remain correctness
+evidence only, without a paired speedup claim.
+
+Deleted-scenario routing remains deferred because path-only callers need merge-base ownership
+evidence. No cache or tombstone tooling is introduced by this batch.

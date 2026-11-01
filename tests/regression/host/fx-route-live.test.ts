@@ -31,7 +31,14 @@ vi.mock('../runtime/fx-live.ts', async (original) => ({
   evidence: fake.evidence,
 }));
 vi.mock('../runtime/live.ts', async (original) => ({ ...(await original<object>()), expectRuntimeUi: fake.ready }));
-import { withRouteFxSession, readTextRows, tap, inspectRouteBoot, routeProtocol } from '../runtime/fx-route-live.ts';
+import { withRouteFxSession } from '../runtime/fx-route-live.ts';
+import {
+  withPreparedFxSession,
+  readTextRows,
+  tap,
+  inspectFxBoot,
+  withPausedFxProtocol,
+} from '../runtime/fx-session.ts';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -39,7 +46,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
-for (const image of ['routes', 'track', 'track-base'] as const) {
+for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
   test(`${image} cards keep the complete inventory and exactly the selected store paths`, async () => {
     vi.resetAllMocks();
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-host-'));
@@ -51,11 +58,13 @@ for (const image of ['routes', 'track', 'track-base'] as const) {
       String(prefix).includes('digi-fx-') ? artifacts : mktemp(prefix)) as typeof fs.mkdtempSync);
     const exists = fs.existsSync.bind(fs);
     vi.spyOn(fs, 'existsSync').mockImplementation((file) => String(file).endsWith('/plusdrive') || exists(file));
-    const count = image === 'routes' ? 5 : 4;
+    const count = image === 'routes' ? 5 : image === 'plain' ? 1 : 4;
     const ids =
       image === 'routes'
         ? ['sine', 'dyn-fx-gain', 'dyn-fx-gain-send', 'dyn-fx-gain-sendonly', 'dyn-fx-gain-send-3']
-        : ['sine', 'dyn-fx-gain-both', 'dyn-fx-gain-both-2', 'dyn-fx-gain-both-3'];
+        : image === 'plain'
+          ? ['sine']
+          : ['sine', 'dyn-fx-gain-both', 'dyn-fx-gain-both-2', 'dyn-fx-gain-both-3'];
     const modulesRoot = path.join(directory, 'modules');
     fs.mkdirSync(path.join(modulesRoot, 'dt2'), { recursive: true });
     ids.forEach((id) => fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.dkm`), id));
@@ -81,15 +90,28 @@ for (const image of ['routes', 'track', 'track-base'] as const) {
           : {},
     );
     fake.exec.mockResolvedValue({ stdout: '', stderr: '' });
-    const result = withRouteFxSession('dt2', 'host route', {
-      image,
-      initial: 'dry',
-      presets: {
-        dry: { selection: ['modules/m0.dkm'] },
-        wet: { selection: ['modules/m0.dkm', 'modules/m1.dkm'], settings: [['fx/route/test/effect', '01']] },
+    const presets = {
+      dry: { selection: ['modules/m0.dkm'] },
+      wet: {
+        selection: image === 'plain' ? ['modules/m0.dkm'] : ['modules/m0.dkm', 'modules/m1.dkm'],
+        settings: [['fx/route/test/effect', '01']] as [string, string][],
       },
-      requireAudible: false,
-    });
+    };
+    const result =
+      image === 'plain'
+        ? withPreparedFxSession('dt2', 'host plain', {
+            image: {
+              name: 'plain',
+              modules: ['core/runtime', 'core/dynreg', 'core/dyndsp'],
+              inventory: ['test/sine'],
+              symbols: ['DKRT_BOOT'],
+              policy: 'default',
+            },
+            initial: 'dry',
+            presets,
+            requireAudible: false,
+          })
+        : withRouteFxSession('dt2', 'host route', { image, initial: 'dry', presets, requireAudible: false });
     const [opts, lifecycle] = fake.fixture.mock.calls[0]!;
     try {
       await opts.env();
@@ -101,7 +123,7 @@ for (const image of ['routes', 'track', 'track-base'] as const) {
         );
       }
       expect(fs.readFileSync(path.join(directory, 'wet/seed/digikit/selection.txt'), 'utf8')).toBe(
-        'modules/m0.dkm\nmodules/m1.dkm\n',
+        image === 'plain' ? 'modules/m0.dkm\n' : 'modules/m0.dkm\nmodules/m1.dkm\n',
       );
       expect(JSON.parse(fs.readFileSync(path.join(directory, 'wet/settings.json'), 'utf8'))).toEqual([
         { key: 'fx/route/test/effect', value_hex: '01' },
@@ -112,9 +134,69 @@ for (const image of ['routes', 'track', 'track-base'] as const) {
       expect(result.sendSlots).toBe(2);
       expect(result.profile.track_type_word).toBe(1234);
       expect(fake.prepare).toHaveBeenCalledTimes(1);
+      const requestedSymbols = fake.prepare.mock.calls[0]![3];
+      const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
+      const commonSymbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'];
+      const roots = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
+      const expectedSymbols =
+        image === 'plain'
+          ? ['DKRT_BOOT']
+          : image === 'track-base'
+            ? [...commonSymbols, 'dynreg_info']
+            : image === 'track'
+              ? [
+                  ...commonSymbols,
+                  'dynreg_info',
+                  'fxpages_info',
+                  'fxp_send_row',
+                  'fxp_send_count',
+                  'fxp_nload',
+                  'DKRT_FXS',
+                ]
+              : [
+                  ...commonSymbols,
+                  'DK_FXR_PEND',
+                  'DK_FXR_SET',
+                  'DK_FXR_FLUSH',
+                  'DK_POPUP',
+                  'DK_POPUP_TEXT',
+                  'DK_POPUPS',
+                  'DK_APPLIES',
+                  'DK_PANEL',
+                  'DK_PANEL_N',
+                  'DK_ROUTE_N',
+                  'DK_ROUTE_ITEM',
+                  'fxp_send_count',
+                  'DKRT_FXS',
+                  'fxpages_info',
+                ];
+      expect(requestedSymbols).toEqual(expectedSymbols);
+      expect(requestedRoots).toEqual([
+        ...roots,
+        ...(image === 'plain' ? [] : ['core/dynfx']),
+        ...(image === 'plain' || image === 'track-base' ? [] : ['core/fxpages']),
+        ...(image === 'routes' ? ['core/digikit-menu'] : []),
+      ]);
+      expect(fs.readFileSync(path.join(directory, 'dry/seed/digikit/modules/m0.dkm'), 'utf8')).toBe('sine');
+      expect(
+        ids.map((_, index) =>
+          fs.readFileSync(path.join(directory, 'dry/seed/digikit/modules', `m${index}.dkm`), 'utf8'),
+        ),
+      ).toEqual(ids);
       await lifecycle.finishCase({ session });
       expect(fake.evidence).toHaveBeenCalledWith({ session }, artifacts, 'case-1', [], false);
       await lifecycle.afterClose();
+      const safetyCall = fake.analysis.mock.calls.find(([, args]) => args[0] === 'runtime-check')!;
+      expect(safetyCall[1][safetyCall[1].indexOf('--policy') + 1]).toBe(image === 'plain' ? 'default' : 'fx-routes');
+      if (image === 'plain') {
+        fake.prepare.mockResolvedValueOnce({
+          plan: { ...plan, symbols: {} },
+          preparedImage,
+          planFile: '/prepared.plan.json',
+          syx: '/prepared.syx',
+        });
+        await expect(opts.env()).rejects.toThrow('symbol DKRT_BOOT: 0 addresses');
+      }
       if (image === 'routes') {
         for (const failing of ['runtime-check', 'render-shots']) {
           const observed: string[] = [];
@@ -148,15 +230,20 @@ test('route diagnostic text decodes big endian words and panel chords release on
   expect(session.client.inputButton).toHaveBeenLastCalledWith(expect.any(Number), false);
 });
 
-for (const afterEpoch of [undefined, 2]) {
-  test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness`, async () => {
+for (const { afterEpoch, loaderResult } of [
+  { afterEpoch: undefined, loaderResult: 0 },
+  { afterEpoch: 2, loaderResult: 0 },
+  { afterEpoch: undefined, loaderResult: -34 },
+]) {
+  test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness and loader result ${loaderResult}`, async () => {
     const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-inspect-'));
     directories.push(artifacts);
     const order: string[] = [];
     let mode = 'paused';
     let observations = 0;
     let pcmStarted = false;
-    const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
+    const expectedNames = loaderResult === 0 ? ['test/sine'] : [];
+    const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, expectedNames.length, 1, loaderResult >>> 0];
     const plan: RuntimePlan = {
       base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
       modules: ['core/runtime'],
@@ -205,7 +292,7 @@ for (const afterEpoch of [undefined, 2]) {
     const dk = {
       modules: vi.fn(async () => {
         expect(mode).toBe('free');
-        return [{ name: 'test/sine' }];
+        return expectedNames.map((name) => ({ name }));
       }),
       capacity: vi.fn(async () => {
         expect(mode).toBe('free');
@@ -213,13 +300,13 @@ for (const afterEpoch of [undefined, 2]) {
         return {};
       }),
     };
-    const inspected = await inspectRouteBoot(
+    const inspected = await inspectFxBoot(
       { session, dk } as unknown as PatchedSession,
       plan,
-      ['test/sine'],
+      expectedNames,
       artifacts,
       'boot',
-      undefined,
+      loaderResult === 0 ? undefined : [loaderResult],
       afterEpoch === undefined ? undefined : { afterEpoch },
     );
     expect(fake.ready).toHaveBeenLastCalledWith(
@@ -231,6 +318,7 @@ for (const afterEpoch of [undefined, 2]) {
     expect(order).toEqual(['pcm:start', 'free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
     expect(mode).toBe('paused');
     expect(inspected.epoch).toBe(3);
+    expect(inspected.results).toEqual([loaderResult]);
     const { evidence } = await vi.importActual<typeof import('../runtime/fx-live.ts')>('../runtime/fx-live.ts');
     await expect(evidence({ session } as PatchedSession, artifacts, 'closing', [], false)).resolves.toBeUndefined();
     expect(order.indexOf('pcm:start')).toBeLessThan(order.indexOf('ready'));
@@ -261,7 +349,7 @@ test('paused route protocol owns its stepped transport and cancels requests on f
   const runtime = { session } as PatchedSession;
   let pending: Promise<unknown> | undefined;
   await expect(
-    routeProtocol(runtime, async (dk) => {
+    withPausedFxProtocol(runtime, async (dk) => {
       pending = expect(dk.request(1)).rejects.toMatchObject({ kind: 'cancelled' });
       await vi.waitFor(() => expect(stepped).toBe(true));
       throw new Error('inspection failed');
@@ -272,6 +360,17 @@ test('paused route protocol owns its stepped transport and cancels requests on f
   expect(calls).not.toContain('run.mode');
   mode = 'free';
   const operation = vi.fn();
-  await expect(routeProtocol(runtime, operation)).rejects.toThrow('require a paused runtime');
+  await expect(withPausedFxProtocol(runtime, operation)).rejects.toThrow('require a paused runtime');
   expect(operation).not.toHaveBeenCalled();
+});
+
+test('prepared FX fixtures require an explicit safety policy', () => {
+  const config = {
+    image: { name: 'plain', modules: ['core/runtime'], inventory: [], symbols: ['DKRT_BOOT'] },
+    initial: 'empty',
+    presets: { empty: { selection: [] } },
+  };
+  expect(() =>
+    withPreparedFxSession('dt2', 'missing policy', config as unknown as Parameters<typeof withPreparedFxSession>[2]),
+  ).toThrow('explicit safety policy');
 });

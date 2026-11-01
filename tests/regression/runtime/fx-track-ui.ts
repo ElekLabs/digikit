@@ -1,8 +1,8 @@
 import { button, encoder, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { advance, bounded, frames, pickSine, rpc, word } from './fx-live.ts';
-import { routeProtocol, tap, type RouteProfile } from './fx-route-live.ts';
+import { advance, bounded, frames, rpc, word } from './fx-live.ts';
+import { tap, type FxProfile } from './fx-session.ts';
 
 export async function halfword(session: Session, address: number): Promise<number> {
   const value = await word(session, address & ~3);
@@ -11,7 +11,7 @@ export async function halfword(session: Session, address: number): Promise<numbe
   return ((value & 0xff) << 8) | ((await word(session, (address & ~3) + 4)) >>> 24);
 }
 
-export async function soundImage(session: Session, profile: RouteProfile, track: number): Promise<number[]> {
+export async function soundImage(session: Session, profile: FxProfile, track: number): Promise<number[]> {
   const base = (await word(session, profile.fx.kit_ptr)) + profile.fx.sound_off + profile.fx.sound_stride * track;
   const result: number[] = [];
   for (let index = 0; index < Math.floor(profile.fx.sound_stride / 2); index++)
@@ -19,7 +19,7 @@ export async function soundImage(session: Session, profile: RouteProfile, track:
   return result;
 }
 
-export async function amountShown(session: Session, profile: RouteProfile, track: number, cell = 0): Promise<number> {
+export async function amountShown(session: Session, profile: FxProfile, track: number, cell = 0): Promise<number> {
   const base = (await word(session, profile.fx.kit_ptr)) + profile.fx.sound_off + profile.fx.sound_stride * track;
   return (await halfword(session, base + 0x14 + 2 * profile.fx.send_indices[cell]!)) >>> 8;
 }
@@ -27,7 +27,7 @@ export async function amountShown(session: Session, profile: RouteProfile, track
 /** Legacy fast-event bursts, then single slow detents; preserve acceleration and settling. */
 export async function setAmount(
   session: Session,
-  profile: RouteProfile,
+  profile: FxProfile,
   enc: string,
   track: number,
   want: number,
@@ -49,23 +49,6 @@ export async function setAmount(
     await advance(session, 20);
   }
   throw new Error(`turning ${enc}: shows ${await amountShown(session, profile, track, cell)}, wanted ${want}`);
-}
-
-/** DT2 retains the legacy selected-type readback and adjacent-list-position retries. */
-export async function selectSine(runtime: PatchedSession, profile: RouteProfile): Promise<void> {
-  const hint = runtime.session.options.device === 'dt2' ? 7 : 5;
-  const sine = (await routeProtocol(runtime, (dk) => dk.modules())).find((module) => module.name === 'test/sine');
-  expect(sine, 'sine is registered').toBeDefined();
-  const want = sine!.types[0];
-  expect(want).toBeDefined();
-  for (const downs of runtime.session.options.device === 'dt2'
-    ? [hint, hint + 1, hint - 1, hint + 2, hint + 3]
-    : [hint]) {
-    await pickSine(runtime.session, downs);
-    if (runtime.session.options.device !== 'dt2') return;
-    if ((((await word(runtime.session, profile.track_type_word)) >>> 8) & 0xff) === want) return;
-  }
-  expect(((await word(runtime.session, profile.track_type_word)) >>> 8) & 0xff, 'selected DT2 sine type').toBe(want);
 }
 
 /** Already-selected input: legacy note boundary offset and 1500-frame hold, without reopening the machine list. */

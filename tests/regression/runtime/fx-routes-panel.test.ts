@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { DEVICES, FIRMWARE, record } from './live.ts';
 import { GAIN, SINE } from './fx-live.ts';
-import { inspectRouteBoot, tap, withRouteFxSession } from './fx-route-live.ts';
+import { withRouteFxSession } from './fx-route-live.ts';
+import { inspectFxBoot, tap } from './fx-session.ts';
 import { MASTER, routeUi, SEND_ROUTE } from './fx-routes-ui.ts';
 
 const SEND = 'test/dyn-fx-gain-send';
@@ -37,7 +38,7 @@ for (const device of DEVICES) {
       const { fixture, plan, artifacts, slots, sendSlots } = context;
       let runtime = fixture.runtime;
       const inspect = async (tag: string, names: string[]) => {
-        await inspectRouteBoot(runtime, plan, names, artifacts, tag);
+        await inspectFxBoot(runtime, plan, names, artifacts, tag);
         context.rememberEpoch(runtime.epoch);
         return routeUi(runtime, plan, artifacts, slots);
       };

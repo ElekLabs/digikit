@@ -47,16 +47,9 @@ Kinds:
              the record (right PC), two in a row lead to safe mode (before and after the stable period).
   pages      the parameter pages of a machine chosen on track 1 (SRC, SRC again, encoder turns): the run-time module's frames equal the patched-in twin's, an
              added machine never draws the sample view, stock sample machines still do (finding 50; tools/patchkit/pk_digikit_pages.py).
-  fx         effects loaded at run time (DSP section version 4, `core/dynfx`; Digitakt II and Digitone II): the sine and `test/dyn-fx-gain` selected at boot play as the
-             dry sine times the gain, the chain's row, MODULES and CAPACITY say so, deselecting the effect and restarting gives the dry PCM again, and
-             one effect more than the device has slots is refused (`E_DSP_ROWS`, and by the fit rule); tools/patchkit/pk_digikit_fx.py.
   settings   the settings store of the runtime (docs/design/digikit-store.md, "The settings record"): a key put through the mailbox is written 2 s after the last change to the copy that is not
              current (A, then B, then A), never to anything else in the store range; a soft restart reads it back; the SETTINGS command and CAPACITY kind SETTINGS report it; `patchkit store dump`
              decodes the card the guest left; a blank card is claimed first; a torn newer copy leaves the older one; tools/patchkit/pk_digikit_settings.py.
-  fxpage     the FX view pages and knobs of run-time effects (`core/fxpages`; Digitakt II and Digitone II): with no effect loaded the three stock pages draw and play as on an image without
-             the pages; with `test/dyn-fx-gain` the view has a fourth page (tab GAN, title Test Gain, the GAIN knob and MIX), turning the knobs changes the PCM as
-             declared (gain, MIX 0 = dry bit for bit, MIX 127 = wet, the linear blend between), and deselecting the effect and restarting brings the three pages and
-             the dry PCM back; screenshots with `DIGIKIT_SHOTS=DIR`; tools/patchkit/pk_digikit_fxpage.py.
   fxpersist  the values of run-time effects are saved with the kit (`core/fxpages` hooks on the kit loader, saver and initialiser; Digitakt II and Digitone II): Save Kit and Load Kit restore them to the
              same effect (kit array, DSP row, PCM, pages) and give another effect, an empty row or a stock kit the defaults, never a zero on the way to the DSP; a project; another
              pattern's kit; tools/patchkit/pk_digikit_fxpersist.py.
@@ -1366,22 +1359,10 @@ def run_pages(c: Ctx) -> None:
     PG.run_pages(c)
 
 
-def run_fx(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fx as FX
-
-    FX.run_fx(c)
-
-
 def run_settings(c: Ctx) -> None:
     from tools.patchkit import pk_digikit_settings as SET
 
     SET.run_settings(c)
-
-
-def run_fxpage(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fxpage as FP
-
-    FP.run_fxpage(c)
 
 
 def run_fxpersist(c: Ctx) -> None:
@@ -1398,9 +1379,7 @@ def run_fxshift(c: Ctx) -> None:
 
 KINDS = {
     "pages": run_pages,
-    "fx": run_fx,
     "settings": run_settings,
-    "fxpage": run_fxpage,
     "fxpersist": run_fxpersist,
     "fxshift": run_fxshift,
     "card": run_card,

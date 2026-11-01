@@ -1,6 +1,6 @@
 import type { PatchedSession } from '../support.ts';
 import { rows, word } from './fx-live.ts';
-import { readTextRows, routeProtocol, shot, tap } from './fx-route-live.ts';
+import { readTextRows, withPausedFxProtocol, shot, tap } from './fx-session.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 export const MASTER = 1;
@@ -71,7 +71,7 @@ export function routeUi(runtime: PatchedSession, plan: RuntimePlan, artifacts: s
         defaults: bytes(await word(session, base + 44), count),
       };
     },
-    sendUsed: async () => (await routeProtocol(runtime, (dk) => dk.capacity())).SEND_SLOTS,
+    sendUsed: async () => (await withPausedFxProtocol(runtime, (dk) => dk.capacity())).SEND_SLOTS,
     fxPageOrder: async () => {
       const base = sym('fxpages_info');
       const first = await word(session, base + 4 * 5);

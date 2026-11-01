@@ -7,7 +7,8 @@ import { button, repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { advance, analysisJson, bounded, frames, pickSine, rpc, word } from './fx-live.ts';
-import { inspectRouteBoot, routeProtocol, SEND, SINE, tap, withRouteFxSession } from './fx-route-live.ts';
+import { SEND, SINE, withRouteFxSession } from './fx-route-live.ts';
+import { inspectFxBoot, withPausedFxProtocol, tap } from './fx-session.ts';
 import { MASTER, routeUi, SEND_ROUTE } from './fx-routes-ui.ts';
 import { DEVICES, expectRuntimeUi, FIRMWARE, record } from './live.ts';
 import { planSymbol } from './runtime-plan.ts';
@@ -79,7 +80,7 @@ for (const device of DEVICES) {
     test('menu YES persists both route directions and restarts into the matching audio and FX pages', async () => {
       const { fixture, plan, artifacts, slots, rememberEpoch } = context;
       const inspect = async (runtime: PatchedSession, tag: string, effect: boolean, afterEpoch?: number) => {
-        const state = await inspectRouteBoot(runtime, plan, effect ? [SINE, SEND] : [SINE], artifacts, tag, undefined, {
+        const state = await inspectFxBoot(runtime, plan, effect ? [SINE, SEND] : [SINE], artifacts, tag, undefined, {
           afterEpoch,
         });
         rememberEpoch(state.epoch);
@@ -90,7 +91,7 @@ for (const device of DEVICES) {
         await rpc(session, 'run.mode', { mode: 'paused' });
         await rpc(session, 'pcm.tap', { action: 'start' });
         const hint = device === 'dt2' ? 7 : 5;
-        const sine = (await routeProtocol(runtime, (dk) => dk.modules())).find((module) => module.name === SINE);
+        const sine = (await withPausedFxProtocol(runtime, (dk) => dk.modules())).find((module) => module.name === SINE);
         expect(sine?.types).toHaveLength(1);
         if (device === 'dt2') {
           let selected = -1;
