@@ -47,6 +47,7 @@ from tools.patchkit.pk_digikit_fx import SINE, chain_rows, scaled
 from tools.patchkit.pk_digikit_fxpage import Shots, open_send_fx, page_down
 from tools.patchkit.pk_digikit_fxpage import profile as fx_profile
 from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
+from tools.patchkit.pk_digikit_fxroute import CLASSES
 from tools.patchkit.pk_harness import text_rows
 
 W_ROUTE = 18  # row word of the route (core/fx module.toml)
@@ -687,6 +688,8 @@ def profile(device: str) -> dict[str, Any]:
     store = pk_device.store_of(device)
     return {
         "track_type_word": M.TRACK_OBJ_WORD,
+        "value_classes": CLASSES[device],
+        "selection": {"copy_a": store.sel_a, "copy_b": store.sel_b},
         "fx_slots": limits.fx_slots,
         "send_slots": limits.send_slots,
         "settings": {"copy_a": store.set_a, "copy_b": store.set_b},

@@ -22,13 +22,18 @@ Screenshots go to the scenario's work folder; `DIGIKIT_SHOTS=DIR` copies them to
 
 from __future__ import annotations
 
+import argparse
+import json
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from tools.coldfire import arena_safety
 from tools.device.dksettings import decode as decode_record
 from tools.device.dksettings import encode as encode_record
+from tools.emulator import card_overlay
 from tools.patchkit import pk_device
 from tools.patchkit import pk_digikit_project as P
 from tools.patchkit import pk_dkrt_machine as M
@@ -639,3 +644,66 @@ def run_fxroute(c: Any) -> None:
     if {"base", "none", "amount", "send"} <= set(results):
         lock_checks()
     c.common_checks(KIT_AREAS[c.device], store_extra=extra)
+
+
+def lock_check(
+    device: str,
+    card: Path,
+    base: Path,
+    none: Path,
+    amount: Path,
+    send: Path,
+) -> dict[str, Any]:
+    """The legacy lock comparisons on complete base-card images with each overlay applied."""
+    overlays = {"base": base, "none": none, "amount": amount, "send": send}
+    touched: set[int] = set()
+    for overlay in overlays.values():
+        touched.update(P.slot_sectors(overlay))
+    with tempfile.TemporaryDirectory(prefix="fxroute-lock-", dir=card.parent) as work:
+        images = {}
+        for name, overlay in overlays.items():
+            after = Path(work) / f"{name}.img"
+            card_overlay.apply(card, overlay, after)
+            images[name] = P.slot_image(after, touched)
+    return {
+        "trig_changed_bytes": len(P.pattern0_changes(images["base"], images["none"])),
+        "send_changed_bytes": len(P.pattern0_changes(images["none"], images["send"])),
+        "amount_diff": P.diff_slot(images["send"], images["amount"], device, P.STAMP),
+    }
+
+
+def overlay_writes(overlay: Path, device: str) -> dict[str, Any]:
+    """Written store sectors, including settings and selection copies, as in the legacy proof."""
+    return {"store_sectors": sorted(set(arena_safety.card_store_hits(overlay, device)))}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Track FX routing offline comparison helpers"
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    lock = commands.add_parser("lock-check")
+    lock.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    lock.add_argument("--card", type=Path, required=True)
+    for name in ("base", "none", "amount", "send"):
+        lock.add_argument(f"--{name}", type=Path, required=True)
+    writes = commands.add_parser("overlay-writes")
+    writes.add_argument("overlay", type=Path)
+    writes.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    args = parser.parse_args(argv)
+    try:
+        result = (
+            lock_check(
+                args.device, args.card, args.base, args.none, args.amount, args.send
+            )
+            if args.command == "lock-check"
+            else overlay_writes(args.overlay, args.device)
+        )
+    except (OSError, ValueError) as exc:
+        parser.exit(1, f"error: {exc}\n")
+    print(json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

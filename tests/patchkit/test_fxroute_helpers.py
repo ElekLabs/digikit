@@ -12,7 +12,9 @@ from unittest.mock import patch
 from tools.coldfire import arena_safety
 from tools.device import dksettings
 from tools.patchkit import pk_device
+from tools.patchkit import pk_digikit_fxroute as track_routes
 from tools.patchkit import pk_digikit_fxroutes as routes
+from tools.patchkit import pk_digikit_project as project
 
 
 class FxRouteHelpersTest(unittest.TestCase):
@@ -67,6 +69,77 @@ class FxRouteHelpersTest(unittest.TestCase):
             routes.render_shots(self.folder)
         self.assertEqual(existing.read_bytes(), b"previous diagnostic")
         self.assertFalse((self.folder / "b.png").exists())
+
+    def masked_overlay(self, name, sector, changes):
+        mask = bytearray(64)
+        data = bytearray(512)
+        for offset, value in changes.items():
+            mask[offset // 8] |= 1 << (offset % 8)
+            data[offset] = value
+        path = self.folder / f"{name}.bin"
+        path.write_bytes(struct.pack("<Q", sector) + mask + data)
+        return path
+
+    def test_lock_check_applies_masks_over_base_card_bytes(self):
+        card = self.folder / "lock.img"
+        sector = project.SLOT0 + 1
+        with card.open("wb") as file:
+            file.truncate((sector + 1) * 512)
+            file.seek(sector * 512)
+            file.write(bytes([7]) * 512)
+        base = self.masked_overlay("base", sector, {0: 7})
+        none = self.masked_overlay("none", sector, {0: 8})
+        # Different masks with the same effective image must compare equal.
+        send = self.masked_overlay("send", sector, {0: 8, 1: 7})
+        amount = self.masked_overlay("amount", sector, {0: 8, 2: 9})
+        result = track_routes.lock_check("dt2", card, base, none, amount, send)
+        self.assertEqual(result["trig_changed_bytes"], 1)
+        self.assertEqual(result["send_changed_bytes"], 0)
+        self.assertEqual(result["amount_diff"]["differ_bytes"], {"pattern": 1})
+        self.assertFalse(result["amount_diff"]["equal"])
+        self.assertEqual(list(self.folder.glob("fxroute-lock-*")), [])
+        with card.open("rb") as file:
+            file.seek(sector * 512)
+            self.assertEqual(file.read(512), bytes([7]) * 512)
+
+    def test_lock_check_compares_union_and_ignores_only_stamp(self):
+        card = self.folder / "union.img"
+        kit_sector = project.SLOT0 + (0x200 + 128 * 0x15C00) // 512 + 1
+        with card.open("wb") as file:
+            file.truncate((kit_sector + 1) * 512)
+            file.seek(kit_sector * 512)
+            file.write(bytes([3]) * 512)
+        empty = self.folder / "empty.bin"
+        empty.write_bytes(b"")
+        send = self.masked_overlay("send", project.SLOT0, {0x18: 9})
+        amount = self.masked_overlay("amount", kit_sector, {20: 4})
+        result = track_routes.lock_check("dt2", card, empty, empty, amount, send)
+        self.assertEqual(result["trig_changed_bytes"], 0)
+        self.assertEqual(result["send_changed_bytes"], 0)
+        self.assertEqual(result["amount_diff"]["differ_bytes"], {"kit": 1})
+        self.assertEqual(result["amount_diff"]["only_first"], 0)
+        self.assertEqual(result["amount_diff"]["only_second"], 0)
+
+    def test_overlay_writes_uses_device_store_range_and_rejects_torn_records(self):
+        for device in ("dt2", "dn2"):
+            with self.subTest(device=device):
+                store = pk_device.store_of(device)
+                overlay = self.overlay(
+                    store.first - 1, store.set_a, store.sel_b, store.end, store.sel_b
+                )
+                self.assertEqual(
+                    track_routes.overlay_writes(overlay, device),
+                    {"store_sectors": [store.set_a, store.sel_b]},
+                )
+        overlay.write_bytes(b"torn")
+        with self.assertRaises(ValueError):
+            track_routes.overlay_writes(overlay, "dt2")
+        card = self.folder / "unused.img"
+        card.write_bytes(b"original")
+        with self.assertRaises(ValueError):
+            track_routes.lock_check("dt2", card, overlay, overlay, overlay, overlay)
+        self.assertEqual(card.read_bytes(), b"original")
+        self.assertEqual(list(self.folder.glob("fxroute-lock-*")), [])
 
     def test_seed_round_trip_preserves_card_and_other_settings_copy(self):
         for device in ("dt2", "dn2"):
