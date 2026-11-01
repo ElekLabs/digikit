@@ -7,8 +7,10 @@ The bounded host proof is complete after cache/workspace metadata isolation: six
 repeat and unrelated-README probes hit the cache, a temporary failing test caused a miss and failure,
 and restoring the original files recovered the original successful cache entry. See the
 [observations and limits](../findings/nx-pilot.md). The named Rust target also executed once: only
-dkneeds compiled and all ten tests passed, with caching disabled. Runtime functional execution and
-Rust/runtime cache input audits remain pending. No speedup has been measured. Existing mise commands and verification routing remain the
+dkneeds compiled and all ten tests passed, with caching disabled. The named runtime file passed its
+two original DT2 1.17/DN2 1.12 cases using existing daemons and isolated local inputs/outputs, also with
+caching disabled. All three execution checks are complete; Rust/runtime cache input audits remain
+open. No migration or gate speedup is proven. Existing mise commands and verification routing remain the
 owners of merge acceptance. The parked `--only` routing change is independent of this pilot.
 
 ## Boundary
@@ -148,10 +150,16 @@ No Nx result cache entry was present for that run. Enabling Rust result caching 
 closure review and the full hit/miss/fresh-agreement protocol above, including Rust source, manifest,
 configuration and toolchain changes.
 
-Inspect the resolved runtime target's `cache: false`, then run it once after prerequisites are ready
-and the CPU budget is available. Confirm both firmware device cases actually execute. Review the
-existing missing-prerequisite failures and ensure the target adds no hidden builds. This is a
-functional acceptance check, not evidence of runtime cache safety.
+The resolved runtime target's `cache: false` and one functional run have been checked: the two original
+service-command device cases passed using prebuilt daemons and copied inputs, without daemon/module
+build targets or plusdrive CLI invocation. Local patched-firmware and card generation occurred within
+the owned pilot directories. No Nx result cache entry was present; `Cargo.lock` remained unchanged.
+This is functional acceptance evidence, not proof of runtime cache safety or independently audited
+ready-snapshot provenance; see the finding for the older ready metadata labels and actual image checks.
+
+The next decision is whether to replace one limited unit of existing host routing with Nx or first
+model the remaining runtime inputs. Further repeated pilot runs are not required without a new change
+or unresolved concern. Rust/runtime result caching stays disabled pending its input audits.
 
 Before integration, run the applicable formatting, path and routed merge checks once under the
 coordinator's budget. Do not remove existing routing until the pilot is validated, a unit's full input

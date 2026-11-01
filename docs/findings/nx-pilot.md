@@ -1,4 +1,4 @@
-# Nx host cache and Rust execution pilot (2026-11-01)
+# Nx host cache and named execution pilot (2026-11-01)
 
 **[D]** Bounded local observations on base `04bfd560` plus the worktree-isolation fix, using
 Node 24.15.0, pnpm 12.8.2, Nx/devkit 22.7.12 and `@monodon/rust` 3.0.0. The target was
@@ -67,6 +67,35 @@ and the existing Python environment via `UV_PROJECT_ENVIRONMENT`, `UV_NO_SYNC=1`
 These supplied execution settings allowed reuse without dependency synchronization and coordinated
 the existing build lock; they do not establish Cargo cache input closure or a performance result.
 
+## Named runtime execution
+
+**[D]** On checkpoint `d6950feb`, `regression:service-commands` executed once with `cache: false`
+under the existing shared benchlock. Only `runtime/service-commands.test.ts` ran: the original DT2
+OS 1.17 and DN2 OS 1.12 cases both passed, two tests with no failures, errors or skips.
+The local `.nx/pilot-validation/07-service-commands.json` records hash `9331773737677411536`, exit 0
+and `cache-miss`; no `.nx/cache/9331773737677411536` entry was present. Logs and JUnit evidence are
+`.nx/pilot-runtime/logs/service-commands.log` and `.nx/pilot-runtime/junit/service-commands.xml`.
+
+The run used prebuilt stable daemons, copied svc-echo modules and samples, specific firmware symlinks,
+and read-only ready-input overrides. `DIGI_REPO_ROOT` selected the pilot; `TMPDIR`, `DIGI_PLUS_DRIVE`,
+`DIGI_PLUSDRIVE_OUT` and `REGRESSION_JUNIT_FILE` selected owned local paths. Recorded input SHA-256:
+
+| Input | SHA-256 |
+| --- | --- |
+| DT2 daemon | `dcc3b4cb73eb4eddb2d5ce440045b7dce48d228b7f32378ce780ec43face4f65` |
+| DN2 daemon | `e1d7aae86d3413d7129b1fbb4e54347d8663d8ca8b4cc0e4ce5c7945ae704aae` |
+| svc-echo module, both devices | `2f8a742d2447ef92ec2bd0754702974d0d7eb4100b2237b8c1e5502f0940449c` |
+
+Ready `SOURCE.json` labels still named dt2-1.16/dn2-1.11, while their `syx_sha256` values matched the
+actual stock 1.17/1.12 inputs and `intc_force` was false; harness validation passed. Ready snapshot
+hashes were not independently audited, so this does not establish wholly current provenance metadata.
+
+The existing daemons generated patched firmware in the pilot's `out/runtime-cache` and card images
+in owned temporary directories. No daemon/module build target, generated-core compile or plusdrive
+CLI ran. No `digi-session` temporary directories remained after exit; pilot Git status was clean and
+`Cargo.lock` unchanged. Local `out` contained only `runs` and `runtime-cache`, with no new build-cache
+outputs. No output, audio or firmware was staged. This is bounded execution evidence, not a speedup.
+
 ## Limits and follow-up
 
 **[D]** Project/target inspection, graph export, targeted configuration formatting and independent
@@ -74,7 +103,12 @@ review completed before the probes; `Cargo.lock` remained unchanged. Input cover
 statically. Config, lockfile, toolchain and every possible environment input were not each mutated
 and tested. The exercised fresh result and cached replay agreed; no timing claim is made.
 
-**[O]** Runtime functional execution remains pending. Rust and runtime both have `cache: false`; Rust cache
+**[D]** All three pilot targets have completed their bounded execution checks; the host target also
+completed its hit/miss probes. No routing migration or gate speedup has been established.
+
+**[O]** Rust and runtime both retain `cache: false`; Rust cache
 enablement needs a Cargo configuration/environment audit, and runtime cache enablement needs closure
-over ignored and external inputs. Existing verification routing remains in place. See the
+over ignored and external inputs. The next decision is a first limited replacement of existing host
+routing with Nx versus further runtime input modeling, not more repeated runs. Existing verification
+routing remains in place. See the
 [pilot plan](../plans/nx-pilot.md) for commands, input boundaries and migration conditions.

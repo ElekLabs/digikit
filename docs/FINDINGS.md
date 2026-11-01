@@ -28,8 +28,8 @@ measured separately; no waits or test isolation were changed.
 
 Host test cache pilot: [Nx cache isolation and input probes](findings/nx-pilot.md)
 (**[D] [O]**, 2026-11-01): local host repeat/unrelated-change hits, intentional-failure miss and
-restored-input hit observed; named Rust execution passed ten tests; runtime execution and Rust/runtime
-cache input audits remain pending.
+restored-input hit observed; named Rust execution passed ten tests and runtime service commands passed
+both device cases. Rust/runtime cache input audits remain open; no routing migration or speedup proven.
 
 | file | covers |
 | --- | --- |
