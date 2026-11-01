@@ -488,8 +488,15 @@ passes. Independent review of track port `cbe4566a` found no missing assertions.
 claim follows from this process layout.
 
 Correctness fixes cover paused protocol transport (`fdb745ad`), PCM observation initialization
-(`a0f52563`) and the existing epoch/UI restart barrier (`761aebba`). The latest DN2 panel proof
-failed: the empty baseline's closing evidence passed and its reload succeeded, then the list
-baseline rejected all selected modules with result `-48`. Artifact/source diagnosis is in progress;
-no new device pass is claimed. Routing/preparation work is underway, and this batch has no gate
-exception.
+(`a0f52563`), the epoch/UI restart barrier (`761aebba`) and prepared DSP-base preservation
+(`f296f998`). Static source review confirmed that replacing the loaded image discarded the stock
+bytes needed for the DSP difference; prepared loads now retain those bytes while `force:true`
+still reconstructs the firmware with the explicit pristine card. Artifacts were repacked through
+the standard current-source SDK 1.2 wrapper after a shared-binary mismatch. Gate preparation and
+routing checkpoint `440f676a` is pushed; this is not a broad-gate pass.
+
+The final DN2 panel proof passed: 151.99 s invocation / 146.644 s case, with artifacts
+`digi-fx-routes-dn2-rj0mZ0`. The load report confirms DSP application at cold boot; all five
+baselines and mandatory lifetime safety passed. These durations are correctness evidence, not a
+speedup measurement. DN2 track and persistence proofs are running; DT2 has not run. Legacy
+runners remain, and this batch has neither a broad-gate pass nor a focused exception.
