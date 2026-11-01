@@ -25,7 +25,8 @@ picker binds a PCM16 file (mono or stereo) to a track, SPARK reads it.
   `[1, track]` returns the BE32 status (3 = ready) and, when ready, frames, rate, channels, token.
 
 - `src/module.c`: the machine, parameters, page and the track table declaration; `dkm_init` resolves the table handle.
-- `src/dsp/spark.s`: `render`, `note_on`, the table storage and the descriptor.
+- `src/dsp/spark.s`: `render`, `note_on`, the table storage and the descriptor. Every sample, mono or stereo, is read by the SDK stereo kernel
+  `_dk_sample_pcm16_stereo_linear` (a mono sample passes `base_r = base_l`); there is no mono path.
 - `tests/test_spark_playback.py`: the DSP on the concrete core through the real adapter, against a float32 model.
 
 ```sh

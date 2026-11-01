@@ -18,14 +18,15 @@
 // 1 / 65536 .. 64 frames per sample, negative for REVERSE. MIDI note 60 plays the sample at its own speed. A mono sample (channels 1) uses
 // base_r = base_l: the same samples go to both outputs (centred). The sample plays once, then the voice ends.
 //
-// State per voice (22 words, all cleared at note-on): 0 .. 5 the cursor of the kernel (start, end, index, fraction, rate, done), 6 the epoch (token),
-// 7 base_l, 8 base_r, 11 the source rate in Hz, 12 the track, 13 reverse, 14 the adapter's return address (I13) across the kernel calls,
-// 16 .. 21 the right channel's copy of the cursor.
+// State per voice (18 words, all cleared at note-on): 0 .. 5 the cursor of the kernel (start, end, index, fraction, rate, done), 6 the epoch (token),
+// 7 base_l, 8 base_r, 11 the source rate in Hz, 12 the track, 13 reverse, 14 the adapter's return address (I13) across the kernel call,
+// 16 out, 17 out_r (the output pointer pair for the stereo kernel).
 
 #include "dk_machine.inc"
 #include "dsp/call.inc"
 #include "dsp/sample.inc"
 #include "dsp/sample_pcm16.inc"
+#include "dsp/sample_pcm16_stereo.inc"
 #include "dsp/sample_bank.inc"
 #include "dsp/sample_track.inc"
 
@@ -101,26 +102,19 @@ _spark_render:
     DK_SAMPLE_BANK_UNLOCK(R13);
 .GLOBAL _spark_render_acquired;
 _spark_render_acquired:
-    // Two mono reads, not _dk_sample_pcm16_stereo_linear: that kernel finds its stack copy of the cursor as I6 - 11 in word units, and the
-    // adapters enter with a byte-alias I6 (the sample-proof fixture's note on the actual adapter), so R would read a misplaced cursor.
-    // The right channel advances a copy of the cursor kept in the state (words 16 .. 21): the same start, end, index, fraction, rate and done.
-    R0 = DM(0, I3); DM(16, I3) = R0;
-    R0 = DM(1, I3); DM(17, I3) = R0;
-    R0 = DM(2, I3); DM(18, I3) = R0;
-    R0 = DM(3, I3); DM(19, I3) = R0;
-    R0 = DM(4, I3); DM(20, I3) = R0;
-    R0 = DM(5, I3); DM(21, I3) = R0;
+    // One stereo read: R4 = the plane bases [base_l, base_r] (state words 7, 8), R8 = the output pointers [out, out_r] (state words 16, 17),
+    // R12 = the cursor (state words 0 .. 5). The pointers are byte addresses of the state, which is how the adapters enter (finding 111).
+    R0 = DM(DK_IN_W_OUT, I2);
+    DM(16, I3) = R0;
+    R0 = DM(DK_IN_W_OUT_R, I2);
+    DM(17, I3) = R0;
     MODIFY(I7, -1) (NW);                  // the adapter's frame ends at I7: one word for DK_CALL's second store
-    R4 = DM(7, I3);                       // base_l
-    R8 = DM(DK_IN_W_OUT, I2);
     R12 = I3;                             // the cursor
-    DK_CALL(_dk_sample_pcm16_linear, _spark_after_left);
-    R4 = DM(8, I3);                       // base_r (== base_l for a mono sample)
-    R8 = DM(DK_IN_W_OUT_R, I2);
-    R12 = I3;
-    R0 = 64;                              // the state pointer is a byte address: word 16 is 64 bytes on
-    R12 = R12 + R0;
-    DK_CALL(_dk_sample_pcm16_linear, _spark_after_right);
+    R0 = 28;                              // word 7 is 28 bytes on
+    R4 = R12 + R0;
+    R0 = 64;                              // word 16 is 64 bytes on
+    R8 = R12 + R0;
+    DK_CALL(_dk_sample_pcm16_stereo_linear, _spark_after_stereo);
     MODIFY(I7, 1) (NW);
     DK_SAMPLE_BANK_LOCK(R13);
     DK_STRACK_RELEASE(I1, R0, _spark_render_release_fault, _spark_render_released);
@@ -249,16 +243,16 @@ _spark_note_return:
 .PKDATA _spark_rec, 512;                  // 16 dk_strack records of 8 words
 .PKDATA _spark_ctl, 256;                  // 16 control sets of 4 words: closed, count, fault, reserved
 // dk_machine_desc: magic, contract (machine contract 1.2: stereo), n_params, voices, state_bytes, state_clear_bytes, max_cycles_block,
-// max_cycles_note_on, max_call_depth, stack_bytes. Cycles are instruction ceilings: the two mono kernels' 2 * 2,148 with their calls, the rate (exp2 and
+// max_cycles_note_on, max_call_depth, stack_bytes. Cycles are instruction ceilings: the stereo kernel's 4,396 with its call, the rate (exp2 and
 // about 60 more) and the two masked scopes; note-on adds about 150 and one render.
 .GLOBAL _spark_desc;
 .VAR _spark_desc = DK_MAGIC;
 .VAR _spark_desc1 = 257;                  // DK_MACHINE_V1 | DK_MACHINE_STEREO (an expression is not accepted here)
 .VAR _spark_desc2 = 4;
 .VAR _spark_desc3 = DK_MAX_VOICES;
-.VAR _spark_desc4 = 88;
-.VAR _spark_desc5 = 88;
+.VAR _spark_desc4 = 72;
+.VAR _spark_desc5 = 72;
 .VAR _spark_desc6 = 4800;
 .VAR _spark_desc7 = 5000;
-.VAR _spark_desc8 = 2;
+.VAR _spark_desc8 = 3;
 .VAR _spark_desc9 = 192;
