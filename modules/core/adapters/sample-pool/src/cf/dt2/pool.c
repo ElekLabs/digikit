@@ -47,6 +47,7 @@ extern const u8 sp_dsp_pool_base;     /* anchor: its address is the pool origin 
 typedef struct Req {
     volatile u32 state;
     volatile i32 result;
+    volatile u32 cancelled;   /* dkpool_cancel: nobody waits for this load any more */
     u32 kind, slot, token, req;
     dkpool_handle *out;
     u32 job[4];   /* the std::function of the job: storage (2 words), manager, invoker */
@@ -97,6 +98,10 @@ static void run_load(Req *r)
 {
     u32 handle[4], key[4], i;
     i32 rc;
+    if (r->cancelled) {   /* still queued when the runtime gave up on it: do nothing, the slot stays free */
+        r->result = DKPOOL_E_LOST;
+        return;
+    }
     for (i = 0; i < 4; i++)   /* volatile: an initialiser would call memset, which a patched-in object cannot link */
         ((volatile u32 *)handle)[i] = ((volatile u32 *)key)[i] = 0;
     if (dk_fw_storage_path_open(r->path, (const u8 *)"r", handle) != 0) {
@@ -200,8 +205,20 @@ i32 dkpool_load(u32 req, const dk_file_id *id, const u8 *path, dkpool_handle *ou
     r->out = out;
     r->req = req;
     r->result = 0;
+    r->cancelled = 0;
     post(r);
     return DKPOOL_QUEUED;
+}
+
+/* Optional symbol (dkrt_pool.h): the runtime does not wait for load `req` any more. A job that has not started is dropped by the worker
+ * when it gets to it (the stock queue cannot be edited); a job that runs finishes, and dkpool_tick releases its slot. The runtime
+ * still gets one dkrt_pool_done for the request, with DKPOOL_E_LOST. */
+void dkpool_cancel(u32 req)
+{
+    u32 i;
+    for (i = 0; i < SP_REQS; i++)
+        if (reqs[i].kind == RQ_LOAD && reqs[i].state == RQ_QUEUED && reqs[i].req == req)
+            reqs[i].cancelled = 1;
 }
 
 static int current(const dkpool_handle *h)
@@ -255,10 +272,13 @@ void dkpool_tick(void)
             set_slot(r->slot, SL_FREE);
             r->state = RQ_FREE;
         } else {
-            u32 req = r->req;
-            i32 result = r->result;
-            set_slot(r->slot, result == 0 ? SL_OWNED : SL_FREE);
+            u32 req = r->req, release;
+            u32 slot_of = r->slot;
+            i32 result = sp_finish(r->result, r->cancelled, &release);
+            set_slot(slot_of, r->result == 0 ? SL_OWNED : SL_FREE);
             r->state = RQ_FREE;
+            if (release)
+                queue_release(slot_of);   /* loaded for nobody */
             dkrt_pool_done(req, result);
         }
     }

@@ -93,4 +93,19 @@ static inline uint32_t sp_free_frames(const uint32_t *begin, const uint32_t *end
         return 0;
     return (SP_POOL_LIMIT - top - headroom) / 2u;
 }
+/* What dkpool_tick reports for a finished load job (`cancelled`: dkpool_cancel flagged it). A job that was cancelled before it started
+ * has result DKPOOL_E_LOST already (nothing was loaded). A cancelled job that loaded anyway (it was running) reports DKPOOL_E_LOST too and
+ * sets *release: its slot goes back to the stock pool, as no handle will ever name it. Without cancel the result is reported as it is. */
+static inline int32_t sp_finish(int32_t result, uint32_t cancelled, uint32_t *release)
+{
+    *release = 0;
+    if (!cancelled)
+        return result;
+    if (result == 0) {
+        *release = 1;
+        return DKPOOL_E_LOST;
+    }
+    return result;
+}
+
 #endif

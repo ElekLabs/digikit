@@ -16,7 +16,7 @@ conflicts = []
 "dt2-1.17" = "untested"
 
 # One adapter, one object per device (docs/design/sample-api-1.5.md 2.3 and recommendation 9). Both export the same symbols of
-# src/dkrt_pool.h: dkpool_version, dkpool_load, dkpool_release, dkpool_check, dkpool_free_frames and dkpool_tick. The runtime lists them as
+# src/dkrt_pool.h: dkpool_version, dkpool_load, dkpool_release, dkpool_check, dkpool_free_frames and dkpool_tick, and the optional dkpool_cancel. The runtime lists them as
 # optional imports; without this module they resolve to 0 and `sample_select` returns E_CONTRACT.
 #
 # DT2 (src/cf/dt2): borrows the stock pool through the stock loader, queued on the SampleLoaderBgWorker (finding 109). No hook: the runtime
