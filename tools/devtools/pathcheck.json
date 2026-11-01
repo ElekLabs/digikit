@@ -100,41 +100,6 @@
       "reason": "URL under the web app's public/ directory"
     },
     {
-      "file": "tests/devtools/test_verify.py",
-      "pattern": ".*",
-      "reason": "fixture paths"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "modules/fx/effect/tests",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "tools/oracle.py",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "modules/fx/effect",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "tests/effect.device.test.ts",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "tests/fixtures/modules/source",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "modules/fx/effect/tests/extra.device.test.ts",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
       "file": "modules/fx/freqshift/tests/test_runtime_routing.py",
       "token": "modules/freqshift.test.ts",
       "reason": "existing device acceptance filter relative to tests/regression"
@@ -279,11 +244,6 @@
       "reason": "regex rows and prose in the READS/NO_RUST tables, not paths"
     },
     {
-      "pattern": "^(docs/x\\.md|tests/devtools/test_x\\.py)$",
-      "file": "tests/devtools/test_rust_ws_select.py",
-      "reason": "made-up changed-file names in selection tests"
-    },
-    {
       "pattern": "^(tests/fixtures/modules/|tools/patchkit/pk_sdkgen\\.py|packages/patchkit/src/modschema\\.rs)$",
       "file": "docs/design/module-sdk.md",
       "reason": "paths the SDK design proposes; they do not exist yet"
@@ -307,21 +267,6 @@
       "pattern": "sdk/src/.*",
       "file": "tests/patchkit/test_patchkit_dkrt_boot.py",
       "reason": "relative to modules/core/runtime"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "tools/missing.py",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "modules/fx/effect/tests/plain.test.ts",
-      "reason": "temporary repository fixture path, not a real repository path"
-    },
-    {
-      "file": "tests/devtools/test_acceptance_records.py",
-      "token": "tests/plain.test.ts",
-      "reason": "temporary repository fixture path, not a real repository path"
     },
     {
       "file": "docs/plans/module-architecture.md",

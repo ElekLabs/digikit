@@ -273,8 +273,7 @@ dt2-tier-sweep.
   Changes to `verify.py` and `verify_route.py` keep devtools owner tests, import-graph consumers,
   `PY_GATE` and static checks, without selecting unrelated production steps or the Rust workspace.
   Explicit `--full` retains full coverage. An unclassified `tools/device` module keeps its own tests,
-  transitive importers, scenario kinds mapped to those importers, and `test_verify.py`, which requires
-  its classification. This does not exempt deleted modules from conservative import-graph handling.
+  transitive importers and scenario kinds mapped to those importers. This does not exempt deleted modules from conservative import-graph handling.
   Framework modules (`FRAMEWORK` in `verify_route.py`) select all of `tests/patchkit` and `tests/digikit`.
 - `stock` runs the DT2 zero-DSP goldens. A changed case selects its file; configuration and shared
   session code select all files. It gives no audio coverage.

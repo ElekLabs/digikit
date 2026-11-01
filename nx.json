@@ -3,7 +3,7 @@
   "cacheDirectory": ".nx/cache",
   "neverConnectToCloud": true,
   "analytics": false,
-  "plugins": ["./tools/nx/modules.mjs"],
+  "plugins": ["./tools/nx/modules.mjs", "./tools/nx/cargo.mjs"],
   "namedInputs": {
     "hostTests": [
       "{projectRoot}/**/*",
