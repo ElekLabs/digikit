@@ -7,9 +7,8 @@ import { openSamples } from '@digi/dk-session/samples';
 import { button, encoder, repoRoot, type Session } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { withSession } from '../support.ts';
-import { record, settleUi } from './live.ts';
+import { memory, panel, record, settleUi } from './live.ts';
 
-const MS = 132_000;
 // Current DT2 1.17 observations in finding81. All diagnostic accesses are reads.
 const CF = { slotBlock: 0x405b5368, slotRef: 0x405b1368, slotLength: 0x405ba768, blocks: 0x405a0f64 };
 const DSP = { slots: 0x257810, voice: 0x2412cc, voiceStride: 0x1d8 };
@@ -34,66 +33,38 @@ function toneWav(hz: number): Uint8Array {
   return wav;
 }
 
-/** Input scheduling uses elapsed, the daemon's own input clock, not wall time. */
-function panel(session: Session) {
-  async function elapsed(): Promise<number> {
-    const value = (await session.status()).elapsed;
-    if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error('input requires status.elapsed');
-    return value;
-  }
-  async function until(target: number): Promise<void> {
-    await expect.poll(elapsed, { timeout: 20_000, interval: 50 }).toBeGreaterThanOrEqual(target);
-  }
-  async function settle(ms: number): Promise<void> {
-    await until((await elapsed()) + ms * MS);
-  }
-  async function tap(name: string | number, settleMs = 80): Promise<void> {
-    const result = (await session.client.inputTap(button(name), 20 * MS)) as { release_at?: number };
-    if (!Number.isSafeInteger(result.release_at)) throw new Error('input.tap must report release_at');
-    await until(result.release_at! + 5 * MS);
-    await settle(settleMs);
-  }
-  async function chord(held: string, key: string | number): Promise<void> {
-    await session.client.inputButton(button(held), true);
-    try {
-      await settle(5);
-      await tap(key);
-    } finally {
-      await session.client.inputButton(button(held), false);
-    }
-    await settle(300);
-  }
-  async function turn(name: string, detents: number): Promise<void> {
-    await session.client.inputTurn(encoder(name), detents);
-    await settle(200);
-  }
-  return { tap, chord, turn, settle };
+/** Column-major OLED: the top eight pixels are byte 7 of each column. */
+function oledTitle(data: string | undefined): string {
+  if (!data) throw new Error('SAMPLES navigation requires decoded OLED bytes');
+  const raw = Buffer.from(data, 'base64');
+  expect(raw.length).toBe(1024);
+  return Buffer.from(raw.filter((_, index) => index % 8 === 7)).toString('hex');
 }
 
-async function discovery(session: Session, dk: DkSession): Promise<void> {
+/** Top pixel row of the inverted (white) bar in the action menu column, or null. A bar has two full white border rows. */
+function actionBarTop(data: string | undefined): number | null {
+  if (!data) throw new Error('action menu navigation requires decoded OLED bytes');
+  const raw = Buffer.from(data, 'base64');
+  for (let y = 0; y < 64; y++) {
+    let white = 0;
+    for (let x = 62; x < 122; x++) white += (raw[x * 8 + (y >> 3)]! >> (y & 7)) & 1;
+    if (white === 60) return y;
+  }
+  return null;
+}
+// Top pixel rows of the SAMPLING action menu items (finding 82 frames): AUTO-PREVIEW 16, UNLOAD 24, REPLACE 32.
+const ACTION = { unload: 24, replace: 32 };
+
+/** Returns the title of the SAMPLES root menu as observed in this run. */
+async function discovery(session: Session, dk: DkSession): Promise<{ out: string; rootTitle: string }> {
   const root = path.join(repoRoot(), 'out/runs/stock-sampler-lifetime');
   mkdirSync(root, { recursive: true });
   // Discovery evidence is retained even when this test passes.
   const out = mkdtempSync(path.join(root, 'dt2-'));
+  const shared: { rootTitle?: string } = {};
   console.info('retained stock sampler discovery:', out);
   const ui = panel(session);
-  async function cf(addr: number): Promise<number> {
-    const reply = (await session.client.call('mem.cf.peek', { addr })) as { value: number };
-    return reply.value >>> 0;
-  }
-  async function words(addr: number, count: number): Promise<number[]> {
-    const values = [];
-    for (let i = 0; i < count; i++) values.push(await cf(addr + i * 4));
-    return values;
-  }
-  async function dsp(addr: number, len: number) {
-    return (await session.client.call('dsp.peek', { addr, len })) as {
-      addr: number;
-      len: number;
-      hex: string;
-      unknown: number;
-    };
-  }
+  const { cf, words, dsp } = memory(session);
   async function observe(name: string) {
     const begin = await cf(CF.blocks);
     const end = await cf(CF.blocks + 4);
@@ -343,19 +314,13 @@ async function discovery(session: Session, dk: DkSession): Promise<void> {
       await ui.chord('FUNC', 50);
       // The stock UI may reopen at the root or remember a directory. Return
       // only as far as this run's observed SAMPLES root; blind NOs can close it.
-      const title = (data: string | undefined) => {
-        if (!data) throw new Error('SAMPLES navigation requires decoded OLED bytes');
-        const raw = Buffer.from(data, 'base64');
-        expect(raw.length).toBe(1024);
-        // Column-major OLED: the top eight pixels are byte 7 of each column.
-        return Buffer.from(raw.filter((_, index) => index % 8 === 7)).toString('hex');
-      };
-      const rootTitle = title(samplesRoot.frame.data_b64);
+      const rootTitle = oledTitle(samplesRoot.frame.data_b64);
+      shared.rootTitle = rootTitle;
       let atRoot = false;
       for (let depth = 0; depth < 6; depth++) {
         const frame = await session.client.framebufferGet({ hash: true, data: true });
         record(out, `samples-root-route-${depth}`, frame);
-        if (title(frame.data_b64) === rootTitle) {
+        if (oledTitle(frame.data_b64) === rootTitle) {
           atRoot = true;
           break;
         }
@@ -423,6 +388,164 @@ async function discovery(session: Session, dk: DkSession): Promise<void> {
     record(out, 'executed', executed);
     await observe('final-state');
   }
+  return { out, rootTitle: shared.rootTitle! };
+}
+
+/** Pool state of one project slot: map index, block record, DSP slot record and the first 64 PCM bytes. */
+async function slotState(session: Session, slot: number) {
+  const { cf, words, dsp } = memory(session);
+  const index = (await cf(CF.slotBlock + slot * 4)) | 0;
+  const begin = await cf(CF.blocks);
+  const block = index >= 0 ? await words(begin + index * 0x34, 13) : null;
+  const header = await dsp(DSP.slots + slot * 0x14, 20);
+  expect(header.unknown).toBe(0);
+  const raw = Buffer.from(header.hex, 'hex');
+  const ptr = (0x8422b9c8 + raw.readUInt32LE(0)) >>> 0;
+  const head = raw.readUInt32LE(8) === 0 ? null : await dsp(ptr, 64);
+  if (head) expect(head.unknown).toBe(0);
+  return {
+    index,
+    offset: block?.[4] ?? null, // record +0x10
+    size: block?.[5] ?? null, // record +0x14
+    sharers: block?.[12] ?? null, // record +0x30
+    dspRecord: header.hex,
+    ptr,
+    pcmHead: head?.hex ?? null,
+  };
+}
+
+/**
+ * Continues from the end of discovery: slot 1 holds b (earlier block record). Load a into slot 2 (later record),
+ * play slot 2, then UNLOAD slot 1 through the stock SAMPLING menu. The block vector shifts only its 0x34-byte
+ * records; PCM stays in place.
+ */
+async function unloadEarlierWhilePlaying(session: Session, out: string, rootTitle: string): Promise<void> {
+  const ui = panel(session);
+  const { dsp } = memory(session);
+  const expectedA = Buffer.from(toneWav(330)).subarray(44, 108).toString('hex');
+  const expectedB = Buffer.from(toneWav(990)).subarray(44, 108).toString('hex');
+  const shot = async (name: string) =>
+    record(out, `unload-${name}`, await session.client.framebufferGet({ hash: true, data: true }));
+  let shotCount = 0;
+  const grab = async () => {
+    const frame = await session.client.framebufferGet({ hash: true, data: true });
+    record(out, `unload-frame-${shotCount++}`, frame);
+    return frame.data_b64 ?? '';
+  };
+  /** NO goes up one level of the SAMPLING pages until the SAMPLES root menu shows. */
+  async function noUntilRoot(): Promise<boolean> {
+    for (let i = 0; i < 6; i++) {
+      if (oledTitle(await grab()) === rootTitle) return true;
+      await ui.tap('NO');
+    }
+    return false;
+  }
+  /** From the track page FUNC+SAMPLING opens the pages where they were left; the first call starts inside them. */
+  async function openProjectRam(fromTrackPage: boolean): Promise<void> {
+    if (fromTrackPage) {
+      await ui.chord('FUNC', 50);
+      await ui.settle(1000); // the SAMPLING pages draw slowly
+    }
+    expect(await noUntilRoot(), 'SAMPLES root reached').toBe(true);
+    for (let i = 0; i < 4; i++) await ui.tap('UP');
+    await ui.tap('DOWN');
+    await ui.tap('YES'); // PROJECT RAM
+  }
+  /** Back to the track page: one more NO from the root menu. */
+  async function leaveSamples(): Promise<void> {
+    if (await noUntilRoot()) await ui.tap('NO');
+  }
+  async function openSlotActions(slot: number, action: number): Promise<void> {
+    for (let i = 0; i < 16; i++) await ui.tap('UP');
+    for (let i = 0; i < slot; i++) await ui.tap('DOWN'); // A00<slot>
+    await ui.tap('RIGHT');
+    // The action menu keeps its last cursor row: move the inverted bar to the wanted row.
+    for (let i = 0; i < 12; i++) {
+      const top = actionBarTop(await grab());
+      if (top === action) return;
+      await ui.tap(top !== null && top > action ? 'DOWN' : 'UP'); // lists run bottom-up: DOWN moves the bar up
+    }
+    throw new Error(`action row ${action} not reached`);
+  }
+  const before1 = await slotState(session, 1);
+  expect(before1.pcmHead, 'slot 1 holds b').toBe(expectedB);
+
+  // Load a into slot 2.
+  await openProjectRam(false);
+  await openSlotActions(2, ACTION.replace);
+  await shot('slot2-replace-action');
+  await ui.tap('YES');
+  await shot('slot2-browser');
+  await ui.tap('UP'); // the browser opens on the slot's current file at the +Drive root; lists run bottom-up: UP is stockproof
+  await ui.tap('YES');
+  await shot('slot2-browser-folder'); // a is the first row
+  await ui.tap('YES');
+  await expect
+    .poll(async () => (await slotState(session, 2)).pcmHead, { timeout: 30_000, interval: 50 })
+    .toBe(expectedA);
+  await leaveSamples();
+
+  // Play slot 2.
+  await ui.chord('TRK', 'TRIG 1');
+  await ui.tap('SRC');
+  await shot('play-src-page');
+  await ui.turn('ENC D', 1);
+  await shot('play-after-turn');
+  await ui.tap('UP');
+  await shot('play-after-first-up');
+  for (let i = 0; i < 15; i++) await ui.tap('UP');
+  await shot('play-after-16-up');
+  for (let i = 0; i < 2; i++) await ui.tap('DOWN'); // A002
+  await shot('slot2-popup');
+  await ui.tap('YES');
+  await ui.settle(300);
+  await ui.tap('TRIG 1', 0);
+  const voice = async () => {
+    const reply = await dsp(DSP.voice, DSP.voiceStride);
+    expect(reply.unknown).toBe(0);
+    return Buffer.from(reply.hex, 'hex');
+  };
+  const slot2Before = await slotState(session, 2);
+  const slot1Before = await slotState(session, 1);
+  // The voice binds the slot at note start; the earlier note's pointer can still be there for a moment.
+  await expect
+    .poll(async () => (await voice()).readUInt32LE(0), { timeout: 10_000, interval: 50 })
+    .toBe(slot2Before.ptr);
+  const v0 = await voice();
+  expect(v0.readUInt32LE(0), 'voice reads slot 2').toBe(slot2Before.ptr);
+  expect(v0[0x1b8], 'voice active').toBe(1);
+  await ui.settle(100);
+  const v1 = await voice();
+  expect(v1.readUInt32LE(0x1b4), 'cursor advances').toBeGreaterThan(v0.readUInt32LE(0x1b4));
+
+  // UNLOAD slot 1 while slot 2 plays.
+  await openProjectRam(true);
+  await openSlotActions(1, ACTION.unload);
+  await shot('slot1-unload-action');
+  await ui.tap('YES');
+  await shot('slot1-unload-confirm'); // CONFIRM Y/N UNLOAD 1 SAMPLE?
+  await ui.tap('YES');
+  await ui.settle(500);
+  await shot('after-unload');
+  const slot1After = await slotState(session, 1);
+  const slot2After = await slotState(session, 2);
+  const v2 = await voice();
+  record(out, 'unload-observation', {
+    slot1Before,
+    slot2Before,
+    slot1After,
+    slot2After,
+    voice: [v0, v1, v2].map((v) => v.subarray(0, 8).toString('hex')),
+    cursor: [v0, v1, v2].map((v) => v.readUInt32LE(0x1b4)),
+  });
+  expect(slot1After.index, 'slot 1 is empty').toBe(-1);
+  // Release removes only the 0x34-byte record of slot 1, so a record after it moves down by one.
+  expect(slot2After.index, 'record index').toBe(slot2Before.index - (slot1Before.index < slot2Before.index ? 1 : 0));
+  expect(slot2After.offset, 'pool offset unchanged').toBe(slot2Before.offset);
+  expect(slot2After.dspRecord, 'DSP slot record unchanged').toBe(slot2Before.dspRecord);
+  expect(slot2After.pcmHead, 'PCM head unchanged').toBe(slot2Before.pcmHead);
+  expect(v2.readUInt32LE(0), 'voice still reads slot 2').toBe(slot2Before.ptr);
+  await session.expectNoFault('unload earlier slot while a later slot plays');
 }
 
 const binary = process.env.DIGI_EMUD_DT2;
@@ -440,7 +563,8 @@ test('stock DT2 slot binding and active ten-second replacement discovery', async
   await session.client.call('run.mode', { mode: 'free' });
   const dk = new DkSession(new EmuUsbTransport((method, params) => session.client.call(method, params)));
   try {
-    await discovery(session, dk);
+    const { out, rootTitle } = await discovery(session, dk);
+    await unloadEarlierWhilePlaying(session, out, rootTitle);
   } finally {
     dk.cancelPending();
   }

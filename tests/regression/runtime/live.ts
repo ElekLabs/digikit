@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { repoRoot, type Device, type Session } from '@digi/test-support';
+import { button, encoder, repoRoot, type Device, type Session } from '@digi/test-support';
 import { describe, expect, onTestFinished, test } from 'vitest';
 import { expectRuntimeBoot, withPatchedSession, type PatchedSession } from '../support.ts';
 import { timePhase, timingContext } from '../timing.ts';
@@ -180,4 +180,65 @@ export function sampleWav(channels: 1 | 2): Uint8Array {
   h.write('data', 36);
   h.writeUInt32LE(pcm.length, 40);
   return Uint8Array.from(Buffer.concat([h, pcm]));
+}
+
+/** ColdFire instructions per emulated millisecond. */
+const MS = 132_000;
+
+/** Input scheduling uses elapsed, the daemon's own input clock, not wall time. */
+export function panel(session: Session) {
+  async function elapsed(): Promise<number> {
+    const value = (await session.status()).elapsed;
+    if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error('input requires status.elapsed');
+    return value;
+  }
+  async function until(target: number): Promise<void> {
+    await expect.poll(elapsed, { timeout: 20_000, interval: 50 }).toBeGreaterThanOrEqual(target);
+  }
+  async function settle(ms: number): Promise<void> {
+    await until((await elapsed()) + ms * MS);
+  }
+  async function tap(name: string | number, settleMs = 80): Promise<void> {
+    const result = (await session.client.inputTap(button(name), 20 * MS)) as { release_at?: number };
+    if (!Number.isSafeInteger(result.release_at)) throw new Error('input.tap must report release_at');
+    await until(result.release_at! + 5 * MS);
+    await settle(settleMs);
+  }
+  async function chord(held: string, key: string | number): Promise<void> {
+    await session.client.inputButton(button(held), true);
+    try {
+      await settle(5);
+      await tap(key);
+    } finally {
+      await session.client.inputButton(button(held), false);
+    }
+    await settle(300);
+  }
+  async function turn(name: string, detents: number): Promise<void> {
+    await session.client.inputTurn(encoder(name), detents);
+    await settle(200);
+  }
+  return { tap, chord, turn, settle };
+}
+
+/** Read-only ColdFire and DSP memory access over the control socket. */
+export function memory(session: Session) {
+  async function cf(addr: number): Promise<number> {
+    const reply = (await session.client.call('mem.cf.peek', { addr })) as { value: number };
+    return reply.value >>> 0;
+  }
+  async function words(addr: number, count: number): Promise<number[]> {
+    const values = [];
+    for (let i = 0; i < count; i++) values.push(await cf(addr + i * 4));
+    return values;
+  }
+  async function dsp(addr: number, len: number) {
+    return (await session.client.call('dsp.peek', { addr, len })) as {
+      addr: number;
+      len: number;
+      hex: string;
+      unknown: number;
+    };
+  }
+  return { cf, words, dsp };
 }
