@@ -1276,7 +1276,7 @@ def run_items(
         argv = [
             str(binary),
             *item.input_args,
-            "--scenarios", str(ROOT / item.scenarios_file),
+            "--scenarios", str(coupled_module().scenario_path(ROOT / item.scenarios_file)),
             *(x for n in item.names for x in ("--scenario", n)),
             *(["--seconds", str(item.seconds)] if item.seconds is not None else []),
             "--out", str(report),
