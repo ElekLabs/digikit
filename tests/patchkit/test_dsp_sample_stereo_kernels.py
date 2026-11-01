@@ -23,7 +23,9 @@ SAVED.update({f"I{n}": OUT + 0x600 + 16 * n for n in (0, 1, 2, 3, 5)})
 SAVED.update({"M1": 11, "M2": 12, "M3": 13, "B3": OUT + 0x650})
 CONSTS = {"M5": 0, "M6": 1, "M7": 0xFFFFFFFF, "M14": 1, "M0": 0}
 CONSTS.update({f"L{n}": 0 for n in range(8)})
-REGS = {**SAVED, **CONSTS, "I6": STACK, "I7": STACK}
+# The actual adapters enter with a byte-alias I6 and I7 (word address * 4); frame words are still addressed as normal words below.
+STACK_ALIAS = 4 * STACK
+REGS = {**SAVED, **CONSTS, "I6": STACK_ALIAS, "I7": STACK_ALIAS}
 CEILING = 2 * (32 * 64 + 100) + 100
 CASES = [
     ref.Cursor(0, 0, 0, 0, 65536),
@@ -224,10 +226,24 @@ def test_nested_frames_with_architectural_stack(linked):
     assert [session.peek(RIGHT + i) for i in range(32)] == bits(expected[1])
     assert [session.peek(STATE + i) for i in range(6)] == words(final)
     assert {name: result["regs"][name] for name in REGS} == REGS
-    assert session.peek(STACK) == STACK
+    assert session.peek(STACK) == STACK_ALIAS
     assert session.peek(STACK - 1) == linked.symbols["_stereo_after"] - 1
-    assert session.peek(STACK - 12) == STACK
+    assert session.peek(STACK - 12) == STACK_ALIAS
     assert (
         session.peek(STACK - 13) == linked.symbols["_dk_sample_stereo_after_right"] - 1
     )
     assert session.peek(STACK - 26) == POISON
+
+
+def test_right_channel_is_not_silent_under_the_adapter_byte_alias_frame(linked):
+    """Finding 111: the cursor copy is found at I6 - 44 bytes; I6 - 11 left R silent under the real adapters."""
+    st = CASES[1]
+    channels, _, dm = setup(st)
+    session = pk_sharc.CallSession([linked], 0xB9F000)
+    for address, word in dm.items():
+        session.poke(address, word)
+    result = session.call("_stereo_h", REGS, max_steps=CEILING + 1)
+    assert result["halt"]["reason"] == "breakpoint", result["halt"]
+    right = [session.peek(RIGHT + i) for i in range(32)]
+    assert right == bits(oracle(channels, st)[0][1])
+    assert any(word & 0x7FFFFFFF for word in right), "R must carry the right plane"

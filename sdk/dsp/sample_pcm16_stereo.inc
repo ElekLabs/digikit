@@ -12,8 +12,11 @@
 // descriptors and stack must otherwise not alias; sources/descriptors immutable.
 // All mono bounds, completion, float rounding and call.inc requirements apply.
 // Saves R3,R5,R6,I1: 4 slots plus 6 cursor words = 10 local words.
-// Relative to this routine's entry I6, deepest write is I6-25 and deepest I7
-// is I6-26 (includes nested call frame and mono's 12 saves). Caller DK_CALL
+// Frame convention: the actual adapters enter modules with a byte-alias I6 (byte addresses, a word is 4), so the
+// stack copy of the cursor is at I6 - 44 (word slot 11) and the pointer arithmetic counts bytes. A normal-word
+// I6 is not supported (finding 111).
+// Relative to this routine's entry I6, deepest write is word slot 25 (I6 - 100 bytes) and deepest I7
+// is word slot 26 (includes nested call frame and mono's 12 saves). Caller DK_CALL
 // writes I6 and I6-1. Clobbers only call.inc's caller-saved set.
 // Conservative instruction ceiling including caller DK_CALL and 3 argument
 // loads: 2*(32*64+100)+100 = 4396. Sequential composition; this is an
@@ -49,7 +52,7 @@ dk_sample_pcm16_stereo_linear.:
     R0 = DM(5, I1);
     DK_SAVE(6, R0);
     R1 = I6;
-    R0 = 11;
+    R0 = 44;
     R6 = R1 - R0;
     DK_CALL(_dk_sample_pcm16_linear, _dk_sample_stereo_after_left);
     R4 = R3;

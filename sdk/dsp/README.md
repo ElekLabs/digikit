@@ -151,7 +151,9 @@ advances once. Source pointers may be equal for mono-to-stereo playback. Output
 buffers must be separate; all other source, output, descriptor, cursor and stack
 ranges must be disjoint and the sources/descriptors immutable during the call.
 The wrapper uses ten local stack words; with its nested mono call, the deepest
-write is entry I6−25 and the deepest stack pointer is I6−26. The calling convention
+write is word slot 25 below entry I6 and the deepest stack pointer is slot 26. The adapters give a
+byte-alias I6 (a word is 4 bytes) and the wrapper finds its cursor copy at I6 − 44 bytes; a normal-word
+I6 is not supported (finding 111). The calling convention
 and mono reader's numerical bounds still apply. This is a correctness baseline,
 not a measured optimization or a stereo machine-output ABI. Assembled coverage is
 in `tests/patchkit/test_dsp_sample_stereo_kernels.py`; actual memory ownership and

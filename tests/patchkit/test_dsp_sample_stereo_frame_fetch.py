@@ -33,7 +33,8 @@ whole_block_dsp = whole_block.dsp
 
 SOURCE = REPO_ROOT / "tests/fixtures/dsp/sample-stereo-frame-fetch.s"
 IMAGE = REPO_ROOT / "out/sections/dt2-1.17/section_7_BLOB.bin"
-BACK, STACK = 0xB9F000, 0x08038000
+# STACK is a byte-alias frame, as the adapters give it (finding 111)
+BACK, STACK = 0xB9F000, 4 * 0x08038000
 BASE, PLANE, FRAMES = 0x8422B9C8, 0x8422C000, 65
 NW = byte_to_normal_word(PLANE)
 REGS = {f"R{i}": 0x7000 + i for i in range(16)}

@@ -23,7 +23,8 @@ SOURCE = REPO_ROOT / "tests/fixtures/dsp/sample-stereo-exclusion.s"
 BACK = 0xB9F000
 OUT = 0x08036000
 LEFT_PCM, RIGHT_PCM = 0x10002000, 0x10003000
-STACK, WRITER_STACK = 0x08038000, 0x08039000
+# STACK is a byte-alias frame, as the adapters give it (finding 111)
+STACK, WRITER_STACK = 4 * 0x08038000, 0x08039000
 OLD = (0x10000000, 0xE000F000)
 NEW = (0x30002000, 0x9000A000)
 PAGE = 0x01000000
