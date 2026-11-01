@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { Session } from '@digi/test-support';
+import { DkSession } from '@digi/dk-session';
 import type { PatchedSession } from '../support.ts';
 import type { RuntimePlan } from '../runtime/runtime-plan.ts';
 
@@ -29,7 +30,7 @@ vi.mock('../runtime/fx-live.ts', async (original) => ({
   evidence: fake.evidence,
 }));
 vi.mock('../runtime/live.ts', async (original) => ({ ...(await original<object>()), expectRuntimeUi: fake.ready }));
-import { withRouteFxSession, readTextRows, tap, inspectRouteBoot } from '../runtime/fx-route-live.ts';
+import { withRouteFxSession, readTextRows, tap, inspectRouteBoot, routeProtocol } from '../runtime/fx-route-live.ts';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -186,7 +187,17 @@ test('route boot drains input while free then returns paused for deterministic p
       return { epoch: 3, mode, cf: { input_pending: pending }, scheduled_inputs: pending };
     }),
   } as unknown as Session;
-  const dk = { modules: vi.fn(async () => [{ name: 'test/sine' }]), capacity: vi.fn(async () => ({})) };
+  const dk = {
+    modules: vi.fn(async () => {
+      expect(mode).toBe('free');
+      return [{ name: 'test/sine' }];
+    }),
+    capacity: vi.fn(async () => {
+      expect(mode).toBe('free');
+      order.push('capacity');
+      return {};
+    }),
+  };
   const inspected = await inspectRouteBoot(
     { session, dk } as unknown as PatchedSession,
     plan,
@@ -194,7 +205,44 @@ test('route boot drains input while free then returns paused for deterministic p
     artifacts,
     'boot',
   );
-  expect(order).toEqual(['free', 'ready', 'pending', 'drained', 'paused', 'drained']);
+  expect(order).toEqual(['free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
   expect(mode).toBe('paused');
   expect(inspected.epoch).toBe(3);
+});
+
+test('paused route protocol owns its stepped transport and cancels requests on failure', async () => {
+  const cancel = vi.spyOn(DkSession.prototype, 'cancelPending');
+  const calls: string[] = [];
+  let stepped = false;
+  let mode = 'paused';
+  const session = {
+    status: vi.fn(async () => ({ mode })),
+    client: {
+      call: vi.fn(async (method: string, params?: Record<string, unknown>) => {
+        calls.push(method);
+        if (method === 'step') {
+          expect(params?.instructions).toBe(400_000);
+          stepped = true;
+          await new Promise((resolve) => setTimeout(resolve, 1));
+        }
+        return { hex: '' };
+      }),
+    },
+  } as unknown as Session;
+  const runtime = { session } as PatchedSession;
+  let pending: Promise<unknown> | undefined;
+  await expect(
+    routeProtocol(runtime, async (dk) => {
+      pending = expect(dk.request(1)).rejects.toMatchObject({ kind: 'cancelled' });
+      await vi.waitFor(() => expect(stepped).toBe(true));
+      throw new Error('inspection failed');
+    }),
+  ).rejects.toThrow('inspection failed');
+  await pending;
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(calls).not.toContain('run.mode');
+  mode = 'free';
+  const operation = vi.fn();
+  await expect(routeProtocol(runtime, operation)).rejects.toThrow('require a paused runtime');
+  expect(operation).not.toHaveBeenCalled();
 });
