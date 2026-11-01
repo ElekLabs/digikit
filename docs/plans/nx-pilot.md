@@ -482,28 +482,11 @@ device proof is claimed.
 
 ### FX route migration checkpoint (2026-11-01)
 
-PR #245 merged at `dd542a11` under Em's explicit focused-acceptance exception. Its prior
-preflight retained three baseline path errors; this was not a full-gate pass, and that exception
-does not transfer to the route batch.
-
-The current `test/fx-route-consolidation` branch ports the complete eight `fxroutes` and eleven
-`fxroute` legs per device. Fixtures own one exact prepared image and matching plan/write-watch
-policy per process: `RT + dynfx` for the track baseline, `RT + dynfx + fxpages` for track routes,
-and the latter plus `digikit-menu` for the route panel. Independent cases load pristine cards;
-persistence cases retain real menu-driven restarts. Legacy runners remain until both-device proof
-passes. Independent review of track port `cbe4566a` found no missing assertions. No performance
-claim follows from this process layout.
-
-Correctness fixes cover paused protocol transport (`fdb745ad`), PCM observation initialization
-(`a0f52563`), the epoch/UI restart barrier (`761aebba`) and prepared DSP-base preservation
-(`f296f998`). Static source review confirmed that replacing the loaded image discarded the stock
-bytes needed for the DSP difference; prepared loads now retain those bytes while `force:true`
-still reconstructs the firmware with the explicit pristine card. Artifacts were repacked through
-the standard current-source SDK 1.2 wrapper after a shared-binary mismatch. Gate preparation and
-routing checkpoint `440f676a` is pushed; this is not a broad-gate pass.
-
-The final DN2 panel proof passed: 151.99 s invocation / 146.644 s case, with artifacts
-`digi-fx-routes-dn2-rj0mZ0`. The load report confirms DSP application at cold boot; all five
-baselines and mandatory lifetime safety passed. These durations are correctness evidence, not a
-speedup measurement. DN2 track and persistence proofs are running; DT2 has not run. Legacy
-runners remain, and this batch has neither a broad-gate pass nor a focused exception.
+The [route coverage and device evidence](test-architecture.md#fx-route-migration-checkpoint-2026-11-01)
+record all six device/family proofs passing, covering 19 legacy baselines per device across four
+owned fixture contexts, clean independent cards and two real menu restarts. Gate preparation/routing
+`440f676a` and the lifecycle fixes are pushed. Reviewed retirement `eaf709b9` is integrated as
+`86e1a7ae`: legacy route device scenarios are removed, retaining the analysis oracles, with no device
+execution change after proof. Final changed checks, full preflight, the routed gate and PR are
+pending. Earlier focused exceptions do not transfer. Timings are correctness evidence, with no
+paired A/B or measured speedup claim.

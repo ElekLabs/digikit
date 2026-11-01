@@ -475,28 +475,48 @@ device proof is claimed.
 
 ### FX route migration checkpoint (2026-11-01)
 
-PR #245 merged at `dd542a11` under Em's explicit focused-acceptance exception. Its prior
-preflight retained three baseline path errors; this was not a full-gate pass, and that exception
-does not transfer to the route batch.
+PR #245 merged at `dd542a11` under Em's explicit focused-acceptance exception, with three prior
+baseline path errors retained. That decision was not a full-gate pass and does not transfer to
+this batch.
 
-The current `test/fx-route-consolidation` branch ports the complete eight `fxroutes` and eleven
-`fxroute` legs per device. Fixtures own one exact prepared image and matching plan/write-watch
-policy per process: `RT + dynfx` for the track baseline, `RT + dynfx + fxpages` for track routes,
-and the latter plus `digikit-menu` for the route panel. Independent cases load pristine cards;
-persistence cases retain real menu-driven restarts. Legacy runners remain until both-device proof
-passes. Independent review of track port `cbe4566a` found no missing assertions. No performance
-claim follows from this process layout.
+The route port covers all eight `fxroutes` and eleven `fxroute` legacy legs per device: 19 independent
+baselines across four owned fixture contexts (panel, persistence, no-hook reference and hooked
+track cases). Each context has one exact prepared image, symbol plan and startup-to-close write-watch
+policy. The three image variants remain `RT + dynfx`, that set plus `fxpages`, and that set plus
+`fxpages + digikit-menu`. Independent cases use pristine cards; the two menu-driven route changes
+retain real guest restarts and before/after persistence evidence. Different images do not share
+allowed-PC sets. The hooked track context runs its ten legs sequentially, retaining the no-hook
+reference in its own process and preserving the final four-overlay project-lock comparison.
 
-Correctness fixes cover paused protocol transport (`fdb745ad`), PCM observation initialization
-(`a0f52563`), the epoch/UI restart barrier (`761aebba`) and prepared DSP-base preservation
-(`f296f998`). Static source review confirmed that replacing the loaded image discarded the stock
-bytes needed for the DSP difference; prepared loads now retain those bytes while `force:true`
-still reconstructs the firmware with the explicit pristine card. Artifacts were repacked through
-the standard current-source SDK 1.2 wrapper after a shared-binary mismatch. Gate preparation and
-routing checkpoint `440f676a` is pushed; this is not a broad-gate pass.
+Independent review of track port `cbe4566a` found no missing assertions. Fixes preserve paused
+protocol queries through the existing stepped USB transport (`fdb745ad`), initialize PCM observation
+before route inspection (`a0f52563`), and use the existing epoch/UI restart barrier (`761aebba`).
+Prepared loads retain the stock bytes needed to compute the DSP difference while still forcing
+firmware reconstruction with the explicit clean card (`f296f998`). Artifacts were repacked through
+the standard current-source SDK 1.2 wrapper after a shared-binary mismatch. Gate preparation/routing
+checkpoint `440f676a` is pushed. Restart inspection now receives the original captured epoch, while
+fresh baselines remain strict; only the combined ten-leg test has a 600-second wall budget
+(`9f0cad73`). Guest timing, note margins, PCM tolerances and assertions remain unchanged.
 
-The final DN2 panel proof passed: 151.99 s invocation / 146.644 s case, with artifacts
-`digi-fx-routes-dn2-rj0mZ0`. The load report confirms DSP application at cold boot; all five
-baselines and mandatory lifetime safety passed. These durations are correctness evidence, not a
-speedup measurement. DN2 track and persistence proofs are running; DT2 has not run. Legacy
-runners remain, and this batch has neither a broad-gate pass nor a focused exception.
+All six device/family proofs passed:
+
+| Device / family | Wall duration | Artifact suffixes | Lifetime safety |
+| --- | --- | --- | --- |
+| DN2 panel | 151.99 s invocation / 146.644 s case | `rj0mZ0` | 11 watch windows, 5 overlays passed |
+| DN2 persistence | 121.88 s invocation / 115.753 s case | `cCWGMv` | 11 watch windows, 8 overlays passed |
+| DT2 panel | 179.062 s file / 173.855 s case | `XQjKMS` | 11 watch windows, 5 overlays passed |
+| DN2 track | 428.32 s invocation; 16.751 s reference + 401.264 s combined case | reference `8hTbj1`, hooked `dJ0EdG` | reference 3 windows / 1 overlay; hooked 15 windows / 13 overlays passed |
+| DT2 persistence | 151.408 s file / 146.082 s case | `lX6mnZ` | 11 watch windows, 8 overlays passed |
+| DT2 track | 360.238 s file; 24.078 s reference + 324.879 s combined case | reference `fgYuXW`, hooked `rGPXvd` | reference 3 windows / 1 overlay; hooked 15 windows / 13 overlays passed |
+
+The final DT2 persistence/track invocation took 511.90 s. All safety reports passed with zero
+write/flush hits. Watch windows are emulator summaries within the
+owned fixture lifecycle, not a count of operating-system processes. The DN2 panel load report confirms
+DSP application at cold boot. These durations establish correctness only: no paired A/B or measured
+speedup claim is made.
+
+Reviewed legacy retirement `eaf709b9` is integrated and pushed as `86e1a7ae` (23 files, +49/-1400;
+349 tests and 15 subtests reported for the retirement work). The legacy route device scenarios
+are removed; the independent analysis oracles remain. No device execution changed after the final
+proofs. Final changed checks, full preflight, the routed gate and PR remain pending; no broad-gate
+pass or focused exception exists for this batch.
