@@ -131,10 +131,12 @@ impl Env {
             && self.m68k_prefix().join("bin/m68k-elf-as").exists()
     }
 
-    /// Environment for `cargo +nightly -Zbuild-std ...` with the GCC back end for -mcpu=54418.
+    /// Environment for the pinned nightly Cargo with the GCC back end for -mcpu=54418.
     pub fn codegen_gcc_env(&self, extra_rustflags: &str) -> Vec<(String, String)> {
+        // The native gate pins stable compiler paths. Let the explicit nightly invocation select
+        // its own compiler and documentation tool instead of inheriting those overrides.
         let mut env: Vec<(String, String)> = std::env::vars()
-            .filter(|(k, _)| k != "RUSTUP_TOOLCHAIN")
+            .filter(|(k, _)| !matches!(k.as_str(), "RUSTUP_TOOLCHAIN" | "RUSTC" | "RUSTDOC"))
             .collect();
         let path = std::env::var("PATH").unwrap_or_default();
         let new_path = format!("{}:{path}", self.m68k_prefix().join("bin").display());

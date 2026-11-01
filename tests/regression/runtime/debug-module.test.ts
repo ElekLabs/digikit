@@ -106,7 +106,10 @@ async function expectEarlyModuleLog(runtime: PatchedSession): Promise<void> {
   );
   expect((await dk.modules()).map((m) => m.name)).toEqual(['digikit/remote', 'digikit/debug']);
   await expect
-    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), { timeout: 60_000, interval: 1000 })
+    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), {
+      timeout: 60_000,
+      interval: 1000,
+    })
     .toBe(true);
   const log = await dk.readLog();
   const line = log.find((e) => e.kind === LOG_KIND.MOD_LOG && text(e.args.slice(0, 4)).startsWith('remote registere'));
