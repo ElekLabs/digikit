@@ -1,6 +1,7 @@
 # samples: the stock sample pool (DT2 1.17 loader, worker queue, slot tables; finding 109)
 # Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
-# The path open, close and stored-metadata functions are in storage.toml. DN2 has no stock pool borrow: core/sample-pool owns an allocator there.
+# The path open, close and stored-metadata functions are in storage.toml. DN2 has no stock pool borrow: core/sample-pool owns an allocator there
+# and runs its page transport as a job on the same worker (worker.get and worker.queue are declared for both devices).
 
 [[fn]]
 name = "cf.samples.fn.loader.load"
@@ -26,7 +27,7 @@ doc = "Release one slot (finding 109 section 2; the loader calls it first): drop
 name = "cf.samples.fn.worker.get"
 cpu = "cf"
 sig = "u32 ()"
-devices = ["dt2"]
+devices = ["dt2", "dn2"]
 rule = { kind = "cf_func", hash = "14b8cdec104500e269af8c0f10c7095c", ordinal = 1, offset = 0x0, len = 4 }
 mark = "D"
 users = ["core/sample-pool"]
@@ -36,7 +37,7 @@ doc = "Getter of the SampleLoaderBgWorker singleton (finding 109 section 3); its
 name = "cf.samples.fn.worker.queue"
 cpu = "cf"
 sig = "u32 (u32 worker, const char *name, void *job, void *done)"
-devices = ["dt2"]
+devices = ["dt2", "dn2"]
 rule = { kind = "cf_func", hash = "2deda5ff5cc76433776f2e649f57f0c1", offset = 0x0, len = 4 }
 mark = "D"
 users = ["core/sample-pool"]

@@ -2207,6 +2207,16 @@ mark = "D"
 rule = "fw/rtos:cf_reset_init_calls"
 
 [[anchor]]
+name = "cf.rtos.fn.sleep_us"
+cpu = "cf"
+kind = "code"
+addr = 0x4013492c
+len = 4
+sha256 = "4588d2f3db332715f3deb955e001dc741b54e633be8ffc3c2a4da9948cf6274d"
+mark = "D"
+rule = "fw/rtos:cf_func"
+
+[[anchor]]
 name = "cf.rtos.site.exc_hook_lit"
 cpu = "cf"
 kind = "code"
@@ -2257,6 +2267,26 @@ len = 8
 sha256 = "dbd7ee3ac848bc629a889c3a534a8b23d8bb88fb05c5dd9f8f825696a3c6b633"
 mark = "D"
 rule = "fw/rtos:cf_reset_helper"
+
+[[anchor]]
+name = "cf.samples.fn.worker.get"
+cpu = "cf"
+kind = "code"
+addr = 0x4019eb1a
+len = 4
+sha256 = "9d173d59041b301888ec7a85e552356c0a38f1538ed266082f5001737ceb2308"
+mark = "D"
+rule = "fw/samples:cf_func"
+
+[[anchor]]
+name = "cf.samples.fn.worker.queue"
+cpu = "cf"
+kind = "code"
+addr = 0x400f25f8
+len = 4
+sha256 = "9b452917d2c5d39ac109b9847aa1b7a6b43f3a292c343ce5867673dc6ac5e67f"
+mark = "D"
+rule = "fw/samples:cf_func"
 
 [[anchor]]
 name = "cf.storage.fn.block.read"

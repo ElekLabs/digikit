@@ -102,7 +102,7 @@ devices = ["dn2"]
 rule = { kind = "cf_func", hash = "9a4120e12f9b5eb84887e090794f55b7", offset = 0x0, len = 4 }
 sig = "void (u32 tag, const u32 *source, u32 format)"
 mark = "D"
-users = ["core/dsp-lp0-proof", "core/sample-pool"]
+users = ["core/dsp-lp0-proof"]
 doc = "DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first."
 
 [[site]]
