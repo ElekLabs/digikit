@@ -358,7 +358,7 @@ pub unsafe fn fx_set_route(k: usize, route: u32, amt: [u32; 4]) {
 /// An effect row whose words are in the DSP: claimed, published and no load in progress, so a one-word write can go out.
 pub unsafe fn fx_live(k: usize) -> bool {
     let d = ds();
-    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !crate::sample::busy()
+    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !crate::sample::busy() && !crate::tracks::busy()
 }
 
 /// The effect row's words in the chain: word `w` of row `k` (a one-word write through window 2).
@@ -694,19 +694,34 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
             }
         }
         let b = s.add(bank_off as usize);
-        if !dkrt_sdk::sample_job::valid_bank(
-            core::slice::from_raw_parts(b, 32),
-            core::slice::from_raw_parts(s.add(image_off as usize), image_size as usize),
-            bss,
-        ) {
-            return E_DSP_FORMAT;
-        }
-        let desc = rd32le(b.add(16));
-        // Relocations cannot turn the initially empty descriptor into a published one.
-        for k in 0..nreloc {
-            let at = rd32(s.add((reloc_off + k * 8) as usize));
-            if at < desc + 16 && desc < at.saturating_add(6) {
+        let record = core::slice::from_raw_parts(b, 32);
+        let image = core::slice::from_raw_parts(s.add(image_off as usize), image_size as usize);
+        // The record is a bank (kind 1) with its descriptor, or a per-track table (kind 2) with its two blocks.
+        if rd32le(b) == 2 {
+            if !dkrt_sdk::sample_job::valid_tracks(record, image) {
                 return E_DSP_FORMAT;
+            }
+            // Relocations cannot turn the initially empty table into a published one.
+            let (records, control) = (rd32le(b.add(8)), rd32le(b.add(12)));
+            for k in 0..nreloc {
+                let at = rd32(s.add((reloc_off + k * 8) as usize));
+                if (at < records + dkrt_sdk::sample_job::TRACK_RECORDS_BYTES && records < at.saturating_add(6))
+                    || (at < control + dkrt_sdk::sample_job::TRACK_CONTROL_BYTES && control < at.saturating_add(6))
+                {
+                    return E_DSP_FORMAT;
+                }
+            }
+        } else {
+            if !dkrt_sdk::sample_job::valid_bank(record, image, bss) {
+                return E_DSP_FORMAT;
+            }
+            let desc = rd32le(b.add(16));
+            // Relocations cannot turn the initially empty descriptor into a published one.
+            for k in 0..nreloc {
+                let at = rd32(s.add((reloc_off + k * 8) as usize));
+                if at < desc + 16 && desc < at.saturating_add(6) {
+                    return E_DSP_FORMAT;
+                }
             }
         }
     }
@@ -863,6 +878,10 @@ unsafe fn put_le16(p: *mut u8, v: u32) {
 /// Nothing is sent yet. On an error nothing is left reserved.
 pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     if retained() { return E_BUSY; }
+    // a track table needs a free client slot: refuse before anything is reserved
+    if !job.bank.is_null() && rd32le(job.bank) == 2 && !crate::tracks::can_reserve() {
+        return E_TABLE_FULL;
+    }
     let d = ds();
     let len = (extent(job.image_size, job.bss, job.voices, job.nvoice, job.vstride, job.fxs, job.nfx) + GRANULE - 1) & !(GRANULE - 1);
     let off = match alloc_range(len, job.align) {
@@ -981,13 +1000,18 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         f += 1;
     }
     if !job.bank.is_null() {
-        crate::sample::reserve(
-            rec,
-            rd32le(job.bank.add(4)),
-            base + rd32le(job.bank.add(8)),
-            rd32le(job.bank.add(12)),
-            base + rd32le(job.bank.add(16)),
-        );
+        if rd32le(job.bank) == 2 {
+            // a client slot was checked free at the start of this function
+            crate::tracks::reserve(rec, rd32le(job.bank.add(4)), base + rd32le(job.bank.add(8)), base + rd32le(job.bank.add(12)));
+        } else {
+            crate::sample::reserve(
+                rec,
+                rd32le(job.bank.add(4)),
+                base + rd32le(job.bank.add(8)),
+                rd32le(job.bank.add(12)),
+                base + rd32le(job.bank.add(16)),
+            );
+        }
     }
     d.mod_fx[rec] = fclaimed;
     d.mod_off[rec] = off;
@@ -1002,6 +1026,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
 /// Give back what `reserve` took for module record `rec` (the rows must have been cleared first).
 unsafe fn unreserve(rec: usize) {
     crate::sample::remove(rec);
+    crate::tracks::remove(rec);
     let d = ds();
     let mut k = 0;
     while k < MAX_ROWS {
@@ -1368,6 +1393,7 @@ pub unsafe fn step() {
                 if row == MAX_ROWS && frow == MAX_FX {
                     // every row is in: list the machine, run init, publish the slots
                     crate::sample::ready(rec);
+                    crate::tracks::ready(rec);
                     crate::boot::note_result(d.pending.boot_idx, OK);
                     crate::st().last_result = OK;
                     next_job();

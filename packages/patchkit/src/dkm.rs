@@ -738,6 +738,7 @@ mod tests {
         };
         let f = pack_full(Some(&object()), &[], &tracks.encode(), &stereo).unwrap();
         assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
+        needs(&f).expect("dkneeds accepts the kind 2 record the packer wrote");
         // a data-only module with a DSP section: machine, no service
         let f = pack_full(None, &[], &[0u8; 16], &opts()).unwrap();
         assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);

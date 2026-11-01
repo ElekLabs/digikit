@@ -5,16 +5,30 @@
 //! No firmware address and no `cf.*` anchor is used here. Without the backing adapter every
 //! `sample_select` returns E_CONTRACT.
 //!
-//! TODO (not wired yet, so no module can declare a track table today and `sample_tracks` returns
-//! E_CONTRACT): the DK_DESC_SAMPLE_TRACKS lowering into the .dkm DSP section and `reserve` here;
-//! the DSP-side `Env` operations (close and drain-ack words, record publish over the DSP link);
-//! the header inspection of stereo native files (`inspect`/`stat`); persistence of the selections
-//! to the digikit store (they live in memory per project now).
-use crate::sample;
+//! The track table of a module travels in its .dkm DSP section (version 5, record kind 2: the byte offsets of the 16 `dk_strack`
+//! records and the 16 control sets in the module's DSP data). `dsp::reserve` calls `reserve` with their L2 byte addresses and
+//! `ready` when the DSP image is in; before that no DSP write is made.
+//!
+//! The DSP link is write-only, so close, drain and publish are queued writes, one in flight at a time (`pump`), with the same link
+//! discipline as the 1.3 bank job (`sample.rs`): a start needs an idle loader and no bank, fx page or fx send transfer, and the bank
+//! tick waits while a table write is in flight (`busy`).
+//!   close:   control CLOSED = 1, then record `ready` = 0. The DSP holds a track only between ACQUIRE and RELEASE inside one `render`
+//!            call, so a render that was inside when CLOSED landed ends within that block. The second write lands in a later block than
+//!            the first (one transfer at a time, each acknowledged), so its acknowledgement drains the track: no COUNT read-back
+//!            exists, and the 1.3 bank never closes, so it never drains.
+//!   publish: record words 1..7 (token, frames, rate, channels, fmt, base_l, base_r), control CLOSED = 0, then `ready` = 1 last.
+//! A write the link refuses is retried; after `TRIES` failures the op stays failed (a close then never drains and the generic drain
+//! guard of `sample_tracks` ends the request; a publish stays unpublished, `ready` = 0, the track plays silence).
+//! A sticky DSP FAULT (poisoned COUNT, CLOSED = 1) is never cleared by the runtime: that track stays silent until the module reloads.
+//!
+//! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
+//! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
+use crate::{dsp, irq_mask, irq_restore, sample};
 use core::hint::black_box;
-use core::ptr::addr_of_mut;
-use dkrt_sdk::sample_tracks::{Core, Env, FileId, Handle, Inspect, Load, Strack, TRACKS};
-use dkrt_sdk::{E_CONTRACT, E_NOT_FOUND, E_SEL_PATH};
+use core::ptr::{addr_of, addr_of_mut, read_volatile};
+use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
+use dkrt_sdk::sample_tracks::{Core, Env, FileId, Handle, Inspect, Load, Strack, ID_HASH_VALID, TRACKS};
+use dkrt_sdk::{E_CONTRACT, E_NOT_FOUND, E_READ, E_SEL_PATH};
 
 pub const DKPOOL_VERSION: u32 = 1;
 const CLIENTS: usize = 2;
@@ -29,12 +43,22 @@ extern "C" {
     fn dkpool_check(h: *const Handle) -> i32;
     fn dkpool_free_frames() -> u32;
     fn dkpool_tick();
+    // Per-device tables of the runtime's assembly objects (DT2 1.17 anchors; zeros on DN2). Both are declared in sample_source.rs and files.rs too.
+    static dkrt_sample_fs: [u32; 4];
+    static dkrt_files_fs: [u32; 3];
 }
 
 static mut CORE: Core<CLIENTS, ENTRIES, PROJECTS> = Core::new();
-/// Module record + 1 of the owner of each client slot (0 = free) and its DSP table addresses.
+/// Module record of the owner of each client slot (`usize::MAX` = free), its local id, the L2 byte addresses of its 16 records and 16
+/// control sets, and whether its DSP image is in (table writes may start).
 static mut OWNER: [usize; CLIENTS] = [usize::MAX; CLIENTS];
 static mut LOCAL: [u32; CLIENTS] = [0; CLIENTS];
+static mut RECORDS: [u32; CLIENTS] = [0; CLIENTS];
+static mut CONTROL: [u32; CLIENTS] = [0; CLIENTS];
+static mut LIVE: [bool; CLIENTS] = [false; CLIENTS];
+/// The client slot of a module that is taken down (`usize::MAX`: none): nothing reads its tracks any more, so close drains at once and
+/// writes are dropped. Other clients are stepped normally meanwhile.
+static mut FORCE: usize = usize::MAX;
 /// 0 not checked, 1 usable, 2 absent or wrong version.
 static mut POOL: u8 = 0;
 
@@ -55,14 +79,213 @@ unsafe fn pool_ok() -> bool {
     POOL == 1
 }
 
+// ---- table writes over the DSP link -------------------------------------------------------------------------------------------
+
+const OP_NONE: u8 = 0;
+const OP_CLOSE: u8 = 1;
+const OP_PUBLISH: u8 = 2;
+const OP_FAILED: u8 = 3;
+/// Refusals of one write before the op is given up.
+const TRIES: u8 = 8;
+const NO_FLIGHT: usize = usize::MAX;
+
+#[derive(Clone, Copy)]
+struct Op {
+    kind: u8,
+    step: u8,
+    tries: u8,
+    /// The record to publish (`Strack` words in order).
+    rec: [u32; 8],
+}
+const OP0: Op = Op { kind: OP_NONE, step: 0, tries: 0, rec: [0; 8] };
+static mut OPS: [[Op; TRACKS]; CLIENTS] = [[OP0; TRACKS]; CLIENTS];
+/// The bytes of the write in flight (little-endian DSP words; the link reads them in place) and its track: client * TRACKS + track.
+static mut STAGE: [u8; 28] = [0; 28];
+static mut FLIGHT: usize = NO_FLIGHT;
+
+/// A table write is in flight: the bank job and the fx word writers wait (one transfer on the link at a time).
+pub fn busy() -> bool {
+    unsafe { FLIGHT != NO_FLIGHT }
+}
+
+/// Little-endian bytes of `words` into `STAGE`; the byte count.
+unsafe fn stage(words: &[u32]) -> u32 {
+    let mut i = 0;
+    while i < words.len() {
+        let b = words[i].to_le_bytes();
+        let st = &mut *addr_of_mut!(STAGE);
+        st[i * 4] = b[0];
+        st[i * 4 + 1] = b[1];
+        st[i * 4 + 2] = b[2];
+        st[i * 4 + 3] = b[3];
+        i += 1;
+    }
+    (words.len() * 4) as u32
+}
+
+/// Has the op written everything?
+fn complete(op: &Op) -> bool {
+    (op.kind == OP_CLOSE && op.step >= 2) || (op.kind == OP_PUBLISH && op.step >= 3)
+}
+
+/// The next write of an op: (destination L2 byte address, byte count), the bytes in `STAGE`. None when the op is complete.
+/// If chains, not a `match`: dense arms become a PC-relative jump table, which is not ColdFire code.
+unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, u32)> {
+    let rec = RECORDS[c] + 32 * k as u32;
+    let ctl = CONTROL[c] + 16 * k as u32;
+    if op.kind == OP_CLOSE {
+        if op.step == 0 {
+            return Some((ctl, stage(&[1])));
+        }
+        if op.step == 1 {
+            return Some((rec, stage(&[0])));
+        }
+    } else if op.kind == OP_PUBLISH {
+        if op.step == 0 {
+            return Some((rec + 4, stage(&op.rec[1..8])));
+        }
+        if op.step == 1 {
+            return Some((ctl, stage(&[0])));
+        }
+        if op.step == 2 {
+            return Some((rec, stage(&[op.rec[0]])));
+        }
+    }
+    None
+}
+
+/// Finish the write in flight, then start the next one. Called twice per UI-loop pass.
+unsafe fn pump() {
+    if FLIGHT != NO_FLIGHT {
+        let done = dsp::sample_poll();
+        if done.is_none() {
+            return;
+        }
+        let (c, k) = (FLIGHT / TRACKS, FLIGHT % TRACKS);
+        FLIGHT = NO_FLIGHT;
+        let op = &mut (*addr_of_mut!(OPS))[c][k];
+        if done == Some(true) {
+            op.step += 1;
+            op.tries = 0;
+        } else {
+            op.tries += 1;
+        }
+    }
+    let mut c = 0;
+    while c < CLIENTS {
+        let mut k = 0;
+        while k < TRACKS {
+            let op = &mut (*addr_of_mut!(OPS))[c][k];
+            if op.kind == OP_CLOSE || op.kind == OP_PUBLISH {
+                if op.tries >= TRIES {
+                    op.kind = OP_FAILED;
+                } else if complete(op) {
+                    op.kind = OP_NONE;
+                }
+            }
+            k += 1;
+        }
+        c += 1;
+    }
+    if !dsp::sample_idle() || crate::fxpage::busy() || crate::fxsend::busy() || sample::busy() {
+        return;
+    }
+    c = 0;
+    while c < CLIENTS {
+        let mut k = 0;
+        while k < TRACKS {
+            let op = (*addr_of!(OPS))[c][k];
+            if (op.kind == OP_CLOSE || op.kind == OP_PUBLISH) && LIVE[c] {
+                if let Some((dst, len)) = next_write(c, k, &op) {
+                    let r = dsp::sample_send(dst, addr_of!(STAGE) as *const u8, len);
+                    if r == 0 {
+                        FLIGHT = c * TRACKS + k;
+                    } else if r == -2 {
+                        (*addr_of_mut!(OPS))[c][k].tries += 1;
+                    }
+                    return;
+                }
+            }
+            k += 1;
+        }
+        c += 1;
+    }
+}
+
+// ---- native file header and identity (DT2) --------------------------------------------------------------------------------
+
+type FsOpen = unsafe extern "C" fn(*const u8, *const u8, *mut u32) -> i32;
+type FsRead = unsafe extern "C" fn(*mut u8, u32, *mut u32) -> i32;
+type FsClose = unsafe extern "C" fn(*mut u32) -> i32;
+type FsSize = unsafe extern "C" fn(u32) -> u32;
+type FsMeta = unsafe extern "C" fn(u32, *mut u32) -> i32;
+
+/// Open `path` (not NUL-terminated), take the identity of its listing row (size and the stored hash by entry id, as `files.rs` lists it)
+/// and, when `head` is given, read the 64 header bytes. DT2 only: DN2 has no sample backing, so `pool_ok` refuses before this runs.
+unsafe fn probe(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId, i32> {
+    if crate::device() != 1 {
+        return Err(E_CONTRACT);
+    }
+    if path.is_empty() || path.len() >= dkrt_sdk::sample_tracks::PATH {
+        return Err(E_SEL_PATH);
+    }
+    let mut z = [0u8; dkrt_sdk::sample_tracks::PATH + 1];
+    z[..path.len()].copy_from_slice(path);
+    let table = addr_of!(dkrt_sample_fs) as *const u32;
+    let (open_addr, read_addr, close_addr, size_addr) =
+        (read_volatile(table), read_volatile(table.add(1)), read_volatile(table.add(2)), read_volatile(table.add(3)));
+    let meta_addr = read_volatile((addr_of!(dkrt_files_fs) as *const u32).add(2));
+    if open_addr == 0 || read_addr == 0 || close_addr == 0 || size_addr == 0 {
+        return Err(E_NOT_FOUND);
+    }
+    let open: FsOpen = core::mem::transmute(open_addr as usize);
+    let read: FsRead = core::mem::transmute(read_addr as usize);
+    let close: FsClose = core::mem::transmute(close_addr as usize);
+    let size_of: FsSize = core::mem::transmute(size_addr as usize);
+    let mut handle = [0u32; 4];
+    if open(z.as_ptr(), b"r\0".as_ptr(), handle.as_mut_ptr()) != 0 {
+        return Err(E_NOT_FOUND);
+    }
+    let result = (|| {
+        let size = size_of(handle[0]);
+        if size == u32::MAX {
+            return Err(E_READ);
+        }
+        if let Some(h) = head {
+            if size < 64 || read(h.as_mut_ptr(), 64, handle.as_mut_ptr()) != 64 {
+                return Err(E_READ);
+            }
+        }
+        let mut id = FileId { root: SAMPLES, size, mtime: 0, flags: 0, hash_kind: 0, hash: [0; 32] };
+        // The stored hash of the entry (words: id, odd hash, physical size, node). No mtime exists on DT2: without a hash the identity is size and path.
+        if meta_addr != 0 {
+            let meta: FsMeta = core::mem::transmute(meta_addr as usize);
+            let mut values = [0u32; 4];
+            if meta(handle[0], values.as_mut_ptr()) == 0 && values[2] == size {
+                id.flags = ID_HASH_VALID;
+                id.hash_kind = HASH_ELEKTRON32;
+                id.hash[..4].copy_from_slice(&values[1].to_be_bytes());
+            }
+        }
+        Ok(id)
+    })();
+    if close(handle.as_mut_ptr()) != 0 {
+        return Err(E_READ);
+    }
+    result
+}
+
 struct Device;
 impl Env for Device {
-    // TODO: header check and stat of stereo native files (needs the listing row identity).
-    fn inspect(&mut self, _path: &[u8]) -> Result<Inspect, i32> {
-        Err(E_CONTRACT)
+    fn inspect(&mut self, path: &[u8]) -> Result<Inspect, i32> {
+        let mut head = [0u8; 64];
+        let id = unsafe { probe(path, Some(&mut head))? };
+        // Size and format only: no PCM is read here (it can be megabytes), the pool adapter reads it.
+        let (frames, channels) = dkrt_sdk::sample::native_header(&head, id.size)?;
+        Ok(Inspect { id, frames, rate: dkrt_sdk::sample::RATE, channels })
     }
-    fn stat(&mut self, _path: &[u8]) -> Result<FileId, i32> {
-        Err(E_CONTRACT)
+    fn stat(&mut self, path: &[u8]) -> Result<FileId, i32> {
+        unsafe { probe(path, None) }
     }
     fn load(&mut self, req: u32, id: &FileId, path: &[u8], out: &mut Handle) -> Load {
         // The adapter gets a NUL-terminated copy: the runtime's path buffers are not.
@@ -83,12 +306,31 @@ impl Env for Device {
     fn free_frames(&mut self) -> u32 {
         unsafe { dkpool_free_frames() }
     }
-    // TODO: DSP words of the track (CLOSED, COUNT) and the record publish over the DSP link.
-    fn close(&mut self, _client: usize, _track: usize) {}
-    fn drained(&mut self, _client: usize, _track: usize) -> bool {
-        false
+    fn close(&mut self, client: usize, track: usize) {
+        unsafe {
+            let op = &mut (*addr_of_mut!(OPS))[client][track];
+            // A publish still queued is dropped: the close writes CLOSED and `ready` = 0 anyway. Before the DSP image is in there is
+            // nothing to close.
+            *op = OP0;
+            if LIVE[client] && FORCE != client {
+                op.kind = OP_CLOSE;
+            }
+        }
     }
-    fn publish(&mut self, _client: usize, _track: usize, _rec: &Strack) {}
+    fn drained(&mut self, client: usize, track: usize) -> bool {
+        unsafe { FORCE == client || (*addr_of!(OPS))[client][track].kind == OP_NONE }
+    }
+    fn publish(&mut self, client: usize, track: usize, rec: &Strack) {
+        unsafe {
+            if FORCE == client {
+                return;
+            }
+            let op = &mut (*addr_of_mut!(OPS))[client][track];
+            *op = OP0;
+            op.kind = OP_PUBLISH;
+            op.rec = [rec.ready, rec.token, rec.frames, rec.rate, rec.channels, rec.fmt, rec.base_l, rec.base_r];
+        }
+    }
 }
 
 /// The client slot of the calling module, if it has a track table.
@@ -100,14 +342,11 @@ unsafe fn client(handle: u32) -> Result<usize, i32> {
     Ok(h - 1)
 }
 
-/// A module's track table was reserved by the loader (the DSP section lowering is a TODO, so nothing calls this yet).
-#[allow(dead_code)]
-pub unsafe fn reserve(rec: usize, local_id: u32) -> bool {
+/// Is a client slot free (checked by `dsp::reserve` before it takes anything)?
+pub unsafe fn can_reserve() -> bool {
     let mut i = 0;
     while i < CLIENTS {
-        if OWNER[i] == usize::MAX && core_().open(i) {
-            OWNER[i] = rec;
-            LOCAL[i] = local_id;
+        if OWNER[i] == usize::MAX {
             return true;
         }
         i += 1;
@@ -115,22 +354,55 @@ pub unsafe fn reserve(rec: usize, local_id: u32) -> bool {
     false
 }
 
-/// A module's record went away: unbind its tracks. True once nothing can touch its memory.
-#[allow(dead_code)]
-pub unsafe fn remove(rec: usize) -> bool {
-    let mut done = true;
+/// A module's track table was found in its DSP section: `records` and `control` are the L2 byte addresses of its 16 records and 16
+/// control sets. Nothing is written to the DSP before `ready`.
+pub unsafe fn reserve(rec: usize, local_id: u32, records: u32, control: u32) -> bool {
     let mut i = 0;
     while i < CLIENTS {
-        if OWNER[i] == rec {
-            if core_().teardown(i, &mut Device) {
-                OWNER[i] = usize::MAX;
-            } else {
-                done = false;
-            }
+        if OWNER[i] == usize::MAX && core_().open(i) {
+            OWNER[i] = rec;
+            LOCAL[i] = local_id;
+            RECORDS[i] = records;
+            CONTROL[i] = control;
+            LIVE[i] = false;
+            (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
+            return true;
         }
         i += 1;
     }
-    done
+    false
+}
+
+/// The module's DSP image is in, so its table words exist: queued writes may go out.
+pub unsafe fn ready(rec: usize) {
+    let mut i = 0;
+    while i < CLIENTS {
+        if OWNER[i] == rec {
+            LIVE[i] = true;
+        }
+        i += 1;
+    }
+}
+
+/// A module's record went away (its machine rows are already cleared, so no voice runs): unbind its tracks without closing them in
+/// the DSP, release the pool references and free the client slot. A write already in flight ends by itself (its bytes are static, and
+/// the link is serialized, so a later load of the range lands after it).
+pub unsafe fn remove(rec: usize) {
+    let mut i = 0;
+    while i < CLIENTS {
+        if OWNER[i] == rec {
+            FORCE = i;
+            let mut n = 0;
+            while n < 4 && !core_().teardown(i, &mut Device) {
+                n += 1;
+            }
+            FORCE = usize::MAX;
+            (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
+            LIVE[i] = false;
+            OWNER[i] = usize::MAX;
+        }
+        i += 1;
+    }
 }
 
 /// Does module record `rec` hold a track table (the bank API refuses it then)?
@@ -188,12 +460,20 @@ pub unsafe fn select(handle: u32, track: u32, path: *const u8) -> i32 {
     if n == copy.len() {
         return E_SEL_PATH;
     }
-    core_().select(c, track as usize, &copy[..n])
+    let sr = irq_mask();
+    let r = core_().select(c, track as usize, &copy[..n]);
+    irq_restore(sr);
+    r
 }
 
 pub unsafe fn unbind(handle: u32, track: u32) -> i32 {
     match client(handle) {
-        Ok(c) => core_().unbind(c, track as usize),
+        Ok(c) => {
+            let sr = irq_mask();
+            let r = core_().unbind(c, track as usize);
+            irq_restore(sr);
+            r
+        }
         Err(e) => e,
     }
 }
@@ -237,7 +517,9 @@ pub unsafe fn tick() {
     if black_box(dkpool_tick as *const () as usize) != 0 {
         dkpool_tick();
     }
+    pump();
     core_().tick(&mut Device);
+    pump();
 }
 
 /// Adapter to runtime: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).

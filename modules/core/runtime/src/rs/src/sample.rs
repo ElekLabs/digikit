@@ -128,7 +128,11 @@ impl Link for Transport {
     }
 }
 pub unsafe fn tick() {
-    if OWNER == usize::MAX || !dsp::sample_idle() || crate::fxpage::busy() || crate::fxsend::busy()
+    if OWNER == usize::MAX
+        || !dsp::sample_idle()
+        || crate::fxpage::busy()
+        || crate::fxsend::busy()
+        || crate::tracks::busy()
     {
         return;
     }

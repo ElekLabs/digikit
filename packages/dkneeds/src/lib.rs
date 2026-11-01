@@ -353,39 +353,70 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         let at = off + bank_off;
         // The sample-bank record alone has little-endian words.
         let bank_version = word(src, at)?.swap_bytes();
-        let bank = word(src, at + 8)?.swap_bytes();
-        let frames = word(src, at + 12)?.swap_bytes();
-        let descriptor = word(src, at + 16)?.swap_bytes();
-        let end = image.checked_add(bss).ok_or(Error::Dsp)?;
-        let bank_end = frames
-            .checked_mul(4)
-            .and_then(|n| bank.checked_add(n))
-            .ok_or(Error::Dsp)?;
-        if bank_version != 1
-            || !(1..=8192).contains(&frames)
-            || bank & 3 != 0
-            || bank < image
-            || bank_end > end
-            || descriptor & 3 != 0
-            || !inside(descriptor, 16, image)
-        {
-            return Err(Error::Dsp);
-        }
-        for i in 5..8 {
-            if word(src, at + i * 4)? != 0 {
+        // Kind 2: the per-track sample table (two zero blocks of the initialized image, no relocations in them).
+        if bank_version == 2 {
+            let records = word(src, at + 8)?.swap_bytes();
+            let control = word(src, at + 12)?.swap_bytes();
+            for i in 4..8 {
+                if word(src, at + i * 4)? != 0 {
+                    return Err(Error::Dsp);
+                }
+            }
+            let blocks = [(records, 512u32), (control, 256u32)];
+            for (b, len) in blocks {
+                if b & 3 != 0 || !inside(b, len, image) {
+                    return Err(Error::Dsp);
+                }
+                for i in 0..len / 4 {
+                    if word(src, off + image_off + b + i * 4)? != 0 {
+                        return Err(Error::Dsp);
+                    }
+                }
+                for i in 0..nreloc {
+                    let r = word(src, off + reloc_off + i * 8)?;
+                    if u64::from(r) < u64::from(b) + u64::from(len) && u64::from(r) + 6 > u64::from(b) {
+                        return Err(Error::Dsp);
+                    }
+                }
+            }
+            if records < control + 256 && control < records + 512 {
                 return Err(Error::Dsp);
             }
-        }
-        for i in 0..4 {
-            if word(src, off + image_off + descriptor + i * 4)? != 0 {
-                return Err(Error::Dsp);
-            }
-        }
-        for i in 0..nreloc {
-            let r = word(src, off + reloc_off + i * 8)?;
-            if u64::from(r) < u64::from(descriptor) + 16 && u64::from(r) + 6 > u64::from(descriptor)
+        } else {
+            let bank = word(src, at + 8)?.swap_bytes();
+            let frames = word(src, at + 12)?.swap_bytes();
+            let descriptor = word(src, at + 16)?.swap_bytes();
+            let end = image.checked_add(bss).ok_or(Error::Dsp)?;
+            let bank_end = frames
+                .checked_mul(4)
+                .and_then(|n| bank.checked_add(n))
+                .ok_or(Error::Dsp)?;
+            if bank_version != 1
+                || !(1..=8192).contains(&frames)
+                || bank & 3 != 0
+                || bank < image
+                || bank_end > end
+                || descriptor & 3 != 0
+                || !inside(descriptor, 16, image)
             {
                 return Err(Error::Dsp);
+            }
+            for i in 5..8 {
+                if word(src, at + i * 4)? != 0 {
+                    return Err(Error::Dsp);
+                }
+            }
+            for i in 0..4 {
+                if word(src, off + image_off + descriptor + i * 4)? != 0 {
+                    return Err(Error::Dsp);
+                }
+            }
+            for i in 0..nreloc {
+                let r = word(src, off + reloc_off + i * 8)?;
+                if u64::from(r) < u64::from(descriptor) + 16 && u64::from(r) + 6 > u64::from(descriptor)
+                {
+                    return Err(Error::Dsp);
+                }
             }
         }
     }

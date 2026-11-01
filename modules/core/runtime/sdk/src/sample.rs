@@ -43,6 +43,29 @@ pub fn native_frames(input: &[u8]) -> Result<u32, i32> {
     Ok((pcm / 2) as u32)
 }
 
+/// Header-only check of a native file of `size` bytes whose first `HEADER_BYTES` bytes are `header`, for the per-track table (mono or
+/// stereo, any length that fits the pool): returns `(frames, channels)`. Byte 1 is 0 for mono and 1 for stereo (interleaved PCM16, finding
+/// 81 arithmetic: pcm bytes = frames * 2 * channels); rate 48 kHz; every other header byte is zero except the PCM length (bytes 4..8),
+/// the rate (8..12) and 0x14 = 0x7f. The trailer is not read: the size must still be header + pcm + trailer.
+pub fn native_header(header: &[u8], size: u32) -> Result<(u32, u32), i32> {
+    if header.len() < HEADER_BYTES || (size as usize) < HEADER_BYTES + TRAILER_BYTES || header[1] > 1 || be32(header, 8) != RATE {
+        return Err(E_FORMAT);
+    }
+    let channels = header[1] as u32 + 1;
+    let pcm = be32(header, 4);
+    if pcm == 0 || pcm != size - (HEADER_BYTES + TRAILER_BYTES) as u32 || pcm % (2 * channels) != 0 {
+        return Err(E_FORMAT);
+    }
+    let mut i = 0;
+    while i < HEADER_BYTES {
+        if i != 1 && !(4..12).contains(&i) && header[i] != if i == 0x14 { 0x7f } else { 0 } {
+            return Err(E_FORMAT);
+        }
+        i += 1;
+    }
+    Ok((pcm / (2 * channels), channels))
+}
+
 /// Decode signed PCM16 normalized by 32768 into float32 words. The entire file
 /// and destination capacity are checked before any output word is written.
 pub fn decode_native(input: &[u8], output: &mut [u32]) -> Result<u32, i32> {
@@ -100,6 +123,40 @@ mod tests {
             }
             assert_eq!(out[MAX_FRAMES], 0xdeadbeef);
         }
+    }
+
+    #[test]
+    fn header_check_reads_mono_and_stereo_and_rejects_the_rest() {
+        let file = |channels: u8, pcm: u32| {
+            let mut bytes = vec![0u8; HEADER_BYTES + pcm as usize + TRAILER_BYTES];
+            bytes[1] = channels;
+            bytes[4..8].copy_from_slice(&pcm.to_be_bytes());
+            bytes[8..12].copy_from_slice(&48_000u32.to_be_bytes());
+            bytes[0x14] = 0x7f;
+            bytes
+        };
+        let m = file(0, 20);
+        assert_eq!(native_header(&m, m.len() as u32), Ok((10, 1)));
+        let s = file(1, 20);
+        assert_eq!(native_header(&s, s.len() as u32), Ok((5, 2)));
+        assert_eq!(native_header(&s[..HEADER_BYTES], s.len() as u32), Ok((5, 2)));
+        // larger than the 8192-frame bank limit is fine here
+        let big = file(1, 4 * 100_000);
+        assert_eq!(native_header(&big[..HEADER_BYTES], big.len() as u32), Ok((100_000, 2)));
+        let bad_size = s.len() as u32 + 1;
+        assert!(native_header(&s, bad_size).is_err());
+        assert!(native_header(&file(1, 18), 64 + 18 + 16).is_err(), "a partial stereo frame");
+        assert!(native_header(&file(2, 20), 100).is_err(), "channels");
+        assert!(native_header(&file(0, 0), 80).is_err(), "empty");
+        for at in [0usize, 2, 3, 12, 0x13, 0x14, 63] {
+            let mut h = s.clone();
+            h[at] ^= 1;
+            assert!(native_header(&h, s.len() as u32).is_err(), "byte {at}");
+        }
+        let mut rate = s.clone();
+        rate[8..12].copy_from_slice(&44_100u32.to_be_bytes());
+        assert!(native_header(&rate, s.len() as u32).is_err());
+        assert!(native_header(&s[..40], s.len() as u32).is_err());
     }
 
     #[test]
