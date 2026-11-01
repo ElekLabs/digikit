@@ -481,6 +481,12 @@ pub mod rtos {
     // cf.rtos.fn.reset.init_calls: no sig yet
 
     unsafe extern "C" {
+        /// DN2 1.12 stock short sleep (DT2 pair 0x40136544): locks its own mutex, loads timer DTIM1 (prescaler 0x84, about 1 MHz) with `us` and blocks the task on a semaphore until the timer interrupt. Task context only. Eight stock callers; the LP0 sender waits 100 after each page with it.
+        #[link_name = "cf.rtos.fn.sleep_us"]
+        pub fn sleep_us(us: u32);
+    }
+
+    unsafe extern "C" {
         /// The firmware's default exception handler (the code every vector points at until a specific handler is installed; DT2 1.16 0x40001252, not a function of its own): `move #0x2700,sr; move.l sp,<save>; lea -16(sp),sp; movem.l d0-d1/a0-a1,(sp); movea.l <hook word>,a0; tst.l a0; beq +10; move.l <save>,-(sp); jsr (a0); ...; rte`.
         #[link_name = "cf.rtos.site.exc_hook_lit"]
         pub static EXC_HOOK_LIT: u8;

@@ -1,9 +1,10 @@
 """core/sample-pool, Digitone II object: the allocator, the page protocol and the whole ColdFire transport on the host.
 
-pool_alloc.h and pool_wire.h are firmware-free and compile as they are. The transport (cf/dn2/pool.c and xfer.c, unchanged) runs against
-tests/fixtures/sample-pool-dn2/harness.c: stand-ins for the store, the block clock, the stock LP0 sender and the runtime's completion call,
-plus a small model of the DSP receiver that writes pages into a DDR array and answers through the real reply hook. What the emulator must
-still show (DSP code, firmware calls, timing) is listed in docs/design/dn2-sample-pool.md section 6."""
+pool_alloc.h and pool_wire.h are firmware-free and compile as they are. The transport (cf/dn2/pool.c, xfer.c and send.c, unchanged) runs
+against tests/fixtures/sample-pool-dn2/harness.c: stand-ins for the store, the block clock, the SampleLoader worker, the LP0 port and the
+runtime's completion call, plus a small model of the DSP receiver that decodes the pages from the port halves, writes them into a DDR
+array and answers through the real reply hook. The harness runs the block interrupt, the UI task and the worker job on one simulated clock.
+What the emulator must still show (DSP code, firmware calls, timing) is listed in docs/design/dn2-sample-pool.md section 6."""
 
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ CC = shutil.which("cc") or shutil.which("gcc")
 pytestmark = pytest.mark.skipif(CC is None, reason="no host C compiler")
 
 
-def build(tmp_path, sources, name):
+def build(tmp_path, sources, name, defines=()):
     exe = tmp_path / name
     cmd = [
         CC,
@@ -27,6 +28,7 @@ def build(tmp_path, sources, name):
         "-Wextra",
         "-Werror",
         "-O1",
+        *defines,
         f"-I{SRC}",
         f"-I{RUNTIME_INC}",
         *map(str, sources),
@@ -348,6 +350,33 @@ int main(void)
         spw_chunk_of(1, 2048, 0, &c); printf(" %u %u %u %u\n", c.sector, c.sectors, c.skip, c.frames);
     }
 
+    /* reads: for many sizes, the reads taken one after the other cover every chunk once and in order, stay inside the file and inside 128
+     * sectors, and each chunk lies whole inside its read, at the file offset it must have */
+    {
+        static const uint32_t sizes[] = {1, 2047, 2048, 2049, 4096, 5000, 14336, 14337, 16384, 30720, 30721, 61440, 61441, 144000, 480000};
+        uint32_t ch, n, bad = 0, reads = 0, pages = 0;
+        for (ch = 1; ch <= 2; ch++)
+            for (n = 0; n < sizeof sizes / sizeof sizes[0]; n++) {
+                uint32_t frames = sizes[n], total = (frames + 2047) / 2048, c = 0, j, file_sectors = (64 + frames * 2 * ch + 16 + 511) / 512;
+                while (c < total) {
+                    spw_span s;
+                    spw_span_of(ch, frames, c, &s);
+                    reads++;
+                    if (s.chunks < 1 || s.sectors < 1 || s.sectors > 128 || s.sector + s.sectors > file_sectors) bad++;
+                    for (j = 0; j < s.chunks; j++, c++) {
+                        spw_chunk k;
+                        uint32_t at = s.skip + j * 4096 * ch, end;
+                        spw_chunk_of(ch, frames, c, &k);
+                        end = at + k.frames * 2 * ch;
+                        if (end > s.sectors * 512 || s.sector * 512 + at != 64 + c * 4096 * ch) bad++;
+                        pages += ch;
+                    }
+                    if (c < total && s.chunks != (ch == 1 ? 15u : 7u)) bad++;   /* only the last read of a sample may be short */
+                }
+            }
+        printf("spans bad %u reads %u pages %u\n", bad, reads, pages);
+    }
+
     /* page data: stereo is deinterleaved by halfword, mono copied, the rest of every page is zero */
     {
         static uint8_t src[8192], l[4096], r[4096], m[4096];
@@ -404,6 +433,8 @@ def test_wire_protocol(tmp_path):
             "hdr 0 16392 2 size -5 stereo flag 2 -5 rate -5 reserved -5 frame -5 mono 0 32785 1",
             # chunk (channels, frames, c): stereo 0 reads 17 sectors, stereo 2 starts at sector 32 with the 904 frames left, mono 1 at sector 8
             "chunk 0 17 64 2048 32 8 64 904 8 9 64 2048 0 9 64 2048",
+            # 30 sizes: 110 reads (at most 15 mono or 7 stereo chunks each) and 1,293 pages; every chunk once, in order, inside its read
+            "spans bad 0 reads 110 pages 1293",
             "pages bad 0",
         ]
     )
@@ -415,13 +446,14 @@ def xfer_exe(tmp_path_factory):
         pytest.skip("no host C compiler")
     return build(
         tmp_path_factory.mktemp("xfer"),
-        [SRC / "cf/dn2/pool.c", SRC / "cf/dn2/xfer.c", HARNESS],
+        [SRC / "cf/dn2/pool.c", SRC / "cf/dn2/xfer.c", SRC / "cf/dn2/send.c", HARNESS],
         "xfer",
+        defines=["-DSP_PORT_HOST"],
     )
 
 
-def scenario(exe, name):
-    out = lines(exe, name)
+def scenario(exe, name, *args):
+    out = lines(exe, name, *map(str, args))
     # 0xabc + 16: the boot wire length the DSP builds its descriptors with
     assert out[0] == "wire 2764"
     return out[1:]
@@ -479,28 +511,90 @@ def test_transport_faults(xfer_exe):
     assert scenario(xfer_exe, "resend") == [
         "done 1 0 sends 5 planes 3 tag0 d0100000 tag1 d0100000"
     ]
-    # an accepted page whose acknowledgement is late: the resend is a repeat and is not counted twice
+    # an accepted page whose acknowledgement is late (replies stop for 80 ms with page 2 in flight): the resend is a repeat and is not counted twice
     assert scenario(xfer_exe, "lostack") == ["done 1 0 sends 5 count 4 planes 3"]
     # the receiver rejects a tag: E_FORMAT, the block is freed, the next load works
     assert scenario(xfer_exe, "dsperr") == [f"a -5 free {FREE_ALL}", "b 0 planes 3"]
     # a dead receiver: E_READ, and so is every later load
     assert scenario(xfer_exe, "dead") == ["a -3 sends 0", "next -3"]
-    # nothing is acknowledged: the page, three resends, then E_READ at 4 x 75 blocks; the block is freed
-    assert scenario(xfer_exe, "timeout") == [f"a -3 sends 4 clock 302 free {FREE_ALL}"]
+    # nothing is acknowledged: the page, three resends, then E_READ at 4 x 75 blocks (the job lasts 301: one block until the first reply);
+    # the block is freed
+    assert scenario(xfer_exe, "timeout") == [f"a -3 sends 4 job blocks 301 free {FREE_ALL}"]
     # a receiver that never arms: E_READ after 200 ms (300 blocks), nothing sent
-    assert scenario(xfer_exe, "unarmed") == ["a -3 sends 0 clock 301"]
+    assert scenario(xfer_exe, "unarmed") == ["a -3 sends 0 job blocks 299"]
     # an acknowledgement with a bad checksum is no acknowledgement
     assert scenario(xfer_exe, "garble") == ["a -3 sends 0"]
-    assert scenario(xfer_exe, "readfail") == [f"a -3 free {FREE_ALL}"]
+    # a card read fails in the middle of a load (the second read, after 14 pages): E_READ, nothing in flight, the block is freed
+    assert scenario(xfer_exe, "readfail") == [f"a -3 sends 14 free {FREE_ALL}"]
     assert scenario(xfer_exe, "badfile") == ["missing -1 bad -5", f"free {FREE_ALL}"]
     assert scenario(xfer_exe, "tokens") == ["rc -48"]
 
 
 def test_transport_cancel(xfer_exe):
-    # request 2 never started: E_LOST once; request 1 loads normally; request 3 runs and stops after the page in flight settled
+    # request 2 never started: E_LOST once; request 1 loads normally; request 3 is cancelled with its second page in flight: that page is
+    # settled, no third page goes out, the result is E_LOST and the pages are free again (the 4 of request 1 stay)
     assert scenario(xfer_exe, "cancel") == [
         "done 2: 2 -15, 1 0",
         "a planes 3 b blocks 0",
         "c done 3: 3 -15 sends 2",
         f"free {FREE_ALL - 4 * 2048}",
     ]
+    # cancelled during the job's first card read: nothing is sent; the next load works
+    assert scenario(xfer_exe, "cancelread") == [f"done 1 -15 sends 0 reads 2 free {FREE_ALL}", "b 0 planes 3"]
+    # cancelled with page 1 in flight and its reply late: the page is acknowledged first (the receiver counted it), then the load ends
+    assert scenario(xfer_exe, "settle") == ["done 1 -15 sends 1 count 1"]
+
+
+def test_transport_job_and_worker(xfer_exe):
+    # one job per load, queued on the worker with the std::function layout, run one at a time; every completion comes from the UI tick
+    # (not from the job and not from dkpool_load); the port sees only whole, well-formed words
+    assert scenario(xfer_exe, "worker") == [
+        "queued 2 runs 2 name 1 layout 1 done 2 outside 0 planes 3 1",
+        "bad port 0 stuck 0",
+    ]
+    # no worker (the getter returns 0): nothing is posted, the load ends with E_READ at the next tick, the block is freed
+    assert scenario(xfer_exe, "noworker") == [f"a -3 queued 0 free {FREE_ALL}"]
+
+
+def test_raw_sender(xfer_exe):
+    # a tag d0 12 34 56 is sent as the bytes 56 34 12 d0 (least significant first), each as `byte << 8 | 0x80` and `byte << 8`; a page
+    # whose first word is bytes 01 06 0b 10 goes out as 10 0b 06 01; 1,025 words; the model checks every word's command and pairs
+    out = scenario(xfer_exe, "wire")
+    assert out[0] == "send 0"
+    assert out[1].split() == "5680 5600 3480 3400 1280 1200 d080 d000 1080 1000 0b80 0b00 0680 0600 0180 0100".split()
+    assert out[2] == "sent tag d0123456 page first 01 06 0b 10 last fc bad 0 words 1025"
+    # a port that stops answering ends the send after 8,192 reads of one word (the bound), with an error
+    assert out[3] == "stuck send -1 max polls 8192 reads"
+    # in a load: the stuck page is lost, counted, sent again after 50 ms, and the load completes
+    assert scenario(xfer_exe, "stuck") == ["done 1 0 stuck 1 max polls 8192 sends 4 planes 3"]
+
+
+def test_card_reads(xfer_exe):
+    # stereo 144,000 frames = 71 chunks: 11 reads of 7 chunks (113 sectors; the next read starts at sector 112), the last one 640 frames
+    # (6 sectors at 1120); mono 5,000 frames: one read of 20 sectors; mono 60,000 frames = 30 chunks: 15 (121 sectors), then 15 from sector 120
+    assert scenario(xfer_exe, "ranges") == [
+        "a reads 11 first 0/113 112/113 last 1120/6 planes 3",
+        "b reads 1 0/20 planes 1",
+        "c reads 2 0/121 120/115 planes 1",
+    ]
+
+
+def rate(exe, ui_period, latency, send_us):
+    out = scenario(exe, "slowui", ui_period, latency, send_us)
+    assert out[0] == "done 0 pages 142 reads 12 planes 3"
+    return 142 / (int(out[1].split()[2]) / 1e6)
+
+
+def test_page_rate(xfer_exe):
+    # The pump runs on the worker and does not wait for the UI pass: the job takes the same time with a UI pass every 5 or 400 blocks
+    # (3 ms, 267 ms) as every 50. A page costs its send time plus the wait for the next reply: with the DSP answering one frame (667 us)
+    # after a page, about one page per frame; two or three frames of latency give half or a third. Even a send of 890 us (the slow end
+    # of the 0.29 to 0.89 ms estimate) with three frames of latency stays above 300 pages/s.
+    base = rate(xfer_exe, 50, 1, 300)
+    assert 1100 < base < 1300
+    assert abs(rate(xfer_exe, 5, 1, 300) - base) < 0.01 * base
+    assert abs(rate(xfer_exe, 400, 1, 300) - base) < 0.01 * base
+    assert 600 < rate(xfer_exe, 50, 2, 300) < 700
+    assert 420 < rate(xfer_exe, 50, 3, 300) < 500
+    assert 600 < rate(xfer_exe, 50, 1, 890) < 700   # the send is longer than a frame: the next reply is two frames away
+    assert 300 < rate(xfer_exe, 50, 3, 890) < 400

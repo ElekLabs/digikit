@@ -26,7 +26,7 @@ conflicts = ["core/dsp-lp0-proof"]
 # DN2 (src/cf/dn2, src/dsp/dn2; docs/design/dn2-sample-pool.md): an allocator over [adapter.sample_pool] ddr_base and ddr_bytes of
 # devices/digitone-ii.toml (4 KiB pages, first fit, identity sharing, released blocks cached, no reset, so no dkrt_pool_lost), and the LP0 page
 # transport of core/dsp-lp0-proof made permanent: the ColdFire reads the store file in ranges (dkrt_store_stat, dkrt_store_read), sends 4 KiB pages with
-# the stock LP0 sender, and the DSP copies each page into DDR in the LP0 callback and acknowledges it in a 16-byte extension of the reply record.
+# its own bounded LP0 sender from a job on the stock SampleLoader worker task (design section 2), and the DSP copies each page into DDR in the LP0 callback and acknowledges it in a 16-byte extension of the reply record.
 # The extension needs the wire 16 bytes longer (0xabc to 0xacc), a boot-only change that the proof proved in the emulator; moving the
 # acknowledgement into the dsp-link diagnostic record is a decision for before any hardware step (design section 7).
 # core/dsp-link must be in a DN2 image with this module: its block tail has the one claim on dsp.link.site.block_tail and calls `_sp_tail` of
@@ -55,16 +55,19 @@ devices = ["dt2"]
 [object.externs]
 sp_dsp_pool_base = "dsp.voice.value.sample.pool_base"
 
-# The stock sender and the stock reply copy (LP0, DN2 1.12).
+# The stock reply copy (LP0, DN2 1.12), the stock short sleep and the SampleLoader worker's getter and queue. The pages go out through our own
+# sender (src/cf/dn2/send.c): the stock sender is not used.
 [[object]]
 path = "build/sample-pool-dn2.dko.json"
-sources = ["src/cf/dn2/pool.c", "src/cf/dn2/xfer.c", "src/cf/dn2/device.s"]
+sources = ["src/cf/dn2/pool.c", "src/cf/dn2/xfer.c", "src/cf/dn2/send.c", "src/cf/dn2/device.s"]
 place = "cf.expansion"
 devices = ["dn2"]
 
 [object.externs]
-sp_stock_send = "cf.link.fn.bulk_send"
 sp_stock_copy = "cf.link.fn.reply_copy"
+sp_stock_sleep = "cf.rtos.fn.sleep_us"
+sp_worker_get = "cf.samples.fn.worker.get"
+sp_worker_queue = "cf.samples.fn.worker.queue"
 
 [[object]]
 path = "build/sample-pool-dsp-dn2.dko.json"

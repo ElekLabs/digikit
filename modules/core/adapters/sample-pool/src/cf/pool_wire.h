@@ -38,7 +38,7 @@
 
 #define SPW_HEADER_BYTES 64u
 #define SPW_SECTOR 512u
-#define SPW_RBUF_SECTORS 17u    /* one 2,048-frame chunk of stereo is 8,192 bytes, 64 bytes into a sector: 17 sectors */
+#define SPW_RBUF_SECTORS 128u   /* one card read: 64 KiB, the most dkrt_store_read takes (15 mono or 7 stereo chunks) */
 
 static inline uint32_t spw_tag(uint32_t seq, uint32_t page)
 {
@@ -230,7 +230,8 @@ static inline int32_t spw_header(const uint8_t *h, uint32_t size, uint32_t *fram
     return 0;
 }
 
-/* Chunk c of a sample is 2,048 frames: one mono page, or one page of each stereo plane. Where to read it. */
+/* Chunk c of a sample is 2,048 frames: one mono page, or one page of each stereo plane. Where it is, for the frame count of a chunk
+ * (spw_span_of is the read). */
 typedef struct spw_chunk {
     uint32_t sector;    /* first file sector */
     uint32_t sectors;   /* sectors to read (at most SPW_RBUF_SECTORS) */
@@ -245,6 +246,31 @@ static inline void spw_chunk_of(uint32_t channels, uint32_t frames, uint32_t c, 
     o->skip = SPW_HEADER_BYTES;
     o->frames = n;
     o->sectors = (o->skip + n * 2u * channels + SPW_SECTOR - 1u) / SPW_SECTOR;
+}
+
+/* One card read covers whole chunks from chunk c on: as many as fit in SPW_RBUF_SECTORS, fewer at the end of the sample. Chunk c + j starts
+ * at byte `skip + j * chunk_bytes` of the buffer: a chunk is a multiple of 512 bytes, so every read starts on the 64-byte header offset. */
+typedef struct spw_span {
+    uint32_t sector;    /* first file sector */
+    uint32_t sectors;   /* sectors to read (at most SPW_RBUF_SECTORS) */
+    uint32_t skip;      /* byte offset of chunk c in the buffer (always 64) */
+    uint32_t chunks;    /* whole chunks in the read */
+} spw_span;
+
+static inline void spw_span_of(uint32_t channels, uint32_t frames, uint32_t c, spw_span *o)
+{
+    uint32_t chunk_bytes = SPA_PAGE_BYTES * channels, total = (frames + SPA_PAGE_FRAMES - 1u) / SPA_PAGE_FRAMES;
+    uint32_t most = (SPW_RBUF_SECTORS * SPW_SECTOR - SPW_HEADER_BYTES) / chunk_bytes, k = total - c, last, bytes;
+    if (k > most)
+        k = most;
+    last = frames - (c + k - 1u) * SPA_PAGE_FRAMES;
+    if (last > SPA_PAGE_FRAMES)
+        last = SPA_PAGE_FRAMES;
+    bytes = SPW_HEADER_BYTES + (k - 1u) * chunk_bytes + last * 2u * channels;
+    o->sector = (SPW_HEADER_BYTES + chunk_bytes * c) / SPW_SECTOR;
+    o->skip = SPW_HEADER_BYTES;
+    o->chunks = k;
+    o->sectors = (bytes + SPW_SECTOR - 1u) / SPW_SECTOR;
 }
 
 static inline void spw_zero_tail(uint8_t *page, uint32_t from)

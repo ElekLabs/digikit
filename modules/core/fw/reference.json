@@ -433,8 +433,7 @@
       "sig": "void (u32 tag, const u32 *source, u32 format)",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
-        "core/sample-pool"
+        "core/dsp-lp0-proof"
       ],
       "was": []
     },
@@ -9091,6 +9090,42 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4013492c",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_rtos_sleep_us",
+        "rust": "dkfw::rtos::sleep_us"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2 1.12 stock short sleep (DT2 pair 0x40136544): locks its own mutex, loads timer DTIM1 (prescaler 0x84, about 1 MHz) with `us` and blocks the task on a semaphore until the timer interrupt. Task context only. Eight stock callers; the LP0 sender waits 100 after each page with it.",
+      "file": "devices/fw/rtos.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.rtos.fn.sleep_us",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u32 us)",
+      "subsystem": "rtos",
+      "users": [
+        "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x400cf0ea"
@@ -9498,6 +9533,12 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4019eb1a",
+            "len": 4
+          }
+        ],
         "dt2-1.17": [
           {
             "addr": "0x4019e65c",
@@ -9511,7 +9552,8 @@
       },
       "cpu": "cf",
       "devices": [
-        "dt2"
+        "dt2",
+        "dn2"
       ],
       "doc": "Getter of the SampleLoaderBgWorker singleton (finding 109 section 3); its task id is the word at +0x20.",
       "file": "devices/fw/samples.toml",
@@ -9519,6 +9561,11 @@
       "mark": "D",
       "name": "cf.samples.fn.worker.get",
       "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
         "dt2": {
           "kind": "cf_func",
           "len": 4,
@@ -9534,6 +9581,12 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400f25f8",
+            "len": 4
+          }
+        ],
         "dt2-1.17": [
           {
             "addr": "0x400f0c1c",
@@ -9547,7 +9600,8 @@
       },
       "cpu": "cf",
       "devices": [
-        "dt2"
+        "dt2",
+        "dn2"
       ],
       "doc": "Queue a job on a worker: `job` and `done` are std::function objects (storage, manager, invoker), as ReloadAllSamples passes them. The job runs in the worker task.",
       "file": "devices/fw/samples.toml",
@@ -9555,6 +9609,11 @@
       "mark": "D",
       "name": "cf.samples.fn.worker.queue",
       "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
         "dt2": {
           "kind": "cf_func",
           "len": 4,
@@ -15368,7 +15427,7 @@
       "name": "project"
     },
     {
-      "count": 10,
+      "count": 11,
       "cpu": "cf",
       "file": "devices/fw/rtos.toml",
       "meaning": "tasks, queues, mutexes, idle, interrupts, the reset and boot path",
