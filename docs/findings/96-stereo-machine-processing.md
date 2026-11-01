@@ -451,6 +451,8 @@ outside this bounded proof. Independent source review found no issues.
 **[D]** Fresh DT2 1.17 section 7 (321,016 bytes, SHA-256
 `0f514a12a2255f5c081e292c47f1f29462003177658da4bbae0a22fd737fffa2`)
 shows independent scaling in the original pan fragment `0x1c711a..1c7155`.
+This holds on the gate-1 path only; with gate 0 the pair is summed
+([finding 112](112-dt2-pair-gate.md)).
 Inputs are separate pointer-table entries 2t/2t+1 at `0x24ef2c`; destination
 initialization at `0x1c1699/9c` with stride update `0x1c16d7` establishes entry
 v at `0x252df8 + 0x80*v`. Each pair therefore has two distinct 32-float buffers.

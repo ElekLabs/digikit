@@ -49,7 +49,13 @@ there is no outstanding reservation-choice request and no approved reservation p
   helper). Fix in the build phase.
 - Working rule for the design phase: static work, docs and design only. Run the
   emulator only when the run decides a design question.
-- Next: the first slice (one track, one 5 s stereo sample, DT2 emulator).
+- First slice proven on DT2 in the emulator (`spark-dt2.test.ts`): API 1.5
+  select in about 0.7-0.8 s, borrowed pool, stop-old-notes on reselect, stock
+  reset detected and reloaded with a new token, contract 1.2 stereo split via
+  the pair gate ([finding 112](../findings/112-dt2-pair-gate.md)).
+- Open: the pitch phase (the PITCH knob has no effect; being investigated), the
+  gate anchor, the finding 111 decision (fix the stereo kernel or keep SPARK's
+  double-mono workaround), the DN2 stereo cost, the picker (slice 2).
 - Proposed, not yet decided by Em: the minimal first-release recovery scope.
 
 All ten DN2 post-source families have bounded local examples; the selected ordered

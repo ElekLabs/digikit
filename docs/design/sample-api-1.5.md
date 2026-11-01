@@ -108,7 +108,7 @@ Anchors live in a new firmware anchor file `samples.toml` next to `devices/fw/st
 
 **DN2 1.12: own allocator** over a reserved high-DDR range from the device profile. The canary soak saw no stock writes in [0x80531000, 0xa0000000), about 507 MiB, in 14 runs; the final size is set after an extended soak. First-fit with the same dedup; the gap [0x8052d790, 0x8052fbe0) (9 KiB) is stock-owned and stays out. No external reset exists; `dkrt_pool_lost` is never raised. The reserved range is a profile field, not a constant in the adapter.
 
-**Stereo.** DT2 writes R into the odd voice buffer of the stock voice pair (stock pans the two buffers independently, finding 96). DN2 uses the shadow right-channel stages made production (the `core/dsp-stereo-proof` route). Both sit on the dsp-voice adapter side, not in the runtime and not in the pool plug-in; the handle only carries `base_l` and `base_r`.
+**Stereo.** DT2 writes R into the odd voice buffer of the stock voice pair and sets the stock pair gate (even voice param record +0xd8 = 1) every block, so the stock pan stage takes its stereo-pair path. Without the gate the pair is summed (finding 112). DN2: the shadow-stage proof is an observer without a gain stage. Real DN2 stereo needs a new SHARC patch site in the gain loop `0x1c9af5..0x1c9aff` (a second input) plus the right-channel chain (finding 96). Cost to be priced. Both sit on the dsp-voice adapter side, not in the runtime and not in the pool plug-in; the handle only carries `base_l` and `base_r`.
 
 ### 2.4 Project identity
 
@@ -138,7 +138,7 @@ Module unload: unbind all, drain, free; teardown waits for terminal completion o
 ## 4. Versioning
 
 - Api minor 4 -> 5 (`api = [1, 5]`): five entries appended (`sample_tracks`, `sample_select`, `sample_unbind`, `sample_track_status`, `sample_track_info`). Additive: a 1.4 module runs on a 1.5 runtime unchanged. A 1.5 module on a 1.4 runtime is refused by the existing contract check.
-- Machine contract 1.2 (additive, accepted 2026-11-01): a machine declares itself stereo in `DK_MACHINE` and `render` gets a second 32-float output buffer for R. A 1.1 (mono) machine is unchanged: the adapter copies L to R as today. The dsp-voice adapter consumes R: DT2 writes it into the odd voice buffer of the stock pair; DN2 feeds the shadow right-channel stages. `dk_voice_in` is unchanged (`track` is already there). The runtime is not involved.
+- Machine contract 1.2 (additive, accepted 2026-11-01): a machine declares itself stereo in `DK_MACHINE` and `render` gets a second 32-float output buffer for R. A 1.1 (mono) machine is unchanged: the adapter copies L to R as today. The dsp-voice adapter consumes R: DT2 writes it into the odd voice buffer of the stock pair and sets the pair gate (even voice param record +0xd8 = 1) every block, so stock pans the pair as a stereo pair (finding 112); DN2 needs a new SHARC patch site in the gain loop `0x1c9af5..0x1c9aff` plus the right-channel chain (finding 96), cost to be priced. `dk_voice_in` is unchanged (`track` is already there). The runtime is not involved.
 - New descriptor kind `DK_DESC_SAMPLE_TRACKS` (additive; a runtime that does not know it refuses the module by size/kind check).
 - New error codes -14..-16 appended; existing values fixed. `E_TOO_BIG` meaning widens for the track family only.
 - Breaking, avoided: record layout is versioned by `size` in the descriptor; new fields append at the end (max 8 words now; extend by raising `size`, never by reordering). Float fmt and >2 channels are deferred, not reserved bits.
