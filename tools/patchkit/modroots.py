@@ -123,7 +123,7 @@ def runtime_acceptance() -> tuple[RuntimeAcceptance, ...]:
         if type(meta["plusdrive"]) is not bool or any(
             mid not in known for mid in meta["modules"]
         ):
-            raise ValueError(f"{project}: invalid runtimeAcceptance modules/plusdrive")
+            raise ValueError(f"{project}: invalid runtimeAcceptance modules or plusdrive")
         files = []
         for filename in meta["files"]:
             path = directory / filename
