@@ -16,8 +16,9 @@ owners of merge acceptance. The parked `--only` routing change is independent of
 Five host groups now enable local result caching: control-client, test-support, dk-session, desktop-host
 and regression-host. Both extensions passed dependency failure/restoration probes; only the earlier
 support/session extension has a bounded timing pair. The integration gate was attempted and aborted;
-[PR #237](https://github.com/ElekLabs/digikit/pull/237) has completed focused verification. The user
-authorized a one-time full-gate exception for this PR; merge remains pending, without a full-gate pass.
+[PR #237](https://github.com/ElekLabs/digikit/pull/237) merged at `a150cac5` after focused verification
+and the authorized one-time full-gate exception, without a full-gate pass. The small `--only`
+selection follow-up is active on `test/gate-selection`; automatic gate-routing changes remain pending.
 
 ## Boundary
 
@@ -243,5 +244,6 @@ override. Runtime sample failures have not been rerun after providing the missin
 The next priority is tighter gate selection using static dependency ownership and existing phase
 evidence, not more caches or custom tracing. Existing runtime evidence already identifies fixed waits;
 do not repeat broad acceptance for observation or timing. Focused checks are complete and the user
-authorized the one-time full-gate exception for PR #237. Merge remains pending; the exception is not
-evidence that the aborted gate passed.
+authorized the one-time full-gate exception for PR #237, now merged at `a150cac5`. The exception is not
+evidence that the aborted gate passed. The active `--only` follow-up changes explicit selection;
+automatic routing remains separate pending work.

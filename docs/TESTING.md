@@ -97,7 +97,7 @@ only the support/session pair was timed, not whole preflight. Rust and runtime t
 | `mise run test` | `test_outcomes run --check` over `tests` (one process per file), then `rust_ws test`, `pnpm test:host`, `pnpm test`, the DN2 pins. Excludes slow gates and runtime acceptance. |
 | `mise run test:slow` | The same runner with `--slow` and a one-hour per-file timeout, then `rust_ws gates`. |
 | `mise run test:quick` | Launcher, PGO, target and coupled-tool tests, then `coupled test-quick`. |
-| `mise run verify` | The merge gate, routed by changed files. Options: `--base BRANCH`, `--head REV`, `--only STEPS`, `--explain`, `--rerun-failed`, `--jobs N`, `--foreground`, `--all-no-aot`, `--no-cache`. |
+| `mise run verify` | The merge gate, routed by changed files. Options: `--base BRANCH`, `--head REV`, `--only STEPS`, `--all-files`, `--explain`, `--rerun-failed`, `--jobs N`, `--foreground`, `--all-no-aot`, `--no-cache`. |
 | `mise run verify:full` | `verify --full`: runtime acceptance, 191 DN2 FX assertions, `tier-sweep` instead of `tier-quick`. `-- --dt2` adds the DT2 full sweep. Only after generated-core changes. |
 
 `uv run python -m tools.devtools.test_outcomes BEFORE.xml AFTER.xml --renames-from REF` compares
@@ -228,6 +228,23 @@ A module keeps its tests in its own folder, `modules/<kind>/<name>/tests/`. No l
 `mise run verify` runs the steps the changed files need. Routing is in `tools/devtools/verify.py`
 (path rules, `PY_SUITES`) and `tools/devtools/verify_route.py` (finer rules).
 
+`--only STEPS` restricts that diff-derived plan to the requested steps, keeping its Python files,
+acceptance files, smoke cells and Rust packages. For example,
+`mise run verify -- --only runtime-fixture --base main --explain` shows only the relevant runtime
+acceptance files; an unrelated or empty diff selects nothing. This changes the former behavior
+where `--only` forced requested steps and broad acceptance or Rust suites.
+To force complete requested suites, use `mise run verify -- --only runtime-fixture --all-files`.
+`--all-files` uses the full Python selection, all acceptance files, the whole smoke matrix and the
+whole Rust workspace for whichever steps are requested. It does not change the tier or add steps;
+normal build prerequisites still apply. It requires `--only` and cannot be combined with named files,
+`--full` or `--rerun-failed`. `--only` and `--full` are also incompatible.
+
+Named `--tests` and `--py-tests` files override selection for their respective steps and imply those
+steps. With `--only`, their steps must be requested; other requested steps keep their diff-derived
+scope. For example, `mise run verify -- --only runtime-fixture,stock --tests runtime/service-commands.test.ts`
+runs that runtime file plus any stock files routed by the diff. `--head REV --explain` uses the same
+selection for a historical range, including with `--only`.
+
 Steps: build, desktop, host, web, stock, runtime-fixture, module-load, pins, check, check-no-aot,
 tier-quick, tier-sweep, python-tests, rust-tests, card, smoke, dt2-tone, dt2-check, dt2-tier-quick,
 dt2-tier-sweep.
@@ -252,7 +269,8 @@ dt2-tier-sweep.
   session code select all files. It gives no audio coverage.
 - `runtime-fixture` packs the modules in `verify_route.RUNTIME_MODULES` (test/input-probe,
   digikit/remote, test/svc-echo), builds plusdrive before samples-live, and runs the runtime project.
-  It runs for relevant changes with filename filters, and with `--full` or `--only runtime-fixture`.
+  It runs for relevant changes with filename filters; `--full` or `--only runtime-fixture --all-files`
+  runs every runtime file.
   It needs a two-core budget share and one fresh coupled daemon at a time.
 - `module-load` filters the production uploads to the changed module on both
   devices. The uploads are the shipped modules that are `dynamic`, a service or `host`, and have a
