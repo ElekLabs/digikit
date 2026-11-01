@@ -424,7 +424,7 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_upload.py": ("upload",),
     "pk_digikit_pages.py": ("pages",),
     "pk_digikit_fx.py": ("fx",),
-    "pk_digikit_fxsend.py": ("fxsend",),
+    "pk_digikit_fxsend.py": (),
     "pk_digikit_fxroute.py": ("fxroute",),
     "pk_digikit_fxroutes.py": ("fxroutes",),
     "pk_digikit_settings.py": ("settings",),

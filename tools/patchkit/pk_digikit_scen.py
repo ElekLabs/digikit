@@ -9,7 +9,7 @@ globbing; no list names them; the names are unique across both places):
 
     [scenario]
     name = "equiv-dyn-pluck"       # the file's stem
-    kind = "equiv" | "roundtrip" | "safe" | "cut" | "menu" | "upload" | "card" | "debug" | "crash" | "pages" | "fx" | "fxsend" | "fxroute" | "fxroutes" | "settings"
+    kind = "equiv" | "roundtrip" | "safe" | "cut" | "menu" | "upload" | "card" | "debug" | "crash" | "pages" | "fx" | "fxroute" | "fxroutes" | "settings"
     devices = ["dt2"]              # the scenario runs on the images of these devices (`images` names them instead)
     tier = "quick" | "full"        # quick: part of the verify gate; full: only `--tier full` (merges to main)
 
@@ -50,8 +50,6 @@ Kinds:
   fx         effects loaded at run time (DSP section version 4, `core/dynfx`; Digitakt II and Digitone II): the sine and `test/dyn-fx-gain` selected at boot play as the
              dry sine times the gain, the chain's row, MODULES and CAPACITY say so, deselecting the effect and restarting gives the dry PCM again, and
              one effect more than the device has slots is refused (`E_DSP_ROWS`, and by the fit rule); tools/patchkit/pk_digikit_fx.py.
-  fxsend     a run-time effect on the send route of `core/fx` (Digitakt II): the row's route and amount words are written with `dsp.patch`; no amount, or an amount on a silent track, leaves the PCM
-             dry bit for bit; an amount on the playing track adds the effect's return (the amount squared, as the stock sends); the effect runs once a block; tools/patchkit/pk_digikit_fxsend.py.
   fxroutes   SETTINGS > DIGIKIT > MODULES > the side panel's ROUTE... and the effect's route fields (`route`, `routes` of DK_FX; Digitakt II): a send-default effect starts on the send route, the
              ROUTE... choice of the side panel offers the allowed routes and the free send slots, the pending route is a change that NO and YES on APPLY & RESTART? write (settings) and restart, and the
              route is in effect after it (row word, FX key page, PCM, `patchkit store dump`), the FX view lists send effects first; tools/patchkit/pk_digikit_fxroutes.py.
@@ -1377,12 +1375,6 @@ def run_fx(c: Ctx) -> None:
     FX.run_fx(c)
 
 
-def run_fxsend(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fxsend as FXS
-
-    FXS.run_fxsend(c)
-
-
 def run_fxroute(c: Ctx) -> None:
     from tools.patchkit import pk_digikit_fxroute as FR
 
@@ -1422,7 +1414,6 @@ def run_fxshift(c: Ctx) -> None:
 KINDS = {
     "pages": run_pages,
     "fx": run_fx,
-    "fxsend": run_fxsend,
     "fxroute": run_fxroute,
     "fxroutes": run_fxroutes,
     "settings": run_settings,
