@@ -542,19 +542,22 @@ runtimeTests(
         const marks: Record<string, number> = {};
         await ui.tap('FLTR');
         const c = await captureNote(runtime, path.join(artifacts, 'stereo-config.wav'), async (clock) => {
-          await until(clock, (await clock()) + 0.6 * RATE);
+          // The track's stock Delay return (default TIME 64: first echo about 1.09 s after the key press, both tones in both channels, then a tail that
+          // outlives the voice) adds about -18 dB of the other tone to each channel from then on (run 4: the split window sat at 1.0 to 1.2 s). The audio
+          // check is therefore the first row, measured before the echo (key press + 0.45 to 0.75 s); the rows after it only read the guard counter.
+          await until(clock, (await clock()) + 0.15 * RATE);
           const rate = async (frames: number) => {
             const [n0, f0] = [await nbad(), await clock()];
             await until(clock, f0 + frames);
             const [n1, f1] = [await nbad(), await clock()];
             return { rate: (n1 - n0) / Math.max(1, f1 - f0) * 32, from: f0, to: f1 };
           };
-          scan.push({ enc: 'default', ...(await rate(0.2 * RATE)) });
+          scan.push({ enc: 'default', ...(await rate(0.15 * RATE)) });
           for (const enc of ['ENC A', 'ENC B', 'ENC C', 'ENC D', 'ENC E', 'ENC F', 'ENC G', 'ENC H']) {
             for (const dir of [-1, 1]) {
               await ui.burst(enc, 12, dir * 4);
               await ui.settle(50);
-              const r = await rate(0.15 * RATE);
+              const r = await rate((scan.length === 1 ? 0.3 : 0.15) * RATE); // the first row is the audio window, before the echo
               scan.push({ enc, dir, ...r });
               if (r.rate < 0.02 && marks.found === undefined) marks.found = scan.length - 1;
             }
