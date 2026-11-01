@@ -1592,7 +1592,8 @@ def explain(
             ):
                 print(
                     f"{step}: prerequisite patchkit build (stale objects only), then fresh patchkit pack into its run directory; "
-                    "may build module toolchains/patchkit CLI, never emulator daemons"
+                    "also prepares the native patchkit CLI used for store dump; "
+                    "may build module toolchains, never emulator daemons"
                 )
             if step == "runtime-fixture" and (
                 not selected
@@ -1701,7 +1702,9 @@ def pack_devices(mid: str) -> tuple[str, ...]:
     return tuple(d for d in ("dt2", "dn2") if any(p.startswith(f"{d}-") for p in ports))
 
 
-def prepare_acceptance_modules(gate: Gate, step: str, modules: list[str]) -> Path:
+def prepare_acceptance_modules(
+    gate: Gate, step: str, modules: list[str], aliases: dict[str, str] | None = None
+) -> Path:
     """Build the stale objects (they are cached in out/cache/dko) and pack fresh DKMs; each acceptance node owns its directory/logs."""
     directory = gate.out / step / "modules"
     builds = []
@@ -1723,8 +1726,10 @@ def prepare_acceptance_modules(gate: Gate, step: str, modules: list[str]) -> Pat
     packs = []
     for device in ("dt2", "dn2"):
         (directory / device).mkdir(parents=True, exist_ok=True)
-        for mid in modules:
-            if device not in pack_devices(mid):
+        # Each source was built once above. The standard pack command builds the native
+        # patchkit CLI too, which route persistence consumes directly for store dump.
+        for mid, source in [*((mid, mid) for mid in modules), *(aliases or {}).items()]:
+            if device not in pack_devices(source):
                 continue
             leaf = mid.rsplit("/", 1)[-1]
             name = f"{step}-pack-{device}-{leaf}"
@@ -1736,9 +1741,10 @@ def prepare_acceptance_modules(gate: Gate, step: str, modules: list[str]) -> Pat
                     "-m",
                     "tools.patchkit.patchkit",
                     "pack",
-                    mid,
+                    source,
                     "--device",
                     device,
+                    *(["--name", mid] if mid != source else []),
                     "-o",
                     str(directory / device / f"{leaf}.dkm"),
                 ],
@@ -1755,6 +1761,15 @@ def runtime_pack_modules(selected: list[str]) -> list[str]:
         for mid, files in verify_route.RUNTIME_MODULES.items()
         if not selected or set(files) & set(selected)
     ]
+
+
+def runtime_pack_aliases(selected: list[str]) -> dict[str, str]:
+    """Extra card identities required by the complete inventory of each selected FX suite."""
+    return {
+        alias: source
+        for alias, (source, files) in verify_route.RUNTIME_PACK_ALIASES.items()
+        if not selected or set(files) & set(selected)
+    }
 
 
 def run_step(gate: Gate, step: str) -> None:
@@ -1816,7 +1831,9 @@ def run_step(gate: Gate, step: str) -> None:
             )
         elif step == "runtime-fixture" and (modules := runtime_pack_modules(selected)):
             env["DIGI_RUNTIME_MODULES"] = str(
-                prepare_acceptance_modules(gate, step, modules)
+                prepare_acceptance_modules(
+                    gate, step, modules, runtime_pack_aliases(selected)
+                )
             )
         if step == "runtime-fixture" and (
             not selected
