@@ -215,6 +215,11 @@ RUNTIME_SHARED = (
 )
 
 
+def emulator_test_path(path: str) -> bool:
+    """Rust integration-test sources cannot change the emulator's production binaries."""
+    return re.fullmatch(r"packages/emulator/[^/]+/tests/.+\.rs", path) is not None
+
+
 @cache
 def acceptance_python(step: str) -> set[str]:
     """Dependencies of consumed preparation/client entry points, using the existing import graph."""
@@ -294,10 +299,15 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
     )
     selected: set[str] = set()
     for path in paths:
-        if path.endswith(".md") or path in {
-            "devices/digitakt-ii-leds.toml",
-            "devices/digitone-ii-leds.toml",
-        }:
+        if (
+            emulator_test_path(path)
+            or path.endswith(".md")
+            or path
+            in {
+                "devices/digitakt-ii-leds.toml",
+                "devices/digitone-ii-leds.toml",
+            }
+        ):
             continue
         if path in RUNTIME_SOURCES:
             if step == "runtime-fixture":
@@ -659,8 +669,9 @@ def device_fine(path: str) -> Fine | None:
                     seen.add(name)
                     todo.append(name)
     kinds = {k for s in seen for k in DEVICE_KINDS.get(s, ())}
-    if kinds or stem not in DEVICE_KINDS:
-        tests += scenario_tests(kinds) if stem in DEVICE_KINDS else list(ALL_SUITES)
+    tests += scenario_tests(kinds)
+    if stem not in DEVICE_KINDS:
+        tests.append("tests/devtools/test_verify.py")
     ordered = list(dict.fromkeys(tests))
     return Fine(f"tools/device/{stem}", ("python-tests",), tuple(ordered))
 

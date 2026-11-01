@@ -1203,6 +1203,30 @@ def test_device_tools_select_their_tests_only() -> None:
     assert "tests/digikit" not in selected("tools/device/dkupload.py")
 
 
+def test_unknown_device_tool_keeps_importers_kinds_and_classification_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = verify_route.importers
+    monkeypatch.setattr(
+        verify_route,
+        "importers",
+        lambda stem: (
+            ["tools/device/dkrun.py", "tests/digikit/test_dkprobe.py"]
+            if stem == "new_device_tool"
+            else original(stem)
+        ),
+    )
+    got = selected("tools/device/new_device_tool.py")
+    assert selected("tools/device/dkrun.py") <= got
+    assert "tests/digikit/test_dkprobe.py" in got
+    assert "tests/devtools/test_verify.py" in got
+    assert "tests/patchkit" not in got
+    assert "tests/digikit" not in got
+    assert selected("tools/device/unknown_without_importers.py") == {
+        "tests/devtools/test_verify.py"
+    }
+
+
 def test_device_tools_nothing_dropped() -> None:
     """A change in a tools/device module runs every unit test that imports it, directly or through
     another tools/device module, and the scenario kinds whose runners call it."""
@@ -1525,12 +1549,26 @@ def test_web_only_for_what_it_reads() -> None:
         assert "web" not in verify.steps_for([path]), path
 
 
-def test_routing_changes_select_everything() -> None:
-    everything = tuple(s for s in verify.EVERYTHING if s != "smoke")
+def test_routing_changes_keep_owner_tests_without_production_escalation() -> None:
     for path in ("tools/devtools/verify.py", "tools/devtools/verify_route.py"):
-        assert verify.steps_for([path]) == everything
-        got = verify.python_tests([path], False)
-        assert set(verify.python_tests([], True)) <= set(got)
+        assert verify.steps_for([path]) == ("python-tests",)
+        got = set(verify.python_tests([path], False))
+        assert set(verify.PY_GATE) <= got
+        assert got >= changed_tests.FAST_PYTHON_TESTS
+        assert "tests/patchkit" not in got
+        assert "tests/digikit" not in got
+        assert verify.rust_scope([path]) == []
+        production = "packages/emulator/machine/src/lib.rs"
+        assert set(verify.steps_for([path, production])) == {
+            *verify.steps_for([production]),
+            "python-tests",
+        }
+        assert set(verify.python_tests([production], False)) <= set(
+            verify.python_tests([path, production], False)
+        )
+        assert set(verify.python_tests([], True)) <= set(
+            verify.python_tests([path], True)
+        )
     # the lane helper is checked by the routing tests only
     assert verify.steps_for(["tools/devtools/changed_tests.py"]) == ("python-tests",)
     assert "tests/devtools/test_verify.py" in verify.python_tests(
@@ -1584,10 +1622,11 @@ def test_rust_scope(monkeypatch: pytest.MonkeyPatch) -> None:
         "patchkit"
     ]
     assert seen == [["tests/fixtures/modules/sine/module.toml"]]
-    # a broad mise.toml change and a routing change keep the whole workspace
+    # Only broad build configuration and the Rust selector keep the whole workspace.
     assert verify.rust_scope(["mise.toml"]) is None
-    assert verify.rust_scope(["tools/devtools/verify.py"]) is None
-    assert len(seen) == 1
+    assert verify.rust_scope(["tools/devtools/rust_ws.py"]) is None
+    assert verify.rust_scope(["tools/devtools/verify.py"]) == ["patchkit"]
+    assert seen[-1] == ["tools/devtools/verify.py"]
 
 
 def test_head_only_with_explain() -> None:
@@ -1626,6 +1665,49 @@ def test_smoke_runs_with_any_gate_step_not_for_docs() -> None:
     assert "smoke" in verify.EVERYTHING
     assert "smoke" not in verify.steps_for(["docs/x.md"])
     assert verify.steps_for(["AGENTS.md"]) == ()
+
+
+@pytest.mark.parametrize(
+    "path,build",
+    [
+        ("packages/emulator/control/tests/card_load.rs", False),
+        ("packages/emulator/machine/tests/state.rs", True),
+        ("packages/emulator/sharc/tests/arithmetic.rs", True),
+        ("packages/emulator/sharc-gen/tests/new_case.rs", True),
+    ],
+)
+def test_emulator_integration_tests_keep_rust_owner_without_device_acceptance(
+    path: str,
+    build: bool,
+) -> None:
+    assert verify.steps_for([path]) == (("build",) if build else ()) + ("rust-tests",)
+    assert verify.rust_scope([path])
+    assert verify.python_tests([path], False) == list(verify.PY_GATE)
+    for step in verify_route.ACCEPTANCE_DIRS:
+        assert verify_route.acceptance_files(step, [path]) == []
+    source = "packages/emulator/machine/src/lib.rs"
+    assert verify.steps_for([path, source]) == verify.steps_for([source])
+    for step in verify_route.ACCEPTANCE_DIRS:
+        assert verify_route.acceptance_files(
+            step, [path, source]
+        ) == verify_route.acceptance_files(step, [source])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "packages/emulator/boot/examples/common/mod.rs",
+        "packages/emulator/boot/examples/dsp_cold.rs",
+        "packages/emulator/boot/examples/sharc_live.rs",
+        "packages/emulator/boot/examples/plusdrive_check.rs",
+        "packages/emulator/machine/src/tests/helpers.rs",
+    ],
+)
+def test_emulator_examples_and_source_helpers_keep_production_coverage(
+    path: str,
+) -> None:
+    assert "smoke" in verify.steps_for([path])
+    assert verify_route.acceptance_files("runtime-fixture", [path])
 
 
 def test_smoke_waits_for_build_daemons_and_runs_after_it() -> None:
@@ -1687,7 +1769,7 @@ def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
             "packages/emulator/control/src/runtime_patch.rs",
             {"stock", "runtime-fixture", "module-load"},
         ),
-        ("tools/devtools/verify.py", {"stock", "runtime-fixture", "module-load"}),
+        ("tools/devtools/verify.py", set()),
     ],
 )
 def test_relevant_native_acceptance_retains_existing_owners(
@@ -1736,7 +1818,7 @@ def test_acceptance_filters_native_files(
 
 def test_broad_change_is_not_narrowed_by_a_module_leaf() -> None:
     paths = [
-        "tools/devtools/verify.py",
+        "Cargo.toml",
         "tests/fixtures/modules/dyn-fx-gain/module.toml",
     ]
     assert verify.acceptance_plan("module-load", paths) == []  # all native module files
