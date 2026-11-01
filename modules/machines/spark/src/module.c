@@ -4,7 +4,9 @@
    The sample comes from the runtime's per-track table (<dk/sample_track.h>): the module only plays; it never selects a file. */
 #include <dk/api.h>
 #include <dk/machine.h>
+#include <dk/sample_picker.h>
 #include <dk/sample_track.h>
+#include <dk/ui.h>
 
 DK_MACHINE(spark, .name = "SPARK", .short_name = "SPK", .render = "_spark_render",
            .note_on = "_spark_note_on", .desc = "_spark_desc", .stereo = 1);
@@ -29,11 +31,21 @@ int32_t dkm_init(const dk_api *api)
     if (handle <= 0)
         return handle < 0 ? handle : DK_SAMPLE_E_CONTRACT;
     tracks = (uint32_t)handle;
+    dk_picker_init(api, tracks); /* the picker is optional: when it cannot start, the SAMPLES... row is absent */
     return 0;
 }
 
 void dkm_fini(const dk_api *api)
 {
     (void)api;
+    dk_picker_fini();
     tracks = 0;
 }
+
+/* SETTINGS... of this module in DIGIKIT > MODULES: the sample picker (sdk/src/sample_picker.c). */
+static void spark_menu(dk_ui_menu *m, void *ctx)
+{
+    (void)ctx;
+    dk_picker_open(m);
+}
+DK_MENU(spark_menu)

@@ -114,7 +114,7 @@ module set (`--stop` ends it), runs the key script from the main screen, and wri
 steps or inline text (`tap:KEY`, `wait:MS`, `turn:ENC A:BY`, `shot:NAME`, `*N` repeats). The workbench has the same call as the Reload
 modules button (⇧⌘R), with `build: true`: it builds the stale objects of the session's modules first (ColdFire and SHARC+; docs/CONTROL.md). `dk:dev` builds in its own step
 and reloads without `build`.
-`--store ID,ID*,synth:NAME:BSS` boots the daemon on a card whose module store holds those modules (`*`: also in the saved selection; `synth:` needs BSS bytes of arena, so it never fits), which the MODULES list of `core/digikit-menu` needs; each list has its own kept daemon.
+`--store ID,ID*,synth:NAME:BSS` boots the daemon on a card whose module store holds those modules (`*`: also in the saved selection; `synth:` needs BSS bytes of arena, so it never fits; `file:SRC=DEST` copies a host file or folder to `digikit/DEST` of the store, for example `file:out/smp=samples`), which the MODULES list of `core/digikit-menu` needs; each list has its own kept daemon.
 
 The daemon method is `dev.reload` (docs/CONTROL.md). It applies the modules again and compares the result with the running image:
 

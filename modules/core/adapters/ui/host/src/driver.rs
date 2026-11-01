@@ -160,6 +160,10 @@ pub fn press_right(row: usize) {
         s.menus.len() - 1
     });
     panel(handle(pid), row as c_int, d.ctx);
+    // core/ui shows no panel when the callback added no rows
+    if with(|s| s.menus[pid].rows.is_empty()) {
+        with(|s| s.stack.retain(|&x| x != pid));
+    }
 }
 
 /// YES on a row of the open side panel: the panel closes, then the row acts.
