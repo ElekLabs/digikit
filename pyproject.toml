@@ -66,7 +66,6 @@ files = [
     "tools/patchkit/pk_digikit_fxroutes.py",
     "tools/patchkit/pk_digikit_settings.py",
     "tools/patchkit/pk_digikit_fxpage.py",
-    "tools/patchkit/pk_digikit_fxpersist.py",
     "tools/patchkit/pk_digikit_fxshift.py",
     "tools/patchkit/pk_idx65_poke.py",
     "modules/*/*/tests/freqshift_ref.py",

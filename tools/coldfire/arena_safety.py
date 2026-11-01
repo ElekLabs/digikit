@@ -37,6 +37,8 @@ from tools.patchkit import pk_device
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SECTOR_RECORD = 8 + 64 + 512
+# The existing firmware kit-library sector ranges (hi exclusive), shared by fixed FX policies.
+KIT_AREAS = {"dt2": ((0x16000, 0x17000),), "dn2": ((0x2000, 0x2100),)}
 
 
 def card_store(device: str) -> tuple[int, int]:
@@ -114,11 +116,11 @@ def runtime_policy(device: str, name: str = "default") -> dict:
         raise ValueError(f"unsupported runtime safety device: {device}")
     if name == "default":
         areas, extra = (), ()
-    elif name == "fx-routes":
-        from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
-
-        store = pk_device.store_of(device)
-        areas, extra = KIT_AREAS[device], (store.set_a, store.set_b)
+    elif name in ("fx-kit", "fx-routes"):
+        areas, extra = KIT_AREAS[device], ()
+        if name == "fx-routes":
+            store = pk_device.store_of(device)
+            extra = (store.set_a, store.set_b)
     else:
         raise ValueError(f"unknown runtime safety policy: {name}")
     return {"name": name, "firmware_areas": areas, "store_extra": extra}
@@ -739,7 +741,7 @@ def main(argv=None) -> int:
     runtime.add_argument("--min-emulators", type=int, default=1)
     runtime.add_argument("--overlay", type=pathlib.Path, action="append", required=True)
     runtime.add_argument(
-        "--policy", choices=("default", "fx-routes"), default="default"
+        "--policy", choices=("default", "fx-kit", "fx-routes"), default="default"
     )
     a = ap.parse_args(argv)
     if a.cmd == "runtime-check":

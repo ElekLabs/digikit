@@ -220,7 +220,7 @@ class FxRouteHelpersTest(unittest.TestCase):
         for device in ("dt2", "dn2"):
             with self.subTest(device=device):
                 store = pk_device.store_of(device)
-                lo, hi = routes.KIT_AREAS[device][0]
+                lo, hi = arena_safety.KIT_AREAS[device][0]
                 overlay = self.overlay(
                     store.set_a, store.set_b, lo, hi - 1, store.sel_a, 0x58000
                 )

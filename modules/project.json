@@ -13,5 +13,6 @@
         "cwd": "."
       }
     }
-  }
+  },
+  "implicitDependencies": ["module-freqshift"]
 }

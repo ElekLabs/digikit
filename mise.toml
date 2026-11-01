@@ -310,7 +310,7 @@ description = "Compile module sources to objects (core/* modules: build/*.dko.js
 
 [tasks."module:check"]
 run = "uv run python -m tools.patchkit.pk_modcheck"
-description = "Check one module: module:check ID [--device dt2|dn2] [--trace]. Machine/effect conformance plus own tests in one pytest process; own tests may build or launch an emulator. Service/raw modules without tests can succeed with nothing to run; not an all-module patched load proof. After passing tests, reports packed size/fit per device (or why it is not packed)"
+description = "Check one module: module:check ID [--device dt2|dn2] [--trace]. Machine/effect conformance and own Python tests, then any module-owned Nx test-device target; may build or emulate. Modules without tests retain source/size checks; not an all-module patched load proof. Size/fit follows only after all owned stages pass"
 
 [tasks."module:audit"]
 run = "uv run python -m tools.patchkit.pk_modaudit"

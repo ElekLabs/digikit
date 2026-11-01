@@ -50,13 +50,6 @@ Kinds:
   settings   the settings store of the runtime (docs/design/digikit-store.md, "The settings record"): a key put through the mailbox is written 2 s after the last change to the copy that is not
              current (A, then B, then A), never to anything else in the store range; a soft restart reads it back; the SETTINGS command and CAPACITY kind SETTINGS report it; `patchkit store dump`
              decodes the card the guest left; a blank card is claimed first; a torn newer copy leaves the older one; tools/patchkit/pk_digikit_settings.py.
-  fxpersist  the values of run-time effects are saved with the kit (`core/fxpages` hooks on the kit loader, saver and initialiser; Digitakt II and Digitone II): Save Kit and Load Kit restore them to the
-             same effect (kit array, DSP row, PCM, pages) and give another effect, an empty row or a stock kit the defaults, never a zero on the way to the DSP; a project; another
-             pattern's kit; tools/patchkit/pk_digikit_fxpersist.py.
-  fxshift    the frequency shifter (`[fxshift] module` names it; Digitakt II and Digitone II; the manifest says send, MIX 127): its page (tab FSH, title Freq Shifter, SHIFT bipolar, MIX default 127), on the master route (stored `master` on
-             the Digitakt II, the fallback on the Digitone II, which has no send cells) MIX 0 leaves the PCM bit for bit as it was, MIX 127 and SHIFT 0 keeps the sine, turning SHIFT moves the sine by the shift of the routine's
-             mapping in either direction with the image 40 dB down, Save Kit and Load Kit give SHIFT back; on the Digitakt II also the send route (the default): an amount on track 1 gives a return of amount^2 x MIX x the shifted
-             track (compared with the float32 model), an amount on another track adds nothing; tools/patchkit/pk_digikit_fxshift.py.
   upload     module upload over USB SysEx (docs/design/digikit-upload.md): `[upload] part` = ops | cut | stock | playback | quick, see
              tools/patchkit/pk_digikit_upload.py. The `menu` kind with `upload = true` is the through-the-menu proof.
 
@@ -1365,23 +1358,9 @@ def run_settings(c: Ctx) -> None:
     SET.run_settings(c)
 
 
-def run_fxpersist(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fxpersist as FPS
-
-    FPS.run_fxpersist(c)
-
-
-def run_fxshift(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fxshift as FSH
-
-    FSH.run_fxshift(c)
-
-
 KINDS = {
     "pages": run_pages,
     "settings": run_settings,
-    "fxpersist": run_fxpersist,
-    "fxshift": run_fxshift,
     "card": run_card,
     "debug": run_debug,
     "crash": run_crash,

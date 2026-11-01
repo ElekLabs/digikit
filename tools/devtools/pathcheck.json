@@ -105,6 +105,51 @@
       "reason": "fixture paths"
     },
     {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "modules/fx/effect",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "tests/fixtures/modules/source",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "tools/oracle.py",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "tests/effect.device.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "modules/fx/effect/tests/effect.device.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "modules/fx/effect/module.toml",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "tests/fixtures/modules/source/module.toml",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "tests/patchkit/test_modroots_acceptance.py",
+      "token": "tests/extra.device.test.ts",
+      "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "modules/fx/freqshift/tests/test_runtime_routing.py",
+      "token": "modules/freqshift.test.ts",
+      "reason": "existing device acceptance filter relative to tests/regression"
+    },
+    {
       "file": "tools/devtools/test_outcomes.py",
       "pattern": ".*",
       "reason": "docstring examples"

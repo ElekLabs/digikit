@@ -184,21 +184,29 @@ RUNTIME_ROUTE_FILES = (
 )
 RUNTIME_TRACK_FILES = ("runtime/fx-track-route.test.ts",)
 RUNTIME_BASIC_FILES = ("runtime/fx-chain.test.ts", "runtime/fx-pages.test.ts")
+RUNTIME_KIT_FILES = ("runtime/fx-kit-persist.test.ts",)
 RUNTIME_PROFILE_FILES = (
     *RUNTIME_BASIC_FILES,
     *RUNTIME_ROUTE_FILES,
     *RUNTIME_TRACK_FILES,
+    *RUNTIME_KIT_FILES,
 )
 RUNTIME_GAIN_FILES = (
     "runtime/fx-reuse.test.ts",
     *RUNTIME_SEND_FILES,
     *RUNTIME_BASIC_FILES,
+    *RUNTIME_KIT_FILES,
 )
-RUNTIME_FX_FILES = (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES, *RUNTIME_TRACK_FILES)
+RUNTIME_FX_FILES = (
+    *RUNTIME_GAIN_FILES,
+    *RUNTIME_ROUTE_FILES,
+    *RUNTIME_TRACK_FILES,
+)
 RUNTIME_PLUSDRIVE_FILES = ("runtime/samples-live.test.ts", *RUNTIME_FX_FILES)
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/sine": RUNTIME_FX_FILES,
     "test/dyn-fx-gain": (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES),
+    "test/dyn-fx-gain-b": RUNTIME_KIT_FILES,
     "test/dyn-fx-gain-sendonly": RUNTIME_ROUTE_FILES,
     "test/dyn-fx-gain-both": RUNTIME_TRACK_FILES,
     "test/input-probe": ("runtime/input-adapter.test.ts",),
@@ -238,10 +246,16 @@ RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
     },
     "tools/patchkit/pk_dkrt_machine.py": RUNTIME_FX_FILES,
     "tools/coldfire/arena_safety.py": RUNTIME_FX_FILES,
-    "tools/patchkit/pk_digikit_fxsend.py": (*RUNTIME_SEND_FILES, *RUNTIME_TRACK_FILES),
+    "tools/patchkit/pk_digikit_fxsend.py": (
+        *RUNTIME_SEND_FILES,
+        *RUNTIME_TRACK_FILES,
+    ),
     "tools/patchkit/hook_ab.py": RUNTIME_FX_FILES,
-    "tools/patchkit/pk_digikit_fx.py": RUNTIME_PROFILE_FILES,
-    "tools/patchkit/pk_digikit_fxpage.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fx.py": ("runtime/fx-chain.test.ts",),
+    "tools/patchkit/pk_digikit_fxpage.py": (
+        "runtime/fx-pages.test.ts",
+        *RUNTIME_KIT_FILES,
+    ),
     "tools/patchkit/pk_digikit_fxroutes.py": RUNTIME_PROFILE_FILES,
     "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_PROFILE_FILES,
 }
@@ -287,6 +301,7 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.patchkit.pk_dkrt_machine",
                 "tools.patchkit.pk_digikit_fx",
                 "tools.patchkit.pk_digikit_fxsend",
+                "tools.patchkit.pk_digikit_fxpage",
                 "tools.patchkit.pk_digikit_fxroutes",
                 "tools.patchkit.pk_digikit_fxroute",
                 "tools.patchkit.hook_ab",
@@ -295,6 +310,13 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
             }
         )
+    if step == "runtime-fixture":
+        roots.update(
+            source.removesuffix(".py").replace("/", ".")
+            for record in modroots.runtime_acceptance()
+            for source in record.sources
+            if source.endswith(".py") and (ROOT / source).is_file()
+        )
     graph = changed_tests.graph()
     found, todo = set(roots), list(roots)
     while todo:
@@ -302,7 +324,20 @@ def acceptance_python(step: str) -> set[str]:
             if dependency not in found:
                 found.add(dependency)
                 todo.append(dependency)
-    return {changed_tests.path_of(module) for module in found}
+    paths = {changed_tests.path_of(module) for module in found}
+    if step == "runtime-fixture":
+        paths.update(
+            source
+            for record in modroots.runtime_acceptance()
+            for source in record.sources
+        )
+        # Module-owned Python models may be loaded dynamically rather than imported.
+        paths.update(
+            p.relative_to(ROOT).as_posix()
+            for record in modroots.runtime_acceptance()
+            for p in (modroots.module_dir(record.owner) / "tests").rglob("*.py")
+        )
+    return paths
 
 
 @cache
@@ -337,6 +372,29 @@ def module_smoke_cells(ids: set[str]) -> list[str] | None:
                 return None
             selected.append(f"{cell['device']}-{cell['firmware']}:" + ",".join(modules))
     return selected
+
+
+def module_runtime_files() -> dict[str, modroots.RuntimeAcceptance]:
+    """Registered module files in the existing tests/regression filter representation."""
+    return {
+        "../../" + file: record
+        for record in modroots.runtime_acceptance()
+        for file in record.files
+    }
+
+
+def runtime_modules() -> dict[str, tuple[str, ...]]:
+    owners = {mid: list(files) for mid, files in RUNTIME_MODULES.items()}
+    for file, record in module_runtime_files().items():
+        for mid in record.modules:
+            owners.setdefault(mid, []).append(file)
+    return {mid: tuple(files) for mid, files in owners.items()}
+
+
+def runtime_plusdrive_files() -> set[str]:
+    return set(RUNTIME_PLUSDRIVE_FILES) | {
+        file for file, record in module_runtime_files().items() if record.plusdrive
+    }
 
 
 @cache
@@ -380,9 +438,19 @@ def related_acceptance(step: str, paths: tuple[str, ...]) -> tuple[str, ...] | N
             for path in files:
                 if (
                     not isinstance(path, str)
-                    or not path.startswith(f"{directory}/")
+                    or not (
+                        path.startswith(f"{directory}/")
+                        or (
+                            step == "runtime-fixture" and path in module_runtime_files()
+                        )
+                    )
                     or not path.endswith(".test.ts")
-                    or ".." in Path(path).parts
+                    or (
+                        ".." in Path(path).parts
+                        and not (
+                            step == "runtime-fixture" and path in module_runtime_files()
+                        )
+                    )
                     or not (ROOT / "tests/regression" / path).is_file()
                 ):
                     return None
@@ -406,6 +474,8 @@ def acceptance_files(
         p.relative_to(ROOT / "tests/regression").as_posix()
         for p in (ROOT / "tests/regression" / directory).rglob("*.test.ts")
     )
+    registered = module_runtime_files() if step == "runtime-fixture" else {}
+    all_files = sorted([*all_files, *registered])
     selected: set[str] = set()
     helpers: list[str] = []
     for path in paths:
@@ -419,9 +489,15 @@ def acceptance_files(
             }
         ):
             continue
+        declared = {
+            file for file, record in registered.items() if path in record.sources
+        }
+        selected.update(declared)
         if path in RUNTIME_SOURCES:
             if step == "runtime-fixture":
                 selected.update(RUNTIME_SOURCES[path])
+            continue
+        if declared:
             continue
         own = f"tests/regression/{directory}/"
         if path.startswith(own):
@@ -473,7 +549,12 @@ def acceptance_files(
                         if m in hit
                     )
                 else:
-                    for module, files in RUNTIME_MODULES.items():
+                    selected.update(
+                        file
+                        for file, record in registered.items()
+                        if record.owner in hit
+                    )
+                    for module, files in runtime_modules().items():
                         if module in hit:
                             selected.update(files)
         elif step == "stock" and path.startswith("tests/regression/goldens/"):
@@ -539,9 +620,8 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_fxroute.py": (),  # retained offline TS oracles
     "pk_digikit_fxroutes.py": (),  # retained TS profile/card/OLED helpers
     "pk_digikit_settings.py": ("settings",),
-    "pk_digikit_fxpage.py": (),  # retained profile/PCM and legacy UI helpers
-    "pk_digikit_fxpersist.py": ("fxpersist",),
-    "pk_digikit_fxshift.py": ("fxshift",),
+    "pk_digikit_fxpage.py": (),  # retained PCM comparison CLI
+    "pk_digikit_fxshift.py": (),  # retained PCM/model analysis CLI
     "pk_digikit_capacity.py": ("debug",),
     "pk_digikit_memaudit.py": ("debug",),
     "pk_digikit_cost.py": ("debug",),

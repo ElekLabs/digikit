@@ -6,8 +6,10 @@ Roots: `modules/`, `tests/fixtures/modules/`, then the os.pathsep-separated `PAT
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -74,3 +76,94 @@ def object_path(manifest: dict, moddir: Path, obj: dict) -> Path:
     if mod["category"] != "core" and obj.get("sources"):
         return OBJECT_CACHE / mod["id"] / obj["path"]
     return moddir / obj["path"]
+
+
+@dataclass(frozen=True)
+class RuntimeAcceptance:
+    """A module's project-owned runtime acceptance, using repository-relative paths."""
+
+    owner: str
+    files: tuple[str, ...]
+    modules: tuple[str, ...]
+    sources: tuple[str, ...]
+    plusdrive: bool
+
+
+def runtime_acceptance() -> tuple[RuntimeAcceptance, ...]:
+    """Read the one ownership declaration; fail closed if generic device discovery diverges."""
+    records = []
+    registered: set[str] = set()
+    known = manifests()
+    for owner, directory in sorted(known.items()):
+        if not directory.is_relative_to(ROOT / "modules"):
+            continue
+        project = directory / "project.json"
+        if not project.is_file():
+            continue
+        meta = (
+            json.loads(project.read_text()).get("metadata", {}).get("runtimeAcceptance")
+        )
+        if meta is None:
+            continue
+        if not isinstance(meta, dict) or set(meta) != {
+            "files",
+            "modules",
+            "sources",
+            "plusdrive",
+        }:
+            raise ValueError(f"{project}: invalid runtimeAcceptance fields")
+        for field in ("files", "modules", "sources"):
+            if (
+                not isinstance(meta[field], list)
+                or (field != "sources" and not meta[field])
+                or any(not isinstance(value, str) for value in meta[field])
+                or len(set(meta[field])) != len(meta[field])
+            ):
+                raise ValueError(f"{project}: invalid runtimeAcceptance {field}")
+        if type(meta["plusdrive"]) is not bool or any(
+            mid not in known for mid in meta["modules"]
+        ):
+            raise ValueError(f"{project}: invalid runtimeAcceptance modules or plusdrive")
+        files = []
+        for filename in meta["files"]:
+            path = directory / filename
+            if (
+                Path(filename).is_absolute()
+                or ".." in Path(filename).parts
+                or not path.is_file()
+                or not filename.startswith("tests/")
+                or not filename.endswith(".device.test.ts")
+            ):
+                raise ValueError(
+                    f"{project}: invalid runtimeAcceptance file {filename}"
+                )
+            rel = path.relative_to(ROOT).as_posix()
+            if rel in registered:
+                raise ValueError(
+                    f"{project}: duplicate runtimeAcceptance file {filename}"
+                )
+            registered.add(rel)
+            files.append(rel)
+        for source in meta["sources"]:
+            if Path(source).is_absolute() or ".." in Path(source).parts:
+                raise ValueError(
+                    f"{project}: invalid runtimeAcceptance source {source}"
+                )
+        records.append(
+            RuntimeAcceptance(
+                owner,
+                tuple(files),
+                tuple(meta["modules"]),
+                tuple(meta["sources"]),
+                meta["plusdrive"],
+            )
+        )
+    discovered = {
+        p.relative_to(ROOT).as_posix()
+        for p in ROOT.glob("modules/*/*/tests/**/*.device.test.ts")
+    }
+    if registered != discovered:
+        raise ValueError(
+            f"module device acceptance registration differs: unregistered={sorted(discovered - registered)}, undiscovered={sorted(registered - discovered)}"
+        )
+    return tuple(records)

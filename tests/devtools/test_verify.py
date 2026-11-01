@@ -877,7 +877,9 @@ def test_only_broad_acceptance_is_not_narrowed_by_leaf(
         path.relative_to(ROOT / "tests/regression").as_posix()
         for path in (ROOT / "tests/regression/runtime").rglob("*.test.ts")
     }
-    assert set(selected["acceptance"]["runtime-fixture"]) == expected
+    assert set(selected["acceptance"]["runtime-fixture"]) == expected | set(
+        verify_route.module_runtime_files()
+    )
 
 
 def test_only_named_overrides_keep_other_routed_scopes(
@@ -1339,17 +1341,11 @@ def test_other_patchkit_files_keep_the_wide_route() -> None:
         assert "smoke" in verify.steps_for([path])
 
 
-def test_a_scenario_runner_selects_the_tests_of_its_kind() -> None:
-    assert selected("tools/patchkit/pk_digikit_fxshift.py") == {
-        "tests/digikit/test_fxshift_dn2.py",
-        "tests/digikit/test_fxshift_dt2.py",
-    }
-    assert "tests/digikit" not in selected("tools/patchkit/pk_digikit_fxpage.py")
-    # a runner others import also selects their kinds
-    assert {
-        "tests/digikit/test_fxshift_dt2.py",
-        "tests/digikit/test_fxpersist_dt2.py",
-    } <= selected("tools/patchkit/pk_digikit_fxpage.py")
+def test_retired_fx_device_runners_have_no_legacy_python_consumers() -> None:
+    for helper in ("pk_digikit_fx", "pk_digikit_fxpage", "pk_digikit_fxshift"):
+        owners = selected(f"tools/patchkit/{helper}.py")
+        assert not any(path.startswith("tests/digikit/") for path in owners)
+        assert "tests/digikit" not in owners
 
 
 def test_shared_digikit_helpers_keep_the_wide_route() -> None:
@@ -1790,7 +1786,6 @@ def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
         ("modules/no/such/module.toml", {"runtime-fixture", "module-load"}),
         ("tools/device/dkupload.py", {"runtime-fixture"}),
         ("tools/device/dkscreen.py", set()),
-        ("tools/patchkit/pk_digikit_fxshift.py", set()),
         ("devices/digitakt-ii-leds.toml", set()),
         ("devices/digitone-ii-leds.toml", set()),
         ("tools/patchkit/patchkit.py", {"runtime-fixture", "module-load"}),
@@ -1843,6 +1838,8 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "tests/fixtures/modules/sine/module.toml",
             [
                 "runtime/fx-chain.test.ts",
+                *verify_route.module_runtime_files(),
+                "runtime/fx-kit-persist.test.ts",
                 "runtime/fx-pages.test.ts",
                 "runtime/fx-reuse.test.ts",
                 "runtime/fx-routes-panel.test.ts",
@@ -1857,6 +1854,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "tests/fixtures/modules/dyn-fx-gain/module.toml",
             [
                 "runtime/fx-chain.test.ts",
+                "runtime/fx-kit-persist.test.ts",
                 "runtime/fx-pages.test.ts",
                 "runtime/fx-reuse.test.ts",
                 "runtime/fx-routes-panel.test.ts",
@@ -1871,14 +1869,16 @@ def test_relevant_native_acceptance_retains_existing_owners(
 def test_acceptance_filters_native_files(
     step: str, path: str, expected: list[str]
 ) -> None:
-    assert verify_route.acceptance_files(step, [path]) == expected
+    assert verify_route.acceptance_files(step, [path]) == sorted(expected)
 
 
 def test_acceptance_helpers_use_discovered_files_and_their_prerequisites(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paths = ["tests/regression/runtime/fx-live.ts", "tests/regression/runtime/live.ts"]
-    fx_files = tuple(sorted(verify_route.RUNTIME_FX_FILES))
+    fx_files = tuple(
+        sorted((*verify_route.RUNTIME_FX_FILES, *verify_route.module_runtime_files()))
+    )
     calls = []
 
     def discover(step: str, helpers: tuple[str, ...]) -> tuple[str, ...]:
@@ -1892,9 +1892,16 @@ def test_acceptance_helpers_use_discovered_files_and_their_prerequisites(
     assert verify.runtime_pack_modules(selected) == [
         "test/sine",
         "test/dyn-fx-gain",
+        "test/dyn-fx-gain-b",
         "test/dyn-fx-gain-sendonly",
         "test/dyn-fx-gain-both",
         "test/dyn-fx-gain-send",
+        *[
+            m
+            for record in modroots.runtime_acceptance()
+            for m in record.modules
+            if m not in verify_route.RUNTIME_MODULES
+        ],
     ]
     assert set(selected).intersection(verify_route.RUNTIME_PLUSDRIVE_FILES)
     assert verify.acceptance_plan("runtime-fixture", [*paths, "Cargo.toml"]) == []
@@ -1912,8 +1919,13 @@ def test_unproven_acceptance_helpers_keep_the_whole_suite(
         "runtime-fixture", [f"tests/regression/runtime/{path}"]
     )
     assert selected == sorted(
-        p.relative_to(ROOT / "tests/regression").as_posix()
-        for p in (ROOT / "tests/regression/runtime").rglob("*.test.ts")
+        [
+            *(
+                p.relative_to(ROOT / "tests/regression").as_posix()
+                for p in (ROOT / "tests/regression/runtime").rglob("*.test.ts")
+            ),
+            *verify_route.module_runtime_files(),
+        ]
     )
 
 
@@ -2067,6 +2079,7 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             [
                 "test/sine",
                 "test/dyn-fx-gain",
+                "test/dyn-fx-gain-b",
                 "test/dyn-fx-gain-sendonly",
                 "test/dyn-fx-gain-both",
                 "test/input-probe",
@@ -2082,9 +2095,19 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
                 "test/dyn-fx-nan",
                 "test/dyn-fx-gain-send",
                 "test/dyn-crash",
+                *[
+                    m
+                    for record in modroots.runtime_acceptance()
+                    for m in record.modules
+                    if m not in verify_route.RUNTIME_MODULES
+                ],
             ],
         ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
+        (
+            ["runtime/fx-kit-persist.test.ts"],
+            ["test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-b"],
+        ),
         (["runtime/fx-reuse.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
         (["runtime/fx-send.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
         (["runtime/fx-send-dn2.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
@@ -2400,6 +2423,7 @@ def test_module_owned_python_tests_are_found_by_globbing(
         ([], True),
         (["runtime/samples-live.test.ts"], True),
         (["runtime/fx-reuse.test.ts"], True),
+        (["runtime/fx-kit-persist.test.ts"], True),
         (["runtime/fx-send.test.ts"], True),
         (["runtime/fx-send-dn2.test.ts"], True),
         (["runtime/fx-routes-panel.test.ts"], True),
@@ -2442,16 +2466,20 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
     "path", ["tools/patchkit/pk_dkrt_machine.py", "tools/coldfire/arena_safety.py"]
 )
 def test_fx_cli_helpers_select_only_runtime_fx_owners(path: str) -> None:
-    assert verify_route.acceptance_files("runtime-fixture", [path]) == [
-        "runtime/fx-chain.test.ts",
-        "runtime/fx-pages.test.ts",
-        "runtime/fx-reuse.test.ts",
-        "runtime/fx-routes-panel.test.ts",
-        "runtime/fx-routes-persist.test.ts",
-        "runtime/fx-send-dn2.test.ts",
-        "runtime/fx-send.test.ts",
-        "runtime/fx-track-route.test.ts",
-    ]
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == sorted(
+        [
+            "runtime/fx-chain.test.ts",
+            *verify_route.module_runtime_files(),
+            "runtime/fx-kit-persist.test.ts",
+            "runtime/fx-pages.test.ts",
+            "runtime/fx-reuse.test.ts",
+            "runtime/fx-routes-panel.test.ts",
+            "runtime/fx-routes-persist.test.ts",
+            "runtime/fx-send-dn2.test.ts",
+            "runtime/fx-send.test.ts",
+            "runtime/fx-track-route.test.ts",
+        ]
+    )
     assert "runtime-fixture" in verify.steps_for([path])
 
 
@@ -2466,11 +2494,14 @@ def test_fx_cli_function_local_needs_dependency_keeps_runtime_gain_coverage() ->
 
 def test_send_cli_selects_only_runtime_send_owners() -> None:
     path = "tools/patchkit/pk_digikit_fxsend.py"
-    assert verify_route.acceptance_files("runtime-fixture", [path]) == [
-        "runtime/fx-send-dn2.test.ts",
-        "runtime/fx-send.test.ts",
-        "runtime/fx-track-route.test.ts",
-    ]
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == sorted(
+        [
+            *verify_route.module_runtime_files(),
+            "runtime/fx-send-dn2.test.ts",
+            "runtime/fx-send.test.ts",
+            "runtime/fx-track-route.test.ts",
+        ]
+    )
     assert "runtime-fixture" in verify.steps_for([path])
 
 
@@ -2502,6 +2533,11 @@ def test_send_function_local_anchor_dependency_keeps_runtime_coverage() -> None:
         ]
     ]
     + [
+        (
+            "runtime/fx-kit-persist.test.ts",
+            ["test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-b"],
+            {},
+        ),
         (
             "runtime/fx-chain.test.ts",
             ["test/sine", "test/dyn-fx-gain"],
@@ -2584,6 +2620,8 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
                 f"tools/patchkit/{helper}.py",
                 [
                     "runtime/fx-chain.test.ts",
+                    *verify_route.module_runtime_files(),
+                    "runtime/fx-kit-persist.test.ts",
                     "runtime/fx-pages.test.ts",
                     "runtime/fx-routes-panel.test.ts",
                     "runtime/fx-routes-persist.test.ts",
@@ -2591,12 +2629,15 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
                 ],
             )
             for helper in (
-                "pk_digikit_fx",
-                "pk_digikit_fxpage",
                 "pk_digikit_fxroutes",
                 "pk_digikit_fxroute",
             )
         ],
+        ("tools/patchkit/pk_digikit_fx.py", ["runtime/fx-chain.test.ts"]),
+        (
+            "tools/patchkit/pk_digikit_fxpage.py",
+            ["runtime/fx-kit-persist.test.ts", "runtime/fx-pages.test.ts"],
+        ),
         (
             "tests/fixtures/modules/dyn-fx-gain-both/module.toml",
             ["runtime/fx-track-route.test.ts"],
@@ -2613,7 +2654,7 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
 def test_route_sources_select_their_consuming_suites(
     source: str, owners: list[str]
 ) -> None:
-    assert verify_route.acceptance_files("runtime-fixture", [source]) == owners
+    assert verify_route.acceptance_files("runtime-fixture", [source]) == sorted(owners)
 
 
 def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> None:
@@ -2622,16 +2663,18 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     assert "tools/device/dksettings.py" in dependencies
     assert "tools/patchkit/pk_digikit_fx.py" in dependencies
     assert "tools/device/dkneeds.py" in dependencies
-    assert "tools/patchkit/pk_digikit_fxpersist.py" in dependencies
+    assert "tools/patchkit/pk_digikit_fxpersist.py" not in dependencies
     assert {
         "runtime/fx-chain.test.ts",
+        *verify_route.module_runtime_files(),
+        "runtime/fx-kit-persist.test.ts",
         "runtime/fx-pages.test.ts",
         "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
         "runtime/fx-track-route.test.ts",
     } <= set(
         verify_route.acceptance_files(
-            "runtime-fixture", ["tools/patchkit/pk_digikit_fxpersist.py"]
+            "runtime-fixture", ["tools/patchkit/pk_digikit_fxroutes.py"]
         )
     )
 
@@ -2640,6 +2683,8 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     "suite",
     [
         "runtime/fx-chain.test.ts",
+        "runtime/fx-kit-persist.test.ts",
+        *verify_route.module_runtime_files(),
         "runtime/fx-pages.test.ts",
         "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
@@ -2676,16 +2721,20 @@ def test_route_dispatch_passes_alias_inventory_to_preparation(
 def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
     assert verify_route.acceptance_files(
         "runtime-fixture", ["tools/patchkit/hook_ab.py"]
-    ) == [
-        "runtime/fx-chain.test.ts",
-        "runtime/fx-pages.test.ts",
-        "runtime/fx-reuse.test.ts",
-        "runtime/fx-routes-panel.test.ts",
-        "runtime/fx-routes-persist.test.ts",
-        "runtime/fx-send-dn2.test.ts",
-        "runtime/fx-send.test.ts",
-        "runtime/fx-track-route.test.ts",
-    ]
+    ) == sorted(
+        [
+            "runtime/fx-chain.test.ts",
+            *verify_route.module_runtime_files(),
+            "runtime/fx-kit-persist.test.ts",
+            "runtime/fx-pages.test.ts",
+            "runtime/fx-reuse.test.ts",
+            "runtime/fx-routes-panel.test.ts",
+            "runtime/fx-routes-persist.test.ts",
+            "runtime/fx-send-dn2.test.ts",
+            "runtime/fx-send.test.ts",
+            "runtime/fx-track-route.test.ts",
+        ]
+    )
 
 
 @pytest.mark.parametrize(
@@ -2693,6 +2742,7 @@ def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
     [
         "pk_digikit_fx.py",
         "pk_digikit_fxpage.py",
+        "pk_digikit_fxshift.py",
         "pk_digikit_fxroute.py",
         "pk_digikit_fxroutes.py",
     ],
@@ -2703,10 +2753,14 @@ def test_retired_route_runners_keep_narrow_python_and_typescript_owners(
     path = f"tools/patchkit/{helper}"
     fine = verify_route.runner_fine(path)
     assert fine is not None
-    if helper in {"pk_digikit_fx.py", "pk_digikit_fxpage.py"}:
-        assert "tests/digikit/test_fxshift_dt2.py" in fine.tests
-        assert "tests/digikit/test_fxpersist_dt2.py" in fine.tests
-    else:
-        assert fine.tests == ()
+    assert fine.tests == ()
     assert fine.steps == ("python-tests",)
     assert verify_route.acceptance_files("runtime-fixture", [path])
+
+
+def test_kit_fixture_retains_runtime_owner():
+    path = "tests/fixtures/modules/dyn-fx-gain-b/module.toml"
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == [
+        "runtime/fx-kit-persist.test.ts"
+    ]
+    assert "runtime-fixture" in verify.steps_for([path])
