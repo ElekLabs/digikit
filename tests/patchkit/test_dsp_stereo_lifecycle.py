@@ -1,6 +1,6 @@
-"""The reset mirrors, the stages without a twin and the unsupported-context fallback of core/dsp-voice on DN2 1.12, on the concrete SHARC+ core.
+"""The reset mirrors and the guard (the unsupported-context fallback) of core/dsp-voice on DN2 1.12, on the concrete SHARC+ core.
 
-The reset wrappers run the real stock resets of the image. The `_gs_bad_*` wrappers and the fallback of the twins jump to a logging stand-in (Rig(stub=True)):
+The reset wrappers run the real stock resets of the image. The guard of the twins jumps to a logging stand-in (Rig(stub=True)):
 they are about what the wrapper does around the stock call, not about the stock stage. Original firmware is supplied at runtime."""
 
 import pytest

@@ -8,7 +8,7 @@ Sources read: AGENTS.md, docs/design/sample-api-1.5.md, findings 92, 95, 104, 10
 ## 0. What exists
 
 - `pool_core.h` is **not** device-neutral. It holds the DT2 stock slot model (`SP_SLOTS`, key words, record stride, `sp_geometry`, `sp_pick_slot`, `sp_free_frames`). Only `SP_NW32_BASE`, `SP_DDR_PHYS*`, `SP_NATIVE_RATE` and `sp_nw32()` are neutral. Plan: move those into a new `src/cf/pool_nw32.h`; `pool_core.h` includes it. No other change to the DT2 object.
-- Profile `[adapter.sample_pool]` for DN2 already has `ddr_base = 0x80531000`, `ddr_bytes = 0x10000000` (256 MiB, so the range is `[0x80531000, 0x90531000)`). `patchkit gen` kind `gas-sample-pool` already writes them as `.equ SP_*` for ColdFire assembly. The DSP needs the same two numbers (section 2.7).
+- Profile `[adapter.sample_pool]` for DN2 already has `ddr_base = 0x80531000`, `ddr_bytes = 0x0ff80000` (256 MiB minus 512 KiB, so the range is `[0x80531000, 0x904b1000)`; the top 512 KiB of the former 256 MiB hold the R rings of the stereo machines, `ring_r_base` in the same section, docs/design/dn2-stereo.md). `patchkit gen` kind `gas-sample-pool` already writes them as `.equ SP_*` for ColdFire assembly. The DSP needs the same two numbers (section 2.7).
 - The runtime already dedups by file identity and refcounts (design 2.1). The adapter still keeps its own block table, because it also keeps released blocks as a cache (1.4).
 - DN2 runtime gaps this object depends on (not adapter code): `tracks.rs probe()` returns `E_CONTRACT` unless `device() == 1`, so `inspect/stat` need a DN2 branch that reads the store table (size and sha256 from the store entry, `hash_kind = DK_FILE_HASH_SHA256`); and the store has no range read (section 2.2).
 

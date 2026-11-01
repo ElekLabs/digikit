@@ -1,19 +1,20 @@
-// core/dsp-voice on the Digitone II: stereo machines (machine contract 1.2), phase 1 (docs/design/dn2-stereo.md).
+// core/dsp-voice on the Digitone II: stereo machines (machine contract 1.2), docs/design/dn2-stereo.md.
 //
 // A machine that returns DK_STEREO writes R to a per-slot R buffer (`_gs_rbuf`). `_gs_post` (called by the contract adapter after the guard) checks and
 // scales R, and stamps the slot "stereo in this block": `_gs_stamp[v] = heartbeat` (`_dv_diag` word 0). The stamp expires with the next block. The
 // firmware chain that follows the machine (docs/findings/96-stereo-machine-processing.md) then runs R through the same stages as L:
 //
 //   * a twin of a stage runs the stock function a second time on R: a private R state record, the R buffer, and the stage's shared control words copied
-//     from the L record BEFORE the L call (the L call advances them once per block). The L call and the L record stay the stock path. The twins are
-//     retargets of the call sites (`_gs_fo`, `_gs_uy`, `_gs_gain`, `_gs_c5`).
-//   * a stage without a twin (the families of `_gs_bad_*`) clears the stamp. The slot then plays R = L, as without this file.
+//     from the L record BEFORE the L call (the L call advances them once per block). The L call and the L record stay the stock path. Every stage between the
+//     machine and the pan has a twin; the twins are retargets of the call sites (`_gs_fo`, `_gs_uy`, `_gs_gain`, `_gs_c5`, `_gs_shaper_*`, `_gs_held_*`,
+//     `_gs_case1` to `_gs_case3`, `_gs_ring4`, `_gs_ring6`), and the resets in the middle of a note are mirrored (`_gs_*_reset`).
+//   * the twins are also the guard: a context they cannot run in (L3, L4 or L5 nonzero, a block count other than 32) clears the stamp, so the slot plays R = L,
+//     and is counted per stage (`_gs_cnt`) and raised in `_gs_health`. So are a bad R and the cap of stereo slots, in `_gs_post`.
 //   * the pan loop of the engine (the hook `_gs_slot` inside the gain loop) feeds plane B from R for a stamped slot; the stock instructions run for every other slot.
 //
-// Slot of a call: the voice buffer R8 is entry v of the table of voice buffers (frame word -24 of the engine's frame); the twins and the `_gs_bad_*`
-// wrappers take it from there. Registers of a retargeted call (the C calling convention of sdk/dsp/call.inc): R0, R1, R2, I4, I12 and the flags are
-// scratch for a wrapper; R4, R8, R12 and the stack arguments reach the stock function unchanged. The wrappers need M5 = 0, M6 = 1, M7 = -1, M14 = 1 as
-// the engine holds them.
+// Slot of a call: the voice buffer R8 is entry v of the table of voice buffers (frame word -24 of the engine's frame); the twins take it from there.
+// Registers of a retargeted call (the C calling convention of sdk/dsp/call.inc): R0, R1, R2, I4, I12 and the flags are scratch for a wrapper; R4, R8, R12
+// and the stack arguments reach the stock function unchanged. The wrappers need M5 = 0, M6 = 1, M7 = -1, M14 = 1 as the engine holds them.
 //
 // R0-R2 are read nowhere by the stock callees as arguments (they are caller-saved in the convention); a wrapper does not restore the caller-saved registers
 // after a stereo call.
@@ -84,7 +85,7 @@
     COMP(R0, R1); \
     IF NE JUMP BAD
 
-// ---- the refusal of an unsupported context by a twin (L3, L4 or L5 nonzero, block count not 32): clears the stamp (the slot plays R = L), counts it in CNT, in `_gs_nbad`
+// ---- the guard: the refusal of an unsupported context by a twin (L3, L4 or L5 nonzero, block count not 32): clears the stamp (the slot plays R = L), counts it in CNT, in `_gs_nbad`
 // and raises bits 0 and 1 of `_gs_hacc`. In: I4 = the slot's stamp word. Clobbers R1, R2. ----
 #define GS_REFUSE(CNT) \
     R1 = 0; \
@@ -690,43 +691,6 @@ _gs_ring_reset:
     DM(17, I4) = R1;
     JUMP _gs_ring_reset_stock;
 
-// ---- stages without an R twin: count, clear the stamp, then the stock function ----
-// In: R8 = the voice buffer, R2 = the caller's frame. R0-R2, I4 and the flags are scratch. A slot that is stereo in this block (`_gs_seen`, set by `_gs_post`
-// whatever the stamp says) is counted in the stage's own counter CNT (`_gs_cnt`), so the stage is visible even after an earlier stage has cleared the stamp.
-// `_gs_nbad` counts the stamps this clears. Bit 0 of `_gs_hacc` (published in `_gs_health`): some stereo slot played R = L.
-#define GS_BAD(NAME, STOCK, CNT) \
-.GLOBAL NAME; \
-NAME: \
-    GS_SLOT4; \
-    R1 = _gs_seen; \
-    R1 = R1 + R0; \
-    I4 = R1; \
-    R1 = DM(0, I4); \
-    R2 = DM(_dv_diag); \
-    COMP(R1, R2); \
-    IF NE JUMP STOCK; \
-    R1 = DM(CNT); \
-    R1 = R1 + 1; \
-    DM(CNT) = R1; \
-    R1 = DM(_gs_hacc); \
-    R2 = 3; \
-    R1 = R1 OR R2; \
-    DM(_gs_hacc) = R1; \
-    R1 = _gs_stamp; \
-    R1 = R1 + R0; \
-    I4 = R1; \
-    R1 = DM(0, I4); \
-    R2 = DM(_dv_diag); \
-    COMP(R1, R2); \
-    IF NE JUMP STOCK; \
-    R1 = 0; \
-    DM(0, I4) = R1; \
-    R1 = DM(_gs_nbad); \
-    R1 = R1 + 1; \
-    DM(_gs_nbad) = R1; \
-    JUMP STOCK
-
-
 // ---- once per block, from the heartbeat code of slot 0 (dsp-voice-dn2.s): publishes the events of the block that has just ended ----
 // Plain subroutine; clobbers R0 and R1 only.
 .GLOBAL _gs_block;
@@ -949,6 +913,9 @@ _gs_scale: DM(I1, M6) = R0;
     R0 = R0 - 1;
     COMP(R3, R0);
     IF EQ JUMP _gs_stamped;
+    R1 = DM(_gs_cnt + 72);                // a gap in a running voice (bad R, cap or a refusal in the last block): R restarts
+    R1 = R1 + 1;
+    DM(_gs_cnt + 72) = R1;
 _gs_clear:
     R0 = 0;
     R1 = 112;
@@ -1055,8 +1022,8 @@ _gs_raise:
 .PKDATA _gs_rg_rec, 1152;                   // R records of the ring stage (18 words), per slot; the R rings are at ADM_RING_R_BASE
 .PKDATA _gs_ns, 4;                         // stereo slots stamped in the block _gs_nhb
 .PKDATA _gs_nhb, 4;
-.PKDATA _gs_nbad, 4;                       // stamped slots a stage without a twin has cleared (diagnostic)
-.PKDATA _gs_seen, 64;                      // per slot: the block (heartbeat) in which the slot was stereo at adapter time (never cleared by a stage)
-.PKDATA _gs_cnt, 128;                      // 32 counters: 0 to 8 stages without a twin on a stereo slot (held early and late, shaper early and late, case 1, 2, 3, ring 4 and 6), 9 to 12 unsupported context of the first-order, U/Y, gain and case 5 twins, 16 bad R, 17 cap
-.PKDATA _gs_hacc, 4;                       // events of the running block: bit 0 some stereo slot plays R = L, bit 1 a stage without a twin or an unsupported context, bit 2 bad R, bit 3 cap
+.PKDATA _gs_nbad, 4;                       // stamps the guards of the twins have cleared (diagnostic)
+.PKDATA _gs_seen, 64;                      // per slot: the block (heartbeat) in which the slot was stereo at adapter time, whether or not R was usable (never cleared)
+.PKDATA _gs_cnt, 128;                      // 32 counters: 0 to 12 refusals of an unsupported context by a twin (held early and late, shaper early and late, case 1, 2, 3, ring 4 and 6, first-order, U/Y, gain, case 5), 16 bad R, 17 cap, 18 gap (R restarted in a running voice)
+.PKDATA _gs_hacc, 4;                       // events of the running block: bit 0 some stereo slot plays R = L, bit 1 a twin refused an unsupported context, bit 2 bad R, bit 3 cap
 .PKDATA _gs_health, 4;                     // `_gs_hacc` of the last completed block, published by `_gs_block` at the heartbeat of slot 0

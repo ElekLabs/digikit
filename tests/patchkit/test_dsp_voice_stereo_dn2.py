@@ -190,9 +190,11 @@ def test_the_r_stage_records_are_kept_in_a_running_voice_and_restart_after_a_gap
         "a voice that ran in the last block keeps its R history"
     )
     # a block in which the slot is not rendered (a stage without a twin cleared the stamp, a slot over the cap): R restarts from zero
+    assert word(rig, "_gs_cnt", 18) == 0
     rig.sess.poke(nw(data(rig, "_gs_stamp")), 0)
     play(rig, [0])
     assert record(rig, "_gs_fo_rec", 112, 28, 0) == [0] * 28
+    assert word(rig, "_gs_cnt", 18) == 1, "the restart of a running voice is counted"
 
 
 def test_a_retrigger_of_a_running_slot_restarts_the_r_history():

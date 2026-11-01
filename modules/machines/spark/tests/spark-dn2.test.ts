@@ -96,6 +96,9 @@ runtimeTests(
         '_dl_nerr',
         '_gs_ns',
         '_gs_nbad',
+        '_gs_cnt',
+        '_gs_seen',
+        '_gs_health',
         '_gs_nhb',
         '_gs_stamp',
         '_gs_rbuf',
@@ -320,7 +323,10 @@ runtimeTests(
         const [nhb] = await dspWords('_gs_nhb', 1);
         const [heartbeat] = await dspWords('_dv_diag', 1);
         const stamps = await dspWords('_gs_stamp', 16);
-        return { ns, nbad, nhb, heartbeat, stamps: stamps.map((x) => heartbeat! - x), rPeaks };
+        const seen = await dspWords('_gs_seen', 16);
+        const cnt = await dspWords('_gs_cnt', 32);
+        const [health] = await dspWords('_gs_health', 1);
+        return { ns, nbad, nhb, heartbeat, stamps: stamps.map((x) => heartbeat! - x), seen: seen.map((x) => heartbeat! - x), cnt, health, rPeaks };
       };
       await phase('stereo-audio', async () => {
         const diag: unknown[] = [];
@@ -337,6 +343,12 @@ runtimeTests(
         expect(o, 'the note is audible').toBeGreaterThanOrEqual(0);
         expect(allFinite(c.l) && allFinite(c.r), 'finite output').toBe(true);
         log.noteASplit = expectSplitPair('A', c, o + 4800, o + RATE, 440, 660);
+        // Every stage between the machine and the pan has an R twin (dn2-stereo.md): the guards never refuse on the default track. `_gs_cnt` words 0 to 12 count the
+        // refusals of an unsupported context by stage, 16 a bad R, 17 the cap; bit 0 of `_gs_health` is "some stereo slot played R = L in the last block".
+        const last = diag[diag.length - 1] as Awaited<ReturnType<typeof stereoDiag>>;
+        expect(last.nbad, 'no stamp cleared by a guard').toBe(0);
+        expect(last.cnt.slice(0, 18), 'no refusal, no bad R, no cap').toEqual(new Array(18).fill(0));
+        expect(last.health! & 1, 'health: no stereo slot played R = L').toBe(0);
         await expectNoNewFault('first note');
       });
 
@@ -562,8 +574,9 @@ runtimeTests(
         expect(s.state, 'NOT_FOUND').toBe(-1);
       });
 
-      // ---- 9. which stage clears the stamp? Scan the FLTR page 1 knobs while T plays and read the rate of `_gs_nbad` (stamped slots a stage without a twin
-      // clears). Exploration for the report: run 2 showed R = L with `_gs_nbad` rising by one per block on the default track.
+      // ---- 9. every filter type plays stereo: scan the FLTR page 1 knobs while T plays and read the rate of `_gs_nbad` (stamps a guard of a twin clears). All
+      // stages have an R twin, so the rate stays 0 at every position (run 2, before the twins of the shaper and the held sample, showed R = L with `_gs_nbad` rising
+      // by one per block on the default track).
       await phase('stereo-config', async () => {
         expect(tReady, 'T is loaded').toBe(true);
         const nbad = async () => (await dspWords('_gs_nbad', 1))[0]!;
@@ -587,13 +600,13 @@ runtimeTests(
               scan.push({ enc, dir, ...r });
               if (r.rate < 0.02 && marks.found === undefined) marks.found = scan.length - 1;
             }
-            if (marks.found !== undefined) break;
           }
           await until(clock, (await clock()) + 0.4 * RATE);
         });
-        log.stereoConfigScan = scan; // rate: stamped slots cleared per block (32 frames)
+        log.stereoConfigScan = scan; // rate: stamps cleared per block (32 frames)
+        expect(scan.every((row) => (row.rate as number) < 0.02), 'no guard refuses at any FLTR position').toBe(true);
         const hit = marks.found === undefined ? undefined : (scan[marks.found] as { from: number; to: number; enc: string; dir: number });
-        log.stereoConfigFound = hit ?? 'none: every knob position of FLTR page 1 left a non-twinned stage active';
+        log.stereoConfigFound = hit ?? 'none: a guard refused at every knob position of FLTR page 1';
         if (hit) log.stereoConfigSplit = expectSplitPair('config', c, hit.from, hit.to, 440, 660);
       });
 
