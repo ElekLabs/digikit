@@ -153,18 +153,22 @@ async function expectTransferredBank(runtime: PatchedSession): Promise<void> {
   const viewOffset = dsp.readUInt32LE(bank + 16);
   await installWithDebug(runtime, 'test/sample-proof');
   async function bankBase(): Promise<number> {
+    // MOD_DSP carries the selection index of the module, and digikit/debug is selected first.
+    const loaded = (await dk.modules()).find((m) => m.name === 'test/sample-proof')!;
+    expect(loaded).toBeDefined();
+    expect(loaded.types).toHaveLength(1);
     await expect
       .poll(
-        async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.MOD_DSP && e.args[0] === 0 && e.args[1] === 0),
+        async () =>
+          (await dk.readLog()).some(
+            (e) => e.kind === LOG_KIND.MOD_DSP && e.args[0] === loaded.index && e.args[1] === 0,
+          ),
         {
           timeout: 30_000,
           interval: 500,
         },
       )
       .toBe(true);
-    const loaded = (await dk.modules()).find((m) => m.name === 'test/sample-proof')!;
-    expect(loaded).toBeDefined();
-    expect(loaded.types).toHaveLength(1);
     const areaReply = (await session.client.call('mem.cf.peek', { addr: planSymbol(plan, 'dyndsp_info') + 12 })) as {
       value: number;
     };
@@ -206,9 +210,11 @@ async function expectTransferredBank(runtime: PatchedSession): Promise<void> {
   expect(await bytes(base + viewOffset, 16), 'oversized source never publishes any descriptor words').toEqual(
     Buffer.alloc(16),
   );
-  expect((await dk.modules()).filter((m) => m.name === 'test/sample-proof').map((m) => ({ faults: m.faults, off: m.guard_off }))).toEqual([
-    { faults: 0, off: false },
-  ]);
+  expect(
+    (await dk.modules())
+      .filter((m) => m.name === 'test/sample-proof')
+      .map((m) => ({ faults: m.faults, off: m.guard_off })),
+  ).toEqual([{ faults: 0, off: false }]);
   await session.expectNoFault('oversized sample acquisition');
   record(artifacts, 'oversized', { status: -13, frames: 9000, base, viewOffset });
 
@@ -304,9 +310,11 @@ async function expectTransferredBank(runtime: PatchedSession): Promise<void> {
     ready,
     retrigger,
   });
-  expect((await dk.modules()).filter((m) => m.name === 'test/sample-proof').map((m) => ({ faults: m.faults, off: m.guard_off }))).toEqual([
-    { faults: 0, off: false },
-  ]);
+  expect(
+    (await dk.modules())
+      .filter((m) => m.name === 'test/sample-proof')
+      .map((m) => ({ faults: m.faults, off: m.guard_off })),
+  ).toEqual([{ faults: 0, off: false }]);
   await session.expectNoFault('transferred sample bank');
 }
 
