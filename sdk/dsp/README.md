@@ -48,6 +48,7 @@ Rules that apply to the loop around a macro (style.md 5a):
 | `oscillator.inc` | `DK_SINE_POLY_STEP(OUT, X, SQUARE, COEF, OUT_BITS, COEF_BITS)` | 16 | BD/PD polynomial on already folded phase, -0.25 to +0.25 |
 | `sample.inc` | `DK_SAMPLE_CURSOR_STEP(INDEX, FRAC, HI, LO, MASK, TMP, CARRY)` | 5 | exact split integer/fraction update for signed Q16.16 rate |
 | `sample_pcm16_fetch.inc` | `DK_SAMPLE_PCM16_FETCH_WORDS(BASE, INDEX_A, INDEX_B, WORD_A, WORD_B, ADDR, DAG)` | 8 per pair | raw packed containing words; caller-owned protection and validated scalar addressing |
+| `sample_track.inc` | `DK_STRACK_CHECK_ADMISSION`, `_CHECK_EPOCH`, `_LATCH_EPOCH`, `_ACQUIRE`, `_RELEASE`, `_FAIL_CLOSED`, `_POISON_COUNT` | as `sample_bank.inc` | the bank macros for one of the 16 track records of `<dk/sample_track.h>`: the record and the control set are addressed through two I registers instead of fixed symbols |
 
 Each file has a header with the maths, the arguments, the instruction count and the accuracy. The float32 reference
 models are in `tools/patchkit/dsp_ref.py`; the tests are in `tests/patchkit/test_dsp_kernels.py`.
