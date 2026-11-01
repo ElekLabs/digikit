@@ -183,7 +183,17 @@ RUNTIME_ROUTE_FILES = (
     "runtime/fx-routes-persist.test.ts",
 )
 RUNTIME_TRACK_FILES = ("runtime/fx-track-route.test.ts",)
-RUNTIME_GAIN_FILES = ("runtime/fx-reuse.test.ts", *RUNTIME_SEND_FILES)
+RUNTIME_BASIC_FILES = ("runtime/fx-chain.test.ts", "runtime/fx-pages.test.ts")
+RUNTIME_PROFILE_FILES = (
+    *RUNTIME_BASIC_FILES,
+    *RUNTIME_ROUTE_FILES,
+    *RUNTIME_TRACK_FILES,
+)
+RUNTIME_GAIN_FILES = (
+    "runtime/fx-reuse.test.ts",
+    *RUNTIME_SEND_FILES,
+    *RUNTIME_BASIC_FILES,
+)
 RUNTIME_FX_FILES = (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES, *RUNTIME_TRACK_FILES)
 RUNTIME_PLUSDRIVE_FILES = ("runtime/samples-live.test.ts", *RUNTIME_FX_FILES)
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
@@ -208,15 +218,16 @@ RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
 }
 # Renamed packs share canonical source objects; these are card identities, not module sources.
 RUNTIME_PACK_ALIASES = {
+    **{
+        f"test/dyn-fx-gain-{index}": ("test/dyn-fx-gain", ("runtime/fx-chain.test.ts",))
+        for index in (2, 3, 4)
+    },
     "test/dyn-fx-gain-send-3": ("test/dyn-fx-gain-send", RUNTIME_ROUTE_FILES),
     "test/dyn-fx-gain-both-2": ("test/dyn-fx-gain-both", RUNTIME_TRACK_FILES),
     "test/dyn-fx-gain-both-3": ("test/dyn-fx-gain-both", RUNTIME_TRACK_FILES),
 }
 # Host sources and subprocess CLI helpers consumed by specific runtime files.
 RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
-    # pickSine's default list hints are read from disk, outside Vitest's import graph.
-    "tests/digikit/scenarios/fx-dyn-dt2.toml": ("runtime/fx-reuse.test.ts",),
-    "tests/digikit/scenarios/fx-dyn-dn2.toml": ("runtime/fx-reuse.test.ts",),
     **{
         path: ("runtime/samples-live.test.ts", "runtime/samples-store-live.test.ts")
         for path in (
@@ -233,11 +244,10 @@ RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
         "runtime/fx-routes-persist.test.ts",
         *RUNTIME_TRACK_FILES,
     ),
-    "tools/patchkit/pk_digikit_fxroutes.py": (
-        *RUNTIME_ROUTE_FILES,
-        *RUNTIME_TRACK_FILES,
-    ),
-    "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_TRACK_FILES,
+    "tools/patchkit/pk_digikit_fx.py": RUNTIME_BASIC_FILES,
+    "tools/patchkit/pk_digikit_fxpage.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxroutes.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_PROFILE_FILES,
 }
 ACCEPTANCE_SHARED = (
     "packages/test-support/src/",
@@ -279,6 +289,7 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.control.digi_client",
                 "tools.emulator.card_overlay",
                 "tools.patchkit.pk_dkrt_machine",
+                "tools.patchkit.pk_digikit_fx",
                 "tools.patchkit.pk_digikit_fxsend",
                 "tools.patchkit.pk_digikit_fxroutes",
                 "tools.patchkit.pk_digikit_fxroute",

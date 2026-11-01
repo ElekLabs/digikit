@@ -150,12 +150,9 @@ export async function advance(session: Session, ms: number): Promise<void> {
   await bounded(() => session.client.step(Math.floor(ms * MS), { timeout_wall_s: 30 }));
 }
 
-/** Accepted FX-behavior contract: choose the scenario hint without asserting selected-track identity.
- * Direct DT2 type checks remain in the legacy dry/full legs, not this gain/deselect sequence. */
-export type FxInputHint = number | string;
-
-/** A numeric list position or a scenario TOML path; omitted keeps the original fx-dyn hint. */
-export async function pickSine(session: Session, selection?: FxInputHint): Promise<void> {
+/** Choose the original device list hint or a numeric override without asserting selected-track identity.
+ * The BASIC chain uses selectSine for DT2 type readback; gain/deselect retains its audible-input contract. */
+export async function pickSine(session: Session, selection?: number): Promise<void> {
   const tap = async (key: string, held?: string) => {
     try {
       if (held) {
@@ -171,17 +168,7 @@ export async function pickSine(session: Session, selection?: FxInputHint): Promi
       }
     }
   };
-  let hint: number;
-  if (typeof selection === 'number') hint = selection;
-  else {
-    const scenario = fs.readFileSync(
-      selection ?? path.join(root, 'tests/digikit/scenarios', `fx-dyn-${session.options.device}.toml`),
-      'utf8',
-    );
-    const value = /^hint\s*=\s*(\d+)/m.exec(scenario)?.[1];
-    if (!value) throw new Error('FX scenario lacks sine list hint');
-    hint = Number(value);
-  }
+  const hint = selection ?? (session.options.device === 'dt2' ? 7 : 5);
   if (!Number.isInteger(hint) || hint < 0) throw new Error('FX input hint must be a nonnegative list position');
   await tap('SRC', 'FUNC');
   await advance(session, 200);
@@ -199,7 +186,7 @@ export async function pickSine(session: Session, selection?: FxInputHint): Promi
 export async function capture(
   runtime: PatchedSession,
   file: string,
-  selection?: FxInputHint,
+  selection?: number,
   triggerFrame?: number,
 ): Promise<number> {
   const { session } = runtime;

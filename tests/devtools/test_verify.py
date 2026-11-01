@@ -1842,6 +1842,8 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "runtime-fixture",
             "tests/fixtures/modules/sine/module.toml",
             [
+                "runtime/fx-chain.test.ts",
+                "runtime/fx-pages.test.ts",
                 "runtime/fx-reuse.test.ts",
                 "runtime/fx-routes-panel.test.ts",
                 "runtime/fx-routes-persist.test.ts",
@@ -1854,6 +1856,8 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "runtime-fixture",
             "tests/fixtures/modules/dyn-fx-gain/module.toml",
             [
+                "runtime/fx-chain.test.ts",
+                "runtime/fx-pages.test.ts",
                 "runtime/fx-reuse.test.ts",
                 "runtime/fx-routes-panel.test.ts",
                 "runtime/fx-routes-persist.test.ts",
@@ -1976,12 +1980,10 @@ def test_failed_acceptance_discovery_stays_conservative(
 
 
 @pytest.mark.parametrize("device", ["dt2", "dn2"])
-def test_gain_scenario_hints_retain_the_runtime_data_consumer(device: str) -> None:
+def test_legacy_gain_scenario_hints_have_no_runtime_data_consumer(device: str) -> None:
     path = f"tests/digikit/scenarios/fx-dyn-{device}.toml"
-    assert verify.acceptance_plan("runtime-fixture", [path]) == [
-        "runtime/fx-reuse.test.ts"
-    ]
-    assert "runtime-fixture" in verify.steps_for([path])
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == []
+    assert "runtime-fixture" not in verify.steps_for([path])
     assert verify_route.acceptance_files("module-load", [path]) == []
 
 
@@ -2499,6 +2501,16 @@ def test_send_function_local_anchor_dependency_keeps_runtime_coverage() -> None:
     ]
     + [
         (
+            "runtime/fx-chain.test.ts",
+            ["test/sine", "test/dyn-fx-gain"],
+            {f"test/dyn-fx-gain-{index}": "test/dyn-fx-gain" for index in (2, 3, 4)},
+        ),
+        (
+            "runtime/fx-pages.test.ts",
+            ["test/sine", "test/dyn-fx-gain"],
+            {},
+        ),
+        (
             "runtime/fx-track-route.test.ts",
             ["test/sine", "test/dyn-fx-gain-both"],
             {
@@ -2553,7 +2565,9 @@ def test_route_preparation_keeps_complete_inventory_and_builds_each_source_once(
 
 def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> None:
     assert verify.runtime_pack_aliases(["runtime/fx-reuse.test.ts"]) == {}
+    assert verify.runtime_pack_aliases(["runtime/fx-pages.test.ts"]) == {}
     assert verify.runtime_pack_aliases([]) == {
+        **{f"test/dyn-fx-gain-{index}": "test/dyn-fx-gain" for index in (2, 3, 4)},
         "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send",
         "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
         "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both",
@@ -2563,15 +2577,27 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
 @pytest.mark.parametrize(
     "source, owners",
     [
+        *[
+            (
+                f"tools/patchkit/{helper}.py",
+                [
+                    "runtime/fx-chain.test.ts",
+                    "runtime/fx-pages.test.ts",
+                    "runtime/fx-routes-panel.test.ts",
+                    "runtime/fx-routes-persist.test.ts",
+                    "runtime/fx-track-route.test.ts",
+                ],
+            )
+            for helper in (
+                "pk_digikit_fxpage",
+                "pk_digikit_fxroutes",
+                "pk_digikit_fxroute",
+            )
+        ],
         (
-            "tools/patchkit/pk_digikit_fxroutes.py",
-            [
-                "runtime/fx-routes-panel.test.ts",
-                "runtime/fx-routes-persist.test.ts",
-                "runtime/fx-track-route.test.ts",
-            ],
+            "tools/patchkit/pk_digikit_fx.py",
+            ["runtime/fx-chain.test.ts", "runtime/fx-pages.test.ts"],
         ),
-        ("tools/patchkit/pk_digikit_fxroute.py", ["runtime/fx-track-route.test.ts"]),
         (
             "tests/fixtures/modules/dyn-fx-gain-both/module.toml",
             ["runtime/fx-track-route.test.ts"],
@@ -2595,11 +2621,27 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     dependencies = verify_route.acceptance_python("runtime-fixture")
     assert "tools/patchkit/pk_digikit_project.py" in dependencies
     assert "tools/device/dksettings.py" in dependencies
+    assert "tools/patchkit/pk_digikit_fx.py" in dependencies
+    assert "tools/device/dkneeds.py" in dependencies
+    assert "tools/patchkit/pk_digikit_fxpersist.py" in dependencies
+    assert {
+        "runtime/fx-chain.test.ts",
+        "runtime/fx-pages.test.ts",
+        "runtime/fx-routes-panel.test.ts",
+        "runtime/fx-routes-persist.test.ts",
+        "runtime/fx-track-route.test.ts",
+    } <= set(
+        verify_route.acceptance_files(
+            "runtime-fixture", ["tools/patchkit/pk_digikit_fxpersist.py"]
+        )
+    )
 
 
 @pytest.mark.parametrize(
     "suite",
     [
+        "runtime/fx-chain.test.ts",
+        "runtime/fx-pages.test.ts",
         "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
         "runtime/fx-track-route.test.ts",
@@ -2629,12 +2671,15 @@ def test_route_dispatch_passes_alias_inventory_to_preparation(
         (verify.runtime_pack_modules([suite]), verify.runtime_pack_aliases([suite]))
     ]
     assert calls[-1] == "runtime-fixture"
+    assert "runtime-fixture:plusdrive" in calls
 
 
 def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
     assert verify_route.acceptance_files(
         "runtime-fixture", ["tools/patchkit/hook_ab.py"]
     ) == [
+        "runtime/fx-chain.test.ts",
+        "runtime/fx-pages.test.ts",
         "runtime/fx-reuse.test.ts",
         "runtime/fx-routes-persist.test.ts",
         "runtime/fx-send-dn2.test.ts",

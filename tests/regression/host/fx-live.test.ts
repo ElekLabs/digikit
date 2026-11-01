@@ -16,6 +16,24 @@ test('numeric input hint controls list movement and a failed chord still release
   expect(client.inputButton).toHaveBeenLastCalledWith(button('FUNC'), false);
 });
 
+test.each([
+  ['dt2', 7],
+  ['dn2', 5],
+] as const)('default %s sine hint keeps its original list position', async (device, hint) => {
+  const client = { inputButton: vi.fn(), inputTap: vi.fn(), step: vi.fn() };
+  const session = { options: { device }, client } as unknown as Session;
+  await pickSine(session);
+  expect(client.inputTap.mock.calls.filter(([code]) => code === button('DOWN'))).toHaveLength(hint);
+});
+
+test.each([-1, 0.5, NaN])('invalid numeric sine hint %s does not press a panel key', async (hint) => {
+  const client = { inputButton: vi.fn(), inputTap: vi.fn(), step: vi.fn() };
+  const session = { options: { device: 'dn2' }, client } as unknown as Session;
+  await expect(pickSine(session, hint)).rejects.toThrow('nonnegative list position');
+  expect(client.inputTap).not.toHaveBeenCalled();
+  expect(client.inputButton).not.toHaveBeenCalled();
+});
+
 test('silent evidence preserves mandatory finite, guard and no-fault checks; default still requires sound', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-fx-evidence-'));
   let nonfinite = 0;
