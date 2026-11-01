@@ -9,8 +9,9 @@ Read [AGENTS.md](../../AGENTS.md), [testing](../TESTING.md), the
 [FX assertion ledger](../plans/test-architecture.md#fx-kit-persistence-and-frequency-shifter-design-2026-11-02)
 and the [Nx audit checkpoint](../plans/nx-pilot.md#family-project-audit-checkpoint-2026-11-02).
 
-This is a draft captured before the final retirement/dispatch review, preflight and PR.
-The parent must append the final integration HEAD, exact artifact/input paths, PR and check outcomes.
+This checkpoint includes completed device proofs, reviewed retirement and the initial final preflight.
+The module-placement correction is complete and pushed through `942cae59`.
+[PR #248](https://github.com/ElekLabs/digikit/pull/248) is draft pending the gate/acceptance decision.
 Do not interpret the four completed device proofs below as a completed merge gate.
 
 ## Decisions and committed checkpoints
@@ -27,10 +28,14 @@ These checkpoints were pushed on the active branch:
 | `01594832` | Consolidated frequency-shifter scenarios |
 | `8b7c248e` | Explicit acceptance routing ownership |
 | `4b7cbf8d` | Proof and Nx family-audit documentation |
+| `ec112ced` | Ten legacy-file deletions and module-owned Nx acceptance dispatch |
+| `2eb9c049` | Initial handover draft |
+| `501f0482` | Module-local acceptance and generic ownership/preparation |
+| `942cae59` | Correct live references and exact temporary-fixture path annotations |
 
-At this snapshot the integration HEAD is `4b7cbf8d`; retirement and module dispatch are uncommitted.
-The earlier retirement-only snapshot was +74/-1473 with ten deletions. The working diff now also
-contains the module dispatch fix, so that count is not the final PR diff. Inspect the actual diff.
+Retirement and module dispatch were committed and pushed at `ec112ced`; the retirement checkpoint
+was 33 files, +364/-1497, with ten deletions. Inspect the full branch diff for final PR totals,
+including the TypeScript replacements, shared helpers, tests and documentation.
 
 ## Acceptance now implemented and proved
 
@@ -47,9 +52,8 @@ saver at least 100 times. Kit loads observe DSP changes every 2 ms for 600 ms; p
 peak threshold (`requireAudible: false`; legacy PCM comparisons own that oracle).
 
 [Frequency shifter](../../modules/fx/freqshift/tests/freqshift.device.test.ts) owns four pristine card baselines
-per device: dry, master, selected FX with no send amount, and send. Both devices execute all four;
-DN2 must not accidentally omit the no-send case. It retains panel/kit/DSP mapping, stock/page
-pixels, exact dry/mix-zero/other-track PCM, spectral rejection, send mix and independent float32
+per device: dry, master, send, and other-track send. Both devices execute all four;
+DN2 must not accidentally omit the other-track case. It retains panel/kit/DSP mapping, page metadata and captured screenshots (no shifter pixel-equality oracle), exact dry/mix-zero/other-track PCM, spectral rejection, send mix and independent float32
 model assertions. Settings and route lifetime checks use `fx-routes`; persistence uses `fx-kit`.
 
 Shared [KIT helper](../../tests/regression/runtime/fx-kit-ui.ts):
@@ -63,37 +67,34 @@ original `afterEpoch`; silence or an old UI frame is not proof of a new boot.
 
 All four family/device proofs passed using prepared inputs. Durations are wall seconds;
 artifact suffixes identify the temporary artifact directories, not stable archive paths.
-The parent must append exact paths and retained logs before publication.
+Exact local paths and input overrides appear below.
 
 | Proof | Invocation / file / case | Artifact suffix | Safety evidence |
 | --- | --- | --- | --- |
 | DN2 persistence | 129.50 invocation / 123.760 case | `zDOVuw` | 3 watch windows, 2 overlays, `fx-kit` |
-| DN2 shifter | 215.72 invocation / 209.578 case | `WDkalo9` | 4 baselines, `fx-routes` |
-| DT2 shifter | 398.171 file / 375.478 case | `acXXAd9` | 4 baselines, `fx-routes` |
-| DT2 persistence | 328.322 file / 320.201 case | `86nKeR7` | 4 watch windows, `fx-kit` |
+| DN2 shifter | 215.72 invocation / 209.578 case | `WDkalo` | 9 watch windows, 4 overlays, `fx-routes` |
+| DT2 shifter | 398.171 file / 375.478 case | `acXXAd` | 9 watch windows, 4 overlays, `fx-routes` |
+| DT2 persistence | 328.322 file / 320.201 case | `86nKeR` | 7 watch windows, 4 overlays, `fx-kit` |
 
 The combined DT2 invocation took 726.77 s. All lifetime reports recorded zero illegal writes,
 flushes and invalid sectors. These are acceptance and safety observations, not a paired performance
 benchmark. Do not claim a speedup from them.
 
-Prepared module artifacts are under `out/runs/fx-persistence-shift-consolidation/modules` in the
-shared local artifact area. The original binary environment and store inputs were retained; the
-parent must append their exact values rather than reconstructing or guessing them. Do not build
-new daemons or replace those inputs merely to resume review. Temporary system artifact locations
-can disappear; retain the evidence needed by the PR before cleanup.
+Prepared module artifacts and exact daemon/ready overrides are listed below. Do not build new
+daemons or replace those inputs merely to resume review. Temporary system artifacts can disappear.
 
-## Retirement and module ownership: inspect the working diff
+## Retirement and module ownership
 
-The ten planned deletions are five scenario TOMLs (three persistence, two shifter), four legacy
-Python device wrappers, and the persistence runner. They are being retired only after the proofs.
+The ten completed deletions are five scenario TOMLs (three persistence, two shifter), four legacy
+Python device wrappers, and the persistence runner. They were retired after the proofs.
 The analysis functions remain: `pk_digikit_fxpage` supplies the PCM comparison CLI;
 `pk_digikit_fxshift` retains spectral/model analysis and its JSON adapter. Shared FX/profile/card,
 OLED and aligned-PCM analysis remain for their TS consumers. Do not delete independent analysis.
 Routing, documentation, the safety policy's source of kit areas and discovery lists are updated
-alongside retirement. The parent owns final deletion review and integration.
+alongside retirement. Independent retirement and dispatch reviews reported no issues.
 
 A final discovery review caught that deleting the module's scenario TOMLs would remove shifter
-acceptance from `module:check`. The scoped fix is in progress, not yet accepted:
+acceptance from `module:check`. The implemented fix is:
 
 - One uncached `module-freqshift:test-device` target in the module's `project.json` owns acceptance.
 - Its command uses existing `verify --tests modules/fx/freqshift/tests/freqshift.device.test.ts`, with no duplicate
@@ -104,29 +105,113 @@ acceptance from `module:check`. The scoped fix is in progress, not yet accepted:
   size/fit scope. It must not silently narrow the new both-device proof.
 - Nested Nx ownership preserves the existing `module-tests` host dependency on the module project.
 
-Target resolution, ownership/closure checks and contract review are pending. Pure dispatch changes
-do not justify rerunning the completed emulator proofs; test the routing boundary with minimal
-host/static checks. Do not claim `module:check` itself passed unless it was actually run.
+Actual Nx project/affected checks and exact named verify selection passed after relocation.
+The moved scenario selects `module-freqshift:test-device`; module source still selects the parent
+`module-tests:test-host`; an unrelated web project change selects no device target. `module:check` was not run end-to-end;
+its discovery, failure ordering and daemon resolution were checked with 11 mocked tests. Do not
+claim a full module check or broad gate pass. Pure relocation/dispatch changes do not justify
+repeating the completed four emulator proofs.
 
-## Validation and next actions
+## Final preflight and ownership correction
 
-The parent owns final scoped validation, changed-file preflight, `verify --explain`, gate decision
-and PR. The known baseline pathcheck failures are in `docs/plans/module-architecture.md` at
-lines 3, 4 and 284. Keep these distinct from new failures; no exception is yet granted for this batch.
-The earlier worker preflight did not retain a final exit result: Ruff and layercheck passed,
-pathcheck failed on those baseline references, and no process remained. It is not a gate pass.
+The parent-owned preflight at `2eb9c049` passed host tests, Ruff check/format, mypy on five sources,
+generated checks, oxlint, Prettier and workspace types. It failed:
 
-1. Finish module target/dispatch contract review and inspect the final retirement diff.
-2. Run the smallest relevant checks, then the parent-owned preflight and gate routing explanation;
-   record actual outcomes and resolve the PR/gate decision with the user.
-3. Commit reviewed checkpoints, update this draft with final HEAD/evidence/PR, and publish only
-   within the user's authorization. Never reuse the PR #247 exception automatically.
-4. Next, undertake the static Nx family-graph spike described in the Nx plan. The broader graph is
-   **unimplemented**. The scout's 18-project candidate is not approval to widen scope.
-   Map every consumer before deleting the old related selector. No extra cache or plugins.
+- Sixteen layer violations from module-specific identities/tests outside their owning module.
+- Twelve stale Python expectations after retiring wrappers (11 changed-test cases, one routing case).
+- New stale path references plus three unchanged baseline paths in
+  `docs/plans/module-architecture.md` (lines 3, 4 and 284).
 
-For a fresh context, preserve one writer per lane. A scout may read bounded code; a worker may
-make explicitly scoped changes; children do not delegate. The parent owns decisions, integration,
-gates and publication. Use push checkpoints as authorized; do not commit firmware, generated
-artifacts, cards or sample audio. Run minimal checks for the change, with no duplicate device sweeps.
-Lane writes outside the sandbox workspace require targeted escalation; do not bypass a denial.
+The earlier child preflight lacked a final exit result and is superseded by this captured run.
+The initial failed run is not a green preflight, even though individual checks passed.
+
+The correction moves the shifter scenario and analyzer/module-specific routing tests into the
+module. Its project owns `metadata.runtimeAcceptance` with module-relative files, required packs,
+external source paths and plusdrive requirement. One generic reader feeds the existing router,
+exact named selection and preparation. This metadata is a repository contract: Nx itself does not
+interpret it. Generic runtime discovery includes module-owned device files; host discovery excludes
+them and TypeScript checking includes them. Owner changes include its reference model. No central
+module-ID table, layercheck exception, custom runner or cache is added.
+
+## Final validation and publication checkpoint
+
+The corrected parent preflight passed 680 Python cases (270 + 57 + 353) and 336 host cases
+(one skipped), Ruff check/format, mypy, layers, generated checks, oxlint, Prettier and workspace
+types. Its exit status was 1 for pathcheck only. After `942cae59`, scoped pathcheck across all
+placement files passed with zero stale references; only the three unchanged baseline reports in
+the module-architecture plan remain. Do not call this a fully green preflight or full gate pass.
+
+Additional focused evidence: 445 named Python cases and a 14-case metadata/routing check passed;
+these overlap the preflight and must not be summed as unique coverage. The runtime collector lists
+20 files including the moved suite, its exact filter selects only that suite, helper discovery
+returns the registered external path, and host collection excludes device files. Independent final
+review reported no issues. The moved scenario body is identical after imports, and analyzer tests
+are byte-identical. No emulator proof was rerun for the move.
+
+The final code checkpoint is `942cae59`, pushed on the active branch. PR #248 is draft. The final
+documentation-only commit follows it; use `git log -1` and upstream comparison for that hash.
+The full routed gate is unrun and no current-PR focused exception is granted.
+
+## Continue from here
+
+1. Review PR #248 and resolve its gate/acceptance decision. The four device proofs and focused
+   checks are complete; do not repeat them without a behavioral change or unresolved concern.
+   No earlier PR exception transfers automatically.
+2. After the required gate or explicit PR-specific acceptance and merge authorization, merge
+   this batch, update these statuses and the external roadmap, and preserve the other checkout.
+3. Next, pursue the bounded static Nx family-graph spike described in the Nx plan. The proposed
+   18-project candidate remains unimplemented. Prove graph/selection equivalence and justify any
+   expensive sibling grouping before adoption. Delete old routing only after every consumer moves.
+
+The five audited cached host targets remain separate from this uncached device target. Broader
+Nx acceptance routing, Python/Rust plugins and device/build caching are not implemented or justified
+by this batch. Preserve artifact packs/aliases, domain-module dependencies and conservative fallbacks.
+
+For a fresh context: one writer per lane; scouts/reviewers are read-only, workers own scoped edits,
+children do not delegate. The parent owns decisions, gates and publication. The Claude checkout is
+not this lane. Do not commit firmware, generated artifacts, cards or audio. Use existing benchlock;
+never stop another session's processes. Lane writes need targeted sandbox escalation, not bypasses.
+
+## Exact retained inputs and evidence
+
+The four artifact directories share this prefix:
+`/private/var/folders/v4/dxpyscrd41n7h6v9bc672p0r0000gn/T/`.
+Their full directory names are:
+
+- `digi-fx-fx-kit-persist-dn2-zDOVuw`
+- `digi-fx-fx-freqshift-dn2-WDkalo`
+- `digi-fx-fx-freqshift-dt2-acXXAd`
+- `digi-fx-fx-kit-persist-dt2-86nKeR`
+
+Each contains `lifetime-safety.json`, watch summaries, overlay evidence and scenario outputs.
+A separate read-only reviewer confirmed all four lifetime reports pass and the exact suffixes.
+Do not commit these directories: they include firmware/card/audio-derived material.
+Temporary artifacts are local evidence and may disappear; the committed assertions and recorded
+proof results are the durable record.
+
+Proof environment, all absolute paths below relative to the integration lane when abbreviated:
+
+```text
+UV_NO_SYNC=1
+UV_CACHE_DIR=/private/tmp/runtime-readiness-uv-cache
+REGRESSION_JOBS=1
+DIGI_EMUD_DT2=/Users/em/src/digi/lanes/nx-integration/out/native/target-wt/nx-integration/g-e7aa50f9/pgo-emud-dt2/aarch64-apple-darwin/stable/digi-emud-abd870786925
+DIGI_EMUD_DN2=/Users/em/src/digi/lanes/nx-integration/out/native/target-wt/nx-integration/prod/pgo-emud-dn2/aarch64-apple-darwin/stable/digi-emud-cf4f57de71b7
+DIGI_RUNTIME_MODULES=/Users/em/src/digi/lanes/nx-integration/out/runs/fx-persistence-shift-consolidation/modules
+DIGI_PK_READY_DT2_117=/Users/em/src/digi/lanes/nx-integration/out/ready-pk-dt2-117
+DIGI_PK_READY_DN2_112=/Users/em/src/digi/lanes/nx-integration/out/ready-fix-dn2-112
+RUSTC=/Users/em/.rustup/toolchains/1.98.1-aarch64-apple-darwin/bin/rustc
+RUSTDOC=/Users/em/.rustup/toolchains/1.98.1-aarch64-apple-darwin/bin/rustdoc
+```
+
+Device proofs used the existing shared benchlock and named Vitest runtime files, one worker;
+no new daemons were built. Module artifacts were prepared once using the freshness-checked
+patchkit wrapper. Do not substitute another checkout's shared release packer.
+
+Initial failed preflight: `/private/tmp/fx-persistence-shift-final-preflight.log`.
+Final corrected preflight: `/private/tmp/fx-persistence-shift-placement-preflight.log`;
+Python details: `out/runs/test-changed/20261101-205015` in the integration lane.
+Gate explanation: `/private/tmp/fx-persistence-shift-placement-explain.txt`.
+The explanation selects 20 runtime files, 3 module files, 89 Python files, stock/host/web/native/
+smoke and preparation steps. It was not executed. Compare against `origin/main`; local `main`
+is stale and must not be used as the comparison base.

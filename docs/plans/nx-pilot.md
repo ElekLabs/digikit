@@ -528,3 +528,25 @@ no issues. All four persistence/shifter device proofs passed. The
 records proof and retirement evidence; legacy device runners are removed while offline analyzers
 and module tests remain. Final preflight/gate acceptance is pending, with no new exception. The
 proposed Nx family-project migration remains unimplemented.
+
+
+### Module-owned device target checkpoint (PR #248)
+
+The active draft [PR #248](https://github.com/ElekLabs/digikit/pull/248), code checkpoint
+`942cae59`, adds an uncached `module-freqshift:test-device` target used by `module:check`.
+The scenario and module-specific tests live under the module, with generic runtime inclusion,
+explicit host exclusion and TypeScript checking. Module `project.json` metadata declares its
+acceptance files, required packs, external source dependencies and plusdrive need. The existing
+Python router reads that small contract; Nx does not interpret this custom metadata. No plugin,
+new cache or second central module-ID table is introduced.
+
+Actual Nx probes passed: the moved device file selects its device target; module source retains
+parent `module-tests:test-host` coverage; unrelated web project changes select no device target.
+Exact named verify selection prepares only the registered runtime file's packs/plusdrive, using
+existing daemon resolution. Runtime collection and helper discovery include the moved test;
+host collection excludes it. Broader family-based automatic selection remains unimplemented.
+
+The four device proofs and focused host/static checks passed; the full gate remains unrun and
+PR #248 is draft. See [the handover](../handovers/HANDOVER-2026-11-02-test-consolidation.md) for
+exact evidence and the three remaining baseline pathcheck reports. Next is the bounded graph and
+selection spike above, with deletion of superseded routing as an acceptance criterion.

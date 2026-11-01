@@ -642,3 +642,20 @@ retains prior host ownership after introducing the nested project. Conservative 
 source inputs cover acceptance, preparation and model code; this is not the proposed family-wide
 routing replacement or a cache-closure claim. The command's device acceptance is preserved while
 retiring its old TOML discovery path; no second Python module-ownership registry is introduced.
+
+
+### PR #248 continuation checkpoint (2026-11-02)
+
+[PR #248](https://github.com/ElekLabs/digikit/pull/248) is draft, with code pushed through
+`942cae59`. Retirement `ec112ced` removes ten legacy files; module-local placement `501f0482`
+keeps the frequency-shifter scenario, analyzer tests and real-module routing assertions together
+under its module. The four device proofs above stand unchanged; the moved scenario differs only
+in imports and the analyzer tests are byte-identical. Shifter screenshots are captured evidence,
+not pixel-equality assertions; its four legs are dry, master, send and other-track send.
+
+Parent preflight passed 680 Python cases, 336 host cases (one skipped), all types/lint/format,
+layer and generated checks. Pathcheck alone failed; all new references were corrected and scoped
+pathcheck passed, leaving three baseline reports in the separate module-architecture plan.
+Focused metadata/routing/collection checks and independent review passed. The broad routed gate
+is unrun; no exception from an earlier PR transfers. Exact evidence, inputs and next actions are in
+[the handover](../handovers/HANDOVER-2026-11-02-test-consolidation.md).
