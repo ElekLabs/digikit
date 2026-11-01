@@ -523,32 +523,33 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     }
 
     fn step(&mut self, c: usize, k: usize, env: &mut impl Env) {
-        match self.tracks[c][k].phase {
-            Phase::Idle => {}
-            Phase::Queued => self.step_queued(c, k, env),
-            Phase::Closing => {
-                if self.drain(c, k, env) {
-                    self.tracks[c][k].phase = Phase::Binding;
-                }
+        // An if chain, not a `match`: dense arms become a PC-relative jump table, which is not ColdFire code.
+        let phase = self.tracks[c][k].phase;
+        if phase == Phase::Queued {
+            self.step_queued(c, k, env);
+        } else if phase == Phase::Closing {
+            if self.drain(c, k, env) {
+                self.tracks[c][k].phase = Phase::Binding;
             }
-            Phase::Binding => self.step_bind(c, k, env),
-            Phase::Loading => self.step_loading(c, k, env),
-            Phase::Unbinding => {
-                // A superseded load's reference goes first; it never reached the DSP.
-                if let Some(e) = self.tracks[c][k].loading.take() {
-                    self.unref(e);
-                }
-                if self.tracks[c][k].bound.is_some() && !self.drain(c, k, env) {
-                    return;
-                }
-                if let Some(e) = self.tracks[c][k].bound.take() {
-                    self.unref(e);
-                }
-                let t = &mut self.tracks[c][k];
-                t.phase = Phase::Idle;
-                t.closed = false;
-                t.published = Info { frames: 0, rate: 0, channels: 0, token: 0 };
+        } else if phase == Phase::Binding {
+            self.step_bind(c, k, env);
+        } else if phase == Phase::Loading {
+            self.step_loading(c, k, env);
+        } else if phase == Phase::Unbinding {
+            // A superseded load's reference goes first; it never reached the DSP.
+            if let Some(e) = self.tracks[c][k].loading.take() {
+                self.unref(e);
             }
+            if self.tracks[c][k].bound.is_some() && !self.drain(c, k, env) {
+                return;
+            }
+            if let Some(e) = self.tracks[c][k].bound.take() {
+                self.unref(e);
+            }
+            let t = &mut self.tracks[c][k];
+            t.phase = Phase::Idle;
+            t.closed = false;
+            t.published = Info { frames: 0, rate: 0, channels: 0, token: 0 };
         }
     }
 
@@ -689,61 +690,60 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             self.tracks[c][k].phase = Phase::Idle;
             return;
         };
-        match self.entries[e].state {
-            EState::Loading => {}
-            EState::Failed(code) => {
-                let code = if self.tracks[c][k].reload { E_LOST } else { code };
-                self.fail(c, k, code);
-            }
-            EState::Dead => {
-                // Lost while loading: start the request again from the path.
-                self.tracks[c][k].phase = Phase::Queued;
-            }
-            EState::Free => self.fail(c, k, E_LOST),
-            EState::Ready => {
-                let h = self.entries[e].handle;
-                if self.tracks[c][k].fresh {
-                    let plen = self.tracks[c][k].plen;
-                    let mut path = [0u8; PATH];
-                    path[..plen].copy_from_slice(&self.tracks[c][k].path[..plen]);
-                    let snap = if self.tracks[c][k].reload { self.tracks[c][k].snap } else { self.tracks[c][k].pend.id };
-                    match env.stat(&path[..plen]) {
-                        Ok(id) if id.same(&snap) => {}
-                        _ => return self.fail(c, k, E_CHANGED),
-                    }
+        // An if chain, not a `match`: a switch on five states becomes a PC-relative jump table, which is not ColdFire code.
+        let st = self.entries[e].state;
+        if st == EState::Loading {
+        } else if let EState::Failed(code) = st {
+            let code = if self.tracks[c][k].reload { E_LOST } else { code };
+            self.fail(c, k, code);
+        } else if st == EState::Dead {
+            // Lost while loading: start the request again from the path.
+            self.tracks[c][k].phase = Phase::Queued;
+        } else if st == EState::Free {
+            self.fail(c, k, E_LOST);
+        } else {
+            let h = self.entries[e].handle;
+            if self.tracks[c][k].fresh {
+                let plen = self.tracks[c][k].plen;
+                let mut path = [0u8; PATH];
+                path[..plen].copy_from_slice(&self.tracks[c][k].path[..plen]);
+                let snap = if self.tracks[c][k].reload { self.tracks[c][k].snap } else { self.tracks[c][k].pend.id };
+                match env.stat(&path[..plen]) {
+                    Ok(id) if id.same(&snap) => {}
+                    _ => return self.fail(c, k, E_CHANGED),
                 }
-                if h.token == 0 || env.check(&h) != 0 || h.frames == 0 {
-                    // A handle that is not valid now counts as a lost backing.
-                    self.invalidate(e);
-                    return;
-                }
-                let Some(next) = self.next_token.checked_add(1) else {
-                    return self.fail(c, k, E_NOMEM);
-                };
-                let token = self.next_token;
-                self.next_token = next;
-                let rec = Strack {
-                    ready: 1,
-                    token,
-                    frames: h.frames,
-                    rate: h.rate,
-                    channels: h.channels,
-                    fmt: FMT_PCM16,
-                    base_l: h.base_l,
-                    base_r: if h.channels == 1 { h.base_l } else { h.base_r },
-                };
-                env.publish(c, k, &rec);
-                let t = &mut self.tracks[c][k];
-                t.loading = None;
-                t.bound = Some(e);
-                t.snap = t.pend.id;
-                t.token = token;
-                t.published = Info { frames: rec.frames, rate: rec.rate, channels: rec.channels, token };
-                t.status = READY;
-                t.phase = Phase::Idle;
-                t.reload = false;
-                t.closed = false;
             }
+            if h.token == 0 || env.check(&h) != 0 || h.frames == 0 {
+                // A handle that is not valid now counts as a lost backing.
+                self.invalidate(e);
+                return;
+            }
+            let Some(next) = self.next_token.checked_add(1) else {
+                return self.fail(c, k, E_NOMEM);
+            };
+            let token = self.next_token;
+            self.next_token = next;
+            let rec = Strack {
+                ready: 1,
+                token,
+                frames: h.frames,
+                rate: h.rate,
+                channels: h.channels,
+                fmt: FMT_PCM16,
+                base_l: h.base_l,
+                base_r: if h.channels == 1 { h.base_l } else { h.base_r },
+            };
+            env.publish(c, k, &rec);
+            let t = &mut self.tracks[c][k];
+            t.loading = None;
+            t.bound = Some(e);
+            t.snap = t.pend.id;
+            t.token = token;
+            t.published = Info { frames: rec.frames, rate: rec.rate, channels: rec.channels, token };
+            t.status = READY;
+            t.phase = Phase::Idle;
+            t.reload = false;
+            t.closed = false;
         }
     }
 
