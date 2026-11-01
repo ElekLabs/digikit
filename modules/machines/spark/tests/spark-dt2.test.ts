@@ -5,9 +5,9 @@ import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import { openSamples } from '@digi/dk-session/samples';
 import { button, repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { PatchedSession } from '../support.ts';
-import { installWithDebug, liveArtifacts, memory, panel, record, runtimeTests, settleUi } from './live.ts';
-import { planSymbol, prepareRuntimePlan } from './runtime-plan.ts';
+import type { PatchedSession } from '../../../../tests/regression/support.ts';
+import { installWithDebug, liveArtifacts, memory, panel, record, runtimeTests, settleUi } from '../../../../tests/regression/runtime/live.ts';
+import { planSymbol, prepareRuntimePlan } from '../../../../tests/regression/runtime/runtime-plan.ts';
 
 // End to end, DT2 1.17: the device-neutral runtime (API 1.5 track table), core/sample-pool (the borrowed stock pool), machine contract 1.2
 // and digikit/spark playing a stereo sample that a fixture module selected by path (docs/design/sample-api-1.5.md).

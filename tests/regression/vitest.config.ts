@@ -6,6 +6,14 @@ import { defineConfig } from 'vitest/config';
 // Vitest 3.2 reads only singleFork per project; worker caps are root-level.
 const serial = { poolOptions: { forks: { singleFork: true } } };
 
+// A module's own tests (modules/<group>/<name>/tests) sit outside this package, so its @digi imports are mapped here.
+const pkg = (name: string) => fileURLToPath(new URL(`../../packages/${name}/src`, import.meta.url));
+const moduleAlias = [
+  { find: /^@digi\/dk-session\/(.*)$/, replacement: `${pkg('dk-session')}/$1.ts` },
+  { find: /^@digi\/test-support$/, replacement: `${pkg('test-support')}/index.ts` },
+  { find: /^@digi\/control-client$/, replacement: `${pkg('control-client')}/index.ts` },
+];
+
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   test: {
@@ -38,6 +46,17 @@ export default defineConfig({
         test: {
           name: 'runtime',
           include: ['runtime/**/*.test.ts'],
+          pool: 'forks',
+          ...serial,
+          testTimeout: 300_000,
+          hookTimeout: 150_000,
+        },
+      },
+      {
+        resolve: { alias: moduleAlias },
+        test: {
+          name: 'module-own',
+          include: ['../../modules/*/*/tests/**/*.test.ts'],
           pool: 'forks',
           ...serial,
           testTimeout: 300_000,

@@ -10,7 +10,12 @@
     "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@digi/dk-session/*": ["../../packages/dk-session/src/*.ts"],
+      "@digi/test-support": ["../../packages/test-support/src/index.ts"],
+      "@digi/control-client": ["../../packages/control-client/src/index.ts"]
+    }
   },
-  "include": ["*.ts", "dt2", "runtime", "modules", "host", "scenarios"]
+  "include": ["*.ts", "dt2", "runtime", "modules", "host", "scenarios", "../../modules/*/*/tests/*.test.ts"]
 }
