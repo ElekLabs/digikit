@@ -182,7 +182,30 @@ and `04-restored.json`, with logs. Targeted config formatting passed; static rev
 No new timing or whole-suite claim follows. Five host groups now cache results; web-transfer,
 empty module-tests, Rust and runtime remain uncached.
 
-**[O]** Gate explanation selected 19 steps and 57 Python files; execution/setup remain pending.
-The isolated worktree's current native build and ready-state inputs are incomplete for that gate and can be prepared
+**[O]** At this checkpoint, gate explanation selected 19 steps and 57 Python files; setup was pending.
+The isolated worktree's native build and ready-state inputs were incomplete for that gate and could be prepared
 through the documented lane and owner workflows. Earlier explicit runtime overrides are not full-gate
 setup. No merge or gate performance claim is established.
+
+## Integration gate checkpoint
+
+**[D]** The warm lane attempted `out/runs/verify/20261101-043906`. The parent stopped our runtime
+process group when the user challenged broad coverage: about 4,035 s had elapsed, including about
+2,483 s of runtime execution. This was an aborted, unsuccessful gate, not a full pass or suite-speed
+measurement. Build, native, quick-tier, module-load, smoke, stock, card and Python checks passed.
+
+Host formatting and Rust launcher failures were repaired in source. The Rust builder now uses
+explicit pinned `rustup run` invocations and removes inherited stable compiler overrides; focused
+validation remains pending. Two runtime sample cases failed with `ENOENT` for the lane's
+`apps/web/public/dksample.wasm`; that prerequisite was subsequently built, with no device rerun.
+Focused host follow-up initially passed 244 tests with 17 skipped; the previously blocked transfer
+file then passed all 14 tests. Formatting and workspace typechecks passed.
+The web Node owner check was attempted, but subprocess CLI comparisons hit a sandbox denial at the
+default uv source cache because the launch omitted the lane's uv environment. That validation is
+unresolved; the web Node suite is not recorded as passing.
+
+**[O]** [PR #237](https://github.com/ElekLabs/digikit/pull/237) remains draft. The broad gate has not
+been repeated for observation or timing, and its incomplete coverage is unresolved. Remaining work
+is focused host and web checks, validation of the Rust fix, and a gate-coverage decision. Prioritize tighter static
+dependency ownership using existing phase evidence; fixed runtime waits are already documented.
+No additional cache expansion, custom tracing or whole-suite speed claim follows from this checkpoint.

@@ -15,7 +15,8 @@ is proven. Existing full-host commands and merge-gate routing remain the
 owners of merge acceptance. The parked `--only` routing change is independent of this pilot.
 Five host groups now enable local result caching: control-client, test-support, dk-session, desktop-host
 and regression-host. Both extensions passed dependency failure/restoration probes; only the earlier
-support/session extension has a bounded timing pair. Merge-gate input setup and execution remain pending.
+support/session extension has a bounded timing pair. The integration gate was attempted and aborted;
+[PR #237](https://github.com/ElekLabs/digikit/pull/237) remains draft with incomplete gate coverage.
 
 ## Boundary
 
@@ -232,8 +233,13 @@ coordinator's budget. Do not remove existing routing until the pilot is validate
 and acceptance contract has migrated, and that unit's old selection logic is explicitly retired.
 Any failure of graph isolation, input invalidation or fresh/cached agreement blocks migration.
 
-The latest `verify --base main --explain` selected 19 steps and 57 Python files with conservative root
-dependency routing. The gate has not run: this isolated worktree currently lacks its native build tree
-and ready directories; the earlier explicit runtime overrides do not provide full-gate setup. Prepare
-a [warm lane](../../tools/devtools/lane.sh) and the [owner inputs](../TESTING.md#inputs), then run the gate
-once. Do not substitute another session's mutable target tree for that setup. No merge is approved yet.
+The warm integration lane attempted the broad gate in `out/runs/verify/20261101-043906`; it did not
+pass. The parent stopped runtime execution after the user challenged the coverage breadth. Focused
+host follow-up passed, but the repaired Rust launcher still awaits focused validation and runtime
+sample failures have not been rerun after providing the missing WASM prerequisite. See the
+[integration checkpoint](../findings/nx-pilot.md#integration-gate-checkpoint) for the exact limits.
+
+The next priority is tighter gate selection using static dependency ownership and existing phase
+evidence, not more caches or custom tracing. Existing runtime evidence already identifies fixed waits;
+do not repeat broad acceptance for observation or timing. PR #237 remains draft pending focused
+checks and a gate-coverage decision; this checkpoint is not merge acceptance.
