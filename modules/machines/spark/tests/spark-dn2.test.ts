@@ -81,12 +81,14 @@ runtimeTests(
       }
     }
     try {
+      log.stage = 'install';
       await settleUi(session);
       await installWithDebug(runtime, 'digikit/spark', 'test/track-select');
       await settleUi(session);
       expect((await dk.modules()).map((m) => m.name)).toEqual(
         expect.arrayContaining(['digikit/spark', 'test/track-select']),
       );
+      log.stage = 'plan';
       const plan = await prepareRuntimePlan(session, artifacts, [
         'RECORDS',
         '_sp_boot_status',
@@ -169,6 +171,7 @@ runtimeTests(
         ['l', wav(8, [220, 330]), 2], // the load that is superseded
         ['y', wav(1.2, [600, 900]), 2], // the file that supersedes it
       ];
+      log.stage = 'upload';
       await backend.mkdir(FOLDER);
       const uploadStart = Date.now();
       for (const [name, bytes, channels] of specs) {
@@ -180,7 +183,9 @@ runtimeTests(
       }
       log.uploadMs = Date.now() - uploadStart;
       const file = (name: string) => `${FOLDER}/${name}`;
+      log.stage = 'machine';
       await selectDynamicMachine(runtime, artifacts);
+      log.stage = 'phases';
       // The uploads into the digikit store stall the main loop (>1 s of wall time without a hit: the stall events are in the fault list from here on, run 1 and 2).
       // They are not the pool's: the checks below look for faults that are new since this point.
       const baseline = { faults: (await session.faults()).length, stalls: ((await session.client.status()) as { heartbeat: { stall_count: number } }).heartbeat.stall_count };
@@ -616,6 +621,13 @@ runtimeTests(
       await expectNoNewFault('the end');
       expect(failures, `phase failures:\n${failures.join('\n')}`).toEqual([]);
     } finally {
+      try {
+        // Diagnostic when the body threw outside a phase: the daemon's view of the CF and the faults.
+        log.statusAtEnd = await session.client.status();
+        log.faultsAtEnd = (await session.faults()).slice(-8);
+      } catch (error) {
+        log.statusAtEnd = `unavailable: ${error instanceof Error ? error.message : String(error)}`;
+      }
       record(artifacts, 'measurements', log);
       console.info('spark-dn2 measurements', JSON.stringify(log));
       try {
