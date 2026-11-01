@@ -362,58 +362,6 @@ runtimeTests(
         await expectNoNewFault('first note');
       });
 
-      // Pan: which AMP page and encoder carries PAN is not known for the DN2 (params 61..72 are the AMP group, PAN is 71): try the candidates in turn and
-      // stop at the first that moves the balance. The check is the movement, hard left against hard right.
-      await phase('pan', async () => {
-        const g = fixtures.s!;
-        expect(await api.select(file('s'), 0)).toBe(0);
-        expect((await settle(0)).state).toBe(3);
-        void g;
-        // Balance: the level of L against the level of R over both source tones (a stereo source is unaffected by which tone is in which channel).
-        const balance = (c: Awaited<ReturnType<typeof holdNote>>, from: number, to: number) => {
-          const l = tone(c.l, 440, from, to) + tone(c.l, 660, from, to);
-          const r = tone(c.r, 440, from, to) + tone(c.r, 660, from, to);
-          return { l, r, ratio: l / Math.max(r, 1e-9) };
-        };
-        // Run 1 found it: AMP page 2, encoder G (the other candidates did not move the balance).
-        const candidates: [number, string][] = [
-          [2, 'ENC G'],
-          [1, 'ENC G'],
-        ];
-        const tried: Record<string, unknown>[] = [];
-        for (const [page, enc] of candidates) {
-          await ui.tap('FLTR');
-          for (let i = 0; i < page; i++) await ui.tap('AMP');
-          const marks: Record<string, number> = {};
-          const c = await captureNote(runtime, path.join(artifacts, `pan-${page}-${enc.slice(-1)}.wav`), async (clock) => {
-            const t0 = await clock();
-            await until(clock, t0 + 0.9 * RATE);
-            marks.base = await clock();
-            await ui.burst(enc, 40, -4);
-            await ui.settle(100);
-            await until(clock, (await clock()) + 0.1 * RATE);
-            marks.left = await clock();
-            await until(clock, marks.left + 0.5 * RATE);
-            await ui.burst(enc, 40, 4);
-            await ui.settle(100);
-            await until(clock, (await clock()) + 0.1 * RATE);
-            marks.right = await clock();
-            await until(clock, marks.right + 0.5 * RATE);
-          });
-          const base = balance(c, marks.base! - 0.5 * RATE, marks.base!);
-          const left = balance(c, marks.left!, marks.left! + 0.5 * RATE);
-          const right = balance(c, marks.right!, marks.right! + 0.5 * RATE);
-          tried.push({ page, enc, base, left, right });
-          if (left.ratio > right.ratio * 2 && left.ratio > base.ratio * 1.2 && right.ratio < base.ratio * 0.85) {
-            log.pan = { page, enc, base, left, right };
-            log.panTried = tried;
-            return;
-          }
-        }
-        log.panTried = tried;
-        throw new Error(`no AMP candidate moved the balance: ${JSON.stringify(tried)}`);
-      });
-
       // ---- 4. retrigger: the fade-in of R restarts --------------------------------------------------------------------------------
       await phase('retrigger', async () => {
         expect(await api.select(file('r'), 0)).toBe(0);
@@ -618,6 +566,59 @@ runtimeTests(
         const hit = marks.found === undefined ? undefined : (scan[marks.found] as { from: number; to: number; enc: string; dir: number });
         log.stereoConfigFound = hit ?? 'none: a guard refused at every knob position of FLTR page 1';
         if (hit) log.stereoConfigSplit = expectSplitPair('config', c, hit.from, hit.to, 440, 660);
+      });
+
+      // Last: the pan phase leaves the track pan turned hard right, so no later phase may depend on the pan.
+      // Pan: which AMP page and encoder carries PAN is not known for the DN2 (params 61..72 are the AMP group, PAN is 71): try the candidates in turn and
+      // stop at the first that moves the balance. The check is the movement, hard left against hard right.
+      await phase('pan', async () => {
+        const g = fixtures.s!;
+        expect(await api.select(file('s'), 0)).toBe(0);
+        expect((await settle(0)).state).toBe(3);
+        void g;
+        // Balance: the level of L against the level of R over both source tones (a stereo source is unaffected by which tone is in which channel).
+        const balance = (c: Awaited<ReturnType<typeof holdNote>>, from: number, to: number) => {
+          const l = tone(c.l, 440, from, to) + tone(c.l, 660, from, to);
+          const r = tone(c.r, 440, from, to) + tone(c.r, 660, from, to);
+          return { l, r, ratio: l / Math.max(r, 1e-9) };
+        };
+        // Run 1 found it: AMP page 2, encoder G (the other candidates did not move the balance).
+        const candidates: [number, string][] = [
+          [2, 'ENC G'],
+          [1, 'ENC G'],
+        ];
+        const tried: Record<string, unknown>[] = [];
+        for (const [page, enc] of candidates) {
+          await ui.tap('FLTR');
+          for (let i = 0; i < page; i++) await ui.tap('AMP');
+          const marks: Record<string, number> = {};
+          const c = await captureNote(runtime, path.join(artifacts, `pan-${page}-${enc.slice(-1)}.wav`), async (clock) => {
+            const t0 = await clock();
+            await until(clock, t0 + 0.9 * RATE);
+            marks.base = await clock();
+            await ui.burst(enc, 40, -4);
+            await ui.settle(100);
+            await until(clock, (await clock()) + 0.1 * RATE);
+            marks.left = await clock();
+            await until(clock, marks.left + 0.5 * RATE);
+            await ui.burst(enc, 40, 4);
+            await ui.settle(100);
+            await until(clock, (await clock()) + 0.1 * RATE);
+            marks.right = await clock();
+            await until(clock, marks.right + 0.5 * RATE);
+          });
+          const base = balance(c, marks.base! - 0.5 * RATE, marks.base!);
+          const left = balance(c, marks.left!, marks.left! + 0.5 * RATE);
+          const right = balance(c, marks.right!, marks.right! + 0.5 * RATE);
+          tried.push({ page, enc, base, left, right });
+          if (left.ratio > right.ratio * 2 && left.ratio > base.ratio * 1.2 && right.ratio < base.ratio * 0.85) {
+            log.pan = { page, enc, base, left, right };
+            log.panTried = tried;
+            return;
+          }
+        }
+        log.panTried = tried;
+        throw new Error(`no AMP candidate moved the balance: ${JSON.stringify(tried)}`);
       });
 
       const modules = await dk.modules();
