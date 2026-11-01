@@ -312,7 +312,7 @@ runtimeTests(
 
       // 4. A note right after READY (READY means the record is in the DSP): both source channels reach the output.
       const noteA = await captureNote(runtime, path.join(artifacts, 'note-a.wav'), async (clock) => {
-        await until(clock, 1.5 * RATE);
+        await until(clock, (await clock()) + 1.5 * RATE);
       });
       const onsetA = onset(noteA);
       log.noteA = { onset: onsetA, frames: noteA.l.length };
@@ -324,9 +324,12 @@ runtimeTests(
 
       // 6. Select B while a note of A plays: the old note stops. B is not retriggered because the key is held.
       let readyAtB = 0;
+      let selectAt = 0;
       let stateB: Awaited<ReturnType<typeof api.settle>> | undefined;
       const reselect = await captureNote(runtime, path.join(artifacts, 'reselect.wav'), async (clock) => {
-        await until(clock, RATE / 2);
+        // The hold counts from the press, not from the start of the capture (see the octave note).
+        selectAt = (await clock()) + RATE / 2;
+        await until(clock, selectAt);
         expect(await api.select(`/${FOLDER}/b`), 'select B queues').toBe(0);
         stateB = await api.settle();
         readyAtB = await clock();
@@ -337,7 +340,7 @@ runtimeTests(
       expect(stateB!.token, 'a new token').not.toBe(readyA.token);
       const onsetR = onset(reselect);
       expect(onsetR, 'A was playing before the select').toBeGreaterThanOrEqual(0);
-      expectTones('before the select', reselect, onsetR + 4800, RATE / 2 - 2400, [440, 660], [330, 495]);
+      expectTones('before the select', reselect, onsetR + 4800, selectAt - 2400, [440, 660], [330, 495]);
       const tailFrom = readyAtB + RATE / 4;
       const tailPeak = Math.max(
         peak(reselect.l, tailFrom, reselect.l.length),
@@ -350,7 +353,7 @@ runtimeTests(
 
       // B plays now (a new note).
       const noteB = await captureNote(runtime, path.join(artifacts, 'note-b.wav'), async (clock) => {
-        await until(clock, 1.5 * RATE);
+        await until(clock, (await clock()) + 1.5 * RATE);
       });
       const onsetB = onset(noteB);
       expect(onsetB, 'B is audible').toBeGreaterThanOrEqual(0);
@@ -361,9 +364,11 @@ runtimeTests(
       // 7. The stock reset (ReloadAllSamples with 1) wipes the pool; the runtime reloads the track from the remembered path.
       const before = await api.status();
       expect(before.state).toBe(3);
+      let resetAt = 0;
       const trace: { t: number; state: number; token: number }[] = [];
       const noteReset = await captureNote(runtime, path.join(artifacts, 'reset.wav'), async (clock) => {
-        await until(clock, RATE / 2);
+        resetAt = (await clock()) + RATE / 2;
+        await until(clock, resetAt);
         const t0 = Date.now();
         const reply = await dk.request(0x3a, Buffer.from([1]));
         expect(reply.status, 'stock-pool reload command').toBe(0);
@@ -391,7 +396,7 @@ runtimeTests(
       // The note that played over the reset ended with the old token. It would run for 6 s, so the capture must end well before that.
       const onsetS = onset(noteReset);
       expect(onsetS, 'B played before the reset').toBeGreaterThanOrEqual(0);
-      expectTones('before the reset', noteReset, onsetS + 4800, RATE / 2 - 2400, [330, 495], [440, 660]);
+      expectTones('before the reset', noteReset, onsetS + 4800, resetAt - 2400, [330, 495], [440, 660]);
       // The old note stops at the wipe and the track plays again after the reload: a silent gap lies inside the capture (measured: 2.3 s).
       const gap = longestSilence(noteReset, onsetS, 0.002);
       log.resetGap = gap;
@@ -404,7 +409,7 @@ runtimeTests(
       expect(endPeak, 'the note of the old token stopped').toBeLessThan(0.002);
 
       const noteAfter = await captureNote(runtime, path.join(artifacts, 'after-reset.wav'), async (clock) => {
-        await until(clock, 1.5 * RATE);
+        await until(clock, (await clock()) + 1.5 * RATE);
       });
       const onsetAfter = onset(noteAfter);
       expect(onsetAfter, 'plays again after the reload').toBeGreaterThanOrEqual(0);
