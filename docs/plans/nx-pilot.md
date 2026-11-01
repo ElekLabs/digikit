@@ -615,7 +615,12 @@ equal the Python outputs on eight saved proof directories (and all written secto
 apply). Python code used only by those calls is deleted; code with other users stays.
 `KIT_AREAS` stays in both languages for now: the Rust device-profile loader rejects new card keys,
 and the Python copy goes when the legacy scenarios and the `profile` subcommand stop using it.
-Deferred: calls that need the Rust `patchkit` binary (runtime-plan patch, chain-check,
-fx-expectations) need a fresh-binary handoff first; audio analysis moves to the audio-QA crate
-([plan](audio-qa.md)).
+The patchkit handoff followed: the tests run the Rust binary directly (`runtime/patchkit.ts`;
+the gate passes `DIGI_PATCHKIT`, local runs build once through `patchkit.py bin`), and
+`fx-expectations` and `chain-check` are TypeScript (`runtime/dkm.ts`), equal to Python on 20
+cases. Focused device proofs passed: DN2 fx-kit-persist and fx-send-dn2 (154 s), DT2 samples-live
+(43 s), DN2 fx-chain and fx-reuse without `DIGI_PATCHKIT` (116 s). Python stays only for audio
+analysis (hook_ab, fxpage, fxsend, pk_digikit_fx pcm-peak, fxshift) and the fxroutes/fxroute
+subcommands that need the settings encoder, PNG output or project-slot code; audio analysis moves
+to the audio-QA crate ([plan](audio-qa.md)).
 

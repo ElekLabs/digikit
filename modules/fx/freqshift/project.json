@@ -23,7 +23,6 @@
           "tools/patchkit/pk_digikit_fxsend.py",
           "tools/patchkit/pk_digikit_fxroutes.py",
           "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_dkrt_machine.py",
           "tools/patchkit/hook_ab.py"
         ],
         "plusdrive": true

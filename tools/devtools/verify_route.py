@@ -365,14 +365,12 @@ def acceptance_python(step: str) -> set[str]:
             {
                 "tools.device.dktransfer",
                 "tools.control.digi_client",
-                "tools.patchkit.pk_dkrt_machine",
                 "tools.patchkit.pk_digikit_fx",
                 "tools.patchkit.pk_digikit_fxsend",
                 "tools.patchkit.pk_digikit_fxpage",
                 "tools.patchkit.pk_digikit_fxroutes",
                 "tools.patchkit.pk_digikit_fxroute",
                 "tools.patchkit.hook_ab",
-                "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
             }
         )
     if step == "runtime-fixture":

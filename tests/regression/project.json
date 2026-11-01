@@ -44,8 +44,7 @@
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fx.py",
           "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_dkrt_machine.py"
+          "tools/patchkit/pk_digikit_fxroutes.py"
         ],
         "plusdrive": true
       },
@@ -56,8 +55,7 @@
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxpage.py",
           "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_dkrt_machine.py"
+          "tools/patchkit/pk_digikit_fxroutes.py"
         ],
         "plusdrive": true
       },
@@ -68,15 +66,14 @@
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxpage.py",
           "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_dkrt_machine.py"
+          "tools/patchkit/pk_digikit_fxroutes.py"
         ],
         "plusdrive": true
       },
       {
         "files": ["runtime/fx-reuse.test.ts"],
         "modules": ["test/dyn-fx-gain", "test/sine"],
-        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_dkrt_machine.py"],
+        "sources": ["tools/patchkit/hook_ab.py"],
         "plusdrive": true
       },
       {
@@ -88,19 +85,14 @@
         "sources": [
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_dkrt_machine.py"
+          "tools/patchkit/pk_digikit_fxroutes.py"
         ],
         "plusdrive": true
       },
       {
         "files": ["runtime/fx-send-dn2.test.ts", "runtime/fx-send.test.ts"],
         "modules": ["test/dyn-fx-gain", "test/sine"],
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fxsend.py",
-          "tools/patchkit/pk_dkrt_machine.py"
-        ],
+        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_digikit_fxsend.py"],
         "plusdrive": true
       },
       {
@@ -114,8 +106,7 @@
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_digikit_fxsend.py",
-          "tools/patchkit/pk_dkrt_machine.py"
+          "tools/patchkit/pk_digikit_fxsend.py"
         ],
         "plusdrive": true
       },

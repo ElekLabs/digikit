@@ -17,6 +17,7 @@ import { expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession } from '../support.ts';
 import { FIRMWARE, expectRuntimeUi, moduleArtifact, record } from './live.ts';
 import { deviceProfile } from './device-data.ts';
+import { fxExpectations, type FxExpectations } from './dkm.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 
@@ -103,11 +104,6 @@ export async function analysisJson<T>(module: string, args: string[], artifacts:
   }
 }
 
-interface FxExpectations {
-  image_hex: string;
-  row: number[];
-  needs: Record<string, number>;
-}
 export function expectGainRow(row: number[], oracle: FxExpectations): void {
   expect(row.slice(0, 12), 'exact process/descriptor/state/default words').toEqual(oracle.row);
   expect(row[12], 'adapter ran the effect').toBe(1);
@@ -332,12 +328,8 @@ export async function inspect(
     expect(effect.rows).toBe(0);
     const base = planSymbol(plan, '_dl_area') + effect.dsp_off;
     const artifact = path.join(path.dirname(session.cardPath!), 'seed/digikit/modules/dyn-fx-gain.dkm');
-    oracle = await analysisJson<FxExpectations>(
-      'tools.patchkit.pk_dkrt_machine',
-      ['fx-expectations', artifact, `0x${base.toString(16)}`],
-      artifacts,
-      `${tag}-expected-gain`,
-    );
+    oracle = await fxExpectations(artifact, base);
+    record(artifacts, `${tag}-expected-gain`, oracle);
     expect(effect.dsp_len, 'MODULES range agrees with independently inferred needs').toBe(oracle.needs.DSP_AREA);
     expect(oracle.needs.FX_SLOTS).toBe(1);
     expect(capacity.FX_SLOTS!.used).toBe(oracle.needs.FX_SLOTS);

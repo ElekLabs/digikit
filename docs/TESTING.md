@@ -154,6 +154,7 @@ Device suites (`test:stock`, `test:fx*`, `test:runtime`, `test:modules`) also ne
 - Complete ready inputs for each device, including the validated DSP files.
 - Module artifacts for `test:runtime` and `test:modules`: `out/regression/modules/<device>/<leaf>.dkm`.
   `DIGI_RUNTIME_MODULES` overrides the directory. The gate packs input-probe, remote and svc-echo itself.
+- `DIGI_PATCHKIT` (optional) names the patchkit binary for `test:runtime` and `test:modules`. The gate sets it; without it the tests build patchkit once through `patchkit.py bin`.
 - DT2 card samples at `out/runs/patchkit/samples`.
 - plusdrive: `test:runtime` builds it through `build:plusdrive`. The gate builds it before samples-live.
 

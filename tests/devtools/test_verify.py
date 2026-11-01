@@ -19,6 +19,12 @@ from tools.devtools import changed_tests, verify, verify_route  # noqa: E402
 from tools.patchkit import modroots  # noqa: E402
 
 
+@pytest.fixture
+def stub_patchkit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_step resolves the patchkit binary (a cargo build); these tests only check the plan."""
+    monkeypatch.setattr(verify.patchkit, "binary", lambda: Path("/stub/patchkit"))
+
+
 def owned_files() -> list[str]:
     """The module-owned acceptance files, as tests/regression filters name them."""
     return [f for f in verify_route.acceptance_records() if f.startswith("../../")]
@@ -2170,7 +2176,7 @@ def test_runtime_fixture_explicit_plan_never_builds_but_waits_for_existing_build
 
 
 def test_a_failed_module_build_stops_before_pack_or_acceptance(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    stub_patchkit: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     gate = verify.Gate(
         tmp_path, budget=2, acceptance={"module-load": ["modules/pluck.test.ts"]}
@@ -2207,6 +2213,7 @@ def test_runtime_fixture_rejects_insufficient_budget(
 
 @pytest.mark.parametrize("from_build", [False, True])
 def test_runtime_fixture_dispatch_preserves_environment_and_built_paths(
+    stub_patchkit: None,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     from_build: bool,
@@ -2455,6 +2462,7 @@ def test_module_owned_python_tests_are_found_by_globbing(
     ],
 )
 def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
+    stub_patchkit: None,
     selected: list[str],
     required: bool,
     monkeypatch: pytest.MonkeyPatch,
@@ -2482,25 +2490,6 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
         acceptance={"runtime-fixture": selected},
     )
     assert ("prerequisite plusdrive CLI build" in capsys.readouterr().out) is required
-
-
-@pytest.mark.parametrize("path", ["tools/patchkit/pk_dkrt_machine.py"])
-def test_fx_cli_helpers_select_only_runtime_fx_owners(path: str) -> None:
-    assert verify_route.acceptance_files("runtime-fixture", [path]) == sorted(
-        [
-            "runtime/fx-chain.test.ts",
-            *owned_files(),
-            "runtime/fx-kit-persist.test.ts",
-            "runtime/fx-pages.test.ts",
-            "runtime/fx-reuse.test.ts",
-            "runtime/fx-routes-panel.test.ts",
-            "runtime/fx-routes-persist.test.ts",
-            "runtime/fx-send-dn2.test.ts",
-            "runtime/fx-send.test.ts",
-            "runtime/fx-track-route.test.ts",
-        ]
-    )
-    assert "runtime-fixture" in verify.steps_for([path])
 
 
 def test_fx_cli_function_local_needs_dependency_keeps_runtime_gain_coverage() -> None:
@@ -2703,6 +2692,7 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     ],
 )
 def test_route_dispatch_passes_alias_inventory_to_preparation(
+    stub_patchkit: None,
     suite: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -16,9 +16,7 @@ const fake = vi.hoisted(() => ({
 vi.mock('node:timers/promises', () => ({
   setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 }));
-vi.mock('node:child_process', () => ({
-  execFile: Object.assign(vi.fn(), { [Symbol.for('nodejs.util.promisify.custom')]: fake.exec }),
-}));
+vi.mock('../runtime/patchkit.ts', () => ({ patchkit: fake.exec }));
 vi.mock('node:fs', async (original) => ({
   default: {
     ...(await original<{ default: typeof import('node:fs') }>()).default,
@@ -145,25 +143,10 @@ test('symbol lookup accepts aliases of one address, including mangled Rust names
   expect(() => planSymbol({ ...plan, symbols: {} }, 'DK_ABOUT')).toThrow('0 addresses');
 });
 
-test('setup reuses the Python patch command, its own daemon and a bounded tool deadline, then installs natively', async () => {
+test('setup patches once with a bounded tool deadline, uses its own daemon, then installs natively', async () => {
   const { calls, runtime } = fakeDk();
   expect(await prepareRemote(runtime)).toEqual(plan);
-  expect(fake.exec.mock.calls[0]?.[1]).toEqual([
-    'run',
-    'python',
-    '-m',
-    'tools.patchkit.patchkit',
-    'patch',
-    '--firmware',
-    '/stock.syx',
-    '--set',
-    'emulator',
-    '-o',
-    '/run/own-daemon/runtime-dt2.syx',
-    '--plan',
-    '/run/own-daemon/runtime-dt2.plan.json',
-  ]);
-  expect(fake.exec.mock.calls.map((call) => call[2].timeout)).toEqual([30_000]);
+  expect(fake.exec.mock.calls.map((call) => call[1].timeout)).toEqual([30_000]);
   expect(fs.readFileSync).toHaveBeenCalledWith('/run/own-daemon/runtime-dt2.plan.json', 'utf8');
   expect(calls).toEqual(['put', 'verifyFile', 'select', 'restart', 'waitForBoot', 'modules']);
 });

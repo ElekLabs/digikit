@@ -84,7 +84,7 @@ from tools.emulator import (  # noqa: E402
     coupled,  # noqa: E402
     digi_env,  # noqa: E402
 )
-from tools.patchkit import modroots  # noqa: E402
+from tools.patchkit import modroots, patchkit  # noqa: E402
 
 PY = ["uv", "run", "python"]
 FX_FILES = (
@@ -1811,6 +1811,8 @@ def run_step(gate: Gate, step: str) -> None:
             raise RuntimeError(f"{step} requires a shared budget of at least two cores")
         selected = getattr(gate, "acceptance", {}).get(step, [])
         env = gate.step_env()
+        if step in ("runtime-fixture", "module-load"):
+            env["DIGI_PATCHKIT"] = str(patchkit.binary())
         if step == "stock":
             # Stock uses one stepped ColdFire thread per worker and the DT2 binary only.
             if binary := env.get("DIGI_EMUD_DT2"):
