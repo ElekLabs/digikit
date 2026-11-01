@@ -1,6 +1,6 @@
 # DN2 object of core/adapters/sample-pool
 
-Status: accepted by Em on 2026-11-01 with the recommendations in section 7.
+Status: accepted by Em on 2026-11-01 with the recommendations in section 7. Built in lane/sample-pool (ColdFire and DSP objects, allocator, transport, dsp-link chaining) and host-tested; the DN2 emulator test of section 6 is still to do.
 
 Target: DN2 OS 1.12. Plug-in point: `modules/core/runtime/include/dkrt_pool.h` (version 1, unchanged except one additive symbol, section 2.6).
 Sources read: AGENTS.md, docs/design/sample-api-1.5.md, findings 92, 95, 104, 106, README and sources of `core/dsp-lp0-proof`, `src/cf/dt2/pool.c`, `src/cf/pool_core.h`, `devices/fw/*.toml`, runtime `store.rs`, `tracks.rs`. Marks: [D] read in repo or on 1.12 bytes, [O] open or my estimate.
@@ -24,15 +24,15 @@ Sources read: AGENTS.md, docs/design/sample-api-1.5.md, findings 92, 95, 104, 10
 
 **Structure.** Sorted free-extent list (start page, page count), fixed array of 66 entries (at most 64 blocks plus holes), coalescing on free, first fit. No bitmap (8 KiB, O(65536) scan) and no per-page metadata. Block table of 64 entries: `{first_page, pages, state, refs, token, frames, channels, lru, id (root,size,hash_kind,hash[32])}`.
 
-**Stereo.** One block holds both planes: `plane_pages = ceil(2*frames / 4096)`; L at `first_page`, R at `first_page + plane_pages`; one allocation of `channels * plane_pages` pages. Mono: `base_r = base_l`. `base = sp_nw32(ddr_base + page*4096)`. Example: first page gives `base_l = 0x10149C00`.
+**Stereo.** One block holds both planes: `plane_pages = ceil(2*frames / 4096)`; L at `first_page`, R at `first_page + plane_pages`; one allocation of `channels * plane_pages` pages. Mono: `base_r = base_l`. `base = sp_nw32(ddr_base + page*4096)`. Example: the first page gives `base_l = 0x1014C400`.
 
-**Dedup and cache.** `dkpool_load` with an id whose `hash_kind` is valid (the DN2 store always gives SHA-256) first looks up a block with equal `(size, hash_kind, hash)` in state READY (refs++, new token, return `DKPOOL_DONE` at once) or CACHED (refs = 1, state READY, `DKPOOL_DONE`). A hit never touches the DSP. Without a valid hash there is no sharing. States: FREE, LOADING, READY (refs > 0), CACHED (refs = 0, content valid, evictable). `dkpool_release` decrements; at 0 the block becomes CACHED (not freed). When an allocation fails, evict CACHED blocks oldest first (coalesce after each) and retry; still no fit gives `DKPOOL_E_POOL`. This makes release/reselect reuse free of transfer cost. It is safe because the runtime closes and drains the track generation before `dkpool_release` (design 2.1), and content never changes for an identity.
+**Dedup and cache.** `dkpool_load` with an id whose `hash_kind` is valid (the DN2 store always gives SHA-256) first looks up a block with equal `(size, hash_kind, hash)` in state READY (refs++, the block keeps its token so that the first holder's handle stays valid, `DKPOOL_DONE` at once) or CACHED (refs = 1, state READY, new token, `DKPOOL_DONE`). A hit never touches the DSP. Without a valid hash there is no sharing. States: FREE, LOADING, READY (refs > 0), CACHED (refs = 0, content valid, evictable). `dkpool_release` decrements; at 0 the block becomes CACHED (not freed). When an allocation fails, evict CACHED blocks oldest first (coalesce after each) and retry; still no fit gives `DKPOOL_E_POOL`. This makes release/reselect reuse free of transfer cost. It is safe because the runtime closes and drains the track generation before `dkpool_release` (design 2.1), and content never changes for an identity.
 
 **Tokens.** One u32 counter, +1 per `dkpool_load` call that returns a handle, from 1; at `0xffffffff` return `DKPOOL_E_CONTRACT` (never wrap), as the DT2 object does.
 
 **free_frames.** The runtime wants mono planes. Return `largest contiguous run of (free + CACHED) pages * 2048`. Total free space would overpromise: a stereo sample needs one run for both planes, and PCM never moves, so no compaction exists.
 
-**check / lost.** DN2 has no external reset of our range (finding 106: 20 scenarios, no stock write above `0x80531000`). `dkpool_check` returns 0 for a current READY handle (`id` = block index, token match) and `DKPOOL_E_LOST` for a stale one or a dead link. `dkrt_pool_lost` is never called. [O] Reads and the 1,136 unresolved stores of finding 106 stay open: the hardware read-back later.
+**check / lost.** DN2 has no external reset of our range (finding 106: 20 scenarios, no stock write above `0x80531000`). `dkpool_check` returns 0 for a current READY handle (`id` = block index, token match) and `DKPOOL_E_LOST` for a stale one. A dead link (status 3) fails new loads with `DKPOOL_E_READ` but does not invalidate loaded samples: their PCM is still in DDR. `dkrt_pool_lost` is never called. [O] Reads and the 1,136 unresolved stores of finding 106 stay open: the hardware read-back later.
 
 ## 2. Transport
 
@@ -48,7 +48,7 @@ Reused **verbatim** (move or include, no logic change):
 
 Changed:
 - Page tag: `0xD0000000 | seq8 << 20 | page_index20`. `page_index` is relative to `ddr_base`. The DSP derives the destination as `0x10000000 + (ddr_base - 0x80000000)/4 + page_index*1024` (words), checks `page_index < ddr_pages` against profile constants (a bad index writes nothing and reports error 4), copies always 1,024 words. The proof's sequential-tag and byte-count rule (tag must equal pages so far) goes away; any order is legal. `seq8` increases by 1 per page, mod 256; the DSP accepts an exact repeat of the last tag (idempotent copy, so a retry is safe) and rejects other seq values with error 5.
-- ACK extension (8 numeric halves): magic `0x5350` and version 2 in halves 0 and 1; in halves 2 and 3 the status (0 unarmed, 1 armed idle, 2 error, 3 dead) and the error; in halves 4 and 5 the accepted-page count since boot, in half 6 the low 16 bits of the last accepted tag, and half 7 a checksum of halves 0-6 so a torn read fails closed. CF decodes with the same seqlock as `lp_ack`. A page counts as acknowledged only when ACK status is 1 (armed), tag equals the sent tag, count equals sent count + 1. This keeps the rule "no send before an armed receiver" that finding 92 requires.
+- ACK extension (8 numeric halves, `src/cf/pool_wire.h` has the format): magic `0x5350` and version 2 in halves 0 and 1; half 2 the status (0 unarmed, 1 armed idle, 2 armed after an error, 3 dead); half 3 the error code (low byte) and a count of rejected pages (high byte); halves 4 and 5 the accepted-page count since boot; half 6 the last accepted tag as `seq8 << 8 | page_index & 0xff`; half 7 a checksum of halves 0-6 (`sum mod 65536 xor 0x5a5a`), so a torn read fails closed. CF decodes with a seqlock snapshot like the proof's `lp_ack`. A page is acknowledged when the status is 1, the count is one more than before the send and half 6 names the page; an error is new when the error count differs from the one before the send (a stale error cannot end the next page). Before the first page of a load the receiver must report status 1 or 2 (armed), the rule that finding 92 requires. The next tag continues after the sequence number in half 6, so a load that gave up after a lost page starts right.
 - Callback no longer takes `DK_SAMPLE_BANK_LOCK`, no reader publish, no 960,000-byte bank, no canary check (tests keep canaries host-side).
 
 ### 2.2 ColdFire range reader and conversion
@@ -88,7 +88,7 @@ Built: `dkpool_cancel` and `dkrt_store_stat` / `dkrt_store_read` exist with the 
 
 ### 2.6 Drop from the proof
 
-`lp_sampler` machine and `DK_PARAM/PAGE`; `readers.s` (A/B diagnostic readers, snapshots, `_lp_close_*` records); the fixed 960,000-byte bank at `0x80800000` and the 1 MiB-style canary guard loops; the CLOSE tag (`0x01014243`) and its mailbox/ACK kind; `lp_mail`/`lp_close_mail` host mailboxes (the external test driver); the 65,536-poll CLOSE budget; "errors need a fresh boot" for data errors; module `requires` (`core/machines`, `core/params`, `core/dsp-voice`) and `conflicts` (`core/dsp-link`, `core/runtime`, `core/dsp-ddr-proof`); `_lp_status/_error/_pages/_bytes` stay as small test oracles (renamed `_sp_*`). The hard assumption "private pre-init cold-idle fixture" is no longer manual: finding 95 records that the harness now initializes changed DSP code from raw `cold.state`.
+`lp_sampler` machine and `DK_PARAM/PAGE`; `readers.s` (A/B diagnostic readers, snapshots, `_lp_close_*` records); the fixed 960,000-byte bank at `0x80800000` and the 1 MiB-style canary guard loops; the CLOSE tag (`0x01014243`) and its mailbox/ACK kind; `lp_mail`/`lp_close_mail` host mailboxes (the external test driver); the 65,536-poll CLOSE budget; "errors need a fresh boot" for data errors; module `requires` (`core/machines`, `core/params`, `core/dsp-voice`) and `conflicts` (`core/dsp-link`, `core/runtime`, `core/dsp-ddr-proof`); `_sp_status`, `_sp_error`, `_sp_errcount`, `_sp_pages` and `_sp_last` are the small test oracles (the proof's `_lp_bytes` is gone: pages are counted, not bytes). The hard assumption "private pre-init cold-idle fixture" is no longer manual: finding 95 records that the harness now initializes changed DSP code from raw `cold.state`.
 
 ### 2.7 DSP range constants
 
@@ -125,7 +125,7 @@ Everything on ColdFire runs in the runtime's UI-loop task from `dkpool_tick`: no
 
 Add:
 - `modules/core/adapters/sample-pool/src/cf/pool_nw32.h`, `src/cf/pool_alloc.h`
-- `src/cf/dn2/pool.c` (plug-in symbols), `src/cf/dn2/xfer.c` (tick state machine, deinterleave, ACK decode), `src/cf/dn2/hook.s` (reply_copy hook wrapper), `src/cf/dn2/device.s` if the profile equ file is separate
+- `src/cf/pool_wire.h` (page tag, ACK format, page state machine, header and chunk geometry, deinterleave), `src/cf/dn2/xfer.h`, `src/cf/dn2/pool.c` (plug-in symbols), `src/cf/dn2/xfer.c` (tick, card reads, the two link hooks `sp_wire_size` and `sp_copy_reply`, written in C: no hook.s), `src/cf/dn2/device.s` (range from the profile equ file)
 - `src/dsp/dn2/boot-window.s` (verbatim split), `src/dsp/dn2/sample-pool.s` (receiver, callback, reply, `_sp_tail`)
 - `module.toml`: `ports += "dn2-1.12"`, `[targets] "dn2-1.12"`, two `[[object]]` (cf `devices=["dn2"]`, dsp `place="dsp.l2"`), externs as the proof (`cf.link.fn.bulk_send`, `cf.link.fn.reply_copy`, `dsp.cache.fn.cache_range`, `dsp.link.fn.lp0_*`, `dsp.link.value.lp0_record`, `hook.dsp.cache.site.cache_enable.return`), `[[op]]` hooks `cf.link.hook.reply_copy`, `cf.link.hook.boot_wire_size`, `dsp.cache.hook.cache_enable`, write `dsp.link.site.boot_wire_size`, claims as the proof except `dsp.link.site.block_tail` and `cf.view.site.ui_loop`.
 Change:
@@ -136,8 +136,8 @@ Change:
 - Retire `core/dsp-lp0-proof` only after the DN2 test passes; its boot fixture test stays until then.
 
 Tests:
-- Host (`tests/patchkit/test_sample_pool_alloc.py`, same style as `test_sample_pool_core.py`, compiles `pool_alloc.h`): first fit and coalescing; stereo R follows L and plane arithmetic; range and 66-extent bounds; CACHED eviction order; dedup refcount and token uniqueness (no wrap); `free_frames` as largest run; `sp_nw32(0x80531000) == 0x10149C00`; page tag encode/decode and seq rule; stereo deinterleave and last-page zero padding against a Python reference; ACK decode torn-read cases (reuse the stand-in harness of `test_dsp_lp0_proof.py`).
-- One DN2 emulator test (`tests/regression/runtime/sample-pool-dn2.test.ts`, Vitest, bounded by `--seconds`, existing ready-pair cache): upload one stereo file (about 3 s) and one mono file to the store, select on two tracks, assert:
+- Host (`tests/patchkit/test_sample_pool_dn2.py` compiles `pool_alloc.h`, `pool_wire.h` and the real `pool.c` and `xfer.c` against `tests/fixtures/sample-pool-dn2/harness.c`; `test_sample_pool_dsp_dn2.py` runs the assembled receiver against stand-ins of the stock driver): first fit and coalescing; stereo R follows L and plane arithmetic; range and 66-extent bounds; CACHED eviction order; dedup refcount and token uniqueness (no wrap); `free_frames` as largest run; `sp_nw32(0x80531000) == 0x1014C400`; page tag encode/decode and seq rule; stereo deinterleave and last-page zero padding against a Python reference; ACK decode torn-read cases (reuse the stand-in harness of `test_dsp_lp0_proof.py`).
+- One DN2 emulator test (a new Vitest file `sample-pool-dn2.test.ts` in `tests/regression/runtime`, bounded by `--seconds`, existing ready-pair cache): upload one stereo file (about 3 s) and one mono file to the store, select on two tracks, assert:
   1. status goes QUEUED, then READY, with the right token; `dk_strack` words (frames, channels, `base_l`, `base_r`) match;
   2. DDR planes read back byte-equal to the file's L and R planes (via the daemon DDR peek), and pad bytes after the last frame are zero;
   3. dedup: the same file on a second track gives equal bases and no new pages (page counter unchanged);
