@@ -7,6 +7,7 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.coldfire import arena_safety
 from tools.device import dksettings
@@ -41,6 +42,31 @@ class FxRouteHelpersTest(unittest.TestCase):
             b"".join(struct.pack("<Q", s) + bytes(64 + 512) for s in sectors)
         )
         return path
+
+    def test_render_shots_writes_named_diagnostics_and_optional_copies(self):
+        copy_dir = self.folder / "copies"
+        with patch.dict("os.environ", {"DIGIKIT_SHOTS": str(copy_dir)}):
+            for name in ("second", "first"):
+                (self.folder / f"{name}.oled").write_bytes(bytes(1024))
+            result = routes.render_shots(self.folder)
+        self.assertEqual(result["count"], 2)
+        self.assertEqual(
+            [Path(name).name for name in result["files"]], ["first.png", "second.png"]
+        )
+        for name in result["files"]:
+            generated = Path(name).read_bytes()
+            self.assertTrue(generated)
+            self.assertEqual((copy_dir / Path(name).name).read_bytes(), generated)
+
+    def test_render_shots_rejects_malformed_batch_before_overwriting(self):
+        existing = self.folder / "a.png"
+        existing.write_bytes(b"previous diagnostic")
+        (self.folder / "a.oled").write_bytes(bytes(1024))
+        (self.folder / "b.oled").write_bytes(bytes(1023))
+        with self.assertRaisesRegex(ValueError, "expected 1024"):
+            routes.render_shots(self.folder)
+        self.assertEqual(existing.read_bytes(), b"previous diagnostic")
+        self.assertFalse((self.folder / "b.png").exists())
 
     def test_seed_round_trip_preserves_card_and_other_settings_copy(self):
         for device in ("dt2", "dn2"):
