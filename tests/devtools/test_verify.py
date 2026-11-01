@@ -2443,6 +2443,8 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
 )
 def test_fx_cli_helpers_select_only_runtime_fx_owners(path: str) -> None:
     assert verify_route.acceptance_files("runtime-fixture", [path]) == [
+        "runtime/fx-chain.test.ts",
+        "runtime/fx-pages.test.ts",
         "runtime/fx-reuse.test.ts",
         "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
