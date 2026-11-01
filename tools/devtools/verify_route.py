@@ -184,21 +184,33 @@ RUNTIME_ROUTE_FILES = (
 )
 RUNTIME_TRACK_FILES = ("runtime/fx-track-route.test.ts",)
 RUNTIME_BASIC_FILES = ("runtime/fx-chain.test.ts", "runtime/fx-pages.test.ts")
+RUNTIME_KIT_FILES = ("runtime/fx-kit-persist.test.ts",)
+RUNTIME_SHIFT_FILES = ("runtime/fx-freqshift.test.ts",)
 RUNTIME_PROFILE_FILES = (
     *RUNTIME_BASIC_FILES,
     *RUNTIME_ROUTE_FILES,
     *RUNTIME_TRACK_FILES,
+    *RUNTIME_KIT_FILES,
+    *RUNTIME_SHIFT_FILES,
 )
 RUNTIME_GAIN_FILES = (
     "runtime/fx-reuse.test.ts",
     *RUNTIME_SEND_FILES,
     *RUNTIME_BASIC_FILES,
+    *RUNTIME_KIT_FILES,
 )
-RUNTIME_FX_FILES = (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES, *RUNTIME_TRACK_FILES)
+RUNTIME_FX_FILES = (
+    *RUNTIME_GAIN_FILES,
+    *RUNTIME_ROUTE_FILES,
+    *RUNTIME_TRACK_FILES,
+    *RUNTIME_SHIFT_FILES,
+)
 RUNTIME_PLUSDRIVE_FILES = ("runtime/samples-live.test.ts", *RUNTIME_FX_FILES)
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/sine": RUNTIME_FX_FILES,
     "test/dyn-fx-gain": (*RUNTIME_GAIN_FILES, *RUNTIME_ROUTE_FILES),
+    "test/dyn-fx-gain-b": RUNTIME_KIT_FILES,
+    "digikit/freqshift": RUNTIME_SHIFT_FILES,
     "test/dyn-fx-gain-sendonly": RUNTIME_ROUTE_FILES,
     "test/dyn-fx-gain-both": RUNTIME_TRACK_FILES,
     "test/input-probe": ("runtime/input-adapter.test.ts",),
@@ -238,10 +250,16 @@ RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
     },
     "tools/patchkit/pk_dkrt_machine.py": RUNTIME_FX_FILES,
     "tools/coldfire/arena_safety.py": RUNTIME_FX_FILES,
-    "tools/patchkit/pk_digikit_fxsend.py": (*RUNTIME_SEND_FILES, *RUNTIME_TRACK_FILES),
+    "tools/patchkit/pk_digikit_fxsend.py": (
+        *RUNTIME_SEND_FILES,
+        *RUNTIME_TRACK_FILES,
+        *RUNTIME_SHIFT_FILES,
+    ),
     "tools/patchkit/hook_ab.py": RUNTIME_FX_FILES,
     "tools/patchkit/pk_digikit_fx.py": RUNTIME_PROFILE_FILES,
     "tools/patchkit/pk_digikit_fxpage.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxpersist.py": RUNTIME_PROFILE_FILES,
+    "tools/patchkit/pk_digikit_fxshift.py": RUNTIME_SHIFT_FILES,
     "tools/patchkit/pk_digikit_fxroutes.py": RUNTIME_PROFILE_FILES,
     "tools/patchkit/pk_digikit_fxroute.py": RUNTIME_PROFILE_FILES,
 }
@@ -287,6 +305,9 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.patchkit.pk_dkrt_machine",
                 "tools.patchkit.pk_digikit_fx",
                 "tools.patchkit.pk_digikit_fxsend",
+                "tools.patchkit.pk_digikit_fxpage",
+                "tools.patchkit.pk_digikit_fxpersist",
+                "tools.patchkit.pk_digikit_fxshift",
                 "tools.patchkit.pk_digikit_fxroutes",
                 "tools.patchkit.pk_digikit_fxroute",
                 "tools.patchkit.hook_ab",
@@ -302,7 +323,12 @@ def acceptance_python(step: str) -> set[str]:
             if dependency not in found:
                 found.add(dependency)
                 todo.append(dependency)
-    return {changed_tests.path_of(module) for module in found}
+    paths = {changed_tests.path_of(module) for module in found}
+    if step == "runtime-fixture":
+        # load_model reads this module-owned file dynamically, outside the tools/tests graph.
+        # Its module ownership still retains the freqshift production lifecycle suite.
+        paths.add("modules/fx/freqshift/tests/freqshift_ref.py")
+    return paths
 
 
 @cache

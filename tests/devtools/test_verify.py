@@ -1843,6 +1843,8 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "tests/fixtures/modules/sine/module.toml",
             [
                 "runtime/fx-chain.test.ts",
+                "runtime/fx-freqshift.test.ts",
+                "runtime/fx-kit-persist.test.ts",
                 "runtime/fx-pages.test.ts",
                 "runtime/fx-reuse.test.ts",
                 "runtime/fx-routes-panel.test.ts",
@@ -1857,6 +1859,7 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "tests/fixtures/modules/dyn-fx-gain/module.toml",
             [
                 "runtime/fx-chain.test.ts",
+                "runtime/fx-kit-persist.test.ts",
                 "runtime/fx-pages.test.ts",
                 "runtime/fx-reuse.test.ts",
                 "runtime/fx-routes-panel.test.ts",
@@ -1892,6 +1895,8 @@ def test_acceptance_helpers_use_discovered_files_and_their_prerequisites(
     assert verify.runtime_pack_modules(selected) == [
         "test/sine",
         "test/dyn-fx-gain",
+        "test/dyn-fx-gain-b",
+        "digikit/freqshift",
         "test/dyn-fx-gain-sendonly",
         "test/dyn-fx-gain-both",
         "test/dyn-fx-gain-send",
@@ -2067,6 +2072,8 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             [
                 "test/sine",
                 "test/dyn-fx-gain",
+                "test/dyn-fx-gain-b",
+                "digikit/freqshift",
                 "test/dyn-fx-gain-sendonly",
                 "test/dyn-fx-gain-both",
                 "test/input-probe",
@@ -2085,6 +2092,11 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             ],
         ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
+        (
+            ["runtime/fx-kit-persist.test.ts"],
+            ["test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-b"],
+        ),
+        (["runtime/fx-freqshift.test.ts"], ["test/sine", "digikit/freqshift"]),
         (["runtime/fx-reuse.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
         (["runtime/fx-send.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
         (["runtime/fx-send-dn2.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
@@ -2400,6 +2412,8 @@ def test_module_owned_python_tests_are_found_by_globbing(
         ([], True),
         (["runtime/samples-live.test.ts"], True),
         (["runtime/fx-reuse.test.ts"], True),
+        (["runtime/fx-kit-persist.test.ts"], True),
+        (["runtime/fx-freqshift.test.ts"], True),
         (["runtime/fx-send.test.ts"], True),
         (["runtime/fx-send-dn2.test.ts"], True),
         (["runtime/fx-routes-panel.test.ts"], True),
@@ -2444,6 +2458,8 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
 def test_fx_cli_helpers_select_only_runtime_fx_owners(path: str) -> None:
     assert verify_route.acceptance_files("runtime-fixture", [path]) == [
         "runtime/fx-chain.test.ts",
+        "runtime/fx-freqshift.test.ts",
+        "runtime/fx-kit-persist.test.ts",
         "runtime/fx-pages.test.ts",
         "runtime/fx-reuse.test.ts",
         "runtime/fx-routes-panel.test.ts",
@@ -2467,6 +2483,7 @@ def test_fx_cli_function_local_needs_dependency_keeps_runtime_gain_coverage() ->
 def test_send_cli_selects_only_runtime_send_owners() -> None:
     path = "tools/patchkit/pk_digikit_fxsend.py"
     assert verify_route.acceptance_files("runtime-fixture", [path]) == [
+        "runtime/fx-freqshift.test.ts",
         "runtime/fx-send-dn2.test.ts",
         "runtime/fx-send.test.ts",
         "runtime/fx-track-route.test.ts",
@@ -2502,6 +2519,12 @@ def test_send_function_local_anchor_dependency_keeps_runtime_coverage() -> None:
         ]
     ]
     + [
+        (
+            "runtime/fx-kit-persist.test.ts",
+            ["test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-b"],
+            {},
+        ),
+        ("runtime/fx-freqshift.test.ts", ["test/sine", "digikit/freqshift"], {}),
         (
             "runtime/fx-chain.test.ts",
             ["test/sine", "test/dyn-fx-gain"],
@@ -2584,6 +2607,8 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
                 f"tools/patchkit/{helper}.py",
                 [
                     "runtime/fx-chain.test.ts",
+                    "runtime/fx-freqshift.test.ts",
+                    "runtime/fx-kit-persist.test.ts",
                     "runtime/fx-pages.test.ts",
                     "runtime/fx-routes-panel.test.ts",
                     "runtime/fx-routes-persist.test.ts",
@@ -2593,6 +2618,7 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
             for helper in (
                 "pk_digikit_fx",
                 "pk_digikit_fxpage",
+                "pk_digikit_fxpersist",
                 "pk_digikit_fxroutes",
                 "pk_digikit_fxroute",
             )
@@ -2625,6 +2651,8 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     assert "tools/patchkit/pk_digikit_fxpersist.py" in dependencies
     assert {
         "runtime/fx-chain.test.ts",
+        "runtime/fx-freqshift.test.ts",
+        "runtime/fx-kit-persist.test.ts",
         "runtime/fx-pages.test.ts",
         "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
@@ -2640,6 +2668,8 @@ def test_route_cli_import_graph_keeps_offline_project_oracle_dependencies() -> N
     "suite",
     [
         "runtime/fx-chain.test.ts",
+        "runtime/fx-kit-persist.test.ts",
+        "runtime/fx-freqshift.test.ts",
         "runtime/fx-pages.test.ts",
         "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
@@ -2678,6 +2708,8 @@ def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
         "runtime-fixture", ["tools/patchkit/hook_ab.py"]
     ) == [
         "runtime/fx-chain.test.ts",
+        "runtime/fx-freqshift.test.ts",
+        "runtime/fx-kit-persist.test.ts",
         "runtime/fx-pages.test.ts",
         "runtime/fx-reuse.test.ts",
         "runtime/fx-routes-panel.test.ts",
@@ -2710,3 +2742,39 @@ def test_retired_route_runners_keep_narrow_python_and_typescript_owners(
         assert fine.tests == ()
     assert fine.steps == ("python-tests",)
     assert verify_route.acceptance_files("runtime-fixture", [path])
+
+
+@pytest.mark.parametrize(
+    "path, owners",
+    [
+        (
+            "tests/fixtures/modules/dyn-fx-gain-b/module.toml",
+            ["runtime/fx-kit-persist.test.ts"],
+        ),
+        ("modules/fx/freqshift/module.toml", ["runtime/fx-freqshift.test.ts"]),
+        ("tools/patchkit/pk_digikit_fxshift.py", ["runtime/fx-freqshift.test.ts"]),
+        (
+            "modules/fx/freqshift/tests/freqshift_ref.py",
+            ["runtime/fx-freqshift.test.ts"],
+        ),
+    ],
+)
+def test_remaining_fx_sources_retain_runtime_owners(path, owners):
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == owners
+    assert "runtime-fixture" in verify.steps_for([path])
+
+
+def test_remaining_fx_dynamic_model_keeps_preparation_and_production_owners():
+    model = "modules/fx/freqshift/tests/freqshift_ref.py"
+    dependencies = verify_route.acceptance_python("runtime-fixture")
+    assert model in dependencies
+    assert "tools/patchkit/pk_digikit_fxshift.py" in dependencies
+    assert verify_route.acceptance_files("module-load", [model]) == [
+        "modules/freqshift.test.ts"
+    ]
+    assert (
+        verify.runtime_pack_aliases(
+            ["runtime/fx-kit-persist.test.ts", "runtime/fx-freqshift.test.ts"]
+        )
+        == {}
+    )
