@@ -471,3 +471,25 @@ selects runtime files 13→3 with all 37 Python plan entries retained; its harne
 requires smoke. The final gate explanation selects host, three stock files, 13 runtime files,
 three module files, Python checks and smoke. That gate was not run. No measured speedup or new
 device proof is claimed.
+
+
+### FX route migration checkpoint (2026-11-01)
+
+PR #245 merged at `dd542a11` under Em's explicit focused-acceptance exception. Its prior
+preflight retained three baseline path errors; this was not a full-gate pass, and that exception
+does not transfer to the route batch.
+
+The current `test/fx-route-consolidation` branch ports the complete eight `fxroutes` and eleven
+`fxroute` legs per device. Fixtures own one exact prepared image and matching plan/write-watch
+policy per process: `RT + dynfx` for the track baseline, `RT + dynfx + fxpages` for track routes,
+and the latter plus `digikit-menu` for the route panel. Independent cases load pristine cards;
+persistence cases retain real menu-driven restarts. Legacy runners remain until both-device proof
+passes. Independent review of track port `cbe4566a` found no missing assertions. No performance
+claim follows from this process layout.
+
+Correctness fixes cover paused protocol transport (`fdb745ad`), PCM observation initialization
+(`a0f52563`) and the existing epoch/UI restart barrier (`761aebba`). The latest DN2 panel proof
+failed: the empty baseline's closing evidence passed and its reload succeeded, then the list
+baseline rejected all selected modules with result `-48`. Artifact/source diagnosis is in progress;
+no new device pass is claimed. Routing/preparation work is underway, and this batch has no gate
+exception.
