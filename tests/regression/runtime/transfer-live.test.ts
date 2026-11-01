@@ -32,9 +32,9 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);
   expect(
-    entries.map((entry) => entry.path),
+    entries.map((entry) => entry.path).sort(),
     'upload survives the soft reset',
-  ).toEqual([debugPath, modulePath]);
+  ).toEqual([debugPath, modulePath].sort());
   const entry = entries.find((e) => e.path === modulePath)!;
 
   // The store follows the guest's card writes after its quiet period (about two seconds).
@@ -46,7 +46,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect(folder.folder, 'card.folder reports the session-owned mirror').toBe(mirror);
   expect(folder.continuous, 'card.folder continuously mirrors the store').toBe(true);
   expect(
-    folder.files.map(({ path, sha256 }) => ({ path, sha256 })),
+    folder.files.map(({ path, sha256 }) => ({ path, sha256 })).sort((x, y) => x.path.localeCompare(y.path)),
     'mirror metadata matches the card',
   ).toEqual([
     { path: debugPath, sha256: entries.find((e) => e.path === debugPath)!.sha256 },

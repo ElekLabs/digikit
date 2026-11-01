@@ -2,7 +2,7 @@
 // and the device answering again after a silent spell does.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { DkSession, decode8in7, encode8in7 } from '@digi/dk-session';
+import { DkSession, encode8in7 } from '@digi/dk-session';
 import { CAP, CMD as GCMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
