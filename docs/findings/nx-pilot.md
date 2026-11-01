@@ -1,4 +1,4 @@
-# Nx host cache pilot (2026-11-01)
+# Nx host cache and Rust execution pilot (2026-11-01)
 
 **[D]** Bounded local observations on base `04bfd560` plus the worktree-isolation fix, using
 Node 24.15.0, pnpm 12.8.2, Nx/devkit 22.7.12 and `@monodon/rust` 3.0.0. The target was
@@ -48,6 +48,25 @@ The first sandboxed host attempt failed all six tests with Unix socket `EPERM`. 
 restriction passed the six original tests. This is evidence of the sandbox restriction, not an
 established product flake.
 
+## Named Rust execution
+
+**[D]** On checkpoint `f3906b02`, `pnpm nx:pilot run dkneeds:test --outputStyle=static` executed
+once with `cache: false`. The existing benchlock command ran pinned Rust 1.98.1 with
+`cargo test -p dkneeds --lib --locked --offline --target-dir .nx/cargo/dkneeds`. Only dkneeds compiled
+in the debug test profile; all ten tests passed, none ignored. The isolated target's rustc information
+reported 1.98.1 (Homebrew), host `aarch64-apple-darwin`; its only fingerprint was
+`dkneeds-bd5fd01e2cc14e75`. No emulator ran and no generated core compiled. `Cargo.lock` was unchanged.
+
+The local `.nx/pilot-validation/06-dkneeds.json` records hash `16223256972177239252`, exit 0 and
+`cache-miss`. That status alone does not establish caching was disabled: the resolved target had
+`cache: false`, and no `.nx/cache/16223256972177239252` entry was present.
+
+Execution used pinned Node/pnpm on `PATH`, `RUSTUP_AUTO_INSTALL=0`, a pilot-local `UV_CACHE_DIR`,
+and the existing Python environment via `UV_PROJECT_ENVIRONMENT`, `UV_NO_SYNC=1`. An absolute
+`BENCHLOCK_PATH` selected the shared repository lock because the pilot's `out` was not linked.
+These supplied execution settings allowed reuse without dependency synchronization and coordinated
+the existing build lock; they do not establish Cargo cache input closure or a performance result.
+
 ## Limits and follow-up
 
 **[D]** Project/target inspection, graph export, targeted configuration formatting and independent
@@ -55,7 +74,7 @@ review completed before the probes; `Cargo.lock` remained unchanged. Input cover
 statically. Config, lockfile, toolchain and every possible environment input were not each mutated
 and tested. The exercised fresh result and cached replay agreed; no timing claim is made.
 
-**[O]** Rust and runtime functional execution remain pending. Both have `cache: false`; Rust cache
+**[O]** Runtime functional execution remains pending. Rust and runtime both have `cache: false`; Rust cache
 enablement needs a Cargo configuration/environment audit, and runtime cache enablement needs closure
 over ignored and external inputs. Existing verification routing remains in place. See the
 [pilot plan](../plans/nx-pilot.md) for commands, input boundaries and migration conditions.

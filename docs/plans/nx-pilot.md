@@ -6,8 +6,9 @@ Targeted Prettier checks passed for six configuration files; independent review 
 The bounded host proof is complete after cache/workspace metadata isolation: six tests passed fresh,
 repeat and unrelated-README probes hit the cache, a temporary failing test caused a miss and failure,
 and restoring the original files recovered the original successful cache entry. See the
-[observations and limits](../findings/nx-pilot.md). Rust/runtime functional execution and their cache
-input audits remain pending. No speedup has been measured. Existing mise commands and verification routing remain the
+[observations and limits](../findings/nx-pilot.md). The named Rust target also executed once: only
+dkneeds compiled and all ten tests passed, with caching disabled. Runtime functional execution and
+Rust/runtime cache input audits remain pending. No speedup has been measured. Existing mise commands and verification routing remain the
 owners of merge acceptance. The parked `--only` routing change is independent of this pilot.
 
 ## Boundary
@@ -104,6 +105,14 @@ pnpm nx:pilot run dkneeds:test
 pnpm nx:pilot run regression:service-commands
 ```
 
+For a worktree reusing an existing Python environment, optionally set `UV_PROJECT_ENVIRONMENT` to
+its absolute path and `UV_NO_SYNC=1` to avoid synchronization, with
+`UV_CACHE_DIR="$PWD/.nx/uv-cache"` for local uv artifacts. If `out` is not linked to the shared
+repository, supply an absolute `BENCHLOCK_PATH` to that repository's existing `out/.benchlock` so the
+Rust target coordinates with other builds. `RUSTUP_AUTO_INSTALL=0` prevents implicit toolchain
+installation; put the pinned Node/pnpm binaries on `PATH`. These are execution prerequisites, not a
+claim that the disabled Rust result cache covers those environment inputs.
+
 The runtime command requires prebuilt, preflighted `DIGI_EMUD_DT2` and `DIGI_EMUD_DN2`, complete ready
 inputs for DT2 OS 1.17 and DN2 OS 1.12, prepared `svc-echo.dkm` artifacts for both devices under
 `out/regression/modules/<device>/` (or `DIGI_RUNTIME_MODULES`), and the DT2 card sample directory at
@@ -133,9 +142,9 @@ environment; config/lock/toolchain coverage was reviewed statically rather than 
    if that review or the observed results leave an unresolved concern. Keep fresh and cached evidence
    explicit. A performance claim requires the repository's approved paired measurement.
 
-Inspect the resolved Rust target's `cache: false`, then run it once after PGO work finishes to confirm
-execution, package scope and isolated target directory. Cargo may reuse compilation outputs; Nx must
-not replay a test result. Enabling Rust result caching is a separate follow-up requiring Cargo input
+The resolved Rust target's `cache: false` and one functional run have been checked: only dkneeds
+compiled in the isolated target directory and all ten tests passed, with `Cargo.lock` unchanged.
+No Nx result cache entry was present for that run. Enabling Rust result caching remains a separate follow-up requiring Cargo input
 closure review and the full hit/miss/fresh-agreement protocol above, including Rust source, manifest,
 configuration and toolchain changes.
 
