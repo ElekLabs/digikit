@@ -230,15 +230,20 @@ test('route diagnostic text decodes big endian words and panel chords release on
   expect(session.client.inputButton).toHaveBeenLastCalledWith(expect.any(Number), false);
 });
 
-for (const afterEpoch of [undefined, 2]) {
-  test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness`, async () => {
+for (const { afterEpoch, loaderResult } of [
+  { afterEpoch: undefined, loaderResult: 0 },
+  { afterEpoch: 2, loaderResult: 0 },
+  { afterEpoch: undefined, loaderResult: -34 },
+]) {
+  test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness and loader result ${loaderResult}`, async () => {
     const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-inspect-'));
     directories.push(artifacts);
     const order: string[] = [];
     let mode = 'paused';
     let observations = 0;
     let pcmStarted = false;
-    const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
+    const expectedNames = loaderResult === 0 ? ['test/sine'] : [];
+    const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, expectedNames.length, 1, loaderResult >>> 0];
     const plan: RuntimePlan = {
       base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
       modules: ['core/runtime'],
@@ -287,7 +292,7 @@ for (const afterEpoch of [undefined, 2]) {
     const dk = {
       modules: vi.fn(async () => {
         expect(mode).toBe('free');
-        return [{ name: 'test/sine' }];
+        return expectedNames.map((name) => ({ name }));
       }),
       capacity: vi.fn(async () => {
         expect(mode).toBe('free');
@@ -298,10 +303,10 @@ for (const afterEpoch of [undefined, 2]) {
     const inspected = await inspectFxBoot(
       { session, dk } as unknown as PatchedSession,
       plan,
-      ['test/sine'],
+      expectedNames,
       artifacts,
       'boot',
-      undefined,
+      loaderResult === 0 ? undefined : [loaderResult],
       afterEpoch === undefined ? undefined : { afterEpoch },
     );
     expect(fake.ready).toHaveBeenLastCalledWith(
@@ -313,6 +318,7 @@ for (const afterEpoch of [undefined, 2]) {
     expect(order).toEqual(['pcm:start', 'free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
     expect(mode).toBe('paused');
     expect(inspected.epoch).toBe(3);
+    expect(inspected.results).toEqual([loaderResult]);
     const { evidence } = await vi.importActual<typeof import('../runtime/fx-live.ts')>('../runtime/fx-live.ts');
     await expect(evidence({ session } as PatchedSession, artifacts, 'closing', [], false)).resolves.toBeUndefined();
     expect(order.indexOf('pcm:start')).toBeLessThan(order.indexOf('ready'));

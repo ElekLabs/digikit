@@ -166,7 +166,7 @@ export async function inspectFxBoot(
     .poll(
       async () => {
         modules = await bounded(() => dk.modules());
-        results = await Promise.all(expectedResults.map((_, i) => word(session, boot + 40 + i * 4)));
+        results = await Promise.all(expectedResults.map(async (_, i) => (await word(session, boot + 40 + i * 4)) | 0));
         return { names: modules.map((module) => module.name), results };
       },
       { timeout: 30_000, interval: 500 },
