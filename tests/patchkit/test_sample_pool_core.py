@@ -56,6 +56,19 @@ int main(void)
     rec[SP_REC_BLOCK / 4] = 0x10000; rec[SP_REC_EXTENT / 4] = 0x8000;
     rec[(SP_REC_BYTES + SP_REC_BLOCK) / 4] = 0x20000; rec[(SP_REC_BYTES + SP_REC_EXTENT) / 4] = 0x4000;
     printf("free %u %u\n", sp_free_frames(rec, rec + SP_REC_BYTES / 4 * 2), sp_free_frames(rec, rec));
+    {
+        uint32_t rel;
+        int32_t r0 = sp_finish(0, 0, &rel);
+        printf("finish %d %u", r0, rel);
+        r0 = sp_finish(DKPOOL_E_POOL, 0, &rel);
+        printf(" %d %u", r0, rel);
+        r0 = sp_finish(0, 1, &rel);                   /* cancelled, but it loaded: report lost, release the slot */
+        printf(" %d %u", r0, rel);
+        r0 = sp_finish(DKPOOL_E_LOST, 1, &rel);       /* cancelled before it started */
+        printf(" %d %u", r0, rel);
+        r0 = sp_finish(DKPOOL_E_READ, 1, &rel);       /* cancelled and it failed anyway: the real error, nothing to release */
+        printf(" %d %u\n", r0, rel);
+    }
     return 0;
 }
 """
@@ -90,3 +103,5 @@ def test_pool_core_logic(tmp_path):
     assert out["lost"] == ["0", "1"]
     # free space: below the loader limit, after the highest record end (0x20000 + 0x4000), minus 8 KiB headroom, in 2-byte frames
     assert out["free"] == [str((0x19000400 - 0x24000 - 8192) // 2), str((0x19000400 - 8192) // 2)]
+    # a finished load job: as it is; cancelled but loaded = lost and release; cancelled before it started = lost; cancelled and failed = the error
+    assert out["finish"] == ["0", "0", "-16", "0", "-15", "1", "-15", "0", "-3", "0"]
