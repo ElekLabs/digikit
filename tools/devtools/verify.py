@@ -40,7 +40,7 @@ every changed tests/**/test_*.py, and the
 test files that import a changed tests/support module. With
 --full it runs PY_GATE plus every suite, not all of tests/ (`mise run test` runs all of tests/).
 rust-tests runs cargo nextest run --workspace --release, or only the crates rust_ws.affected_packages names
-for the changed files (a routed run; --full and --only keep the workspace). The finer rules for modules/,
+for the changed files (--full and --only --all-files keep the workspace). The finer rules for modules/,
 tools/device/, tests/digikit scenarios and mise.toml tasks are in tools/devtools/verify_route.py
 (docs/TESTING.md, "What verify runs for a change"). --explain takes the same options as a run, then
 prints each changed file with its matched prefix and steps, the node plan with dependencies and
@@ -2260,7 +2260,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="full acceptance including runtime-fixture and tier-sweep (DT2 full sweep with --dt2)",
     )
-    ap.add_argument("--only", help=f"comma-separated steps from: {', '.join(STEPS)}")
+    ap.add_argument(
+        "--only",
+        help=f"restrict the diff-derived plan to comma-separated steps from: {', '.join(STEPS)}",
+    )
+    ap.add_argument(
+        "--all-files",
+        action="store_true",
+        help="with --only: run the requested suites in full, without changing the tier",
+    )
     ap.add_argument(
         "--dt2",
         action="store_true",
@@ -2317,6 +2325,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.rerun_failed and (args.only or args.full):
         ap.error("--rerun-failed cannot be combined with --only or --full")
     named = bool(args.py_tests or args.tests)
+    if args.only and args.full:
+        ap.error("--only cannot be combined with --full")
+    if args.all_files and (not args.only or named or args.full or args.rerun_failed):
+        ap.error(
+            "--all-files requires --only and cannot be combined with named files, --full or --rerun-failed"
+        )
     if named and (args.rerun_failed or args.full):
         ap.error(
             "--py-tests and --tests cannot be combined with --rerun-failed or --full"
@@ -2368,16 +2382,21 @@ def main(argv: list[str] | None = None) -> int:
         steps, rust_packages = rerun.steps, rerun.rust_packages
         why = "--rerun-failed"
     elif args.only:
-        steps = tuple(args.only.split(","))
-        unknown = sorted(set(steps) - set(STEPS))
+        requested = tuple(args.only.split(","))
+        unknown = sorted(set(requested) - set(STEPS))
         if unknown:
             ap.error(f"unknown steps: {', '.join(unknown)}")
         for step in implied:
-            if step not in steps:
+            if step not in requested:
                 ap.error(f"--py-tests/--tests need the step {step}: add it to --only")
         why = "--only"
-        if "python-tests" in steps:
-            files = changed_files(args.base)
+        if args.all_files:
+            steps = requested
+        else:
+            files, origin, routed_steps, rust_packages = changed_plan(
+                args.base, args.head
+            )
+            steps = tuple(s for s in requested if s in routed_steps or s in implied)
     elif named:
         steps = tuple(s for s in STEPS if s in implied)
         why = "named files"
@@ -2395,16 +2414,17 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if named_py:
             py_plan = [(path, "named") for path in named_py]
+        elif "python-tests" in steps:
+            py_plan = python_test_plan(files, args.full or args.all_files)
         else:
-            py_plan = python_test_plan(files, args.full)
-        routed = why not in ("--only", "--full", "named files")
+            py_plan = []
+        routed = not (args.full or args.all_files or why == "named files")
         acceptance = (
-            named_acceptance
-            if named_acceptance
-            else {s: acceptance_plan(s, files) for s in verify_route.ACCEPTANCE_DIRS}
+            {s: acceptance_plan(s, files) for s in verify_route.ACCEPTANCE_DIRS}
             if routed
             else {}
         )
+        acceptance.update(named_acceptance)
         smoke_selection = smoke_cells(files) if routed else None
     budget = verify_budget.resolve_budget(args.jobs)
     budget_label = verify_budget.budget_text(args.jobs)
@@ -2413,14 +2433,14 @@ def main(argv: list[str] | None = None) -> int:
             steps,
             files,
             py_plan,
-            per_file=not (args.only or args.full or args.rerun_failed or named),
+            per_file=routed if rerun is None else False,
             origin=origin,
             rust_packages=rust_packages,
             budget=budget,
             all_no_aot=args.all_no_aot,
             budget_label=budget_label,
-            acceptance=acceptance if rerun or named_acceptance else None,
-            smoke_selection=smoke_selection if rerun else None,
+            acceptance=acceptance,
+            smoke_selection=smoke_selection,
             reasons=rerun.reasons if rerun else None,
         )
         return 0
