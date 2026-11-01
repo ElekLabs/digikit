@@ -71,6 +71,8 @@ for (const device of DEVICES) {
         image: { name: 'fxpage-step1', modules: RT, inventory, symbols: ['DKRT_BOOT', 'fx.rows'], policy: 'default' },
         initial: 'stock',
         presets: { stock: presets.stock },
+        // Legacy relative PCM oracles own audibility; finite and safety evidence stays mandatory.
+        requireAudible: false,
       });
       test('captures the three original send pages and dry sine', async () => {
         const { fixture, plan, profile, artifacts } = context;
@@ -105,6 +107,8 @@ for (const device of DEVICES) {
         },
         initial: 'stock',
         presets,
+        // Legacy relative PCM oracles own audibility; finite and safety evidence stays mandatory.
+        requireAudible: false,
       });
 
       test('preserves stock pixels/audio, maps page knobs, and removes the effect through SELECT/restart', async () => {

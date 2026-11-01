@@ -82,7 +82,6 @@ export async function effectPage(session: Session) {
 
 export async function mainPage(session: Session) {
   await tap(session, 'NO', 300);
-  await advance(session, 300);
 }
 
 export async function stockPages(session: Session, artifacts: string, tag: string) {
