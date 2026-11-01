@@ -45,6 +45,7 @@ packages/**/target/
 
 # JavaScript build artifacts
 node_modules/
+.nx/
 .astro/
 dist/
 apps/web/public/emulator-core.wasm

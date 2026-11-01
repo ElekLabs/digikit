@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import re
 import subprocess
 import time
@@ -397,10 +398,25 @@ def typed_files() -> list[str]:
 
 
 def host_plan(files: list[str]) -> list[tuple[str, list[str] | None, str]]:
-    """Use Vitest's import relation, conservatively running all hosts for config changes."""
+    """Delegate host test selection to Nx; retain the existing static-check scope."""
+    out: list[tuple[str, list[str] | None, str]] = []
+    if files:
+        out.append(
+            (
+                "host-tests",
+                [
+                    "pnpm",
+                    "nx:pilot",
+                    "affected",
+                    "--target=test-host",
+                    "--parallel=1",
+                    "--stdin",
+                ],
+                "",
+            )
+        )
     js = [f for f in files if f.endswith(JS_SUFFIXES)]
-    # Native forceRerunTriggers in the host config cover tests that read desktop
-    # sources/assets with fs rather than importing them, including CSS-only edits.
+    # Preserve the static-check eligibility independently of Nx test selection.
     assets = [f for f in files if f.startswith("apps/desktop/ui/src/") and f not in js]
     config = any(
         f.endswith((".json", ".yaml", ".yml"))
@@ -417,29 +433,7 @@ def host_plan(files: list[str]) -> list[tuple[str, list[str] | None, str]]:
         for f in files
     )
     if not js and not assets and not config:
-        return []
-    sources = js + assets
-    out: list[tuple[str, list[str] | None, str]] = []
-    if config or any(not (ROOT / f).is_file() for f in sources):
-        out.append(("host-tests", ["pnpm", "test:host"], ""))
-    else:
-        out.append(
-            (
-                "host-tests-related",
-                [
-                    "pnpm",
-                    "exec",
-                    "vitest",
-                    "related",
-                    "--run",
-                    "--config",
-                    "vitest.host.config.ts",
-                    "--passWithNoTests",
-                    *sources,
-                ],
-                "",
-            )
-        )
+        return out
     existing = [f for f in js if (ROOT / f).is_file()]
     if existing:
         out.append(("oxlint", ["pnpm", "exec", "oxlint", *existing], ""))
@@ -569,6 +563,10 @@ def main(argv: list[str] | None = None) -> int:
             else verify.changed_files(args.base)
         )
     )
+    if any("\n" in path or "\r" in path for path in files):
+        ap.error(
+            "changed paths cannot contain newlines (Nx --stdin uses one path per line)"
+        )
     sel = select(files, args.deep)
     print(f"test:changed: fast preflight for {len(files)} changed files")
     print_deferred(files, sel)
@@ -580,6 +578,8 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if args.explain:
             print(f"RUN  {name}: {' '.join(cmd)}")
+            if name == "host-tests":
+                print(f"     changed paths supplied on stdin: {json.dumps(files)}")
             continue
         start = time.monotonic()
         env = verify_budget.bounded_env(
@@ -588,7 +588,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         if name == "python-tests":
             print(f"python-tests logs: {out_dir}", flush=True)
-        done = subprocess.run(cmd, cwd=ROOT, env=python_env(env))
+        done: subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]
+        if name == "host-tests":
+            done = subprocess.run(
+                cmd,
+                cwd=ROOT,
+                env=python_env(env),
+                input="\n".join(files) + "\n",
+                text=True,
+            )
+        else:
+            done = subprocess.run(cmd, cwd=ROOT, env=python_env(env))
         if done.returncode:
             failed.append(name)
         print(

@@ -1,0 +1,30 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "regression",
+  "implicitDependencies": ["control-client", "@digi/test-support", "@digi/dk-session"],
+  "targets": {
+    "test-host": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["hostTests", "^hostTests", "{workspaceRoot}/tools/emulator/fast_regions.json"],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project regression-host",
+        "cwd": "."
+      }
+    },
+    "service-commands": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "parallelism": false,
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm --filter @digi/regression exec vitest run --project runtime runtime/service-commands.test.ts",
+        "cwd": ".",
+        "env": { "REGRESSION_JOBS": "1" }
+      }
+    }
+  }
+}

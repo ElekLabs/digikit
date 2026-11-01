@@ -757,6 +757,249 @@ def test_named_files_exclude_rerun_and_full() -> None:
         assert info.value.code == 2
 
 
+def explain_selection(
+    monkeypatch: pytest.MonkeyPatch, files: list[str], *flags: str
+) -> dict:
+    """Exercise CLI routing without git, execution, or run-directory writes."""
+    selected: dict = {}
+    monkeypatch.setattr(verify, "git_lines", lambda *args: ["a" * 40])
+    monkeypatch.setattr(verify, "changed_files", lambda base, head=None: files)
+
+    def capture(steps, changed, py_plan, **kwargs):
+        selected.update(steps=steps, files=changed, py_plan=py_plan, **kwargs)
+
+    monkeypatch.setattr(verify, "explain", capture)
+    assert verify.main(["--explain", *flags]) == 0
+    return selected
+
+
+def test_only_keeps_routed_acceptance_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected = explain_selection(
+        monkeypatch,
+        ["tests/regression/runtime/remote-input.test.ts"],
+        "--only",
+        "runtime-fixture,module-load",
+    )
+    assert selected["steps"] == ("runtime-fixture",)
+    assert selected["acceptance"]["runtime-fixture"] == ["runtime/remote-input.test.ts"]
+
+
+@pytest.mark.parametrize(
+    "files", [[], ["tests/regression/runtime/remote-input.test.ts"]]
+)
+def test_only_execution_matches_explained_selection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, files: list[str]
+) -> None:
+    selected = explain_selection(monkeypatch, files, "--only", "runtime-fixture")
+    monkeypatch.setattr(verify.digi_env, "run_dir", lambda name: str(tmp_path))
+    monkeypatch.setattr(verify.verify_budget, "lower_priority", lambda foreground: None)
+    monkeypatch.setattr(verify, "missing_daemons", lambda steps, py_tests: [])
+    executed = []
+
+    def run(gate, steps):
+        executed.append(steps)
+        assert steps == selected["steps"]
+        assert gate.acceptance == selected["acceptance"]
+        assert gate.py_tests == [path for path, _ in selected["py_plan"]]
+        assert gate.smoke_selection == selected["smoke_selection"]
+        assert gate.rust_packages == selected["rust_packages"]
+        return []
+
+    monkeypatch.setattr(verify, "run_steps", run)
+    assert verify.main(["--only", "runtime-fixture"]) == 0
+    assert executed == [selected["steps"]]
+
+
+def test_only_empty_diff_explains_nothing_to_run(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(verify, "git_lines", lambda *args: ["a" * 40])
+    monkeypatch.setattr(verify, "changed_files", lambda base, head=None: [])
+    assert verify.main(["--explain", "--only", "runtime-fixture,python-tests"]) == 0
+    out = capsys.readouterr().out
+    assert "steps: nothing to run" in out
+    assert "runtime-fixture:" not in out
+    assert "python-tests:" not in out
+
+
+@pytest.mark.parametrize(
+    "files", [[], ["docs/TESTING.md"], ["apps/web/src/components/App.svelte"]]
+)
+def test_only_does_not_force_unrouted_steps(
+    monkeypatch: pytest.MonkeyPatch, files: list[str]
+) -> None:
+    selected = explain_selection(
+        monkeypatch, files, "--only", "runtime-fixture,python-tests,smoke"
+    )
+    assert selected["steps"] == ()
+    assert selected["py_plan"] == []
+
+
+def test_only_broad_acceptance_is_not_narrowed_by_leaf(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected = explain_selection(
+        monkeypatch,
+        [
+            "tests/regression/support.ts",
+            "tests/regression/runtime/remote-input.test.ts",
+        ],
+        "--only",
+        "runtime-fixture",
+    )
+    assert selected["steps"] == ("runtime-fixture",)
+    expected = {
+        path.relative_to(ROOT / "tests/regression").as_posix()
+        for path in (ROOT / "tests/regression/runtime").rglob("*.test.ts")
+    }
+    assert set(selected["acceptance"]["runtime-fixture"]) == expected
+
+
+def test_only_named_overrides_keep_other_routed_scopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    files = ["tests/regression/support.ts", "tests/devtools/test_verify.py"]
+    selected = explain_selection(
+        monkeypatch,
+        files,
+        "--only",
+        "runtime-fixture,stock,python-tests,smoke",
+        "--tests",
+        "runtime/service-commands.test.ts",
+        "--py-tests",
+        "tests/devtools/test_verify.py",
+    )
+    assert set(selected["steps"]) == {
+        "runtime-fixture",
+        "stock",
+        "python-tests",
+        "smoke",
+    }
+    assert selected["acceptance"]["runtime-fixture"] == [
+        "runtime/service-commands.test.ts"
+    ]
+    expected_stock = {
+        path.relative_to(ROOT / "tests/regression").as_posix()
+        for path in (ROOT / "tests/regression/dt2").rglob("*.test.ts")
+    }
+    assert set(selected["acceptance"]["stock"]) == expected_stock
+    assert selected["py_plan"] == [("tests/devtools/test_verify.py", "named")]
+
+
+def test_only_named_files_imply_steps_for_empty_diff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected = explain_selection(
+        monkeypatch,
+        [],
+        "--only",
+        "runtime-fixture,stock",
+        "--tests",
+        "runtime/service-commands.test.ts",
+    )
+    assert selected["steps"] == ("runtime-fixture",)
+    with pytest.raises(SystemExit):
+        verify.main(["--only", "stock", "--tests", "runtime/service-commands.test.ts"])
+
+
+def test_only_preserves_python_smoke_and_rust_scopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(verify_route.RUNTIME_UPLOADS, "test/patched-pluck", "x.test.ts")
+    files = [f"{mpath('test/patched-pluck')}/module.toml"]
+    py_plan = [("tests/devtools/test_verify.py", "routed")]
+    monkeypatch.setattr(verify, "python_test_plan", lambda changed, full: py_plan)
+    monkeypatch.setattr(verify, "rust_scope", lambda changed: ["patchkit"])
+    selected = explain_selection(
+        monkeypatch, files, "--only", "python-tests,smoke,rust-tests"
+    )
+    assert selected["steps"] == ("python-tests", "smoke", "rust-tests")
+    assert selected["py_plan"] == py_plan
+    assert selected["smoke_selection"] == verify.smoke_cells(files)
+    assert {cell.partition(":")[0] for cell in selected["smoke_selection"]} == {
+        "dt2-1.17",
+        "dn2-1.12",
+    }
+    assert selected["rust_packages"] == ["patchkit"]
+
+
+def test_only_all_files_keeps_requested_suites_and_quick_tier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGIKIT_TIER", "quick")
+    selected = explain_selection(
+        monkeypatch,
+        [],
+        "--only",
+        "runtime-fixture,python-tests,smoke,rust-tests",
+        "--all-files",
+    )
+    assert selected["steps"] == (
+        "runtime-fixture",
+        "python-tests",
+        "smoke",
+        "rust-tests",
+    )
+    assert selected["py_plan"] == verify.python_test_plan([], True)
+    assert selected["acceptance"].get("runtime-fixture", []) == []
+    assert selected["smoke_selection"] is None
+    assert selected["rust_packages"] is None
+    assert os.environ["DIGIKIT_TIER"] == "quick"
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--all-files"],
+        ["--only", "pins", "--full"],
+        ["--only", "pins", "--all-files", "--full"],
+        ["--only", "pins", "--all-files", "--rerun-failed"],
+        [
+            "--only",
+            "python-tests",
+            "--all-files",
+            "--py-tests",
+            "tests/devtools/test_verify.py",
+        ],
+        [
+            "--only",
+            "runtime-fixture",
+            "--all-files",
+            "--tests",
+            "runtime/service-commands.test.ts",
+        ],
+    ],
+)
+def test_only_all_files_cli_conflicts(flags: list[str]) -> None:
+    with pytest.raises(SystemExit) as info:
+        verify.main(flags)
+    assert info.value.code == 2
+
+
+def test_only_explain_passes_head_through_changed_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = []
+
+    def changed(base, head=None):
+        seen.append((base, head))
+        return [], {}, (), None
+
+    monkeypatch.setattr(verify, "changed_plan", changed)
+    selected = explain_selection(
+        monkeypatch,
+        [],
+        "--only",
+        "runtime-fixture",
+        "--base",
+        "before",
+        "--head",
+        "after",
+    )
+    assert seen == [("before", "after")]
+    assert selected["steps"] == ()
+
+
 def test_daemon_check_needs_variables_that_name_files(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -766,7 +1009,7 @@ def test_daemon_check_needs_variables_that_name_files(
         "DIGI_EMUD_DT2",
         "DIGI_EMUD_DN2",
     ]
-    assert verify.main(["--only", "runtime-fixture"]) == 2
+    assert verify.main(["--only", "runtime-fixture", "--all-files"]) == 2
     for var in ("DIGI_EMUD_DT2", "DIGI_EMUD_DN2"):
         binary = tmp_path / var
         binary.write_text("")
@@ -805,7 +1048,7 @@ def test_explain_runs_nothing(
         raise AssertionError("a run directory was created")
 
     monkeypatch.setattr(verify.digi_env, "run_dir", fail)
-    assert verify.main(["--explain", "--only", "pins"]) == 0
+    assert verify.main(["--explain", "--only", "pins", "--all-files"]) == 0
     assert "pins" in capsys.readouterr().out
 
 
@@ -822,7 +1065,7 @@ def test_result_records_the_head_the_run_started_on(
     monkeypatch.setattr(verify.digi_env, "run_dir", lambda _name: str(tmp_path))
     monkeypatch.setattr(verify.verify_budget, "lower_priority", lambda _fg: None)
     monkeypatch.setattr(verify, "run_steps", lambda _gate, _steps: [])
-    assert verify.main(["--only", "pins"]) == 0
+    assert verify.main(["--only", "pins", "--all-files"]) == 0
     assert json.loads((tmp_path / "result.json").read_text())["head"] == "a" * 40
 
 
@@ -958,6 +1201,30 @@ def test_device_tools_select_their_tests_only() -> None:
     assert selected("tools/device/mmon.py") == set()
     assert "tests/patchkit" not in selected("tools/device/dkupload.py")
     assert "tests/digikit" not in selected("tools/device/dkupload.py")
+
+
+def test_unknown_device_tool_keeps_importers_kinds_and_classification_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = verify_route.importers
+    monkeypatch.setattr(
+        verify_route,
+        "importers",
+        lambda stem: (
+            ["tools/device/dkrun.py", "tests/digikit/test_dkprobe.py"]
+            if stem == "new_device_tool"
+            else original(stem)
+        ),
+    )
+    got = selected("tools/device/new_device_tool.py")
+    assert selected("tools/device/dkrun.py") <= got
+    assert "tests/digikit/test_dkprobe.py" in got
+    assert "tests/devtools/test_verify.py" in got
+    assert "tests/patchkit" not in got
+    assert "tests/digikit" not in got
+    assert selected("tools/device/unknown_without_importers.py") == {
+        "tests/devtools/test_verify.py"
+    }
 
 
 def test_device_tools_nothing_dropped() -> None:
@@ -1282,12 +1549,26 @@ def test_web_only_for_what_it_reads() -> None:
         assert "web" not in verify.steps_for([path]), path
 
 
-def test_routing_changes_select_everything() -> None:
-    everything = tuple(s for s in verify.EVERYTHING if s != "smoke")
+def test_routing_changes_keep_owner_tests_without_production_escalation() -> None:
     for path in ("tools/devtools/verify.py", "tools/devtools/verify_route.py"):
-        assert verify.steps_for([path]) == everything
-        got = verify.python_tests([path], False)
-        assert set(verify.python_tests([], True)) <= set(got)
+        assert verify.steps_for([path]) == ("python-tests",)
+        got = set(verify.python_tests([path], False))
+        assert set(verify.PY_GATE) <= got
+        assert got >= changed_tests.FAST_PYTHON_TESTS
+        assert "tests/patchkit" not in got
+        assert "tests/digikit" not in got
+        assert verify.rust_scope([path]) == []
+        production = "packages/emulator/machine/src/lib.rs"
+        assert set(verify.steps_for([path, production])) == {
+            *verify.steps_for([production]),
+            "python-tests",
+        }
+        assert set(verify.python_tests([production], False)) <= set(
+            verify.python_tests([path, production], False)
+        )
+        assert set(verify.python_tests([], True)) <= set(
+            verify.python_tests([path], True)
+        )
     # the lane helper is checked by the routing tests only
     assert verify.steps_for(["tools/devtools/changed_tests.py"]) == ("python-tests",)
     assert "tests/devtools/test_verify.py" in verify.python_tests(
@@ -1341,10 +1622,11 @@ def test_rust_scope(monkeypatch: pytest.MonkeyPatch) -> None:
         "patchkit"
     ]
     assert seen == [["tests/fixtures/modules/sine/module.toml"]]
-    # a broad mise.toml change and a routing change keep the whole workspace
+    # Only broad build configuration and the Rust selector keep the whole workspace.
     assert verify.rust_scope(["mise.toml"]) is None
-    assert verify.rust_scope(["tools/devtools/verify.py"]) is None
-    assert len(seen) == 1
+    assert verify.rust_scope(["tools/devtools/rust_ws.py"]) is None
+    assert verify.rust_scope(["tools/devtools/verify.py"]) == ["patchkit"]
+    assert seen[-1] == ["tools/devtools/verify.py"]
 
 
 def test_head_only_with_explain() -> None:
@@ -1385,6 +1667,49 @@ def test_smoke_runs_with_any_gate_step_not_for_docs() -> None:
     assert verify.steps_for(["AGENTS.md"]) == ()
 
 
+@pytest.mark.parametrize(
+    "path,build",
+    [
+        ("packages/emulator/control/tests/card_load.rs", False),
+        ("packages/emulator/machine/tests/state.rs", True),
+        ("packages/emulator/sharc/tests/arithmetic.rs", True),
+        ("packages/emulator/sharc-gen/tests/new_case.rs", True),
+    ],
+)
+def test_emulator_integration_tests_keep_rust_owner_without_device_acceptance(
+    path: str,
+    build: bool,
+) -> None:
+    assert verify.steps_for([path]) == (("build",) if build else ()) + ("rust-tests",)
+    assert verify.rust_scope([path])
+    assert verify.python_tests([path], False) == list(verify.PY_GATE)
+    for step in verify_route.ACCEPTANCE_DIRS:
+        assert verify_route.acceptance_files(step, [path]) == []
+    source = "packages/emulator/machine/src/lib.rs"
+    assert verify.steps_for([path, source]) == verify.steps_for([source])
+    for step in verify_route.ACCEPTANCE_DIRS:
+        assert verify_route.acceptance_files(
+            step, [path, source]
+        ) == verify_route.acceptance_files(step, [source])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "packages/emulator/boot/examples/common/mod.rs",
+        "packages/emulator/boot/examples/dsp_cold.rs",
+        "packages/emulator/boot/examples/sharc_live.rs",
+        "packages/emulator/boot/examples/plusdrive_check.rs",
+        "packages/emulator/machine/src/tests/helpers.rs",
+    ],
+)
+def test_emulator_examples_and_source_helpers_keep_production_coverage(
+    path: str,
+) -> None:
+    assert "smoke" in verify.steps_for([path])
+    assert verify_route.acceptance_files("runtime-fixture", [path])
+
+
 def test_smoke_waits_for_build_daemons_and_runs_after_it() -> None:
     nodes, deps = verify.plan(("smoke",))
     assert deps["smoke"] == ("build-daemons",)
@@ -1399,7 +1724,7 @@ def test_python_daemon_tests_keep_their_daemon_prerequisite_without_smoke() -> N
 
 
 def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
-    assert verify.main(["--explain", "--only", "smoke"]) == 0
+    assert verify.main(["--explain", "--only", "smoke", "--all-files"]) == 0
     out = capsys.readouterr().out
     assert "smoke" in out
     assert "pins" not in out
@@ -1444,7 +1769,7 @@ def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
             "packages/emulator/control/src/runtime_patch.rs",
             {"stock", "runtime-fixture", "module-load"},
         ),
-        ("tools/devtools/verify.py", {"stock", "runtime-fixture", "module-load"}),
+        ("tools/devtools/verify.py", set()),
     ],
 )
 def test_relevant_native_acceptance_retains_existing_owners(
@@ -1493,7 +1818,7 @@ def test_acceptance_filters_native_files(
 
 def test_broad_change_is_not_narrowed_by_a_module_leaf() -> None:
     paths = [
-        "tools/devtools/verify.py",
+        "Cargo.toml",
         "tests/fixtures/modules/dyn-fx-gain/module.toml",
     ]
     assert verify.acceptance_plan("module-load", paths) == []  # all native module files
@@ -1584,7 +1909,9 @@ def test_runtime_fixture_packs_only_modules_of_selected_files(
     assert verify.runtime_pack_modules(selected) == packed
 
 
-@pytest.mark.parametrize("flags", [["--only", "runtime-fixture"], ["--full"]])
+@pytest.mark.parametrize(
+    "flags", [["--only", "runtime-fixture", "--all-files"], ["--full"]]
+)
 def test_runtime_fixture_full_or_explicit_planning(
     flags: list[str],
     monkeypatch: pytest.MonkeyPatch,

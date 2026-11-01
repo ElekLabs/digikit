@@ -40,7 +40,7 @@ every changed tests/**/test_*.py, and the
 test files that import a changed tests/support module. With
 --full it runs PY_GATE plus every suite, not all of tests/ (`mise run test` runs all of tests/).
 rust-tests runs cargo nextest run --workspace --release, or only the crates rust_ws.affected_packages names
-for the changed files (a routed run; --full and --only keep the workspace). The finer rules for modules/,
+for the changed files (--full and --only --all-files keep the workspace). The finer rules for modules/,
 tools/device/, tests/digikit scenarios and mise.toml tasks are in tools/devtools/verify_route.py
 (docs/TESTING.md, "What verify runs for a change"). --explain takes the same options as a run, then
 prints each changed file with its matched prefix and steps, the node plan with dependencies and
@@ -305,9 +305,6 @@ NO_AOT_SUBSET: dict[str, tuple[str, ...]] = {
 # Normal broad verification excludes full-tier or explicitly requested steps.
 EVERYTHING = tuple(s for s in STEPS if s not in ("tier-sweep", "dt2-tier-sweep"))
 FALLBACK = ("build", "desktop", "pins", "check", "python-tests")
-# A change to the routing itself selects every normal step and the whole python plan: a routing bug
-# would otherwise drop coverage without anyone seeing it.
-SELF_BROAD = ("tools/devtools/verify.py", "tools/devtools/verify_route.py")
 # Paths that cannot change what the patchkit smoke matrix runs: the desktop console UI (TS, TSX, CSS, its
 # preview harness and tests), the web components and styles, the web node tests, and documentation. The
 # smoke step is skipped only when EVERY changed file matches one of these glob patterns (fnmatch; `*`
@@ -357,7 +354,6 @@ def host_test_globs() -> tuple[str, ...]:
 # The first rule whose prefix matches a changed path decides that path's steps.
 RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("docs/", "README", "AGENTS.md", "CLAUDE.md", "tests/scenarios/README"), ()),
-    (SELF_BROAD, EVERYTHING),
     # GitHub settings files (templates, CODEOWNERS): only the path check reads them.
     ((".github/",), ("python-tests",)),
     # the agent hook settings (tools/devtools/agent_guard.py); .claude/skills/ holds links and .agents/skills/ markdown (the skills test)
@@ -648,6 +644,8 @@ def base_route(path: str) -> tuple[str, tuple[str, ...]]:
     for prefixes, steps in RULES:
         for prefix in prefixes:
             if path.startswith(prefix):
+                if verify_route.emulator_test_path(path):
+                    steps = tuple(s for s in steps if s in ("build", "rust-tests"))
                 return prefix, steps
     return "fallback", FALLBACK
 
@@ -725,9 +723,12 @@ def python_test_plan(files: list[str], full: bool) -> list[tuple[str, str]]:
     from tools.devtools import changed_tests  # it imports this module
 
     plan_: list[tuple[str, str]] = [(path, "gate") for path in PY_GATE]
-    full = full or any(f.startswith(SELF_BROAD) for f in files)
     finer = {f: verify_route.fine(f) for f in files if not f.endswith(".md")}
-    coarse = [f for f in files if finer.get(f) is None]
+    coarse = [
+        f
+        for f in files
+        if finer.get(f) is None and not verify_route.emulator_test_path(f)
+    ]
     # A changed Python module selects the tests that reach it in the import graph; the suites that
     # name a test directory trigger only on the other files (and on a module the root conftest reaches).
     graph_tests, conftest_broad = changed_tests.gate_tests(
@@ -763,7 +764,9 @@ def ui_only(files: list[str]) -> bool:
 
 def test_only_path(path: str) -> bool:
     """Whether one path matches the test-only smoke exemption (TEST_ONLY)."""
-    return any(fnmatch.fnmatchcase(path, pattern) for pattern in TEST_ONLY)
+    return verify_route.emulator_test_path(path) or any(
+        fnmatch.fnmatchcase(path, pattern) for pattern in TEST_ONLY
+    )
 
 
 def host_test_path(path: str) -> bool:
@@ -831,6 +834,7 @@ def steps_for(files: list[str]) -> tuple[str, ...]:
         wanted.update(route(path)[1])
         if is_changed_test(path) or (
             not path.endswith(".md")
+            and not verify_route.emulator_test_path(path)
             and verify_route.fine(path) is None
             and any(path.startswith(triggers) for _, triggers, _ in PY_SUITES)
         ):
@@ -1388,13 +1392,16 @@ def expand_python(
     """Replace the python-tests node by one job per file (FILE_PREFIX + path) plus the node itself, which
     only judges the files once they all ended (finish_python) and holds no cores.
 
-    A file that drives a daemon waits for build-daemons only; any other file waits for every build of
-    the plan (it may build for itself: the cargo steps of tests/emulator). The jobs are in the order of
+    Audited fast files need no build barrier. A file that drives a daemon waits for build-daemons
+    only; unaudited files keep every build barrier when daemons are built (they may build for themselves:
+    the cargo steps of tests/emulator). The jobs are in the order of
     verify_times.longest_first; those of LONG_FILE_SECONDS or more come before the other steps, so the
     longest file starts as soon as its daemon is built; the rest fill the cores the steps leave.
     A step whose estimate in STEP_SECS is LONG_FILE_SECONDS or more joins that long part, longest first."""
     if "python-tests" not in nodes:
         return nodes, deps
+    from tools.devtools.changed_tests import FAST_PYTHON_TESTS
+
     py_tests = [rel for rel, _ in python_files(py_tests)]
     builds = tuple(n for n in BUILD_CHAIN if n in nodes)
     ordered = verify_times.longest_first(py_tests, seconds)
@@ -1403,7 +1410,7 @@ def expand_python(
     for rel, _, _ in ordered:
         job = verify_budget.FILE_PREFIX + rel
         names[rel] = job
-        if "build-daemons" not in nodes:
+        if rel in FAST_PYTHON_TESTS or "build-daemons" not in nodes:
             new_deps[job] = ()
         elif needs_daemon(rel):
             new_deps[job] = ("build-daemons",)
@@ -1479,12 +1486,8 @@ def with_desktop(
 
 def rust_scope(files: list[str]) -> list[str] | None:
     """The workspace packages whose tests the changed FILES can affect: None is the whole
-    workspace, [] no Rust test. A broad mise.toml change or a change to the routing keeps the
-    whole workspace."""
-    if any(
-        f == "mise.toml" or f.startswith(SELF_BROAD) or f == "tools/devtools/rust_ws.py"
-        for f in files
-    ):
+    workspace, [] no Rust test. Broad mise.toml and Rust routing changes keep the whole workspace."""
+    if any(f in ("mise.toml", "tools/devtools/rust_ws.py") for f in files):
         return None
     return rust_ws.affected_packages(files)
 
@@ -2260,7 +2263,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="full acceptance including runtime-fixture and tier-sweep (DT2 full sweep with --dt2)",
     )
-    ap.add_argument("--only", help=f"comma-separated steps from: {', '.join(STEPS)}")
+    ap.add_argument(
+        "--only",
+        help=f"restrict the diff-derived plan to comma-separated steps from: {', '.join(STEPS)}",
+    )
+    ap.add_argument(
+        "--all-files",
+        action="store_true",
+        help="with --only: run the requested suites in full, without changing the tier",
+    )
     ap.add_argument(
         "--dt2",
         action="store_true",
@@ -2317,6 +2328,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.rerun_failed and (args.only or args.full):
         ap.error("--rerun-failed cannot be combined with --only or --full")
     named = bool(args.py_tests or args.tests)
+    if args.only and args.full:
+        ap.error("--only cannot be combined with --full")
+    if args.all_files and (not args.only or named or args.full or args.rerun_failed):
+        ap.error(
+            "--all-files requires --only and cannot be combined with named files, --full or --rerun-failed"
+        )
     if named and (args.rerun_failed or args.full):
         ap.error(
             "--py-tests and --tests cannot be combined with --rerun-failed or --full"
@@ -2368,16 +2385,21 @@ def main(argv: list[str] | None = None) -> int:
         steps, rust_packages = rerun.steps, rerun.rust_packages
         why = "--rerun-failed"
     elif args.only:
-        steps = tuple(args.only.split(","))
-        unknown = sorted(set(steps) - set(STEPS))
+        requested = tuple(args.only.split(","))
+        unknown = sorted(set(requested) - set(STEPS))
         if unknown:
             ap.error(f"unknown steps: {', '.join(unknown)}")
         for step in implied:
-            if step not in steps:
+            if step not in requested:
                 ap.error(f"--py-tests/--tests need the step {step}: add it to --only")
         why = "--only"
-        if "python-tests" in steps:
-            files = changed_files(args.base)
+        if args.all_files:
+            steps = requested
+        else:
+            files, origin, routed_steps, rust_packages = changed_plan(
+                args.base, args.head
+            )
+            steps = tuple(s for s in requested if s in routed_steps or s in implied)
     elif named:
         steps = tuple(s for s in STEPS if s in implied)
         why = "named files"
@@ -2395,16 +2417,17 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if named_py:
             py_plan = [(path, "named") for path in named_py]
+        elif "python-tests" in steps:
+            py_plan = python_test_plan(files, args.full or args.all_files)
         else:
-            py_plan = python_test_plan(files, args.full)
-        routed = why not in ("--only", "--full", "named files")
+            py_plan = []
+        routed = not (args.full or args.all_files or why == "named files")
         acceptance = (
-            named_acceptance
-            if named_acceptance
-            else {s: acceptance_plan(s, files) for s in verify_route.ACCEPTANCE_DIRS}
+            {s: acceptance_plan(s, files) for s in verify_route.ACCEPTANCE_DIRS}
             if routed
             else {}
         )
+        acceptance.update(named_acceptance)
         smoke_selection = smoke_cells(files) if routed else None
     budget = verify_budget.resolve_budget(args.jobs)
     budget_label = verify_budget.budget_text(args.jobs)
@@ -2413,14 +2436,14 @@ def main(argv: list[str] | None = None) -> int:
             steps,
             files,
             py_plan,
-            per_file=not (args.only or args.full or args.rerun_failed or named),
+            per_file=routed if rerun is None else False,
             origin=origin,
             rust_packages=rust_packages,
             budget=budget,
             all_no_aot=args.all_no_aot,
             budget_label=budget_label,
-            acceptance=acceptance if rerun or named_acceptance else None,
-            smoke_selection=smoke_selection if rerun else None,
+            acceptance=acceptance,
+            smoke_selection=smoke_selection,
             reasons=rerun.reasons if rerun else None,
         )
         return 0
