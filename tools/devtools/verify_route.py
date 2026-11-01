@@ -177,6 +177,8 @@ ACCEPTANCE_DIRS = {
 # Runtime test files by the fixture module they exercise; the gate packs a native artifact for each
 # module (DIGI_RUNTIME_MODULES). Paths are relative to tests/regression.
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
+    "test/sine": ("runtime/fx-reuse.test.ts",),
+    "test/dyn-fx-gain": ("runtime/fx-reuse.test.ts",),
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
     "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),

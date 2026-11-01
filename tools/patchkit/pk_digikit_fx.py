@@ -24,9 +24,10 @@ from typing import Any
 import numpy as np
 
 from tools.device import dkneeds
-from tools.patchkit import hook_ab, pk_device
+from tools.patchkit import pk_device
 from tools.patchkit import pk_digikit_debug as D
 from tools.patchkit import pk_dkrt_machine as M
+from tools.patchkit.hook_ab import compare_aligned as scaled
 
 FREE_PC = 0xFFFF_FFFF
 ROW_WORDS = 24  # a row of the chain (core/fx module.toml)
@@ -42,24 +43,6 @@ def chain_rows(rig: Any, n: int) -> list[tuple[int, ...]]:
     base = M.sym(rig.plan, "core/fx", "fx.rows")
     words = struct.unpack(f"<{n * ROW_WORDS}I", rig.dsp_bytes(base, 4 * ROW_WORDS * n))
     return [tuple(words[i * ROW_WORDS : (i + 1) * ROW_WORDS]) for i in range(n)]
-
-
-def scaled(ref: np.ndarray, run: np.ndarray, gain: float) -> dict[str, Any]:
-    """RUN against REF times GAIN from the note's onset on (the boots reach the note up to a few blocks apart): `hook_ab.compare`'s figures over the
-    common length, and the onset shift in samples."""
-
-    def onset(x: np.ndarray, thr: float) -> int:
-        nz = np.flatnonzero(np.abs(x) > thr)
-        return int(nz[0]) if len(nz) else -1
-
-    # the threshold scales with the gain, so that a quieter run is not found later on the same attack ramp
-    a, b = onset(ref, 1e-6), onset(run, 1e-6 * max(abs(gain), 1e-3))
-    if a < 0 or b < 0:
-        return {"shift": None, "max_err_ulps": 1e9, "rms_db": None}
-    n = min(len(ref) - a, len(run) - b)
-    r = hook_ab.compare(ref[a : a + n], run[b : b + n], gain)
-    r["shift"] = b - a
-    return r
 
 
 def run_fx(c: Any) -> None:

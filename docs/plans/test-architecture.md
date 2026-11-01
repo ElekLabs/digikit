@@ -97,10 +97,10 @@ Each module type keeps one coupled test per device. Everything else moves down a
 ## FX consolidation design (2026-11-01)
 
 Status: Em selected design work and proposed reusing a daemon through the control socket with
-setup/teardown fixtures. This section records the approved design direction; implementation is
-pending. It supersedes the historical one-PR-per-item rule for this work: keep the reusable fixture
+setup/teardown fixtures. The first lifecycle/PCM pilot is now implemented under subsequent approval;
+its focused device proofs passed; final fast preflight passed (checkpoint below). This design supersedes the historical one-PR-per-item rule: keep the reusable fixture
 and compatible FX coverage in one coherent change, with explicit checkpoints rather than a bulk
-seven-family port. No source, scenario deletion, new RPC or benchmark is authorized by this document.
+seven-family port. No legacy deletion, new RPC or benchmark is authorized by this checkpoint.
 
 ### Fixture lifecycle and isolation
 
@@ -130,7 +130,8 @@ A load is rejected while a controller job or patch job is active. Settle or canc
 a deadline before loading; replacement does not promise to cancel every job. Failed or dirty reset
 fails setup, preserves diagnostics and discards the owned daemon; never silently continue as a clean
 case. `afterEach` collects the case's guard/fault/card/PCM closing evidence before discarding state,
-then stops capture, releases inputs and cancels pending protocol work. `afterAll` closes the owned daemon.
+then stops capture, pauses the runtime and cancels pending protocol work. Input helpers own release
+in `finally`; no release-all RPC is assumed. `afterAll` closes the owned daemon.
 
 Within a persistence scenario, use protocol restart to preserve guest writes and RAM according to
 that scenario's contract. An independent-case clean load must not replace that restart. The first
@@ -191,3 +192,75 @@ Choose minimal analyzer reuse for live captures or a small TypeScript comparison
 the needed oracles; do not port DSP analysis wholesale or invent protocol APIs. Seed/analyzer choices
 and the complete actor-state reset checklist are bounded checks during the first implementation
 slice; resolve them before relying on the affected assertion, rather than blocking every fixture step.
+
+
+### First implementation checkpoint (2026-11-01)
+
+**[D]** Both focused device proofs passed on their first runs; final fast preflight passed: the [gain-FX pilot](../../tests/regression/runtime/fx-reuse.test.ts)
+uses [Session baseline reload](../../packages/test-support/src/session.ts) and the existing Vitest
+[regression fixture](../../tests/regression/support.ts). No legacy family is deleted or declared equivalent.
+One serial scenario per device covers dry → gain → protocol deselection/restart → pristine dry,
+plus one sequential fresh-process dry reference while the kept daemon is paused.
+
+Clean reload uses the existing firmware-load replacement path in the same owned process, updates
+Session metadata, verifies a newer epoch and creates fresh protocol/USB receive state. Firmware
+boot still occurs. The deselection stage instead uses protocol restart, retaining guest writes;
+it must not be substituted with pristine reload. Reset/cleanup failures discard only the owned
+daemon and retain its diagnostics. Native plusdrive builds the preboot selections from prepared
+DKMs in owned overlay-free card directories, with mirroring/synchronization disabled. No TypeScript
+store codec, new reset/seed RPC, snapshot restore or daemon pool was added.
+
+The following assertions passed the focused DT2 and DN2 proofs:
+
+| Area | Pilot asserts | Retained legacy facts / limits |
+| --- | --- | --- |
+| Boot and registry | Normal boot, count/loaded/results/UI; assignment identity; reported module types/contracts, FX slots and free/used rows | No-hook/plain, full-capacity/overflow, no-module and fxpage variants remain |
+| Gain chain | Enabled/default parameters, descriptor/state within the module DSP range, adapter fault fields and one-call-per-block state progress | Inferred resource needs, exact relocated DSP bytes and exact row pointers remain |
+| Reset isolation | New epoch, old protocol invalidation, restored normalized module/FX capacity/input/settings/DSP semantics and fresh-process comparison | Not a whole-RAM/tick digest or deliberate dirty-settings isolation proof |
+| PCM | Dry × 0.5 within 2 ULP, RMS within 0.001 dB and onset shift at most 128 samples; deselected/restored/reference dry bit-identical from onset | Existing PCM/PIX oracles and all other FX family scenarios remain |
+| Closing evidence | No runtime fault/DSP halt/nonfinite PCM, audible sine, targeted post-load boot-identity guard and exported card overlay | Launch-time expansion write-watch, flush, card-sector allow policy and DT2 selected-track type/retry proof remain |
+
+Captures pause execution, choose current DSP frame + 300 after panel setup (the legacy restarted-note
+strategy), step 44,000 CF instructions beyond the boundary and hold TRIG 1 for 1,500 DSP frames.
+Key-up runs in `finally`. Input idle is observed while free before pausing. The existing
+[PCM comparator](../../tools/patchkit/hook_ab.py) now exposes onset alignment and JSON metrics; the
+legacy scaled-comparison alias uses the same function. No WAV codec or DSP analyzer was duplicated.
+Absent pristine settings are null only for the structured `E_SET_NOKEY` status; other errors fail.
+
+Prerequisites are prepared separately, not built by the test. For the default module directory:
+
+```sh
+uv run python -m tools.firmware.plusdrive_check --build-only
+mkdir -p out/regression/modules/dt2 out/regression/modules/dn2
+for device in dt2 dn2; do
+  uv run python -m tools.patchkit.patchkit pack test/sine --device "$device" -o "out/regression/modules/$device/sine.dkm"
+  uv run python -m tools.patchkit.patchkit pack test/dyn-fx-gain --device "$device" -o "out/regression/modules/$device/dyn-fx-gain.dkm"
+done
+```
+
+The test uses the existing fixed native plusdrive binary and preflighted daemon/ready inputs.
+`DIGI_RUNTIME_MODULES` may name an already prepared module directory. Gate ownership maps both
+fixtures to the pilot, and both explain/execution select plusdrive preparation for an FX-only run.
+
+Focused checks passed: 50 host cases plus the one canonical-path assertion correction retry (51
+across the runs); 10 PCM synthetic cases; seven fault/settings cases; 41 routing cases plus four
+new prerequisite/explain cases. Affected package/regression types passed. Independent foundation
+and pilot reviews completed with their reported blockers corrected. Both device proofs passed
+on their first runs, each with one selected case and the other device's case skipped:
+
+| Device | Invocation | Case | Local log |
+| --- | ---: | ---: | --- |
+| DT2 OS 1.17 | 89.66 s | 73.23 s | `/private/tmp/fx-reuse-dt2.log` |
+| DN2 OS 1.12 | 62.06 s | 53.506 s | `/private/tmp/fx-reuse-dn2.log` |
+
+These runs include the fresh reference, gain PCM, protocol deselection and clean restore. They are
+functional evidence, not a speedup benchmark, complete migration or broad-gate acceptance. Legacy
+coverage remains retained. Final `mise run test:changed` passed: 612 Python tests, 301 host passed
+and one skipped, plus lint, format, types, path, layers and generated checks. Log:
+`/private/tmp/fx-reuse-preflight.log`. Final independent static review found no issues after the
+reported blockers were corrected. The gate plan was explained only; the broad gate was not run.
+
+Exact inferred needs, relocated DSP bytes/row pointers, selected-track type and launch-time
+write-watch/flush/card-sector policy are not established as equivalent by this pilot. No legacy
+deletion is authorized by this evidence. Next, close the assertion ledger before parallel family
+migrations. The coordinator retains integration, remaining acceptance and publication decisions.

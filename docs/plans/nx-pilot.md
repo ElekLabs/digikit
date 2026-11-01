@@ -357,6 +357,17 @@ checkpoint; broader build/pack caching remains conditional on a justified candid
 
 The remaining cheap readiness candidate using an existing symbol plan is debug-module
 `expectWithoutDebugModule` (57 s static scheduled-wait ceiling across its cases), deferred rather
-than opened as a separate small PR. Em chose FX consolidation design next, without implementation;
+than opened as a separate small PR. Em first chose FX consolidation design, then approved its first fixture/PCM implementation;
 the [current fixture-first FX design](test-architecture.md#fx-consolidation-design-2026-11-01) records
-the approved direction and unresolved seed/analysis choices. Implementation remains pending.
+the approved direction and the [first implementation checkpoint](test-architecture.md#first-implementation-checkpoint-2026-11-01).
+The fixture/PCM pilot is implemented; focused host/type checks and both first-run device proofs passed
+(DT2 89.66 s, DN2 62.06 s invocation), as correctness evidence rather than a speedup benchmark.
+Final `mise run test:changed` passed 612 Python tests and 301 host cases (one skipped), with lint,
+format, types, path, layer and generated checks; log `/private/tmp/fx-reuse-preflight.log`.
+The gate plan was explained only; the broad gate remains unrun.
+Native preboot-card seeding and the existing PCM comparator resolved the first slice's seed/analysis
+choices without a new codec or RPC. Legacy coverage remains intact; no speedup or full migration is claimed.
+
+Next, close the assertion ledger before parallel family migrations. Exact inferred needs, relocated
+DSP bytes/row pointers, selected-track type and launch-time write-watch/flush/card-sector policy
+remain legacy facts; this evidence authorizes no deletion or complete-migration claim.

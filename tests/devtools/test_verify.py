@@ -289,6 +289,7 @@ def test_docs_only_stays_empty() -> None:
 
 def test_representative_module_runtime_and_core_routes_stay_conservative() -> None:
     assert verify.steps_for(["tests/fixtures/modules/sine/src/module.c"]) == (
+        "runtime-fixture",
         "python-tests",
         "rust-tests",
         "smoke",
@@ -1335,7 +1336,12 @@ def test_shared_digikit_helpers_keep_the_wide_route() -> None:
 
 def test_module_leaf_selects_the_tests_that_name_it() -> None:
     src = "tests/fixtures/modules/sine/src/module.c"
-    assert verify.steps_for([src]) == ("python-tests", "rust-tests", "smoke")
+    assert verify.steps_for([src]) == (
+        "runtime-fixture",
+        "python-tests",
+        "rust-tests",
+        "smoke",
+    )
     # a module that tests name selects those tests, not whole directories
     named = selected(src)
     assert "tests/modules/test_machine_conformance.py" in named
@@ -1753,8 +1759,11 @@ def test_smoke_alone_with_only(capsys: pytest.CaptureFixture[str]) -> None:
             "modules/core/runtime/src/rs/src/upload.rs",
             {"runtime-fixture", "module-load"},
         ),
-        ("tests/fixtures/modules/dyn-fx-gain/src/dsp/dyn_fx_gain.s", {"module-load"}),
-        ("tests/fixtures/modules/sine/src/module.c", set()),
+        (
+            "tests/fixtures/modules/dyn-fx-gain/src/dsp/dyn_fx_gain.s",
+            {"runtime-fixture", "module-load"},
+        ),
+        ("tests/fixtures/modules/sine/src/module.c", {"runtime-fixture"}),
         ("modules/no/such/module.toml", {"runtime-fixture", "module-load"}),
         ("tools/device/dkupload.py", {"runtime-fixture"}),
         ("tools/device/dkscreen.py", set()),
@@ -1806,7 +1815,16 @@ def test_relevant_native_acceptance_retains_existing_owners(
             "modules/tools/remote/module.toml",
             ["runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"],
         ),
-        ("runtime-fixture", "tests/fixtures/modules/sine/module.toml", []),
+        (
+            "runtime-fixture",
+            "tests/fixtures/modules/sine/module.toml",
+            ["runtime/fx-reuse.test.ts"],
+        ),
+        (
+            "runtime-fixture",
+            "tests/fixtures/modules/dyn-fx-gain/module.toml",
+            ["runtime/fx-reuse.test.ts"],
+        ),
         ("stock", "tests/regression/dt2/transport.test.ts", ["dt2/transport.test.ts"]),
     ],
 )
@@ -1871,6 +1889,8 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
         (
             [],
             [
+                "test/sine",
+                "test/dyn-fx-gain",
                 "test/input-probe",
                 "digikit/remote",
                 "digikit/probe",
@@ -1887,6 +1907,7 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
             ],
         ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
+        (["runtime/fx-reuse.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
         (
             ["runtime/sharc-probe.test.ts"],
             [
@@ -2191,3 +2212,42 @@ def test_module_owned_python_tests_are_found_by_globbing(
     ]
     assert verify.is_module_test_dir("modules/machines/m/tests/sub/test_m.py")
     assert not verify.is_module_test_dir("modules/machines/m/src/test_m.py")
+
+
+@pytest.mark.parametrize(
+    "selected, required",
+    [
+        ([], True),
+        (["runtime/samples-live.test.ts"], True),
+        (["runtime/fx-reuse.test.ts"], True),
+        (["runtime/service-commands.test.ts"], False),
+    ],
+)
+def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
+    selected: list[str],
+    required: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    gate = verify.Gate(tmp_path, budget=2, acceptance={"runtime-fixture": selected})
+    monkeypatch.setattr(gate, "share", lambda: 2)
+    monkeypatch.setattr(gate, "step_env", lambda: {"DIGI_JOBS": "2"})
+    monkeypatch.setattr(
+        verify, "prepare_acceptance_modules", lambda *_args: tmp_path / "modules"
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(gate, "run", lambda name, *_args, **_kwargs: calls.append(name))
+    verify.run_step(gate, "runtime-fixture")
+    assert ("runtime-fixture:plusdrive" in calls) is required
+    if required:
+        assert calls.index("runtime-fixture:plusdrive") < calls.index("runtime-fixture")
+    verify.explain(
+        ("runtime-fixture",),
+        [],
+        [],
+        False,
+        budget=2,
+        acceptance={"runtime-fixture": selected},
+    )
+    assert ("prerequisite plusdrive CLI build" in capsys.readouterr().out) is required

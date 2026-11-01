@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   RpcError,
   spawnDaemon,
@@ -8,6 +9,7 @@ import {
   type Daemon,
   type EmuEvent,
   type FirmwareLoadResult,
+  type GuardSetParams,
   type LedsResult,
   type StatusResult,
 } from '@digi/control-client';
@@ -36,7 +38,33 @@ export interface SessionOptions {
   /** Press NO automatically when ready; defaults to true. */
   autoNo?: boolean;
   /** Runtime boot uses firmware.load's existing patch/cache path, then runs freely. Stock defaults stay stepped. */
-  runtime?: { patchSet?: string };
+  runtime?: { patchSet?: string; reuse?: boolean };
+}
+
+/** A pristine image in a fixture-owned child directory of Session.runDir; not a sample directory. */
+export interface RuntimeBaseline {
+  cardImage: string;
+  /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
+  guard: GuardSetParams;
+  deliverExceptions?: boolean;
+  timeoutMs?: number;
+}
+
+/** Bound awaited control RPCs to one absolute lifecycle deadline, including a peer that never answers. */
+export async function withinRuntimeDeadline<T>(deadline: number, operation: () => Promise<T>): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('runtime lifecycle deadline exceeded');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('runtime lifecycle deadline exceeded')), remaining);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export class Session {
@@ -47,6 +75,8 @@ export class Session {
   #load: FirmwareLoadResult | undefined;
   #card: string | undefined;
   #closing: Promise<void> | undefined;
+  #reloading = false;
+  #preserveDiagnostics = false;
 
   private constructor(options: SessionOptions, daemon: Daemon, ownedDir: string | null) {
     this.options = options;
@@ -74,6 +104,7 @@ export class Session {
   }
 
   static async start(options: SessionOptions): Promise<Session> {
+    if (options.runtime?.reuse && options.mirror) throw new Error('reusable runtime sessions cannot mirror cards');
     const inp = resolveInputs(options.device, options.firmware);
     if (options.runtime) validateRuntimeInputs(inp);
     const ownedDir = options.runDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'digi-session-'));
@@ -94,6 +125,7 @@ export class Session {
             inp.cfSnapshot,
             '--no-audio',
           ];
+    if (options.runtime?.reuse) args.push('--no-card-sync');
     if (options.mirror) args.push('--mirror-dir', path.join(runDir, 'mirror'));
     const controller = options.runtime ? new AbortController() : undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -158,6 +190,99 @@ export class Session {
       throw err;
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  /** Clean independent runtime case in the owned process. Persistence cases must use protocol restart instead. */
+  async reloadRuntimeBaseline(baseline: RuntimeBaseline): Promise<number> {
+    if (!this.options.runtime?.reuse) throw new Error('runtime baseline reload requires runtime.reuse');
+    if (this.#closing || this.#reloading) throw new Error('runtime session is closed or already reloading');
+    this.#reloading = true;
+    const deadline = Date.now() + (baseline.timeoutMs ?? 120_000);
+    const checked = <T>(operation: () => Promise<T>) => withinRuntimeDeadline(deadline, operation);
+    let lastStatus: StatusResult | undefined;
+    try {
+      const root = fs.realpathSync(this.runDir);
+      const directory = fs.realpathSync(path.dirname(baseline.cardImage));
+      const image = fs.realpathSync(baseline.cardImage);
+      const inside = (file: string) => {
+        const relative = path.relative(root, file);
+        return (
+          Boolean(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+        );
+      };
+      if (!inside(directory) || !inside(image)) {
+        throw new Error('runtime baseline card must be in a fixture-owned child directory of runDir');
+      }
+      if (
+        !fs.statSync(image).isFile() ||
+        [directory, path.dirname(image)].some((dir) => fs.existsSync(path.join(dir, 'overlay.bin')))
+      ) {
+        throw new Error('runtime baseline must be a card image without an inherited overlay.bin');
+      }
+      if (!baseline.guard) throw new Error('runtime baseline requires an explicit scenario guard policy');
+      // The visible job can finish; a hidden patch job may still reject load as BUSY, which discards this daemon.
+      let before = (lastStatus = await checked(() => this.client.status()));
+      while (before.job) {
+        await checked(() => delay(100));
+        before = lastStatus = await checked(() => this.client.status());
+      }
+      const epoch = before.epoch;
+      if (typeof epoch !== 'number') throw new Error('runtime status has no epoch');
+      this.#load = undefined;
+      this.#card = undefined;
+      this.client.drainEvents();
+      this.#events = [];
+      await checked(() => this.client.call('cpu.exceptions', { deliver: baseline.deliverExceptions ?? false }));
+      await checked(() => this.client.watchdogConfig(this.options.stallMs ?? 1000));
+      const inp = resolveInputs(this.options.device, this.options.firmware);
+      const load = await checked(() =>
+        this.client.firmwareLoad({
+          syx: inp.syx,
+          card: image,
+          runtime: true,
+          patch_set: this.options.runtime!.patchSet,
+          replace: true,
+          force: true,
+          start: 'auto',
+          auto_no: this.options.autoNo ?? true,
+        }),
+      );
+      await checked(() => this.client.guardSet(baseline.guard));
+      await checked(() => this.client.call('run.mode', { mode: 'free' }));
+      const status = (lastStatus = await checked(() => this.client.status()));
+      if (typeof status.epoch !== 'number' || status.epoch <= epoch || !status.cf.ready || status.mode !== 'free') {
+        throw new Error(`runtime baseline did not establish a new ready epoch: ${JSON.stringify(status)}`);
+      }
+      this.#load = load;
+      this.#card = image;
+      this.#collect();
+      return status.epoch;
+    } catch (error) {
+      // A rejected or unanswered reset never becomes the baseline of a later test.
+      this.#load = undefined;
+      this.#card = undefined;
+      try {
+        fs.writeFileSync(
+          path.join(this.runDir, 'runtime-baseline-error.json'),
+          JSON.stringify(
+            {
+              error: String(error),
+              cardImage: baseline.cardImage,
+              status: lastStatus ?? null,
+            },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        /* Preserve the original reset failure even if its artifact cannot be written. */
+      }
+      console.info('runtime reset diagnostics:', this.runDir);
+      await this.close({ preserveDiagnostics: true });
+      throw error;
+    } finally {
+      this.#reloading = false;
     }
   }
 
@@ -249,12 +374,13 @@ export class Session {
   }
 
   /** Quit the daemon and remove an owned temporary run directory. */
-  close(): Promise<void> {
+  close(options: { preserveDiagnostics?: boolean } = {}): Promise<void> {
+    if (options.preserveDiagnostics) this.#preserveDiagnostics = true;
     return (this.#closing ??= (async () => {
       try {
         await this.#daemon.close();
       } finally {
-        if (this.#ownedDir) fs.rmSync(this.#ownedDir, { recursive: true, force: true });
+        if (this.#ownedDir && !this.#preserveDiagnostics) fs.rmSync(this.#ownedDir, { recursive: true, force: true });
       }
     })());
   }
