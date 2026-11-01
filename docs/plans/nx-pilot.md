@@ -19,7 +19,7 @@ support/session extension has a bounded timing pair. The integration gate was at
 [PR #237](https://github.com/ElekLabs/digikit/pull/237) merged at `a150cac5` after focused verification
 and the authorized one-time full-gate exception, without a full-gate pass. Follow-up
 [PR #238](https://github.com/ElekLabs/digikit/pull/238) adds diff-preserving explicit selection;
-automatic gate-routing changes remain pending.
+the routing-consolidation batch below follows those independent changes.
 
 ## Boundary
 
@@ -247,4 +247,48 @@ evidence, not more caches or custom tracing. Existing runtime evidence already i
 do not repeat broad acceptance for observation or timing. Focused checks are complete and the user
 authorized the one-time full-gate exception for PR #237, now merged at `a150cac5`. The exception is not
 evidence that the aborted gate passed. The `--only` follow-up adds diff-preserving explicit selection;
-automatic routing remains separate pending work.
+automatic routing is implemented and verified in the separate batch below.
+
+## Routing consolidation
+
+The last-25-merge baseline was saved before this batch. The bounded changes remove the routing
+files' automatic all-step/all-Python/all-Rust escalation, reuse the existing seven-file
+`changed_tests.FAST_PYTHON_TESTS` audit to release those jobs from build barriers, and retain only
+existing Rust/build ownership for crate-level emulator integration-test sources. Unknown device
+modules keep importer tests and mapped importer scenario kinds, with `test_verify.py` explicitly
+selected to enforce `DEVICE_KINDS` classification. Owner tests, import-graph consumers, `PY_GATE`,
+static checks, explicit full mode and mixed production coverage remain in place.
+
+The audit found production/preparation consumers of emulator examples: coupled imports boot common
+helpers, ready preparation uses DSP/SHARC examples, and card checks use plusdrive. Examples therefore
+retain production routes. No generic deleted-file exemption is introduced: absent modules can be
+missing from the current import graph, leaving ownership unproven. Root manifests and Vitest
+configuration retain conservative shared coverage. The existing `acceptance_python` closure remains
+unchanged because its consumed preparation/client entry points have real production dependencies.
+
+`docs/TESTING.md` now reflects the actual 16 smoke cells, four maintenance exemptions, existing
+test-only/patchkit-group exemptions, and seven fast devtools files.
+
+The historical comparison uses exactly the 25 first-parent landed commits recorded in
+`out/runs/verify/20261101-062531/selection-audit/manifest.json`, from baseline `a6c29b4f` through `11ad79ee`.
+For each manifest entry, run `.venv/bin/python -m tools.devtools.verify --base COMMIT^1 --head COMMIT --explain`
+with the baseline router and the implemented router. The same audit directory retains `comparison.json`
+and the exact 25 raw logs in each of `before/` and `after/`.
+Eleven plans changed and fourteen stayed unchanged. Representative selections:
+
+| Landed change | Steps before → after | Python files before → after |
+| --- | --- | --- |
+| #238 | 17 → 1 | 115 → 9 |
+| #225 | 17 → 1 | 115 → 9 |
+| #230 | 18 → 3 (`runtime-fixture`, `python-tests`, `smoke`) | 116 → 29 |
+| #231 | 18 → 18 | 188 → 183 |
+
+Production and root-manifest coverage stayed in place; examples remain conservative for the
+consumers described above. This comparison measures selection, without executing historical suites.
+
+The routed gate in `out/runs/verify/20261101-062531` selected nine Python files: 689 cases passed,
+with three stale test expectations failing. After correcting those expectations without changing
+production code, the targeted retry passed all three cases in 1.67 seconds. All 692 cases therefore
+passed across the gate and retry. Ruff, format, mypy, path, layer and generated-source checks all
+passed; final independent review reported no issues. The gate's 87-second wall time describes this
+routed run; it is neither a benchmark nor evidence of a full-suite pass or gate speedup.

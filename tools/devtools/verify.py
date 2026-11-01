@@ -305,9 +305,6 @@ NO_AOT_SUBSET: dict[str, tuple[str, ...]] = {
 # Normal broad verification excludes full-tier or explicitly requested steps.
 EVERYTHING = tuple(s for s in STEPS if s not in ("tier-sweep", "dt2-tier-sweep"))
 FALLBACK = ("build", "desktop", "pins", "check", "python-tests")
-# A change to the routing itself selects every normal step and the whole python plan: a routing bug
-# would otherwise drop coverage without anyone seeing it.
-SELF_BROAD = ("tools/devtools/verify.py", "tools/devtools/verify_route.py")
 # Paths that cannot change what the patchkit smoke matrix runs: the desktop console UI (TS, TSX, CSS, its
 # preview harness and tests), the web components and styles, the web node tests, and documentation. The
 # smoke step is skipped only when EVERY changed file matches one of these glob patterns (fnmatch; `*`
@@ -357,7 +354,6 @@ def host_test_globs() -> tuple[str, ...]:
 # The first rule whose prefix matches a changed path decides that path's steps.
 RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("docs/", "README", "AGENTS.md", "CLAUDE.md", "tests/scenarios/README"), ()),
-    (SELF_BROAD, EVERYTHING),
     # GitHub settings files (templates, CODEOWNERS): only the path check reads them.
     ((".github/",), ("python-tests",)),
     # the agent hook settings (tools/devtools/agent_guard.py); .claude/skills/ holds links and .agents/skills/ markdown (the skills test)
@@ -648,6 +644,8 @@ def base_route(path: str) -> tuple[str, tuple[str, ...]]:
     for prefixes, steps in RULES:
         for prefix in prefixes:
             if path.startswith(prefix):
+                if verify_route.emulator_test_path(path):
+                    steps = tuple(s for s in steps if s in ("build", "rust-tests"))
                 return prefix, steps
     return "fallback", FALLBACK
 
@@ -725,9 +723,12 @@ def python_test_plan(files: list[str], full: bool) -> list[tuple[str, str]]:
     from tools.devtools import changed_tests  # it imports this module
 
     plan_: list[tuple[str, str]] = [(path, "gate") for path in PY_GATE]
-    full = full or any(f.startswith(SELF_BROAD) for f in files)
     finer = {f: verify_route.fine(f) for f in files if not f.endswith(".md")}
-    coarse = [f for f in files if finer.get(f) is None]
+    coarse = [
+        f
+        for f in files
+        if finer.get(f) is None and not verify_route.emulator_test_path(f)
+    ]
     # A changed Python module selects the tests that reach it in the import graph; the suites that
     # name a test directory trigger only on the other files (and on a module the root conftest reaches).
     graph_tests, conftest_broad = changed_tests.gate_tests(
@@ -763,7 +764,9 @@ def ui_only(files: list[str]) -> bool:
 
 def test_only_path(path: str) -> bool:
     """Whether one path matches the test-only smoke exemption (TEST_ONLY)."""
-    return any(fnmatch.fnmatchcase(path, pattern) for pattern in TEST_ONLY)
+    return verify_route.emulator_test_path(path) or any(
+        fnmatch.fnmatchcase(path, pattern) for pattern in TEST_ONLY
+    )
 
 
 def host_test_path(path: str) -> bool:
@@ -831,6 +834,7 @@ def steps_for(files: list[str]) -> tuple[str, ...]:
         wanted.update(route(path)[1])
         if is_changed_test(path) or (
             not path.endswith(".md")
+            and not verify_route.emulator_test_path(path)
             and verify_route.fine(path) is None
             and any(path.startswith(triggers) for _, triggers, _ in PY_SUITES)
         ):
@@ -1388,13 +1392,16 @@ def expand_python(
     """Replace the python-tests node by one job per file (FILE_PREFIX + path) plus the node itself, which
     only judges the files once they all ended (finish_python) and holds no cores.
 
-    A file that drives a daemon waits for build-daemons only; any other file waits for every build of
-    the plan (it may build for itself: the cargo steps of tests/emulator). The jobs are in the order of
+    Audited fast files need no build barrier. A file that drives a daemon waits for build-daemons
+    only; unaudited files keep every build barrier when daemons are built (they may build for themselves:
+    the cargo steps of tests/emulator). The jobs are in the order of
     verify_times.longest_first; those of LONG_FILE_SECONDS or more come before the other steps, so the
     longest file starts as soon as its daemon is built; the rest fill the cores the steps leave.
     A step whose estimate in STEP_SECS is LONG_FILE_SECONDS or more joins that long part, longest first."""
     if "python-tests" not in nodes:
         return nodes, deps
+    from tools.devtools.changed_tests import FAST_PYTHON_TESTS
+
     py_tests = [rel for rel, _ in python_files(py_tests)]
     builds = tuple(n for n in BUILD_CHAIN if n in nodes)
     ordered = verify_times.longest_first(py_tests, seconds)
@@ -1403,7 +1410,7 @@ def expand_python(
     for rel, _, _ in ordered:
         job = verify_budget.FILE_PREFIX + rel
         names[rel] = job
-        if "build-daemons" not in nodes:
+        if rel in FAST_PYTHON_TESTS or "build-daemons" not in nodes:
             new_deps[job] = ()
         elif needs_daemon(rel):
             new_deps[job] = ("build-daemons",)
@@ -1479,12 +1486,8 @@ def with_desktop(
 
 def rust_scope(files: list[str]) -> list[str] | None:
     """The workspace packages whose tests the changed FILES can affect: None is the whole
-    workspace, [] no Rust test. A broad mise.toml change or a change to the routing keeps the
-    whole workspace."""
-    if any(
-        f == "mise.toml" or f.startswith(SELF_BROAD) or f == "tools/devtools/rust_ws.py"
-        for f in files
-    ):
+    workspace, [] no Rust test. Broad mise.toml and Rust routing changes keep the whole workspace."""
+    if any(f in ("mise.toml", "tools/devtools/rust_ws.py") for f in files):
         return None
     return rust_ws.affected_packages(files)
 

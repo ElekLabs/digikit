@@ -74,7 +74,7 @@ only the support/session pair was timed, not whole preflight. Rust and runtime t
 
 | Command | What runs |
 | --- | --- |
-| `mise run test:changed` | `tools/devtools/changed_tests.py`: ruff and mypy on changed Python, pathcheck, six audited tooling unit files, Nx-affected host Vitest projects, changed JS/TS lint and format, host types. Options: `--base`, `--head`, `--files`, `--deep`, `--explain`. Does not run Rust, module builds or devices. |
+| `mise run test:changed` | `tools/devtools/changed_tests.py`: ruff and mypy on changed Python, pathcheck, seven audited tooling unit files, Nx-affected host Vitest projects, changed JS/TS lint and format, host types. Options: `--base`, `--head`, `--files`, `--deep`, `--explain`. Does not run Rust, module builds or devices. |
 | `mise run test:host` | All seven Vitest projects from `vitest.host.projects.json`: control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests. One worker by default; `-- --maxWorkers N` changes it. |
 | `mise run verify:host` | `pnpm verify:host`: oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
 | `mise run web:test` | `node --test` in `apps/web/tests`. Cases that need WASM or firmware skip when absent. |
@@ -264,6 +264,11 @@ dt2-tier-sweep.
   alongside a launcher restores its scenario consumers. Changed tests and full-mode declared
   suites still run; neighboring modules keep conservative graph selection. Each launcher alone
   still selects `build`, `pins`, `python-tests` and the full `smoke` matrix.
+  Changes to `verify.py` and `verify_route.py` keep devtools owner tests, import-graph consumers,
+  `PY_GATE` and static checks, without selecting unrelated production steps or the Rust workspace.
+  Explicit `--full` retains full coverage. An unclassified `tools/device` module keeps its own tests,
+  transitive importers, scenario kinds mapped to those importers, and `test_verify.py`, which requires
+  its classification. This does not exempt deleted modules from conservative import-graph handling.
   Framework modules (`FRAMEWORK` in `verify_route.py`) select all of `tests/patchkit` and `tests/digikit`.
 - `stock` runs the DT2 zero-DSP goldens. A changed case selects its file; configuration and shared
   session code select all files. It gives no audio coverage.
@@ -277,16 +282,23 @@ dt2-tier-sweep.
   `tests/regression/modules/<name>.test.ts` (`verify_route.RUNTIME_UPLOADS`, built from the manifests;
   `acceptance.ts` scans them by the same rule). Shared ABI, protocol and unknown modules select all uploads.
 - `rust-tests` runs `cargo nextest run --workspace --release`, without the desktop app crate. The
-  `desktop` step builds the console and tests the app crate.
-- `smoke` runs the patchkit smoke matrix (`pk_harness run`, 17 cells, one daemon each).
+  `desktop` step builds the console and tests the app crate. Crate-level Rust integration-test changes
+  under `packages/emulator/<crate>/tests/` keep affected Rust packages and their existing build step,
+  without unrelated native acceptance or smoke. Examples keep production routes because production
+  code and ready/card preparation consume some of them. Mixed source/test changes retain source coverage.
+- `smoke` runs the patchkit smoke matrix (`pk_harness run`, 16 cells, one daemon each).
 
 Smoke is skipped when every changed path is:
 
 - UI-only (`UI_ONLY` in `verify.py`: `apps/desktop/ui/`, `apps/web/src/components/`,
   `apps/web/src/styles/`, `apps/web/tests/*.mjs`, `docs/`, `*.md`);
 - a host test file matched by `vitest.host.projects.json`; or
-- one of the three `SMOKE_EXEMPT` paths: `tools/devtools/agent_guard.py`,
-  `tools/devtools/pathcheck.py`, `.claude/settings.json`.
+- one of the four `SMOKE_EXEMPT` paths: `tools/devtools/agent_guard.py`,
+  `tools/devtools/pathcheck.py`, `tools/devtools/layercheck.py`, `.claude/settings.json`;
+- a test-only path (`TEST_ONLY`: devtools tooling/tests, patchkit and digikit Python test files,
+  device acceptance test files), or a crate-level Rust integration-test source under
+  `packages/emulator/<crate>/tests/`;
+- a patchkit source in a `PATCHKIT_GROUPS` group that omits smoke (checks, flash, wasm, codegen).
 
 These may be mixed. If every other changed path is in `digikit/pluck`, `digikit/freqshift` or
 `digikit/remote`, only the matrix cells that depend on those modules run (PLUCK keeps its DT2 and DN2
@@ -388,6 +400,10 @@ every seventh scenario in routed `tier-quick`.
   One coupled emulator process counts as 2 cores.
 - Every python-tests file is its own job of 2 cores, queued longest first by recent timings
   (`tools/devtools/verify_times.py`).
+- The seven audited devtools files in `changed_tests.FAST_PYTHON_TESTS` need no build barrier.
+  Daemon-driving Python files wait for `build-daemons`; other files retain the existing build barriers
+  when the plan builds daemons. The audit is shared with fast preflight; new Python files are not
+  presumed safe to overlap builds.
 - Builds run in a chain: `build`, `build-daemons`, `build-dt2` (`tools/devtools/verify_build.py`).
   Test steps use immutable copies of the daemons (`tools/devtools/stablebin.py`) as `DIGI_EMUD_<DEV>`.
 - `verify` runs at nice 10 (`--foreground` keeps the priority). `--explain` prints the worker plan.

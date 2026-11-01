@@ -378,20 +378,27 @@ def test_file_job_pools_match_the_old_python_tests_share() -> None:
 def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
     nodes, deps = verify.plan(
         verify.EVERYTHING,
-        ["tests/digikit/test_menu_dt2.py", "tests/devtools/test_verify.py"],
+        [
+            "tests/digikit/test_menu_dt2.py",
+            "tests/emulator/test_native_pgo.py",
+            "tests/devtools/test_verify.py",
+        ],
     )
     secs = {
         "tests/digikit/test_menu_dt2.py": 372.0,
-        "tests/devtools/test_verify.py": 2.0,
+        "tests/emulator/test_native_pgo.py": 2.0,
+        "tests/devtools/test_verify.py": 1.0,
     }
     nodes, deps = verify.expand_python(nodes, deps, list(secs), secs, {})
-    daemon, plain = (
+    daemon, plain, fast = (
         FILE + "tests/digikit/test_menu_dt2.py",
+        FILE + "tests/emulator/test_native_pgo.py",
         FILE + "tests/devtools/test_verify.py",
     )
     assert deps[daemon] == ("build-daemons",)  # not the DT2 build behind it
     assert deps[plain] == ("build", "build-daemons", "build-dt2")
-    assert set(deps["python-tests"]) == {daemon, plain}
+    assert deps[fast] == ()
+    assert set(deps["python-tests"]) == {daemon, plain, fast}
     # the long file starts before the steps, the short one after them, the judge is last
     assert nodes.index(daemon) < nodes.index("tier-quick") < nodes.index(plain)
     assert nodes[-1] == "python-tests"
@@ -399,7 +406,7 @@ def test_files_wait_for_their_builds_and_python_tests_judges_them() -> None:
     nodes, deps = verify.expand_python(
         nodes, deps, ["tests/devtools/test_verify.py"], {}, {}
     )
-    assert deps[plain] == ()  # no daemon build in the plan: nothing to wait for
+    assert deps[fast] == ()  # no daemon build in the plan: nothing to wait for
 
 
 def test_long_steps_start_with_the_long_files() -> None:
