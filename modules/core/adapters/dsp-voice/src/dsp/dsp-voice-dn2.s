@@ -54,6 +54,8 @@
 .EXTERN _fw_frame;
 .EXTERN _fw_render_next;
 .EXTERN _dv_table;
+.EXTERN _gs_rbuf;
+.EXTERN _gs_post;
 
 _dv_entry:
     DM(_dv_s_r0) = R0;
@@ -466,9 +468,12 @@ _dv_cowner:
     DM(_dv_in + DK_IN_VELOCITY) = R0;
     R4 = DM(_dv_c + 8);
     DM(_dv_in + DK_IN_OUT) = R4;
-    // TODO(stereo, machine contract 1.2): out_r is a scratch block here and the status bit DK_STEREO is dropped, so a stereo machine plays as mono
-    // (L only). The shadow right-channel stages (core/dsp-stereo-proof) are the route for a real R; wire `_dv_rscr` into them when they are production.
-    R0 = _dv_rscr;
+    // out_r: the slot's R buffer (`_gs_rbuf`, dsp-voice-dn2-stereo.s). A machine that returns DK_STEREO has its R stamped after the guard (`_gs_post`)
+    // and run through the R twins of the stages that follow; a mono machine leaves it alone.
+    R2 = DM(_dv_c + 4);
+    R0 = LSHIFT R2 BY 7;
+    R1 = _gs_rbuf;
+    R0 = R0 + R1;
     DM(_dv_in + DK_IN_OUT_R) = R0;
     // the parameter words: knob ADM_PARAM_SLOTi of the slot, until a slot of 255 (the buffer's other words stay 0)
     R0 = 0;
@@ -560,7 +565,9 @@ _dv_crender:
     I13 = _dv_rback;
     JUMP (M13, I12);
 _dv_rback:
-    R1 = DK_STEREO;                       // contract 1.2: the stereo bit is not used on this device (see the TODO at _dv_in + DK_IN_OUT_R)
+    R1 = DK_STEREO;                       // contract 1.2: the stereo bit goes to _gs_post, the rest is the status
+    R2 = R0 AND R1;
+    DM(_dv_c + 48) = R2;
     R1 = NOT R1;
     R0 = R0 AND R1;
     DM(_dv_c + 32) = R0;                  // the status
@@ -576,6 +583,7 @@ _dv_gchk: R13 = MAX(R13, R0);
     R0 = 0x41000000;
     COMP(R13, R0);
     IF GT JUMP _dv_gfault;
+    CALL _gs_post;                        // a stereo machine: check, scale and stamp R (dsp-voice-dn2-stereo.s)
     R1 = DK_DONE;
     R0 = DM(_dv_c + 32);
     COMP(R0, R1);
@@ -774,8 +782,6 @@ _dv_frame_sw:
 // The contract adapter's data: the `dk_voice_in` it hands to the module, the parameter words (8), its scalars (see `_dv_contract`), the slots'
 // records (4 words each) and the knob positions of the module's parameters in order (ADM_PARAM_SLOT0 .. 7; 255: none).
 .PKDATA _dv_in, 24;
-// Scratch right-channel block handed to a stereo machine (DK_BLOCK words); nothing reads it yet.
-.PKDATA _dv_rscr, 128;
 .PKDATA _dv_params, 32;
 .PKDATA _dv_c, 64;
 .PKDATA _dv_cst, 256;

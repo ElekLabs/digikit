@@ -30,9 +30,10 @@ import support.dsp_voice_rig as dv
 from tools.patchkit import pk_conform, pk_sharc
 
 ROOT = pk_conform.ROOT
-WRAPPER = {
-    "dt2": ROOT / "modules/core/adapters/dsp-voice/src/dsp/dsp-voice.s",
-    "dn2": ROOT / "modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dn2.s",
+_DSP = ROOT / "modules/core/adapters/dsp-voice/src/dsp"
+WRAPPER = {  # the adapter's sources of a device, assembled as separate objects that see each other's data symbols
+    "dt2": (_DSP / "dsp-voice.s",),
+    "dn2": (_DSP / "dsp-voice-dn2.s", _DSP / "dsp-voice-dn2-stereo.s"),
 }
 CODE_BASE = 0xB90000
 CODE_END = dv.STOCK_BP  # code must end below the stand-ins at STOCK_BP / RETURN_SW
@@ -102,14 +103,38 @@ def _assemble(path: Path, moddir: Path) -> pk_sharc.SharcObject:
     return pk_sharc.assemble(pk_sharc.expand_includes(path.read_text(), dirs))
 
 
+# The stock functions and sites the stereo hooks of the DN2 adapter name (dsp-voice-dn2-stereo.s). The machine rig does not run them: the stand-ins
+# only have to link.
+STEREO_STANDINS = (
+    "_gs_fo_stock",
+    "_gs_fo_reset_stock",
+    "_gs_uy_stock",
+    "_gs_uy_reset_stock",
+    "_gs_gain_stock",
+    "_gs_c5_stock",
+    "_gs_held_stock",
+    "_gs_shaper_stock",
+    "_gs_case1_stock",
+    "_gs_case2_stock",
+    "_gs_case3_stock",
+    "_gs_ring_stock",
+    "_gs_engine_base",
+    "_gs_pan_cont",
+    "_gs_pan_end",
+)
+
+
 def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
-    return {
+    fixed = {
         "_fw_type_cache": dv.TYPE_CACHE,
         "_fw_render_next": dv.STOCK_BP,
         "_fw_frame": dv.FRAME,
         "_fw_param_rec": dv.PARAM_REC,
         "_dv_table": dv.TABLE,
     }
+    if device == "dn2":
+        fixed.update({n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)})
+    return fixed
 
 
 def build(module: str, device: str) -> _Built:
@@ -135,7 +160,8 @@ def build_spec(sp: pk_conform.MachineSpec) -> _Built:
 
 def _build(sp: pk_conform.MachineSpec) -> _Built:
     module, device = sp.module, sp.device
-    objs = [_assemble(WRAPPER[device], WRAPPER[device].parents[2])]
+    nwrap = len(WRAPPER[device])
+    objs = [_assemble(w, w.parents[2]) for w in WRAPPER[device]]
     objs += [_assemble(Path(s), sp.moddir) for s in sp.sources]
     # data symbols: one 4-byte aligned run per section, in L2 above the stand-ins
     addr = DATA_BASE
@@ -190,7 +216,8 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
     ext = {**externs, **syms}
     linked = [pk_sharc.link(o, b, ext) for o, b in zip(objs, bases, strict=True)]
     code = tuple(
-        (b, b + len(o.section) // 2) for o, b in zip(objs[1:], bases[1:], strict=True)
+        (b, b + len(o.section) // 2)
+        for o, b in zip(objs[nwrap:], bases[nwrap:], strict=True)
     )
     return _Built(
         objs,
@@ -203,8 +230,8 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
         clear,
         desc,
         module_code=code,
-        module_data=tuple(r for rs in own[1:] for r in rs),
-        wrapper_data=tuple(own[0]),
+        module_data=tuple(r for rs in own[nwrap:] for r in rs),
+        wrapper_data=tuple(r for rs in own[:nwrap] for r in rs),
     )
 
 
