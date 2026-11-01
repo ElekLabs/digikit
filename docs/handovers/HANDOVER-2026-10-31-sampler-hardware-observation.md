@@ -10,11 +10,9 @@ scoped path/layer checks. The full merge gate remains deferred; full native
 fault-history acceptance remains failed/open. No hardware proof follows from
 these component results.
 
-The user agreed to hardware observation in a separate worktree/session as the
-next direction. Remaining native/storage/memory-ownership scope has low
-confidence without targeted evidence, so pause further emulator expansion.
-This documentation task authorizes no hardware actions or flashing. The separate
-worktree/branch has not been created. One owner must coordinate device access and
+The current direction is in the 2026-11-01 checkpoint of the
+[master plan](../plans/dsp-sdk-and-sampler.md). This handover authorizes no
+hardware actions or flashing. One owner must coordinate device access and
 preserve the other Claude checkout, edits and PIDs.
 
 Read the [master plan](../plans/dsp-sdk-and-sampler.md),
@@ -45,11 +43,11 @@ Remote control reproduces the scenario; dedicated telemetry supplies evidence.
 
 | Priority / area | Gap and source | Useful observation |
 | --- | --- | --- |
-| First: ColdFire storage reset | Post-RSTA IRQSTATEN is answered statically: the model sets `0x117f013f` (finding 107); only the exact full value is open. [Finding 100](../findings/107-storage-interrupt-emulation-scope.md) and [eSDHC model](../../packages/emulator/periph/src/esdhc.rs). | Optional: read IRQSTATEN/IRQSIGEN after the firmware's normal reset completion and initialization, tagged with event order, to confirm the full value. Do not manually reset an active storage controller. |
+| First: ColdFire storage reset | Post-RSTA IRQSTATEN is answered statically: the model sets `0x117f013f` (finding 107); only the exact full value is open. [Finding 107](../findings/107-storage-interrupt-emulation-scope.md) and [eSDHC model](../../packages/emulator/periph/src/esdhc.rs). | Optional: read IRQSTATEN/IRQSIGEN after the firmware's normal reset completion and initialization, tagged with event order, to confirm the full value. Do not manually reset an active storage controller. |
 | ColdFire delivery/order | Default Oracle storage completion bypasses real handlers; isolated Device handlers/waiters pass, but native composition of storage, timers, SSI and host inputs is unfinished. [Board](../../packages/emulator/machine/src/board.rs), [Time](../../packages/emulator/machine/src/time.rs), [native runtime](../../packages/emulator/boot/src/runtime.rs), finding 100. | Small records of command issue, DMA/controller ISR entry, captured status, acknowledgement and waiter continuation during a known sample load. This provides an ordering reference, not complete interrupt coverage. |
 | SHARC cache/DMA visibility | Answered statically for the stock path and a CPU-copy design ([finding 108](../findings/108-dt2-sample-cache-visibility.md)); a device test is needed only for direct DMA into cached memory. | None for the stock path or a CPU copy. For direct DMA: the one probe in finding 108. DN2-specific helper addresses are not DT2 probe addresses. |
 | SHARC reader/interrupt lifetime | Frame-fetch tests supply controlled interleavings; physical IRQ/DMA exclusion, callback retirement and complete writer coverage remain open. [Finding 99](../findings/99-stereo-frame-fetch-exclusion.md), [retirement design](../findings/83-sample-retirement-design.md). | Correlate publication, reader admission/exit, stop acknowledgement and reclaim events under a repeatable remote-controlled selection/playback scenario. A quiet trace alone is not an ownership proof. |
-| Product memory ownership, not just emulator fidelity | Safe shared project backing, allocator/reclaim boundaries and coexistence are not established. [Stock sampler dependencies](../findings/81-stock-sampler-dependencies.md), [DN2 DDR finding](../findings/106-dn2-ddr-configuration.md). | Observe stock DT2 allocation/publication/retirement across repeatable load, replace and project-change scenarios, then reconcile with static firmware evidence. DT2 cannot establish DN2's available pool or ownership. |
+| Product memory ownership, not just emulator fidelity | DT2: answered by [finding 109](../findings/109-dt2-stock-pool-borrowing.md) (borrow the stock pool). DN2: measured by the canary soak (in progress). Earlier text: safe shared project backing, allocator/reclaim boundaries and coexistence are not established. [Stock sampler dependencies](../findings/81-stock-sampler-dependencies.md), [DN2 DDR finding](../findings/106-dn2-ddr-configuration.md). | Observe stock DT2 allocation/publication/retirement across repeatable load, replace and project-change scenarios, then reconcile with static firmware evidence. DT2 cannot establish DN2's available pool or ownership. |
 
 Start with the first row. Treat SHARC arithmetic as a separate experiment, and
 prioritize cache/lifetime observations for sampler integrity. Do not advertise a

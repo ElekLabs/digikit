@@ -4,6 +4,25 @@
 original-byte audits; **[C]** corrected interpretation; **[O]** integration open.
 See the [sampler plan](../plans/dsp-sdk-and-sampler.md).
 
+## DN2: stereo as two mono voice slots (2026-11-01)
+
+**[D]** The DN2 note-on allocator `0x4002a6a2` (caller frame builder `0x40025e36`)
+works on 16-bit slot masks. The per-track bitmap is `0x40288444 + track*0x103*4`.
+Slot records have stride 0x14 from `0x40288304`. The steal mode byte
+`_DAT_4059da30` is 0 (oldest), 1 (lower-priority tracks) or 2 (per-note
+bitmaps). The allocator already makes N slots per note from `0x4059da00 + track`
+(meaning **[O]**). A machine cannot request a second slot, and an adapter cannot
+pair slots.
+
+Pan is per track, not per slot. The final stage `0x1c9aea..0x1c9b30` applies the
+owning track's two gain streams to each mono slot (planes `0x257ee8 + 0x100*v`,
+B = A + `0x80`). Two slots of one track land at the same pan position.
+
+Hard-panning would need a ColdFire allocator patch (pairing, paired steal) and a
+SHARC gain-stage patch. It also halves polyphony (16 mono voices to 8 stereo).
+Conclusion: this route is rejected. The shadow right-channel stages
+(`core/dsp-stereo-proof`) are the DN2 stereo route.
+
 ## Current SDK boundary
 
 **[D]** Machine contract 1.1 has one 32-float output pointer in `dk_voice_in`.

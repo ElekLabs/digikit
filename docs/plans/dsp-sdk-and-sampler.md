@@ -24,24 +24,23 @@ there is no outstanding reservation-choice request and no approved reservation p
 
 ## Latest checkpoint
 
-**Current direction (2026-10-31):** pause expansion of emulator scope and resume
-with one targeted hardware observation in a separate worktree/session. Remaining
-native execution, storage and memory ownership work has low confidence without
-hardware evidence.
-Start with [the hardware-observation handover](../handovers/HANDOVER-2026-10-31-sampler-hardware-observation.md):
-inventory the actual DT2 and existing transport, then plan a bounded capture of
-normal ColdFire RSTA initialization and IRQSTATEN/IRQSIGEN state. No hardware
-operation or flashing is authorized by this documentation checkpoint; the new
-worktree has not been created.
+**Checkpoint (2026-11-01):**
 
-The sampler discovery branch is clean and fully pushed at `63a6ba13`
-(DTIM completed ticks), following `6623d5a8` (SSI) and `0f38f288` (mask commands).
-The last tick checkpoint passed 60 named tests, independent static review and
-scoped path/layer checks. Full gate and native fault-history acceptance remain
-open. Reusable file listing passes on both devices; production backing ownership,
-full stereo/runtime integration, per-track binding and the picker remain open.
-
-The sampler discovery branch was rebased onto main `d6b5d4bb`.
+- Main is merged into the branch (`bd12a6bf`). `approx_recips` is removed and the
+  sampler findings are renumbered 104-107.
+- Cache visibility is answered statically ([finding 108](../findings/108-dt2-sample-cache-visibility.md)).
+- DT2 backing: borrow the stock sample pool through a `core/adapters/sample-pool`
+  adapter. This is emulator-confirmed ([finding 109](../findings/109-dt2-stock-pool-borrowing.md)).
+- DN2 backing: reserved high DDR. The canary soak saw no stock writes in
+  `[0x80531000, 0xa0000000)` in 14 runs. An extended soak is running
+  (`tools/emulator/ddrcanary.py`).
+- DN2 stereo: the shadow stages go to production. The two-slot route is rejected
+  ([finding 96](../findings/96-stereo-machine-processing.md)).
+- Project identity: [finding 110](../findings/110-project-identity.md).
+- API 1.5 draft (stereo descriptor, per-track binding, device-neutral runtime plus
+  sample-pool adapter) awaits Em's review.
+- Next: the first slice (one track, one 5 s stereo sample, DT2 emulator).
+- Proposed, not yet decided by Em: the minimal first-release recovery scope.
 
 All ten DN2 post-source families have bounded local examples; the selected ordered
 replay has 44 cases. The opt-in first-order/U/Y observer passes 75 model cases and
@@ -175,9 +174,10 @@ from that bounded playback result.
 - [ ] Reconcile a finite owner/boundary/reset/bypass table with DN2's fixed-buffer
   map to establish production ownership. Absence of discovered writers does not
   establish ownership.
-- [ ] Inventory stereo file/descriptor formats, channel layout, frame/length fields
+- [~] Inventory stereo file/descriptor formats, channel layout, frame/length fields
   and arithmetic limits on both devices, including long-sample boundary cases.
-- [ ] Establish DT2 stereo allocation accounting: bytes per frame, guards/alignment,
+  Partial: DT2 evidence in finding 81.
+- [~] Establish DT2 stereo allocation accounting: bytes per frame, guards/alignment,
   slot/reference deduplication and actual shared project-pool capacity.
 - [ ] Establish DN2 backing ownership, usable capacity and reset/coexistence bounds
   for the same shared-pool contract, without fixed per-track partitions.
@@ -271,8 +271,9 @@ side panels and dialogs rather than introducing a separate UI framework.
   synchronous SEC dispatch and nested-interrupt limits are recorded in finding 95.
 - [x] Isolate the private RX buffer's complete cache-line footprint; 47 focused
   cases, rebuilt module object and independent review pass (fixture 0.2.1).
-- [ ] Establish a callable cache-maintenance path with supported L1 placement,
-  register ownership and pre-/post-DMA ordering; layout alone is insufficient.
+- [x] Replaced: no cache-maintenance path is needed. DT2 is answered by
+  [finding 108](../findings/108-dt2-sample-cache-visibility.md); DN2 uses the RR4
+  non-cacheable window.
 - [x] Implement bounded catalogue access with focused tests.
 - [ ] Implement per-track binding with focused tests.
 - [ ] Build the on-device picker using SDK UI components, with loading/error states.
@@ -915,7 +916,7 @@ pass with the changed consumer; no actual bank reopening is claimed.
   patched-image trial and the passing unpatched DT2 1.17 critical reproduction retain a progressing active voice
   address while exact backing bytes change; cleared slot metadata is not retirement. Next design requires explicit consumer retirement
   before overwrite/release, stale-note generation guards, and coverage of external slot replacement/project reset.
-  No borrowed-view API is implemented or safe to expose yet; preserve the current immutable-bank proof.
+  Borrowing the DT2 stock pool is the chosen direction ([finding 109](../findings/109-dt2-stock-pool-borrowing.md)); preserve the current immutable-bank proof until the adapter exists.
 - [Finding 83](../findings/83-sample-retirement-design.md) records the retirement discovery,
   corrected AudioTask roots, explicit IRQ/admission assumptions and passing terminal DN2 result.
   Both CF builders submit the prior frame before queue traversal/reconstruction; strict UI-time
@@ -999,7 +1000,7 @@ Acceptance: an evidence-backed gap matrix and migration order, with implemented 
 ## Phase 2 — sample path on both target images
 
 - [ ] Inventory available current-image databases, dumps and provenance; do not rebuild them implicitly.
-- [ ] Trace DT2 1.17 selection/load/slot registration through ColdFire to SHARC-readable PCM and voice access.
+- [x] Trace DT2 1.17 selection/load/slot registration through ColdFire to SHARC-readable PCM and voice access. Done: findings 81, 82, 109.
 - [x] Record current DT2 project loader/release/reset, slot/setup/render dependencies and DN2 hash-comparison limits
   in finding 81, including independently audited rebase/store/tap bytes. Finding 82 now captures the current
   OneShot UI; broader CF/lifecycle audit and controlled parameter/boundary semantics remain open.
@@ -1157,8 +1158,9 @@ Evidence and exact current-image mappings are in finding 105. Runtime implementa
 the transferred-file bounded emulator proof passes on both current OS images. The first SDK milestone is checkpointed at `4cd29a3c`.
 
 **Scope:** prove an actual transferred mono sample can reach the existing numerical reader on both devices,
-with correct ownership and failure behavior. Preserve the current Transfer destinations. No stock-pointer
-borrowing, new transport, stereo ABI, eviction, or new sample browser in this proof.
+with correct ownership and failure behavior. Preserve the current Transfer destinations. No new transport,
+stereo ABI, eviction, or new sample browser in this proof. Borrowing the DT2 stock pool is the chosen direction
+(finding 109) but is outside this proof.
 
 **Resource declaration:** a versioned SDK sample-bank declaration associates a module-local bank id with
 its DSP BSS capacity and initialized descriptor symbol. The packer resolves and validates offsets within the
@@ -1199,8 +1201,8 @@ exclusion exists. Bound work per UI pass; synchronous read latency must still be
 - [x] Measure no-dynamic-module and proof-only runtime capacity on both current images; persist provenance and limits.
 - [x] Record the user's stop-old-notes-on-selection choice and distinguish temporary CF source from pinned DSP storage.
 - [x] Record the historical ten-second prototype target; superseded by the current stereo/shared-pool requirements. Stop old notes on selection remains required.
-- [ ] Prove DT2 1.17 stock DSP-pool slot ownership, external mutation interception, lifetime/reclaim and cache rules
-  before borrowing stock backing. The terminal DN2 owned-bank proof does not establish stock backing ownership.
+- [ ] Borrowing the DT2 stock pool is the chosen direction (finding 109). Prove slot ownership, external mutation interception, lifetime/reclaim and cache rules
+  in the adapter before borrowing stock backing. The terminal DN2 owned-bank proof does not establish stock backing ownership.
 - [x] Prove bounded DN2 emulator backing/delivery for 960,000 packed PCM16 bytes and full ten-second playback,
   with exact payload, complete canaries, failure cases, actual dispatch, end cursor and early/late PCM evidence.
 - [ ] Establish hardware ownership/cache/coexistence and general capacity beyond that isolated emulator range.
