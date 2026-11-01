@@ -31,15 +31,19 @@ async function captureSend(
   slotBus: number,
   artifacts: string,
   tag: string,
-): Promise<void> {
+  triggerFrame?: number,
+): Promise<number> {
   const { session } = runtime;
   const until = (target: number) => bounded(() => session.client.runUntil({ frames: target, timeout_wall_s: 30 }));
   const trigger = (down: boolean) => bounded(() => session.client.inputButton(button('TRIG 1'), down));
   await rpc(session, 'run.mode', { mode: 'paused' });
   await rpc(session, 'pcm.tap', { action: 'start' });
   await pickSine(session, sineHint);
-  const trig = (await frames(session)) + 300;
+  const current = await frames(session);
+  const trig = triggerFrame ?? current + 300;
+  record(artifacts, `${tag}-trigger-frame`, { current, triggerFrame: trig });
   try {
+    if (current >= trig - 20) throw new Error(`SEND capture setup too late: current frame ${current}, trigger ${trig}`);
     await until(trig);
     if (chord) await bounded(() => session.client.step(44_000, { timeout_wall_s: 30 }));
     await rpc(session, 'pcm.tap', { action: 'capture', path: file });
@@ -74,6 +78,7 @@ async function captureSend(
   }
   await advance(session, 50);
   await bounded(() => session.expectNoFault(tag));
+  return trig;
 }
 
 describe(`DN2 ${FIRMWARE.dn2} FX send voice slots`, () => {
@@ -94,6 +99,8 @@ describe(`DN2 ${FIRMWARE.dn2} FX send voice slots`, () => {
     const files: Record<string, string> = {};
     const initial = fixture.runtime;
     let previous = initial;
+    // Established absolute frame target from the legacy DN2 fx-send fixture.
+    const triggerFrame = 7000;
     for (const tag of ['chordzero', 'chordfull', 'idle'] as const) {
       const runtime = tag === 'chordzero' ? initial : await fixture.reload(wet);
       expect(runtime.session, 'all cases keep the owned daemon').toBe(initial.session);
@@ -119,7 +126,7 @@ describe(`DN2 ${FIRMWARE.dn2} FX send voice slots`, () => {
       const file = path.join(artifacts, `${tag}.wav`);
       files[tag] = file;
       if (tag !== 'idle') audible.add(runtime);
-      await captureSend(runtime, file, tag !== 'idle', slotBus, artifacts, tag);
+      await captureSend(runtime, file, tag !== 'idle', slotBus, artifacts, tag, triggerFrame);
       const after = (await rows(runtime.session, plan, slots))[0]!;
       expect(after[12], 'send adapter ran the effect').toBe(1);
       expect(after[14], 'effect remains enabled').toBe(0);

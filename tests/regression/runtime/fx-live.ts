@@ -196,13 +196,24 @@ export async function pickSine(session: Session, selection?: FxInputHint): Promi
 }
 
 /** Future-frame choice follows the legacy restarted-note path; boundary offset and 1500-frame hold are unchanged. */
-export async function capture(runtime: PatchedSession, file: string, selection?: FxInputHint): Promise<void> {
+export async function capture(
+  runtime: PatchedSession,
+  file: string,
+  selection?: FxInputHint,
+  triggerFrame?: number,
+): Promise<number> {
   const { session } = runtime;
   await rpc(session, 'run.mode', { mode: 'paused' });
   await rpc(session, 'pcm.tap', { action: 'start' });
   await pickSine(session, selection);
-  const trig = (await frames(session)) + 300;
+  const current = await frames(session);
+  const trig = triggerFrame ?? current + 300;
+  record(path.dirname(file), `${path.basename(file, path.extname(file))}-timing`, {
+    currentFrame: current,
+    triggerFrame: trig,
+  });
   try {
+    if (current >= trig - 20) throw new Error(`FX capture setup too late: current frame ${current}, trigger ${trig}`);
     await bounded(() => session.client.runUntil({ frames: trig, timeout_wall_s: 30 }));
     await bounded(() => session.client.step(44_000, { timeout_wall_s: 30 }));
     await rpc(session, 'pcm.tap', { action: 'capture', path: file });
@@ -217,6 +228,7 @@ export async function capture(runtime: PatchedSession, file: string, selection?:
   }
   await advance(session, 50);
   await bounded(() => session.expectNoFault('FX note'));
+  return trig;
 }
 
 interface Metrics {

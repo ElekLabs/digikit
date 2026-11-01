@@ -176,9 +176,12 @@ ACCEPTANCE_DIRS = {
 }
 # Runtime test files by the fixture module they exercise; the gate packs a native artifact for each
 # module (DIGI_RUNTIME_MODULES). Paths are relative to tests/regression.
+RUNTIME_SEND_FILES = ("runtime/fx-send-dn2.test.ts", "runtime/fx-send.test.ts")
+RUNTIME_FX_FILES = ("runtime/fx-reuse.test.ts", *RUNTIME_SEND_FILES)
+RUNTIME_PLUSDRIVE_FILES = ("runtime/samples-live.test.ts", *RUNTIME_FX_FILES)
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
-    "test/sine": ("runtime/fx-reuse.test.ts",),
-    "test/dyn-fx-gain": ("runtime/fx-reuse.test.ts",),
+    "test/sine": RUNTIME_FX_FILES,
+    "test/dyn-fx-gain": RUNTIME_FX_FILES,
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
     "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),
@@ -204,8 +207,9 @@ RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
             "packages/dk-session/src/samples.ts",
         )
     },
-    "tools/patchkit/pk_dkrt_machine.py": ("runtime/fx-reuse.test.ts",),
-    "tools/coldfire/arena_safety.py": ("runtime/fx-reuse.test.ts",),
+    "tools/patchkit/pk_dkrt_machine.py": RUNTIME_FX_FILES,
+    "tools/coldfire/arena_safety.py": RUNTIME_FX_FILES,
+    "tools/patchkit/pk_digikit_fxsend.py": RUNTIME_SEND_FILES,
 }
 ACCEPTANCE_SHARED = (
     "packages/test-support/src/",
@@ -246,6 +250,8 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.control.digi_client",
                 "tools.emulator.card_overlay",
                 "tools.patchkit.pk_dkrt_machine",
+                "tools.patchkit.pk_digikit_fxsend",
+                "tools.patchkit.pk_dsplink",  # named anchor reader imported inside the SEND oracle
                 "tools.coldfire.arena_safety",
                 "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
             }
