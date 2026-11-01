@@ -275,7 +275,9 @@ dt2-tier-sweep.
 - `runtime-fixture` packs the modules in `verify_route.RUNTIME_MODULES` (test/input-probe,
   digikit/remote, test/svc-echo), builds plusdrive before samples-live, and runs the runtime project.
   It runs for relevant changes with filename filters; `--full` or `--only runtime-fixture --all-files`
-  runs every runtime file.
+  runs every runtime file. Helpers inside stock/runtime/module acceptance directories use Vitest's
+  import discovery to select importing test files, without collecting or running tests. Discovery
+  errors, missing tools, unconsumed helpers and deleted files retain the whole owner suite.
   It needs a two-core budget share and one fresh coupled daemon at a time.
 - `module-load` filters the production uploads to the changed module on both
   devices. The uploads are the shipped modules that are `dynamic`, a service or `host`, and have a
@@ -296,7 +298,8 @@ Smoke is skipped when every changed path is:
 - one of the four `SMOKE_EXEMPT` paths: `tools/devtools/agent_guard.py`,
   `tools/devtools/pathcheck.py`, `tools/devtools/layercheck.py`, `.claude/settings.json`;
 - a test-only path (`TEST_ONLY`: devtools tooling/tests, patchkit and digikit Python test files,
-  device acceptance test files), or a crate-level Rust integration-test source under
+  device acceptance test files, runtime acceptance TypeScript helpers and digikit scenario TOMLs),
+  or a crate-level Rust integration-test source under
   `packages/emulator/<crate>/tests/`;
 - a patchkit source in a `PATCHKIT_GROUPS` group that omits smoke (checks, flash, wasm, codegen).
 

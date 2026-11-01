@@ -36,6 +36,7 @@ import ast
 import json
 import re
 import shlex
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from functools import cache
@@ -199,6 +200,9 @@ RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
 }
 # Host sources and subprocess CLI helpers consumed by specific runtime files.
 RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
+    # pickSine's default list hints are read from disk, outside Vitest's import graph.
+    "tests/digikit/scenarios/fx-dyn-dt2.toml": ("runtime/fx-reuse.test.ts",),
+    "tests/digikit/scenarios/fx-dyn-dn2.toml": ("runtime/fx-reuse.test.ts",),
     **{
         path: ("runtime/samples-live.test.ts", "runtime/samples-store-live.test.ts")
         for path in (
@@ -219,6 +223,7 @@ ACCEPTANCE_SHARED = (
     "tests/regression/support.ts",
 )
 RUNTIME_SHARED = (
+    "tests/regression/runtime/live.ts",  # lifecycle shared by runtime and module suites
     "sdk/",
     "packages/dk-session/src/",
     "packages/patchkit/",
@@ -300,7 +305,62 @@ def module_smoke_cells(ids: set[str]) -> list[str] | None:
     return selected
 
 
-def acceptance_files(step: str, paths: list[str]) -> list[str]:
+@cache
+def related_acceptance(step: str, paths: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Vitest's import discovery only; any unproven helper keeps the owner suite.
+
+    One bounded subprocess handles the helpers together. Process-local memoization avoids
+    repeating discovery when the plan and explanation ask about the same changed paths.
+    """
+    directory = ACCEPTANCE_DIRS[step]
+    project = {
+        "stock": "stock",
+        "runtime-fixture": "runtime",
+        "module-load": "modules",
+    }[step]
+    try:
+        done = subprocess.run(
+            [
+                "mise",
+                "exec",
+                "--",
+                "node",
+                "tests/regression/scripts/related-tests.mjs",
+                project,
+                *paths,
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if done.returncode:
+            return None
+        found = json.loads(done.stdout)
+        if not isinstance(found, dict) or set(found) != set(paths):
+            return None
+        selected: set[str] = set()
+        for files in found.values():
+            if not isinstance(files, list) or not files:
+                return None
+            for path in files:
+                if (
+                    not isinstance(path, str)
+                    or not path.startswith(f"{directory}/")
+                    or not path.endswith(".test.ts")
+                    or ".." in Path(path).parts
+                    or not (ROOT / "tests/regression" / path).is_file()
+                ):
+                    return None
+                selected.add(path)
+        return tuple(sorted(selected))
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+
+
+def acceptance_files(
+    step: str, paths: list[str], *, resolve_helpers: bool = True
+) -> list[str]:
     """Native Vitest filenames affected by PATHS, relative to tests/regression.
 
     Framework/upload dependencies are partly implicit in patched firmware, so shared code keeps
@@ -313,6 +373,7 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
         for p in (ROOT / "tests/regression" / directory).rglob("*.test.ts")
     )
     selected: set[str] = set()
+    helpers: list[str] = []
     for path in paths:
         if (
             emulator_test_path(path)
@@ -333,11 +394,18 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
             rel = path.removeprefix("tests/regression/")
             if path.endswith(".test.ts") and rel in all_files:
                 selected.add(rel)
+            elif (
+                path.endswith(".ts")
+                and not path.endswith(".test.ts")
+                and (ROOT / path).is_file()
+            ):
+                helpers.append(path)
             else:
-                # Helpers may serve several devices and cases; deleted cases keep their owner suite.
+                # Unknown scripts and deleted cases keep their owner suite.
                 selected.update(all_files)
         elif (
             path == config
+            or path == "tests/regression/scripts/related-tests.mjs"
             or path
             in ("tests/regression/package.json", "tests/regression/tsconfig.json")
             or path.startswith(ACCEPTANCE_SHARED)
@@ -376,6 +444,15 @@ def acceptance_files(step: str, paths: list[str]) -> list[str]:
                             selected.update(files)
         elif step == "stock" and path.startswith("tests/regression/goldens/"):
             selected.update(all_files)
+    if helpers and selected != set(all_files):
+        # Step-only routing needs membership, not filename discovery: an unproven helper
+        # already retains this suite. Resolve once the caller needs the actual file plan.
+        related = (
+            related_acceptance(step, tuple(sorted(set(helpers))))
+            if resolve_helpers
+            else None
+        )
+        selected.update(all_files if related is None else related)
     return sorted(selected)
 
 

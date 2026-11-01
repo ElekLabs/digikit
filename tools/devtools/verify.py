@@ -336,7 +336,9 @@ TEST_ONLY: tuple[str, ...] = (
     "tests/devtools/*",
     "tests/patchkit/test_*.py",
     "tests/digikit/test_*.py",
+    "tests/digikit/scenarios/*.toml",
     "tests/regression/*.test.ts",
+    "tests/regression/runtime/*.ts",
     "tools/devtools/*",
 )
 # Host Vitest test files (vitest.host.projects.json). The host config runs them without a device, so
@@ -655,7 +657,7 @@ def route(path: str) -> tuple[str, tuple[str, ...]]:
     label, original = base_route(path)
     wanted = set(original)
     for step in verify_route.ACCEPTANCE_DIRS:
-        if verify_route.acceptance_files(step, [path]):
+        if verify_route.acceptance_files(step, [path], resolve_helpers=False):
             wanted.add(step)
     return label, tuple(s for s in STEPS if s in wanted)
 
