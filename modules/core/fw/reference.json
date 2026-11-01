@@ -13309,7 +13309,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 held-sample stage 0xb8265b (entry inside the function that starts at 0xb8258f); no R twin in phase 1.",
+      "doc": "DN2 1.12 held-sample stage 0xb8265b (entry inside the function that starts at 0xb8258f); R twin in core/dsp-voice.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "fn",
       "mark": "D",
@@ -13423,7 +13423,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 conditional shaper 0x1cdb56 (record 0x24fa20 + 0x60 v, two control groups, no audio history); no R twin in phase 1.",
+      "doc": "DN2 1.12 conditional shaper 0x1cdb56 (record 0x24fa20 + 0x60 v, two control groups, no audio history); R twin in core/dsp-voice.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "fn",
       "mark": "D",
@@ -13824,7 +13824,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of the held-sample stage (early call): shared counters, private held audio; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -13833,6 +13833,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -13842,8 +13845,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.held_sample.early.call",
@@ -13866,7 +13870,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of the held-sample stage (late call): shared counters, private held audio; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -13875,6 +13879,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -13884,8 +13891,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.held_sample.late.call",
@@ -14139,7 +14147,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of the shaper (early call): the R pass runs on a copy of the control words; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -14148,6 +14156,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -14157,8 +14168,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.shaper.early.call",
@@ -14181,7 +14193,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of the shaper (late call): the R pass runs between the engine's two scalings (x16, x1/16) applied to R as to L; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -14190,6 +14202,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -14199,8 +14214,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.shaper.late.call",

@@ -99,6 +99,61 @@
     R0 = I0; \
     DM(-4, I6) = R0
 
+// ---- the common parts of the twins of the families with one stack argument (the block count) and the voice buffer as input and output ----
+// GS_TWIN_HEAD: stamp check, supported context, frame, the R record (WORDS words per slot at REC) in frame -2, the R buffer in frame -3, I4 = the L record,
+// I0 = the R record. In: R0 free. After it GS_COPY(n) copies a shared control word L to R, then GS_L1 and GS_R1 run the stock stage on L and on R.
+#define GS_RPTRS(WORDS, REC) \
+    R1 = WORDS; \
+    R1 = R1 * R0 (SSI); \
+    R2 = REC; \
+    R1 = R1 + R2; \
+    DM(-2, I6) = R1; \
+    R1 = LSHIFT R0 BY 5; \
+    R2 = _gs_rbuf; \
+    R1 = R1 + R2; \
+    DM(-3, I6) = R1
+
+#define GS_TWIN_HEAD(STOCK, REFUSE, WORDS, REC) \
+    GS_CHECK(STOCK); \
+    GS_SUPPORTED(REFUSE, 1); \
+    DK_ENTER(8); \
+    GS_SAVE_I0; \
+    R0 = I4; \
+    R1 = _gs_stamp; \
+    R0 = R0 - R1; \
+    GS_RPTRS(WORDS, REC); \
+    I4 = R4; \
+    I0 = DM(-2, I6)
+
+#define GS_COPY(N) \
+    R0 = DM(N, I4); \
+    DM(N, I0) = R0
+
+#define GS_L1(STOCK, LABEL) \
+    R0 = DM(1, I6); \
+    DM(I7, M7) = R0; \
+    DK_CALL(STOCK, LABEL); \
+    MODIFY(I7, 1) (NW)
+
+#define GS_R1(STOCK, LABEL) \
+    R4 = DM(-2, I6); \
+    R8 = DM(-3, I6); \
+    R12 = R8; \
+    R0 = DM(1, I6); \
+    DM(I7, M7) = R0; \
+    DK_CALL(STOCK, LABEL); \
+    MODIFY(I7, 1) (NW)
+
+// R buffer times FACTOR in place (the shaper's late path: the engine scales L by 16 before the stage and by 1/16 after it). Clobbers R0, R2, I0, I4.
+#define GS_SCALE_R(FACTOR, LABEL) \
+    I4 = DM(-3, I6); \
+    I0 = DM(-3, I6); \
+    R2 = FACTOR; \
+    LCNTR = 32, DO LABEL UNTIL LCE; \
+        R0 = DM(I4, M6); \
+        F0 = F0 * F2; \
+LABEL: DM(I0, M6) = R0
+
 // ---- first-order recurrence (0xb80c39, call 0x1c94fd): L record 28 words at engine + 0xe088 + 0x70 v; control words 21 to 23 ----
 .GLOBAL _gs_fo;
 _gs_fo:
@@ -328,6 +383,70 @@ _gs_c5_bad:
     GS_REFUSE(_gs_cnt + 48);
     JUMP _gs_c5_stock;
 
+// ---- the conditional shaper (0x1cdb56; early call 0x1c95c9, late call 0x1c9935): L record 24 words at engine + 0xe788 + 0x60 v ----
+// The stage reads words 0, 1, 2, 5 and 12, writes 4, 5, 6, 11, 12 and 13 (two groups of old, current and step of a control), and keeps no audio: the R record is a
+// copy of the five words it reads, taken before the L call, and holds no state. The late call is bracketed by the engine's own scalings (x16 before, x1/16 after, 0x1c98f9 to 0x1c9975
+// for L): the R buffer gets the same two multiplications around the R pass.
+#define GS_SHAPER_COPY \
+    GS_COPY(0); GS_COPY(1); GS_COPY(2); GS_COPY(5); GS_COPY(12)
+
+.GLOBAL _gs_shaper_early;
+_gs_shaper_early:
+    GS_TWIN_HEAD(_gs_shaper_stock, _gs_shaper_early_bad, 24, _gs_sh_rec);
+    GS_SHAPER_COPY;
+    GS_L1(_gs_shaper_stock, _gs_shaper_early_l);
+    GS_R1(_gs_shaper_stock, _gs_shaper_early_r);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_shaper_early_bad:
+    GS_REFUSE(_gs_cnt + 8);
+    JUMP _gs_shaper_stock;
+
+.GLOBAL _gs_shaper_late;
+_gs_shaper_late:
+    GS_TWIN_HEAD(_gs_shaper_stock, _gs_shaper_late_bad, 24, _gs_sh_rec);
+    GS_SHAPER_COPY;
+    GS_L1(_gs_shaper_stock, _gs_shaper_late_l);
+    GS_SCALE_R(0x41800000, _gs_shaper_up);
+    GS_R1(_gs_shaper_stock, _gs_shaper_late_r);
+    GS_SCALE_R(0x3d800000, _gs_shaper_down);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_shaper_late_bad:
+    GS_REFUSE(_gs_cnt + 12);
+    JUMP _gs_shaper_stock;
+
+// ---- the held-sample stage (0xb8265b; early call 0x1c95b4, late call 0x1c9b8f): L record 5 words at engine + 0xeec8 + 0x14 v ----
+// Words 0 (the control), 3 and 4 (the phase counters) are shared: R gets the values L saw before its call, so both channels hold and refresh in the same
+// samples. Words 1 and 2 (the held audio) are private to R.
+.GLOBAL _gs_held_early;
+_gs_held_early:
+    GS_TWIN_HEAD(_gs_held_stock, _gs_held_early_bad, 5, _gs_hd_rec);
+    GS_COPY(0);
+    GS_COPY(3);
+    GS_COPY(4);
+    GS_L1(_gs_held_stock, _gs_held_early_l);
+    GS_R1(_gs_held_stock, _gs_held_early_r);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_held_early_bad:
+    GS_REFUSE(_gs_cnt + 0);
+    JUMP _gs_held_stock;
+
+.GLOBAL _gs_held_late;
+_gs_held_late:
+    GS_TWIN_HEAD(_gs_held_stock, _gs_held_late_bad, 5, _gs_hd_rec);
+    GS_COPY(0);
+    GS_COPY(3);
+    GS_COPY(4);
+    GS_L1(_gs_held_stock, _gs_held_late_l);
+    GS_R1(_gs_held_stock, _gs_held_late_r);
+    I0 = DM(-4, I6);
+    JUMP _gs_leave;
+_gs_held_late_bad:
+    GS_REFUSE(_gs_cnt + 4);
+    JUMP _gs_held_stock;
+
 // ---- the common return of a stereo twin: pops the twin's frame and returns to the caller of the retargeted call ----
 _gs_leave:
     I12 = DM(-1, I6);
@@ -429,10 +548,6 @@ NAME: \
     DM(_gs_nbad) = R1; \
     JUMP STOCK
 
-GS_BAD(_gs_bad_held_early, _gs_held_stock, _gs_cnt + 0);
-GS_BAD(_gs_bad_held_late, _gs_held_stock, _gs_cnt + 4);
-GS_BAD(_gs_bad_shaper_early, _gs_shaper_stock, _gs_cnt + 8);
-GS_BAD(_gs_bad_shaper_late, _gs_shaper_stock, _gs_cnt + 12);
 GS_BAD(_gs_bad_case1, _gs_case1_stock, _gs_cnt + 16);
 GS_BAD(_gs_bad_case2, _gs_case2_stock, _gs_cnt + 20);
 GS_BAD(_gs_bad_case3, _gs_case3_stock, _gs_cnt + 24);
@@ -691,6 +806,13 @@ _gs_z3: DM(I3, M6) = R0;
     I3 = R1;
     LCNTR = 53, DO _gs_z4 UNTIL LCE;
 _gs_z4: DM(I3, M6) = R0;
+    R1 = 20;
+    R1 = R1 * R4 (SSI);
+    R2 = _gs_hd_rec;
+    R1 = R1 + R2;
+    I3 = R1;
+    LCNTR = 5, DO _gs_z5 UNTIL LCE;
+_gs_z5: DM(I3, M6) = R0;
 _gs_stamped:
     R0 = DM(_dv_diag);
     DM(0, I2) = R0;
@@ -722,6 +844,8 @@ _gs_raise:
 .PKDATA _gs_gain_rec, 704;
 .PKDATA _gs_c5_rec, 3392;
 .PKDATA _gs_c5_scr, 2048;
+.PKDATA _gs_sh_rec, 1536;                  // R records of the shaper (24 words) and the held-sample stage (5 words), per slot
+.PKDATA _gs_hd_rec, 320;
 .PKDATA _gs_ns, 4;                         // stereo slots stamped in the block _gs_nhb
 .PKDATA _gs_nhb, 4;
 .PKDATA _gs_nbad, 4;                       // stamped slots a stage without a twin has cleared (diagnostic)

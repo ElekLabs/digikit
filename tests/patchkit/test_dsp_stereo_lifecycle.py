@@ -121,10 +121,6 @@ def test_a_reset_of_a_record_that_is_no_slot_only_runs_the_stock_reset(
 
 # (wrapper, stock function, counter word in `_gs_cnt`)
 BAD = [
-    ("_gs_bad_held_early", "_gs_held_stock", 0),
-    ("_gs_bad_held_late", "_gs_held_stock", 1),
-    ("_gs_bad_shaper_early", "_gs_shaper_stock", 2),
-    ("_gs_bad_shaper_late", "_gs_shaper_stock", 3),
     ("_gs_bad_case1", "_gs_case1_stock", 4),
     ("_gs_bad_case2", "_gs_case2_stock", 5),
     ("_gs_bad_case3", "_gs_case3_stock", 6),
@@ -222,6 +218,10 @@ TWINS = [
     ("_gs_uy", (32,), 10),
     ("_gs_c5", (32,), 12),
     ("_gs_gain", (0, 0, 32), 11),
+    ("_gs_held_early", (32,), 0),
+    ("_gs_held_late", (32,), 1),
+    ("_gs_shaper_early", (32,), 2),
+    ("_gs_shaper_late", (32,), 3),
 ]
 
 

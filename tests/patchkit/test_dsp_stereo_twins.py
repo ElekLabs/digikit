@@ -5,6 +5,7 @@ buffer, the arguments on the stack. For a stamped slot it runs the stock functio
 stock function on independent concrete cores with private state; the control words of each block are the same for all three. Negative controls: a shared
 history, and the stage's control words copied after the L call, give a different R. Original firmware is supplied at runtime, never copied into a fixture."""
 
+import dataclasses
 import random
 from dataclasses import dataclass, field
 
@@ -20,8 +21,10 @@ from support.dn2_stereo_rig import (
     Rig,
     bits,
     call,
+    f32,
     new_session,
     poke_words,
+    value,
     words,
 )
 
@@ -50,6 +53,8 @@ class Stage:
     scratch: bool = False  # R12 is a scratch output block and a blend follows (case 5)
     blocks: int = 4
     controls_per_block: tuple = ()  # gain: the first stack argument of each block (1 restarts the attack)
+    checked: tuple = ()  # words of the R record compared with the reference (default: controls and histories)
+    r_scale: bool = False  # the late shaper: the engine scales L by 16 before the stage and by 1/16 after it, the twin does the same on R
     extra: dict = field(default_factory=dict)
 
     def args_of(self, block):
@@ -145,6 +150,52 @@ STAGES["case5"] = Stage(
 )
 
 
+def scaled(block, factor):
+    """The engine's scaling of a block by a power of two (exact, so Python's float32 product is the core's)."""
+    return [bits(f32(value(w) * factor)) for w in block]
+
+
+SHAPER_VALUES = {0: (0.6, 0.05), 1: (0.2, 0.0), 2: (0.5, 0.04)}
+SHAPER_INITIAL = {0: 0.6, 1: 0.2, 2: 0.5, 5: 0.4, 12: 0.3}
+for late in (False, True):
+    STAGES["shaper-late" if late else "shaper-early"] = Stage(
+        "shaper-late" if late else "shaper-early",
+        "_gs_shaper_late" if late else "_gs_shaper_early",
+        "_gs_shaper_stock",
+        ENGINE + 0xE788,
+        96,
+        24,
+        (0, 1, 2),
+        (),
+        SHAPER_INITIAL,
+        checked=(0, 1, 2, 4, 5, 6, 11, 12, 13),
+        r_scale=late,
+        blocks=6,
+        extra={"rrec": "_gs_sh_rec", "values": SHAPER_VALUES},
+    )
+STAGES["held"] = Stage(
+    "held",
+    "_gs_held_early",
+    "_gs_held_stock",
+    ENGINE + 0xEEC8,
+    20,
+    5,
+    (0,),
+    (1, 2),
+    {0: 0.25},
+    checked=(0, 1, 2, 3, 4),
+    blocks=5,
+    extra={
+        "rrec": "_gs_hd_rec",
+        "values": {0: (32 / 127, 16 / 127)},
+        "words": (0, 0, 0, 1, 1),
+    },
+)
+STAGES["held-late"] = dataclasses.replace(
+    STAGES["held"], name="held-late", entry="_gs_held_late"
+)
+
+
 def init_record(session, address, size, initial, words_=None):
     poke_words(session, address, list(words_) if words_ else [0] * size)
     for i, v in initial.items():
@@ -217,7 +268,7 @@ def run_chain(rig, stage, blocks=None, seed=1):
         poke_words(stereo, LBUF, l_in)
         poke_words(left, LBUF, l_in)
         poke_words(stereo, rbuf, r_in)
-        poke_words(right, LBUF, r_in)
+        poke_words(right, LBUF, scaled(r_in, 16.0) if stage.r_scale else r_in)
         before_l_ctrl = words(stereo, lrec, stage.size)
         args = stage.args_of(block)
         call(stereo, rig.sym[stage.entry], lrec, LBUF, out, args, **regs)
@@ -231,7 +282,9 @@ def run_chain(rig, stage, blocks=None, seed=1):
                 "l": words(stereo, LBUF, 32),
                 "l_ref": words(left, LBUF, 32),
                 "r": words(stereo, rbuf, 32),
-                "r_ref": words(right, LBUF, 32),
+                "r_ref": scaled(words(right, LBUF, 32), 1 / 16)
+                if stage.r_scale
+                else words(right, LBUF, 32),
                 "l_rec": words(stereo, lrec, stage.size),
                 "l_rec_ref": words(left, lrec, stage.size),
                 "r_rec": words(stereo, rrec, stage.size),
@@ -255,7 +308,7 @@ def test_the_twin_matches_two_isolated_mono_channels(rig, name):
         words_checked = (
             range(stage.size)
             if stage.name == "gain"
-            else (*stage.controls, *stage.histories)
+            else stage.checked or (*stage.controls, *stage.histories)
         )
         for i in words_checked:
             assert h["r_rec"][i] == h["r_rec_ref"][i], f"R record word {i}"
@@ -294,13 +347,14 @@ SCRATCH_R = SCRATCH + 0x200
 RREC = 0x20190000  # a separate record for the variants
 
 
-def variant_r(rig, stage, history, mode):
+def variant_r(rig, stage, history, mode, omit_scale=False):
     """R by hand with the stock function: `early` copies the control words from the L record before the L call (what the twin does, so it must give the twin's R),
     `late` copies them after the L call, `shared` runs R on the L record."""
     session = new_session(rig)
     lrec = stage.l_record()
     rrec = lrec if mode == "shared" else RREC
     regs = stage_regs(stage)
+    r_scale = stage.r_scale and not omit_scale
     init_record(session, lrec, stage.size, stage.initial, stage.extra.get("words"))
     if mode != "shared":
         init_record(session, rrec, stage.size, {}, [0] * stage.size)
@@ -313,6 +367,8 @@ def variant_r(rig, stage, history, mode):
             session.poke(lrec + 4 * i, bits(base + spread * block))
         poke_words(session, LBUF, h["l_in"])
         copy = [i for i in range(stage.size) if i not in stage.histories]
+        if stage.size == 5:  # the held stage: the counters are advanced by the call
+            copy = [0, 3, 4]
         if mode == "early":
             for i in copy:
                 session.poke(rrec + 4 * i, session.peek(lrec + 4 * i))
@@ -322,7 +378,9 @@ def variant_r(rig, stage, history, mode):
         if mode == "late":
             for i in copy:
                 session.poke(rrec + 4 * i, session.peek(lrec + 4 * i))
-        poke_words(session, LBUF, h["r_in"])
+        poke_words(
+            session, LBUF, scaled(h["r_in"], 16.0) if r_scale else h["r_in"]
+        )
         call(
             session,
             STOCK[stage.stock],
@@ -334,7 +392,8 @@ def variant_r(rig, stage, history, mode):
         )
         if stage.scratch:
             run_blend(session, LBUF, SCRATCH_R)
-        outputs.append(words(session, LBUF, 32))
+        out_r = words(session, LBUF, 32)
+        outputs.append(scaled(out_r, 1 / 16) if r_scale else out_r)
     return outputs
 
 
@@ -358,6 +417,15 @@ def test_controls_copied_after_the_l_call_give_a_different_r_for_the_gain_stage(
     stage = STAGES["gain"]
     history, _ = run_chain(rig, stage)
     assert variant_r(rig, stage, history, "late") != [h["r"] for h in history]
+
+
+def test_the_late_shaper_without_the_scalings_on_r_gives_a_different_r(rig):
+    """The engine scales L by 16 before the late stage and by 1/16 after it; R without that is another point on the curve."""
+    stage = STAGES["shaper-late"]
+    history, _ = run_chain(rig, stage)
+    assert variant_r(rig, stage, history, "early", omit_scale=True) != [
+        h["r"] for h in history
+    ]
 
 
 def test_the_callee_saved_registers_survive_the_stereo_path(rig):

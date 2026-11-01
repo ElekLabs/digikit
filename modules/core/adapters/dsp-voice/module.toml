@@ -274,7 +274,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.held_sample.early.call"
-to = "_gs_bad_held_early"
+to = "_gs_held_early"
 devices = ["dn2"]
 
 [[claim]]
@@ -284,7 +284,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.held_sample.late.call"
-to = "_gs_bad_held_late"
+to = "_gs_held_late"
 devices = ["dn2"]
 
 [[claim]]
@@ -294,7 +294,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.shaper.early.call"
-to = "_gs_bad_shaper_early"
+to = "_gs_shaper_early"
 devices = ["dn2"]
 
 [[claim]]
@@ -304,7 +304,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.shaper.late.call"
-to = "_gs_bad_shaper_late"
+to = "_gs_shaper_late"
 devices = ["dn2"]
 
 [[claim]]

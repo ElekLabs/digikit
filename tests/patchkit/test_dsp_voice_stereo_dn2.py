@@ -28,6 +28,7 @@ STAGE_RECORDS = (
     ("_gs_uy_rec", 32, 8),
     ("_gs_gain_rec", 44, 11),
     ("_gs_c5_rec", 212, 53),
+    ("_gs_hd_rec", 20, 5),
 )
 
 
