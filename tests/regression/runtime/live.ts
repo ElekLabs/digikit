@@ -218,7 +218,41 @@ export function panel(session: Session) {
     await session.client.inputTurn(encoder(name), detents);
     await settle(200);
   }
-  return { tap, chord, turn, settle };
+  /** `count` turns of `detents` each, `gapMs` apart, scheduled on the input clock. The stock encoder accelerates by event rate, so a
+   * fast burst moves a value much further than the same turns with a settle between them. Returns after the last event plus 30 ms. */
+  async function burst(name: string, count: number, detents = 4, gapMs = 7.5): Promise<void> {
+    const start = (await elapsed()) + 5 * MS;
+    const code = encoder(name);
+    const events = Array.from({ length: count }, (_, i) => ({
+      at_instr: Math.round(start + i * gapMs * MS),
+      turn: code,
+      detents,
+    }));
+    await session.client.inputSchedule(events);
+    await until(events.at(-1)!.at_instr + 30 * MS);
+  }
+  /** Burst until `read()` is within `tolerance` of `target`, turning back when it overshoots. Returns the value reached and the bursts used. */
+  async function turnTo(
+    name: string,
+    read: () => Promise<number>,
+    target: number,
+    { tolerance = 0x40, perBurst = 10, maxBursts = 12 } = {},
+  ): Promise<{ value: number; bursts: number; trace: number[] }> {
+    const trace = [await read()];
+    for (let bursts = 0; bursts < maxBursts; bursts++) {
+      const value = trace.at(-1)!;
+      if (Math.abs(value - target) <= tolerance) return { value, bursts, trace };
+      // Fewer events near the target: about 0x100 per event at this rate.
+      const events = Math.max(1, Math.min(perBurst, Math.floor(Math.abs(target - value) / 0x180)));
+      await burst(name, events, value < target ? 4 : -4);
+      await settle(100);
+      trace.push(await read());
+    }
+    const value = trace.at(-1)!;
+    if (Math.abs(value - target) > tolerance) throw new Error(`turnTo ${name}: ${target.toString(16)} not reached: ${trace.map((v) => v.toString(16))}`);
+    return { value, bursts: maxBursts, trace };
+  }
+  return { tap, chord, turn, settle, burst, turnTo };
 }
 
 /** Read-only ColdFire and DSP memory access over the control socket. */
@@ -240,5 +274,16 @@ export function memory(session: Session) {
       unknown: number;
     };
   }
-  return { cf, words, dsp };
+  /** Halfword at a ColdFire address (big endian, read through the aligned word). */
+  async function half(addr: number): Promise<number> {
+    const word = await cf(addr & ~3);
+    return (addr & 2 ? word : word >>> 16) & 0xffff;
+  }
+  /** Value of stock sound parameter `index` (the mirror index, 25 + knob slot for the machine knobs) of `track` on DT2: the 16 Sound objects lie
+   * inline in the kit object, track t at `*0x80004704 + 0x34 + 0x450 t` (finding 64; the pointer table at 0x8000470c holds 0 for track 0), and the
+   * parameter halfwords start 0x14 into the object (finding 02). The array holds zeros until the track's first trig. */
+  async function soundParam(track: number, index: number): Promise<number> {
+    return half((await cf(0x80004704)) + 0x34 + 0x450 * track + 0x14 + 2 * index);
+  }
+  return { cf, words, dsp, half, soundParam };
 }

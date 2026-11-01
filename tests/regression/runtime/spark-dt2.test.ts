@@ -6,7 +6,7 @@ import { openSamples } from '@digi/dk-session/samples';
 import { button, repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { installWithDebug, liveArtifacts, panel, record, runtimeTests, settleUi } from './live.ts';
+import { installWithDebug, liveArtifacts, memory, panel, record, runtimeTests, settleUi } from './live.ts';
 
 // End to end, DT2 1.17: the device-neutral runtime (API 1.5 track table), core/sample-pool (the borrowed stock pool), machine contract 1.2
 // and digikit/spark playing a stereo sample that a fixture module selected by path (docs/design/sample-api-1.5.md).
@@ -106,6 +106,17 @@ function tone(x: Float32Array, hz: number, from: number, to: number): number {
   return (2 * Math.hypot(re, im)) / Math.max(1, end - from);
 }
 
+/** The strongest sine within `spread` (a fraction) of `hz` over frames [from, to), searched in 0.25 Hz steps: the 0.9 s window resolves about
+ * 1 Hz, so a pitch that is off by a few cents would miss a fixed-frequency measurement. */
+function peakTone(x: Float32Array, hz: number, from: number, to: number, spread = 0.03): { hz: number; amp: number } {
+  let best = { hz, amp: 0 };
+  for (let f = hz * (1 - spread); f <= hz * (1 + spread); f += 0.25) {
+    const amp = tone(x, f, from, to);
+    if (amp > best.amp) best = { hz: f, amp };
+  }
+  return best;
+}
+
 const AUDIBLE = 0.015;
 const ABSENT = 0.004;
 
@@ -139,7 +150,7 @@ function expectSplitPair(name: string, c: Capture, from: number, to: number, lef
 // ---- the device ----------------------------------------------------------------------------------------------------------------
 
 /** The panel path of sample-playback.test.ts: the sole dynamic machine, row 7 of the DT2 machine list, on the selected track (TRIG 1). */
-async function selectDynamicMachine({ session }: Pick<PatchedSession, 'session'>, artifacts: string): Promise<void> {
+async function selectDynamicMachine({ session }: Pick<PatchedSession, 'session'>, artifacts: string): Promise<string> {
   const ui = panel(session);
   await ui.tap('NO');
   await session.client.inputButton(button('FUNC'), true);
@@ -154,7 +165,9 @@ async function selectDynamicMachine({ session }: Pick<PatchedSession, 'session'>
   for (let i = 0; i < 7; i++) await ui.tap('DOWN');
   await ui.tap('YES', 300);
   await ui.tap('YES', 300);
-  record(artifacts, 'machine-page', await session.client.framebufferGet({ hash: true, data: true }));
+  const page = await session.client.framebufferGet({ hash: true, data: true });
+  record(artifacts, 'machine-page', page);
+  return page.sha256 ?? '';
 }
 
 function trackApi({ dk }: PatchedSession) {
@@ -254,7 +267,7 @@ runtimeTests(
       expect((await dk.modules()).map((m) => m.name)).toEqual(
         expect.arrayContaining(['digikit/spark', 'test/track-select', 'test/stock-pool']),
       );
-      await selectDynamicMachine(runtime, artifacts);
+      const srcPageHash = await selectDynamicMachine(runtime, artifacts);
 
       // 1. Two stereo files on the card: A has L 440 Hz and R 660 Hz, B has L 330 Hz and R 495 Hz.
       const sample = await Sample.create(
@@ -382,15 +395,44 @@ runtimeTests(
       expect(onsetAfter, 'plays again after the reload').toBeGreaterThanOrEqual(0);
       log.noteAfterLevels = expectTones('after the reset', noteAfter, onsetAfter + 4800, onsetAfter + RATE, [330, 495], [440, 660]);
 
-      // 5. Pitch: PITCH is 0.375 semitone per unit, so +32 units are one octave (ENC F: PITCH is knob 5, the second row of the SRC page under START; knob 3 is the sample slot).
+      // 5. Pitch: PITCH is 0.375 semitone per unit (0x100 raw), so +32 units (0x6000 from 0x4000) are one octave. ENC F: PITCH is knob 5, the second
+      // row of the SRC page under START (knob 3 is the sample slot). The stock encoder accelerates by event rate; slow single turns move about one raw
+      // step, so the knob is turned in fast bursts until the Sound array reads 0x6000 (frame halfword of knob slot 5: mirror index 30).
+      const PITCH_INDEX = 25 + 5;
+      const PITCH_OCTAVE = 0x6000;
       const ui = panel(session);
-      for (let i = 0; i < 32; i++) await ui.turn('ENC F', 1);
+      const mem = memory(session);
+      const readPitch = () => mem.soundParam(TRACK, PITCH_INDEX);
+      const pageNow = (await session.client.framebufferGet({ hash: true, data: false })).sha256;
+      log.pitchPage = { srcPageHash, pageNow, same: pageNow === srcPageHash };
+      const start = await readPitch();
+      expect(start, `PITCH starts unchanged (0x4000): ${start.toString(16)}`).toBe(0x4000);
+      const turned = await ui.turnTo('ENC F', readPitch, PITCH_OCTAVE);
+      log.pitchTurn = { value: turned.value, bursts: turned.bursts, trace: turned.trace };
       const noteUp = await captureNote(runtime, path.join(artifacts, 'octave.wav'), async (clock) => {
         await until(clock, 1.5 * RATE);
       });
       const onsetUp = onset(noteUp);
       expect(onsetUp, 'the note is audible').toBeGreaterThanOrEqual(0);
-      log.octaveLevels = expectTones('one octave up', noteUp, onsetUp + 4800, onsetUp + RATE, [660, 990], [330, 495]);
+      const [fromUp, toUp] = [onsetUp + 4800, onsetUp + RATE];
+      // B sample: L 330 Hz, R 495 Hz. One octave up is L 660 Hz, R 990 Hz. A turn tolerance of 0x40 raw is 0.09 semitone (0.5 percent), so the peak
+      // is searched within 3 percent and must lie within 1 percent of the octave.
+      const upL = peakTone(noteUp.l, 660, fromUp, toUp);
+      const upR = peakTone(noteUp.r, 990, fromUp, toUp);
+      const crossLR = peakTone(noteUp.l, 990, fromUp, toUp).amp;
+      const crossRL = peakTone(noteUp.r, 660, fromUp, toUp).amp;
+      const oldL = tone(noteUp.l, 330, fromUp, toUp);
+      const oldR = tone(noteUp.r, 495, fromUp, toUp);
+      log.octaveLevels = { upL, upR, crossLR, crossRL, oldL, oldR };
+      const text = JSON.stringify(log.octaveLevels);
+      expect(upL.amp, `L holds the octave of the left source ${text}`).toBeGreaterThan(AUDIBLE);
+      expect(upR.amp, `R holds the octave of the right source ${text}`).toBeGreaterThan(AUDIBLE);
+      expect(Math.abs(upL.hz / 660 - 1), `L pitch ${upL.hz} Hz`).toBeLessThan(0.01);
+      expect(Math.abs(upR.hz / 990 - 1), `R pitch ${upR.hz} Hz`).toBeLessThan(0.01);
+      expect(crossLR, `the pair stays split: 990 Hz at least 20 dB down in L ${text}`).toBeLessThan(upL.amp * 0.1);
+      expect(crossRL, `the pair stays split: 660 Hz at least 20 dB down in R ${text}`).toBeLessThan(upR.amp * 0.1);
+      expect(oldL, `the old 330 Hz is at least 20 dB down ${text}`).toBeLessThan(upL.amp * 0.1);
+      expect(oldR, `the old 495 Hz is at least 20 dB down ${text}`).toBeLessThan(upR.amp * 0.1);
 
       const modules = await dk.modules();
       log.modules = modules.map((m) => ({ name: m.name, faults: m.faults, off: m.guard_off }));
