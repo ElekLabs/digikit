@@ -353,7 +353,7 @@ legacy source counts, excluding the TypeScript case, not uncached boots or measu
 The verified TypeScript execution is unchanged by this deletion-only follow-up; its audible-input
 assertion text and selection comment now state the accepted contract. Earlier safety/device results
 remain evidence for that unchanged execution. The follow-up fast preflight passed; the coordinator
-owns the remaining acceptance decision and the broad gate remains unrun. Other FX families remain unmodified; subsequent migrations will use the completed assertion mapping and fixture.
+owned the remaining acceptance decision at that checkpoint; the broad gate remained unrun. Other FX families remain unmodified; subsequent migrations will use the completed assertion mapping and fixture.
 
 
 Deletion follow-up fast preflight passed (`/private/tmp/fx-gain-deletion-preflight.log`): 345 Python
@@ -365,6 +365,28 @@ The gate was explained against the actual PR base `origin/main` at `0feb02cb`: h
 files, 11 runtime files, three module-load files, 49 Python files, smoke and an implicit daemon build.
 `/private/tmp/fx-gain-merge-explain-origin-main.txt` supersedes the local-main explanation
 (`/private/tmp/fx-gain-merge-explain.txt`): local main at `365b45b` was stale and overselected already
-merged changes. The broad gate has not run, and no focused-acceptance exception for PR #242 exists.
-The next decision is focused acceptance versus the full routed gate before merge; this checkpoint
-is not merge acceptance. Historical proof/count tables and the bounded type-coverage decision stand.
+merged changes. At this pre-merge checkpoint, the broad gate had not run and no focused-acceptance
+exception existed yet; the subsequent merge decision below supersedes that pending status. Historical proof/count tables and the bounded type-coverage decision stand.
+
+
+### PR #242 merged and next-batch bookkeeping (2026-11-01)
+
+PR #242 merged at `a41699e5` on 2026-11-01T09:46:15Z. Em explicitly accepted the prior both-device
+proofs, helper/host/routing tests and static/type checks under a one-time focused-acceptance exception.
+This supersedes the pending acceptance status above; the broad routed gate was not run. The device
+runs remain correctness evidence, not a paired speedup benchmark. The bounded audible-input contract
+and the retained legacy plain/dry/full coverage remain as recorded in the assertion mapping.
+
+The next coherent batch is mapping the remaining basic-FX and fxpage work, alongside the other
+families, for independent workers using the shared fixture and completed assertion mapping. Em
+already endorsed parallel migration after the first proof and deletion. This is bookkeeping while
+the shared design is mapped, not a broad bulk-deletion plan or a new performance claim.
+
+
+Next-batch prerequisite: shared gain/SEND support is extracted mechanically into
+`tests/regression/runtime/fx-live.ts`. The first migration target is FX SEND: its five DT2 and eight
+DN2 same-image legs can use clean reload without alternate images or watch policies. Shared setup
+remains explicitly sine/gain on the default emulator image. Optional input hints and per-case
+silent-evidence policy do not relax mandatory no-fault/nonfinite/watch/overlay checks. Remaining
+basic-FX plain/dry/full and fxpage stay unchanged, retaining their direct type checks; no new SEND
+case or further legacy deletion is part of this extraction.

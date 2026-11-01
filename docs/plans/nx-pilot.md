@@ -394,7 +394,7 @@ assertions map to the already verified runtime case; its execution is unchanged.
 fit/overflow and other families remain. The owner is `test:runtime -- fx-reuse`, not the stock-FX tasks.
 Remaining legacy quick counts subtract one rig plus one restart per device: 35/38 rig entries and
 three restarts each (38/41 static operations), excluding TS and preserving the historical counts
-above. No measured-speedup claim follows. Follow-up fast preflight passed; coordinator acceptance remains required.
+above. No measured-speedup claim follows. Follow-up fast preflight passed; acceptance was still pending at that pre-merge checkpoint.
 
 The existing runtime-source map/import closure now includes the consumed machine/arena CLI helpers
 and needs wrapper, so replacement coverage follows its real dependencies. Three focused routing
@@ -404,6 +404,17 @@ Ruff/mypy/path/layers/generated/oxlint/Prettier/all types (`/private/tmp/fx-gain
 The actual-PR-base gate explanation (`origin/main` at `0feb02cb`) selects host/web, three stock,
 11 runtime, three module-load and 49 Python files, smoke and an implicit daemon build. Its log
 `/private/tmp/fx-gain-merge-explain-origin-main.txt` supersedes the stale-local-main (`365b45b`)
-explanation. The broad gate was not run; PR #242 has no focused-acceptance exception yet. The next
-acceptance decision is focused coverage versus the full routed gate before merge. No device rerun
+explanation. At that pre-merge checkpoint the broad gate was not run and focused acceptance was
+still pending; the merge checkpoint below supersedes that status. No device rerun
 was needed for this TS wording/comment-only follow-up to the prior both-device safety proof.
+
+
+PR #242 merged at `a41699e5` (2026-11-01T09:46:15Z) under Em's explicit one-time focused exception
+using the prior both-device, helper/host/routing and static/type proofs. The broad routed gate was
+not run; no measured speedup follows. Next-batch bookkeeping maps the remaining basic-FX/fxpage and
+other families for independent workers, as already endorsed after the first proof/deletion. The
+shared fixture and assertion mapping carry forward; this is not a broad bulk-deletion plan.
+
+FX SEND is the chosen next migration: five DT2/eight DN2 same-image legs. The mechanical shared
+`fx-live.ts` extraction is the prerequisite for independent common-SEND/DN2 work, without changing
+gain execution or basic plain/dry/full/fxpage coverage. No new device result or speedup is claimed.
