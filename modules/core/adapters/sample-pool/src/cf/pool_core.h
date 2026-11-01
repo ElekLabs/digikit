@@ -1,9 +1,10 @@
-/* The part of the sample pool adapter that does not touch the firmware: slot choice, PCM geometry and the free-space figure, on plain
- * data the caller passes in. tests/patchkit/test_sample_pool_core.py compiles it on the host. Finding 109 and 81 are the sources. */
+/* The part of the DT2 sample pool adapter that does not touch the firmware: slot choice, PCM geometry and the free-space figure, on plain
+ * data the caller passes in (the stock slot model; the device-neutral address helpers are in pool_nw32.h). tests/patchkit/test_sample_pool_core.py compiles it on the host. Finding 109 and 81 are the sources. */
 #ifndef SP_CORE_H
 #define SP_CORE_H
 #include <stdint.h>
 #include "dkrt_pool.h"
+#include "cf/pool_nw32.h"
 
 #define SP_SLOTS 0x400u           /* stock sample slots 0 .. 0x3ff */
 #define SP_KEY_WORDS 4u           /* key: 16 bytes per slot */
@@ -13,18 +14,6 @@
 #define SP_REC_EXTENT 0x14u       /* record +0x14: rounded extent A */
 #define SP_FILE_OVERHEAD 80u      /* file bytes minus PCM bytes: 64-byte header and 16-byte trailer (finding 81) */
 #define SP_POOL_LIMIT 0x19000400u /* the loader's append limit on the block offset space (finding 109 section 2) */
-#define SP_NW32_BASE 0x10000000u  /* NW32 alias of the DSP's DDR; physical byte = 0x80000000 + 4 * (w - 0x10000000) (finding 99) */
-#define SP_NATIVE_RATE 48000u     /* every stock native file is 48 kHz: the writer sets it (finding 81) and the pool has no other rate */
-#define SP_DDR_PHYS 0x80000000u
-#define SP_DDR_PHYS_END 0xa0000000u
-
-/* The DSP's normal-word address of a physical DDR byte address, or 0 when it has none (outside the alias or not word aligned). */
-static inline uint32_t sp_nw32(uint32_t phys)
-{
-    if (phys < SP_DDR_PHYS || phys >= SP_DDR_PHYS_END || (phys & 3u))
-        return 0;
-    return SP_NW32_BASE + ((phys - SP_DDR_PHYS) >> 2);
-}
 
 /* Fill the handle's planes and frame count for a loaded block (finding 81 "Stereo storage"):
  * block = record +0x10, extent = record +0x14 (A), file_bytes = key word 2 (F = P + 80), pool_base = the DSP view of the pool origin.

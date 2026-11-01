@@ -15,6 +15,8 @@
 //!   and `[modules.frame]` of the device file (docs/design/module-sdk.md 5.2). Only those names, no other constant.
 //! - `gas-sample-pool`: `.equ SP_*` lines for the sample pool adapter's ColdFire assembly, one file per device, from
 //!   `[adapter.sample_pool]` (slot floor and the reserved DDR range; docs/design/sample-api-1.5.md 2.3). Only those names.
+//! - `sharc-sample-pool`: `#define SP_DDR_BASE_NW32` and `SP_DDR_PAGES` for the sample pool's SHARC+ receiver, one file per device that owns a
+//!   DDR range (a device that borrows the stock pool gets no file), from the same fields (docs/design/dn2-sample-pool.md 2.7).
 //!
 //! The files carry no firmware bytes, only numbers of the device files.
 
@@ -722,6 +724,11 @@ fn sample_pool_facts(short: &str, p: Option<AdapterSamplePool>) -> Result<Option
             ));
         }
     }
+    if p.ddr_bytes != 0 && (p.ddr_base < SAMPLE_POOL_STOCK_END || p.ddr_base + p.ddr_bytes > DSP_DDR_END) {
+        return Err(err!(
+            "{short}: [adapter.sample_pool] the DDR range must start at or above 0x80531000 (the end of the stock writes seen, finding 106) and end at or below 0xa0000000 (the DSP's NW32 alias)"
+        ));
+    }
     if p.slot_floor != 0 && p.ddr_bytes != 0 {
         return Err(err!(
             "{short}: [adapter.sample_pool] a device borrows the stock pool or owns a range, not both"
@@ -736,6 +743,10 @@ fn sample_pool_facts(short: &str, p: Option<AdapterSamplePool>) -> Result<Option
 
 /// The first byte of the DSP's DDR in its physical byte addresses (docs/findings/99). It is not the ColdFire's DDR of `[board]`.
 const DSP_DDR_BASE: u64 = 0x8000_0000;
+/// The end of the DSP's DDR that the NW32 alias reaches (physical 0xa0000000).
+const DSP_DDR_END: u64 = 0xa000_0000;
+/// The end of the last stock write seen in the DSP's DDR (finding 106 canary map): a range the adapter owns starts at or above it.
+const SAMPLE_POOL_STOCK_END: u64 = 0x8053_1000;
 
 /// The `SP_*` constants of one device.
 fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
@@ -755,6 +766,23 @@ fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
             "SP_DDR_BYTES",
             p.ddr_bytes,
             "[adapter.sample_pool] ddr_bytes",
+        ),
+    ]
+}
+
+/// The DSP's view of the same range: the NW32 word address of its first byte and its size in 4 KiB pages.
+fn sample_pool_dsp_constants(p: &SamplePoolF) -> Vec<C> {
+    let v = |name, value: u64, note| c(name, value, Scope::PerDevice, note);
+    vec![
+        v(
+            "SP_DDR_BASE_NW32",
+            0x1000_0000 + (p.ddr_base - DSP_DDR_BASE) / 4,
+            "NW32 word address of ddr_base (0x10000000 + (ddr_base - 0x80000000) / 4)",
+        ),
+        v(
+            "SP_DDR_PAGES",
+            p.ddr_bytes / 4096,
+            "[adapter.sample_pool] ddr_bytes in 4 KiB pages: the page index of a wire tag must be below it",
         ),
     ]
 }
@@ -1523,8 +1551,62 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
             }
+            "sharc-sample-pool" => {
+                if !g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `sharc-sample-pool` gen is one file per device: put {{dev}} in the path"
+                    ));
+                }
+                for (dev, e) in &facts.docs {
+                    // a device that borrows the stock pool has no range and no DSP receiver
+                    let Some(p) = e.sample_pool.as_ref().filter(|p| p.ddr_bytes != 0) else {
+                        continue;
+                    };
+                    out.push((
+                        g.path.replace("{dev}", dev),
+                        sharc(module, dev, &sample_pool_dsp_constants(p)),
+                    ));
+                }
+            }
             k => return Err(err!("{module}: unknown gen kind {k:?}")),
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod sample_pool_tests {
+    use super::*;
+
+    fn pool(base: u64, bytes: u64) -> Option<AdapterSamplePool> {
+        Some(AdapterSamplePool {
+            slot_floor: 0,
+            ddr_base: base,
+            ddr_bytes: bytes,
+        })
+    }
+
+    #[test]
+    fn range_must_clear_the_stock_writes_and_stay_in_the_alias() {
+        assert!(sample_pool_facts("dn2", pool(0x8053_1000, 0x1000_0000)).is_ok());
+        assert!(sample_pool_facts("dn2", pool(0x9ff0_0000, 0x10_0000)).is_ok());
+        // below the last stock write seen (finding 106)
+        assert!(sample_pool_facts("dn2", pool(0x8053_0000, 0x1000)).is_err());
+        // past the end of the NW32 alias
+        assert!(sample_pool_facts("dn2", pool(0x9ff0_0000, 0x20_0000)).is_err());
+        // no range at all is a device that borrows the stock pool
+        assert!(sample_pool_facts("dt2", pool(0, 0)).is_ok());
+    }
+
+    #[test]
+    fn dsp_constants_are_the_nw32_view_of_the_range() {
+        let p = SamplePoolF {
+            slot_floor: 0,
+            ddr_base: 0x8053_1000,
+            ddr_bytes: 0x1000_0000,
+        };
+        let c = sample_pool_dsp_constants(&p);
+        assert_eq!((c[0].name, c[0].value), ("SP_DDR_BASE_NW32", 0x1014_c400));
+        assert_eq!((c[1].name, c[1].value), ("SP_DDR_PAGES", 65536));
+    }
 }

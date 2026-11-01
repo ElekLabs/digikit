@@ -433,7 +433,8 @@
       "sig": "void (u32 tag, const u32 *source, u32 format)",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -520,7 +521,8 @@
       "sig": "u8 *(u8 *destination, const u8 *source, u32 length)",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -670,7 +672,8 @@
       "site": "cf.link.site.boot_wire_size",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -715,7 +718,8 @@
       "site": "cf.link.site.reply_copy",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -847,7 +851,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -878,7 +883,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12031,7 +12037,8 @@
       },
       "subsystem": "cache",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12070,7 +12077,8 @@
       "site": "dsp.cache.site.cache_enable",
       "subsystem": "cache",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12102,7 +12110,8 @@
       },
       "subsystem": "cache",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12563,7 +12572,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12595,7 +12605,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12627,7 +12638,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12761,7 +12773,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
@@ -12791,7 +12804,8 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof"
+        "core/dsp-lp0-proof",
+        "core/sample-pool"
       ],
       "was": []
     },
