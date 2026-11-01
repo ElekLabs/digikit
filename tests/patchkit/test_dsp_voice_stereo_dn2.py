@@ -23,7 +23,12 @@ pytestmark = pytest.mark.skipif(
 FIXTURE = REPO_ROOT / "tests/fixtures/dsp/stereo-machine.s"
 ENGINE_GAIN = 0x3FCADE01
 NAN = 0xFFFFFFFF
-STAGE_RECORDS = (("_gs_fo_rec", 112, 28), ("_gs_uy_rec", 32, 8), ("_gs_gain_rec", 44, 11), ("_gs_c5_rec", 212, 53))
+STAGE_RECORDS = (
+    ("_gs_fo_rec", 112, 28),
+    ("_gs_uy_rec", 32, 8),
+    ("_gs_gain_rec", 44, 11),
+    ("_gs_c5_rec", 212, 53),
+)
 
 
 def f32(bits):
@@ -33,7 +38,13 @@ def f32(bits):
 def stereo_rig():
     """The fixture machine on the manifest of test/sine: parameter word 0 selects R (0: 0.5, 1: 16.0 over the bound, 2: NaN); L is 0.25."""
     spec = pk_conform.spec("test/sine", "dn2")
-    spec = dataclasses.replace(spec, sources=(str(FIXTURE),), entry="_sm_render", note_on="_sm_note_on", desc="_sm_desc")
+    spec = dataclasses.replace(
+        spec,
+        sources=(str(FIXTURE),),
+        entry="_sm_render",
+        note_on="_sm_note_on",
+        desc="_sm_desc",
+    )
     return MachineRig("test/sine", "dn2", spec=spec)
 
 
@@ -115,7 +126,9 @@ def test_a_mono_machine_is_unchanged_and_never_stamps():
 def test_a_bad_r_block_plays_r_equals_l_without_a_fault_and_without_a_stamp(select):
     rig = stereo_rig()
     blocks = start(rig, [0], select)
-    assert blocks[0].faults == 0, "L is fine: the machine is not faulted, R is not used for the block"
+    assert blocks[0].faults == 0, (
+        "L is fine: the machine is not faulted, R is not used for the block"
+    )
     assert set(blocks[0].samples) == {0.25}
     assert stamp(rig, 0) in (0, None)
     # the machine goes on: a good R is stamped again
@@ -133,15 +146,21 @@ def test_the_r_stage_records_restart_at_the_note_on_block():
     fill_records(rig, 0, NAN)
     fill_records(rig, 3, NAN)
     fill_records(rig, 7, NAN)
-    play(rig, [0, 3], trig={0, 3})  # the edge block: the machines do not run, nothing is stamped, the records are not touched
+    play(
+        rig, [0, 3], trig={0, 3}
+    )  # the edge block: the machines do not run, nothing is stamped, the records are not touched
     assert stamp(rig, 0) in (0, None)
     assert record(rig, "_gs_fo_rec", 112, 28, 0) == [NAN] * 28
     play(rig, [0, 3])  # block 0 of the machines
     for v in (0, 3):
         for name, stride, size in STAGE_RECORDS:
-            assert record(rig, name, stride, size, v) == [0] * size, f"{name} of slot {v}"
+            assert record(rig, name, stride, size, v) == [0] * size, (
+                f"{name} of slot {v}"
+            )
     for name, stride, size in STAGE_RECORDS:
-        assert record(rig, name, stride, size, 7) == [NAN] * size, "another slot's records are not touched"
+        assert record(rig, name, stride, size, 7) == [NAN] * size, (
+            "another slot's records are not touched"
+        )
 
 
 def test_the_r_stage_records_are_kept_in_a_running_voice_and_restart_after_a_gap():
@@ -149,7 +168,9 @@ def test_the_r_stage_records_are_kept_in_a_running_voice_and_restart_after_a_gap
     start(rig, [0])
     fill_records(rig, 0, 0x3F000000)
     play(rig, [0])
-    assert record(rig, "_gs_fo_rec", 112, 28, 0) == [0x3F000000] * 28, "a voice that ran in the last block keeps its R history"
+    assert record(rig, "_gs_fo_rec", 112, 28, 0) == [0x3F000000] * 28, (
+        "a voice that ran in the last block keeps its R history"
+    )
     # a block in which the slot is not rendered (a stage without a twin cleared the stamp, a slot over the cap): R restarts from zero
     rig.sess.poke(nw(data(rig, "_gs_stamp")), 0)
     play(rig, [0])
@@ -178,9 +199,20 @@ def test_the_cap_is_eight_stereo_slots_per_block_the_others_play_r_equals_l():
     assert [v for v in slots if stamp(rig, v) == heartbeat(rig)] == list(range(8))
     # a slot that stops being stereo frees its place at once: stop slot 2, slot 8 is stamped
     rig.use(2)
-    rig.hw(74 + 2, 0)  # the slot's machine type is no longer the machine's: the stock engine renders it
+    rig.hw(
+        74 + 2, 0
+    )  # the slot's machine type is no longer the machine's: the stock engine renders it
     play(rig, slots)
-    assert [v for v in slots if stamp(rig, v) == heartbeat(rig)] == [0, 1, 3, 4, 5, 6, 7, 8]
+    assert [v for v in slots if stamp(rig, v) == heartbeat(rig)] == [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+    ]
 
 
 def test_the_private_observer_cannot_be_installed_with_the_adapter(tmp_path):
@@ -195,7 +227,18 @@ def test_the_private_observer_cannot_be_installed_with_the_adapter(tmp_path):
         pytest.skip("requires the DN2 1.12 firmware")
     out = tmp_path / "both.syx"
     both = subprocess.run(
-        [sys.executable, "-m", "tools.patchkit.patchkit", "patch", "--firmware", str(syx), "--modules", "core/dsp-voice,core/dsp-stereo-proof", "-o", str(out)],
+        [
+            sys.executable,
+            "-m",
+            "tools.patchkit.patchkit",
+            "patch",
+            "--firmware",
+            str(syx),
+            "--modules",
+            "core/dsp-voice,core/dsp-stereo-proof",
+            "-o",
+            str(out),
+        ],
         cwd=REPO_ROOT,
         env=tools.python_env(),
         capture_output=True,

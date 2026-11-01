@@ -55,7 +55,10 @@ class Stage:
     def args_of(self, block):
         if not self.controls_per_block:
             return self.args
-        return (self.controls_per_block[block % len(self.controls_per_block)], *self.args[1:])
+        return (
+            self.controls_per_block[block % len(self.controls_per_block)],
+            *self.args[1:],
+        )
 
     def l_record(self, v=SLOT):
         return self.record + self.stride * v
@@ -75,7 +78,10 @@ STAGES = {
         (21, 22, 23),
         (24, 25),
         {21: 0.7, 22: 0.2, 23: 0.1, 24: 0.1, 25: -0.05, 26: 0.3, 27: -0.2},
-        extra={"rrec": "_gs_fo_rec", "values": {21: (0.7, -0.05), 22: (0.2, 0.01), 23: (0.1, 0.02)}},
+        extra={
+            "rrec": "_gs_fo_rec",
+            "values": {21: (0.7, -0.05), 22: (0.2, 0.01), 23: (0.1, 0.02)},
+        },
     ),
     "uy": Stage(
         "uy",
@@ -87,19 +93,27 @@ STAGES = {
         (2, 3, 4, 5),
         (6, 7),
         {2: 0.6, 3: 0.3, 4: 0.2, 5: 0.4, 6: 0.02, 7: -0.03},
-        extra={"rrec": "_gs_uy_rec", "values": {2: (0.6, 0.02), 3: (0.3, -0.01), 4: (0.2, 0.0), 5: (0.4, 0.03)}},
+        extra={
+            "rrec": "_gs_uy_rec",
+            "values": {2: (0.6, 0.02), 3: (0.3, -0.01), 4: (0.2, 0.0), 5: (0.4, 0.03)},
+        },
     ),
 }
 
 
-BLEND = ENGINE + 0x13E9C + 0x38 * SLOT  # the blend's 14-word ramp record (I0 of the engine at the case 5 call)
+BLEND = (
+    ENGINE + 0x13E9C + 0x38 * SLOT
+)  # the blend's 14-word ramp record (I0 of the engine at the case 5 call)
 BLEND_ENTRY, BLEND_STOP = 0x1C9C12, 0x1C98B9
-CASE5 = (
-    {9: 0.02, 10: -0.03}
-    | {11 + 7 * k + d: v for k in range(6) for d, v in ((0, (0.6, 0.1, 0.15, 0.2, 0.1, 0.08)[k]), (2, 0.0001))}
-)
+CASE5 = {9: 0.02, 10: -0.03} | {
+    11 + 7 * k + d: v
+    for k in range(6)
+    for d, v in ((0, (0.6, 0.1, 0.15, 0.2, 0.1, 0.08)[k]), (2, 0.0001))
+}
 CASE5_VALUES = {
-    11 + 7 * k + d: (v * (1 + 0.1 * k), v * 0.05) for k in range(6) for d, v in ((0, (0.6, 0.1, 0.15, 0.2, 0.1, 0.08)[k]), (2, 0.0001))
+    11 + 7 * k + d: (v * (1 + 0.1 * k), v * 0.05)
+    for k in range(6)
+    for d, v in ((0, (0.6, 0.1, 0.15, 0.2, 0.1, 0.08)[k]), (2, 0.0001))
 }
 STAGES["gain"] = Stage(
     "gain",
@@ -142,9 +156,19 @@ def run_blend(session, buffer, scratch=SCRATCH):
     session.poke(ENGINE + 0x13808, scratch)
     session.symbols["_blend"] = BLEND_ENTRY
     session.runner.breakpoints = frozenset((BACK, BLEND_STOP))
-    regs = {**REGS, "I0": BLEND, "I1": ENGINE, "I5": buffer, "R9": 32, "I6": FRAME, "I7": FRAME - 8}
+    regs = {
+        **REGS,
+        "I0": BLEND,
+        "I1": ENGINE,
+        "I5": buffer,
+        "R9": 32,
+        "I6": FRAME,
+        "I7": FRAME - 8,
+    }
     result = session.call("_blend", regs, max_steps=4000)
-    assert result["halt"]["reason"] == "breakpoint" and result["final_pc_sw"] == BLEND_STOP, result
+    assert (
+        result["halt"]["reason"] == "breakpoint" and result["final_pc_sw"] == BLEND_STOP
+    ), result
 
 
 def block_input(rng, scale=0.4):
@@ -228,14 +252,20 @@ def test_the_twin_matches_two_isolated_mono_channels(rig, name):
         assert h["l"] == h["l_ref"], "L is the stock path"
         assert h["l_rec"] == h["l_rec_ref"]
         assert h["r"] == h["r_ref"], "R is the stock stage on independent state"
-        words_checked = range(stage.size) if stage.name == "gain" else (*stage.controls, *stage.histories)
+        words_checked = (
+            range(stage.size)
+            if stage.name == "gain"
+            else (*stage.controls, *stage.histories)
+        )
         for i in words_checked:
             assert h["r_rec"][i] == h["r_rec_ref"][i], f"R record word {i}"
         assert h["l"] != h["r"]
         assert h["r"] != h["r_in"] and h["l"] != h["l_in"]
         assert all((w & 0x7F800000) != 0x7F800000 for w in h["l"] + h["r"])
     # the histories are independent: both are live and different
-    assert not stage.histories or any(history[-1]["l_rec"][i] != history[-1]["r_rec"][i] for i in stage.histories)
+    assert not stage.histories or any(
+        history[-1]["l_rec"][i] != history[-1]["r_rec"][i] for i in stage.histories
+    )
 
 
 @pytest.mark.parametrize("name", STAGES)
@@ -254,7 +284,9 @@ def test_a_slot_that_is_not_stamped_is_the_plain_stock_call(rig, name):
     call(plain, STOCK[stage.stock], lrec, LBUF, out, stage.args, **stage_regs(stage))
     assert words(stereo, LBUF, 32) == words(plain, LBUF, 32)
     assert words(stereo, lrec, stage.size) == words(plain, lrec, stage.size)
-    assert words(stereo, rrec, stage.size) == [0x12345678] * stage.size, "R state untouched"
+    assert words(stereo, rrec, stage.size) == [0x12345678] * stage.size, (
+        "R state untouched"
+    )
     assert stereo.peek(rig.data["_gs_rbuf"] + 128 * SLOT) == 0x12345678
 
 
@@ -291,7 +323,15 @@ def variant_r(rig, stage, history, mode):
             for i in copy:
                 session.poke(rrec + 4 * i, session.peek(lrec + 4 * i))
         poke_words(session, LBUF, h["r_in"])
-        call(session, STOCK[stage.stock], rrec, LBUF, SCRATCH_R if stage.scratch else LBUF, stage.args_of(block), **regs)
+        call(
+            session,
+            STOCK[stage.stock],
+            rrec,
+            LBUF,
+            SCRATCH_R if stage.scratch else LBUF,
+            stage.args_of(block),
+            **regs,
+        )
         if stage.scratch:
             run_blend(session, LBUF, SCRATCH_R)
         outputs.append(words(session, LBUF, 32))
@@ -329,4 +369,15 @@ def test_the_callee_saved_registers_survive_the_stereo_path(rig):
     for i in stage.histories:
         session.poke(stage.r_record(rig) + 4 * i, 0)
     poke_words(session, LBUF, block_input(random.Random(2)))
-    call(session, rig.sym[stage.entry], stage.l_record(), LBUF, LBUF, stage.args, M6=1, M5=0, M14=1, M7=0xFFFFFFFF)
+    call(
+        session,
+        rig.sym[stage.entry],
+        stage.l_record(),
+        LBUF,
+        LBUF,
+        stage.args,
+        M6=1,
+        M5=0,
+        M14=1,
+        M7=0xFFFFFFFF,
+    )

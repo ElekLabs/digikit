@@ -11,8 +11,8 @@ import hashlib
 import struct
 
 import pytest
-from support.paths import REPO_ROOT
 
+from support.paths import REPO_ROOT
 from tools.patchkit import pk_sharc
 from tools.sharc_dev.sharcldr import LoadedMemory
 
@@ -53,7 +53,9 @@ ENGINE = 0x20110000  # `_gs_engine_base`: the engine's base address I9
 FRAME = 0x2010F000  # the callee frame of a wrapper call
 CALLER = 0x2010F400  # the engine's frame: word -24 is the table of voice buffers
 STACK = 0x2010E000  # the engine's frame in the pan block runs
-TABLE = 0x20150000  # 16 pointers to the voice buffers; the pan records are at TABLE + 0x354
+TABLE = (
+    0x20150000  # 16 pointers to the voice buffers; the pan records are at TABLE + 0x354
+)
 STRUCT = 0x20151000  # word 3 points to the table of plane pointers
 PLANE_TABLE = 0x20152000
 BUFFERS = 0x20170000  # voice buffer of slot v: BUFFERS + 0x80 v (the low 7 bits are 0x10 in the engine; the wrappers do not need it)
@@ -216,7 +218,9 @@ def build_engine(session, left, ramp=None, fade=None, pan=None, gain_words=None)
         poke_words(session, PLANES + 0x100 * v, nan_block(64))
         record = TABLE + 0x354 + 28 * v
         poke_words(session, record, [0] * 7)
-        ga, step_a, gb, step_b = pan.get(v, (0.5 + v / 64, 0.0007 * (v + 1), 0.25 + v / 128, -0.0005 * (v + 1)))
+        ga, step_a, gb, step_b = pan.get(
+            v, (0.5 + v / 64, 0.0007 * (v + 1), 0.25 + v / 128, -0.0005 * (v + 1))
+        )
         session.poke(record, bits(ga))
         session.poke(record + 8, bits(step_a))
         session.poke(record + 0x70 * 4, bits(gb))
@@ -265,7 +269,10 @@ def run_block(session, stop=BLOCK_TO, steps=60000):
 
 def planes(session):
     return [
-        (words(session, PLANES + 0x100 * v, 32), words(session, PLANES + 0x100 * v + 0x80, 32))
+        (
+            words(session, PLANES + 0x100 * v, 32),
+            words(session, PLANES + 0x100 * v + 0x80, 32),
+        )
         for v in range(16)
     ]
 
@@ -276,7 +283,26 @@ def buffers(session):
 
 # ---- a wrapper call the way the engine makes a linked call ----
 
-CALLEE_SAVED = ("R3", "R5", "R6", "R7", "R9", "R10", "R11", "R13", "R14", "R15", "I0", "I1", "I2", "I3", "I5", "M1", "M2", "M3")
+CALLEE_SAVED = (
+    "R3",
+    "R5",
+    "R6",
+    "R7",
+    "R9",
+    "R10",
+    "R11",
+    "R13",
+    "R14",
+    "R15",
+    "I0",
+    "I1",
+    "I2",
+    "I3",
+    "I5",
+    "M1",
+    "M2",
+    "M3",
+)
 
 
 def new_session(rig, hooked=False):
@@ -297,17 +323,25 @@ def set_stack(session, args):
 def call(session, entry_pc, rec, inp, out, args, sentinels=True, **regs):
     session.symbols["_entry"] = entry_pc
     set_stack(session, args)
-    r = {**REGS, "I6": FRAME, "I7": FRAME - 8, "R2": CALLER, "R4": rec, "R8": inp, "R12": out}
+    r = {
+        **REGS,
+        "I6": FRAME,
+        "I7": FRAME - 8,
+        "R2": CALLER,
+        "R4": rec,
+        "R8": inp,
+        "R12": out,
+    }
     if sentinels:
         for i, n in enumerate(CALLEE_SAVED):
             r[n] = 0x20000100 + 16 * i if n.startswith("I") else 0x3000 + i
     r.update(regs)
     session.runner.breakpoints = frozenset((BACK,))
     result = session.call("_entry", r, max_steps=40000, read_regs=CALLEE_SAVED)
-    assert result["halt"]["reason"] == "breakpoint" and result["final_pc_sw"] == BACK, result
+    assert result["halt"]["reason"] == "breakpoint" and result["final_pc_sw"] == BACK, (
+        result
+    )
     if sentinels:
         for n in CALLEE_SAVED:
             assert result["regs"][n] == r[n], f"{n} is callee-saved"
     return result
-
-

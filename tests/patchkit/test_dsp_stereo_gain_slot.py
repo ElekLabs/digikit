@@ -10,15 +10,14 @@ import random
 import pytest
 from support.dn2_stereo_rig import (
     HEARTBEAT,
-    PAN_BODY,
     PAN_END,
     PLANE_TABLE,
     PLANES,
     TABLE,
     Rig,
     bits,
-    build_engine,
     buffers,
+    build_engine,
     engine_regs,
     planes,
     run_block,
@@ -44,7 +43,11 @@ def run_triple(rig, stereo, seed, ramp=None, fade=None, gain_words=None):
     left = {v: block_of(rng) for v in ALL}
     right = {v: block_of(rng, 0.3) for v in ALL}
     out = {}
-    for name, data, hooked in (("L", left, False), ("R", right, False), ("H", left, True)):
+    for name, data, hooked in (
+        ("L", left, False),
+        ("R", right, False),
+        ("H", left, True),
+    ):
         session = rig.session(hooked=hooked)
         build_engine(session, data, ramp=ramp, fade=fade, gain_words=gain_words)
         if hooked:
@@ -52,7 +55,9 @@ def run_triple(rig, stereo, seed, ramp=None, fade=None, gain_words=None):
                 base = rig.data["_gs_rbuf"] + 128 * v
                 for i, w in enumerate(right[v]):
                     session.poke(base + 4 * i, w)
-                session.poke(rig.data["_gs_stamp"] + 4 * v, HEARTBEAT if v in stereo else 0)
+                session.poke(
+                    rig.data["_gs_stamp"] + 4 * v, HEARTBEAT if v in stereo else 0
+                )
         result = run_block(session)
         out[name] = (planes(session), buffers(session), result["instructions"])
     return out, left, right
@@ -75,7 +80,9 @@ def test_no_stamp_is_bit_identical_to_the_stock_block():
     assert out["H"][2] - out["L"][2] < 16 * 30
 
 
-@pytest.mark.parametrize("stereo", [{0}, {5}, {15}, {1, 2, 3}, set(range(0, 16, 2)), set(ALL)])
+@pytest.mark.parametrize(
+    "stereo", [{0}, {5}, {15}, {1, 2, 3}, set(range(0, 16, 2)), set(ALL)]
+)
 def test_a_stamped_slot_pans_r_into_plane_b_and_l_into_plane_a(rig, stereo):
     out, left, right = run_triple(rig, stereo, 7)
     check(out, stereo)
@@ -121,7 +128,11 @@ def test_a_stamp_of_another_block_is_a_mono_slot(rig, stamp):
 @pytest.mark.parametrize("shape", ["ramp", "fade", "ramp+fade"])
 def test_r_takes_the_block_ramp_and_the_fade_of_the_engine(rig, shape):
     rng = random.Random(21)
-    ramp = {v: (rng.uniform(0.2, 1.2), rng.uniform(-0.01, 0.01)) for v in ALL} if "ramp" in shape else None
+    ramp = (
+        {v: (rng.uniform(0.2, 1.2), rng.uniform(-0.01, 0.01)) for v in ALL}
+        if "ramp" in shape
+        else None
+    )
     fade = {1, 4, 5, 9} if "fade" in shape else None
     gain_words = {v: [0] * 5 + [1] + [0] * 5 for v in (fade or ())}
     stereo = {1, 2, 4, 9, 12}
@@ -129,7 +140,10 @@ def test_r_takes_the_block_ramp_and_the_fade_of_the_engine(rig, shape):
     check(out, stereo)
     if fade:
         # the fade is a real one: the last sample of a faded slot is (nearly) zero, the stock block says so for R as for L
-        assert abs(value(out["R"][0][1][1][31])) < 1e-3 * 0.1 and abs(value(out["L"][0][1][1][31])) < 1e-3 * 0.1
+        assert (
+            abs(value(out["R"][0][1][1][31])) < 1e-3 * 0.1
+            and abs(value(out["L"][0][1][1][31])) < 1e-3 * 0.1
+        )
 
 
 def test_a_fade_flag_of_another_slot_does_not_fade_this_slot(rig):
@@ -140,14 +154,21 @@ def test_a_fade_flag_of_another_slot_does_not_fade_this_slot(rig):
     results = []
     for fade in ({2}, {3}):
         session = rig.session()
-        build_engine(session, left, fade=fade, gain_words={v: [0] * 5 + [1] + [0] * 5 for v in fade})
+        build_engine(
+            session,
+            left,
+            fade=fade,
+            gain_words={v: [0] * 5 + [1] + [0] * 5 for v in fade},
+        )
         for v in ALL:
             for i, w in enumerate(right[v]):
                 session.poke(rig.data["_gs_rbuf"] + 128 * v + 4 * i, w)
             session.poke(rig.data["_gs_stamp"] + 4 * v, HEARTBEAT if v == 2 else 0)
         run_block(session)
         results.append(planes(session)[2][1])
-    assert results[0] != results[1], "slot 2's R is faded only when slot 2 has the fade flags"
+    assert results[0] != results[1], (
+        "slot 2's R is faded only when slot 2 has the fade flags"
+    )
 
 
 # ---- the one-slot body: registers and the loop's own flag use ----
@@ -170,8 +191,15 @@ def run_slot(rig, hooked, slot, stamped, block=32, **regs):
         I12=0x1234,
         **regs,
     )
-    result = session.call("_pan_body", r, max_steps=4000, read_regs=("I2", "I3", "I4", "I5", "I12", "I6", "I7", "M4", "ASTATX"))
-    assert result["halt"]["reason"] == "breakpoint" and result["final_pc_sw"] == PAN_END, result
+    result = session.call(
+        "_pan_body",
+        r,
+        max_steps=4000,
+        read_regs=("I2", "I3", "I4", "I5", "I12", "I6", "I7", "M4", "ASTATX"),
+    )
+    assert (
+        result["halt"]["reason"] == "breakpoint" and result["final_pc_sw"] == PAN_END
+    ), result
     return session, result
 
 

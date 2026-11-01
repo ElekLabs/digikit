@@ -134,7 +134,9 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_dv_table": dv.TABLE,
     }
     if device == "dn2":
-        fixed.update({n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)})
+        fixed.update(
+            {n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)}
+        )
     return fixed
 
 
