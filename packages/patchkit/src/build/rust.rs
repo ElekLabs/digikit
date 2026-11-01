@@ -157,9 +157,10 @@ pub fn source_sha256(manifest: &Path) -> Result<String> {
 
 fn toolchain_info(env: &Env) -> BTreeMap<String, String> {
     let pins = tc::pins();
-    let rustc = std::process::Command::new("rustc")
-        .arg(format!("+{}", pins.rust_nightly))
-        .arg("--version")
+    let rustc = std::process::Command::new("rustup")
+        .arg("run")
+        .arg(&pins.rust_nightly)
+        .args(["rustc", "--version"])
         .env_clear()
         .envs(env.codegen_gcc_env(""))
         .output()
@@ -319,9 +320,10 @@ fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf
     let src = TempDir::new("pk-rust-src-")?;
     let crate_dir = src.path().join("crate");
     let staged = stage(manifest, &crate_dir, &crate_dir.join(".deps"), &mut vec![])?;
-    let mut cmd = std::process::Command::new("cargo");
-    cmd.arg(format!("+{}", tc::pins().rust_nightly))
-        .args(["rustc", "--release"])
+    let mut cmd = std::process::Command::new("rustup");
+    cmd.arg("run")
+        .arg(&tc::pins().rust_nightly)
+        .args(["cargo", "rustc", "--release"])
         .args(CARGO_ARGS)
         .arg("--target")
         .arg(&target)
@@ -332,7 +334,7 @@ fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf
         .current_dir(staged.parent().unwrap())
         .env_clear()
         .envs(cg_env);
-    let o = cmd.output().map_err(|e| err!("cargo: {e}"))?;
+    let o = cmd.output().map_err(|e| err!("rustup: {e}"))?;
     if !o.status.success() {
         let tail = |b: &[u8]| {
             let s = String::from_utf8_lossy(b).into_owned();
