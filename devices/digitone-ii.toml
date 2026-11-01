@@ -397,8 +397,11 @@ reserved_slots  = []
 
 # The sample pool adapter's device facts (docs/design/sample-api-1.5.md 2.3); generated into core/sample-pool build/gen/sample-pool-{dev}.inc.
 # DN2 has no stock pool to borrow: the adapter owns a DDR range of the DSP. The canary soak saw no stock write in [0x80531000, 0xa0000000)
-# (finding 106); 256 MiB is a placeholder until the extended soak. The DN2 object is not written yet.
+# (finding 106); 256 MiB is a placeholder until the extended soak. The top 512 KiB of that range are not the pool's: they hold the R rings of the stereo
+# machines (core/dsp-voice, docs/design/dn2-stereo.md): 16 rings of 32 KiB, one per slot, written and read by the DSP only. ring_r_base = 0x80531000 + 0x10000000 - 0x80000;
+# the pool range is 0x80000 bytes shorter than the 256 MiB placeholder.
 [adapter.sample_pool]
 slot_floor = 0
 ddr_base   = 0x80531000
-ddr_bytes  = 0x10000000
+ddr_bytes  = 0x0ff80000
+ring_r_base = 0x904b1000

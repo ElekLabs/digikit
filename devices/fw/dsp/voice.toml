@@ -259,7 +259,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "95283a0fec918601cc2c72b2351184f0e5eb7d2f881873273c6a41404d8ec2ea", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 conditional shaper 0x1cdb56 (record 0x24fa20 + 0x60 v, two control groups, no audio history); no R twin in phase 1."
+doc = "DN2 1.12 conditional shaper 0x1cdb56 (record 0x24fa20 + 0x60 v, two control groups, no audio history); R twin in core/dsp-voice."
 
 [[fn]]
 name = "dsp.voice.fn.held_sample"
@@ -268,7 +268,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "b7d705e4101e795bf3bbe4cc8adcf0e8aef65e71d63c6822593d7c855ee6baf6", offset = 0xcc, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 held-sample stage 0xb8265b (entry inside the function that starts at 0xb8258f); no R twin in phase 1."
+doc = "DN2 1.12 held-sample stage 0xb8265b (entry inside the function that starts at 0xb8258f); R twin in core/dsp-voice."
 
 [[fn]]
 name = "dsp.voice.fn.filter_case1"
@@ -277,7 +277,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "a848fafc850e85b27c9b578d7ffb227637ad3a06d494491950491066d37379ac", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 dispatch case 1 stage 0xb82342 (record 0x2505a0 + 0xcc v); no R twin in phase 1."
+doc = "DN2 1.12 dispatch case 1 stage 0xb82342 (record 0x2505a0 + 0xcc v); R twin in core/dsp-voice."
 
 [[fn]]
 name = "dsp.voice.fn.filter_case2"
@@ -286,7 +286,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "ce69e3b3039afc9bf9e4fb69ceaa2f3f7793b4e1d40ced0a059f36472a70682d", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 dispatch case 2 stage 0xb81a16 (record 0x251260 + 0x12c v); no R twin in phase 1."
+doc = "DN2 1.12 dispatch case 2 stage 0xb81a16 (record 0x251260 + 0x12c v); R twin in core/dsp-voice."
 
 [[fn]]
 name = "dsp.voice.fn.filter_case3"
@@ -295,7 +295,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "a37d371275bf9e99cd1022ac68c29e2df2c2515ff768b78cd40436636537c2a9", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 dispatch case 3 stage 0xb80f2e (record 0x252520 + 0xec v); no R twin in phase 1."
+doc = "DN2 1.12 dispatch case 3 stage 0xb80f2e (record 0x252520 + 0xec v); R twin in core/dsp-voice."
 
 [[fn]]
 name = "dsp.voice.fn.ring_stage"
@@ -304,7 +304,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "0fa80930d5d80e215e7111306e608dda7db62829cf0039550cdbfea044c364f3", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 ring stage 0xb806f5 (dispatch cases 4 and 6; 32 KiB ring per slot behind record word 16); no R twin in phase 1."
+doc = "DN2 1.12 ring stage 0xb806f5 (dispatch cases 4 and 6; 32 KiB ring per slot behind record word 16); R twin in core/dsp-voice with its own ring."
 
 # ---- DN2 stereo: call sites of the stages without a twin (retarget to a wrapper that clears the stamp) ----
 
@@ -325,8 +325,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the held-sample stage (early call): shared counters, private held audio; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.shaper.early.call"
@@ -345,8 +345,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the shaper (early call): the R pass runs on a copy of the control words; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.filter_case1.call"
@@ -365,8 +365,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of dispatch case 1: the audio histories are private to R, the words the stage reads are copied before the L call; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.shaper.late.call"
@@ -385,8 +385,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the shaper (late call): the R pass runs between the engine's two scalings (x16, x1/16) applied to R as to L; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.held_sample.late.call"
@@ -405,8 +405,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the held-sample stage (late call): shared counters, private held audio; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.filter_case2.call"
@@ -425,8 +425,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of dispatch case 2: the audio histories are private to R, the words the stage reads are copied before the L call; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.filter_case3.call"
@@ -445,8 +445,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of dispatch case 3: the audio histories are private to R, the words the stage reads are copied before the L call; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.ring_stage.case4.call"
@@ -465,8 +465,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the ring stage (dispatch case 4): the R pass runs on a private record and the R ring at ring_r_base + 0x8000 v; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.ring_stage.case6.call"
@@ -485,8 +485,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the ring stage (dispatch case 6): the R pass runs on a private record and the R ring at ring_r_base + 0x8000 v; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.case5.call"
@@ -595,3 +595,199 @@ regs = { in = ["r9", "r11", "i0", "i6", "m5", "m7", "m13"], clobbers = ["r0-r8",
 mark = "D"
 users = ["core/dsp-voice"]
 doc = "R of each stamped slot through the engine's block ramp and fade; every other slot is untouched."
+
+# ---- DN2 stereo: the resets of the stages in the middle of a note (the note-on resets are covered by the adapter's clear of the R records) ----
+
+[[fn]]
+name = "dsp.voice.fn.held_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "e9b352a7d60f9197a411d6de6ea1050614069dafdcd2bae815d37020705b3865", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 held-sample reset 0xb82440 (zeroes the five words of the record; R4 = record). Also called by another function; only the engine's call sites are retargeted."
+
+[[fn]]
+name = "dsp.voice.fn.case1_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "7993baaea8fa7c40a1fb480a4400dcc313326c50dd5d94971b052cc252c35265", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 dispatch case 1 reset 0xb81d6d (zeroes histories 3 and 4, re-initialises coefficients; R4 = record)."
+
+[[fn]]
+name = "dsp.voice.fn.case2_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "6e8d957e469e7f132da1433534bf23f8d2edab8373e730cc5c9feb0bf818ae41", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 dispatch case 2 reset 0xb81c8d (zeroes histories 10 and 11, re-initialises coefficients; R4 = record)."
+
+[[fn]]
+name = "dsp.voice.fn.case3_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "eb9a54b7f6dbbca641235c8e4f36d86482f9d278f0781c41f407d3e00fde1ad1", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 dispatch case 3 reset 0xb811f1 (clears words 5 to 12, re-initialises coefficients; R4 = record)."
+
+[[fn]]
+name = "dsp.voice.fn.ring_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "eda07e26b55104d61e00d7c4efddf53936f507952059ab130c04ee39e85016ed", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 ring stage reset 0xb805d8 (history and cursor 0, fill status M14, no clear of the backing; R4 = record)."
+
+[[fn]]
+name = "dsp.voice.fn.case5_reset"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "a284614e8f388425dc26f82717056144fa0d216b63b7881b17648f2574c2cedb", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 dispatch case 5 reset 0xb818c7 (zeroes histories 9 and 10, re-initialises coefficients; R4 = record)."
+
+[[site]]
+name = "dsp.voice.site.held_sample.reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x2d4, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c91c5: reset of the stage after a SRR routing byte change in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.held_sample.reset.call"
+site = "dsp.voice.site.held_sample.reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."
+
+[[site]]
+name = "dsp.voice.site.filter_case1.reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x825, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c9716: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.filter_case1.reset.call"
+site = "dsp.voice.site.filter_case1.reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."
+
+[[site]]
+name = "dsp.voice.site.filter_case2.reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x856, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c9747: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.filter_case2.reset.call"
+site = "dsp.voice.site.filter_case2.reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."
+
+[[site]]
+name = "dsp.voice.site.filter_case3.reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x87e, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c976f: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.filter_case3.reset.call"
+site = "dsp.voice.site.filter_case3.reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."
+
+[[site]]
+name = "dsp.voice.site.ring_stage.reset.case4.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x8dc, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c97cd: reset of the stage after a ring delay change (case 4) in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.ring_stage.reset.case4.call"
+site = "dsp.voice.site.ring_stage.reset.case4.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."
+
+[[site]]
+name = "dsp.voice.site.ring_stage.reset.case6.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x9ae, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c989f: reset of the stage after a ring delay change (case 6) in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.ring_stage.reset.case6.call"
+site = "dsp.voice.site.ring_stage.reset.case6.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."
+
+[[site]]
+name = "dsp.voice.site.case5.reset.call"
+cpu = "sharc"
+devices = ["dn2"]
+rule = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x951, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DN2 1.12 call at 0x1c9842: reset of the stage after a filter change in the middle of a note. Retarget only this call; both delay slots of the linked call stay."
+
+[[hook]]
+name = "dsp.voice.hook.case5.reset.call"
+site = "dsp.voice.site.case5.reset.call"
+cpu = "sharc"
+mode = "retarget"
+devices = ["dn2"]
+mark = "D"
+users = ["core/dsp-voice"]
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "i4", "astat"] }
+doc = "Reset mirror: sets the private words of the R record of the slot as the stock reset does for L, then jumps to the stock reset."

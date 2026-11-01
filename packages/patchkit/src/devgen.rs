@@ -110,6 +110,9 @@ struct AdapterSamplePool {
     /// The reserved DDR range of an own allocator (base is a physical byte address; 0, 0: not used).
     ddr_base: u64,
     ddr_bytes: u64,
+    /// The base of the 16 R rings of the stereo machines (16 x 32 KiB of the DSP's DDR; 0: no stereo rings). Outside the pool range, in DDR the stock never writes.
+    #[serde(default)]
+    ring_r_base: u64,
 }
 /// `[adapter.machine]`: the machine adapter's device facts. The strings are checked, the numbers become `ADM_*` defines.
 #[derive(Deserialize)]
@@ -242,6 +245,7 @@ struct SamplePoolF {
     slot_floor: u64,
     ddr_base: u64,
     ddr_bytes: u64,
+    ring_r_base: u64,
 }
 #[derive(Debug)]
 struct AdapterF {
@@ -734,10 +738,28 @@ fn sample_pool_facts(short: &str, p: Option<AdapterSamplePool>) -> Result<Option
             "{short}: [adapter.sample_pool] a device borrows the stock pool or owns a range, not both"
         ));
     }
+    if p.ring_r_base != 0 {
+        let end = p.ring_r_base.checked_add(RING_R_BYTES);
+        let overlaps = p.ddr_bytes != 0 && p.ring_r_base < p.ddr_base + p.ddr_bytes && p.ddr_base < p.ring_r_base + RING_R_BYTES;
+        if p.ring_r_base & 0xfff != 0
+            || p.ring_r_base < SAMPLE_POOL_STOCK_END
+            || end.is_none_or(|e| e > DSP_DDR_END)
+        {
+            return Err(err!(
+                "{short}: [adapter.sample_pool] ring_r_base must be 4 KiB aligned, start at or above 0x80531000 (the end of the stock writes seen, finding 106) and end at or below 0xa0000000"
+            ));
+        }
+        if overlaps {
+            return Err(err!(
+                "{short}: [adapter.sample_pool] the 512 KiB of the R rings at ring_r_base overlap the pool range (ddr_base, ddr_bytes)"
+            ));
+        }
+    }
     Ok(Some(SamplePoolF {
         slot_floor: p.slot_floor,
         ddr_base: p.ddr_base,
         ddr_bytes: p.ddr_bytes,
+        ring_r_base: p.ring_r_base,
     }))
 }
 
@@ -745,6 +767,8 @@ fn sample_pool_facts(short: &str, p: Option<AdapterSamplePool>) -> Result<Option
 const DSP_DDR_BASE: u64 = 0x8000_0000;
 /// The end of the DSP's DDR that the NW32 alias reaches (physical 0xa0000000).
 const DSP_DDR_END: u64 = 0xa000_0000;
+/// The R rings of the stereo machines: 16 rings of 32 KiB, like the stock rings (finding 106) but in the DSP's own DDR range.
+const RING_R_BYTES: u64 = 16 * 0x8000;
 /// The end of the last stock write seen in the DSP's DDR (finding 106 canary map): a range the adapter owns starts at or above it.
 const SAMPLE_POOL_STOCK_END: u64 = 0x8053_1000;
 
@@ -1528,10 +1552,16 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         .adapter
                         .as_ref()
                         .ok_or_else(|| err!("{module}: {dev} has no [adapter.machine]"))?;
-                    out.push((
-                        g.path.replace("{dev}", dev),
-                        sharc(module, dev, &adapter_constants(a)),
-                    ));
+                    let mut constants = adapter_constants(a);
+                    if let Some(p) = e.sample_pool.as_ref().filter(|p| p.ring_r_base != 0) {
+                        constants.push(c(
+                            "ADM_RING_R_BASE",
+                            p.ring_r_base,
+                            Scope::PerDevice,
+                            "[adapter.sample_pool] ring_r_base (byte address of the 16 R rings of 32 KiB, one per slot)",
+                        ));
+                    }
+                    out.push((g.path.replace("{dev}", dev), sharc(module, dev, &constants)));
                 }
             }
             "gas-sample-pool" => {
@@ -1583,6 +1613,7 @@ mod sample_pool_tests {
             slot_floor: 0,
             ddr_base: base,
             ddr_bytes: bytes,
+            ring_r_base: 0,
         })
     }
 
@@ -1599,11 +1630,36 @@ mod sample_pool_tests {
     }
 
     #[test]
+    fn the_r_rings_sit_outside_the_pool_and_inside_the_alias() {
+        let rings = |base: u64, ring: u64| {
+            Some(AdapterSamplePool {
+                slot_floor: 0,
+                ddr_base: base,
+                ddr_bytes: 0x0ff8_0000,
+                ring_r_base: ring,
+            })
+        };
+        // the top of the pool range, as in devices/digitone-ii.toml
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0x904b_1000)).is_ok());
+        // inside the pool
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0x9000_0000)).is_err());
+        // half inside the pool
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0x9049_1000)).is_err());
+        // below the last stock write, unaligned, past the alias
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0x8053_0000)).is_err());
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0x904b_1800)).is_err());
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0x9ff8_1000)).is_err());
+        // none
+        assert!(sample_pool_facts("dn2", rings(0x8053_1000, 0)).is_ok());
+    }
+
+    #[test]
     fn dsp_constants_are_the_nw32_view_of_the_range() {
         let p = SamplePoolF {
             slot_floor: 0,
             ddr_base: 0x8053_1000,
             ddr_bytes: 0x1000_0000,
+            ring_r_base: 0,
         };
         let c = sample_pool_dsp_constants(&p);
         assert_eq!((c[0].name, c[0].value), ("SP_DDR_BASE_NW32", 0x1014_c400));

@@ -3,4 +3,4 @@
 // NW32 word address of ddr_base (0x10000000 + (ddr_base - 0x80000000) / 4)
 #define SP_DDR_BASE_NW32 269796352
 // [adapter.sample_pool] ddr_bytes in 4 KiB pages: the page index of a wire tag must be below it
-#define SP_DDR_PAGES 65536
+#define SP_DDR_PAGES 65408

@@ -1462,7 +1462,7 @@
  "sections": [
   {
    "align": 4,
-   "hex": "8053100010000000",
+   "hex": "805310000ff80000",
    "kind": "data",
    "name": ".rodata",
    "size": 8
@@ -1713,7 +1713,7 @@
    "size": 122
   }
  ],
- "source_sha256": "3f84fd096cfaff3659a6412ca1052aa716e66fe96eccb8f613b3cb2da4ca046d",
+ "source_sha256": "3e8f9d9f831fd4572e0f93f2ed3595595386274ccd651d1b7d41436e83f533e0",
  "symbols": [
   {
    "global": false,
@@ -2123,7 +2123,7 @@
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "1674",
-  "isa_check": "a14a94dcd680371b1efd34443a1718c19c3908891406417ce0a285f988e721db",
+  "isa_check": "72f1611c7cb6c93e037f05d3c3d03caabc5702dab36257290eca8637307c2f8f",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

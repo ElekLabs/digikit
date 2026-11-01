@@ -55,6 +55,12 @@ _gs_case1_stock = "dsp.voice.fn.filter_case1"
 _gs_case2_stock = "dsp.voice.fn.filter_case2"
 _gs_case3_stock = "dsp.voice.fn.filter_case3"
 _gs_ring_stock = "dsp.voice.fn.ring_stage"
+_gs_held_reset_stock = "dsp.voice.fn.held_reset"
+_gs_case1_reset_stock = "dsp.voice.fn.case1_reset"
+_gs_case2_reset_stock = "dsp.voice.fn.case2_reset"
+_gs_case3_reset_stock = "dsp.voice.fn.case3_reset"
+_gs_ring_reset_stock = "dsp.voice.fn.ring_reset"
+_gs_case5_reset_stock = "dsp.voice.fn.case5_reset"
 _gs_engine_base = "dsp.voice.value.engine_base"
 _gs_pan_cont = "dsp.voice.site.pan_slot.next"
 _gs_pan_end = "dsp.voice.site.pan_slot.end"
@@ -274,7 +280,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.held_sample.early.call"
-to = "_gs_bad_held"
+to = "_gs_held_early"
 devices = ["dn2"]
 
 [[claim]]
@@ -284,7 +290,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.held_sample.late.call"
-to = "_gs_bad_held"
+to = "_gs_held_late"
 devices = ["dn2"]
 
 [[claim]]
@@ -294,7 +300,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.shaper.early.call"
-to = "_gs_bad_shaper"
+to = "_gs_shaper_early"
 devices = ["dn2"]
 
 [[claim]]
@@ -304,7 +310,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.shaper.late.call"
-to = "_gs_bad_shaper"
+to = "_gs_shaper_late"
 devices = ["dn2"]
 
 [[claim]]
@@ -314,7 +320,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.filter_case1.call"
-to = "_gs_bad_case1"
+to = "_gs_case1"
 devices = ["dn2"]
 
 [[claim]]
@@ -324,7 +330,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.filter_case2.call"
-to = "_gs_bad_case2"
+to = "_gs_case2"
 devices = ["dn2"]
 
 [[claim]]
@@ -334,7 +340,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.filter_case3.call"
-to = "_gs_bad_case3"
+to = "_gs_case3"
 devices = ["dn2"]
 
 [[claim]]
@@ -344,7 +350,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.ring_stage.case4.call"
-to = "_gs_bad_ring"
+to = "_gs_ring4"
 devices = ["dn2"]
 
 [[claim]]
@@ -354,11 +360,81 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.ring_stage.case6.call"
-to = "_gs_bad_ring"
+to = "_gs_ring6"
 devices = ["dn2"]
 
 [[claim]]
 resource = "dsp.voice.site.ring_stage.case6.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.held_sample.reset.call"
+to = "_gs_held_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.held_sample.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case1.reset.call"
+to = "_gs_case1_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case1.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case2.reset.call"
+to = "_gs_case2_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case2.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case3.reset.call"
+to = "_gs_case3_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case3.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.ring_stage.reset.case4.call"
+to = "_gs_ring_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.ring_stage.reset.case4.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.ring_stage.reset.case6.call"
+to = "_gs_ring_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.ring_stage.reset.case6.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.case5.reset.call"
+to = "_gs_case5_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.case5.reset.call"
 devices = ["dn2"]
 
 [[op]]
