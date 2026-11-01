@@ -92,3 +92,102 @@ Each module type keeps one coupled test per device. Everything else moves down a
 - Two test systems run side by side only per level, and only until that level's replacement passes: one Python file
   deleted per TS file that replaces it.
 - Each item reports before/after (files, file-seconds, gate wall time) against the recorded runs.
+
+
+## FX consolidation design (2026-11-01)
+
+Status: Em selected design work and proposed reusing a daemon through the control socket with
+setup/teardown fixtures. This section records the approved design direction; implementation is
+pending. It supersedes the historical one-PR-per-item rule for this work: keep the reusable fixture
+and compatible FX coverage in one coherent change, with explicit checkpoints rather than a bulk
+seven-family port. No source, scenario deletion, new RPC or benchmark is authorized by this document.
+
+### Fixture lifecycle and isolation
+
+Extend the existing Session lifecycle with Vitest `beforeAll`, `beforeEach`, `afterEach` and
+`afterAll` hooks; do not introduce a parallel test framework. `beforeAll` owns one daemon per device
+per test file/worker, reused by serial cases. Never attach to another agent's or the user's daemon.
+A Session baseline-reload method used by `beforeEach` updates its private load result, card and event
+state; a raw-client load with stale Session metadata is insufficient. Reload through the existing
+control-socket `firmware.load` operation (also used by the workbench): `replace: true`, `force: true`, explicit
+pristine card/image/runtime patch set and `start: auto`. This rebuilds firmware state in the same
+process; firmware boot still occurs. The stock-only
+[Session restart wrapper](../../packages/test-support/src/session.ts) is not a limitation of the
+underlying load operation. In implementation, extend the existing
+[FirmwareLoadParams type](../../packages/control-client/src/types.ts) with its missing `replace`
+field rather than inventing a reset RPC.
+
+Use a fixture-owned pristine card directory, not just a pristine base file:
+[controller card loading](../../packages/emulator/control/src/controller.rs) applies a saved sibling
+overlay. There must be no inherited `overlay.bin`; keep mirror/card synchronization off. Reuse the
+fixture-owned pristine base without copying a huge card per case only when read-only backing and
+disabled synchronization are guaranteed. Specify `auto_no` consistently on every load. Recreate DkSession and EmuUsbTransport per case, fence observations
+by the new epoch, and clear collected events. Actor-level options survive runtime replacement:
+explicitly set CPU exception delivery (normally false), watchdog stall policy and mirror settings;
+reapply guards/watchdog configuration rather than assuming load resets them.
+
+A load is rejected while a controller job or patch job is active. Settle or cancel owned work within
+a deadline before loading; replacement does not promise to cancel every job. Failed or dirty reset
+fails setup, preserves diagnostics and discards the owned daemon; never silently continue as a clean
+case. `afterEach` collects the case's guard/fault/card/PCM closing evidence before discarding state,
+then stops capture, releases inputs and cancels pending protocol work. `afterAll` closes the owned daemon.
+
+Within a persistence scenario, use protocol restart to preserve guest writes and RAM according to
+that scenario's contract. An independent-case clean load must not replace that restart. The first
+batch introduces no generic reset RPC, global daemon pool, result cache or snapshot restoration.
+CF-only snapshots do not prove matched DSP state, and the existing state-load operation requires
+instruction count zero; neither establishes the desired coupled reset contract.
+
+### Static scope and coverage groups
+
+**[D]** Independently reviewed source counts below describe rig entries and explicit restarts, not
+actual uncached boots or elapsed time. Quick tier has 14 scenario/device pairs; full tier has 15.
+The earlier estimate of 80 boots per device reduced to nine is unsupported and is withdrawn.
+
+| Family / source anchor | Quick DT2 rig entries | Quick DN2 rig entries | Explicit restarts per device |
+| --- | ---: | ---: | ---: |
+| [fx](../../tools/patchkit/pk_digikit_fx.py) line 312 | 4 | 4 | 1 |
+| [fxsend](../../tools/patchkit/pk_digikit_fxsend.py) line 192 | 5 | 8 | 0 |
+| [fxroute](../../tools/patchkit/pk_digikit_fxroute.py) line 558 | 11 | 11 | 0 |
+| [fxroutes](../../tools/patchkit/pk_digikit_fxroutes.py) line 637 | 8 | 8 | 2 |
+| [fxpage](../../tools/patchkit/pk_digikit_fxpage.py) line 513 | 3 | 3 | 1 |
+| [fxpersist](../../tools/patchkit/pk_digikit_fxpersist.py) line 275 | 1 | 1 | 0 |
+| [fxshift](../../tools/patchkit/pk_digikit_fxshift.py) line 499 | 4 | 4 | 0 |
+| Total | 36 | 39 | 4 |
+
+Quick totals are therefore 40 DT2 and 43 DN2 static operations. Full tier adds one DT2 persistence
+rig entry and two explicit restarts, three additional operations. These counts make no savings
+promise. Use three coverage groups for the design: chain plus page baseline; send plus routes;
+persistence plus frequency shifter. These are coverage boundaries, not a proven nine-boot schedule.
+
+Start with the reusable fixture, one existing representative gain-FX lifecycle/PCM flow and its
+cleanup assertion on DT2 OS 1.17 and DN2 OS 1.12; no large new test matrix is needed for this pilot.
+Only then fold compatible fx/fxpage checks into the same coherent PR, using an
+assertion ledger that maps each old assertion, device, image/seed state and PCM/PIX oracle to its
+replacement. Retain special no-hook/fxpages-off images, capacity/overflow and no-module cases,
+deselect/restart checks and each case's closing checks. Do not delete a family until every unique
+assertion is mapped and its port passes. Contract-feature coverage is a safety aid, not proof that
+these scenario facts are interchangeable.
+
+### Proof checkpoint and unresolved implementation choices
+
+The focused isolation proof dirties a case, clean-loads in the same daemon, and checks expected
+registry, card/settings, CF/DSP baseline, input state and a new epoch. Compare that reset baseline
+with a fresh-process reference once per device using focused cases. A separate persistence case
+must prove that writes survive protocol restart. Keep the closing guard/fault/card/PCM checks;
+there is no broad sweep for this experiment. Stop the first slice if useful process reuse or exact
+isolation cannot be established. Process-reuse payoff is unmeasured; use the existing bounded
+measurement workflow only if a later decision needs it, without making a performance claim now.
+
+Preboot seeding must reuse the existing Rust store/settings codecs. Inspect the
+[native card builder](../../packages/emulator/control/src/cards.rs) and available APIs before proposing
+a narrow operation; do not duplicate the codec in TypeScript. Postboot upload cannot substitute for
+assertions about a preboot-seeded state. Exact seed transport and fixture implementation remain open.
+
+PCM capture is already available through generic client calls to `pcm.tap`; `--no-audio` disables
+playback only, not capture. The existing
+[FX support](../../tests/regression/scenarios/fx-support.ts) uses a Python renderer/NumPy path.
+Choose minimal analyzer reuse for live captures or a small TypeScript comparison only after inspecting
+the needed oracles; do not port DSP analysis wholesale or invent protocol APIs. Seed/analyzer choices
+and the complete actor-state reset checklist are bounded checks during the first implementation
+slice; resolve them before relying on the affected assertion, rather than blocking every fixture step.

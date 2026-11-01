@@ -320,7 +320,43 @@ waits total at most 269 s across eight sessions (171 s initial, 80 s post-instal
 a static ceiling, not an A/B measurement or measured speedup. Protocol-only startup, navigation,
 key holds, remote refill pacing and faulttrace waits remain. Global settle helpers are unchanged.
 
-This is a partial readiness migration. The broad routed gate (host, runtime-fixture across all ten
-runtime files, and smoke) remains unrun; runtime merge acceptance is pending. The earlier routing-only
-exception does not cover this batch. The [timing finding](../findings/69-runtime-test-timing.md)
+This partial readiness migration merged in [PR #241](https://github.com/ElekLabs/digikit/pull/241)
+at `0feb02cb` under Em's explicit acceptance of the focused runtime checks. The broad routed gate
+(host, runtime-fixture across all ten runtime files, and smoke) remains unrun. This specific merge
+exception is separate from the earlier routing-only exception and is not a broad-gate pass. The [timing finding](../findings/69-runtime-test-timing.md)
 records the same scope and a future completion-event direction; no event facility is implemented here.
+
+
+## Static coverage and cache audit checkpoint (2026-11-01)
+
+**[D]** Provisional static reading corrects the proposed safe/crash deletion premise; it does not
+verify firmware semantics against image bytes. Independent static review confirmed all three scenario
+gaps; synthetic TypeScript decoder tests do not prove guest capture or cross-boot persistence. The [safe runners](../../tools/patchkit/pk_digikit_scen.py)
+(lines 774–953) retain unique init-reset/safe-once, counter/result/selection and three-boot early/late
+stability assertions on both devices. The [crash runner](../../tools/patchkit/pk_digikit_debug.py)
+(lines 1277–1443) adds DT2 vectors 4/5, 16 registers, 32 stack words, cold-RAM behavior, record replay
+and selection across boots absent from the [TypeScript crash case](../../tests/regression/runtime/fault-trace.test.ts)
+(lines 213–237). Inputs are [safe-fault](../../tests/digikit/scenarios/safe-fault.toml),
+[safe-late-fault](../../tests/digikit/scenarios/safe-late-fault.toml) and
+[crash-capture](../../tests/digikit/scenarios/crash-capture.toml).
+
+There is no established deletion-only set. Retain the four safe-cut/debug device wrappers, which
+also own cut/card/debug coverage. Migration requires a fact-by-fact coverage comparison and device
+proof before removing assertions. The [router](../../tools/devtools/verify_route.py) currently sends
+a generic deleted scenario TOML to the full digikit family; no routing change is justified without
+an actual deletion. A contract-coverage guard enables safer thin tests, but neither proves duplicate
+coverage nor blocks separately demonstrated equivalent consolidation.
+
+Further readiness work should replace only waits with proven observable completion conditions;
+deliberate input pacing and stability-boundary tests stay. PR #241 completes a bounded subset, not
+the roadmap's whole readiness goal. Existing Cargo incremental builds and
+[packed-module reuse](../../tools/device/dktransfer.py) already avoid work. Build-cache input closure
+is broad, and incremental ROI has not been established: rebuild byte identity alone proves neither
+saved work nor worthwhile caching. No new benchmark, plugin or implementation is authorized by this
+checkpoint; broader build/pack caching remains conditional on a justified candidate and input audit.
+
+The remaining cheap readiness candidate using an existing symbol plan is debug-module
+`expectWithoutDebugModule` (57 s static scheduled-wait ceiling across its cases), deferred rather
+than opened as a separate small PR. Em chose FX consolidation design next, without implementation;
+the [current fixture-first FX design](test-architecture.md#fx-consolidation-design-2026-11-01) records
+the approved direction and unresolved seed/analysis choices. Implementation remains pending.
