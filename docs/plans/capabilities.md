@@ -27,8 +27,9 @@ As capabilities, they let such machines load as `.dkm` modules.
 
 Track flags (16 saved bits per track, PR #209) are not planned: a parameter does the same job.
 
-- [ ] Capability declaration: a module lists the capabilities it needs in `module.toml`; the device reports the ones it has; the fit check
-      (`dkrt-fit`) reports a missing one like any other shortfall ("needs stereo voice: not on this device").
+- [ ] Capability report: a module's capabilities are derived from its `.dkm` (its imports and record kinds), as `packages/dkneeds` derives
+      sizes; the device reports the ones it has; the fit check (`dkrt-fit`) reports a missing one like any other shortfall ("needs stereo
+      voice: not on this device").
 - [ ] Value text per parameter (both devices).
 - [ ] Track sample (DT2).
 - [ ] Stereo voice (DT2).
@@ -38,13 +39,7 @@ Track flags (16 saved bits per track, PR #209) are not planned: a parameter does
 
 These change the module contract, which the sampler branch also changes: start after it is merged.
 
-## 2. Hooks installed on demand
+## 2. Hooks on demand and the runtime review
 
-- [ ] Find out whether the runtime can install a ColdFire hook at boot (the OS runs from RAM; instruction cache) and a SHARC hook (L2/L1 code,
-      after the boot stream) **[O]**.
-- [ ] If yes: the runtime installs only the hooks of the capabilities the selected modules ask for.
-
-## 3. Runtime review (later)
-
-- [ ] Measure what each of the eight static adapters costs when no module uses it (image bytes, RAM, cycles per block).
-- [ ] Move hot-path hooks to the on-demand install, and drop what nothing needs.
+The [module architecture plan](module-architecture.md) tracks these: step 8 (hooks installed at boot, the cost of each adapter when unused)
+and step 6 (the runtime split into core and capabilities).
