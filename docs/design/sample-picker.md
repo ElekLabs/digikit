@@ -145,7 +145,7 @@ Other gaps (all additive, none blocks the host-menu route except G4 for live pro
 Files:
 - `sdk/include/dk/sample_picker.h`: `dk_picker_open(dk_ui_menu *m, const dk_api *api, uint32_t handle)`.
 - `sdk/src/sample_picker.c`: screens, callbacks, statics.
-- `sdk/src/picker_logic.h/.c`: pure functions, no API calls: sort order, leaf-name truncation, path join/parent, size/length text, error text for a code, row text for track state.
+- `sdk/src/picker_logic.h` and `sdk/src/picker_logic.c`: pure functions, no API calls: sort order, leaf-name truncation, path join/parent, size/length text, error text for a code, row text for track state.
 - `modules/machines/spark/src/module.c`: `DK_MENU(spark_menu)` and the `[[object]]` sources list gets `sdk/src/sample_picker.c`. `requires = ["core/ui"]` is added to the manifest (imports `dk_ui_*`); the module still loads without core/ui (calls return failure values; then the entry row is simply absent).
 - No new manifest for a picker module in this route.
 
@@ -156,7 +156,7 @@ Tests:
 2. `dk:dev` screenshot sheet on DN2 (SPARK change reloads by boot, DN2 5 s; a pure `core/ui` change swaps in about 4 s). Per screen a `shot:`:
    `mise run dk:dev -- digikit/spark --device dn2 --store 'digikit/spark*' --keys 'tap:NO,tap:SETTINGS,wait:400,<tap steps to DIGIKIT > MODULES > RIGHT > SETTINGS...>,shot:tracks,tap:YES,wait:800,shot:browse,tap:DOWN*2,tap:RIGHT,shot:panel,tap:LEFT,tap:YES,wait:600,shot:refused,tap:YES,tap:NO,tap:DOWN,tap:RIGHT,tap:DOWN,tap:YES,shot:info'`
    (step lists are tuned when the screens exist). Shots: `tracks`, `browse`, `panel`, `refused` (DN2: NO SAMPLE POOL), `info`, `empty`, `error` (needs a DT2 run with a bad file). Check DT2 at the end with the same script. Look at every PNG before handoff.
-3. One DT2 runtime test, `tests/regression/runtime/spark-picker.test.ts`, built on the helpers of `sample-playback.test.ts`: put a stereo PCM16 file in +Drive, drive the keys to select it on track 1 through the picker, wait for the `dk_strack` record of track 1 to show `ready == 1` (observe the runtime record and `sample_track_status`, not the framebuffer), then play the note and check the MOD_DSP event of SPARK's own index as that test does. Also CLEAR: record `ready == 0`. One device, one pass; no all-cell sweep.
+3. One DT2 runtime test, `spark-picker.test.ts` in tests/regression/runtime (not written yet), built on the helpers of `sample-playback.test.ts`: put a stereo PCM16 file in +Drive, drive the keys to select it on track 1 through the picker, wait for the `dk_strack` record of track 1 to show `ready == 1` (observe the runtime record and `sample_track_status`, not the framebuffer), then play the note and check the MOD_DSP event of SPARK's own index as that test does. Also CLEAR: record `ready == 0`. One device, one pass; no all-cell sweep.
 4. Gate: `mise run module:check digikit/spark`, `mise run test:host`, then the owner's runtime test above. No gate run until the end of the slice.
 
 ## 5. Open questions for Em (with recommendations)
@@ -168,6 +168,15 @@ Tests:
 5. Errors on an immediate refusal: decided (Em, 2026-11-01): no dialog; the track row shows the error text (section 2.4).
 6. DN2: picker shows `NO SAMPLE POOL` until the DN2 allocator exists. Recommend ship the picker on DT2 first and keep DN2 as the screenshot-iteration device.
 7. G5: should the runtime add the root prefix to `sample_select`? Recommend yes (keeps the picker device-agnostic).
+
+## 5b. As built (slice 2, DN2 screens)
+
+- Two calls plus the fini: `dk_picker_init(api, handle)` in `dkm_init` (the listing client is init-only), `dk_picker_open(m)` in the settings menu fill, `dk_picker_fini()`.
+- The 128-row table keeps the first 128 rows in sort order while the listing arrives (insertion by index), so the cap does not depend on the provider order. A name over 47 bytes is not shown and counts in `+N MORE`.
+- A path over 255 bytes is refused by the picker itself (`!BAD PATH` in the track row); there are no disabled rows, because the picker does not know the device limit.
+- The lists use a `check` callback and take the mark off at once. A list without it is closed by the stock handler after the row action, and a list that opens another view is not on the stack when that view closes (seen on the DN2 screen). The picker closes the browser itself and opens the track list again.
+- INFO text pages show about 16 characters per row; list rows about 21 to 23. Row text in lists is cut at 23 (worst-case wide names fit).
+- Title of INFO is `INFO`; the first row is `TRACK n`.
 
 ## 6. Estimate and risk (agent time)
 

@@ -100,11 +100,11 @@ fn activate(id: usize, row: usize) {
     }
 }
 
-/// YES on a row. A list row with a `check` callback toggles its check mark and calls it; other rows act.
+/// YES on a row. A list row toggles its check mark and calls `check`; other rows act.
 pub fn press_yes(row: usize) {
     let id = top();
     with(|s| s.menus[id].selected = row);
-    if is_list(id) && desc_of(id).is_some_and(|d| d.check.is_some()) {
+    if is_list(id) {
         let n = with(|s| s.menus[id].rows.len());
         assert!(row < n, "no row {row}");
         let on = dk_ui_checked(handle(id), row as c_int) == 0;

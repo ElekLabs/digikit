@@ -413,6 +413,8 @@ fn yes_on_a_file_selects_the_full_path_and_returns_to_the_track_list() {
     );
     assert_eq!(depth(), 2);
     assert_eq!(rows()[3], "04 KICK_01 QUEUED");
+    // no row keeps the check mark that core/ui sets on YES
+    assert!(render().iter().all(|r| r.starts_with("  ")));
 }
 
 #[test]
@@ -507,7 +509,7 @@ fn a_device_without_a_pool_says_so_in_the_row() {
     choose_panel_row(1);
     assert_eq!(
         render(),
-        vec!["TRACK 6", "STATE", "NO SAMPLE POOL ON THIS", "DEVICE"]
+        vec!["TRACK 6", "STATE", "NO SAMPLE POOL", "ON THIS DEVICE"]
     );
 }
 
@@ -613,9 +615,11 @@ fn track_info_page_shows_name_path_format_and_state() {
         vec![
             "TRACK 3",
             "KICK808",
-            "DRUMS/KICKS/KICK808",
+            "DRUMS/KICKS/",
+            "KICK808",
             "STEREO 48000 HZ",
-            "57600 FRAMES 1.2s",
+            "57600 FRAMES",
+            "LENGTH 1.2s",
             "STATE READY"
         ]
     );
@@ -629,8 +633,8 @@ fn track_info_page_shows_name_path_format_and_state() {
             "BAD",
             "X/BAD",
             "STATE",
-            "NEEDS PCM16 48K MONO OR",
-            "STEREO"
+            "NEEDS PCM16 48K",
+            "MONO OR STEREO"
         ]
     );
     press_no();

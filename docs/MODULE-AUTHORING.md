@@ -523,6 +523,11 @@ only calls these entries (a picker) has no table and must check the table `size`
 that has what a module needs; a module that calls a newer entry without checking `size` lists it in `[module] uses_api = ["sample_track_path"]`
 and is then refused by a runtime that lacks it.
 
+A module with a track table can add the on-device sample picker with `<dk/sample_picker.h>`: list `../../../sdk/src/sample_picker.c` and
+`../../../sdk/src/picker_logic.c` in the `[[object]]` sources, call `dk_picker_init(api, handle)` in `dkm_init`, `dk_picker_open(m)` in the fill of
+its `DK_MENU` settings menu (it adds a `SAMPLES...` row) and `dk_picker_fini()` in `dkm_fini`. `modules/machines/spark` is the example. The picker
+needs no manifest field: it checks the Api `size` before it calls `sample_track_path`, and without `core/ui` the row is absent.
+
 For reusable browsing, include `<dk/files.h>` and acquire a positive `files_client()` handle during init.
 `files_list` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
 empty path lists the root. `DK_FILES_SAMPLES` maps to DT2 +Drive or DN2 store `samples/`, and

@@ -34,15 +34,17 @@ static void fill_info(dk_ui_menu *m, void *ctx);
 static void panel_tracks(dk_ui_menu *p, int row, void *ctx);
 static void panel_browser(dk_ui_menu *p, int row, void *ctx);
 static int back_browser(void *ctx);
+static void check_tracks(void *ctx, int row, int on);
+static void check_browser(void *ctx, int row, int on);
 static void open_browser(void *ctx, int track);
 static void on_notify(uint32_t client, uint32_t request, int32_t hint, uint8_t *ctx);
 static void up_cb(void *ctx, int arg);
 static void row_cb(void *ctx, int at);
 
 static const dk_ui_menu_desc tracks_desc = {.name = "Samples", .title = "SAMPLES", .flags = DK_UI_LIST, .fill = fill_tracks,
-                                            .panel = panel_tracks};
+                                            .panel = panel_tracks, .check = check_tracks};
 static const dk_ui_menu_desc browser_desc = {.name = "Browse", .title = "SAMPLES", .flags = DK_UI_LIST, .fill = fill_browser,
-                                             .panel = panel_browser, .back = back_browser};
+                                             .panel = panel_browser, .check = check_browser, .back = back_browser};
 static const dk_ui_menu_desc info_desc = {.name = "SampleInfo", .title = "INFO", .flags = DK_UI_TEXT_PAGE, .fill = fill_info};
 
 static int slen(const char *s)
@@ -64,20 +66,23 @@ static void cat(char *out, const char *a, const char *b)
     out[n] = 0;
 }
 
-/* Text rows, broken at a space when there is one in the row width, else at the width. */
+/* A text page shows about 16 characters next to its title column (seen on the DN2 screen). */
+#define WRAP 16
+
+/* Text rows of at most WRAP characters: broken at a space (dropped) or after a '/' when there is one, else at the width. */
 static void wrap(dk_ui_menu *m, const char *s)
 {
     char row[DK_UI_ROW];
     while (*s) {
-        int n = slen(s), cut = PK_TEXT, i;
-        if (n > PK_TEXT) {
-            for (i = PK_TEXT; i > 0; i--)
-                if (s[i] == ' ') {
+        int n = slen(s), cut = n, i;
+        if (n > WRAP) {
+            cut = WRAP;
+            for (i = WRAP; i > 0; i--)
+                if (s[i] == ' ' || s[i - 1] == '/') {
                     cut = i;
                     break;
                 }
-        } else
-            cut = n;
+        }
         for (i = 0; i < cut; i++)
             row[i] = s[i];
         row[cut] = 0;
@@ -122,7 +127,7 @@ static void fill_tracks(dk_ui_menu *m, void *ctx)
         if (st == DK_SAMPLE_QUEUED || st == DK_SAMPLE_LOADING)
             active = 1;
         pk_track_row(row, t, st, g_refused[t], st == DK_SAMPLE_UNUSED ? "" : pk_leaf(track_path(t)), info.frames, info.rate, info.channels);
-        dk_ui_action(m, row, open_browser, 0, t);
+        dk_ui_text(m, row);
     }
     if (active && !g_ticking && dk_ui_has(DK_UI_CAP_TICK) && dk_ui_tick(tick, 0, TICK_MS) == 0)
         g_ticking = 1;
@@ -201,7 +206,7 @@ static void fill_browser(dk_ui_menu *m, void *ctx)
     (void)ctx;
     cat(tmp, "..  /", g_dir);
     pk_trunc(row, tmp, PK_TEXT);
-    dk_ui_action(m, row, up_cb, 0, 0);
+    dk_ui_text(m, row);
     if (g_state == ST_READING) {
         dk_ui_text(m, "READING...");
         return;
@@ -228,7 +233,7 @@ static void fill_browser(dk_ui_menu *m, void *ctx)
             pk_trunc(nm, r->name, PK_TEXT - 2);
             cat(row, "  ", nm);
         }
-        dk_ui_action(m, row, row_cb, 0, i);
+        dk_ui_text(m, row);
     }
     if (g_n == 0)
         dk_ui_text(m, "NO SAMPLES HERE");
@@ -241,33 +246,34 @@ static void fill_browser(dk_ui_menu *m, void *ctx)
     }
 }
 
-/* Leaves the browser: cancels a running listing and shows the track list again. */
+/* Leaves the browser for the track list. The browser is closed here and the track list is opened again: a list that opened another
+   view is not on the stack any more when that view closes (seen on the device screen), and dk_ui_open only refreshes a list that is. */
 static void leave_browser(void)
 {
     if (g_state == ST_READING)
         g_api->files_cancel(g_client, (uint32_t)g_ticket);
     g_state = ST_IDLE;
-    dk_ui_refresh(g_tracks);
+    dk_ui_close(g_browser);
+    dk_ui_open(g_tracks);
 }
 
+/* NO and the ".." row: up one folder, or out of the browser at the root. Always consumes the key. */
 static int back_browser(void *ctx)
 {
     (void)ctx;
     if (pk_parent(g_dir)) {
         relist();
         dk_ui_refresh(g_browser);
-        return 1;
-    }
-    leave_browser();
-    return 0; /* NO at the root closes the browser */
+    } else
+        leave_browser();
+    return 1;
 }
 
 static void up_cb(void *ctx, int arg)
 {
     (void)ctx;
     (void)arg;
-    if (back_browser(0) == 0)
-        dk_ui_close(g_browser);
+    back_browser(0);
 }
 
 static void select_file(int at)
@@ -278,7 +284,6 @@ static void select_file(int at)
     else
         rc = g_api->sample_select(g_handle, (uint32_t)g_track, (uint8_t *)g_path);
     g_refused[g_track] = rc < 0 ? rc : 0;
-    dk_ui_close(g_browser);
     leave_browser();
 }
 
@@ -320,6 +325,27 @@ static void file_info_cb(void *ctx, int at)
 {
     (void)ctx;
     open_info(1, at);
+}
+
+/* YES on a row of a list that has a check callback comes here and is the only thing that happens: the stock handler of a list without
+   one closes the list after the row's action. The mark core/ui sets is taken off at once, so a row never shows a check. */
+static void check_browser(void *ctx, int row, int on)
+{
+    (void)ctx;
+    (void)on;
+    dk_ui_check(g_browser, row, 0);
+    if (row == 0)
+        up_cb(0, 0);
+    else if (g_state == ST_DONE)
+        row_cb(0, row - 1);
+}
+
+static void check_tracks(void *ctx, int row, int on)
+{
+    (void)ctx;
+    (void)on;
+    dk_ui_check(g_tracks, row, 0);
+    open_browser(0, row);
 }
 
 /* RIGHT on a listed file: row 0 is "..", the files are rows 1 to g_n. */
@@ -387,7 +413,7 @@ static void fill_info(dk_ui_menu *m, void *ctx)
         if (g_info_at < 0 || g_info_at >= g_n)
             return;
         r = &g_rows[g_idx[g_info_at]];
-        pk_trunc(nm, r->name, PK_TEXT);
+        pk_trunc(nm, r->name, WRAP);
         dk_ui_text(m, nm);
         if (pk_join(g_path, sizeof g_path, g_dir, r->name) >= 0)
             wrap(m, g_path);
@@ -406,16 +432,15 @@ static void fill_info(dk_ui_menu *m, void *ctx)
             return;
         }
         if (track_path(t)[0]) {
-            pk_trunc(nm, pk_leaf(g_path), PK_TEXT);
+            pk_trunc(nm, pk_leaf(g_path), WRAP);
             dk_ui_text(m, nm);
             wrap(m, g_path);
         }
         if (st == DK_SAMPLE_READY && g_api->sample_track_info(g_handle, (uint32_t)t, (uint8_t *)&info) >= 0) {
             number_line(m, info.channels == 2 ? "STEREO " : "MONO ", info.rate, " HZ");
+            number_line(m, "", info.frames, " FRAMES");
             pk_secs_text(text, info.frames, info.rate);
-            pk_utoa(num, info.frames);
-            cat(row, num, " FRAMES ");
-            cat(row, row, text);
+            cat(row, "LENGTH ", text);
             dk_ui_text(m, row);
         }
         if (g_refused[t] || st < 0) {
