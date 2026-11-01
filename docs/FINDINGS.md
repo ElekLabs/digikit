@@ -20,7 +20,8 @@ earlier claim.
 
 Current SHARC follow-up: [native DT2 stock versus runtime diagnosis](findings/68-sharc-runtime-performance.md)
 (**[D] [C]**, 2026-10-26): patched parameter-conversion code remains a major
-interpreter workload; stock sampling is mostly compiled work. No optimization accepted.
+interpreter workload; stock sampling is mostly compiled work. The two-core PGO profile
+cuts DSP-thread CPU by about 18% on both devices; the DT2 root change saves 9-12% on the patched runtime (2026-11-01).
 
 Runtime test follow-up: [phase timing and bounded DT2 pilot](findings/69-runtime-test-timing.md)
 (**[D] [C]**, 2026-10-27): startup, settling, restarts and scenario work are now

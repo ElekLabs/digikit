@@ -83,14 +83,18 @@ def set_fast_regions(
         if "--audio-profile-syx" in args
         else digi_env.firmware(environ)
     )
-    # The first core's lists are SHARC_FAST_REGIONS and SHARC_BLOCKTRANS; the second core (`--also-coupled`, whose
-    # firmware is the fourth value) reads its own with a _2 suffix, since the addresses belong to one device's DSP image.
-    lists = [("", syx)]
+    # Slot 1's lists are SHARC_FAST_REGIONS and SHARC_BLOCKTRANS; slot 2 reads its own with a _2 suffix, since the
+    # addresses belong to one device's DSP image. In a two-core build (`--also-coupled`, whose firmware is the fourth
+    # value) slot 1 is always the DN2 core and slot 2 the DT2 core (see `second_core`), so the suffix follows the
+    # firmware's device, not the launch order.
+    firmwares = [syx]
     if "--also-coupled" in args and (at := args.index("--also-coupled") + 4) < len(
         args
     ):
-        lists.append(("_2", pathlib.Path(args[at])))
-    for suffix, firmware in lists:
+        firmwares.append(pathlib.Path(args[at]))
+    dt2_first = len(firmwares) == 2 and digi_env.device_for_syx(syx) == "dt2"
+    suffixes = ["_2", ""] if dt2_first else ["", "_2"]
+    for suffix, firmware in zip(suffixes, firmwares, strict=False):
         # Check explicit fast settings before installing the regular default.
         fallback_name = f"SHARC_FAST_FALLBACK_REGIONS{suffix}"
         if (
@@ -151,9 +155,10 @@ def second_core(
     device: str, *, enabled_by_default: bool = False
 ) -> tuple[list[str], pathlib.Path | None]:
     """The other device's ready inputs for a binary with both generated cores (`--also-coupled`) and its generated core
-    (SHARC_GEN_DIR_2). Desktop launches enable it by default; daemons opt in with DIGI_EMU_SECOND_CORE=1.
-    DIGI_EMU_SECOND_CORE=0 disables it. The build has no PGO profile yet (profiles are per single-core binary).
-    Nothing (a one-core launch) when it is off or the other device lacks a ready set or a core."""
+    (a preset SHARC_GEN_DIR_2 names the other device's core, as SHARC_GEN_DIR names the launching device's; the caller
+    then stores both in slot order). Desktop launches enable it by default; daemons opt in with
+    DIGI_EMU_SECOND_CORE=1. DIGI_EMU_SECOND_CORE=0 disables it. The two-core build has its own PGO profile (device
+    `both`). Nothing (a one-core launch) when it is off or the other device lacks a ready set or a core."""
     if (
         os.environ.get("DIGI_EMU_SECOND_CORE", "1" if enabled_by_default else "0")
         != "1"
@@ -235,7 +240,14 @@ def default_audio_args(
     print(f"native core: {generated} ({reason})", file=sys.stderr)
     also, second = second_core(device, enabled_by_default=second_core_by_default)
     if second is not None:
-        os.environ["SHARC_GEN_DIR_2"] = str(second)
+        # Slot order of a two-core build, whichever firmware launches: slot 1 (SHARC_GEN_DIR) is the DN2 core, slot 2
+        # (SHARC_GEN_DIR_2) the DT2 core. The engine is chosen by the firmware's device at run time, and the
+        # profile, the target dir and the region lists are keyed by slot.
+        dn2_core, dt2_core = (
+            (second, generated) if device == "dt2" else (generated, second)
+        )
+        os.environ["SHARC_GEN_DIR"] = str(dn2_core)
+        os.environ["SHARC_GEN_DIR_2"] = str(dt2_core)
         args.extend(also)
     if positional is None:
         args.insert(0, str(paths["firmware"]))
@@ -355,7 +367,10 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
 
 
 def device_for_args(args: list[str]) -> str:
-    """The device a coupled launch runs (`dn2`, `dt2`), by its firmware file."""
+    """The PGO profile device of a coupled launch: `both` for a two-core build (SHARC_GEN_DIR_2 is set), else the
+    device of its firmware file (`dn2`, `dt2`)."""
+    if os.environ.get("SHARC_GEN_DIR_2"):
+        return "both"
     if "--audio-profile-syx" in args:
         position = args.index("--audio-profile-syx") + 1
         syx = pathlib.Path(args[position]) if position < len(args) else None
@@ -387,19 +402,16 @@ def train_profile(device: str = "dn2") -> str:
 def pgo_plan(args: list[str]) -> object | None:
     """Profile-use plan for the coupled build, or None for the ordinary build.
 
-    Each device has its own profile (`native_pgo.py train --device dt2`): a DN2
-    profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%.
-    The launcher never trains on its own. A stale or missing profile falls back
+    Each single-core device has its own profile (`native_pgo.py train --device dt2`): a DN2
+    profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%. The two-core build (SHARC_GEN_DIR_2
+    set, the desktop default) has the profile of device `both` (`train --device both`), built in a target dir of its
+    own. The launcher never trains on its own. A stale or missing profile falls back
     to the ordinary build (its own target dir, not the launcher's pgo-use). DIGI_EMU_PGO_TRAIN=1 trains a stale or missing
     profile here when the training inputs exist (`mise run perf:pgo` is the usual
     way); DIGI_EMU_PGO=0 skips PGO. Any failure falls back to the ordinary
     build with a WARNING line: launching is never blocked.
     """
     if "--coupled" not in args and "--auto-coupled" not in args:
-        return None
-    if os.environ.get("SHARC_GEN_DIR_2"):
-        # The profiles are trained on single-core binaries; a two-core build runs without one.
-        print("second core: no PGO profile for a two-core build", file=sys.stderr)
         return None
     try:
         from tools.emulator import native_pgo
@@ -455,6 +467,9 @@ PGO_MISMATCH_WARNING = (
     "live DSP will run ~35% slower. Run uv run python -m tools.emulator.native_pgo train."
 )
 PGO_MISMATCH_WARNING_DT2 = PGO_MISMATCH_WARNING.replace("train.", "train --device dt2.")
+PGO_MISMATCH_WARNING_BOTH = PGO_MISMATCH_WARNING.replace(
+    "train.", "train --device both."
+)
 
 
 def build_command(command: list[str]) -> list[str]:
@@ -495,7 +510,10 @@ def verify_pgo(command: list[str], env: dict[str, str], device: str = "dn2") -> 
     except (OSError, ValueError):
         return
     if done.returncode == 1:
-        warning = PGO_MISMATCH_WARNING_DT2 if device == "dt2" else PGO_MISMATCH_WARNING
+        warning = {
+            "dt2": PGO_MISMATCH_WARNING_DT2,
+            "both": PGO_MISMATCH_WARNING_BOTH,
+        }.get(device, PGO_MISMATCH_WARNING)
         print(warning, file=sys.stderr, flush=True)
 
 

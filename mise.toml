@@ -240,13 +240,22 @@ description = "Retrain the DN2 PGO profile against the current code and generate
 run = "uv run python -m tools.emulator.native_pgo train --device dt2"
 description = "Retrain the DT2 PGO profile against the current code and generated core"
 
+[tasks."perf:fixture"]
+run = "node tools/devtools/runtime_fixture.ts"
+description = "Cold-boot the patched runtime of one device and save it as a replay fixture in out/fixtures/runtime/<dev>/ (use: mise run perf:fixture -- --device dn2|dt2). Two-core PGO training and timing cells read it."
+
+[tasks."perf:pgo:both"]
+run = "uv run python -m tools.emulator.native_pgo train --device both"
+description = "Retrain the two-core PGO profile (the desktop build with both generated cores). Needs the runtime fixtures of both devices (out/fixtures/runtime/<dev>/)."
+
 [tasks."perf:pgo"]
 run = [
   "uv run python -m tools.emulator.native_pgo train",
   "uv run python -m tools.emulator.native_pgo train --device dt2",
+  "uv run python -m tools.emulator.native_pgo train --device both",
   "uv run python -m tools.emulator.native_emu --build-only",
 ]
-description = "Retrain DN2 and DT2 PGO profiles, then rebuild the launcher with PGO. Run after core or engine changes, when `mise run workbench` reports a stale profile."
+description = "Retrain the DN2, DT2 and two-core PGO profiles, then rebuild the launcher with PGO. Run after core or engine changes, when `mise run workbench` reports a stale profile."
 
 [tasks."perf:aot"]
 run = "uv run python -m tools.sharc_dev.aot_gen"

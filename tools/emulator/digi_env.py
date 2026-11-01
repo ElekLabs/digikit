@@ -347,6 +347,23 @@ def fast_env(
     return out
 
 
+# Engine slots of a two-core build. Slot 1 (SHARC_GEN_DIR, unsuffixed region lists) is always the DN2 core and
+# slot 2 (SHARC_GEN_DIR_2, `_2` lists) always the DT2 core, whichever firmware boots. The region lists are
+# addresses in one device's DSP image and each engine instance reads the list of its own slot.
+SLOT_DEVICES = ("dn2", "dt2")
+SLOT_SUFFIX = {"dn2": "", "dt2": "_2"}
+SLOT_LISTS = ("SHARC_FAST_REGIONS", "SHARC_FAST_FALLBACK_REGIONS", "SHARC_BLOCKTRANS")
+
+
+def slot_env(device: str, env: dict[str, str]) -> dict[str, str]:
+    """ENV (a device's `fast_env`) with its region lists renamed for the device's engine slot of a two-core build."""
+    suffix = SLOT_SUFFIX[device]
+    return {
+        (key + suffix if key in SLOT_LISTS else key): value
+        for key, value in env.items()
+    }
+
+
 @functools.cache
 def toolchain_rustc() -> str:
     """The pinned rustup toolchain's rustc ("" when rustup cannot find it).

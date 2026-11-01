@@ -36,7 +36,8 @@ runtime keeps fault capture. Agreed with Em on 2026-10-31. Sources: the sampler 
       every block, also when no module is registered. 11.7 % are the barred hook helper `FUN_b8251b`, 2.6 % dsp-link. Steps: (1) dsp-voice
       skips the scan when no module type is registered and otherwise looks only at slots with a module type (one compare when unused, which
       also follows the capability rule on the device); (2) a fast-tier root at `_dv_entry`, with its data on its own page; (3) a PGO profile
-      for the two-core build (`tools/emulator/native_emu.py` makes none today). Fallback roots for barred stock code give about 5 %. Own PR to
+      for the two-core build (done 2026-11-01: about 18% less DSP-thread CPU on DT2 and DN2; the DT2 root change saves 9-12% on the patched
+      runtime; see finding 68). Fallback roots for barred stock code give about 5 %. Own PR to
       `main`.
 
 ## Phase 1: probe kit (one small runtime change, one flash)
