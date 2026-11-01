@@ -543,7 +543,7 @@ pub unsafe extern "C" fn dkrt_pool_done(req: u32, result: i32) {
 /// Adapter to runtime: the backing was lost, all handles are invalid.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_pool_lost() {
-    core_().lost();
+    core_().lost(&mut Device);
 }
 /// Project adapter to runtime: the current project slot changed.
 #[no_mangle]

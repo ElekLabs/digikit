@@ -362,21 +362,25 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     }
 
     /// The backing lost everything (DT2 stock reset): every bound track reloads from its path.
-    pub fn lost(&mut self) {
+    pub fn lost(&mut self, env: &mut impl Env) {
         for i in 0..EN {
             if matches!(self.entries[i].state, EState::Loading | EState::Ready) {
-                self.invalidate(i);
+                self.invalidate(i, env);
             }
         }
     }
 
     /// Mark an entry dead. Idle tracks bound to it reload from their path; tracks in the middle of a
     /// new request notice at their next step (their old reference is dropped without a release).
-    fn invalidate(&mut self, e: usize) {
+    /// A track that still plays the dead entry gets its DSP close at once, before any file access of the reload.
+    fn invalidate(&mut self, e: usize, env: &mut impl Env) {
         self.entries[e].state = EState::Dead;
         for c in 0..CL {
             for k in 0..TRACKS {
                 let t = &mut self.tracks[c][k];
+                if t.bound == Some(e) && (t.phase == Phase::Idle || t.phase == Phase::Queued) {
+                    env.close(c, k);
+                }
                 if t.phase != Phase::Idle || t.bound != Some(e) {
                     continue;
                 }
@@ -502,7 +506,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             if self.entries[e].state == EState::Ready && self.entries[e].refs != 0 {
                 let h = self.entries[e].handle;
                 if env.check(&h) != 0 {
-                    self.invalidate(e);
+                    self.invalidate(e, env);
                 }
             }
         }
@@ -721,7 +725,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             }
             if h.token == 0 || env.check(&h) != 0 || h.frames == 0 {
                 // A handle that is not valid now counts as a lost backing.
-                self.invalidate(e);
+                self.invalidate(e, env);
                 return;
             }
             let Some(next) = self.next_token.checked_add(1) else {
@@ -776,7 +780,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         // The backing was lost while the record was on its way (`invalidate` skips a track that is not idle).
         if let Some(e) = t.bound {
             if self.entries[e].state == EState::Dead {
-                self.invalidate(e);
+                self.invalidate(e, env);
             }
         }
     }

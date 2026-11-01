@@ -21,6 +21,7 @@ struct Fake {
     land_after: u32,
     landing: u32,
     publish_err: i32,
+    log: Vec<&'static str>,
 }
 fn id(size: u32, hash: u8) -> FileId {
     let mut h = [0; 32];
@@ -40,6 +41,7 @@ impl Fake {
 }
 impl Env for Fake {
     fn inspect(&mut self, p: &[u8]) -> Result<Inspect, i32> {
+        self.log.push("inspect");
         self.file(p).map(|f| Inspect { id: f.1, frames: f.2, rate: 48000, channels: f.3 }).ok_or(E_NOT_FOUND)
     }
     fn stat(&mut self, p: &[u8]) -> Result<FileId, i32> {
@@ -71,6 +73,7 @@ impl Env for Fake {
         self.free
     }
     fn close(&mut self, c: usize, k: usize) {
+        self.log.push("close");
         self.closed[c][k] = true;
     }
     fn drained(&mut self, _c: usize, _k: usize) -> bool {
@@ -155,7 +158,7 @@ fn backing_lost_while_the_record_is_on_its_way_reloads() {
     c.select(0, 0, b"a.wav");
     run(&mut c, &mut e, 3);
     assert_eq!(c.status(0, 0), LOADING);
-    c.lost();
+    c.lost(&mut e);
     run(&mut c, &mut e, 20);
     assert_eq!(c.status(0, 0), READY);
     assert_eq!(e.loads, 2, "reloaded from the remembered path");
@@ -359,13 +362,28 @@ fn backing_lost_reloads_bound_tracks() {
     c.select(0, 1, b"a.wav");
     run(&mut c, &mut e, 6);
     let t0 = c.info(0, 0).unwrap().token;
-    c.lost();
+    c.lost(&mut e);
     assert_eq!(c.status(0, 0), LOADING);
     run(&mut c, &mut e, 8);
     assert_eq!((c.status(0, 0), c.status(0, 1)), (READY, READY));
     assert_eq!(e.loads, 2, "one reload shared by both tracks");
     assert_eq!(e.released, 0, "dead handles are never released");
     assert_ne!(c.info(0, 0).unwrap().token, t0);
+}
+
+#[test]
+fn backing_lost_closes_a_playing_track_before_any_file_access() {
+    let (mut c, mut e) = (core(), Fake::new());
+    e.add("a.wav", id(100, 1), 500, 2);
+    c.select(0, 0, b"a.wav");
+    run(&mut c, &mut e, 6);
+    assert_eq!(c.status(0, 0), READY);
+    e.log.clear();
+    c.lost(&mut e);
+    assert_eq!(e.log, ["close"], "the close is issued by lost() itself");
+    run(&mut c, &mut e, 8);
+    assert_eq!(e.log[1], "inspect");
+    assert_eq!(c.status(0, 0), READY);
 }
 
 #[test]
@@ -378,7 +396,7 @@ fn backing_lost_with_a_changed_or_missing_file() {
     run(&mut c, &mut e, 6);
     e.files[0].1 = id(100, 7);
     e.files.pop();
-    c.lost();
+    c.lost(&mut e);
     run(&mut c, &mut e, 8);
     assert_eq!(c.status(0, 0), E_CHANGED);
     assert_eq!(c.status(0, 1), E_LOST);
