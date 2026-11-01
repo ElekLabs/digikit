@@ -7,6 +7,7 @@ import { button, repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { installWithDebug, liveArtifacts, memory, panel, record, runtimeTests, settleUi } from './live.ts';
+import { planSymbol, prepareRuntimePlan } from './runtime-plan.ts';
 
 // End to end, DT2 1.17: the device-neutral runtime (API 1.5 track table), core/sample-pool (the borrowed stock pool), machine contract 1.2
 // and digikit/spark playing a stereo sample that a fixture module selected by path (docs/design/sample-api-1.5.md).
@@ -122,9 +123,13 @@ const ABSENT = 0.004;
 
 /** The louder channel holds each tone of `want` and none of `absent` over frames [from, to). Returns the measured levels. */
 function expectTones(name: string, c: Capture, from: number, to: number, want: number[], absent: number[]) {
-  const levels = Object.fromEntries([...want, ...absent].map((hz) => [hz, Math.max(tone(c.l, hz, from, to), tone(c.r, hz, from, to))]));
-  for (const hz of want) expect(levels[hz]!, `${name}: ${hz} Hz in the louder channel (${JSON.stringify(levels)})`).toBeGreaterThan(AUDIBLE);
-  for (const hz of absent) expect(levels[hz]!, `${name}: ${hz} Hz absent (${JSON.stringify(levels)})`).toBeLessThan(ABSENT);
+  const levels = Object.fromEntries(
+    [...want, ...absent].map((hz) => [hz, Math.max(tone(c.l, hz, from, to), tone(c.r, hz, from, to))]),
+  );
+  for (const hz of want)
+    expect(levels[hz]!, `${name}: ${hz} Hz in the louder channel (${JSON.stringify(levels)})`).toBeGreaterThan(AUDIBLE);
+  for (const hz of absent)
+    expect(levels[hz]!, `${name}: ${hz} Hz absent (${JSON.stringify(levels)})`).toBeLessThan(ABSENT);
   return levels;
 }
 
@@ -142,8 +147,12 @@ function expectSplitPair(name: string, c: Capture, from: number, to: number, lef
   const text = JSON.stringify(measured);
   expect(measured.lLeft, `${name}: the left source is in L ${text}`).toBeGreaterThan(AUDIBLE);
   expect(measured.rRight, `${name}: the right source is in R ${text}`).toBeGreaterThan(AUDIBLE);
-  expect(measured.lRight, `${name}: the right source is at least 20 dB down in L ${text}`).toBeLessThan(measured.lLeft * 0.1);
-  expect(measured.rLeft, `${name}: the left source is at least 20 dB down in R ${text}`).toBeLessThan(measured.rRight * 0.1);
+  expect(measured.lRight, `${name}: the right source is at least 20 dB down in L ${text}`).toBeLessThan(
+    measured.lLeft * 0.1,
+  );
+  expect(measured.rLeft, `${name}: the left source is at least 20 dB down in R ${text}`).toBeLessThan(
+    measured.rRight * 0.1,
+  );
   return measured;
 }
 
@@ -327,7 +336,10 @@ runtimeTests(
       expect(onsetR, 'A was playing before the select').toBeGreaterThanOrEqual(0);
       expectTones('before the select', reselect, onsetR + 4800, RATE / 2 - 2400, [440, 660], [330, 495]);
       const tailFrom = readyAtB + RATE / 4;
-      const tailPeak = Math.max(peak(reselect.l, tailFrom, reselect.l.length), peak(reselect.r, tailFrom, reselect.r.length));
+      const tailPeak = Math.max(
+        peak(reselect.l, tailFrom, reselect.l.length),
+        peak(reselect.r, tailFrom, reselect.r.length),
+      );
       log.reselectTail = { tailFrom, tailPeak };
       expect(reselect.l.length - tailFrom, 'the capture covers the tail').toBeGreaterThan(RATE);
       expect(tailPeak, 'the old note is silent after the select').toBeLessThan(0.002);
@@ -393,22 +405,40 @@ runtimeTests(
       });
       const onsetAfter = onset(noteAfter);
       expect(onsetAfter, 'plays again after the reload').toBeGreaterThanOrEqual(0);
-      log.noteAfterLevels = expectTones('after the reset', noteAfter, onsetAfter + 4800, onsetAfter + RATE, [330, 495], [440, 660]);
+      log.noteAfterLevels = expectTones(
+        'after the reset',
+        noteAfter,
+        onsetAfter + 4800,
+        onsetAfter + RATE,
+        [330, 495],
+        [440, 660],
+      );
 
       // 5. Pitch: PITCH is 0.375 semitone per unit (0x100 raw), so +32 units (0x6000 from 0x4000) are one octave. ENC F: PITCH is knob 5, the second
-      // row of the SRC page under START (knob 3 is the sample slot). The stock encoder accelerates by event rate; slow single turns move about one raw
-      // step, so the knob is turned in fast bursts until the Sound array reads 0x6000 (frame halfword of knob slot 5: mirror index 30).
-      const PITCH_INDEX = 25 + 5;
+      // row of the SRC page under START (knob 3 is the sample slot). The stock encoder accelerates by event rate, so the knob is turned in fast
+      // bursts. The read-back is word 3 (PITCH) of `_dv_params`, the parameter words that core/dsp-voice builds every block and passes to SPARK
+      // as R12 (the words SPARK actually reads). The buffer is rewritten only while a voice renders, so TRIG 1 is held during the turn.
       const PITCH_OCTAVE = 0x6000;
       const ui = panel(session);
       const mem = memory(session);
-      const readPitch = () => mem.soundParam(TRACK, PITCH_INDEX);
+      const paramsPlan = await prepareRuntimePlan(session, artifacts, ['_dv_params']);
+      const pitchAddress = planSymbol(paramsPlan, '_dv_params') + 3 * 4; // a byte-alias address; one little-endian word per parameter
+      const readPitch = async () => {
+        const peek = await mem.dsp(pitchAddress, 4);
+        expect(peek.unknown, 'the parameter word is readable').toBe(0);
+        return Buffer.from(peek.hex, 'hex').readUInt32LE(0);
+      };
       const pageNow = (await session.client.framebufferGet({ hash: true, data: false })).sha256;
       log.pitchPage = { srcPageHash, pageNow, same: pageNow === srcPageHash };
-      const start = await readPitch();
-      expect(start, `PITCH starts unchanged (0x4000): ${start.toString(16)}`).toBe(0x4000);
-      const turned = await ui.turnTo('ENC F', readPitch, PITCH_OCTAVE);
-      log.pitchTurn = { value: turned.value, bursts: turned.bursts, trace: turned.trace };
+      await session.client.inputButton(button('TRIG 1'), true);
+      let turned: Awaited<ReturnType<typeof ui.turnTo>>;
+      try {
+        await expect.poll(readPitch, { timeout: 10_000, interval: 100 }).toBe(0x4000);
+        turned = await ui.turnTo('ENC F', readPitch, PITCH_OCTAVE);
+      } finally {
+        await session.client.inputButton(button('TRIG 1'), false);
+      }
+      log.pitchTurn = { address: pitchAddress, value: turned.value, bursts: turned.bursts, trace: turned.trace };
       const noteUp = await captureNote(runtime, path.join(artifacts, 'octave.wav'), async (clock) => {
         await until(clock, 1.5 * RATE);
       });

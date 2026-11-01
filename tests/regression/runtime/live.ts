@@ -249,7 +249,8 @@ export function panel(session: Session) {
       trace.push(await read());
     }
     const value = trace.at(-1)!;
-    if (Math.abs(value - target) > tolerance) throw new Error(`turnTo ${name}: ${target.toString(16)} not reached: ${trace.map((v) => v.toString(16))}`);
+    if (Math.abs(value - target) > tolerance)
+      throw new Error(`turnTo ${name}: ${target.toString(16)} not reached: ${trace.map((v) => v.toString(16))}`);
     return { value, bursts: maxBursts, trace };
   }
   return { tap, chord, turn, settle, burst, turnTo };
