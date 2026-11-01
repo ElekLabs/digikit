@@ -148,6 +148,7 @@ mod tests {
                 id: "t".into(),
                 name: "T".into(),
                 short: "T".into(),
+                stereo: false,
             }];
             m.manifest.param = (0..2)
                 .map(|w| ParamDef {
@@ -176,6 +177,7 @@ mod tests {
                 render: "_r".into(),
                 note_on: "_n".into(),
                 desc: "_d".into(),
+                stereo: false,
             }];
         }
         let models = models();

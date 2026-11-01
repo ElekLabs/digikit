@@ -212,6 +212,8 @@ pub struct MachineDef {
     pub id: String,
     pub name: String,
     pub short: String,
+    /// Declared stereo (`.stereo = 1`, machine contract 1.2).
+    pub stereo: bool,
 }
 
 /// A parameter of a machine (a `DK_PARAM` record). `min`, `max` and `default` are raw: the knob unit times 256.
@@ -256,6 +258,8 @@ pub struct VoiceDef {
     pub render: String,
     pub note_on: String,
     pub desc: String,
+    /// Declared stereo; the packer checks it against `DK_MACHINE_STEREO` in the `dk_machine_desc`.
+    pub stereo: bool,
 }
 
 /// A run-time effect (a `DK_FX` record, DSP section version 4 of a `.dkm`; docs/design/digikit-dkm.md): `process` is the global text symbol of its process routine
@@ -369,6 +373,7 @@ pub struct RVoice {
     pub entry: String,
     pub note_on: Option<String>,
     pub desc: Option<String>,
+    pub stereo: bool,
     /// A patched-in contract voice: the state block `Library::lower` reserved for it (`desc` read from the object).
     pub state: Option<VoiceState>,
 }
@@ -607,6 +612,7 @@ pub fn resolve(m: &Manifest, models: &Models) -> Result<Vec<DevResolved>> {
                 entry: v.render.clone(),
                 note_on: Some(v.note_on.clone()),
                 desc: Some(v.desc.clone()),
+                stereo: v.stereo,
                 state: m.voice_state.get(&v.machine).cloned(),
             })
             .collect();
@@ -869,6 +875,7 @@ summary = "t."
             id: "t".into(),
             name: "Tee".into(),
             short: "T".into(),
+            stereo: false,
         }];
         m.param = (0..n)
             .map(|w| ParamDef {
@@ -901,6 +908,7 @@ summary = "t."
             render: "_t_render".into(),
             note_on: "_t_note_on".into(),
             desc: "_t_desc".into(),
+            stereo: false,
         }];
         m
     }
@@ -1084,6 +1092,15 @@ summary = "t."
         lower(&mut m, &models()).unwrap();
         assert_eq!(m.entry.len(), n);
     }
+}
+
+/// A module-owned table of 16 per-track sample records, declared by DK_SAMPLE_TRACKS (<dk/sample_track.h>, API 1.5): the symbols of the
+/// records and of the control sets in the module's DSP data.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct SampleTracksDef {
+    pub local_id: u32,
+    pub records: String,
+    pub control: String,
 }
 
 /// A module-owned sample bank, declared by DK_SAMPLE_BANK.

@@ -654,6 +654,7 @@ plan.json {}",
                         render: v.entry.clone(),
                         note_on: v.note_on.clone(),
                         desc: v.desc.clone(),
+                        stereo: v.stereo,
                         ranges,
                     });
                 }
@@ -678,6 +679,12 @@ plan.json {}",
                     if let Some(p) = patchkit::register::effect_page(id, i, f)? {
                         pages.push(p);
                     }
+                }
+                if m.manifest.sample_tracks.is_some() {
+                    // TODO(API 1.5 runtime): the DSP section has no record for the track table yet (the runtime owner adds it with the loader).
+                    return Err(Error(format!(
+                        "{id}: DK_SAMPLE_TRACKS is read by `desc` and the conformance rigs, but a .dkm cannot carry the track table yet"
+                    )));
                 }
                 match sharc.first() {
                     Some((o, _)) => {
@@ -750,6 +757,7 @@ plan.json {}",
                     "pages": mf.page,
                     "voices": mf.voice,
                     "sample_bank": mf.sample_bank,
+                    "sample_tracks": mf.sample_tracks,
                 }))?
             );
         }

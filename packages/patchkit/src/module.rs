@@ -9,6 +9,8 @@ use std::collections::BTreeMap;
 pub struct Manifest {
     #[serde(skip)]
     pub sample_bank: Option<crate::typed::SampleBankDef>,
+    #[serde(skip)]
+    pub sample_tracks: Option<crate::typed::SampleTracksDef>,
     pub module: ModuleInfo,
     #[serde(default)]
     pub targets: BTreeMap<String, String>,
@@ -432,7 +434,9 @@ fn reserve_voice_state(m: &mut Module) -> Result<()> {
                 )
             })?;
         let w = |i: usize| u32::from_le_bytes(words[i * 4..i * 4 + 4].try_into().unwrap());
-        if w(0) != crate::dkmdsp::DESC_MAGIC || w(1) != crate::dkmdsp::DESC_CONTRACT {
+        if w(0) != crate::dkmdsp::DESC_MAGIC
+            || w(1) & !crate::dkmdsp::DESC_STEREO != crate::dkmdsp::DESC_CONTRACT
+        {
             return Err(err!(
                 "voice {machine}: desc {desc} is no dk_machine_desc of contract {}",
                 crate::dkmdsp::DESC_CONTRACT
@@ -539,6 +543,7 @@ impl Module {
             manifest.page = d.pages;
             manifest.voice = d.voices;
             manifest.sample_bank = d.sample_bank;
+            manifest.sample_tracks = d.sample_tracks;
             // a patched-in module keeps the records out of the image: the objects lose their descriptor sections
             if !manifest.module.dynamic {
                 // an object that held only records is removed with its manifest entry (the two lists stay aligned)

@@ -1,0 +1,167 @@
+{
+  "machines": [
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "param": "spark_start",
+              "slot": 25
+            },
+            {
+              "param": "spark_end",
+              "slot": 26
+            },
+            {
+              "param": "spark_reverse",
+              "slot": 27
+            },
+            {
+              "param": "spark_pitch",
+              "slot": 28
+            }
+          ],
+          "level": 10,
+          "name": "SPARK",
+          "own_dsp": true,
+          "page": {
+            "name": "SPK",
+            "title": "SPARK"
+          },
+          "position": null,
+          "short": "SPK",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            {
+              "param": "spark_start",
+              "slot": 1
+            },
+            {
+              "param": "spark_end",
+              "slot": 2
+            },
+            null,
+            {
+              "param": "spark_reverse",
+              "slot": 4
+            },
+            {
+              "param": "spark_pitch",
+              "slot": 5
+            },
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "SPARK",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "SPK",
+          "type": null
+        }
+      },
+      "id": "spark",
+      "name": "SPARK",
+      "short": "SPK"
+    }
+  ],
+  "module": "digikit/spark",
+  "params": {
+    "dn2": [
+      {
+        "default": 0,
+        "id": "spark_start",
+        "max": 32512,
+        "min": 0,
+        "name": "Start",
+        "short": "START",
+        "slot": 25,
+        "template": 213
+      },
+      {
+        "default": 32512,
+        "id": "spark_end",
+        "max": 32512,
+        "min": 0,
+        "name": "End",
+        "short": "END",
+        "slot": 26,
+        "template": 213
+      },
+      {
+        "default": 0,
+        "id": "spark_reverse",
+        "max": 32512,
+        "min": 0,
+        "name": "Reverse",
+        "short": "REV",
+        "slot": 27,
+        "template": 213
+      },
+      {
+        "default": 16384,
+        "id": "spark_pitch",
+        "max": 32512,
+        "min": 0,
+        "name": "Pitch",
+        "short": "PITCH",
+        "slot": 28,
+        "template": 213
+      }
+    ],
+    "dt2": [
+      {
+        "default": 0,
+        "id": "spark_start",
+        "max": 32512,
+        "min": 0,
+        "name": "Start",
+        "short": "START",
+        "slot": 1,
+        "template": 209
+      },
+      {
+        "default": 32512,
+        "id": "spark_end",
+        "max": 32512,
+        "min": 0,
+        "name": "End",
+        "short": "END",
+        "slot": 2,
+        "template": 209
+      },
+      {
+        "default": 0,
+        "id": "spark_reverse",
+        "max": 32512,
+        "min": 0,
+        "name": "Reverse",
+        "short": "REV",
+        "slot": 4,
+        "template": 209
+      },
+      {
+        "default": 16384,
+        "id": "spark_pitch",
+        "max": 32512,
+        "min": 0,
+        "name": "Pitch",
+        "short": "PITCH",
+        "slot": 5,
+        "template": 209
+      }
+    ]
+  }
+}

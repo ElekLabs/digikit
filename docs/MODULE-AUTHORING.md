@@ -383,6 +383,14 @@ The adapter enters your routine with `I13` = return address and `JUMP (M13, I12)
 track independently of the physical voice slot, and stays latched until retrigger. The first trigger-edge block remains silent; the owner is
 latched on the following note-on block. An invalid owner ends only that slot without calling the module.
 `render` also runs on the note-on block, after `note_on`.
+
+Stereo machines (machine contract 1.2, additive). A machine that has two output channels declares `.stereo = 1` in `DK_MACHINE`, sets
+`DK_MACHINE_STEREO` in the contract word of its `dk_machine_desc` (`DK_MACHINE_V1 | DK_MACHINE_STEREO`, 257; `pack` refuses a mismatch), writes
+`DK_BLOCK` floats of the right channel to `in->out_r` (word 5 of `dk_voice_in`) and returns `DK_STEREO` or-ed into the status (`DK_OK | DK_STEREO`,
+`DK_DONE | DK_STEREO`) on every block. A mono 1.1 machine is unchanged: it never touches `out_r` and the adapter copies L to R. On the Digitakt II
+the adapter writes R into the odd voice of the stock voice pair (the stock engine pans the two buffers independently); the guard checks both
+blocks. On the Digitone II `out_r` is a scratch block for now and the status bit is dropped, so a stereo machine plays its L only until the shadow
+right-channel stages are production (TODO in `dsp-voice-dn2.s`). `digikit/spark` is the example.
 Do not place `note_on` at offset 0 of the image: an offset of 0 reads as "no note_on".
 
 The `dk_machine_desc` has 10 words: magic, contract, parameter count, voices (1 to 16), state bytes per voice (a multiple of 4), bytes cleared at
@@ -619,7 +627,7 @@ Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `modul
   | Contract | Version | Covers |
   | --- | --- | --- |
   | `api` | `[1, 2]` | The `dk_api` table. Every module has it, `raw` included. |
-  | `machine` | `[1, 0]` | `<dk/machine.h>` |
+  | `machine` | `[1, 2]` | `<dk/machine.h>`; minor 1: `track`; minor 2: stereo machines |
   | `fx` | `[1, 0]` | `<dk/fx.h>` |
   | `service` | `[1, 0]` | Service modules |
 

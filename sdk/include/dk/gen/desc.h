@@ -88,6 +88,7 @@ typedef struct {
     char render[32];                         /* the SHARC+ symbol of the render routine */
     char note_on[32];                        /* the SHARC+ symbol of the note-on routine */
     char desc[32];                           /* the SHARC+ symbol of the dk_machine_desc */
+    uint32_t stereo;                         /* 0 mono, 1 stereo (contract 1.2); must agree with DK_MACHINE_STEREO in the dk_machine_desc */
 } dk_desc_machine;
 
 /* One parameter of a machine. Values are knob units times 256 (0x7f00 = 127.0). */
@@ -154,7 +155,7 @@ _Static_assert(offsetof(dk_desc_fx_param, max) == 36, "dk_desc_fx_param.max");
 _Static_assert(offsetof(dk_desc_fx_param, def) == 40, "dk_desc_fx_param.def");
 _Static_assert(offsetof(dk_desc_fx_param, name) == 44, "dk_desc_fx_param.name");
 _Static_assert(offsetof(dk_desc_fx_param, short_name) == 68, "dk_desc_fx_param.short_name");
-_Static_assert(sizeof(dk_desc_machine) == 168, "dk_desc_machine size");
+_Static_assert(sizeof(dk_desc_machine) == 172, "dk_desc_machine size");
 _Static_assert(offsetof(dk_desc_machine, kind) == 0, "dk_desc_machine.kind");
 _Static_assert(offsetof(dk_desc_machine, size) == 4, "dk_desc_machine.size");
 _Static_assert(offsetof(dk_desc_machine, id) == 8, "dk_desc_machine.id");
@@ -163,6 +164,7 @@ _Static_assert(offsetof(dk_desc_machine, short_name) == 48, "dk_desc_machine.sho
 _Static_assert(offsetof(dk_desc_machine, render) == 72, "dk_desc_machine.render");
 _Static_assert(offsetof(dk_desc_machine, note_on) == 104, "dk_desc_machine.note_on");
 _Static_assert(offsetof(dk_desc_machine, desc) == 136, "dk_desc_machine.desc");
+_Static_assert(offsetof(dk_desc_machine, stereo) == 168, "dk_desc_machine.stereo");
 _Static_assert(sizeof(dk_desc_param) == 112, "dk_desc_param size");
 _Static_assert(offsetof(dk_desc_param, kind) == 0, "dk_desc_param.kind");
 _Static_assert(offsetof(dk_desc_param, size) == 4, "dk_desc_param.size");

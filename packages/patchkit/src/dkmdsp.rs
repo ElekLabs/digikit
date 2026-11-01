@@ -63,6 +63,8 @@ pub const VOICE_LEN_V3: usize = 64;
 /// `dk_machine_desc` (SDK contract): magic "DKMA" and the contract number the packer accepts, and its size in u32 words.
 pub const DESC_MAGIC: u32 = 0x444b_4d41;
 pub const DESC_CONTRACT: u32 = 1;
+/// Bit 8 of the desc's contract word: a stereo machine (contract 1.2, `DK_MACHINE_STEREO`). The low byte is the major number.
+pub const DESC_STEREO: u32 = 0x100;
 pub const DESC_WORDS: usize = 10;
 pub const VOICE_LEN_V1: usize = 16;
 pub const FX_LEN: usize = 64;
@@ -133,6 +135,8 @@ pub struct VoiceSpec {
     pub render: String,
     pub note_on: Option<String>,
     pub desc: Option<String>,
+    /// Declared stereo in `DK_MACHINE`; the desc must carry `DESC_STEREO` too.
+    pub stereo: bool,
     pub ranges: [u32; 8],
 }
 
@@ -144,6 +148,7 @@ impl VoiceSpec {
             render,
             note_on: None,
             desc: None,
+            stereo: false,
             ranges,
         }
     }
@@ -472,10 +477,17 @@ pub fn pack_with_bank(
                     w(0)
                 ));
             }
-            if w(1) != DESC_CONTRACT {
+            if w(1) & !DESC_STEREO != DESC_CONTRACT {
                 return Err(err!(
-                    "voice desc {d}: contract {}, this packer takes {DESC_CONTRACT}",
+                    "voice desc {d}: contract {:#x}, this packer takes {DESC_CONTRACT} (optionally with {DESC_STEREO:#x}, stereo)",
                     w(1)
+                ));
+            }
+            if (w(1) & DESC_STEREO != 0) != v.stereo {
+                return Err(err!(
+                    "voice desc {d}: DK_MACHINE says stereo = {}, the desc's contract word says {}",
+                    v.stereo as u32,
+                    (w(1) & DESC_STEREO != 0) as u32
                 ));
             }
             voices_n = w(3);
@@ -1283,6 +1295,42 @@ mod tests {
             routes: ROUTE_MASTER,
             route: ROUTE_MASTER,
         }
+    }
+
+    /// A contract machine: `render` and `note_on` in the text, a `dk_machine_desc` with the given contract word in the data.
+    fn machine_object(contract: u32) -> Dko {
+        let mut o = object();
+        let words = [DESC_MAGIC, contract, 1, 1, 8, 8, 100, 100, 0, 0];
+        let desc: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        o.sections[1] = sec("d", "data", 4, &desc);
+        o.symbols.push(sym("mdesc", Some("d"), 0, true));
+        o.symbols.push(sym("note", Some("t"), 3, true));
+        o
+    }
+
+    fn machine_spec(stereo: bool) -> VoiceSpec {
+        VoiceSpec {
+            type_no: 1,
+            render: "entry".into(),
+            note_on: Some("note".into()),
+            desc: Some("mdesc".into()),
+            stereo,
+            ranges: [0; 8],
+        }
+    }
+
+    #[test]
+    fn a_stereo_declaration_must_agree_with_the_contract_word_of_the_desc() {
+        let mono = machine_object(DESC_CONTRACT);
+        let stereo = machine_object(DESC_CONTRACT | DESC_STEREO);
+        assert!(pack(&mono, 1, &[machine_spec(false)], &[]).is_ok());
+        assert!(pack(&stereo, 1, &[machine_spec(true)], &[]).is_ok());
+        let e = |o: &Dko, v: bool| pack(o, 1, &[machine_spec(v)], &[]).unwrap_err().0;
+        assert!(e(&stereo, false).contains("stereo = 0"));
+        assert!(e(&mono, true).contains("stereo = 1"));
+        // another major number, or an unknown flag, is refused
+        assert!(e(&machine_object(2), false).contains("contract 0x2"));
+        assert!(e(&machine_object(DESC_CONTRACT | 0x200), false).contains("contract 0x201"));
     }
 
     #[test]

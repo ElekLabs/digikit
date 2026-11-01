@@ -5,7 +5,7 @@ pub const RUNTIME_VERSION: u32 = 0x000504;
 
 pub mod contract {
     pub const API: (u8, u8) = (1, 5);
-    pub const MACHINE: (u8, u8) = (1, 1);
+    pub const MACHINE: (u8, u8) = (1, 2);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
 }

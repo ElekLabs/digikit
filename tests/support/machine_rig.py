@@ -66,6 +66,7 @@ class Block:
     foreign: list[str] = field(
         default_factory=list
     )  # stores of the module's code outside the memory it may write (rig with record_stores), one text each
+    right: tuple[float, ...] = ()  # DT2: the odd voice's block after the call (a stereo machine's R; NaN when nothing wrote it)
 
 
 @dataclass
@@ -393,6 +394,8 @@ class MachineRig:
         regs, out_addr = self._regs(ctx)
         for k in range(32):
             self.sess.poke(nw(out_addr) + k, NAN)
+            if self.device == "dt2":
+                self.sess.poke(nw(out_addr + 0x80) + k, NAN)
         self.sess.poke(nw(dv.STACK) - 1, dv.RETURN_SW - 1)
         self.sess.poke(nw(dv.STACK), 0x20000FF0)
         # the mask of the registered types, as voice 0 of an earlier block leaves it (the table holds the one row)
@@ -415,6 +418,12 @@ class MachineRig:
         samples = struct.unpack(
             "<32f", struct.pack("<32I", *[NAN if w is None else w for w in words])
         )
+        right = ()
+        if self.device == "dt2":
+            rw = [self.sess.peek(nw(out_addr + 0x80) + k) for k in range(32)]
+            right = struct.unpack(
+                "<32f", struct.pack("<32I", *[NAN if w is None else w for w in rw])
+            )
         bad = [
             n
             for n in dv.CONTEXT_REGS
@@ -431,6 +440,31 @@ class MachineRig:
             res,
             faults & 0xFFFF,
             foreign,
+            right,
+        )
+
+    def odd_block(self, ctx: dict | str | None = "friendly") -> tuple[float, ...]:
+        """DT2: the odd voice of the pair, called after `block` the way the engine does: it copies the even voice's block unless
+        the even voice wrote R. Returns the odd voice's 32 floats (NaN where nothing wrote)."""
+        if self.device != "dt2":
+            raise ValueError("only the Digitakt II has a voice pair")
+        ctx = dict(dv.FRIENDLY) if ctx == "friendly" else {**dv.FRIENDLY, **(ctx or {})}
+        v = 2 * self.track + 1
+        regs = {
+            **self._regs(ctx)[0],
+            "R4": dv.RECORDS + v * dv.REC,
+            "R8": dv.OUT + v * 0x80,
+            "R14": 32 - v,
+        }
+        self.sess.poke(nw(dv.STACK) - 1, dv.RETURN_SW - 1)
+        self.sess.poke(nw(dv.STACK), 0x20000FF0)
+        res = self.sess.call(
+            "_dv_entry", regs, max_steps=self.step_limit, read_regs=("I6", "I7")
+        )
+        assert res["halt"]["reason"] == "breakpoint", res["halt"]
+        words = [self.sess.peek(nw(dv.OUT + v * 0x80) + k) for k in range(32)]
+        return struct.unpack(
+            "<32f", struct.pack("<32I", *[NAN if w is None else w for w in words])
         )
 
     # -- the write set -----------------------------------------------------------------------------------------------------
@@ -439,6 +473,10 @@ class MachineRig:
         the output block, the voice's own state block (base + stride * track, `state_bytes`), its data stack and its own data and bss (shared by all voices) (`stack_bytes` bytes below the device's actual module-entry I7). A routine without a description (the raw form) has no state; it gets DEFAULT_STACK_BYTES of stack."""
         b = self.built
         out = [(out_addr, 4 * 32, "output block")]
+        if self.device == "dt2":  # a stereo machine writes R into the odd voice's block
+            out.append((out_addr + 0x80, 4 * 32, "right output block"))
+        elif "_dv_rscr" in self.built.data:  # DN2: the adapter's scratch block for a stereo machine's R
+            out.append((self.built.data["_dv_rscr"], 4 * 32, "right output scratch"))
         if b.desc:
             out.append(
                 (

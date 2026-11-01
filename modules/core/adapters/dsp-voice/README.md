@@ -33,6 +33,8 @@ Around a registered routine the wrapper checks what it cannot trust (docs/findin
 - Cost: about 400 instructions per registered even voice and block on the rig (0.07 % to 0.09 % of the DSP).
 - A row with a `note_on` pc (row words 16 to 19: `note_on`, `state_base`, `stride`, `clear`) is a machine of the SDK contract (`<dk/machine.h>`) on both devices: the adapter finds the note-on, clears the voice's state, calls `note_on` and `render` with the voice input and the parameter words, ends the voice on `DK_DONE` or a fault, and applies the guard above. On the Digitone II the guard is the same, a faulted slot is silent until the next trig. A row without a `note_on` is a routine of the form below and runs as described.
 
+- Stereo machines (machine contract 1.2): the status of `render` may carry `DK_STEREO`. The adapter gives `dk_voice_in` an `out_r` (the odd voice's block of the pair on the Digitakt II, a scratch block on the Digitone II). On the Digitakt II the even voice sets a flag for its track; the odd voice keeps the R the machine wrote instead of copying L, and clears the flag (the even voice clears it at the start of every block as well). The guard of a stereo block covers both blocks: a bad sample in either zeroes both and ends the voice. A mono machine behaves as before. Digitone II: the bit is dropped and R is not used yet (TODO: the shadow right-channel stages).
+
 A routine should therefore render silence for an idle voice and start at its note-on path when byte `+0x1b9` of the record is clear.
 
 ## For module authors: the routine's register contract
