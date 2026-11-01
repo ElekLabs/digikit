@@ -141,7 +141,7 @@ instruction count zero; neither establishes the desired coupled reset contract.
 
 ### Static scope and coverage groups
 
-**[D]** Independently reviewed source counts below describe rig entries and explicit restarts, not
+**[D]** Historical counts before the approved gain-leg deletion: these describe rig entries and explicit restarts, not
 actual uncached boots or elapsed time. Quick tier has 14 scenario/device pairs; full tier has 15.
 The earlier estimate of 80 boots per device reduced to nine is unsupported and is withdrawn.
 
@@ -300,10 +300,9 @@ occurs. Clean baseline replacement and guest-write-preserving protocol restart r
 | DN2 OS 1.12 | 50.16 s | 47.441 s | 8 emulator summaries, zero write/flush hits, 4 valid overlays | `/private/tmp/fx-safety-dn2.log` |
 
 Both passed on the first revised run. These durations describe correctness runs, not a paired
-benchmark or measured speedup. The user decision on the one-effect selected-track-type assertion
-is still pending: audible-input PCM proves FX behavior, not sine identity. Legacy `one()` remains;
-plain/full/fxpage and other family coverage also remain. Close that explicit coverage decision and
-the assertion ledger before any deletion or parallel family migration. The coordinator owns
+benchmark or measured speedup. At this safety checkpoint, the selected-track-type decision was
+still pending and legacy `one()` remained. The approved replacement below resolves that boundary;
+plain/full/fxpage and other family coverage remain. The coordinator owns
 acceptance and publication; the broad merge gate remains unrun.
 
 Required fast preflight passed (`/private/tmp/fx-safety-preflight.log`): 612 audited Python routing
@@ -311,4 +310,61 @@ tests and 75 host cases (four test-support, 71 regression), plus lint, format, p
 checks and all workspace TypeScript types. Mypy was skipped because no changed files were in its
 typed set. The separate 11 new Python synthetic and 57 focused mocked-host passes above remain
 iteration evidence, not additional unique cases to add to these totals. This is a verified safety
-checkpoint in draft PR #242; selected-type coverage remains undecided and legacy `one()` stays.
+checkpoint in draft PR #242, before the approved gain-leg replacement below.
+
+
+### Approved gain-leg replacement (2026-11-01)
+
+Em explicitly accepted the FX-behavior contract: the TypeScript gain/deselect sequence proves behavior
+on audible input, without a direct selected-track-type assertion. The removed `one()` leg previously
+made DT2 type observations for both its wet note and its post-restart dry note. Those observations
+are intentionally not reproduced; the independent legacy dry/full legs retain their DT2 selected-sine
+checks. This is a bounded coverage decision, not a claim that PCM identifies the selected machine.
+
+Only the nested Python `one()` leg, its parallel entry and its gain/back PCM comparisons are removed.
+The remaining plain/dry/full functions, plain-versus-dry and full-chain PCM, overflow/fit rules and
+common launch-time checks are unchanged. No scenario TOML, wrapper file or other FX family is deleted.
+The replacement owner is `mise run test:runtime -- fx-reuse`; `test:fx` / `test:fx:dt2` own stock-FX
+suites and are not the replacement owner.
+
+Runtime ownership also follows the consumed CLI helpers: direct changes to the existing machine
+oracle or arena-safety module select the gain case; their import closure, including the function-local
+needs wrapper, retains runtime coverage through the existing dependency graph. No synthetic
+legacy-runner-to-TypeScript edge was added. The three focused routing cases passed; coordinator
+fast preflight of this deletion follow-up passed (final checkpoint below).
+
+| Removed `one()` assertion | Replacement / accepted boundary |
+| --- | --- |
+| Boot results, safe/loaded state, module names/contracts/rows and inferred DSP range/FX slot | Verified TypeScript `inspect` plus the existing independent needs wrapper |
+| Relocated DSP image, exact first 12 chain-row words/defaults and free rows | Independent Python parser/relocator JSON oracle, compared with live DSP bytes/rows |
+| Post-note enabled/was/disabled/fault/parameter fields and state call counter | Post-capture row checks and the unchanged >1000 / 90–110 call-count assertions |
+| Gain ×0.5 PCM | Existing comparator, at most 2 ULP, RMS tolerance 0.001 dB, onset shift at most 128 samples |
+| SELECT/restart, dry-only registry/boot/free rows/capacity and restored dry PCM | Protocol deselection/restart in the TypeScript sequence; bit-identical dry PCM from onset |
+| Lifetime write/flush and card-sector policy | Sequenced startup-to-close summaries and every exported overlay, proven on both devices in the safety increment |
+| Direct DT2 selected-type observations inside this leg | Explicitly accepted narrower audible-input FX contract; legacy dry/full retain direct type coverage |
+
+Historical static counts above remain the pre-deletion baseline. This deletion subtracts one legacy
+rig entry and one explicit restart per device: the `fx` family is now three rig entries and zero
+restarts per device. Across the seven legacy quick families, remaining counts are 35 DT2 / 38 DN2
+rig entries plus three restarts each (38 / 41 static operations). Full tier still adds one DT2 rig
+entry and two restarts; scenario/device pair counts remain 14 quick and 15 full. These are remaining
+legacy source counts, excluding the TypeScript case, not uncached boots or measured speedup.
+
+The verified TypeScript execution is unchanged by this deletion-only follow-up; its audible-input
+assertion text and selection comment now state the accepted contract. Earlier safety/device results
+remain evidence for that unchanged execution. The follow-up fast preflight passed; the coordinator
+owns the remaining acceptance decision and the broad gate remains unrun. Other FX families remain unmodified; subsequent migrations will use the completed assertion mapping and fixture.
+
+
+Deletion follow-up fast preflight passed (`/private/tmp/fx-gain-deletion-preflight.log`): 345 Python
+cases (57 changed-tests and 288 verify), 71 regression-host cases, Ruff, mypy, path, layers,
+generated checks, oxlint, Prettier and all workspace types. No device rerun was needed: both-device
+safety proof at `b963e257` covers unchanged TS execution; only its wording/comment changed afterward.
+
+The gate was explained against the actual PR base `origin/main` at `0feb02cb`: host/web, three stock
+files, 11 runtime files, three module-load files, 49 Python files, smoke and an implicit daemon build.
+`/private/tmp/fx-gain-merge-explain-origin-main.txt` supersedes the local-main explanation
+(`/private/tmp/fx-gain-merge-explain.txt`): local main at `365b45b` was stale and overselected already
+merged changes. The broad gate has not run, and no focused-acceptance exception for PR #242 exists.
+The next decision is focused acceptance versus the full routed gate before merge; this checkpoint
+is not merge acceptance. Historical proof/count tables and the bounded type-coverage decision stand.

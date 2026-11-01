@@ -370,7 +370,7 @@ choices without a new codec or RPC. Legacy coverage remains intact; no speedup o
 
 The first checkpoint left inferred needs, relocated DSP bytes/row pointers, selected-track type
 and launch-time write-watch/flush/card-sector policy as legacy facts. The current increment below
-adds safety/oracle checks; the ledger and selected-type decision still precede deletion or migration.
+adds safety/oracle checks; the approved gain-leg replacement below records the subsequent coverage decision.
 
 
 The [PR #242 safety increment](test-architecture.md#safety-increment-in-pr-242-2026-11-01) now adds
@@ -382,5 +382,28 @@ passed. Required fast preflight also passed: 612 audited Python routing tests an
 (four test-support, 71 regression), with lint/format/path/layers/generated and all workspace TS types.
 Mypy was skipped (no changed typed files); log `/private/tmp/fx-safety-preflight.log`. The fresh-process reference above is historical
 one-time proof, removed from default acceptance. Only the redundant SDK patched load was removed;
-CLI stock startup remains. Selected-type coverage awaits an explicit user decision; legacy `one()`
-is intact. No deletion, equivalence, measured-speedup or merge-readiness promise follows.
+CLI stock startup remains. At that checkpoint legacy `one()` was intact and selected-type coverage
+awaited a decision; the approved replacement below records the later decision.
+
+
+The [approved gain-leg replacement](test-architecture.md#approved-gain-leg-replacement-2026-11-01)
+removes only Python `one()` and its two PCM comparisons after Em accepted the audible-input FX
+contract. TS does not directly observe selected-track type during gain or deselection; legacy
+dry/full retain that DT2 proof. All gain boot/metadata/needs/relocation/row/state/PCM/restart/safety
+assertions map to the already verified runtime case; its execution is unchanged. Plain/dry/full,
+fit/overflow and other families remain. The owner is `test:runtime -- fx-reuse`, not the stock-FX tasks.
+Remaining legacy quick counts subtract one rig plus one restart per device: 35/38 rig entries and
+three restarts each (38/41 static operations), excluding TS and preserving the historical counts
+above. No measured-speedup claim follows. Follow-up fast preflight passed; coordinator acceptance remains required.
+
+The existing runtime-source map/import closure now includes the consumed machine/arena CLI helpers
+and needs wrapper, so replacement coverage follows its real dependencies. Three focused routing
+cases passed; final deletion fast preflight passed 345 Python and 71 regression-host cases, with
+Ruff/mypy/path/layers/generated/oxlint/Prettier/all types (`/private/tmp/fx-gain-deletion-preflight.log`).
+
+The actual-PR-base gate explanation (`origin/main` at `0feb02cb`) selects host/web, three stock,
+11 runtime, three module-load and 49 Python files, smoke and an implicit daemon build. Its log
+`/private/tmp/fx-gain-merge-explain-origin-main.txt` supersedes the stale-local-main (`365b45b`)
+explanation. The broad gate was not run; PR #242 has no focused-acceptance exception yet. The next
+acceptance decision is focused coverage versus the full routed gate before merge. No device rerun
+was needed for this TS wording/comment-only follow-up to the prior both-device safety proof.

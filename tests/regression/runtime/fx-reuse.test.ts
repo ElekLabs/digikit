@@ -156,7 +156,8 @@ async function advance(session: Session, ms: number): Promise<void> {
   await bounded(() => session.client.step(Math.floor(ms * MS), { timeout_wall_s: 30 }));
 }
 
-/** Legacy hold/gap durations at the scenario hint. DT2 track-type retries remain covered by the legacy test. */
+/** Accepted FX-behavior contract: choose the scenario hint without asserting selected-track identity.
+ * Direct DT2 type checks remain in the legacy dry/full legs, not this gain/deselect sequence. */
 async function pickSine(session: Session): Promise<void> {
   const tap = async (key: string, held?: string) => {
     try {
@@ -378,7 +379,7 @@ async function evidence(runtime: PatchedSession, artifacts: string, tag: string,
   record(artifacts, `${tag}-closing`, { guard, overlay, pcm, status: await bounded(() => session.status()) });
   await bounded(() => expectNoGuardHits(session));
   expect(pcm.non_finite).toBe(0);
-  expect(pcm.peak, 'the sine was audible').toBeGreaterThan(0.01);
+  expect(pcm.peak, 'input is audible').toBeGreaterThan(0.01);
   await bounded(() => session.expectNoFault(tag));
 }
 

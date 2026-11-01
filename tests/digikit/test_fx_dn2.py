@@ -1,4 +1,4 @@
-"""Run-time effects, Digitone II (tests/digikit/scenarios/fx-dyn-dn2.toml): the effect selected at boot sits in the chain and scales the PCM, deselect and restart gives the dry PCM again, one effect more than the slots is refused. One file per group, so that verify runs them in parallel."""
+"""Remaining run-time FX legs, Digitone II (tests/digikit/scenarios/fx-dyn-dn2.toml): plain versus dry PCM, full-chain scaling, overflow and fit rules. The single-gain lifecycle and deselect/restart PCM are owned by tests/regression/runtime/fx-reuse.test.ts. Retained Python legs keep their launch-time safety checks."""
 
 import pytest
 from scen_cases import cases, run

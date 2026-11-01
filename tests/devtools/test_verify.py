@@ -2251,3 +2251,22 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
         acceptance={"runtime-fixture": selected},
     )
     assert ("prerequisite plusdrive CLI build" in capsys.readouterr().out) is required
+
+
+@pytest.mark.parametrize(
+    "path", ["tools/patchkit/pk_dkrt_machine.py", "tools/coldfire/arena_safety.py"]
+)
+def test_fx_cli_helpers_select_only_the_runtime_gain_owner(path: str) -> None:
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == [
+        "runtime/fx-reuse.test.ts"
+    ]
+    assert "runtime-fixture" in verify.steps_for([path])
+
+
+def test_fx_cli_function_local_needs_dependency_keeps_runtime_gain_coverage() -> None:
+    path = "tools/device/dkneeds.py"
+    assert path in verify_route.acceptance_python("runtime-fixture")
+    assert "runtime/fx-reuse.test.ts" in verify_route.acceptance_files(
+        "runtime-fixture", [path]
+    )
+    assert "runtime-fixture" in verify.steps_for([path])
