@@ -269,6 +269,7 @@ pub mod store;
 /// Bounded native sample validation and integer-only PCM decoding.
 pub mod sample;
 pub mod sample_job;
+pub mod sample_tracks;
 
 /// Internal fixed-memory listing work/notification lifecycle model.
 pub mod files_job;

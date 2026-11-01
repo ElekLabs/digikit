@@ -54,6 +54,7 @@ int32_t dkpool_load(uint32_t req, const dk_file_id *id, const uint8_t *path, dkp
 void dkpool_release(const dkpool_handle *h);
 /* A few loads. 0 valid, DKPOOL_E_LOST when the backing was lost externally. */
 int32_t dkpool_check(const dkpool_handle *h);
+/* Free space counted in mono planes: a stereo sample of N frames needs 2N. */
 uint32_t dkpool_free_frames(void);
 
 /* Adapter to runtime. result: 0, DKPOOL_E_POOL, DKPOOL_E_READ or DKPOOL_E_FORMAT. */
