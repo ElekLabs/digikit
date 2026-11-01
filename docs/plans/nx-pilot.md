@@ -487,6 +487,8 @@ record all six device/family proofs passing, covering 19 legacy baselines per de
 owned fixture contexts, clean independent cards and two real menu restarts. Gate preparation/routing
 `440f676a` and the lifecycle fixes are pushed. Reviewed retirement `eaf709b9` is integrated as
 `86e1a7ae`: legacy route device scenarios are removed, retaining the analysis oracles, with no device
-execution change after proof. Final changed checks, full preflight, the routed gate and PR are
-pending. Earlier focused exceptions do not transfer. Timings are correctness evidence, with no
-paired A/B or measured speedup claim.
+execution change after proof. Final preflight passed 666 Python and 95 host cases plus static/type
+checks, but exited 1 on three unchanged baseline path references; the detailed checkpoint records
+the limits and gate selection. The gate explanation ran; the broad gate did not. A draft PR and
+single-PR focused-exception request are next, with no new exception in place. Earlier exceptions
+do not transfer. Timings are correctness evidence, with no paired A/B or measured speedup claim.

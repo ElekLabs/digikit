@@ -518,5 +518,15 @@ speedup claim is made.
 Reviewed legacy retirement `eaf709b9` is integrated and pushed as `86e1a7ae` (23 files, +49/-1400;
 349 tests and 15 subtests reported for the retirement work). The legacy route device scenarios
 are removed; the independent analysis oracles remain. No device execution changed after the final
-proofs. Final changed checks, full preflight, the routed gate and PR remain pending; no broad-gate
-pass or focused exception exists for this batch.
+proofs.
+
+Final preflight exited 1 only because pathcheck found three pre-existing references in
+[module-architecture.md](module-architecture.md), at lines 3, 4 and 284; the file is unchanged from
+`origin/main`. This is not a fully green preflight. All 666 Python cases (270 + 57 + 339) and
+95 host cases (4 + 91) passed. Ruff check/format, mypy on two sources, layer/generated checks,
+oxlint, Prettier and workspace types passed. Scoped pathchecks for the changed docs also passed.
+
+The gate explanation selected host, three stock files, 16 runtime files, three module files,
+54 Python files, smoke and native prerequisites. The broad routed gate was not run. The draft PR
+and a concrete single-PR focused-exception request are next; no new exception or broad-gate pass
+exists for this batch. Earlier focused exceptions do not transfer.
