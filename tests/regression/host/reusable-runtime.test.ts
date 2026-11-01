@@ -18,7 +18,9 @@ vi.mock('vitest', async (original) => ({
 vi.mock('@digi/test-support', async (original) => ({ ...(await original<object>()), Session: { start: fake.start } }));
 import { withReusablePatchedSession } from '../support.ts';
 
-async function fixture(options: { startDelay?: number; hangPreparation?: boolean } = {}) {
+async function fixture(
+  options: { startDelay?: number; hangPreparation?: boolean; afterClose?: (session: unknown) => Promise<void> } = {},
+) {
   vi.resetAllMocks();
   const calls: string[] = [];
   let epoch = 2;
@@ -34,7 +36,9 @@ async function fixture(options: { startDelay?: number; hangPreparation?: boolean
       calls.push('load');
       return ++epoch;
     }),
-    close: vi.fn(),
+    close: vi.fn(async () => {
+      calls.push('closed');
+    }),
   };
   fake.start.mockImplementation(async () => {
     if (options.startDelay) await new Promise((resolve) => setTimeout(resolve, options.startDelay));
@@ -53,6 +57,7 @@ async function fixture(options: { startDelay?: number; hangPreparation?: boolean
         return baseline;
       },
       finishCase: finish,
+      afterClose: options.afterClose,
     },
   );
   const beforeAll = fake.beforeAll.mock.calls[0]![0] as () => Promise<void>;
@@ -135,4 +140,24 @@ test('slow startup leaves only the remaining beforeAll budget for baseline prepa
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('post-close evidence waits for owned shutdown and runs once after a failed case', async () => {
+  const checked = vi.fn(async () => {});
+  const f = await fixture({ afterClose: checked });
+  f.finish.mockRejectedValueOnce(new Error('case failed'));
+  await expect(f.handle.reload(f.baseline)).rejects.toThrow();
+  let finishClose!: () => void;
+  f.session.close.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishClose = resolve;
+      }),
+  );
+  const closed = f.afterAll();
+  expect(checked).not.toHaveBeenCalled();
+  finishClose();
+  await closed;
+  await f.afterAll();
+  expect(checked).toHaveBeenCalledExactlyOnceWith(f.session);
 });

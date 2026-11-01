@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
@@ -13,15 +14,15 @@ import {
   button,
   MS,
   repoRoot,
-  Session,
+  type Session,
   withinRuntimeDeadline,
   type Device,
   type RuntimeBaseline,
 } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession } from '../support.ts';
-import { DEVICES, FIRMWARE, expectRuntimeUi, liveArtifacts, moduleArtifact, record } from './live.ts';
-import { planSymbol, prepareRuntimePlan, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
+import { DEVICES, FIRMWARE, expectRuntimeUi, moduleArtifact, record } from './live.ts';
+import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -91,17 +92,52 @@ async function baseline(
   };
 }
 
+async function analysisJson<T>(module: string, args: string[], artifacts: string, tag: string): Promise<T> {
+  try {
+    const result = await exec('uv', ['run', '--no-sync', 'python', '-m', module, ...args], {
+      cwd: root,
+      timeout: 30_000,
+      maxBuffer: 4 * 1024 * 1024,
+      env: { ...process.env, UV_NO_SYNC: '1' },
+    });
+    const value = JSON.parse(result.stdout) as T;
+    record(artifacts, tag, value);
+    return value;
+  } catch (error) {
+    const output = error as { stdout?: string; stderr?: string };
+    record(artifacts, tag, { error: String(error), stdout: output.stdout, stderr: output.stderr });
+    throw error;
+  }
+}
+
+interface FxExpectations {
+  image_hex: string;
+  row: number[];
+  needs: Record<string, number>;
+}
+function expectGainRow(row: number[], oracle: FxExpectations): void {
+  expect(row.slice(0, 12), 'exact process/descriptor/state/default words').toEqual(oracle.row);
+  expect(row[12], 'adapter ran the effect').toBe(1);
+  expect(row[14], 'effect is not disabled').toBe(0);
+  expect(row[17], 'no effect fault').toBe(0);
+}
+
 async function word(session: Session, address: number): Promise<number> {
   const value = await bounded(() => session.client.memPeek(address));
   if (value === null) throw new Error(`unmapped CF word at ${address.toString(16)}`);
   return value >>> 0;
 }
 
-async function dspWords(session: Session, address: number, count: number): Promise<number[]> {
-  const result = await rpc<{ hex: string; unknown: number }>(session, 'dsp.peek', { addr: address, len: count * 4 });
+async function dspBytes(session: Session, address: number, length: number): Promise<Buffer> {
+  const result = await rpc<{ hex: string; unknown: number }>(session, 'dsp.peek', { addr: address, len: length });
   expect(result.unknown, 'DSP bytes are mapped').toBe(0);
   const bytes = Buffer.from(result.hex, 'hex');
-  expect(bytes.length).toBe(count * 4);
+  expect(bytes.length).toBe(length);
+  return bytes;
+}
+
+async function dspWords(session: Session, address: number, count: number): Promise<number[]> {
+  const bytes = await dspBytes(session, address, count * 4);
   return Array.from({ length: count }, (_, i) => bytes.readUInt32LE(i * 4));
 }
 
@@ -240,6 +276,7 @@ async function inspect(
   afterEpoch?: number,
 ) {
   const { session, dk } = runtime;
+  validateRuntimePlan(plan, session);
   await rpc(session, 'run.mode', { mode: 'free' });
   await expectRuntimeUi(session, plan, artifacts, { afterEpoch });
   const names = [SINE, ...(wet ? [GAIN] : [])];
@@ -284,21 +321,28 @@ async function inspect(
   expect(modules[0]!.types).toHaveLength(1);
   const chain = await rows(session, plan, slots);
   expect(chain.slice(wet ? 1 : 0).map((row) => row[0])).toEqual(Array(slots - (wet ? 1 : 0)).fill(FREE_PC));
+  let oracle: FxExpectations | undefined;
   if (wet) {
     const effect = modules[1]!;
     expect(effect.contracts[2]).toEqual([1, 0]);
     expect(effect.contracts[1]).toEqual([0, 0]);
     expect(effect.rows).toBe(0);
-    expect(effect.dsp_len).toBeGreaterThan(0);
     const base = planSymbol(plan, '_dl_area') + effect.dsp_off;
-    expect(chain[0]![1]).toBeGreaterThanOrEqual(base);
-    expect(chain[0]![1]).toBeLessThan(base + effect.dsp_len);
-    expect(chain[0]![2]).toBeGreaterThanOrEqual(base);
-    expect(chain[0]![2]).toBeLessThan(base + effect.dsp_len);
-    expect(chain[0]!.slice(3, 12)).toEqual([1, 0x3f000000, 0, 0, 0, 0, 0, 0, 0]);
-    expect(chain[0]![12]).toBe(1);
-    expect(chain[0]![14]).toBe(0);
-    expect(chain[0]![17]).toBe(0);
+    const artifact = path.join(path.dirname(session.cardPath!), 'seed/digikit/modules/dyn-fx-gain.dkm');
+    oracle = await analysisJson<FxExpectations>(
+      'tools.patchkit.pk_dkrt_machine',
+      ['fx-expectations', artifact, `0x${base.toString(16)}`],
+      artifacts,
+      `${tag}-expected-gain`,
+    );
+    expect(effect.dsp_len, 'MODULES range agrees with independently inferred needs').toBe(oracle.needs.DSP_AREA);
+    expect(oracle.needs.FX_SLOTS).toBe(1);
+    expect(capacity.FX_SLOTS!.used).toBe(oracle.needs.FX_SLOTS);
+    expect(
+      (await dspBytes(session, base, oracle.image_hex.length / 2)).toString('hex'),
+      'independent relocated DSP image',
+    ).toBe(oracle.image_hex);
+    expectGainRow(chain[0]!, oracle);
   }
   const status = await bounded(() => session.status());
   expect(status.cf.main_ui_reached).toBe(true);
@@ -321,13 +365,15 @@ async function inspect(
     dsp: status.dsp,
   };
   record(artifacts, tag, { semantic, modules, chain, status, capacity });
-  return { semantic, chain };
+  return { semantic, chain, oracle, epoch: status.epoch };
 }
 
-async function evidence(runtime: PatchedSession, artifacts: string, tag: string): Promise<void> {
+async function evidence(runtime: PatchedSession, artifacts: string, tag: string, overlays: string[]): Promise<void> {
   const { session } = runtime;
   const guard = await bounded(() => session.client.guardReport());
-  const overlay = await rpc(session, 'card.overlay', { path: path.join(artifacts, `${tag}.overlay.bin`) });
+  const file = path.join(artifacts, `${tag}.overlay.bin`);
+  const overlay = await rpc(session, 'card.overlay', { path: file });
+  overlays.push(file);
   const pcm = await rpc<{ non_finite: number; peak: number }>(session, 'pcm.tap', { action: 'report' });
   record(artifacts, `${tag}-closing`, { guard, overlay, pcm, status: await bounded(() => session.status()) });
   await bounded(() => expectNoGuardHits(session));
@@ -343,59 +389,85 @@ for (const device of DEVICES) {
     let wet: RuntimeBaseline;
     let artifacts: string;
     let closed = 0;
+    let watchOutput: string;
+    const overlays: string[] = [];
+    const epochs = new Set<number>();
+    const rememberEpoch = (epoch: unknown) => {
+      if (typeof epoch !== 'number') throw new Error('runtime status lacks epoch');
+      epochs.add(epoch);
+    };
     const slots = slotsFor(device);
     const fixture = withReusablePatchedSession(
-      options(device),
+      {
+        ...options(device),
+        env: async () => {
+          artifacts = fs.mkdtempSync(path.join(os.tmpdir(), `digi-fx-reuse-${device}-`));
+          console.info('FX safety artifacts:', artifacts);
+          const prepared = await prepareRuntimePlanOffline(
+            { device, firmware: FIRMWARE[device] },
+            artifacts,
+            artifacts,
+            ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'],
+          );
+          plan = prepared.plan;
+          watchOutput = path.join(artifacts, 'writewatch.jsonl');
+          return analysisJson<Record<string, string>>(
+            'tools.patchkit.pk_dkrt_machine',
+            ['watch-env', prepared.planFile, watchOutput],
+            artifacts,
+            'watch-environment',
+          );
+        },
+      },
       {
         prepareBaseline: async (session) => {
-          artifacts = liveArtifacts(session, 'fx-reuse');
-          plan = await prepareRuntimePlan(session, artifacts, ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area']);
+          rememberEpoch((await bounded(() => session.status())).epoch);
           dry = await baseline(session, plan, false, artifacts);
           wet = await baseline(session, plan, true, artifacts);
           return dry;
         },
-        finishCase: (runtime) => evidence(runtime, artifacts, `case-${++closed}`),
+        finishCase: (runtime) => evidence(runtime, artifacts, `case-${++closed}`, overlays),
+        afterClose: async () => {
+          const report = await analysisJson<{ pass: boolean }>(
+            'tools.coldfire.arena_safety',
+            [
+              'runtime-check',
+              '--device',
+              device,
+              '--watch-output',
+              watchOutput,
+              '--min-emulators',
+              String(epochs.size),
+              ...overlays.flatMap((file) => ['--overlay', file]),
+            ],
+            artifacts,
+            'lifetime-safety',
+          );
+          expect(report.pass, 'every emulator and exported overlay meets legacy safety policy').toBe(true);
+        },
       },
       'FX dry/gain/deselect/reset',
     );
     test('reuses an owned daemon while clean reset and protocol restart preserve their distinct FX contracts', async () => {
       const initial = fixture.runtime;
       const initialState = await inspect(initial, plan, slots, false, artifacts, 'initial');
+      rememberEpoch(initialState.epoch);
       const dryPcm = path.join(artifacts, 'dry.wav');
       await capture(initial, dryPcm);
 
-      // One sequential fresh-process reference; the kept daemon is paused while the reference runs.
-      await rpc(initial.session, 'run.mode', { mode: 'paused' });
-      const referenceSession = await Session.start({ ...options(device), dsp: 'sharc', runtime: { reuse: true } });
-      let referenceDk: DkSession | undefined;
-      let referencePassed = false;
-      try {
-        const referenceCard = await baseline(referenceSession, plan, false, artifacts);
-        await referenceSession.reloadRuntimeBaseline(referenceCard);
-        referenceDk = new DkSession(
-          new EmuUsbTransport((method, params) => referenceSession.client.call(method, params)),
-        );
-        const reference = { session: referenceSession, dk: referenceDk, close: () => referenceSession.close() };
-        validateRuntimePlan(plan, referenceSession);
-        const state = await inspect(reference, plan, slots, false, artifacts, 'fresh-reference');
-        expect(state.semantic).toEqual(initialState.semantic);
-        const file = path.join(artifacts, 'fresh-reference.wav');
-        await capture(reference, file);
-        await evidence(reference, artifacts, 'fresh-reference');
-        await compare(dryPcm, file, 1, artifacts, 'fresh-reference', true);
-        referencePassed = true;
-      } finally {
-        referenceDk?.cancelPending();
-        await referenceSession.close({ preserveDiagnostics: !referencePassed });
-      }
-
+      // Fresh-process equivalence passed on both devices in the earlier one-time fixture proof.
+      // Permanent acceptance retains clean reload isolation without that extra process/boot.
       const dirty = await fixture.reload(wet);
       expect(dirty.session).toBe(initial.session);
       expect(dirty.epoch).toBeGreaterThan(initial.epoch);
       await expect(initial.dk.info()).rejects.toThrow();
       const wetState = await inspect(dirty, plan, slots, true, artifacts, 'wet');
+      rememberEpoch(wetState.epoch);
       const wetPcm = path.join(artifacts, 'gain.wav');
       await capture(dirty, wetPcm);
+      const afterNote = await rows(dirty.session, plan, slots);
+      expectGainRow(afterNote[0]!, wetState.oracle!);
+      record(artifacts, 'gain-after-note', afterNote);
       await compare(dryPcm, wetPcm, 0.5, artifacts, 'gain');
       const stateAddress = wetState.chain[0]![2]!;
       const before = (await dspWords(dirty.session, stateAddress, 1))[0]!;
@@ -406,7 +478,7 @@ for (const device of DEVICES) {
       expect(before).toBeGreaterThan(1000);
       expect(after - before).toBeGreaterThanOrEqual(90);
       expect(after - before).toBeLessThanOrEqual(110);
-      await evidence(dirty, artifacts, 'before-deselect');
+      await evidence(dirty, artifacts, 'before-deselect', overlays);
 
       // This restart deliberately retains guest writes; it is not an independent-case clean load.
       await rpc(dirty.session, 'run.mode', { mode: 'free' });
@@ -423,7 +495,8 @@ for (const device of DEVICES) {
         await bounded(() => rebootDk.waitForBoot());
         await expectRuntimeUi(dirty.session, plan, artifacts, { afterEpoch: Number(epoch) });
         await bounded(() => dirty.session.client.guardSet(wet.guard));
-        await inspect(reboot, plan, slots, false, artifacts, 'deselected', Number(epoch));
+        const deselected = await inspect(reboot, plan, slots, false, artifacts, 'deselected', Number(epoch));
+        rememberEpoch(deselected.epoch);
         const file = path.join(artifacts, 'deselected.wav');
         await capture(reboot, file);
         await compare(dryPcm, file, 1, artifacts, 'deselected', true);
@@ -433,6 +506,7 @@ for (const device of DEVICES) {
 
       const restored = await fixture.reload(dry);
       const resetState = await inspect(restored, plan, slots, false, artifacts, 'restored');
+      rememberEpoch(resetState.epoch);
       expect(resetState.semantic).toEqual(initialState.semantic);
       expect(restored.epoch).toBeGreaterThan(dirty.epoch);
       const restoredPcm = path.join(artifacts, 'restored.wav');

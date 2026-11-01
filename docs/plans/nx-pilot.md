@@ -368,6 +368,19 @@ The gate plan was explained only; the broad gate remains unrun.
 Native preboot-card seeding and the existing PCM comparator resolved the first slice's seed/analysis
 choices without a new codec or RPC. Legacy coverage remains intact; no speedup or full migration is claimed.
 
-Next, close the assertion ledger before parallel family migrations. Exact inferred needs, relocated
-DSP bytes/row pointers, selected-track type and launch-time write-watch/flush/card-sector policy
-remain legacy facts; this evidence authorizes no deletion or complete-migration claim.
+The first checkpoint left inferred needs, relocated DSP bytes/row pointers, selected-track type
+and launch-time write-watch/flush/card-sector policy as legacy facts. The current increment below
+adds safety/oracle checks; the ledger and selected-type decision still precede deletion or migration.
+
+
+The [PR #242 safety increment](test-architecture.md#safety-increment-in-pr-242-2026-11-01) now adds
+startup-lifetime write/flush summaries, exact overlay policy and independent inferred-needs/DSP
+relocation/row oracles, including post-note adapter checks. Revised DT2 and DN2 cases both passed
+first run (63.62 s / 50.16 s invocation), with eight clean emulator summaries and four policy-valid
+overlays each. The 11 new Python synthetic cases, 57 affected host cases, types and scoped lint
+passed. Required fast preflight also passed: 612 audited Python routing tests and 75 host cases
+(four test-support, 71 regression), with lint/format/path/layers/generated and all workspace TS types.
+Mypy was skipped (no changed typed files); log `/private/tmp/fx-safety-preflight.log`. The fresh-process reference above is historical
+one-time proof, removed from default acceptance. Only the redundant SDK patched load was removed;
+CLI stock startup remains. Selected-type coverage awaits an explicit user decision; legacy `one()`
+is intact. No deletion, equivalence, measured-speedup or merge-readiness promise follows.

@@ -35,6 +35,8 @@ export interface SessionOptions {
   /** Stall threshold in emulated ms for the watchdog (default 1000, as the Python harness). */
   stallMs?: number;
   binary?: string;
+  /** Additional daemon environment, prepared before spawn under the same startup deadline. */
+  env?: Record<string, string> | ((runDir: string) => Promise<Record<string, string>>);
   /** Press NO automatically when ready; defaults to true. */
   autoNo?: boolean;
   /** Runtime boot uses firmware.load's existing patch/cache path, then runs freely. Stock defaults stay stepped. */
@@ -127,6 +129,7 @@ export class Session {
           ];
     if (options.runtime?.reuse) args.push('--no-card-sync');
     if (options.mirror) args.push('--mirror-dir', path.join(runDir, 'mirror'));
+    const startupDeadline = Date.now() + (options.runtime ? 120_000 : 300_000);
     const controller = options.runtime ? new AbortController() : undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const expired = controller
@@ -141,10 +144,16 @@ export class Session {
       : undefined;
     let session: Session | undefined;
     const started = (async () => {
+      const prepareEnv = options.env;
+      const extraEnv =
+        typeof prepareEnv === 'function'
+          ? await withinRuntimeDeadline(startupDeadline, () => prepareEnv(runDir))
+          : prepareEnv;
+      controller?.signal.throwIfAborted();
       const daemon = await spawnDaemon({
         binary: options.binary,
         args,
-        env: options.dsp === 'sharc' ? coupledEnv(inp.syx) : undefined,
+        env: options.dsp === 'sharc' ? { ...coupledEnv(inp.syx), ...extraEnv } : extraEnv,
         runDir,
         timeoutMs: options.runtime ? 120_000 : 300_000,
         signal: controller?.signal,
@@ -158,6 +167,9 @@ export class Session {
       };
       const c = daemon.client;
       await checked(c.eventsSubscribe());
+      // The CLI still restores its initial stock image. Reuse skips the redundant SDK patched boot;
+      // its first runtime identity/card is established by mandatory reloadRuntimeBaseline.
+      if (options.runtime?.reuse) return session;
       let card: string | undefined;
       if (options.card) card = (await checked(c.cardLoad(options.card))).card;
       session.#card = card;

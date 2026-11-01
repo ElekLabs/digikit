@@ -144,6 +144,8 @@ export function withReusablePatchedSession(
     prepareBaseline: (session: Session) => Promise<RuntimeBaseline>;
     /** Required scenario evidence (guard/fault/card/PCM) before state is discarded. Holds release in their own finally. */
     finishCase: (runtime: RuntimeCase) => Promise<void>;
+    /** Validate process-lifetime artifacts only after the owned daemon has closed, even on a failed case. */
+    afterClose?: (session: Session) => Promise<void>;
   },
   scope = 'reused runtime',
 ): { readonly runtime: RuntimeCase; reload(baseline: RuntimeBaseline): Promise<RuntimeCase> } {
@@ -233,9 +235,23 @@ export function withReusablePatchedSession(
     await finishCurrentCase();
     if (context.task.result?.state === 'fail') await session?.close({ preserveDiagnostics: true });
   });
+  let checkedClose = false;
   afterAll(async () => {
     invalidate?.();
-    await session?.close();
+    if (!session || checkedClose) return;
+    checkedClose = true;
+    const errors: unknown[] = [];
+    try {
+      await session.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await lifecycle.afterClose?.(session);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) throw new AggregateError(errors, 'runtime shutdown or post-close evidence failed');
   });
   return {
     get runtime() {

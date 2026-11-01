@@ -9,6 +9,7 @@ which uses `Rig`, `pcm_check`, `parse_dsp_section` and `relocate` from here.
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import hashlib
 import json
@@ -158,6 +159,77 @@ def relocate(sec: dict[str, Any], base: int, imports: dict[str, int]) -> bytes:
     return bytes(m)
 
 
+def runtime_watch_env(
+    plan_file: Path, out: Path, *, sequential: bool = False
+) -> dict[str, str]:
+    """The runtime proof's existing DMA holes and allowed writer PCs, before a daemon starts."""
+    plan = json.loads(plan_file.read_text())
+    lo, hi = arena_safety.expansion(
+        plan["base"]["device"] + "-" + plan["base"]["version"]
+    )
+    # the card reads land by DMA in the runtime's staging buffer (and the 512-byte record buffer): left out of the watch
+    holes = [(sym(plan, "core/runtime", "DKRT_STAGE"), 64 * 1024)]
+    with contextlib.suppress(
+        ProofError
+    ):  # an image of an older runtime has no record buffer
+        holes.append((sym(plan, "core/runtime", "DKRT_SECBUF"), 512))
+    with contextlib.suppress(
+        ProofError
+    ):  # nor the upload buffer (36,896 bytes, card reads of the store land in it)
+        holes.append((sym(plan, "core/runtime", "DKRT_UPLOAD_BUF"), 36896))
+    with contextlib.suppress(
+        ProofError
+    ):  # nor the store-peek sector (the card read of the store's header DMAs into it)
+        holes.append((sym(plan, "core/runtime", "DKRT_STORE_PEEK"), 512))
+    with contextlib.suppress(ProofError):  # the fingerprint sector of a store list
+        holes.append((sym(plan, "core/runtime", "DKRT_STORE_FP"), 512))
+    with contextlib.suppress(
+        ProofError
+    ):  # the settings record's RAM copy and its header sector: the boot's card read of the settings area lands in them by DMA
+        holes.append(
+            (sym(plan, "core/runtime", "DKRT_SETTINGS"), SETTINGS_SECTORS * 512)
+        )
+        holes.append((sym(plan, "core/runtime", "DKRT_SETTINGS_HDR"), 512))
+    ranges, at = [], lo
+    for start, size in sorted(holes):
+        if start > at:  # adjacent holes leave no range between them
+            ranges.append("0x%x-0x%x" % (at, start))
+        at = start + size
+    ranges.append("0x%x-0x%x" % (at, hi))
+    env = {
+        "DIGI_WRITE_WATCH": ",".join(ranges),
+        "DIGI_WRITE_WATCH_AFTER": "cacr",
+        "DIGI_WRITE_WATCH_ALLOW_PC": arena_safety.plan_allow_pc(plan_file),
+        "DIGI_FLUSH_CHECK": "1",
+        "DIGI_WRITE_WATCH_OUT": str(out),
+    }
+    if sequential:
+        env["DIGI_WRITE_WATCH_SEQ"] = "1"
+    return env
+
+
+def fx_expectations(dkm: bytes, base: int) -> dict[str, Any]:
+    """Independent Python relocation/row oracle; resource needs use the existing dkneeds wrapper."""
+    from tools.device import dkneeds
+
+    sec = parse_dsp_section(dkm)
+    if len(sec["fxs"]) != 1 or sec["imports"]:
+        raise Fail("FX oracle requires exactly one effect without DSP imports")
+    effect = sec["fxs"][0]
+    state_at = (len(sec["image"]) + sec["bss"] + 7) & ~7
+    return {
+        "image_hex": relocate(sec, base, {}).hex(),
+        "row": [
+            L2_SW_BASE + (base + effect["process"] - L2_BYTE_BASE) // 2,
+            base + effect["desc"],
+            base + state_at,
+            1,
+            *effect["defaults"],
+        ],
+        "needs": dkneeds.needs_of(dkm),
+    }
+
+
 # ---- sessions --------------------------------------------------------------------------------------------------------------
 
 
@@ -211,50 +283,9 @@ class Rig:
         env: dict[str, str] = dict(extra_env or {})
         self.summary: Path | None = None
         if watch:
-            lo, hi = arena_safety.expansion(image)
-            # the card reads land by DMA in the runtime's staging buffer (and the 512-byte record buffer): left out of the watch
-            holes = [(sym(plan, "core/runtime", "DKRT_STAGE"), 64 * 1024)]
-            with contextlib.suppress(
-                ProofError
-            ):  # an image of an older runtime has no record buffer
-                holes.append((sym(plan, "core/runtime", "DKRT_SECBUF"), 512))
-            with contextlib.suppress(
-                ProofError
-            ):  # nor the upload buffer (36,896 bytes, card reads of the store land in it)
-                holes.append((sym(plan, "core/runtime", "DKRT_UPLOAD_BUF"), 36896))
-            with contextlib.suppress(
-                ProofError
-            ):  # nor the store-peek sector (the card read of the store's header DMAs into it)
-                holes.append((sym(plan, "core/runtime", "DKRT_STORE_PEEK"), 512))
-            with contextlib.suppress(
-                ProofError
-            ):  # the fingerprint sector of a store list
-                holes.append((sym(plan, "core/runtime", "DKRT_STORE_FP"), 512))
-            with contextlib.suppress(
-                ProofError
-            ):  # the settings record's RAM copy and its header sector: the boot's card read of the settings area lands in them by DMA
-                holes.append(
-                    (sym(plan, "core/runtime", "DKRT_SETTINGS"), SETTINGS_SECTORS * 512)
-                )
-                holes.append((sym(plan, "core/runtime", "DKRT_SETTINGS_HDR"), 512))
-            ranges, at = [], lo
-            for start, size in sorted(holes):
-                if start > at:  # adjacent holes leave no range between them
-                    ranges.append("0x%x-0x%x" % (at, start))
-                at = start + size
-            ranges.append("0x%x-0x%x" % (at, hi))
             out = work / f"{tag}.writewatch.jsonl"
             self.summary = out.with_suffix(".summary.json")
-            env |= {
-                "DIGI_WRITE_WATCH": ",".join(ranges),
-                # from the first cache enable on: the reset path clears and copies the whole RAM before it
-                "DIGI_WRITE_WATCH_AFTER": "cacr",
-                "DIGI_WRITE_WATCH_ALLOW_PC": arena_safety.plan_allow_pc(
-                    syx.with_suffix(".plan.json")
-                ),
-                "DIGI_FLUSH_CHECK": "1",
-                "DIGI_WRITE_WATCH_OUT": str(out),
-            }
+            env |= runtime_watch_env(syx.with_suffix(".plan.json"), out)
         self.s = self.session_cls(
             cell,
             H.Goldens(work / f"{tag}.goldens.json"),
@@ -527,3 +558,28 @@ def run_imports(run: Rig, plan: dict) -> dict[str, int]:
         )
         out[raw[:28].split(b"\0")[0].decode()] = int.from_bytes(raw[28:32], "big")
     return out
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Runtime proof's existing offline oracles"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    watch = sub.add_parser("watch-env")
+    watch.add_argument("plan", type=Path)
+    watch.add_argument("out", type=Path)
+    effect = sub.add_parser("fx-expectations")
+    effect.add_argument("dkm", type=Path)
+    effect.add_argument("base", type=lambda value: int(value, 0))
+    args = parser.parse_args(argv)
+    result = (
+        runtime_watch_env(args.plan, args.out, sequential=True)
+        if args.command == "watch-env"
+        else fx_expectations(args.dkm.read_bytes(), args.base)
+    )
+    print(json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -318,3 +318,82 @@ for (const stalled of ['status', 'firmwareLoad'] as const) {
     fs.rmSync(session.runDir, { recursive: true, force: true });
   });
 }
+
+test('reuse starts subscribed with no SDK card or patched load until the explicit baseline', async () => {
+  const session = await Session.start({ device: 'dn2', firmware: '1.12', dsp: 'sharc', runtime: { reuse: true } });
+  try {
+    expect(fake.client.eventsSubscribe).toHaveBeenCalledOnce();
+    expect(fake.client.cardLoad).not.toHaveBeenCalled();
+    expect(fake.client.firmwareLoad).not.toHaveBeenCalled();
+    expect(fake.client.watchdogConfig).not.toHaveBeenCalled();
+    expect(fake.client.call).not.toHaveBeenCalled();
+    expect(() => session.loadResult).toThrow('not loaded');
+  } finally {
+    await session.close();
+  }
+});
+
+test('startup prepares instrumentation before spawn and preserves coupled defaults', async () => {
+  const env = vi.fn(async (runDir: string) => {
+    expect(fake.spawn).not.toHaveBeenCalled();
+    expect(fs.existsSync(runDir)).toBe(true);
+    return { DIGI_WRITE_WATCH_OUT: path.join(runDir, 'watch.jsonl') };
+  });
+  const session = await Session.start({ device: 'dn2', firmware: '1.12', dsp: 'sharc', runtime: { reuse: true }, env });
+  try {
+    expect(env).toHaveBeenCalledExactlyOnceWith(session.runDir);
+    expect(fake.spawn.mock.calls[0]![0].env).toMatchObject({
+      SHARC_FAST_REGIONS: 'fixture-regions',
+      DIGI_WRITE_WATCH_OUT: path.join(session.runDir, 'watch.jsonl'),
+    });
+  } finally {
+    await session.close();
+  }
+});
+
+test('failed environment preparation removes the owned directory without spawning', async () => {
+  let directory = '';
+  await expect(
+    Session.start({
+      device: 'dn2',
+      firmware: '1.12',
+      dsp: 'sharc',
+      runtime: { reuse: true },
+      env: async (runDir) => {
+        directory = runDir;
+        throw new Error('offline plan failed');
+      },
+    }),
+  ).rejects.toThrow('offline plan failed');
+  expect(fake.spawn).not.toHaveBeenCalled();
+  expect(fs.existsSync(directory)).toBe(false);
+});
+
+test('expired environment preparation cannot spawn a late daemon', async () => {
+  vi.useFakeTimers();
+  let finish!: (env: Record<string, string>) => void;
+  let directory = '';
+  try {
+    const started = Session.start({
+      device: 'dn2',
+      firmware: '1.12',
+      dsp: 'sharc',
+      runtime: { reuse: true },
+      env: (runDir) => {
+        directory = runDir;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+    });
+    const failed = expect(started).rejects.toThrow('runtime startup timed out');
+    await vi.advanceTimersByTimeAsync(120_000);
+    await failed;
+    finish({ DIGI_FLUSH_CHECK: '1' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.spawn).not.toHaveBeenCalled();
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -98,7 +98,7 @@ Each module type keeps one coupled test per device. Everything else moves down a
 
 Status: Em selected design work and proposed reusing a daemon through the control socket with
 setup/teardown fixtures. The first lifecycle/PCM pilot is now implemented under subsequent approval;
-its focused device proofs passed; final fast preflight passed (checkpoint below). This design supersedes the historical one-PR-per-item rule: keep the reusable fixture
+its earlier fixture proofs passed. The safety increment below records the current PR #242 state. This design supersedes the historical one-PR-per-item rule: keep the reusable fixture
 and compatible FX coverage in one coherent change, with explicit checkpoints rather than a bulk
 seven-family port. No legacy deletion, new RPC or benchmark is authorized by this checkpoint.
 
@@ -196,7 +196,7 @@ slice; resolve them before relying on the affected assertion, rather than blocki
 
 ### First implementation checkpoint (2026-11-01)
 
-**[D]** Both focused device proofs passed on their first runs; final fast preflight passed: the [gain-FX pilot](../../tests/regression/runtime/fx-reuse.test.ts)
+**[D]** Historical first fixture proof, before the safety increment: both device proofs and fast preflight passed. the [gain-FX pilot](../../tests/regression/runtime/fx-reuse.test.ts)
 uses [Session baseline reload](../../packages/test-support/src/session.ts) and the existing Vitest
 [regression fixture](../../tests/regression/support.ts). No legacy family is deleted or declared equivalent.
 One serial scenario per device covers dry → gain → protocol deselection/restart → pristine dry,
@@ -210,7 +210,7 @@ daemon and retain its diagnostics. Native plusdrive builds the preboot selection
 DKMs in owned overlay-free card directories, with mirroring/synchronization disabled. No TypeScript
 store codec, new reset/seed RPC, snapshot restore or daemon pool was added.
 
-The following assertions passed the focused DT2 and DN2 proofs:
+At that first checkpoint, the following assertions passed the focused DT2 and DN2 proofs:
 
 | Area | Pilot asserts | Retained legacy facts / limits |
 | --- | --- | --- |
@@ -260,7 +260,55 @@ and one skipped, plus lint, format, types, path, layers and generated checks. Lo
 `/private/tmp/fx-reuse-preflight.log`. Final independent static review found no issues after the
 reported blockers were corrected. The gate plan was explained only; the broad gate was not run.
 
-Exact inferred needs, relocated DSP bytes/row pointers, selected-track type and launch-time
-write-watch/flush/card-sector policy are not established as equivalent by this pilot. No legacy
+At that checkpoint, exact inferred needs, relocated DSP bytes/row pointers, selected-track type
+and launch-time write-watch/flush/card-sector policy were not established as equivalent. No legacy
 deletion is authorized by this evidence. Next, close the assertion ledger before parallel family
 migrations. The coordinator retains integration, remaining acceptance and publication decisions.
+
+
+### Safety increment in PR #242 (2026-11-01)
+
+**[D]** Both revised device cases and required final fast preflight passed. This is the
+same PR #242, with no legacy `one()` deletion and no merge-acceptance claim. Eleven new Python
+synthetic cases, 57 affected mocked host cases, affected types and scoped lint passed.
+
+The existing Python runtime rig and the TypeScript test now share the offline watch-range calculation,
+including its DMA-buffer holes and allowed writer-PC range. The patch plan is prepared before spawn,
+then validated against the loaded image after pristine baseline load. Existing write-watch/flush
+instrumentation is configured in the daemon's environment from startup, with CACR activation and
+per-emulator sequence output. After the owned daemon closes, the check requires contiguous watch
+logs matched by complete summaries, at least the observed epochs, zero write events and zero flush
+hits. Every exported overlay is parsed by the existing Python parser: store writes are limited to
+the two selection sectors, and writes below sector 0x50000 are limited to those same sectors.
+Missing/truncated summaries or malformed overlays fail rather than becoming missing evidence.
+
+The gain oracle reuses the independent Python DSP parser/relocator and the existing needs wrapper.
+It now compares the exact relocated DSP image, exact first 12 chain-row words and MODULES/FX-slot
+resource figures against the inferred expectations. The row defaults, enabled/was/disabled/fault
+fields are checked again after capture, preserving the post-note assertion rather than setup alone.
+No new emulator instrumentation, RPC, runner, store codec or relocation implementation was added.
+
+The earlier fresh-process reference passed on both devices as a one-time fixture-equivalence proof;
+it is historical evidence, removed from default acceptance without an optional hidden test. The
+permanent case remains initial dry → gain → protocol deselection/restart → pristine dry restore.
+Reuse now skips Session's redundant SDK patched-image load; the existing CLI stock startup still
+occurs. Clean baseline replacement and guest-write-preserving protocol restart remain distinct.
+
+| Revised proof | Invocation | Case | Watch/overlay result | Local log |
+| --- | ---: | ---: | --- | --- |
+| DT2 OS 1.17 | 63.62 s | 60.64 s | 8 emulator summaries, zero write/flush hits, 4 valid overlays | `/private/tmp/fx-safety-dt2.log` |
+| DN2 OS 1.12 | 50.16 s | 47.441 s | 8 emulator summaries, zero write/flush hits, 4 valid overlays | `/private/tmp/fx-safety-dn2.log` |
+
+Both passed on the first revised run. These durations describe correctness runs, not a paired
+benchmark or measured speedup. The user decision on the one-effect selected-track-type assertion
+is still pending: audible-input PCM proves FX behavior, not sine identity. Legacy `one()` remains;
+plain/full/fxpage and other family coverage also remain. Close that explicit coverage decision and
+the assertion ledger before any deletion or parallel family migration. The coordinator owns
+acceptance and publication; the broad merge gate remains unrun.
+
+Required fast preflight passed (`/private/tmp/fx-safety-preflight.log`): 612 audited Python routing
+tests and 75 host cases (four test-support, 71 regression), plus lint, format, path, layers, generated
+checks and all workspace TypeScript types. Mypy was skipped because no changed files were in its
+typed set. The separate 11 new Python synthetic and 57 focused mocked-host passes above remain
+iteration evidence, not additional unique cases to add to these totals. This is a verified safety
+checkpoint in draft PR #242; selected-type coverage remains undecided and legacy `one()` stays.
