@@ -71,7 +71,7 @@ Em approved the four new values on 2026-11-01; `tests/scenarios/dn2.json` holds 
 
 ## 6. Open
 
-- DN2: the fixture was measured on a Digitakt II only. The DN2 core is assumed identical (same SHARC+ core, same MODE1 setting by the fx adapter); the emulator check runs the DT2 rows on the DN2 emulator. **[O]** Not measured on a Digitone II.
+- DN2 **[D]**: measured on a real Digitone II (OS 1.12, image `44c2d5d6d0341420`, 2026-11-01, `out/probe/dn2-device.json`): all 6694 results, ASTAT[13:0] and STKY[9:0] equal the Digitakt II rows; only ASTAT bits above 13 differ (`0x75000000` on DN2, `0x3f040000` on DT2), which is the state the surrounding firmware leaves, not an effect of the instruction. The DT2 fixture therefore holds for both devices.
 - `RECIPS` and `RSQRTS` under other MODE1 settings (TRUNCATE, ALUSAT, RND32 clear) and in 40-bit mode are not measured; the core uses the same result for all. **[O]**
 
 ## 7. The fast tier **[D]**

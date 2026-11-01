@@ -57,7 +57,7 @@ host (there is no CLEAR for a foreign card by design). The eMMC guarantees secto
 ## The log
 
 Event: `u32 seq` (from 1), `u32 time` (the firmware's block counter, 1500 per second; with no counter anchor 0), `u16 kind`, `u16 flags` (bit 0 error),
-five argument words. The runtime's small ring holds 32: error events (not the long detail of a replayed crash record, which `crash::replay_detail` hands to a sink when one is set) and the boot's own kinds. A sink gets every event first, with interrupts masked, and the module's ring holds 512; appends mask interrupts for a few instructions. Without a sink the other events are dropped. A new sink gets the small ring's events at once, so the module starts with the boot. Nothing is ever sent
+five argument words. The runtime's small ring holds 32: every event until the first UI frame (after all modules' `init`), then error events (not the long detail of a replayed crash record, which `crash::replay_detail` hands to a sink when one is set) and the boot's own kinds. A sink gets every event first, with interrupts masked, and the module's ring holds 512; appends mask interrupts for a few instructions. Without a sink the other events are dropped after the boot. A new sink gets the small ring's events at once, so the module starts with the boot; the module keeps their sequence numbers, so events the ring lost show as a gap (LOG's `oldest` starts after it). Nothing is ever sent
 unless a host asks (LOG), and LOG, PEEK and INFO are not logged themselves. Names and arguments (`dkrt_sdk::logk`, `tools/device/dklog.py KINDS`):
 
 | id | kind | arguments (a0..a4) | error |
@@ -235,5 +235,6 @@ the runtime holds about 15 KiB less.
 - A host cannot tell a new boot from the old one by the log without the module. INFO keeps its wire format (bytes 17 to 24, the log range, are 0 and 0; a host takes
   the range from the module's LOG reply). `DkSession.waitForBoot` takes the device as booted when it answers again after a silent spell; `dkrun` always selects
   the module, so its boot wait uses the log.
-- A module that loads before `digikit/debug` in the selection logs its first lines (`MOD_LOG` of its `init`) before the sink exists; the small ring does not keep them.
-  The default modules list `digikit/debug` first, so every other module logs into it.
+- A module that loads before `digikit/debug` in the selection logs its first lines (`MOD_LOG` of its `init`) before the sink exists. Until the first UI frame
+  the small ring keeps every event, so the debug module copies them when it starts (test `a module that loads before the debug module has its log line in the
+  debug log`, with `digikit/remote` first). If more than 32 events come first, the oldest are lost and the debug log starts after a gap.

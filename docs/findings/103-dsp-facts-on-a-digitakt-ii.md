@@ -68,7 +68,7 @@ What matters for the model: the cache ranges (two cached ranges: `0x200fa000`-`0
 
 ## 5. The emulator against the device **[D]**
 
-`mise run dk:probe -- --spawn dt2|dn2 --modules test/dsp-facts --capture out/probe/facts-DEV-emulator2.json --compare out/probe/facts-dt2-device.json` with the regenerated core: 59 of 59 value items equal the device (masked as above) on the DT2 emulator and on the DN2 emulator (against the DT2 rows; not measured on a Digitone II). The probe took 114 s (DT2) and 66 s (DN2).
+`mise run dk:probe -- --spawn dt2|dn2 --modules test/dsp-facts --capture out/probe/facts-DEV-emulator2.json --compare out/probe/facts-dt2-device.json` with the regenerated core: 59 of 59 value items equal the device (masked as above) on the DT2 emulator and on the DN2 emulator (against the DT2 rows, which section 10 shows hold on a Digitone II too). The probe took 114 s (DT2) and 66 s (DN2).
 
 The regression check is the fourth test of `tests/regression/runtime/sharc-probe.test.ts` ("the instruction facts of the Digitakt II hold for every value item of the dsp-facts probe", Vitest project `runtime`, both devices, about 27 s each). It runs three runs of the facts stream and compares result, ASTAT[13:0] and STKY[9:0] of the 59 items with the fixture. With the daemons built before this change it fails with 44 of 59 items differing (the class (a) items), so the check sees the change.
 
@@ -134,4 +134,15 @@ The L2 conflict case shows that L2 data is cached in a 16 KiB cache that maps li
 - STKY bits 24 and 26 (SSEM, LSEM) are written as zero by an STKY write in the emulator; they read as the stack status on the device.
 - The emulator register reads of section 4 are not changed: REVID, OSPID, SYSCTL bit 16, IMASK bits 0 and 1, MODE2 bits 25 and 30 and the SHL1C ranges.
 - Cycle model: nothing in section 8 is modelled yet.
-- Not measured on a Digitone II. The fast tier now leaves a kernel on every fixed-point overflow and on a denormal float add or subtract result; the cost of the added guards is not measured (no A/B).
+- The fast tier now leaves a kernel on every fixed-point overflow and on a denormal float add or subtract result; the cost of the added guards is not measured (no A/B).
+
+## 10. The same probe on a Digitone II **[D]**
+
+2026-11-01, real Digitone II, OS 1.12, image `44c2d5d6d0341420` (runtime with `digikit/debug`): `out/probe/facts-dn2-device.json`, 143 of 143 items, 48 runs, no sequence or checksum errors, compared with the Digitakt II capture.
+
+- Value items: all 59 equal the Digitakt II (masked as in section 1).
+- Registers: equal except three that the firmware sets, not the core: the core timer period `0x00268538` (DT2 `0x0025f280`), the timer count `0x200da318` (DT2 `0x2009ce58`) and OSPID `0x07674700` (DT2 `0x00224601`).
+- Cycles: every snippet costs the same as on the Digitakt II (the L2 conflict loads 2769 against 2803 cycles for 4096 loads).
+- One block: median 666784 cycles, standard deviation 3730 (DT2: 666582, 3459).
+
+The same capture also proved the step-word transport of [finding 101](101-module-step-word-on-hardware.md) on DN2 silicon, and the health adapter reported DSP 57 % average (61 % peak) and ColdFire 26 % with only `digikit/remote` and `digikit/debug` loaded.

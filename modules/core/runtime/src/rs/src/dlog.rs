@@ -2,7 +2,8 @@
 //! event), the firmware's block counter (1500 per second) as the time, a kind (`dkrt_sdk::logk`), flags (bit 0: an error; bits 1 to 3: the level; bits
 //! 8 to 15: the source module) and five argument words.
 //!
-//! The runtime keeps a small ring of boot and error events (`RING` events) for the crash record's tail and for a debug module that loads later. One
+//! The runtime keeps a small ring (`RING` events) for the crash record's tail and for a debug module that loads later: every event until the first UI
+//! frame, then boot and error events. A replay to a new sink keeps the runtime's sequence numbers, so a gap (the ring overflowed) shows. One
 //! sink pointer (`dkrt_log_sink_set`, an import of the modules) receives every event before any filter: `digikit/debug` holds the long ring, the level
 //! filter and the host commands. Without a sink the other events are dropped (one pointer test).
 //!
@@ -96,11 +97,15 @@ const BOOT_KINDS: u32 = (1 << logk::BOOT_START)
     | (1 << logk::DSP_ABSENT)
     | (1 << logk::MACHINE_TYPE_ASSIGNED);
 
-/// Does the small ring keep this event? Boot events and error events, except the long detail of a replayed crash record and the raw DSP words of a stop
-/// (the fault record holds both).
+/// Does the small ring keep this event? Until the first UI frame (the boot's end, after every module's `init`) every event, so a debug module that loads
+/// after another module sees what that module logged. Then boot events and error events, except the long detail of a replayed crash record and the raw
+/// DSP words of a stop (the fault record holds both).
 fn keeps(kind: u16, flags: u16) -> bool {
     if flags & logk::F_ERROR != 0 {
         return kind != logk::CRASH_REG && kind != logk::CRASH_STACK && kind != logk::CRASH_TAIL && kind != logk::DSP_DIAG;
+    }
+    if crate::boot::info().ui_reached == 0 {
+        return true;
     }
     kind == logk::SETTINGS_LOAD || (kind < 32 && (BOOT_KINDS >> kind) & 1 != 0)
 }
