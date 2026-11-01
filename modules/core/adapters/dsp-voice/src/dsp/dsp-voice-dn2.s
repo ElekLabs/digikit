@@ -466,6 +466,10 @@ _dv_cowner:
     DM(_dv_in + DK_IN_VELOCITY) = R0;
     R4 = DM(_dv_c + 8);
     DM(_dv_in + DK_IN_OUT) = R4;
+    // TODO(stereo, machine contract 1.2): out_r is a scratch block here and the status bit DK_STEREO is dropped, so a stereo machine plays as mono
+    // (L only). The shadow right-channel stages (core/dsp-stereo-proof) are the route for a real R; wire `_dv_rscr` into them when they are production.
+    R0 = _dv_rscr;
+    DM(_dv_in + DK_IN_OUT_R) = R0;
     // the parameter words: knob ADM_PARAM_SLOTi of the slot, until a slot of 255 (the buffer's other words stay 0)
     R0 = 0;
     DM(_dv_c + 20) = R0;
@@ -556,6 +560,9 @@ _dv_crender:
     I13 = _dv_rback;
     JUMP (M13, I12);
 _dv_rback:
+    R1 = DK_STEREO;                       // contract 1.2: the stereo bit is not used on this device (see the TODO at _dv_in + DK_IN_OUT_R)
+    R1 = NOT R1;
+    R0 = R0 AND R1;
     DM(_dv_c + 32) = R0;                  // the status
     // the guard: finite samples of at most 8.0 in magnitude (one integer test: the magnitude bits of 8.0 are 0x41000000, Inf and NaN lie above 0x7f800000)
     R8 = DM(_dv_c + 8);
@@ -766,7 +773,9 @@ _dv_frame_sw:
 .PKDATA _dv_row, 4;
 // The contract adapter's data: the `dk_voice_in` it hands to the module, the parameter words (8), its scalars (see `_dv_contract`), the slots'
 // records (4 words each) and the knob positions of the module's parameters in order (ADM_PARAM_SLOT0 .. 7; 255: none).
-.PKDATA _dv_in, 20;
+.PKDATA _dv_in, 24;
+// Scratch right-channel block handed to a stereo machine (DK_BLOCK words); nothing reads it yet.
+.PKDATA _dv_rscr, 128;
 .PKDATA _dv_params, 32;
 .PKDATA _dv_c, 64;
 .PKDATA _dv_cst, 256;
