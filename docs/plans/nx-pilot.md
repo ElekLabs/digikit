@@ -292,3 +292,35 @@ production code, the targeted retry passed all three cases in 1.67 seconds. All 
 passed across the gate and retry. Ruff, format, mypy, path, layer and generated-source checks all
 passed; final independent review reported no issues. The gate's 87-second wall time describes this
 routed run; it is neither a benchmark nor evidence of a full-suite pass or gate speedup.
+
+
+## Bounded runtime readiness checkpoint (2026-11-01)
+
+The readiness batch changes only remote-input and input-adapter workflows and their shared helpers.
+It replaces selected startup/post-install sleeps with bounded observations of the current runtime
+UI hook and normal boot, a newer epoch after the single install restart, and remote command readiness.
+Fresh pre-install boots must have zero selected modules and a zero boot-counter snapshot; this does
+not claim that a stability flag proves a persisted card update. ABOUT now requires an empty buffer
+before opening and a complete runtime/BOOT/final RAM row snapshot. Awaited readiness RPCs share
+absolute observation deadlines, including stalled reads; input hold/release behavior is unchanged.
+
+Focused device proof passed: DN2 OS 1.12 ran all three selected cases in 203.62 s; DT2 OS 1.17 retried
+all three in 278.20 s. Each invocation passed two files, with the other device's three cases skipped.
+Local logs are `/private/tmp/runtime-readiness-dn2.log` and
+`/private/tmp/runtime-readiness-dt2-retry.log`. The initial DT2 remote-UI case failed because post-restart
+status reported `cf.ready=false` and an unobserved filesystem check despite a newer epoch and current
+UI hooks. The reviewed restart contract preserves the card and relaxes that filesystem-worker check:
+initial readiness still requires `cf.ready`; post-restart readiness permits an unobserved check but
+rejects an explicit filesystem failure, retaining all current boot/UI/epoch guards. No filesystem
+verification is claimed by a null result.
+
+Before that adjustment, 49 host cases and static/type checks passed. The final helper file passed
+25 tests, regression types passed, and independent review reported no issues. The removed scheduled
+waits total at most 269 s across eight sessions (171 s initial, 80 s post-install, 18 s ABOUT); this is
+a static ceiling, not an A/B measurement or measured speedup. Protocol-only startup, navigation,
+key holds, remote refill pacing and faulttrace waits remain. Global settle helpers are unchanged.
+
+This is a partial readiness migration. The broad routed gate (host, runtime-fixture across all ten
+runtime files, and smoke) remains unrun; runtime merge acceptance is pending. The earlier routing-only
+exception does not cover this batch. The [timing finding](../findings/69-runtime-test-timing.md)
+records the same scope and a future completion-event direction; no event facility is implemented here.
