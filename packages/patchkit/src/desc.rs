@@ -16,6 +16,7 @@ use crate::typed::{FxDef, FxKnob, MachineDef, PageDef, PageKnob, ParamDef, Voice
 #[derive(Debug)]
 pub struct Desc {
     pub sample_bank: Option<crate::typed::SampleBankDef>,
+    pub sample_tracks: Option<crate::typed::SampleTracksDef>,
     /// The effects, sorted by id.
     pub fx: Vec<FxDef>,
     /// The machines, sorted by id.
@@ -31,6 +32,7 @@ pub struct Desc {
 /// One record as it was read, before the records are put together.
 enum Rec {
     SampleBank(crate::typed::SampleBankDef),
+    SampleTracks(crate::typed::SampleTracksDef),
     Fx {
         what: String,
         def: FxDef,
@@ -350,6 +352,11 @@ fn records(obj: &Dko, spec: &DescSpec) -> Result<Vec<Rec>> {
                     descriptor: req(&what, rb, rec, "descriptor")?,
                     capacity_frames: word(rb, rec, "capacity_frames")?,
                 }),
+                "dk_desc_sample_tracks" => Rec::SampleTracks(crate::typed::SampleTracksDef {
+                    local_id: word(rb, rec, "local_id")?,
+                    records: req(&what, rb, rec, "records")?,
+                    control: req(&what, rb, rec, "control")?,
+                }),
                 "dk_desc_fx" => fx_def(&what, spec, rb, rec)?,
                 "dk_desc_fx_param" => fx_param(&what, spec, rb, rec)?,
                 "dk_desc_machine" => machine_def(&what, rb, rec)?,
@@ -409,6 +416,7 @@ fn positions(what: &str, entries: &[PageKnob]) -> Result<Vec<u32>> {
 /// Put the records together: ids, owners and words are checked here.
 fn assemble(recs: Vec<Rec>) -> Result<Desc> {
     let mut sample_bank = None;
+    let mut sample_tracks = None;
     let mut fxs: Vec<(String, FxDef)> = vec![];
     let mut fx_params: Vec<(String, String, u32, FxKnob)> = vec![];
     let mut machines: Vec<(MachineDef, VoiceDef)> = vec![];
@@ -424,6 +432,15 @@ fn assemble(recs: Vec<Rec>) -> Result<Desc> {
                     return Err(err!("sample bank capacity must be 1 .. 8192 frames"));
                 }
                 sample_bank = Some(b);
+            }
+            Rec::SampleTracks(t) => {
+                if sample_tracks.is_some() {
+                    return Err(err!("at most one sample track table per module"));
+                }
+                if sample_bank.is_some() {
+                    return Err(err!("a module declares a sample bank or a sample track table, not both"));
+                }
+                sample_tracks = Some(t);
             }
             Rec::Fx { what, def } => fxs.push((what, def)),
             Rec::FxParam {
@@ -591,6 +608,7 @@ fn assemble(recs: Vec<Rec>) -> Result<Desc> {
     }
     Ok(Desc {
         sample_bank,
+        sample_tracks,
         fx: fx_out,
         params: params.into_iter().map(|p| p.1).collect(),
         pages: machine_pages,

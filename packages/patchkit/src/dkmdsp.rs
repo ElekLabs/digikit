@@ -1297,6 +1297,42 @@ mod tests {
         }
     }
 
+    /// A contract machine: `render` and `note_on` in the text, a `dk_machine_desc` with the given contract word in the data.
+    fn machine_object(contract: u32) -> Dko {
+        let mut o = object();
+        let words = [DESC_MAGIC, contract, 1, 1, 8, 8, 100, 100, 0, 0];
+        let desc: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        o.sections[1] = sec("d", "data", 4, &desc);
+        o.symbols.push(sym("mdesc", Some("d"), 0, true));
+        o.symbols.push(sym("note", Some("t"), 3, true));
+        o
+    }
+
+    fn machine_spec(stereo: bool) -> VoiceSpec {
+        VoiceSpec {
+            type_no: 1,
+            render: "entry".into(),
+            note_on: Some("note".into()),
+            desc: Some("mdesc".into()),
+            stereo,
+            ranges: [0; 8],
+        }
+    }
+
+    #[test]
+    fn a_stereo_declaration_must_agree_with_the_contract_word_of_the_desc() {
+        let mono = machine_object(DESC_CONTRACT);
+        let stereo = machine_object(DESC_CONTRACT | DESC_STEREO);
+        assert!(pack(&mono, 1, &[machine_spec(false)], &[]).is_ok());
+        assert!(pack(&stereo, 1, &[machine_spec(true)], &[]).is_ok());
+        let e = |o: &Dko, v: bool| pack(o, 1, &[machine_spec(v)], &[]).unwrap_err().0;
+        assert!(e(&stereo, false).contains("stereo = 0"));
+        assert!(e(&mono, true).contains("stereo = 1"));
+        // another major number, or an unknown flag, is refused
+        assert!(e(&machine_object(2), false).contains("contract 0x2"));
+        assert!(e(&machine_object(DESC_CONTRACT | 0x200), false).contains("contract 0x201"));
+    }
+
     #[test]
     fn the_routes_are_the_flags_of_the_record_and_zero_is_master_only() {
         let o = fx_object(1, 4);

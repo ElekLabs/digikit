@@ -680,6 +680,12 @@ plan.json {}",
                         pages.push(p);
                     }
                 }
+                if m.manifest.sample_tracks.is_some() {
+                    // TODO(API 1.5 runtime): the DSP section has no record for the track table yet (the runtime owner adds it with the loader).
+                    return Err(Error(format!(
+                        "{id}: DK_SAMPLE_TRACKS is read by `desc` and the conformance rigs, but a .dkm cannot carry the track table yet"
+                    )));
+                }
                 match sharc.first() {
                     Some((o, _)) => {
                         dsp = patchkit::dkmdsp::pack_with_bank(
@@ -751,6 +757,7 @@ plan.json {}",
                     "pages": mf.page,
                     "voices": mf.voice,
                     "sample_bank": mf.sample_bank,
+                    "sample_tracks": mf.sample_tracks,
                 }))?
             );
         }

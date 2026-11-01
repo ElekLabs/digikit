@@ -1094,6 +1094,15 @@ summary = "t."
     }
 }
 
+/// A module-owned table of 16 per-track sample records, declared by DK_SAMPLE_TRACKS (<dk/sample_track.h>, API 1.5): the symbols of the
+/// records and of the control sets in the module's DSP data.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct SampleTracksDef {
+    pub local_id: u32,
+    pub records: String,
+    pub control: String,
+}
+
 /// A module-owned sample bank, declared by DK_SAMPLE_BANK.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct SampleBankDef {

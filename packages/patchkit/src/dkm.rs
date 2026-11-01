@@ -693,16 +693,16 @@ mod tests {
         let c = |f: &[u8]| f[H_CONTRACT..H_CONTRACT + 8].to_vec();
         // ColdFire code with slots and init, no DSP section: api and service
         let f = pack(&object(), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 1, 0]);
+        assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 1, 0]);
         // with a DSP section: machine too (the section's bytes are not parsed by pack)
         let f = pack_full(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 1, 0]);
+        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
         // a data-only module with a DSP section: machine, no service
         let f = pack_full(None, &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 0, 0]);
         // a data-only module without DSP code: api only
         let f = pack_with(None, &[], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 0, 0]);
         // register records that hold a machine: machine too (a data-only machine module); param and page records alone: not
         let rec = |kind: u32, len: usize| {
             let mut r = kind.to_be_bytes().to_vec();
@@ -720,9 +720,9 @@ mod tests {
         let param = rec(crate::register::KIND_PARAM, crate::register::LEN_PARAM);
         let machine = rec(crate::register::KIND_MACHINE, crate::register::LEN_MACHINE);
         let f = pack_with(None, &table(&[param.clone(), machine]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 0, 0]);
         let f = pack_with(None, &table(&[param]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 0, 0]);
     }
 
     /// A DSP section of an 8-byte image with BSS bytes of bss and one version 3 voice with `voices` states of 20 bytes (0: version 2).

@@ -9,6 +9,9 @@
      DK_PARAM(pluck, 0, pluck_decay, "Decay", "DECAY", 0, 127, 64);
      DK_PAGE(pluck, "PLUCK", "Pluck", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2), DK_KNOB(3));
 
+   A stereo machine (contract 1.2) adds `.stereo = 1`, sets DK_MACHINE_STEREO in the contract word of its dk_machine_desc, writes the right
+   channel to in->out_r and returns DK_STEREO or-ed into the render status (docs/MODULE-AUTHORING.md 7.1).
+
    DK_PARAM values are knob units 0 .. 127, fractions allowed. The stored value is the unit times 256
    (0x7f00 = 127.0). The records go to the .dk.desc section. `patchkit` reads them; the device never sees them.
    Text longer than its field is a compile error. */
