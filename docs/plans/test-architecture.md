@@ -659,3 +659,11 @@ pathcheck passed, leaving three baseline reports in the separate module-architec
 Focused metadata/routing/collection checks and independent review passed. The broad routed gate
 is unrun; no exception from an earlier PR transfers. Exact evidence, inputs and next actions are in
 [the handover](../handovers/HANDOVER-2026-11-02-test-consolidation.md).
+
+
+### PR #248 acceptance decision (2026-11-02)
+
+Em explicitly approved merging PR #248 using the recorded focused checks, accepting the three
+baseline pathcheck reports. The full routed gate remains unrun; this is a PR-248-only exception,
+not a full-gate pass or permission to skip later gates. The PR and external testing roadmap
+record the final merge state/commit; earlier draft/pending statements above are superseded.

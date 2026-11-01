@@ -550,3 +550,11 @@ The four device proofs and focused host/static checks passed; the full gate rema
 PR #248 is draft. See [the handover](../handovers/HANDOVER-2026-11-02-test-consolidation.md) for
 exact evidence and the three remaining baseline pathcheck reports. Next is the bounded graph and
 selection spike above, with deletion of superseded routing as an acceptance criterion.
+
+
+### PR #248 acceptance decision (2026-11-02)
+
+Em explicitly approved merging PR #248 using the recorded focused checks, accepting the three
+baseline pathcheck reports. The full routed gate remains unrun; this is a PR-248-only exception,
+not a full-gate pass or permission to skip later gates. The PR and external testing roadmap
+record the final merge state/commit; earlier draft/pending statements above are superseded.

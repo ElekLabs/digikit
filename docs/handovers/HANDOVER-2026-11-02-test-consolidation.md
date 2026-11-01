@@ -11,7 +11,9 @@ and the [Nx audit checkpoint](../plans/nx-pilot.md#family-project-audit-checkpoi
 
 This checkpoint includes completed device proofs, reviewed retirement and the initial final preflight.
 The module-placement correction is complete and pushed through `942cae59`.
-[PR #248](https://github.com/ElekLabs/digikit/pull/248) is draft pending the gate/acceptance decision.
+Em explicitly accepted the focused checks, remaining baseline pathcheck reports and merge of
+[PR #248](https://github.com/ElekLabs/digikit/pull/248). This exception applies only to PR #248.
+This document records the pre-merge checkpoint; the PR and external roadmap record the merge commit.
 Do not interpret the four completed device proofs below as a completed merge gate.
 
 ## Decisions and committed checkpoints
@@ -148,17 +150,18 @@ returns the registered external path, and host collection excludes device files.
 review reported no issues. The moved scenario body is identical after imports, and analyzer tests
 are byte-identical. No emulator proof was rerun for the move.
 
-The final code checkpoint is `942cae59`, pushed on the active branch. PR #248 is draft. The final
+The final code checkpoint is `942cae59`, pushed on the active branch. PR #248 has explicit focused-acceptance and merge authorization. The final
 documentation-only commit follows it; use `git log -1` and upstream comparison for that hash.
-The full routed gate is unrun and no current-PR focused exception is granted.
+The full routed gate is unrun. Em granted a PR-248-only focused exception, including the three
+baseline pathcheck reports. This is not a full-gate pass and does not transfer to future work.
 
 ## Continue from here
 
-1. Review PR #248 and resolve its gate/acceptance decision. The four device proofs and focused
-   checks are complete; do not repeat them without a behavioral change or unresolved concern.
-   No earlier PR exception transfers automatically.
-2. After the required gate or explicit PR-specific acceptance and merge authorization, merge
-   this batch, update these statuses and the external roadmap, and preserve the other checkout.
+1. Check PR #248's merged state and merge commit (also recorded in the external roadmap).
+   Em authorized its merge using the focused evidence and accepted baseline pathcheck reports.
+   Do not repeat completed device proofs without a behavioral change or unresolved concern.
+2. Start subsequent work from current main in an isolated lane; preserve the Claude checkout.
+   The PR-248-only exception does not apply to another batch.
 3. Next, pursue the bounded static Nx family-graph spike described in the Nx plan. The proposed
    18-project candidate remains unimplemented. Prove graph/selection equivalence and justify any
    expensive sibling grouping before adoption. Delete old routing only after every consumer moves.
