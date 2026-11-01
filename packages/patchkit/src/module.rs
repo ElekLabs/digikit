@@ -65,7 +65,7 @@ pub struct Manifest {
 }
 
 /// One generated file of device data: `kind` is `rust` (constants every device agrees on, one file), `gas-shared` (the same as `.equ` lines), `gas` (a ColdFire assembler
-/// include, `.equ` lines, one file per device), `sharc` (a SHARC+ include, `#define` lines, one file per device) or `sharc-adapter` (the `ADM_*` defines of `[adapter.machine]`, one file per device). `path` is relative
+/// include, `.equ` lines, one file per device), `sharc` (a SHARC+ include, `#define` lines, one file per device) `sharc-adapter` (the `ADM_*` defines of `[adapter.machine]`, one file per device), `gas-sample-pool` or `sharc-sample-pool` (the `SP_*` numbers of `[adapter.sample_pool]` for ColdFire and SHARC+ assembly, one file per device). `path` is relative
 /// to the module; `{dev}` stands for the device's short name in a per-device path.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
