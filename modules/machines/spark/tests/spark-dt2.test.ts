@@ -407,6 +407,7 @@ runtimeTests(
       // after the first poll that saw CLOSED. The held key does not retrigger the track after the reload, so the capture stays silent to its end.
       const closedAt = timeline.find((s) => s.closed === 1);
       expect(closedAt, `the control word was set to CLOSED: ${JSON.stringify(timeline)}`).toBeDefined();
+      log.resetAudio = { resetFrame: resetAt, silenceFrom: (() => { for (let i = resetAt; i < noteReset.l.length; i++) if (peak(noteReset.l, i, i + 480) < 0.002 && peak(noteReset.r, i, i + 480) < 0.002) return i - resetAt; return -1; })() };
       const silenceFrom = (log.resetAudio as { silenceFrom: number }).silenceFrom;
       expect(silenceFrom, 'the note of the old token stopped').toBeGreaterThanOrEqual(0);
       expect(silenceFrom, `the sound ends with the close: ${JSON.stringify(log.resetAudio)}`).toBeLessThanOrEqual(closedAt!.frame + 2400);
