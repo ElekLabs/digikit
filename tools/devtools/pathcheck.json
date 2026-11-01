@@ -100,11 +100,6 @@
       "reason": "URL under the web app's public/ directory"
     },
     {
-      "file": "modules/fx/freqshift/tests/test_runtime_routing.py",
-      "token": "modules/freqshift.test.ts",
-      "reason": "existing device acceptance filter relative to tests/regression"
-    },
-    {
       "file": "tools/devtools/test_outcomes.py",
       "pattern": ".*",
       "reason": "docstring examples"
