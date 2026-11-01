@@ -100,8 +100,9 @@ Saves about 15 KB of runtime memory (measured: 784,279 to 768,438 bytes of text,
       without the DEBUG row, store order in transfer-live, unused import, winmidi source wording"). Device (DT2 1.17, image `4a0465b00d65c475`):
       the flash installed `digikit/debug` next to the kept selection; boot events, a level change and PEEK work; without the module the device
       boots, INFO drops the LOG, PEEK and LOGCFG capabilities (caps 4095 to 4088), LOG answers E_PROTO and remote still works.
-- [ ] Load `digikit/debug` before the other modules, so the info events modules log at their start reach the log (on the device the remote's
-      start message was dropped because remote loaded first). The runtime size went from 784,279 to 768,438 bytes (15.8 KB saved).
+- [x] Info events of modules that load before `digikit/debug` reach its log (on the device the remote's start message was dropped because remote
+      loaded first): the runtime's small ring keeps every event until the first UI frame; the debug module keeps the runtime's sequence numbers, so a
+      ring overflow shows as a gap. The runtime size went from 784,279 to 768,438 bytes (15.8 KB saved) in this phase. Commit "Runtime log: the small ring keeps every event until the first UI frame".
 - Decided not now: dsp-link page mode (nothing needs more than 1500 words a second yet; it changes the DSP side of dsp-link); run-time
   ColdFire hooks ([capabilities](capabilities.md) step 2); the probe collector stays its own module `digikit/probe`.
 

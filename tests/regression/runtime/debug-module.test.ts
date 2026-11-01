@@ -2,7 +2,15 @@ import { hasCap } from '@digi/dk-session';
 import { LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { installWithDebug, liveArtifacts, runtimeTests, settleUi } from './live.ts';
+import {
+  DEBUG_MODULE,
+  installModules,
+  installWithDebug,
+  liveArtifacts,
+  moduleArtifact,
+  runtimeTests,
+  settleUi,
+} from './live.ts';
 import { readSmallRing, RING_SYMBOLS } from './runtime-menu.ts';
 import { prepareRuntimePlan } from './runtime-plan.ts';
 
@@ -86,6 +94,27 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   await session.expectNoFault('runtime with the debug module');
 }
 
+/** A module that loads before digikit/debug and logs in its init (digikit/remote: `remote registered`): the small ring kept the line through the boot, and
+ * the debug module copies it when it starts. */
+async function expectEarlyModuleLog(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
+  await settleUi(session);
+  const device = session.options.device;
+  await installModules(
+    dk,
+    ['digikit/remote', DEBUG_MODULE].map((id) => ({ id, artifact: moduleArtifact(device, id) })),
+  );
+  expect((await dk.modules()).map((m) => m.name)).toEqual(['digikit/remote', 'digikit/debug']);
+  await expect
+    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), { timeout: 60_000, interval: 1000 })
+    .toBe(true);
+  const log = await dk.readLog();
+  const line = log.find((e) => e.kind === LOG_KIND.MOD_LOG && text(e.args.slice(0, 4)).startsWith('remote registere'));
+  expect(line, 'the log line of the module that loaded before the debug module').toBeDefined();
+  expect(log.find((e) => e.kind === LOG_KIND.BOOT_START)!.seq).toBeLessThan(line!.seq);
+  await session.expectNoFault('runtime with an early module log line');
+}
+
 runtimeTests(
   'without the debug module the runtime boots, has no log commands and keeps a small ring',
   expectWithoutDebugModule,
@@ -94,5 +123,8 @@ runtimeTests(
   },
 );
 runtimeTests('with the debug module the boot events, levels, PEEK and a module log line work', expectWithDebugModule, {
+  timeout: 900_000,
+});
+runtimeTests('a module that loads before the debug module has its log line in the debug log', expectEarlyModuleLog, {
   timeout: 900_000,
 });

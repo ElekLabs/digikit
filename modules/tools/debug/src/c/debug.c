@@ -65,6 +65,7 @@ typedef struct Ev {
 /* The ring is module bss, not an `Api.alloc` block: the arena need is then what `dkneeds` reads from the file (docs/design/digikit-dkm.md, "Needs are inferred from the contents"). */
 static Ev ring[RING];
 static volatile u32 count; /* events appended: the newest sequence number */
+static volatile u32 base; /* sequence numbers up to here were lost before this module loaded (the runtime's small ring overflowed) */
 static volatile u32 level_default = L_INFO;
 static volatile u8 level_module[MODULES];
 
@@ -88,6 +89,10 @@ static void sink(const Ev *e)
             return;
     }
     n = count + 1u;
+    if (e->seq > n && count == 0u) { /* the runtime's replay starts after lost events: keep its numbering, so the reader sees the gap */
+        n = e->seq;
+        base = n - 1u;
+    }
     s = &ring[(n - 1u) % RING];
     s->seq = 0; /* a reader that is cut off here sees no event, not a half-written one */
     s->time = e->time;
@@ -140,6 +145,8 @@ static int32_t cmd_log(const u8 *body, u32 len, u8 *out)
     from = get32(body);
     newest = count;
     oldest = newest > RING ? newest - RING + 1u : (newest ? 1u : 0u);
+    if (newest != 0u && oldest <= base)
+        oldest = base + 1u;
     put32(out, oldest);
     put32(out + 4, newest);
     if (newest != 0u) {
