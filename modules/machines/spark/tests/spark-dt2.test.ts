@@ -366,6 +366,20 @@ runtimeTests(
       expect(before.state).toBe(3);
       let resetAt = 0;
       const trace: { t: number; state: number; token: number }[] = [];
+      // Reset-phase timeline: every poll peeks the track's DSP record (ready, token) and control word (CLOSED) at the table addresses the runtime
+      // keeps (`RECORDS`, `CONTROL` of client 0), next to the runtime status and the capture clock.
+      const tablePlan = await prepareRuntimePlan(session, artifacts, ['RECORDS', 'CONTROL', '_dv_params']);
+      const tableMem = memory(session);
+      const tableBase = async (name: string) => (await tableMem.cf(planSymbol(tablePlan, name))) + (name === 'RECORDS' ? 32 : 16) * TRACK;
+      const dspWords = async (addr: number, n: number) => {
+        const peek = await tableMem.dsp(addr, n * 4);
+        const b = Buffer.from(peek.hex, 'hex');
+        return peek.unknown ? [] : Array.from({ length: n }, (_, i) => b.readUInt32LE(i * 4));
+      };
+      const recAddr = await tableBase('RECORDS');
+      const ctlAddr = await tableBase('CONTROL');
+      const timeline: { ms: number; frame: number; state: number; ready?: number; token?: number; closed?: number }[] = [];
+      log.tableAddresses = { recAddr, ctlAddr, now: [await dspWords(recAddr, 2), await dspWords(ctlAddr, 1)] };
       const noteReset = await captureNote(runtime, path.join(artifacts, 'reset.wav'), async (clock) => {
         resetAt = (await clock()) + RATE / 2;
         await until(clock, resetAt);
@@ -375,6 +389,10 @@ runtimeTests(
         // The wipe comes about 1.5 s after the call; the track must leave the old binding, then be ready again.
         for (;;) {
           const s = await api.status();
+          const [rec, ctl] = [await dspWords(recAddr, 2), await dspWords(ctlAddr, 1)];
+          const last = timeline.at(-1);
+          if (!last || last.state !== s.state || last.ready !== rec[0] || last.token !== rec[1] || last.closed !== ctl[0])
+            timeline.push({ ms: Date.now() - t0, frame: (await clock()) - resetAt, state: s.state, ready: rec[0], token: rec[1], closed: ctl[0] });
           if (!trace.length || trace.at(-1)!.state !== s.state || trace.at(-1)!.token !== s.token)
             trace.push({ t: Date.now() - t0, state: s.state, token: s.token });
           if (s.state === 3 && s.token !== before.token) break;
@@ -384,6 +402,7 @@ runtimeTests(
         await until(clock, (await clock()) + RATE);
       });
       log.reset = { before, trace, frames: noteReset.l.length };
+      log.resetTimeline = timeline; // frame: capture clock relative to the reset request (48 frames per ms)
       const after = await api.status();
       expect(after.state, `ready again after the reset: ${JSON.stringify(trace)}`).toBe(3);
       expect(after.token, 'the reload published a new token').not.toBe(before.token);
@@ -400,6 +419,7 @@ runtimeTests(
       // The old note stops at the wipe and the track plays again after the reload: a silent gap lies inside the capture (measured: 2.3 s).
       const gap = longestSilence(noteReset, onsetS, 0.002);
       log.resetGap = gap;
+      log.resetAudio = { resetFrame: resetAt, silenceFrom: (() => { for (let i = resetAt; i < noteReset.l.length; i++) if (peak(noteReset.l, i, i + 480) < 0.002 && peak(noteReset.r, i, i + 480) < 0.002) return i - resetAt; return -1; })() };
       expect(gap, 'the note of the old token stopped for a while at the wipe').toBeGreaterThan(RATE / 2);
       const endPeak = Math.max(
         peak(noteReset.l, noteReset.l.length - RATE / 2, noteReset.l.length),
@@ -429,7 +449,7 @@ runtimeTests(
       const PITCH_OCTAVE = 0x6000;
       const ui = panel(session);
       const mem = memory(session);
-      const paramsPlan = await prepareRuntimePlan(session, artifacts, ['_dv_params']);
+      const paramsPlan = tablePlan;
       const pitchAddress = planSymbol(paramsPlan, '_dv_params') + 3 * 4; // a byte-alias address; one little-endian word per parameter
       const readPitch = async () => {
         const peek = await mem.dsp(pitchAddress, 4);
