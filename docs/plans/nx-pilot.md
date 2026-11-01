@@ -16,7 +16,8 @@ owners of merge acceptance. The parked `--only` routing change is independent of
 Five host groups now enable local result caching: control-client, test-support, dk-session, desktop-host
 and regression-host. Both extensions passed dependency failure/restoration probes; only the earlier
 support/session extension has a bounded timing pair. The integration gate was attempted and aborted;
-[PR #237](https://github.com/ElekLabs/digikit/pull/237) remains draft with incomplete gate coverage.
+[PR #237](https://github.com/ElekLabs/digikit/pull/237) has completed focused verification. The user
+authorized a one-time full-gate exception for this PR; merge remains pending, without a full-gate pass.
 
 ## Boundary
 
@@ -235,11 +236,12 @@ Any failure of graph isolation, input invalidation or fresh/cached agreement blo
 
 The warm integration lane attempted the broad gate in `out/runs/verify/20261101-043906`; it did not
 pass. The parent stopped runtime execution after the user challenged the coverage breadth. Focused
-host follow-up passed, but the repaired Rust launcher still awaits focused validation and runtime
-sample failures have not been rerun after providing the missing WASM prerequisite. See the
+host and web follow-up passed, as did the forced Rust compile with the final absolute pinned compiler
+override. Runtime sample failures have not been rerun after providing the missing WASM prerequisite. See the
 [integration checkpoint](../findings/nx-pilot.md#integration-gate-checkpoint) for the exact limits.
 
 The next priority is tighter gate selection using static dependency ownership and existing phase
 evidence, not more caches or custom tracing. Existing runtime evidence already identifies fixed waits;
-do not repeat broad acceptance for observation or timing. PR #237 remains draft pending focused
-checks and a gate-coverage decision; this checkpoint is not merge acceptance.
+do not repeat broad acceptance for observation or timing. Focused checks are complete and the user
+authorized the one-time full-gate exception for PR #237. Merge remains pending; the exception is not
+evidence that the aborted gate passed.

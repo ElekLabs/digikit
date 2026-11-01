@@ -307,6 +307,23 @@ fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf
             manifest.display()
         ));
     }
+    let pin = &tc::pins().rust_nightly;
+    let rustc = std::process::Command::new("rustup")
+        .args(["which", "--toolchain", pin.as_str(), "rustc"])
+        .output()
+        .map_err(|e| err!("rustup which rustc: {e}"))?;
+    if !rustc.status.success() {
+        return Err(err!(
+            "cannot locate rustc for {pin}: {}",
+            String::from_utf8_lossy(&rustc.stderr).trim()
+        ));
+    }
+    let rustc = PathBuf::from(String::from_utf8_lossy(&rustc.stdout).trim());
+    if !rustc.is_absolute() {
+        return Err(err!(
+            "rustup which returned no absolute rustc path for {pin}"
+        ));
+    }
     let tdir = target_dir(env);
     std::fs::create_dir_all(&tdir).map_err(|e| err!("{}: {e}", tdir.display()))?;
     let cg_env = env.codegen_gcc_env(RUSTFLAGS_EXTRA);
@@ -333,7 +350,9 @@ fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf
         .arg(&staged)
         .current_dir(staged.parent().unwrap())
         .env_clear()
-        .envs(cg_env);
+        .envs(cg_env)
+        // Cargo otherwise finds the gate's real stable rustc on PATH, bypassing rustup's pin.
+        .env("RUSTC", rustc);
     let o = cmd.output().map_err(|e| err!("rustup: {e}"))?;
     if !o.status.success() {
         let tail = |b: &[u8]| {

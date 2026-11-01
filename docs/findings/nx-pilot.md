@@ -196,16 +196,29 @@ measurement. Build, native, quick-tier, module-load, smoke, stock, card and Pyth
 
 Host formatting and Rust launcher failures were repaired in source. The Rust builder now uses
 explicit pinned `rustup run` invocations and removes inherited stable compiler overrides; focused
-validation remains pending. Two runtime sample cases failed with `ENOENT` for the lane's
+validation was still pending at this checkpoint. Two runtime sample cases failed with `ENOENT` for the lane's
 `apps/web/public/dksample.wasm`; that prerequisite was subsequently built, with no device rerun.
 Focused host follow-up initially passed 244 tests with 17 skipped; the previously blocked transfer
 file then passed all 14 tests. Formatting and workspace typechecks passed.
 The web Node owner check was attempted, but subprocess CLI comparisons hit a sandbox denial at the
-default uv source cache because the launch omitted the lane's uv environment. That validation is
-unresolved; the web Node suite is not recorded as passing.
+default uv source cache because the launch omitted the lane's uv environment. That initial attempt
+did not establish a passing web Node suite.
 
-**[O]** [PR #237](https://github.com/ElekLabs/digikit/pull/237) remains draft. The broad gate has not
-been repeated for observation or timing, and its incomplete coverage is unresolved. Remaining work
-is focused host and web checks, validation of the Rust fix, and a gate-coverage decision. Prioritize tighter static
+**[D]** At interruption, [PR #237](https://github.com/ElekLabs/digikit/pull/237) remained draft with
+incomplete gate coverage. Remaining work was focused host and web checks, validation of the Rust fix,
+and a gate-coverage decision. The broad gate was not repeated for observation or timing. Prioritize tighter static
 dependency ownership using existing phase evidence; fixed runtime waits are already documented.
 No additional cache expansion, custom tracing or whole-suite speed claim follows from this checkpoint.
+
+### Focused verification completed
+
+**[D]** The final Rust fix resolves the pinned compiler with `rustup which --toolchain` and supplies
+its absolute path as Cargo's `RUSTC`: `rustup run` alone leaves the gate's real stable compiler first
+on inherited `PATH`. One focused test forced compilation under inherited stable `RUSTC`, `RUSTDOC`
+and `RUSTUP_TOOLCHAIN` and passed in 19.26 s, without an emulator. Static review reported no issues.
+Targeted web Node retries passed with the correct uv environment; the runner reported 21 entries,
+including matching cases and empty-file entries, not 21 scenario tests.
+
+The focused verification is complete. The user explicitly authorized a one-time full-gate exception
+for PR #237 after these checks passed; merge remains pending. The interrupted gate above remains
+unsuccessful, and the runtime sample cases were not rerun. No full-pass or new speed claim is made.
