@@ -2962,6 +2962,17 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
 
 [[anchor]]
+name = "dsp.voice.value.param_record_base"
+cpu = "sharc"
+kind = "value"
+addr = 0x2506ec
+src = 0x283859c6
+len = 6
+sha256 = "5e50c45d3c686f2f462d9db895675d94fa7b1029b2d7664ac3020713985f6503"
+mark = "D"
+rule = "fw/dsp/voice:sharc_literal"
+
+[[anchor]]
 name = "dsp.voice.value.sample.pool_base"
 cpu = "sharc"
 kind = "value"

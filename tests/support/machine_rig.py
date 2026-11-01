@@ -105,6 +105,7 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_fw_type_cache": dv.TYPE_CACHE,
         "_fw_render_next": dv.STOCK_BP,
         "_fw_frame": dv.FRAME,
+        "_fw_param_rec": dv.PARAM_REC,
         "_dv_table": dv.TABLE,
     }
 

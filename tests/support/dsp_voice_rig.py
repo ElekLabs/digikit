@@ -26,6 +26,7 @@ TYPE_CACHE, FRAME, RECORDS, OUT, TABLE, STATE, STACK, DIAG = (
     0x2009C000,
     0x2009D000,
 )
+PARAM_REC = 0x2506EC  # DT2 1.17 param record base (the stock literal; the rig keeps the stock address)
 SV_L4 = DIAG + 0x100  # the wrapper's data symbols (the build places them in free L2)
 SV3, SV5, BCW, REC_PTRS = DIAG + 0x104, DIAG + 0x108, DIAG + 0x10C, DIAG + 0x110
 STEP_WORD = (
@@ -62,6 +63,7 @@ def core_externs() -> dict[str, int]:
         "_fw_type_cache": TYPE_CACHE,
         "_fw_render_next": STOCK_BP,
         "_fw_frame": FRAME,
+        "_fw_param_rec": PARAM_REC,
         "_dv_table": TABLE,
         "_dv_diag": DIAG,
         "_dv_sv_l4": SV_L4,

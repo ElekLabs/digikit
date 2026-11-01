@@ -44,6 +44,15 @@ mark = "D"
 users = ["core/dsp-voice"]
 doc = "The DSP's per-track machine type cache: the literal `I4 = 0x255970` in the per-track unpack."
 
+[[value]]
+name = "dsp.voice.value.param_record_base"
+cpu = "sharc"
+devices = ["dt2"]
+rule = { kind = "sharc_literal", reloc_hash = "55a5d8458350a1b67249f5aca8d49a4692d9ab5886fd12d95c259479f83ce780", offset = 0x1bf }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "DT2 1.17 base of the 0xdc-byte per-voice param records (0x2506ec): the literal `I5 = 0x2506ec` of the per-voice loop in FUN_1c2b24. Word +0xd8 of the even voice's record is the pair gate of the pan stage (finding 112)."
+
 [[hook]]
 name = "dsp.voice.hook.render_entry"
 site = "dsp.voice.fn.render_entry"

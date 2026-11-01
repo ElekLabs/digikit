@@ -13809,6 +13809,36 @@
       "at": {
         "dt2-1.17": [
           {
+            "addr": "0x2506ec",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "DT2 1.17 base of the 0xdc-byte per-voice param records (0x2506ec): the literal `I5 = 0x2506ec` of the per-voice loop in FUN_1c2b24. Word +0xd8 of the even voice's record is the pair gate of the pan stage (finding 112).",
+      "file": "devices/fw/dsp/voice.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.voice.value.param_record_base",
+      "rule": {
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 447
+        }
+      },
+      "subsystem": "voice",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
             "addr": "0x8422b9c8",
             "len": 6
           }
@@ -14079,7 +14109,7 @@
       "name": "master"
     },
     {
-      "count": 22,
+      "count": 23,
       "cpu": "sharc",
       "file": "devices/fw/dsp/voice.toml",
       "meaning": "voice rendering",

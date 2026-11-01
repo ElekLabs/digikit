@@ -57,6 +57,7 @@
 .EXTERN _fw_type_cache;
 .EXTERN _fw_render_next;
 .EXTERN _fw_frame;
+.EXTERN _fw_param_rec;
 .EXTERN _dv_table;
 
 _dv_entry:
@@ -1367,14 +1368,16 @@ _dv_rback:
     R2 = R0 AND R1;
     DM(0, I1) = R2;
     // DT2 1.17: the stock pan stage (FUN_1c642a, loop 0x1c7040) reads its per-pair gate (1: stereo pair, pan = balance; 0: matrix, both
-    // voices summed into both planes) from the even voice's param record word +0xd8 (byte 0x2506ec + 0xdc * 2t + 0xd8 = 0x2507c4 + 0x1b8 * t),
+    // voices summed into both planes) from the even voice's param record word +0xd8 (byte _fw_param_rec + 0xdc * 2t + 0xd8, the base 0x2506ec on 1.17),
     // one frame late (copy at 0x1c7158). Only the stock sample note-on (0x1c335b) writes it. A stereo machine sets it every block.
     R2 = PASS R2;
     IF EQ JUMP _dv_nogate;
     R3 = DM(_dv_g + 12);
     R4 = 0x1b8;
     R3 = R3 * R4 (SSI);
-    R4 = 0x2507c4;
+    R4 = _fw_param_rec;
+    R3 = R3 + R4;
+    R4 = 0xd8;
     R3 = R3 + R4;
     I1 = R3;
     R4 = 1;
