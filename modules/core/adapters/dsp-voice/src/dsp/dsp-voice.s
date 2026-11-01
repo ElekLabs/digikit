@@ -796,6 +796,12 @@ _dv_f3b:
 #else
     CALL _dv_crumb;                       // stage 4: the routine is about to be called (R3, R5, I4 are free here)
 #endif
+    R3 = LSHIFT R2 BY 2;                  // the track's stereo flag starts the block clear (the odd voice normally consumes it; stale if it did not run)
+    R5 = _dv_st;
+    R5 = R5 + R3;
+    I1 = R5;
+    R3 = 0;
+    DM(0, I1) = R3;
     CALL _dv_clrstep;                     // the module step word is cleared
     R3 = DM(_dv_g + 0);
     I4 = R3;
