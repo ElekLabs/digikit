@@ -72,7 +72,11 @@ for (const image of ['routes', 'track', 'track-base'] as const) {
     };
     fake.prepare.mockResolvedValue({ plan, preparedImage, planFile: '/prepared.plan.json', syx: '/prepared.syx' });
     fake.analysis.mockImplementation(async (_module: string, args: string[]) =>
-      args[0] === 'profile' ? { fx_slots: 3, send_slots: 2 } : args[0] === 'runtime-check' ? { pass: true } : {},
+      args[0] === 'profile'
+        ? { fx_slots: 3, send_slots: 2, track_type_word: 1234 }
+        : args[0] === 'runtime-check'
+          ? { pass: true }
+          : {},
     );
     fake.exec.mockResolvedValue({ stdout: '', stderr: '' });
     const result = withRouteFxSession('dt2', 'host route', {
@@ -104,10 +108,24 @@ for (const image of ['routes', 'track', 'track-base'] as const) {
       expect(() => result.baseline('absent')).toThrow('unknown');
       expect(result.slots).toBe(3);
       expect(result.sendSlots).toBe(2);
+      expect(result.profile.track_type_word).toBe(1234);
       expect(fake.prepare).toHaveBeenCalledTimes(1);
       await lifecycle.finishCase({ session });
       expect(fake.evidence).toHaveBeenCalledWith({ session }, artifacts, 'case-1', [], false);
       await lifecycle.afterClose();
+      if (image === 'routes') {
+        for (const failing of ['runtime-check', 'render-shots']) {
+          const observed: string[] = [];
+          fake.analysis.mockImplementation(async (_module: string, args: string[]) => {
+            observed.push(args[0]!);
+            if (args[0] === failing) throw new Error(`${failing} failed`);
+            return { pass: true };
+          });
+          await expect(lifecycle.afterClose()).rejects.toThrow(`${failing} failed`);
+          expect(observed).toContain('runtime-check');
+          expect(observed).toContain('render-shots');
+        }
+      }
     } finally {
       vi.unstubAllEnvs();
     }
