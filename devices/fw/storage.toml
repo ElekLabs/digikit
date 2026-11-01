@@ -44,7 +44,7 @@ sig = "i32 (const u8 *path, const u8 *mode, u32 *handle)"
 devices = ["dt2"]
 rule = { kind = "cf_func", hash = "f642319babf0cc8f26a18a17356a25df", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/sample-pool"]
 doc = "Path open; 0 succeeds. Handle is four words (entry id, position, write mode, open). The sample adapter passes only mode r; task context, internal filesystem locking (finding 105)."
 
 [[fn]]
@@ -64,7 +64,7 @@ sig = "i32 (u32 *handle)"
 devices = ["dt2"]
 rule = { kind = "cf_func", hash = "ad3982007ea053f7f633f28b1f0e5f59", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/sample-pool"]
 doc = "Close a successfully opened four-word handle; 0 succeeds. Takes the filesystem mutex internally (finding 105)."
 
 [[fn]]
@@ -105,7 +105,7 @@ sig = "i32 (u32 entry_id, u32 *output)"
 devices = ["dt2"]
 rule = { kind = "cf_func", hash = "56566ccf1985a1fe2868df8f8d909661", offset = 0, len = 4 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/sample-pool"]
 doc = "DT2 1.17 locked stored metadata getter: 0 success/-1 failure, output unchanged on failure. Four words: id, stored odd hash, physical byte size, node word. No hash recomputation or source lease (finding 93)."
 
 # Optional private DT2 1.17 storage error observer: one displaced MMIO load per site.

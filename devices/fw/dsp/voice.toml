@@ -201,3 +201,22 @@ mark = "D"
 users = ["core/dsp-stereo-proof"]
 regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
 doc = "Private finite U/Y observer; original left state/output remains authoritative, no IRQ-mask policy."
+
+# ---- The stock sample pool as the DSP sees it (finding 109; core/sample-pool).
+[[value]]
+name = "dsp.voice.value.sample.pool_base"
+cpu = "sharc"
+devices = ["dt2"]
+rule = { kind = "sharc_literal", reloc_hash = "e2bc946bce1cc3effe08d930f4fbdcfd2258c47ef03857f694e5706066938c74", offset = 0x1e }
+mark = "D"
+users = ["core/sample-pool"]
+doc = "DT2 1.17 base of the sample pool in the DSP's view (0x8422b9c8): the literal added to a slot record's start fields in the slot lookup. PCM address = base + pool block offset."
+
+[[value]]
+name = "dsp.voice.value.sample.slot_table"
+cpu = "sharc"
+devices = ["dt2"]
+rule = { kind = "sharc_literal", reloc_hash = "e2bc946bce1cc3effe08d930f4fbdcfd2258c47ef03857f694e5706066938c74", offset = 0x10 }
+mark = "D"
+users = ["core/sample-pool"]
+doc = "DT2 1.17 DSP slot record table (0x257810, stride 0x14: startL, startR, length bytes per channel, rate, stereo byte at +16): the literal of the slot lookup. The ColdFire cannot read it; a test reads it to check the borrowed slot."
