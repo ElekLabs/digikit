@@ -128,3 +128,38 @@ Focused validation passed all 57 Python routing cases (56 initially, then the co
 test alone) and one new uncached test-support target run, four tests in one file. Static review
 reported no issues. No full host sweep or merge gate ran for this migration; input closure and gate
 speedup are not established. Lint/format/type selection and merge-gate routing remain unchanged.
+
+## Support and session cache extension
+
+**[D]** On base `8e98b797` plus this extension, support and session joined control-client as cached
+host targets; the other four hosts and Rust/runtime targets remain uncached. Support uses standard
+`hostTests`, `^hostTests` (its graph dependency on control-client), and the explicit
+`tools/emulator/fast_regions.json` input. Session retains its project/shared inputs and `sdk/sdk.toml`.
+Current tests use local sources, mocks and temporary data; frozen installed dependencies are assumed.
+Future helper, environment or external-input changes require another boundary audit.
+
+| Target | Original task hash | Fresh / repeat | Intentional failure hash | Failure result |
+| --- | --- | --- | --- | --- |
+| `@digi/test-support:test-host` | `4808849853363473802` | Four passed / local-cache-hit, exit 0 | `4851917506349540059` | cache-miss, exit 1 from imported control-client throw |
+| `@digi/dk-session:test-host` | `11821132459342275169` | Thirty passed / local-cache-hit, exit 0 | `14052011362760429413` | cache-miss, exit 1; original thirty passed plus one intentional failure |
+
+The support probe appended a top-level throw to control-client's imported index, exercising dependency
+invalidation through `^hostTests`. The session probe appended a standalone failing assertion. Both
+files were restored byte-exactly, and subsequent runs used their original hashes. Explicit data/SDK
+coverage was audited statically rather than separately executed for every input. Local correctness
+records are `.nx/cache-extension-validation/01-fresh.json`, `02-repeat.json` and `03-failing-probes.json`.
+
+**[D]** Ceiling: a cache hit can skip target process/test work; Nx overhead, other static checks and
+the merge gate remain. A single warm-graph pair for only these two targets ran under one existing
+exclusive benchlock against the shared repository lock: `--skipNxCache` took **4.96 s real**, then
+normal cached execution took **1.52 s real**, an observed **3.44 s reduction**. Both uncached targets
+passed freshly; both cached results were successful local hits with the original hashes. The user
+approved `/usr/bin/time` for this host-only comparison because `coupled_ab` is an emulator measurement
+tool. This is one local pair, not evidence of a whole-preflight, whole-suite or gate speedup.
+Initial unguarded fresh/repeat timings are excluded from performance evidence.
+
+The locked pair's records are `.nx/cache-extension-validation/04-uncached.json` and `05-cached.json`,
+with corresponding `.log` and `.time` files. The unused Rust plugin dependency was removed offline
+with scripts disabled, deleting 1,171 lockfile lines without version updates; `@nx/devkit` remains.
+The frozen scripts-disabled install reconciliation fetched policy metadata, reused 576 packages and
+downloaded none. Static review reported no issues. No probe files or generated inputs were committed.

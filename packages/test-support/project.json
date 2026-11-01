@@ -4,8 +4,8 @@
   "targets": {
     "test-host": {
       "executor": "nx:run-commands",
-      "cache": false,
-      "inputs": ["hostTests"],
+      "cache": true,
+      "inputs": ["hostTests", "^hostTests", "{workspaceRoot}/tools/emulator/fast_regions.json"],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,

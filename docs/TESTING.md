@@ -65,6 +65,12 @@ The evaluated Rust discovery plugin is unregistered for host preflight, so host 
 require Rust toolchains or Cargo metadata. Explicit Rust targets retain their own pinned commands.
 See the [Nx migration boundary](plans/nx-pilot.md#host-preflight-migration).
 
+Control-client, test-support and dk-session host targets use local result caching; the other four
+host targets remain uncached. Cache use assumes a frozen installation. New test helpers, environment
+reads or external inputs require an input audit before relying on cached results. The
+[bounded cache observations](findings/nx-pilot.md#support-and-session-cache-extension) cover the support
+dependency and session failure probes, not a whole-preflight speedup.
+
 | Command | What runs |
 | --- | --- |
 | `mise run test:changed` | `tools/devtools/changed_tests.py`: ruff and mypy on changed Python, pathcheck, six audited tooling unit files, Nx-affected host Vitest projects, changed JS/TS lint and format, host types. Options: `--base`, `--head`, `--files`, `--deep`, `--explain`. Does not run Rust, module builds or devices. |

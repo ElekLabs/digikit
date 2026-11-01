@@ -13,10 +13,12 @@ caching disabled. All three execution checks are complete; Rust/runtime cache in
 open. The host preflight migration below passed focused validation; no gate speedup
 is proven. Existing full-host commands and merge-gate routing remain the
 owners of merge acceptance. The parked `--only` routing change is independent of this pilot.
+Control-client, test-support and dk-session now enable local result caching; the support/session
+extension passed failure/restoration probes and one locked two-target timing pair (details in the finding).
 
 ## Boundary
 
-Pin Nx and `@nx/devkit` to 22.7.12 and `@monodon/rust` to 3.0.0. Use the existing Node 24.15.0,
+Pin Nx and `@nx/devkit` to 22.7.12. The evaluated `@monodon/rust` dependency has been removed. Use the existing Node 24.15.0,
 pnpm 12.8.2 and Rust 1.98.1 pins in [mise.toml](../../mise.toml). The root `nx:pilot` script disables
 the Nx daemon and Cloud. Use that entrypoint rather than a bare Nx invocation. There is no remote
 cache or new gate. The explicit dkneeds command retains its exact Rust pin and offline/locked flags.
@@ -31,8 +33,8 @@ The local cache and isolated Cargo build files live under ignored `.nx/`; do not
 The initial pilot evaluated Rust plugin graph discovery with an include filter for
 `packages/dkneeds/Cargo.toml`. It nevertheless called root `cargo metadata --format-version=1` for
 the workspace before filtering. The plugin is now unregistered so host preflight does not acquire
-a Rust toolchain or Cargo metadata prerequisite. Its pinned dependency remains installed; dependency
-cleanup and broader Rust graph migration are deferred. The explicit dependency-free dkneeds target
+a Rust toolchain or Cargo metadata prerequisite. Its unused dependency and unreachable lockfile entries
+have been removed; broader Rust graph migration remains deferred. The explicit dependency-free dkneeds target
 does not require plugin discovery. Historical plugin observations in the finding remain unchanged.
 
 The plugin test executor accepts only stable/beta/nightly as its toolchain option, so it cannot express
@@ -56,7 +58,8 @@ separate from the focused migration checks below.
 | `regression` | `regression-host` |
 | `module-tests` | `module-tests` |
 
-Only control-client result caching remains enabled. The other six host targets use `cache: false`.
+Control-client, test-support and dk-session result caching is enabled. Web-transfer, desktop-host,
+regression-host and module-tests still use `cache: false`.
 Each fixed command runs its whole Vitest project; preflight supplies all changed paths on standard
 Nx `--stdin`, rejecting newlines rather than splitting a pathname. `--parallel=1` preserves the
 previous one-worker host budget. There is no root project covering the repository. Existing package
@@ -77,7 +80,9 @@ workflow. Ignored WASM/generated/live inputs are another reason web result cachi
 
 Rust plugin registration and the script's Cargo environment overrides are removed for this migration.
 Host graph discovery needs Node/pnpm, without Rust metadata, fetches or toolchain installation. The
-dependency stays pinned for historical pilot reproducibility; no lockfile churn is needed here.
+unused plugin dependency was subsequently removed with an offline, lockfile-only, scripts-disabled
+update; `@nx/devkit` remains pinned. Installed dependencies were reconciled with a frozen,
+scripts-disabled install (policy metadata fetched, 576 packages reused, none downloaded, no version updates).
 
 Focused validation passed: all 57 changed-tests Python cases (56 in the initial file run and the one
 corrected test in isolation), plus one uncached `@digi/test-support:test-host` run, four tests in one
@@ -86,6 +91,11 @@ desktop filesystem assets, module tests and unrelated documentation and Python c
 same with an unavailable Rust toolchain after unregistering the plugin. The explicit dkneeds target
 still resolved to its pinned command. Static review reported no issues. No whole-host suite or merge
 gate was run for this migration, and no performance claim follows from these checks.
+
+The support/session extension passed all 34 original tests, repeat hits, intentional dependency/source
+failure probes and exact restoration. The [extension evidence](../findings/nx-pilot.md#support-and-session-cache-extension)
+records its single locked timing pair and input-audit limits. Local caching assumes a frozen install;
+audit new helpers, environment reads or external artifacts before extending the cache boundary.
 
 ## Initial pilot targets and graph
 

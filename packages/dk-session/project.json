@@ -4,7 +4,7 @@
   "targets": {
     "test-host": {
       "executor": "nx:run-commands",
-      "cache": false,
+      "cache": true,
       "inputs": ["hostTests", "{workspaceRoot}/sdk/sdk.toml"],
       "outputs": [],
       "options": {
