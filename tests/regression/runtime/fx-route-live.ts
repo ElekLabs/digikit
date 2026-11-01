@@ -29,6 +29,7 @@ export const FX = 'test/dyn-fx-gain-both';
 export interface RouteProfile {
   fx_slots: number;
   send_slots: number;
+  track_type_word: number;
   settings: { copy_a: number; copy_b: number };
   kit_areas: [number, number][];
   fx: {
@@ -281,24 +282,33 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
       },
       finishCase: (runtime) => collectEvidence(runtime, `case-${++closed}`),
       afterClose: async () => {
-        const report = await analysisJson<{ pass: boolean }>(
-          'tools.coldfire.arena_safety',
-          [
-            'runtime-check',
-            '--device',
-            device,
-            '--policy',
-            'fx-routes',
-            '--watch-output',
-            watchOutput,
-            '--min-emulators',
-            String(epochs.size),
-            ...overlays.flatMap((file) => ['--overlay', file]),
-          ],
-          artifacts,
-          'lifetime-safety',
-        );
-        expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
+        const results = await Promise.allSettled([
+          (async () => {
+            const report = await analysisJson<{ pass: boolean }>(
+              'tools.coldfire.arena_safety',
+              [
+                'runtime-check',
+                '--device',
+                device,
+                '--policy',
+                'fx-routes',
+                '--watch-output',
+                watchOutput,
+                '--min-emulators',
+                String(epochs.size),
+                ...overlays.flatMap((file) => ['--overlay', file]),
+              ],
+              artifacts,
+              'lifetime-safety',
+            );
+            expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
+          })(),
+          analysisJson('tools.patchkit.pk_digikit_fxroutes', ['render-shots', artifacts], artifacts, 'rendered-shots'),
+        ]);
+        const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
+        if (errors.length === 1) throw errors[0];
+        if (errors.length > 1)
+          throw new AggregateError(errors, 'route lifetime safety and screenshot rendering failed');
       },
     },
     scope,
