@@ -5,13 +5,7 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": [
-        "{projectRoot}/**/*",
-        "jsToolchain",
-        "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host.projects.json",
-        { "externalDependencies": ["vitest"] }
-      ],
+      "inputs": ["hostTests"],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,

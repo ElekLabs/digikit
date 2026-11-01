@@ -2,13 +2,16 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "cacheDirectory": ".nx/cache",
   "neverConnectToCloud": true,
-  "plugins": [
-    {
-      "plugin": "@monodon/rust",
-      "include": ["packages/dkneeds/Cargo.toml"]
-    }
-  ],
   "namedInputs": {
+    "hostTests": [
+      "{projectRoot}/**/*",
+      "jsToolchain",
+      "{workspaceRoot}/vitest.host.config.ts",
+      "{workspaceRoot}/vitest.host.projects.json",
+      "{workspaceRoot}/tsconfig*.json",
+      "{workspaceRoot}/apps/desktop/ui/src/**/*",
+      { "externalDependencies": ["vitest"] }
+    ],
     "jsToolchain": [
       "{workspaceRoot}/package.json",
       "{workspaceRoot}/pnpm-lock.yaml",

@@ -54,10 +54,21 @@ Use the owner command while iterating. The coordinator runs the routed gate once
 
 Device tasks never build a daemon or the emulator themselves. Prerequisites are in "Inputs".
 
+`test:changed` sends its complete changed-path list to `pnpm nx:pilot affected --target=test-host`
+on stdin, with one Nx task at a time. Nx selects whole registered host projects, including dependency
+consumers, shared configuration and explicit filesystem inputs. Deleted paths retain their project
+scope; newline-containing paths are rejected. Empty changes select no host work. `--explain` prints
+the Nx command and its stdin paths without running it. The former full-host versus `vitest related`
+branch is removed; lint, formatting, types and the full merge gate retain their existing selection.
+
+The evaluated Rust discovery plugin is unregistered for host preflight, so host selection does not
+require Rust toolchains or Cargo metadata. Explicit Rust targets retain their own pinned commands.
+See the [Nx migration boundary](plans/nx-pilot.md#host-preflight-migration).
+
 | Command | What runs |
 | --- | --- |
-| `mise run test:changed` | `tools/devtools/changed_tests.py`: ruff and mypy on changed Python, pathcheck, six audited tooling unit files, related host Vitest tests, changed JS/TS lint and format, host types. Options: `--base`, `--head`, `--files`, `--deep`, `--explain`. Does not run Rust, module builds or devices. |
-| `mise run test:host` | Vitest projects from `vitest.host.projects.json`: control-client, test-support, dk-session, desktop-host, regression-host. One worker by default; `-- --maxWorkers N` changes it. |
+| `mise run test:changed` | `tools/devtools/changed_tests.py`: ruff and mypy on changed Python, pathcheck, six audited tooling unit files, Nx-affected host Vitest projects, changed JS/TS lint and format, host types. Options: `--base`, `--head`, `--files`, `--deep`, `--explain`. Does not run Rust, module builds or devices. |
+| `mise run test:host` | All seven Vitest projects from `vitest.host.projects.json`: control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests. One worker by default; `-- --maxWorkers N` changes it. |
 | `mise run verify:host` | `pnpm verify:host`: oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
 | `mise run web:test` | `node --test` in `apps/web/tests`. Cases that need WASM or firmware skip when absent. |
 | `mise run lint:py` | `ruff check` and `ruff format --check` over the pyproject include list. |

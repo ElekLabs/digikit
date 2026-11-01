@@ -112,3 +112,19 @@ over ignored and external inputs. The next decision is a first limited replaceme
 routing with Nx versus further runtime input modeling, not more repeated runs. Existing verification
 routing remains in place. See the
 [pilot plan](../plans/nx-pilot.md) for commands, input boundaries and migration conditions.
+
+## Host preflight adoption
+
+**[D]** The subsequent host migration replaces `test:changed`'s full-host/`vitest related` branch
+with standard Nx affected selection for all seven registered Vitest projects. Changed paths travel
+on stdin, tasks run one at a time, and the six newly configured host targets have caching disabled.
+The Rust discovery plugin is unregistered: eleven affected-project probes preserved their selections
+with an unavailable Rust toolchain. Shared host config and desktop CSS selected all seven projects;
+known dependency, deleted-source, device TOML, module-manifest and distributed-test paths selected
+their owners/consumers, while unrelated docs and Python selected no host project. Local records are
+`.nx/host-selection-probes.json` and `.nx/host-selection-probes-without-rust.json`.
+
+Focused validation passed all 57 Python routing cases (56 initially, then the corrected budget-mock
+test alone) and one new uncached test-support target run, four tests in one file. Static review
+reported no issues. No full host sweep or merge gate ran for this migration; input closure and gate
+speedup are not established. Lint/format/type selection and merge-gate routing remain unchanged.

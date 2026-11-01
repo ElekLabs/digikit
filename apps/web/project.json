@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@digi/web",
+  "implicitDependencies": ["control-client", "@digi/dk-session"],
+  "targets": {
+    "test-host": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": ["hostTests"],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project web-transfer",
+        "cwd": ".",
+        "env": { "DIGI_FW_EMU_SOCKET": "" }
+      }
+    }
+  }
+}

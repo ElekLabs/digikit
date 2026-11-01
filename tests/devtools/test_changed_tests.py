@@ -448,28 +448,97 @@ def test_fast_plan_runs_only_selected_audited_units(
     assert "tests/patchkit/test_dyn_fx.py" not in commands["python-tests"]
 
 
-def test_host_selection_uses_native_related_for_sources_tests_and_assets() -> None:
-    for path in (
+@pytest.mark.parametrize(
+    "path,checks",
+    [
+        ("packages/control-client/src/index.ts", {"oxlint", "prettier", "types"}),
+        ("apps/desktop/ui/src/native.css", {"prettier"}),
+        ("packages/dk-session/package.json", {"prettier", "types"}),
+        ("deleted/source.ts", {"types"}),
+        ("devices/digitakt-ii.toml", set()),
+        ("docs/TESTING.md", set()),
+    ],
+)
+def test_host_handoff_keeps_static_check_scope(path: str, checks: set[str]) -> None:
+    planned = {name for name, cmd, _ in changed_tests.host_plan([path]) if cmd}
+    assert planned == checks | {"host-tests"}
+
+
+def test_empty_change_selects_no_host_work() -> None:
+    assert changed_tests.host_plan([]) == []
+
+
+def test_host_handoff_preserves_paths_and_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    files = [
         "packages/control-client/src/index.ts",
-        "packages/control-client/tests/client.test.ts",
-        "apps/desktop/ui/src/native.css",
-    ):
-        commands = {n: c for n, c, _ in changed_tests.host_plan([path])}
-        related = commands["host-tests-related"]
-        assert related[related.index("vitest") + 1] == "related"
-        assert "--run" in related and path in related
-        if path.endswith(".ts"):
-            assert commands["types"] == ["pnpm", "-r", "run", "typecheck"]
-        else:
-            assert "types" not in commands
-        assert not any(name.startswith("types-") for name in commands)
-    for path in (
-        "pnpm-lock.yaml",
-        "vitest.host.config.ts",
-        "packages/dk-session/package.json",
-    ):
-        commands = {n: c for n, c, _ in changed_tests.host_plan([path])}
-        assert commands["host-tests"][1] == "test:host"
+        "deleted/space,quotes'$(touch unexpected);.ts",
+        "devices/digitakt-ii.toml",
+    ]
+    monkeypatch.setattr(changed_tests.verify, "changed_files", lambda _: files)
+    monkeypatch.setattr(
+        changed_tests, "select", lambda *args: changed_tests.Selection()
+    )
+    monkeypatch.setattr(changed_tests, "print_deferred", lambda *args: None)
+    monkeypatch.setattr(changed_tests.digi_env, "run_dir", lambda _: str(tmp_path))
+    monkeypatch.setattr(changed_tests.verify_budget, "resolve_budget", lambda: 1)
+    monkeypatch.setattr(changed_tests.verify_budget, "bounded_env", lambda *args: {})
+    monkeypatch.setattr(
+        changed_tests,
+        "plan",
+        lambda paths, *args: [
+            row for row in changed_tests.host_plan(paths) if row[0] == "host-tests"
+        ],
+    )
+    received = []
+
+    def run(cmd, **kwargs):
+        received.extend(kwargs["input"].splitlines())
+        assert kwargs["text"] is True
+        assert not kwargs.get("shell")
+        return CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(changed_tests.subprocess, "run", run)
+    assert changed_tests.main(["--foreground"]) == 1
+    assert received == files
+
+
+@pytest.mark.parametrize("path", ["a\nb.ts", "a\rb.ts"])
+def test_newline_paths_fail_before_selection(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    select = Mock(side_effect=AssertionError("selection must not start"))
+    monkeypatch.setattr(changed_tests, "select", select)
+    with pytest.raises(SystemExit) as info:
+        changed_tests.main(["--foreground", "--files", path])
+    assert info.value.code == 2
+    select.assert_not_called()
+
+
+def test_host_explain_shows_stdin_paths_without_execution(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    files = ["deleted/path with spaces.ts", "devices/digitakt-ii.toml"]
+    monkeypatch.setattr(
+        changed_tests, "select", lambda *args: changed_tests.Selection()
+    )
+    monkeypatch.setattr(changed_tests, "print_deferred", lambda *args: None)
+    monkeypatch.setattr(
+        changed_tests,
+        "plan",
+        lambda paths, *args: [
+            row for row in changed_tests.host_plan(paths) if row[0] == "host-tests"
+        ],
+    )
+    run = Mock(side_effect=AssertionError("explain must not execute"))
+    monkeypatch.setattr(changed_tests.subprocess, "run", run)
+    assert changed_tests.main(["--explain", "--files", *files]) == 0
+    run.assert_not_called()
+    output = capsys.readouterr().out
+    assert "changed paths supplied on stdin" in output
+    for path in files:
+        assert path in output
 
 
 def test_deferred_output_names_python_crates_and_changed_files(
