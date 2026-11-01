@@ -253,3 +253,46 @@ def test_runtime_safety_fails_real_watch_or_flush_hits(tmp_path, dirty):
     data[dirty] = 1 if dirty == "events" else [{"line": 16}]
     (tmp_path / "watch-0.summary.json").write_text(json.dumps(data))
     assert not a.runtime_safety("dt2", output, [overlay])["pass"]
+
+
+@pytest.mark.parametrize("device", ["dt2", "dn2"])
+def test_runtime_fx_kit_accepts_exact_kit_ranges_without_settings(tmp_path, device):
+    from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
+
+    output = _watch_process(tmp_path, 1)
+    store = a.pk_device.store_of(device)
+    overlay = tmp_path / "kit.bin"
+    boundaries = [sector for lo, hi in KIT_AREAS[device] for sector in (lo, hi - 1)]
+    overlay.write_bytes(_overlay(store.sel_a, store.sel_b, *boundaries))
+    assert not a.runtime_safety(device, output, [overlay])["pass"]
+    result = a.runtime_safety(device, output, [overlay], policy="fx-kit")
+    assert result["pass"]
+    assert result["overlays"][0]["invalid_low"] == []
+    assert result["overlays"][0]["invalid_store"] == []
+
+    overlay.write_bytes(_overlay(*boundaries, store.set_a, store.set_b))
+    result = a.runtime_safety(device, output, [overlay], policy="fx-kit")
+    assert not result["pass"]
+    assert result["overlays"][0]["invalid_store"] == sorted([store.set_a, store.set_b])
+    assert a.runtime_safety(device, output, [overlay], policy="fx-routes")["pass"]
+
+
+@pytest.mark.parametrize("device", ["dt2", "dn2"])
+@pytest.mark.parametrize("outside", ["low", "before-kit", "after-kit", "store"])
+def test_runtime_fx_kit_rejects_unrelated_low_and_store_writes(
+    tmp_path, device, outside
+):
+    from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
+
+    output = _watch_process(tmp_path, 1)
+    store = a.pk_device.store_of(device)
+    lo, hi = KIT_AREAS[device][0]
+    sector = {"low": 7, "before-kit": lo - 1, "after-kit": hi, "store": store.first}[
+        outside
+    ]
+    overlay = tmp_path / "unexpected.bin"
+    overlay.write_bytes(_overlay(lo, sector))
+    result = a.runtime_safety(device, output, [overlay], policy="fx-kit")
+    assert not result["pass"]
+    field = "invalid_store" if outside == "store" else "invalid_low"
+    assert result["overlays"][0][field] == [sector]

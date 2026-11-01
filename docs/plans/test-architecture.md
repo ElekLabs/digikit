@@ -584,3 +584,18 @@ evidence only, without a paired speedup claim.
 
 Deleted-scenario routing remains deferred because path-only callers need merge-base ownership
 evidence. No cache or tombstone tooling is introduced by this batch.
+
+### FX kit persistence and frequency shifter design (2026-11-02)
+
+The approved remaining FX batch keeps one owned context per device and family, with pristine
+cards and explicit baseline reloads for independent legs. DT2 persistence uses the full real
+SELECT/restart flow, which subsumes the quick table-poke setup; DN2 retains its existing quick
+coverage. Preserve every unique kit-storage, page/row, PCM, project and restart oracle.
+Frequency-shifter dry, master, send and other-track legs run on both devices: the DN2 TOML header
+is stale, while the existing runner invokes those legs unconditionally. Preserve its independent
+PCM/model, parameter, send and settings observations without changing thresholds or guest timing.
+
+The shared prerequisite is the fixed `fx-kit` card-safety policy: exactly the existing per-device
+`KIT_AREAS` firmware ranges, with no settings-sector allowance. Default and `fx-routes` policies
+retain their existing behavior; callers cannot supply arbitrary allowlists. Device proof and the
+Nx dependency audit remain pending. No new UI helpers or measured speedup are part of this step.

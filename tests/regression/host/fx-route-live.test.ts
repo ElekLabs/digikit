@@ -46,9 +46,10 @@ afterEach(() => {
   for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
-for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
+for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) {
   test(`${image} cards keep the complete inventory and exactly the selected store paths`, async () => {
     vi.resetAllMocks();
+    const plain = image === 'plain' || image === 'kit';
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-host-'));
     directories.push(directory);
     const artifacts = path.join(directory, 'artifacts');
@@ -58,11 +59,11 @@ for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
       String(prefix).includes('digi-fx-') ? artifacts : mktemp(prefix)) as typeof fs.mkdtempSync);
     const exists = fs.existsSync.bind(fs);
     vi.spyOn(fs, 'existsSync').mockImplementation((file) => String(file).endsWith('/plusdrive') || exists(file));
-    const count = image === 'routes' ? 5 : image === 'plain' ? 1 : 4;
+    const count = image === 'routes' ? 5 : plain ? 1 : 4;
     const ids =
       image === 'routes'
         ? ['sine', 'dyn-fx-gain', 'dyn-fx-gain-send', 'dyn-fx-gain-sendonly', 'dyn-fx-gain-send-3']
-        : image === 'plain'
+        : plain
           ? ['sine']
           : ['sine', 'dyn-fx-gain-both', 'dyn-fx-gain-both-2', 'dyn-fx-gain-both-3'];
     const modulesRoot = path.join(directory, 'modules');
@@ -93,25 +94,24 @@ for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
     const presets = {
       dry: { selection: ['modules/m0.dkm'] },
       wet: {
-        selection: image === 'plain' ? ['modules/m0.dkm'] : ['modules/m0.dkm', 'modules/m1.dkm'],
+        selection: plain ? ['modules/m0.dkm'] : ['modules/m0.dkm', 'modules/m1.dkm'],
         settings: [['fx/route/test/effect', '01']] as [string, string][],
       },
     };
-    const result =
-      image === 'plain'
-        ? withPreparedFxSession('dt2', 'host plain', {
-            image: {
-              name: 'plain',
-              modules: ['core/runtime', 'core/dynreg', 'core/dyndsp'],
-              inventory: ['test/sine'],
-              symbols: ['DKRT_BOOT'],
-              policy: 'default',
-            },
-            initial: 'dry',
-            presets,
-            requireAudible: false,
-          })
-        : withRouteFxSession('dt2', 'host route', { image, initial: 'dry', presets, requireAudible: false });
+    const result = plain
+      ? withPreparedFxSession('dt2', 'host plain', {
+          image: {
+            name: image,
+            modules: ['core/runtime', 'core/dynreg', 'core/dyndsp'],
+            inventory: ['test/sine'],
+            symbols: ['DKRT_BOOT'],
+            policy: image === 'kit' ? 'fx-kit' : 'default',
+          },
+          initial: 'dry',
+          presets,
+          requireAudible: false,
+        })
+      : withRouteFxSession('dt2', 'host route', { image, initial: 'dry', presets, requireAudible: false });
     const [opts, lifecycle] = fake.fixture.mock.calls[0]!;
     try {
       await opts.env();
@@ -123,7 +123,7 @@ for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
         );
       }
       expect(fs.readFileSync(path.join(directory, 'wet/seed/digikit/selection.txt'), 'utf8')).toBe(
-        image === 'plain' ? 'modules/m0.dkm\n' : 'modules/m0.dkm\nmodules/m1.dkm\n',
+        plain ? 'modules/m0.dkm\n' : 'modules/m0.dkm\nmodules/m1.dkm\n',
       );
       expect(JSON.parse(fs.readFileSync(path.join(directory, 'wet/settings.json'), 'utf8'))).toEqual([
         { key: 'fx/route/test/effect', value_hex: '01' },
@@ -138,43 +138,42 @@ for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
       const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
       const commonSymbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'];
       const roots = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
-      const expectedSymbols =
-        image === 'plain'
-          ? ['DKRT_BOOT']
-          : image === 'track-base'
-            ? [...commonSymbols, 'dynreg_info']
-            : image === 'track'
-              ? [
-                  ...commonSymbols,
-                  'dynreg_info',
-                  'fxpages_info',
-                  'fxp_send_row',
-                  'fxp_send_count',
-                  'fxp_nload',
-                  'DKRT_FXS',
-                ]
-              : [
-                  ...commonSymbols,
-                  'DK_FXR_PEND',
-                  'DK_FXR_SET',
-                  'DK_FXR_FLUSH',
-                  'DK_POPUP',
-                  'DK_POPUP_TEXT',
-                  'DK_POPUPS',
-                  'DK_APPLIES',
-                  'DK_PANEL',
-                  'DK_PANEL_N',
-                  'DK_ROUTE_N',
-                  'DK_ROUTE_ITEM',
-                  'fxp_send_count',
-                  'DKRT_FXS',
-                  'fxpages_info',
-                ];
+      const expectedSymbols = plain
+        ? ['DKRT_BOOT']
+        : image === 'track-base'
+          ? [...commonSymbols, 'dynreg_info']
+          : image === 'track'
+            ? [
+                ...commonSymbols,
+                'dynreg_info',
+                'fxpages_info',
+                'fxp_send_row',
+                'fxp_send_count',
+                'fxp_nload',
+                'DKRT_FXS',
+              ]
+            : [
+                ...commonSymbols,
+                'DK_FXR_PEND',
+                'DK_FXR_SET',
+                'DK_FXR_FLUSH',
+                'DK_POPUP',
+                'DK_POPUP_TEXT',
+                'DK_POPUPS',
+                'DK_APPLIES',
+                'DK_PANEL',
+                'DK_PANEL_N',
+                'DK_ROUTE_N',
+                'DK_ROUTE_ITEM',
+                'fxp_send_count',
+                'DKRT_FXS',
+                'fxpages_info',
+              ];
       expect(requestedSymbols).toEqual(expectedSymbols);
       expect(requestedRoots).toEqual([
         ...roots,
-        ...(image === 'plain' ? [] : ['core/dynfx']),
-        ...(image === 'plain' || image === 'track-base' ? [] : ['core/fxpages']),
+        ...(plain ? [] : ['core/dynfx']),
+        ...(plain || image === 'track-base' ? [] : ['core/fxpages']),
         ...(image === 'routes' ? ['core/digikit-menu'] : []),
       ]);
       expect(fs.readFileSync(path.join(directory, 'dry/seed/digikit/modules/m0.dkm'), 'utf8')).toBe('sine');
@@ -187,8 +186,10 @@ for (const image of ['routes', 'track', 'track-base', 'plain'] as const) {
       expect(fake.evidence).toHaveBeenCalledWith({ session }, artifacts, 'case-1', [], false);
       await lifecycle.afterClose();
       const safetyCall = fake.analysis.mock.calls.find(([, args]) => args[0] === 'runtime-check')!;
-      expect(safetyCall[1][safetyCall[1].indexOf('--policy') + 1]).toBe(image === 'plain' ? 'default' : 'fx-routes');
-      if (image === 'plain') {
+      expect(safetyCall[1][safetyCall[1].indexOf('--policy') + 1]).toBe(
+        image === 'kit' ? 'fx-kit' : plain ? 'default' : 'fx-routes',
+      );
+      if (plain) {
         fake.prepare.mockResolvedValueOnce({
           plan: { ...plan, symbols: {} },
           preparedImage,

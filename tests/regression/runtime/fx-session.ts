@@ -66,7 +66,7 @@ export interface PreparedFxSessionOptions {
     modules: string[];
     inventory: string[];
     symbols: string[];
-    policy: 'default' | 'fx-routes';
+    policy: 'default' | 'fx-kit' | 'fx-routes';
   };
   initial: string;
   presets: Record<string, FxCardPreset>;
@@ -217,7 +217,7 @@ export async function selectSine(runtime: PatchedSession, profile: FxProfile): P
 export function withPreparedFxSession(device: Device, scope: string, config: PreparedFxSessionOptions) {
   if (!Object.hasOwn(config.presets, config.initial)) throw new Error(`unknown initial route preset ${config.initial}`);
   const { name, inventory, modules, symbols, policy } = config.image;
-  if (policy !== 'default' && policy !== 'fx-routes')
+  if (policy !== 'default' && policy !== 'fx-kit' && policy !== 'fx-routes')
     throw new Error('prepared FX image requires an explicit safety policy');
   let prepared: PreparedRuntimePlan;
   let profile: FxProfile;

@@ -114,11 +114,13 @@ def runtime_policy(device: str, name: str = "default") -> dict:
         raise ValueError(f"unsupported runtime safety device: {device}")
     if name == "default":
         areas, extra = (), ()
-    elif name == "fx-routes":
+    elif name in ("fx-kit", "fx-routes"):
         from tools.patchkit.pk_digikit_fxpersist import KIT_AREAS
 
-        store = pk_device.store_of(device)
-        areas, extra = KIT_AREAS[device], (store.set_a, store.set_b)
+        areas, extra = KIT_AREAS[device], ()
+        if name == "fx-routes":
+            store = pk_device.store_of(device)
+            extra = (store.set_a, store.set_b)
     else:
         raise ValueError(f"unknown runtime safety policy: {name}")
     return {"name": name, "firmware_areas": areas, "store_extra": extra}
@@ -739,7 +741,7 @@ def main(argv=None) -> int:
     runtime.add_argument("--min-emulators", type=int, default=1)
     runtime.add_argument("--overlay", type=pathlib.Path, action="append", required=True)
     runtime.add_argument(
-        "--policy", choices=("default", "fx-routes"), default="default"
+        "--policy", choices=("default", "fx-kit", "fx-routes"), default="default"
     )
     a = ap.parse_args(argv)
     if a.cmd == "runtime-check":
