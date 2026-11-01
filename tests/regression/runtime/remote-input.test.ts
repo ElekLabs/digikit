@@ -3,19 +3,22 @@ import { SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { runtimeTests, settleUi } from './live.ts';
-import { captureRemoteOled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from './remote.ts';
-import { openDigikitMenu, openRuntimeAbout, expectRuntimeAbout } from './runtime-menu.ts';
+import { liveArtifacts, runtimeTests, settleUi } from './live.ts';
+import {
+  captureRemoteOled,
+  expectRemoteEnabled,
+  installRemote,
+  prepareRemote,
+  remoteTap,
+  withRemoteRelease,
+} from './remote.ts';
+import { openDigikitMenu, openRuntimeAbout } from './runtime-menu.ts';
 
 /** KEY navigation opens semantic ABOUT content; TURN reports accepted signed deltas. */
 async function expectRemoteKeys(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
-  // Preserve live_boot's device-specific pre-install settling, then the remote scenario's own settle.
-  await settleUi(session);
   await withRemoteRelease(dk, async () => {
     const plan = await prepareRemote(runtime);
-    await timePhase('settle.post-install', () => delay(10_000));
-    expect((await dk.remoteState()).enabled).toBe(true);
     let shots = 0;
     const shot = (name: string) => captureRemoteOled(session, `${String(++shots).padStart(2, '0')}-${name}`);
     const tap = async (name: string, settleMs = 1200) => {
@@ -24,8 +27,7 @@ async function expectRemoteKeys(runtime: PatchedSession): Promise<void> {
     };
     await shot('start');
     await openDigikitMenu(tap);
-    await openRuntimeAbout(tap);
-    await expectRuntimeAbout(session, dk, plan);
+    await openRuntimeAbout(tap, session, dk, plan, liveArtifacts(session, 'remote-input'));
     for (let i = 0; i < 4; i++) await tap('NO', 2000);
     try {
       expect(await dk.remoteTurnOnce(1, 20)).toBe(20);
@@ -42,7 +44,7 @@ async function expectRemoteControl(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await settleUi(session);
   await installRemote(runtime);
-  await timePhase('settle.post-install', () => delay(10_000));
+  await expectRemoteEnabled(session, dk);
   const cmd = (command: number, body: number[] = []) => dk.request(command, Uint8Array.from(body));
   const state = async () => {
     const reply = await cmd(SERVICE_CMD.REMOTE_STATE);

@@ -7,6 +7,7 @@ import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { describe, expect, onTestFinished, test } from 'vitest';
 import { expectRuntimeBoot, withPatchedSession, type PatchedSession } from '../support.ts';
 import { timePhase, timingContext } from '../timing.ts';
+import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 export const DEVICES = ['dt2', 'dn2'] as const;
 export const FIRMWARE = { dt2: '1.17', dn2: '1.12' } as const;
@@ -52,6 +53,93 @@ export async function settleLive(session: Session, ms = 12_000): Promise<void> {
 /** The DN2 firmware needs a longer pre-install settle than the DT2. */
 export function settleUi(session: Session): Promise<void> {
   return settleLive(session, session.options.device === 'dn2' ? 45_000 : 12_000);
+}
+
+/** Bound each awaited RPC round to the same absolute deadline, even when the peer never replies. */
+export async function beforeReadinessDeadline<T>(deadline: number, read: () => Promise<T>): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('runtime readiness deadline exceeded');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('runtime readiness deadline exceeded')), remaining);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** DkrtBootInfo word offsets, owned by modules/core/runtime/abi.toml (checked in modules/core/runtime/sdk/src/gen_abi.rs). */
+const BOOT_FIELDS = { magic: 0, version: 4, safe: 8, reason: 12, counter: 16, count: 28, ui_reached: 36 } as const;
+
+/** Current UI-hook evidence, rather than elapsed time or the boot's in-memory stability flag. */
+export async function expectRuntimeUi(
+  session: Session,
+  plan: RuntimePlan,
+  artifacts: string,
+  options: { fresh?: boolean; afterEpoch?: number; timeout?: number } = {},
+): Promise<number> {
+  const timeout = options.timeout ?? 45_000;
+  const deadline = Date.now() + timeout;
+  const base = planSymbol(plan, 'DKRT_BOOT');
+  let status: Awaited<ReturnType<Session['status']>> | undefined;
+  let boot: Record<keyof typeof BOOT_FIELDS, number | null> | undefined;
+  try {
+    await expect
+      .poll(
+        async () => {
+          status = await beforeReadinessDeadline(deadline, () => session.status());
+          boot = Object.fromEntries(
+            await beforeReadinessDeadline(deadline, () =>
+              Promise.all(
+                Object.entries(BOOT_FIELDS).map(async ([name, offset]) => [
+                  name,
+                  await session.client.memPeek(base + offset),
+                ]),
+              ),
+            ),
+          ) as typeof boot;
+          return (
+            status.mode === 'free' &&
+            // Restart preserves the card and relaxes the DT2 filesystem-worker check.
+            // A new epoch still needs the current UI guards; an explicit filesystem failure is never accepted.
+            (options.afterEpoch === undefined ? status.cf.ready : status.cf.filesystem_verified !== false) &&
+            status.cf.main_ui_reached &&
+            typeof status.epoch === 'number' &&
+            (options.afterEpoch === undefined || status.epoch > options.afterEpoch) &&
+            boot?.magic === 0x444b4254 &&
+            boot.version === 1 &&
+            boot.safe === 0 &&
+            boot.reason === 0 &&
+            boot.ui_reached === 1
+          );
+        },
+        {
+          timeout,
+          interval: 500,
+          message: 'current runtime boot reached the normal UI hook',
+        },
+      )
+      .toBe(true);
+    if (options.fresh) {
+      // boot.rs only raises the persisted counter when count != 0 or counter != 0.
+      // This fresh empty boot and one controlled install restart need no stability wait.
+      expect(boot?.count, 'fresh pre-install boot has no selected modules').toBe(0);
+      expect(boot?.counter, 'fresh pre-install boot found no failed boots').toBe(0);
+    }
+    if (typeof status?.epoch !== 'number') throw new Error('runtime status has no boot epoch');
+    return status.epoch;
+  } finally {
+    record(artifacts, options.fresh ? 'readiness-pre-install' : 'readiness-post-install', {
+      afterEpoch: options.afterEpoch,
+      status: status ?? null,
+      boot: boot ?? null,
+      expired: Date.now() >= deadline,
+    });
+  }
 }
 
 /** Press, hold, release (also when the press fails), then let the UI settle. */

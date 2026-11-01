@@ -1,11 +1,10 @@
 import fs from 'node:fs';
-import { setTimeout as delay } from 'node:timers/promises';
 import { button, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { startPatchedSession } from '../support.ts';
 import { timePhase, timingContext } from '../timing.ts';
 import { prepareRuntimePlan } from './runtime-plan.ts';
-import { openDigikitMenu, openRuntimeAbout, expectRuntimeAbout, meaningfulAboutRows } from './runtime-menu.ts';
+import { openDigikitMenu, openRuntimeAbout, meaningfulAboutRows } from './runtime-menu.ts';
 import {
   DEVICES,
   FIRMWARE,
@@ -14,7 +13,7 @@ import {
   liveProtocol,
   moduleArtifact,
   record,
-  settleUi,
+  expectRuntimeUi,
   tap as holdTap,
 } from './live.ts';
 
@@ -37,8 +36,8 @@ async function expectInputAdapter(device: Device): Promise<void> {
       await timePhase(
         'scenario.body',
         async () => {
-          await settleUi(session);
-          const plan = await prepareRuntimePlan(session, artifacts, ['DK_ABOUT', 'DK_ABOUT_N']);
+          const plan = await prepareRuntimePlan(session, artifacts, ['DK_ABOUT', 'DK_ABOUT_N', 'DKRT_BOOT']);
+          const epoch = await expectRuntimeUi(session, plan, artifacts, { fresh: true });
           await timePhase('module.upload', () => protocol.put('modules/input-probe.dkm', bytes));
           expect(
             await protocol.verifyFile('modules/input-probe.dkm', bytes),
@@ -56,7 +55,7 @@ async function expectInputAdapter(device: Device): Promise<void> {
               message: 'input probe imports core/input',
             })
             .toContain('test/input-probe');
-          await timePhase('settle.post-install', () => delay(10_000));
+          await expectRuntimeUi(session, plan, artifacts, { afterEpoch: epoch });
           const tap = async (name: string, settleMs = 1200) => {
             const code = button(name);
             await holdTap(
@@ -101,8 +100,7 @@ async function expectInputAdapter(device: Device): Promise<void> {
             frames[name] = frame.sha256!;
             record(artifacts, `${source}-${name}`, frame);
           });
-          await openRuntimeAbout(tap);
-          rows = await expectRuntimeAbout(session, protocol, plan);
+          rows = await openRuntimeAbout(tap, session, protocol, plan, artifacts);
           if (source === 'probe') {
             refusals = [
               (await protocol.request(0x38, Uint8Array.of(200, 1))).status,

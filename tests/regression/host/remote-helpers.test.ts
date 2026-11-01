@@ -32,7 +32,8 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
   ...(await original<object>()),
   resolveInputs: () => ({ syx: '/stock.syx' }),
 }));
-import { installRemote, prepareRemote, remoteTap, withRemoteRelease } from '../runtime/remote.ts';
+import { expectRuntimeUi } from '../runtime/live.ts';
+import { expectRemoteEnabled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from '../runtime/remote.ts';
 import { planSymbol, validateRuntimePlan, type RuntimePlan } from '../runtime/runtime-plan.ts';
 import { openDigikitMenu, openRuntimeAbout, readAboutRows, expectRuntimeAbout } from '../runtime/runtime-menu.ts';
 
@@ -41,7 +42,11 @@ const plan: RuntimePlan = {
   output: { syx_sha256: patchedSha256 },
   base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
   modules: ['core/runtime@0.1.0', 'core/digikit-menu@0.1.0'],
-  symbols: { 'core/digikit-menu@0.1.0:DK_ABOUT': 4096, 'core/digikit-menu@0.1.0:DK_ABOUT_N': 8192 },
+  symbols: {
+    'core/digikit-menu@0.1.0:DK_ABOUT': 4096,
+    'core/digikit-menu@0.1.0:DK_ABOUT_N': 8192,
+    'core/runtime@0.1.0:DKRT_BOOT': 12288,
+  },
 };
 const session = {
   options: { device: 'dt2', firmware: '1.17' },
@@ -58,8 +63,30 @@ const session = {
   },
 } as unknown as Session;
 
+/** Mutable daemon evidence for boot transitions; omitted words remain unmapped. */
+function readyDaemon() {
+  const status = {
+    mode: 'free',
+    epoch: 4,
+    cf: { ready: true, main_ui_reached: true, filesystem_verified: null as boolean | null },
+  };
+  const words: Record<number, number | null> = {
+    0: 0x444b4254,
+    4: 1,
+    8: 0,
+    12: 0,
+    16: 0,
+    28: 0,
+    36: 1,
+  };
+  const memPeek = vi.fn(async (address: number) => words[address - 12288] ?? null);
+  const daemon = { ...session, status: vi.fn(async () => status), client: { memPeek } } as unknown as Session;
+  return { daemon, status, words, memPeek };
+}
+
 /** A fake protocol session that records the order of the native install calls. */
 function fakeDk() {
+  const { daemon, status } = readyDaemon();
   const calls: string[] = [];
   const record = (name: string, result?: unknown) =>
     vi.fn(async (..._args: unknown[]) => {
@@ -74,8 +101,13 @@ function fakeDk() {
     waitForBoot: record('waitForBoot'),
     modules: record('modules', [{ name: 'digikit/remote' }]),
     remoteRelease: vi.fn().mockResolvedValue(undefined),
+    remoteState: vi.fn().mockResolvedValue({ enabled: true }),
   };
-  return { calls, dk, runtime: { session, dk } as unknown as PatchedSession };
+  dk.restart.mockImplementation(async () => {
+    calls.push('restart');
+    status.epoch++;
+  });
+  return { calls, dk, runtime: { session: daemon, dk } as unknown as PatchedSession };
 }
 
 beforeEach(() => {
@@ -281,16 +313,14 @@ test('negative setup installs natively on its own device-set daemon without patc
   expect(dk.select).toHaveBeenCalledExactlyOnceWith(['modules/remote.dkm']);
 });
 
-test('menu navigation uses named SETTINGS and DIGIKIT checkpoints before ABOUT', async () => {
+test('menu navigation uses named SETTINGS and DIGIKIT checkpoints', async () => {
   const tap = vi.fn().mockResolvedValue(undefined);
   const checkpoint = vi.fn().mockResolvedValue(undefined);
   await openDigikitMenu(tap, checkpoint);
-  await openRuntimeAbout(tap);
   expect(tap.mock.calls).toEqual([
     ['NO', 2000],
     ['SETTINGS', 3000],
     ...Array.from({ length: 8 }, () => ['DOWN']),
-    ['YES', 3000],
     ['YES', 3000],
   ]);
   expect(checkpoint.mock.calls).toEqual([['settings-ninth-row'], ['digikit-main']]);
@@ -301,13 +331,171 @@ test('ABOUT reads are bounded and assert the live protocol runtime identity with
   const menuSession = { client: { memPeek } } as unknown as Session;
   await expect(readAboutRows(menuSession, plan)).rejects.toThrow('invalid ABOUT row count');
   expect(memPeek.mock.calls).toEqual([[8192]]);
-  const rows = ['DIGIKIT 0.1.0', 'RUNTIME 0.2.5'];
+  const rows = ['DIGIKIT 0.1.0', 'RUNTIME 0.2.5', 'BOOT: 1 OF 1 OK', 'RAM KEPT: NO'];
   const bytes = Buffer.from(rows.map((row) => row.padEnd(24, '\0')).join(''), 'latin1');
   memPeek.mockImplementation(async (address: number) =>
     address === 8192 ? rows.length : bytes.readUInt32BE(address - 4096),
   );
   const info = vi.fn().mockResolvedValue({ runtime: 0x205 });
-  await expect(expectRuntimeAbout(menuSession, { info } as unknown as DkSession, plan)).resolves.toEqual(rows);
+  await expect(expectRuntimeAbout(menuSession, { info } as unknown as DkSession, plan, '/artifacts')).resolves.toEqual(
+    rows,
+  );
   expect(info).toHaveBeenCalledWith();
   expect(fake.exec).not.toHaveBeenCalled();
+});
+
+test('UI readiness rejects stale epochs and records the last daemon and boot evidence on timeout', async () => {
+  const { daemon, status } = readyDaemon();
+  await expect(
+    expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: status.epoch, timeout: 20 }),
+  ).rejects.toThrow();
+  const saved = fake.write.mock.calls.find(([file]) => file.endsWith('readiness-post-install.json'));
+  expect(JSON.parse(saved![1])).toMatchObject({ afterEpoch: 4, status: { epoch: 4 }, boot: { ui_reached: 1 } });
+  status.epoch++;
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 4, timeout: 20 })).resolves.toBe(5);
+});
+
+test('UI readiness requires a valid normal boot and both daemon and actual runtime UI hooks', async () => {
+  const { daemon, status, words } = readyDaemon();
+  for (const [offset, invalid] of [
+    [0, 0],
+    [4, 2],
+    [8, 1],
+    [12, 1],
+    [36, 0],
+    [0, null],
+  ] as const) {
+    const previous = words[offset]!;
+    words[offset] = invalid;
+    await expect(expectRuntimeUi(daemon, plan, '/artifacts', { timeout: 20 })).rejects.toThrow();
+    words[offset] = previous;
+  }
+  for (const field of ['ready', 'main_ui_reached'] as const) {
+    status.cf[field] = false;
+    await expect(expectRuntimeUi(daemon, plan, '/artifacts', { timeout: 20 })).rejects.toThrow();
+    status.cf[field] = true;
+  }
+  status.mode = 'paused';
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { timeout: 20 })).rejects.toThrow();
+  status.mode = 'free';
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { timeout: 20 })).resolves.toBe(4);
+});
+
+test('fresh empty boot is an explicit prerequisite for skipping the pre-install stability wait', async () => {
+  const { daemon, words } = readyDaemon();
+  for (const offset of [16, 28]) {
+    words[offset] = 1;
+    await expect(expectRuntimeUi(daemon, plan, '/artifacts', { fresh: true, timeout: 20 })).rejects.toThrow(
+      'fresh pre-install',
+    );
+    words[offset] = 0;
+  }
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { fresh: true, timeout: 20 })).resolves.toBe(4);
+});
+
+test('ABOUT refuses stale content before pressing YES', async () => {
+  const tap = vi.fn();
+  const memPeek = vi.fn().mockResolvedValue(4);
+  await expect(
+    openRuntimeAbout(tap, { client: { memPeek } } as unknown as Session, {} as DkSession, plan, '/artifacts'),
+  ).rejects.toThrow('ABOUT buffer is empty');
+  expect(tap).not.toHaveBeenCalled();
+  const saved = fake.write.mock.calls.find(([file]) => file.endsWith('about-before-open.json'));
+  expect(JSON.parse(saved![1])).toMatchObject({ initialCount: 4 });
+});
+
+test('ABOUT returns only the complete snapshot after the new open, keeping the key hold without a final settle', async () => {
+  const rows = ['DIGIKIT 0.1.0', 'RUNTIME 0.2.5', 'BOOT: 1 OF 1 OK', 'RAM KEPT: YES'];
+  const bytes = Buffer.from(rows.map((row) => row.padEnd(24, '\0')).join(''), 'latin1');
+  let polls = 0;
+  const memPeek = vi.fn(async (address: number) => {
+    // Pre-open is empty, then only identity, then BOOT, then the final RAM row.
+    if (address === 8192) return [0, 2, 3, 4][Math.min(polls++, 3)]!;
+    return bytes.readUInt32BE(address - 4096);
+  });
+  const tap = vi.fn().mockResolvedValue(undefined);
+  const info = vi.fn().mockResolvedValue({ runtime: 0x205 });
+  await expect(
+    openRuntimeAbout(
+      tap,
+      { client: { memPeek } } as unknown as Session,
+      { info } as unknown as DkSession,
+      plan,
+      '/artifacts',
+    ),
+  ).resolves.toEqual(rows);
+  expect(tap).toHaveBeenCalledExactlyOnceWith('YES', 0);
+  expect(polls).toBe(4);
+});
+
+test('never-answering status and boot reads cannot postpone readiness rejection or diagnostics', async () => {
+  for (const stalled of ['status', 'memory'] as const) {
+    const { daemon, memPeek } = readyDaemon();
+    if (stalled === 'status') vi.mocked(daemon.status).mockImplementation(() => new Promise(() => {}));
+    else memPeek.mockImplementation(() => new Promise(() => {}));
+    const started = Date.now();
+    await expect(expectRuntimeUi(daemon, plan, '/artifacts', { timeout: 30 })).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(500);
+    const saved = fake.write.mock.calls.filter(([file]) => file.endsWith('readiness-post-install.json')).at(-1);
+    expect(JSON.parse(saved![1])).toMatchObject({ expired: true, boot: null });
+  }
+});
+
+test('ABOUT bounds initial count, info and row reads, and preserves incomplete rows on timeout', async () => {
+  for (const stalled of ['initial-count', 'info', 'row', 'incomplete'] as const) {
+    fake.write.mockClear();
+    const rows = ['RUNTIME 0.2.5', 'BOOT: 1 OF 1 OK'];
+    const bytes = Buffer.from(rows.map((row) => row.padEnd(24, '\0')).join(''), 'latin1');
+    let opened = false;
+    const memPeek = vi.fn(async (address: number): Promise<number> => {
+      if (!opened) return stalled === 'initial-count' ? new Promise(() => {}) : 0;
+      if (address === 8192) return rows.length;
+      if (stalled === 'row') return new Promise(() => {});
+      return bytes.readUInt32BE(address - 4096);
+    });
+    const info = vi.fn(async () => (stalled === 'info' ? new Promise<never>(() => {}) : { runtime: 0x205 }));
+    const tap = vi.fn(async () => {
+      opened = true;
+    });
+    const started = Date.now();
+    await expect(
+      openRuntimeAbout(
+        tap,
+        { client: { memPeek } } as unknown as Session,
+        { info } as unknown as DkSession,
+        plan,
+        '/artifacts',
+        30,
+      ),
+    ).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(500);
+    const initial = fake.write.mock.calls.find(([file]) => file.endsWith('about-before-open.json'));
+    expect(JSON.parse(initial![1])).toMatchObject({ expired: true });
+    if (stalled === 'initial-count') expect(tap).not.toHaveBeenCalled();
+    else {
+      const saved = fake.write.mock.calls.find(([file]) => file.endsWith('about-readiness.json'));
+      expect(JSON.parse(saved![1])).toMatchObject({ expired: true, rows: stalled === 'incomplete' ? rows : [] });
+    }
+  }
+});
+
+test('a never-answering remote state request obeys the readiness deadline', async () => {
+  const dk = { remoteState: vi.fn(() => new Promise(() => {})) } as unknown as DkSession;
+  const started = Date.now();
+  await expect(expectRemoteEnabled(session, dk, 30)).rejects.toThrow();
+  expect(Date.now() - started).toBeLessThan(500);
+  const saved = fake.write.mock.calls.find(([file]) => file.endsWith('remote-readiness.json'));
+  expect(JSON.parse(saved![1])).toMatchObject({ state: null, expired: true });
+});
+
+test('post-restart UI readiness allows an unobserved filesystem worker only with a newer epoch', async () => {
+  const { daemon, status } = readyDaemon();
+  status.cf.ready = false;
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 3, timeout: 20 })).resolves.toBe(4);
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { timeout: 20 })).rejects.toThrow();
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 4, timeout: 20 })).rejects.toThrow();
+  status.cf.filesystem_verified = false;
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 3, timeout: 20 })).rejects.toThrow();
+  status.cf.ready = true;
+  await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 3, timeout: 20 })).rejects.toThrow();
 });
