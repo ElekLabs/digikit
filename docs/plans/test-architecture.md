@@ -353,7 +353,7 @@ legacy source counts, excluding the TypeScript case, not uncached boots or measu
 The verified TypeScript execution is unchanged by this deletion-only follow-up; its audible-input
 assertion text and selection comment now state the accepted contract. Earlier safety/device results
 remain evidence for that unchanged execution. The follow-up fast preflight passed; the coordinator
-owns the remaining acceptance decision and the broad gate remains unrun. Other FX families remain unmodified; subsequent migrations will use the completed assertion mapping and fixture.
+owned the remaining acceptance decision at that checkpoint; the broad gate remained unrun. Other FX families remain unmodified; subsequent migrations will use the completed assertion mapping and fixture.
 
 
 Deletion follow-up fast preflight passed (`/private/tmp/fx-gain-deletion-preflight.log`): 345 Python
@@ -365,6 +365,76 @@ The gate was explained against the actual PR base `origin/main` at `0feb02cb`: h
 files, 11 runtime files, three module-load files, 49 Python files, smoke and an implicit daemon build.
 `/private/tmp/fx-gain-merge-explain-origin-main.txt` supersedes the local-main explanation
 (`/private/tmp/fx-gain-merge-explain.txt`): local main at `365b45b` was stale and overselected already
-merged changes. The broad gate has not run, and no focused-acceptance exception for PR #242 exists.
-The next decision is focused acceptance versus the full routed gate before merge; this checkpoint
-is not merge acceptance. Historical proof/count tables and the bounded type-coverage decision stand.
+merged changes. At this pre-merge checkpoint, the broad gate had not run and no focused-acceptance
+exception existed yet; the subsequent merge decision below supersedes that pending status. Historical proof/count tables and the bounded type-coverage decision stand.
+
+
+### PR #242 merged and next-batch bookkeeping (2026-11-01)
+
+PR #242 merged at `a41699e5` on 2026-11-01T09:46:15Z. Em explicitly accepted the prior both-device
+proofs, helper/host/routing tests and static/type checks under a one-time focused-acceptance exception.
+This supersedes the pending acceptance status above; the broad routed gate was not run. The device
+runs remain correctness evidence, not a paired speedup benchmark. The bounded audible-input contract
+and the retained legacy plain/dry/full coverage remain as recorded in the assertion mapping.
+
+The next coherent batch is mapping the remaining basic-FX and fxpage work, alongside the other
+families, for independent workers using the shared fixture and completed assertion mapping. Em
+already endorsed parallel migration after the first proof and deletion. This is bookkeeping while
+the shared design is mapped, not a broad bulk-deletion plan or a new performance claim.
+
+
+Next-batch prerequisite: shared gain/SEND support is extracted mechanically into
+`tests/regression/runtime/fx-live.ts`. The first migration target is FX SEND: its five DT2 and eight
+DN2 same-image legs can use clean reload without alternate images or watch policies. Shared setup
+remains explicitly sine/gain on the default emulator image. Optional input hints and per-case
+silent-evidence policy do not relax mandatory no-fault/nonfinite/watch/overlay checks. Remaining
+basic-FX plain/dry/full and fxpage stay unchanged, retaining their direct type checks; no new SEND
+case or further legacy deletion is part of this extraction.
+
+
+### FX SEND implementation and device proof (2026-11-01)
+
+The SEND replacement covers 13 independent baselines in three owned daemon processes: five common
+legs on DT2, five on DN2, and three DN2 chord/idle legs. Each independent leg reloads its pristine
+native sine/gain card in the kept process; this is not a persistence restart. The shared fixture
+retains startup-to-close write/flush summaries, every-overlay policy checks, guards, finite PCM and
+no-fault checks. Idle alone permits silence. This is a coverage/process-count description, not a
+measured speedup; stock startup and firmware reloads still occur.
+
+| Legacy SEND facts | Replacement |
+| --- | --- |
+| Dry audible input; safe boot/module results; clean default row, enabled state and zero route/amount words | Common case plus shared gain-fixture inspection and mandatory closing evidence |
+| ZERO/OTHER route 1 and packed amount readback; dry-identical PCM | Common case, unchanged bit-identity and onset-shift limit of 128 samples |
+| FULL return adds 0.5; HALF follows `(64/127)^2` | Existing independent added-factor oracle against ZERO, relative tolerances 0.001 and 0.01; positive full gain proves nonidentity with dry |
+| Every wet post-note WAS/DIS/NFAULT and >1000 call count; +100 frames gives 90–110 calls | Common and chord cases retain the exact counter assertions; legacy idle retains activity without the delta constraint |
+| DN2 chord sums at least two sounding voice slots; idle has >1000 samples and exactly zero peak | DN2-specific anchored slot-bus and existing PCM/added-factor oracles; final fixed-frame proof passed |
+
+Input selection follows the accepted audible-input FX contract, without a direct selected-type
+observation in these TS sequences. Basic legacy dry/full retain their direct type proof; plain,
+fit/overflow and fxpage remain unchanged. No further family deletion follows from this mapping.
+
+Final common proofs passed: DT2 87.51 s invocation / 82.090 s case
+(`digi-fx-reuse-dt2-PJYUEo`), DN2 67.634 s file / 65.074 s case
+(`digi-fx-reuse-dn2-KSWG4L`). ZERO and OTHER both had identity shift 0; FULL added about 0.500003
+and HALF about 0.126977. Each lifetime check passed eight emulator summaries and five exported
+overlays. These durations are correctness evidence only. Earlier `current + 300` timing produced
+DT2 shift 192; sharing the first dry target then failed DN2's late-setup guard. The final shape
+restores established absolute targets DT2 7500 / DN2 7000, retaining the 20-frame setup guard,
+44,000-instruction offset, capture windows and all PCM tolerances. Per-WAV timing artifacts expose
+setup frame and target; a missed deadline fails rather than adapting.
+
+Final fixed-7000 DN2 extras passed: 42.055 s file / 39.564 s case (DN2 invocation 109.92 s;
+`digi-fx-reuse-dn2-ulBe72`). Both chord legs had exactly two sounding buses, added factor
+0.5000029707401741, and idle had 48,000 finite samples with peak 0. Lifetime safety passed five
+summaries/three overlays with zero write/flush hits. All three final device cases now pass; no
+additional device run is needed for deletion. Static review found no issues. Legacy retirement
+checkpoint `42028b59` is integrated as `804bdae2`, after runtime/routing checkpoint `da4fdf7f`: the
+SEND wrappers/scenarios and device runner are removed while the analysis CLI remains. No device
+execution changed after the final proofs.
+Final fast preflight passed: `mise run test:changed -- --base origin/main` ran 621 Python cases
+(270 + 57 + 294) and 73 host cases, with Ruff check/format, mypy (one source), pathcheck (zero stale
+references), layer/generated checks, oxlint, Prettier and workspace types. Earlier 21 analyzer and
+two shared-helper tests also passed. The gate explanation selects host, all 13 runtime fixtures,
+47 Python files, smoke and daemon prerequisites; that routed gate was not run. Focused acceptance
+for this batch is pending Em's decision after the concrete PR; PR #242's exception
+does not transfer.

@@ -1818,12 +1818,20 @@ def test_relevant_native_acceptance_retains_existing_owners(
         (
             "runtime-fixture",
             "tests/fixtures/modules/sine/module.toml",
-            ["runtime/fx-reuse.test.ts"],
+            [
+                "runtime/fx-reuse.test.ts",
+                "runtime/fx-send-dn2.test.ts",
+                "runtime/fx-send.test.ts",
+            ],
         ),
         (
             "runtime-fixture",
             "tests/fixtures/modules/dyn-fx-gain/module.toml",
-            ["runtime/fx-reuse.test.ts"],
+            [
+                "runtime/fx-reuse.test.ts",
+                "runtime/fx-send-dn2.test.ts",
+                "runtime/fx-send.test.ts",
+            ],
         ),
         ("stock", "tests/regression/dt2/transport.test.ts", ["dt2/transport.test.ts"]),
     ],
@@ -1908,6 +1916,8 @@ def test_changed_tests_reports_acceptance_gate_additions() -> None:
         ),
         (["runtime/remote-input.test.ts"], ["digikit/remote"]),
         (["runtime/fx-reuse.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
+        (["runtime/fx-send.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
+        (["runtime/fx-send-dn2.test.ts"], ["test/sine", "test/dyn-fx-gain"]),
         (
             ["runtime/sharc-probe.test.ts"],
             [
@@ -2220,6 +2230,8 @@ def test_module_owned_python_tests_are_found_by_globbing(
         ([], True),
         (["runtime/samples-live.test.ts"], True),
         (["runtime/fx-reuse.test.ts"], True),
+        (["runtime/fx-send.test.ts"], True),
+        (["runtime/fx-send-dn2.test.ts"], True),
         (["runtime/service-commands.test.ts"], False),
     ],
 )
@@ -2256,9 +2268,11 @@ def test_runtime_plusdrive_prerequisite_matches_execution_and_explain(
 @pytest.mark.parametrize(
     "path", ["tools/patchkit/pk_dkrt_machine.py", "tools/coldfire/arena_safety.py"]
 )
-def test_fx_cli_helpers_select_only_the_runtime_gain_owner(path: str) -> None:
+def test_fx_cli_helpers_select_only_runtime_fx_owners(path: str) -> None:
     assert verify_route.acceptance_files("runtime-fixture", [path]) == [
-        "runtime/fx-reuse.test.ts"
+        "runtime/fx-reuse.test.ts",
+        "runtime/fx-send-dn2.test.ts",
+        "runtime/fx-send.test.ts",
     ]
     assert "runtime-fixture" in verify.steps_for([path])
 
@@ -2269,4 +2283,22 @@ def test_fx_cli_function_local_needs_dependency_keeps_runtime_gain_coverage() ->
     assert "runtime/fx-reuse.test.ts" in verify_route.acceptance_files(
         "runtime-fixture", [path]
     )
+    assert "runtime-fixture" in verify.steps_for([path])
+
+
+def test_send_cli_selects_only_runtime_send_owners() -> None:
+    path = "tools/patchkit/pk_digikit_fxsend.py"
+    assert verify_route.acceptance_files("runtime-fixture", [path]) == [
+        "runtime/fx-send-dn2.test.ts",
+        "runtime/fx-send.test.ts",
+    ]
+    assert "runtime-fixture" in verify.steps_for([path])
+
+
+def test_send_function_local_anchor_dependency_keeps_runtime_coverage() -> None:
+    path = "tools/patchkit/pk_dsplink.py"
+    assert path in verify_route.acceptance_python("runtime-fixture")
+    selected = verify_route.acceptance_files("runtime-fixture", [path])
+    assert "runtime/fx-send.test.ts" in selected
+    assert "runtime/fx-send-dn2.test.ts" in selected
     assert "runtime-fixture" in verify.steps_for([path])

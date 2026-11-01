@@ -1594,10 +1594,7 @@ def explain(
                 )
             if step == "runtime-fixture" and (
                 not selected
-                or {
-                    "runtime/samples-live.test.ts",
-                    "runtime/fx-reuse.test.ts",
-                }.intersection(selected)
+                or set(verify_route.RUNTIME_PLUSDRIVE_FILES).intersection(selected)
             ):
                 print(
                     f"{step}: prerequisite plusdrive CLI build (tools.firmware.plusdrive_check --build-only)"
@@ -1821,10 +1818,7 @@ def run_step(gate: Gate, step: str) -> None:
             )
         if step == "runtime-fixture" and (
             not selected
-            or {
-                "runtime/samples-live.test.ts",
-                "runtime/fx-reuse.test.ts",
-            }.intersection(selected)
+            or set(verify_route.RUNTIME_PLUSDRIVE_FILES).intersection(selected)
         ):
             gate.run(
                 "runtime-fixture:plusdrive",
