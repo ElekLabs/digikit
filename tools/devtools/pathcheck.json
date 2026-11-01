@@ -322,6 +322,21 @@
       "file": "tests/devtools/test_acceptance_records.py",
       "token": "tests/plain.test.ts",
       "reason": "temporary repository fixture path, not a real repository path"
+    },
+    {
+      "file": "docs/plans/module-architecture.md",
+      "token": "docs/module-architecture",
+      "reason": "branch name, not a path"
+    },
+    {
+      "file": "docs/plans/module-architecture.md",
+      "token": "sdk/dsp-sampler-discovery",
+      "reason": "branch name, not a path"
+    },
+    {
+      "file": "docs/plans/module-architecture.md",
+      "token": "modules/machines/spark/module.toml",
+      "reason": "path on the sdk/dsp-sampler-discovery branch until it merges"
     }
   ],
   "moved_local": {
