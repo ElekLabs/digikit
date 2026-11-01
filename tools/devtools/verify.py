@@ -1597,7 +1597,7 @@ def explain(
                 )
             if step == "runtime-fixture" and (
                 not selected
-                or set(verify_route.RUNTIME_PLUSDRIVE_FILES).intersection(selected)
+                or verify_route.runtime_plusdrive_files().intersection(selected)
             ):
                 print(
                     f"{step}: prerequisite plusdrive CLI build (tools.firmware.plusdrive_check --build-only)"
@@ -1758,7 +1758,7 @@ def runtime_pack_modules(selected: list[str]) -> list[str]:
     """Runtime fixture modules to pack for the SELECTED test files (empty: all files)."""
     return [
         mid
-        for mid, files in verify_route.RUNTIME_MODULES.items()
+        for mid, files in verify_route.runtime_modules().items()
         if not selected or set(files) & set(selected)
     ]
 
@@ -1837,7 +1837,7 @@ def run_step(gate: Gate, step: str) -> None:
             )
         if step == "runtime-fixture" and (
             not selected
-            or set(verify_route.RUNTIME_PLUSDRIVE_FILES).intersection(selected)
+            or verify_route.runtime_plusdrive_files().intersection(selected)
         ):
             gate.run(
                 "runtime-fixture:plusdrive",
@@ -2222,7 +2222,16 @@ def named_units(
         if not (ROOT / path).is_file():
             raise ValueError(f"--py-tests: no such file: {path}")
     by_step: dict[str, list[str]] = {}
+    registered = {
+        file.removeprefix("../../"): file
+        for file in verify_route.module_runtime_files()
+    }
     for path in tests:
+        if path in registered:
+            by_step.setdefault("runtime-fixture", []).append(registered[path])
+            continue
+        if Path(path).is_absolute() or ".." in Path(path).parts:
+            raise ValueError(f"--tests: not a registered acceptance path: {path}")
         if not (ROOT / "tests/regression" / path).is_file():
             raise ValueError(f"--tests: no such file in tests/regression: {path}")
         step = next(

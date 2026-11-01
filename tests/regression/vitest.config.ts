@@ -37,7 +37,7 @@ export default defineConfig({
       {
         test: {
           name: 'runtime',
-          include: ['runtime/**/*.test.ts'],
+          include: ['runtime/**/*.test.ts', '../../modules/*/*/tests/**/*.device.test.ts'],
           pool: 'forks',
           ...serial,
           testTimeout: 300_000,

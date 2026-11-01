@@ -46,7 +46,7 @@ saver at least 100 times. Kit loads observe DSP changes every 2 ms for 600 ms; p
 10 ms for 7 s, rejecting transient zero p0/mix. Original tolerances remain, with no added generic
 peak threshold (`requireAudible: false`; legacy PCM comparisons own that oracle).
 
-[Frequency shifter](../../tests/regression/runtime/fx-freqshift.test.ts) owns four pristine card baselines
+[Frequency shifter](../../modules/fx/freqshift/tests/freqshift.device.test.ts) owns four pristine card baselines
 per device: dry, master, selected FX with no send amount, and send. Both devices execute all four;
 DN2 must not accidentally omit the no-send case. It retains panel/kit/DSP mapping, stock/page
 pixels, exact dry/mix-zero/other-track PCM, spectral rejection, send mix and independent float32
@@ -96,7 +96,7 @@ A final discovery review caught that deleting the module's scenario TOMLs would 
 acceptance from `module:check`. The scoped fix is in progress, not yet accepted:
 
 - One uncached `module-freqshift:test-device` target in the module's `project.json` owns acceptance.
-- Its command uses existing `verify --tests runtime/fx-freqshift.test.ts`, with no duplicate
+- Its command uses existing `verify --tests modules/fx/freqshift/tests/freqshift.device.test.ts`, with no duplicate
   module-to-file ownership table.
 - `pk_modcheck` dispatches the owned target after Python conformance/own tests succeed, before
   size/fit. Failure must stop later stages. Legacy daemon/input resolution is preserved.

@@ -18,17 +18,15 @@ def test_only_the_modules_own_project_declares_device_acceptance(tmp_path, monke
     monkeypatch.setattr(pk_modcheck.modroots, "module_dir", lambda _mid: folder)
     declaration = {"name": "owned-effect", "targets": {"test-device": {}}}
     (tmp_path / "project.json").write_text(json.dumps(declaration))
-    assert pk_modcheck.own_device_target("digikit/freqshift") is None
+    assert pk_modcheck.own_device_target("owned/effect") is None
     project = folder / "project.json"
     project.write_text(json.dumps({"name": "owned-effect", "targets": {}}))
-    assert pk_modcheck.own_device_target("digikit/freqshift") is None
+    assert pk_modcheck.own_device_target("owned/effect") is None
     project.write_text(json.dumps(declaration))
-    assert (
-        pk_modcheck.own_device_target("digikit/freqshift") == "owned-effect:test-device"
-    )
+    assert pk_modcheck.own_device_target("owned/effect") == "owned-effect:test-device"
     monkeypatch.setattr(pk_modcheck.pk_conform, "is_machine_module", lambda _mid: False)
     monkeypatch.setattr(pk_modcheck.pk_conform, "is_fx_module", lambda _mid: False)
-    assert pk_modcheck.plan("digikit/freqshift", "dt2") == ([], {})
+    assert pk_modcheck.plan("owned/effect", "dt2") == ([], {})
 
 
 @pytest.mark.parametrize(

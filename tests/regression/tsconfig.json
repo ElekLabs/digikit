@@ -12,5 +12,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts", "dt2", "runtime", "modules", "host", "scenarios"]
+  "include": ["*.ts", "dt2", "runtime", "modules", "host", "scenarios", "../../modules/*/*/tests/**/*.device.test.ts"]
 }

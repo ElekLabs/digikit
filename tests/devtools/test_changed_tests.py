@@ -212,7 +212,7 @@ def test_bounded_launcher_never_filters_direct_scenario_importers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     importing = changed_tests.importing_tests
-    scenario = "tests/digikit/test_fxshift_dt2.py"
+    scenario = "tests/digikit/test_menu_dt2.py"
 
     def with_scenario(module: str) -> dict[str, str]:
         return {**importing(module), scenario: "imports launcher directly"}
@@ -237,15 +237,13 @@ def test_scenario_helpers_restore_scenarios_per_source(
 ) -> None:
     tests, _ = changed_tests.gate_tests([*launchers, helper])
     assert {
-        "tests/digikit/test_fxshift_dt2.py",
-        "tests/digikit/test_fxshift_dn2.py",
         "tests/digikit/test_menu_dt2.py",
         "tests/digikit/test_upload_dn2.py",
     } <= set(tests)
 
 
 def test_explicit_scenario_and_full_suites_remain_selected() -> None:
-    scenario = "tests/digikit/test_fxshift_dt2.py"
+    scenario = "tests/digikit/test_menu_dt2.py"
     assert scenario in changed_tests.verify.python_tests(
         [*LAUNCHER_PATHS, scenario], False
     )
@@ -256,7 +254,7 @@ def test_explicit_scenario_and_full_suites_remain_selected() -> None:
 
 def test_neighboring_launcher_keeps_conservative_scenario_selection() -> None:
     tests, _ = changed_tests.gate_tests(["tools/emulator/native_target.py"])
-    assert "tests/digikit/test_fxshift_dt2.py" in tests
+    assert "tests/digikit/test_menu_dt2.py" in tests
     assert "tests/digikit/test_upload_dn2.py" in tests
 
 
@@ -267,7 +265,7 @@ def test_missing_scenario_helper_keeps_conservative_selection(
     graph.modules = set(changed_tests.graph().modules) - {"tests.digikit.scen_cases"}
     monkeypatch.setattr(changed_tests, "graph", lambda: graph)
     tests, _ = changed_tests.gate_tests(LAUNCHER_PATHS)
-    assert "tests/digikit/test_fxshift_dt2.py" in tests
+    assert "tests/digikit/test_menu_dt2.py" in tests
     assert "tests.digikit.scen_cases" not in {
         call.args[0] for call in graph.find_downstream_modules.call_args_list
     }

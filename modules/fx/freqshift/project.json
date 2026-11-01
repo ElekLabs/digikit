@@ -30,8 +30,24 @@
       "options": {
         "forwardAllArgs": false,
         "cwd": ".",
-        "command": "uv run python -m tools.devtools.verify --tests runtime/fx-freqshift.test.ts"
+        "command": "uv run python -m tools.devtools.verify --tests modules/fx/freqshift/tests/freqshift.device.test.ts"
       }
+    }
+  },
+  "metadata": {
+    "runtimeAcceptance": {
+      "files": ["tests/freqshift.device.test.ts"],
+      "modules": ["test/sine", "digikit/freqshift"],
+      "sources": [
+        "tools/patchkit/pk_digikit_fxshift.py",
+        "tools/patchkit/pk_digikit_fxsend.py",
+        "tools/patchkit/pk_digikit_fxroutes.py",
+        "tools/patchkit/pk_digikit_fxroute.py",
+        "tools/patchkit/pk_dkrt_machine.py",
+        "tools/patchkit/hook_ab.py",
+        "tools/coldfire/arena_safety.py"
+      ],
+      "plusdrive": true
     }
   }
 }
