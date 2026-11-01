@@ -29,8 +29,8 @@ typedef struct dk_strack {
     uint32_t rate;     /* Hz */
     uint32_t channels; /* 1 or 2 */
     uint32_t fmt;      /* DK_STRACK_FMT_PCM16 */
-    uint32_t base_l;   /* normal-word address of plane L */
-    uint32_t base_r;   /* plane R; == base_l when channels == 1 */
+    uint32_t base_l;   /* DSP normal-word address of plane L; DDR PCM uses the NW32 alias 0x10000000 + (phys - 0x80000000) / 4 (finding 99) */
+    uint32_t base_r;   /* plane R, same form; == base_l when channels == 1 */
 } dk_strack;
 _Static_assert(sizeof(dk_strack) == 32, "dk_strack layout");
 #define DK_STRACK_WORDS 8u

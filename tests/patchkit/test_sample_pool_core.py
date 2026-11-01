@@ -11,6 +11,7 @@ import pytest
 from support.paths import REPO_ROOT
 
 SRC = REPO_ROOT / "modules" / "core" / "adapters" / "sample-pool" / "src"
+RUNTIME_INC = REPO_ROOT / "modules" / "core" / "runtime" / "include"
 CC = shutil.which("cc") or shutil.which("gcc")
 
 HARNESS = r"""
@@ -29,9 +30,9 @@ int main(void)
 
     printf("nw32 %x %x %x\n", sp_nw32(BASE), sp_nw32(0x7ffffffc), sp_nw32(BASE + 2));
     /* mono, 1000 frames: P = 2000, F = 2080, A = align_up(P + 96, 8192) = 8192 */
-    printf("mono %d %x %x %u\n", sp_geometry(BASE, 0x10000, 8192, 0, 2080, &h), h.base_l, h.base_r, h.frames);
+    printf("mono %d %x %x %u %u %u\n", sp_geometry(BASE, 0x10000, 8192, 0, 2080, &h), h.base_l, h.base_r, h.frames, h.rate, h.channels);
     /* stereo, 1000 frames: P = 4000, F = 4080, A = 8192 */
-    printf("stereo %d %x %x %u\n", sp_geometry(BASE, 0x10000, 8192, 1, 4080, &h), h.base_l, h.base_r, h.frames);
+    printf("stereo %d %x %x %u %u %u\n", sp_geometry(BASE, 0x10000, 8192, 1, 4080, &h), h.base_l, h.base_r, h.frames, h.rate, h.channels);
     printf("bad %d %d %d %d\n",
            sp_geometry(BASE, 0x10000, 8192, 1, 4082, &h),      /* P not a whole stereo frame */
            sp_geometry(BASE, 0x10000, 8192, 0, 80, &h),        /* no PCM */
@@ -65,7 +66,7 @@ def test_pool_core_logic(tmp_path):
     src = tmp_path / "h.c"
     src.write_text(HARNESS)
     exe = tmp_path / "h"
-    subprocess.run([CC, "-Wall", "-Werror", f"-I{SRC}", str(src), "-o", str(exe)], check=True)
+    subprocess.run([CC, "-Wall", "-Werror", f"-I{SRC}", f"-I{RUNTIME_INC}", str(src), "-o", str(exe)], check=True)
     out = {}
     for line in subprocess.run([str(exe)], check=True, capture_output=True, text=True).stdout.splitlines():
         key, *rest = line.split()
@@ -76,9 +77,9 @@ def test_pool_core_logic(tmp_path):
     # the DSP's normal-word alias of a DDR byte; none outside the alias or off a word boundary
     assert out["nw32"] == [f"{nw(base):x}", "0", "0"]
     # mono: PCM at block + 64, both planes the same
-    assert out["mono"] == ["0", f"{nw(base + 0x10000 + 64):x}", f"{nw(base + 0x10000 + 64):x}", "1000"]
+    assert out["mono"] == ["0", f"{nw(base + 0x10000 + 64):x}", f"{nw(base + 0x10000 + 64):x}", "1000", "48000", "1"]
     # stereo: left at block + 32, right at block + A/2 + 32
-    assert out["stereo"] == ["0", f"{nw(base + 0x10000 + 32):x}", f"{nw(base + 0x10000 + 4096 + 32):x}", "1000"]
+    assert out["stereo"] == ["0", f"{nw(base + 0x10000 + 32):x}", f"{nw(base + 0x10000 + 4096 + 32):x}", "1000", "48000", "2"]
     assert out["bad"] == ["-5", "-5", "-5", "-5"]
     # slots from 0x3ff down; busy and stock-used slots are skipped; none left gives 0
     assert out["pick0"] == ["3ff"]

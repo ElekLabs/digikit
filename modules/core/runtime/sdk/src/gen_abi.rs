@@ -583,4 +583,13 @@ pub mod sig {
 
     /// Which modules fit. The ticked set loads at the next boot into an empty runtime: start from the limits (nothing used) and take in the ticked entries (ticked[i] != 0) in list order; a ticked one that does not fit is flagged and not taken. Then each unticked entry is checked against what the ticked ones leave. An entry without SCAN_COMPAT or without SCAN_NEEDS has no verdict (wont 0). n is at most SCAN_MAX. OK.
     pub type dkrt_fit = unsafe extern "C" fn(entries: *const DkrtScan, n: u32, ticked: *const u8, out: *mut DkrtFitOut) -> i32;
+
+    /// Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick.
+    pub type dkrt_pool_done = unsafe extern "C" fn(req: u32, result: i32);
+
+    /// Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick.
+    pub type dkrt_pool_lost = unsafe extern "C" fn();
+
+    /// Adapter to runtime: the current project slot changed. The runtime never reads the byte.
+    pub type dkrt_project_changed = unsafe extern "C" fn(slot: u32);
 }

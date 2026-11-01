@@ -63,24 +63,33 @@ Rule (ARCHITECTURE.md): anything that depends on device or firmware version sits
 
 ### 2.2 Backing plug-in point (`dkrt_pool.h`, version 1)
 
-All calls run in the runtime's task context. `identity` and `path` are runtime-owned; the adapter does not keep `path`.
+All `dkpool_*` calls run in the runtime's UI-loop task. `id` and `path` are runtime-owned; the adapter does not keep `path` or `id`. `out` is runtime-owned and valid until the load ends. The adapter fills all seven words of it before it reports the result. The header is `modules/core/runtime/include/dkrt_pool.h`.
 
 ```c
+#define DKPOOL_VERSION 1u
 typedef struct dkpool_handle {          /* what the runtime stores per dedup entry */
     uint32_t id;                        /* adapter-private (DT2: slot; DN2: block index) */
     uint32_t token;                     /* nonzero, unique per load; never reused */
-    uint32_t base_l, base_r;            /* normal-word addresses of the planes (as in dk_strack) */
+    uint32_t base_l, base_r;            /* DSP normal-word addresses of the planes, as dk_strack: NW32 alias of DDR */
     uint32_t frames;
+    uint32_t rate;                      /* Hz; DT2: 48000, every stock native file */
+    uint32_t channels;                  /* 1 or 2; base_r == base_l for 1 */
 } dkpool_handle;
-i32  dkpool_load(const dk_file_id *id, const u8 *path, dkpool_handle *out);
-        /* alloc + read + convert + DSP-visible; may be async: returns QUEUED, then
-           dkrt_pool_done(req, result) from the adapter; result: 0, E_POOL, E_READ, E_FORMAT */
+uint32_t dkpool_version(void);                 /* DKPOOL_VERSION; the runtime refuses another value */
+int32_t  dkpool_load(uint32_t req, const dk_file_id *id, const uint8_t *path, dkpool_handle *out);
+        /* DKPOOL_DONE (0, `out` filled), DKPOOL_QUEUED (1: dkrt_pool_done(req, result) follows from dkpool_tick),
+           or a negative code at once: E_POOL, E_READ, E_FORMAT, E_NOT_FOUND, E_CONTRACT */
 void dkpool_release(const dkpool_handle *h);   /* PCM of other handles never moves */
-i32  dkpool_check(const dkpool_handle *h);     /* 0 valid; E_LOST if the backing was lost externally */
-u32  dkpool_free_frames(void);                 /* free-space query, for TOO_BIG and the UI */
-/* adapter -> runtime event */
+int32_t  dkpool_check(const dkpool_handle *h); /* 0 valid; E_LOST if the backing was lost externally */
+uint32_t dkpool_free_frames(void);             /* free space in mono planes (a stereo frame costs two), for TOO_BIG and the UI */
+void dkpool_tick(void);                        /* optional: once per UI-loop pass; delivers completions, detects a stock reset */
+/* adapter -> runtime, only from dkpool_tick */
+void dkrt_pool_done(uint32_t req, int32_t result);  /* 0, E_POOL, E_READ or E_FORMAT */
 void dkrt_pool_lost(void);                     /* "backing lost": all handles are invalid (reset) */
+void dkrt_project_changed(uint32_t slot);      /* from the project adapter (2.4) */
 ```
+
+Codes (`sdk/sdk.toml` `[load.status]`): `E_NOT_FOUND` -1, `E_READ` -3, `E_FORMAT` -5, `E_LOST` -15, `E_POOL` -16, `E_CHANGED` -17 (raised by the runtime when the file differs from the selection snapshot; the adapter never returns it), `E_CONTRACT` -48. The base address form is the NW32 alias of the DDR byte address, `0x10000000 + (phys - 0x80000000) / 4` (finding 99); the PCM16 kernels read it as a normal-word DM address.
 
 Guarantees the adapter gives: PCM of a valid handle does not move; `token` changes on every load; `dkpool_check` is cheap (a few loads) so the runtime can call it from its periodic tick and before every publish. On `dkrt_pool_lost` or a failed check, the runtime CLOSEs the affected tracks, sets LOADING and reloads from the remembered path and identity; a failed reload gives ERROR `E_LOST` or `E_CHANGED`.
 

@@ -15,10 +15,13 @@
 uint32_t dkpool_version(void);
 
 /* Errors are the runtime's load codes (sdk/sdk.toml [load.status]). */
+#define DKPOOL_E_NOT_FOUND (-1)
 #define DKPOOL_E_READ (-3)
 #define DKPOOL_E_FORMAT (-5)
 #define DKPOOL_E_LOST (-15)
 #define DKPOOL_E_POOL (-16)
+#define DKPOOL_E_CHANGED (-17) /* runtime only: the file differs from the selection snapshot */
+#define DKPOOL_E_CONTRACT (-48) /* the caller broke the contract (no free request, token counter exhausted) */
 #define DKPOOL_DONE 0   /* dkpool_load finished, `out` is filled */
 #define DKPOOL_QUEUED 1 /* dkrt_pool_done(req, result) follows later */
 
@@ -38,7 +41,7 @@ typedef struct dk_file_id {
 typedef struct dkpool_handle {
     uint32_t id;      /* adapter-private (DT2: slot; DN2: block index) */
     uint32_t token;   /* nonzero, unique per load, never reused */
-    uint32_t base_l;  /* normal-word address of plane L (as in dk_strack) */
+    uint32_t base_l;  /* DSP normal-word address of plane L, as dk_strack.base_l: NW32 alias of DDR, 0x10000000 + (phys - 0x80000000) / 4 */
     uint32_t base_r;  /* plane R; == base_l for mono */
     uint32_t frames;
     uint32_t rate;    /* Hz */
@@ -47,7 +50,7 @@ typedef struct dkpool_handle {
 
 /* Alloc, read, convert, make DSP-visible. `req` is chosen by the runtime and returned by
    dkrt_pool_done; `out` stays runtime-owned and valid until the load is terminal and the
-   adapter fills it before it reports DONE. Returns DKPOOL_DONE, DKPOOL_QUEUED or a negative
+   adapter fills it (all seven words, rate and channels included) before it reports DONE or calls dkrt_pool_done. Returns DKPOOL_DONE, DKPOOL_QUEUED or a negative
    error (E_POOL pool full, E_READ, E_FORMAT). Reusing a slot of the same file is allowed. */
 int32_t dkpool_load(uint32_t req, const dk_file_id *id, const uint8_t *path, dkpool_handle *out);
 /* PCM of other handles never moves. */
@@ -56,6 +59,9 @@ void dkpool_release(const dkpool_handle *h);
 int32_t dkpool_check(const dkpool_handle *h);
 /* Free space counted in mono planes: a stereo sample of N frames needs 2N. */
 uint32_t dkpool_free_frames(void);
+/* Optional symbol. The runtime calls it once per UI-loop pass (it owns the hook). The adapter delivers finished loads with
+   dkrt_pool_done there, and detects a stock reset and reports it with dkrt_pool_lost. Never call the runtime from another task. */
+void dkpool_tick(void);
 
 /* Adapter to runtime. result: 0, DKPOOL_E_POOL, DKPOOL_E_READ or DKPOOL_E_FORMAT. */
 void dkrt_pool_done(uint32_t req, int32_t result);

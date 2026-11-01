@@ -586,3 +586,23 @@ name = "dkrt_fit"
 sig = "i32 dkrt_fit(const DkrtScan *entries, u32 n, const u8 *ticked, DkrtFitOut *out)"
 doc = "Which modules fit. The ticked set loads at the next boot into an empty runtime: start from the limits (nothing used) and take in the ticked entries (ticked[i] != 0) in list order; a ticked one that does not fit is flagged and not taken. Then each unticked entry is checked against what the ticked ones leave. An entry without SCAN_COMPAT or without SCAN_NEEDS has no verdict (wont 0). n is at most SCAN_MAX. OK."
 at = "scan"
+
+# The sample backing's events, called by the adapter core/sample-pool (plug-in point dkrt_pool.h, docs/design/sample-api-1.5.md 2.2).
+
+[[fn]]
+name = "dkrt_pool_done"
+sig = "void dkrt_pool_done(u32 req, i32 result)"
+doc = "Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick."
+at = "tracks"
+
+[[fn]]
+name = "dkrt_pool_lost"
+sig = "void dkrt_pool_lost()"
+doc = "Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick."
+at = "tracks"
+
+[[fn]]
+name = "dkrt_project_changed"
+sig = "void dkrt_project_changed(u32 slot)"
+doc = "Adapter to runtime: the current project slot changed. The runtime never reads the byte."
+at = "tracks"

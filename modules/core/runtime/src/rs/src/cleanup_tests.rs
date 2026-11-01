@@ -383,3 +383,5 @@ pub extern "C" fn dkpool_check(_: *const u8) -> i32 {
 pub extern "C" fn dkpool_free_frames() -> u32 {
     0
 }
+#[no_mangle]
+pub extern "C" fn dkpool_tick() {}

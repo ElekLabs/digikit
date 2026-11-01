@@ -538,4 +538,13 @@ uint32_t dkrt_scan_reads(void);
 /* Which modules fit. The ticked set loads at the next boot into an empty runtime: start from the limits (nothing used) and take in the ticked entries (ticked[i] != 0) in list order; a ticked one that does not fit is flagged and not taken. Then each unticked entry is checked against what the ticked ones leave. An entry without SCAN_COMPAT or without SCAN_NEEDS has no verdict (wont 0). n is at most SCAN_MAX. OK. */
 int32_t dkrt_fit(const DkrtScan *entries, uint32_t n, const uint8_t *ticked, DkrtFitOut *out);
 
+/* Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick. */
+void dkrt_pool_done(uint32_t req, int32_t result);
+
+/* Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick. */
+void dkrt_pool_lost(void);
+
+/* Adapter to runtime: the current project slot changed. The runtime never reads the byte. */
+void dkrt_project_changed(uint32_t slot);
+
 #endif /* DKRT_H */

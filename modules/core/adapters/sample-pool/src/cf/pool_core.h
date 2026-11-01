@@ -14,6 +14,7 @@
 #define SP_FILE_OVERHEAD 80u      /* file bytes minus PCM bytes: 64-byte header and 16-byte trailer (finding 81) */
 #define SP_POOL_LIMIT 0x19000400u /* the loader's append limit on the block offset space (finding 109 section 2) */
 #define SP_NW32_BASE 0x10000000u  /* NW32 alias of the DSP's DDR; physical byte = 0x80000000 + 4 * (w - 0x10000000) (finding 99) */
+#define SP_NATIVE_RATE 48000u     /* every stock native file is 48 kHz: the writer sets it (finding 81) and the pool has no other rate */
 #define SP_DDR_PHYS 0x80000000u
 #define SP_DDR_PHYS_END 0xa0000000u
 
@@ -28,7 +29,7 @@ static inline uint32_t sp_nw32(uint32_t phys)
 /* Fill the handle's planes and frame count for a loaded block (finding 81 "Stereo storage"):
  * block = record +0x10, extent = record +0x14 (A), file_bytes = key word 2 (F = P + 80), pool_base = the DSP view of the pool origin.
  * Mono: PCM at block + 64, both planes the same. Stereo: left at block + 32, right at block + A/2 + 32. Frames = P / (2 * channels).
- * Returns 0, or DKPOOL_E_FORMAT when the numbers do not describe a PCM16 block that lies inside its extent. */
+ * Also sets rate (SP_NATIVE_RATE) and channels. Returns 0, or DKPOOL_E_FORMAT when the numbers do not describe a PCM16 block that lies inside its extent. */
 static inline int32_t sp_geometry(uint32_t pool_base, uint32_t block, uint32_t extent, uint32_t stereo, uint32_t file_bytes,
                                   dkpool_handle *out)
 {
@@ -47,6 +48,8 @@ static inline int32_t sp_geometry(uint32_t pool_base, uint32_t block, uint32_t e
     out->base_l = sp_nw32(l);
     out->base_r = sp_nw32(r);
     out->frames = pcm / frame_bytes;
+    out->rate = SP_NATIVE_RATE;
+    out->channels = chan;
     return (out->base_l && out->base_r && out->frames) ? 0 : DKPOOL_E_FORMAT;
 }
 

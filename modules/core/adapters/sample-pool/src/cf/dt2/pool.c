@@ -47,7 +47,7 @@ extern const u8 sp_dsp_pool_base;     /* anchor: its address is the pool origin 
 typedef struct Req {
     volatile u32 state;
     volatile i32 result;
-    u32 kind, slot, token;
+    u32 kind, slot, token, req;
     dkpool_handle *out;
     u32 job[4];   /* the std::function of the job: storage (2 words), manager, invoker */
     u32 done[8];  /* an empty std::function */
@@ -174,7 +174,7 @@ static Req *take_req(void)
     return 0;
 }
 
-i32 dkpool_load(const dk_file_id *id, const u8 *path, dkpool_handle *out)
+i32 dkpool_load(u32 req, const dk_file_id *id, const u8 *path, dkpool_handle *out)
 {
     Req *r;
     u32 slot, i;
@@ -198,6 +198,7 @@ i32 dkpool_load(const dk_file_id *id, const u8 *path, dkpool_handle *out)
     r->slot = slot;
     r->token = slot_token[slot];
     r->out = out;
+    r->req = req;
     r->result = 0;
     post(r);
     return DKPOOL_QUEUED;
@@ -254,11 +255,11 @@ void dkpool_tick(void)
             set_slot(r->slot, SL_FREE);
             r->state = RQ_FREE;
         } else {
-            dkpool_handle *out = r->out;
+            u32 req = r->req;
             i32 result = r->result;
             set_slot(r->slot, result == 0 ? SL_OWNED : SL_FREE);
             r->state = RQ_FREE;
-            dkrt_pool_done(out, result);
+            dkrt_pool_done(req, result);
         }
     }
     /* 2. releases that waited for a request */

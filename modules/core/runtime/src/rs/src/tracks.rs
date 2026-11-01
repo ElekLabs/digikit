@@ -28,6 +28,7 @@ extern "C" {
     fn dkpool_release(h: *const Handle);
     fn dkpool_check(h: *const Handle) -> i32;
     fn dkpool_free_frames() -> u32;
+    fn dkpool_tick();
 }
 
 static mut CORE: Core<CLIENTS, ENTRIES, PROJECTS> = Core::new();
@@ -231,6 +232,10 @@ pub unsafe fn info(handle: u32, track: u32, out: *mut u8) -> i32 {
 pub unsafe fn tick() {
     if POOL == 2 || !pool_ok() {
         return;
+    }
+    // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
+    if black_box(dkpool_tick as *const () as usize) != 0 {
+        dkpool_tick();
     }
     core_().tick(&mut Device);
 }
