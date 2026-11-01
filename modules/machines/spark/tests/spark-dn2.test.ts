@@ -164,23 +164,28 @@ runtimeTests(
       const specs: [string, Uint8Array, number][] = [
         ['a', wav(3, [440, 660]), 2], // the pool and the stereo checks
         ['m', wav(2, [330]), 1], // mono
-        ['s', wav(6, [440, 660]), 2], // pan
+        ['s', wav(4, [440, 660]), 2], // pan
         ['r', wav(3.6, (n) => (n < 1.2 * RATE ? [440, 660] : [880, 1320]), (n) => (n < 2.4 * RATE ? 1 : 0)), 2], // tones A for 1.2 s, then B for 1.2 s: a retrigger shows as A again
         ['x', wav(1.5, [550, 770]), 2], // the file the track moves to
-        ['t', wav(8, [440, 660]), 2], // the long tone and the throughput load
-        ['l', wav(8, [220, 330]), 2], // the load that is superseded
+        ['t', wav(5, [440, 660]), 2], // the long tone and the throughput load
+        ['l', wav(4, [220, 330]), 2], // the load that is superseded
         ['y', wav(1.2, [600, 900]), 2], // the file that supersedes it
       ];
       log.stage = 'upload';
       await backend.mkdir(FOLDER);
       const uploadStart = Date.now();
+      const perFile: Record<string, number> = {};
       for (const [name, bytes, channels] of specs) {
+        log.stage = `upload ${name}`;
+        const t0 = Date.now();
         const prep = prepareUpload(sample, `${name}.wav`, bytes);
         expect(prep.kind).toBe('converted');
         await backend.put(FOLDER, prep);
         expect((await backend.verify(FOLDER, prep)).ok, `${name} verifies on the card`).toBe(true);
+        perFile[name] = Date.now() - t0;
         fixtures[name] = { name, prep, channels, frames: (prep.stored.length - 64 - 16) / (2 * channels) };
       }
+      log.uploadPerFile = perFile;
       log.uploadMs = Date.now() - uploadStart;
       const file = (name: string) => `${FOLDER}/${name}`;
       log.stage = 'machine';
@@ -558,7 +563,7 @@ runtimeTests(
         expect(tone(c.l, 440, marks.press! + 0.3 * RATE, end), 'L tone present').toBeGreaterThan(AUDIBLE);
         const stats = info.pages as { l: number; total: number; errcount: number };
         expect((info.readyY as { state: number }).state, 'Y reaches ready').toBe(3);
-        // a full L is 2 * 4 s ... 8 s = 376 pages; the superseded load stops long before that
+        // a full L is 2 * 4 s = 188 pages; the superseded load stops long before that
         expect(stats.total, `L was cut short (pages ${JSON.stringify(stats)})`).toBeLessThan(
           2 * planePages(fixtures.l!.frames) * 0.5 + 2 * planePages(y.frames),
         );
