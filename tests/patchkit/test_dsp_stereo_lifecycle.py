@@ -117,15 +117,6 @@ def test_a_reset_of_a_record_that_is_no_slot_only_runs_the_stock_reset(
         ), name
 
 
-# ---- stages without an R twin ----
-
-# (wrapper, stock function, counter word in `_gs_cnt`)
-BAD = [
-    ("_gs_bad_ring4", "_gs_ring_stock", 7),
-    ("_gs_bad_ring6", "_gs_ring_stock", 8),
-]
-
-
 def seen(rig, session, slots):
     for v in range(16):
         session.poke(rig.data["_gs_seen"] + 4 * v, HEARTBEAT if v in slots else 0)
@@ -135,79 +126,7 @@ def counters(rig, session):
     return words(session, rig.data["_gs_cnt"], 32)
 
 
-@pytest.mark.parametrize("entry,stock,index", BAD)
-def test_a_stage_without_a_twin_clears_the_stamp_of_its_slot_and_calls_the_stock_function(
-    stub_rig, entry, stock, index
-):
-    session = new_session(stub_rig)
-    stamps(stub_rig, session, {SLOT, OTHER})
-    seen(stub_rig, session, {SLOT, OTHER})
-    session.poke(stub_rig.data["_gs_nbad"], 0)
-    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, ())
-    log = stub_log(session)
-    assert log[:3] == [0x1234, LBUF, LBUF] and log[3] == 1, (
-        "the stock function got its arguments, once"
-    )
-    assert session.peek(stub_rig.data["_gs_stamp"] + 4 * SLOT) == 0, (
-        "this slot plays R = L from here"
-    )
-    assert session.peek(stub_rig.data["_gs_stamp"] + 4 * OTHER) == HEARTBEAT, (
-        "no other slot is touched"
-    )
-    assert session.peek(stub_rig.data["_gs_nbad"]) == 1
-    assert counters(stub_rig, session) == [int(i == index) for i in range(32)]
-    assert session.peek(stub_rig.data["_gs_hacc"]) == 3
-    assert [session.peek(stub_rig.data["_gs_seen"] + 4 * v) for v in range(16)] == [
-        HEARTBEAT if v in (SLOT, OTHER) else 0 for v in range(16)
-    ], "the stereo latch is never cleared by a stage"
-
-
-@pytest.mark.parametrize("entry,stock,index", BAD)
-def test_a_stage_without_a_twin_counts_a_stereo_slot_whose_stamp_an_earlier_stage_cleared(
-    stub_rig, entry, stock, index
-):
-    """Both stages are active on the slot, only the first clears the stamp: the second is visible in its own counter."""
-    session = new_session(stub_rig)
-    stamps(stub_rig, session, {OTHER})
-    seen(stub_rig, session, {SLOT, OTHER})
-    session.poke(stub_rig.data["_gs_nbad"], 0)
-    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, ())
-    assert stub_log(session)[3] == 1
-    assert session.peek(stub_rig.data["_gs_nbad"]) == 0, "no stamp was left to clear"
-    assert counters(stub_rig, session)[index] == 1
-    assert session.peek(stub_rig.data["_gs_hacc"]) == 3
-
-
-@pytest.mark.parametrize("entry,stock,index", BAD)
-def test_a_stage_without_a_twin_leaves_a_mono_slot_alone(
-    stub_rig, entry, stock, index
-):
-    session = new_session(stub_rig)
-    stamps(stub_rig, session, {OTHER})
-    seen(stub_rig, session, {OTHER})
-    session.poke(stub_rig.data["_gs_stamp"] + 4 * SLOT, HEARTBEAT - 1)
-    session.poke(stub_rig.data["_gs_seen"] + 4 * SLOT, HEARTBEAT - 1)
-    session.poke(stub_rig.data["_gs_nbad"], 0)
-    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, ())
-    assert stub_log(session)[3] == 1
-    assert session.peek(stub_rig.data["_gs_stamp"] + 4 * SLOT) == HEARTBEAT - 1
-    assert session.peek(stub_rig.data["_gs_nbad"]) == 0
-    assert counters(stub_rig, session) == [0] * 32
-    assert session.peek(stub_rig.data["_gs_hacc"]) == 0
-
-
-def test_every_slot_is_found_by_its_voice_buffer(stub_rig):
-    for slot in range(16):
-        session = new_session(stub_rig)
-        stamps(stub_rig, session, set(range(16)))
-        seen(stub_rig, session, set(range(16)))
-        call(session, stub_rig.sym["_gs_bad_ring4"], 0, BUFFERS + 0x80 * slot, 0, ())
-        assert [
-            session.peek(stub_rig.data["_gs_stamp"] + 4 * v) for v in range(16)
-        ] == [0 if v == slot else HEARTBEAT for v in range(16)]
-
-
-# ---- twins in a context the twin does not support ----
+# ---- the guard: a twin in a context it does not support ----
 
 # (twin, arguments, counter word in `_gs_cnt`)
 TWINS = [
@@ -222,6 +141,8 @@ TWINS = [
     ("_gs_case1", (32,), 4),
     ("_gs_case2", (32,), 5),
     ("_gs_case3", (32,), 6),
+    ("_gs_ring4", (32,), 7),
+    ("_gs_ring6", (32,), 8),
 ]
 
 
@@ -251,3 +172,44 @@ def test_an_unsupported_context_clears_the_stamp_and_runs_the_stock_stage_once(
     assert counters(stub_rig, session) == [int(i == index) for i in range(32)]
     assert session.peek(stub_rig.data["_gs_nbad"]) == 1
     assert session.peek(stub_rig.data["_gs_hacc"]) == 3
+
+
+@pytest.mark.parametrize("entry,args,index", TWINS)
+def test_the_guard_counts_the_refusal_of_a_stereo_slot_once_per_stage_and_touches_no_other_slot(
+    stub_rig, entry, args, index
+):
+    session = new_session(stub_rig)
+    stamps(stub_rig, session, {SLOT, OTHER})
+    seen(stub_rig, session, {SLOT, OTHER})
+    call_args = (*args[:-1], 16)
+    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, call_args)
+    assert session.peek(stub_rig.data["_gs_stamp"] + 4 * SLOT) == 0
+    assert session.peek(stub_rig.data["_gs_stamp"] + 4 * OTHER) == HEARTBEAT
+    assert counters(stub_rig, session) == [int(i == index) for i in range(32)]
+    assert session.peek(stub_rig.data["_gs_hacc"]) == 3
+    # a second twin of the same slot sees an unstamped slot: the refusal is not counted twice
+    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, call_args)
+    assert counters(stub_rig, session) == [int(i == index) for i in range(32)]
+    assert stub_log(session)[3] == 2, "the stock stage ran each time"
+
+
+@pytest.mark.parametrize("entry,args,index", TWINS)
+def test_a_mono_slot_goes_straight_to_the_stock_stage(stub_rig, entry, args, index):
+    session = new_session(stub_rig)
+    stamps(stub_rig, session, {OTHER})
+    session.poke(stub_rig.data["_gs_stamp"] + 4 * SLOT, HEARTBEAT - 1)
+    call(session, stub_rig.sym[entry], 0x1234, LBUF, LBUF, (*args[:-1], 16))
+    assert stub_log(session)[:4] == [0x1234, LBUF, LBUF, 1]
+    assert counters(stub_rig, session) == [0] * 32
+    assert session.peek(stub_rig.data["_gs_hacc"]) == 0
+    assert session.peek(stub_rig.data["_gs_nbad"]) == 0
+
+
+def test_every_slot_is_found_by_its_voice_buffer(stub_rig):
+    for slot in range(16):
+        session = new_session(stub_rig)
+        stamps(stub_rig, session, set(range(16)))
+        call(session, stub_rig.sym["_gs_ring4"], 0, BUFFERS + 0x80 * slot, 0, (16,))
+        assert [
+            session.peek(stub_rig.data["_gs_stamp"] + 4 * v) for v in range(16)
+        ] == [0 if v == slot else HEARTBEAT for v in range(16)]

@@ -13391,7 +13391,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 ring stage 0xb806f5 (dispatch cases 4 and 6; 32 KiB ring per slot behind record word 16); no R twin in phase 1.",
+      "doc": "DN2 1.12 ring stage 0xb806f5 (dispatch cases 4 and 6; 32 KiB ring per slot behind record word 16); R twin in core/dsp-voice with its own ring.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "fn",
       "mark": "D",
@@ -14075,7 +14075,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of the ring stage (dispatch case 4): the R pass runs on a private record and the R ring at ring_r_base + 0x8000 v; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -14084,6 +14084,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -14093,8 +14096,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.ring_stage.case4.call",
@@ -14117,7 +14121,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L.",
+      "doc": "R twin of the ring stage (dispatch case 6): the R pass runs on a private record and the R ring at ring_r_base + 0x8000 v; a stereo slot in an unsupported context is counted and plays R = L.",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "hook",
       "mark": "D",
@@ -14126,6 +14130,9 @@
       "regs": {
         "clobbers": [
           "r0-r2",
+          "r4",
+          "r8",
+          "r12",
           "i4",
           "i12",
           "astat"
@@ -14135,8 +14142,9 @@
           "r8",
           "r12",
           "i6-i7",
-          "m5-m7",
-          "m14"
+          "m6-m7",
+          "m14",
+          "mode1"
         ]
       },
       "site": "dsp.voice.site.ring_stage.case6.call",

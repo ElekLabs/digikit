@@ -344,7 +344,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.ring_stage.case4.call"
-to = "_gs_bad_ring4"
+to = "_gs_ring4"
 devices = ["dn2"]
 
 [[claim]]
@@ -354,7 +354,7 @@ devices = ["dn2"]
 [[op]]
 op = "hook"
 hook = "dsp.voice.hook.ring_stage.case6.call"
-to = "_gs_bad_ring6"
+to = "_gs_ring6"
 devices = ["dn2"]
 
 [[claim]]

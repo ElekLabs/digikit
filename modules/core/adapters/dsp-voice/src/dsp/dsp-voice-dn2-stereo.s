@@ -18,6 +18,7 @@
 // R0-R2 are read nowhere by the stock callees as arguments (they are caller-saved in the convention); a wrapper does not restore the caller-saved registers
 // after a stereo call.
 #include "dsp/call.inc"
+#include "adapter-dn2.inc"
 #include "dk_machine.inc"
 
 .SECTION/PM seg_pmco;
@@ -504,6 +505,36 @@ _gs_case3_bad:
     GS_REFUSE(_gs_cnt + 24);
     JUMP _gs_case3_stock;
 
+// ---- the ring stage (0xb806f5, dispatch case 4 call 0x1c9be9 and case 6 call 0x1c9c4f): L record 18 words at engine + 0x12348 + 0x48 v ----
+// The stage keeps a 32 KiB delay ring behind the byte pointer in word 16 (L: 0x804ad790 + 0x8000 v, finding 106). R has its own ring: slot v uses the 32 KiB at
+// ADM_RING_R_BASE + 0x8000 v ([adapter.sample_pool] ring_r_base, a range of the DSP's DDR that neither the stock engine nor the sample pool uses), and the twin writes
+// that pointer to word 16 of the R record before every R pass. The DSP alone reads and writes the ring, as it does the stock rings: no cache maintenance.
+// Reads 0 (history), 2, 4, 10 (controls), 13, 14 (read coordinate and write cursor), 15 (delay), 16, 17 (fill status); writes 0, 3, 4, 5, 13, 14, 17 and the ring. The
+// R record gets 2, 3, 4, 5, 10 and 15 from L before the L call; words 0, 13, 14, 17 and the ring are R's own. R's note-on state is what the stock reset leaves in L:
+// history and cursor 0, fill status 1, the ring backing as it is (the status makes the stage ignore it until the ring has been written once).
+#define GS_RING_COPY \
+    GS_COPY(2); GS_COPY(3); GS_COPY(4); GS_COPY(5); GS_COPY(10); GS_COPY(15)
+
+#define GS_RING(NAME, REFUSE, CNT, LABEL_L, LABEL_R) \
+.GLOBAL NAME; \
+NAME: \
+    GS_TWIN_HEAD(_gs_ring_stock, REFUSE, 18, _gs_rg_rec); \
+    R1 = LSHIFT R0 BY 13; \
+    R2 = ADM_RING_R_BASE; \
+    R1 = R1 + R2; \
+    DM(16, I0) = R1; \
+    GS_RING_COPY; \
+    GS_L1(_gs_ring_stock, LABEL_L); \
+    GS_R1(_gs_ring_stock, LABEL_R); \
+    I0 = DM(-4, I6); \
+    JUMP _gs_leave; \
+REFUSE: \
+    GS_REFUSE(CNT); \
+    JUMP _gs_ring_stock
+
+GS_RING(_gs_ring4, _gs_ring4_bad, _gs_cnt + 28, _gs_ring4_l, _gs_ring4_r);
+GS_RING(_gs_ring6, _gs_ring6_bad, _gs_cnt + 32, _gs_ring6_l, _gs_ring6_r);
+
 // ---- the common return of a stereo twin: pops the twin's frame and returns to the caller of the retargeted call ----
 _gs_leave:
     I12 = DM(-1, I6);
@@ -605,8 +636,6 @@ NAME: \
     DM(_gs_nbad) = R1; \
     JUMP STOCK
 
-GS_BAD(_gs_bad_ring4, _gs_ring_stock, _gs_cnt + 28);
-GS_BAD(_gs_bad_ring6, _gs_ring_stock, _gs_cnt + 32);
 
 // ---- once per block, from the heartbeat code of slot 0 (dsp-voice-dn2.s): publishes the events of the block that has just ended ----
 // Plain subroutine; clobbers R0 and R1 only.
@@ -888,6 +917,15 @@ _gs_z7: DM(I3, M6) = R0;
     I3 = R1;
     LCNTR = 59, DO _gs_z8 UNTIL LCE;
 _gs_z8: DM(I3, M6) = R0;
+    R1 = 72;
+    R1 = R1 * R4 (SSI);
+    R2 = _gs_rg_rec;
+    R1 = R1 + R2;
+    I3 = R1;
+    LCNTR = 18, DO _gs_z9 UNTIL LCE;
+_gs_z9: DM(I3, M6) = R0;
+    R0 = 1;
+    DM(-1, I3) = R0;                      // the fill status of a ring after the stock reset (word 17); the ring's backing is not cleared
 _gs_stamped:
     R0 = DM(_dv_diag);
     DM(0, I2) = R0;
@@ -924,6 +962,7 @@ _gs_raise:
 .PKDATA _gs_c1_rec, 3264;                  // R records of dispatch case 1 (51 words), 2 (75) and 3 (59), per slot
 .PKDATA _gs_c2_rec, 4800;
 .PKDATA _gs_c3_rec, 3776;
+.PKDATA _gs_rg_rec, 1152;                   // R records of the ring stage (18 words), per slot; the R rings are at ADM_RING_R_BASE
 .PKDATA _gs_ns, 4;                         // stereo slots stamped in the block _gs_nhb
 .PKDATA _gs_nhb, 4;
 .PKDATA _gs_nbad, 4;                       // stamped slots a stage without a twin has cleared (diagnostic)

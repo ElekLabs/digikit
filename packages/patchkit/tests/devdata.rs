@@ -589,7 +589,7 @@ fn the_sample_pool_facts_are_checked() {
         ),
         (
             "a range with a base and no size",
-            on_dn2("ddr_bytes  = 0x10000000", "ddr_bytes  = 0"),
+            on_dn2("ddr_bytes  = 0x0ff80000", "ddr_bytes  = 0"),
         ),
         (
             "a range below the DSP's DDR",
@@ -601,7 +601,15 @@ fn the_sample_pool_facts_are_checked() {
         ),
         (
             "a range past 4 GiB",
-            on_dn2("ddr_bytes  = 0x10000000", "ddr_bytes  = 0x90000000"),
+            on_dn2("ddr_bytes  = 0x0ff80000", "ddr_bytes  = 0x90000000"),
+        ),
+        (
+            "R rings inside the pool range",
+            on_dn2("ring_r_base = 0x904b1000", "ring_r_base = 0x90000000"),
+        ),
+        (
+            "R rings below the stock writes",
+            on_dn2("ring_r_base = 0x904b1000", "ring_r_base = 0x80530000"),
         ),
         (
             "a stock floor and an own range together",

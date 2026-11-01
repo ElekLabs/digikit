@@ -5,6 +5,7 @@ What is tested is our code: the set-up order and refusals, the page rules agains
 lands in DDR, the rearm after every callback, and the acknowledgement words, which are decoded by the C decoder of the ColdFire side.
 The real driver, the DMA, the cache and the timing are for the emulator test."""
 
+import re
 import shutil
 import subprocess
 
@@ -19,8 +20,10 @@ CC = shutil.which("cc") or shutil.which("gcc")
 BACK = 0xBB0000
 PORT = 0x20070000
 STACK = 0x20078000
-DDR_BASE_NW32 = 0x1014C400  # 0x80531000, from build/gen/sample-pool-dsp-dn2.inc
-DDR_PAGES = 65536
+_GEN = (MOD / "build/gen/sample-pool-dsp-dn2.inc").read_text()
+DDR_BASE_NW32 = int(re.search(r"#define SP_DDR_BASE_NW32 (\d+)", _GEN).group(1))
+DDR_PAGES = int(re.search(r"#define SP_DDR_PAGES (\d+)", _GEN).group(1))
+assert DDR_BASE_NW32 == 0x1014C400  # 0x80531000
 CONSTS = {"M5": 0, "M6": 1, "M7": 0xFFFFFFFF, "M13": 0, "M14": 1, "M15": 0xFFFFFFFF}
 REGS = {**CONSTS, "I6": STACK, "I7": STACK, "MODE1": 0x10000, "IMASKP": 0}
 REPLY = 0x20050000

@@ -38,3 +38,5 @@
 #define ADM_PARAM_SLOT7 255
 // [board] dsp_clock_hz / dsp_blocks_per_second, rounded (DSP_BLOCK_CYCLES)
 #define ADM_BLOCK_CYCLES 666667
+// [adapter.sample_pool] ring_r_base (byte address of the 16 R rings of 32 KiB, one per slot)
+#define ADM_RING_R_BASE 2420838400

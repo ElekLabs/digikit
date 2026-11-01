@@ -32,6 +32,7 @@ STAGE_RECORDS = (
     ("_gs_c1_rec", 204, 51),
     ("_gs_c2_rec", 300, 75),
     ("_gs_c3_rec", 236, 59),
+    ("_gs_rg_rec", 72, 18),
 )
 
 
@@ -84,6 +85,11 @@ def fill_records(rig, v, word):
     for name, stride, size in STAGE_RECORDS:
         for k in range(size):
             rig.sess.poke(nw(data(rig, name) + stride * v) + k, word)
+
+
+def restarted(name, size):
+    """An R record after the clear of a note-on or a gap: zeros, but the ring stage's fill status (word 17) is 1 as the stock reset leaves it."""
+    return [1 if name == "_gs_rg_rec" and k == 17 else 0 for k in range(size)]
 
 
 def play(rig, slots, trig=()):
@@ -166,7 +172,7 @@ def test_the_r_stage_records_restart_at_the_note_on_block():
     play(rig, [0, 3])  # block 0 of the machines
     for v in (0, 3):
         for name, stride, size in STAGE_RECORDS:
-            assert record(rig, name, stride, size, v) == [0] * size, (
+            assert record(rig, name, stride, size, v) == restarted(name, size), (
                 f"{name} of slot {v}"
             )
     for name, stride, size in STAGE_RECORDS:

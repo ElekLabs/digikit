@@ -304,7 +304,7 @@ devices = ["dn2"]
 rule = { kind = "sharc_func", reloc_hash = "0fa80930d5d80e215e7111306e608dda7db62829cf0039550cdbfea044c364f3", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/dsp-voice"]
-doc = "DN2 1.12 ring stage 0xb806f5 (dispatch cases 4 and 6; 32 KiB ring per slot behind record word 16); no R twin in phase 1."
+doc = "DN2 1.12 ring stage 0xb806f5 (dispatch cases 4 and 6; 32 KiB ring per slot behind record word 16); R twin in core/dsp-voice with its own ring."
 
 # ---- DN2 stereo: call sites of the stages without a twin (retarget to a wrapper that clears the stamp) ----
 
@@ -465,8 +465,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the ring stage (dispatch case 4): the R pass runs on a private record and the R ring at ring_r_base + 0x8000 v; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.ring_stage.case6.call"
@@ -485,8 +485,8 @@ mode = "retarget"
 devices = ["dn2"]
 mark = "D"
 users = ["core/dsp-voice"]
-regs = { in = ["r4", "r8", "r12", "i6-i7", "m5-m7", "m14"], clobbers = ["r0-r2", "i4", "i12", "astat"] }
-doc = "Clears the slot's stereo stamp when it is set, then jumps to the stock function: the slot plays R = L."
+regs = { in = ["r4", "r8", "r12", "i6-i7", "m6-m7", "m14", "mode1"], clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"] }
+doc = "R twin of the ring stage (dispatch case 6): the R pass runs on a private record and the R ring at ring_r_base + 0x8000 v; a stereo slot in an unsupported context is counted and plays R = L."
 
 [[site]]
 name = "dsp.voice.site.case5.call"
