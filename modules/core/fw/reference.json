@@ -14705,7 +14705,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2 1.12 0x1c9af6, the multiply `F4 = F2 * F8; modify(I1, M4)` of plane A's first sample in the pan loop 0x1c9aea to 0x1c9b30 (outer loop of 16 slots, 7th instruction; the loop's restrictions on branches concern its last instructions, finding 96).",
+      "doc": "DN2 1.12 0x1c9af6, the multiply `F4 = F2 * F8; modify(I1, M4)` of plane A's first sample in the pan loop 0x1c9aea to 0x1c9b30 (outer loop of 16 slots, 7th instruction; the loop's restrictions on branches concern its last instructions, docs/design/dn2-stereo.md 1.1).",
       "file": "devices/fw/dsp/voice.toml",
       "kind": "site",
       "mark": "D",

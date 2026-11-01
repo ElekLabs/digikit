@@ -121,6 +121,7 @@ STEREO_STANDINS = (
     "_gs_engine_base",
     "_gs_pan_cont",
     "_gs_pan_end",
+    "_gs_pre_cont",
 )
 
 
@@ -506,9 +507,15 @@ class MachineRig:
         if self.device == "dt2":  # a stereo machine writes R into the odd voice's block
             out.append((out_addr + 0x80, 4 * 32, "right output block"))
         elif (
-            "_dv_rscr" in self.built.data
-        ):  # DN2: the adapter's scratch block for a stereo machine's R
-            out.append((self.built.data["_dv_rscr"], 4 * 32, "right output scratch"))
+            "_gs_rbuf" in self.built.data
+        ):  # DN2: the slot's R buffer (a stereo machine's R, dsp-voice-dn2-stereo.s)
+            out.append(
+                (
+                    self.built.data["_gs_rbuf"] + 128 * self.voice,
+                    4 * 32,
+                    "right output block",
+                )
+            )
         if b.desc:
             out.append(
                 (
