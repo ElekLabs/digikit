@@ -1,164 +1,182 @@
 # DN2 stereo, Phase 1: spec
 
-Status: accepted by Em on 2026-11-01 with the recommendations in section 7; nothing built yet. DN2 OS 1.12 (SHA-256 of the SYX in finding 96). Marks: [D] read from image bytes in this pass, [O] open, [P] proposal.
-Addresses are SHARC short-word pcs. Call-site offsets in `devices/fw/dsp/voice.toml` are `pc - 0x1c8ef1` (engine function entry; check: `0x1c94fd - 0x1c8ef1 = 0x60c`, the existing first-order site).
+Status: accepted by Em on 2026-11-01 with the recommendations of section 7. Built in the lane `lane/dn2-stereo` (commits after `b9643e0d`); model tests only. The DN2 emulator proof (section 8) is not run. DN2 OS 1.12 (SHA-256 of the SYX in finding 96). Marks: **[D]** read from image bytes or measured on the model, **[O]** open, **[P]** proposal.
+Addresses are SHARC short-word pcs. Offsets in `devices/fw/dsp/voice.toml` are `pc - 0x1c8ef1` (engine function entry) or `pc - 0x1c9b73` (its continuation fragment, hash `d72f9ef5...`); check: `0x1c94fd - 0x1c8ef1 = 0x60c`, the first-order site.
 
 ## 0. Idea in four lines
 
-- A stereo machine returns `DK_STEREO` and writes R to a per-slot R buffer. `dsp-voice-dn2` stamps the slot "stereo this block".
-- Each pre-pan stage that has an R twin runs a second time on the R buffer, with a private R state record. L stays the stock, authoritative path.
-- A stage without a twin marks the slot "mono for this block". The gain loop then plays R = L, exactly as today.
-- The gain loop is patched once, per slot: a stereo slot gets `plane B = gain B * R`, a mono slot runs the stock instructions.
+- A stereo machine returns `DK_STEREO` and writes R to a per-slot R buffer. `dsp-voice-dn2` checks R, scales it like the engine scales L, and stamps the slot "stereo in this block" with the block counter.
+- Each pre-pan stage that has an R twin runs a second time on the R buffer, with a private R state record. L stays the stock, authoritative path. The two inline gain stages without a call (block ramp, fade) run on R in one hook before the pan loop.
+- A stage without a twin clears the stamp. The pan loop then plays R = L, exactly as before.
+- The pan loop is patched once, per slot: a stamped slot gets `plane B = gain B * R`, every other slot runs the stock instructions.
 
-## 1. Gain-loop patch
+## 1. Static answers (all [D] unless marked)
 
-### What the stock loop does [D]
+### 1.1 Loop-branch restriction at the hook site `0x1c9af6`
 
-Loop `DO 0x1c9b30 UNTIL LCE`, 16 trips, body `0x1c9aea..0x1c9b30` (last instruction `0x1c9b30`, `I5 = modify(I5, 8)`). Per slot:
+A jump at `0x1c9af6` is legal. The Programming Reference (SHARC+ Core, Rev 1.5, "Restrictions on Ending Loops" p. 4-41 and "VISA-Related Restrictions on Hardware Loops" p. 4-42) limits what may stand at the end of a loop: a call in the last 5 instructions needs a return with the loop-return modifier, no `IF NOT LCE` after a `CURLCNTR` write, no `IDLE` in the last 3, the last 11 instructions are 48-bit, and the loop and PC stacks must not be pushed, popped or written inside the loop.
 
-```
-1c9aea  R0 = dec(R9); I2 = DM(I3,M5)         ; R9 = 32; I2 = slot input pointer
-1c9aed  M4 = DM(I5,M5)                       ; plane A pointer (I1 = 0, so M4 is the address)
-1c9aef  R2 = DM(I4) post +7                  ; gain A start
-1c9af1  I1 = 0 ; 1c9af3  I0 = 0
-1c9af5  R8 = DM(I2,M6)                       ; L[0]            (16 bit)
-1c9af6  F4 = F2*F8 ; modify(I1,M4)           ; A[0] = gA*L[0]   (48 bit: 0x043e60130428)
-1c9af9  DM(I1,M5) = R4
-1c9afa  M4 = DM(I5,M6)                       ; plane B pointer
-1c9afc  R1 = DM(I4+0x69)                     ; gain B start
-1c9aff  F15 = F1*F8 ; modify(I3,M6)          ; B[0] = gB*L[0]   (48 bit: 0x04bef0130f18)
-1c9b02  R12 = DM(I4-5) ; 1c9b04 R14 = DM(I4+0x6b)   ; steps A, B
-1c9b07  JUMP IF EQ delayed -> 1c9b30         ; EQ from R0 = dec(R9) (1 sample block)
-1c9b0c  DM(I1,M5) = R15 ; 1c9b0d I1 = 0
-1c9b0f  DO 0x1c9b2d UNTIL LCE (R0 = 31 trips), body 1c9b12..1c9b2d:
-        F2 += F12 ; F1 += F14 ; F8 = F2*F0 ; F0 = F1*F0 ; stores to A and B planes
-```
+- The body `0x1c9aea..0x1c9b30` has 29 instructions: 18 before the inner loop, the 10 of the inner `DO 0x1c9b2d`, and the loop end `0x1c9b30`. `0x1c9af6` is the 7th, the 23rd from the end: outside every window of the rules above.
+- The patch is a plain `JUMP` out and back. It touches neither stack. The wrapper's own `DO` nests as the stock inner `DO` does (stack depth 2 of 6); the stereo path ends with a `JUMP` to the loop-end instruction `0x1c9b30`, as the stock `JUMP IF EQ` at `0x1c9b07` does. The mono path returns to `0x1c9af9`.
+- The hook site is a 48-bit instruction (Type 7a), as the replacement `JUMP` is. The next instruction `0x1c9af9` is 16 bits.
+- Model check: the full block `0x1c99de..0x1c9b33` runs 16 slots with the hook; all 16 slots are processed (loop count intact) and a mono slot is bit-identical to the stock block. No hardware claim: the model does not model the sequencer's pipeline restrictions **[O]**, the emulator test covers the integrated run.
+- The slot index is not read from `LCNTR`: the hook takes it from `I3` (the slot's entry of the table of voice buffers, `DM(I6 - 24)` is its base): `4 v = I3 - DM(I6 - 24)`. The twins take it from the voice buffer `R8` in the same table.
 
-Both products use the same input sample (`F8`, later `F0`). That is the whole mono-to-pair step. `reguse` over `0x1c9aea..0x1c9b30` is exactly R0 R1 R2 R4 R8 R9 R12 R14 R15, F0 F1 F2 F8 F12 F14, I0..I5, M4..M6, LCNTR. The epilogue `0x1c9b33..0x1c9b72` reloads R3 R5 R6 R7 R9 R10 R11 R13 R14 R15 and I8..I11 I14 I15 from the frame, so those are dead inside the loop and free for the patch. I12 holds the return address (loaded at `0x1c9ad8`): do not touch it.
+### 1.2 Steal and retrigger: trigger edge and reset site
 
-### Patch site [P]
+- Allocator `0x4002a6a2` (called from the frame builder `0x40025e36`, vector-191 handler) reuses a slot in place when it steals or retriggers: it overwrites the slot's record (`0x40288300 + 0x14 v`: track, note, age), clears the old owner's bitmaps and returns the slot in the allocated mask (low half of the 64-bit result). Steal mode `_DAT_4059da30` 0 (oldest), 1, 2 and 3 differ only in which slot is chosen. The high half is the voices of the same note that were not reused; the builder frees them and sets their release bit.
+- The builder ORs the bit of every returned slot into `local_b0` (one OR for each slot of the allocated mask, in the loop over the result), and writes it to `_DAT_80005e82` (`0x40027498`), the frame mask `0x11` that is `ADM_TRIG_HW`. `local_b0` is zeroed at every entry of the builder (every frame): the bit is a one-frame pulse.
+- So a steal or retrigger gives the same pulse in the same slot as a fresh note-on: a rising edge of bit v, unless the slot was also triggered in the previous frame (two note-ons in consecutive frames; then the bit stays set and the adapter sees no edge, as for every module today). The adapter's primary R clear at the note-on block is therefore the steal and retrigger reset. **[D]** static reading of the decompiled builder and allocator (second check pending); the emulator test covers it with a real steal.
+- The stock reset of the L stage states happens in the control part of the same block as the pulse (before the audio chain), at `0x1c9642..0x1c96d1` (entered from `0x1c9343`): first-order reset `0xb80b93` at `0x1c96cb`, U/Y reset `0xb8135a` at `0x1c96aa`, case 5 reset `0xb818c7` at `0x1c9673`, case 3 `0xb811f1` at `0x1c9692`, case 2 `0xb81c8d` at `0x1c9684`, case 1 `0xb81d6d` at `0x1c964b`, ring reset `0xb805d8` at `0x1c96b3`. The R mirror is built for the first two (sites `0x1c96cb`, `0x1c96aa`). The case 5 R record is cleared at the note-on block only: a stock reset of case 5 in the middle of a note is not mirrored **[O]**.
 
-One `replace` hook, same mechanism as `dsp.voice.hook.render_entry` (the 48-bit instruction becomes `JUMP _gs_slot`, the wrapper runs the displaced instruction itself):
+### 1.3 The constant gain of the chain (`0x1c9448..0x1c94fd`)
 
-- site `dsp.voice.site.gain_slot` = function `09fe195e...` (the engine function, hash already used by the existing sites), offset `0xC05` (= `0x1c9af6`), len 6. Displaced instruction: `F4 = F2*F8; modify(I1,M4)`. Continue-at for mono: `0x1c9af9` (offset `0xC08`), a second `site`.
-- Why `0x1c9af6` and not a per-sample patch: a jump per sample in the inner loop costs 31 jumps per slot and the loop end must not hold a branch. One entry check per slot costs one jump.
-- Why not `0x1c9aea` (first loop instruction): the first instructions of a hardware loop have branch restrictions in the sequencer; `0x1c9af6` is the seventh instruction. [O] confirm against the Programming Reference (loop restrictions on jumps) before coding; the DT2 gate-1 patch has no equivalent.
-- Slot index `v = 16 - LCNTR` read at the hook (the inner `DO` at `0x1c9b0f` has not started yet). [O] check LCNTR value at entry in the model test.
+The loop `0x1c9478..0x1c94c5` multiplies every voice buffer by the constant `0x3fcade01` (about 1.5898, loaded at `0x1c946b` and `0x1c948c`) in SIMD pairs (`MODE1` PEYEN set at `0x1c9484`, cleared at `0x1c94b0`). It runs for all 16 buffers right after the render-hook loop (`0x1c9453..0x1c9467`), skipped only for a block count of zero. Its multiplications are plain 32-bit products, so a scalar multiply of R gives the same bits. `_gs_post` scales R by `0x3fcade01` after the guard.
 
-### Wrapper `_gs_slot` [P]
+### 1.4 Two inline stages the first spec did not list
 
-1. `R3 = ASTATX` (save flags: `0x1c9b07` branches on the AZ from `R0 = dec(R9)`; restore before leaving). R3, R5, R6, R7, R10, R11, R13 are free.
-2. `R5 = 16 - LCNTR`; `R6 = _gs_stamp[R5]`; compare with `_dv_diag[0]` (the heartbeat the adapter increments once per block in slot 0) and with `_gs_bad[R5]`.
-3. Mono (stamp differs, or bad): restore flags, run `F4 = F2*F8; modify(I1,M4)`, `JUMP 0x1c9af9`. The slot then runs the original bytes: same results, only 6 to 10 more cycles per slot. Mono slots are bit-identical because nothing else changes.
-4. Stereo: `I10 = _gs_rbuf + 32*v` (words). Run a copy of `0x1c9af6..0x1c9b2d` with two changes: the B products take the R sample (`R7 = DM(I10,M6)` ahead of each `F15 = F1*R7`, `F0 = F1*Rnext`), and the B stream uses its own ramp registers as in stock. Then restore flags and `JUMP 0x1c9b30` (the loop-end instruction, so the outer `DO` still counts). The copy uses its own inner `DO`; it nests inside the outer loop like the stock one. First-sample and 1-sample-block cases are copied as in stock (EQ path).
-5. The pan gains stay the stock gA, gB. The DT2 stock gate-1 path gives `A = L*gA, B = R*gB` (finding 112); the DN2 loop gives the same shape, so a stereo slot with R = L reproduces the stock pair bit for bit. This is the first regression check (section 5).
+`0xb80345` is the envelope generator, not a "final gain ramp". After the gain loop `0x1c99bd..0x1c99d6` two more inline stages multiply the L buffers, with no call, so the twins cannot reach them:
 
-Stereo mark: `_gs_stamp[v]` (16 words, `.PKDATA` in the dsp-voice DN2 object) holds the block counter when `dsp-voice-dn2` returned `DK_STEREO` for slot v. A stale flag expires by itself (a slot that changed to an FM type, a finished voice, a disabled machine). No clear is needed.
+- **Block ramp** `0x1c99ed..0x1c9a31`: for every slot, `out[k] = r_k * in[k]`, `r_0 = DM(rec)`, `r_{k+1} = r_k + DM(rec + 2)`; the record is `engine + 0x1395c + 28 v` (7 words). Unconditional.
+- **Conditional fade** `0x1c9a59..0x1c9aac`: for slot v when byte v of the array `engine + 0x138fc` (a byte access, Type 3b with `(l, x, w) = (0, 0, 0)`) and the word `engine + 0x1351c + 44 v` (word 5 of the `0xb80345` record) are both nonzero: `r` runs from 1.0 with the step `-1/31` (`0xbd042108`, the value of the stock division `0x1c06ba` of -1.0 by 31.0; tested against the stock block).
+- The metadata clear `0x1c9aaf..0x1c9acf` zeroes the fade flags before the pan loop. A pan-loop hook cannot read them; the R fade needs a hook before the clear (section 2.3).
 
-## 2. Phase 1 R chain
+Both stages are linear per-sample gains, so R needs the same multiplications in the same order.
 
-Rule for every twin (replay-proven in finding 96): copy the shared control words L to R before the stock L call, then run the L call, then run the same stock function on the R record and the R buffer. The R pass never publishes control state to L. Control ramps advance once per block in the L pass; an R pass on advanced state gives zero difference, so the capture must come first.
+### 1.5 Exact call sites of the stages (the `mark_bad` and twin retargets)
 
-Hooks are call-site retargets (`mode = "retarget"`, as in `core/dsp-stereo-proof`). Each wrapper starts with `stamp == heartbeat && !bad` for slot v; if not, it is a pass-through to the stock function (as `_sp_render` does for the SIMD/fallback case). Slot v comes from the L record pointer (`R4 - base) / stride`, as the proof does with `engine_base + 0xe088`) or from the R-state table index.
+The dispatch table at `0x8052dbc0` holds `0x1c98b9` (case 0 and above 6: skip), `0x1c98ab` (1), `0x1c9ba9` (2), `0x1c9bc4` (3), `0x1c9bdf` (4), `0x1c9bf7` (5), `0x1c9c45` (6). The first spec called `0x1c9c4f` the case 5 continuation: it is case 6's ring call.
 
-| Stage | Site | L record (stride) | R twin | Capture before L | R state |
-| --- | --- | --- | --- | --- | --- |
-| first-order `0xb80c39 -> 0xb809f2` | call `0x1c94fd` (exists) | `0x24f320 + 0x70 v` | stock function on R record | words 21, 22, 23 (coefficients) | words 24, 25 histories; 112 B per slot, keep 28 words as the proof does |
-| U/Y `0xb81368` | calls `0x1c959f`, late (exist) | `0x2533e0 + 0x20 v` | stock function on R record | words 2..5 | words 6, 7; 32 B |
-| final gain ramp `0xb80345` | new site (call after the selected stages) | `0x2547a0 + 0x2c v` | stock function on R buffer | all 11 words (0..7, 9, 10) before L | the whole record; 44 B. It is audio-independent: R state evolves in step with L only because the capture restarts from L each block, so R output equals L's gain trajectory |
-| case 5 `0xb81526` + scratch blend `0x1c9c12..0x1c9c44` | dispatch case 5 call; blend inside the continuation | `0x253a60 + 0xd4 v` | filter leaf on R record writing a private R scratch; copy of the blend loop on R | the ramp words of the record (11 + 7k, 13 + 7k, k = 0..5) | words 9, 10 histories; 212 B. The blend loads its ramp registers from the I0 record and stores nothing back to it (no store to the record in `0x1c9c12..0x1c9c44` [D]), so it needs no capture; it needs R scratch (128 B per slot) in place of `DM(0x254aa0)` |
+| Stage | Call site (pc) | Rule: function + offset | Kind |
+| --- | --- | --- | --- |
+| first-order `0xb80c39` | `0x1c94fd` | engine `0x60c` | twin (existing site) |
+| first-order reset `0xb80b93` | `0x1c96cb` | engine `0x7da` | mirror |
+| U/Y `0xb81368` early | `0x1c959f` | engine `0x6ae` | twin |
+| U/Y late | `0x1c9b7a` | fragment `0x7` | twin |
+| U/Y reset `0xb8135a` | `0x1c96aa` | engine `0x7b9` | mirror |
+| held sample `0xb8265b` early / late | `0x1c95b4` / `0x1c9b8f` | engine `0x6c3` / fragment `0x1c` | bad |
+| shaper `0x1cdb56` early / late | `0x1c95c9` / `0x1c9935` | engine `0x6d8` / `0xa44` | bad |
+| case 1 `0xb82342` | `0x1c98af` | engine `0x9be` | bad |
+| case 2 `0xb81a16` | `0x1c9bb6` | fragment `0x43` | bad |
+| case 3 `0xb80f2e` | `0x1c9bd1` | fragment `0x5e` | bad |
+| case 4 ring `0xb806f5` | `0x1c9be9` | fragment `0x76` | bad |
+| case 5 `0xb81526` | `0x1c9c08` | fragment `0x95` | twin + blend |
+| case 6 ring `0xb806f5` | `0x1c9c4f` | fragment `0xdc` | bad |
+| gain `0xb80345` | `0x1c99cc` | engine `0xadb` | twin |
+| pre-pan hook | `0x1c9aaf` | engine `0xbbe` (len 6; next `0x1c9ab2`, `0xbc1`, len 4) | replace |
+| pan hook | `0x1c9af6` | engine `0xc05` (next `0x1c9af9`, `0xc08`, len 2; end `0x1c9b30`, `0xc3f`) | replace |
 
-Before each stage the R buffer already holds the R signal after the earlier twins. Final gain also covers the "gain ramps" of the request; the constant-gain multiply at the start of the chain is a scalar on the buffer: apply the same scalar to R (read it where the L multiply reads it; [O] locate the exact instruction, `0x1c9448..0x1c94fd`).
+All of them are call instructions with both delay slots, retargeted as the existing sites. The stages `0xb8265b` (entry inside the function at `0xb8258f`, offset `0xcc`) and the dispatch stages have one caller each in the table above; the other callers of the shared functions are not retargeted. Every call has R8 = the voice buffer, the same table entry as the slot's pointer in the pan loop.
 
-R state memory (`dsp.l2`, `.PKDATA` in a new object of the adapter): first-order 1792 B, U/Y 512 B, final gain 704 B, case 5 3392 B, R buffers 2048 B, R scratch 2048 B, tables ~300 B. About 11 KiB for 16 slots. The proof already holds 3.8 KiB of this (`_sp_states` 1792, `_sp_audio` 2048); reuse them.
+## 2. Phase 1 as built
 
-### Reset, steal, retrigger [P]
+### 2.1 Adapter (`dsp-voice-dn2.s`, `_gs_post` in `dsp-voice-dn2-stereo.s`)
 
-- Primary: the adapter clears the slot's R records and R buffer on the machine's note-on block (`DK_IN_BLOCK == 0`, the same edge that zeroes the module's own state). R history then has the lifetime of the machine, which is what a stereo user hears.
-- Secondary: mirror the firmware reset calls. Existing sites `0x1c96cb` (first-order reset) and `0x1c96aa` (U/Y reset, `0xb8135a`, `R4 = R5 + R10` in the delay slot [D]) get the R twin: the stock reset on the R record (zero the histories). The proof's `_sp_reset` does this already.
-- Do not use the proof's clone-on-first-use (it copies 28 words of L state into R) in production: R must start at zero.
-- Steal and retrigger both appear as a note-on edge for the slot. [O] confirm that a steal in mode 0/1/2 of `_DAT_4059da30` produces a rising edge of bit v in `ADM_TRIG_HW`, not a held bit. The model test covers it with a forced edge; the emulator test with real steal.
+- `out_r = _gs_rbuf + 128 v` (16 x 32 floats). `_dv_rscr` and the TODO are gone. The status bit `DK_STEREO` is kept in `_dv_c + 48`.
+- After the guard of L: `CALL _gs_post`. For a mono return it is 4 instructions. For a stereo return: guard of R (finite, at most 8.0; else no stamp, no fault: the slot plays R = L for the block), the cap, R times `0x3fcade01`, the stamp.
+- Cap `_GS_MAX_STEREO` = 8: the first 8 stereo slots of a block are stamped (counter `_gs_ns` of the block `_gs_nhb`); the others play R = L. A slot that stops being stereo frees its place in the next block.
+- Stamp: `_gs_stamp[v] = heartbeat` (`_dv_diag` word 0, once per block, slot 0). It expires with the next block.
+- R stage records (first-order 28 words, U/Y 8, gain 11, case 5 53) are cleared at the note-on block and whenever the stamp of the previous block is not the previous heartbeat (a gap: a stage without a twin cleared it, the cap, a bad R). R buffers are never cleared: a stereo machine writes all 32 samples.
+- Memory (`.PKDATA`, loaded as zeros): stamps 64 B, R buffers 2048, first-order 1792, U/Y 512, gain 704, case 5 3392, case 5 R scratch 2048, counters 12: about 10.4 KiB for 16 slots.
 
-### Mono fallback [P]
+### 2.2 Twins (`_gs_fo`, `_gs_uy`, `_gs_gain`, `_gs_c5`)
 
-Families without an R twin in Phase 1: `0x1cdb56` (conditional early/late), `0xb8265b` (held sample), cases 1..4, 6 (`0xb82342`, `0xb81a16`, `0xb80f2e`, `0xb806f5`). Each of their call sites gets a `mark_bad` retarget: if the slot is stamped stereo this block, write `_gs_bad[v] = heartbeat`, then tail into the stock function. The call executes only when the family is active for the slot, so the mark equals "this slot uses a stage without a twin". The gain loop reads `_gs_bad` and plays R = L (stock path). Cost: one compare and one store per call of those families. `_gs_bad` must be checked after all stages, which holds: the gain loop is the last step. [O] the dispatch cases are reached by indirect jump from table `0x8052dbc0`; if a retarget of the call site is not possible for a case, mark at the dispatch entry (one site, reads the case number) instead.
+Rule (replay-proven in finding 96): copy the shared control words L to R before the stock L call, run the L call, run the same stock function on the R record and the R buffer. The R pass never publishes control state to L.
 
-## 3. Cost and ceiling
+| Stage | L record (stride) | Captured before L | R state kept |
+| --- | --- | --- | --- |
+| first-order | `engine + 0xe088 + 0x70 v` | words 21 to 23 | histories 24, 25 (record 112 B) |
+| U/Y | `engine + 0x12148 + 0x20 v` | words 2 to 5 | histories 6, 7 (32 B) |
+| gain `0xb80345` | `engine + 0x13508 + 0x2c v` | all 11 words | none: the record is a copy of L's pre-call state, so R follows L's gain trajectory |
+| case 5 `0xb81526` | `engine + 0x127c8 + 0xd4 v` | words 11 to 48 (38) | histories 9, 10 (212 B) |
 
-Estimate per active stereo slot per block, 32 samples [P, not measured]:
+- A wrapper starts with the stamp check; an unstamped slot costs 13 instructions and reaches the stock function with R4, R8, R12 and the stack unchanged. The stereo path needs L3, L4, L5 = 0 and a block count of 32 (else it clears the stamp and calls the stock function: R = L). MODE1 PEYEN is clear at every call site: the four SIMD sections of the engine between `0x1c9440` and `0x1c9ad2` (`0x1c9484..0x1c94b0`, `0x1c98f9..0x1c9926`, `0x1c9948..0x1c9975`, `0x1c9aaf..0x1c9ad2`) hold no call and are cleared before the next one.
+- Registers: the wrappers clobber only R0, R1, R2, I4, I12 and the flags (the C convention, `sdk/dsp/call.inc`); the callee-saved ones are kept and tested.
+- Case 5: the scratch block R12 of the L call is the firmware's (`DM(engine + 0x13808)`); the R pass writes the slot's R scratch. The blend that follows (`0x1c9c12..0x1c9c44`) runs for R inside the wrapper, reading the same ramp record `I0` (the caller's I0, which the stock call keeps) and writing nothing to it. The L blend stays the stock continuation.
+- Stages without a twin (`_gs_bad_*`): clear the stamp of the slot and jump to the stock function. `_gs_nbad` counts the stamps cleared.
 
-| Part | cycles |
-| --- | --- |
-| first-order twin | 170 |
-| U/Y twin | 240 |
-| final gain twin | 140 |
-| case 5 filter + blend twin | 550 |
-| stereo gain loop (replaces the stock slot; one extra load per sample) | +70 |
-| wrappers, capture copies | 120 |
-| Total, all four active | about 1300 |
-| Typical (first-order + final gain + gain loop) | about 500 |
+### 2.3 Hooks in the pan section
 
-Mono slots: 8 to 10 cycles for the gain hook plus 4 cycles per twin wrapper that falls through. 16 slots all stereo and all four stages active: about 21 k cycles per block. I did not verify the SHARC clock or the stock block load [O]; do not turn these numbers into a percentage before the ceiling is measured.
+- Pre-pan hook `_gs_prepan` at `0x1c9aaf` (before the metadata clear): for every stamped slot, the block ramp and the fade on its R buffer, in place, as in section 1.4. Live in: I0, M13, M5, M7, R9, R11, I6; everything else is dead (`regs` in `voice.toml`). It needs R9 = 32.
+- Pan hook `_gs_slot` at `0x1c9af6`, once per slot. Mono path (no stamp of this block, or R9 not 32): `I1 = 0; R0 = R9 - 1` (the register and the flags of the hook), the displaced `F4 = F2 * F8; modify(I1, M4)` as two instructions, jump to `0x1c9af9`. Stereo path: plane A as the stock loop, plane B from R, 31 trips of a 5-instruction loop; I3 is advanced by one word, as the stock `modify(I3, M6)` does (written `MODIFY(I3, 4)`: the assembler's `MODIFY(I3, M6)` is a raw 1-byte step, the stock instruction is the word-scaled Type 7a form); jump to `0x1c9b30`. Dead registers used: R1, R3 to R7, R10 to R15, I0, I1, I3 (a DM access takes I0 to I7).
+- The pan gains are the stock gA, gB records (`TABLE + 0x354 + 28 v`, words 0, 2 and 112, 114). A stamped slot with R = L reproduces the stock pair bit for bit (tested).
 
-Measure, in order:
+### 2.4 Reset mirrors
 
-1. Ceiling first: the stock DN2 engine's busy cycles per block with 16 sounding voices (emulator SHARC cycle counter around the engine function `0x1c8ef1`, bounded with `--seconds`) against the block budget (32 samples at 48 kHz). The free cycles per block are the cap.
-2. One paired A/B: `uv run python -m tools.devtools.coupled_ab A=BIN B=BIN --patch B=<stereo patch> -s <16-voice stereo scenario>`, mono 1.1 machine in A, the same machine as stereo in B. Read the busy-cycle delta, not wall time.
+`_gs_fo_reset` (site `0x1c96cb`) and `_gs_uy_reset` (`0x1c96aa`): zero the R histories (words 24 to 27, words 6 and 7) of the slot whose L record is R4, whatever the stamp says, then the stock reset. A pointer that is not the start of a slot's record only reaches the stock reset.
 
-Cap [P]: `_GS_MAX_STEREO` = 8 stereo slots per block to start (the adapter stamps only the first 8 stereo slots it renders; the rest play R = L). Raise it from the ceiling number. No cap is needed for memory in Phase 1 (11 KiB for 16).
+## 3. Cost (instruction counts on the model, 1 instruction = 1 cycle, no stalls) and ceiling
+
+Measured with the stock image on the model rig (`tests/support/dn2_stereo_rig.py`). Per call of a stereo slot, stock-plus-R pass against the stock call alone (the wrapper is included):
+
+| Part | Spec estimate | Measured: stock call | Measured: twin call | Twin minus stock (R pass + wrapper) |
+| --- | --- | --- | --- | --- |
+| first-order | 170 | 657 | 1386 | 729 |
+| U/Y (per site; early or late) | 240 | 204 | 480 | 276 |
+| gain `0xb80345` | 140 | 237 | 616 | 379 |
+| case 5 + blend | 550 | 489 | 1553 | 1064 |
+| block ramp (pre-pan, per stamped slot) | | | | 128 (+ 128 with the fade) |
+| pan hook: stereo slot against a mono slot | +70 | | | +15 (the stereo loop is 5 instructions per sample) |
+| adapter `_gs_post` (guard, scale, stamp) | 120 | | | about 230; +162 at a note-on block (record clear) |
+
+- Unstamped slot: 13 instructions per wrapper call, 14 for the pan hook and about 12 for the pre-pan loop: 423 instructions for the 16 slots of a block with no stereo slot (6.3 % of the stock block `0x1c99de..0x1c9b33`, 6673 instructions; 0.06 % of the 666,667 instructions of a DSP block at 1 GHz).
+- A stereo slot with all four stages: 729 + 276 + 379 + 1064 + 15 + 230 about 2700 instructions (spec: 1300). Typical (first-order, gain, ramp, pan, adapter): about 1350 (spec: 500). The first spec estimates were low because the stock stages are longer than assumed (first-order is 657 instructions, 20 per sample).
+- 8 stereo slots with all stages: about 21.6 k instructions per block, 3.2 % of a block's 666,667 (stalls would add 15 to 30 %). 16 slots would be 6.5 %. The stock block runs at about 50 % (finding 06, "Real cycles per DSP block"). The cap of 8 is not needed for the budget; it stays as the safety valve until the A/B.
+- Ceiling and A/B on the emulator are still to do (section 8).
 
 ## 4. What breaks, and the guards
 
-- **Sends, FX:** they read A/B after the loop (`0x1c1738`, `0x1c1f1e`) and already take two planes. Guard: a stereo slot writes both planes in full (32 samples); the test checks send levels with L != R.
-- **Steal and retrigger:** section 2. Guard: R records are per physical slot, never keyed by track; no history sharing (test below).
+- **Sends, FX:** they read A/B after the loop and already take two planes. A stereo slot writes both planes in full; tested with L != R.
+- **Steal and retrigger:** section 1.2. R records are per physical slot, never keyed by track; no history sharing (tested: records of other slots are untouched).
 - **Polyphony:** unchanged, 16 mono slots; a stereo voice uses one slot.
-- **Stage state shared by two paths:** the R pass must not run on a record whose L pass skipped because of the stage's own conditional; the twin sits inside the same call site, so it runs only when L runs.
-- **Exceptional floats:** the adapter's block guard (finite, at most 8.0) must check R as well; a bad R block clears the stamp and the slot plays R = L for that block.
-- **SIMD or linked-frame entry:** the proof's wrappers fall back to the stock call when SIMD is on or L3/L4/L5 are nonzero; keep that, counted.
-- **Registers and flags:** gain wrapper preserves ASTAT; R3/R5..R7/R10/R11/R13/I8..I11/I14/I15 are dead in the loop (epilogue reloads them [D]), so the wrapper needs no spill.
-- **32 KiB ring (`0xb806f5`, cases 4 and 6, also in the case-5 continuation call `0x1c9c4f`):** Phase 1 does not twin it. It is a `mark_bad` family, so a slot using it plays R = L. A copied record would share the ring through word 16 (`0x804ad790 + 0x8000 v`); never copy that word.
-- **Other callers of the stock functions:** retarget only the listed call sites, not the function entries.
-- **Module and DT2:** nothing changes on DT2; `dsp-voice-dn2.s` is the only existing file with DN2 stereo behaviour.
+- **Stage state shared by two paths:** the R pass runs inside the call site of its stage, so it runs only when L runs.
+- **Exceptional floats:** a bad R block (not finite, over 8.0) gives no stamp: R = L for that block, no fault.
+- **Unsupported context:** L3, L4 or L5 nonzero, or a block count other than 32, clears the stamp and calls the stock function (R = L).
+- **Registers and flags:** the pan hook uses only registers the epilogue reloads (section 2.3); the mono path restores R0 and the flags as at the hook.
+- **32 KiB ring (`0xb806f5`, cases 4 and 6):** not twinned; a `_gs_bad_ring` family, the slot plays R = L. A copied record would share the ring through word 16; never copy that word.
+- **Other callers of the stock functions:** only the sites of section 1.5 are retargeted.
+- **Module and DT2:** nothing changes on DT2 (the new ops and claims are `devices = ["dn2"]`); `dsp-voice-dn2.s` and `dsp-voice-dn2-stereo.s` are the only DN2 files with stereo behaviour.
+- **`core/dsp-stereo-proof`:** stays the private observer. It claims the first-order and U/Y sites too, so patchkit refuses both modules together (tested).
 
-## 5. Files, tests
+## 5. Files and tests
 
-Change / add:
+- `modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dn2.s`, `dsp-voice-dn2-stereo.s` (new): one object, `module.toml` lists both sources.
+- `devices/fw/dsp/voice.toml`, `modules/core/adapters/dsp-voice/module.toml`, `devices/ports/dn2-1.12.toml`, `modules/core/fw/reference.json`, `build/dsp-voice-dn2-dsp.dko.json`. The DN2 1.11 port was not regenerated: it was already stale for other anchors.
+- `tests/support/dn2_stereo_rig.py` (stock image plus the stereo object, patch overlays, synthetic engine memory), `tests/support/machine_rig.py` (the adapter now has two sources; R buffer in the write set).
 
-- `modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dn2.s`: replace `_dv_rscr` by `_gs_rbuf` (16 x 32 floats); set `out_r = _gs_rbuf + 128 v` (bytes); after the module returns, if status has `DK_STEREO` write `_gs_stamp[v]` and run the guard on R; on note-on clear the R records and the R buffer; remove the TODO at line 469. Slot stamping, the cap and the heartbeat read are here.
-- New object `modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dn2-stereo.s` (or a role-`adapter` module `core/dsp-stereo` that `requires` dsp-voice): `_gs_slot`, the four twins, `mark_bad` wrappers, reset mirrors. Decision below.
-- `devices/fw/dsp/voice.toml`: new `site`/`hook` entries for the gain slot (`0xC05`, `0xC08`), final gain call, case 5 call, and the `mark_bad` sites; reuse the existing first-order/U-Y/reset ones. All rules by `reloc_hash` of `09fe195e...` plus offset; add the entries for the DT2 only if the DT2 path ever needs them (it does not).
-- `modules/core/adapters/dsp-voice/module.toml`: objects, `[[op]]` hooks, `[[claim]]` for each site (as in `dsp-stereo-proof/module.toml`).
-- `core/dsp-stereo-proof`: keep as the private observer (identity/polarity proof, diagnostics). Its states and wrappers are the starting code for the first-order and U/Y twins. Production code must not install both: the proof module claims the same call sites, so the claims already forbid it.
+Model tests:
 
-Model tests (shadow-replay style, `tests/patchkit/`, fixtures in `tests/fixtures/dsp/`):
-
-1. `test_dsp_stereo_gain_slot.py`: the patched gain loop on the image bytes. Mono slots: A/B planes bit-identical to the stock loop for random inputs and gains. Stereo slot with R = L: bit-identical to stock. Stereo with R != L: `A == gA*L` and `B == gB*R` per sample over the ramp, flags preserved (the `JUMP IF EQ` at `0x1c9b07` still sees the old AZ), outer loop count intact for all 16 slots.
-2. Extend `test_dsp_stereo_shadow_replay.py` with the ordered chain first-order -> U/Y -> final gain -> case-5 blend using the production wrappers: two isolated mono references (L and R inputs), three changing-control blocks, stores bounded to declared state. Negative controls: capture after L, shared record, clone-on-first-use.
-3. Lifecycle model: reset mirror and the note-on clear zero R histories; a retrigger mid-tail gives block-zero output again.
-4. `mark_bad`: slot using a non-twinned family gets `_gs_bad`, plays R = L.
-
-One DN2 emulator test (`tests/regression/modules/`, TypeScript, ceiling-bounded run via the scenario runner; fixture machine of `tests/fixtures/dsp/stereo-machine.s`, as the DT2 `test_dsp_voice_stereo.py` does):
-
-- Machine writes distinct L and R (for example a tone in L and a different tone in R), first-order filter and the final gain stage active on the track, pan at the extremes and the centre. Capture the master/send planes. Assert: L != R through the filter and pan; separation (hard-left pan: R plane energy near the stock gA/gB ratio; the gB path carries only the R tone); mono machine unchanged (golden hash).
-- Two voices on different slots with different R tones, then retrigger one slot and steal the other: each slot's R history restarts from zero, the other slot's output is unchanged (no history sharing).
-- Phase 1 fallback: one voice with a non-twinned stage active plays R = L (count `_gs_bad`).
-
-Gate: `mise run module:check core/dsp-voice`, `mise run test:host` for nothing; the owner's checks only. Smoke matrix at merge (existing rule). SHARC golden hashes are unaffected (no core change). Pathcheck for the new doc references.
+1. `tests/patchkit/test_dsp_stereo_gain_slot.py`: the stock block `0x1c99de..0x1c9b33` with both hooks against the stock block on L and on R: mono slots bit-identical, stereo slots A = stock(L).A and B = stock(R).B, with block ramp and fade (including the flags per slot), loop counts, flags (block of one sample), live-out registers.
+2. `tests/patchkit/test_dsp_stereo_twins.py`: each twin against two isolated mono channels over 4 to 9 blocks with changing controls, callee-saved registers, unstamped slot is the stock call; negative controls (shared history, controls copied after the L call).
+3. `tests/patchkit/test_dsp_stereo_lifecycle.py`: reset mirrors (real stock resets), the six `_gs_bad_*` wrappers, unsupported contexts.
+4. `tests/patchkit/test_dsp_voice_stereo_dn2.py`: the adapter on the machine rig: stamp, R scaling, bad R, note-on clear, gap, retrigger, cap of 8, mono unchanged, the proof module cannot be installed with it.
 
 ## 6. Phase 2 (outline)
 
-- Twin the remaining families one at a time, each with a replay test first: `0x1cdb56` (two control groups, no audio history), `0xb8265b` (held samples, shared phase), `0xb82342`, `0xb81a16`, `0xb80f2e` (shared preparation block writes {17,18,19} + 7k).
-- Ring stage `0xb806f5`: R needs its own 32 KiB ring and a constructor call (`0xb80575`); 16 x 32 KiB does not fit, so cap the number of stereo slots using it (for example 2) from a pool; allocator and release belong to the adapter; the ring-fixture proof exists.
-- Raise or remove the mono fallback and the stereo cap from the measured ceiling.
+- Twin the remaining families one at a time, each with a replay test first: `0x1cdb56` (two control groups, no audio history; its x16 and x1/16 scalings `0x1c98f9..0x1c9975` run on R too), `0xb8265b` (held samples, shared phase), `0xb82342`, `0xb81a16`, `0xb80f2e` (shared preparation block writes {17,18,19} + 7k).
+- Ring stage `0xb806f5`: R needs its own 32 KiB ring and a constructor call (`0xb80575`); 16 x 32 KiB does not fit, so cap the number of stereo slots using it (for example 2) from a pool.
+- Mirror the case 5 reset (`0xb818c7` at `0x1c9673`) and the other stage resets.
+- Raise or remove the cap from the measured ceiling.
 - Optional: a patch of the pair gate / balance mapping if the DN2 pan differs from gate-1 on DT2.
 
-## 7. Open questions for Em (recommendation first)
+## 7. Decisions of Em (2026-11-01)
 
-1. Where does the code live? Recommend: put the twins in the `dsp-voice` DN2 object set (one adapter, one claim owner), keep `dsp-stereo-proof` as a private observer. Alternative: a new `core/dsp-stereo` module that requires dsp-voice. Recommend against, because the gain hook and the stamp are tied to the adapter.
-2. Cap of 8 stereo slots at first: recommend yes, then lift after the A/B.
-3. Steal edge semantics (section 2, [O]): recommend resolving statically from the ColdFire allocator before coding the reset; if a steal holds the trigger bit, hook the mirror reset.
-4. Per-slot gain hook at `0x1c9af6` (my choice) versus the per-sample patch you suggested at `0x1c9af5..0x1c9aff`: recommend per-slot; the instruction at `0x1c9af6` is inside your range. It needs the loop-branch restriction check.
-5. Is "R = L whenever a non-twinned stage is active" acceptable for the first release? Recommend yes: it is exactly today's sound, and Phase 2 widens the set.
-6. Use an A/B at the end only, or also a pre-build static cycle count of each twin? Recommend static count first (cheap), A/B once.
+1. The twins live in the `dsp-voice` DN2 object set (one adapter, one claim owner); `dsp-stereo-proof` stays a private observer.
+2. Cap of 8 stereo slots at first, lifted after the A/B.
+3. Steal edge resolved statically before the reset code (section 1.2).
+4. Per-slot gain hook at `0x1c9af6` (section 1.1).
+5. R = L whenever a non-twinned stage is active.
+6. Static cycle count first (section 3), one A/B later.
 
-Estimate (agent time): gain hook and model test 3 to 4 h; first-order, U/Y, final gain twins with production wrappers and tests 4 to 6 h; case 5 + blend 3 h; mark_bad sites and dispatch audit 2 to 3 h; emulator test and A/B 3 h. About 2 days in total. Outcome risk: medium. Main risks: the loop-branch restriction at `0x1c9af6` (low, has an alternative), the steal/retrigger edge (medium), unlocated constant-gain instruction and exact dispatch call sites (low), cycle budget unknown until the ceiling is measured (medium; the cap is the safety valve). Confidence that mono is unaffected: high (same bytes, flags preserved). Payoff: true stereo for every machine on DN2 for the stages listed, with polyphony unchanged.
+## 8. What the DN2 emulator test must check after integration
+
+The model has the stock image's engine bytes but not the real engine state, the allocator or the audio path.
+
+- The patched image boots and plays a stock DN2 voice with the hooks installed: the audio is bit-identical to the unpatched image (golden hash), 16 voices included.
+- A stereo machine on a track (`tests/fixtures/dsp/stereo-machine.s`): a tone in L and another in R with the first-order filter active and the pan at the extremes and the centre. L != R in the master and send planes; hard-left: plane B carries the R tone only.
+- Two voices on different slots with different R tones; retrigger one slot and steal the other (a 17th note): each slot's R history restarts at its note-on block, the other slot's output is unchanged. This confirms section 1.2 on the real allocator.
+- One voice with a non-twinned stage active (filter types that dispatch to cases 1 to 4 or 6, the shaper or the held sample) plays R = L: `_gs_nbad` counts it, the planes equal the mono result.
+- The fade: end a stereo voice (release) and check that R fades with L in the last block (no click). The block ramp: a level change on a held stereo note moves R and L together.
+- The busy-cycle ceiling with 16 sounding voices, and one paired A/B (`tools/devtools/coupled_ab.py`) with 8 stereo voices: read the busy-cycle delta; compare with the 21.6 k instructions per block of section 3.
+- The pan hook on the real core: all 16 slots are processed with the hook (loop count), no sequencer stop.
+- Hardware only after all of the above.
