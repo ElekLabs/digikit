@@ -219,9 +219,10 @@ SELECT writes the selection record and loads nothing; RESTART applies it at the 
 | D8 | An experimental tier for adapters, with merge rules (section 7.3). | Contributions that need new hooks (PR #209) can merge without changing the default images. |
 | D9 | The migration path: experimental adapter → `raw` `.dkm` → contract module. The category stays the same in every step. | Users submit now; we migrate as the SDK grows. |
 | D10 | SHARC assembly is a first-class module language. A C compiler for SHARC+ is measured later. | All DSP code is assembly today; it is the fastest path we have. |
-| D11 | Capability = device-neutral logic (runtime crate, `src/cap/*`) plus an adapter per firmware where the firmware needs glue. | Keeps device code in adapters and device values in TOML. |
+| D11 | Capability = device-neutral logic (runtime crate, `src/cap/*`) plus an adapter per firmware where the firmware needs glue. "Adapter" is the right name. Adapters stay separate modules, one per firmware plug-in point. | Keeps device code in adapters and device values in TOML. |
+| D11a | No new device-specific layer. The adapters with their per-device objects, the device profiles (`devices/*.toml`) and the ports are that layer. | The layer exists; it needs one source of values, not another layer. |
 | D12 | The runtime core keeps: load and unload, record dispatch, arena, boot, selection, safe mode, crash and fault handling, log, settings, store reader and card gate, DSP link transport, basic stats (CAPACITY, MODULES, what fits). | These are what loading modules and recovering from faults need. Settings stays because the crash handler stores its fault record there. |
-| D13 | Capabilities are split **inside the runtime crate** (option A), behind one registration table with the **shape of a C interface** (option 2). A capability becomes its own object only for a reason; the first is the store upload (#240). | No memory or speed cost, no new ABI to version, little churn. A later move to its own object is a build change (section 8.5). |
+| D13 | Capabilities are split **inside the runtime crate** (option A), behind one registration table with the **shape of a C interface** (option 2). A capability becomes its own object only for a reason; the first is the store upload (#240). | No memory or speed cost, no new ABI to version, little churn. A capability change touches only its folder and one line of the table. A later move to its own object is a build change (sections 8.3 and 8.7). |
 | D14 | The DSP link transport owns one claim flag; capabilities claim, send and release. | Removes the cross-checks of `busy()` between capabilities. |
 | D15 | `requires` is a code dependency. `[patch_sets]` decide what an image holds and name `core/runtime` themselves. | Today `requires` points the wrong way for a layer check (3.2). |
 | D16 | Device values come only from TOML through `patchkit gen`. Per-device code only where the firmware differs. One source per adapter where the devices differ only in values. | One source of truth per value; nothing to fix on one device and forget on the other. |
@@ -391,7 +392,7 @@ does not change. The more a raw module uses the SDK headers from the start, the 
 
 An experimental adapter:
 
-- has `stability = "experimental"` in `[module]`;
+- has `stability = "experimental"` in `[module]` (a field, not a folder, so a promotion moves no files);
 - has its own patch set and is never in the `emulator` or `device` set;
 - takes device values only through `patchkit gen`, and has per-device code only where the firmware differs (rules 7 and 8);
 - has its own tests, and its README names the capability it prototypes;
@@ -413,7 +414,8 @@ Its author built them into the firmware because of memory and knob limits, and o
    limits step 4), track sample, stereo voice, chords.
 4. TB303 then loads as a `raw` `.dkm` on DT2, then moves to the machine contract. Para and ParaWT follow.
 
-The author should rebase after step 1, so their modules are migrated once.
+The author should rebase after step 1, so their modules are migrated once. The paraphonic machines run out of DSP time today (the
+author's comment on the PR); we help measure them once they are split out.
 
 ## 8. Runtime: core and capabilities
 
@@ -534,6 +536,11 @@ dnfw's machines are digikit modules ([finding 73](../findings/73-dnfw-coexistenc
 store but cannot receive files, because the upload handler is part of the runtime. Users must flash a runtime image, upload, and flash the
 dnfw image again.
 
+- dnfw runs on DN2 1.11. `core/runtime` targets `dn2-1.11`, and the MIDI anchors exist there (`devices/ports/dn2-1.11.toml`, `rx` and
+  `tx_inflight_lit`).
+- dnfw's fixed RAM chunks are already kept out of `cf.expansion` on 1.11: 17 `excludes` in `devices/ports/dn2-1.11.toml`.
+- Both projects are AGPL, so linking our object into a dnfw image raises no licence question.
+
 ### 9.2 The split
 
 `dkrt_midi_rx` (`upload.rs:1120`) matches `F0 7D 64 6B`, unpacks the body and looks the command up in one 17-entry table
@@ -549,8 +556,11 @@ The object also holds the store table code (`dkrt_sdk::store`, already `no_std` 
 finding 46: writes only inside the store range; the first write to a blank card claims it; a card whose area is neither the store's nor
 blank is read-only.
 
-INFO gets a capability bit for the store (there is none today; bits 0-11 are LOG to SETTINGS). Its flags byte and the runtime facts it
-reports come from the host image.
+INFO today (`upload.rs:406-441`) returns 41 bytes: version, free space, maximum chunk, a flags byte (safe boot, upload open, card
+read-only, debug sink, crash seen), the log range, the packed runtime version, a u32 capability field at offset 25 and the 8-byte image
+id. The capability bits are 0 LOG, 1 PEEK, 2 LOGCFG, 3 SELECT, 4 RESTART, 5 MODULES, 6 CAPACITY, 7 READ, 8 VERIFY, 9 SERVICE_CMDS,
+10 FOLDERS, 11 SETTINGS (`sdk/sdk.toml`); LOG, PEEK and LOGCFG are set only while a log sink is set. There is no bit for the store itself:
+INFO gets one. The flags byte and the runtime facts come from the host image (9.3).
 
 ### 9.3 What the host image gives the object
 
@@ -664,6 +674,9 @@ Method:
 3. A new hook (an FX, a parameter page, a mod page) is one more site through the same classification and comparison. The install
    mechanism does not change per hook.
 
+End state if every adapter site passes: the image holds only the runtime core and the installer (`core/expansion`); adapters are
+per-firmware files that the runtime installs at boot, only for the capabilities the selected modules use.
+
 Install at boot only, never while running: the module set changes only at boot (3.7). With hot reload later, a module loaded mid-session
 may need a capability whose hooks are not installed; then either all hooks of the image's capabilities install at boot, or hooks install
 live. Neither changes the module contract.
@@ -708,8 +721,8 @@ None of them changes D1 to D24. They decide how much of the adapter layer can lo
 
 ### 13.1 Tools considered
 
-- `@nx/enforce-module-boundaries`: TypeScript imports and `package.json` only. Works with ESLint or Oxlint
-  (https://nx.dev/docs/features/enforce-module-boundaries).
+- `@nx/enforce-module-boundaries`: TypeScript imports and `package.json` only. The docs say it works with ESLint or Oxlint
+  (https://nx.dev/docs/features/enforce-module-boundaries); verify with our Oxlint setup in step 4.
 - `@nx/conformance` `enforce-project-boundaries`: checks every graph edge in any language, but needs a paid Nx Enterprise licence
   (https://nx.dev/docs/reference/conformance/overview). Not used.
 - Nx language plugins: community plugins for Rust (`@monodon/rust`, tried and removed in the Nx pilot; `@eddacraft/nxrust`) and Python
@@ -734,6 +747,8 @@ None of them changes D1 to D24. They decide how much of the adapter layer can lo
   self-contained rule, `<dk/ui.h>` imports.
 - **layercheck adds:** the absolute-address check on content objects (7.2); no device-named include in a source (rule 7); capability
   folders do not use core internals (rule 3); `requires` as code dependencies (rule 6).
+- **The gap:** a number typed into a source instead of taken from TOML cannot be found reliably. Review and the AGENTS.md rule cover it;
+  one source per adapter (10.2) leaves fewer places for it.
 - **Generated files:** an AGENTS.md rule (never edit `build/gen/`; change the TOML and run `mise run gen:modules`); `test:changed` runs
   `gen-check` when a generated file or its source changes; the gate keeps `gen-check`.
 
@@ -749,7 +764,24 @@ None of them changes D1 to D24. They decide how much of the adapter layer can lo
 
 Order: #240 and #209 first, and the contract changes once.
 
-- [ ] **0. This plan, and replies to #240 and #209.** Static.
+Why this order:
+
+- Step 0 lets both contributors start their side now.
+- Step 1 comes before both contributor tracks, so their modules land on the final manifest and are migrated once.
+- Step 2 is the first use of the capability shape and unblocks uploads for dnfw users.
+- Step 3 gives PR #209 a home; its layercheck rules go in before outside PRs land in volume.
+- Step 4 must exist before outside PRs land in volume.
+- Step 5 moves PR #209 along the migration path, one capability at a time.
+- Steps 6 and 7 are internal; neither PR needs them (except the store-upload piece, done in step 2).
+- Step 8 decides how much of the adapter layer can load at boot.
+
+The contract stays stable: only step 1 breaks it, once, while the runtime is 0.x. Step 2 adds a protocol bit. Step 5 only adds (minors).
+Steps 3, 4, 6 and 7 change no contract; 6 is checked against today's behaviour (regression suites, sizes), 3 and 7 by byte-identical
+default images and objects.
+
+- [ ] **0. This plan, and replies to #240 and #209.** Static. The #240 reply agrees to the split with the line of 9.2, answers its three
+      questions (yes; we build and commit the object; a 5th `[[object]]` of `core/runtime`) and asks how dnfw links a `.dko`. The #209
+      reply explains category, contract, `raw` and experimental adapters, and asks for the three-part split and a rebase after step 1.
 - [ ] **1. Contract change, once.** After the sampler branch is merged. About 1 day. Contract: one change.
   - [ ] Check for a free byte in the `.dkm` header for the category, or bump the format version.
   - [ ] `category` enum and `contract` field in patchkit (`module.rs`); `framework` deleted; the packer checks the contract (`dkm.rs`).
@@ -764,6 +796,7 @@ Order: #240 and #209 first, and the contract changes once.
   - [ ] The host interface of 9.3, with a version.
   - [ ] The 5th `[[object]]` of `core/runtime`; build and commit the object.
   - [ ] Decide: own copy of the store reader and card gate, or the core's.
+  - [ ] Decide where the upload test knobs live (`DKRT_UPLOAD_CUT`, `DKRT_UPLOAD_TEAR`, `DKRT_STORE_CAP`, `upload.rs:94` and `:310-343`).
   - Proof: the upload regression tests unchanged; an emulator scenario with only the object (no runtime); dnfw's power-cut scenario when
     they send it.
 - [ ] **3. Experimental tier.** About 1 day plus review. No contract change.
@@ -800,6 +833,8 @@ Later, not ordered: the module settings API (12).
 - **[O]** Whether `status` always equals the `[targets]` values (step 1).
 - **[O]** The store-upload object: its own copy of the store reader and card gate, or the core's through the table (step 2).
 - **[O]** How dnfw links a `.dko` (reply to #240).
+- **[O]** A power cut during the very first sector write on a blank card (the claim of finding 46; [finding 46](../findings/46-digikit-debug.md),
+  "Card safety"). The object inherits this risk (step 2).
 - **[O]** `{dev}` in `[[object]] path`, and a per-device include path in the build (step 7).
 - **[O]** The ordering rules hidden in today's `busy()` checks (step 6).
 - **[O]** Hooks at boot: whether the MMU is enabled; whether the DSP boot stream is sent again (step 8).
