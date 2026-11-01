@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import pathlib
 import subprocess
 
 import pytest
@@ -341,3 +342,273 @@ def test_fallback_configuration_reports_change_without_invalidating_profile(
         "fast regions changed since training; the profile still applies"
         in capsys.readouterr().out
     )
+
+
+# --- both: the two-core build -------------------------------------------------------
+
+
+@pytest.fixture
+def both(tree, monkeypatch):
+    """The tree with a second generated core and a manifest trained for device `both`."""
+    (tree / "gen2").mkdir()
+    (tree / "gen2/core.rs").write_text("dt2 core")
+    state_both = tree / "state-both"
+    state_both.mkdir()
+    monkeypatch.setattr(
+        native_pgo,
+        "state_dir",
+        lambda triple=None, device="dn2": (
+            state_both if device == "both" else tree / "state"
+        ),
+    )
+    hasher = native_pgo.FileHasher(state_both / "hash-cache.json")
+    components, _ = native_pgo.compute_components(
+        PACKAGES, tree / "gen", hasher, gen2=tree / "gen2"
+    )
+    (state_both / "manifest.json").write_text(
+        json.dumps(
+            {
+                "components": components,
+                "packages": PACKAGES,
+                "desktop_sha256": native_pgo.desktop_digest(hasher),
+                "profdata": {"path": str(tree / "state" / "p.profdata")},
+            }
+        )
+    )
+    return tree
+
+
+def both_state(tree):
+    return native_pgo.check_state(tree / "gen", "", "", "both", tree / "gen2")
+
+
+def test_both_key_covers_the_second_core_the_feature_and_the_slot_order(tree):
+    hasher = native_pgo.FileHasher(tree / "state" / "hash-cache.json")
+    (tree / "gen2").mkdir()
+    (tree / "gen2/core.rs").write_text("dt2 core")
+    one, _ = native_pgo.compute_components(PACKAGES, tree / "gen", hasher)
+    two, _ = native_pgo.compute_components(
+        PACKAGES, tree / "gen", hasher, gen2=tree / "gen2"
+    )
+    assert "generated2" not in one
+    assert two["generated2"] != two["generated"]
+    assert two["features"] == "second-core"
+    assert two["workload"] == "both-v1"
+    assert two["slots"] == "generated=dn2,generated2=dt2"
+    assert native_pgo.key_of(one) != native_pgo.key_of(two)
+
+
+def test_both_profile_is_current_until_either_core_changes(both):
+    assert both_state(both)[:2] == ("ok", str(both / "state" / "p.profdata"))
+    (both / "gen2/core.rs").write_text("new dt2 core")
+    assert both_state(both)[:2] == ("stale", "changed: generated2")
+    (both / "gen2/core.rs").write_text("dt2 core")
+    (both / "gen/core.rs").write_text("new dn2 core")
+    assert both_state(both)[:2] == ("stale", "changed: generated")
+
+
+def test_both_profile_is_not_a_single_core_profile(both):
+    # The single-core manifest has no second core: the two keys never match.
+    assert native_pgo.check_state(both / "gen", "", "", "dn2")[0] == "ok"
+    status, detail, _ = native_pgo.check_state(
+        both / "gen", "", "", "both", both / "gen2"
+    )
+    assert status == "ok"
+    (both / "state-both" / "manifest.json").write_text(
+        (both / "state" / "manifest.json").read_text()
+    )
+    changed = both_state(both)[1]
+    assert "generated2" in changed and "features" in changed
+
+
+def test_both_package_list_is_read_with_the_second_core_feature(monkeypatch):
+    seen = []
+
+    def run(command, **_kwargs):
+        seen.append(command)
+        return subprocess.CompletedProcess(command, 0, json.dumps({"packages": []}), "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    native_pgo.local_package_dirs("second-core")
+    assert seen[0][seen[0].index("--features") + 1] == "second-core"
+    native_pgo.local_package_dirs()
+    assert seen[1][seen[1].index("--features") + 1] == "coupled-audio"
+
+
+def test_both_build_never_lands_in_the_single_core_pgo_use_dir(tmp_path, monkeypatch):
+    from tools.emulator import native_target
+
+    gens = {}
+    for name in ("dn2", "dt2"):
+        gens[name] = tmp_path / name
+        gens[name].mkdir()
+        (gens[name] / "image.rs").write_text("")
+    monkeypatch.setattr(native_target, "TARGET_ROOT", tmp_path / "target")
+    monkeypatch.setattr(native_pgo, "toolchain_rustc", lambda: "/fake/rustc")
+    single = {"SHARC_GEN_DIR": str(gens["dn2"])}
+    two = {**single, "SHARC_GEN_DIR_2": str(gens["dt2"])}
+    one_dir = native_pgo.plan_for("p", single).cargo_args[3]
+    two_dir = native_pgo.plan_for("p", two).cargo_args[3]
+    assert two_dir != one_dir
+    assert two_dir.endswith("/pgo-use")
+    assert pathlib.Path(two_dir).parent.name.count("+") == 1
+    assert str(native_pgo.pgo_binary(two)).startswith(two_dir)
+    assert not str(native_pgo.pgo_binary(single)).startswith(two_dir)
+
+
+def test_second_engine_crates_are_guarded():
+    text = "_RNvCsAAA111_14sharc_native_26engine3run\n_RNvCsBBB222_12sharc_native3run\n_RNvCsCCC333_11sharc_gen_24core\n"
+    assert native_pgo.crates_in(text) == {
+        "sharc_native_2": {"AAA111"},
+        "sharc_native": {"BBB222"},
+        "sharc_gen_2": {"CCC333"},
+    }
+    profile = {"sharc_native_2": {"A"}, "sharc_native": {"B"}}
+    binary = {"sharc_native_2": {"Z"}, "sharc_native": {"B"}}
+    assert native_pgo.crate_mismatches(profile, binary) == [
+        "MISMATCH crate sharc_native_2: profile ['A'] binary ['Z']"
+    ]
+
+
+def test_both_verify_ignores_the_boot_crate_but_not_the_second_engine(monkeypatch):
+    profile = {"elektron_native_boot": {"B"}, "sharc_native_2": {"A"}}
+    binary = {"elektron_native_boot": {"C"}, "sharc_native_2": {"A"}}
+    monkeypatch.setattr(native_pgo, "profile_crates", lambda _p: profile)
+    monkeypatch.setattr(native_pgo, "binary_crates", lambda _b: binary)
+    assert native_pgo.verify_binary("bin", "p", "dn2")
+    assert native_pgo.verify_binary("bin", "p", "both") == []
+    binary["sharc_native_2"] = {"Z"}
+    assert native_pgo.verify_binary("bin", "p", "both")
+
+
+def test_each_device_sets_the_region_lists_of_its_own_engine_slot():
+    env = {
+        "SHARC_FAST_REGIONS": "0x1",
+        "SHARC_BLOCKTRANS": "0x2",
+        "NOTE_EVENTS": "trig",
+    }
+    assert digi_env.slot_env("dn2", env) == env
+    assert digi_env.slot_env("dt2", env) == {
+        "SHARC_FAST_REGIONS_2": "0x1",
+        "SHARC_BLOCKTRANS_2": "0x2",
+        "NOTE_EVENTS": "trig",
+    }
+
+
+def run_one_item(tmp_path, monkeypatch, device, gate_ok=True):
+    """run_items with a fake coupled-run; returns the environment and argv it was given."""
+    seen = {}
+
+    def run(argv, env, **_kwargs):
+        seen["argv"], seen["env"] = argv, env
+        report = pathlib.Path(argv[argv.index("--out") + 1])
+        report.write_text(
+            json.dumps({"scenarios": [{"name": "s", "gates": {"ok": gate_ok}}]})
+        )
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(
+        digi_env,
+        "fast_env",
+        lambda environ=None, *, syx=None: {"SHARC_FAST_REGIONS": "0xaa"},
+    )
+    item = native_pgo.WorkItem(
+        f"{device}-x",
+        device,
+        "tests/scenarios/dn2.json",
+        ("s",),
+        ("--syx", "fw"),
+        tmp_path / "fw",
+        5.0,
+    )
+    native_pgo.run_items(tmp_path / "coupled-run", tmp_path, {}, [item], slots=True)
+    return seen
+
+
+def test_training_runs_one_process_with_the_tiers_of_its_slot(tmp_path, monkeypatch):
+    monkeypatch.delenv("SHARC_FAST_REGIONS", raising=False)
+    monkeypatch.delenv("SHARC_FAST_REGIONS_2", raising=False)
+    dn2 = run_one_item(tmp_path, monkeypatch, "dn2")
+    assert dn2["env"]["SHARC_FAST_REGIONS"] == "0xaa"
+    assert "SHARC_FAST_REGIONS_2" not in dn2["env"]
+    assert dn2["argv"][dn2["argv"].index("--seconds") + 1] == "5.0"
+    dt2 = run_one_item(tmp_path, monkeypatch, "dt2")
+    assert dt2["env"]["SHARC_FAST_REGIONS_2"] == "0xaa"
+    assert "SHARC_FAST_REGIONS" not in dt2["env"]
+
+
+def test_a_failed_gate_aborts_the_training(tmp_path, monkeypatch):
+    with pytest.raises(SystemExit, match="gate failed"):
+        run_one_item(tmp_path, monkeypatch, "dt2", gate_ok=False)
+
+
+# --- runtime fixtures ---------------------------------------------------------------
+
+
+def write_fixture(directory, card=True):
+    directory.mkdir(parents=True)
+    names = {
+        "firmware": "firmware.syx",
+        "dsp_image": "dsp-image.bin",
+        "dsp_state": "dsp-state.snap.dsp",
+        "cf_snapshot": "cf-snapshot.snap",
+        "card": "card.img" if card else None,
+    }
+    sums = {}
+    for key, name in names.items():
+        if name:
+            (directory / name).write_bytes(key.encode())
+            sums[key] = hashlib.sha256(key.encode()).hexdigest()
+        else:
+            sums[key] = None
+    (directory / "provenance.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "device": "dt2",
+                "firmware_version": "1.17",
+                "patch_set": "emulator",
+                "files": names,
+                "sha256": sums,
+                "source_head": "abc123",
+                "created": "2026-11-01T00:00:00Z",
+            }
+        )
+    )
+
+
+def test_fixture_is_checked_against_its_provenance_and_recorded(tmp_path):
+    write_fixture(tmp_path / "dt2")
+    fixture = native_pgo.load_fixture("dt2", tmp_path / "dt2")
+    args = fixture.input_args()
+    assert args[args.index("--card-image") + 1] == str(tmp_path / "dt2" / "card.img")
+    record = fixture.record()
+    assert record["source_head"] == "abc123"
+    assert record["sha256"]["dsp_image"] == hashlib.sha256(b"dsp_image").hexdigest()
+
+
+def test_fixture_without_a_card_runs_without_card_image(tmp_path):
+    write_fixture(tmp_path / "dt2", card=False)
+    assert (
+        "--card-image"
+        not in native_pgo.load_fixture("dt2", tmp_path / "dt2").input_args()
+    )
+
+
+def test_a_changed_fixture_file_is_refused_with_the_make_command(tmp_path):
+    write_fixture(tmp_path / "dt2")
+    (tmp_path / "dt2" / "dsp-image.bin").write_bytes(b"other")
+    with pytest.raises(SystemExit, match=r"perf:fixture -- --device dt2"):
+        native_pgo.load_fixture("dt2", tmp_path / "dt2")
+
+
+def test_a_missing_fixture_names_the_make_command(tmp_path):
+    with pytest.raises(SystemExit, match=r"perf:fixture -- --device dn2"):
+        native_pgo.load_fixture("dn2", tmp_path / "none")
+
+
+def test_a_fixture_of_another_device_is_refused(tmp_path):
+    write_fixture(tmp_path / "dt2")
+    with pytest.raises(SystemExit, match=r"perf:fixture -- --device dn2"):
+        native_pgo.load_fixture("dn2", tmp_path / "dt2")

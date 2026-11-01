@@ -47,6 +47,20 @@ applies any profile, e.g. the DN2 one (a cross-device check)::
     uv run python -m tools.emulator.native_pgo check --device dt2
     uv run python -m tools.emulator.native_pgo coupled-build --device dt2 [--profile PATH] --variant NAME
 
+Two cores (``--device both`` on ``train``/``check``/``verify``/``plan``/``coupled-build``): the
+desktop build holds both generated cores (feature ``second-core``, ``SHARC_GEN_DIR`` and
+``SHARC_GEN_DIR_2``) and has its own profile in ``out/native/pgo/both/<triple>/``. Slot 1
+(``SHARC_GEN_DIR``) is always the DN2 core and slot 2 (``SHARC_GEN_DIR_2``) always the DT2 core,
+in training and in the launcher; the engine is chosen by the firmware's device at run time.
+Training runs an instrumented two-core ``coupled-run``, one process per workload item:
+the DN2 ``exactness-100m`` scenario (the ``coupled_ready_exactness`` workload), the DT2
+:data:`DT2_WORKLOAD`, and one runtime replay per device from a fixture directory
+(``out/fixtures/runtime/<dev>/``, see :func:`load_fixture`; ``mise run perf:fixture -- --device DEV``
+makes it)::
+
+    uv run python -m tools.emulator.native_pgo train --device both [--fixture-dn2 DIR] [--fixture-dt2 DIR]
+    uv run python -m tools.emulator.native_pgo check --device both
+
 The training workload is the ``coupled_ready_exactness`` gate, run from the
 instrumented desktop APP binary with ``--pgo-train`` (not the test binary:
 cargo gives the test target's dependencies other crate hashes than the app's,
@@ -88,6 +102,9 @@ READY = digi_env.READY
 TOOLCHAIN = digi_env.TOOLCHAIN
 TRIPLE = digi_env.TRIPLE
 FEATURES = "coupled-audio"
+BOTH = "both"
+BOTH_FEATURES = "second-core"
+BOTH_WORKLOAD_NAME = "both-v1"
 TEST_NAME = "desktop_runtime::coupled::tests::coupled_ready_exactness"
 WORKLOAD = "desktop-bin"
 EXPECTED_FRAMES = 1139
@@ -134,6 +151,48 @@ def generated_dir(
     environ: dict[str, str] | os._Environ[str] | None = None,
 ) -> pathlib.Path:
     return digi_env.generated_dir(environ)
+
+
+def second_generated(
+    environ: dict[str, str] | os._Environ[str] | None = None,
+) -> pathlib.Path | None:
+    """The second generated core (SHARC_GEN_DIR_2) of a two-core build, None for one core."""
+    environ = os.environ if environ is None else environ
+    value = environ.get("SHARC_GEN_DIR_2")
+    return pathlib.Path(value) if value else None
+
+
+def both_generated(
+    environ: dict[str, str] | os._Environ[str] | None = None,
+) -> tuple[pathlib.Path, pathlib.Path]:
+    """The cores of a two-core build in slot order: (DN2 core, DT2 core).
+
+    SHARC_GEN_DIR and SHARC_GEN_DIR_2 name them in that order; without them the
+    core registered for each device's ready DSP image is used (DN2: the default
+    core), as the launcher finds them (native_emu.second_core).
+    """
+    environ = os.environ if environ is None else environ
+    dn2 = digi_env.gen_for_image(
+        digi_env.ready_inputs(environ, device="dn2")["DSP image"]
+    )
+    dt2 = digi_env.gen_for_image(
+        digi_env.ready_inputs(environ, device="dt2")["DSP image"]
+    )
+    gen1 = (
+        pathlib.Path(environ["SHARC_GEN_DIR"])
+        if environ.get("SHARC_GEN_DIR")
+        else (dn2 or DEFAULT_GENERATED)
+    )
+    gen2 = second_generated(environ) or dt2
+    if gen2 is None:
+        raise SystemExit(
+            "no generated DT2 core registered for the DT2 DSP image "
+            "(mise run perf:aot -- dt2 --card-image IMG, or set SHARC_GEN_DIR_2)"
+        )
+    for name, gen in (("DN2", gen1), ("DT2", gen2)):
+        if not gen.is_dir():
+            raise SystemExit(f"generated {name} core not found: {gen}")
+    return gen1, gen2
 
 
 def rustc_version() -> str:
@@ -221,8 +280,9 @@ def is_emulation_package(rel: str) -> bool:
     return pathlib.PurePosixPath(rel).parts[:1] != ("apps",)
 
 
-def local_package_dirs() -> list[str]:
-    """Repo-relative directories of the emulation crates in the coupled build graph."""
+def local_package_dirs(features: str = FEATURES) -> list[str]:
+    """Repo-relative directories of the emulation crates in the build graph of FEATURES
+    (the two-core build adds the `-2` crates)."""
     out = subprocess.run(
         [
             "rustup",
@@ -235,7 +295,7 @@ def local_package_dirs() -> list[str]:
             "--manifest-path",
             MANIFEST_PATH,
             "--features",
-            FEATURES,
+            features,
             "--filter-platform",
             TRIPLE,
         ],
@@ -302,12 +362,15 @@ def compute_components(
     hasher: FileHasher,
     fast: str = "",
     blocktrans: str = "",
+    gen2: pathlib.Path | None = None,
 ) -> tuple[dict[str, str], int]:
     """The profile key components.
 
     ``fast`` and ``blocktrans`` are kept for signature compatibility only: the
     fast-region lists are read at run time and do not change the binary, so
-    they no longer enter the key.
+    they no longer enter the key. ``gen2`` is the second generated core of the
+    two-core build (SHARC_GEN_DIR_2): its digest, the feature and the workload
+    name of device ``both`` enter the key, and so does the slot order.
     """
     outer = hashlib.sha256()
     files = 0
@@ -333,6 +396,15 @@ def compute_components(
         "workload": WORKLOAD,
         "flags_template": FLAGS_TEMPLATE,
     }
+    if gen2 is not None:
+        gen2_digest, gen2_count = (
+            tree_digest(hasher, gen2, gen2, set()) if gen2.is_dir() else ("absent", 0)
+        )
+        components["generated2"] = gen2_digest
+        components["features"] = BOTH_FEATURES
+        components["workload"] = BOTH_WORKLOAD_NAME
+        components["slots"] = "generated=dn2,generated2=dt2"
+        gen_count += gen2_count
     return components, files + gen_count
 
 
@@ -383,6 +455,7 @@ def check_state(
     fast: str = "",
     blocktrans: str = "",
     device: str = "dn2",
+    gen2: pathlib.Path | None = None,
 ) -> tuple[str, str, bool]:
     """Return (status, detail, desktop_changed); status is ok, partial, stale or missing.
 
@@ -390,7 +463,8 @@ def check_state(
     stale: the rustc or generated core (or any other component) differs.
 
     DEVICE selects the profile (``train --device``); a DT2 profile's key also
-    carries the DT2 workload name.
+    carries the DT2 workload name. For ``both``, GEN is the DN2 core (slot 1) and
+    GEN2 the DT2 core (slot 2); they default to the registered cores.
     """
     manifest = read_manifest(device)
     if manifest is None:
@@ -401,8 +475,16 @@ def check_state(
     if not toolchain_dir().is_dir():
         return "stale", f"rustup toolchain {TOOLCHAIN} is not installed", False
     hasher = FileHasher(device_state(device) / "hash-cache.json")
+    if device == BOTH:
+        default1, default2 = both_generated()
+        gen, gen2 = gen or default1, gen2 or default2
     components, _ = compute_components(
-        list(manifest["packages"]), gen or generated_dir(), hasher, fast, blocktrans
+        list(manifest["packages"]),
+        gen or generated_dir(),
+        hasher,
+        fast,
+        blocktrans,
+        gen2 if device == BOTH else None,
     )  # type: ignore[call-overload]
     if device == "dt2":
         components["workload"] = DT2_WORKLOAD_NAME
@@ -423,9 +505,10 @@ def check(
     fast: str = "",
     blocktrans: str = "",
     device: str = "dn2",
+    gen2: pathlib.Path | None = None,
 ) -> tuple[str, str]:
     """Return (status, detail): status is ok, partial, stale or missing."""
-    status, detail, _ = check_state(gen, fast, blocktrans, device)
+    status, detail, _ = check_state(gen, fast, blocktrans, device, gen2)
     return status, detail
 
 
@@ -462,6 +545,7 @@ def pgo_state(
         environ.get("SHARC_FAST_REGIONS", ""),
         environ.get("SHARC_BLOCKTRANS", ""),
         device,
+        second_generated(environ) if device == BOTH else None,
     )
 
 
@@ -486,7 +570,11 @@ def plan_for(
             TRIPLE,
             "--target-dir",
             str(
-                native_target().target_dir(generated_dir(environ), pgo_variant(environ))
+                native_target().target_dir(
+                    generated_dir(environ),
+                    pgo_variant(environ),
+                    second_generated(environ),
+                )
             ),
         ],
         env={"RUSTFLAGS": profile_use_flags(profdata), "RUSTC": toolchain_rustc()},
@@ -495,8 +583,8 @@ def plan_for(
 
 def train_hint(device: str = "dn2") -> str:
     return (
-        "uv run python -m tools.emulator.native_pgo train --device dt2"
-        if device == "dt2"
+        f"uv run python -m tools.emulator.native_pgo train --device {device}"
+        if device in ("dt2", BOTH)
         else "uv run python -m tools.emulator.native_pgo train"
     )
 
@@ -520,8 +608,9 @@ def stale_notice(detail: str = "", device: str = "dn2") -> str:
     """The one line printed when a stale profile is not used."""
     return (
         "PGO profile is stale for this core; building without PGO. Retrain with "
-        "`mise run perf:pgo` (both devices), `mise run perf:pgo:dn2` or `mise run perf:pgo:dt2` "
-        "(`uv run python -m tools.emulator.native_pgo train --device dt2`)."
+        "`mise run perf:pgo` (all three), `mise run perf:pgo:dn2`, `mise run perf:pgo:dt2` or "
+        "`mise run perf:pgo:both` (the two-core desktop build; "
+        "`uv run python -m tools.emulator.native_pgo train --device both`)."
     )
 
 
@@ -536,7 +625,13 @@ def training_blocker(
 ) -> str:
     """Why `train` cannot run here ("" when it can)."""
     try:
-        if device == "dt2":
+        if device == BOTH:
+            gen1, gen2 = both_generated(environ)
+            digi_env.check_generated(gen1, environ)
+            digi_env.check_generated(gen2, environ)
+            for fixture_device in digi_env.SLOT_DEVICES:
+                load_fixture(fixture_device)
+        elif device == "dt2":
             digi_env.check_generated(dt2_generated(), environ)
         else:
             require_inputs(generated_dir(environ))
@@ -579,7 +674,14 @@ def launch_plan(
 # PGO matches functions by mangled name, and a v0 name embeds the crate
 # disambiguator (`Cs<hash>_<len><name>`). A profile trained from a build whose
 # crate hashes differ from the app's silently applies to nothing.
-GUARDED_CRATES = ("sharc_native", "sharc_gen", "sharc_rt", "elektron_native_boot")
+GUARDED_CRATES = (
+    "sharc_native",
+    "sharc_gen",
+    "sharc_rt",
+    "elektron_native_boot",
+    "sharc_native_2",
+    "sharc_gen_2",
+)
 CRATE_NAME_RE = re.compile(
     r"C[sc]([0-9A-Za-z]+)_("
     + "|".join(f"{len(name)}{name}" for name in GUARDED_CRATES)
@@ -627,6 +729,7 @@ def binary_crates(path: str | os.PathLike[str]) -> dict[str, set[str]]:
 
 # A DT2 profile is trained on coupled-run, not on the desktop app, so the
 # app's own boot crate never matches it; the engine crates carry the DSP cost.
+# The two-core profile is trained on coupled-run too.
 DT2_APP_UNPROFILED = ("elektron_native_boot",)
 
 
@@ -651,8 +754,10 @@ def crate_mismatches(
 def pgo_binary(
     environ: dict[str, str] | os._Environ[str] | None = None,
 ) -> pathlib.Path:
-    """The app binary the launcher's PGO build produces."""
-    target = native_target().target_dir(generated_dir(environ), pgo_variant(environ))
+    """The app binary the launcher's PGO build produces (a two-core build has its own target dir)."""
+    target = native_target().target_dir(
+        generated_dir(environ), pgo_variant(environ), second_generated(environ)
+    )
     return pathlib.Path(target) / TRIPLE / "release" / "digiemu-desktop"
 
 
@@ -661,12 +766,13 @@ def verify_binary(
 ) -> list[str]:
     """Mismatch lines for `binary` against `profdata` (empty when they match).
 
-    For DT2 the app's boot crate is expected to differ (see DT2_APP_UNPROFILED).
+    For DT2 and the two-core build the app's boot crate is expected to differ
+    (see DT2_APP_UNPROFILED).
     """
     return crate_mismatches(
         profile_crates(profdata),
         binary_crates(binary),
-        DT2_APP_UNPROFILED if device == "dt2" else (),
+        DT2_APP_UNPROFILED if device in ("dt2", BOTH) else (),
     )
 
 
@@ -690,13 +796,15 @@ def toolchain_rustc() -> str:
     return rustc
 
 
-def base_env(gen: pathlib.Path) -> dict[str, str]:
+def base_env(gen: pathlib.Path, gen2: pathlib.Path | None = None) -> dict[str, str]:
     env = {
         k: v
         for k, v in os.environ.items()
         if k not in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS")
     }
     env["SHARC_GEN_DIR"] = str(gen)
+    if gen2 is not None:
+        env["SHARC_GEN_DIR_2"] = str(gen2)
     env["RUSTC"] = toolchain_rustc()
     return env
 
@@ -994,7 +1102,15 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if profdata is None or not profdata.is_file():
         print("no trained profile to verify against")
         return 1
-    binary = pathlib.Path(args.binary) if args.binary else pgo_binary()
+    environ = os.environ
+    if args.device == BOTH:
+        gen, gen2 = both_generated()
+        environ = {
+            **os.environ,
+            "SHARC_GEN_DIR": str(gen),
+            "SHARC_GEN_DIR_2": str(gen2),
+        }
+    binary = pathlib.Path(args.binary) if args.binary else pgo_binary(environ)
     if not binary.is_file():
         print(f"no binary at {binary}")
         return 1
@@ -1012,6 +1128,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
     }
     if args.device == "dt2" and not environ.get("SHARC_GEN_DIR"):
         environ["SHARC_GEN_DIR"] = str(dt2_generated())
+    if args.device == BOTH:
+        gen, gen2 = both_generated()
+        environ["SHARC_GEN_DIR"], environ["SHARC_GEN_DIR_2"] = str(gen), str(gen2)
     plan, notice = launch_plan(environ, args.device)
     print(notice or "native PGO: not used")
     if plan:
@@ -1060,15 +1179,19 @@ def build_coupled(
     rustflags: str | None,
     gen: pathlib.Path,
     log: pathlib.Path,
+    gen2: pathlib.Path | None = None,
 ) -> pathlib.Path:
-    """Build packages/emulator/coupled's ``coupled-run`` (RUSTFLAGS builds use --target)."""
-    env = base_env(gen)
+    """Build packages/emulator/coupled's ``coupled-run`` (RUSTFLAGS builds use --target).
+
+    GEN2 (the DT2 core, slot 2) makes it the two-core build.
+    """
+    env = base_env(gen, gen2)
     if rustflags:
         env["RUSTFLAGS"] = rustflags
     command = [
         "rustup", "run", TOOLCHAIN, "cargo", "build", "--release", "--locked",
         "--manifest-path", COUPLED_MANIFEST,
-        "--features", coupled_module().FEATURES,
+        "--features", BOTH_FEATURES if gen2 is not None else coupled_module().FEATURES,
         "--bin", coupled_module().BINARY_NAME,
         *(["--target", TRIPLE] if rustflags else []),
         "--target-dir", str(target_dir),
@@ -1090,39 +1213,103 @@ def build_coupled(
     return binary
 
 
-def run_dt2_workload(
-    binary: pathlib.Path, outdir: pathlib.Path, extra_env: dict[str, str]
+@dataclasses.dataclass(frozen=True)
+class WorkItem:
+    """One training process: a coupled-run on one device's inputs and some scenarios of a file."""
+
+    label: str
+    device: str
+    scenarios_file: str
+    names: tuple[str, ...]
+    input_args: tuple[str, ...]
+    fast_syx: pathlib.Path
+    seconds: float | None = None
+
+
+def ready_args(
+    inputs: dict[str, pathlib.Path], card_args: list[str]
+) -> tuple[str, ...]:
+    """The coupled-run input arguments of a ready state (and its `--card-image`)."""
+    return (
+        "--syx", str(inputs["firmware"]),
+        "--dsp-image", str(inputs["DSP image"]),
+        "--dsp-state", str(inputs["DSP state"]),
+        "--cf-snapshot", str(inputs["CF snapshot"]),
+        *card_args,
+    )  # fmt: skip
+
+
+def dt2_items() -> list[WorkItem]:
+    """:data:`DT2_WORKLOAD` on the one-sample card's ready state."""
+    from tools.emulator import dt2_sample_check
+
+    inputs, card_args = dt2_sample_check.card_inputs()
+    return [
+        WorkItem(
+            f"dt2-{pathlib.Path(file).stem}",
+            "dt2",
+            file,
+            tuple(names),
+            ready_args(inputs, card_args),
+            inputs["firmware"],
+        )
+        for file, names in DT2_WORKLOAD
+    ]
+
+
+def run_items(
+    binary: pathlib.Path,
+    outdir: pathlib.Path,
+    extra_env: dict[str, str],
+    items: list[WorkItem],
+    slots: bool = False,
 ) -> float:
-    """Run :data:`DT2_WORKLOAD` once (one process per scenario file); seconds."""
-    coupled = coupled_module()
-    coupled.enable_dt2_card()
+    """Run the items once, one process each; seconds. A failed process or gate aborts.
+
+    Each item gets the fast tiers of its firmware (``digi_env.fast_env``, as the launcher
+    sets them). SLOTS names the two-core build: the lists then go to the engine slot of
+    the item's device.
+    """
     started = time.monotonic()
-    for file, names in DT2_WORKLOAD:
-        report = outdir / (pathlib.Path(file).stem + ".json")
-        extra = [
-            "--scenarios", str(ROOT / file),
-            *(x for n in names for x in ("--scenario", n)),
+    for item in items:
+        report = outdir / f"{item.label}.json"
+        argv = [
+            str(binary),
+            *item.input_args,
+            "--scenarios", str(ROOT / item.scenarios_file),
+            *(x for n in item.names for x in ("--scenario", n)),
+            *(["--seconds", str(item.seconds)] if item.seconds is not None else []),
             "--out", str(report),
         ]  # fmt: skip
-        actual_inputs = coupled.inputs("dt2")
-        argv = coupled.run_args(binary, actual_inputs, extra)
+        env = {**os.environ, **extra_env}
+        fast = digi_env.fast_env(env, syx=item.fast_syx)
+        env.update(digi_env.slot_env(item.device, fast) if slots else fast)
         done = subprocess.run(
             argv,
             cwd=ROOT,
-            env=coupled.run_env(extra_env, syx=actual_inputs["firmware"]),
+            env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
         )
         if done.returncode or not report.is_file():
             raise SystemExit(
-                f"DT2 workload {file} failed (exit {done.returncode}):\n"
+                f"{item.device.upper()} workload {item.label} failed (exit {done.returncode}):\n"
                 + done.stderr[-1500:]
             )
         for sc in json.loads(report.read_text())["scenarios"]:
             if (sc.get("gates") or {}).get("ok") is False:
-                raise SystemExit(f"DT2 workload gate failed: {sc['name']}")
+                raise SystemExit(
+                    f"{item.device.upper()} workload gate failed: {sc['name']}"
+                )
     return time.monotonic() - started
+
+
+def run_dt2_workload(
+    binary: pathlib.Path, outdir: pathlib.Path, extra_env: dict[str, str]
+) -> float:
+    """Run :data:`DT2_WORKLOAD` once (one process per scenario file); seconds."""
+    return run_items(binary, outdir, extra_env, dt2_items())
 
 
 def cmd_train_dt2(args: argparse.Namespace) -> None:
@@ -1229,9 +1416,248 @@ def cmd_check_dt2() -> int:
     return 1 if changed else 0
 
 
+# --- both: the two-core build, instrumented coupled-run -------------------------
+
+# The DN2 half of the workload is the `coupled_ready_exactness` workload as a coupled-run
+# scenario (QA prelude, Trig 1 down at +60M instructions, up at +100M, ended at +100M).
+DN2_WORKLOAD: list[tuple[str, list[str]]] = [
+    ("tests/scenarios/dn2.json", ["exactness-100m"]),
+]
+# One runtime replay per device (scenario file, scenario, seconds or None for the scenario's own).
+# Instrumented runs are 2 to 3 times slower than plain ones: keep them short.
+REPLAYS: dict[str, tuple[str, str, float | None]] = {
+    "dn2": ("tests/scenarios/dn2.json", "trig1-hold", 5.0),
+    "dt2": ("tests/scenarios/dt2.json", "dt2-sample-trig", None),
+}
+FIXTURE_ROOT = ROOT / "out" / "fixtures" / "runtime"
+FIXTURE_FILES = ("firmware", "dsp_image", "dsp_state", "cf_snapshot", "card")
+
+
+@dataclasses.dataclass(frozen=True)
+class Fixture:
+    """A runtime replay fixture (out/fixtures/runtime/<device>/, made by `mise run perf:fixture`)."""
+
+    device: str
+    directory: pathlib.Path
+    files: dict[str, pathlib.Path | None]
+    provenance: dict[str, object]
+
+    def record(self) -> dict[str, object]:
+        """What the profile manifest keeps of the fixture."""
+        return {
+            "device": self.device,
+            "directory": str(self.directory),
+            "firmware_version": self.provenance.get("firmware_version"),
+            "patch_set": self.provenance.get("patch_set"),
+            "sha256": self.provenance["sha256"],
+            "source_head": self.provenance.get("source_head"),
+            "created": self.provenance.get("created"),
+        }
+
+    def input_args(self) -> tuple[str, ...]:
+        paths = self.files
+        return (
+            "--syx", str(paths["firmware"]),
+            "--dsp-image", str(paths["dsp_image"]),
+            "--dsp-state", str(paths["dsp_state"]),
+            "--cf-snapshot", str(paths["cf_snapshot"]),
+            *(("--card-image", str(paths["card"])) if paths["card"] else ()),
+        )  # fmt: skip
+
+
+def load_fixture(device: str, directory: pathlib.Path | str | None = None) -> Fixture:
+    """Read a runtime fixture and check every file against the SHA-256 of its provenance.json."""
+    directory = pathlib.Path(directory) if directory else FIXTURE_ROOT / device
+    hint = f"`mise run perf:fixture -- --device {device}`"
+    try:
+        provenance = json.loads((directory / "provenance.json").read_text())
+    except (OSError, ValueError) as exc:
+        raise SystemExit(
+            f"no runtime fixture for {device.upper()} at {directory} ({exc}); make it with {hint}"
+        ) from exc
+    if provenance.get("schema") != 1 or provenance.get("device") != device:
+        raise SystemExit(
+            f"{directory}/provenance.json is not a schema 1 fixture of {device.upper()}; remake it with {hint}"
+        )
+    files: dict[str, pathlib.Path | None] = {}
+    for key in FIXTURE_FILES:
+        name = provenance["files"].get(key)
+        if name is None and key == "card":
+            files[key] = None
+            continue
+        path = directory / str(name)
+        if not name or not path.is_file():
+            raise SystemExit(
+                f"fixture file {key} is missing in {directory}; remake it with {hint}"
+            )
+        if sha256_file(path) != provenance["sha256"].get(key):
+            raise SystemExit(
+                f"fixture file {path} does not match its provenance sha256; remake it with {hint}"
+            )
+        files[key] = path
+    return Fixture(device, directory, files, provenance)
+
+
+def both_items(fixtures: dict[str, Fixture]) -> list[WorkItem]:
+    """The training workload of the two-core build: DN2 items, then DT2 items."""
+    inputs = digi_env.ready_inputs(device="dn2")
+    missing = [f"{k}: {v}" for k, v in inputs.items() if not pathlib.Path(v).exists()]
+    if missing:
+        raise SystemExit("missing DN2 ready inputs:\n  " + "\n  ".join(missing))
+    items = [
+        WorkItem(
+            f"dn2-{pathlib.Path(file).stem}",
+            "dn2",
+            file,
+            tuple(names),
+            ready_args(inputs, []),
+            inputs["firmware"],
+        )
+        for file, names in DN2_WORKLOAD
+    ]
+    items += dt2_items()
+    for device in digi_env.SLOT_DEVICES:
+        file, name, seconds = REPLAYS[device]
+        fixture = fixtures[device]
+        firmware = fixture.files["firmware"]
+        assert firmware is not None
+        items.append(
+            WorkItem(
+                f"{device}-replay-{name}",
+                device,
+                file,
+                (name,),
+                fixture.input_args(),
+                # The tier tables are keyed by the stock firmware.
+                digi_env.base_firmware(firmware),
+                seconds,
+            )
+        )
+    return items
+
+
+def both_workload_text(items: list[WorkItem]) -> list[str]:
+    return [f"{i.label}:{i.scenarios_file}={'+'.join(i.names)}" for i in items]
+
+
+def cmd_train_both(args: argparse.Namespace) -> None:
+    gen, gen2 = both_generated()
+    digi_env.check_generated(gen)
+    digi_env.check_generated(gen2)
+    fixtures = {
+        "dn2": load_fixture("dn2", args.fixture_dn2),
+        "dt2": load_fixture("dt2", args.fixture_dt2),
+    }
+    items = both_items(fixtures)
+    state = device_state(BOTH)
+    started = time.monotonic()
+    packages = local_package_dirs(BOTH_FEATURES)
+    hasher = FileHasher(state / "hash-cache.json")
+    components, nfiles = compute_components(packages, gen, hasher, gen2=gen2)
+    hasher.save()
+    key = key_of(components)
+    raw = state / f"raw-{key[:16]}"
+    shutil.rmtree(raw, ignore_errors=True)
+    raw.mkdir(parents=True)
+    variant = args.variant or "pgo-both-instrument"
+    binary = build_coupled(
+        native_target().target_dir(gen, variant, gen2),
+        f"-Cprofile-generate={raw}",
+        gen,
+        state / "instrument-build.log",
+        gen2,
+    )
+    print(f"instrumented build {time.monotonic() - started:.1f} s", flush=True)
+    seconds = []
+    for number in range(1, args.runs + 1):
+        outdir = state / f"train-{number}"
+        outdir.mkdir(exist_ok=True)
+        with benchlock("shared", "pgo train both"):
+            seconds.append(
+                run_items(
+                    binary,
+                    outdir,
+                    {"LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw")},
+                    items,
+                    slots=True,
+                )
+            )
+        print(f"train run {number}: {seconds[-1]:.1f} s", flush=True)
+    raws = sorted(str(p) for p in raw.glob("*.profraw"))
+    if not raws:
+        raise SystemExit("training produced no .profraw files")
+    merged = raw / "merged.profdata"
+    merge = [str(llvm_profdata()), "merge", "-o", str(merged), *raws]
+    subprocess.run(merge, check=True)
+    digest = sha256_file(merged)
+    (state / "profiles").mkdir(parents=True, exist_ok=True)
+    final = state / "profiles" / f"{digest}.profdata"
+    shutil.move(str(merged), final)
+    shutil.rmtree(raw, ignore_errors=True)
+    manifest = {
+        "key": key,
+        "components": components,
+        "packages": packages,
+        # Slot order: slot 1 (SHARC_GEN_DIR) is the DN2 core, slot 2 (SHARC_GEN_DIR_2) the DT2 core.
+        "generated_dir": str(gen),
+        "generated_dir_2": str(gen2),
+        "fast_env": {
+            item.label: {
+                k: v
+                for k, v in digi_env.slot_env(
+                    item.device, digi_env.fast_env(syx=item.fast_syx)
+                ).items()
+                if k.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
+            }
+            for item in items
+        },
+        "fixtures": {device: fx.record() for device, fx in fixtures.items()},
+        "file_count": nfiles,
+        "rustc_vV": rustc_version(),
+        "triple": TRIPLE,
+        "features": BOTH_FEATURES,
+        "profdata": {
+            "path": str(final),
+            "sha256": digest,
+            "size": final.stat().st_size,
+        },
+        "train_commands": {
+            "build_rustflags": f"-Cprofile-generate={raw}",
+            "runs": args.runs,
+            "workload": both_workload_text(items),
+        },
+        "run_seconds": seconds,
+        "created": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    (state / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    print(
+        f"trained {final} ({final.stat().st_size} bytes) key {key[:16]} "
+        f"in {time.monotonic() - started:.1f} s"
+    )
+
+
+def cmd_check_both() -> int:
+    gen, gen2 = both_generated()
+    status, detail, _ = check_state(gen, "", "", BOTH, gen2)
+    if status == "partial":
+        print(f"partly stale ({detail}); the launcher still uses the profile")
+    else:
+        print(f"{status} {detail}")
+    return 0 if status == "ok" else 1
+
+
 def cmd_coupled_build(args: argparse.Namespace) -> None:
-    """Build ``coupled-run`` for a device's core, plain or with a profile."""
-    gen = dt2_generated() if args.device == "dt2" else coupled_module().generated("dn2")
+    """Build ``coupled-run`` for a device's core (``both``: the two-core build), plain or with a profile."""
+    gen2 = None
+    if args.device == BOTH:
+        gen, gen2 = both_generated()
+        digi_env.check_generated(gen2)
+    else:
+        gen = (
+            dt2_generated()
+            if args.device == "dt2"
+            else coupled_module().generated("dn2")
+        )
     digi_env.check_generated(gen)
     flags = None
     profile = args.profile
@@ -1244,9 +1670,9 @@ def cmd_coupled_build(args: argparse.Namespace) -> None:
         profile = str(pathlib.Path(profile).resolve())
         flags = profile_use_flags(profile)
     target = native_target().target_dir(
-        gen, args.variant or ("pgo-cr-" + args.device if flags else "")
+        gen, args.variant or ("pgo-cr-" + args.device if flags else ""), gen2
     )
-    binary = build_coupled(target, flags, gen, target / "build.log")
+    binary = build_coupled(target, flags, gen, target / "build.log", gen2)
     print(binary)
     if profile:
         lines = crate_mismatches(profile_crates(profile), binary_crates(binary))
@@ -1491,27 +1917,35 @@ def main(argv: list[str] | None = None) -> int:
         "train", help="build instrumented, run the workload, merge a profile"
     )
     train.add_argument("--runs", type=int, default=TRAIN_RUNS)
-    train.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    train.add_argument("--device", choices=["dn2", "dt2", BOTH], default="dn2")
     train.add_argument(
-        "--variant", help="dt2: target-dir variant of the instrumented build"
+        "--variant", help="dt2, both: target-dir variant of the instrumented build"
+    )
+    train.add_argument(
+        "--fixture-dn2",
+        help="both: DN2 runtime fixture (default out/fixtures/runtime/dn2)",
+    )
+    train.add_argument(
+        "--fixture-dt2",
+        help="both: DT2 runtime fixture (default out/fixtures/runtime/dt2)",
     )
     check = sub.add_parser(
         "check", help="print ok/stale/missing for the current profile"
     )
-    check.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    check.add_argument("--device", choices=["dn2", "dt2", BOTH], default="dn2")
     cb = sub.add_parser(
         "coupled-build", help="build coupled-run (plain, or with --profile)"
     )
-    cb.add_argument("--device", choices=["dn2", "dt2"], default="dt2")
+    cb.add_argument("--device", choices=["dn2", "dt2", BOTH], default="dt2")
     cb.add_argument("--profile", help="profdata path, or 'current' for the device's")
     cb.add_argument("--variant", help="target-dir variant (default pgo-cr-<device>)")
     verify = sub.add_parser(
         "verify", help="check the profile's crate hashes against the app binary"
     )
     verify.add_argument("--binary", help="default: the launcher's pgo-use app binary")
-    verify.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    verify.add_argument("--device", choices=["dn2", "dt2", BOTH], default="dn2")
     plan = sub.add_parser("plan", help="show what the launcher would do")
-    plan.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    plan.add_argument("--device", choices=["dn2", "dt2", BOTH], default="dn2")
     bench = sub.add_parser("bench", help="paired control vs profile-use benchmark")
     bench.add_argument("--pairs", type=int, default=5)
     build = sub.add_parser(
@@ -1552,7 +1986,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         cmd_run(args)
     elif args.command == "train":
-        if args.device == "dt2":
+        if args.device == BOTH:
+            cmd_train_both(args)
+        elif args.device == "dt2":
             cmd_train_dt2(args)
         else:
             cmd_train(args)
@@ -1565,6 +2001,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "bench-bins":
         cmd_bench_bins(args)
     elif args.command == "check":
+        if args.device == BOTH:
+            return cmd_check_both()
         return cmd_check_dt2() if args.device == "dt2" else cmd_check(args)
     elif args.command == "verify":
         return cmd_verify(args)

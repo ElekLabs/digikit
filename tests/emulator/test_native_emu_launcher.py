@@ -642,16 +642,65 @@ def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
         str(inputs[other][label])
         for label in ("DSP image", "DSP state", "CF snapshot", "firmware")
     ]
-    assert os.environ["SHARC_GEN_DIR"] == str(cores[first])
-    assert os.environ["SHARC_GEN_DIR_2"] == str(cores[other])
-    for suffix, device in (("", first), ("_2", other)):
+    # Slot order is fixed: slot 1 is the DN2 core, slot 2 the DT2 core, whichever firmware launches.
+    assert os.environ["SHARC_GEN_DIR"] == str(cores["dn2"])
+    assert os.environ["SHARC_GEN_DIR_2"] == str(cores["dt2"])
+    for suffix, device in (("", "dn2"), ("_2", "dt2")):
         for name, value in (
             ("SHARC_FAST_REGIONS", "regions"),
             ("SHARC_BLOCKTRANS", "roots"),
             ("SHARC_FAST_FALLBACK_REGIONS", "fallback"),
         ):
             assert os.environ[name + suffix] == f"{device}-{value}"
-    assert "no PGO profile for a two-core build" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("first", ["dn2", "dt2"])
+def test_two_core_launch_plans_the_both_profile_in_its_own_target_dir(
+    monkeypatch, tmp_path, first
+):
+    """A two-core launch asks for the `both` profile and builds outside the single-core target dirs."""
+    from tools.emulator import native_pgo
+
+    scope, calls, inputs, cores = _dual_launch(monkeypatch, tmp_path, first)
+    monkeypatch.setenv("DIGI_EMU_PGO", "1")
+    monkeypatch.setattr(native_pgo, "supported_host", lambda: True)
+    monkeypatch.setattr(native_pgo, "toolchain_rustc", lambda: "/fake/rustc")
+    asked = []
+
+    def pgo_state(_environ=None, device="dn2"):
+        asked.append(device)
+        return "ok", "/p/both.profdata"
+
+    monkeypatch.setattr(native_pgo, "pgo_state", pgo_state)
+    scope["main"]([])
+    assert asked == ["both"]
+    command = calls[0]
+    assert command[command.index("--features") + 1] == "second-core"
+    target = Path(command[command.index("--target-dir") + 1])
+    # Keyed by both cores, in slot order, and never the single-core pgo-use dir.
+    assert "+" in target.parent.name
+    assert target.name == "pgo-use"
+    assert target.parent != Path(scope["target_dir_for"](cores["dn2"]))
+
+
+def test_missing_both_profile_falls_back_to_the_plain_two_core_build(
+    monkeypatch, tmp_path, capsys
+):
+    from tools.emulator import native_pgo
+
+    scope, calls, inputs, cores = _dual_launch(monkeypatch, tmp_path, "dt2")
+    monkeypatch.setenv("DIGI_EMU_PGO", "1")
+    monkeypatch.delenv("DIGI_EMU_PGO_TRAIN", raising=False)
+    monkeypatch.setattr(
+        native_pgo,
+        "pgo_state",
+        lambda _e=None, device="dn2": ("missing", "no manifest"),
+    )
+    scope["main"]([])
+    command = calls[0]
+    assert command[command.index("--features") + 1] == "second-core"
+    assert "pgo-use" not in command[command.index("--target-dir") + 1]
+    assert "train --device both" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
