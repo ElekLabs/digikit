@@ -445,3 +445,36 @@ two shared-helper tests also passed. The gate explanation selects host, all 13 r
 47 Python files, smoke and daemon prerequisites; that routed gate was not run. Focused acceptance
 for this batch is pending Em's decision after the concrete PR; PR #242's exception
 does not transfer.
+
+
+### Routing ownership checkpoint (2026-11-01)
+
+PR #244 merged at `097eefa2`. The next routing change uses Vitest's existing import discovery
+for TypeScript helpers inside the stock, runtime and module acceptance directories. It discovers
+filenames without collecting tests or executing hooks; it adds no separate dependency graph.
+`runtime/fx-live.ts` selects the three FX files, while `runtime/live.ts` selects all 13 runtime
+files and retains all module lifecycle files through its explicit shared ownership. Missing tools,
+discovery failures, unconsumed helpers and deleted files retain the whole owner suite. Production, shared session and configuration routes remain conservative.
+
+Runtime TypeScript and digikit scenario TOMLs no longer select the unrelated smoke matrix by
+themselves. Production sources, module-owned scenarios, smoke inputs and shared/configuration
+files retain smoke. The gain fixture's two TOML sine hints remain explicit runtime data owners,
+because filesystem reads are outside Vitest's import discovery. Deleted digikit scenarios still
+select the whole Python suite; historical ownership recovery is deferred. These are static
+selection changes, with no measured execution speedup or new device proof.
+
+
+Validation for this routing checkpoint: 648 Python cases and 73 host cases passed across the
+final preflight and the single stale-expectation retry. Lint, formatting, layers, generated checks
+and workspace TypeScript types passed; mypy was skipped. The overall preflight is not a clean
+pass: pathcheck retains three pre-existing references in `docs/plans/module-architecture.md`
+(lines 3, 4 and 284), unchanged from `origin/main`. The new adapter references were resolved by
+staging the file, and scoped pathcheck then reported zero stale references.
+
+The 15-case static comparison selects FX helper files 13→3 and remote helper files 13→1;
+`live.ts` and `runtime-plan.ts` remain 13→13. Production and configuration selections remain
+unchanged, apart from correcting `live.ts`'s shared module lifecycle coverage. Replaying PR #244
+selects runtime files 13→3 with all 37 Python plan entries retained; its harness change still
+requires smoke. The final gate explanation selects host, three stock files, 13 runtime files,
+three module files, Python checks and smoke. That gate was not run. No measured speedup or new
+device proof is claimed.

@@ -70,7 +70,13 @@ HOST_TEST_FILES = [
         (["packages/dk-session/tests/new.test.ts"], {"host"}, False, "host-only test"),
         (["tests/regression/host/new.test.ts"], {"host"}, False, "host-only test"),
         (["packages/dk-session/tests/fake.ts"], {"host"}, True, None),
-        (["tests/regression/runtime/x.ts"], {"runtime-fixture"}, True, None),
+        (["tests/regression/runtime/x.ts"], {"runtime-fixture"}, False, "test-only"),
+        (
+            ["tests/digikit/scenarios/deleted.toml"],
+            {"python-tests"},
+            False,
+            "test-only",
+        ),
         (["vitest.host.config.ts"], {"host"}, True, None),
         (
             [*HOST_TEST_FILES, "docs/x.md", "tools/devtools/pathcheck.py"],
@@ -129,6 +135,24 @@ def test_smoke_skip_table(
         assert verify.smoke_reason(files) is None
     else:
         assert reason in (verify.smoke_reason(files) or "")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/patchkit/smoke/matrix.toml",
+        "tools/patchkit/pk_harness.py",
+        "modules/core/health/tests/scenarios/example.toml",
+        "modules/core/runtime/src/rs/src/upload.rs",
+        "tests/regression/vitest.config.ts",
+        "tests/regression/support.ts",
+        "tests/regression/scenarios/fx-support.ts",
+        "tests/regression/scripts/related-tests.mjs",
+    ],
+)
+def test_smoke_still_covers_production_and_harness_inputs(path: str) -> None:
+    assert verify.smoke_reason([path]) is None
+    assert "smoke" in verify.steps_for([path])
 
 
 def test_explain_states_why_host_tests_skip_smoke(
@@ -1263,7 +1287,6 @@ def test_digikit_test_files_and_scenarios() -> None:
     }
     assert verify.steps_for(["tests/digikit/scenarios/menu-open-dt2.toml"]) == (
         "python-tests",
-        "smoke",
     )
     # a helper of the suite: the test files that import it
     helper = selected("tests/digikit/scen_cases.py")
@@ -1840,6 +1863,138 @@ def test_acceptance_filters_native_files(
     step: str, path: str, expected: list[str]
 ) -> None:
     assert verify_route.acceptance_files(step, [path]) == expected
+
+
+def test_acceptance_helpers_use_discovered_files_and_their_prerequisites(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = ["tests/regression/runtime/fx-live.ts", "tests/regression/runtime/live.ts"]
+    fx_files = tuple(sorted(verify_route.RUNTIME_FX_FILES))
+    calls = []
+
+    def discover(step: str, helpers: tuple[str, ...]) -> tuple[str, ...]:
+        calls.append((step, helpers))
+        return fx_files
+
+    monkeypatch.setattr(verify_route, "related_acceptance", discover)
+    selected = verify.acceptance_plan("runtime-fixture", paths)
+    assert selected == list(fx_files)
+    assert calls == [("runtime-fixture", tuple(paths))]
+    assert verify.runtime_pack_modules(selected) == ["test/sine", "test/dyn-fx-gain"]
+    assert set(selected).intersection(verify_route.RUNTIME_PLUSDRIVE_FILES)
+    assert verify.acceptance_plan("runtime-fixture", [*paths, "Cargo.toml"]) == []
+
+
+@pytest.mark.parametrize(
+    "path", ["live.ts", "deleted.ts", "unknown.mjs", "deleted.test.ts"]
+)
+def test_unproven_acceptance_helpers_keep_the_whole_suite(
+    path: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(verify_route, "related_acceptance", lambda step, paths: None)
+    selected = verify_route.acceptance_files(
+        "runtime-fixture", [f"tests/regression/runtime/{path}"]
+    )
+    assert selected == sorted(
+        p.relative_to(ROOT / "tests/regression").as_posix()
+        for p in (ROOT / "tests/regression/runtime").rglob("*.test.ts")
+    )
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "not json",
+        "[]",
+        "{}",
+        json.dumps({"tests/regression/runtime/live.ts": []}),
+        json.dumps({"tests/regression/runtime/live.ts": ["modules/remote.test.ts"]}),
+        json.dumps({"tests/regression/runtime/live.ts": ["runtime/deleted.test.ts"]}),
+        json.dumps(
+            {
+                "tests/regression/runtime/live.ts": [
+                    "runtime/../runtime/fx-reuse.test.ts"
+                ]
+            }
+        ),
+    ],
+)
+def test_invalid_acceptance_discovery_stays_conservative(
+    output: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        verify_route.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess([], 0, output),
+    )
+    verify_route.related_acceptance.cache_clear()
+    try:
+        assert (
+            verify_route.related_acceptance(
+                "runtime-fixture", ("tests/regression/runtime/live.ts",)
+            )
+            is None
+        )
+    finally:
+        verify_route.related_acceptance.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "failure", [OSError("unavailable"), subprocess.TimeoutExpired("discovery", 30)]
+)
+def test_failed_acceptance_discovery_stays_conservative(
+    failure: Exception,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*args: object, **kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(verify_route.subprocess, "run", fail)
+    verify_route.related_acceptance.cache_clear()
+    try:
+        assert (
+            verify_route.related_acceptance(
+                "runtime-fixture", ("tests/regression/runtime/live.ts",)
+            )
+            is None
+        )
+    finally:
+        verify_route.related_acceptance.cache_clear()
+
+
+@pytest.mark.parametrize("device", ["dt2", "dn2"])
+def test_gain_scenario_hints_retain_the_runtime_data_consumer(device: str) -> None:
+    path = f"tests/digikit/scenarios/fx-dyn-{device}.toml"
+    assert verify.acceptance_plan("runtime-fixture", [path]) == [
+        "runtime/fx-reuse.test.ts"
+    ]
+    assert "runtime-fixture" in verify.steps_for([path])
+    assert verify_route.acceptance_files("module-load", [path]) == []
+
+
+def test_step_routing_does_not_need_helper_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_discovery(*args: object) -> None:
+        pytest.fail("step routing must not discover test filenames")
+
+    monkeypatch.setattr(verify_route, "related_acceptance", unexpected_discovery)
+    assert "runtime-fixture" in verify.steps_for(
+        ["tests/regression/runtime/fx-live.ts"]
+    )
+
+
+def test_shared_runtime_lifecycle_retains_module_acceptance() -> None:
+    path = "tests/regression/runtime/live.ts"
+    steps = verify.steps_for([path])
+    assert {"runtime-fixture", "module-load"} <= set(steps)
+    assert "stock" not in steps
+    assert verify.acceptance_plan("module-load", [path]) == sorted(
+        p.relative_to(ROOT / "tests/regression").as_posix()
+        for p in (ROOT / "tests/regression/modules").rglob("*.test.ts")
+    )
 
 
 def test_broad_change_is_not_narrowed_by_a_module_leaf() -> None:
