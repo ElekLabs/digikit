@@ -414,6 +414,8 @@ class Ctx:
     ) -> None:
         """The checks every scenario ends with. FIRMWARE_AREAS: sector ranges (first, end) below 0x50000 that the scenario makes the firmware write on purpose (the kit library of a Save Kit).
         STORE_EXTRA: store-range sectors besides the two selection sectors that the scenario writes on purpose (the settings copies)."""
+        from tools.coldfire import arena_safety
+
         t = self.totals
         self.check(
             "write-watch on cf.expansion over every boot: no stray write",
@@ -421,6 +423,9 @@ class Ctx:
             str(t),
         )
         self.check("flush check over every boot: no hit", t["flush_hits"] == 0, str(t))
+        policy = arena_safety.runtime_card_policy(
+            self.all_writes, self.device, firmware_areas, store_extra
+        )
         stray = sorted(
             self.store_writes - {self.store.sel_a, self.store.sel_b} - store_extra
         )
@@ -432,13 +437,7 @@ class Ctx:
             not stray,
             f"wrote {sorted(hex(s) for s in self.store_writes)}",
         )
-        outside = sorted(
-            x
-            for x in self.all_writes
-            if x < FIRMWARE_FIRST
-            and x not in (self.store.sel_a, self.store.sel_b)
-            and not any(lo <= x < hi for lo, hi in firmware_areas)
-        )
+        outside = policy["invalid_low"]
         self.check(
             "card writes elsewhere: only the firmware's own working project and project slots (sectors from 0x50000)"
             + (

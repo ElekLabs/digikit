@@ -177,6 +177,8 @@ ACCEPTANCE_DIRS = {
 # Runtime test files by the fixture module they exercise; the gate packs a native artifact for each
 # module (DIGI_RUNTIME_MODULES). Paths are relative to tests/regression.
 RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
+    "test/sine": ("runtime/fx-reuse.test.ts",),
+    "test/dyn-fx-gain": ("runtime/fx-reuse.test.ts",),
     "test/input-probe": ("runtime/input-adapter.test.ts",),
     "digikit/remote": ("runtime/remote-input.test.ts", "runtime/sharc-probe.test.ts"),
     "digikit/probe": ("runtime/sharc-probe.test.ts", "runtime/debug-module.test.ts"),
@@ -192,14 +194,18 @@ RUNTIME_MODULES: dict[str, tuple[str, ...]] = {
     "test/dyn-fx-gain-send": ("runtime/fault-trace.test.ts",),
     "test/dyn-crash": ("runtime/fault-trace.test.ts",),
 }
-# Host sources only these runtime test files read.
+# Host sources and subprocess CLI helpers consumed by specific runtime files.
 RUNTIME_SOURCES: dict[str, tuple[str, ...]] = {
-    path: ("runtime/samples-live.test.ts", "runtime/samples-store-live.test.ts")
-    for path in (
-        "packages/dk-session/src/dksample.ts",
-        "packages/dk-session/src/rpcfiles.ts",
-        "packages/dk-session/src/samples.ts",
-    )
+    **{
+        path: ("runtime/samples-live.test.ts", "runtime/samples-store-live.test.ts")
+        for path in (
+            "packages/dk-session/src/dksample.ts",
+            "packages/dk-session/src/rpcfiles.ts",
+            "packages/dk-session/src/samples.ts",
+        )
+    },
+    "tools/patchkit/pk_dkrt_machine.py": ("runtime/fx-reuse.test.ts",),
+    "tools/coldfire/arena_safety.py": ("runtime/fx-reuse.test.ts",),
 }
 ACCEPTANCE_SHARED = (
     "packages/test-support/src/",
@@ -239,6 +245,9 @@ def acceptance_python(step: str) -> set[str]:
                 "tools.device.dktransfer",
                 "tools.control.digi_client",
                 "tools.emulator.card_overlay",
+                "tools.patchkit.pk_dkrt_machine",
+                "tools.coldfire.arena_safety",
+                "tools.device.dkneeds",  # called inside the FX oracle; local imports are not graphed
             }
         )
     graph = changed_tests.graph()

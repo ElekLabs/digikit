@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { repoRoot, resolveInputs, type Session } from '@digi/test-support';
+import { repoRoot, resolveInputs, type Session, type SessionOptions } from '@digi/test-support';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -49,10 +49,22 @@ export function validateRuntimePlan(plan: RuntimePlan, session: Pick<Session, 'o
   }
 }
 
-/** Existing Python tools own patch/module preparation; this helper never builds a daemon or core. */
-export async function prepareRuntimePlan(session: Session, artifacts: string, symbols: string[]): Promise<RuntimePlan> {
-  const { device, firmware } = session.options;
-  const syx = path.join(session.runDir, `runtime-${device}.syx`);
+export interface PreparedRuntimePlan {
+  plan: RuntimePlan;
+  planFile: string;
+  syx: string;
+}
+
+/** Offline plan preparation also supplies startup instrumentation before a daemon exists. */
+export async function prepareRuntimePlanOffline(
+  options: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>,
+  directory: string,
+  artifacts: string,
+  symbols: string[],
+): Promise<PreparedRuntimePlan> {
+  const { device, firmware } = options;
+  fs.mkdirSync(directory, { recursive: true });
+  const syx = path.join(directory, `runtime-${device}.syx`);
   const planFile = syx.replace(/\.syx$/, '.plan.json');
   const patch = await exec(
     'uv',
@@ -65,18 +77,23 @@ export async function prepareRuntimePlan(session: Session, artifacts: string, sy
       '--firmware',
       resolveInputs(device, firmware).syx,
       '--set',
-      session.options.runtime?.patchSet ?? 'emulator',
+      options.runtime?.patchSet ?? 'emulator',
       '-o',
       syx,
       '--plan',
       planFile,
     ],
-    { cwd: root, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 },
+    { cwd: root, timeout: 30_000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, UV_NO_SYNC: '1' } },
   );
   fs.writeFileSync(path.join(artifacts, 'patch.log'), `${patch.stdout}\n${patch.stderr}`);
   const plan: RuntimePlan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
-  validateRuntimePlan(plan, session);
-  // Fail before installation/navigation if either diagnostic symbol is absent or ambiguous.
   for (const symbol of symbols) planSymbol(plan, symbol);
+  return { plan, planFile, syx };
+}
+
+/** Loaded-image identity is checked separately from offline preparation. */
+export async function prepareRuntimePlan(session: Session, artifacts: string, symbols: string[]): Promise<RuntimePlan> {
+  const { plan } = await prepareRuntimePlanOffline(session.options, session.runDir, artifacts, symbols);
+  validateRuntimePlan(plan, session);
   return plan;
 }

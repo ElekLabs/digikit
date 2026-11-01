@@ -1,9 +1,16 @@
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { afterAll, beforeAll, beforeEach, expect } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect } from 'vitest';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { repoRoot, Session, type Device, type SessionOptions } from '@digi/test-support';
+import {
+  repoRoot,
+  Session,
+  withinRuntimeDeadline,
+  type Device,
+  type RuntimeBaseline,
+  type SessionOptions,
+} from '@digi/test-support';
 import { setTimingContext, timePhase, timingContext } from './timing.ts';
 
 export interface SessionHandle {
@@ -122,6 +129,144 @@ export function withPatchedSession(
     get runtime() {
       if (!runtime) throw new Error('runtime not started');
       return runtime;
+    },
+  };
+}
+
+export interface RuntimeCase extends PatchedSession {
+  readonly epoch: number;
+}
+
+/** Opt-in fixture: independent cases reload pristine firmware/card state in one owned daemon. */
+export function withReusablePatchedSession(
+  opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string },
+  lifecycle: {
+    prepareBaseline: (session: Session) => Promise<RuntimeBaseline>;
+    /** Required scenario evidence (guard/fault/card/PCM) before state is discarded. Holds release in their own finally. */
+    finishCase: (runtime: RuntimeCase) => Promise<void>;
+    /** Validate process-lifetime artifacts only after the owned daemon has closed, even on a failed case. */
+    afterClose?: (session: Session) => Promise<void>;
+  },
+  scope = 'reused runtime',
+): { readonly runtime: RuntimeCase; reload(baseline: RuntimeBaseline): Promise<RuntimeCase> } {
+  let session: Session | undefined;
+  let baseline: RuntimeBaseline | undefined;
+  let runtime: RuntimeCase | undefined;
+  let invalidate: (() => void) | undefined;
+  let transitioning = false;
+  const loadCase = async (next: RuntimeBaseline): Promise<RuntimeCase> => {
+    const context = { scope, device: opts.device, session: randomUUID() };
+    setTimingContext(session!, context);
+    const epoch = await timePhase('session.baseline-reload', () => session!.reloadRuntimeBaseline(next), context);
+    let active = true;
+    const dk = new DkSession(
+      new EmuUsbTransport(async <T>(method: string, params?: Record<string, unknown>) => {
+        if (!active) throw new Error('runtime case protocol is no longer active');
+        const result = await session!.client.call<T>(method, params);
+        if (!active) throw new Error('runtime case protocol is no longer active');
+        return result;
+      }),
+    );
+    const invalidateCase = () => {
+      active = false;
+      dk.cancelPending();
+    };
+    invalidate = invalidateCase;
+    runtime = {
+      session: session!,
+      dk,
+      epoch,
+      close: async () => {
+        if (!active) throw new Error('runtime case is no longer active');
+        invalidateCase();
+        await session!.close();
+      },
+    };
+    return runtime;
+  };
+  const finishCurrentCase = async (): Promise<void> => {
+    if (!runtime) return;
+    const current = runtime;
+    const cancel = invalidate;
+    const deadline = Date.now() + 10_000;
+    const errors: unknown[] = [];
+    try {
+      await withinRuntimeDeadline(deadline, () => lifecycle.finishCase(current));
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await withinRuntimeDeadline(deadline, () => session!.client.call('pcm.tap', { action: 'capture_stop' }));
+      await withinRuntimeDeadline(deadline, () => session!.client.call('run.mode', { mode: 'paused' }));
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      // No release-all RPC exists. Bounded taps/chords own release; the mandatory next load clears runtime/scheduled input.
+      cancel?.();
+      runtime = undefined;
+    }
+    if (errors.length) {
+      try {
+        fs.writeFileSync(
+          path.join(session!.runDir, 'runtime-case-error.json'),
+          JSON.stringify(errors.map(String), null, 2),
+        );
+      } catch {
+        /* Preserve evidence/cleanup errors if diagnostics cannot be written. */
+      }
+      await session!.close({ preserveDiagnostics: true });
+      throw new AggregateError(errors, 'runtime case evidence or cleanup failed; owned daemon discarded');
+    }
+  };
+  beforeAll(async () => {
+    const deadline = Date.now() + 120_000;
+    session = await Session.start({ ...opts, dsp: 'sharc', runtime: { patchSet: opts.patchSet, reuse: true } });
+    try {
+      baseline = await withinRuntimeDeadline(deadline, () => lifecycle.prepareBaseline(session!));
+    } catch (error) {
+      await session.close({ preserveDiagnostics: true });
+      throw error;
+    }
+  });
+  beforeEach(async () => {
+    await loadCase(baseline!);
+  });
+  afterEach(async (context) => {
+    await finishCurrentCase();
+    if (context.task.result?.state === 'fail') await session?.close({ preserveDiagnostics: true });
+  });
+  let checkedClose = false;
+  afterAll(async () => {
+    invalidate?.();
+    if (!session || checkedClose) return;
+    checkedClose = true;
+    const errors: unknown[] = [];
+    try {
+      await session.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await lifecycle.afterClose?.(session);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) throw new AggregateError(errors, 'runtime shutdown or post-close evidence failed');
+  });
+  return {
+    get runtime() {
+      if (!runtime) throw new Error('runtime case not started');
+      return runtime;
+    },
+    async reload(next) {
+      if (!runtime || transitioning) throw new Error('runtime case not active or already transitioning');
+      transitioning = true;
+      try {
+        await finishCurrentCase();
+        return await loadCase(next);
+      } finally {
+        transitioning = false;
+      }
     },
   };
 }

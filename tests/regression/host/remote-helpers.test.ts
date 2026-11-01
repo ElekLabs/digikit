@@ -34,7 +34,12 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
 }));
 import { expectRuntimeUi } from '../runtime/live.ts';
 import { expectRemoteEnabled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from '../runtime/remote.ts';
-import { planSymbol, validateRuntimePlan, type RuntimePlan } from '../runtime/runtime-plan.ts';
+import {
+  planSymbol,
+  prepareRuntimePlanOffline,
+  validateRuntimePlan,
+  type RuntimePlan,
+} from '../runtime/runtime-plan.ts';
 import { openDigikitMenu, openRuntimeAbout, readAboutRows, expectRuntimeAbout } from '../runtime/runtime-menu.ts';
 
 const patchedSha256 = 'c'.repeat(64);
@@ -498,4 +503,19 @@ test('post-restart UI readiness allows an unobserved filesystem worker only with
   await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 3, timeout: 20 })).rejects.toThrow();
   status.cf.ready = true;
   await expect(expectRuntimeUi(daemon, plan, '/artifacts', { afterEpoch: 3, timeout: 20 })).rejects.toThrow();
+});
+
+test('offline preparation returns a symbol plan before any loaded-image identity exists', async () => {
+  const prepared = await prepareRuntimePlanOffline({ device: 'dt2', firmware: '1.17' }, '/offline', '/artifacts', [
+    'DKRT_BOOT',
+  ]);
+  expect(prepared.plan).toEqual(plan);
+  expect(prepared.planFile).toBe('/offline/runtime-dt2.plan.json');
+  // Offline availability never substitutes for the explicit loaded-image hash validation.
+  expect(() =>
+    validateRuntimePlan(prepared.plan, {
+      ...session,
+      loadResult: { ...session.loadResult, syx_sha256: 'd'.repeat(64) },
+    }),
+  ).toThrow('output hash');
 });

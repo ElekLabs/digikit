@@ -3,7 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { repoRoot, type Device, type Session } from '@digi/test-support';
+import {
+  repoRoot,
+  withinRuntimeDeadline as beforeReadinessDeadline,
+  type Device,
+  type Session,
+} from '@digi/test-support';
 import { describe, expect, onTestFinished, test } from 'vitest';
 import { expectRuntimeBoot, withPatchedSession, type PatchedSession } from '../support.ts';
 import { timePhase, timingContext } from '../timing.ts';
@@ -55,22 +60,8 @@ export function settleUi(session: Session): Promise<void> {
   return settleLive(session, session.options.device === 'dn2' ? 45_000 : 12_000);
 }
 
-/** Bound each awaited RPC round to the same absolute deadline, even when the peer never replies. */
-export async function beforeReadinessDeadline<T>(deadline: number, read: () => Promise<T>): Promise<T> {
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error('runtime readiness deadline exceeded');
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      read(),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('runtime readiness deadline exceeded')), remaining);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+/** Shared lifecycle deadline; preserve the existing readiness-helper export for its callers. */
+export { beforeReadinessDeadline };
 
 /** DkrtBootInfo word offsets, owned by modules/core/runtime/abi.toml (checked in modules/core/runtime/sdk/src/gen_abi.rs). */
 const BOOT_FIELDS = { magic: 0, version: 4, safe: 8, reason: 12, counter: 16, count: 28, ui_reached: 36 } as const;

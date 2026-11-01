@@ -1593,7 +1593,11 @@ def explain(
                     "may build module toolchains/patchkit CLI, never emulator daemons"
                 )
             if step == "runtime-fixture" and (
-                not selected or "runtime/samples-live.test.ts" in selected
+                not selected
+                or {
+                    "runtime/samples-live.test.ts",
+                    "runtime/fx-reuse.test.ts",
+                }.intersection(selected)
             ):
                 print(
                     f"{step}: prerequisite plusdrive CLI build (tools.firmware.plusdrive_check --build-only)"
@@ -1816,7 +1820,11 @@ def run_step(gate: Gate, step: str) -> None:
                 prepare_acceptance_modules(gate, step, modules)
             )
         if step == "runtime-fixture" and (
-            not selected or "runtime/samples-live.test.ts" in selected
+            not selected
+            or {
+                "runtime/samples-live.test.ts",
+                "runtime/fx-reuse.test.ts",
+            }.intersection(selected)
         ):
             gate.run(
                 "runtime-fixture:plusdrive",

@@ -2,17 +2,18 @@
 """The `fx` kind of the digikit scenarios: effects loaded at run time (docs/design/digikit-dkm.md, DSP section version 4; finding 55).
 
 Run by `tools/patchkit/pk_digikit_scen.py`. The image is the runtime with `core/dynfx` (the effect chain of `core/fx` with free rows); the sound is the run-time
-machine `test/sine` on track 1, the effect `test/dyn-fx-gain` (p0 = 0.5, a counter in its state). Three boots on three cards, each in its own daemon:
+machine `test/sine` on track 1. The three retained Python legs each use their own daemon/card:
 
   plain  the sine alone on an image without `core/dynfx`: the PCM that the hook and the free rows must not change.
   dry    the sine alone: the reference PCM (equal to the plain one); every effect row is free; CAPACITY FX_SLOTS has the device file's limit and none used.
-  one    the sine and one effect: both load; MODULES lists the effect (fx contract, no machine contract, a DSP range); CAPACITY FX_SLOTS used 1 (what
-         `dkneeds` infers); the DSP's L2 holds the packed image relocated at the range; the chain's row 0 holds the effect (pc, desc, state, enabled,
-         p0 = 0.5) and the other rows are free; the PCM is the dry PCM times 0.5 (the effect is in the DAC output); the state word counts the calls.
-         Then the effect is taken out of the selection and the runtime restarted: the PCM is the dry PCM again, bit for bit, and every row is free.
   full   the sine and one more effect than the device has slots (the same file under other names): the effects fill the slots, the last is refused with
          `E_DSP_ROWS` and leaves nothing behind; the PCM is the dry PCM times 0.5 per effect; the fit rule (`dkneeds.fit`, the DIGIKIT menu's) refuses one more
          effect, naming the effect slots, from the live CAPACITY and from an empty one.
+
+The one-effect gain/metadata/relocation/state/deselect-restart leg is covered by
+`tests/regression/runtime/fx-reuse.test.ts`, including lifetime write/flush and card-sector checks.
+Its accepted contract proves FX behavior on audible input, not direct selected-track identity.
+The retained dry/full paths still perform their DT2 selected-sine checks.
 """
 
 from __future__ import annotations
@@ -24,9 +25,10 @@ from typing import Any
 import numpy as np
 
 from tools.device import dkneeds
-from tools.patchkit import hook_ab, pk_device
+from tools.patchkit import pk_device
 from tools.patchkit import pk_digikit_debug as D
 from tools.patchkit import pk_dkrt_machine as M
+from tools.patchkit.hook_ab import compare_aligned as scaled
 
 FREE_PC = 0xFFFF_FFFF
 ROW_WORDS = 24  # a row of the chain (core/fx module.toml)
@@ -42,24 +44,6 @@ def chain_rows(rig: Any, n: int) -> list[tuple[int, ...]]:
     base = M.sym(rig.plan, "core/fx", "fx.rows")
     words = struct.unpack(f"<{n * ROW_WORDS}I", rig.dsp_bytes(base, 4 * ROW_WORDS * n))
     return [tuple(words[i * ROW_WORDS : (i + 1) * ROW_WORDS]) for i in range(n)]
-
-
-def scaled(ref: np.ndarray, run: np.ndarray, gain: float) -> dict[str, Any]:
-    """RUN against REF times GAIN from the note's onset on (the boots reach the note up to a few blocks apart): `hook_ab.compare`'s figures over the
-    common length, and the onset shift in samples."""
-
-    def onset(x: np.ndarray, thr: float) -> int:
-        nz = np.flatnonzero(np.abs(x) > thr)
-        return int(nz[0]) if len(nz) else -1
-
-    # the threshold scales with the gain, so that a quieter run is not found later on the same attack ramp
-    a, b = onset(ref, 1e-6), onset(run, 1e-6 * max(abs(gain), 1e-3))
-    if a < 0 or b < 0:
-        return {"shift": None, "max_err_ulps": 1e9, "rms_db": None}
-    n = min(len(ref) - a, len(run) - b)
-    r = hook_ab.compare(ref[a : a + n], run[b : b + n], gain)
-    r["shift"] = b - a
-    return r
 
 
 def run_fx(c: Any) -> None:
@@ -84,7 +68,6 @@ def run_fx(c: Any) -> None:
         )
         fx_files.append(f"modules/m{k + 1}.dkm")
         fx_bytes.append(out.read_bytes())
-    needs = dkneeds.needs_of(fx_bytes[0])
     sec = M.parse_dsp_section(fx_bytes[0])
     fx = sec["fxs"][0]
     pcm: dict[str, np.ndarray] = {}
@@ -176,84 +159,6 @@ def run_fx(c: Any) -> None:
             )
             c.done(rig)
 
-    def one() -> None:
-        with c.rig(img, c.card([sine, fx_files[0]]), "one") as rig:
-            info = rig.boot_info()
-            c.check(
-                "one: the sine and the effect loaded (results 0, no safe mode)",
-                info["results"] == [0, 0] and info["loaded"] == 2 and info["safe"] == 0,
-                f"{info['results']}",
-            )
-            up = D.uploader(rig)
-            mods = up.modules()
-            names = [m["name"] for m in mods["modules"]]
-            rec = mods["modules"][-1]
-            c.check(
-                "one: MODULES lists the effect with the fx contract 1.0 and no machine contract, and a DSP range of its inferred size",
-                names == [SINE, FX]
-                and rec["contracts"][2] == (1, 0)
-                and rec["contracts"][1] == (0, 0)
-                and rec["dsp_len"] == needs["DSP_AREA"]
-                and rec["rows"] == 0,
-                f"{names} {rec}",
-            )
-            cap = up.capacity()
-            c.check(
-                "one: CAPACITY FX_SLOTS: one of the device's slots used, as the file's inferred needs say",
-                needs["FX_SLOTS"] == 1
-                and cap["FX_SLOTS"] == {"limit": slots, "used": 1, "largest": 0},
-                f"{cap['FX_SLOTS']} needs {needs['FX_SLOTS']}",
-            )
-            base = M.sym(rig.plan, "core/dsp-link", "_dl_area") + rec["dsp_off"]
-            want = M.relocate(sec, base, {})
-            got = rig.dsp_bytes(base, len(want))
-            c.check(
-                "one: the DSP's L2 holds the packed image relocated at its range",
-                got == want,
-                f"range {rec['dsp_off']:#x}+{rec['dsp_len']:#x}, {sum(a != b for a, b in zip(got, want, strict=True))} bytes differ",
-            )
-            rows = chain_ok("one", rig, [(rec, fx)])
-            state_addr = rows[0][W_STATE]
-            pcm["one"] = sound(rig, c.work / "one.wav")
-            after = chain_rows(rig, slots)[0]
-            c.check(
-                "one: the adapter ran the effect: was 1, not switched off, no fault; the parameters are as published",
-                after[W_WAS] == 1
-                and after[W_DIS] == 0
-                and after[W_NFAULT] == 0
-                and after[W_P0 : W_P0 + 8] == tuple(fx["defaults"]),
-                f"was {after[W_WAS]} dis {after[W_DIS]} faults {after[W_NFAULT]}",
-            )
-            n0 = struct.unpack("<I", rig.dsp_bytes(state_addr, 4))[0]
-            rig.emu.call("run_until", frames=rig.frames() + 100)
-            n1 = struct.unpack("<I", rig.dsp_bytes(state_addr, 4))[0]
-            c.check(
-                "one: the effect's state word (reserved behind its image) counts its calls, one a block",
-                n0 > 1000 and 90 <= n1 - n0 <= 110,
-                f"{n0} then {n1}",
-            )
-            # take the effect out of the selection and restart: the dry sound again, every row free
-            r = rig.set_selection([sine])
-            c.check("one: SELECT of the sine alone is accepted", r == 0, f"{r}")
-            rig.restart()
-            rig.emu.pcm_start()  # the new boot has no PCM tap yet (`Session.reset` starts it for a cold boot)
-            rig.s.pcm_mark = 0
-            info = rig.boot_info()
-            c.check(
-                "one: after the restart only the sine is loaded",
-                info["results"] == [0] and info["safe"] == 0,
-                f"{info['results']}",
-            )
-            rows = chain_rows(rig, slots)
-            cap = D.uploader(rig).capacity()
-            c.check(
-                "one: after the restart every row is free and no slot is used",
-                all(r[W_PC] == FREE_PC for r in rows) and cap["FX_SLOTS"]["used"] == 0,
-                f"{[hex(r[W_PC]) for r in rows]} {cap['FX_SLOTS']}",
-            )
-            pcm["back"] = sound(rig, c.work / "one-back.wav", restarted=True)
-            c.done(rig)
-
     def full() -> None:
         sel = [sine, *fx_files]
         with c.rig(img, c.card(sel), "full") as rig:
@@ -309,7 +214,7 @@ def run_fx(c: Any) -> None:
             )
             c.done(rig)
 
-    c.parallel(plain, dry, one, full)
+    c.parallel(plain, dry, full)
     # the sounds are compared with the dry one, which a part that ran beside the others had not finished yet
     r0 = scaled(pcm["plain"], pcm["dry"], 1.0)
     c.check(
@@ -317,14 +222,7 @@ def run_fx(c: Any) -> None:
         bool(r0["identical"]) and abs(r0["shift"]) <= 128,
         f"onset shift {r0['shift']}, max err {r0.get('max_abs_err')}",
     )
-    check_pcm("one", pcm["one"], 0.5, "the effect is in the DAC output")
     check_pcm("full", pcm["full"], 0.5**slots, f"{slots} effects in series, 0.5 each")
-    r2 = scaled(pcm["dry"], pcm["back"], 1.0)
-    c.check(
-        "one: the PCM after deselecting the effect and restarting is the dry PCM, bit for bit from the onset on",
-        bool(r2["identical"]) and abs(r2["shift"]) <= 128,
-        f"onset shift {r2['shift']}, max err {r2.get('max_abs_err')}",
-    )
     c.common_checks()
 
 
