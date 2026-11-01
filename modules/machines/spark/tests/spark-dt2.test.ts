@@ -77,19 +77,6 @@ const peak = (x: Float32Array, from: number, to: number) => {
   return p;
 };
 
-/** Longest run of frames in [from, last sound) where both channels stay under the threshold. */
-function longestSilence(c: Capture, from: number, threshold: number): number {
-  let best = 0;
-  let run = 0;
-  for (let i = Math.max(0, from); i < c.l.length; i++) {
-    if (Math.abs(c.l[i]!) > threshold || Math.abs(c.r[i]!) > threshold) {
-      best = Math.max(best, run);
-      run = 0;
-    } else run++;
-  }
-  return best;
-}
-
 /** First frame at or after the key press where either channel exceeds the threshold, or -1. */
 function onset(c: Capture, threshold = 0.01): number {
   for (let i = c.pressedAt ?? 0; i < c.l.length; i++)
@@ -416,11 +403,13 @@ runtimeTests(
       const onsetS = onset(noteReset);
       expect(onsetS, 'B played before the reset').toBeGreaterThanOrEqual(0);
       expectTones('before the reset', noteReset, onsetS + 4800, resetAt - 2400, [330, 495], [440, 660]);
-      // The old note stops at the wipe and the track plays again after the reload: a silent gap lies inside the capture (measured: 2.3 s).
-      const gap = longestSilence(noteReset, onsetS, 0.002);
-      log.resetGap = gap;
-      log.resetAudio = { resetFrame: resetAt, silenceFrom: (() => { for (let i = resetAt; i < noteReset.l.length; i++) if (peak(noteReset.l, i, i + 480) < 0.002 && peak(noteReset.r, i, i + 480) < 0.002) return i - resetAt; return -1; })() };
-      expect(gap, 'the note of the old token stopped for a while at the wipe').toBeGreaterThan(RATE / 2);
+      // The old note stops with the close that the runtime issues when the wipe is reported: the sound ends no later than 50 ms (of capture clock)
+      // after the first poll that saw CLOSED. The held key does not retrigger the track after the reload, so the capture stays silent to its end.
+      const closedAt = timeline.find((s) => s.closed === 1);
+      expect(closedAt, `the control word was set to CLOSED: ${JSON.stringify(timeline)}`).toBeDefined();
+      const silenceFrom = (log.resetAudio as { silenceFrom: number }).silenceFrom;
+      expect(silenceFrom, 'the note of the old token stopped').toBeGreaterThanOrEqual(0);
+      expect(silenceFrom, `the sound ends with the close: ${JSON.stringify(log.resetAudio)}`).toBeLessThanOrEqual(closedAt!.frame + 2400);
       const endPeak = Math.max(
         peak(noteReset.l, noteReset.l.length - RATE / 2, noteReset.l.length),
         peak(noteReset.r, noteReset.r.length - RATE / 2, noteReset.r.length),
