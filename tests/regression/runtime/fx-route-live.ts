@@ -154,6 +154,7 @@ export async function inspectRouteBoot(
 ) {
   const { session, dk } = runtime;
   validateRuntimePlan(plan, session);
+  await bounded(() => session.client.call('pcm.tap', { action: 'start' }));
   await bounded(() => session.client.call('run.mode', { mode: 'free' }));
   await expectRuntimeUi(session, plan, artifacts);
   const boot = planSymbol(plan, 'DKRT_BOOT');

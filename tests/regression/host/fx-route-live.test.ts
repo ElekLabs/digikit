@@ -14,11 +14,12 @@ const fake = vi.hoisted(() => ({
   evidence: vi.fn(),
   exec: vi.fn(),
   ready: vi.fn(),
+  noGuardHits: vi.fn(),
 }));
 vi.mock('node:child_process', () => ({
   execFile: Object.assign(vi.fn(), { [Symbol.for('nodejs.util.promisify.custom')]: fake.exec }),
 }));
-vi.mock('../support.ts', () => ({ withReusablePatchedSession: fake.fixture }));
+vi.mock('../support.ts', () => ({ withReusablePatchedSession: fake.fixture, expectNoGuardHits: fake.noGuardHits }));
 vi.mock('../runtime/runtime-plan.ts', async (original) => ({
   ...(await original<object>()),
   prepareRuntimePlanOffline: fake.prepare,
@@ -153,6 +154,7 @@ test('route boot drains input while free then returns paused for deterministic p
   const order: string[] = [];
   let mode = 'paused';
   let observations = 0;
+  let pcmStarted = false;
   const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
   const plan: RuntimePlan = {
     base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
@@ -165,6 +167,7 @@ test('route boot drains input while free then returns paused for deterministic p
     expect(mode).toBe('free');
   });
   const session = {
+    expectNoFault: vi.fn(),
     options: { device: 'dt2', firmware: '1.17' },
     loadResult: { syx_sha256: plan.output!.syx_sha256 },
     preparedRuntimeImage: {
@@ -174,10 +177,21 @@ test('route boot drains input while free then returns paused for deterministic p
       modules: plan.modules,
     },
     client: {
-      call: vi.fn(async (_method: string, params: { mode: string }) => {
-        mode = params.mode;
-        order.push(mode);
+      call: vi.fn(async (method: string, params: Record<string, unknown>) => {
+        if (method === 'run.mode') {
+          mode = String(params.mode);
+          order.push(mode);
+        } else if (method === 'pcm.tap') {
+          order.push(`pcm:${params.action}`);
+          if (params.action === 'start') pcmStarted = true;
+          if (params.action === 'report') {
+            if (!pcmStarted) throw new Error('pcm.tap was not started');
+            return { non_finite: 0, peak: 0 };
+          }
+        }
+        return {};
       }),
+      guardReport: vi.fn(async () => ({ total: 0, hits: [] })),
       memPeek: vi.fn(async (address: number) => fields[(address - 4096) / 4]),
     },
     status: vi.fn(async () => {
@@ -205,9 +219,14 @@ test('route boot drains input while free then returns paused for deterministic p
     artifacts,
     'boot',
   );
-  expect(order).toEqual(['free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
+  expect(order).toEqual(['pcm:start', 'free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
   expect(mode).toBe('paused');
   expect(inspected.epoch).toBe(3);
+  const { evidence } = await vi.importActual<typeof import('../runtime/fx-live.ts')>('../runtime/fx-live.ts');
+  await expect(evidence({ session } as PatchedSession, artifacts, 'closing', [], false)).resolves.toBeUndefined();
+  expect(order.indexOf('pcm:start')).toBeLessThan(order.indexOf('ready'));
+  expect(order.indexOf('pcm:report')).toBeGreaterThan(order.indexOf('paused'));
+  expect(session.expectNoFault).toHaveBeenCalledWith('closing');
 });
 
 test('paused route protocol owns its stepped transport and cancels requests on failure', async () => {
