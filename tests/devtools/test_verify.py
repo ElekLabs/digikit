@@ -2589,15 +2589,12 @@ def test_runtime_aliases_are_only_selected_for_their_owning_route_suites() -> No
                 ],
             )
             for helper in (
+                "pk_digikit_fx",
                 "pk_digikit_fxpage",
                 "pk_digikit_fxroutes",
                 "pk_digikit_fxroute",
             )
         ],
-        (
-            "tools/patchkit/pk_digikit_fx.py",
-            ["runtime/fx-chain.test.ts", "runtime/fx-pages.test.ts"],
-        ),
         (
             "tests/fixtures/modules/dyn-fx-gain-both/module.toml",
             ["runtime/fx-track-route.test.ts"],
@@ -2681,6 +2678,7 @@ def test_route_pcm_helper_selects_audible_fx_consumers() -> None:
         "runtime/fx-chain.test.ts",
         "runtime/fx-pages.test.ts",
         "runtime/fx-reuse.test.ts",
+        "runtime/fx-routes-panel.test.ts",
         "runtime/fx-routes-persist.test.ts",
         "runtime/fx-send-dn2.test.ts",
         "runtime/fx-send.test.ts",
