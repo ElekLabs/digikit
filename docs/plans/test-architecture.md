@@ -563,8 +563,24 @@ The four legacy wrappers and four scenario TOMLs are retired after those proofs:
 The Python kind dispatch and runner bodies are removed. Shared row/PCM oracles and profile,
 kit, screenshot and knob utilities remain for `fxpersist`, `fxshift` and the TypeScript suites.
 Gain aliases 2/3/4 are prepared only for the complete BASIC inventory, and sine selection now
-uses the same numeric 7/5 defaults without reading the retired TOMLs. Final gate acceptance
-remains outstanding; no gate pass or exception is claimed for this batch.
+uses the same numeric 7/5 defaults without reading the retired TOMLs. Retirement `bb3972ee`
+is committed (21 files, +61/-737, eight deleted). Focused checks passed 14 offline tests plus
+15 subtests, 14 routing tests and 12 changed-test cases; independent review reported no issues.
+
+The final required `test:changed` invocation exited 1 on three baseline path errors in
+[module-architecture.md](module-architecture.md) (lines 3, 4 and 284, unchanged from `origin/main`)
+and two stale expected-list failures. Commit `0adc052d` corrected those two expectations, and both
+retry cases passed. Across the run/retry, 674 Python cases passed (270 budget + 57 changed +
+345 verify + two retries), along with 99 host cases. Ruff check/format, mypy on two sources,
+layers/generated checks, oxlint, Prettier and workspace types passed. Scoped changed-doc
+pathchecks passed. The original preflight was not a fully green run.
+
+The authoritative gate explanation uses `origin/main` at `e8c0e8ac` and selects eight FX runtime
+files, 41 Python files, host checks, smoke and native prerequisites. The initial `--base main`
+explanation used a stale local ref and is superseded. The broad gate was not run. Draft
+[PR #247](https://github.com/ElekLabs/digikit/pull/247) awaits a PR-specific focused-validation
+decision; no exception or broad-gate pass is claimed for this batch. Timings remain correctness
+evidence only, without a paired speedup claim.
 
 Deleted-scenario routing remains deferred because path-only callers need merge-base ownership
 evidence. No cache or tombstone tooling is introduced by this batch.
