@@ -276,7 +276,9 @@ export class Session {
           ...(prepared
             ? { base_sha256: prepared.baseSha256 }
             : { runtime: true, patch_set: this.options.runtime!.patchSet }),
-          replace: true,
+          // Prepared images need the daemon's retained stock bytes to derive the DSP patch.
+          // force still reconstructs the firmware and opens the explicit pristine card.
+          replace: !prepared,
           force: true,
           start: 'auto',
           auto_no: this.options.autoNo ?? true,

@@ -188,7 +188,7 @@ export async function inspectRouteBoot(
   expect(status.mode).toBe('paused');
   expect(status.cf.input_pending).toBe(0);
   expect(status.scheduled_inputs).toBe(0);
-  record(artifacts, tag, { fields, modules, results, capacity, status });
+  record(artifacts, tag, { fields, modules, results, capacity, status, load: session.loadResult });
   return { fields, modules, results, capacity, epoch: status.epoch };
 }
 

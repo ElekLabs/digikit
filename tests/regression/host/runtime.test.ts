@@ -276,7 +276,7 @@ test('baseline reload replaces Session identity/card/events and reapplies actor 
     expect(session.loadResult).toBe(loaded);
     expect(await session.faults()).toEqual([]);
     expect(fake.client.firmwareLoad).toHaveBeenLastCalledWith(
-      expect.objectContaining({ card: fs.realpathSync(baseline.cardImage), replace: true, runtime: true }),
+      expect.objectContaining({ card: fs.realpathSync(baseline.cardImage), replace: true, runtime: true, force: true }),
     );
     expect(fake.client.call).toHaveBeenCalledWith('cpu.exceptions', { deliver: false });
     expect(fake.client.guardSet).toHaveBeenLastCalledWith(baseline.guard);
@@ -446,7 +446,12 @@ for (const mismatch of [null, 'artifact', 'stock', 'load', 'status-image', 'stat
         expect(load.syx).toBe(syx);
         expect(load.base_sha256).toBe(preparedImage.baseSha256);
         expect(load.runtime).toBeUndefined();
-        expect(load.replace).toBe(true);
+        // Retain the startup stock bytes for the daemon's DSP diff, while still reconstructing
+        // the firmware with this pristine card rather than taking its hot-load path.
+        expect(load.replace).toBe(false);
+        expect(load.force).toBe(true);
+        expect(load.start).toBe('auto');
+        expect(load.card).toBe(fs.realpathSync(baseline.cardImage));
         expect(session.loadResult.runtime).toBeUndefined();
       }
     } finally {
