@@ -9,7 +9,7 @@ globbing; no list names them; the names are unique across both places):
 
     [scenario]
     name = "equiv-dyn-pluck"       # the file's stem
-    kind = "equiv" | "roundtrip" | "safe" | "cut" | "menu" | "upload" | "card" | "debug" | "crash" | "pages" | "fx" | "fxroute" | "fxroutes" | "settings"
+    kind = "equiv" | "roundtrip" | "safe" | "cut" | "menu" | "upload" | "card" | "debug" | "crash" | "pages" | "fx" | "settings"
     devices = ["dt2"]              # the scenario runs on the images of these devices (`images` names them instead)
     tier = "quick" | "full"        # quick: part of the verify gate; full: only `--tier full` (merges to main)
 
@@ -50,9 +50,6 @@ Kinds:
   fx         effects loaded at run time (DSP section version 4, `core/dynfx`; Digitakt II and Digitone II): the sine and `test/dyn-fx-gain` selected at boot play as the
              dry sine times the gain, the chain's row, MODULES and CAPACITY say so, deselecting the effect and restarting gives the dry PCM again, and
              one effect more than the device has slots is refused (`E_DSP_ROWS`, and by the fit rule); tools/patchkit/pk_digikit_fx.py.
-  fxroutes   SETTINGS > DIGIKIT > MODULES > the side panel's ROUTE... and the effect's route fields (`route`, `routes` of DK_FX; Digitakt II): a send-default effect starts on the send route, the
-             ROUTE... choice of the side panel offers the allowed routes and the free send slots, the pending route is a change that NO and YES on APPLY & RESTART? write (settings) and restart, and the
-             route is in effect after it (row word, FX key page, PCM, `patchkit store dump`), the FX view lists send effects first; tools/patchkit/pk_digikit_fxroutes.py.
   settings   the settings store of the runtime (docs/design/digikit-store.md, "The settings record"): a key put through the mailbox is written 2 s after the last change to the copy that is not
              current (A, then B, then A), never to anything else in the store range; a soft restart reads it back; the SETTINGS command and CAPACITY kind SETTINGS report it; `patchkit store dump`
              decodes the card the guest left; a blank card is claimed first; a torn newer copy leaves the older one; tools/patchkit/pk_digikit_settings.py.
@@ -1375,18 +1372,6 @@ def run_fx(c: Ctx) -> None:
     FX.run_fx(c)
 
 
-def run_fxroute(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fxroute as FR
-
-    FR.run_fxroute(c)
-
-
-def run_fxroutes(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_fxroutes as FRS
-
-    FRS.run_fxroutes(c)
-
-
 def run_settings(c: Ctx) -> None:
     from tools.patchkit import pk_digikit_settings as SET
 
@@ -1414,8 +1399,6 @@ def run_fxshift(c: Ctx) -> None:
 KINDS = {
     "pages": run_pages,
     "fx": run_fx,
-    "fxroute": run_fxroute,
-    "fxroutes": run_fxroutes,
     "settings": run_settings,
     "fxpage": run_fxpage,
     "fxpersist": run_fxpersist,

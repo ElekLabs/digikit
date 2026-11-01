@@ -529,8 +529,8 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_pages.py": ("pages",),
     "pk_digikit_fx.py": ("fx",),
     "pk_digikit_fxsend.py": (),
-    "pk_digikit_fxroute.py": ("fxroute",),
-    "pk_digikit_fxroutes.py": ("fxroutes",),
+    "pk_digikit_fxroute.py": (),  # retained offline TS oracles
+    "pk_digikit_fxroutes.py": (),  # retained TS profile/card/OLED helpers
     "pk_digikit_settings.py": ("settings",),
     "pk_digikit_fxpage.py": ("fxpage",),
     "pk_digikit_fxpersist.py": ("fxpersist",),
