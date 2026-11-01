@@ -5,17 +5,9 @@ import { button, encoder, repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { advance, analysisJson, bounded, compare, frames, rows, rpc, word } from './fx-live.ts';
-import { FX, SINE, inspectRouteBoot, routeProtocol, shot, tap, withRouteFxSession } from './fx-route-live.ts';
-import {
-  amountShown,
-  kitMenu,
-  kitSlotOne,
-  selectSine,
-  selectTrack,
-  setAmount,
-  soundImage,
-  trackNote,
-} from './fx-track-ui.ts';
+import { FX, SINE, withRouteFxSession } from './fx-route-live.ts';
+import { inspectFxBoot, withPausedFxProtocol, selectSine, shot, tap } from './fx-session.ts';
+import { amountShown, kitMenu, kitSlotOne, selectTrack, setAmount, soundImage, trackNote } from './fx-track-ui.ts';
 import { DEVICES, FIRMWARE, record } from './live.ts';
 import { planSymbol } from './runtime-plan.ts';
 
@@ -55,7 +47,7 @@ for (const device of DEVICES) {
       test('captures the original FX pixels and PCM', async () => {
         const { fixture, plan, profile, artifacts } = context;
         const runtime = fixture.runtime;
-        const state = await inspectRouteBoot(runtime, plan, [SINE], artifacts, 'base-boot');
+        const state = await inspectFxBoot(runtime, plan, [SINE], artifacts, 'base-boot');
         context.rememberEpoch(state.epoch);
         await selectSine(runtime, profile);
         await tap(runtime.session, 'FX', 400);
@@ -83,7 +75,7 @@ for (const device of DEVICES) {
         return Array.from({ length: 16 }, (_, track) => (words[track >> 2]! >>> (8 * (track % 4))) & 0xff);
       };
       const capacity = async (runtime: PatchedSession, used: number) => {
-        expect((await routeProtocol(runtime, (dk) => dk.capacity())).SEND_SLOTS).toEqual({
+        expect((await withPausedFxProtocol(runtime, (dk) => dk.capacity())).SEND_SLOTS).toEqual({
           limit: context.sendSlots,
           used,
           largest: 0,
@@ -119,7 +111,7 @@ for (const device of DEVICES) {
         const boot = async (tag: string, selectedNames: string[], preset: string) => {
           const runtime = firstBoot ? context.fixture.runtime : await context.fixture.reload(context.baseline(preset));
           firstBoot = false;
-          const state = await inspectRouteBoot(runtime, context.plan, selectedNames, context.artifacts, `${tag}-boot`);
+          const state = await inspectFxBoot(runtime, context.plan, selectedNames, context.artifacts, `${tag}-boot`);
           context.rememberEpoch(state.epoch);
           return { runtime, state };
         };
