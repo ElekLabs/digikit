@@ -418,3 +418,30 @@ shared fixture and assertion mapping carry forward; this is not a broad bulk-del
 FX SEND is the chosen next migration: five DT2/eight DN2 same-image legs. The mechanical shared
 `fx-live.ts` extraction is the prerequisite for independent common-SEND/DN2 work, without changing
 gain execution or basic plain/dry/full/fxpage coverage. No new device result or speedup is claimed.
+
+
+The [SEND implementation checkpoint](test-architecture.md#fx-send-implementation-and-device-proof-2026-11-01)
+now maps 13 independent baselines into three owned processes (five common DT2, five common DN2,
+three DN2 extras), retaining the independent PCM, state/counter, voice/idle and lifetime safety
+oracles. The accepted audible-input contract leaves direct type proof in basic legacy dry/full;
+plain/fxpage and other families remain. This is not a measured-speedup claim.
+
+Final common proofs passed: DT2 87.51 s invocation / 82.090 s case; DN2 67.634 s file / 65.074 s
+case. Both identity shifts were 0 and lifetime checks passed eight summaries/five overlays each.
+Earlier relative-frame attempts failed shift/setup guards; final captures restore legacy absolute
+frames 7500/7000 without relaxing margins or PCM tolerances. Final DN2 extras also passed at fixed
+frame 7000: 42.055 s file / 39.564 s case (109.92 s DN2 invocation), exactly two sounding buses per
+chord, added factor 0.5000029707401741, 48,000 finite idle samples at peak 0, and lifetime safety
+five summaries/three overlays with zero write/flush hits. All three final cases pass. Retirement
+`42028b59` is integrated as `804bdae2`, after runtime/routing `da4fdf7f`; the SEND
+wrappers/scenarios and device runner are removed, retaining the analysis CLI. No device execution
+changed after proof. Static review found no issues; the broad gate is unrun and no exception exists
+for this new batch. PR #242's focused exception does not transfer.
+
+Final fast preflight passed: `mise run test:changed -- --base origin/main` ran 621 Python cases
+(270 + 57 + 294) and 73 host cases, with Ruff check/format, mypy (one source), pathcheck (zero stale
+references), layer/generated checks, oxlint, Prettier and workspace types. Earlier 21 analyzer and
+two shared-helper tests also passed. The gate explanation selects host, all 13 runtime fixtures,
+47 Python files, smoke and daemon prerequisites; that routed gate was not run. Focused acceptance
+for this batch is pending Em's decision after the concrete PR; PR #242's exception
+does not transfer.
