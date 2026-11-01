@@ -78,8 +78,10 @@ for (const device of DEVICES) {
 
     test('menu YES persists both route directions and restarts into the matching audio and FX pages', async () => {
       const { fixture, plan, artifacts, slots, rememberEpoch } = context;
-      const inspect = async (runtime: PatchedSession, tag: string, effect: boolean) => {
-        const state = await inspectRouteBoot(runtime, plan, effect ? [SINE, SEND] : [SINE], artifacts, tag);
+      const inspect = async (runtime: PatchedSession, tag: string, effect: boolean, afterEpoch?: number) => {
+        const state = await inspectRouteBoot(runtime, plan, effect ? [SINE, SEND] : [SINE], artifacts, tag, undefined, {
+          afterEpoch,
+        });
         rememberEpoch(state.epoch);
         return state;
       };
@@ -166,7 +168,7 @@ for (const device of DEVICES) {
         try {
           await expectRuntimeUi(session, plan, artifacts, { afterEpoch: Number(before) });
           await bounded(() => session.client.guardSet(context.baseline(tag).guard));
-          await inspect(reboot, `${tag}-restarted`, true);
+          await inspect(reboot, `${tag}-restarted`, true, Number(before));
           await expectRoute(reboot, send);
           expect(await storedRoute(reboot, artifacts, tag)).toBe(send ? 'send' : 'master');
           const file = await capture(reboot, tag === 'apply' ? 'master' : 'send1');

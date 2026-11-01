@@ -113,6 +113,7 @@ for (const device of DEVICES) {
         await tap(runtime.session, 'FX', 400);
       };
 
+      // Ten formerly separate tests now share this bounded composite wall-clock budget.
       test('preserves stock pixels, routes, kit amounts and project controls across ten clean baselines', async () => {
         let firstBoot = true;
         const boot = async (tag: string, selectedNames: string[], preset: string) => {
@@ -427,7 +428,7 @@ for (const device of DEVICES) {
             }
           }
         }
-      });
+      }, 600_000);
     });
   });
 }

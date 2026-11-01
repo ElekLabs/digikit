@@ -148,86 +148,96 @@ test('route diagnostic text decodes big endian words and panel chords release on
   expect(session.client.inputButton).toHaveBeenLastCalledWith(expect.any(Number), false);
 });
 
-test('route boot drains input while free then returns paused for deterministic panel steps', async () => {
-  const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-inspect-'));
-  directories.push(artifacts);
-  const order: string[] = [];
-  let mode = 'paused';
-  let observations = 0;
-  let pcmStarted = false;
-  const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
-  const plan: RuntimePlan = {
-    base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
-    modules: ['core/runtime'],
-    symbols: { 'core/runtime:DKRT_BOOT': 4096 },
-    output: { syx_sha256: 'b'.repeat(64) },
-  };
-  fake.ready.mockImplementation(async () => {
-    order.push('ready');
-    expect(mode).toBe('free');
-  });
-  const session = {
-    expectNoFault: vi.fn(),
-    options: { device: 'dt2', firmware: '1.17' },
-    loadResult: { syx_sha256: plan.output!.syx_sha256 },
-    preparedRuntimeImage: {
-      syx: '/prepared.syx',
-      baseSha256: plan.base.syx_sha256,
-      syxSha256: plan.output!.syx_sha256,
-      modules: plan.modules,
-    },
-    client: {
-      call: vi.fn(async (method: string, params: Record<string, unknown>) => {
-        if (method === 'run.mode') {
-          mode = String(params.mode);
-          order.push(mode);
-        } else if (method === 'pcm.tap') {
-          order.push(`pcm:${params.action}`);
-          if (params.action === 'start') pcmStarted = true;
-          if (params.action === 'report') {
-            if (!pcmStarted) throw new Error('pcm.tap was not started');
-            return { non_finite: 0, peak: 0 };
+for (const afterEpoch of [undefined, 2]) {
+  test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness`, async () => {
+    const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-inspect-'));
+    directories.push(artifacts);
+    const order: string[] = [];
+    let mode = 'paused';
+    let observations = 0;
+    let pcmStarted = false;
+    const fields = [0x444b4254, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
+    const plan: RuntimePlan = {
+      base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
+      modules: ['core/runtime'],
+      symbols: { 'core/runtime:DKRT_BOOT': 4096 },
+      output: { syx_sha256: 'b'.repeat(64) },
+    };
+    fake.ready.mockImplementation(async () => {
+      order.push('ready');
+      expect(mode).toBe('free');
+    });
+    const session = {
+      expectNoFault: vi.fn(),
+      options: { device: 'dt2', firmware: '1.17' },
+      loadResult: { syx_sha256: plan.output!.syx_sha256 },
+      preparedRuntimeImage: {
+        syx: '/prepared.syx',
+        baseSha256: plan.base.syx_sha256,
+        syxSha256: plan.output!.syx_sha256,
+        modules: plan.modules,
+      },
+      client: {
+        call: vi.fn(async (method: string, params: Record<string, unknown>) => {
+          if (method === 'run.mode') {
+            mode = String(params.mode);
+            order.push(mode);
+          } else if (method === 'pcm.tap') {
+            order.push(`pcm:${params.action}`);
+            if (params.action === 'start') pcmStarted = true;
+            if (params.action === 'report') {
+              if (!pcmStarted) throw new Error('pcm.tap was not started');
+              return { non_finite: 0, peak: 0 };
+            }
           }
-        }
+          return {};
+        }),
+        guardReport: vi.fn(async () => ({ total: 0, hits: [] })),
+        memPeek: vi.fn(async (address: number) => fields[(address - 4096) / 4]),
+      },
+      status: vi.fn(async () => {
+        const pending = observations++ === 0 ? 1 : 0;
+        order.push(pending ? 'pending' : 'drained');
+        if (pending) expect(mode).toBe('free');
+        return { epoch: 3, mode, cf: { input_pending: pending }, scheduled_inputs: pending };
+      }),
+    } as unknown as Session;
+    const dk = {
+      modules: vi.fn(async () => {
+        expect(mode).toBe('free');
+        return [{ name: 'test/sine' }];
+      }),
+      capacity: vi.fn(async () => {
+        expect(mode).toBe('free');
+        order.push('capacity');
         return {};
       }),
-      guardReport: vi.fn(async () => ({ total: 0, hits: [] })),
-      memPeek: vi.fn(async (address: number) => fields[(address - 4096) / 4]),
-    },
-    status: vi.fn(async () => {
-      const pending = observations++ === 0 ? 1 : 0;
-      order.push(pending ? 'pending' : 'drained');
-      if (pending) expect(mode).toBe('free');
-      return { epoch: 3, mode, cf: { input_pending: pending }, scheduled_inputs: pending };
-    }),
-  } as unknown as Session;
-  const dk = {
-    modules: vi.fn(async () => {
-      expect(mode).toBe('free');
-      return [{ name: 'test/sine' }];
-    }),
-    capacity: vi.fn(async () => {
-      expect(mode).toBe('free');
-      order.push('capacity');
-      return {};
-    }),
-  };
-  const inspected = await inspectRouteBoot(
-    { session, dk } as unknown as PatchedSession,
-    plan,
-    ['test/sine'],
-    artifacts,
-    'boot',
-  );
-  expect(order).toEqual(['pcm:start', 'free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
-  expect(mode).toBe('paused');
-  expect(inspected.epoch).toBe(3);
-  const { evidence } = await vi.importActual<typeof import('../runtime/fx-live.ts')>('../runtime/fx-live.ts');
-  await expect(evidence({ session } as PatchedSession, artifacts, 'closing', [], false)).resolves.toBeUndefined();
-  expect(order.indexOf('pcm:start')).toBeLessThan(order.indexOf('ready'));
-  expect(order.indexOf('pcm:report')).toBeGreaterThan(order.indexOf('paused'));
-  expect(session.expectNoFault).toHaveBeenCalledWith('closing');
-});
+    };
+    const inspected = await inspectRouteBoot(
+      { session, dk } as unknown as PatchedSession,
+      plan,
+      ['test/sine'],
+      artifacts,
+      'boot',
+      undefined,
+      afterEpoch === undefined ? undefined : { afterEpoch },
+    );
+    expect(fake.ready).toHaveBeenLastCalledWith(
+      session,
+      plan,
+      artifacts,
+      afterEpoch === undefined ? {} : { afterEpoch },
+    );
+    expect(order).toEqual(['pcm:start', 'free', 'ready', 'capacity', 'pending', 'drained', 'paused', 'drained']);
+    expect(mode).toBe('paused');
+    expect(inspected.epoch).toBe(3);
+    const { evidence } = await vi.importActual<typeof import('../runtime/fx-live.ts')>('../runtime/fx-live.ts');
+    await expect(evidence({ session } as PatchedSession, artifacts, 'closing', [], false)).resolves.toBeUndefined();
+    expect(order.indexOf('pcm:start')).toBeLessThan(order.indexOf('ready'));
+    expect(order.indexOf('pcm:report')).toBeGreaterThan(order.indexOf('paused'));
+    expect(session.expectNoFault).toHaveBeenCalledWith('closing');
+  });
+}
 
 test('paused route protocol owns its stepped transport and cancels requests on failure', async () => {
   const cancel = vi.spyOn(DkSession.prototype, 'cancelPending');

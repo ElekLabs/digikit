@@ -151,12 +151,13 @@ export async function inspectRouteBoot(
   artifacts: string,
   tag: string,
   expectedResults = expectedNames.map(() => 0),
+  readiness: { afterEpoch?: number } = {},
 ) {
   const { session, dk } = runtime;
   validateRuntimePlan(plan, session);
   await bounded(() => session.client.call('pcm.tap', { action: 'start' }));
   await bounded(() => session.client.call('run.mode', { mode: 'free' }));
-  await expectRuntimeUi(session, plan, artifacts);
+  await expectRuntimeUi(session, plan, artifacts, readiness);
   const boot = planSymbol(plan, 'DKRT_BOOT');
   let modules = await bounded(() => dk.modules());
   let results: number[] = [];
