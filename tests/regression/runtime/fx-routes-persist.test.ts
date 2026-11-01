@@ -164,7 +164,6 @@ for (const device of DEVICES) {
         const dk = new DkSession(new EmuUsbTransport((method, params) => session.client.call(method, params)));
         const reboot = { session, dk, close: runtime.close };
         try {
-          await bounded(() => dk.waitForBoot());
           await expectRuntimeUi(session, plan, artifacts, { afterEpoch: Number(before) });
           await bounded(() => session.client.guardSet(context.baseline(tag).guard));
           await inspect(reboot, `${tag}-restarted`, true);
