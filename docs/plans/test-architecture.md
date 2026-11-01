@@ -147,11 +147,11 @@ The earlier estimate of 80 boots per device reduced to nine is unsupported and i
 
 | Family / source anchor | Quick DT2 rig entries | Quick DN2 rig entries | Explicit restarts per device |
 | --- | ---: | ---: | ---: |
-| [fx](../../tools/patchkit/pk_digikit_fx.py) line 312 | 4 | 4 | 1 |
+| fx (retired runner, historical line 312) | 4 | 4 | 1 |
 | [fxsend](../../tools/patchkit/pk_digikit_fxsend.py) line 192 | 5 | 8 | 0 |
 | fxroute (retired runner, historical line 558) | 11 | 11 | 0 |
 | fxroutes (retired runner, historical line 637) | 8 | 8 | 2 |
-| [fxpage](../../tools/patchkit/pk_digikit_fxpage.py) line 513 | 3 | 3 | 1 |
+| fxpage (retired runner, historical line 513) | 3 | 3 | 1 |
 | [fxpersist](../../tools/patchkit/pk_digikit_fxpersist.py) line 275 | 1 | 1 | 0 |
 | [fxshift](../../tools/patchkit/pk_digikit_fxshift.py) line 499 | 4 | 4 | 0 |
 | Total | 36 | 39 | 4 |
@@ -548,13 +548,23 @@ FXPAGE relative PCM oracles retain audibility responsibility without relaxing fi
 | BASIC capacity, selected type, free/live rows, overflow refusal and unchanged serial-gain PCM | [fx-chain.test.ts](../../tests/regression/runtime/fx-chain.test.ts), with separate plain reference and sequential dry/full baselines |
 | FXPAGE stock hashes, free-index poke invariance, page/index metadata, GAIN/MIX and A–E controls, SELECT/restart removal | [fx-pages.test.ts](../../tests/regression/runtime/fx-pages.test.ts), with independent reference and sequential stock/effect/deselect context |
 
-Both ports and the reviewed parity fixes are committed and pushed through `f7895788`; scoped
-host/static/type checks passed. DN2 BASIC passed: 58.75 s invocation, 16.462 s plain / 34.285 s
-hooked cases, with artifact suffixes `FYLTlZ` / `6wyS5t`. Default-policy lifetime safety passed
-3 + 5 watch windows and 1 + 2 overlays with zero write/flush hits. These are correctness durations.
-DN2 FXPAGE proof is running; no other new device pass is claimed. BASIC/FXPAGE legacy retirement
-has not happened, and no gate exception exists for this batch. Remaining device proof and final
-acceptance are ahead; no performance claim is made.
+Both ports and the reviewed parity fixes passed their four family/device proofs. DN2 BASIC took
+58.75 s and DN2 FXPAGE 293.71 s. The combined DT2 invocation took 201.23 s, with BASIC 76.193 s
+and FXPAGE 124.770 s per file. These are correctness durations, not a speedup comparison.
+On each device BASIC passed 3 + 5 lifetime watch windows and 1 + 2 overlays; FXPAGE passed
+3 + 7 windows and 1 + 4 overlays. All eight lifetime-safety reports passed the default policy,
+with zero write/flush hits and no invalid sectors.
+
+The four legacy wrappers and four scenario TOMLs are retired after those proofs:
+`REF:tests/digikit/test_fx_dt2.py`, `REF:tests/digikit/test_fx_dn2.py`,
+`REF:tests/digikit/test_fxpage_dt2.py`, `REF:tests/digikit/test_fxpage_dn2.py`,
+`REF:tests/digikit/scenarios/fx-dyn-dt2.toml`, `REF:tests/digikit/scenarios/fx-dyn-dn2.toml`,
+`REF:tests/digikit/scenarios/fx-pages-dt2.toml`, and `REF:tests/digikit/scenarios/fx-pages-dn2.toml`.
+The Python kind dispatch and runner bodies are removed. Shared row/PCM oracles and profile,
+kit, screenshot and knob utilities remain for `fxpersist`, `fxshift` and the TypeScript suites.
+Gain aliases 2/3/4 are prepared only for the complete BASIC inventory, and sine selection now
+uses the same numeric 7/5 defaults without reading the retired TOMLs. Final gate acceptance
+remains outstanding; no gate pass or exception is claimed for this batch.
 
 Deleted-scenario routing remains deferred because path-only callers need merge-base ownership
 evidence. No cache or tombstone tooling is introduced by this batch.

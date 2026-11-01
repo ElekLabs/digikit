@@ -534,12 +534,12 @@ RUNNER_KINDS: dict[str, tuple[str, ...]] = {
     "pk_digikit_debug.py": ("card", "debug", "crash"),
     "pk_digikit_upload.py": ("upload",),
     "pk_digikit_pages.py": ("pages",),
-    "pk_digikit_fx.py": ("fx",),
+    "pk_digikit_fx.py": (),  # retained offline TS and legacy shared oracles
     "pk_digikit_fxsend.py": (),
     "pk_digikit_fxroute.py": (),  # retained offline TS oracles
     "pk_digikit_fxroutes.py": (),  # retained TS profile/card/OLED helpers
     "pk_digikit_settings.py": ("settings",),
-    "pk_digikit_fxpage.py": ("fxpage",),
+    "pk_digikit_fxpage.py": (),  # retained profile/PCM and legacy UI helpers
     "pk_digikit_fxpersist.py": ("fxpersist",),
     "pk_digikit_fxshift.py": ("fxshift",),
     "pk_digikit_capacity.py": ("debug",),
