@@ -506,6 +506,8 @@ RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ),
         ("build", "pins", "python-tests"),
     ),
+    # the Nx graph: host affected selection and verify_route.nx_graph read it
+    (("nx.json", "tools/nx/"), ("host", "python-tests")),
     (("tools/", "tests/", "pyproject.toml"), ("python-tests",)),
     (
         ("Cargo.toml", "Cargo.lock", "mise.toml", "package.json", "pnpm-lock.yaml"),
