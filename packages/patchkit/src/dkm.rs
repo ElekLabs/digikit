@@ -83,6 +83,9 @@ pub const FLAG_TRACE: u32 = 1 << 31;
 /// The runtime version that loads a DSP section (`dkrt_sdk::RUNTIME_VERSION` is at least this).
 pub const RUNTIME_DSP: u32 = 5; // DSP sections of version 2 (voices with knob ranges, finding 51); a runtime 2 to 4 loads version 1 only
 
+/// The newest minor of the machine contract that has no stereo machines (1.1: `track` appended to `voice_in`).
+pub const MACHINE_MONO_MINOR: u8 = 1;
+
 pub struct Options {
     pub name: String,
     /// major << 16 | minor << 8 | patch
@@ -90,6 +93,9 @@ pub struct Options {
     pub runtime_min: u32,
     /// A traced build (`patchkit pack --trace`, DK_TRACE defined): sets [`FLAG_TRACE`].
     pub trace: bool,
+    /// A stereo machine (`DK_MACHINE_STEREO`): the file declares machine contract 1.2. A mono machine declares 1.1, so a runtime of
+    /// machine contract 1.1 still accepts it.
+    pub stereo: bool,
 }
 
 /// "1.2.3" -> 0x010203
@@ -365,8 +371,10 @@ pub fn pack_full_max(
         sdk.api,
         if (dsp.is_empty() || fx_only) && !has_machine_record(reg) {
             none
-        } else {
+        } else if o.stereo {
             sdk.machine
+        } else {
+            (sdk.machine.0, sdk.machine.1.min(MACHINE_MONO_MINOR))
         },
         if has_fx { sdk.fx } else { none },
         if has_service { sdk.service } else { none },
@@ -634,6 +642,7 @@ mod tests {
             version: 0x010203,
             runtime_min: 1,
             trace: false,
+            stereo: false,
         }
     }
 
@@ -696,10 +705,14 @@ mod tests {
         assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 1, 0]);
         // with a DSP section: machine too (the section's bytes are not parsed by pack)
         let f = pack_full(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
+        assert_eq!(c(&f), vec![1, 5, 1, 1, 0, 0, 1, 0]);
+        // a stereo machine: contract 1.2
+        let stereo = Options { stereo: true, ..opts() };
+        let f = pack_full(Some(&object()), &[], &[0u8; 16], &stereo).unwrap();
         assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
         // a data-only module with a DSP section: machine, no service
         let f = pack_full(None, &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 5, 1, 1, 0, 0, 0, 0]);
         // a data-only module without DSP code: api only
         let f = pack_with(None, &[], &opts()).unwrap();
         assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 0, 0]);
@@ -720,7 +733,7 @@ mod tests {
         let param = rec(crate::register::KIND_PARAM, crate::register::LEN_PARAM);
         let machine = rec(crate::register::KIND_MACHINE, crate::register::LEN_MACHINE);
         let f = pack_with(None, &table(&[param.clone(), machine]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 0, 0]);
+        assert_eq!(c(&f), vec![1, 5, 1, 1, 0, 0, 0, 0]);
         let f = pack_with(None, &table(&[param]), &opts()).unwrap();
         assert_eq!(c(&f), vec![1, 5, 0, 0, 0, 0, 0, 0]);
     }

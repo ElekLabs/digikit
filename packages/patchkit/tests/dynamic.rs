@@ -82,6 +82,7 @@ fn the_register_records_are_the_lowered_typed_sections() {
         version: 0x000100,
         runtime_min: 1,
         trace: false,
+        stereo: false,
     };
     let a = dkm::pack_with(None, &reg.encode(), &opts).unwrap();
     assert_eq!(a, dkm::pack_with(None, &reg.encode(), &opts).unwrap());

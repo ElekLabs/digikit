@@ -596,7 +596,7 @@ plan.json {}",
                     cf.len()
                 )));
             }
-            let opts = patchkit::dkm::Options {
+            let mut opts = patchkit::dkm::Options {
                 name: flag(rest, "--name").unwrap_or_else(|| id.clone()),
                 version: patchkit::dkm::parse_version(&m.manifest.module.version)?,
                 runtime_min: match flag(rest, "--runtime-min") {
@@ -606,6 +606,7 @@ plan.json {}",
                     None => patchkit::dkm::runtime_version(),
                 },
                 trace: rest.iter().any(|a| a == "--trace"),
+                stereo: false,
             };
             // a run-time module: its typed sections, lowered for one device, are the `register` records
             let mut dsp: Vec<u8> = vec![];
@@ -658,6 +659,8 @@ plan.json {}",
                         ranges,
                     });
                 }
+                // machine contract 1.2 only for a stereo machine: a mono one stays loadable by a runtime of 1.1
+                opts.stereo = voices.iter().any(|v| v.stereo);
                 // the effects of the device (the `DK_FX` records of the ColdFire object): process routine and descriptor in the DSP object;
                 // a page's knobs set the first words of the row
                 let all_fx = patchkit::desc::module_fx(m)?;
