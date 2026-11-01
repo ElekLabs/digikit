@@ -1,6 +1,7 @@
 """The timing of a put (tools/device/dktiming.py), `put --chunk --depth --timing` of tools/device/dkupload.py, and the parts of
 tools/device/winmidi.py that run without Windows. No emulator, no device."""
 
+import ctypes
 import json
 
 import pytest
@@ -176,3 +177,67 @@ def test_pick_takes_one_port_and_names_the_others():
         winmidi.pick(names, "Digitone", "in")
     with pytest.raises(OSError, match="no MIDI out port.*0 Elektron Digitone"):
         winmidi.pick(names, "Digitakt", "out")
+
+
+class _Hdr(ctypes.Structure):
+    _fields_ = [
+        ("lpData", ctypes.c_void_p),
+        ("dwBufferLength", ctypes.c_uint32),
+        ("dwFlags", ctypes.c_uint32),
+    ]
+
+
+class _FakeWinmm:
+    """midiOut calls that record what happened; `done_on_reset` says whether midiOutReset hands the buffer back."""
+
+    def __init__(self, done_on_reset: bool):
+        self.done_on_reset = done_on_reset
+        self.held = None
+        self.unprepared = 0
+
+    def midiOutPrepareHeader(self, h, ref, size):
+        return 0
+
+    def midiOutLongMsg(self, h, ref, size):
+        self.held = ref._obj
+        return 0
+
+    def midiOutReset(self, h):
+        if self.done_on_reset:
+            self.held.dwFlags |= winmidi.MHDR_DONE
+
+    def midiOutUnprepareHeader(self, h, ref, size):
+        self.unprepared += 1
+
+
+class _CtrlCOnce:
+    """WaitForSingleObject that raises KeyboardInterrupt on its first call, as a Ctrl-C in the wait loop does."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def WaitForSingleObject(self, ev, ms):
+        self.calls += 1
+        if self.calls == 1:
+            raise KeyboardInterrupt
+
+
+def _transport(done_on_reset: bool) -> winmidi.WinMidiTransport:
+    t = object.__new__(winmidi.WinMidiTransport)
+    t.w, t.k, t.MIDIHDR = _FakeWinmm(done_on_reset), _CtrlCOnce(), _Hdr
+    t.hout, t.ev_out, t.timeout_s, t.parked = None, None, 30.0, []
+    return t
+
+
+@pytest.mark.parametrize("done_on_reset", [True, False])
+def test_ctrl_c_in_send_never_frees_a_buffer_the_driver_owns(
+    done_on_reset, monkeypatch
+):
+    monkeypatch.setattr(winmidi, "WAIT_MS", 0)
+    t = _transport(done_on_reset)
+    with pytest.raises(KeyboardInterrupt):
+        t.send(b"\xf0\x00\xf7")
+    if done_on_reset:  # handed back: unprepared, nothing kept
+        assert t.w.unprepared == 1 and t.parked == []
+    else:  # never handed back: kept alive, never unprepared
+        assert t.w.unprepared == 0 and len(t.parked) == 1

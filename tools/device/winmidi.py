@@ -6,9 +6,10 @@
 The port pair is the one whose names contain the given text (case ignored); none or more than one is an error that lists the ports.
 Windows lets one program at a time open a MIDI port: quit Elektron Transfer and any browser page that holds the port first.
 
-Both directions use event callbacks, so the times are close to the driver's: a reader thread waits on the input event and stamps each
-complete SysEx message when its last buffer comes back (`last_rx_t`, time.perf_counter); `send` returns when the driver hands back the
-message's buffer. The winmm calls follow the winmidi module of the dn2_firmware project (derived from irpina/digihealth, GPL-2.0-or-later).
+Both directions use event callbacks. A reader thread waits on the input event and stamps each complete SysEx message when the thread
+wakes after its last buffer comes back (`last_rx_t`, time.perf_counter). That is the thread's time, a little after the driver's: winmm
+gives a long message a time stamp only in a function callback, which this module does not use. `send` returns when the driver hands
+back the message's buffer. The winmm calls follow the winmidi module of the dn2_firmware project (derived from irpina/digihealth, GPL-2.0-or-later).
 """
 
 from __future__ import annotations
@@ -25,6 +26,12 @@ from tools.device.dkupload import parse_reply, split_messages
 MHDR_DONE = 0x1
 CALLBACK_EVENT = 0x50000
 WAIT_MS = 50
+
+
+def _check(r: int, call: str) -> None:
+    """Raise OSError when a winmm call returns an error code."""
+    if r:
+        raise OSError(f"{call} failed: {r}")
 
 
 def _api() -> tuple[Any, Any, Any, Any, Any]:
@@ -166,20 +173,34 @@ class WinMidiTransport:
             )
         # winmm fills the input buffers in the order they were added: the deque keeps that order
         self.bufs: collections.deque[tuple[Any, Any]] = collections.deque()
-        for _ in range(nbuf):
-            mem = ctypes.create_string_buffer(size)
-            h = self.MIDIHDR(
-                lpData=ctypes.cast(mem, ctypes.c_void_p), dwBufferLength=size
-            )
-            self.w.midiInPrepareHeader(self.hin, ctypes.byref(h), ctypes.sizeof(h))
-            self.w.midiInAddBuffer(self.hin, ctypes.byref(h), ctypes.sizeof(h))
-            self.bufs.append((h, mem))
+        # buffers the driver did not hand back: kept alive so their memory is never freed under it
+        self.parked: list[tuple[Any, Any]] = []
         self.stream = bytearray()
         self.stop = threading.Event()
         self.reader = threading.Thread(
             target=self._read, name="winmidi-in", daemon=True
         )
-        self.w.midiInStart(self.hin)
+        try:
+            for _ in range(nbuf):
+                mem = ctypes.create_string_buffer(size)
+                h = self.MIDIHDR(
+                    lpData=ctypes.cast(mem, ctypes.c_void_p), dwBufferLength=size
+                )
+                _check(
+                    self.w.midiInPrepareHeader(
+                        self.hin, ctypes.byref(h), ctypes.sizeof(h)
+                    ),
+                    "midiInPrepareHeader",
+                )
+                self.bufs.append((h, mem))
+                _check(
+                    self.w.midiInAddBuffer(self.hin, ctypes.byref(h), ctypes.sizeof(h)),
+                    "midiInAddBuffer",
+                )
+            _check(self.w.midiInStart(self.hin), "midiInStart")
+        except BaseException:
+            self.close()
+            raise
         self.reader.start()
 
     def _read(self) -> None:
@@ -188,7 +209,7 @@ class WinMidiTransport:
             while self.bufs and self.bufs[0][0].dwFlags & MHDR_DONE:
                 h, mem = self.bufs.popleft()
                 t = time.perf_counter()
-                self.stream += mem.raw[: h.dwBytesRecorded]
+                self.stream += ctypes.string_at(mem, h.dwBytesRecorded)
                 h.dwBytesRecorded = 0
                 h.dwFlags &= ~MHDR_DONE
                 if not self.stop.is_set():
@@ -202,21 +223,35 @@ class WinMidiTransport:
         h = self.MIDIHDR(
             lpData=ctypes.cast(mem, ctypes.c_void_p), dwBufferLength=len(msg)
         )
-        self.w.midiOutPrepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
+        _check(
+            self.w.midiOutPrepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h)),
+            "midiOutPrepareHeader",
+        )
         r = self.w.midiOutLongMsg(self.hout, ctypes.byref(h), ctypes.sizeof(h))
         if r:
             self.w.midiOutUnprepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
             raise OSError(f"midiOutLongMsg failed: {r}")
         end = time.monotonic() + self.timeout_s
-        while not h.dwFlags & MHDR_DONE:
-            if time.monotonic() > end:
-                self.w.midiOutReset(self.hout)
-                self.w.midiOutUnprepareHeader(
-                    self.hout, ctypes.byref(h), ctypes.sizeof(h)
-                )
-                raise TimeoutError("the MIDI driver did not take the message")
-            self.k.WaitForSingleObject(self.ev_out, WAIT_MS)
+        try:
+            while not h.dwFlags & MHDR_DONE:
+                if time.monotonic() > end:
+                    raise TimeoutError("the MIDI driver did not take the message")
+                self.k.WaitForSingleObject(self.ev_out, WAIT_MS)
+        except BaseException:  # a timeout or a Ctrl-C: the driver still owns the buffer
+            self.w.midiOutReset(self.hout)
+            self._reclaim(h, mem)
+            raise
         self.w.midiOutUnprepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
+
+    def _reclaim(self, h: Any, mem: Any) -> None:
+        """After midiOutReset: unprepare H once the driver marks it done, or park it with MEM if it never does."""
+        end = time.monotonic() + 1.0
+        while not h.dwFlags & MHDR_DONE and time.monotonic() < end:
+            self.k.WaitForSingleObject(self.ev_out, WAIT_MS)
+        if h.dwFlags & MHDR_DONE:
+            self.w.midiOutUnprepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
+        else:
+            self.parked.append((h, mem))
 
     def recv(self, timeout_s: float | None = None) -> bytes:
         """The next reply of the upload protocol (other messages are dropped); TimeoutError after `timeout_s` (default: the transport's)."""
@@ -235,7 +270,8 @@ class WinMidiTransport:
 
     def close(self) -> None:
         self.stop.set()
-        self.reader.join(timeout=1.0)
+        if self.reader.is_alive():
+            self.reader.join(timeout=1.0)
         self.w.midiInStop(self.hin)
         self.w.midiInReset(self.hin)
         for h, _mem in self.bufs:
