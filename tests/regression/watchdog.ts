@@ -38,7 +38,10 @@ export interface WatchdogOptions {
  * emulator without a job is idle on purpose (host work between steps) and resets the timer. */
 export function startNoProgressWatchdog(session: WatchedSession, options: WatchdogOptions = {}): Watchdog {
   const intervalMs = options.intervalMs ?? 5000;
-  const limitMs = options.limitMs ?? Number(process.env.DIGI_NO_PROGRESS_MS ?? 120_000);
+  const limitMs = options.limitMs ?? Number(process.env.DIGI_NO_PROGRESS_MS ?? 0);
+  // Off by default: its status polls wake the daemon's controller and move where a free-running coupled emulator
+  // stops (fx-reuse DN2 onset shift 192 > 128). Enable with DIGI_NO_PROGRESS_MS until the daemon has a passive progress signal.
+  if (limitMs <= 0) return { stop() {}, tripped: undefined };
   const now = options.now ?? Date.now;
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
   let lastKey: string | undefined;
