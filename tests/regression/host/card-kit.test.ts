@@ -12,6 +12,7 @@ import {
   readSectors,
   recordsIn,
 } from '../runtime/card-kit.ts';
+import { cardAfter, encodeOverlay } from '../runtime/write-safety.ts';
 
 const directories: string[] = [];
 const tmp = () => {
@@ -77,6 +78,14 @@ describe('card sectors', () => {
     overlay.writeBigUInt64LE(BigInt(selB));
     overlay[8] = 0x0f;
     expect(recordsIn(both, device, overlay).map((r) => r?.counter)).toEqual([3, undefined]);
+    // base + overlay reads equal the bytes written, and a card after the guest's writes keeps the earlier ones
+    const written = path.join(dir, 'written.bin');
+    fs.writeFileSync(written, encodeOverlay(new Map([[5, Buffer.alloc(512, 0xcd)]])));
+    const after = cardAfter(both, written, path.join(dir, 'after'));
+    expect(readSectors(after, 5, 1).equals(Buffer.alloc(512, 0xcd))).toBe(true);
+    expect(recordsIn(after, device).map((r) => r?.counter)).toEqual([3, 3]);
+    expect(recordsIn(both, device).map((r) => r?.counter)).toEqual([3, 3]);
+    expect(readSectors(both, 5, 1).equals(Buffer.alloc(512))).toBe(true);
     expect(selA).toBeLessThan(selB);
   });
 

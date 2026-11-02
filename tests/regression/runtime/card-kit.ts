@@ -6,11 +6,11 @@ import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { DkError } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
-import { cloneFile, repoRoot, type Device, type Session } from '@digi/test-support';
+import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
 import { advance, rpc, word } from './fx-live.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
-import { overlayRecords } from './write-safety.ts';
+import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
 /**
  * Port of the card and guest helpers of tools/patchkit/pk_dkrt_boot.py (Rig.card, make_record, parse_record, boot_info, ...).
@@ -31,8 +31,9 @@ const MB_SEQ = 4;
 const MB_RESULT = 8;
 const MB_ARG = 12;
 
+/** The plusdrive CLI: `DIGI_PLUSDRIVE` (a lane that built its own), else the shared build. */
 export function plusdriveBinary(): string {
-  return path.join(repoRoot(), 'out/native/target/nogen/release/plusdrive');
+  return process.env.DIGI_PLUSDRIVE || path.join(repoRoot(), 'out/native/target/nogen/release/plusdrive');
 }
 
 // ---- the selection record (one 512-byte copy) --------------------------------------------------------------------------------------
@@ -91,8 +92,11 @@ export function decodeRecord(b: Buffer): SelRecord | null {
   };
 }
 
-/** `count` sectors at `first`, read by position (a card file is sparse and about 25 GB: never read it whole); bytes past the end read as zeros. */
-export function readSectors(file: string, first: number, count: number): Buffer {
+/**
+ * `count` sectors at `first` of the card the guest sees: the image (sparse and about 25 GB: read by position, never whole; bytes past
+ * its end read as zeros), the `overlay.bin` next to it, then the optional `overlay` blob of a session's writes.
+ */
+export function readSectors(file: string, first: number, count: number, overlay?: Buffer): Buffer {
   const buf = Buffer.alloc(count * SECTOR);
   const fd = fs.openSync(file, 'r');
   try {
@@ -100,6 +104,7 @@ export function readSectors(file: string, first: number, count: number): Buffer 
   } finally {
     fs.closeSync(fd);
   }
+  layOver(buf, first, file, overlay);
   return buf;
 }
 
@@ -108,42 +113,16 @@ export function currentRecord([a, b]: (SelRecord | null)[]): SelRecord | null {
   return a == null || (b != null && b.seq > a.seq) ? (b ?? null) : a;
 }
 
-/** The two copies of a card file, with the guest's `card.overlay` bytes (optional) laid over it; a card that ends before the area reads as zeros. */
-export function recordsIn(cardFile: string, device: Device, overlay: Buffer = Buffer.alloc(0)): (SelRecord | null)[] {
+/** The two copies of a card, with the guest's `card.overlay` bytes (optional) laid over it; a card that ends before the area reads as zeros. */
+export function recordsIn(cardFile: string, device: Device, overlay?: Buffer): (SelRecord | null)[] {
   const { selA, selB } = cardStore(device);
-  const sectors = new Map<number, Buffer>([selA, selB].map((s) => [s, readSectors(cardFile, s, 1)]));
-  for (const { sector, mask, data } of overlayRecords(overlay)) {
-    const cur = sectors.get(sector);
-    if (cur) for (let i = 0; i < SECTOR; i++) if (mask[i >> 3]! & (1 << (i & 7))) cur[i] = data[i]!;
-  }
-  return [selA, selB].map((s) => decodeRecord(sectors.get(s)!));
-}
-
-/** Raw sector images over the two record sectors of a card file (null leaves one alone), and `foreign` sectors (absolute sector -> bytes). */
-export function writeSectors(
-  card: string,
-  device: Device,
-  recs: (Buffer | null)[] = [],
-  foreign: Record<number, Buffer> = {},
-): void {
-  const { selA, selB } = cardStore(device);
-  const fd = fs.openSync(card, 'r+');
-  try {
-    const at: [number, Buffer | null | undefined][] = [
-      [selA, recs[0]],
-      [selB, recs[1]],
-      ...Object.entries(foreign).map(([s, d]) => [Number(s), d] as [number, Buffer]),
-    ];
-    for (const [sector, data] of at) if (data) fs.writeSync(fd, data, 0, data.length, sector * SECTOR);
-  } finally {
-    fs.closeSync(fd);
-  }
+  return [selA, selB].map((s) => decodeRecord(readSectors(cardFile, s, 1, overlay)));
 }
 
 // ---- the card image ----------------------------------------------------------------------------------------------------------------
 
 export interface CardOptions extends Partial<Omit<SelRecord, 'paths'>> {
-  /** Work directory: the seed folder and the card file go here. */
+  /** Work directory: the seed folder and the card directory (`<name>/card.img` and `overlay.bin`) go here. */
   dir: string;
   name?: string;
   /** Modules of the store: `name` is the store path (`modules/a.dkm`), `file` the .dkm. */
@@ -154,21 +133,22 @@ export interface CardOptions extends Partial<Omit<SelRecord, 'paths'>> {
   selection?: string[] | null;
   /** Each copy as given: raw bytes, null (left alone) or 'torn' (the record of the options with a bit flipped: its CRC fails). */
   recs?: [Buffer | null | 'torn', Buffer | null | 'torn'];
-  /** Lay the records over a copy of this card (a `cardAfter` file) instead of building one; its sticky map is kept. */
+  /** Lay the records over a card that shares this card's image and keeps its writes, instead of building one; its sticky map is kept. */
   base?: string;
-  /** Absolute sector -> bytes (a multiple of 512) written over the card. */
+  /** Absolute sector -> bytes (a multiple of 512) written over the card, as overlay records. */
   foreign?: Record<number, Buffer>;
 }
 
 /** Python `Ctx.card` / `Rig.card`: a card with the store of `modules` and the record copies. Returns the card file. */
 export async function buildCard(device: Device, o: CardOptions): Promise<string> {
-  const out = path.join(o.dir, `${o.name ?? 'card'}.img`);
-  fs.rmSync(out, { force: true });
-  if (o.base) cloneFile(o.base, out);
-  else {
+  const dir = path.join(o.dir, o.name ?? 'card');
+  const out = path.join(dir, 'card.img');
+  fs.rmSync(dir, { recursive: true, force: true });
+  if (!o.base) {
     const seed = path.join(o.dir, `seed-${o.name ?? 'card'}`);
     fs.rmSync(seed, { recursive: true, force: true });
     fs.mkdirSync(path.join(seed, 'digikit'), { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
     for (const m of o.modules ?? []) {
       fs.mkdirSync(path.dirname(path.join(seed, 'digikit', m.name)), { recursive: true });
       fs.copyFileSync(m.file, path.join(seed, 'digikit', m.name));
@@ -182,7 +162,7 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
       },
     );
   }
-  let copies: (Buffer | null)[] = [null, null];
+  const sectors = new Map<number, Buffer>();
   if (o.selection != null || o.recs) {
     const map = o.map ?? (o.base ? currentRecord(recordsIn(o.base, device))?.map : undefined);
     const made = o.selection != null ? encodeRecord({ ...o, paths: o.selection, map }) : null;
@@ -191,11 +171,24 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
       b.writeUInt8(b.readUInt8(40) ^ 1, 40);
       return b;
     };
-    copies = (o.recs ?? [made, made]).map((r) => (r === 'torn' ? torn(made) : r));
+    const { selA, selB } = cardStore(device);
+    (o.recs ?? [made, made]).forEach((r, i) => {
+      const rec = r === 'torn' ? torn(made) : r;
+      if (rec) sectors.set(i ? selB : selA, rec);
+    });
   }
-  writeSectors(out, device, copies, o.foreign);
+  for (const [first, data] of Object.entries(o.foreign ?? {}))
+    for (let at = 0; at < data.length; at += SECTOR)
+      sectors.set(Number(first) + at / SECTOR, data.subarray(at, at + SECTOR));
+  const overlay = mergeOverlays(o.base ? cardOverlay(o.base) : Buffer.alloc(0), encodeOverlay(sectors));
+  if (o.base) return linkCard(o.base, dir, overlay);
+  fs.writeFileSync(overlayFile(out), overlay);
   return out;
 }
+
+/** The plusdrive option that reads a card through the `overlay.bin` next to its image. */
+export const overlayArgs = (card: string): string[] =>
+  fs.existsSync(overlayFile(card)) ? ['--overlay', overlayFile(card)] : [];
 
 export interface StoreEntry {
   path: string;
@@ -207,7 +200,13 @@ export interface StoreEntry {
 
 /** `plusdrive store ls`: the header line (used sectors, version, seq, header copy) and the files with their sha256. Fails on a card with no store. */
 export async function storeList(cardImage: string, device: Device): Promise<{ head: string; entries: StoreEntry[] }> {
-  const { stdout } = await exec(plusdriveBinary(), ['store', 'ls', cardImage, '--device', device], { cwd: repoRoot() });
+  const { stdout } = await exec(
+    plusdriveBinary(),
+    ['store', 'ls', cardImage, ...overlayArgs(cardImage), '--device', device],
+    {
+      cwd: repoRoot(),
+    },
+  );
   const [head, ...lines] = stdout.trim().split('\n');
   const entries = lines.map((line) => {
     const [p, first, size, sha] = line.split('\t') as [string, string, string, string];
@@ -402,11 +401,15 @@ export async function cardView(cardFile: string, device: Device): Promise<{ file
   for (const entry of store.entries) {
     if (entry.dir) continue;
     try {
-      const cat = await exec(plusdriveBinary(), ['store', 'ls', cardFile, '--device', device, '--cat', entry.path], {
-        cwd: repoRoot(),
-        encoding: 'buffer',
-        maxBuffer: 1 << 30,
-      });
+      const cat = await exec(
+        plusdriveBinary(),
+        ['store', 'ls', cardFile, ...overlayArgs(cardFile), '--device', device, '--cat', entry.path],
+        {
+          cwd: repoRoot(),
+          encoding: 'buffer',
+          maxBuffer: 1 << 30,
+        },
+      );
       files[entry.path] = cat.stdout;
     } catch {
       files[entry.path] = Buffer.from('<unreadable>');

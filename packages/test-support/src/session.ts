@@ -252,12 +252,8 @@ export class Session {
       if (!inside(directory) || !inside(image)) {
         throw new Error('runtime baseline card must be in a fixture-owned child directory of runDir');
       }
-      if (
-        !fs.statSync(image).isFile() ||
-        [directory, path.dirname(image)].some((dir) => fs.existsSync(path.join(dir, 'overlay.bin')))
-      ) {
-        throw new Error('runtime baseline must be a card image without an inherited overlay.bin');
-      }
+      // The card's own `overlay.bin` (its test writes) is part of the baseline: the daemon applies it on load.
+      if (!fs.statSync(image).isFile()) throw new Error('runtime baseline must be a card image file');
       if (!baseline.guard) throw new Error('runtime baseline requires an explicit scenario guard policy');
       // The visible job can finish; a hidden patch job may still reject load as BUSY, which discards this daemon.
       let before = (lastStatus = await checked(() => this.client.status()));
