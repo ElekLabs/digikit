@@ -78,6 +78,9 @@ export async function expectModuleLoad(
   const { session, dk } = runtime;
   const bytes = fs.readFileSync(artifact);
   const storePath = `modules/${module.id.split('/')[1]}.dkm`;
+  // The debug module is loaded next to every module (the cell reads its LOG); for the debug module itself, once.
+  const names = [...new Set([DEBUG_MODULE, module.id])];
+  const paths = [...new Set(['modules/debug.dkm', storePath])].sort();
   const hash = await hexSha256(bytes);
   const artifacts = path.join(liveArtifacts(session, 'module-load'), module.id.split('/')[1]!);
   fs.mkdirSync(artifacts, { recursive: true });
@@ -92,7 +95,7 @@ export async function expectModuleLoad(
   expect(
     (await dk.modules()).map((entry) => entry.name),
     'only the uploaded module and the debug module are registered',
-  ).toEqual([DEBUG_MODULE, module.id]);
+  ).toEqual(names);
   expect((await session.status()).epoch, 'protocol restart boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'store', entries);
@@ -101,7 +104,7 @@ export async function expectModuleLoad(
     size: bytes.length,
     sha256: hash,
   });
-  expect(entries.map((entry) => entry.path)).toEqual(['modules/debug.dkm', storePath].sort());
+  expect(entries.map((entry) => entry.path).sort(), 'the store holds the two module files (any order)').toEqual(paths);
   expect(await dk.verifyFile(storePath, bytes), 'module bytes survive reboot').toBe(true);
 
   try {
@@ -147,10 +150,9 @@ export async function expectModuleLoad(
     await waitEmulated(session, 2000);
     const modules = await dk.modules();
     record(artifacts, 'modules', modules);
-    expect(modules.map(({ name, faults, guard_off }) => ({ name, faults, guard_off }))).toEqual([
-      { name: DEBUG_MODULE, faults: 0, guard_off: false },
-      { name: module.id, faults: 0, guard_off: false },
-    ]);
+    expect(modules.map(({ name, faults, guard_off }) => ({ name, faults, guard_off }))).toEqual(
+      names.map((name) => ({ name, faults: 0, guard_off: false })),
+    );
     await expect
       .poll(async () => (await dk.readLog()).some((event) => event.kind === LOG_KIND.UI_FIRST), {
         timeout: 30_000,
