@@ -337,6 +337,7 @@ TEST_ONLY: tuple[str, ...] = (
     "tests/regression/*.test.ts",
     "tests/regression/runtime/*.ts",
     "tests/regression/modules/*.ts",
+    "tests/regression/project.json",
     "tools/devtools/*",
 )
 # Host Vitest test files (vitest.host.projects.json). The host config runs them without a device, so

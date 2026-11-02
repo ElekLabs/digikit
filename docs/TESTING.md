@@ -308,7 +308,7 @@ Smoke is skipped when every changed path is:
 - one of the four `SMOKE_EXEMPT` paths: `tools/devtools/agent_guard.py`,
   `tools/devtools/pathcheck.py`, `tools/devtools/layercheck.py`, `.claude/settings.json`;
 - a test-only path (`TEST_ONLY`: devtools tooling/tests, patchkit and digikit Python test files,
-  device acceptance test files, runtime and module-load acceptance TypeScript helpers and digikit
+  device acceptance test files, runtime and module-load acceptance TypeScript helpers, `tests/regression/project.json` and digikit
   scenario TOMLs),
   or a crate-level Rust integration-test source under
   `packages/emulator/<crate>/tests/`;
