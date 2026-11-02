@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { DkError } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
-import { repoRoot, type Device, type Session } from '@digi/test-support';
+import { cloneFile, repoRoot, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
 import { advance, rpc, word } from './fx-live.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
@@ -164,7 +164,7 @@ export interface CardOptions extends Partial<Omit<SelRecord, 'paths'>> {
 export async function buildCard(device: Device, o: CardOptions): Promise<string> {
   const out = path.join(o.dir, `${o.name ?? 'card'}.img`);
   fs.rmSync(out, { force: true });
-  if (o.base) fs.copyFileSync(o.base, out, fs.constants.COPYFILE_FICLONE);
+  if (o.base) cloneFile(o.base, out);
   else {
     const seed = path.join(o.dir, `seed-${o.name ?? 'card'}`);
     fs.rmSync(seed, { recursive: true, force: true });

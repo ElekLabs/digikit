@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Device } from '@digi/test-support';
+import { cloneFile, type Device } from '@digi/test-support';
 import { cardStore, expansionRegion } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
@@ -40,10 +40,9 @@ export function overlayWrites(overlay: string, device: Device): { store_sectors:
   return { store_sectors: [...new Set(cardStoreHits(overlaySectors(overlay), device))] };
 }
 
-/** Copy BASE (a copy-on-write clone where the file system has one) to OUT and write the masked bytes of the overlay over it. */
+/** Clone BASE (sparse, sharing blocks where the file system can) to OUT and write the masked bytes of the overlay over it. */
 export function applyOverlay(base: string, overlay: string, out: string): number {
-  fs.rmSync(out, { force: true });
-  fs.copyFileSync(base, out, fs.constants.COPYFILE_FICLONE);
+  cloneFile(base, out);
   const fd = fs.openSync(out, 'r+');
   try {
     let n = 0;
