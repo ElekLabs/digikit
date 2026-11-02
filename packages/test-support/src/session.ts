@@ -33,8 +33,8 @@ const FAULT_KINDS = new Set(['halt', 'fault', 'stall', 'stall.end', 'lagged']);
 export interface SessionOptions {
   device: Device;
   firmware: string;
-  /** "zero": no DSP (`--dsp zero --cf-snapshot`); "sharc": coupled DSP audio from the ready inputs. */
-  dsp: 'zero' | 'sharc';
+  /** "zero": no DSP (`--dsp zero --cf-snapshot`); "sharc": coupled DSP audio from the ready inputs; "cold": no DSP and no snapshot (every load boots cold, for a card identity other than the snapshot's). */
+  dsp: 'zero' | 'sharc' | 'cold';
   /** Card sample directory for `card.load` (DT2). */
   card?: string;
   /** Run directory; default a fresh temporary directory. */
@@ -142,21 +142,23 @@ export class Session {
     const ownedDir = options.runDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'digi-session-'));
     const runDir = options.runDir ?? ownedDir!;
     const args =
-      options.dsp === 'zero'
-        ? [...(options.runtime ? [inp.syx] : []), '--dsp', 'zero', '--cf-snapshot', inp.cfSnapshot]
-        : [
-            inp.syx,
-            '--auto-coupled',
-            '--audio-profile-syx',
-            inp.syx,
-            '--dsp-image',
-            inp.dspImage,
-            '--dsp-state',
-            inp.dspState,
-            '--cf-snapshot',
-            inp.cfSnapshot,
-            '--no-audio',
-          ];
+      options.dsp === 'cold'
+        ? []
+        : options.dsp === 'zero'
+          ? [...(options.runtime ? [inp.syx] : []), '--dsp', 'zero', '--cf-snapshot', inp.cfSnapshot]
+          : [
+              inp.syx,
+              '--auto-coupled',
+              '--audio-profile-syx',
+              inp.syx,
+              '--dsp-image',
+              inp.dspImage,
+              '--dsp-state',
+              inp.dspState,
+              '--cf-snapshot',
+              inp.cfSnapshot,
+              '--no-audio',
+            ];
     if (options.runtime?.reuse) args.push('--no-card-sync');
     if (options.mirror) args.push('--mirror-dir', path.join(runDir, 'mirror'));
     const startupDeadline = Date.now() + (options.runtime ? 120_000 : 300_000);
@@ -300,10 +302,14 @@ export class Session {
       await checked(() => this.client.guardSet(baseline.guard));
       await checked(() => this.client.call('run.mode', { mode: baseline.paused ? 'paused' : 'free' }));
       const status = (lastStatus = await checked(() => this.client.status()));
-      if (typeof status.epoch !== 'number' ||
+      if (
+        typeof status.epoch !== 'number' ||
         status.epoch <= epoch ||
-        !(baseline.relaxedReady ? status.cf.main_ui_reached && status.cf.filesystem_verified !== false : status.cf.ready) ||
-        status.mode !== (baseline.paused ? 'paused' : 'free')) {
+        !(baseline.relaxedReady
+          ? status.cf.main_ui_reached && status.cf.filesystem_verified !== false
+          : status.cf.ready) ||
+        status.mode !== (baseline.paused ? 'paused' : 'free')
+      ) {
         throw new Error(`runtime baseline did not establish a new ready epoch: ${JSON.stringify(status)}`);
       }
       if (prepared) {
