@@ -36,20 +36,30 @@ export const FULL_TIER = process.env.DIGIKIT_TIER === 'full';
 export function runtimeTests(
   name: string,
   body: (runtime: PatchedSession) => Promise<void>,
-  opts: { patchSet?: string; mirror?: boolean; timeout?: number; devices?: readonly Device[]; full?: boolean } = {},
+  opts: {
+    patchSet?: string;
+    mirror?: boolean;
+    timeout?: number;
+    devices?: readonly Device[];
+    full?: boolean;
+    skip?: string;
+  } = {},
 ): void {
   for (const device of opts.devices ?? DEVICES) {
-    describe.skipIf(opts.full === true && !FULL_TIER)(`${device.toUpperCase()} ${FIRMWARE[device]}`, () => {
-      const handle = withPatchedSession(liveOptions(device, opts), name);
-      test(
-        name,
-        async () => {
-          await expectRuntimeBoot(handle.runtime);
-          await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
-        },
-        opts.timeout,
-      );
-    });
+    describe.skipIf((opts.full === true && !FULL_TIER) || opts.skip !== undefined)(
+      `${device.toUpperCase()} ${FIRMWARE[device]}`,
+      () => {
+        const handle = withPatchedSession(liveOptions(device, opts), name);
+        test(
+          name,
+          async () => {
+            await expectRuntimeBoot(handle.runtime);
+            await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
+          },
+          opts.timeout,
+        );
+      },
+    );
   }
 }
 

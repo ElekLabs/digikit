@@ -100,39 +100,51 @@ export async function usbTake(session: Session): Promise<Uint8Array> {
 export function uploadTests(
   name: string,
   body: (rig: CardRig) => Promise<void>,
-  opts: { devices?: readonly Device[]; full?: boolean; symbols?: string[]; sharc?: boolean; timeout?: number; stallMs?: number } = {},
+  opts: {
+    devices?: readonly Device[];
+    full?: boolean;
+    symbols?: string[];
+    sharc?: boolean;
+    timeout?: number;
+    stallMs?: number;
+    /** Skip with this reason (the Python scenario still covers it); see docs/plans/python-test-triage.md. */
+    skip?: string;
+  } = {},
 ): void {
   for (const device of opts.devices ?? DEVICES) {
-    describe.skipIf(opts.full === true && !FULL_TIER)(`${device.toUpperCase()} ${FIRMWARE[device]}`, () => {
-      const rig = cardRig(device, name, {
-        symbols: opts.symbols,
-        dsp: opts.sharc ? 'sharc' : 'zero',
-        project: true,
-        uploads: true,
-        stallMs: opts.stallMs,
-        onClose: (r, report) => {
-          expect(report.emulators).toBeGreaterThan(0);
-          const { first, end, firmwareFirst } = r.store;
-          const written = new Set(
-            r.overlays.flatMap((f) => Array.from(overlayRecords(fs.readFileSync(f)), (rec) => rec.sector)),
-          );
-          const outside = [...written]
-            .filter((s) => !(first <= s && s < end) && s < firmwareFirst)
-            .sort((a, b) => a - b);
-          expect(
-            outside.map((s) => `0x${s.toString(16)}`),
-            'card writes: the module store range and the firmware project sectors',
-          ).toEqual([]);
-        },
-      });
-      test(
-        name,
-        async () => {
-          await body(rig);
-        },
-        opts.timeout ?? 1_800_000,
-      );
-    });
+    describe.skipIf(opts.skip !== undefined || (opts.full === true && !FULL_TIER))(
+      `${device.toUpperCase()} ${FIRMWARE[device]}`,
+      () => {
+        const rig = cardRig(device, name, {
+          symbols: opts.symbols,
+          dsp: opts.sharc ? 'sharc' : 'zero',
+          project: true,
+          uploads: true,
+          stallMs: opts.stallMs,
+          onClose: (r, report) => {
+            expect(report.emulators).toBeGreaterThan(0);
+            const { first, end, firmwareFirst } = r.store;
+            const written = new Set(
+              r.overlays.flatMap((f) => Array.from(overlayRecords(fs.readFileSync(f)), (rec) => rec.sector)),
+            );
+            const outside = [...written]
+              .filter((s) => !(first <= s && s < end) && s < firmwareFirst)
+              .sort((a, b) => a - b);
+            expect(
+              outside.map((s) => `0x${s.toString(16)}`),
+              'card writes: the module store range and the firmware project sectors',
+            ).toEqual([]);
+          },
+        });
+        test(
+          name,
+          async () => {
+            await body(rig);
+          },
+          opts.timeout ?? 1_800_000,
+        );
+      },
+    );
   }
 }
 

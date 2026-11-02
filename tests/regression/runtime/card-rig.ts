@@ -60,6 +60,8 @@ export interface CardRigOptions {
   devices?: readonly Device[];
   /** Full tier only. */
   full?: boolean;
+  /** Skip with this reason (the Python scenario still covers it); see the scenario-migration handover. */
+  skip?: Partial<Record<Device, string>>;
   /** Module roots of the runtime image (`patchkit apply --modules`); omit for the emulator patch set. */
   roots?: string[];
   /** Plan symbols besides `DKRT_BOOT`. */
@@ -159,9 +161,12 @@ export interface CardRig {
 /** One describe per device (`label` in its title) with a rig inside. */
 export function cardRigs(label: string, o: CardRigOptions, define: (rig: CardRig) => void): void {
   for (const device of o.devices ?? DEVICES) {
-    describe.skipIf(o.full === true && !FULL_TIER)(`${device.toUpperCase()} ${FIRMWARE[device]}: ${label}`, () => {
-      define(cardRig(device, label, o));
-    });
+    describe.skipIf((o.full === true && !FULL_TIER) || o.skip?.[device] !== undefined)(
+      `${device.toUpperCase()} ${FIRMWARE[device]}: ${label}`,
+      () => {
+        define(cardRig(device, label, o));
+      },
+    );
   }
 }
 

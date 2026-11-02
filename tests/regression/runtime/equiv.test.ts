@@ -74,7 +74,12 @@ for (const sc of SCENARIOS) {
       }),
     });
     // the reference: the twin patched in, a card with no selection
-    const ref = cardRig(device, `${sc.name}-ref`, { roots: [...RT, sc.twin], symbols: SYMBOLS, initial: () => ({}), hold: true });
+    const ref = cardRig(device, `${sc.name}-ref`, {
+      roots: [...RT, sc.twin],
+      symbols: SYMBOLS,
+      initial: () => ({}),
+      hold: true,
+    });
 
     test('the rows equal the static twin; the sine note has the pinned SHA-256', async () => {
       const refRt = await ref.first();

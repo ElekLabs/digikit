@@ -97,7 +97,11 @@ uploadTests(
       );
     }
   },
-  { full: true, symbols: ['DKRT_UPLOAD_CUT'] },
+  {
+    skip: 'open: the exported overlay of a zero-DSP session blanks the store header (python-test-triage.md)',
+    full: true,
+    symbols: ['DKRT_UPLOAD_CUT'],
+  },
 );
 
 // ---- CLEAR: two faults in a row -----------------------------------------------------------------------------------------------------
@@ -154,7 +158,11 @@ uploadTests(
       { path: 'modules/after.dkm', data: two },
     );
   },
-  { full: true, symbols: ['DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR'] },
+  {
+    skip: 'open: the exported overlay of a zero-DSP session blanks the store header (python-test-triage.md)',
+    full: true,
+    symbols: ['DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR'],
+  },
 );
 
 // ---- an upload while a note plays ---------------------------------------------------------------------------------------------------
