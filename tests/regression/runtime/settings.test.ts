@@ -3,7 +3,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { hasCap, type DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { bootInfo, buildCard, cardInfo, E_NOSTORE, statusOf } from './card-kit.ts';
+import { bootInfo, buildCard, cardInfo, E_NOSTORE, overlayArgs, statusOf } from './card-kit.ts';
 import { cardRig, RT, type CardSpec } from './card-rig.ts';
 import { cardStore, deviceProfile } from './device-data.ts';
 import { advance } from './fx-live.ts';
@@ -78,7 +78,7 @@ for (const device of DEVICES) {
     });
     const written = () => kit.storeWrites();
     const dump = async (card: string, ...flags: string[]) =>
-      (await patchkit(['store', 'dump', card, '--device', device, ...flags])).stdout;
+      (await patchkit(['store', 'dump', card, ...overlayArgs(card), '--device', device, ...flags])).stdout;
     const dumpJson = async (card: string) => JSON.parse(await dump(card, '--json'));
 
     test('main: put and get, the 2 s delay, copy A then B, restart, remove', async () => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { allocatedBytes, cloneFile } from '@digi/test-support';
 import { afterEach, describe, expect, test } from 'vitest';
 import { buildCard, plusdriveBinary } from '../runtime/card-kit.ts';
-import { applyOverlay } from '../runtime/write-safety.ts';
+import { cardAfter, encodeOverlay, overlayFile } from '../runtime/write-safety.ts';
 
 /** A card file is about 25 GB of address space and a few MB of data: copying one must not allocate the holes. */
 const FULL_CARD = 24_750_587_904;
@@ -59,22 +59,23 @@ describe('card images stay sparse', () => {
     expect([read(base), read(copy)]).toEqual([7, 9]);
   });
 
-  test('buildCard over a full-size base and applyOverlay allocate almost nothing', async () => {
+  test('a built card and a card-after hold the overlay only: they share the base image', async () => {
     const dir = tmp();
     const base = path.join(dir, 'base.img');
     sparseCard(base);
     const before = freeBytes(dir);
     const card = await buildCard('dn2', { dir, base, selection: ['modules/a.dkm'] });
-    const overlay = path.join(dir, 'o.bin');
-    const record = Buffer.alloc(8 + 64 + 512);
-    record.writeBigUInt64LE(5n);
-    record.fill(0xff, 8, 72);
-    fs.writeFileSync(overlay, record);
-    const after = path.join(dir, 'after.img');
-    expect(applyOverlay(card, overlay, after)).toBe(1);
+    const written = path.join(dir, 'written.bin');
+    fs.writeFileSync(written, encodeOverlay(new Map([[8, Buffer.alloc(512, 5)]])));
+    const after = cardAfter(card, written, path.join(dir, 'after'));
     expect(fs.statSync(after).size).toBe(FULL_CARD);
-    expect(allocatedBytes(card)).toBeLessThan(LIMIT);
-    expect(allocatedBytes(after)).toBeLessThan(LIMIT);
+    for (const file of [card, after]) {
+      expect(fs.statSync(file).ino).toBe(fs.statSync(base).ino);
+      expect(allocatedBytes(file)).toBeLessThan(LIMIT);
+    }
+    // two selection records and the written sector, 584 bytes each
+    expect(fs.statSync(overlayFile(card)).size).toBe(2 * 584);
+    expect(fs.statSync(overlayFile(after)).size).toBe(3 * 584);
     expect(before - freeBytes(dir)).toBeLessThan(LIMIT);
   });
 
