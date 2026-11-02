@@ -485,7 +485,7 @@ target. `--all-cached` audits every cached target; `--json FILE` keeps the full 
 ### Daemon targets
 
 `digi-control:daemon-dt2` and `digi-control:daemon-dn2` build the coupled PGO `digi-emud` and keep
-`digi-emud`, `key.txt` and `depfile.d` in `out/nx/emud/<dev>`. The gate's `build-daemons` node runs
+`digi-emud`, `key.txt` and `depfile.d` in `.nx/outputs/emud/<dev>` (a real directory in each checkout: Nx must not restore into the `out/` symlink of a lane). The gate's `build-daemons` node runs
 `verify_build daemons --via-nx`, which takes each daemon from these targets and copies it to an immutable
 file (`stablebin`). A lane that has the same key restores the daemon from the shared cache and builds nothing.
 

@@ -34,7 +34,9 @@ import tools  # noqa: E402
 from tools.devtools import stablebin  # noqa: E402
 from tools.patchkit import pk_emud_pgo, pk_harness  # noqa: E402
 
-NX_OUT = ROOT / "out" / "nx"
+# Nx outputs live in the checkout's own .nx/ (a real directory): out/ is a symlink in lanes, and Nx replaces a
+# symlinked parent of an output with a real directory when it restores from cache.
+NX_OUT = ROOT / ".nx" / "outputs"
 
 
 def cargo_target_dir(binary: Path) -> Path:

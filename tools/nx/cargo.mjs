@@ -38,9 +38,9 @@ export const createNodesV2 = [
                 { runtime: `uv run python -m tools.devtools.emud_key key --device ${dev}` },
                 '{workspaceRoot}/tools/devtools/emud_key.py',
               ],
-              outputs: [`{workspaceRoot}/out/nx/emud/${dev}`],
+              outputs: [`{workspaceRoot}/.nx/outputs/emud/${dev}`],
               options: {
-                command: `uv run python -m tools.devtools.verify_build daemon --device ${dev} --out out/nx/emud/${dev}`,
+                command: `uv run python -m tools.devtools.verify_build daemon --device ${dev} --out .nx/outputs/emud/${dev}`,
                 cwd: '.',
               },
             };
