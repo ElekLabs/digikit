@@ -1857,7 +1857,6 @@ def run_step(gate: Gate, step: str) -> None:
                 "-m",
                 "tools.devtools.verify_build",
                 "daemons",
-                "--via-nx",
                 "--env-out",
                 str(env_file),
             ],

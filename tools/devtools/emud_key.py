@@ -162,7 +162,7 @@ def audit(inputs: EmudInputs, depfile_text: str, target_dir: Path) -> list[str]:
     """The depfile entries that the key does not cover and that are no build output (empty: complete)."""
     covered = covered_paths(inputs)
     out_root = str(target_dir.resolve())
-    missing = []
+    missing: list[str] = []
     for dep in parse_depfile(depfile_text):
         path = str(Path(dep).resolve())
         if path == out_root or path.startswith(out_root + os.sep):

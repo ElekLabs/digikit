@@ -6,8 +6,7 @@ import { DependencyType } from '@nx/devkit';
 import { parse } from 'smol-toml';
 
 const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
-const DAEMON_DEVICES = ['dt2', 'dn2'];
-const KINDS =['dependencies', 'dev-dependencies', 'build-dependencies'];
+const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
 export const createNodesV2 = [
   'Cargo.toml',
@@ -19,32 +18,19 @@ export const createNodesV2 = [
       const projects = {};
       for (const root of read(ctx.workspaceRoot, f).workspace?.members ?? []) {
         const { name } = read(ctx.workspaceRoot, join(root, 'Cargo.toml')).package;
-        const targets = {
-          'rust-tests': {
-            executor: 'nx:run-commands',
-            cache: false,
-            inputs,
-            options: { command: `uv run python -m tools.devtools.rust_ws test --packages ${name}`, cwd: '.' },
+        projects[root] = {
+          name,
+          root,
+          tags: ['rust'],
+          targets: {
+            'rust-tests': {
+              executor: 'nx:run-commands',
+              cache: false,
+              inputs,
+              options: { command: `uv run python -m tools.devtools.rust_ws test --packages ${name}`, cwd: '.' },
+            },
           },
         };
-        // The coupled PGO digi-emud: the key script covers the sources, the generated core, the profile and
-        // the toolchain; the build audits cargo's dependency file against it (tools/devtools/emud_key.py).
-        if (name === 'digi-control')
-          for (const dev of DAEMON_DEVICES)
-            targets[`daemon-${dev}`] = {
-              executor: 'nx:run-commands',
-              cache: true,
-              inputs: [
-                { runtime: `uv run python -m tools.devtools.emud_key key --device ${dev}` },
-                '{workspaceRoot}/tools/devtools/emud_key.py',
-              ],
-              outputs: [`{workspaceRoot}/.nx/outputs/emud/${dev}`],
-              options: {
-                command: `uv run python -m tools.devtools.verify_build daemon --device ${dev} --out .nx/outputs/emud/${dev}`,
-                cwd: '.',
-              },
-            };
-        projects[root] = { name, root, tags: ['rust'], targets };
       }
       return [f, { projects }];
     }),
