@@ -25,6 +25,8 @@ import { button, encoder } from './keys.ts';
 
 /** ColdFire instructions per emulated millisecond (the oracle clock). */
 export const MS = 132_000;
+/** A session refuses to start on a volume with less free space (card images and run dirs add up). */
+const MIN_FREE_GB = 50;
 const MAX_STEP = 200_000_000;
 const FAULT_KINDS = new Set(['halt', 'fault', 'stall', 'stall.end', 'lagged']);
 
@@ -127,6 +129,14 @@ export class Session {
     if (options.runtime?.reuse && options.mirror) throw new Error('reusable runtime sessions cannot mirror cards');
     const inp = resolveInputs(options.device, options.firmware);
     if (options.runtime) validateRuntimeInputs(inp);
+    const volume = options.runDir && fs.existsSync(options.runDir) ? options.runDir : os.tmpdir();
+    const { bavail, bsize } = fs.statfsSync(volume);
+    const freeGb = (bavail * bsize) / 1e9;
+    if (freeGb < MIN_FREE_GB) {
+      throw new Error(
+        `refusing to start: ${freeGb.toFixed(1)} GB free under ${volume}, need ${MIN_FREE_GB} GB (mise run clean:runs)`,
+      );
+    }
     const ownedDir = options.runDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'digi-session-'));
     const runDir = options.runDir ?? ownedDir!;
     const args =

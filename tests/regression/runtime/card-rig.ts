@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport, frame, parseReply } from '@digi/dk-session';
-import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
+import { cloneFile, resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type RuntimeCase } from '../support.ts';
 import {
@@ -247,7 +247,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
         await bounded(() => expectNoGuardHits(session));
         if (!o.faults) await bounded(() => session.expectNoFault(`case ${closed}`));
       },
-      afterClose: async () => {
+      afterClose: async (session) => {
         const report = runtimeSafety(device, watchOutput, overlays, Math.max(1, epochs.size));
         record(artifacts, 'lifetime-safety', report);
         expect(report.write_events, 'write-watch on cf.expansion over every boot: no stray write').toBe(0);
@@ -263,6 +263,8 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
             );
           }
         o.onClose?.(rig, report);
+        // The artifacts dir is ours. Keep it with the session dir when that is kept (a failed run).
+        if (!fs.existsSync(session.runDir)) fs.rmSync(artifacts, { recursive: true, force: true });
       },
     },
     scope,
@@ -411,7 +413,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       const previous = clone && path.dirname(clone);
       const next = path.join(session.runDir, `boot${++boots}`, 'card.img');
       fs.mkdirSync(path.dirname(next), { recursive: true });
-      fs.copyFileSync(card, next, fs.constants.COPYFILE_FICLONE);
+      cloneFile(card, next);
       const runtime = await rig.boot(next);
       await expectRuntimeUi(runtime.session, prepared.plan, artifacts, { afterEpoch: runtime.epoch - 1 });
       await expect
