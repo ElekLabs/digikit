@@ -181,6 +181,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       preparedImage: prepared.preparedImage,
       guard: { protect: [{ lo: boot, hi: boot + 8, label: 'runtime boot identity' }], allow_pc: [] },
       deliverExceptions,
+      relaxedFs: o.relaxFs,
     };
   };
   const freshDir = (session: Session, tag = 'card') => {

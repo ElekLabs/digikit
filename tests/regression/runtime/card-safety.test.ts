@@ -33,7 +33,13 @@ const BOOT_OK = { safe: 0, count: 0, uiReached: 1 };
 
 cardRigs(
   'card safety',
-  { devices: ['dt2'], uploads: true, roots: RT, symbols: [...CARD_SYMBOLS, 'DKRT_UPLOAD_CUT'] },
+  {
+    devices: ['dt2'],
+    uploads: true,
+    relaxFs: true, // the card after the cut upload carries the firmware's own writes: no filesystem check on the next boot
+    roots: RT,
+    symbols: [...CARD_SYMBOLS, 'DKRT_UPLOAD_CUT'],
+  },
   (h) => {
     const { first, end } = cardStore(h.device);
 

@@ -58,6 +58,8 @@ export interface RuntimeBaseline {
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
+  /** The daemon relaxes the DT2 filesystem check for a card the firmware used (`DIGI_COLD_RELAX_FS`): the main UI is the ready point. */
+  relaxedFs?: boolean;
   timeoutMs?: number;
 }
 
@@ -287,7 +289,7 @@ export class Session {
       await checked(() => this.client.guardSet(baseline.guard));
       await checked(() => this.client.call('run.mode', { mode: 'free' }));
       const status = (lastStatus = await checked(() => this.client.status()));
-      if (typeof status.epoch !== 'number' || status.epoch <= epoch || !status.cf.ready || status.mode !== 'free') {
+      if (typeof status.epoch !== 'number' || status.epoch <= epoch || !(baseline.relaxedFs ? status.cf.main_ui_reached : status.cf.ready) || status.mode !== 'free') {
         throw new Error(`runtime baseline did not establish a new ready epoch: ${JSON.stringify(status)}`);
       }
       if (prepared) {
