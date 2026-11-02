@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport, frame, parseReply } from '@digi/dk-session';
-import { cloneFile, resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
+import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type RuntimeCase } from '../support.ts';
 import {
@@ -28,7 +28,16 @@ import {
   type PreparedRuntimePlan,
   type RuntimePlan,
 } from './runtime-plan.ts';
-import { applyOverlay, overlayRecords, overlayWrites, runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
+import {
+  cardAfter,
+  cardOverlay,
+  linkCard,
+  overlayRecords,
+  overlayWrites,
+  runtimeSafety,
+  runtimeWatchEnv,
+  withoutOwn,
+} from './write-safety.ts';
 
 /**
  * The one card fixture of the runtime device tests (settings, round trip, equiv, debug, card, crash, safe mode and upload): an owned daemon
@@ -125,7 +134,7 @@ export interface CardRig {
   waitReset(timeoutMs?: number): Promise<void>;
 
   // ---- paused protocol sessions (the upload tests) ----
-  /** Cold boot on a clone of `card`, wait for the main UI, pause and settle 300 ms; returns a protocol session that steps the emulator while it waits for a reply. */
+  /** Cold boot on a card of its own that shares the image of `card`, wait for the main UI, pause and settle 300 ms; returns a protocol session that steps the emulator while it waits for a reply. */
   pausedBoot(card: string): Promise<DkSession>;
   /** The files of the store as the plusdrive reader reads them from the card after the guest's writes. */
   view(tag: string): ReturnType<typeof cardView>;
@@ -188,9 +197,11 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     fs.mkdirSync(session.runDir, { recursive: true });
     return fs.mkdtempSync(path.join(session.runDir, `${tag}-`));
   };
-  const exportOverlay = async (session: Session, tag: string) => {
+  /** The overlay file of the session's card writes: by default only what the guest wrote since the load (`raw`: the daemon's whole overlay). */
+  const exportOverlay = async (session: Session, tag: string, raw = false) => {
     const file = path.join(artifacts, `${tag}.overlay.bin`);
     await rpc(session, 'card.overlay', { path: file });
+    if (!raw) fs.writeFileSync(file, withoutOwn(fs.readFileSync(file), cardOverlay(image)));
     return file;
   };
   const mod = (id: string, as?: string) => ({
@@ -280,9 +291,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   };
   const afterCard = async (tag: string, base: string) => {
     const { session } = fixture.runtime;
-    const out = path.join(freshDir(session, 'after'), 'card.img');
-    applyOverlay(base, await exportOverlay(session, tag), out);
-    return out;
+    return cardAfter(base, await exportOverlay(session, tag, true), freshDir(session, 'after'));
   };
   const sectorsOf = (file: string) => Array.from(overlayRecords(fs.readFileSync(file)), (r) => r.sector);
 
@@ -367,7 +376,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     after: (tag = `after-${++seq}`, base = image) => afterCard(tag, base),
     async records() {
       const { session } = fixture.runtime;
-      return selRecords(session, image, device, await exportOverlay(session, `records-${++seq}`));
+      return selRecords(session, image, device, await exportOverlay(session, `records-${++seq}`, true));
     },
     async storeWrites() {
       const { session } = fixture.runtime;
@@ -413,7 +422,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       const previous = clone && path.dirname(clone);
       const next = path.join(session.runDir, `boot${++boots}`, 'card.img');
       fs.mkdirSync(path.dirname(next), { recursive: true });
-      cloneFile(card, next);
+      linkCard(card, path.dirname(next), cardOverlay(card)); // the daemon may save next to the image: boot a card of its own
       const runtime = await rig.boot(next);
       await expectRuntimeUi(runtime.session, prepared.plan, artifacts, { afterEpoch: runtime.epoch - 1 });
       await expect
@@ -436,20 +445,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       return stepping.dk;
     },
     async view(tag) {
-      const out = await afterCard(tag, image);
-      try {
-        return await cardView(out, device);
-      } finally {
-        fs.rmSync(out, { force: true });
-      }
+      return cardView(await afterCard(tag, image), device);
     },
     async ls(tag) {
-      const out = await afterCard(tag, image);
-      try {
-        return await storeList(out, device);
-      } finally {
-        fs.rmSync(out, { force: true });
-      }
+      return storeList(await afterCard(tag, image), device);
     },
     async applyCap() {
       const { limit } = rig.store;
