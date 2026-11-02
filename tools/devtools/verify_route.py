@@ -347,11 +347,92 @@ def emulator_test_path(path: str) -> bool:
     return re.fullmatch(r"packages/emulator/[^/]+/tests/.+\.rs", path) is not None
 
 
-def _import_closure(roots: set[str]) -> set[str]:
+@cache
+def tracked_text() -> str:
+    """The text of the tracked .py, .ts, .mjs, .json and .toml files, joined."""
+    listed = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    parts = []
+    for name in listed:
+        if name.endswith((".py", ".ts", ".mjs", ".json", ".toml")):
+            try:
+                parts.append((ROOT / name).read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
+                continue
+    return "\n".join(parts)
+
+
+def module_referenced(path: str, text: str) -> bool:
+    """Whether TEXT names the Python module at PATH: its dotted name (also `-m tools.x.y`), or its
+    stem in an `import` or `from ... import` line."""
+    dotted = path.removesuffix(".py").replace("/", ".")
+    stem = re.escape(dotted.rsplit(".", 1)[-1])
+    if dotted in text:
+        return True
+    return (
+        re.search(
+            rf"^[ \t]*(?:import\s+(?:[\w.]+\s*,\s*)*{stem}\b"
+            rf"|from\s+[\w.]+\s+import\s+(?:[^\n(]*\b{stem}\b|\([^)]*\b{stem}\b))",
+            text,
+            re.M,
+        )
+        is not None
+    )
+
+
+def deleted_path_referenced(path: str) -> bool:
+    """Whether a tracked file still refers to the deleted Python module PATH (fail closed)."""
+    return module_referenced(path, tracked_text())
+
+
+@cache
+def smoke_harness_closure() -> set[str]:
+    """Paths of the Python modules the smoke harness (pk_harness) can run, function-local imports included."""
+    return _import_closure(
+        {
+            "tools.patchkit.pk_harness",
+            "tools.patchkit.patchkit",
+            "tools.devtools.stablebin",
+            "tools.sharc_dev.sharc_disasm",
+        },
+        local_imports=True,
+    )
+
+
+def outside_smoke_harness(path: str) -> bool:
+    """A tools/ Python path (existing or deleted) the smoke harness cannot reach. A deleted path
+    counts only when no tracked file refers to it."""
+    if not (path.startswith("tools/") and path.endswith(".py")):
+        return False
+    if not (ROOT / path).is_file():
+        return not deleted_path_referenced(path)
+    return path not in smoke_harness_closure()
+
+
+def lint_config_only(old: str | None, new: str | None) -> bool:
+    """Whether two pyproject.toml texts differ only inside `tool.mypy` or `tool.ruff`."""
+    if old is None or new is None:
+        return False
+    try:
+        a, b = tomllib.loads(old), tomllib.loads(new)
+    except tomllib.TOMLDecodeError:
+        return False
+    for data in (a, b):
+        tool = data.get("tool")
+        if isinstance(tool, dict):
+            tool.pop("mypy", None)
+            tool.pop("ruff", None)
+            if not tool:
+                del data["tool"]
+    return a == b
+
+
+def _import_closure(roots: set[str], *, local_imports: bool = False) -> set[str]:
     """Paths of ROOTS and of every module they import, using the existing import graph."""
     from tools.devtools import changed_tests
 
-    graph = changed_tests.graph()
+    graph = changed_tests.graph(local_imports=local_imports)
     found, todo = set(roots), list(roots)
     while todo:
         for dependency in graph.find_modules_directly_imported_by(todo.pop()):
@@ -577,7 +658,11 @@ def acceptance_files(
                 and path.startswith("tools/")
                 and path.endswith(".py")
                 and (
-                    (step == "runtime-fixture" and not (ROOT / path).is_file())
+                    (
+                        step == "runtime-fixture"
+                        and not (ROOT / path).is_file()
+                        and deleted_path_referenced(path)
+                    )
                     or path in acceptance_shared(step)
                 )
             )
