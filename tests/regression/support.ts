@@ -13,6 +13,12 @@ import {
 import { portFile } from './runtime/device-data.ts';
 import { setTimingContext, timePhase, timingContext } from './timing.ts';
 
+/** An AggregateError whose message names its causes (Vitest prints only the message). */
+export function aggregate(errors: unknown[], what: string): AggregateError {
+  const causes = errors.map((e) => (e instanceof Error ? e.message : String(e))).join(' | ');
+  return new AggregateError(errors, `${what}: ${causes}`);
+}
+
 export interface SessionHandle {
   /** The session of this test file; valid inside tests and hooks. */
   readonly session: Session;
@@ -205,8 +211,8 @@ export function withReusablePatchedSession(
       errors.push(error);
     }
     try {
-      // A cold ColdFire-only daemon has no DSP audio session to tap.
-      if (opts.dsp !== 'cold')
+      // Without a DSP (zero or cold ColdFire-only) there is no audio capture to stop.
+      if (opts.dsp !== 'zero' && opts.dsp !== 'cold')
         await withinRuntimeDeadline(deadline, () => session!.client.call('pcm.tap', { action: 'capture_stop' }));
       await withinRuntimeDeadline(deadline, () => session!.client.call('run.mode', { mode: 'paused' }));
     } catch (error) {
@@ -226,7 +232,7 @@ export function withReusablePatchedSession(
         /* Preserve evidence/cleanup errors if diagnostics cannot be written. */
       }
       await session!.close({ preserveDiagnostics: true });
-      throw new AggregateError(errors, 'runtime case evidence or cleanup failed; owned daemon discarded');
+      throw aggregate(errors, 'runtime case evidence or cleanup failed; owned daemon discarded');
     }
   };
   beforeAll(async () => {
@@ -266,7 +272,7 @@ export function withReusablePatchedSession(
     } catch (error) {
       errors.push(error);
     }
-    if (errors.length) throw new AggregateError(errors, 'runtime shutdown or post-close evidence failed');
+    if (errors.length) throw aggregate(errors, 'runtime shutdown or post-close evidence failed');
   });
   return {
     get runtime() {
