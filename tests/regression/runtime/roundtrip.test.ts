@@ -20,7 +20,7 @@ import {
   trackType,
   typeAt,
 } from './project-kit.ts';
-import { applyOverlay } from './write-safety.ts';
+import { cardAfter } from './write-safety.ts';
 
 /**
  * The project round trip across module sets (finding 39; port of tools/patchkit/pk_digikit_project.py `run_roundtrip`).
@@ -196,16 +196,14 @@ for (const sc of SCENARIOS) {
           const baseOverlay = await exportOverlay('base');
           baseSlots = slotSectors(baseOverlay);
           for (const s of baseSlots.keys()) touched.add(s);
-          baseCardAfter = path.join(kit.artifacts, `${sc.name}-base.after.img`);
-          applyOverlay(card, baseOverlay, baseCardAfter);
+          baseCardAfter = cardAfter(card, baseOverlay, path.join(kit.artifacts, `${sc.name}-base.after`));
           await buildProject(session, device, machines);
         } else await loadProject(session);
         await saveProject(session, device);
         const overlay = await exportOverlay('save');
         const slots = slotSectors(overlay);
         for (const s of slots.keys()) touched.add(s);
-        const after = path.join(kit.artifacts, `${sc.name}-${step}.after.img`);
-        applyOverlay(card, overlay, after);
+        const after = cardAfter(card, overlay, path.join(kit.artifacts, `${sc.name}-${step}.after`));
         afterCards.push(after);
         saves.push({ set, slots });
         card = after;
