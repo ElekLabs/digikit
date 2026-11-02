@@ -482,6 +482,25 @@ passes. The audit runs the command with `tools/devtools/fs_trace.mjs` preloaded 
 file read with the expanded inputs. Run it after changing the inputs or the command of a cached
 target. `--all-cached` audits every cached target; `--json FILE` keeps the full result.
 
+### Daemon targets
+
+`digi-control:daemon-dt2` and `digi-control:daemon-dn2` build the coupled PGO `digi-emud` and keep
+`digi-emud`, `key.txt` and `depfile.d` in `out/nx/emud/<dev>`. The gate's `build-daemons` node runs
+`verify_build daemons --via-nx`, which takes each daemon from these targets and copies it to an immutable
+file (`stablebin`). A lane that has the same key restores the daemon from the shared cache and builds nothing.
+
+The only input is the key printed by `uv run python -m tools.devtools.emud_key key --device DEV` (a
+runtime input). It is a sha256 over: the content of the repository files in `SOURCE_GLOBS` and `RECIPE_FILES`,
+every file of the generated core directory (resolved as `pk_emud_pgo` does), the PGO profile, `rustc -vV`
+of the pinned toolchain, and the build flags. The target fails, and so is not cached, when the device lacks its stock
+firmware or ready directory.
+
+Each build audits itself: `verify_build daemon` compares the dependency file cargo wrote (`digi-emud.d`)
+with the key. A dependency that the key does not cover (and that is not under the cargo target dir) fails the
+build, so nothing is cached with an incomplete key. Add the missing path to `SOURCE_GLOBS` in
+`tools/devtools/emud_key.py`. `uv run python -m tools.devtools.emud_key audit --device DEV --depfile FILE`
+repeats the check on a kept file.
+
 To clear the cache: `pnpm nx:pilot reset`.
 
 ## PCM pins
