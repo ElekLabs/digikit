@@ -34,17 +34,17 @@ fn digest_without_dsp(syx: &[u8]) -> String {
     sha256_hex(&buf)
 }
 
-/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with the move of a plucked-string machine to test/patched-pluck (P3e-1): patch record only
+/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with the move of a plucked-string machine to test/patched-pluck (P3e-1): patch record only; 2026-11-02 with core/params' param_edits (its accessor hook looks up an edited code's class)
 const PINS: &[(&str, &str, &str)] = &[
     (
         "Digitakt_II_OS1.17.syx",
         "test/patched-pluck",
-        "5c4a69710cc8ca3012e251c1c50380b11b4856bafe6597de75aa500b5c5e7c3e",
+        "7102fbe114bc6a7445d8c3f56a55a85c006fe078222e9c77a2a7d0da6edbae4d",
     ),
     (
         "Digitone_II_OS1.12.syx",
         "test/patched-pluck",
-        "01e1d441c6e9bdfd5bb82eb5d3f2f39493d6ce4f16c61d121622dfc0da74ea40",
+        "9c350c0959bdf024ff7ae97d4e4597aad4d5f8f9933fb4130898f5f20d9890e7",
     ),
 ];
 
