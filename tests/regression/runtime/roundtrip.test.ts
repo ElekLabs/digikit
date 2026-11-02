@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { Device, Session } from '@digi/test-support';
-import { bootInfo } from './card-kit.ts';
+import { bootInfo, E_LOADING } from './card-kit.ts';
 import { cardRig, RT } from './card-rig.ts';
 import { advance, pickSine, rpc } from './fx-live.ts';
 import { tap } from './fx-session.ts';
@@ -168,7 +168,12 @@ for (const sc of SCENARIOS) {
         const { session } = rt;
         const kit = step === 0 ? first : later;
         const label = `boot ${step + 1} (set ${set})`;
-        const info = await bootInfo(session, kit.plan);
+        // Python `wait_dsp`: a module's DSP part follows its ColdFire part (result LOADING); step up to 5 s until none is left
+        let info = await bootInfo(session, kit.plan);
+        for (let i = 0; i < 50 && info.results.includes(E_LOADING); i++) {
+          await advance(session, 100);
+          info = await bootInfo(session, kit.plan);
+        }
         expect(info.loaded, `${label}: every module loaded`).toBe(sel.length);
         expect(info.safe, `${label}: no safe mode`).toBe(0);
         expect(
