@@ -279,6 +279,9 @@ export class Session {
         ? { ...baseline.preparedImage, modules: [...baseline.preparedImage.modules] }
         : undefined;
       if (prepared) validatePreparedRuntimeImage(prepared, inp.syx);
+      // A paused baseline pauses before the load: the runtime is installed in the mode the daemon has (a new session runs free,
+      // at full speed), so the DSP frames it runs between the install and the pause would count against a test's trigger frame.
+      if (baseline.paused) await checked(() => this.client.call('run.mode', { mode: 'paused' }));
       const load = await checked(() =>
         this.client.firmwareLoad({
           syx: prepared?.syx ?? inp.syx,
