@@ -66,7 +66,7 @@ conformance suite over all 8 shipped modules; one Nx cache for all worktrees, gu
    controller and move where a free-running coupled emulator stops (fx-reuse DN2: onset shift 192 > 128 with it,
    pass without) [D]. Fix in the daemon: status requests must not change emulation, or a passive heartbeat file.
 2. Done: every gate step streams its log to `out/runs/verify/<id>/<step>.log`; the START line prints the path.
-3. Split `tests/regression/runtime/live.ts` so a helper change reruns only its importers.
+3. Done: `live.ts` is split into devices, ready, waits, install, artifacts and protocol helpers (tests/regression/runtime).
 4. Build caching: the daemon binary as a cached Nx target, its inputs proven against cargo's `digi-emud.d`
    (module packs take under a second, so they stay uncached). Then cache device results, starting with conformance.
 5. Upload full tier once, then delete the matching Python upload scenarios. Fix open item 1, then delete
