@@ -82,6 +82,8 @@ export interface CardRigOptions {
   hold?: boolean;
   /** A CPU exception is part of the scenario: faults of the session are not an error. */
   faults?: boolean;
+  /** Stall threshold of the daemon in emulated ms (default 1000): for a scenario whose single guest request blocks the main loop longer. */
+  stallMs?: number;
   /** More checks after the daemon has closed. */
   onClose?: (rig: CardRig, report: ReturnType<typeof runtimeSafety>) => void;
 }
@@ -224,6 +226,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const fixture = withReusablePatchedSession(
     {
       ...options(device),
+      ...(o.stallMs !== undefined ? { stallMs: o.stallMs } : {}),
       dsp: o.initial === 'small' ? 'cold' : o.dsp,
       env: async () => {
         artifacts = fs.mkdtempSync(

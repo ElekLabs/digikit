@@ -100,7 +100,7 @@ export async function usbTake(session: Session): Promise<Uint8Array> {
 export function uploadTests(
   name: string,
   body: (rig: CardRig) => Promise<void>,
-  opts: { devices?: readonly Device[]; full?: boolean; symbols?: string[]; sharc?: boolean; timeout?: number } = {},
+  opts: { devices?: readonly Device[]; full?: boolean; symbols?: string[]; sharc?: boolean; timeout?: number; stallMs?: number } = {},
 ): void {
   for (const device of opts.devices ?? DEVICES) {
     describe.skipIf(opts.full === true && !FULL_TIER)(`${device.toUpperCase()} ${FIRMWARE[device]}`, () => {
@@ -109,6 +109,7 @@ export function uploadTests(
         dsp: opts.sharc ? 'sharc' : 'zero',
         project: true,
         uploads: true,
+        stallMs: opts.stallMs,
         onClose: (r, report) => {
           expect(report.emulators).toBeGreaterThan(0);
           const { first, end, firmwareFirst } = r.store;
