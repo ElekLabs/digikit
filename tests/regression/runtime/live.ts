@@ -74,7 +74,7 @@ export async function expectRuntimeUi(
   session: Session,
   plan: RuntimePlan,
   artifacts: string,
-  options: { fresh?: boolean; afterEpoch?: number; timeout?: number } = {},
+  options: { fresh?: boolean; afterEpoch?: number; timeout?: number; paused?: boolean } = {},
 ): Promise<number> {
   const timeout = options.timeout ?? 45_000;
   const deadline = Date.now() + timeout;
@@ -97,7 +97,7 @@ export async function expectRuntimeUi(
             ),
           ) as typeof boot;
           return (
-            status.mode === 'free' &&
+            status.mode === (options.paused ? 'paused' : 'free') &&
             // Restart preserves the card and relaxes the DT2 filesystem-worker check.
             // A new epoch still needs the current UI guards; an explicit filesystem failure is never accepted.
             (options.afterEpoch === undefined ? status.cf.ready : status.cf.filesystem_verified !== false) &&
