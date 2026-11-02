@@ -205,7 +205,9 @@ export function withReusablePatchedSession(
       errors.push(error);
     }
     try {
-      await withinRuntimeDeadline(deadline, () => session!.client.call('pcm.tap', { action: 'capture_stop' }));
+      // A zero-DSP daemon has no audio session, so there is no capture to stop.
+      if (opts.dsp !== 'zero')
+        await withinRuntimeDeadline(deadline, () => session!.client.call('pcm.tap', { action: 'capture_stop' }));
       await withinRuntimeDeadline(deadline, () => session!.client.call('run.mode', { mode: 'paused' }));
     } catch (error) {
       errors.push(error);
