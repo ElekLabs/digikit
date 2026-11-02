@@ -81,7 +81,7 @@ Python `c.parallel` cases run one after the other in one daemon.
 | ops | 414 | RT3 the next card build holds the uploaded files | K:roundtrip (in O) |
 | ops | 422 | the upload wrote no selection sector | U:O |
 | ops | 160-171 | INFO and empty LIST at the start | U:O |
-| ops | put+verify of small modules, LIST after reboot, CLI delete/persistence | | COVERED by live.ts installModules, modules/acceptance.ts, transfer-live.test.ts (the ops file puts are the protocol-level cases, kept) |
+| ops | put+verify of small modules, LIST after reboot, CLI delete/persistence | | COVERED by live.ts installModules, tests/regression/modules/acceptance.ts, transfer-live.test.ts (the ops file puts are the protocol-level cases, kept) |
 
 ## folders (U:458-697), full tier, DT2 and DN2
 

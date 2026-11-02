@@ -40,7 +40,6 @@ const MODULE_PATH = 'modules/c-demo.dkm';
 const byte = (n: number) => Buffer.from([n]);
 const text = (s: string) => Buffer.from(s);
 const padded = (b: Buffer) => Buffer.concat([b, Buffer.alloc(SECTOR - b.length)]);
-const hex = (sectors: number[]) => sectors.map((s) => `0x${s.toString(16)}`);
 
 /** A pattern that is not a record, not a header and not blank. */
 const PATTERN = Buffer.from(Array.from({ length: SECTOR }, (_, i) => (i * 7 + 3) & 0xff));

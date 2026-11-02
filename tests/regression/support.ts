@@ -229,7 +229,11 @@ export function withReusablePatchedSession(
   };
   beforeAll(async () => {
     const deadline = Date.now() + 120_000;
-    session = await Session.start({ ...opts, dsp: opts.dsp ?? 'sharc', runtime: { patchSet: opts.patchSet, reuse: true } });
+    session = await Session.start({
+      ...opts,
+      dsp: opts.dsp ?? 'sharc',
+      runtime: { patchSet: opts.patchSet, reuse: true },
+    });
     try {
       baseline = await withinRuntimeDeadline(deadline, () => lifecycle.prepareBaseline(session!));
     } catch (error) {
