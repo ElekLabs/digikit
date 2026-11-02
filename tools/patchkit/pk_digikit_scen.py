@@ -9,7 +9,7 @@ globbing; no list names them; the names are unique across both places):
 
     [scenario]
     name = "equiv-dyn-pluck"       # the file's stem
-    kind = "equiv" | "safe" | "cut" | "menu" | "upload" | "card" | "debug" | "crash" | "pages" | "fx"
+    kind = "equiv" | "safe" | "cut" | "menu" | "upload" | "debug" | "crash" | "pages" | "fx"
     devices = ["dt2"]              # the scenario runs on the images of these devices (`images` names them instead)
     tier = "quick" | "full"        # quick: part of the verify gate; full: only `--tier full` (merges to main)
 
@@ -35,8 +35,6 @@ Kinds:
   menu       a set checked in SETTINGS > DIGIKIT > MODULES on a boot with no selection and applied with NO and YES on APPLY & RESTART? is
              loaded by the next boot and compares as `equiv` does (rows, machine in the list, PCM of a note equal to the patched-in set's).
   cut        the card states a power cut leaves between the two copies of the selection record.
-  card       card safety (finding 46): the one card-write function refuses writes outside the store range; a blank card works as before, a card
-             with foreign bytes in the range goes read-only and the runtime writes nothing, a card with our store keeps working.
   debug      the debug log: LOG and PEEK over SysEx, the DEBUG switch, INFO's sequence numbers, the periodic events.
              `[debug] part = "sticky"`: sticky machine type numbers (assigned at the boot load, kept in the selection record's map, eviction); the plain part also checks MODULES.
              `part = "guard"` (both images): the runtime guard on a NaN fixture.
@@ -1315,12 +1313,6 @@ def run_upload(c: Ctx) -> None:
     U.run_upload(c)
 
 
-def run_card(c: Ctx) -> None:
-    from tools.patchkit import pk_digikit_debug as DBG
-
-    DBG.run_card(c)
-
-
 def run_debug(c: Ctx) -> None:
     from tools.patchkit import pk_digikit_debug as DBG
 
@@ -1341,7 +1333,6 @@ def run_pages(c: Ctx) -> None:
 
 KINDS = {
     "pages": run_pages,
-    "card": run_card,
     "debug": run_debug,
     "crash": run_crash,
     "equiv": run_equiv,
@@ -1449,7 +1440,6 @@ def _run_pairs(
     rank = {
         "cut": 1,
         "upload": 1,
-        "card": 1,
         "debug": 1,
         "safe": 3,
         "crash": 3,

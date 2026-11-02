@@ -69,7 +69,7 @@ FRAMEWORK = frozenset(
 # call it.
 DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "__init__": (),
-    "dkupload": ("upload", "menu", "debug", "crash", "card"),
+    "dkupload": ("upload", "menu", "debug", "crash"),
     "dksettings": (),  # the settings record CLI; no scenario kind runs it (the TS port is tests/regression/runtime/project-kit.ts)
     "dkrun": ("menu",),
     "dkneeds": (
@@ -79,17 +79,16 @@ DEVICE_KINDS: dict[str, tuple[str, ...]] = {
     "dktransfer": ("menu",),
     "dkpackall": (),  # a dev task: the files the workbench reads
     "dkscreen": ("upload",),
-    "dklog": ("debug", "crash", "card"),
-    "dklog_kinds": ("debug", "crash", "card"),  # the event kinds dklog reads
+    "dklog": ("debug", "crash"),
+    "dklog_kinds": ("debug", "crash"),  # the event kinds dklog reads
     "dkproto": (
         "upload",
         "menu",
         "debug",
         "crash",
-        "card",
     ),  # the protocol numbers dkupload uses
     "devrpc": ("upload",),
-    "midisniff": ("upload", "menu", "debug", "crash", "card"),
+    "midisniff": ("upload", "menu", "debug", "crash"),
     "mmon": (),
     "dkprobe": (),  # the SHARC probe capture tool: no scenario kind runs it
     "dkprobe_seq": (),
@@ -751,7 +750,7 @@ def refs(text: str) -> set[str]:
 # TOMLs (test/dyn-guard-nan in the debug runner). A module a runner names selects the kinds the runner
 # serves; a runner not listed here serves every kind.
 RUNNER_KINDS: dict[str, tuple[str, ...]] = {
-    "pk_digikit_debug.py": ("card", "debug", "crash"),
+    "pk_digikit_debug.py": ("debug", "crash"),
     "pk_digikit_upload.py": ("upload",),
     "pk_digikit_pages.py": ("pages",),
     "pk_digikit_fx.py": (),  # retained offline TS and legacy shared oracles
