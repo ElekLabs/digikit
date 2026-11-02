@@ -451,6 +451,7 @@ async function folders(rig: CardRig): Promise<void> {
 uploadTests('upload-folders: folders, ranges, a streamed upload, first fit and paging', folders, {
   full: true,
   symbols: ['DKRT_STORE_CAP'],
+  stallMs: 10_000, // the END and the ranged VERIFY hash MiBs in one request: the main loop does not beat for over a second
 });
 
 // ---- the stock route ----------------------------------------------------------------------------------------------------------------
