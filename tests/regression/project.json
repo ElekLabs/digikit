@@ -19,7 +19,7 @@
     "runtimeAcceptance": [
       {
         "files": ["runtime/debug-module.test.ts"],
-        "modules": ["digikit/debug", "digikit/probe"]
+        "modules": ["digikit/debug", "digikit/probe", "digikit/remote", "test/dyn-params"]
       },
       {
         "files": ["runtime/fault-trace.test.ts"],
