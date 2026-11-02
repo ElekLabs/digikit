@@ -66,8 +66,8 @@ export interface CardRigOptions {
   symbols?: string[];
   /** Daemon environment besides the write watch. */
   env?: Record<string, string>;
-  /** ColdFire-only daemon ('zero') or with the SHARC (default). */
-  dsp?: 'zero' | 'sharc';
+  /** ColdFire-only daemon ('zero'; 'cold': also without a snapshot) or with the SHARC (default). */
+  dsp?: 'zero' | 'sharc' | 'cold';
   /** The first card: a function that gives its spec (default a blank store card) or `small`, a blank 1 MiB file (a test sets `DIGI_CARD_IDENTITY=small`). */
   initial?: 'small' | (() => CardSpec);
   /** Seed every card with the stock firmware's project (Python `Env.card`). */
@@ -221,7 +221,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const fixture = withReusablePatchedSession(
     {
       ...options(device),
-      dsp: o.dsp,
+      dsp: o.initial === 'small' ? 'cold' : o.dsp,
       env: async () => {
         artifacts = fs.mkdtempSync(
           path.join(os.tmpdir(), `digi-${scope.split(':')[0]!.replace(/\W+/g, '-')}-${device}-`),

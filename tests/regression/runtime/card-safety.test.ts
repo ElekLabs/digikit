@@ -232,7 +232,14 @@ cardRigs(
 // A card smaller than the store area (the emulator's `small` identity reports 0x3B0000 sectors, below the area of both devices): no store.
 cardRigs(
   'card-small',
-  { initial: 'small', env: { DIGI_CARD_IDENTITY: 'small' }, uploads: true, roots: RT, symbols: CARD_SYMBOLS },
+  {
+    initial: 'small',
+    relaxFs: true,
+    env: { DIGI_CARD_IDENTITY: 'small' },
+    uploads: true,
+    roots: RT,
+    symbols: CARD_SYMBOLS,
+  },
   (h) => {
     test(
       'a card smaller than the store area has no store: nothing is read or written there and uploads answer E_NOSTORE',

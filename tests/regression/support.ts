@@ -148,7 +148,7 @@ export interface RuntimeCase extends PatchedSession {
 
 /** Opt-in fixture: independent cases reload pristine firmware/card state in one owned daemon. */
 export function withReusablePatchedSession(
-  opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string; dsp?: 'zero' | 'sharc' },
+  opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string; dsp?: 'zero' | 'sharc' | 'cold' },
   lifecycle: {
     prepareBaseline: (session: Session) => Promise<RuntimeBaseline>;
     /** Required scenario evidence (guard/fault/card/PCM) before state is discarded. Holds release in their own finally. */
@@ -205,7 +205,9 @@ export function withReusablePatchedSession(
       errors.push(error);
     }
     try {
-      await withinRuntimeDeadline(deadline, () => session!.client.call('pcm.tap', { action: 'capture_stop' }));
+      // A cold ColdFire-only daemon has no DSP audio session to tap.
+      if (opts.dsp !== 'cold')
+        await withinRuntimeDeadline(deadline, () => session!.client.call('pcm.tap', { action: 'capture_stop' }));
       await withinRuntimeDeadline(deadline, () => session!.client.call('run.mode', { mode: 'paused' }));
     } catch (error) {
       errors.push(error);
