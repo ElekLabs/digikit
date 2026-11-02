@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { Device, Session } from '@digi/test-support';
-import { bootInfo } from './card-kit.ts';
+import { bootInfo, E_LOADING } from './card-kit.ts';
 import { cardRig, RT } from './card-rig.ts';
 import { advance, pickSine, rpc } from './fx-live.ts';
 import { tap } from './fx-session.ts';
@@ -140,13 +140,15 @@ for (const sc of SCENARIOS) {
     const { device } = sc;
     const modules = [...new Set(Object.values(sc.sets).flat())];
     const selectionOf = (set: string) => sc.sets[set]!.map(storeName);
-    const kit = cardRig(device, sc.name, {
-      roots: RT,
-      symbols: ['DKRT_ASSIGN'],
+    // The first boot runs the DT2 filesystem check; a card the firmware saved a project on never does, so the later boots are a second daemon with the check relaxed
+    // (the environment is the daemon's, as in Python where `Ctx.rig` relaxes used cards only). The stock firmware's project seeds the first card (Python `Env.card`).
+    const base = { roots: RT, symbols: ['DKRT_ASSIGN'] };
+    const first = cardRig(device, sc.name, {
+      ...base,
       initial: () => ({ modules, selection: selectionOf(sc.order[0]!) }),
-      // a card the firmware saved a project on never runs the DT2 filesystem check
-      relaxFs: true,
+      project: true,
     });
+    const later = cardRig(device, `${sc.name}-used`, { ...base, initial: () => ({}), relaxFs: true });
 
     test('a project passes through the module sets without a change (but for the header stamp)', async () => {
       const known: Record<string, number> = {};
@@ -162,10 +164,16 @@ for (const sc of SCENARIOS) {
       for (const [step, set] of sc.order.entries()) {
         const sel = selectionOf(set);
         const rt =
-          step === 0 ? await kit.first() : await kit.load(`step${step}`, { modules, selection: sel, base: card });
+          step === 0 ? await first.first() : await later.load(`step${step}`, { modules, selection: sel, base: card });
         const { session } = rt;
+        const kit = step === 0 ? first : later;
         const label = `boot ${step + 1} (set ${set})`;
-        const info = await bootInfo(session, kit.plan);
+        // Python `wait_dsp`: a module's DSP part follows its ColdFire part (result LOADING); step up to 5 s until none is left
+        let info = await bootInfo(session, kit.plan);
+        for (let i = 0; i < 50 && info.results.includes(E_LOADING); i++) {
+          await advance(session, 100);
+          info = await bootInfo(session, kit.plan);
+        }
         expect(info.loaded, `${label}: every module loaded`).toBe(sel.length);
         expect(info.safe, `${label}: no safe mode`).toBe(0);
         expect(

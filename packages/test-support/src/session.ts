@@ -60,6 +60,10 @@ export interface RuntimeBaseline {
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
+  /** The daemon boots with DIGI_COLD_RELAX_FS: its restored runtime is not `ready` (the DT2 filesystem check is skipped); the main panel is the contract. */
+  relaxedReady?: boolean;
+  /** Leave the emulator paused at the ready point (the default is free running); a test that times events in DSP frames steps from there. */
+  paused?: boolean;
   timeoutMs?: number;
 }
 
@@ -275,6 +279,9 @@ export class Session {
         ? { ...baseline.preparedImage, modules: [...baseline.preparedImage.modules] }
         : undefined;
       if (prepared) validatePreparedRuntimeImage(prepared, inp.syx);
+      // A paused baseline pauses before the load: the runtime is installed in the mode the daemon has (a new session runs free,
+      // at full speed), so the DSP frames it runs between the install and the pause would count against a test's trigger frame.
+      if (baseline.paused) await checked(() => this.client.call('run.mode', { mode: 'paused' }));
       const load = await checked(() =>
         this.client.firmwareLoad({
           syx: prepared?.syx ?? inp.syx,
@@ -291,9 +298,12 @@ export class Session {
         }),
       );
       await checked(() => this.client.guardSet(baseline.guard));
-      await checked(() => this.client.call('run.mode', { mode: 'free' }));
+      await checked(() => this.client.call('run.mode', { mode: baseline.paused ? 'paused' : 'free' }));
       const status = (lastStatus = await checked(() => this.client.status()));
-      if (typeof status.epoch !== 'number' || status.epoch <= epoch || !status.cf.ready || status.mode !== 'free') {
+      if (typeof status.epoch !== 'number' ||
+        status.epoch <= epoch ||
+        !(baseline.relaxedReady ? status.cf.main_ui_reached && status.cf.filesystem_verified !== false : status.cf.ready) ||
+        status.mode !== (baseline.paused ? 'paused' : 'free')) {
         throw new Error(`runtime baseline did not establish a new ready epoch: ${JSON.stringify(status)}`);
       }
       if (prepared) {

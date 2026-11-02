@@ -78,6 +78,8 @@ export interface CardRigOptions {
   storeExtra?: number[];
   /** The DT2 file system check never runs on a card that the firmware saved a project on. */
   relaxFs?: boolean;
+  /** Boot paused at the ready point and settle by stepping (Python `settle_ms` of 300 ms and `wait_dsp`), so a test that times events in DSP frames starts from the same frame in every run. */
+  hold?: boolean;
   /** A CPU exception is part of the scenario: faults of the session are not an error. */
   faults?: boolean;
   /** More checks after the daemon has closed. */
@@ -190,6 +192,8 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       preparedImage: prepared.preparedImage,
       guard: { protect: [{ lo: boot, hi: boot + 8, label: 'runtime boot identity' }], allow_pc: [] },
       deliverExceptions,
+      relaxedReady: o.relaxFs,
+      paused: o.hold,
     };
   };
   const freshDir = (session: Session, tag = 'card') => {
@@ -284,7 +288,13 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     runtime,
     afterEpoch = o.relaxFs && runtime.epoch ? runtime.epoch - 1 : undefined,
   ) => {
-    await expectRuntimeUi(runtime.session, prepared.plan, artifacts, { afterEpoch });
+    if (o.hold) {
+      // Python `settle_ms` (SETTLE_MS, 300 emulated ms), then `wait_dsp`: up to 5 s until no module is still LOADING (its DSP part follows the ColdFire part)
+      await advance(runtime.session, 300);
+      for (let i = 0; i < 50 && (await bootInfo(runtime.session, prepared.plan)).results.includes(1); i++)
+        await advance(runtime.session, 100);
+    }
+    await expectRuntimeUi(runtime.session, prepared.plan, artifacts, { afterEpoch, paused: o.hold });
     await rpc(runtime.session, 'run.mode', { mode: 'paused' });
     return runtime;
   };
