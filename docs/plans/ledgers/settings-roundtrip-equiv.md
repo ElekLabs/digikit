@@ -2,7 +2,7 @@
 
 Line format: `scenario | file:line | what | -> TS file:test | or COVERED by <test> | or DROPPED/NOT PORTED: reason`.
 Python files: `S` = `tools/patchkit/pk_digikit_settings.py`, `P` = `tools/patchkit/pk_digikit_project.py`, `C` = `tools/patchkit/pk_digikit_scen.py`, `M` = `tools/patchkit/pk_dkrt_machine.py`.
-TS files are under `tests/regression/runtime/` (`settings.test.ts`, `roundtrip.test.ts`, `equiv.test.ts`, helpers in `project-kit.ts`); the encoder test is `tests/regression/host/settings-record.test.ts`.
+TS files are under `tests/regression/runtime/` (`settings.test.ts`, `roundtrip.test.ts`, `equiv.test.ts`, helpers in `project-kit.ts`, fixture in `card-rig.ts`); the encoder test is `tests/regression/host/settings-record.test.ts`.
 Every TypeScript daemon is coupled (ColdFire and DSP). The Python `cf_only` engine has no TypeScript counterpart; the tiers and devices of the TOML files are kept.
 
 ## settings-dn2, settings-dt2 (quick, both devices, coupled)
@@ -44,10 +44,10 @@ settings | S:492 | oldcard: settings store on (state 0, limit 8192), store lists
 settings | S:502 | oldcard: settings write goes to copy A only (besides the selection sectors) | -> settings.test.ts: oldcard
 settings | S:512 | oldcard: an upload writes header B at the new place with the same seq; both files listed | -> settings.test.ts: oldcard
 settings | S:520 | oldcard: `store dump`: two files, selection kept, key in copy A | -> settings.test.ts: oldcard
-settings | C:406 | common: write-watch on cf.expansion over every boot, no stray write | -> project-kit.ts withCardFixture afterClose (runs after the daemon closes)
-settings | C:406 | common: flush check over every boot, no hit | -> project-kit.ts withCardFixture afterClose
-settings | C:413 | common: store range writes are the two selection sectors plus store_extra (settings copies, header pair, oldcard writes) | -> project-kit.ts withCardFixture afterClose (`storeExtra`, `allowStoreWrites`)
-settings | C:422 | common: card writes elsewhere only from 0x50000 | -> project-kit.ts withCardFixture afterClose
+settings | C:406 | common: write-watch on cf.expansion over every boot, no stray write | -> card-rig.ts cardRig afterClose (runs after the daemon closes)
+settings | C:406 | common: flush check over every boot, no hit | -> card-rig.ts cardRig afterClose
+settings | C:413 | common: store range writes are the two selection sectors plus store_extra (settings copies, header pair, oldcard writes) | -> card-rig.ts cardRig afterClose (`storeExtra`, `allowStoreWrites`)
+settings | C:422 | common: card writes elsewhere only from 0x50000 | -> card-rig.ts cardRig afterClose
 settings | S:121 (encode) | tools/device/dksettings.py encode and decode against sdk/vectors | -> host/settings-record.test.ts (valid and invalid vectors, limits)
 settings | tests/digikit/scenarios/settings-*.toml `cf_only = false` | coupled boot for the 2 s count | kept: all TS daemons are coupled
 settings | S:530 | the parts run in parallel threads on separate daemons | DROPPED: one test per part in one reusable daemon; reload gives each part its own card
@@ -67,10 +67,10 @@ roundtrip | P:438 | each later save equals the first but for the header stamp | 
 roundtrip | P:446 | saves 3 and 4 are byte-identical to the second save | -> roundtrip.test.ts: a project passes through the module sets
 roundtrip | P:453 | sound records still carry each type after every boot | -> roundtrip.test.ts: a project passes through the module sets
 roundtrip | P:460 | the header stamp changes once and then stays | -> roundtrip.test.ts: a project passes through the module sets
-roundtrip | P:465 | common checks (write-watch, flush, store writes, writes elsewhere) | -> project-kit.ts withCardFixture afterClose (policy 'default', no store_extra)
+roundtrip | P:465 | common checks (write-watch, flush, store writes, writes elsewhere) | -> card-rig.ts cardRig afterClose (policy default, no storeExtra)
 roundtrip | roundtrip-dt2-coupled.toml | same case as roundtrip-dt2 on the coupled engine | COVERED by roundtrip.test.ts: roundtrip-dt2 (every TS daemon is coupled); the full-tier entry is not repeated
 roundtrip | roundtrip-dt2.toml `tier = "quick"` | quick DT2 case ran on a ColdFire-only daemon (4x faster) | NOT PORTED as cf-only: runs coupled, so it is slower than before
-roundtrip | P:355 (c.used_cards, DIGI_COLD_RELAX_FS) | a card the firmware saved on skips the DT2 filesystem check | -> project-kit.ts withCardFixture `relaxFs` (daemon env DIGI_COLD_RELAX_FS=1)
+roundtrip | P:355 (c.used_cards, DIGI_COLD_RELAX_FS) | a card the firmware saved on skips the DT2 filesystem check | -> card-rig.ts cardRig `relaxFs` (daemon env DIGI_COLD_RELAX_FS=1)
 
 ## equiv-dn2-set (quick, dn2)
 
@@ -81,5 +81,5 @@ equiv | C:726 | the run-time set added rows | -> equiv.test.ts: the rows equal t
 equiv | M:503 | pcm_pin: onset even, 24000 samples, SHA-256 equals the pinned 330e9725...db1d3 | -> equiv.test.ts: the rows equal the static twin. Hash carried unchanged. NOT shown bit-identical: needs the owner's decision (report)
 equiv | C:653 | reference note audible | DROPPED: runs only when no pcm_sha256 pin is set; this scenario has the pin
 equiv | M:466 | pcm_check run against reference PCM | DROPPED: runs only without a pin
-equiv | C:751 | common checks | -> project-kit.ts withCardFixture afterClose (both daemons)
+equiv | C:751 | common checks | -> card-rig.ts cardRig afterClose (both daemons)
 equiv | C:674 | report of boot_ready (frames_at_ready, voice rows at ready) | DROPPED: report fields, no assertion

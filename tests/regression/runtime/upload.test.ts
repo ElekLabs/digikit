@@ -14,7 +14,8 @@ import {
 } from '@digi/dk-session';
 import { Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { pokeWord, putStatus } from './card-kit.ts';
+import { blob, listing, pokeWord, sha, statusOf, type Files } from './card-kit.ts';
+import type { CardRig } from './card-rig.ts';
 import { options, word } from './fx-live.ts';
 import { tap } from './fx-session.ts';
 import { portFile } from './device-data.ts';
@@ -22,24 +23,18 @@ import { FIRMWARE, liveCheck as check } from './live.ts';
 import { planSymbol } from './runtime-plan.ts';
 import {
   beginBody,
-  blob,
   clearFiles,
   cstr,
   dataBody,
   deviceListing,
   GCMD,
-  listing,
   putWithHash,
   roundtrip,
   runtimeVersion,
-  sha,
   shaBytes,
-  statusOf,
   uploadTests,
   usbSend,
   usbTake,
-  type Files,
-  type UploadRig,
 } from './upload-kit.ts';
 
 /** Python tools/patchkit/pk_digikit_upload.py: the `quick`, `ops`, `folders`, `stock`, `txfull` and `screenshot` parts. */
@@ -56,7 +51,7 @@ async function put(dk: DkSession, files: Files, p: string, data: Buffer): Promis
 }
 
 /** The device's LIST, the card read by plusdrive after the guest's writes, and the bytes sent all agree. */
-async function expectCard(rig: UploadRig, label: string, files: Files): Promise<void> {
+async function expectCard(rig: CardRig, label: string, files: Files): Promise<void> {
   expect(await deviceListing(rig.dk), `${label}: LIST equals the files sent`).toEqual(listing(files));
   const view = await rig.view(`ops-${label.replace(/\W+/g, '-')}`);
   expect(listing(view.files), `${label}: the card, read by plusdrive, holds the same bytes ${view.head}`).toEqual(
@@ -68,7 +63,7 @@ async function expectCard(rig: UploadRig, label: string, files: Files): Promise<
 // ---- ops and quick ------------------------------------------------------------------------------------------------------------------
 
 /** READ: the header, a range across a sector boundary, the 768-byte cap and the end of the file equal the bytes sent; a missing file, an offset past the end and length 0 are refused. */
-async function readChecks(rig: UploadRig, file: string, data: Buffer): Promise<void> {
+async function readChecks(rig: CardRig, file: string, data: Buffer): Promise<void> {
   const dk = rig.dk;
   expect(Buffer.from(await dk.header(file)), 'READ: the first 0xa0 bytes equal the file sent').toEqual(
     data.subarray(0, HEADER_BYTES),
@@ -80,13 +75,20 @@ async function readChecks(rig: UploadRig, file: string, data: Buffer): Promise<v
     `${range.size} ${range.bytes.length}`,
   );
   const long = await dk.read(file, 1, 5000);
-  check('READ: a long request returns 768 bytes', Buffer.from(long.bytes).equals(data.subarray(1, 769)), String(long.bytes.length));
+  check(
+    'READ: a long request returns 768 bytes',
+    Buffer.from(long.bytes).equals(data.subarray(1, 769)),
+    String(long.bytes.length),
+  );
   const tail = await dk.read(file, data.length - 10, 100);
   check('READ: a range past the end is cut at the end', Buffer.from(tail.bytes).equals(data.subarray(-10)));
   const parts: Buffer[] = [];
   for (let off = 0; off < data.length; off += 768) parts.push(Buffer.from((await dk.read(file, off, 768)).bytes));
   check('READ: the whole file by 768-byte reads', Buffer.concat(parts).equals(data));
-  check('VERIFY: the device sha256 of the file on the card equals the local one', (await dk.verify(file)) === sha(data));
+  check(
+    'VERIFY: the device sha256 of the file on the card equals the local one',
+    (await dk.verify(file)) === sha(data),
+  );
   const missing = await statusOf(() => dk.verify('modules/none.dkm'));
   check('VERIFY: a missing file is refused', missing === -59, String(missing));
   for (const [what, args, status] of [
@@ -94,13 +96,13 @@ async function readChecks(rig: UploadRig, file: string, data: Buffer): Promise<v
     ['offset at the end', [file, data.length, 4], -54],
     ['length 0', [file, 0, 0], -55],
   ] as const) {
-    const got = await statusOf(() => dk.read(...args));
+    const got = await statusOf(() => dk.read(args[0], args[1], args[2]));
     check(`READ: ${what} is refused`, got === status, String(got));
   }
 }
 
-async function ops(rig: UploadRig, quick: boolean): Promise<void> {
-  const dk = await rig.boot(await rig.card('ops'));
+async function ops(rig: CardRig, quick: boolean): Promise<void> {
+  const dk = await rig.pausedBoot(await rig.card({ name: 'ops' }));
   await rig.applyCap();
   const files: Files = {};
   const info = await dk.info();
@@ -119,7 +121,7 @@ async function ops(rig: UploadRig, quick: boolean): Promise<void> {
 
   const a = blob(70_000, 1); // three chunks, the last partial
   files['modules/a.dkm'] = a;
-  check('put a 70,000-byte file', (await putStatus(dk, 'modules/a.dkm', a)) === 0);
+  check('put a 70,000-byte file', (await statusOf(() => dk.put('modules/a.dkm', a))) === 0);
   await expectCard(rig, 'first upload', files);
   await readChecks(rig, 'modules/a.dkm', a);
 
@@ -142,7 +144,7 @@ async function ops(rig: UploadRig, quick: boolean): Promise<void> {
   );
 }
 
-async function opsFull(rig: UploadRig, files: Files): Promise<void> {
+async function opsFull(rig: CardRig, files: Files): Promise<void> {
   const dk = rig.dk;
   const status = (cmd: number, body?: Uint8Array, version?: number) => rig.status(cmd, body, version);
   // sizes around a sector, a one-byte file and an empty file, a nested path, sorted insert before and after
@@ -155,7 +157,7 @@ async function opsFull(rig: UploadRig, files: Files): Promise<void> {
   ] as const) {
     const data = blob(n, seed);
     files[p] = data;
-    const st = await putStatus(dk, p, data);
+    const st = await statusOf(() => dk.put(p, data));
     check(`put ${p} (${n} bytes)`, st === 0, String(st));
   }
   await expectCard(rig, 'six files', files);
@@ -215,7 +217,11 @@ async function opsFull(rig: UploadRig, files: Files): Promise<void> {
   files['retry.bin'] = d;
   await expectCard(rig, 'after the retry', files);
   const noUpload = [await status(GCMD.DATA, dataBody(0, d.subarray(0, 512))), await status(GCMD.END)];
-  check('DATA and END with no upload open: E_STATE', noUpload.every((st) => st === -53), String(noUpload));
+  check(
+    'DATA and END with no upload open: E_STATE',
+    noUpload.every((st) => st === -53),
+    String(noUpload),
+  );
 
   // paths and messages
   for (const p of ['', '/a', 'a//b', 'a/', 'a/../b', './a', 'x'.repeat(160)]) {
@@ -262,9 +268,9 @@ uploadTests('upload-ops: the commands, errors and CLEAR', (rig) => ops(rig, fals
 // ---- folders and large files --------------------------------------------------------------------------------------------------------
 
 /** Folders, LIST by prefix, MKDIR, CAPACITY's STORE entry, a streamed upload of several MiB, a delete that frees its space for the next file, and LIST paging. */
-async function folders(rig: UploadRig): Promise<void> {
+async function folders(rig: CardRig): Promise<void> {
   const mib = 6;
-  const dk = await rig.boot(await rig.card('folders'));
+  const dk = await rig.pausedBoot(await rig.card({ name: 'folders' }));
   await rig.applyCap();
   const files: Files = {};
   const zeroHash = '0'.repeat(64);
@@ -295,7 +301,12 @@ async function folders(rig: UploadRig): Promise<void> {
     ).toEqual(listing(files));
     const folderNames = listed.filter((e) => isFolder(e) && !(e.path in files)).map((e) => e.path);
     expect(folderNames.sort(), `${label}: folders with nothing in them: LIST = the card`).toEqual([...dirs].sort());
-    expect(store.entries.filter((e) => e.dir).map((e) => e.path).sort()).toEqual([...dirs].sort());
+    expect(
+      store.entries
+        .filter((e) => e.dir)
+        .map((e) => e.path)
+        .sort(),
+    ).toEqual([...dirs].sort());
     return Object.fromEntries(onCard.map((e) => [e.path, e.firstSector]));
   };
 
@@ -320,8 +331,12 @@ async function folders(rig: UploadRig): Promise<void> {
   const big = blob(mib * MIB + 77, 21);
   const bigPath = 'samples/drums/big.wav';
   files[bigPath] = big;
-  const putSt = await putStatus(dk, bigPath, big);
-  check(`put a ${mib} MiB file under a folder entry (DATA chunks of 32 KiB straight to the card)`, putSt === 0, String(putSt));
+  const putSt = await statusOf(() => dk.put(bigPath, big));
+  check(
+    `put a ${mib} MiB file under a folder entry (DATA chunks of 32 KiB straight to the card)`,
+    putSt === 0,
+    String(putSt),
+  );
   const free1 = (await dk.info()).free_bytes;
   check(
     "INFO: the free bytes fell by the file's sectors (and the table room)",
@@ -368,7 +383,7 @@ async function folders(rig: UploadRig): Promise<void> {
   const cap2 = (await dk.capacity()).STORE!;
   check('CAPACITY: STORE used fell again', cap2.used < 16, JSON.stringify(cap2));
   await put(dk, files, 'samples/second.wav', blob(mib * MIB + 77, 22));
-  rows =await verify('a file of the same size', []);
+  rows = await verify('a file of the same size', []);
   check(
     'the new file took the first gap, which holds the space the deleted one left (it starts at or before it)',
     rows['samples/second.wav']! <= bigFirst,
@@ -460,7 +475,7 @@ async function talk(session: Session): Promise<Uint8Array[]> {
 uploadTests(
   'upload-stock: MidiRpc Ping, SoftwareVersion and DeviceUID are the stock replies',
   async (rig) => {
-    await rig.boot(await rig.card('stock'));
+    await rig.pausedBoot(await rig.card({ name: 'stock' }));
     const runtime = await talk(rig.session);
     // the reference is the unpatched firmware booted from its snapshot (no runtime, no card image)
     const stockSession = await Session.start({ ...options(rig.device), dsp: 'zero' });
@@ -491,7 +506,7 @@ uploadTests(
   'upload-txfull: replies are dropped while the TX ring is full',
   async (rig) => {
     const { session, device } = rig;
-    const dk = await rig.boot(await rig.card('txfull'));
+    const dk = await rig.pausedBoot(await rig.card({ name: 'txfull' }));
     const symbol = (name: string) => planSymbol(rig.plan, name);
     // the 4-byte address literal of the code anchor (not word aligned: read as bytes)
     const anchor = portFile(device, FIRMWARE[device]).anchor?.find((a) => a.name === 'cf.midi.site.tx_inflight_lit');
@@ -501,7 +516,11 @@ uploadTests(
     literal.writeUInt32BE(await word(session, at), 0);
     literal.writeUInt32BE(await word(session, at + 4), 4);
     const flight = literal.readUInt32BE(anchor.addr - at);
-    check('the in-flight word is a DDR address', flight >= 0x40000000 && flight < 0x48000000 && flight % 4 === 0, flight.toString(16));
+    check(
+      'the in-flight word is a DDR address',
+      flight >= 0x40000000 && flight < 0x48000000 && flight % 4 === 0,
+      flight.toString(16),
+    );
     check('an INFO answers while the ring is empty', (await dk.info()).port === device);
     const dropped0 = await word(session, symbol('DKRT_UPLOAD_DROPPED'));
     const sent0 = await word(session, symbol('DKRT_UPLOAD_COUNT'));
@@ -519,7 +538,11 @@ uploadTests(
       await pokeWord(session, flight, level);
       const out: Uint8Array[] = [];
       for (let i = 0; i < 20; i++) out.push(await raw(request));
-      check(`${name}: 20 requests, no reply reaches the output`, out.every((o) => o.length === 0), out.map((o) => o.length).join());
+      check(
+        `${name}: 20 requests, no reply reaches the output`,
+        out.every((o) => o.length === 0),
+        out.map((o) => o.length).join(),
+      );
     }
     const dropped = (await word(session, symbol('DKRT_UPLOAD_DROPPED'))) - dropped0;
     check(
@@ -543,7 +566,11 @@ uploadTests(
       await pokeWord(session, flight, level);
       const out = await raw(request);
       const first = splitMessages(out).messages[0];
-      check(`${name}: the reply is sent`, first !== undefined && parseReply(first) !== null, Buffer.from(out).toString('hex'));
+      check(
+        `${name}: the reply is sent`,
+        first !== undefined && parseReply(first) !== null,
+        Buffer.from(out).toString('hex'),
+      );
     }
   },
   { full: true, symbols: ['DKRT_UPLOAD_DROPPED', 'DKRT_UPLOAD_COUNT'] },
@@ -554,7 +581,7 @@ uploadTests(
 /** The firmware's own MidiRpc Screenshot (0x04) over the emulated USB MIDI path equals the emulator's frame capture, on the main screen and on SETTINGS. */
 uploadTests('upload-screenshot: the MidiRpc Screenshot equals the frame capture', async (rig) => {
   const { session } = rig;
-  const dk = await rig.boot(await rig.card('screen'));
+  const dk = await rig.pausedBoot(await rig.card({ name: 'screen' }));
   const oled = async () => {
     const frame = await session.client.framebufferGet({ hash: true, data: true });
     return Buffer.from(frame.data_b64 ?? '', 'base64');
@@ -563,13 +590,16 @@ uploadTests('upload-screenshot: the MidiRpc Screenshot equals the frame capture'
     const before = await oled();
     const shot = Buffer.from(await dk.screen());
     const after = await oled();
-    fs.writeFileSync(path.join(rig.dir, `${name}.oled`), shot);
+    fs.writeFileSync(path.join(rig.artifacts, `${name}.oled`), shot);
     check(
       `Screenshot reply (${name}): 1024 bytes equal to the emulator's frame capture`,
       shot.length === 1024 && (shot.equals(before) || shot.equals(after)),
       `${shot.filter((b, i) => b !== after[i]).length} bytes differ from the frame after`,
     );
-    check(`Screenshot reply (${name}): the screen is not blank`, shot.some((b) => b !== 0));
+    check(
+      `Screenshot reply (${name}): the screen is not blank`,
+      shot.some((b) => b !== 0),
+    );
   };
   await grab('main');
   await tap(session, 'SETTINGS', 600);

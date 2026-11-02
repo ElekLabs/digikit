@@ -2,16 +2,16 @@ import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { Device, Session } from '@digi/test-support';
 import { bootInfo } from './card-kit.ts';
-import { advance, rpc } from './fx-live.ts';
+import { cardRig, RT } from './card-rig.ts';
+import { advance, pickSine, rpc } from './fx-live.ts';
+import { tap } from './fx-session.ts';
 import { FIRMWARE, FULL_TIER } from './live.ts';
 import {
   diffSlot,
   dynType,
   panelKey,
-  panelTap,
   panelTurn,
   pattern0Changes,
-  selectMachine,
   slotImage,
   slotSectors,
   soundRecords,
@@ -19,7 +19,6 @@ import {
   STAMP,
   trackType,
   typeAt,
-  withCardFixture,
 } from './project-kit.ts';
 import { applyOverlay } from './write-safety.ts';
 
@@ -49,8 +48,6 @@ const DT2_MACHINES = [
 const DT2_TYPES = ['test/dyn-params:dynp', 'test/sine:sine'];
 const LOCK_TURN = 11;
 const SOUND_LOCK_TURN = 2; // sine has one parameter (level)
-const RT = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
-
 const SCENARIOS: Scenario[] = [
   {
     name: 'roundtrip-dn2',
@@ -61,53 +58,80 @@ const SCENARIOS: Scenario[] = [
     machines: [{ track: 1, machine: 'test/dyn-dn2:dyn_pluck', hint: 5 }],
     sets: { A: ['test/dyn-dn2', 'test/sine'], B: ['test/sine'], A2: ['test/sine', 'test/dyn-dn2'] },
   },
-  { name: 'roundtrip-dt2', device: 'dt2', full: false, order: ['A', 'B'], types: DT2_TYPES, machines: DT2_MACHINES, sets: SETS_DT2 },
-  { name: 'roundtrip-dt2-orders', device: 'dt2', full: true, order: ['A', 'A', 'B', 'A2'], types: DT2_TYPES, machines: DT2_MACHINES, sets: SETS_DT2 },
+  {
+    name: 'roundtrip-dt2',
+    device: 'dt2',
+    full: false,
+    order: ['A', 'B'],
+    types: DT2_TYPES,
+    machines: DT2_MACHINES,
+    sets: SETS_DT2,
+  },
+  {
+    name: 'roundtrip-dt2-orders',
+    device: 'dt2',
+    full: true,
+    order: ['A', 'A', 'B', 'A2'],
+    types: DT2_TYPES,
+    machines: DT2_MACHINES,
+    sets: SETS_DT2,
+  },
 ];
 
 const storeName = (id: string) => `modules/${id.split('/').at(-1)}.dkm`;
 
 /** The panel script that makes the project: the run-time machine on track 1 (and the second one on track 2), parameter values, a p-lock and a sound lock on step 1 of track 1. */
-async function buildProject(session: Session, device: Device, machines: { track: number; type: number; hint: number }[]) {
+async function buildProject(
+  session: Session,
+  device: Device,
+  machines: { track: number; type: number; hint: number }[],
+) {
   for (const m of machines) {
-    if (m.track !== 1) await panelTap(session, ['TRK', `TRIG ${m.track}`], 300);
+    if (m.track !== 1) await tap(session, `TRIG ${m.track}`, 300, 'TRK');
     if (device === 'dt2') {
       // The first SRC list after a project save may not take, so the hint is tried up to four times; every try starts from the top of the list (12 UP presses).
       const seen: [number, number][] = [];
       for (const downs of [m.hint, m.hint, m.hint, m.hint, m.hint + 1, m.hint - 1]) {
-        await selectMachine(session, downs, 12);
+        await pickSine(session, downs, 12);
         seen.push([downs, await trackType(session, m.track)]);
         if (seen.at(-1)![1] === m.type) break;
       }
-      expect(seen.at(-1)![1], `track ${m.track} holds type ${m.type}; (downs, type) ${JSON.stringify(seen)}`).toBe(m.type);
-    } else await selectMachine(session, m.hint);
-    await panelTap(session, device === 'dt2' ? 'SRC' : 'SYN', 300);
-    for (const [enc, by] of [['ENC A', 9], ['ENC B', -7]] as const) await panelTurn(session, enc, by, 100);
+      expect(seen.at(-1)![1], `track ${m.track} holds type ${m.type}; (downs, type) ${JSON.stringify(seen)}`).toBe(
+        m.type,
+      );
+    } else await pickSine(session, m.hint);
+    await tap(session, device === 'dt2' ? 'SRC' : 'SYN', 300);
+    for (const [enc, by] of [
+      ['ENC A', 9],
+      ['ENC B', -7],
+    ] as const)
+      await panelTurn(session, enc, by, 100);
   }
-  if (machines.some((m) => m.track !== 1)) await panelTap(session, ['TRK', 'TRIG 1'], 300);
+  if (machines.some((m) => m.track !== 1)) await tap(session, 'TRIG 1', 300, 'TRK');
   // a note trig, a p-lock and a preset (sound) lock on it: GRID RECORDING, tap the trig, hold it and turn knobs
-  await panelTap(session, 'RECORD', 200);
-  await panelTap(session, 'TRIG 1', 200);
+  await tap(session, 'RECORD', 200);
+  await tap(session, 'TRIG 1', 200);
   await panelKey(session, 'TRIG 1', true);
   await advance(session, 100);
   await panelTurn(session, 'ENC C', LOCK_TURN, 100);
   await panelTurn(session, 'LEVEL', SOUND_LOCK_TURN, 300);
   await panelKey(session, 'TRIG 1', false);
   await advance(session, 300);
-  await panelTap(session, 'RECORD', 200);
+  await tap(session, 'RECORD', 200);
 }
 
 async function saveProject(session: Session, device: Device) {
-  await panelTap(session, ['FUNC', 'SETTINGS'], 300);
-  await panelTap(session, 'YES', 500); // slot 001
-  if (device === 'dn2') await panelTap(session, 'YES', 3500); // the name, save
+  await tap(session, 'SETTINGS', 300, 'FUNC');
+  await tap(session, 'YES', 500); // slot 001
+  if (device === 'dn2')
+    await tap(session, 'YES', 3500); // the name, save
   else await advance(session, 3500);
 }
 
 async function loadProject(session: Session) {
-  await panelTap(session, 'SETTINGS', 300);
-  for (let i = 0; i < 3; i++) await panelTap(session, 'YES', 500);
-  await panelTap(session, 'YES', 6000);
+  await tap(session, 'SETTINGS', 300);
+  for (let i = 0; i < 3; i++) await tap(session, 'YES', 500);
+  await tap(session, 'YES', 6000);
   await session.expectNoFault('project loaded');
 }
 
@@ -116,9 +140,9 @@ for (const sc of SCENARIOS) {
     const { device } = sc;
     const modules = [...new Set(Object.values(sc.sets).flat())];
     const selectionOf = (set: string) => sc.sets[set]!.map(storeName);
-    const kit = withCardFixture(device, sc.name, {
+    const kit = cardRig(device, sc.name, {
       roots: RT,
-      symbols: ['DKRT_BOOT', 'DKRT_ASSIGN'],
+      symbols: ['DKRT_ASSIGN'],
       initial: () => ({ modules, selection: selectionOf(sc.order[0]!) }),
       // a card the firmware saved a project on never runs the DT2 filesystem check
       relaxFs: true,
@@ -137,13 +161,17 @@ for (const sc of SCENARIOS) {
 
       for (const [step, set] of sc.order.entries()) {
         const sel = selectionOf(set);
-        const rt = step === 0 ? await kit.first() : await kit.load(`step${step}`, { modules, selection: sel, base: card });
+        const rt =
+          step === 0 ? await kit.first() : await kit.load(`step${step}`, { modules, selection: sel, base: card });
         const { session } = rt;
         const label = `boot ${step + 1} (set ${set})`;
         const info = await bootInfo(session, kit.plan);
         expect(info.loaded, `${label}: every module loaded`).toBe(sel.length);
         expect(info.safe, `${label}: no safe mode`).toBe(0);
-        expect(info.results.every((r) => r === 0), `${label}: results ${info.results}`).toBe(true);
+        expect(
+          info.results.every((r) => r === 0),
+          `${label}: results ${info.results}`,
+        ).toBe(true);
         // the run-time machines get their number from the boot's assignment table; a machine keeps its number in every later boot that loads its module (D7)
         for (const spec of new Set([...sc.types, ...sc.machines.map((m) => m.machine)])) {
           const [module, machine] = spec.split(':') as [string, string];
@@ -185,22 +213,47 @@ for (const sc of SCENARIOS) {
       const baseImg = slotImage(baseCardAfter, touched);
       const d0 = diffSlot(baseImg, imgs[0]!, device);
       expect(d0.equal, `control: the panel script changed the project ${JSON.stringify(d0)}`).toBe(false);
-      expect(d0.differBytes.pattern ?? 0, 'control: the first save differs from a save of the untouched project in the patterns').toBeGreaterThan(0);
+      expect(
+        d0.differBytes.pattern ?? 0,
+        'control: the first save differs from a save of the untouched project in the patterns',
+      ).toBeGreaterThan(0);
       // the firmware saves only the patterns and kits that changed: an untouched project's save does not write pattern 1 at all, so its bytes compare against the card's zeros
       const pc = pattern0Changes(baseImg, imgs[0]!);
-      expect(pc.filter((o) => o[0] < 0x20).length, 'control: pattern 1 gained a trig (its first bytes)').toBeGreaterThan(0);
-      expect(pc.filter((o) => o[0] >= 0x20).length, 'control: pattern 1 gained lock data (the bytes after the trig table)').toBeGreaterThan(0);
-      expect((d0.differBytes.kit ?? 0) + (d0.differBytes.pool ?? 0), 'control: the sounds changed too (parameter values, the machine type)').toBeGreaterThan(0);
+      expect(
+        pc.filter((o) => o[0] < 0x20).length,
+        'control: pattern 1 gained a trig (its first bytes)',
+      ).toBeGreaterThan(0);
+      expect(
+        pc.filter((o) => o[0] >= 0x20).length,
+        'control: pattern 1 gained lock data (the bytes after the trig table)',
+      ).toBeGreaterThan(0);
+      expect(
+        (d0.differBytes.kit ?? 0) + (d0.differBytes.pool ?? 0),
+        'control: the sounds changed too (parameter values, the machine type)',
+      ).toBeGreaterThan(0);
       const typesIn = (img: Map<number, Buffer>) => soundRecords(img, typeAt(device)).map(([, ty]) => ty);
-      for (const want of types) expect(typesIn(imgs[0]!), `the first save holds a sound with the run-time machine's type ${want}`).toContain(want);
+      for (const want of types)
+        expect(typesIn(imgs[0]!), `the first save holds a sound with the run-time machine's type ${want}`).toContain(
+          want,
+        );
       for (let k = 1; k < saves.length; k++) {
         const d = diffSlot(imgs[0]!, imgs[k]!, device, STAMP);
-        expect(d.equal, `project slot after set ${saves[k]!.set} (boot ${k + 1}) equals the first save (but for the header stamp) ${JSON.stringify(d)}`).toBe(true);
+        expect(
+          d.equal,
+          `project slot after set ${saves[k]!.set} (boot ${k + 1}) equals the first save (but for the header stamp) ${JSON.stringify(d)}`,
+        ).toBe(true);
         if (k >= 2) {
           const d2 = diffSlot(imgs[1]!, imgs[k]!, device);
-          expect(d2.equal, `project slot after set ${saves[k]!.set} (boot ${k + 1}) is byte-identical to the second save (stamp included) ${JSON.stringify(d2)}`).toBe(true);
+          expect(
+            d2.equal,
+            `project slot after set ${saves[k]!.set} (boot ${k + 1}) is byte-identical to the second save (stamp included) ${JSON.stringify(d2)}`,
+          ).toBe(true);
         }
-        for (const want of types) expect(typesIn(imgs[k]!), `boot ${k + 1} (set ${saves[k]!.set}): sound records still carry type ${want}`).toContain(want);
+        for (const want of types)
+          expect(
+            typesIn(imgs[k]!),
+            `boot ${k + 1} (set ${saves[k]!.set}): sound records still carry type ${want}`,
+          ).toContain(want);
       }
       const stamps = imgs.map((img) => img.get(SLOT0)!.readUInt32BE(0x18));
       expect(

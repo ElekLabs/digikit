@@ -2,7 +2,7 @@
 
 One line per Python check: `scenario | file:line | what | -> TS file:test`, or `COVERED by <test>`, or `DROPPED/NOT PORTED: reason`.
 D = `tools/patchkit/pk_digikit_debug.py`, S = `tools/patchkit/pk_digikit_scen.py`. TS files are in `tests/regression/runtime/`.
-Local helpers: `debug-kit.ts` (`cardTests`, `waitReset`, `crashRecord`, `OPS`, WAV and key helpers).
+Local helpers: `card-rig.ts` (`cardRigs`, `waitReset`), `debug-kit.ts` (`crashRecord`, `OPS`, `openAbout`).
 
 Differences that apply to many lines:
 

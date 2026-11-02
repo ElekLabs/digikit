@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
-import { DkError, type DkSession } from '@digi/dk-session';
+import { DkError } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
 import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
@@ -224,7 +225,18 @@ export async function storeList(cardImage: string, device: Device): Promise<{ he
 
 // ---- guest memory and the test mailbox ----------------------------------------------------------------------------------------------
 
-const BI_FIELDS = ['magic', 'version', 'safe', 'reason', 'counter', 'seq', 'copy', 'count', 'loaded', 'uiReached'];
+const BI_FIELDS = [
+  'magic',
+  'version',
+  'safe',
+  'reason',
+  'counter',
+  'seq',
+  'copy',
+  'count',
+  'loaded',
+  'uiReached',
+] as const;
 const SAFE_NAMES = ['none', 'counter', 'key', 'flag'];
 const CARD_FIELDS = [
   'state',
@@ -236,7 +248,7 @@ const CARD_FIELDS = [
   'checked',
   'claims',
   'writes',
-];
+] as const;
 const CARD_NAMES = ['unknown', 'ours', 'blank', 'foreign', 'unreadable', 'too small'];
 const CRASH_FIELDS = [
   'found',
@@ -251,14 +263,23 @@ const CRASH_FIELDS = [
   'saved',
   'panic',
   'tail',
-];
+] as const;
 /** `LOADING` in a module's boot result: its DSP part has not followed yet. */
 export const E_LOADING = 1;
+/** Store statuses of the upload protocol (the numbers of gen_proto's STATUS table). */
+export const E_NOSTORE = -61;
+export const E_INUSE = -62;
+export const E_PEEK = -63;
 
-async function words(session: Session, plan: RuntimePlan, symbol: string, fields: string[]) {
+async function words<const F extends readonly string[]>(
+  session: Session,
+  plan: RuntimePlan,
+  symbol: string,
+  fields: F,
+) {
   const base = planSymbol(plan, symbol);
   const values = await Promise.all(fields.map((_, i) => word(session, base + 4 * i)));
-  return Object.fromEntries(fields.map((k, i) => [k, values[i]!])) as Record<string, number>;
+  return Object.fromEntries(fields.map((k, i) => [k, values[i]!])) as Record<F[number], number>;
 }
 
 /** `DKRT_BOOT`: the boot's fields, per-module results (signed, `results` has `count` of them), `dspWait` and `stable`. */
@@ -273,14 +294,14 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
     allResults,
     dspWait: tail[SEL_MAX]!,
     stable: tail[SEL_MAX + 1]!,
-    reasonName: SAFE_NAMES[d.reason!] ?? '?',
+    reasonName: SAFE_NAMES[d.reason] ?? '?',
   };
 }
 
 /** `DKRT_CARD`: state, the first non-blank sector, its crc32, writes refused and done. */
 export async function cardInfo(session: Session, plan: RuntimePlan) {
   const d = await words(session, plan, 'DKRT_CARD', CARD_FIELDS);
-  return { ...d, stateName: CARD_NAMES[d.state!] ?? '?' };
+  return { ...d, stateName: CARD_NAMES[d.state] ?? '?' };
 }
 
 /** `DKRT_CRASH`: what the boot found of a crash record. */
@@ -327,10 +348,13 @@ export const setSelection = (session: Session, plan: RuntimePlan, paths: string[
 
 // ---- the upload protocol ------------------------------------------------------------------------------------------------------------
 
-/** `put` and the status it ended with (0 for success). DkSession.put throws a DkError with the status name; the number comes from the generated tables. */
-export async function putStatus(dk: DkSession, storePath: string, data: Uint8Array): Promise<number> {
+/**
+ * The status a protocol call ends with, as a number (0 for success). A DkSession call throws a DkError with the status name; the number comes
+ * from the generated tables. Other errors are rethrown.
+ */
+export async function statusOf(op: () => Promise<unknown>): Promise<number> {
   try {
-    await dk.put(storePath, data);
+    await op();
     return 0;
   } catch (e) {
     const row =
@@ -340,4 +364,53 @@ export async function putStatus(dk: DkSession, storePath: string, data: Uint8Arr
     if (!row) throw e;
     return row[0];
   }
+}
+
+export const sha = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
+
+/** Deterministic bytes with every value (the 8-in-7 packing needs the high bits): mulberry32 of `seed`. */
+export function blob(n: number, seed: number): Buffer {
+  const out = Buffer.alloc(n);
+  let a = seed >>> 0;
+  for (let i = 0; i < n; i++) {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    out[i] = (t ^ (t >>> 14)) & 0xff;
+  }
+  return out;
+}
+
+// ---- the store as the plusdrive reader sees it ----------------------------------------------------------------------------------------
+
+export type Files = Record<string, Buffer>;
+export type Listing = Record<string, [number, string]>;
+
+/** {path: [size, sha256]} of the files sent. */
+export const listing = (files: Files): Listing =>
+  Object.fromEntries(Object.entries(files).map(([p, b]) => [p, [b.length, sha(b)]]));
+
+/** The files of a card's store as `plusdrive store ls --cat` reads them (their sha256 is checked there), and the reader's header line. A card the reader cannot read gives no files. */
+export async function cardView(cardFile: string, device: Device): Promise<{ files: Files; head: string }> {
+  let store: Awaited<ReturnType<typeof storeList>>;
+  try {
+    store = await storeList(cardFile, device);
+  } catch (e) {
+    return { files: {}, head: `error: ${String(e).slice(0, 200)}` };
+  }
+  const files: Files = {};
+  for (const entry of store.entries) {
+    if (entry.dir) continue;
+    try {
+      const cat = await exec(plusdriveBinary(), ['store', 'ls', cardFile, '--device', device, '--cat', entry.path], {
+        cwd: repoRoot(),
+        encoding: 'buffer',
+        maxBuffer: 1 << 30,
+      });
+      files[entry.path] = cat.stdout;
+    } catch {
+      files[entry.path] = Buffer.from('<unreadable>');
+    }
+  }
+  return { files, head: store.head };
 }

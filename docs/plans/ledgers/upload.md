@@ -1,7 +1,7 @@
 # Ledger: the `upload` device scenarios (tools/patchkit/pk_digikit_upload.py)
 
 One line per Python check: `scenario | U:line | what | -> TS file:test name | or COVERED / DROPPED / NOT PORTED`.
-Files are under `tests/regression/runtime/`. Names: `U` = `upload.test.ts`, `F` = `upload-faults.test.ts`, `K` = `upload-kit.ts`.
+Files are under `tests/regression/runtime/`. Names: `U` = `upload.test.ts`, `F` = `upload-faults.test.ts`, `K` = `upload-kit.ts` (protocol bodies, `uploadTests`, `roundtrip`; the rig is `card-rig.ts`).
 Tests: Q = `upload-quick: one upload, a replace and a delete` (DT2, always), O = `upload-ops: the commands, errors and CLEAR` (full),
 FO = `upload-folders: folders, ranges, a streamed upload, first fit and paging` (full), ST = `upload-stock: ...` (full), TX = `upload-txfull: ...` (full),
 SC = `upload-screenshot: ...` (always), CUT = `upload-cut: ...` (full), CC = `upload-clear-cut: ...` (full), PB = `upload-playback: ...` (DT2, full).

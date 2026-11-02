@@ -11,7 +11,9 @@ In TypeScript a helper that reads guest memory takes `(session, plan, ...)`, whe
 | Python call | TypeScript helper (file) | Status / note |
 | --- | --- | --- |
 | `rig.put` (upload a file) | `dk.put(path, data)` (`@digi/dk-session` DkSession) | EXISTS |
-| `put_status` | `putStatus(dk, path, data)` (`runtime/card-kit.ts`) | NEW. Returns the number from the generated STATUS and LOAD_STATUS tables; other errors are rethrown |
+| `put_status` | `statusOf(() => dk.put(path, data))` (`runtime/card-kit.ts`) | NEW. Returns the number from the generated STATUS and LOAD_STATUS tables; other errors are rethrown |
+| `Rig`, `Env`, `common_checks`, `common_checks_upload`, `wait_reset` | `cardRig` / `cardRigs` (`runtime/card-rig.ts`): `boot`, `load`, `pausedBoot`, `ready`, `after`, `records`, `storeWrites`, `waitReset`; options `uploads`, `storeExtra`, `relaxFs`, `dsp` | EXISTS. One fixture for settings, round trip, equiv, debug, card, crash, safe mode and upload |
+| `Rig.note`, `pcm_check`, `pcm_pin` | `playNote`, `pcmMatches`, `pcmWindow`, `readFloatWav` (`runtime/fx-live.ts`) | EXISTS |
 | `rig.ls` | `dk.list()` | EXISTS |
 | `rig.info` | `dk.info()` | EXISTS |
 | `rig.modules` | `dk.modules()` | EXISTS |

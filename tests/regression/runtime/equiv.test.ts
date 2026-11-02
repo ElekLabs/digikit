@@ -3,17 +3,10 @@ import path from 'node:path';
 import { button, MS, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { bootInfo } from './card-kit.ts';
-import { bounded, frames, rpc } from './fx-live.ts';
+import { cardRig, RT } from './card-rig.ts';
+import { bounded, frames, pcmWindow, pickSine, readFloatWav, rpc } from './fx-live.ts';
 import { FIRMWARE } from './live.ts';
-import {
-  decodeTables,
-  diffTables,
-  pcmWindow,
-  readFloatWav,
-  selectMachine,
-  voiceRows,
-  withCardFixture,
-} from './project-kit.ts';
+import { decodeTables, diffTables, voiceRows } from './project-kit.ts';
 
 /**
  * A run-time module set against the patched-in static twin (port of tools/patchkit/pk_digikit_scen.py `run_equiv`, scenario equiv-dn2-set).
@@ -37,7 +30,6 @@ interface Equiv {
   pcmSha256: string;
 }
 
-const RT = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
 const PIN_SAMPLES = 24000; // interleaved samples a PCM pin covers from the onset (0.25 s of stereo)
 const PRESS_OFFSET = 44_000; // ColdFire instructions after the block boundary (a block is 88 000)
 const NOTE_FRAMES = 1500; // 1 s of audio, captured from the trig on
@@ -72,13 +64,16 @@ const SCENARIOS: Equiv[] = [
 for (const sc of SCENARIOS) {
   describe(`${sc.device.toUpperCase()} ${FIRMWARE[sc.device]} ${sc.name}`, () => {
     const { device } = sc;
-    const run = withCardFixture(device, `${sc.name}-run`, {
+    const run = cardRig(device, `${sc.name}-run`, {
       roots: RT,
       symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info'],
-      initial: () => ({ modules: sc.modules, selection: sc.modules.map((id) => `modules/${id.split('/').at(-1)}.dkm`) }),
+      initial: () => ({
+        modules: sc.modules,
+        selection: sc.modules.map((id) => `modules/${id.split('/').at(-1)}.dkm`),
+      }),
     });
     // the reference: the twin patched in, a card with no selection
-    const ref = withCardFixture(device, `${sc.name}-ref`, { roots: [...RT, sc.twin], symbols: SYMBOLS, initial: () => ({}) });
+    const ref = cardRig(device, `${sc.name}-ref`, { roots: [...RT, sc.twin], symbols: SYMBOLS, initial: () => ({}) });
 
     test('the rows equal the static twin; the sine note has the pinned SHA-256', async () => {
       const refRt = await ref.first();
@@ -96,7 +91,7 @@ for (const sc of SCENARIOS) {
       expect(used.length, `voice rows claimed: ${JSON.stringify(used)}`).toBe(sc.voices);
 
       // the DN2 machine list position (finding 33); the sound proves the type. The note starts the same instruction after the block boundary of `trigFrame` in every run.
-      await selectMachine(session, sc.hintRun);
+      await pickSine(session, sc.hintRun);
       const current = await frames(session);
       if (current >= sc.trigFrame - 20) throw new Error(`setup took until frame ${current}; raise trigFrame`);
       const file = path.join(run.artifacts, 'run.wav');

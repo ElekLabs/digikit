@@ -1,9 +1,10 @@
 import fs from 'node:fs';
-import { eventLine, hasCap, moduleNames, runtimeEvent, type DkLogEvent } from '@digi/dk-session';
+import { be32, eventLine, hasCap, moduleNames, runtimeEvent, type DkLogEvent } from '@digi/dk-session';
 import { CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { deviceFile, ofKind, waitFrames } from './debug-kit.ts';
+import { waitFrames } from './debug-kit.ts';
+import { deviceProfile } from './device-data.ts';
 import { word } from './fx-live.ts';
 import {
   DEBUG_MODULE,
@@ -14,10 +15,9 @@ import {
   runtimeTests,
   settleUi,
 } from './live.ts';
-import { readSmallRing, RING_SYMBOLS } from './runtime-menu.ts';
+import { ofKind, readSmallRing, RING_SYMBOLS } from './runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from './runtime-plan.ts';
 
-const be32 = (n: number) => Uint8Array.of(n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255);
 const text = (words: number[]) =>
   String.fromCharCode(...words.flatMap((w) => [w >>> 24, (w >>> 16) & 255, (w >>> 8) & 255, w & 255]).filter(Boolean));
 
@@ -110,7 +110,13 @@ function expectLogShape(log: DkLogEvent[], runtime: number) {
     'the block counter does not go back',
   ).toBe(true);
   const kinds = new Set(log.map((e) => e.kind));
-  for (const kind of [LOG_KIND.BOOT_START, LOG_KIND.CARD_CHECK, LOG_KIND.RAM_KEEP, LOG_KIND.BOOT_RECORD, LOG_KIND.UI_FIRST])
+  for (const kind of [
+    LOG_KIND.BOOT_START,
+    LOG_KIND.CARD_CHECK,
+    LOG_KIND.RAM_KEEP,
+    LOG_KIND.BOOT_RECORD,
+    LOG_KIND.UI_FIRST,
+  ])
     expect(kinds.has(kind), `boot step ${kind} is logged (handed over from the runtime's ring)`).toBe(true);
   const start = log.find((e) => e.kind === LOG_KIND.BOOT_START)!;
   expect(start.args[0], 'BOOT_START carries the runtime version').toBe(runtime);
@@ -120,22 +126,31 @@ function expectLogShape(log: DkLogEvent[], runtime: number) {
   const lines = log.map((e) => eventLine(runtimeEvent(e), names));
   expect(lines.length).toBeGreaterThanOrEqual(8);
   expect(lines.some((line) => line.includes('CARD_CHECK'))).toBe(true);
-  expect(log.some((e) => e.kind === LOG_KIND.CRASH_FOUND), 'no crash record in this log').toBe(false);
+  expect(
+    log.some((e) => e.kind === LOG_KIND.CRASH_FOUND),
+    'no crash record in this log',
+  ).toBe(false);
 }
 
 /** PEEK reads the runtime's own region and the firmware's data range, in 512-byte requests, and refuses everything outside the ranges of the device file. */
-async function expectPeekRanges({ session, dk }: PatchedSession, plan: Awaited<ReturnType<typeof prepareRuntimePlan>>, runtime: number) {
-  const peek = (addr: number, n: number) => dk.request(SERVICE_CMD.PEEK, new Uint8Array([...be32(addr), n >> 8, n & 255]));
+async function expectPeekRanges(
+  { session, dk }: PatchedSession,
+  plan: Awaited<ReturnType<typeof prepareRuntimePlan>>,
+  runtime: number,
+) {
+  const peek = (addr: number, n: number) =>
+    dk.request(SERVICE_CMD.PEEK, new Uint8Array([...be32(addr), n >> 8, n & 255]));
   const state = planSymbol(plan, 'DKRT_STATE');
   const head = await peek(state, 8);
   expect([...head.body.subarray(6, 10)], "the runtime's own region: magic DKRT").toEqual([...Buffer.from('DKRT')]);
   expect(Buffer.from(head.body.subarray(10, 14)).readUInt32BE(0), 'and the runtime version').toBe(runtime);
   const big: number[] = [];
-  for (let off = 0; off < 1300; off += 512) big.push(...(await peek(state + off, Math.min(512, 1300 - off))).body.subarray(6));
+  for (let off = 0; off < 1300; off += 512)
+    big.push(...(await peek(state + off, Math.min(512, 1300 - off))).body.subarray(6));
   expect(big, 'PEEK of 1300 bytes in three requests (512 at most each)').toHaveLength(1300);
   expect(big.slice(0, 4)).toEqual([...Buffer.from('DKRT')]);
 
-  const ranges = deviceFile(session.options.device).digikit.peek;
+  const ranges = deviceProfile(session.options.device).digikit.peek;
   const [lo0, hi0] = ranges[0]!;
   const hi1 = ranges.at(-1)![1];
   expect((await peek(lo0 + 0x400, 16)).body.length, "the firmware's data range").toBe(6 + 16);
@@ -182,7 +197,9 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
     ids.map((id) => ({ id, artifact: moduleArtifact(device, id) })),
   );
   const info = await dk.info();
-  expect(hasCap(info, 'MODULES') && hasCap(info, 'CAPACITY'), 'INFO sets the MODULES and CAPACITY capabilities').toBe(true);
+  expect(hasCap(info, 'MODULES') && hasCap(info, 'CAPACITY'), 'INFO sets the MODULES and CAPACITY capabilities').toBe(
+    true,
+  );
   const uploadsBefore = ofKind(await dk.readLog(), LOG_KIND.UPLOAD).length;
   const modules = await dk.modules();
   const [pl, xs] = modules as [(typeof modules)[0], (typeof modules)[0]];
@@ -205,7 +222,9 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   expect(disjoint([pl.cf_base, pl.cf_size], [xs.cf_base, xs.cf_size]), 'the ColdFire ranges do not overlap').toBe(true);
   const arena = cap.ARENA!;
   const arenaFree = arena.limit - arena.used;
-  expect(arena.used, 'the arena use covers the modules').toBeGreaterThanOrEqual(modules.reduce((n, m) => n + m.cf_size, 0));
+  expect(arena.used, 'the arena use covers the modules').toBeGreaterThanOrEqual(
+    modules.reduce((n, m) => n + m.cf_size, 0),
+  );
   expect(arena.largest).toBeGreaterThan(0);
   expect(arena.largest).toBeLessThanOrEqual(arenaFree);
 
@@ -222,7 +241,7 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   expect([popcount(pl.rows), popcount(xs.rows)], 'one voice row each').toEqual([1, 1]);
   for (const m of [pl, xs]) expect([m.faults, m.guard_off], `${m.name}: no guard fault`).toEqual([0, false]);
 
-  const file = deviceFile(device);
+  const file = deviceProfile(device);
   const limits = Object.fromEntries(Object.entries(cap).map(([k, v]) => [k, v.limit]));
   expect(limits, "CAPACITY lists the device file's limits").toMatchObject({
     MODULES: file.limits.modules,
@@ -250,7 +269,9 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   const [from1, from9] = [await page(1), await page(9)];
   expect([from1[16], from1[17], from1[18]], 'MODULES pages by start index').toEqual([3, 2, 1]);
   expect([from9[16], from9[17]]).toEqual([3, 0]);
-  expect(ofKind(await dk.readLog(), LOG_KIND.UPLOAD), 'MODULES is not logged as an UPLOAD event').toHaveLength(uploadsBefore);
+  expect(ofKind(await dk.readLog(), LOG_KIND.UPLOAD), 'MODULES is not logged as an UPLOAD event').toHaveLength(
+    uploadsBefore,
+  );
   await session.expectNoFault('modules reply');
 }
 
@@ -274,7 +295,9 @@ async function expectPeriodicEvents(runtime: PatchedSession): Promise<void> {
 
   const diag = ofKind(log, LOG_KIND.DSP_DIAG);
   const starts = diag.filter((e) => (e.args[0]! & 0xff) === 0);
-  expect(diag.length, 'a full set (24 words, six events) at the first poll and at each later one').toBe(6 * starts.length);
+  expect(diag.length, 'a full set (24 words, six events) at the first poll and at each later one').toBe(
+    6 * starts.length,
+  );
   expect(starts.length).toBeGreaterThanOrEqual(3);
   expect(starts.length).toBeLessThanOrEqual(5);
   for (let i = 2; i < starts.length; i++) expectTenSeconds(gap(starts[i - 1]!, starts[i]!));
@@ -323,8 +346,12 @@ runtimeTests('MODULES and CAPACITY list the loaded modules, ranges, types and li
   timeout: 900_000,
   devices: ['dt2'],
 });
-runtimeTests('the periodic events: HEALTH every ten seconds, STABLE once, quiet DSP diagnostics', expectPeriodicEvents, {
-  timeout: 1_200_000,
-  devices: ['dt2'],
-  full: true,
-});
+runtimeTests(
+  'the periodic events: HEALTH every ten seconds, STABLE once, quiet DSP diagnostics',
+  expectPeriodicEvents,
+  {
+    timeout: 1_200_000,
+    devices: ['dt2'],
+    full: true,
+  },
+);

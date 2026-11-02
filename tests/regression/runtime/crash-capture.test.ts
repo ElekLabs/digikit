@@ -1,15 +1,8 @@
-import { hasCap } from '@digi/dk-session';
+import { be32, hasCap } from '@digi/dk-session';
 import { expect, test } from 'vitest';
 import { bootInfo, cardInfo, crashInfo, currentRecord } from './card-kit.ts';
-import {
-  be32,
-  CARD_TIMEOUT,
-  cardTests,
-  crashRecord,
-  pausedProtocol,
-  waitReset,
-  type CardHarness,
-} from './debug-kit.ts';
+import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from './card-rig.ts';
+import { CARD_TIMEOUT, crashRecord, pausedProtocol } from './debug-kit.ts';
 import { rpc } from './fx-live.ts';
 
 /**
@@ -27,7 +20,7 @@ const KINDS = {
 } as const;
 
 /** What a test looks at after a boot, read while the run is paused. */
-async function observe(h: CardHarness) {
+async function observe(h: CardRig) {
   const runtime = h.runtime;
   const { session } = runtime;
   const hasLog = await pausedProtocol(runtime, async (dk) => hasCap(await dk.info(), 'LOG'));
@@ -42,7 +35,7 @@ async function observe(h: CardHarness) {
   };
 }
 
-cardTests('crash capture', { devices: ['dt2'], full: true, faults: true }, (h) => {
+cardRigs('crash capture', { devices: ['dt2'], full: true, faults: true, roots: RT, symbols: CARD_SYMBOLS }, (h) => {
   for (const [kind, { blocks, mode, vector }] of Object.entries(KINDS)) {
     test(
       `${kind}: a CPU exception in a module's slot is recorded, reported by the next boot, and two in a row lead to safe mode`,
@@ -59,7 +52,7 @@ cardTests('crash capture', { devices: ['dt2'], full: true, faults: true }, (h) =
         await rpc(runtime.session, 'run.mode', { mode: 'paused' });
         const seen: Awaited<ReturnType<typeof observe>>[] = [];
         for (let boot = 0; boot < 3; boot++) {
-          if (boot) await waitReset(runtime);
+          if (boot) await h.waitReset();
           seen.push(await observe(h));
         }
         const [b0, b1, b2] = seen as [(typeof seen)[0], (typeof seen)[0], (typeof seen)[0]];
@@ -93,13 +86,24 @@ cardTests('crash capture', { devices: ['dt2'], full: true, faults: true }, (h) =
         expect(b2.hasLog, 'no LOG capability without the debug module').toBe(false);
 
         if (kind === 'early') {
-          expect([b0, b1, b2].map((b) => b.info.counter), 'boot 2 starts with counter 1 and boot 3 with 2').toEqual([0, 1, 2]);
+          expect(
+            [b0, b1, b2].map((b) => b.info.counter),
+            'boot 2 starts with counter 1 and boot 3 with 2',
+          ).toEqual([0, 1, 2]);
           expect(b1.info).toMatchObject({ safe: 0, loaded: 2 });
           expect(b1.crash.stable, 'the crash came before the stable period').toBe(0);
-          expect(b2.info, 'boot 3 is safe mode (counter), no module loaded').toMatchObject({ safe: 1, reason: 1, loaded: 0 });
+          expect(b2.info, 'boot 3 is safe mode (counter), no module loaded').toMatchObject({
+            safe: 1,
+            reason: 1,
+            loaded: 0,
+          });
         } else {
           expect(b0.info.counter).toBe(0);
-          expect(b1.info, 'the crashed boot is counted bad at the next boot').toMatchObject({ counter: 1, safe: 0, loaded: 2 });
+          expect(b1.info, 'the crashed boot is counted bad at the next boot').toMatchObject({
+            counter: 1,
+            safe: 0,
+            loaded: 2,
+          });
           expect(b1.crash.stable, 'the crash came after the stable period').toBe(1);
           expect(b2.info, 'two such crashes in a row make boot 3 safe mode').toMatchObject({
             counter: 2,

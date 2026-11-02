@@ -1,7 +1,9 @@
+import { be32 } from '@digi/dk-session';
 import type { Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo, CMD as MAILBOX, currentRecord, encodeRecord, postRaw } from './card-kit.ts';
-import { be32, CARD_TIMEOUT, cardTests, settleHang } from './debug-kit.ts';
+import { CARD_SYMBOLS, cardRigs, RT } from './card-rig.ts';
+import { CARD_TIMEOUT, settleHang } from './debug-kit.ts';
 import { rpc } from './fx-live.ts';
 import { planSymbol } from './runtime-plan.ts';
 
@@ -29,14 +31,18 @@ const CUT_CASES = [
   { a: 'torn', b: 'torn', want: { loaded: 0, seq: 0, copy: 0 } },
 ] as const;
 
-cardTests('safe mode', { full: true }, (h) => {
+cardRigs('safe mode', { full: true, roots: RT, symbols: CARD_SYMBOLS }, (h) => {
   test(
     'a module that resets the machine in its init: two boots never reach the UI loop, the third boots in safe mode',
     async () => {
       const fault = h.mod('test/dyn-fault', 'fault');
       await h.boot(await h.card({ modules: [fault], selection: [fault.name] }));
       const info = await h.ready(true);
-      expect(info, 'the third boot is safe mode (counter 2)').toMatchObject({ safe: 1, reason: SAFE_COUNTER, counter: 2 });
+      expect(info, 'the third boot is safe mode (counter 2)').toMatchObject({
+        safe: 1,
+        reason: SAFE_COUNTER,
+        counter: 2,
+      });
       expect(info.loaded, 'safe mode loaded no module').toBe(0);
       expect(info.allResults[0], 'and reported it').toBe(E_SAFE_MODE);
       const rec = currentRecord(await h.records());
@@ -74,7 +80,12 @@ cardTests('safe mode', { full: true }, (h) => {
           const first = await bootInfo(session, h.plan);
           await rpc(session, 'run.mode', { mode: 'paused' });
           const hung = await settleHang(session, ticks);
-          seen.push({ info: first, after: await bootInfo(session, h.plan), rec: currentRecord(await h.records()), hung });
+          seen.push({
+            info: first,
+            after: await bootInfo(session, h.plan),
+            rec: currentRecord(await h.records()),
+            hung,
+          });
           if (boot < 2) card = await h.after(); // a power cycle: the card as the last boot left it
         }
         const summary = JSON.stringify(seen.map((s) => [s.info.counter, s.after.stable, s.rec?.counter, s.hung]));
@@ -112,7 +123,7 @@ cardTests('safe mode', { full: true }, (h) => {
   }
 });
 
-cardTests('power cut between the selection record copies', { full: true }, (h) => {
+cardRigs('power cut between the selection record copies', { full: true, roots: RT, symbols: CARD_SYMBOLS }, (h) => {
   const modules = () => CUT_MODULES[h.device].map((id, i) => h.mod(id, `m${i}`));
 
   for (const { a, b, want } of CUT_CASES) {
@@ -145,7 +156,12 @@ cardTests('power cut between the selection record copies', { full: true }, (h) =
       const mods = modules();
       const { session, dk } = await h.boot(await h.card({ modules: mods }));
       await h.ready();
-      const r = await postRaw(session, h.plan, MAILBOX.SELECT_ONE, Buffer.from(`\0${mods.map((m) => m.name).join('\0')}\0\0`));
+      const r = await postRaw(
+        session,
+        h.plan,
+        MAILBOX.SELECT_ONE,
+        Buffer.from(`\0${mods.map((m) => m.name).join('\0')}\0\0`),
+      );
       const recs = await h.records();
       expect(r).toBe(0);
       expect(recs[0]?.seq, 'A is new').toBe(1);
