@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { repoRoot } from '@digi/test-support';
 import { test } from 'vitest';
 
 test('remote pacing unit uses the C handler with a controlled block clock', () => {
@@ -17,7 +16,7 @@ test('remote pacing unit uses the C handler with a controlled block clock', () =
         '-Wextra',
         '-Werror',
         '-I',
-        path.join(repoRoot(), 'sdk/include'),
+        path.join(import.meta.dirname, '../../../../sdk/include'),
         path.join(import.meta.dirname, 'remote-pacing.c'),
         '-o',
         binary,

@@ -225,7 +225,8 @@ def acceptance_records() -> dict[str, RuntimeAcceptance]:
             ):
                 raise _invalid(root, "types")
             is_module = "module" in data.get("tags", [])
-            if is_module and name not in modules:
+            # An uploadable owner is packed with its tests; a core/* owner is patched into the image.
+            if is_module and name in RUNTIME_UPLOADS and name not in modules:
                 modules = [*modules, name]
             if (
                 len(set(modules)) != len(modules)
