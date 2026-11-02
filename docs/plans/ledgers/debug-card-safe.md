@@ -6,6 +6,8 @@ Local helpers: `card-rig.ts` (`cardRigs`, `waitReset`), `debug-kit.ts` (`crashRe
 
 card-safety and card-small: Python deleted; the store-range write check is ported to card-rig.ts (afterClose, uploads). `debug_on` is obsolete (the debug switch is gone); the saved-selection flag bit belongs to debug-log.
 
+card-torn (`tests/digikit/scenarios/card-torn.toml`, added 2026-11-02): stays Python (`run_card_torn`) until it is ported to card-safety.test.ts.
+
 Differences that apply to many lines:
 
 - The Python scenarios run a `cf_only` daemon without DSP for most card and debug checks. The TS runtime sessions are always coupled (`dsp: 'sharc'`), so a boot is slower and has DSP events. No check depends on the missing DSP.
