@@ -29,14 +29,17 @@ export function liveOptions(device: Device, extra: { patchSet?: string; mirror?:
   return { device, firmware: FIRMWARE[device], binary, card, ...extra };
 }
 
+/** Full-tier scenarios run only under `DIGIKIT_TIER=full` (`verify --full`), as the Python tiers do. */
+export const FULL_TIER = process.env.DIGIKIT_TIER === 'full';
+
 /** One test per device, each on its own fresh runtime daemon that has passed `expectRuntimeBoot`. */
 export function runtimeTests(
   name: string,
   body: (runtime: PatchedSession) => Promise<void>,
-  opts: { patchSet?: string; mirror?: boolean; timeout?: number; devices?: readonly Device[] } = {},
+  opts: { patchSet?: string; mirror?: boolean; timeout?: number; devices?: readonly Device[]; full?: boolean } = {},
 ): void {
   for (const device of opts.devices ?? DEVICES) {
-    describe(`${device.toUpperCase()} ${FIRMWARE[device]}`, () => {
+    describe.skipIf(opts.full === true && !FULL_TIER)(`${device.toUpperCase()} ${FIRMWARE[device]}`, () => {
       const handle = withPatchedSession(liveOptions(device, opts), name);
       test(
         name,
