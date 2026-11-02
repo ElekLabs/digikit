@@ -347,39 +347,10 @@ def emulator_test_path(path: str) -> bool:
     return re.fullmatch(r"packages/emulator/[^/]+/tests/.+\.rs", path) is not None
 
 
-@cache
-def acceptance_python(step: str) -> set[str]:
-    """Dependencies of consumed preparation/client entry points, using the existing import graph."""
+def _import_closure(roots: set[str]) -> set[str]:
+    """Paths of ROOTS and of every module they import, using the existing import graph."""
     from tools.devtools import changed_tests
 
-    # The graph omits function-local imports. These consumed call paths need stablebin from
-    # patchkit.binary and sharc_disasm (imported inside the functions of the SHARC runner pk_sharc.run_call).
-    roots = {
-        "tools",
-        "tools.patchkit.patchkit",
-        "tools.devtools.stablebin",
-        "tools.sharc_dev.sharc_disasm",
-    }
-    if step == "runtime-fixture":
-        roots.update(
-            {
-                "tools.device.dktransfer",
-                "tools.control.digi_client",
-                "tools.patchkit.pk_digikit_fx",
-                "tools.patchkit.pk_digikit_fxsend",
-                "tools.patchkit.pk_digikit_fxpage",
-                "tools.patchkit.pk_digikit_fxroutes",
-                "tools.patchkit.pk_digikit_fxroute",
-                "tools.patchkit.hook_ab",
-            }
-        )
-    if step == "runtime-fixture":
-        roots.update(
-            source.removesuffix(".py").replace("/", ".")
-            for record in dict.fromkeys(acceptance_records().values())
-            for source in record.sources
-            if source.endswith(".py") and (ROOT / source).is_file()
-        )
     graph = changed_tests.graph()
     found, todo = set(roots), list(roots)
     while todo:
@@ -387,18 +358,39 @@ def acceptance_python(step: str) -> set[str]:
             if dependency not in found:
                 found.add(dependency)
                 todo.append(dependency)
-    paths = {changed_tests.path_of(module) for module in found}
-    if step == "runtime-fixture":
-        paths.update(
-            source
-            for record in dict.fromkeys(acceptance_records().values())
+    return {changed_tests.path_of(module) for module in found}
+
+
+@cache
+def acceptance_shared(step: str) -> set[str]:
+    """Dependencies of the preparation/client entry points that every acceptance file consumes."""
+    # The graph omits function-local imports. These consumed call paths need stablebin from
+    # patchkit.binary and sharc_disasm (imported inside the functions of the SHARC runner pk_sharc.run_call).
+    return _import_closure(
+        {
+            "tools",
+            "tools.patchkit.patchkit",
+            "tools.devtools.stablebin",
+            "tools.sharc_dev.sharc_disasm",
+        }
+    )
+
+
+@cache
+def acceptance_record_closure(record: RuntimeAcceptance) -> set[str]:
+    """Dependencies of the Python sources one runtime record runs, and the record's own sources."""
+    paths = _import_closure(
+        {
+            source.removesuffix(".py").replace("/", ".")
             for source in record.sources
-        )
-        # Module-owned Python models may be loaded dynamically rather than imported.
+            if source.endswith(".py") and (ROOT / source).is_file()
+        }
+    )
+    paths.update(record.sources)
+    # Module-owned Python models may be loaded dynamically rather than imported.
+    if record.owner in manifests():
         paths.update(
             p.relative_to(ROOT).as_posix()
-            for record in dict.fromkeys(acceptance_records().values())
-            if record.owner in manifests()
             for p in (modroots.module_dir(record.owner) / "tests").rglob("*.py")
         )
     return paths
@@ -583,10 +575,22 @@ def acceptance_files(
             or (
                 step != "stock"
                 and path.startswith("tools/")
-                and path in acceptance_python(step)
+                and path.endswith(".py")
+                and (
+                    (step == "runtime-fixture" and not (ROOT / path).is_file())
+                    or path in acceptance_shared(step)
+                )
             )
         ):
             selected.update(all_files)
+        elif (
+            step == "runtime-fixture"
+            and path.startswith("tools/")
+            and path.endswith(".py")
+        ):
+            selected.update(
+                f for f, r in registered.items() if path in acceptance_record_closure(r)
+            )
         elif step != "stock" and path.startswith(
             tuple(r + "/" for r in modroots.REPO_ROOTS)
         ):
