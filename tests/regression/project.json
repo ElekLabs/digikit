@@ -13,6 +13,30 @@
         "command": "pnpm exec vitest run --config vitest.host.config.ts --project regression-host",
         "cwd": "."
       }
+    },
+    "test-device-upload": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "uv run python -m tools.devtools.verify --tests runtime/upload.test.ts runtime/upload-faults.test.ts",
+        "cwd": "."
+      }
+    },
+    "test-device-settings": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "uv run python -m tools.devtools.verify --tests runtime/settings.test.ts runtime/roundtrip.test.ts runtime/equiv.test.ts",
+        "cwd": "."
+      }
+    },
+    "test-device-debug": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "uv run python -m tools.devtools.verify --tests runtime/card-safety.test.ts runtime/debug-module.test.ts runtime/safe-mode.test.ts runtime/crash-capture.test.ts runtime/debug-guard.test.ts",
+        "cwd": "."
+      }
     }
   },
   "metadata": {
