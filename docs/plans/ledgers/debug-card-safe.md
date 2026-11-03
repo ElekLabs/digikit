@@ -179,7 +179,6 @@ sticky-types | D:run_sticky | the map persists on the card between boots | COVER
 
 New unit tests with no Python counterpart: a full map whose entries are all in the boot evicts nothing and gives no number (the 9th machine gets 0); pinned keys take no number; a repeated key takes a fresh number and is not recorded; `clean` drops duplicate hashes, duplicate numbers, out-of-range types and entries without a hash.
 
-<<<<<<< HEAD
 ## capacity, inferred-needs, fits, menu-open, isolation (dt2 and dn2; C `tools/patchkit/pk_digikit_capacity.py`, K `tools/patchkit/pk_capacity.py`; Python deleted)
 
 Status: proven on DT2 and DN2 (2026-11-03). TS tests: `modules/core/runtime/tests/capacity.device.test.ts` (below `capacity.test`), `modules/core/apps/digikit-menu/tests/fits.device.test.ts` (`fits.test`). Helper: `tests/regression/runtime/synth.ts` (typed `synth-dkm` spec, packing, geometry). K stays for `memaudit-*-full` and `test_capacity_sets.py`.
@@ -227,7 +226,7 @@ Differences that apply to many lines:
 
 - The Python `capacity` cases booted in threads, one rig per case, ColdFire-only. In TS one daemon per describe block boots the cases one after the other; the full set, files and arena run on a ColdFire-only daemon (`dsp: 'zero'`), the coupled full set and the needs on a coupled daemon with `hold: true`.
 - The full set has no reference module on the ColdFire-only daemon: a DSP reference's registry rows come after the DSP acknowledges, so machine types and rows would not add up there.
-=======
+
 ## memaudit (dt2 and dn2, quick; D `run_memaudit`; clean and stray ported, `-full` stays Python)
 
 Status: proven on DT2 and DN2 (full tier, 2026-11-03). The scenarios `memaudit-{dt2,dn2}` and `memaudit-{dt2,dn2}-stray` and `pk_modaudit.py` are deleted. `memaudit-{dt2,dn2}-full` and `pk_digikit_memaudit.py` remain for the full synthetic set (B2). The test is `modules/core/runtime/tests/memaudit.device.test.ts`; the helpers are `tests/regression/runtime/memaudit-kit.ts` (guard plan, writer names, module sets) and `memaudit-suite.ts` (the two daemons), and `project-kit.ts` (the panel drive).
@@ -244,4 +243,3 @@ memaudit | D:load_pass | second cold boot with the write watch on the protected 
 memaudit | D:common_checks_upload | write watch, flush check, card writes in the store range and the project sectors | -> `cardRig` options `uploads`, `relaxFs`, `project` (the rig's close checks)
 memaudit | D:sweep | `module:audit`: each of the first 14 machine list entries chosen on track 1, page turned | -> project-kit.ts `sweepMachineList`; memaudit-module.device.test.ts
 memaudit | D:report | per-module words changed, hits list in the run report | DROPPED: the artifacts dir keeps `memaudit-plan.json` and `memaudit-result.json`; Python report fields have no reader
->>>>>>> b426792e (Port memaudit clean and stray scenarios to TypeScript; module:audit runs a device test)
