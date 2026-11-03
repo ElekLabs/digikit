@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { Device } from '@digi/test-support';
 import { test } from 'vitest';
@@ -28,6 +30,9 @@ else {
   const targets = new Set(Object.keys(manifests.get(id)?.targets ?? {}).map((k) => k.split('-')[0]));
   const only = process.env.DIGI_AUDIT_DEVICE as Device | undefined;
   const modules = auditSet(id, manifests);
+  // The packed files outlive the first daemon: the load pass boots a card built from the same files.
+  const packed = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-module-audit-'));
+  process.on('exit', () => fs.rmSync(packed, { recursive: true, force: true }));
 
   defineMemaudit(
     (device) =>
@@ -42,7 +47,7 @@ else {
       devices: only ? [only] : undefined,
       artifact: async (rig, module) => {
         const last = module.split('/').at(-1)!;
-        const file = path.join(rig.artifacts, `audit-${last}.dkm`);
+        const file = path.join(packed, `${rig.device}-${last}.dkm`);
         try {
           await patchkit(['pack', module, '--device', rig.device, '-o', file], { timeout: 300_000 });
         } catch (error) {
