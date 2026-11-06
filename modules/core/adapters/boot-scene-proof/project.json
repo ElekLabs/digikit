@@ -1,14 +1,22 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/boot-scene-proof",
-  "targets": { "test-device": { "cache": false } },
+  "targets": { "test-device": { "cache": false }, "test-host": { "cache": false } },
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": ["tests/scene.device.test.ts"],
         "modules": ["test/c-demo"],
         "plusdrive": true,
-        "patchModules": ["core/runtime", "core/dynreg", "core/dyndsp", "core/boot-guard", "core/boot-scene-proof"]
+        "patchModules": [
+          "core/runtime",
+          "core/dynreg",
+          "core/dyndsp",
+          "core/boot-guard",
+          "core/boot-scene-proof",
+          "test/boot-dkbs-valid",
+          "test/boot-dkbs-corrupt"
+        ]
       }
     ]
   }

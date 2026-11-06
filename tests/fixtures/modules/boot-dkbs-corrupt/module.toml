@@ -1,0 +1,21 @@
+[module]
+id = "test/boot-dkbs-corrupt"
+version = "0.1.0"
+name = "Resident DKBS corrupt fixture"
+category = "test"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Private immutable synthetic RAM asset for the scene proof"
+requires = ["core/boot-scene-proof"]
+conflicts = ["test/boot-dkbs-valid"]
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-dkbs-corrupt.dko.json"
+sources = ["src/asset.c"]
+place = "cf.expansion"

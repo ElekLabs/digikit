@@ -1,8 +1,9 @@
 # Experimental host bootscreen assets
 
 This host prototype packs original PNG frames, validates the packed bytes and
-previews the decoded result. `.dkbs` is provisional: there is no device loader,
-player, transfer or compatibility promise. It does not solve blocked storage I/O.
+previews the decoded result. `.dkbs` is provisional: there is no card-based device
+loader, production player, transfer or compatibility promise. It does not solve
+blocked storage I/O.
 
 ```sh
 UV_CACHE_DIR=/private/tmp/digi-boot-query-uv uv run --no-sync python -m tools.bootscreen.asset pack animation.json -o animation.dkbs --preview animation.html
@@ -83,9 +84,25 @@ XOR-RUN record. Each represents 184,320 raw tick bytes. These are disk sizes for
 these synthetic inputs, not general compression or performance claims. HTML
 previews and source PNGs remain ignored artifacts, not repository assets.
 
-Runtime rendering/storage and publication remain unsolved. A future candidate
-is a before-hook at stock scene_setup entry that rewrites the original SP+4
-table argument only after publishing a fully validated custom table, then uses
-the displaced tail/original setup. This needs ABI, byte and presentation proof;
-it is not implemented. Retargeting the indirect task `JSR A2` is not currently
-supported by the patcher. Stock skip/completion ownership must remain intact.
+Card-based loading, storage and lifecycle remain unsolved. The private RAM proof
+implements the stock scene_setup entry hook: it rewrites original SP+4 only after
+publishing a validated resident table, then uses the displaced tail/original
+setup. Stock skip/completion ownership stays intact. This is not a public player
+or card-lifecycle contract. Retargeting the indirect task `JSR A2` remains
+unsupported; no task replacement is used.
+
+## Private resident interoperability proof
+
+The opt-in core/boot-scene-proof now cross-builds the same pure C decoder tested
+against this Python reference, without changing this format or host tool. Whole
+asset validation uses the playback decoder, at most 300 ticks, then rewinds one
+aligned 1024-byte previous-frame buffer. Noncanonical valid repeated records and
+oversized encoded XOR streams remain valid; output is bounded to 1024 bytes.
+Only immutable compiled RAM providers are used, not card files or a public SDK.
+The scene count is published after validation. Existing stock blit receives a
+plain synchronous source view plus opaque mask; stock setup/ownership/completion
+stay intact. Eight selected current-device emulator cases pass (valid, CRC-corrupt,
+absent getter and held REC); all use the existing 80 ms UI taps and full roundtrip
+checks. This demonstrates a narrow integration, not production loader,
+storage cancellation or physical presentation compatibility. See the
+[resident proof handover](../handovers/HANDOVER-2026-11-07-resident-dkbs.md).

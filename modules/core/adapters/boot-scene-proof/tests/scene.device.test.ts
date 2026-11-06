@@ -18,7 +18,9 @@ const symbols = [
   'BOOT_SCENE_PUBLISHED',
   'BOOT_SCENE_CALLS',
   'BOOT_SCENE_LAST_INDEX',
-  'BOOT_SCENE_SEEN',
+  'BOOT_SCENE_STATUS',
+  'BOOT_SCENE_VALIDATIONS',
+  'BOOT_SCENE_DECODED_RECORDS',
   'BOOT_SCENE_ERRORS',
   'BOOT_GUARD_REQUESTS',
   'BOOT_GUARD_ENTERED',
@@ -36,23 +38,28 @@ for (const [x0, y0, x1, y1] of [
 }
 const expectedHash = createHash('sha256').update(expected).digest('hex');
 
-for (const scenario of ['active', 'missing', 'held'] as const) {
+for (const scenario of ['active', 'missing', 'held', 'corrupt', 'absent'] as const) {
+  const requested = scenario !== 'missing' && scenario !== 'held';
   cardRigs(
     `RAM scene ${scenario}`,
     {
-      roots: [...RT, 'core/boot-scene-proof'],
+      roots: [
+        ...RT,
+        scenario === 'absent'
+          ? 'core/boot-scene-proof'
+          : `test/boot-dkbs-${scenario === 'corrupt' ? 'corrupt' : 'valid'}`,
+      ],
       symbols: [...CARD_SYMBOLS, ...symbols],
       startEmpty: true,
       initial: () => ({ modules: ['test/c-demo'], selection: ['modules/c-demo.dkm'] }),
-      initialButtons:
-        scenario === 'active'
-          ? [
-              { code: button('STOP'), down: true },
-              { code: button('STOP'), down: false },
-            ]
-          : scenario === 'held'
-            ? [{ code: button('RECORD'), down: true }]
-            : [],
+      initialButtons: requested
+        ? [
+            { code: button('STOP'), down: true },
+            { code: button('STOP'), down: false },
+          ]
+        : scenario === 'held'
+          ? [{ code: button('RECORD'), down: true }]
+          : [],
       onClose(h) {
         const retained = fs.mkdtempSync(path.join(os.tmpdir(), `digi-boot-scene-evidence-${h.device}-`));
         for (const name of ['scene-proof.json', 'startup-empty.json', 'lifetime-safety.json', 'scene-intro.png']) {
@@ -64,7 +71,7 @@ for (const scenario of ['active', 'missing', 'held'] as const) {
     },
     (h) => {
       test(
-        'preserves stock setup and completion with an optional RAM diagnostic table',
+        'validates a resident DKBS before preserving stock setup and completion',
         async () => {
           await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
           const first = await bootInfo(h.session, h.plan);
@@ -79,13 +86,15 @@ for (const scenario of ['active', 'missing', 'held'] as const) {
             await Promise.all(symbols.map(async (name) => [name, await word(h.session, planSymbol(h.plan, name))])),
           );
           expect(observed).toMatchObject({
-            BOOT_SCENE_CALLS: scenario === 'active' ? 3 : 0,
-            BOOT_SCENE_LAST_INDEX: scenario === 'active' ? 2 : 0,
-            BOOT_SCENE_SEEN: scenario === 'active' ? 7 : 0,
+            BOOT_SCENE_CALLS: scenario === 'active' ? 4 : 0,
+            BOOT_SCENE_LAST_INDEX: scenario === 'active' ? 3 : 0,
+            BOOT_SCENE_STATUS: scenario === 'active' ? 1 : scenario === 'corrupt' ? 2 : 0,
+            BOOT_SCENE_VALIDATIONS: scenario === 'active' || scenario === 'corrupt' ? 1 : 0,
+            BOOT_SCENE_DECODED_RECORDS: scenario === 'active' ? 3 : 0,
             BOOT_SCENE_ERRORS: 0,
-            BOOT_GUARD_REQUESTS: scenario === 'active' ? 1 : 0,
-            BOOT_GUARD_ENTERED: scenario === 'active' ? 1 : 0,
-            BOOT_GUARD_RETURNED: scenario === 'active' ? 1 : 0,
+            BOOT_GUARD_REQUESTS: requested ? 1 : 0,
+            BOOT_GUARD_ENTERED: requested ? 1 : 0,
+            BOOT_GUARD_RETURNED: requested ? 1 : 0,
           });
           if (scenario === 'active') expect(observed.BOOT_SCENE_PUBLISHED).toBeGreaterThan(0);
           else expect(observed.BOOT_SCENE_PUBLISHED).toBe(0);
@@ -127,9 +136,9 @@ for (const scenario of ['active', 'missing', 'held'] as const) {
             if (typeof irqs !== 'number') throw new Error('input response requires numeric IRQ count');
             const main = await shot(h.session, h.artifacts, 'scene-main');
             const keys = panel(h.session);
-            await keys.tap('SETTINGS', 3000);
+            await keys.tap('SETTINGS');
             expect(await shot(h.session, h.artifacts, 'scene-settings')).not.toBe(main);
-            await keys.tap('NO', 3000);
+            await keys.tap('NO');
             expect(await shot(h.session, h.artifacts, 'scene-return')).toBe(main);
             const after = await h.session.status();
             expect(after.cf.input_irqs).toBeGreaterThan(irqs);

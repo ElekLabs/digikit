@@ -600,9 +600,45 @@ limits and future-only snapshot follow-up. Final `mise run test:changed` passed
 all 13 tasks in 48.5 s (0 cache hits); generated-module and diff checks passed.
 The full merge gate was not run.
 
-### Remaining product and safety acceptance
+### Resident DKBS interoperability proof
 
-**[D]** An opt-in RAM-only scene proof is implemented in one core adapter, not
+**[D]** The next RAM-only phase replaces procedural scene drawing with a pure C
+resident DKBS decoder plus existing stock blit. Full validation reuses checked
+forward playback then rewinds one aligned previous-frame buffer; no heap, card
+I/O or public SDK/provider contract. Private valid/corrupt linked data providers
+exercise RAW clearing, XOR and holds. Four differential C/Python host cases
+passed on one unchanged retry after an initial child-process timeout (transient
+cause unproved); header/CRC/bounds/expansion/redzone/no-prefix-output checks and
+types/generated/layers pass. A compiler-generated memcpy link failure was fixed
+by approved explicit volatile source-header field stores, without libc binding.
+Actual adapter placement is 3,260 B (text 1,116 B, data 16 B, BSS 2,116 B, tail 12 B),
+valid provider separately 2,184 B (text 18 B, immutable bytes 2,166 B); six-byte hook unchanged. First DN2
+valid case passed (55.41 s total/51.969 s baseline): four callbacks/three decoded
+records/status 1/validation 1/errors 0, exact final bitmap hash `630531…14a66`,
+selected loading/counter 1, default 80 ms SETTINGS/NO full-hash roundtrip and
+DSP/input/lifetime. All eight selected cases passed: remaining DN2 held/corrupt/
+absent group 3 cases in 153.38 s, DT2 active/held/corrupt/absent 4 in 124.14 s,
+both exit 0. Both valid assets show four calls/three records/exact final hash.
+CRC failures deny publication with status 2; absent getter makes no C preparation;
+both fall back to the stock black last drawing with normal late loading/counter 1.
+Held REC denies early work and takes KEY safe mode, skips the module/counter 0.
+All eight default 80 ms UI roundtrips, DSP/input/lifetime checks passed, one
+baseline each. Missing-receipt cases stayed registered without repetition.
+Final cheap preflight passed 14/14 tasks in 48.0 s (7 cached), with generated,
+layer, owned-format and diff checks passed; full merge gate not run.
+Small evidence index: `/private/tmp/bootscreen-resident-summary.json`. See the
+[resident handover](../handovers/HANDOVER-2026-11-07-resident-dkbs.md).
+
+**[V]** Stock blit at DT2 `0x40114168` / DN2 `0x40115adc`: an independent audit
+matched all 131 instructions/376 raw bytes on both current images, SHA-256
+`9ddd2f673c1ac024d2fb381131327c7646f667392302f99095283c177f988222`.
+Source fields are width/height/bands at +4/+8/+0xc, pixels +0x10, mask +0x14;
+copy is `dst ^= (src ^ dst) & mask`. There are no header/ownership writes,
+outside calls or retained pointers, supporting the synchronous 28-byte stack
+view with opaque mask used here. This is static ABI evidence, not hardware proof.
+
+**[D]** Historical `f83518d7` procedural scene proof, superseded by the resident
+decoder above: one opt-in core adapter implemented the table substitution, not
 a generic player: the accounted early callback publishes a const three-frame
 diagnostic table; a hash-resolved scene_setup entry hook substitutes only its
 original stack argument, then executes the stock setup/task/completion. Drawing
@@ -680,6 +716,8 @@ and format checks passed. Final cheap preflight passed 13/13 tasks in 42.4 s
 retained evidence paths and remaining limits are in the
 [REC follow-up handover](../handovers/HANDOVER-2026-11-07-rec-key-state.md).
 
+### Remaining product and safety acceptance
+
 The genuine pre-intro CPU-fault case above is accepted under working-card
 emulator conditions on both devices. It does not accept the following
 read/timeout/hang cases or establish physical exception recovery.
@@ -696,7 +734,7 @@ read/timeout/hang cases or establish physical exception recovery.
 | Normal playback | Frame-boundary capture, timing, allocations and stack proved on DN2, then DT2 |
 | Callback/buffer lifetime | Preserve bitmap flags, orientation, ownership and completed-frame publication; no provider cleanup until the callback returns and no stock table/function pointer references its memory |
 
-No row has a bootscreen implementation proof yet. Use bounded runs and the owning
+No row has complete card-loadable bootscreen acceptance yet. Use bounded runs and the owning
 acceptance targets; compare with stock and run one paired A/B through
 `tools/devtools/coupled_ab.py` before performance claims.
 Current modules remain loaded for the session; a future early provider's cleanup

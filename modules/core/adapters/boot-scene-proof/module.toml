@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Opt-in diagnostic table substitution; no asset reader or production player"
+summary = "Opt-in resident DKBS proof; no card asset reader or production player contract"
 requires = ["core/boot-guard"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
@@ -18,8 +18,9 @@ ports = ["dt2-1.17", "dn2-1.12"]
 
 [[object]]
 path = "build/boot-scene-proof.dko.json"
-sources = ["src/scene.c", "src/tramp.s"]
+sources = ["src/scene.c", "src/asset.c", "src/tramp.s"]
 place = "cf.expansion"
+optional = ["dk_boot_asset"]
 
 [object.externs]
 boot_scene_next = "hook.cf.rtos.site.intro_scene_setup.tail"

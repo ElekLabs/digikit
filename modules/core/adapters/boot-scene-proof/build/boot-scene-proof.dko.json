@@ -18,109 +18,263 @@
   },
   {
    "addend": 0,
-   "offset": 32,
-   "section": ".text.diagnostic",
+   "offset": 24,
+   "section": ".text",
+   "symbol": "dk_boot_asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text",
+   "symbol": "boot_scene_prepare",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 14,
+   "section": ".text.draw",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.draw",
    "symbol": ".sec..bss.BOOT_SCENE_CALLS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 40,
-   "section": ".text.diagnostic",
+   "offset": 36,
+   "section": ".text.draw",
    "symbol": ".sec..bss.BOOT_SCENE_ERRORS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 46,
-   "section": ".text.diagnostic",
+   "section": ".text.draw",
    "symbol": ".sec..bss.BOOT_SCENE_CALLS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 52,
-   "section": ".text.diagnostic",
+   "section": ".text.draw",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.draw",
    "symbol": ".sec..bss.BOOT_SCENE_LAST_INDEX",
    "type": "cf.32"
   },
   {
    "addend": 0,
+   "offset": 64,
+   "section": ".text.draw",
+   "symbol": "dkbs_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 78,
+   "section": ".text.draw",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 86,
-   "section": ".text.diagnostic",
-   "symbol": "cf.draw.fn.fill_rect",
+   "section": ".text.draw",
+   "symbol": ".sec..bss.BOOT_SCENE_DECODED_RECORDS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 112,
+   "section": ".text.draw",
+   "symbol": ".sec..bss.asset",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 94,
-   "section": ".text.diagnostic",
-   "symbol": ".sec..bss.BOOT_SCENE_SEEN",
+   "offset": 126,
+   "section": ".text.draw",
+   "symbol": ".sec..bss.mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2,
-   "section": ".text.dk_boot_early",
-   "symbol": ".sec..rodata.scenes",
+   "offset": 168,
+   "section": ".text.draw",
+   "symbol": "cf.draw.fn.blit",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8,
-   "section": ".text.dk_boot_early",
+   "offset": 24,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.BOOT_SCENE_VALIDATIONS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.boot_scene_prepare",
+   "symbol": "dkbs_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.BOOT_SCENE_STATUS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1024,
+   "offset": 74,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 82,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 90,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..data.scenes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.BOOT_SCENE_STATUS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..data.scenes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".text.boot_scene_prepare",
    "symbol": ".sec..bss.BOOT_SCENE_PUBLISHED",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 0,
-   "section": ".rodata.scenes",
-   "symbol": ".sec..text.diagnostic",
+   "section": ".data.scenes",
+   "symbol": ".sec..text.draw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text.dkbs_open",
+   "symbol": ".sec..text.dkbs_next",
    "type": "cf.32"
   }
  ],
  "sections": [
   {
    "align": 4,
-   "hex": "2f0020390000000067042f400008201f4ef900000000",
+   "hex": "2f0020390000000067042f400008201f4ef900000000203c00000000670a2f004eb900000000588f4e75",
    "kind": "text",
    "name": ".text",
-   "size": 22
+   "size": 42
   },
   {
    "align": 2,
-   "hex": "4feffff4700348d7040c242f0010262f0018b0af0014660e7002b0826508b4b900000000670652b90000000052b90000000023c2000000007002b08265000090700142a74878003fe5a84878007f42a742a72f0345f900000000e78a81b9000000004e924878ffff487800024878000542a742a72f034e924fef00304878ffff4878003f4878007f4878003d4878007b2f034e924878ffff48780012487800124878000b487800112f034e924fef00304878ffff4878002720424868002348780020486800202f034e924fef00184cd7040c4fef000c4e75",
+   "hex": "4e56ffe4202e000c222e0008b0b900000000660eb280640a203900000000b280670a52b9000000004e5e4e7552b90000000048790000000023c0000000004eb900000000588f53804a8066d641f900000000724023d00000000042aeffe4203c000000802d40ffe870022d41ffec223c000000002d40fff02d41fff441f90000000042a72d48fff842a7420042a7486effe42f2e00101d40fffc1d40fffd1d40fffe1d40ffff4eb9000000004fef00146000ff76",
    "kind": "text",
-   "name": ".text.diagnostic",
-   "size": 216
+   "name": ".text.draw",
+   "size": 180
   },
   {
    "align": 2,
-   "hex": "203c0000000023c0000000004e75",
+   "hex": "4e56fffc206e0008486efffc42aefffc4e902f2efffc52b9000000002f004879000000004eb9000000004fef00104a80660c700223c0000000004e5e4e7541f90000000070ff20c0b1fc0000000066f441f900000000700123d00000000023c00000000041f90000000023c80000000060c8",
    "kind": "text",
-   "name": ".text.dk_boot_early",
-   "size": 14
+   "name": ".text.boot_scene_prepare",
+   "size": 114
   },
   {
    "align": 4,
-   "hex": "00000000000000030000000000000000",
+   "hex": "00000000000000000000000000000000",
    "kind": "data",
-   "name": ".rodata.scenes",
+   "name": ".data.scenes",
    "size": 16
   },
   {
    "align": 4,
    "hex": "",
    "kind": "bss",
-   "name": ".bss.BOOT_SCENE_ERRORS",
+   "name": ".bss.mask",
+   "size": 1024
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.asset",
+   "size": 1064
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_DECODED_RECORDS",
    "size": 4
   },
   {
    "align": 4,
    "hex": "",
    "kind": "bss",
-   "name": ".bss.BOOT_SCENE_SEEN",
+   "name": ".bss.BOOT_SCENE_VALIDATIONS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_STATUS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_ERRORS",
    "size": 4
   },
   {
@@ -143,14 +297,34 @@
    "kind": "bss",
    "name": ".bss.BOOT_SCENE_PUBLISHED",
    "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "4fefffc4206f004048d77cfc4aa80024660c70ff4cd77cfc4fef003c4e752a28001826280010b68566244aa8001c670642a8002460dc2028000cb0a8001466f022280004b2a8000866e6428060c6b68565de2428001c4a82660000a82028000828280004b88065c822049280e68967c028680014b9e8000c64b6245043f20800508075d13c29000212290004214000082e0253870c870000012b62949685b682658e77c64a4667889880b883658273817801b8816500ff7a4a2900056600ff724a2900066600ff6a4a2900076600ff62d5c04a81663e0c83000004006600ff5243f218001191182852810c810000040066eed680528c21430008214c001452a80020538252852142001c7001214500186000ff02428442811c3218007e7f1f460037cc8752867d8622464a2f00376c707c012f46002c2c3c000004009c84bc896500feee52812c039c812f410030bcaf002c6500fedc47f048282c414286ddca1f5b003b4a2f00376d3c2a461e36d80052863a471e2f003b220dbf811741ffffbc8965dc222f0030d889d2af002cb28365860c84000004006600fe966000ff542f46002c60909bcd60c2",
+   "kind": "text",
+   "name": ".text.dkbs_next",
+   "size": 426
+  },
+  {
+   "align": 2,
+   "hex": "4fefffdc701048d71cfc246f00282a0a206f002c06850000042847ea0028224b42aa0024429242aa001042aa000c42aa00042540000842aa002042aa001c42aa001842aa00144219ba8966fa4a886712202f00300680fffffff00c800000fff0630e428220024cd71cfc4fef00244e7571907244b28066ea71a80001744bb48066e071a800027242b28066d671a800037453b48066cc71e8000453804a8066c279e80006200453800c800000012b62b226280008200353800c800000012b62a22c2f003070ff43e80010dc88bc8966684680b0a8000c668a2544000c70012488256f003000042543001025400024428449f9000000002f0a4e94588f72012400b2806600ff5e5284b68466ea2f0a4e94588f4a806600ff4c70102540000842aa002042aa001c42aa001842aa0014421bba8b66fa6000ff2e7599b58074087201c2802e00e28f2841080000006706287cedb88320200c5382bf804a8266e06000ff6c",
+   "kind": "text",
+   "name": ".text.dkbs_open",
+   "size": 354
   }
  ],
- "source_sha256": "8089960e3b56acfb7e4688892356d66a13b1e4d75fd6ed0e4428b69f11317041",
+ "source_sha256": "765690903936a1ae9eba23a0f5f787f559cb6d9d58bd66d6ba0ebaa6ba35e23d",
  "symbols": [
   {
    "global": false,
    "name": ".sec..bss.BOOT_SCENE_CALLS",
    "section": ".bss.BOOT_SCENE_CALLS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_SCENE_DECODED_RECORDS",
+   "section": ".bss.BOOT_SCENE_DECODED_RECORDS",
    "value": 0
   },
   {
@@ -173,26 +347,56 @@
   },
   {
    "global": false,
-   "name": ".sec..bss.BOOT_SCENE_SEEN",
-   "section": ".bss.BOOT_SCENE_SEEN",
+   "name": ".sec..bss.BOOT_SCENE_STATUS",
+   "section": ".bss.BOOT_SCENE_STATUS",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..rodata.scenes",
-   "section": ".rodata.scenes",
+   "name": ".sec..bss.BOOT_SCENE_VALIDATIONS",
+   "section": ".bss.BOOT_SCENE_VALIDATIONS",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..text.diagnostic",
-   "section": ".text.diagnostic",
+   "name": ".sec..bss.asset",
+   "section": ".bss.asset",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.mask",
+   "section": ".bss.mask",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..data.scenes",
+   "section": ".data.scenes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.dkbs_next",
+   "section": ".text.dkbs_next",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.draw",
+   "section": ".text.draw",
    "value": 0
   },
   {
    "global": true,
    "name": "BOOT_SCENE_CALLS",
    "section": ".bss.BOOT_SCENE_CALLS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_DECODED_RECORDS",
+   "section": ".bss.BOOT_SCENE_DECODED_RECORDS",
    "value": 0
   },
   {
@@ -215,8 +419,20 @@
   },
   {
    "global": true,
-   "name": "BOOT_SCENE_SEEN",
-   "section": ".bss.BOOT_SCENE_SEEN",
+   "name": "BOOT_SCENE_STATUS",
+   "section": ".bss.BOOT_SCENE_STATUS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_VALIDATIONS",
+   "section": ".bss.BOOT_SCENE_VALIDATIONS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "asset",
+   "section": ".bss.asset",
    "value": 0
   },
   {
@@ -233,26 +449,56 @@
   },
   {
    "global": true,
-   "name": "cf.draw.fn.fill_rect",
+   "name": "boot_scene_prepare",
+   "section": ".text.boot_scene_prepare",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.draw.fn.blit",
    "section": null,
    "value": 0
   },
   {
-   "global": false,
-   "name": "diagnostic",
-   "section": ".text.diagnostic",
+   "global": true,
+   "name": "dk_boot_asset",
+   "section": null,
    "value": 0
   },
   {
    "global": true,
    "name": "dk_boot_early",
-   "section": ".text.dk_boot_early",
+   "section": ".text",
+   "value": 22
+  },
+  {
+   "global": true,
+   "name": "dkbs_next",
+   "section": ".text.dkbs_next",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkbs_open",
+   "section": ".text.dkbs_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "draw",
+   "section": ".text.draw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "mask",
+   "section": ".bss.mask",
    "value": 0
   },
   {
    "global": false,
    "name": "scenes",
-   "section": ".rodata.scenes",
+   "section": ".data.scenes",
    "value": 0
   }
  ],
@@ -260,8 +506,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "74",
-  "isa_check": "804cc170d893550b36bc02223780aa4ab5a6d90c8789e7d1f4018221895db0f1",
+  "instructions_redecoded": "354",
+  "isa_check": "1756a7662a0b5c1916ff01cf4c40b5e65415360c7fb2522229ccb7443b3b0b65",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }
