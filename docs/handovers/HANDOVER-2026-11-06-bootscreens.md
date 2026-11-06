@@ -8,6 +8,13 @@ this same isolated worktree. Existing source-tree `.vscode/` is user work and
 remains untouched. No hardware flashing, player, asset I/O or service framework
 was authorized or implemented.
 
+Current checkpoint: both DN2 1.12 and DT2 1.17 emulator reset fixtures pass.
+This follow-up changes diagnostics and test workload/oracle handling, with no
+firmware-side behavior change. Next safety work is pre-arm storage, independent
+bypass/key timing and real early-fault recovery. It is not production-ready;
+no push or merge, and the full merge gate has not run. Detailed corrected
+failure history and retained evidence remain in finding 115.
+
 Evidence and outstanding acceptance:
 [finding 115](../findings/115-loadable-bootscreens.md). DT2 1.17 / DN2 1.12 raw
 bytes support 128 × 64 packed 1bpp, configured ~30 Hz, five stock variants, and an
@@ -50,7 +57,7 @@ Early preparation also caches the selection. Successful selection refresh and
 later module loading after transient early read errors are not proved; the
 counter retry units cover failed writes only.
 
-Checks actually completed:
+Checks completed at implementation checkpoint `4721bec8` (follow-up below):
 
 - `mise exec -- pnpm nx:pilot run core/runtime:rust-tests`: 55 passed.
 - Current DN2/DT2 port resolution, generation and `mise run check:layers` passed.
@@ -71,7 +78,9 @@ Checks actually completed:
   the strengthened current revision. An owner-wide legacy title filter also
   selected unintended cases and was stopped; it is not a passed check.
 
-The strengthened reset case and paired empty control use the existing
+The following failure history used the original 120 s baseline window; the
+follow-up below corrects its timeout interpretation. The strengthened reset
+case and paired empty control use the existing
 `relaxFs: true` reset contract. The reset case requires DSP frame growth and an actual
 SETTINGS/NO screen response. Record export pauses the daemon, so it explicitly
 resumes it before those checks and drains/pauses in cleanup. No global harness
@@ -105,7 +114,8 @@ CF runtime, then failed during first prepared baseline setup (132.69 s total,
 about 130 s reload); none of its safe/counter/DSP/UI body assertions ran. No
 DT2 true-empty reset attempt followed. The distinct DN2 returning-callback
 control passed under the same empty/card/MainPanel configuration, so generic
-empty startup is positively checked while early-reset acceptance remains red.
+empty startup was positively checked while early-reset acceptance remained red
+at that checkpoint, superseded by the follow-up below.
 The reset test remains registered and unskipped.
 
 Preserved latest failure evidence:
@@ -135,17 +145,99 @@ The adapter is 130 B text / 172 B BSS, no rodata/data; the observed plan reserve
 proof instrumentation. Stack and compressed-container flash delta are unknown.
 This remains an experimental checkpoint on `work/loadable-bootscreens` in the
 dedicated worktree. No push, PR or merge; not merge-ready. Reset acceptance is
-red and the full merge gate has not run.
+accepted on both device emulator fixtures and the full merge gate has not run.
+
+## Follow-up checkpoint: deadline ordering and DT2 UI oracle
+
+**[C]** The three retained 120 s failures completed their cache pairs 4–6 s
+after the deadline. A post-cache, transport or DSP hang was not established.
+In refined run `digi-session-myxJgM`, failure artifact mtime was Unix
+1793965094.447 s, main snapshot mtime 1793965099.445 s and final daemon log
+mtime 1793965099.644 s. A late successful channel send does not mean the
+client deadline had not expired. Older first/later runtime-load failures were
+not rerun; do not claim all reload paths fixed.
+
+Default-off `DIGI_TRACE_PATCH_BOOT=1` markers cover cold pair save through
+worker/controller/restore/install/reply, with Unix milliseconds. Existing
+`runtime-baseline-error.json` now retains the pending operation, any resolved
+load report and `statusPhase`. The refined failure was `firmware.load`,
+`load:null`, `statusPhase:before-load`, epoch 0 / firmware null. Retained
+diagnostic pairs are `digi-session-bIJNmT` /
+`digi-early-boot-reset-recovery-dn2-nNaFA9` and `digi-session-myxJgM` /
+`digi-early-boot-reset-recovery-dn2-QmqStv`, under the temporary root above.
+
+Only reset recovery now sets `baselineTimeoutMs: 3 * 60_000`, propagated to
+the existing baseline deadline and matching no-progress watchdog. Other
+fixtures keep 120 s defaults/environment behavior and the existing 600 s hook
+backstop is unchanged. Three expected cold boots receive one bounded minute
+each; these host emulator durations are not hardware boot times. No engine,
+reset, snapshot, readiness or firmware behavior changed.
+
+DN2 1.12 exact reset acceptance **passed**, 135.92 s total / 123.34 s baseline,
+including every original safe/counter/selection, DSP, SETTINGS/NO, IRQ/input
+and lifetime assertion. Timestamped markers showed roughly 38 s per reset
+boot (about 76 s together), followed by the safe third boot. The successful
+`digi-session-flZ5hu` / `digi-early-boot-reset-recovery-dn2-NoHRt2` artifacts
+were cleaned up by the harness. This is DN2 emulator acceptance only.
+
+The first DT2 1.17 follow-up **failed**: recovered Vitest result
+`failed:true`, file duration 53.873 s, baseline reply after 41.855 s. Raw
+terminal output was lost to tool-result truncation; no exact error text or
+exit code is claimed. Retained frames show initial `VERIFYING FILE SYSTEM...`,
+then loading/main rather than SETTINGS, then unobscured main. Hash difference
+was a false-positive SETTINGS-entry check; full-hash return equality fails on
+the retained bytes. Downstream IRQ assertions are unproved. Lifetime safety
+recorded `pass:true`, which does not accept the test. Root inspected all three
+PNGs. Evidence:
+
+- `/private/var/folders/v4/dxpyscrd41n7h6v9bc672p0r0000gn/T/digi-session-27q4z7`
+- `/private/var/folders/v4/dxpyscrd41n7h6v9bc672p0r0000gn/T/digi-early-boot-reset-recovery-dt2-e3AUh0`
+- `/private/tmp/bootscreen-dt2-reset-oled/{safe-main,safe-settings,safe-return}.png`
+
+The bounded fix is a DT2-only pre-input known-main-frame gate after the
+existing 150 DSP frames: poll up to 30 s for
+`f55c67e4d946992137a1381c0883f9a3e76991a650ef2ceb31996b5dab0df817`.
+This pins this empty-card fixture's unobscured stock main screen and excludes
+verification/loading overlays; DN2 is unchanged. All original roundtrip,
+IRQ/input-drain and lifetime assertions remain. No firmware state or global
+readiness change was introduced.
+MainPanel acceptance permits missing filesystem verification and rejects
+explicit failure; it does not stop the stock worker. These DT2 images show
+verification/loading continuing after the snapshot.
+
+DT2 then passed with exit 0, 57.15 s total / 42.266 s baseline. Successful
+cleanup removed its captures before review. One unchanged repeat solely to
+retain that evidence also passed with exit 0: 57.22 s total / 42.372 s baseline,
+1 passed / 12 skipped. Root inspected the retained unobscured main SMP view
+and actual SETTINGS menu (PROJECT, SONG, PATTERN, MIDI CONFIG, SYSTEM).
+SETTINGS hash `dd320930a8c1d208fb3a210d66c1b2c237f8e0d9108ee5a1846534235187fe82`
+is recorded evidence, not a new menu-layout golden assertion. Paths:
+
+- `/private/tmp/bootscreen-dt2-oracle-calibration.log`
+- `/private/tmp/bootscreen-dt2-oracle-retained.log`
+- `/private/tmp/bootscreen-dt2-settled-review/safe-main.{oled,png}`
+- `/private/tmp/bootscreen-dt2-settled-review/safe-settings.{oled,png}`
+
+Both reset cases are accepted for these emulator fixtures. The normal 10,
+legacy 20 and returning-control results retain their earlier scope; the common
+device runtime is unchanged from `4721bec8`. No player/assets or engine
+behavior fix was added. Earlier first/later runtime-load failures were not
+rerun and are not claims of universal restart coverage.
+
+Scoped host tests/types/format and the daemon build passed before these runs:
+2 validated-base units, 5 test-support host tests, 4 existing watchdog tests,
+both affected TypeScript checks; daemon build 15.1 s. Final `mise run test:plan`
+explained 65 affected merge tasks plus prerequisites; `mise run test:changed`
+passed all 11 cheap preflight tasks in 41.3 s. The full merge gate has not run.
+Production storage/pre-arm-write, physical
+bypass/initial-scan and real early CPU-exception gaps remain unchanged.
 
 Next steps, in order:
 
-1. Diagnose the post-cache lifecycle before another reset run. The unique run's
-   cache pair is written after cold ready/DSP-quiet/save/export; it does not
-   prove actor installation or boot counters. Add bounded markers around worker
-   return/teardown, controller completion, patched-audio restore and actor
-   install/reply. No more startup variants, timeout increases or CF-only substitutes.
-   The generic empty control passed. Finish strengthened DN2 reset acceptance
-   before a DT2 true-empty reset attempt; the independent legacy suites are done.
+1. Review this follow-up checkpoint; no further emulator suite repeat is needed
+   for the completed scope. Both reset fixtures passed. Preserve
+   the deadline-order correction and the failed transient-modal evidence; do
+   not claim a transport hang or hardware recovery from these emulator checks.
 2. Review independent bypass and bounded storage against the active service
    plan. Stock block reads wait on mutex/semaphores; a caller timeout alone
    cannot recover a blocked call. Resolve the pre-arm crash/settings writes and
@@ -171,5 +263,5 @@ they do not establish held-RECORD hardware timing or a pre-main hook's safety.
 
 The research validation remains firmware queries, raw-byte/listing comparisons
 and scalar range checks. Implementation validation is the partial ledger above;
-the strengthened recovery proof is red. No hardware recovery or zero-risk
+the two strengthened reset fixtures passed, while production proof is incomplete. No hardware recovery or zero-risk
 guarantee is established; bootloader STARTUP is a separate path.

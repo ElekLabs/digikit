@@ -62,7 +62,7 @@ export interface RuntimeBaseline {
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
-  /** The daemon boots with DIGI_COLD_RELAX_FS: its restored runtime is not `ready` (the DT2 filesystem check is skipped); the main panel is the contract. */
+  /** Use the MainPanel contract with DIGI_COLD_RELAX_FS: missing filesystem verification is accepted, explicit failure is rejected. Stock verification/loading may continue. */
   relaxedReady?: boolean;
   /** Leave the emulator paused at the ready point (the default is free running); a test that times events in DSP frames steps from there. */
   paused?: boolean;
@@ -266,8 +266,15 @@ export class Session {
     if (this.#closing || this.#reloading) throw new Error('runtime session is closed or already reloading');
     this.#reloading = true;
     const deadline = Date.now() + (baseline.timeoutMs ?? 120_000);
-    const checked = <T>(operation: () => Promise<T>) => withinRuntimeDeadline(deadline, operation);
+    let phase = 'validate.card';
+    const checked = <T>(operationPhase: string, operation: () => Promise<T>) => {
+      phase = operationPhase;
+      return withinRuntimeDeadline(deadline, operation);
+    };
     let lastStatus: StatusResult | undefined;
+    let statusPhase: 'before-load' | 'after-load' | undefined;
+    let resolvedLoad: FirmwareLoadResult | undefined;
+    let expectedImage: PreparedRuntimeImage | undefined;
     try {
       const root = fs.realpathSync(this.runDir);
       const directory = fs.realpathSync(path.dirname(baseline.cardImage));
@@ -285,11 +292,13 @@ export class Session {
       if (!fs.statSync(image).isFile()) throw new Error('runtime baseline must be a card image file');
       if (!baseline.guard) throw new Error('runtime baseline requires an explicit scenario guard policy');
       // The visible job can finish; a hidden patch job may still reject load as BUSY, which discards this daemon.
-      let before = (lastStatus = await checked(() => this.client.status()));
+      let before = (lastStatus = await checked('status.before-load', () => this.client.status()));
+      statusPhase = 'before-load';
       while (before.job) {
-        await checked(() => delay(100));
-        before = lastStatus = await checked(() => this.client.status());
+        await checked('job.wait', () => delay(100));
+        before = lastStatus = await checked('status.job-wait', () => this.client.status());
       }
+      phase = 'validate.epoch';
       const epoch = before.epoch;
       if (typeof epoch !== 'number') throw new Error('runtime status has no epoch');
       this.#load = undefined;
@@ -297,17 +306,23 @@ export class Session {
       this.#preparedImage = undefined;
       this.client.drainEvents();
       this.#events = [];
-      await checked(() => this.client.call('cpu.exceptions', { deliver: baseline.deliverExceptions ?? false }));
-      await checked(() => this.client.watchdogConfig(this.options.stallMs ?? 1000));
+      await checked('cpu.exceptions', () =>
+        this.client.call('cpu.exceptions', { deliver: baseline.deliverExceptions ?? false }),
+      );
+      await checked('watchdog.config', () => this.client.watchdogConfig(this.options.stallMs ?? 1000));
+      phase = 'prepare.inputs';
       const inp = resolveInputs(this.options.device, this.options.firmware);
       const prepared = baseline.preparedImage
         ? { ...baseline.preparedImage, modules: [...baseline.preparedImage.modules] }
         : undefined;
+      expectedImage = prepared;
+      phase = 'validate.prepared.before-load';
       if (prepared) validatePreparedRuntimeImage(prepared, inp.syx);
       // A paused baseline pauses before the load: the runtime is installed in the mode the daemon has (a new session runs free,
       // at full speed), so the DSP frames it runs between the install and the pause would count against a test's trigger frame.
-      if (baseline.paused) await checked(() => this.client.call('run.mode', { mode: 'paused' }));
-      const load = await checked(() =>
+      if (baseline.paused)
+        await checked('run.mode.before-load', () => this.client.call('run.mode', { mode: 'paused' }));
+      const load = (resolvedLoad = await checked('firmware.load', () =>
         this.client.firmwareLoad({
           syx: prepared?.syx ?? inp.syx,
           card: image,
@@ -321,11 +336,16 @@ export class Session {
           start: 'auto',
           auto_no: this.options.autoNo ?? true,
         }),
-      );
+      ));
+      phase = 'cache.touch';
       this.#touchCacheHit(load);
-      await checked(() => this.client.guardSet(baseline.guard));
-      await checked(() => this.client.call('run.mode', { mode: baseline.paused ? 'paused' : 'free' }));
-      const status = (lastStatus = await checked(() => this.client.status()));
+      await checked('guard.set', () => this.client.guardSet(baseline.guard));
+      await checked('run.mode.after-load', () =>
+        this.client.call('run.mode', { mode: baseline.paused ? 'paused' : 'free' }),
+      );
+      const status = (lastStatus = await checked('status.after-load', () => this.client.status()));
+      statusPhase = 'after-load';
+      phase = 'validate.loaded';
       if (this.options.startEmpty && (status.dsp !== 'sharc' || status.audio == null))
         throw new Error('empty coupled baseline did not load coupled audio');
       if (
@@ -338,6 +358,7 @@ export class Session {
       ) {
         throw new Error(`runtime baseline did not establish a new ready epoch: ${JSON.stringify(status)}`);
       }
+      phase = 'validate.prepared.after-load';
       if (prepared) {
         validatePreparedRuntimeImage(prepared, inp.syx);
         if (
@@ -350,6 +371,7 @@ export class Session {
           );
         }
       }
+      phase = 'commit.baseline';
       this.#load = load;
       this.#card = image;
       this.#preparedImage = prepared;
@@ -366,8 +388,12 @@ export class Session {
           JSON.stringify(
             {
               error: String(error),
+              phase,
               cardImage: baseline.cardImage,
+              preparedImage: expectedImage ?? null,
+              load: resolvedLoad ?? null,
               status: lastStatus ?? null,
+              statusPhase: statusPhase ?? null,
             },
             null,
             2,

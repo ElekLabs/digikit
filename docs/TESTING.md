@@ -223,9 +223,27 @@ the declared base before deriving the DSP diff. Startup must report no firmware
 or CF runtime; the loaded baseline must still pass exact identity and coupled
 audio checks. Do not access `loadResult` before the first baseline.
 
-The `core/early-boot-tests` DN2 empty returning-callback control passes this
-path. Its early-reset case remains red; the option does not fix or waive reset,
-snapshot/readiness or lifecycle acceptance. Normal startup defaults are unchanged.
+The `core/early-boot-tests` DN2 empty returning-callback control and DN2/DT2
+early-reset fixtures pass this path. Normal startup defaults are unchanged;
+these results do not establish hardware recovery or every runtime reload path.
+The reset family alone sets `CardRigOptions.baselineTimeoutMs: 3 * 60_000`,
+propagated to `RuntimeBaseline.timeoutMs` and the reusable lifecycle's existing
+no-progress watchdog via `watchdogLimitMs`. Undefined options preserve defaults
+and environment behavior (normally 120 s); the 600 s hook backstop is unchanged.
+This budgets two reset boots plus the safe third boot, not hardware boot time.
+Timestamped diagnostics established that three earlier failures completed
+their cache pairs 4–6 s after the original deadline; they did not prove a hang.
+
+Reset proof retains counter/card, DSP progress, UI roundtrip, IRQ/input and
+lifetime checks. DT2 waits up to 30 s for this fixture's known unobscured main
+frame before sending keys, excluding verification/loading overlays that can
+produce false-positive framebuffer changes. The actual SETTINGS capture was
+visually reviewed; this adds no menu-layout golden assertion. Detailed results
+and retained output/image paths are in
+[finding 115](findings/115-loadable-bootscreens.md#follow-up-deadline-ordering-and-device-acceptance).
+For bounded lifecycle diagnosis, `DIGI_TRACE_PATCH_BOOT=1` opts into timestamped
+stderr phase markers (default off); `runtime-baseline-error.json` records the
+pending operation, any resolved load and whether saved status preceded load.
 
 FX route and track SEND acceptance runs in the device tests of the owning modules (`modules/**/tests/*.device.test.ts`)
 with `pnpm nx:pilot run <module-id>:test-device`. `tests/regression/runtime` keeps the shared helpers only. The legacy Python `fxroute` and `fxroutes` scenarios are retired;

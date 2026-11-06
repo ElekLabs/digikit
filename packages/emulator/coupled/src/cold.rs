@@ -313,6 +313,7 @@ pub fn boot_emulator_to_ready(
             // and the snapshot's presence is what marks the pair complete.
             write_atomic(&dsp_path, &file)?;
             write_atomic(&snapshot_path, &cf)?;
+            crate::trace_patch_boot("cold.pair_written");
             return Ok(ColdReport {
                 snapshot: snapshot_path,
                 dsp: dsp_path,

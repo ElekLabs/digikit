@@ -18,6 +18,21 @@ use std::{
 
 /// Largest number of ColdFire instructions a host runs per `step_chunk`.
 pub const STEP_CHUNK: u32 = 250_000;
+
+/// Opt-in, boundary-only diagnostics retained by the daemon's stderr transport.
+fn trace_patch_boot(phase: &'static str) {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ENABLED.get_or_init(|| std::env::var("DIGI_TRACE_PATCH_BOOT").as_deref() == Ok("1")) {
+        let unix_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        eprintln!(
+            "patch-boot phase={phase} unix_ms={unix_ms} thread={}",
+            std::thread::current().name().unwrap_or("unnamed")
+        );
+    }
+}
 #[cfg(feature = "coupled-audio")]
 pub mod cold;
 #[cfg(feature = "coupled-audio")]
@@ -177,6 +192,7 @@ impl CoupledRuntime {
         base_sha256: &str,
         options: &AudioOptions,
     ) -> Result<Self, String> {
+        trace_patch_boot("restore.emulator.before");
         let mut runtime = Self {
             emulator: Emulator::new_patched(syx, card, base_sha256)?,
             #[cfg(feature = "coupled-audio")]
@@ -185,8 +201,12 @@ impl CoupledRuntime {
             input_base: 0,
             zero: false,
         };
+        trace_patch_boot("restore.emulator.after");
+        trace_patch_boot("restore.attach.before");
         runtime.attach(Some(options))?;
+        trace_patch_boot("restore.attach.after");
         runtime.input_base = runtime.emulator.icount();
+        trace_patch_boot("restore.return");
         Ok(runtime)
     }
     /// Load a ColdFire snapshot into this fresh runtime and restart the
@@ -845,17 +865,22 @@ mod coupled {
             let sidecar = std::fs::read(&options.state).map_err(|e| format!("DSP state: {e}"))?;
             let (clock, initial_instructions, state) = continuation(&sidecar)?;
             let state = state.to_vec();
+            super::trace_patch_boot("audio.snapshot_read.before");
             let snapshot =
                 std::fs::read(&options.snapshot).map_err(|e| format!("CF snapshot: {e}"))?;
+            super::trace_patch_boot("audio.snapshot_read.after");
             // The spike log needs the per-period DSP times and the reply waits.
             let link_timing = options.link_timing
                 || std::env::var("DN2_PROFILE_LINK").as_deref() == Ok("1")
                 || elektron_native_boot::spikelog::enabled();
             emulator.enable_ssi_diagnostic(96_000)?;
+            super::trace_patch_boot("audio.load_state.before");
             emulator.load_state(&snapshot)?;
+            super::trace_patch_boot("audio.load_state.after");
             // The fast tier's Cranelift backend is registered by the spawn; the engine uses it only when
             // SHARC_FAST_REGIONS names regions (the launcher sets that). The core is the device's own.
             let core = crate::dsp_core::Core::for_device(&profile.device);
+            super::trace_patch_boot("audio.spawn_dsp.before");
             let (peer, handle, shared) = crate::dsp_core::spawn_dsp(
                 core,
                 crate::dsp_core::EngineInputs {
@@ -869,11 +894,14 @@ mod coupled {
                 link_timing,
                 true,
             )?;
+            super::trace_patch_boot("audio.spawn_dsp.after");
+            super::trace_patch_boot("audio.peer_attach.before");
             if dsp.sample_link == Some(device_profile::SampleLink::Lp0) {
                 peer.enable_sample_link();
             }
             shared.borrow_mut().dsp_instructions = initial_instructions;
             emulator.set_dspi2_peer(peer.boxed());
+            super::trace_patch_boot("audio.peer_attach.after");
             let mode = if options.buffer_seconds == 0.0 {
                 Mode::Live
             } else {

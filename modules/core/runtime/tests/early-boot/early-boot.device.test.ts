@@ -105,8 +105,11 @@ cardRigs(
 cardRigs(
   'early boot reset recovery',
   {
-    // A reset intentionally skips the DT2 filesystem worker; use the existing MainPanel baseline contract.
+    // Use the existing MainPanel reset baseline; stock verification/loading can continue after the snapshot.
     relaxFs: true,
+    env: { DIGI_TRACE_PATCH_BOOT: '1' },
+    // Two failed cold boots and the safe third boot: one bounded minute per expected boot.
+    baselineTimeoutMs: 3 * 60_000,
     startEmpty: true,
     initial: () => ({ selection: [] }),
     roots: [...guard, 'test/boot-early-reset'],
@@ -124,6 +127,12 @@ cardRigs(
         await rpc(h.session, 'run.mode', { mode: 'free' });
         try {
           await waitEmulatedFrames(h.session, 150);
+          if (h.device === 'dt2') {
+            // Pin this empty-card DT2 stock main screen, excluding verification/loading overlays.
+            await expect
+              .poll(async () => (await h.session.client.framebufferGet({ hash: true })).sha256, { timeout: 30_000 })
+              .toBe('f55c67e4d946992137a1381c0883f9a3e76991a650ef2ceb31996b5dab0df817');
+          }
           const before = await h.session.status();
           const inputIrqs = before.cf.input_irqs;
           if (typeof inputIrqs !== 'number') throw new Error('panel response proof requires a numeric input IRQ count');

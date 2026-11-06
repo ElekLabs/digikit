@@ -593,6 +593,20 @@ fn first_coupled_stock_base(
     Ok(Some(bytes))
 }
 
+fn trace_patch_boot(phase: &'static str, resets: u32) {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ENABLED.get_or_init(|| std::env::var("DIGI_TRACE_PATCH_BOOT").as_deref() == Ok("1")) {
+        let unix_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        eprintln!(
+            "patch-boot phase={phase} unix_ms={unix_ms} resets={resets} thread={}",
+            std::thread::current().name().unwrap_or("unnamed")
+        );
+    }
+}
+
 struct Actor {
     rx: mpsc::Receiver<Command>,
     /// The audio options in force: a loaded card's own ready state replaces the
@@ -4024,9 +4038,11 @@ impl Actor {
             reset_out: Some(reset_out.clone()),
             keep_ram,
         };
+        let trace_resets = self.boot_resets;
         thread::Builder::new()
             .name("digi-patched-boot".into())
             .spawn(move || {
+                trace_patch_boot("worker.boot.before", trace_resets);
                 let result = card_for(worker_card).and_then(|(mut card_obj, _)| {
                     if let Some(sectors) = &reset_overlay {
                         // A guest with no card file still writes to the default blank card: lay its writes over a new one,
@@ -4044,12 +4060,15 @@ impl Actor {
                         |_| {},
                     )
                 });
+                trace_patch_boot("worker.boot.after", trace_resets);
+                trace_patch_boot("worker.send.before", trace_resets);
                 let _ = done_tx.send(result.map(|r| PatchBooted {
                     icount: r.icount,
                     frames: r.frames,
                     wall_seconds: r.wall_seconds,
                     dsp_start_seconds: r.dsp_start_seconds,
                 }));
+                trace_patch_boot("worker.send.after", trace_resets);
             })
             .map_err(|e| RpcError::io(format!("boot thread: {e}")))?;
         self.patch_job = Some(PatchJob {
@@ -4085,6 +4104,7 @@ impl Actor {
     /// Build the runtime from a ready pair, make it the running one and apply
     /// the DSP difference to the base. Leaves the controller untouched on error.
     fn install_patched_audio(&mut self, install: PatchInstall) -> Result<Value, RpcError> {
+        trace_patch_boot("install.enter", self.boot_resets);
         let rejected = |m: String| RpcError::new(code::FIRMWARE_REJECTED, m);
         let PatchInstall {
             bytes,
@@ -4097,13 +4117,17 @@ impl Actor {
             dsp_in_boot,
         } = install;
         let (card_obj, error) = card_for(card.clone()).map_err(&rejected)?;
+        trace_patch_boot("install.runtime.before", self.boot_resets);
         let runtime =
             Runtime::new_patched_audio(&bytes, card_obj, &base_sha, &audio).map_err(&rejected)?;
+        trace_patch_boot("install.runtime.after", self.boot_resets);
         report["audio"] = runtime.has_audio().into();
+        trace_patch_boot("install.base_analysis.before", self.boot_resets);
         let base_analysis = match &base_bytes {
             Some(base) => Some(Analysis::of(base).map_err(&rejected)?),
             None => None,
         };
+        trace_patch_boot("install.base_analysis.after", self.boot_resets);
         self.loaded = Some(Loaded {
             base: base_bytes,
             base_sha,
@@ -4112,9 +4136,12 @@ impl Actor {
             base_analysis: base_analysis.clone(),
             current_analysis: Some(new.clone()),
         });
+        trace_patch_boot("install.actor.before", self.boot_resets);
         self.install(runtime, error);
+        trace_patch_boot("install.actor.after", self.boot_resets);
         self.session = self.session.max(1);
         self.emit("session.changed", json!({"reason": "firmware.load"}));
+        trace_patch_boot("install.dsp.before", self.boot_resets);
         report["dsp"] = match (base_analysis.and_then(|b| b.dsp), new.dsp) {
             (Some(base), Some(new_dsp)) if base != new_dsp && dsp_in_boot => {
                 json!({"applied": true, "at": "cold boot", "reason": "the boot ran with the DSP patch"})
@@ -4131,6 +4158,7 @@ impl Actor {
                 "reason": "the base .syx is not known, so the DSP difference cannot be computed",
             }),
         };
+        trace_patch_boot("install.dsp.after", self.boot_resets);
         Ok(report)
     }
 
@@ -4144,6 +4172,14 @@ impl Actor {
             Err(mpsc::TryRecvError::Empty) => return,
             Err(mpsc::TryRecvError::Disconnected) => Err("boot worker stopped".into()),
         };
+        trace_patch_boot(
+            match &outcome {
+                Ok(_) => "poll.received.ok",
+                Err(e) if e == "soft reset" => "poll.received.soft_reset",
+                Err(_) => "poll.received.error",
+            },
+            self.boot_resets,
+        );
         let job = self.patch_job.take().expect("patch job");
         // The guest reset the machine before it was ready (a module that resets in `init`, the firmware's exception path): boot
         // again on the card as the guest left it. A boot loop is bounded.
@@ -4151,6 +4187,7 @@ impl Actor {
             let overlay = job.reset_out.lock().expect("reset overlay").take();
             self.reset_ram = job.keep_out.lock().expect("kept ram").take();
             self.boot_resets += 1;
+            trace_patch_boot("poll.reset", self.boot_resets);
             if let (Some(overlay), true) = (overlay, self.boot_resets <= 8) {
                 self.emit(
                     "cpu.reset",
@@ -4178,12 +4215,26 @@ impl Actor {
                     "cold",
                     &reply,
                 ) {
-                    Ok(CoupledLoad::Started) => return,
+                    Ok(CoupledLoad::Started) => {
+                        trace_patch_boot("poll.reset_restart.started", self.boot_resets);
+                        return;
+                    }
                     _ => {
-                        let _ = reply.send(Err(RpcError::new(
-                            code::GUEST_FAULT,
-                            "boot loop: the restart failed",
-                        )));
+                        trace_patch_boot("poll.reset_reply.before", self.boot_resets);
+                        let sent = reply
+                            .send(Err(RpcError::new(
+                                code::GUEST_FAULT,
+                                "boot loop: the restart failed",
+                            )))
+                            .is_ok();
+                        trace_patch_boot(
+                            if sent {
+                                "poll.reset_reply.sent"
+                            } else {
+                                "poll.reset_reply.rejected"
+                            },
+                            self.boot_resets,
+                        );
                         return;
                     }
                 }
@@ -4204,15 +4255,29 @@ impl Actor {
             }
         };
         let installed = result.is_ok();
+        trace_patch_boot("poll.firmware_loaded.before", self.boot_resets);
         self.emit(
             "firmware.loaded",
             json!({"ok": result.is_ok(), "seconds": seconds,
                    "error": result.as_ref().err().map(|e| e.message.clone())}),
         );
-        let _ = job.reply.send(result.map(|mut report| {
-            report["seconds"] = seconds.into();
-            self.envelope(report)
-        }));
+        trace_patch_boot("poll.firmware_loaded.after", self.boot_resets);
+        trace_patch_boot("poll.reply.before", self.boot_resets);
+        let sent = job
+            .reply
+            .send(result.map(|mut report| {
+                report["seconds"] = seconds.into();
+                self.envelope(report)
+            }))
+            .is_ok();
+        trace_patch_boot(
+            if sent {
+                "poll.reply.sent"
+            } else {
+                "poll.reply.rejected"
+            },
+            self.boot_resets,
+        );
         // The old runtime kept stepping while the boot ran on its worker. A step or run-until job in flight has its target counted
         // on that runtime (`icount + n`): left alone, it would run the new runtime up to that count, a number of instructions that
         // depends on how far the old runtime had got when the boot finished (host timing). End it at the install instead, so every

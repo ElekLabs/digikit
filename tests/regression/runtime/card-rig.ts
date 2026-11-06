@@ -76,6 +76,8 @@ export interface CardRigOptions {
   dsp?: 'zero' | 'sharc' | 'cold';
   /** Configure coupled audio without loading stock firmware before the first explicit baseline. */
   startEmpty?: boolean;
+  /** Explicit absolute baseline budget; omit to preserve the shared 120-second default. */
+  baselineTimeoutMs?: number;
   /** The first card: a function that gives its spec (default a blank store card) or `small`, a blank 1 MiB file (a test sets `DIGI_CARD_IDENTITY=small`). */
   initial?: 'small' | (() => CardSpec);
   /** Seed every card with the stock firmware's project (Python `Env.card`). */
@@ -84,7 +86,7 @@ export interface CardRigOptions {
   uploads?: boolean;
   /** Store sectors besides the two selection sectors that the test writes on purpose (Python `store_extra`). */
   storeExtra?: number[];
-  /** The DT2 file system check never runs on a card that the firmware saved a project on. */
+  /** Use the MainPanel baseline, accepting missing filesystem verification but rejecting explicit failure; this does not stop stock verification/loading. */
   relaxFs?: boolean;
   /** Boot paused at the ready point and settle by stepping (Python `settle_ms` of 300 ms and `wait_dsp`), so a test that times events in DSP frames starts from the same frame in every run. */
   hold?: boolean;
@@ -211,6 +213,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       deliverExceptions,
       relaxedReady: o.relaxFs,
       paused: o.hold,
+      timeoutMs: o.baselineTimeoutMs,
     };
   };
   const freshDir = (session: Session, tag = 'card') => {
@@ -267,6 +270,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       },
     },
     {
+      watchdogLimitMs: o.baselineTimeoutMs,
       prepareBaseline: async (session) => {
         if (o.startEmpty) {
           const startup = await session.status();

@@ -163,6 +163,8 @@ export interface RuntimeCase extends PatchedSession {
 export function withReusablePatchedSession(
   opts: Omit<SessionOptions, 'runtime' | 'dsp'> & { patchSet?: string; dsp?: 'zero' | 'sharc' | 'cold' },
   lifecycle: {
+    /** Explicit no-progress budget for this fixture; undefined preserves the environment/default limit. */
+    watchdogLimitMs?: number;
     prepareBaseline: (session: Session) => Promise<RuntimeBaseline>;
     /** Required scenario evidence (guard/fault/card/PCM) before state is discarded. Holds release in their own finally. */
     finishCase: (runtime: RuntimeCase) => Promise<void>;
@@ -250,7 +252,7 @@ export function withReusablePatchedSession(
       dsp: opts.dsp ?? 'sharc',
       runtime: { patchSet: opts.patchSet, reuse: true },
     });
-    watchdog = startNoProgressWatchdog(session);
+    watchdog = startNoProgressWatchdog(session, { limitMs: lifecycle.watchdogLimitMs });
     try {
       baseline = await withinRuntimeDeadline(deadline, () => lifecycle.prepareBaseline(session!));
     } catch (error) {
