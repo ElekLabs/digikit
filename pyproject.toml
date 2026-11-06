@@ -53,6 +53,7 @@ ignore = [
 python_version = "3.11"
 files = [
     "tools/__init__.py",
+    "tools/bootscreen/asset.py",
     "tools/patchkit/pk_dsplink.py",
     "tools/patchkit/modroots.py",
     "tools/patchkit/pk_conform.py",

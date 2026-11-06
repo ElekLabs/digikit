@@ -602,6 +602,20 @@ The full merge gate was not run.
 
 ### Remaining product and safety acceptance
 
+**[D]** A subsequent host-only asset prototype packs PNG manifests into provisional
+DKBS v1 (RAW or bounded previous-frame XOR-RUN), decodes/validates them and creates
+self-contained decoded-frame previews. Existing Pillow and oled_png are reused,
+with explicit native/OLED layout conversion. No firmware/runtime/player/transfer
+implementation or dependency change. The 64 KiB cap is chosen host policy, not
+device staging or blocked-read proof. Original synthetic 180-tick moving dot:
+5,715 B/180 records; constant dot: 42 B/one merged record; each represents
+184,320 raw tick bytes, not a general compression/performance claim. Named host
+tests (49), scoped Ruff and mypy passed. Cheap preflight passed all 13 tasks in
+1 min 2 s (8 cached); diff and generated-preview Node syntax checks passed.
+Interactive preview was not checked because no browser is available on this host.
+See [format/design](../design/bootscreen-assets.md) and
+[host handover](../handovers/HANDOVER-2026-11-07-host-assets.md).
+
 **[V]** Subsequent current-state REC follow-up: independent audit matched all
 50 key_down function bytes on both current images. Key 19 maps to channel 2,
 bit 2 (mask 4); the query reads the current mask without queue/init/persistent
