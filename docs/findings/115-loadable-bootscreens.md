@@ -3,7 +3,7 @@
 2026-11-06. DT2 OS **1.17**, DN2 OS **1.12**. Research plus an unreleased,
 opt-in recovery prototype; its focused coupled safety fixtures pass. Production
 recovery acceptance remains incomplete. There
-is no player or hardware recovery proof. The immediate static startup
+is no production player or hardware recovery proof. The immediate static startup
 logo is outside the established ownership boundary; replacing it remains **[O]**.
 
 **[V]** below marks parent findings independently checked against current image
@@ -873,3 +873,10 @@ same summary JSON.
 
 **[O]** No hardware, timing, cancellation, reset/power-cut or physical
 presentation claim follows. See the [card contract](../design/bootscreen-assets.md#opt-in-card-provider-contract).
+
+
+**[D]** Integrated Workbench/card phase: backend `6becb4ba`, reviewed UI
+cherry-pick `1a13c0f5` (source `75a24fb8`). One explicit-base cheap gate
+(`DIGI_GATE_BASE=38cb06a8 mise run test:changed`) passed 12/12 tasks in 48.5 s,
+zero cache hits; final generated-module, layer and diff checks passed. No full
+merge gate, hardware, push, PR or merge was performed.

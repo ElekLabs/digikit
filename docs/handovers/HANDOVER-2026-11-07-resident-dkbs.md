@@ -1,5 +1,7 @@
 # Handover 2026-11-07: validated resident DKBS proof
 
+Continued by the [opt-in card provider and Workbench handover](HANDOVER-2026-11-07-card-dkbs.md).
+
 User-authorized RAM-only follow-up on `work/loadable-bootscreens`, based on
 `f83518d7`. Eight selected device cases passed on DN2 1.12 / DT2 1.17. No new
 hooks, native emulator/snapshot/protocol, runtime/SDK, card I/O, default patch
