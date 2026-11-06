@@ -17,6 +17,8 @@ extern const uint8_t dk_fw_rtos_exc_hook_lit __asm__("cf.rtos.site.exc_hook_lit"
 extern const uint8_t dk_fw_rtos_reset_clear_helper __asm__("cf.rtos.value.reset.clear_helper");
 /* Address of the reset code's .data copy helper, the first call of cf.rtos.fn.reset.init_calls; the expansion loader calls it after it copies its segments. */
 extern const uint8_t dk_fw_rtos_reset_copy_helper __asm__("cf.rtos.value.reset.copy_helper");
+/* Private opt-in recovery gate before intro installation; preserves the caller's argument and always continues through the original installer. */
+typedef void dk_fw_rtos_intro_install_hook(uint32_t skip);
 /* Entry of the main-OS task, before the task builds its singletons; the hook point for boot-time module loading. */
 typedef void dk_fw_rtos_main_os_task_hook(void);
 

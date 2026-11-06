@@ -1,0 +1,26 @@
+{
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/early-boot-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/runtime", "core/boot-guard"],
+  "targets": {
+    "test-device": { "cache": false }
+  },
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["early-boot.device.test.ts"],
+        "modules": ["test/c-demo"],
+        "plusdrive": true,
+        "patchModules": [
+          "core/runtime",
+          "core/dynreg",
+          "core/dyndsp",
+          "core/boot-guard",
+          "test/boot-early-probe",
+          "test/boot-early-reset"
+        ]
+      }
+    ]
+  }
+}

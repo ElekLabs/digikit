@@ -9825,6 +9825,55 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400d3920"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400d1448"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_rtos_intro_install_hook",
+        "gas": "dk_fw_rtos_intro_install_hook",
+        "rust": "dkfw::rtos::IntroInstallHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Private opt-in recovery gate before intro installation; preserves the caller's argument and always continues through the original installer.",
+      "file": "devices/fw/rtos.toml",
+      "handler": {
+        "args": [
+          "sp+4"
+        ],
+        "sig": "void (u32 skip)"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.rtos.hook.intro_install",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "sig": "void (u32 skip)",
+      "site": "cf.rtos.site.intro_install",
+      "subsystem": "rtos",
+      "users": [
+        "core/boot-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4002ed34"
@@ -9973,6 +10022,45 @@
       "was": [
         "health.hook.idle"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400d3920",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400d1448",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Intro installer entry on DT2 1.17 / DN2 1.12, before its timer and completion setup. The stack argument is the stock skip-intro flag.",
+      "file": "devices/fw/rtos.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.rtos.site.intro_install",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "rtos",
+      "users": [
+        "core/boot-guard"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -16832,7 +16920,7 @@
       "name": "project"
     },
     {
-      "count": 11,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/rtos.toml",
       "meaning": "tasks, queues, mutexes, idle, interrupts, the reset and boot path",

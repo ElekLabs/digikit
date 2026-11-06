@@ -1,0 +1,21 @@
+[module]
+id = "test/boot-early-reset"
+version = "0.1.0"
+name = "boot-early-reset"
+category = "test"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Linked test-only callback: resets before intro/main loading to exercise empty-selection recovery"
+requires = ["core/boot-guard"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-early-reset.dko.json"
+sources = ["src/callback.c"]
+place = "cf.expansion"

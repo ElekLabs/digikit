@@ -1,0 +1,21 @@
+[module]
+id = "test/boot-early-probe"
+version = "0.1.0"
+name = "boot-early-probe"
+category = "test"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Linked test-only callback: captures recovery state before the original intro installer"
+requires = ["core/boot-guard"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-early-probe.dko.json"
+sources = ["src/callback.c"]
+place = "cf.expansion"

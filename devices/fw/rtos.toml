@@ -115,3 +115,24 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/health"]
 doc = "The boot thread's last call (create the main-OS task), after which the thread idles; the hook makes that call itself and then counts idle iterations forever."
+
+# Opt-in early recovery proof. The original installer always runs after the handler.
+[[site]]
+name = "cf.rtos.site.intro_install"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "47a3f360c4c8604b1f28d1b5acc6e379", offset = 0x0, len = 8 }
+mark = "D"
+users = ["core/boot-guard"]
+doc = "Intro installer entry on DT2 1.17 / DN2 1.12, before its timer and completion setup. The stack argument is the stock skip-intro flag."
+
+[[hook]]
+name = "cf.rtos.hook.intro_install"
+site = "cf.rtos.site.intro_install"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "void (u32 skip)", args = ["sp+4"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/boot-guard"]
+doc = "Private opt-in recovery gate before intro installation; preserves the caller's argument and always continues through the original installer."

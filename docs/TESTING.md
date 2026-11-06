@@ -211,6 +211,22 @@ Device suites (`test:stock`, `test:fx*`, the Nx `test-device` and `test-conforma
 - DT2 card samples at `out/runs/patchkit/samples`.
 - plusdrive: `test-device` builds it through `plusdrive-format:cli` (`dist/plusdrive/plusdrive`, also `DIGI_PLUSDRIVE`). The gate builds it before samples-live.
 
+Reusable coupled sessions normally load stock firmware at daemon startup; the
+first prepared baseline is then a load over that runtime. For a genuinely empty
+coupled start, `SessionOptions.startEmpty` (also exposed by `CardRigOptions`)
+requires `dsp: 'sharc'` and `runtime.reuse`. It omits only the positional startup
+SYX, retaining `--auto-coupled`, explicit `--audio-profile-syx` and all DSP/CF
+ready inputs. The CLI refuses an empty coupled start without that explicit
+automatic profile; no environment-profile fallback accepts it. The first
+prepared load reads the configured stock file and validates its hash against
+the declared base before deriving the DSP diff. Startup must report no firmware
+or CF runtime; the loaded baseline must still pass exact identity and coupled
+audio checks. Do not access `loadResult` before the first baseline.
+
+The `core/early-boot-tests` DN2 empty returning-callback control passes this
+path. Its early-reset case remains red; the option does not fix or waive reset,
+snapshot/readiness or lifecycle acceptance. Normal startup defaults are unchanged.
+
 FX route and track SEND acceptance runs in the device tests of the owning modules (`modules/**/tests/*.device.test.ts`)
 with `pnpm nx:pilot run <module-id>:test-device`. `tests/regression/runtime` keeps the shared helpers only. The legacy Python `fxroute` and `fxroutes` scenarios are retired;
 their offline data and comparison helpers remain.

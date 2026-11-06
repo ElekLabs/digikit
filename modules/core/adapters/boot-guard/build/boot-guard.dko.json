@@ -1,0 +1,247 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text",
+   "symbol": "boot_guard_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text",
+   "symbol": "dk_boot_early",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text",
+   "symbol": "boot_guard_enter",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_ATTEMPTS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.boot_guard_enter",
+   "symbol": "dkrt_boot_enter_early",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_BEFORE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.boot_guard_enter",
+   "symbol": "dkrt_boot_info",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_ENTERED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_RETURNED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_AFTER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".text.boot_guard_enter",
+   "symbol": "dkrt_boot_info",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d703032f2f00144eba0012588f4cd703034fef00104ef900000000202f00046612203c00000000670a2f004eb900000000588f4e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 58
+  },
+  {
+   "align": 2,
+   "hex": "2f0a246f000852b9000000004eb9000000004a80672e4879000000004eb90000000052b9000000004e92588f52b900000000203c000000002f400008245f4ef900000000245f4e75",
+   "kind": "text",
+   "name": ".text.boot_guard_enter",
+   "size": 72
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_AFTER",
+   "size": 80
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_BEFORE",
+   "size": 80
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_RETURNED",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_ENTERED",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_ATTEMPTS",
+   "size": 4
+  }
+ ],
+ "source_sha256": "c7443ad5633876b4b56fc7d913d1f569540d4c58d6bfc7a65e1756a69bd20386",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_AFTER",
+   "section": ".bss.BOOT_GUARD_AFTER",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_ATTEMPTS",
+   "section": ".bss.BOOT_GUARD_ATTEMPTS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_BEFORE",
+   "section": ".bss.BOOT_GUARD_BEFORE",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_ENTERED",
+   "section": ".bss.BOOT_GUARD_ENTERED",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_RETURNED",
+   "section": ".bss.BOOT_GUARD_RETURNED",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_AFTER",
+   "section": ".bss.BOOT_GUARD_AFTER",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_ATTEMPTS",
+   "section": ".bss.BOOT_GUARD_ATTEMPTS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_BEFORE",
+   "section": ".bss.BOOT_GUARD_BEFORE",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_ENTERED",
+   "section": ".bss.BOOT_GUARD_ENTERED",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_RETURNED",
+   "section": ".bss.BOOT_GUARD_RETURNED",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "boot_guard_dispatch",
+   "section": ".text",
+   "value": 32
+  },
+  {
+   "global": true,
+   "name": "boot_guard_enter",
+   "section": ".text.boot_guard_enter",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_guard_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_guard_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_boot_early",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_boot_enter_early",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_boot_info",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "34",
+  "isa_check": "74077426d965771cfc4cc685f94650ebbfe9660fed63ae338cd3b3856dd644d8",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

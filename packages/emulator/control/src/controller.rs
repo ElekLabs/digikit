@@ -565,6 +565,34 @@ fn ready_inputs_sha(audio: &AudioOptions) -> Option<String> {
     })
 }
 
+/// A first patched coupled load has no retained stock bytes for its DSP diff. Use only the configured
+/// automatic profile's explicit stock path, and validate its identity before the existing loader sees it.
+fn first_coupled_stock_base(
+    audio: Option<&AudioOptions>,
+    base_sha: &str,
+) -> Result<Option<Vec<u8>>, String> {
+    let Some(audio) = audio.filter(|a| a.automatic && !a.zero) else {
+        return Ok(None);
+    };
+    let path = audio
+        .expected_syx
+        .as_ref()
+        .ok_or("first patched coupled load requires an explicit stock profile")?;
+    let bytes = std::fs::read(path).map_err(|e| {
+        format!(
+            "cannot read first coupled stock profile {}: {e}",
+            path.display()
+        )
+    })?;
+    if firmware::sha256_hex(&bytes) != base_sha {
+        return Err(format!(
+            "first coupled stock profile {} does not match declared base_sha256 {base_sha}",
+            path.display()
+        ));
+    }
+    Ok(Some(bytes))
+}
+
 struct Actor {
     rx: mpsc::Receiver<Command>,
     /// The audio options in force: a loaded card's own ready state replaces the
@@ -3280,6 +3308,13 @@ impl Actor {
             // First load: stock when the file is a known one (or base_sha256
             // names itself), otherwise a patched build of `base_sha256`.
             let base_sha = base_param.clone().unwrap_or_else(|| new.sha256.clone());
+            if base_sha != new.sha256 && stock_base.is_none() {
+                let audio = self
+                    .audio_for_base(&base_sha)
+                    .or_else(|| self.audio.clone());
+                stock_base =
+                    first_coupled_stock_base(audio.as_ref(), &base_sha).map_err(&rejected)?;
+            }
             let card = card_param
                 .clone()
                 .or_else(|| self.default_card(&bytes, stock_base.as_deref()));
@@ -4615,6 +4650,63 @@ fn summarize_audio(runtime: &mut Runtime) -> Value {
         "source_audio_seconds": report["source_audio_seconds"],
         "dsp_tiers": report["dsp_tiers"], "dsp_core": report["dsp_core"],
     })
+}
+
+#[cfg(test)]
+mod first_coupled_base_tests {
+    use super::*;
+
+    #[test]
+    fn first_coupled_base_accepts_only_matching_readable_explicit_stock() {
+        let dir =
+            std::env::temp_dir().join(format!("digi-first-coupled-base-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("stock.syx");
+        let bytes = b"owned stock fixture bytes";
+        std::fs::write(&path, bytes).unwrap();
+        let mut audio = AudioOptions {
+            automatic: true,
+            expected_syx: Some(path.clone()),
+            ..Default::default()
+        };
+        let sha = firmware::sha256_hex(bytes);
+        assert_eq!(
+            first_coupled_stock_base(Some(&audio), &sha).unwrap(),
+            Some(bytes.to_vec())
+        );
+        assert!(
+            first_coupled_stock_base(Some(&audio), "wrong base")
+                .unwrap_err()
+                .contains("does not match")
+        );
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            first_coupled_stock_base(Some(&audio), &sha)
+                .unwrap_err()
+                .contains("cannot read")
+        );
+        audio.expected_syx = None;
+        assert!(
+            first_coupled_stock_base(Some(&audio), &sha)
+                .unwrap_err()
+                .contains("explicit stock profile")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn first_coupled_base_leaves_nonautomatic_and_absent_audio_unchanged() {
+        assert_eq!(first_coupled_stock_base(None, "base").unwrap(), None);
+        let audio = AudioOptions {
+            automatic: false,
+            expected_syx: Some("not-read.syx".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            first_coupled_stock_base(Some(&audio), "base").unwrap(),
+            None
+        );
+    }
 }
 
 #[cfg(test)]

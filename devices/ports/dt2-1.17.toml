@@ -2358,6 +2358,16 @@ mark = "D"
 rule = "fw/rtos:cf_func"
 
 [[anchor]]
+name = "cf.rtos.site.intro_install"
+cpu = "cf"
+kind = "code"
+addr = 0x400d1448
+len = 8
+sha256 = "2e76b4e4bf78f4b77cd098513068c57b1bb088742b889670164e42aa463db407"
+mark = "D"
+rule = "fw/rtos:cf_func"
+
+[[anchor]]
 name = "cf.rtos.site.main_os_task"
 cpu = "cf"
 kind = "code"
@@ -3245,6 +3255,11 @@ mode = "before"
 name = "cf.rtos.hook.idle"
 site = "cf.rtos.site.idle"
 mode = "replace"
+
+[[hook]]
+name = "cf.rtos.hook.intro_install"
+site = "cf.rtos.site.intro_install"
+mode = "before"
 
 [[hook]]
 name = "cf.rtos.hook.main_os_task"

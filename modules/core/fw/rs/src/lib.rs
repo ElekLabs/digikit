@@ -554,6 +554,9 @@ pub mod rtos {
         pub static RESET_COPY_HELPER: u8;
     }
 
+    /// Private opt-in recovery gate before intro installation; preserves the caller's argument and always continues through the original installer.
+    pub type IntroInstallHook = unsafe extern "C" fn(skip: u32);
+
     /// Entry of the main-OS task, before the task builds its singletons; the hook point for boot-time module loading.
     pub type MainOsTaskHook = unsafe extern "C" fn();
 }

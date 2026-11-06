@@ -1,0 +1,34 @@
+[module]
+id = "core/boot-guard"
+version = "0.1.0"
+name = "Early boot recovery proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Opt-in emulator proof of recovery accounting before intro installation; not production ready"
+requires = ["core/runtime"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-guard.dko.json"
+sources = ["src/guard.c", "src/tramp.s"]
+place = "cf.expansion"
+optional = ["dk_boot_early"]
+
+[object.externs]
+boot_guard_next = "hook.cf.rtos.site.intro_install.tail"
+
+[[op]]
+op = "hook"
+hook = "cf.rtos.hook.intro_install"
+to = "boot_guard_hook"
+
+[[claim]]
+resource = "cf.rtos.site.intro_install"

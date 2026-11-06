@@ -56,6 +56,11 @@ const DEAD_CLOCK_PASSES: u32 = 1800;
 static mut REC: Record = Record::empty();
 static mut REC_VALID: bool = false;
 static mut REC_COPY: u32 = 0;
+// Preparation and loading have separate latches: the opt-in early adapter must never load modules.
+static mut PREP_STATE: u32 = 0; // 0 untouched, 1 preparing, 2 complete
+static mut LOAD_STARTED: bool = false;
+static mut EARLY_ATTEMPTED: bool = false;
+static mut COUNTER_ARMED: bool = false;
 
 /// Paths of the selection this boot loaded (for CAPACITY).
 pub fn selected() -> u32 {
@@ -191,6 +196,17 @@ unsafe fn update(mut r: Record, current_copy: u32, valid: bool) -> i32 {
     e
 }
 
+/// The counter transaction shared by early preparation and late fallback. Failed writes retain the caller's current
+/// record, so a later attempt retries the same intended counter instead of incrementing twice.
+fn arm_counter(armed: &mut bool, mut current: Record, write: impl FnOnce(Record) -> i32) -> bool {
+    if *armed {
+        return true;
+    }
+    current.boot_counter = current.boot_counter.wrapping_add(1);
+    *armed = write(current) == OK;
+    *armed
+}
+
 /// Is the safe-mode key down among the events waiting in the UI queue? (The panel's held keys arrive as key-down events
 /// shortly after reset; whether they are queued yet at this point is untested on a device **[O]**.)
 unsafe fn key_held() -> bool {
@@ -226,14 +242,14 @@ unsafe fn key_held() -> bool {
     false
 }
 
-/// The boot hook (once per boot, main-OS task).
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_boot() {
+/// Recovery preparation, once per boot. `early` requires an already owned store and arms even an empty selection.
+unsafe fn prepare(early: bool) -> bool {
+    if PREP_STATE != 0 {
+        return PREP_STATE == 2;
+    }
+    PREP_STATE = 1;
     crate::init_once();
     let b = info();
-    if b.magic == INFO_MAGIC {
-        return; // the constructor ran once already: a second call is a bug, not a second boot
-    }
     b.magic = INFO_MAGIC;
     b.version = 1;
     let (rec, copy) = current();
@@ -301,14 +317,72 @@ pub unsafe extern "C" fn dkrt_boot() {
             b.results[k] = E_SAFE_MODE;
             k += 1;
         }
-        return;
+        PREP_STATE = 2;
+        return true;
     }
     // raise the counter before anything of a module runs; the first UI-loop pass clears it. On a card the runtime does not write there is no
     // counter, so no safe mode by counter (ABOUT says so).
-    if (r.count != 0 || r.boot_counter != 0) && card::writable() {
-        r.boot_counter = r.boot_counter.wrapping_add(1);
-        update(r, copy, valid);
+    let may_arm = if early {
+        valid && card::state() == CARD_OURS && card::info().read_errors == 0
+    } else {
+        card::writable()
+    };
+    if (early || r.count != 0 || r.boot_counter != 0) && may_arm {
+        arm_counter(&mut *addr_of_mut!(COUNTER_ARMED), r, |next| update(next, copy, valid));
     }
+    PREP_STATE = 2;
+    true
+}
+
+/// Private adapter entry, not an SDK phase. No modules are loaded here. A failed write never permits a callback.
+/// Storage calls can still block: this opt-in proof is not a production recovery guarantee.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_boot_enter_early() -> u32 {
+    if EARLY_ATTEMPTED || LOAD_STARTED {
+        return 0;
+    }
+    EARLY_ATTEMPTED = true;
+    if !prepare(true) {
+        return 0;
+    }
+    if info().safe != 0 || !REC_VALID || card::state() != CARD_OURS || card::info().read_errors != 0 || !COUNTER_ARMED {
+        return 0;
+    }
+    // Firmware can overwrite the hook later; the UI loop continues reinstalling it as before.
+    if !crash::install_checked() {
+        return 0;
+    }
+    1
+}
+
+/// The main-OS boot hook: prepare if needed, then load the selection once.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_boot() {
+    if LOAD_STARTED {
+        return;
+    }
+    if !prepare(false) {
+        return;
+    }
+    LOAD_STARTED = true;
+    let b = info();
+    // Events may only have arrived since the early preparation. Preserve the late held-RECORD check.
+    if b.safe == 0 && EARLY_ATTEMPTED && key_held() {
+        b.safe = 1;
+        b.reason = SAFE_KEY;
+        LATE_FLOOR = 0;
+        b.results = [E_SAFE_MODE; SEL_MAX];
+        dlog::ev(logk::SAFE, logk::F_ERROR, [SAFE_KEY, b.counter, b.seq, 0, 0]);
+    }
+    if b.safe != 0 {
+        return;
+    }
+    // Early denial must not suppress the original late counter policy. Retry the same intended value from REC;
+    // update only changes REC after success, so an uncertain early write cannot turn this retry into a second increment.
+    if EARLY_ATTEMPTED && !COUNTER_ARMED && (REC.count != 0 || REC.boot_counter != 0) && card::writable() {
+        arm_counter(&mut *addr_of_mut!(COUNTER_ARMED), REC, |next| update(next, REC_COPY, REC_VALID));
+    }
+    let r = REC;
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     loader::EARLY = true;
@@ -420,4 +494,38 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         dsp_wait: b.dsp_wait,
         stable: b.stable,
     };
+}
+
+#[cfg(test)]
+mod counter_tests {
+    use super::*;
+
+    #[test]
+    fn failed_early_write_denies_permission_and_late_retry_uses_same_counter() {
+        let mut current = Record::empty();
+        current.boot_counter = 1;
+        let mut armed = false;
+        let mut attempted = 0;
+        assert!(!arm_counter(&mut armed, current, |next| {
+            attempted = next.boot_counter;
+            E_SEL_WRITE
+        }));
+        assert!(!armed);
+        assert!(arm_counter(&mut armed, current, |next| {
+            assert_eq!(next.boot_counter, attempted);
+            assert_eq!(next.boot_counter, 2);
+            OK
+        }));
+    }
+
+    #[test]
+    fn successful_early_arm_prevents_late_increment_or_another_write() {
+        let current = Record::empty();
+        let mut armed = false;
+        assert!(arm_counter(&mut armed, current, |next| {
+            assert_eq!(next.boot_counter, 1);
+            OK
+        }));
+        assert!(arm_counter(&mut armed, current, |_| panic!("already armed: must not write again")));
+    }
 }

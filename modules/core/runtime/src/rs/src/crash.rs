@@ -128,6 +128,13 @@ pub unsafe fn install() {
     }
 }
 
+/// Private early-entry verification. Keep readback off the normal UI-loop installation path.
+pub(crate) unsafe fn install_checked() -> bool {
+    install();
+    let Some(w) = hook_word() else { return false };
+    read_volatile(w) == core::hint::black_box(dkrt_exc_hook as usize) as u32
+}
+
 static mut IN_EXC: u32 = 0;
 
 /// The exception handler proper (from `dkrt_exc_hook`): `frame` is the hardware exception frame (format/vector/status word, then the PC); the

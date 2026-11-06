@@ -74,6 +74,8 @@ export interface CardRigOptions {
   env?: Record<string, string> | ((prepared: PreparedRuntimePlan) => Record<string, string>);
   /** ColdFire-only daemon ('zero'; 'cold': also without a snapshot) or with the SHARC (default). */
   dsp?: 'zero' | 'sharc' | 'cold';
+  /** Configure coupled audio without loading stock firmware before the first explicit baseline. */
+  startEmpty?: boolean;
   /** The first card: a function that gives its spec (default a blank store card) or `small`, a blank 1 MiB file (a test sets `DIGI_CARD_IDENTITY=small`). */
   initial?: 'small' | (() => CardSpec);
   /** Seed every card with the stock firmware's project (Python `Env.card`). */
@@ -241,6 +243,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       ...options(device),
       ...(o.stallMs !== undefined ? { stallMs: o.stallMs } : {}),
       dsp: o.initial === 'small' ? 'cold' : o.dsp,
+      startEmpty: o.startEmpty,
       env: async () => {
         artifacts = fs.mkdtempSync(
           path.join(os.tmpdir(), `digi-${scope.split(':')[0]!.replace(/\W+/g, '-')}-${device}-`),
@@ -265,8 +268,15 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     },
     {
       prepareBaseline: async (session) => {
+        if (o.startEmpty) {
+          const startup = await session.status();
+          record(artifacts, 'startup-empty', startup);
+          expect(startup.firmware, 'the first baseline starts without firmware').toBeNull();
+          expect(startup.cf, 'no ColdFire runtime exists before the first baseline').toBeUndefined();
+        }
         // A cold daemon (no firmware at spawn) has no emulator, so no watch summary, for its first epoch.
-        if (o.initial !== 'small' && o.dsp !== 'cold') epochs.add((await session.status()).epoch as number);
+        if (o.initial !== 'small' && o.dsp !== 'cold' && !o.startEmpty)
+          epochs.add((await session.status()).epoch as number);
         if (o.initial === 'small') {
           image = path.join(freshDir(session), 'small-card.img');
           fs.writeFileSync(image, Buffer.alloc(1 << 20)); // blank; the identity, not the file, sets the capacity

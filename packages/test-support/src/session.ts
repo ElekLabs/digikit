@@ -50,6 +50,8 @@ export interface SessionOptions {
   autoNo?: boolean;
   /** Runtime boot uses firmware.load's existing patch/cache path, then runs freely. Stock defaults stay stepped. */
   runtime?: { patchSet?: string; reuse?: boolean };
+  /** Reusable coupled sessions only: configure the DSP inputs but leave firmware absent until the first baseline. */
+  startEmpty?: boolean;
 }
 
 /** A pristine image in a fixture-owned child directory of Session.runDir; not a sample directory. */
@@ -128,6 +130,8 @@ export class Session {
   }
 
   static async start(options: SessionOptions): Promise<Session> {
+    if (options.startEmpty && (options.dsp !== 'sharc' || !options.runtime?.reuse))
+      throw new Error('empty startup requires a reusable coupled session');
     if (options.runtime?.reuse && options.mirror) throw new Error('reusable runtime sessions cannot mirror cards');
     const inp = resolveInputs(options.device, options.firmware);
     if (options.runtime) validateRuntimeInputs(inp);
@@ -147,7 +151,7 @@ export class Session {
         : options.dsp === 'zero'
           ? [...(options.runtime ? [inp.syx] : []), '--dsp', 'zero', '--cf-snapshot', inp.cfSnapshot]
           : [
-              inp.syx,
+              ...(options.startEmpty ? [] : [inp.syx]),
               '--auto-coupled',
               '--audio-profile-syx',
               inp.syx,
@@ -199,9 +203,16 @@ export class Session {
       };
       const c = daemon.client;
       await checked(c.eventsSubscribe());
-      // The CLI still restores its initial stock image. Reuse skips the redundant SDK patched boot;
-      // its first runtime identity/card is established by mandatory reloadRuntimeBaseline.
-      if (options.runtime?.reuse) return session;
+      // Reuse skips the redundant SDK patched boot. Empty startup additionally omits the CLI's stock load.
+      // The first runtime identity/card is established by mandatory reloadRuntimeBaseline.
+      if (options.runtime?.reuse) {
+        if (options.startEmpty) {
+          const status = await checked(c.status());
+          if (status.firmware !== null || status.cf !== undefined)
+            throw new Error('empty coupled startup unexpectedly loaded firmware');
+        }
+        return session;
+      }
       let card: string | undefined;
       if (options.card) card = (await checked(c.cardLoad(options.card))).card;
       session.#card = card;
@@ -303,7 +314,7 @@ export class Session {
           ...(prepared
             ? { base_sha256: prepared.baseSha256 }
             : { runtime: true, patch_set: this.options.runtime!.patchSet }),
-          // Prepared images need the daemon's retained stock bytes to derive the DSP patch.
+          // Prepared images need validated stock bytes for the DSP diff; an empty coupled daemon resolves its profile.
           // force still reconstructs the firmware and opens the explicit pristine card.
           replace: !prepared,
           force: true,
@@ -315,6 +326,8 @@ export class Session {
       await checked(() => this.client.guardSet(baseline.guard));
       await checked(() => this.client.call('run.mode', { mode: baseline.paused ? 'paused' : 'free' }));
       const status = (lastStatus = await checked(() => this.client.status()));
+      if (this.options.startEmpty && (status.dsp !== 'sharc' || status.audio == null))
+        throw new Error('empty coupled baseline did not load coupled audio');
       if (
         typeof status.epoch !== 'number' ||
         status.epoch <= epoch ||
