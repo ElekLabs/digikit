@@ -572,11 +572,11 @@ changes. Raw output: `/private/tmp/bootscreen-dn2-fault-deferral-zero.log` and
 `/private/tmp/bootscreen-matrix-panel-summary.json` and
 `/private/tmp/bootscreen-matrix-exception-summary.json`.
 
-**[C]** All four held/sticky fixtures observed late reason **NONE**, not KEY.
+**[C]** At historical checkpoint `04f5ec86`, all four held/sticky fixtures observed late reason **NONE**, not KEY.
 Decision 3 and zero runtime requests prove the new optional early-work bypass;
 they do not establish global late safe mode or hardware RECORD behavior.
-Functional REC access to global safe mode did not activate in these cold fixtures
-on either device and remains an open issue, not a fix in this phase. Missing
+Functional REC access to global safe mode did not activate in those cold fixtures;
+the subsequent current-key follow-up below corrects this emulator result. Missing
 input also denies requests while selected-module late loading succeeds. Fresh
 released cases show decision 1, one request/callback and settings loaded 0/0/1.
 UART packet freshness is not hardware initial-scan completion.
@@ -601,6 +601,38 @@ all 13 tasks in 48.5 s (0 cache hits); generated-module and diff checks passed.
 The full merge gate was not run.
 
 ### Remaining product and safety acceptance
+
+**[V]** Subsequent current-state REC follow-up: independent audit matched all
+50 key_down function bytes on both current images. Key 19 maps to channel 2,
+bit 2 (mask 4); the query reads the current mask without queue/init/persistent
+side effects, and its ABI matches the existing binding. **[D]** The runtime
+now uses that query instead of scanning queued events, with no stale-event
+fallback. This is not evidence that intro consumed the old queue or that a
+physical initial scan arrives before main. Direct held/released acceptance
+without boot-guard passed first on DN2: safe 1 / KEY 2 / count 1 / loaded 0,
+unchanged selected c-demo/counter 0, DSP/UI and lifetime checks passed. Exactly
+one baseline reload (59.599 s), 62.95 s total; raw
+`/private/tmp/bootscreen-direct-rec-dn2-held.log`, retained JSON directory
+`/var/folders/v4/dxpyscrd41n7h6v9bc672p0r0000gn/T/digi-direct-rec-evidence-dn2-oLSg4J/`.
+All remaining direct/tightened panel cases also passed: held is KEY/selected
+module skipped/counter 0; down/up is NONE/module loaded once/counter 1 on both
+devices. Both panel sequences retain sticky early denial (decision 3, requests 0).
+This corrects the prior emulator REC limitation, not hardware initial-scan timing
+or independent escape from blocked I/O.
+
+**[D]** This follow-up passed all 18 unique affected cases: prior DN2 held 1,
+group A refactored absent/four probe cases 10 (426.42 s), group B remaining
+direct/panel cases 7 (300.99 s), no retries. Raw group logs:
+`/private/tmp/bootscreen-rec-refactored-group-a.log` and
+`/private/tmp/bootscreen-rec-panel-group-b.log`. The ten refactored cases each
+have exactly one baseline-reload trace, removing ten redundant baseline boots
+with unchanged assertions and exact initial cards. The old first-span sum
+281.769 s is a potential setup ceiling only, not a measured wall-time saving;
+host load varies. Runtime 58 units, types, scoped object build, generated/layer
+and format checks passed. Final cheap preflight passed 13/13 tasks in 42.4 s
+(7 cached); final generated-module and diff checks passed. Exact commands,
+retained evidence paths and remaining limits are in the
+[REC follow-up handover](../handovers/HANDOVER-2026-11-07-rec-key-state.md).
 
 The genuine pre-intro CPU-fault case above is accepted under working-card
 emulator conditions on both devices. It does not accept the following

@@ -9,7 +9,12 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["early-boot.device.test.ts", "early-exception.device.test.ts", "early-panel.device.test.ts"],
+        "files": [
+          "early-boot.device.test.ts",
+          "early-exception.device.test.ts",
+          "early-panel.device.test.ts",
+          "late-rec.device.test.ts"
+        ],
         "modules": ["test/c-demo"],
         "plusdrive": true,
         "patchModules": [

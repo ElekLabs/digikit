@@ -11,7 +11,7 @@
 //! The record is the only thing the runtime writes to the card here, and only to its two sectors (`store::Layout::sel_a`/`sel_b`), through
 //! `block_write`, which refuses a write when the card's area is not ours (`card.rs`): then the boot counter is not raised either.
 use crate::{assign, block_read, block_write, card, crash, dlog, loader, st};
-use core::ptr::{addr_of, addr_of_mut, read_volatile};
+use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
 
@@ -207,39 +207,10 @@ fn arm_counter(armed: &mut bool, mut current: Record, write: impl FnOnce(Record)
     *armed
 }
 
-/// Is the safe-mode key down among the events waiting in the UI queue? (The panel's held keys arrive as key-down events
-/// shortly after reset; whether they are queued yet at this point is untested on a device **[O]**.)
+/// Read the firmware's current key state rather than historical queued events.
+/// Physical initial-scan arrival before this check remains unproved on hardware.
 unsafe fn key_held() -> bool {
-    // `UI_QUEUE_LIT`: the 4-byte literal `pea <ui queue>` of the UI loop.
-    let lit = core::hint::black_box(&raw const dkfw::view::UI_LOOP_QUEUE_LIT as usize) as u32;
-    if lit == 0 {
-        return false;
-    }
-    let q = read_volatile(lit as *const u32);
-    // the firmware's objects live in the cached DDR window (`[board]` of the device files)
-    let ddr = |a: u32| {
-        (dkrt_sdk::device::DDR_CACHED_BASE..dkrt_sdk::device::DDR_CACHED_BASE + dkrt_sdk::device::DDR_BYTES).contains(&a) && a & 3 == 0
-    };
-    if !ddr(q) {
-        return false;
-    }
-    let w = |a: u32, k: u32| read_volatile((a + 4 * k) as *const u32);
-    let (count, mask, buf, rd) = (w(q, 1), w(q, 4), w(q, 5), w(q, 7));
-    if count == 0 || count > 64 || mask > 0xffff || !ddr(buf) {
-        return false;
-    }
-    let mut i = 0;
-    while i < count {
-        let item = read_volatile((buf + 4 * ((rd + i) & mask)) as *const u32);
-        if ddr(item) && read_volatile(item as *const u8) == 0 {
-            // a key event: +4 the key, +8 the state
-            if w(item, 1) == SAFE_KEY_CODE && w(item, 2) != 0 {
-                return true;
-            }
-        }
-        i += 1;
-    }
-    false
+    dkfw::input::key_down(SAFE_KEY_CODE) != 0
 }
 
 fn early_record_allowed(record: Option<&Record>) -> bool {

@@ -10,7 +10,10 @@ import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { waitEmulatedFrames } from '@digi/regression/runtime/waits.ts';
 
 const guard = [...RT, 'core/boot-guard'];
-const releasedPanel = [{ code: button('STOP'), down: true }, { code: button('STOP'), down: false }];
+const releasedPanel = [
+  { code: button('STOP'), down: true },
+  { code: button('STOP'), down: false },
+];
 const proof = [
   'BOOT_GUARD_ATTEMPTS',
   'BOOT_GUARD_ENTERED',
@@ -26,20 +29,29 @@ const proof = [
   'DKRT_SET',
 ];
 
-cardRigs('early boot without callback', { roots: guard, symbols: [...CARD_SYMBOLS, ...proof] }, (h) => {
-  test(
-    'the absent callback does not prepare early or arm an empty selection',
-    async () => {
-      await h.boot(await h.card({ selection: [] }));
-      const info = await h.ready();
-      expect(info).toMatchObject({ safe: 0, count: 0, loaded: 0, counter: 0 });
-      for (const symbol of proof.slice(0, 3)) expect(await word(h.session, planSymbol(h.plan, symbol)), symbol).toBe(0);
-      expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_REQUESTS'))).toBe(0);
-      expect(currentRecord(await h.records())).toMatchObject({ counter: 0, paths: [] });
-    },
-    CARD_TIMEOUT,
-  );
-});
+cardRigs(
+  'early boot without callback',
+  {
+    roots: guard,
+    symbols: [...CARD_SYMBOLS, ...proof],
+    startEmpty: true,
+    initial: () => ({ selection: [] }),
+  },
+  (h) => {
+    test(
+      'the absent callback does not prepare early or arm an empty selection',
+      async () => {
+        const info = await h.ready();
+        expect(info).toMatchObject({ safe: 0, count: 0, loaded: 0, counter: 0 });
+        for (const symbol of proof.slice(0, 3))
+          expect(await word(h.session, planSymbol(h.plan, symbol)), symbol).toBe(0);
+        expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_REQUESTS'))).toBe(0);
+        expect(currentRecord(await h.records())).toMatchObject({ counter: 0, paths: [] });
+      },
+      CARD_TIMEOUT,
+    );
+  },
+);
 
 cardRigs(
   'early boot probe',
@@ -47,12 +59,13 @@ cardRigs(
     roots: [...guard, 'test/boot-early-probe'],
     initialButtons: releasedPanel,
     symbols: [...CARD_SYMBOLS, ...proof, 'BOOT_EARLY_CALLS'],
+    startEmpty: true,
+    initial: () => ({ selection: [] }),
   },
   (h) => {
     test(
       'arms zero selected modules before callback, then reaches the UI without another increment',
       async () => {
-        await h.boot(await h.card({ selection: [] }));
         const info = await h.ready();
         expect(info).toMatchObject({ safe: 0, count: 0, loaded: 0, counter: 0, uiReached: 1 });
         for (const symbol of ['BOOT_GUARD_ATTEMPTS', 'BOOT_GUARD_ENTERED', 'BOOT_GUARD_RETURNED', 'BOOT_EARLY_CALLS'])
@@ -72,13 +85,26 @@ cardRigs(
       },
       CARD_TIMEOUT,
     );
+  },
+);
 
+cardRigs(
+  'early boot probe corrupt selection',
+  {
+    roots: [...guard, 'test/boot-early-probe'],
+    initialButtons: releasedPanel,
+    symbols: [...CARD_SYMBOLS, ...proof, 'BOOT_EARLY_CALLS'],
+    startEmpty: true,
+    initial: () => {
+      const torn = encodeRecord({ paths: [] });
+      torn[100] = torn[100]! ^ 0xff;
+      return { recs: [torn, torn] };
+    },
+  },
+  (h) => {
     test(
       'an owned store with two corrupt selection records denies early work and boots normally',
       async () => {
-        const torn = encodeRecord({ paths: [] });
-        torn[100] = torn[100]! ^ 0xff;
-        await h.boot(await h.card({ recs: [torn, torn] }));
         expect(await h.ready()).toMatchObject({ safe: 0, count: 0, loaded: 0, counter: 0, seq: 0 });
         expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_ATTEMPTS'))).toBe(1);
         expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_ENTERED'))).toBe(0);
@@ -87,12 +113,23 @@ cardRigs(
       },
       CARD_TIMEOUT,
     );
+  },
+);
 
+cardRigs(
+  'early boot probe selected module',
+  {
+    roots: [...guard, 'test/boot-early-probe'],
+    initialButtons: releasedPanel,
+    symbols: [...CARD_SYMBOLS, ...proof, 'BOOT_EARLY_CALLS'],
+    startEmpty: true,
+    initial: () => ({ modules: ['test/c-demo'], selection: ['modules/c-demo.dkm'] }),
+  },
+  (h) => {
     test(
       'the later boot hook still loads a selected module once',
       async () => {
         const mod = h.mod('test/c-demo');
-        await h.boot(await h.card({ modules: [mod], selection: [mod.name] }));
         await h.ready();
         expect(await bootInfoLoaded(h.session, h.plan)).toMatchObject({ count: 1, loaded: 1, safe: 0 });
         expect(await word(h.session, planSymbol(h.plan, 'BOOT_EARLY_CALLS'))).toBe(1);
@@ -100,12 +137,23 @@ cardRigs(
       },
       CARD_TIMEOUT,
     );
+  },
+);
 
+cardRigs(
+  'early boot probe safe once',
+  {
+    roots: [...guard, 'test/boot-early-probe'],
+    initialButtons: releasedPanel,
+    symbols: [...CARD_SYMBOLS, ...proof, 'BOOT_EARLY_CALLS'],
+    startEmpty: true,
+    initial: () => ({ modules: ['test/c-demo'], selection: ['modules/c-demo.dkm'], flags: 1 }),
+  },
+  (h) => {
     test(
       'safe-once skips the callback, clears the flag and preserves selection',
       async () => {
         const mod = h.mod('test/c-demo');
-        await h.boot(await h.card({ modules: [mod], selection: [mod.name], flags: 1 }));
         expect(await h.ready(true)).toMatchObject({ safe: 1, reason: 3, loaded: 0 });
         expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_ATTEMPTS'))).toBe(1);
         expect(await word(h.session, planSymbol(h.plan, 'BOOT_EARLY_CALLS'))).toBe(0);

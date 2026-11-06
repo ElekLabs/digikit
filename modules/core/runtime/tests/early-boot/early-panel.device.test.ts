@@ -23,7 +23,7 @@ const scenarios: { name: string; buttons: InitialButton[]; decision: number; sel
     decision: 1,
   },
   { name: 'missing', buttons: [], decision: 0, selected: true },
-  { name: 'held', buttons: [{ code: button('RECORD'), down: true }], decision: 3, held: true },
+  { name: 'held', buttons: [{ code: button('RECORD'), down: true }], decision: 3, held: true, selected: true },
   {
     name: 'record down then up',
     buttons: [
@@ -31,6 +31,7 @@ const scenarios: { name: string; buttons: InitialButton[]; decision: number; sel
       { code: button('RECORD'), down: false },
     ],
     decision: 3,
+    selected: true,
   },
 ];
 const symbols = [
@@ -71,12 +72,13 @@ for (const scenario of scenarios) {
         'captures UART-only freshness before intro without bypassing normal late boot',
         async () => {
           await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
-          const info = scenario.selected ? await bootInfoLoaded(h.session, h.plan) : await bootInfo(h.session, h.plan);
-          if (scenario.decision === 3) {
-            expect([0, 2], 'only the existing NONE or queued-KEY late policy may apply').toContain(info.reason);
-            expect(info.safe).toBe(info.reason === 2 ? 1 : 0);
-          } else expect(info).toMatchObject({ safe: 0, reason: 0 });
-          expect(info).toMatchObject({ count: scenario.selected ? 1 : 0, loaded: scenario.selected ? 1 : 0 });
+          const first = await bootInfo(h.session, h.plan);
+          expect(first).toMatchObject({ safe: scenario.held ? 1 : 0, reason: scenario.held ? 2 : 0 });
+          const info = scenario.selected && !scenario.held ? await bootInfoLoaded(h.session, h.plan) : first;
+          expect(info).toMatchObject({
+            count: scenario.selected ? 1 : 0,
+            loaded: scenario.selected && !scenario.held ? 1 : 0,
+          });
           const observed = Object.fromEntries(
             await Promise.all(symbols.map(async (name) => [name, await word(h.session, planSymbol(h.plan, name))])),
           );
@@ -95,7 +97,7 @@ for (const scenario of scenarios) {
           });
           const selection = currentRecord(await h.records());
           expect(selection).toMatchObject({
-            counter: scenario.selected || scenario.decision === 1 ? 1 : 0,
+            counter: !scenario.held && (scenario.selected || scenario.decision === 1) ? 1 : 0,
             paths: scenario.selected ? ['modules/c-demo.dkm'] : [],
           });
           record(h.artifacts, 'early-panel', { scenario: scenario.name, info, observed, selection });
