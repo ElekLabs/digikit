@@ -14,7 +14,8 @@ boot_scene_hook:
 dk_boot_early:
     move.l  #dk_boot_asset,%d0
     beq.s   2f
+    move.l  #dk_boot_asset_discard,-(%sp)
     move.l  %d0,-(%sp)
     jsr     boot_scene_prepare
-    addq.l  #4,%sp
+    addq.l  #8,%sp
 2:  rts

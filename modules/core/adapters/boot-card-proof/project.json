@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/boot-card-proof",
+  "targets": { "test-host": { "cache": false }, "test-device": { "cache": false } },
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/card.device.test.ts"],
+        "modules": ["test/c-demo"],
+        "plusdrive": true,
+        "patchModules": ["core/runtime", "core/dynreg", "core/dyndsp", "core/boot-card-proof"]
+      }
+    ]
+  }
+}

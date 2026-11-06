@@ -8,7 +8,7 @@ author = "digikit"
 status = "experimental"
 summary = "Private immutable synthetic RAM asset for the scene proof"
 requires = ["core/boot-scene-proof"]
-conflicts = ["test/boot-dkbs-corrupt"]
+conflicts = ["test/boot-dkbs-corrupt", "core/boot-card-proof"]
 ports = ["dt2-1.17", "dn2-1.12"]
 
 [targets]

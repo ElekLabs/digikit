@@ -1,0 +1,395 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": ".sec..bss.BOOT_CARD_OWNED_BYTES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": ".sec..bss.BOOT_CARD_POINTER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": ".sec..bss.owned",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": ".sec..bss.actual_size",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": ".sec..bss.BOOT_CARD_DISCARDS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": ".sec..bss.owned",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 12,
+   "section": ".text.dk_boot_asset_discard",
+   "symbol": "dkrt_api",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.BOOT_CARD_ATTEMPTS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.BOOT_CARD_STATS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.owned",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.BOOT_CARD_OWNED_BYTES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 136,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.BOOT_CARD_POINTER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.BOOT_CARD_READS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 182,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.actual_size",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.BOOT_CARD_ATTEMPTS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.actual_size",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..bss.owned",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..rodata.path",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text.dk_boot_asset",
+   "symbol": "dkrt_store_stat",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 94,
+   "section": ".text.dk_boot_asset",
+   "symbol": "dkrt_api",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 120,
+   "section": ".text.dk_boot_asset",
+   "symbol": "dkrt_api",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 142,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..rodata.path",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 170,
+   "section": ".text.dk_boot_asset",
+   "symbol": ".sec..text.dk_boot_asset_discard",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 2,
+   "hex": "2039000000004a80672a2079000000002f004e9042b90000000042b90000000042b90000000042b900000000588f52b9000000004e75",
+   "kind": "text",
+   "name": ".text.dk_boot_asset_discard",
+   "size": 54
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffd8206e000842904ab900000000670e20b9000000002039000000006038486effd852b90000000048790000000052b9000000004eb900000000508f4a806614202effdc22000681fffffff00c810000fff0630642804e5e4e752079000000002f004e90588f23c0000000004a8067e6222effdc2079000000002f0123c1000000002f0023c00000000048790000000052b9000000004e904fef000c4a806f06b0aeffdc63084eb90000000060a6206e000823c00000000020806000ff5a",
+   "kind": "text",
+   "name": ".text.dk_boot_asset",
+   "size": 192
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.actual_size",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.owned",
+   "size": 4
+  },
+  {
+   "align": 1,
+   "hex": "626f6f7473637265656e732f6163746976652e646b627300",
+   "kind": "data",
+   "name": ".rodata.path",
+   "size": 24
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_CARD_DISCARDS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_CARD_POINTER",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_CARD_OWNED_BYTES",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_CARD_READS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_CARD_STATS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_CARD_ATTEMPTS",
+   "size": 4
+  }
+ ],
+ "source_sha256": "33e556cbba1089fa52e172b78b961963521345ff58b43e8ac321ec1195c1ac48",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_CARD_ATTEMPTS",
+   "section": ".bss.BOOT_CARD_ATTEMPTS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_CARD_DISCARDS",
+   "section": ".bss.BOOT_CARD_DISCARDS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_CARD_OWNED_BYTES",
+   "section": ".bss.BOOT_CARD_OWNED_BYTES",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_CARD_POINTER",
+   "section": ".bss.BOOT_CARD_POINTER",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_CARD_READS",
+   "section": ".bss.BOOT_CARD_READS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_CARD_STATS",
+   "section": ".bss.BOOT_CARD_STATS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.actual_size",
+   "section": ".bss.actual_size",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.owned",
+   "section": ".bss.owned",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.path",
+   "section": ".rodata.path",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.dk_boot_asset_discard",
+   "section": ".text.dk_boot_asset_discard",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_CARD_ATTEMPTS",
+   "section": ".bss.BOOT_CARD_ATTEMPTS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_CARD_DISCARDS",
+   "section": ".bss.BOOT_CARD_DISCARDS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_CARD_OWNED_BYTES",
+   "section": ".bss.BOOT_CARD_OWNED_BYTES",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_CARD_POINTER",
+   "section": ".bss.BOOT_CARD_POINTER",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_CARD_READS",
+   "section": ".bss.BOOT_CARD_READS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_CARD_STATS",
+   "section": ".bss.BOOT_CARD_STATS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "actual_size",
+   "section": ".bss.actual_size",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_boot_asset",
+   "section": ".text.dk_boot_asset",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_boot_asset_discard",
+   "section": ".text.dk_boot_asset_discard",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_api",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_store_stat",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "owned",
+   "section": ".bss.owned",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "path",
+   "section": ".rodata.path",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "64",
+  "isa_check": "e862e28d697d9bfaec20c634392bf0a3b8d80de2c5e0bf14ef7d42e94e7caa93",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

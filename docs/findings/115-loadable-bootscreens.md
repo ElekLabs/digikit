@@ -785,3 +785,91 @@ boot/storage/display checks covered 4,352 DT2 / 4,304 DN2 instruction bytes in
 image. Scalar reads established the tables/descriptors and distinct plane ranges.
 Raw refscan helped find shared initialization references; its DT2 whole-image
 decode coverage was 96.81%, not an exhaustive proof about computed references.
+
+
+## Opt-in card provider (2026-11-07)
+
+**[D]** A separate `core/boot-card-proof` adapter supplies the private optional
+getter/discard pair from `bootscreens/active.dkbs`, without default patch
+membership or selection/settings changes. It uses runtime stat, exact-size arena
+allocation and the existing API's stage-fit/SHA-checked whole-file copy. Successful
+bytes remain immutable until reset; invalid DKBS invokes discard before scene
+publication and clears the decoder pointer. No callback-time freeing is allowed:
+normal main-task allocation can overlap the intro task. Both current firmware
+images link offline with the unchanged hook and no new firmware binding or libc
+helper. Provider undefined symbols are only `dkrt_api` and `dkrt_store_stat`.
+
+**[D]** Provider host tests passed 9/9; existing decoder tests passed 4/4. Scoped
+object builds passed 7 tasks; regression types, generated metadata and layers
+passed. The generic-store SDK owner test also passed with a new same-path
+replacement commit-cut case. That case seeds separate complete payload extents,
+then cuts metadata writes and checks one complete old/new entry, digest, payload
+and table CRC. It does not model interrupted DATA or device flush timing.
+
+**[D]** Offline placement on both devices: provider text 246 B, constant path
+24 B, BSS 32 B, placed 304 B; scene text 1,152 B, data 16 B, BSS 2,116 B,
+placed 3,284 B plus existing 12 B tail. The six-byte hook is unchanged. A valid
+2,166 B file costs 2,192 arena bytes after alignment/header; the file cap costs
+65,552 arena bytes. Decoder/mask remain additional retained state.
+
+**[D]** Ten selected card cases passed on current firmware: all seven DN2
+cases (valid/missing/corrupt/oversized/held/empty/counter), plus DT2 valid/corrupt/
+held. There was one baseline per case, ten total. First DN2 valid: 1 passed/
+13 skipped in 54.61 s (49.428 s baseline); remaining DN2 group: 6 passed/
+8 skipped in 300.03 s; DT2 group: 3 passed/11 skipped in 90.60 s. Four additional
+DT2 cases stay registered, not run. No old RAM matrix or broader reset sweep ran.
+
+**[D]** Both valid cases and DN2 empty selection had attempt/stat/read 1/1/1,
+owned bytes 2,166 and discard 0. Their aligned pointers lay outside staging;
+all retained bytes matched the fixture after late loading (no module loaded in
+the empty-selection case). Four callbacks, last index 3, three records, one
+validation, status 1 and zero errors produced final bitmap hash
+`63053142ed4218204f369f72b315a6294777a0b9180d5a158de4810b28814a66`.
+Normal selection kept c-demo and counter 1; empty selection had count/loaded 0
+and counter 1.
+
+**[D]** Missing/oversized cases statted once, made no allocation/read and owned
+zero bytes. CRC-corrupt cases read once, discarded once, owned zero bytes and
+had invalid status 2 without publication/callbacks. All permitted failure cases
+loaded c-demo normally and kept counter 1. Non-held fallback captures matched
+stock's black last drawing exactly, not the full stock animation. Held REC and
+seeded counter 2 made no provider calls and skipped selected loading. Counter
+safe mode retained preboot counter 2 in BootInfo, then cleared the stored counter
+to 0 on reaching the UI; held REC also left stored counter 0. All ten passed the
+existing 80 ms SETTINGS/NO full-hash roundtrip, IRQ/input, DSP and lifetime
+checks with zero write-watch/flush hits and no invalid writes.
+
+Logs: `/private/tmp/bootscreen-card-dn2-valid.log`,
+`/private/tmp/bootscreen-card-dn2-remaining.log`,
+`/private/tmp/bootscreen-card-dt2.log`. The actual observation/evidence-directory/
+baseline index is `/private/tmp/bootscreen-card-summary.json`. Retained boot evidence
+is limited to three JSON files and an intro PNG where captured.
+
+**[D]** A further DN2 USB transfer case passed: 1 passed/15 skipped in 50.55 s,
+one 45.898 s baseline. Existing `h.usb`/DkSession PUT replaced the active path
+with a 40 B valid black asset (the existing corrupt fixture with repaired body
+CRC); fresh verifyFile returned true, LIST reported 40 B, DELETE removed the path
+and the next LIST omitted it. Before replacement, after PUT/VERIFY/LIST and
+after DELETE/LIST, the same pointer, all 2,166 source bytes, provider/scene
+counters, final intro hash and selection paths/flags were unchanged. The owned
+copy SHA was `5bef464c2a86fc5fbd508000d438b5ae6aa431c6247b146f070535a117f488a6`.
+One c-demo remained loaded with zero faults; the existing 80 ms UI/input/DSP
+checks passed. CardRig's existing `uploads: true` checks passed with no writes
+outside the store/project policy, no invalid low writes and zero write-watch/
+flush hits. Its raw default boot-only `lifetime-safety.pass` is false because the
+five legitimate upload store sectors are listed as `invalid_store`; that raw
+flag is not the upload-policy assertion. No hardware flush claim follows.
+
+An initial transfer setup attempt failed before any USB mutation because the
+existing paused transport rejected the running baseline. The explicit pause
+fixed this; only the transfer case was retried. There are **11 successful unique
+cases/11 successful baselines, 12 attempted baselines** including that failure.
+Sixteen cases are registered (the prior fourteen plus transfer on both devices);
+five DT2 scopes remain unrun. The transfer adds one bounded `transfer-proof.json`
+to its retained evidence. Failed setup log:
+`/private/tmp/bootscreen-card-dn2-transfer.log`; successful retry:
+`/private/tmp/bootscreen-card-dn2-transfer-retry.log`; both are indexed in the
+same summary JSON.
+
+**[O]** No hardware, timing, cancellation, reset/power-cut or physical
+presentation claim follows. See the [card contract](../design/bootscreen-assets.md#opt-in-card-provider-contract).

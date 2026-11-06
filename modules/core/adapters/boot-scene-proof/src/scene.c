@@ -61,12 +61,17 @@ typedef struct {
 } Scene;
 static Scene scenes[] __attribute__((aligned(4))) = { { draw, 0 }, { 0, 0 } };
 
-void boot_scene_prepare(const uint8_t *(*get_asset)(uint32_t *))
+void boot_scene_prepare(const uint8_t *(*get_asset)(uint32_t *), void (*discard)(void))
 {
     uint32_t size = 0;
     const uint8_t *data = get_asset(&size);
     BOOT_SCENE_VALIDATIONS++;
     if (!dkbs_open(&asset, data, size)) {
+        if (discard)
+            discard();
+        asset.data = 0;
+        asset.size = 0;
+        asset.valid = 0;
         BOOT_SCENE_STATUS = 2;
         return;
     }

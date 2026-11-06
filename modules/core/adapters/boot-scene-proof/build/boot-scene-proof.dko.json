@@ -25,7 +25,14 @@
   },
   {
    "addend": 0,
-   "offset": 34,
+   "offset": 32,
+   "section": ".text",
+   "symbol": "dk_boot_asset_discard",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
    "section": ".text",
    "symbol": "boot_scene_prepare",
    "type": "cf.32"
@@ -137,56 +144,77 @@
   },
   {
    "addend": 0,
-   "offset": 54,
-   "section": ".text.boot_scene_prepare",
-   "symbol": ".sec..bss.BOOT_SCENE_STATUS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 64,
-   "section": ".text.boot_scene_prepare",
-   "symbol": ".sec..bss.mask",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1024,
-   "offset": 74,
-   "section": ".text.boot_scene_prepare",
-   "symbol": ".sec..bss.mask",
-   "type": "cf.32"
-  },
-  {
-   "addend": 16,
-   "offset": 82,
+   "offset": 66,
    "section": ".text.boot_scene_prepare",
    "symbol": ".sec..bss.asset",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 90,
+   "offset": 72,
    "section": ".text.boot_scene_prepare",
-   "symbol": ".sec..data.scenes",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 78,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.asset",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 96,
+   "offset": 84,
    "section": ".text.boot_scene_prepare",
    "symbol": ".sec..bss.BOOT_SCENE_STATUS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 102,
+   "offset": 94,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1024,
+   "offset": 104,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 112,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.asset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 120,
    "section": ".text.boot_scene_prepare",
    "symbol": ".sec..data.scenes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 108,
+   "offset": 126,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..bss.BOOT_SCENE_STATUS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 132,
+   "section": ".text.boot_scene_prepare",
+   "symbol": ".sec..data.scenes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
    "section": ".text.boot_scene_prepare",
    "symbol": ".sec..bss.BOOT_SCENE_PUBLISHED",
    "type": "cf.32"
@@ -209,10 +237,10 @@
  "sections": [
   {
    "align": 4,
-   "hex": "2f0020390000000067042f400008201f4ef900000000203c00000000670a2f004eb900000000588f4e75",
+   "hex": "2f0020390000000067042f400008201f4ef900000000203c0000000067102f3c000000002f004eb900000000508f4e75",
    "kind": "text",
    "name": ".text",
-   "size": 42
+   "size": 48
   },
   {
    "align": 2,
@@ -223,10 +251,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fffc206e0008486efffc42aefffc4e902f2efffc52b9000000002f004879000000004eb9000000004fef00104a80660c700223c0000000004e5e4e7541f90000000070ff20c0b1fc0000000066f441f900000000700123d00000000023c00000000041f90000000023c80000000060c8",
+   "hex": "4e56fffc206e0008486efffc42aefffc4e902f2efffc52b9000000002f004879000000004eb9000000004fef00104a80662a4aae000c6706206e000c4e90700242b90000000042b90000000042b90000000023c0000000004e5e4e7541f90000000070ff20c0b1fc0000000066f441f900000000700123d00000000023c00000000041f90000000023c80000000060c8",
    "kind": "text",
    "name": ".text.boot_scene_prepare",
-   "size": 114
+   "size": 144
   },
   {
    "align": 4,
@@ -313,7 +341,7 @@
    "size": 354
   }
  ],
- "source_sha256": "765690903936a1ae9eba23a0f5f787f559cb6d9d58bd66d6ba0ebaa6ba35e23d",
+ "source_sha256": "06b72efb03b4374b95cdfacd8f7fcdd2c5d0088be2d849ee7bf0ae780fab059d",
  "symbols": [
   {
    "global": false,
@@ -467,6 +495,12 @@
   },
   {
    "global": true,
+   "name": "dk_boot_asset_discard",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dk_boot_early",
    "section": ".text",
    "value": 22
@@ -506,8 +540,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "354",
-  "isa_check": "1756a7662a0b5c1916ff01cf4c40b5e65415360c7fb2522229ccb7443b3b0b65",
+  "instructions_redecoded": "362",
+  "isa_check": "53125146f829ece3cece8e244c0ec1a9b5d049a31cdd67a6d11f1cac0364e18e",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

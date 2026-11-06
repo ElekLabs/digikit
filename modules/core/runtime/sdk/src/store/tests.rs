@@ -501,6 +501,122 @@ fn a_power_cut_at_any_write_leaves_the_old_store_or_the_new_one() {
     }
 }
 
+/// Same-path activation changes the entry atomically at the commit boundary. Payloads
+/// are already written to separate extents; this does not model interrupted DATA.
+#[test]
+fn a_replacement_commit_cut_keeps_one_complete_entry_and_payload() {
+    let _g = lock();
+    let old_bytes = [0x51; 513];
+    let new_bytes = [0xa6; 777];
+    let old = Entry {
+        first: 100,
+        size: old_bytes.len() as u32,
+        kind: KIND_FILE,
+        sha: snapshot_hash(&old_bytes),
+    };
+    let new = Entry {
+        first: 200,
+        size: new_bytes.len() as u32,
+        kind: KIND_FILE,
+        sha: snapshot_hash(&new_bytes),
+    };
+    let path = cstr("bootscreens/active.dkbs");
+    let mut saw_old = false;
+    let mut saw_new = false;
+    for cut in 0..40 {
+        fresh();
+        let mut w = work();
+        {
+            let mut card = CARD.lock().unwrap();
+            card[100 * 512..100 * 512 + old_bytes.len()].copy_from_slice(&old_bytes);
+            card[200 * 512..200 * 512 + new_bytes.len()].copy_from_slice(&new_bytes);
+        }
+        let mut encoded = [0; ENTRY];
+        unsafe { encode_entry(path.as_ptr(), &old, encoded.as_mut_ptr()) };
+        let empty = current(&mut w);
+        unsafe {
+            commit(
+                &IO,
+                &LAY,
+                &empty,
+                w.a.0.as_mut_ptr(),
+                w.b.0.as_mut_ptr(),
+                1024,
+                w.s.0.as_mut_ptr(),
+                Edit::Insert(encoded.as_ptr()),
+                &[],
+            )
+        }
+        .unwrap();
+        let before = current(&mut w);
+        unsafe { encode_entry(path.as_ptr(), &new, encoded.as_mut_ptr()) };
+        *CUT.lock().unwrap() = (cut, 0);
+        let result = unsafe {
+            commit(
+                &IO,
+                &LAY,
+                &before,
+                w.a.0.as_mut_ptr(),
+                w.b.0.as_mut_ptr(),
+                1024,
+                w.s.0.as_mut_ptr(),
+                Edit::Insert(encoded.as_ptr()),
+                &[],
+            )
+        };
+        *CUT.lock().unwrap() = (u32::MAX, 0);
+        let table = state(&mut w).unwrap_or_else(|e| panic!("cut {cut}: unreadable store {e}"));
+        assert_eq!(table.h.count, 1, "cut {cut}: same-path replacement");
+        assert_eq!(
+            unsafe {
+                table_crc(
+                    &IO,
+                    &LAY,
+                    table.h.table_first,
+                    table.h.table_sectors,
+                    w.a.0.as_mut_ptr(),
+                    4096,
+                )
+            }
+            .unwrap(),
+            table.h.table_crc,
+            "cut {cut}: table CRC"
+        );
+        let mut bytes = Buf([0; 1024]);
+        let chosen = unsafe {
+            snapshot(
+                &IO,
+                &LAY,
+                path.as_ptr(),
+                w.s.0.as_mut_ptr(),
+                w.a.0.as_mut_ptr(),
+                4096,
+                bytes.0.as_mut_ptr(),
+                1024,
+                1024,
+                snapshot_hash,
+            )
+        }
+        .unwrap_or_else(|e| panic!("cut {cut}: unreadable payload {e}"));
+        if chosen == old {
+            saw_old = true;
+            assert_eq!(&bytes.0[..old_bytes.len()], &old_bytes);
+            assert!(
+                result.is_err(),
+                "cut {cut}: completed replacement still old"
+            );
+        } else {
+            saw_new = true;
+            assert_eq!(chosen, new, "cut {cut}: mixed replacement metadata");
+            assert_eq!(&bytes.0[..new_bytes.len()], &new_bytes);
+        }
+        let card = CARD.lock().unwrap();
+        assert_eq!(&card[100 * 512..100 * 512 + old_bytes.len()], &old_bytes);
+        assert_eq!(&card[200 * 512..200 * 512 + new_bytes.len()], &new_bytes);
+    }
+    assert!(saw_old && saw_new, "cuts cover both sides of publication");
+}
+
 #[test]
 fn header_copies_fall_back_and_the_lagging_one_is_repaired() {
     let _g = lock();

@@ -20,7 +20,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 path = "build/boot-scene-proof.dko.json"
 sources = ["src/scene.c", "src/asset.c", "src/tramp.s"]
 place = "cf.expansion"
-optional = ["dk_boot_asset"]
+optional = ["dk_boot_asset", "dk_boot_asset_discard"]
 
 [object.externs]
 boot_scene_next = "hook.cf.rtos.site.intro_scene_setup.tail"

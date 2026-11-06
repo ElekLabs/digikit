@@ -1,8 +1,9 @@
-# Experimental host bootscreen assets
+# Experimental bootscreen assets
 
 This host prototype packs original PNG frames, validates the packed bytes and
-previews the decoded result. `.dkbs` is provisional: there is no card-based device
-loader, production player, transfer or compatibility promise. It does not solve
+previews the decoded result. `.dkbs` is provisional. An opt-in private card
+provider is implemented below; there is no production player or compatibility
+promise. It does not solve
 blocked storage I/O.
 
 ```sh
@@ -84,8 +85,7 @@ XOR-RUN record. Each represents 184,320 raw tick bytes. These are disk sizes for
 these synthetic inputs, not general compression or performance claims. HTML
 previews and source PNGs remain ignored artifacts, not repository assets.
 
-Card-based loading, storage and lifecycle remain unsolved. The private RAM proof
-implements the stock scene_setup entry hook: it rewrites original SP+4 only after
+The private resident proof implements the stock scene_setup entry hook: it rewrites original SP+4 only after
 publishing a validated resident table, then uses the displaced tail/original
 setup. Stock skip/completion ownership stays intact. This is not a public player
 or card-lifecycle contract. Retargeting the indirect task `JSR A2` remains
@@ -98,7 +98,8 @@ against this Python reference, without changing this format or host tool. Whole
 asset validation uses the playback decoder, at most 300 ticks, then rewinds one
 aligned 1024-byte previous-frame buffer. Noncanonical valid repeated records and
 oversized encoded XOR streams remain valid; output is bounded to 1024 bytes.
-Only immutable compiled RAM providers are used, not card files or a public SDK.
+The initial interoperability proof used immutable compiled RAM providers. The
+separate card provider below extends that private boundary without a public SDK.
 The scene count is published after validation. Existing stock blit receives a
 plain synchronous source view plus opaque mask; stock setup/ownership/completion
 stay intact. Eight selected current-device emulator cases pass (valid, CRC-corrupt,
@@ -106,3 +107,82 @@ absent getter and held REC); all use the existing 80 ms UI taps and full roundtr
 checks. This demonstrates a narrow integration, not production loader,
 storage cancellation or physical presentation compatibility. See the
 [resident proof handover](../handovers/HANDOVER-2026-11-07-resident-dkbs.md).
+
+## Opt-in card provider contract
+
+`core/boot-card-proof` is a separate firmware adapter requiring the private
+`core/boot-scene-proof`; neither is in a default patch set. It supports DT2 1.17
+and DN2 1.12 and conflicts with the two linked RAM fixture providers. This is
+independent of any future loadable-service contract: no early `.dkm` loading,
+public SDK addition, SELECT change or settings field is introduced.
+
+The only active path is **`bootscreens/active.dkbs`** in the generic digikit
+store on either device. Existing atomic PUT replacement activates a new file
+for the next boot; deleting that path restores stock fallback on the next boot.
+The current session retains its own immutable copy, so upload or deletion never
+changes an animation already prepared. There is no selection-list membership.
+Firmware must include the opt-in provider for this path to have any effect.
+
+The existing early guard must finish runtime initialization, counter arming and
+exception protection before it calls the getter. Held REC, a safe boot or missing
+panel receipt skips the getter. The provider stats the fixed path, rejects sizes
+outside 16..65,536 bytes, allocates exactly the reported size, then calls existing
+`dkrt_api.store_read`. That call checks staging fit and whole-file SHA before
+copying into the owned block. A positive result no greater than capacity supplies
+the actual size; all other read results free the block. Missing files, invalid
+sizes and failed allocation return no asset. There is at most one allocation
+attempt and no retries. No storage directory or selection call is needed.
+
+The scene adapter validates the entire DKBS before publication. Rejected bytes
+invoke the optional private discard callback, then the decoder pointer and valid
+state are cleared. Linked immutable fixture providers need no discard callback.
+Successful card bytes remain allocated for the entire boot/session until reset;
+the intro callback never frees them because main-task arena allocation may run
+concurrently. Failed loading or validation leaves stock animation setup intact
+and permits normal late module loading.
+
+The runtime arena rounds the requested size to 16 bytes and adds its 16-byte
+header: a 2,166-byte fixture reserves 2,192 bytes; the 65,536-byte cap reserves
+65,552 bytes. This is additional to the retained decoder (1,064 bytes), opaque
+mask (1,024 bytes), scene table and instrumentation. The provider has no large
+BSS or staging alias. Its current object is 246 bytes text, 24 bytes constant
+path and 32 bytes BSS, placed in 304 bytes including alignment. The scene object
+is 3,284 bytes plus the unchanged 12-byte hook tail; the hook write stays 6 bytes.
+These are offline build costs, not stack-depth or compressed-flash measurements.
+
+Host coverage compiles the production provider with the real generated C API
+headers and fake stat/allocator/read functions. It checks exact allocation/read,
+retention, missing/short/oversized inputs, allocation/read failures, actual read
+size, idempotent discard and no retry. The existing four C/Python codec tests
+remain the format oracle. The generic store's same-path replacement unit checks
+commit cuts with already written old/new payloads in separate extents: the
+visible entry, extent, size, digest and bytes remain consistently old or new.
+It does not prove interrupted upload DATA, hardware flush or power-loss timing.
+
+Device cases are registered for valid, missing, corrupt, oversized, held REC,
+empty selection and seeded counter bypass on each device. Ten selected cases
+passed: all seven DN2 plus DT2 valid/corrupt/held, including retained bytes after
+late loading, invalid-asset freeing and the existing UI/DSP/input/lifetime proof.
+A further DN2 USB PUT/VERIFY/delete case passed while the current owned asset
+remained unchanged. Eleven unique device cases passed; five DT2 scopes remain
+registered, not run. Detailed results are in finding 115
+and the card handover. Existing store I/O can block; this provider
+does not establish a deadline, storage cancellation, read-only recovery or
+physical display/scan timing guarantee.
+
+## Workbench transfer
+
+With firmware that includes the opt-in provider, open **Transfer → Bootscreens**,
+choose **Add .dkbs**, then **Upload**. Workbench PUTs the file to the fixed generic
+store path on either device and performs a fresh VERIFY before reporting
+completion. The active file is listed there; **Remove active** requires a second
+click to confirm deletion. Upload and removal take effect on the next normal
+restart. Workbench does not restart the device or change module selection.
+
+Workbench rejects files outside 16..65,536 bytes before reading their contents
+and checks only the DKBS magic, version and record/tick ranges. Use the pack/inspect
+tool above for complete validation before transfer; the device validates the
+whole asset again at boot. Workbench cannot detect whether the installed
+firmware includes this experimental provider, so the transfer panel states that
+requirement. The existing Samples destination and public protocol/SDK remain
+unchanged.

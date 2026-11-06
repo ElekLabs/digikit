@@ -1,0 +1,22 @@
+[module]
+id = "core/boot-card-proof"
+version = "0.1.0"
+name = "Card boot asset proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Opt-in fixed-path owned DKBS provider; applies on next boot"
+requires = ["core/boot-scene-proof"]
+conflicts = ["test/boot-dkbs-valid", "test/boot-dkbs-corrupt"]
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-card-proof.dko.json"
+sources = ["src/card.c"]
+place = "cf.expansion"
