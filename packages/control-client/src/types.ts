@@ -104,11 +104,15 @@ export interface InputScheduleEvent {
 }
 
 export interface FramebufferParams {
+  /** Default current; intro retains the last completed drawing callback before stock presentation. */
+  source?: 'current' | 'intro';
   hash?: boolean;
   data?: boolean;
 }
 
 export interface FramebufferResult {
+  /** Present only when explicitly reading the retained intro drawing. */
+  source?: 'intro';
   revision: number;
   /** base64 of the 1024 decoded OLED bytes; absent when `data: false`. */
   data_b64?: string;

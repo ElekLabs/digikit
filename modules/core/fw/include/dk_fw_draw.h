@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, data pointer at +0x14. */
+/* Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, pixels pointer at +0x10, auxiliary bitplane at +0x14, ownership byte at +0x18. */
 void dk_fw_draw_blit(uint8_t *dst, uint8_t *src, int32_t x, int32_t y, uint8_t centre) __asm__("cf.draw.fn.blit");
 /* Fills the rectangle x0, y0 to x1, y1 (inclusive, corners in any order, clipped) in a Bitmap with `color`; the screen Bitmap is 0x80 x 0x40, 1 bpp. */
 void dk_fw_draw_fill_rect(uint8_t *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color) __asm__("cf.draw.fn.fill_rect");

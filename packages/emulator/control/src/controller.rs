@@ -3047,21 +3047,37 @@ impl Actor {
         self.with_runtime(|r| Ok(json!({"scenario": r.recorded_scenario()})))
     }
 
-    /// `framebuffer.get {hash?, data?}`: the frame; `hash: true` adds the SHA-256
+    /// `framebuffer.get {hash?, data?, source?}`: the frame; `hash: true` adds the SHA-256
     /// of its bytes, `data: false` omits them.
     fn rpc_framebuffer(&mut self, p: &Params) -> RpcResult {
         let hash = p.opt_bool("hash")?.unwrap_or(false);
         let data = p.opt_bool("data")?.unwrap_or(true);
+        let intro = match p.opt_str("source")?.unwrap_or("current") {
+            "current" => false,
+            "intro" => true,
+            _ => {
+                return Err(RpcError::new(
+                    code::BAD_PARAMS,
+                    "source must be current or intro",
+                ));
+            }
+        };
         self.with_runtime(|r| {
-            let (revision, bytes) = r
-                .current_frame()
-                .map(|(revision, bytes)| (revision, bytes.to_vec()))
-                .ok_or_else(|| RpcError::new(code::GUEST_FAULT, "no frame yet"))?;
+            let (revision, bytes) = if intro {
+                r.intro_frame()
+            } else {
+                r.current_frame()
+            }
+            .map(|(revision, bytes)| (revision, bytes.to_vec()))
+            .ok_or_else(|| RpcError::new(code::GUEST_FAULT, "no frame yet"))?;
             let mut frame = json!({
                 "revision": revision, "width": 128, "height": 64,
                 "format": "oled-1bpp-column-major",
                 "note": "byte (7 - y/8) + 8*x, bit y%8",
             });
+            if intro {
+                frame["source"] = "intro".into();
+            }
             if data {
                 frame["data_b64"] = base64(&bytes).into();
             }
@@ -5397,6 +5413,33 @@ mod mem_write_tests {
         assert!(decode_hex("abc").is_err(), "odd length");
         assert!(decode_hex("zz").is_err(), "not hex");
         assert!(decode_hex("é1").is_err(), "not ASCII");
+    }
+}
+
+#[cfg(test)]
+mod framebuffer_tests {
+    use super::*;
+
+    #[test]
+    fn source_is_validated_before_runtime_access_with_current_as_default() {
+        let (_commands, rx) = mpsc::channel();
+        let mut actor = Actor::new(rx, Config::new(None));
+        for params in [json!({"source":"history"}), json!({"source":true})] {
+            assert_eq!(
+                actor.rpc_framebuffer(&Params(&params)).unwrap_err().code,
+                code::BAD_PARAMS
+            );
+        }
+        for params in [
+            json!({}),
+            json!({"source":"current"}),
+            json!({"source":"intro"}),
+        ] {
+            assert_ne!(
+                actor.rpc_framebuffer(&Params(&params)).unwrap_err().code,
+                code::BAD_PARAMS
+            );
+        }
     }
 }
 

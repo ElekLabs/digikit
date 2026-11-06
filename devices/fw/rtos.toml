@@ -136,3 +136,23 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/boot-guard"]
 doc = "Private opt-in recovery gate before intro installation; preserves the caller's argument and always continues through the original installer."
+
+# Opt-in RAM-only scene-table proof; original setup and completion remain stock.
+[[site]]
+name = "cf.rtos.site.intro_scene_setup"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "76bd72a01dc0ff453c176fae55a6031e", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/boot-scene-proof"]
+doc = "Stock intro scene setup entry; original SP+4 is the scene-table pointer. Displaced LEA -0x1c(SP),SP and CLR D1 contain no calls or PC references."
+
+[[hook]]
+name = "cf.rtos.hook.intro_scene_setup"
+site = "cf.rtos.site.intro_scene_setup"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/boot-scene-proof"]
+doc = "Private test adapter substitutes a published RAM table argument, then jumps to the displaced stock setup tail."

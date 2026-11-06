@@ -2367,6 +2367,16 @@ mark = "D"
 rule = "fw/rtos:cf_func"
 
 [[anchor]]
+name = "cf.rtos.site.intro_scene_setup"
+cpu = "cf"
+kind = "code"
+addr = 0x400d3d0a
+len = 6
+sha256 = "1dd6a2bef5202bcdff8ddb77c2f1669d17f5fcd6a462e48577f1fc1f167fa041"
+mark = "D"
+rule = "fw/rtos:cf_func"
+
+[[anchor]]
 name = "cf.rtos.site.main_os_task"
 cpu = "cf"
 kind = "code"
@@ -3638,6 +3648,11 @@ mode = "replace"
 [[hook]]
 name = "cf.rtos.hook.intro_install"
 site = "cf.rtos.site.intro_install"
+mode = "before"
+
+[[hook]]
+name = "cf.rtos.hook.intro_scene_setup"
+site = "cf.rtos.site.intro_scene_setup"
 mode = "before"
 
 [[hook]]

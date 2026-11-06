@@ -26,7 +26,7 @@
         "rust": "dkfw::draw::blit"
       },
       "cpu": "cf",
-      "doc": "Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, data pointer at +0x14.",
+      "doc": "Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, pixels pointer at +0x10, auxiliary bitplane at +0x14, ownership byte at +0x18.",
       "file": "devices/fw/draw.toml",
       "kind": "fn",
       "mark": "D",
@@ -9963,6 +9963,43 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400d3d0a"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400d1832"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Private test adapter substitutes a published RAM table argument, then jumps to the displaced stock setup tail.",
+      "file": "devices/fw/rtos.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.rtos.hook.intro_scene_setup",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.rtos.site.intro_scene_setup",
+      "subsystem": "rtos",
+      "users": [
+        "core/boot-scene-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4002ed34"
@@ -10148,6 +10185,45 @@
       "subsystem": "rtos",
       "users": [
         "core/boot-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x400d3d0a",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400d1832",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Stock intro scene setup entry; original SP+4 is the scene-table pointer. Displaced LEA -0x1c(SP),SP and CLR D1 contain no calls or PC references.",
+      "file": "devices/fw/rtos.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.rtos.site.intro_scene_setup",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "rtos",
+      "users": [
+        "core/boot-scene-proof"
       ],
       "was": []
     },
@@ -17009,7 +17085,7 @@
       "name": "project"
     },
     {
-      "count": 13,
+      "count": 15,
       "cpu": "cf",
       "file": "devices/fw/rtos.toml",
       "meaning": "tasks, queues, mutexes, idle, interrupts, the reset and boot path",

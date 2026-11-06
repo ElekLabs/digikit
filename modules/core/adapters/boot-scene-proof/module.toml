@@ -1,0 +1,33 @@
+[module]
+id = "core/boot-scene-proof"
+version = "0.1.0"
+name = "RAM-only boot scene proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Opt-in diagnostic table substitution; no asset reader or production player"
+requires = ["core/boot-guard"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-scene-proof.dko.json"
+sources = ["src/scene.c", "src/tramp.s"]
+place = "cf.expansion"
+
+[object.externs]
+boot_scene_next = "hook.cf.rtos.site.intro_scene_setup.tail"
+
+[[op]]
+op = "hook"
+hook = "cf.rtos.hook.intro_scene_setup"
+to = "boot_scene_hook"
+
+[[claim]]
+resource = "cf.rtos.site.intro_scene_setup"

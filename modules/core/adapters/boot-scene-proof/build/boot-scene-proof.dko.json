@@ -1,0 +1,267 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".text",
+   "symbol": "BOOT_SCENE_PUBLISHED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text",
+   "symbol": "boot_scene_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.diagnostic",
+   "symbol": ".sec..bss.BOOT_SCENE_CALLS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.diagnostic",
+   "symbol": ".sec..bss.BOOT_SCENE_ERRORS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.diagnostic",
+   "symbol": ".sec..bss.BOOT_SCENE_CALLS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text.diagnostic",
+   "symbol": ".sec..bss.BOOT_SCENE_LAST_INDEX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.diagnostic",
+   "symbol": "cf.draw.fn.fill_rect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": ".text.diagnostic",
+   "symbol": ".sec..bss.BOOT_SCENE_SEEN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_boot_early",
+   "symbol": ".sec..rodata.scenes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.dk_boot_early",
+   "symbol": ".sec..bss.BOOT_SCENE_PUBLISHED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 0,
+   "section": ".rodata.scenes",
+   "symbol": ".sec..text.diagnostic",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "2f0020390000000067042f400008201f4ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 22
+  },
+  {
+   "align": 2,
+   "hex": "4feffff4700348d7040c242f0010262f0018b0af0014660e7002b0826508b4b900000000670652b90000000052b90000000023c2000000007002b08265000090700142a74878003fe5a84878007f42a742a72f0345f900000000e78a81b9000000004e924878ffff487800024878000542a742a72f034e924fef00304878ffff4878003f4878007f4878003d4878007b2f034e924878ffff48780012487800124878000b487800112f034e924fef00304878ffff4878002720424868002348780020486800202f034e924fef00184cd7040c4fef000c4e75",
+   "kind": "text",
+   "name": ".text.diagnostic",
+   "size": 216
+  },
+  {
+   "align": 2,
+   "hex": "203c0000000023c0000000004e75",
+   "kind": "text",
+   "name": ".text.dk_boot_early",
+   "size": 14
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000030000000000000000",
+   "kind": "data",
+   "name": ".rodata.scenes",
+   "size": 16
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_ERRORS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_SEEN",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_LAST_INDEX",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_CALLS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_SCENE_PUBLISHED",
+   "size": 4
+  }
+ ],
+ "source_sha256": "8089960e3b56acfb7e4688892356d66a13b1e4d75fd6ed0e4428b69f11317041",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_SCENE_CALLS",
+   "section": ".bss.BOOT_SCENE_CALLS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_SCENE_ERRORS",
+   "section": ".bss.BOOT_SCENE_ERRORS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_SCENE_LAST_INDEX",
+   "section": ".bss.BOOT_SCENE_LAST_INDEX",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_SCENE_PUBLISHED",
+   "section": ".bss.BOOT_SCENE_PUBLISHED",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_SCENE_SEEN",
+   "section": ".bss.BOOT_SCENE_SEEN",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.scenes",
+   "section": ".rodata.scenes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.diagnostic",
+   "section": ".text.diagnostic",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_CALLS",
+   "section": ".bss.BOOT_SCENE_CALLS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_ERRORS",
+   "section": ".bss.BOOT_SCENE_ERRORS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_LAST_INDEX",
+   "section": ".bss.BOOT_SCENE_LAST_INDEX",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_PUBLISHED",
+   "section": ".bss.BOOT_SCENE_PUBLISHED",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_SCENE_SEEN",
+   "section": ".bss.BOOT_SCENE_SEEN",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_scene_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_scene_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.draw.fn.fill_rect",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "diagnostic",
+   "section": ".text.diagnostic",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_boot_early",
+   "section": ".text.dk_boot_early",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "scenes",
+   "section": ".rodata.scenes",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "74",
+  "isa_check": "804cc170d893550b36bc02223780aa4ab5a6d90c8789e7d1f4018221895db0f1",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

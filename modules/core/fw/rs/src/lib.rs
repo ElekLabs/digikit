@@ -5,7 +5,7 @@
 
 pub mod draw {
     unsafe extern "C" {
-        /// Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, data pointer at +0x14.
+        /// Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, pixels pointer at +0x10, auxiliary bitplane at +0x14, ownership byte at +0x18.
         #[link_name = "cf.draw.fn.blit"]
         pub fn blit(dst: *mut u8, src: *mut u8, x: i32, y: i32, centre: u8);
     }

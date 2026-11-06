@@ -602,6 +602,38 @@ The full merge gate was not run.
 
 ### Remaining product and safety acceptance
 
+**[D]** An opt-in RAM-only scene proof is implemented in one core adapter, not
+a generic player: the accounted early callback publishes a const three-frame
+diagnostic table; a hash-resolved scene_setup entry hook substitutes only its
+original stack argument, then executes the stock setup/task/completion. Drawing
+uses the existing fill_rect and supplied Bitmap without ownership changes.
+Independent raw audits establish the LEA/CLR hook window, callback ABI and pixels
+pointer at +0x10 (auxiliary bitplane +0x14, ownership byte +0x18), correcting the
+old blit declaration documentation.
+
+The native observer captures a completed drawing at the stock callback return,
+before stock presentation, replacing the full-pixel coverage heuristic. Existing
+legacy tracker snapshot slots remain opaque serialized metadata unchanged.
+Read-only framebuffer.get source:intro retains that latest callback bitmap with
+the global display revision; no history or hardware display proof. Focused host,
+resolver, snapshot, RPC/types and layer checks passed. First exact DN2 active case
+passed (79.29 s total/60.550 s baseline): three callbacks in order, guard accounted
+once, exact last index-2 bitmap hash
+`63053142ed4218204f369f72b315a6294777a0b9180d5a158de4810b28814a66`, healthy selected
+module/main/DSP/input/lifetime. Remaining five cases also passed: DN2 missing/held
+2 cases in 276.82 s, DT2 active/missing/held 3 in 261.16 s, both exit 0. Both active
+drawings match exactly; missing receipt leaves diagnostic inactive and stock
+retained drawing available with normal selected loading; held REC leaves it
+inactive and takes KEY2 with selected module skipped. All six lifetime reports
+pass; one baseline per scope, no retries or budget changes. Evidence index:
+`/private/tmp/bootscreen-ram-scene-summary.json`. Capture is completed drawing
+before stock presentation, not physical display/flush proof.
+Text 252 B, const table 16 B, BSS 20 B; actual placement 288 B object plus 12 B tail
+=300 B, separate six-byte in-place site. No stack or performance claim.
+Final cheap preflight passed 13/13 tasks in 1 min 41 s (0 cached), with final
+generated-module, layer and diff checks passed; full merge gate not run.
+See the [RAM scene handover](../handovers/HANDOVER-2026-11-07-ram-scene.md).
+
 **[D]** A subsequent host-only asset prototype packs PNG manifests into provisional
 DKBS v1 (RAW or bounded previous-frame XOR-RUN), decodes/validates them and creates
 self-contained decoded-frame previews. Existing Pillow and oled_png are reused,
