@@ -191,6 +191,25 @@ fn retarget_hook_with_stack_args_saves_registers() {
 }
 
 #[test]
+fn before_hook_reads_stack_top_and_next_word_in_original_order() {
+    let t = hook_text(
+        "cf.view.site.loop",
+        "before",
+        "{ in = [], clobbers = [\"ccr\"] }",
+        "handler = { sig = \"void (u32 channel, u32 mask)\", args = [\"sp+0\", \"sp+4\"] }\n",
+    );
+    let inc = out(&t, "inc/dk_fw_view.inc");
+    // Save 16 bytes, push original sp+4, then original sp+0 (now another four bytes away).
+    assert!(inc.contains(
+        ".macro dk_fw_view_loop_hook handler, next\n    lea     -16(%sp),%sp\n    movem.l %d0-%d1/%a0-%a1,(%sp)\n    move.l  20(%sp),-(%sp)\n    move.l  20(%sp),-(%sp)\n    jsr     \\handler\n    addq.l  #8,%sp\n    movem.l (%sp),%d0-%d1/%a0-%a1\n    lea     16(%sp),%sp\n    jmp     \\next\n.endm\n"
+    ), "{inc}");
+    assert!(
+        out(&t, "include/dk_fw_view.h")
+            .contains("typedef void dk_fw_view_loop_hook(uint32_t channel, uint32_t mask);")
+    );
+}
+
+#[test]
 fn bad_hooks_are_errors() {
     let regs = "{ in = [\"a2\"], clobbers = [\"ccr\"] }";
     let handler =
@@ -211,6 +230,9 @@ fn bad_hooks_are_errors() {
     assert!(hook_error("cf.view.site.loop", "before", regs, &handler("[]")).contains("args"));
     assert!(
         hook_error("cf.view.site.loop", "before", regs, &handler("[\"sp+2\"]")).contains("sp+N")
+    );
+    assert!(
+        hook_error("cf.view.site.loop", "before", regs, &handler("[\"sp+1\"]")).contains("sp+N")
     );
     assert!(
         hook_error("cf.view.site.loop", "before", regs, &handler("[\"a3\"]"))

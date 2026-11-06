@@ -173,7 +173,7 @@ struct StaticDef {
 /// Where a handler argument comes from at the hook.
 enum ArgSrc {
     Reg(String),
-    /// `sp+N` at the hook, N a multiple of 4 and at least 4.
+    /// `sp+N` at the hook, N a non-negative multiple of 4 (including an in-function site's stack top).
     Stack(u32),
 }
 
@@ -971,8 +971,8 @@ fn check_hook(
                 .all(|b| b.is_ascii_digit())
                 .then(|| n.parse::<u32>().ok())
                 .flatten()
-                .filter(|o| *o >= 4 && o % 4 == 0)
-                .ok_or_else(|| err!("{name}: handler arg {a:?}: expected sp+N with N a multiple of 4, at least 4"))?;
+                .filter(|o| o % 4 == 0)
+                .ok_or_else(|| err!("{name}: handler arg {a:?}: expected sp+N with N a non-negative multiple of 4"))?;
             args.push(ArgSrc::Stack(off));
         } else if known_reg(true, a) && a != "ccr" {
             if !inputs.contains(a) {

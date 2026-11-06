@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { button } from '@digi/test-support';
 import { bootInfoLoaded, currentRecord, encodeRecord } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { CARD_TIMEOUT } from '@digi/regression/runtime/debug-kit.ts';
@@ -9,12 +10,20 @@ import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { waitEmulatedFrames } from '@digi/regression/runtime/waits.ts';
 
 const guard = [...RT, 'core/boot-guard'];
+const releasedPanel = [{ code: button('STOP'), down: true }, { code: button('STOP'), down: false }];
 const proof = [
   'BOOT_GUARD_ATTEMPTS',
   'BOOT_GUARD_ENTERED',
   'BOOT_GUARD_RETURNED',
   'BOOT_GUARD_BEFORE',
   'BOOT_GUARD_AFTER',
+  'BOOT_GUARD_REQUESTS',
+  'BOOT_GUARD_PANEL_BITS',
+  'BOOT_GUARD_CLOSED',
+  'BOOT_GUARD_DECISION',
+  'BOOT_GUARD_SETTINGS_BEFORE',
+  'BOOT_GUARD_SETTINGS_AFTER',
+  'DKRT_SET',
 ];
 
 cardRigs('early boot without callback', { roots: guard, symbols: [...CARD_SYMBOLS, ...proof] }, (h) => {
@@ -25,6 +34,7 @@ cardRigs('early boot without callback', { roots: guard, symbols: [...CARD_SYMBOL
       const info = await h.ready();
       expect(info).toMatchObject({ safe: 0, count: 0, loaded: 0, counter: 0 });
       for (const symbol of proof.slice(0, 3)) expect(await word(h.session, planSymbol(h.plan, symbol)), symbol).toBe(0);
+      expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_REQUESTS'))).toBe(0);
       expect(currentRecord(await h.records())).toMatchObject({ counter: 0, paths: [] });
     },
     CARD_TIMEOUT,
@@ -35,6 +45,7 @@ cardRigs(
   'early boot probe',
   {
     roots: [...guard, 'test/boot-early-probe'],
+    initialButtons: releasedPanel,
     symbols: [...CARD_SYMBOLS, ...proof, 'BOOT_EARLY_CALLS'],
   },
   (h) => {
@@ -55,6 +66,9 @@ cardRigs(
           expect(await word(h.session, address + 36), 'main UI has not run').toBe(0);
         }
         expect(currentRecord(await h.records())).toMatchObject({ counter: 1, paths: [] });
+        expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_SETTINGS_BEFORE'))).toBe(0);
+        expect(await word(h.session, planSymbol(h.plan, 'BOOT_GUARD_SETTINGS_AFTER'))).toBe(0);
+        expect(await word(h.session, planSymbol(h.plan, 'DKRT_SET'))).toBe(1);
       },
       CARD_TIMEOUT,
     );
@@ -107,6 +121,7 @@ cardRigs(
   {
     // Use the existing MainPanel reset baseline; stock verification/loading can continue after the snapshot.
     relaxFs: true,
+    initialButtons: releasedPanel,
     env: { DIGI_TRACE_PATCH_BOOT: '1' },
     // Two failed cold boots and the safe third boot: one bounded minute per expected boot.
     baselineTimeoutMs: 3 * 60_000,
@@ -163,6 +178,7 @@ cardRigs(
   'early boot empty coupled control',
   {
     devices: ['dn2'],
+    initialButtons: releasedPanel,
     // Paired with reset recovery: same empty startup/card/MainPanel contract, with a returning callback.
     startEmpty: true,
     initial: () => ({ selection: [] }),

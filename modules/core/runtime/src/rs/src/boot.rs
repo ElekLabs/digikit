@@ -242,6 +242,14 @@ unsafe fn key_held() -> bool {
     false
 }
 
+fn early_record_allowed(record: Option<&Record>) -> bool {
+    matches!(record, Some(r) if r.flags & sel::FLAG_SAFE_ONCE == 0 && r.boot_counter < SAFE_AFTER)
+}
+
+fn late_retry_needed(prepared_on_entry: bool, armed: bool, record: &Record) -> bool {
+    prepared_on_entry && !armed && (record.count != 0 || record.boot_counter != 0)
+}
+
 /// Recovery preparation, once per boot. `early` requires an already owned store and arms even an empty selection.
 unsafe fn prepare(early: bool) -> bool {
     if PREP_STATE != 0 {
@@ -253,13 +261,20 @@ unsafe fn prepare(early: bool) -> bool {
     b.magic = INFO_MAGIC;
     b.version = 1;
     let (rec, copy) = current();
+    if early && !early_record_allowed(rec.as_ref()) {
+        // Let the original late path reread selection and own flag/counter decisions and side effects.
+        PREP_STATE = 0;
+        return false;
+    }
     let valid = rec.is_some();
     let mut r = rec.unwrap_or(Record::empty());
     dlog::ev(logk::BOOT_START, dlog::INFO, [RUNTIME_VERSION, crate::device(), r.stable_blocks, r.seq, r.boot_counter]);
     // the card's area: ours, blank or neither (read-only), before anything is written
     card::check();
     // the settings record (the fx routes and send amounts): into RAM before the UI starts
-    crate::settings::load();
+    if !early {
+        crate::settings::load();
+    }
     // the crash record and the RAM probe of the boot before
     crash::keep_probe();
     if crash::at_boot() {
@@ -342,6 +357,9 @@ pub unsafe extern "C" fn dkrt_boot_enter_early() -> u32 {
         return 0;
     }
     EARLY_ATTEMPTED = true;
+    if crash::pending() {
+        return 0;
+    }
     if !prepare(true) {
         return 0;
     }
@@ -361,8 +379,12 @@ pub unsafe extern "C" fn dkrt_boot() {
     if LOAD_STARTED {
         return;
     }
+    let prepared_on_entry = PREP_STATE == 2;
     if !prepare(false) {
         return;
+    }
+    if EARLY_ATTEMPTED {
+        crate::settings::ensure();
     }
     LOAD_STARTED = true;
     let b = info();
@@ -377,9 +399,9 @@ pub unsafe extern "C" fn dkrt_boot() {
     if b.safe != 0 {
         return;
     }
-    // Early denial must not suppress the original late counter policy. Retry the same intended value from REC;
-    // update only changes REC after success, so an uncertain early write cannot turn this retry into a second increment.
-    if EARLY_ATTEMPTED && !COUNTER_ARMED && (REC.count != 0 || REC.boot_counter != 0) && card::writable() {
+    // Retry only a completed early preparation's failed arm, never a failed normal late write after deferral.
+    // update only changes REC after success, so an uncertain early write retries the same intended count.
+    if late_retry_needed(prepared_on_entry, COUNTER_ARMED, &*addr_of!(REC)) && card::writable() {
         arm_counter(&mut *addr_of_mut!(COUNTER_ARMED), REC, |next| update(next, REC_COPY, REC_VALID));
     }
     let r = REC;
@@ -499,6 +521,46 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
 #[cfg(test)]
 mod counter_tests {
     use super::*;
+
+    #[test]
+    fn invalid_flagged_and_exhausted_records_defer_early_side_effects() {
+        assert!(!early_record_allowed(None));
+        let mut record = Record::empty();
+        assert!(
+            early_record_allowed(Some(&record)),
+            "a valid empty selection still arms clean early work"
+        );
+        record.flags = sel::FLAG_SAFE_ONCE;
+        assert!(!early_record_allowed(Some(&record)));
+        record.flags = 0;
+        record.boot_counter = SAFE_AFTER;
+        assert!(!early_record_allowed(Some(&record)));
+        record.boot_counter = SAFE_AFTER - 1;
+        assert!(early_record_allowed(Some(&record)));
+    }
+
+    #[test]
+    fn deferred_early_entry_does_not_retry_a_failed_normal_late_write() {
+        let mut record = Record::empty();
+        record.count = 1;
+        let mut armed = false;
+        let mut writes = 0;
+        assert!(!arm_counter(&mut armed, record, |_| {
+            writes += 1;
+            E_SEL_WRITE
+        }));
+        assert!(
+            !late_retry_needed(false, armed, &record),
+            "normal late preparation owns its single attempt"
+        );
+        assert_eq!(writes, 1);
+        assert!(
+            late_retry_needed(true, armed, &record),
+            "completed early preparation retains the late retry"
+        );
+        assert!(arm_counter(&mut armed, record, |_| OK));
+        assert!(!late_retry_needed(true, armed, &record));
+    }
 
     #[test]
     fn failed_early_write_denies_permission_and_late_retry_uses_same_counter() {

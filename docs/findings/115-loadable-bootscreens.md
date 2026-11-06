@@ -1,7 +1,8 @@
 # 115. Loadable bootscreens: stock path, footprint and early-boot safety
 
 2026-11-06. DT2 OS **1.17**, DN2 OS **1.12**. Research plus an unreleased,
-opt-in recovery prototype; its current coupled acceptance is incomplete. There
+opt-in recovery prototype; its focused coupled safety fixtures pass. Production
+recovery acceptance remains incomplete. There
 is no player or hardware recovery proof. The immediate static startup
 logo is outside the established ownership boundary; replacing it remains **[O]**.
 
@@ -482,17 +483,17 @@ then rerun, passing all 177 tests in 6.2 s. The other ten successes were
 retained, not repeated. Formatting and diff checks passed. The full merge gate
 was not run, and this remains an experimental checkpoint without push/merge.
 
-**[O]** Pre-arm work still includes selection reads, area probes/possible
+**[O]** At checkpoint `70c0875d`, pre-arm work included selection reads, area probes/possible
 1 MiB blank scan, settings/store loads and `at_boot` immediate fault flush.
 A caller timeout cannot cancel blocked SDHC/DMA. Conservative deferral of a
 pending KEEP crash to normal late handling, and unrelated settings load on a
-clean boot, are later design options only; no such change is approved in this
-exception patch. A bypass candidate needs separate received/held evidence;
+clean boot, were design options only in that exception patch. The subsequent
+validated deferral below supersedes this historical boundary. A bypass candidate needs separate received/held evidence;
 absent freshness must deny optional work, and receipt is not hardware initial
 scan proof. No independent early physical bypass is established. See the
 [current handover](../handovers/HANDOVER-2026-11-07-early-exception.md).
 
-**[D/O]** UART dispatch receipt candidate: hash
+**[D/O]** Historical `70c0875d` UART dispatch receipt candidate: hash
 `8a1e573cfa9d7893e83dc64c6f6caeb3`, offset `0xa8`, len 4, resolves DT2
 `0x4011e6f0` / DN2 `0x40120064`. Decoder entry also sees `core/input` injection;
 the call site is the physical-receipt candidate. Optional permission would
@@ -512,6 +513,92 @@ inactive channels. **[O]** The apparent tension remains unresolved. No maximum
 abort/reset latency or firmware semaphore/IRQ ownership contract has been
 established, so these register semantics do not establish safe integration or
 hardware recovery. No low-level cancellation implementation is approved.
+
+### Historical first fresh-packet proof (before I/O deferral)
+
+**[D]** The first fresh-packet gate revision was distinct from the RECORD
+safe-mode check already on main. It observes only UART dispatch, captures
+receipt/sticky RECORD-down before intro and denies missing/held input before
+requesting runtime preparation. STOP down/up supplies real channel-2 packets
+without a historical RECORD-down. The bounded coupled-cold logical-input seam
+is implemented. The first exact DN2 fresh-released case passed, 72.06 s total /
+67.293 s baseline: captured decision 1, closed observation, one runtime request
+and one returned callback; zero modules, persisted counter 1, UI/DSP/lifetime
+checks passed. This establishes UART receipt before intro for that emulator
+sequence only; missing/held/sticky cases and DT2 had not run at that point. Raw output is
+`/private/tmp/bootscreen-dn2-fresh-panel.log`, three named JSON files are in
+`/private/var/folders/v4/dxpyscrd41n7h6v9bc672p0r0000gn/T/digi-early-panel-evidence-dn2-H2eSDV/`.
+Receipt does not establish hardware scan completion or bounded storage recovery. See
+the [packet-gate handover](../handovers/HANDOVER-2026-11-07-fresh-panel.md).
+
+**[D]** Intermediate packet-gate object: 256 B text / 188 B BSS, versus
+`70c0875d` 130 / 172 B; rodata/data zero. Actual plan placement is 444 B object
+plus 16 B intro tail plus 20 B UART tail = 480 B, versus prior measured 320 B.
+Runtime object sections/relocations are identical; only its generated-source
+fingerprint changed. These are measured proof costs, not player, compressed
+flash, stack or performance claims.
+
+### Current fresh UART gate and I/O deferral
+
+**[D]** The subsequent I/O-deferral substep is implemented and validated on both
+current emulator devices. A pure volatile KEEP word-0 marker check denies early
+preparation before selection I/O, leaving even corrupt marked records for
+normal late validation. Invalid selection, safe-once or starting counter >= 2
+defers after selection reads but before card/settings/crash side effects.
+Clean early preparation skips unrelated settings load; main ensures settings
+once, while the ordinary late path preserves settings-before-at_boot order.
+Only a preparation already complete on main entry can take the early-arm
+counter retry. No KEEP/settings format, persistent runtime state or driver
+change is introduced. All 58 runtime host tests and revised regression types
+passed; the five-task object build, generated and layer checks passed. The earlier packet/cost
+measurement predates this runtime change.
+
+The revised exception proof expects one real fault then pending-record
+deferral: starting counter 0 with a selected healthy module returns through
+normal late boot (counter-1 info), while seeded counter 1/empty selection
+returns through late safe-counter 2. Seeded history is not a second fault.
+The separate reset fixture retains its two actual reset expectations. Private
+pure settings-loaded snapshots and direct late DKRT_SET observation verified
+early 0/0 / late 1. Selection/probe
+I/O, counter writes and ordinary late fault/settings I/O can still block;
+cached probe errors, read-only recovery and physical bypass are still open.
+
+**[D]** All 25 current focused cases passed: 13 early-boot, 8 panel and 4
+exception cases. The separate DN2 pending-fault zero-counter run passed in
+101.53 s (88.789 s baseline); the remaining three-file matrix passed 24 cases,
+with only that prior case skipped, in 1015.06 s, exit 0. No retries or budget
+changes. Raw output: `/private/tmp/bootscreen-dn2-fault-deferral-zero.log` and
+`/private/tmp/bootscreen-focused-matrix.log`. Retained evidence indexes:
+`/private/tmp/bootscreen-matrix-panel-summary.json` and
+`/private/tmp/bootscreen-matrix-exception-summary.json`.
+
+**[C]** All four held/sticky fixtures observed late reason **NONE**, not KEY.
+Decision 3 and zero runtime requests prove the new optional early-work bypass;
+they do not establish global late safe mode or hardware RECORD behavior.
+Functional REC access to global safe mode did not activate in these cold fixtures
+on either device and remains an open issue, not a fix in this phase. Missing
+input also denies requests while selected-module late loading succeeds. Fresh
+released cases show decision 1, one request/callback and settings loaded 0/0/1.
+UART packet freshness is not hardware initial-scan completion.
+
+**[D]** Revised exception cases retain exact vector 4 / PC DN2 `0x46804824`,
+DT2 `0x47f73f64`, CRC-valid KEEP and persisted fault evidence, narrow settings/
+selection writes, DSP growth, settled UI, actual SETTINGS/NO, IRQ/input and
+lifetime checks. Counter-0 cases load the selected module after one real fault;
+seeded counter-1 cases reach safe-counter 2 after one real fault. The separate
+reset fixture still proves two real resets. The 180 s recovery window is unchanged.
+
+**[D]** Final measured cost against `70c0875d`: adapter text 296 B (+166), BSS
+196 B (+24), data/rodata zero; placed object 492 B plus 16 B intro and 20 B UART
+tails =528 B (+208). Runtime text 157072 B (+172), actual placement 901456 B
+(+176); runtime data/BSS unchanged. Retained small metadata:
+`/private/tmp/bootscreen-deferral-section-costs.json` and
+`/private/tmp/bootscreen-deferral-placement.json`. No stack, compressed-flash or
+performance claim. See the authoritative
+[current handover](../handovers/HANDOVER-2026-11-07-fresh-panel.md) for checks,
+limits and future-only snapshot follow-up. Final `mise run test:changed` passed
+all 13 tasks in 48.5 s (0 cache hits); generated-module and diff checks passed.
+The full merge gate was not run.
 
 ### Remaining product and safety acceptance
 

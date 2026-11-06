@@ -10,6 +10,7 @@ import {
   type EmuEvent,
   type FirmwareLoadResult,
   type GuardSetParams,
+  type InitialButton,
   type LedsResult,
   type StatusResult,
 } from '@digi/control-client';
@@ -62,6 +63,8 @@ export interface RuntimeBaseline {
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
+  /** Real logical panel transitions before cold execution; explicitly supplied (even empty) selects start:cold. */
+  initialButtons?: readonly InitialButton[];
   /** Use the MainPanel contract with DIGI_COLD_RELAX_FS: missing filesystem verification is accepted, explicit failure is rejected. Stock verification/loading may continue. */
   relaxedReady?: boolean;
   /** Leave the emulator paused at the ready point (the default is free running); a test that times events in DSP frames steps from there. */
@@ -333,7 +336,8 @@ export class Session {
           // force still reconstructs the firmware and opens the explicit pristine card.
           replace: !prepared,
           force: true,
-          start: 'auto',
+          start: baseline.initialButtons === undefined ? 'auto' : 'cold',
+          initial_buttons: baseline.initialButtons,
           auto_no: this.options.autoNo ?? true,
         }),
       ));

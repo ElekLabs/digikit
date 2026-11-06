@@ -70,6 +70,16 @@ fn rec() -> *mut u32 {
     KEEP_BASE as usize as *mut u32
 }
 
+unsafe fn pending_at(record: *const u32) -> bool {
+    read_volatile(record) == MAGIC
+}
+
+/// Conservative early gate only: leave even a corrupt marked record for ordinary late validation/persistence.
+/// No initialization, I/O, consumption or cache flush.
+pub(crate) unsafe fn pending() -> bool {
+    pending_at(rec())
+}
+
 /// What `at_boot` found, kept for `dkrt_diag`, the proofs and the boot code.
 #[no_mangle]
 pub static mut DKRT_CRASH: CrashSeen =
@@ -571,4 +581,20 @@ pub unsafe fn keep_probe() {
     write_volatile(p.add(2), !ngen);
     dkrt_flush(KEEP_BASE + PROBE_AT, 16);
     let _ = KEEP_BYTES;
+}
+
+#[cfg(test)]
+mod pending_tests {
+    use super::*;
+
+    #[test]
+    fn pending_marker_is_volatile_nonconsuming_and_defers_even_invalid_payloads() {
+        let mut record = [0xdead_beefu32; REC_WORDS];
+        record[W_MAGIC] = MAGIC;
+        let before = record;
+        assert!(unsafe { pending_at(record.as_ptr()) });
+        assert_eq!(record, before, "early inspection must not consume, clear or rewrite evidence");
+        record[W_MAGIC] = 0;
+        assert!(!unsafe { pending_at(record.as_ptr()) });
+    }
 }

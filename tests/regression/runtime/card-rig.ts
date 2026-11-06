@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport, frame, parseReply } from '@digi/dk-session';
+import type { InitialButton } from '@digi/control-client';
 import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type RuntimeCase } from '../support.ts';
@@ -94,6 +95,8 @@ export interface CardRigOptions {
   faults?: boolean;
   /** Deliver genuine guest CPU exceptions during the initial baseline as well as later boots. */
   deliverExceptions?: boolean;
+  /** Queue ordered panel transitions before every cold boot in this baseline, including boot-time resets. */
+  initialButtons?: readonly InitialButton[];
   /** Stall threshold of the daemon in emulated ms (default 1000): for a scenario whose single guest request blocks the main loop longer. */
   stallMs?: number;
   /** More checks after the daemon has closed. */
@@ -213,6 +216,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       preparedImage: prepared.preparedImage,
       guard: { protect: [{ lo: boot, hi: boot + 8, label: 'runtime boot identity' }], allow_pc: [] },
       deliverExceptions,
+      initialButtons: o.initialButtons,
       relaxedReady: o.relaxFs,
       paused: o.hold,
       timeoutMs: o.baselineTimeoutMs,

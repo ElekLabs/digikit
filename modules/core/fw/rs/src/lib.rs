@@ -39,6 +39,9 @@ pub mod input {
         #[link_name = "cf.input.fn.key_down"]
         pub fn key_down(key: u32) -> u32;
     }
+
+    /// Observe UART-dispatched key masks, then restore the original stack and jump to the decoder/cleanup tail. No decoder-entry or post-call hook.
+    pub type UartKeyDispatchHook = unsafe extern "C" fn(channel: u32, mask: u32);
 }
 
 pub mod link {

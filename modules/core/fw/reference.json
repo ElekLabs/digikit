@@ -354,6 +354,56 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x40120064"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011e6f0"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_input_uart_key_dispatch_hook",
+        "gas": "dk_fw_input_uart_key_dispatch_hook",
+        "rust": "dkfw::input::UartKeyDispatchHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Observe UART-dispatched key masks, then restore the original stack and jump to the decoder/cleanup tail. No decoder-entry or post-call hook.",
+      "file": "devices/fw/input.toml",
+      "handler": {
+        "args": [
+          "sp+0",
+          "sp+4"
+        ],
+        "sig": "void (u32 channel, u32 mask)"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.input.hook.uart_key_dispatch",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "sig": "void (u32 channel, u32 mask)",
+      "site": "cf.input.site.uart_key_dispatch",
+      "subsystem": "input",
+      "users": [
+        "core/boot-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4011f9bc",
@@ -399,6 +449,45 @@
         "cf.input.site.key_mask_lit",
         "input.fw.key_mask_lit"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x40120064",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011e6f0",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "UART callback's parsed-key decoder call and cleanup branch. At this in-function site sp+0 is channel and sp+4 is mask; not the shared decoder entry.",
+      "file": "devices/fw/input.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.input.site.uart_key_dispatch",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 168
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 168
+        }
+      },
+      "subsystem": "input",
+      "users": [
+        "core/boot-guard"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -16857,7 +16946,7 @@
       "name": "draw"
     },
     {
-      "count": 4,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/input.toml",
       "meaning": "key and encoder decoding",

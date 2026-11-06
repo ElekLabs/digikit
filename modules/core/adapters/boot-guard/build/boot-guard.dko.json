@@ -11,70 +11,168 @@
   },
   {
    "addend": 0,
-   "offset": 40,
+   "offset": 50,
+   "section": ".text",
+   "symbol": "boot_guard_observe",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text",
+   "symbol": "boot_guard_uart_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text",
+   "symbol": "BOOT_GUARD_CLOSED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text",
+   "symbol": "BOOT_GUARD_CLOSED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text",
+   "symbol": "BOOT_GUARD_PANEL_BITS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": ".text",
+   "symbol": "BOOT_GUARD_DECISION",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
    "section": ".text",
    "symbol": "dk_boot_early",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 50,
+   "offset": 116,
    "section": ".text",
    "symbol": "boot_guard_enter",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8,
-   "section": ".text.boot_guard_enter",
-   "symbol": ".sec..bss.BOOT_GUARD_ATTEMPTS",
+   "offset": 10,
+   "section": ".text.boot_guard_observe",
+   "symbol": ".sec..bss.BOOT_GUARD_CLOSED",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.boot_guard_observe",
+   "symbol": ".sec..bss.BOOT_GUARD_PANEL_BITS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.boot_guard_observe",
+   "symbol": ".sec..bss.BOOT_GUARD_PANEL_BITS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 14,
    "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_ATTEMPTS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_DECISION",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.boot_guard_enter",
+   "symbol": "dkrt_boot_settings_loaded",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_REQUESTS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_SETTINGS_BEFORE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.boot_guard_enter",
    "symbol": "dkrt_boot_enter_early",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 24,
+   "offset": 60,
+   "section": ".text.boot_guard_enter",
+   "symbol": ".sec..bss.BOOT_GUARD_SETTINGS_AFTER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
    "section": ".text.boot_guard_enter",
    "symbol": ".sec..bss.BOOT_GUARD_BEFORE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 30,
+   "offset": 78,
    "section": ".text.boot_guard_enter",
    "symbol": "dkrt_boot_info",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 36,
+   "offset": 84,
    "section": ".text.boot_guard_enter",
    "symbol": ".sec..bss.BOOT_GUARD_ENTERED",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 46,
+   "offset": 94,
    "section": ".text.boot_guard_enter",
    "symbol": ".sec..bss.BOOT_GUARD_RETURNED",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 52,
+   "offset": 100,
    "section": ".text.boot_guard_enter",
    "symbol": ".sec..bss.BOOT_GUARD_AFTER",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 64,
+   "offset": 116,
    "section": ".text.boot_guard_enter",
    "symbol": "dkrt_boot_info",
    "type": "cf.32"
@@ -83,17 +181,24 @@
  "sections": [
   {
    "align": 4,
-   "hex": "4feffff048d703032f2f00144eba0012588f4cd703034fef00104ef900000000202f00046612203c00000000670a2f004eb900000000588f4e75",
+   "hex": "4feffff048d703032f2f00144eba0038588f4cd703034fef00104ef9000000004feffff048d703032f2f00142f2f00144eb900000000508f4cd703034fef00104ef9000000004ab9000000006614700123c00000000020390000000023c000000000202f00046612203c00000000670a2f004eb900000000588f4e75",
    "kind": "text",
    "name": ".text",
-   "size": 58
+   "size": 124
   },
   {
    "align": 2,
-   "hex": "2f0a246f000852b9000000004eb9000000004a80672e4879000000004eb90000000052b9000000004e92588f52b900000000203c000000002f400008245f4ef900000000245f4e75",
+   "hex": "7002b0af000466224ab900000000661a202f0008e2887202c081720180b900000000828023c1000000004e75",
+   "kind": "text",
+   "name": ".text.boot_guard_observe",
+   "size": 44
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0b70012f0a266f001052b900000000b0b900000000665e45f90000000052b9000000004e9223c0000000004eb9000000002f4000084e9223c0000000004aaf000867324879000000004eb90000000052b9000000004e93588f52b900000000203c000000002f400010245f265f588f4ef900000000245f265f588f4e75",
    "kind": "text",
    "name": ".text.boot_guard_enter",
-   "size": 72
+   "size": 128
   },
   {
    "align": 2,
@@ -108,6 +213,48 @@
    "kind": "bss",
    "name": ".bss.BOOT_GUARD_BEFORE",
    "size": 80
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_DECISION",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_CLOSED",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_PANEL_BITS",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_SETTINGS_AFTER",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_SETTINGS_BEFORE",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_GUARD_REQUESTS",
+   "size": 4
   },
   {
    "align": 2,
@@ -131,7 +278,7 @@
    "size": 4
   }
  ],
- "source_sha256": "c7443ad5633876b4b56fc7d913d1f569540d4c58d6bfc7a65e1756a69bd20386",
+ "source_sha256": "61de8a15e52b2f700a19186dcc93792a192875938ad9e920984e4f8fc5b226d1",
  "symbols": [
   {
    "global": false,
@@ -153,14 +300,50 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.BOOT_GUARD_CLOSED",
+   "section": ".bss.BOOT_GUARD_CLOSED",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_DECISION",
+   "section": ".bss.BOOT_GUARD_DECISION",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.BOOT_GUARD_ENTERED",
    "section": ".bss.BOOT_GUARD_ENTERED",
    "value": 0
   },
   {
    "global": false,
+   "name": ".sec..bss.BOOT_GUARD_PANEL_BITS",
+   "section": ".bss.BOOT_GUARD_PANEL_BITS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_REQUESTS",
+   "section": ".bss.BOOT_GUARD_REQUESTS",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.BOOT_GUARD_RETURNED",
    "section": ".bss.BOOT_GUARD_RETURNED",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_SETTINGS_AFTER",
+   "section": ".bss.BOOT_GUARD_SETTINGS_AFTER",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_GUARD_SETTINGS_BEFORE",
+   "section": ".bss.BOOT_GUARD_SETTINGS_BEFORE",
    "value": 0
   },
   {
@@ -183,8 +366,32 @@
   },
   {
    "global": true,
+   "name": "BOOT_GUARD_CLOSED",
+   "section": ".bss.BOOT_GUARD_CLOSED",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_DECISION",
+   "section": ".bss.BOOT_GUARD_DECISION",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "BOOT_GUARD_ENTERED",
    "section": ".bss.BOOT_GUARD_ENTERED",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_PANEL_BITS",
+   "section": ".bss.BOOT_GUARD_PANEL_BITS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_REQUESTS",
+   "section": ".bss.BOOT_GUARD_REQUESTS",
    "value": 0
   },
   {
@@ -194,10 +401,22 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "BOOT_GUARD_SETTINGS_AFTER",
+   "section": ".bss.BOOT_GUARD_SETTINGS_AFTER",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_SETTINGS_BEFORE",
+   "section": ".bss.BOOT_GUARD_SETTINGS_BEFORE",
+   "value": 0
+  },
+  {
    "global": false,
    "name": "boot_guard_dispatch",
    "section": ".text",
-   "value": 32
+   "value": 70
   },
   {
    "global": true,
@@ -219,6 +438,24 @@
   },
   {
    "global": true,
+   "name": "boot_guard_observe",
+   "section": ".text.boot_guard_observe",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_guard_uart_hook",
+   "section": ".text",
+   "value": 32
+  },
+  {
+   "global": true,
+   "name": "boot_guard_uart_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dk_boot_early",
    "section": null,
    "value": 0
@@ -234,14 +471,20 @@
    "name": "dkrt_boot_info",
    "section": null,
    "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_boot_settings_loaded",
+   "section": null,
+   "value": 0
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "34",
-  "isa_check": "74077426d965771cfc4cc685f94650ebbfe9660fed63ae338cd3b3856dd644d8",
+  "instructions_redecoded": "79",
+  "isa_check": "2a1812c270c4677718b06d01a854be1f28a47bfadc658fe9fc313d24268f724e",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

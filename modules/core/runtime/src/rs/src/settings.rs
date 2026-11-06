@@ -163,10 +163,16 @@ pub unsafe fn is_off() -> bool {
     state().off != 0
 }
 
-unsafe fn ensure() {
+pub(crate) unsafe fn ensure() {
     if read_volatile(addr_of!(DKRT_SET.loaded)) == 0 {
         load();
     }
+}
+
+/// Private adapter proof probe. Do not trigger lazy settings I/O through a normal accessor.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_boot_settings_loaded() -> u32 {
+    read_volatile(addr_of!(DKRT_SET.loaded))
 }
 
 fn count_entries() -> u32 {

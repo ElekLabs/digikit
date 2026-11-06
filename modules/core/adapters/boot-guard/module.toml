@@ -24,6 +24,7 @@ optional = ["dk_boot_early"]
 
 [object.externs]
 boot_guard_next = "hook.cf.rtos.site.intro_install.tail"
+boot_guard_uart_next = "hook.cf.input.site.uart_key_dispatch.tail"
 
 [[op]]
 op = "hook"
@@ -32,3 +33,11 @@ to = "boot_guard_hook"
 
 [[claim]]
 resource = "cf.rtos.site.intro_install"
+
+[[op]]
+op = "hook"
+hook = "cf.input.hook.uart_key_dispatch"
+to = "boot_guard_uart_hook"
+
+[[claim]]
+resource = "cf.input.site.uart_key_dispatch"

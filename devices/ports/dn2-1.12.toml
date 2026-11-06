@@ -119,6 +119,16 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.input.site.uart_key_dispatch"
+cpu = "cf"
+kind = "code"
+addr = 0x40120064
+len = 6
+sha256 = "2b485111f07fde2b4bf9619c50ed8c0c286b4c51032730a4f5a0fce0403f7b09"
+mark = "D"
+rule = "fw/input:cf_func"
+
+[[anchor]]
 name = "cf.link.fn.block_isr"
 cpu = "cf"
 kind = "code"
@@ -3463,6 +3473,11 @@ len = 6
 sha256 = "f6353ecd25610b1605fe58097dae09f6182ee62fef7a0e305380a0f3e36ab25e"
 mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
+
+[[hook]]
+name = "cf.input.hook.uart_key_dispatch"
+site = "cf.input.site.uart_key_dispatch"
+mode = "before"
 
 [[hook]]
 name = "cf.link.hook.block_isr"

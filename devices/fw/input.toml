@@ -39,3 +39,23 @@ rule = { kind = "cf_func", hash = "157be8bc0a941e9aa4c960f56894c227", offset = 0
 mark = "D"
 users = ["core/input"]
 doc = "The 4-byte literal at +0x10 of the button decoder (its first `lea`): the address of the previous masks, one byte per channel. core/input reads the old mask there."
+
+[[site]]
+name = "cf.input.site.uart_key_dispatch"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "8a1e573cfa9d7893e83dc64c6f6caeb3", offset = 0xa8, len = 6 }
+mark = "D"
+users = ["core/boot-guard"]
+doc = "UART callback's parsed-key decoder call and cleanup branch. At this in-function site sp+0 is channel and sp+4 is mask; not the shared decoder entry."
+
+[[hook]]
+name = "cf.input.hook.uart_key_dispatch"
+site = "cf.input.site.uart_key_dispatch"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "void (u32 channel, u32 mask)", args = ["sp+0", "sp+4"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/boot-guard"]
+doc = "Observe UART-dispatched key masks, then restore the original stack and jump to the decoder/cleanup tail. No decoder-entry or post-call hook."

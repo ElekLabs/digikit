@@ -4452,6 +4452,24 @@ mod tests {
     }
 
     #[test]
+    fn initial_panel_packets_are_real_transitions_queued_before_guest_execution() {
+        let Ok(syx) = std::fs::read("../../../firmware/Digitakt_II_OS1.17.syx") else {
+            return;
+        };
+        let mut runtime = Emulator::new(&syx, None).unwrap();
+        runtime.button(19, false).unwrap();
+        assert!(
+            runtime.input_packets.is_empty(),
+            "initial release is a no-op, not receipt evidence"
+        );
+        runtime.button(21, true).unwrap();
+        runtime.button(21, false).unwrap();
+        assert_eq!(runtime.input_packets, [0x22, 0x10, 0x22, 0]);
+        assert_eq!(runtime.held_masks[2], 0);
+        assert_eq!(runtime.cpu.icount, 0);
+    }
+
+    #[test]
     fn panel_packets_keep_chords_split_signed_turns_and_reserve_capacity() {
         let Ok(syx) = std::fs::read("../../../firmware/Digitakt_II_OS1.17.syx") else {
             return;
