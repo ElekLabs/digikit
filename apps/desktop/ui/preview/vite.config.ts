@@ -20,6 +20,7 @@ export default defineConfig({
       { find: /^\.\/transfer-backend$/, replacement: here('./transfer-backend.mock.ts') },
       { find: /^\.\/memory-backend$/, replacement: here('./memory-backend.mock.ts') },
       { find: /^\.\/samples-backend$/, replacement: here('./samples-backend.mock.ts') },
+      { find: /^\.\/bootscreens-backend$/, replacement: here('./bootscreens-backend.mock.ts') },
     ],
     dedupe: ['solid-js'],
   },

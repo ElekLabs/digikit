@@ -137,7 +137,7 @@ render(
         ) : (
           <span class="path">
             UI preview: fake device (state in the address: ?dev=ok|empty|noreply|error|slow &amp;
-            folder=files|empty|none &amp; speed=MiB/s &amp; mode=modules|samples &amp; mkdir=0|1)
+            folder=files|empty|none &amp; speed=MiB/s &amp; mode=modules|samples|bootscreens &amp; mkdir=0|1)
           </span>
         )}
       </header>

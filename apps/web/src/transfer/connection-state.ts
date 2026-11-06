@@ -10,13 +10,15 @@ export const noteConnection = (e: ConnectionEvent): void => {
 };
 
 /** Run a request of the session; a failure that means "the device cannot be reached" shows in the indicator, and is thrown on. */
-export async function asked<T>(f: () => Promise<T>): Promise<T> {
-  noteConnection({ type: 'asking' });
+export async function asked<T>(f: () => Promise<T>, isCurrent: () => boolean = () => true): Promise<T> {
+  if (isCurrent()) noteConnection({ type: 'asking' });
   try {
     return await f();
   } catch (e) {
-    if (isCancelled(e)) noteConnection({ type: 'cancelled' });
-    else if (isLost(e)) noteConnection({ type: 'lost', reason: lostReason(e) });
+    if (isCurrent()) {
+      if (isCancelled(e)) noteConnection({ type: 'cancelled' });
+      else if (isLost(e)) noteConnection({ type: 'lost', reason: lostReason(e) });
+    }
     throw e;
   }
 }

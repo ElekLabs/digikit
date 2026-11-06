@@ -25,7 +25,6 @@ import {
   freeText,
   freeLine,
   localTags,
-  MODES,
   parseMode,
   storageLine,
   tickedFit,
@@ -280,12 +279,9 @@ test('the tags: only what says something; the usual state has none', () => {
         assert.doesNotMatch(t.text + (t.title ?? ''), /on card/);
 });
 
-test('the mode of the page: Modules and Samples, Modules for anything unknown', () => {
-  assert.deepEqual(
-    MODES.map((m) => m.label),
-    ['Modules', 'Samples'],
-  );
+test('the saved mode of the page: registered modes, Modules for anything unknown', () => {
   assert.equal(parseMode('samples'), 'samples');
+  assert.equal(parseMode('bootscreens'), 'bootscreens');
   assert.equal(parseMode('modules'), 'modules');
   assert.equal(parseMode(null), 'modules');
   assert.equal(parseMode('card'), 'modules');

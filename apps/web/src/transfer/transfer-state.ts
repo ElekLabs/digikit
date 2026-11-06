@@ -48,10 +48,13 @@ export function remembered<T extends string>(key: string, read: (v: string | nul
   ];
 }
 
-/** The mode of the page (Modules or Samples). */
+/** The saved mode of the page. */
 export const [mode, setMode] = remembered('digikit.transferMode', parseMode);
-/** The mode in use: Samples only where the app gives it (the desktop app). */
-export const activeMode = (): Mode => (mode() === 'samples' && transferEnv().extras?.samples ? 'samples' : 'modules');
+/** Optional modes are available only where the app supplies their slot. */
+export const activeMode = (): Mode => {
+  const m = mode();
+  return m !== 'modules' && transferEnv().extras?.[m] ? m : 'modules';
+};
 /** What the On device column says about the device: its name (the profile's), the runtime, the free space of what the mode shows, and the
  * samples backend; `canMkdir` is known after the samples backend was opened. */
 export const [deviceInfo, setDeviceInfo] = createSignal<DeviceInfo>();

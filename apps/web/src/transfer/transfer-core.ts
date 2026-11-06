@@ -12,10 +12,11 @@ export const GROUPS: Group[] = ['Machines', 'Effects', 'Tools'];
 
 // ---- the mode of the page ---------------------------------------------------------------------------------------------------------
 
-export type Mode = 'modules' | 'samples';
+export type Mode = 'modules' | 'samples' | 'bootscreens';
 export const MODES: { id: Mode; label: string }[] = [
   { id: 'modules', label: 'Modules' },
   { id: 'samples', label: 'Samples' },
+  { id: 'bootscreens', label: 'Bootscreens' },
 ];
 /** The saved mode, or Modules when nothing (or something else) was saved. */
 export const parseMode = (v: unknown): Mode => MODES.find((m) => m.id === v)?.id ?? 'modules';

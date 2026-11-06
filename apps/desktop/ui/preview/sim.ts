@@ -20,7 +20,7 @@ export interface SimState {
   folder: 'files' | 'empty' | 'none';
   speed: number;
   paused: boolean;
-  mode: 'modules' | 'samples';
+  mode: 'modules' | 'samples' | 'bootscreens';
   /** The device storage can make folders (mkdir=0: it cannot). */
   mkdir: boolean;
 }

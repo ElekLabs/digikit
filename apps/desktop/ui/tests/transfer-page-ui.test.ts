@@ -349,3 +349,64 @@ test('drop targets: the folder row the drop is on, else the open folder; rows of
   assert.equal(dragKind(undefined), 'none');
   assert.equal(dragKind(['Files', ROWS_TYPE]), 'rows', 'our own drag wins');
 });
+
+test('saved transfer modes are available only when the environment supplies their slot', async () => {
+  const { setTransferEnv } = await import('../../../web/src/transfer/env.ts');
+  const { activeMode, setMode } = await import('../../../web/src/transfer/transfer-state.ts');
+  type Env = import('../../../web/src/transfer/env.ts').TransferEnv;
+  const base: Env = {
+    library: {
+      async scan() {
+        return [];
+      },
+      async read() {
+        return new Uint8Array();
+      },
+    },
+    async patchkitWasm() {
+      return new ArrayBuffer(0);
+    },
+    async deviceName() {
+      return 'Digitone II';
+    },
+    targets: {
+      emulator: true,
+      async ports() {
+        return [];
+      },
+      async open() {
+        throw new Error('unused');
+      },
+    },
+    logRun() {},
+  };
+  const slot = {
+    Mode: () => undefined,
+    async read() {},
+    reset() {},
+    bar() {
+      return undefined;
+    },
+  };
+  setTransferEnv(base);
+  setMode('bootscreens');
+  assert.equal(activeMode(), 'modules');
+  setTransferEnv({ ...base, extras: { bootscreens: slot } });
+  assert.equal(activeMode(), 'bootscreens');
+  setMode('samples');
+  assert.equal(activeMode(), 'modules');
+  setTransferEnv({
+    ...base,
+    extras: {
+      samples: {
+        ...slot,
+        async localChanged() {
+          return false;
+        },
+      },
+    },
+  });
+  assert.equal(activeMode(), 'samples');
+  setMode('modules');
+  assert.equal(activeMode(), 'modules');
+});

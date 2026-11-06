@@ -24,6 +24,7 @@ import {
   uploads,
 } from './samples-state';
 import SamplesMode from './SamplesMode';
+import { bootscreens } from './BootscreensMode';
 
 export const PAUSED =
   'The emulator is paused: nothing would run the transfer. Resume it (the Run button of the workbench), then try again.';
@@ -84,6 +85,7 @@ export const desktopEnv: TransferEnv = {
   logRun: (run) => logInput(transferEntry(run)),
   extras: {
     samples,
+    bootscreens,
     onJobEnd() {
       // the Card panel reads the folder now and again after the emulator's quiet period (the folder follows the card about 2 s later)
       bumpCardRefresh();

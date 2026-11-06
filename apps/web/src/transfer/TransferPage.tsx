@@ -1,4 +1,4 @@
-// The Transfer page, shared by the desktop workbench and the site (the app gives its parts in env.ts): one page, up to two modes. A dropdown
+// The Transfer page, shared by the desktop workbench and the site (the app gives its parts in env.ts): one page, with optional desktop modes. A dropdown
 // picks Modules (the built modules of the library and the card's module store) or, in the desktop app, Samples (a folder of samples and the
 // device's sample folders). The left column is always "On your computer", the right
 // column "On device"; each column carries its own controls (ModulesMode.tsx, SamplesMode.tsx; the shared parts are in TransferParts.tsx).
@@ -36,7 +36,8 @@ import './transfer-page.css';
 /** Read what the mode shows, both sides: the device and the computer (the library, or the chosen samples folder). */
 async function read(): Promise<void> {
   const env = transferEnv();
-  if (activeMode() === 'samples' && env.extras?.samples) return env.extras.samples.read();
+  const mode = activeMode();
+  if (mode !== 'modules') return env.extras?.[mode]?.read();
   const v = await transferBackend.list();
   setLastView(v);
   setDeviceInfo({ name: await env.deviceName(v.device), runtime: v.runtime, storage: storageLine(v) });
@@ -109,6 +110,7 @@ export default function TransferPage(): JSX.Element {
         setTicks(new Set<string>());
         setDelTicks(new Set<string>());
         transferEnv().extras?.samples?.reset();
+        transferEnv().extras?.bootscreens?.reset();
         void run('Reading', async () => {});
       },
       { defer: true },
@@ -122,21 +124,26 @@ export default function TransferPage(): JSX.Element {
     void run('Reading', async () => {});
   };
 
+  const extra = () => {
+    const m = activeMode();
+    return m === 'modules' ? undefined : transferEnv().extras?.[m];
+  };
+  const modes = () => MODES.filter((m) => m.id === 'modules' || transferEnv().extras?.[m.id]);
+
   // the bar along the bottom, for the install, delete or restart of Modules and the upload of Samples
   const bar = createMemo(() => {
     if (activeMode() === 'modules') {
       const p = progress();
       return p ? { info: modulesBar(p), running: writing(busy()) } : undefined;
     }
-    return transferEnv().extras?.samples?.bar(busy());
+    return extra()?.bar(busy());
   });
-  const samples = () => transferEnv().extras?.samples;
 
   return (
     <section class="transfer-page" aria-label="Transfer">
       <header class="head">
         <h2>Transfer</h2>
-        <Show when={samples()}>
+        <Show when={modes().length > 1}>
           <label class="target-select">
             <span class="dim">Mode</span>{' '}
             <select
@@ -145,7 +152,7 @@ export default function TransferPage(): JSX.Element {
               value={activeMode()}
               onChange={(e) => changeMode(e.currentTarget.value)}
             >
-              <For each={MODES}>{(m) => <option value={m.id}>{m.label}</option>}</For>
+              <For each={modes()}>{(m) => <option value={m.id}>{m.label}</option>}</For>
             </select>
           </label>
         </Show>
@@ -172,9 +179,7 @@ export default function TransferPage(): JSX.Element {
         <Match when={activeMode() === 'modules'}>
           <ModulesMode ctx={ctx} />
         </Match>
-        <Match when={activeMode() === 'samples' && samples()}>
-          {(slot) => <Dynamic component={slot().Mode} ctx={ctx} />}
-        </Match>
+        <Match when={extra()}>{(slot) => <Dynamic component={slot().Mode} ctx={ctx} />}</Match>
       </Switch>
 
       <Show when={bar()}>{(b) => <TransferBar bar={b().info} running={b().running} />}</Show>

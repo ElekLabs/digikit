@@ -44,6 +44,8 @@ const setPanel = (p, which, want) =>
   );
 /** Page helpers: `p.eval(js)`, `p.click(text)`, `p.tick(labelRegexSource)`, `p.hover(selector)`, `p.wait(ms)`. */
 const SCENES = [
+  { name: 'bootscreens', q: 'mode=bootscreens', size: WIDE },
+  { name: 'bootscreens-narrow', q: 'mode=bootscreens', size: MIN },
   { name: 'modules', q: 'mode=modules', size: WIDE },
   {
     name: 'modules-select-partial',

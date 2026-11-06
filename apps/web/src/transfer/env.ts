@@ -66,8 +66,8 @@ export interface TransferRun {
   lines: string[];
 }
 
-/** The Samples mode, which only the desktop app has (it needs the folders of the computer). The pane shows the mode only when this is given. */
-export interface SamplesSlot {
+/** An optional desktop Transfer mode. The pane shows it only when the app supplies the slot. */
+export interface TransferSlot {
   /** The body of the mode: both columns. */
   Mode: (props: { ctx: PageCtx }) => JSX.Element;
   /** Read both sides of the mode (throws when either fails). */
@@ -76,6 +76,9 @@ export interface SamplesSlot {
   reset(): void;
   /** The bar along the bottom for a running or finished upload. */
   bar(busy: string): { info: BarInfo; running: boolean } | undefined;
+}
+
+export interface SamplesSlot extends TransferSlot {
   /** The light poll of the chosen folder: true when its listing changed (and the pane reads again). */
   localChanged(): Promise<boolean>;
 }
@@ -94,6 +97,7 @@ export interface TransferEnv {
   /** Only the desktop app has these; the pane shows a part only when it is given. */
   extras?: {
     samples?: SamplesSlot;
+    bootscreens?: TransferSlot;
     /** A job ended (the Card panel reads the folder now and again after its quiet period). */
     onJobEnd?(): void;
   };
