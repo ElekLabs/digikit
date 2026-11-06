@@ -9,7 +9,7 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["early-boot.device.test.ts"],
+        "files": ["early-boot.device.test.ts", "early-exception.device.test.ts"],
         "modules": ["test/c-demo"],
         "plusdrive": true,
         "patchModules": [
@@ -18,7 +18,8 @@
           "core/dyndsp",
           "core/boot-guard",
           "test/boot-early-probe",
-          "test/boot-early-reset"
+          "test/boot-early-reset",
+          "test/boot-early-exception"
         ]
       }
     ]

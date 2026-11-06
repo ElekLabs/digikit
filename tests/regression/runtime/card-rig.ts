@@ -92,6 +92,8 @@ export interface CardRigOptions {
   hold?: boolean;
   /** A CPU exception is part of the scenario: faults of the session are not an error. */
   faults?: boolean;
+  /** Deliver genuine guest CPU exceptions during the initial baseline as well as later boots. */
+  deliverExceptions?: boolean;
   /** Stall threshold of the daemon in emulated ms (default 1000): for a scenario whose single guest request blocks the main loop longer. */
   stallMs?: number;
   /** More checks after the daemon has closed. */
@@ -202,7 +204,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const extra = new Set(o.storeExtra ?? []);
   const symbols = ['DKRT_BOOT', ...(o.symbols ?? [])];
 
-  const baseline = (cardImage: string, deliverExceptions?: boolean): RuntimeBaseline => {
+  const baseline = (cardImage: string, deliverExceptions = o.deliverExceptions): RuntimeBaseline => {
     if (o.roots && !prepared.preparedImage)
       throw new Error('the explicit runtime plan lacks a prepared image identity');
     const boot = planSymbol(prepared.plan, 'DKRT_BOOT');
@@ -297,7 +299,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
         if (!o.faults) await bounded(() => session.expectNoFault(`case ${closed}`));
       },
       afterClose: async (session) => {
-        const report = runtimeSafety(device, watchOutput, overlays, Math.max(1, epochs.size));
+        const report = runtimeSafety(device, watchOutput, overlays, Math.max(1, epochs.size), 'default', [...extra]);
         record(artifacts, 'lifetime-safety', report);
         expect(report.write_events, 'write-watch on cf.expansion over every boot: no stray write').toBe(0);
         expect(report.flush_hits, 'flush check over every boot: no hit').toBe(0);

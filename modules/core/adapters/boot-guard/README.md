@@ -52,10 +52,18 @@ The full merge gate has not
 run; this prototype is not merge-ready. The preserved failures and ledger are in
 [finding 115](../../../../docs/findings/115-loadable-bootscreens.md).
 
+The separate `test/boot-early-exception` fixture executes a real illegal
+instruction before the original intro installer. Both current-device emulator
+cases passed: exact vector/PC, valid retained and persisted CPU fault, two
+handler resets, safe third boot with zero modules, DSP/UI/input and lifetime
+checks. This proves the guest path under working-card emulator conditions;
+hardware exception recovery and blocked-I/O escape are not established.
+See the [2026-11-07 follow-up](../../../../docs/handovers/HANDOVER-2026-11-07-early-exception.md).
+
 Storage calls can block before the counter is armed. Prior-crash replay may
 flush settings/store data before arming, so preparation is not read-only.
-Physical early bypass, initial panel-scan timing, read-only recovery and a real
-early CPU exception remain unproved. Global readiness and firmware behavior
+Physical early bypass, initial panel-scan timing and read-only recovery remain
+unproved. Global readiness and firmware behavior
 are unchanged.
 Selection is cached during preparation; successful refresh and later module
 loading after transient early reads are also unproved. Counter-write retry

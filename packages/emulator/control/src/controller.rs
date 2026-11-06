@@ -3827,12 +3827,17 @@ fn patched_pair_key(
     cold_state: &Path,
     card: Option<&Path>,
     extra: &[u8],
+    deliver_exceptions: bool,
 ) -> Result<String, String> {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
     hash.update(main_sha.as_bytes());
     // what else the cold boot started from: the DSP section it ran with, the card writes of a soft reset
     hash.update(extra);
+    // False retains the existing key. A guest-handler boot must not reuse a fatal-exception boot's pair.
+    if deliver_exceptions {
+        hash.update(b"deliver-exceptions:");
+    }
     for path in [image, cold_state] {
         let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         hash.update(Sha256::digest(&data));
@@ -3966,8 +3971,15 @@ impl Actor {
             }
             _ => None,
         };
-        let stem = patched_pair_key(main_sha, &image, startup_state, card.as_deref(), &extra_key)
-            .map_err(&rejected)?;
+        let stem = patched_pair_key(
+            main_sha,
+            &image,
+            startup_state,
+            card.as_deref(),
+            &extra_key,
+            self.deliver_exceptions,
+        )
+        .map_err(&rejected)?;
         let pair = self.run_dir.join("patched").join(stem);
         let (snapshot, dsp_state) = (
             pair.join("digi-audio-m5.snap"),
@@ -4030,6 +4042,7 @@ impl Actor {
             base_sha.to_string(),
         );
         let inputs = digi_coupled::cold::ColdInputs {
+            deliver_exceptions: self.deliver_exceptions,
             image,
             cold_idle,
             cold_state,
@@ -4404,6 +4417,7 @@ fn run_card_job(
                     &syx,
                     card,
                     &digi_coupled::cold::ColdInputs {
+                        deliver_exceptions: false,
                         image,
                         cold_idle,
                         cold_state: None,
@@ -4808,7 +4822,8 @@ mod card_key_tests {
         std::fs::write(&card, vec![0u8; 512]).unwrap();
         let _ = std::fs::remove_file(overlay_path(&card));
         let main = "ab".repeat(32);
-        let key = || super::patched_pair_key(&main, &image, &cold, Some(&card), b"").unwrap();
+        let key =
+            || super::patched_pair_key(&main, &image, &cold, Some(&card), b"", false).unwrap();
         let none = key();
         assert_eq!(none, key(), "stable");
         std::fs::write(overlay_path(&card), b"overlay one").unwrap();
@@ -4850,16 +4865,25 @@ mod tests {
         std::fs::write(&card, vec![0u8; 512]).unwrap();
         let main = "ab".repeat(32);
         let key = |main: &str, card: Option<&std::path::Path>| {
-            patched_pair_key(main, &image, &idle, card, b"").unwrap()
+            patched_pair_key(main, &image, &idle, card, b"", false).unwrap()
         };
         let base = key(&main, None);
         assert_eq!(base, key(&main, None), "stable");
+        let delivered = patched_pair_key(&main, &image, &idle, None, b"", true).unwrap();
+        assert_ne!(
+            base, delivered,
+            "guest exception delivery changes the production cold pair identity"
+        );
+        assert_eq!(
+            delivered,
+            patched_pair_key(&main, &image, &idle, None, b"", true).unwrap()
+        );
         assert!(base.starts_with("abababababababab-"));
         assert_ne!(base, key(&"cd".repeat(32), None), "another MAIN");
         assert_ne!(base, key(&main, Some(&card)), "a card");
         assert_ne!(
             base,
-            patched_pair_key(&main, &image, &idle, None, b"keep-ram:x").unwrap(),
+            patched_pair_key(&main, &image, &idle, None, b"keep-ram:x", false).unwrap(),
             "another cold boot input"
         );
         std::fs::write(&idle, b"idle two").unwrap();
@@ -4869,16 +4893,17 @@ mod tests {
         assert_ne!(base, key(&main, None), "another DSP image");
         let raw = dir.join("cold.state");
         std::fs::write(&raw, b"raw reset one").unwrap();
-        let changed = patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:").unwrap();
+        let changed =
+            patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:", false).unwrap();
         std::fs::write(&raw, b"raw reset two").unwrap();
         assert_ne!(
             changed,
-            patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:").unwrap(),
+            patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:", false).unwrap(),
             "changed DSP follows raw reset bytes"
         );
         std::fs::remove_file(&idle).unwrap();
         assert!(
-            patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:").is_ok(),
+            patched_pair_key(&main, &image, &raw, None, b"dsp-raw-init-v1:", false).is_ok(),
             "changed DSP does not use initialized idle state"
         );
         std::fs::write(&idle, b"idle one").unwrap();

@@ -406,17 +406,124 @@ the counter is armed. Prior-crash replay can flush settings/store data before
 arming: preparation is not read-only and cannot be described as selection-only
 I/O. No positive initial panel-scan marker was established; a cleared cached
 key state cannot prove that RECORD was sampled. Early physical bypass, DTOE
-versus the earlier DMA-semaphore wait, read-only recovery, and an actual early
-CPU exception still need proof. The existing late-path exception tests do not prove
-the early hook's timing. No player or service architecture decision is implied.
+versus the earlier DMA-semaphore wait and read-only recovery still need proof.
+The following genuine early CPU-exception proof covers working-card emulator
+conditions only, not hardware or blocked pre-arm I/O. The existing late-path
+exception tests alone do not prove early timing. No player or service
+architecture decision is implied.
 
 ## Acceptance still pending
+
+### Genuine early CPU exception proof (2026-11-07)
+
+**[D]** A separate linked illegal-instruction fixture exercises vector 4 at the
+exact optional callback PC before the original intro installer. It does not
+write SOFTRST. Both current-device emulator cases passed as recorded below.
+Static inspection found that the existing controller
+`cpu.exceptions` policy reached installed runtimes but not cold workers; the
+bounded patch forwards it before guest execution and includes true mode in
+the patched-pair cache key, preserving false-mode keys. The proof
+requires valid retained CPU evidence, persisted `dk/fault`, two handler resets
+and safe third boot with zero selected modules, plus DSP/UI/input/lifetime
+checks. This does not replace the previously passing reset fixtures.
+
+**[D]** The exact DN2 1.12 genuine-exception case passed (exit 0, 1 passed /
+1 skipped): 135.58 s total, 123.623 s baseline. The retained version/CRC-valid
+record reports vector 4 at the planned `dk_boot_early` entry `0x468046a4`,
+no dynamic module (`0xffffffff`), pre-stable crash, RAM kept and `saved:1`.
+The persisted fault decodes as CPU at the same PC with no module name. The
+third boot is safe-counter mode with counter 2 and zero modules; the UI clears
+the stored selection counter and preserves empty paths. DSP progress,
+SETTINGS/NO response, IRQ/input and scenario lifetime assertions passed.
+Written store sectors are exactly the two selection sectors and the first
+sector of each settings copy (`0x2e19fde`, `0x2e19fee`, `0x2e19ffe`,
+`0x2e19fff`). The fixture preallows only those settings sectors and requires
+a settings-copy write, rather than accepting arbitrary observed writes.
+
+Evidence is retained at `/private/tmp/digi-early-exception-evidence-dn2-Mtm7qy/`
+(`early-exception.json`, `startup-empty.json`, `lifetime-safety.json`); full
+output is `/private/tmp/bootscreen-dn2-early-exception.log`. The generic raw
+lifetime report says `pass:false`: it is generated with the default policy
+before CardRig filters the scenario's explicit settings-sector allowance.
+Its only `invalid_store` entries are those two settings-copy sectors;
+CardRig's final checks passed with zero write-watch/flush hits and no other
+invalid writes. Do not label that historical raw report `pass:true`.
+
+**[D]** The exact DT2 1.17 case then passed (exit 0, 1 passed / 1 skipped):
+61.13 s total, 43.957 s baseline, with retained vector-4 CPU record and
+persisted fault at planned callback PC `0x47f73de4`. It has the same validated
+record, safe-counter/zero-module, four-sector-only write, DSP/UI/input and
+lifetime evidence as DN2. Evidence is
+`/private/tmp/digi-early-exception-evidence-dt2-ldET0h/`; full output is
+`/private/tmp/bootscreen-dt2-early-exception.log`. A small reporting-only fix
+before DT2 passes CardRig's existing explicit sector allowance into
+`runtimeSafety` facts; no permission was broadened. Its retained report now
+lists exactly `setA`/`setB`, has `pass:true`, zero write-watch/flush hits and
+empty invalid-write lists. The existing write-safety host file passed 21 tests,
+including default rejection, exact acceptance, adjacent-sector rejection and
+unchanged firmware-area rules. DN2 was not repeated for this reporting fix.
+
+The fixture is four bytes (`4afc60fe`, two re-decoded instructions), with the
+callback entry at the illegal instruction. The two production pair-key host
+tests, regression types and the daemon prerequisite (16.1 s) passed before
+proof. After DT2, retention was made portable with `os.tmpdir()`; only
+format/type checks apply to that output-path change, with no emulator repeat.
+Both tests used the existing 180 s three-boot workload window and DT2 known-main
+gate; neither global limits nor firmware/runtime handler behavior changed.
+This establishes a real early guest exception and retained/persisted recovery
+under working-card emulator conditions, not hardware or pre-arm-I/O safety.
+
+Final phase checks: generated-module `--check` passed without regeneration;
+affected merge plan explained 65 tasks plus prerequisites. Initial cheap
+preflight completed 10/11 tasks in 42.9 s, with one unrelated ABOUT deadline
+host failure (`expired:false` versus expected `true`). With no code/timeout
+change, the isolated test passed; only the failed regression host owner was
+then rerun, passing all 177 tests in 6.2 s. The other ten successes were
+retained, not repeated. Formatting and diff checks passed. The full merge gate
+was not run, and this remains an experimental checkpoint without push/merge.
+
+**[O]** Pre-arm work still includes selection reads, area probes/possible
+1 MiB blank scan, settings/store loads and `at_boot` immediate fault flush.
+A caller timeout cannot cancel blocked SDHC/DMA. Conservative deferral of a
+pending KEEP crash to normal late handling, and unrelated settings load on a
+clean boot, are later design options only; no such change is approved in this
+exception patch. A bypass candidate needs separate received/held evidence;
+absent freshness must deny optional work, and receipt is not hardware initial
+scan proof. No independent early physical bypass is established. See the
+[current handover](../handovers/HANDOVER-2026-11-07-early-exception.md).
+
+**[D/O]** UART dispatch receipt candidate: hash
+`8a1e573cfa9d7893e83dc64c6f6caeb3`, offset `0xa8`, len 4, resolves DT2
+`0x4011e6f0` / DN2 `0x40120064`. Decoder entry also sees `core/input` injection;
+the call site is the physical-receipt candidate. Optional permission would
+require fresh channel-2 receipt and RECORD released, denying held/missing
+receipt. Packet receipt and request `0x60,0x00` are not initial-scan proof.
+Although `Emulator.button` can queue input before stepping, no coupled cold
+initial-input bridge or hook is approved in this patch.
+
+**[D]** Parallel primary-source storage research: NXP's
+[MCF54418 Reference Manual, Rev. 5, May 2018](https://www.nxp.com/docs/en/reference-manual/MCF54418RM.pdf)
+§25.3.9 (pp. 25-20–25-21) defines RSTD/RSTC/RSTA host resets. §25.3.19
+(p. 25-38) describes `EXT_DMA_EN` suppressing requests, without documenting
+quiescence of an already accepted eDMA transfer. §19.4.1 (pp. 19-6–19-7) and
+§19.4.2 (p. 19-8) describe CX/ECX completing the current read/write sequence
+before cancellation; §19.4.1 (p. 19-5) also restricts `EDMA_CR` writes to
+inactive channels. **[O]** The apparent tension remains unresolved. No maximum
+abort/reset latency or firmware semaphore/IRQ ownership contract has been
+established, so these register semantics do not establish safe integration or
+hardware recovery. No low-level cancellation implementation is approved.
+
+### Remaining product and safety acceptance
+
+The genuine pre-intro CPU-fault case above is accepted under working-card
+emulator conditions on both devices. It does not accept the following
+read/timeout/hang cases or establish physical exception recovery.
 
 | Case | Required proof |
 | --- | --- |
 | Absent, invalid, corrupt or oversized asset/provider | Stock fallback, bounded validation, completion preserved |
 | Power cut during upload | No partial asset becomes active; previous valid selection or stock remains |
-| Read failure, timeout, early fault or hang | Bounded escape or independent bypass before existing protections; later selected-module behavior after early I/O denial still needs proof. `REC` is cached; counter-write retry units do not establish selection refresh after transient reads. |
+| Read failure, timeout or hang | Bounded escape or independent bypass before existing protections; later selected-module behavior after early I/O denial still needs proof. `REC` is cached; counter-write retry units do not establish selection refresh after transient reads. |
 | Repeated failed boots; bootscreen-only/no modules | Protection accounts for early work and eventually bypasses it |
 | Read-only card | Explicit recovery independent of counter writes |
 | Safe-once flag, held key, service/skip boot modes | Earliest behavior and queued-key timing proved; stock semantics preserved |
@@ -439,7 +546,8 @@ Existing reuse points under owner target `core/runtime-tests:test-device` are
 These prove behavior against emulator daemons. `test/dyn-fault` resets from
 `dkm_init`, later than the proposed pre-intro hook; reuse does not automatically
 cover the early phase. There is no existing held-RECORD hardware-timing or
-pre-main-hook proof in these suites.
+pre-main-hook proof in those reused suites alone; the separate current
+early-exception case supplies the working-card emulator evidence described above.
 
 ## Reproducing the static evidence
 

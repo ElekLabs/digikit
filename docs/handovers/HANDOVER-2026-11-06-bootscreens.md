@@ -1,5 +1,9 @@
 # Handover 2026-11-06: loadable bootscreens research
 
+Follow-up: [2026-11-07 genuine early CPU exception proof](HANDOVER-2026-11-07-early-exception.md)
+supersedes this historical ledger's open early-CPU item for working-card
+emulator conditions on both current devices; hardware/storage/bypass remain open.
+
 Documentation checkpoint branch: `work/loadable-bootscreens`, in the dedicated
 worktree `/Users/em/.codex/worktrees/28d7/digitakt2`. Research began on `main`;
 the user authorized moving and committing only these documentation changes here.

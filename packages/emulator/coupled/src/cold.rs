@@ -35,6 +35,8 @@ const CHUNK: u32 = 250_000;
 /// What the cold boot needs besides the firmware and the card.
 #[derive(Clone, Debug)]
 pub struct ColdInputs {
+    /// Deliver CPU exceptions to the guest handler during cold boot; false preserves fatal-error diagnostics.
+    pub deliver_exceptions: bool,
     /// The packed DSP loader image (`digi-audio-dn2-image.bin`).
     pub image: PathBuf,
     /// The DSP's cold-start state at its first idle rest (`cold-idle.dsp`, the
@@ -144,6 +146,7 @@ pub fn boot_emulator_to_ready(
     mut progress: impl FnMut(&ColdProgress),
 ) -> Result<ColdReport, String> {
     let started = Instant::now();
+    emulator.set_deliver_exceptions(inputs.deliver_exceptions);
     if inputs.relax_fs_check {
         emulator.relax_fs_check();
     }

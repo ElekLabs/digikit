@@ -1,0 +1,21 @@
+[module]
+id = "test/boot-early-exception"
+version = "0.1.0"
+name = "boot-early-exception"
+category = "test"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Linked test-only callback: a genuine illegal instruction before intro/main loading"
+requires = ["core/boot-guard"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-early-exception.dko.json"
+sources = ["src/callback.s"]
+place = "cf.expansion"
