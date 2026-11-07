@@ -76,20 +76,24 @@ fn secbuf() -> *mut u8 {
 }
 
 /// Read one copy (0 = A, 1 = B).
-unsafe fn read_copy(i: u32) -> Option<Record> {
+unsafe fn read_copy(i: u32) -> Result<Option<Record>, ()> {
     let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
     if block_read(sector, 512, secbuf()) != 0 {
-        return None;
+        return Err(());
     }
     let b = &*(secbuf() as *const [u8; 512]);
-    sel::decode(b)
+    Ok(sel::decode(b))
 }
 
-/// The record in use: the valid copy with the higher sequence number (A when equal).
-unsafe fn current() -> (Option<Record>, u32) {
-    let a = read_copy(0);
-    let b = read_copy(1);
-    match (a, b) {
+/// Read both copies once, retaining I/O uncertainty separately from an invalid record.
+/// The valid copy with the higher sequence number wins (A when equal).
+fn read_selection(
+    mut read: impl FnMut(u32) -> Result<Option<Record>, ()>,
+) -> (Option<Record>, u32, bool) {
+    let a = read(0);
+    let b = read(1);
+    let failed = a.is_err() || b.is_err();
+    let (record, copy) = match (a.unwrap_or(None), b.unwrap_or(None)) {
         (Some(x), Some(y)) => {
             if y.seq > x.seq {
                 (Some(y), 1)
@@ -100,7 +104,13 @@ unsafe fn current() -> (Option<Record>, u32) {
         (Some(x), None) => (Some(x), 0),
         (None, Some(y)) => (Some(y), 1),
         (None, None) => (None, 0),
-    }
+    };
+    (record, copy, failed)
+}
+
+/// One production lookup; late callers retain their policy by ignoring I/O uncertainty.
+unsafe fn current() -> (Option<Record>, u32, bool) {
+    read_selection(|i| read_copy(i))
 }
 
 /// Write `r` to copy `i`. Only these two sectors are ever written.
@@ -135,7 +145,7 @@ unsafe fn path_ok(p: *const u8) -> bool {
 
 /// `dkrt_selection_get`.
 pub unsafe fn selection_get(out: *mut DkrtSelection) -> i32 {
-    let (r, _) = current();
+    let (r, _, _) = current();
     let o = &mut *out;
     let r = r.unwrap_or(Record::empty());
     o.count = r.count;
@@ -158,7 +168,7 @@ pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
         }
         k += 1;
     }
-    let (cur, _) = current();
+    let (cur, _, _) = current();
     let cur = cur.unwrap_or(Record::empty());
     let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
     dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_SELECT, s.count, 0, 0, 0]);
@@ -176,7 +186,7 @@ pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
     if e != OK {
         return e;
     }
-    let (cur, _) = current();
+    let (cur, _, _) = current();
     let cur = cur.unwrap_or(Record::empty());
     let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
     write_copy(i, &r)
@@ -231,8 +241,8 @@ unsafe fn prepare(early: bool) -> bool {
     let b = info();
     b.magic = INFO_MAGIC;
     b.version = 1;
-    let (rec, copy) = current();
-    if early && !early_record_allowed(rec.as_ref()) {
+    let (rec, copy, read_failed) = current();
+    if early && (read_failed || !early_record_allowed(rec.as_ref())) {
         // Let the original late path reread selection and own flag/counter decisions and side effects.
         PREP_STATE = 0;
         return false;
@@ -458,7 +468,7 @@ pub unsafe fn ui_pass() {
         // The record as the card holds it now, not the one this boot started from: the menu may have saved a selection since.
         // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
         let floor = LATE_FLOOR;
-        let (cur, copy) = current();
+        let (cur, copy, _) = current();
         if let Some(mut r) = cur {
             if r.boot_counter != floor {
                 r.boot_counter = floor;
@@ -492,6 +502,117 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
 #[cfg(test)]
 mod counter_tests {
     use super::*;
+
+    fn selected_record(seq: u32) -> Record {
+        let mut record = Record::empty();
+        record.seq = seq;
+        record.count = 1;
+        let path = b"modules/c-demo.dkm";
+        record.paths[0][..path.len()].copy_from_slice(path);
+        record
+    }
+
+    #[test]
+    fn either_unreadable_copy_makes_early_selection_uncertain() {
+        for unreadable in 0..2 {
+            let mut reads = 0;
+            let (record, copy, failed) = read_selection(|i| {
+                assert_eq!(i, reads);
+                reads += 1;
+                if i == unreadable {
+                    Err(())
+                } else {
+                    Ok(Some(selected_record(if i == 0 { 1 } else { 10 })))
+                }
+            });
+            assert_eq!(reads, 2);
+            assert_eq!(copy, 1 - unreadable);
+            assert!(record.is_some());
+            assert!(failed);
+            assert!(early_record_allowed(record.as_ref()));
+        }
+    }
+
+    #[test]
+    fn both_unreadable_copies_remain_uncertain() {
+        let mut reads = 0;
+        let (record, copy, failed) = read_selection(|i| {
+            assert_eq!(i, reads);
+            reads += 1;
+            Err(())
+        });
+        assert_eq!(reads, 2);
+        assert!(record.is_none());
+        assert_eq!(copy, 0);
+        assert!(failed);
+    }
+
+    #[test]
+    fn invalid_crc_is_not_a_returned_io_error() {
+        for invalid in 0..2 {
+            let (record, copy, failed) = read_selection(|i| {
+                Ok(if i == invalid {
+                    None
+                } else {
+                    Some(selected_record(10))
+                })
+            });
+            assert!(!failed);
+            assert_eq!(copy, 1 - invalid);
+            assert_eq!(record.unwrap().seq, 10);
+        }
+        let (record, _, failed) = read_selection(|_| Ok(None));
+        assert!(record.is_none());
+        assert!(!failed);
+    }
+
+    #[test]
+    fn successful_selection_preserves_ordering_and_a_wins_ties() {
+        for (a, b, expected_seq, expected_copy) in [(1, 10, 10, 1), (10, 1, 10, 0), (10, 10, 10, 0)]
+        {
+            let (record, copy, failed) =
+                read_selection(|i| Ok(Some(selected_record(if i == 0 { a } else { b }))));
+            assert!(!failed);
+            assert_eq!(copy, expected_copy);
+            assert_eq!(record.unwrap().seq, expected_seq);
+        }
+    }
+
+    #[test]
+    fn deferred_lookup_rereads_newer_selection_before_arming() {
+        let mut reads = 0;
+        let mut read = |i| {
+            assert_eq!(i, reads % 2);
+            reads += 1;
+            if reads == 2 {
+                Err(())
+            } else if i == 0 {
+                let mut old = Record::empty();
+                old.seq = 1;
+                Ok(Some(old))
+            } else {
+                Ok(Some(selected_record(10)))
+            }
+        };
+        let (early, _, failed) = read_selection(&mut read);
+        assert_eq!(early.unwrap().seq, 1);
+        assert!(failed);
+        let (late, copy, failed) = read_selection(&mut read);
+        assert!(!failed);
+        assert_eq!(copy, 1);
+        let late = late.unwrap();
+        let mut armed = false;
+        assert!(arm_counter(&mut armed, late, |next| {
+            assert_eq!(next.seq, 10);
+            assert_eq!(next.count, 1);
+            let path = b"modules/c-demo.dkm";
+            assert_eq!(&next.paths[0][..path.len()], path);
+            assert_eq!(next.paths[0][path.len()], 0);
+            assert_eq!(next.boot_counter, 1);
+            OK
+        }));
+        assert_eq!(reads, 4);
+    }
 
     #[test]
     fn invalid_flagged_and_exhausted_records_defer_early_side_effects() {

@@ -186,3 +186,40 @@ whole asset again at boot. Workbench cannot detect whether the installed
 firmware includes this experimental provider, so the transfer panel states that
 requirement. The existing Samples destination and public protocol/SDK remain
 unchanged.
+
+## Returned-I/O error proof, phase 1
+
+The private opt-in `core/storage-error-proof` entry shim and pure-data
+`test/boot-io-*` configurations model returned block-driver errors, separately
+from the DT2 IRQSTAT observer. Before `BOOT_GUARD_ATTEMPTS` is nonzero they pass
+all I/O without observations; afterward only requests starting within the
+runtime store match. No buffer reaches the C decider. The pass path restores
+volatile registers and executes patchkit's displaced prologue; rejection returns
+-1 directly to the original caller. The base intentionally requires one mode
+configuration at link time and configurations conflict. Neither adapter nor
+configuration belongs to a default image.
+
+Phase 1 registers a pass control and one-copy recovery on DT2 1.17 and DN2 1.12.
+The seed has valid empty selection A sequence 1 and newer c-demo selection B
+sequence 10. B's first early 512-byte read returns an error once. The required
+behavior is no early asset/callback, followed by a fresh late read preserving
+the newer selected path and loading c-demo with counter 1. The suspected bug is
+accepting older A after B's returned error, then overwriting B when arming A.
+The test saves boot, provider/guard/scene, selection copies, fault counters and
+intro evidence before assertions. Only after parent review will the pass DN2
+control run, then one expected-red DN2 recovery case without retry. No runtime
+fix is part of this phase.
+
+Other configurations have host-only semantics in this phase: each selection
+copy once, first 2,560-byte payload read once, persistent store write errors,
+and first header A read once. These model returned errors, including a
+read-only returned-error model. Actual DMA failure, hardware write protection,
+bounded blocked I/O and cancellation remain open.
+
+The before-fix DN2 one-copy run reproduced loss of the newer B selection.
+The bounded runtime correction preserves per-copy I/O failure separately from
+invalid decoding and denies early preparation after any selection read error,
+resetting preparation so the late normal path rereads both copies. Existing
+late persistent-read-error policy is unchanged and remains open. Host coverage
+checks both error directions, both errors, invalid CRC, ordering/ties and a
+scripted fresh late read with counter arming from the newer selected record.

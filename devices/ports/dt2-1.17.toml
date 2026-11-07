@@ -2600,6 +2600,26 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.site.error_read"
+cpu = "cf"
+kind = "code"
+addr = 0x4012e1b6
+len = 8
+sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.error_write"
+cpu = "cf"
+kind = "code"
+addr = 0x4012e39c
+len = 8
+sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.site.fault_irqstat_a"
 cpu = "cf"
 kind = "code"
@@ -3294,6 +3314,16 @@ mode = "before"
 [[hook]]
 name = "cf.rtos.hook.main_os_task"
 site = "cf.rtos.site.main_os_task"
+mode = "before"
+
+[[hook]]
+name = "cf.storage.hook.error_read"
+site = "cf.storage.site.error_read"
+mode = "before"
+
+[[hook]]
+name = "cf.storage.hook.error_write"
+site = "cf.storage.site.error_write"
 mode = "before"
 
 [[hook]]

@@ -1,0 +1,358 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "boot_io_decide",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text",
+   "symbol": "boot_io_read_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text",
+   "symbol": "boot_io_decide",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text",
+   "symbol": "boot_io_write_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.boot_io_decide",
+   "symbol": "BOOT_GUARD_ATTEMPTS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.boot_io_decide",
+   "symbol": "dkrt_store_first",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.boot_io_decide",
+   "symbol": "dkrt_store_sectors",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_MATCH_WRITES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.boot_io_decide",
+   "symbol": "BOOT_IO_MODE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_MATCH_READS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.used",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 162,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.used",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 172,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_REJECT_WRITES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 184,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_LAST_SECTOR",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 190,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_LAST_BYTES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 196,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_LAST_OP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 244,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.BOOT_IO_REJECT_READS",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d703032f2f00182f2f00182f3c000000004eb9000000004fef000c4a8067102ebcffffffff4cd703034fef00104e754cd703034fef00104ef9000000004feffff048d703032f2f00182f2f00182f3c000000014eb9000000004fef000c4a8067102ebcffffffff4cd703034fef00104e754cd703034fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 132
+  },
+  {
+   "align": 2,
+   "hex": "4feffff420390000000048d7001c226f0010242f00184a80670000ae203900000000b0af0014630642806000009c207900000000222f00149280b1c163ea4a89672052b9000000002039000000007604b68066164a8966480c820000020066c8601452b90000000060de4a8966ba0c8200000200665c7801b888677e26005383b8836576260878025383b880665a5588b1c1667e2200c2b9000000004a81668881b9000000004a89674852b900000000282f0014700123c40000000023c20000000023c9000000004cd7001c4fef000c4e7557804a806600ff500c8200000a006600ff46700460acb6816600ff3c700160a252b90000000060b67603b6806700ff285b804a806600ff204a8167d66000ff18b68157c17301200144804a816600ff7460a4",
+   "kind": "text",
+   "name": ".text.boot_io_decide",
+   "size": 292
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.used",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_LAST_OP",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_LAST_BYTES",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_LAST_SECTOR",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_REJECT_WRITES",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_REJECT_READS",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_MATCH_WRITES",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.BOOT_IO_MATCH_READS",
+   "size": 4
+  }
+ ],
+ "source_sha256": "d814e6a2d65a8f3ac8a882285ecb6e0ad81c1005d6a122a001d0bf732fd67a9a",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_LAST_BYTES",
+   "section": ".bss.BOOT_IO_LAST_BYTES",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_LAST_OP",
+   "section": ".bss.BOOT_IO_LAST_OP",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_LAST_SECTOR",
+   "section": ".bss.BOOT_IO_LAST_SECTOR",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_MATCH_READS",
+   "section": ".bss.BOOT_IO_MATCH_READS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_MATCH_WRITES",
+   "section": ".bss.BOOT_IO_MATCH_WRITES",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_REJECT_READS",
+   "section": ".bss.BOOT_IO_REJECT_READS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.BOOT_IO_REJECT_WRITES",
+   "section": ".bss.BOOT_IO_REJECT_WRITES",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.used",
+   "section": ".bss.used",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_GUARD_ATTEMPTS",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_LAST_BYTES",
+   "section": ".bss.BOOT_IO_LAST_BYTES",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_LAST_OP",
+   "section": ".bss.BOOT_IO_LAST_OP",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_LAST_SECTOR",
+   "section": ".bss.BOOT_IO_LAST_SECTOR",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_MATCH_READS",
+   "section": ".bss.BOOT_IO_MATCH_READS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_MATCH_WRITES",
+   "section": ".bss.BOOT_IO_MATCH_WRITES",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_MODE",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_REJECT_READS",
+   "section": ".bss.BOOT_IO_REJECT_READS",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "BOOT_IO_REJECT_WRITES",
+   "section": ".bss.BOOT_IO_REJECT_WRITES",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_io_decide",
+   "section": ".text.boot_io_decide",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_io_read",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_io_read_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "boot_io_write",
+   "section": ".text",
+   "value": 66
+  },
+  {
+   "global": true,
+   "name": "boot_io_write_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_store_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_store_sectors",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "used",
+   "section": ".bss.used",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "128",
+  "isa_check": "d93f440f5a0412dc16afafa6c575fae015409795839886015864807d6928155e",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

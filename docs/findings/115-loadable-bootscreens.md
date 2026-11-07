@@ -880,3 +880,93 @@ cherry-pick `1a13c0f5` (source `75a24fb8`). One explicit-base cheap gate
 (`DIGI_GATE_BASE=38cb06a8 mise run test:changed`) passed 12/12 tasks in 48.5 s,
 zero cache hits; final generated-module, layer and diff checks passed. No full
 merge gate, hardware, push, PR or merge was performed.
+
+
+**[D]** A separate test-only `core/storage-error-proof` adapter now prepares
+returned-driver-error experiments on DT2 1.17/DN2 1.12. The existing
+`core/storage-fault-proof` remains the DT2 raw-status observer. The new entry
+shims use generated displaced tails and required pure-data mode configurations;
+no default image or production runtime behavior changes. Phase 1 prepares pass
+and one-copy early-selection-read recovery, with fault/selection evidence saved
+before assertions. Six host modes, scoped object/config builds, regression
+typecheck, generation and layers pass; pass/one-copy offline-link on both
+current images. The adapter alone refuses the missing BOOT_IO_MODE export.
+Object text is 424 bytes plus 32 bytes BSS and each mode is 4 bytes read-only
+data; no libc helper or direct storage call is imported. No emulator result
+is claimed yet. Returned errors do not
+prove DMA errors, hardware write protection, cancellation or bounded blocked I/O.
+
+
+**[D]** Returned-error before-fix DN2 evidence: the pass control loaded c-demo
+from B seq 10, armed seq 11/counter 1, preserved all 2,166 asset bytes and passed
+UI/input/DSP/lifetime checks. The one-copy run rejected exactly one B 512-byte
+read, then used A seq 1 empty, ran the early scene, and overwrote B's newer
+c-demo selection with seq 2 empty/counter 1. It failed the recovery assertion
+with count/loaded 0; bounded fault JSON retained both copies before assertion.
+Logs: `/private/tmp/bootscreen-io-dn2-control.log` and
+`/private/tmp/bootscreen-io-dn2-one-copy-before.log`; evidence directories are
+recorded in the [handover](../handovers/HANDOVER-2026-11-07-boot-returned-errors.md).
+No retry of the failing case. Both lifetime reports passed with zero write-watch
+or flush hits and no invalid writes.
+
+**[D]** The bounded fix distinguishes returned read errors from invalid records,
+reads each selection copy once per lookup, and defers early preparation on any
+I/O uncertainty before card/settings/crash/counter side effects. The late lookup
+then rereads fresh copies. Both failed early reads already deferred previously;
+the regression was accepting an older valid copy after one returned error.
+Late persistent-error policy is unchanged. Runtime host tests pass 63/63 with
+five new selection-helper cases; scoped build (4 tasks), both current-image
+offline links, generation/layers/diff pass. Runtime code +718 bytes, data/BSS
+unchanged, no new extern; aligned CF placement +720 bytes on each image.
+At that host checkpoint, after-fix device verification was pending parent authorization.
+
+
+**[D]** Sharing the production selection lookup removes the tuple wrapper and
+second production closure expression. Host tests still pass 63/63; scoped build
+passes 4 tasks and both offline links pass. Final runtime code delta is +192
+bytes (+718 before sharing), data/BSS unchanged, no new extern. CF expansion
+placement is +192 bytes per image (+720 before sharing). No after-fix emulator
+verification had occurred at that host checkpoint.
+
+
+**[D]** Updated-runtime DN2 one-copy regression passed once (51.05 s, one
+47.485 s baseline). One B 512-byte read returned error; early provider/scene
+work stayed zero. Late boot selected seq 10/copy B and loaded c-demo; A advanced
+to seq 11/counter 1 with the path and original B seq 10/counter 0 remained.
+The updated DT2 pass control passed once (26.63 s, one 20.333 s baseline): no
+rejections, c-demo loaded, exact 2,166 retained bytes and scene hash, 4 callbacks/
+3 records. Both unchanged tests passed existing UI/input/DSP/lifetime checks,
+with zero write-watch/flush hits and no invalid writes. Logs:
+`/private/tmp/bootscreen-io-dn2-one-copy-after.log` and
+`/private/tmp/bootscreen-io-dt2-control-after.log`; bounded evidence is indexed
+in `/private/tmp/boot-io-after-summary.json` and the handover. No retries or
+fixture changes; updated DN2 pass/DT2 one-copy and all other modes remain unrun.
+
+
+**[D]** The 11 parent-selected expanded returned-error cases all passed, one
+baseline each with no retries. Group A: 5 passed/11 skipped in 219.31 s; group
+B: 6 passed/10 skipped in 252.90 s. DT2 one-copy and DN2 both-copies recovered
+late seq 10 c-demo after one/two rejected reads. Both payload cases discarded
+the failed 2,560-byte read allocation once, published no asset, and loaded
+c-demo normally. Both persistent write-error cases rejected two counter writes,
+loaded c-demo, preserved selection/counter 0 and had actual storeWrites empty.
+DN2 header probe retained card ours/readErrors 1 and late loading/counter retry
+succeeded. Both held-RECORD cases required no successful write (key safe 2,
+loaded 0, no write attempts). Both safe-once cases retained the safe flag after
+one failed clear (flag safe 3, loaded 0, actual storeWrites empty).
+
+All 11 existing UI/input/DSP/lifetime checks passed with zero write-watch/flush
+hits and no invalid writes. Logs: `/private/tmp/bootscreen-io-expanded-a.log`,
+`/private/tmp/bootscreen-io-expanded-b.log`; bounded actual evidence and per-case
+baselines: `/private/tmp/boot-io-expanded-summary.json`. Updated-runtime coverage
+is 13/16 cases; updated DN2 pass/DT2 both-copies/DT2 probe remain unrun. These
+are emulator caller-return checks; physical write protection, DMA errors, blocked
+I/O escape and persistent late-read-error policy are not proved.
+
+
+**[O]** Blocked controller I/O, physical write protection, initial RECORD scan/
+display timing and persistent late selection-read-error policy remain open.
+The test-only entry hooks/configurations stay outside all default images. The
+accepted after-fix footprint is +192 bytes code and CF placement per image,
+with unchanged data/BSS. The 13 after-fix passes are distinct from the pre-fix
+normal control success and expected failure (15 total attempted baselines).

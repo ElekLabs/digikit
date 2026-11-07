@@ -1,5 +1,8 @@
 # Handover 2026-11-07: opt-in card DKBS provider
 
+Continuation: [returned storage errors and bounded early-selection recovery](HANDOVER-2026-11-07-boot-returned-errors.md)
+records the later runtime fix and verification.
+
 Work on `work/loadable-bootscreens`, based on `38cb06a8`. The parent accepted
 the static/host phase, eleven selected device cases and Workbench UI review.
 Backend commit: `6becb4ba`; reviewed UI commit `75a24fb8` was cherry-picked as

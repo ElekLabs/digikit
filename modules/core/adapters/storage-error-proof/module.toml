@@ -1,0 +1,42 @@
+[module]
+id = "core/storage-error-proof"
+version = "0.1.0"
+name = "Private storage returned-error proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Test-only opt-in store-scoped returned block-driver errors"
+requires = ["core/runtime", "core/boot-guard"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/storage-error-proof.dko.json"
+sources = ["src/error.c", "src/entry.s"]
+place = "cf.expansion"
+
+[object.externs]
+boot_io_read_next = "hook.cf.storage.site.error_read.tail"
+boot_io_write_next = "hook.cf.storage.site.error_write.tail"
+
+[[op]]
+op = "hook"
+hook = "cf.storage.hook.error_read"
+to = "boot_io_read"
+
+[[claim]]
+resource = "cf.storage.site.error_read"
+
+[[op]]
+op = "hook"
+hook = "cf.storage.hook.error_write"
+to = "boot_io_write"
+
+[[claim]]
+resource = "cf.storage.site.error_write"

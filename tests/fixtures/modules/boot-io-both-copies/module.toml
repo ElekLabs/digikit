@@ -1,0 +1,21 @@
+[module]
+id = "test/boot-io-both-copies"
+version = "0.1.0"
+name = "Boot I/O both-copies fixture"
+category = "test"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Private pure-data returned-error mode 2"
+requires = ["core/storage-error-proof", "core/boot-card-proof"]
+conflicts = ["test/boot-io-pass", "test/boot-io-one-copy", "test/boot-io-payload", "test/boot-io-write-error", "test/boot-io-probe"]
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "untested"
+"dn2-1.12" = "untested"
+
+[[object]]
+path = "build/boot-io-both-copies.dko.json"
+sources = ["src/mode.c"]
+place = "cf.expansion"

@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/storage-error-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/storage-error-proof"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["error.device.test.ts"],
+        "modules": ["test/c-demo"],
+        "plusdrive": true,
+        "patchModules": [
+          "core/runtime",
+          "core/dynreg",
+          "core/dyndsp",
+          "test/boot-io-pass",
+          "test/boot-io-one-copy",
+          "test/boot-io-both-copies",
+          "test/boot-io-payload",
+          "test/boot-io-write-error",
+          "test/boot-io-probe"
+        ],
+        "sources": ["tests/fixtures/modules/boot-dkbs-valid/src/asset.c", "tools/patchkit/pk_digikit_fxroutes.py"],
+        "pythonTools": true
+      }
+    ]
+  },
+  "targets": {
+    "test-device": {
+      "cache": false
+    }
+  }
+}

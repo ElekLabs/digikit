@@ -169,3 +169,41 @@ regs = { in = [], clobbers = ["d0", "ccr"] }
 mark = "D"
 users = ["core/storage-fault-proof"]
 doc = "Replay one original IRQSTAT load; retain its D0/CCR result while latching audited error bits. Jump site+6, never the displaced-code tail; no complete storage-fault coverage claim."
+
+# Test-only returned-error entry shim; original prologue runs in the generated tail.
+[[site]]
+name = "cf.storage.site.error_read"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "dcf1d4873d4a4fb5ac903e8ada9c1a12", offset = 0, len = 8 }
+mark = "D"
+users = ["core/storage-error-proof"]
+doc = "DT2 1.17/DN2 1.12 block read entry, eight complete non-PC-relative prologue bytes; continuation at entry+8."
+
+[[hook]]
+name = "cf.storage.hook.error_read"
+site = "cf.storage.site.error_read"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["d0", "ccr"] }
+mark = "D"
+users = ["core/storage-error-proof"]
+doc = "Private test-only entry shim: pass restores volatile registers then runs the displaced tail; reject returns -1 directly, preserving caller-owned arguments."
+
+# Test-only returned-error entry shim; original prologue runs in the generated tail.
+[[site]]
+name = "cf.storage.site.error_write"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "0dd5a176b94c6e30225068661b58a898", offset = 0, len = 8 }
+mark = "D"
+users = ["core/storage-error-proof"]
+doc = "DT2 1.17/DN2 1.12 block write entry, eight complete non-PC-relative prologue bytes; continuation at entry+8."
+
+[[hook]]
+name = "cf.storage.hook.error_write"
+site = "cf.storage.site.error_write"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["d0", "ccr"] }
+mark = "D"
+users = ["core/storage-error-proof"]
+doc = "Private test-only entry shim: pass restores volatile registers then runs the displaced tail; reject returns -1 directly, preserving caller-owned arguments."

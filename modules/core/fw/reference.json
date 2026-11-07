@@ -11102,6 +11102,74 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c87a"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e1b6"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Private test-only entry shim: pass restores volatile registers then runs the displaced tail; reject returns -1 directly, preserving caller-owned arguments.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.storage.hook.error_read",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.error_read",
+      "subsystem": "storage",
+      "users": [
+        "core/storage-error-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca60"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e39c"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Private test-only entry shim: pass restores volatile registers then runs the displaced tail; reject returns -1 directly, preserving caller-owned arguments.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.storage.hook.error_write",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.error_write",
+      "subsystem": "storage",
+      "users": [
+        "core/storage-error-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4012d5c2"
@@ -11193,6 +11261,84 @@
       "subsystem": "storage",
       "users": [
         "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c87a",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e1b6",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 1.17/DN2 1.12 block read entry, eight complete non-PC-relative prologue bytes; continuation at entry+8.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.error_read",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/storage-error-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca60",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e39c",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 1.17/DN2 1.12 block write entry, eight complete non-PC-relative prologue bytes; continuation at entry+8.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.error_write",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/storage-error-proof"
       ],
       "was": []
     },
@@ -17099,7 +17245,7 @@
       "name": "samples"
     },
     {
-      "count": 16,
+      "count": 20,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",
