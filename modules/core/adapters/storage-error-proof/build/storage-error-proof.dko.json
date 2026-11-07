@@ -67,56 +67,56 @@
   },
   {
    "addend": 0,
-   "offset": 100,
+   "offset": 94,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.BOOT_IO_MATCH_READS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 152,
+   "offset": 178,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.used",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 162,
-   "section": ".text.boot_io_decide",
-   "symbol": ".sec..bss.used",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 172,
+   "offset": 188,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.BOOT_IO_REJECT_WRITES",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 184,
+   "offset": 198,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.BOOT_IO_LAST_SECTOR",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 190,
+   "offset": 206,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.BOOT_IO_LAST_BYTES",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 196,
+   "offset": 212,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.BOOT_IO_LAST_OP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 244,
+   "offset": 240,
+   "section": ".text.boot_io_decide",
+   "symbol": ".sec..bss.used",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 292,
    "section": ".text.boot_io_decide",
    "symbol": ".sec..bss.BOOT_IO_REJECT_READS",
    "type": "cf.32"
@@ -132,10 +132,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffff420390000000048d7001c226f0010242f00184a80670000ae203900000000b0af0014630642806000009c207900000000222f00149280b1c163ea4a89672052b9000000002039000000007604b68066164a8966480c820000020066c8601452b90000000060de4a8966ba0c8200000200665c7801b888677e26005383b8836576260878025383b880665a5588b1c1667e2200c2b9000000004a81668881b9000000004a89674852b900000000282f0014700123c40000000023c20000000023c9000000004cd7001c4fef000c4e7557804a806600ff500c8200000a006600ff46700460acb6816600ff3c700160a252b90000000060b67603b6806700ff285b804a806600ff204a8167d66000ff18b68157c17301200144804a816600ff7460a4",
+   "hex": "4feffff420390000000048d7001c242f0010206f00184a80670000fe203900000000b0af001463064280600000ec227900000000262f00149680b3c363ea4a82671a52b9000000002239000000007004b08166104a8267d07004605452b90000000060e44a8266c0b1fc00000200666a7801b889676420015380b88064065b80b880655620095380b68057c0780271004480b88167067807b88166785589b3c3667270027604b68167065d81e289663c81b9000000004a82676852b900000000202f001423c000000000700123c80000000023c200000000603e7003b081661cb1fc00000a006600ff4070042200c2b9000000004a8167b86000ff2e7805b8816628b1fc000002006600ff1e4a8367da6000ff164a80668c4cd7001c4fef000c4e7552b900000000609651814a816600fef8b1fc00000a006600feee708013c0ec09000060fe",
    "kind": "text",
    "name": ".text.boot_io_decide",
-   "size": 292
+   "size": 326
   },
   {
    "align": 2,
@@ -194,7 +194,7 @@
    "size": 4
   }
  ],
- "source_sha256": "d814e6a2d65a8f3ac8a882285ecb6e0ad81c1005d6a122a001d0bf732fd67a9a",
+ "source_sha256": "1b34ce8711fdfd80ab20c318dc881a6e4f3552b1aa3707c0517d711ebfa16643",
  "symbols": [
   {
    "global": false,
@@ -351,8 +351,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "128",
-  "isa_check": "d93f440f5a0412dc16afafa6c575fae015409795839886015864807d6928155e",
+  "instructions_redecoded": "142",
+  "isa_check": "5d49cc4116d6b5dd2568122b618e21dfca0dce1345c53729083f08ba2c2cb058",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

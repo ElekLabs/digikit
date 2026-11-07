@@ -108,7 +108,7 @@ fn read_selection(
     (record, copy, failed)
 }
 
-/// One production lookup; late callers retain their policy by ignoring I/O uncertainty.
+/// One production lookup; every caller must honor I/O uncertainty.
 unsafe fn current() -> (Option<Record>, u32, bool) {
     read_selection(|i| read_copy(i))
 }
@@ -145,7 +145,10 @@ unsafe fn path_ok(p: *const u8) -> bool {
 
 /// `dkrt_selection_get`.
 pub unsafe fn selection_get(out: *mut DkrtSelection) -> i32 {
-    let (r, _, _) = current();
+    let (r, _, read_failed) = current();
+    if read_failed {
+        return E_READ;
+    }
     let o = &mut *out;
     let r = r.unwrap_or(Record::empty());
     o.count = r.count;
@@ -168,7 +171,10 @@ pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
         }
         k += 1;
     }
-    let (cur, _, _) = current();
+    let (cur, _, read_failed) = current();
+    if read_failed {
+        return E_READ;
+    }
     let cur = cur.unwrap_or(Record::empty());
     let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
     dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_SELECT, s.count, 0, 0, 0]);
@@ -186,7 +192,10 @@ pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
     if e != OK {
         return e;
     }
-    let (cur, _, _) = current();
+    let (cur, _, read_failed) = current();
+    if read_failed {
+        return E_READ;
+    }
     let cur = cur.unwrap_or(Record::empty());
     let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
     write_copy(i, &r)
@@ -278,7 +287,9 @@ unsafe fn prepare(early: bool) -> bool {
         DKRT_STABLE_BLOCKS.0 = r.stable_blocks;
     }
     // safe mode: the record asked for it, or the key, or too many boots that did not reach the UI loop
-    let reason = if r.flags & sel::FLAG_SAFE_ONCE != 0 {
+    let reason = if read_failed {
+        SAFE_READ
+    } else if r.flags & sel::FLAG_SAFE_ONCE != 0 {
         SAFE_FLAG
     } else if key_held() {
         SAFE_KEY
@@ -468,8 +479,12 @@ pub unsafe fn ui_pass() {
         // The record as the card holds it now, not the one this boot started from: the menu may have saved a selection since.
         // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
         let floor = LATE_FLOOR;
-        let (cur, copy, _) = current();
-        if let Some(mut r) = cur {
+        let (cur, copy, read_failed) = if b.reason == SAFE_READ {
+            (None, 0, true)
+        } else {
+            current()
+        };
+        if let Some(mut r) = cur.filter(|_| !read_failed) {
             if r.boot_counter != floor {
                 r.boot_counter = floor;
                 update(r, copy, true);

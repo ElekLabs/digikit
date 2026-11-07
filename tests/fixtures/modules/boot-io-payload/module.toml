@@ -8,7 +8,7 @@ author = "digikit"
 status = "experimental"
 summary = "Private pure-data returned-error mode 3"
 requires = ["core/storage-error-proof", "core/boot-card-proof"]
-conflicts = ["test/boot-io-pass", "test/boot-io-one-copy", "test/boot-io-both-copies", "test/boot-io-write-error", "test/boot-io-probe"]
+conflicts = ["test/boot-io-pass", "test/boot-io-one-copy", "test/boot-io-both-copies", "test/boot-io-write-error", "test/boot-io-probe", "test/boot-io-persistent-one", "test/boot-io-persistent-both", "test/boot-io-payload-reset"]
 ports = ["dt2-1.17", "dn2-1.12"]
 
 [targets]

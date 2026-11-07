@@ -24,13 +24,19 @@ uint32_t boot_io_decide(uint32_t write, uint32_t sector, uint32_t bytes)
     if (!write) {
         const uint32_t relative = sector - first;
         if (bytes == 512 && sectors >= 2) {
-            if ((BOOT_IO_MODE == 1 || BOOT_IO_MODE == 2) && relative == sectors - 1) bit = 1;
-            if (BOOT_IO_MODE == 2 && relative == sectors - 2) bit = 2;
+            if ((BOOT_IO_MODE == 1 || BOOT_IO_MODE == 2 || BOOT_IO_MODE == 6 || BOOT_IO_MODE == 7) && relative == sectors - 1) bit = 1;
+            if ((BOOT_IO_MODE == 2 || BOOT_IO_MODE == 7) && relative == sectors - 2) bit = 2;
         }
         if (BOOT_IO_MODE == 3 && bytes == 2560) bit = 4;
         if (BOOT_IO_MODE == 5 && bytes == 512 && relative == 0) bit = 4;
     }
-    if (!bit || (BOOT_IO_MODE != 4 && (used & bit))) return 0;
+    if (BOOT_IO_MODE == 8 && !write && bytes == 2560) {
+        /* Reset at the provider payload-read boundary; the caller never returns. */
+        *(volatile unsigned char *)0xEC090000 = 0x80;
+        for (;;) {
+        }
+    }
+    if (!bit || (BOOT_IO_MODE != 4 && BOOT_IO_MODE != 6 && BOOT_IO_MODE != 7 && (used & bit))) return 0;
     used |= bit;
     if (write) BOOT_IO_REJECT_WRITES++;
     else BOOT_IO_REJECT_READS++;

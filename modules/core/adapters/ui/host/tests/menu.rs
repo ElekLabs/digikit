@@ -8,6 +8,10 @@ extern "C" {
     fn fk_add(path: *const c_char, flags: u32, arena: u32, fx_slots: u32, machines: u32);
     fn fk_select(path: *const c_char);
     fn fk_scan_result(r: c_int);
+    fn fk_get_result(r: c_int);
+    fn fk_apply();
+    fn fk_set_tick(row: c_int, on: c_int);
+    fn fk_boot_read_failure();
     fn fk_loaded(path: *const c_char, name: *const c_char);
     fn fk_fx(id: *const c_char, allowed: u32, saved: u32);
     fn fk_loaded_menu(path: *const c_char, name: *const c_char);
@@ -428,4 +432,62 @@ fn a_refused_restart_is_shown() {
     answer_confirm(true);
     let (_, title, text, _) = dialog().expect("the refusal");
     assert_eq!((title.as_str(), text.as_str()), ("NO RESTART", "CARD BUSY"));
+}
+
+#[test]
+fn selection_read_failure_blocks_apply_until_a_successful_refresh() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    open_modules();
+    assert!(render()[0].starts_with("* TOOL"));
+    press_no();
+    press_no();
+    unsafe { fk_get_result(-3) };
+    open_modules();
+    assert_eq!(render(), ["STORE READ ERROR"]);
+    unsafe { fk_set_tick(0, 1) };
+    assert_eq!(unsafe { fk_tick(0) }, 0);
+    assert_eq!(
+        dialog().expect("read error dialog").1,
+        "SELECTION READ ERROR"
+    );
+    answer_confirm(false);
+    // Even if storage recovers, the failed refresh's empty ticks must not be saved.
+    unsafe {
+        fk_get_result(0);
+        fk_apply();
+    }
+    assert_eq!(unsafe { fk_selection_sets() }, 0);
+    assert_eq!(unsafe { fk_restarts() }, 0);
+    assert_eq!(dialog().expect("read error dialog").1, "NOT SAVED");
+    press_no();
+    press_no();
+    press_no();
+    open_modules();
+    assert!(render()[0].starts_with("* TOOL"));
+    unsafe { fk_apply() };
+    assert_eq!(unsafe { fk_selection_sets() }, 1);
+    assert_eq!(unsafe { fk_set_count() }, 1);
+    assert_eq!(cstr(unsafe { fk_set_path(0) }), "modules/tool.dkm");
+}
+
+#[test]
+fn about_reports_read_failure_without_stale_selection_names() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    open_modules();
+    press_no();
+    press_no();
+    unsafe {
+        fk_get_result(-3);
+        fk_boot_read_failure();
+    }
+    open_digikit();
+    press_yes(1);
+    let rows = render();
+    assert!(rows.iter().any(|s| s == "SAFE: READ FAILED"), "{rows:?}");
+    assert!(rows.iter().any(|s| s == "SELECTION READ ERROR"), "{rows:?}");
+    assert!(!rows.iter().any(|s| s.contains("TOOL")), "{rows:?}");
 }

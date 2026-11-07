@@ -18,7 +18,10 @@
           "test/boot-io-both-copies",
           "test/boot-io-payload",
           "test/boot-io-write-error",
-          "test/boot-io-probe"
+          "test/boot-io-probe",
+          "test/boot-io-persistent-one",
+          "test/boot-io-persistent-both",
+          "test/boot-io-payload-reset"
         ],
         "sources": ["tests/fixtures/modules/boot-dkbs-valid/src/asset.c", "tools/patchkit/pk_digikit_fxroutes.py"],
         "pythonTools": true

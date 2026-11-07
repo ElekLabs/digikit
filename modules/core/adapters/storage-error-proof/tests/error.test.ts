@@ -26,6 +26,6 @@ beforeAll(() => {
 });
 afterAll(() => fs.rmSync(directory, { recursive: true, force: true }));
 
-test.each([0, 1, 2, 3, 4, 5])('returned-error matching, range, and one-shot semantics: mode %i', (mode) => {
+test.each([0, 1, 2, 3, 4, 5, 6, 7])('returned-error matching, range, and one-shot semantics: mode %i', (mode) => {
   execFileSync(binary, [String(mode)], { timeout: 2000 });
 });

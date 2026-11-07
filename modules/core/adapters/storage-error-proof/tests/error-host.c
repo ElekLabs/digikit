@@ -27,8 +27,9 @@ int main(int argc, char **argv)
     uint32_t expected_reads = 0, expected_writes = 0;
     for (uint32_t repeat = 0; repeat < 2; repeat++) {
         for (uint32_t sector = 100; sector < 120; sector++) {
-            uint32_t expected = !repeat && ((BOOT_IO_MODE == 1 && sector == 119) ||
-                (BOOT_IO_MODE == 2 && sector >= 118) || (BOOT_IO_MODE == 5 && sector == 100));
+            uint32_t expected = ((BOOT_IO_MODE == 6 && sector == 119) ||
+                (BOOT_IO_MODE == 7 && sector >= 118)) || (!repeat && ((BOOT_IO_MODE == 1 && sector == 119) ||
+                (BOOT_IO_MODE == 2 && sector >= 118) || (BOOT_IO_MODE == 5 && sector == 100)));
             assert(boot_io_decide(0, sector, 512) == expected);
             expected_reads += expected;
             assert(boot_io_decide(1, sector, 512) == (BOOT_IO_MODE == 4));

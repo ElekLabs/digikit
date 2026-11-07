@@ -82,6 +82,7 @@ static uint8_t g_fx_saved[MAX_FXR];
 static int8_t g_row_fx[MAX_ENT]; /* the first effect of a loaded row's module, -1: none */
 static uint8_t g_saved[MAX_ENT];
 static uint32_t g_saved_extra;
+static int32_t g_selection_error;
 static int g_info_row;
 static int g_route_row;
 static uint32_t g_safe_shown, g_seen, g_last, g_calls;
@@ -253,11 +254,11 @@ static void result_text(txt *t, int32_t code)
 
 static void safe_reason(txt *t, uint32_t reason)
 {
-    // a table, not an if chain: five dense values become a jump table, which is data in the code
-    static const char *const why[6] = {"UNKNOWN", "2 BAD BOOTS", "KEY HELD", "REQUESTED", "DSP STOPPED", "CPU PANIC"};
-    _Static_assert(DKRT_SAFE_COUNTER == 1 && DKRT_SAFE_KEY == 2 && DKRT_SAFE_FLAG == 3 && DKRT_SAFE_DSP == 4 && DKRT_SAFE_PANIC == 5,
+    // Dense safe reasons use a table in code.
+    static const char *const why[7] = {"UNKNOWN", "2 BAD BOOTS", "KEY HELD", "REQUESTED", "DSP STOPPED", "CPU PANIC", "READ FAILED"};
+    _Static_assert(DKRT_SAFE_COUNTER == 1 && DKRT_SAFE_KEY == 2 && DKRT_SAFE_FLAG == 3 && DKRT_SAFE_DSP == 4 && DKRT_SAFE_PANIC == 5 && DKRT_SAFE_READ == 6,
                    "why[] follows the DKRT_SAFE_* values");
-    t_s(t, reason < 6 ? why[reason] : why[0]);
+    t_s(t, reason < 7 ? why[reason] : why[0]);
 }
 
 /* The file name of a path, upper case, at most max characters: from the end, or with head the first ones. */
@@ -337,7 +338,11 @@ static void read_boot(void)
 /* The saved selection, matched against the rows: a checked row for each path the store still has. */
 static void load_selection(void)
 {
-    dkrt_selection_get(&g_sel);
+    g_selection_error = dkrt_selection_get(&g_sel);
+    if (g_selection_error != DKRT_OK) {
+        STORE = 3;
+        return;
+    }
     for (uint32_t i = 0; i < MAX_ENT; i++)
         TICK[i] = 0;
     g_saved_extra = 0;
@@ -604,8 +609,10 @@ static void fill_about(dk_ui_menu *m, void *ctx)
     arow(m, t.b);
     /* each module of this boot's selection with its result; the names come from the saved selection, which is what the boot
        loaded unless it was saved again without a restart */
-    dkrt_selection_get(&g_sel);
-    uint32_t n = g_boot.count > DKRT_SEL_MAX ? DKRT_SEL_MAX : g_boot.count;
+    int32_t selection_result = dkrt_selection_get(&g_sel);
+    if (selection_result != DKRT_OK)
+        arow(m, "SELECTION READ ERROR");
+    uint32_t n = selection_result != DKRT_OK ? 0 : g_boot.count > DKRT_SEL_MAX ? DKRT_SEL_MAX : g_boot.count;
     for (uint32_t k = 0; k < n; k++) {
         const uint8_t *p = g_sel.paths[k];
         t_init(&t);
@@ -970,6 +977,10 @@ static void refuse(int row, const char *what)
    unchecked and a dialog says why. */
 static void set_tick(int row, int on)
 {
+    if (g_selection_error != DKRT_OK) {
+        fail_text("SELECTION READ ERROR", g_selection_error);
+        return;
+    }
     if (row < 0 || row >= (int)NENT)
         return;
     if (!on) {
@@ -1220,6 +1231,10 @@ static void fill_info(dk_ui_menu *m, void *ctx)
 /* Saves the selection and the changed routes, then restarts. dkrt_restart returns only when it refuses. */
 static void apply(void)
 {
+    if (g_selection_error != DKRT_OK) {
+        fail_text("NOT SAVED", g_selection_error);
+        return;
+    }
     DK_APPLIES++;
     static DkrtSelection sel;
     uint32_t n = 0;

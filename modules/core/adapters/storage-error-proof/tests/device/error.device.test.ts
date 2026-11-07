@@ -5,7 +5,17 @@ import path from 'node:path';
 import { button, repoRoot } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { record } from '@digi/regression/runtime/artifacts.ts';
-import { bootInfo, bootInfoLoaded, cardInfo, currentRecord, encodeRecord } from '@digi/regression/runtime/card-kit.ts';
+import {
+  bootInfo,
+  bootInfoLoaded,
+  cardInfo,
+  currentRecord,
+  encodeRecord,
+  CMD,
+  postRaw,
+  readSectors,
+  setSelection,
+} from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { CARD_TIMEOUT } from '@digi/regression/runtime/debug-kit.ts';
@@ -64,8 +74,35 @@ interface Scenario {
   reason?: number;
   held?: boolean;
   flags?: number;
+  persistent?: boolean;
+  reset?: boolean;
 }
 const scenarios: Scenario[] = [
+  {
+    name: 'payload-reset',
+    config: 'payload-reset',
+    mode: 8,
+    rejectReads: 0,
+    rejectWrites: 0,
+    storedCounter: 0,
+    scene: 'none',
+    reason: 1,
+    reset: true,
+  },
+  ...([6, 7] as const).map((mode) => ({
+    name: mode === 6 ? 'persistent-one' : 'persistent-both',
+    config: mode === 6 ? 'persistent-one' : 'persistent-both',
+    mode,
+    rejectReads: mode === 6 ? 3 : 5,
+    rejectWrites: 0,
+    storedCounter: 0,
+    scene: 'none' as const,
+    reason: 6,
+    persistent: true,
+    lastSector: 'selB' as const,
+    lastBytes: 512,
+    lastOp: 0,
+  })),
   { name: 'pass', config: 'pass', mode: 0, rejectReads: 0, rejectWrites: 0, storedCounter: 1, scene: 'active' },
   {
     name: 'one-copy',
@@ -166,6 +203,7 @@ for (const expected of scenarios) {
       roots: [...RT, `test/boot-io-${expected.config}`],
       symbols: [...CARD_SYMBOLS, ...sceneSymbols, ...faultSymbols, 'DKRT_STAGE'],
       startEmpty: true,
+      ...(expected.reset ? { relaxFs: true, baselineTimeoutMs: 3 * 60_000, env: { DIGI_TRACE_PATCH_BOOT: '1' } } : {}),
       initial: () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-boot-io-input-'));
         const file = path.join(directory, 'active.dkbs');
@@ -212,6 +250,13 @@ for (const expected of scenarios) {
               faultSymbols.map(async (name) => [name, await word(h.session, planSymbol(h.plan, name))]),
             ),
           );
+          const resets = expected.reset
+            ? [
+                ...fs
+                  .readFileSync(path.join(h.session.runDir, 'daemon.stderr'), 'utf8')
+                  .matchAll(/phase=poll\.reset unix_ms=\d+ resets=(\d+)/g),
+              ].map((match) => Number(match[1]))
+            : undefined;
           const copies = await h.records();
           const selection = currentRecord(copies);
           const card = await cardInfo(h.session, h.plan);
@@ -231,6 +276,7 @@ for (const expected of scenarios) {
           // Persist complete failure evidence before recovery assertions: the first red run is not retried.
           record(h.artifacts, 'fault-proof', {
             scenario,
+            resets,
             first,
             info,
             observed,
@@ -243,6 +289,7 @@ for (const expected of scenarios) {
             sourceHash,
             sourceBytes: valid.length,
           });
+          if (expected.reset) expect(resets).toEqual([1, 2]);
           expect(fault).toMatchObject({
             BOOT_IO_MODE: expected.mode,
             BOOT_IO_REJECT_READS: expected.rejectReads,
@@ -259,22 +306,25 @@ for (const expected of scenarios) {
           expect(info).toMatchObject({
             safe: safe ? 1 : 0,
             reason: expected.reason ?? 0,
-            count: 1,
+            count: expected.persistent ? 0 : 1,
             loaded: safe ? 0 : 1,
-            counter: 0,
-            seq: 10,
-            copy: 1,
+            counter: expected.reset ? 2 : 0,
+            seq: expected.reset ? 12 : expected.persistent ? (expected.mode === 6 ? 1 : 0) : 10,
+            copy: expected.persistent ? 0 : 1,
+            ...(safe ? { allResults: Array(8).fill(-44) } : {}),
+            ...(expected.persistent ? { results: [] } : {}),
             ...(!safe ? { results: [0] } : {}),
           });
           expect(selection).toMatchObject({ counter: expected.storedCounter, paths: ['modules/c-demo.dkm'] });
           expect(selection!.seq).toBeGreaterThanOrEqual(10);
-          expect(copies[1]).toMatchObject({
-            seq: 10,
-            counter: 0,
-            flags: expected.flags ?? 0,
-            paths: ['modules/c-demo.dkm'],
-          });
-          if (expected.storedCounter === 0) {
+          if (!expected.reset)
+            expect(copies[1]).toMatchObject({
+              seq: 10,
+              counter: 0,
+              flags: expected.flags ?? 0,
+              paths: ['modules/c-demo.dkm'],
+            });
+          if (expected.storedCounter === 0 && !expected.reset) {
             expect(copies[0]).toMatchObject({ seq: 1, counter: 0, flags: 0, paths: [] });
             expect(storeWrites).toEqual([]);
           }
@@ -314,6 +364,23 @@ for (const expected of scenarios) {
             expect(observed.BOOT_SCENE_PUBLISHED).toBe(0);
             expect(observed.BOOT_CARD_POINTER).toBe(0);
           }
+          if (expected.persistent) {
+            expect(info).toMatchObject({ stable: 1 });
+            const before = await h.after('persistent-before');
+            const original = [
+              encodeRecord({ paths: [], seq: 1 }),
+              encodeRecord({ paths: ['modules/c-demo.dkm'], seq: 10 }),
+            ];
+            for (const [index, sector] of [h.store.selA, h.store.selB].entries())
+              expect(readSectors(before, sector, 1)).toEqual(original[index]);
+            expect(await setSelection(h.session, h.plan, [])).toBe(-3);
+            for (const copy of [0, 1])
+              expect(await postRaw(h.session, h.plan, CMD.SELECT_ONE, Buffer.from([copy, 0, 0]))).toBe(-3);
+            const after = await h.after('persistent-after-api');
+            for (const [index, sector] of [h.store.selA, h.store.selB].entries())
+              expect(readSectors(after, sector, 1)).toEqual(original[index]);
+            expect(await h.storeWrites()).toEqual([]);
+          }
           await rpc(h.session, 'run.mode', { mode: 'free' });
           try {
             if (expected.held) await rpc(h.session, 'input.button', { code: button('RECORD'), down: false });
@@ -335,6 +402,12 @@ for (const expected of scenarios) {
             const after = await h.session.status();
             expect(after.cf.input_irqs).toBeGreaterThan(irqs);
             expect(after.cf.input_pending).toBe(0);
+            if (expected.persistent) {
+              expect(await h.storeWrites()).toEqual([]);
+              expect(await word(h.session, planSymbol(h.plan, 'BOOT_IO_REJECT_READS'))).toBe(
+                expected.rejectReads + (expected.mode === 6 ? 3 : 6),
+              );
+            }
           } finally {
             try {
               await drainInputs(h.session);

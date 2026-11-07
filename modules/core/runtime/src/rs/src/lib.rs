@@ -1033,14 +1033,14 @@ pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
 
 // ---- boot-time loading (finding 37) ---------------------------------------------------------------------------------------
 
-/// `dkrt_selection_get(out)`: the saved selection (what the next boot loads). Always 0.
+/// `dkrt_selection_get(out)`: the saved selection (what the next boot loads). 0, or `E_READ` without touching `out` if either copy cannot be read.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_selection_get(out: *mut DkrtSelection) -> i32 {
     init_once();
     boot::selection_get(out)
 }
 
-/// `dkrt_selection_set(sel)`: save the selection (two copies, sequence number, CRC); no effect until the next boot. 0 or `E_SEL_*`.
+/// `dkrt_selection_set(sel)`: save the selection (two copies, sequence number, CRC); no effect until the next boot. 0, `E_SEL_*`, or `E_READ` without writes if either copy cannot be read.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_selection_set(sel: *const DkrtSelection) -> i32 {
     init_once();
