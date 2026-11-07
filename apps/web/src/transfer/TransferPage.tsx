@@ -26,6 +26,7 @@ import {
   browseDevice,
   browsing,
   busy,
+  ENABLING,
   endJob,
   error,
   log,
@@ -198,7 +199,12 @@ export default function TransferPage(): JSX.Element {
       </header>
       <AutoRefresh busy={busy} read={readNow} rescanPorts={() => setReload((n) => n + 1)} />
 
-      <WaitNotice active={!!busy()} cancel={!cancellable(busy())} />
+      <Show when={busy() === ENABLING}>
+        <p class="meta" role="status">
+          Enabling default modules…
+        </p>
+      </Show>
+      <WaitNotice active={!!busy()} cancel={!cancellable(busy()) && busy() !== ENABLING} />
 
       <Show when={error()}>
         <p class="err" role="alert">

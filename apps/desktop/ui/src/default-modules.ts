@@ -30,12 +30,12 @@ export function sessionOps(s: DkSession, library: LibraryModule[]): DefaultOps {
 
 export const desktopDefaultModules: NonNullable<FirmwareEnv['defaultModules']> = {
   entries,
-  async install(where, device, ids, progress: (p: DefaultProgress) => void) {
+  async install(where, device, ids, progress: (p: DefaultProgress) => void, drop = []) {
     // after a flash the old session may be of the port before the restart
     if (where === 'device') resetSession();
     const s = await (where === 'emulator' ? emulatorSession() : session());
     const library = await loadLibrary(device);
-    return asked(() => installDefaults(sessionOps(s, library), ids, progress));
+    return asked(() => installDefaults(sessionOps(s, library), ids, progress, drop));
   },
 };
 

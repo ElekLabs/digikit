@@ -7,6 +7,7 @@ import {
   parseUnticked,
   patchSetFor,
   tickedIds,
+  untickedIds,
   withTick,
   type DefaultOps,
 } from '../src/firmware/default-modules-core.ts';
@@ -67,9 +68,8 @@ class Fake implements DefaultOps {
   async restart() {
     this.calls.push('restart');
     if (this.loadsAfterRestart)
-      this.now = [
-        ...new Set([...this.now, ...this.selected.at(-1)!.map((p) => [...this.paths].find(([, v]) => v === p)![0])]),
-      ];
+      // the boot loads exactly what the selection names
+      this.now = this.selected.at(-1)!.map((p) => [...this.paths].find(([, v]) => v === p)![0]);
     return this.now;
   }
 }
@@ -143,4 +143,48 @@ test('a selection over 8 paths is refused without a change on the device', async
 test('the Custom boot screen toggle picks the patch set that adds core/introblank', () => {
   assert.equal(patchSetFor(false), 'device');
   assert.equal(patchSetFor(true), 'device-introblank');
+});
+
+test('the unticked default modules of a device are the ones a run may remove', () => {
+  const u = withTick({}, 'dt2', 'digikit/debug', false);
+  assert.deepEqual(untickedIds(entries, u, 'dt2'), ['digikit/debug']);
+  assert.deepEqual(untickedIds(entries, u, 'dn2'), []);
+  assert.deepEqual(untickedIds(entries, {}, 'dt2'), []);
+});
+
+test('an unticked default module that is loaded is removed from the selection with one restart; other modules stay', async () => {
+  const d = new Fake();
+  d.card.add('modules/remote.dkm');
+  d.now = ['digikit/remote', 'digikit/debug', 'fx/other'];
+  d.paths.set('fx/other', 'modules/other.dkm');
+  const lines = await installDefaults(d, ['digikit/remote'], undefined, ['digikit/debug']);
+  assert.deepEqual(new Set(d.selected[0]), new Set(['modules/remote.dkm', 'modules/other.dkm']));
+  assert.equal(d.calls.filter((c) => c === 'restart').length, 1);
+  assert.deepEqual(lines.at(-1), 'disabled digikit/debug (restarted once)');
+});
+
+test('a run with all default modules unticked can still remove the loaded ones; with none loaded it costs no restart', async () => {
+  const d = new Fake();
+  d.now = ['digikit/remote'];
+  const lines = await installDefaults(d, [], undefined, ['digikit/remote', 'digikit/debug']);
+  assert.deepEqual(d.selected, [[]]);
+  assert.deepEqual(lines, ['disabled digikit/remote (restarted once)']);
+  const idle = new Fake();
+  assert.deepEqual(await installDefaults(idle, [], undefined, ['digikit/debug']), ['already enabled']);
+  assert.deepEqual(idle.calls, ['wait']);
+});
+
+test('a module that is still loaded after its removal is reported', async () => {
+  const d = new Fake();
+  d.now = ['digikit/debug'];
+  d.restart = async () => d.now;
+  await assert.rejects(installDefaults(d, [], undefined, ['digikit/debug']), /digikit\/debug: it is still loaded after the restart/);
+});
+
+test('a ticked and an unticked module of the same id is never removed', async () => {
+  const d = new Fake();
+  d.card.add('modules/remote.dkm');
+  d.now = ['digikit/remote'];
+  const lines = await installDefaults(d, ['digikit/remote'], undefined, ['digikit/remote']);
+  assert.deepEqual(lines, ['digikit/remote: already on the card', 'already enabled']);
 });

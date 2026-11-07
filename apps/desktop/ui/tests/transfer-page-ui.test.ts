@@ -37,8 +37,8 @@ import {
   tickSelect,
   toggleAll,
 } from '../../../web/src/transfer/select-core.ts';
-import { countLabel, applyEvent, modulesBar, startProgress } from '../../../web/src/transfer/transfer-core.ts';
-import { beginJob, busy, endJob, error, setError } from '../../../web/src/transfer/transfer-state.ts';
+import { countLabel, applyEvent, modulesBar, startProgress, writing } from '../../../web/src/transfer/transfer-core.ts';
+import { ENABLING, beginJob, busy, endJob, error, setError, withJob } from '../../../web/src/transfer/transfer-state.ts';
 import { WAIT_QUIET_MS, createActivity, waitShown } from '../../../web/src/transfer/wait-core.ts';
 
 test('select all: none, some or all of the visible rows; a click ticks all, or clears them when all are ticked', () => {
@@ -515,4 +515,39 @@ test('the speed of the bar does not see skipped files: its bytes only grow with 
   u = ev(u, { event: 'progress', name: 'b', sent: 100_000, bytes: 1_000_000 });
   r.add(2000, samplesBar(u, {}, true)!.sent);
   assert.equal(r.rate(2000), 50_000, '100 KB in 2 s, not 1.1 MB');
+});
+
+test('enabling the default modules is a job: a write that blocks the page, refuses a second job and ends also on a failure', async () => {
+  assert.equal(writing(ENABLING), true, 'Upload, Delete and Remote treat it as a write');
+  let seen = '';
+  const first = await withJob(ENABLING, async () => {
+    seen = busy();
+    // a job on the page (an upload) cannot start now, and a second install does not run its function
+    assert.equal(beginJob('Uploading'), false);
+    let ran = false;
+    assert.deepEqual(
+      await withJob(ENABLING, async () => void (ran = true)),
+      { ran: false },
+    );
+    assert.equal(ran, false);
+    return 'lines';
+  });
+  assert.deepEqual(first, { ran: true, value: 'lines' });
+  assert.equal(seen, ENABLING);
+  assert.equal(busy(), '');
+  await assert.rejects(
+    withJob(ENABLING, async () => {
+      throw new Error('boom');
+    }),
+    /boom/,
+  );
+  assert.equal(busy(), '', 'the job ends when the install fails');
+  // a job that runs already: the install is skipped and that job is left alone
+  assert.equal(beginJob('Uploading'), true);
+  assert.deepEqual(
+    await withJob(ENABLING, async () => 1),
+    { ran: false },
+  );
+  assert.equal(busy(), 'Uploading');
+  endJob();
 });

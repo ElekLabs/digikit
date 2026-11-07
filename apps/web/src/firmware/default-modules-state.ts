@@ -7,6 +7,7 @@ import {
   parseUnticked,
   patchSetFor,
   tickedIds,
+  untickedIds,
   withTick,
   type DefaultModuleEntry,
   type Unticked,
@@ -66,6 +67,9 @@ export const entriesFor = (device: string): DefaultModuleEntry[] => firmwareEnv(
 /** The ids ticked for the device, in list order. */
 export const tickedFor = (device: string): string[] => tickedIds(entriesFor(device), unticked(), device);
 
+/** The default modules the user unticked for the device: the install turns them off when they are loaded. */
+export const untickedFor = (device: string): string[] => untickedIds(entriesFor(device), unticked(), device);
+
 /** The run of the default modules after a flash. */
 export type PostRun =
   | { kind: 'idle' }
@@ -83,11 +87,12 @@ export const postWorking = (): boolean => postRun().kind === 'working';
 export async function installAfterFlash(device: string): Promise<void> {
   const env = firmwareEnv();
   const ids = tickedFor(device);
+  const drop = untickedFor(device);
   if (!env.defaultModules || ids.length === 0) return;
   setPostRun({ kind: 'working', text: 'Starting the default modules', done: 0, total: ids.length + 2 });
-  env.log({ level: 'info', text: `default modules for ${device}: ${ids.join(', ')}` });
+  env.log({ level: 'info', text: `default modules for ${device}: ${ids.join(', ')}${drop.length ? ` (off: ${drop.join(', ')})` : ''}` });
   try {
-    const lines = await env.defaultModules.install('device', device, ids, (p) => setPostRun({ kind: 'working', ...p }));
+    const lines = await env.defaultModules.install('device', device, ids, (p) => setPostRun({ kind: 'working', ...p }), drop);
     setPostRun({ kind: 'done', lines });
     env.log({ level: 'info', text: 'default modules installed', detail: lines.join('\n') });
   } catch (e) {

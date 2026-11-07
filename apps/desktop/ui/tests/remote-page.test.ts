@@ -69,7 +69,7 @@ test('a Transfer job keeps the Remote page from cancelling its requests and from
   // leaving the page cancels what waits on the session only when no job writes to the device (a read is short and not worth keeping)
   assert.equal(leaveCancels(''), true);
   assert.equal(leaveCancels('Reading'), true);
-  for (const job of ['Uploading', 'Installing', 'Deleting', 'Restarting']) {
+  for (const job of ['Uploading', 'Installing', 'Deleting', 'Restarting', 'Enabling']) {
     assert.equal(leaveCancels(job), false, job);
     assert.equal(remotePaused(job), true, job);
   }
