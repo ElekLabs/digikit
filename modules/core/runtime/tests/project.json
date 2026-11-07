@@ -27,6 +27,11 @@
         "pythonTools": true
       },
       {
+        "files": ["launch-selection.device.test.ts"],
+        "modules": ["test/sine"],
+        "sources": ["apps/web/src/modules/dktransfer.ts"]
+      },
+      {
         "files": ["samples-live.device.test.ts"],
         "modules": [],
         "sources": [
