@@ -200,3 +200,41 @@ The earlier card-DKBS handover links this continuation at its top.
 No push, PR, merge or hardware action. Three registered updated-image cases
 remain unrun as listed above. Physical/controller and late-error limitations
 remain open.
+
+## Coverage closeout on unchanged `80c1181f`
+
+The user requested finishing the remaining registered checks. Two frozen owner
+groups ran with the same default budgets, one worker each and at most two
+processes; no code/configuration change, rebuild, previous-pass rerun or retry.
+The storage group passed 3/3 selected (13 skipped) in 116.72 s: updated DN2 pass,
+DT2 both-copies and DT2 probe. The normal DN2 control loaded c-demo with no
+rejections; DT2 both-copies recovered after two read rejections, and DT2 probe
+recovered after one header rejection with card ours/readErrors 1. All three
+retained c-demo paths/counter 1 and passed existing UI/input/DSP/lifetime checks
+with zero write-watch/flush hits and no invalid writes. Storage recovery now has
+16/16 registered updated-runtime passes across the selected runs. Including the
+pre-fix control and expected red reproducer, its subtotal is 18 baselines, no
+retries; the prior 15-baseline figure describes the earlier 13-case checkpoint.
+
+The DT2 card-provider group passed 5/5 selected (11 skipped) in 152.17 s:
+missing, oversized, empty, counter and transfer. Missing/oversized owned no
+asset and still loaded c-demo; empty selection retained all 2,166 asset bytes
+and played the scene with count/loaded 0; counter 2 produced counter safe reason
+1 and loaded 0. Transfer used PUT/fresh VERIFY/LIST, then DELETE/absence LIST,
+with three snapshots preserving the boot pointer, bytes, scene and selection
+while c-demo stayed loaded. Existing UI/input/DSP and uploads:true safety
+assertions passed. The transfer's raw default lifetime.pass is false for the
+five expected USB store writes (48,173,056/57/74/75 and 48,340,957), not the
+upload-policy result. Outside-store/invalid-low lists were empty and write-watch/
+flush hits zero. The other four raw lifetime reports passed. Card-provider
+coverage is now 16/16 registered cases across its selected runs.
+
+Exactly eight new cases/eight baselines ran in this closeout. Logs:
+`/private/tmp/bootscreen-closeout-storage.log` and
+`/private/tmp/bootscreen-closeout-card-dt2.log`; bounded actual evidence, retained
+directories and individual baseline durations:
+`/private/tmp/bootscreen-closeout-summary.json`. This updates the earlier
+remaining-case lists; no registered cases in these two tables remain unrun.
+No new gate, full gate, commit, native build, hardware, push, PR or merge in this
+closeout. Blocked/controller I/O, physical write protection and scan/display
+timing, and persistent late selection-read-error policy remain open.
