@@ -38,13 +38,15 @@ write sectors and intro evidence before assertions. Write-error cases require
 an empty actual store-write sector list. Held RECORD skips intro capture and is
 released before the existing UI checks.
 
-DN2 one-copy passed after the bounded early-selection fix; updated DT2 pass
-also passed. Eleven parent-selected expanded cases also passed, bringing
-updated-runtime coverage to 13/16 registered cases; updated DN2 pass, DT2 both-copies and DT2
-probe remain unrun. All selected cases passed the existing UI/input/DSP and
-lifetime checks, with actual empty store-write lists for write-error cases.
-This returned-status model makes no physical write-protection/DMA-stall claim.
-Persistent selection read errors enter safe mode without record writes. The
-payload-reset case tests counter recovery when reset occurs inside the provider
-read; it does not model a controller timeout or cancellation. These new cases
-are prepared, not yet run. Blocked I/O remains open.
+The original sixteen returned-error cases passed across the recorded
+`80c1181f` checks. On `aafa618f`, all six new persistent-read/reset cases plus
+DN2 pass and DT2 one-copy controls passed, with existing UI/input/DSP and strict
+lifetime checks. Both reset cases recorded `[1, 2]`, then reached counter-safe
+mode with no provider work. Persistent cases reached SAFE_READ (6), preserved
+both original records and refused SELECT/SELECT_ONE with E_READ and no writes.
+The full twenty-two-case table was not rerun on that final commit.
+
+See [results and evidence](../../../../docs/handovers/HANDOVER-2026-11-07-boot-persistent-errors.md).
+This proves returned-error handling and controlled reset recovery at the
+provider-read boundary. Real DMA stalls, physical write protection, automatic
+cancellation and hardware recovery remain unproved.

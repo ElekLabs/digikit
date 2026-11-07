@@ -11,6 +11,42 @@ bytes by a second agent. **[D]** marks readings, arithmetic and session-local
 build/emulator observations; **[O]** marks proposals or missing proof. Byte checks establish
 instructions and stored values, not hardware timing or recoverability.
 
+## Current checkpoint: 2026-11-07
+
+**[C]** This status supersedes the older unrun-case and persistent late-read
+policy lists below. The prototype includes PNG/JSON packing and preview, a
+RAM-only DKBS renderer, a private guarded card provider and Workbench transfer.
+Its adapters remain explicit opt-ins; no public loadable-service contract or
+production/default-enabled player is claimed.
+
+**[D]** Original card-provider and returned-error tables each reached 16/16
+passes across their recorded `80c1181f` runs. On integrated `aafa618f`, all six
+new persistent-read/reset cases plus DN2 pass and DT2 one-copy controls passed:
+3 cases in 214.04 s and 5 in 221.87 s, two parallel groups, eight baseline
+requests/four guest resets, no retries. Both reset cases retained `[1, 2]`, then
+counter-safe mode with no provider work. All four persistent cases entered
+SAFE_READ (6), loaded nothing and preserved both selection records with no
+writes; SELECT and SELECT_ONE refused with E_READ. Full-record before/after
+comparisons passed as assertions; post-API bytes were not separately retained.
+All eight UI/input/DSP and strict lifetime checks passed. The whole-branch cheap
+preflight passed 19/19 tasks (4 cached) in 52.8 s; the full merge gate has not run.
+
+**[D]** Every selection lookup now honors read uncertainty, including late boot,
+setters and stable UI counter clearing. Menu errors block saving until a fresh
+successful selection read. This final fix adds 104 runtime text bytes versus
+`80c1181f`, with unchanged runtime data/BSS; menu +88 text/+37 rodata/+4 BSS.
+The test-only fault shim is 458 text/32 BSS; each mode is 4 bytes. New modes
+6/7 persist returned selection-read errors; mode 8 resets inside the payload
+read and never returns. This does not model timeout/cancellation of real DMA.
+
+Evidence and exact scope: [persistent-error handover](../handovers/HANDOVER-2026-11-07-boot-persistent-errors.md),
+`/private/tmp/bootscreen-safety-device-summary.json`, and the
+[earlier coverage closeout](../handovers/HANDOVER-2026-11-07-boot-returned-errors.md#coverage-closeout-on-unchanged-80c1181f).
+
+**[O]** Hardware initial REC scan/display timing, physical write protection and
+escape from permanently blocked I/O remain unproved. Counter recovery is proved
+for the controlled guest-reset boundary, not arbitrary physical power loss.
+
 ## Stock animation
 
 **[V]** The animated intro renders a **128 × 64 monochrome bitmap**, 1,024 bytes.
