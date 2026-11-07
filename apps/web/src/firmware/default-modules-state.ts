@@ -90,9 +90,18 @@ export async function installAfterFlash(device: string): Promise<void> {
   const drop = untickedFor(device);
   if (!env.defaultModules || ids.length === 0) return;
   setPostRun({ kind: 'working', text: 'Starting the default modules', done: 0, total: ids.length + 2 });
-  env.log({ level: 'info', text: `default modules for ${device}: ${ids.join(', ')}${drop.length ? ` (off: ${drop.join(', ')})` : ''}` });
+  env.log({
+    level: 'info',
+    text: `default modules for ${device}: ${ids.join(', ')}${drop.length ? ` (off: ${drop.join(', ')})` : ''}`,
+  });
   try {
-    const lines = await env.defaultModules.install('device', device, ids, (p) => setPostRun({ kind: 'working', ...p }), drop);
+    const lines = await env.defaultModules.install(
+      'device',
+      device,
+      ids,
+      (p) => setPostRun({ kind: 'working', ...p }),
+      drop,
+    );
     setPostRun({ kind: 'done', lines });
     env.log({ level: 'info', text: 'default modules installed', detail: lines.join('\n') });
   } catch (e) {

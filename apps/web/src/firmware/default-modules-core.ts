@@ -146,7 +146,8 @@ export async function installDefaults(
   if (still.length)
     throw new DefaultModuleError(still[0]!, 'it is not loaded after the restart (see the Log for the reason)');
   const stays = extra.filter((id) => after.includes(id));
-  if (stays.length) throw new DefaultModuleError(stays[0]!, 'it is still loaded after the restart (see the Log for the reason)');
+  if (stays.length)
+    throw new DefaultModuleError(stays[0]!, 'it is still loaded after the restart (see the Log for the reason)');
   lines.push(
     [missing.length ? `enabled ${missing.join(', ')}` : '', extra.length ? `disabled ${extra.join(', ')}` : '']
       .filter(Boolean)

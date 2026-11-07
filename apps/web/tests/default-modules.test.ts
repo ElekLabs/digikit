@@ -178,7 +178,10 @@ test('a module that is still loaded after its removal is reported', async () => 
   const d = new Fake();
   d.now = ['digikit/debug'];
   d.restart = async () => d.now;
-  await assert.rejects(installDefaults(d, [], undefined, ['digikit/debug']), /digikit\/debug: it is still loaded after the restart/);
+  await assert.rejects(
+    installDefaults(d, [], undefined, ['digikit/debug']),
+    /digikit\/debug: it is still loaded after the restart/,
+  );
 });
 
 test('a ticked and an unticked module of the same id is never removed', async () => {

@@ -38,7 +38,15 @@ import {
   toggleAll,
 } from '../../../web/src/transfer/select-core.ts';
 import { countLabel, applyEvent, modulesBar, startProgress, writing } from '../../../web/src/transfer/transfer-core.ts';
-import { ENABLING, beginJob, busy, endJob, error, setError, withJob } from '../../../web/src/transfer/transfer-state.ts';
+import {
+  ENABLING,
+  beginJob,
+  busy,
+  endJob,
+  error,
+  setError,
+  withJob,
+} from '../../../web/src/transfer/transfer-state.ts';
 import { WAIT_QUIET_MS, createActivity, waitShown } from '../../../web/src/transfer/wait-core.ts';
 
 test('select all: none, some or all of the visible rows; a click ticks all, or clears them when all are ticked', () => {
@@ -525,10 +533,7 @@ test('enabling the default modules is a job: a write that blocks the page, refus
     // a job on the page (an upload) cannot start now, and a second install does not run its function
     assert.equal(beginJob('Uploading'), false);
     let ran = false;
-    assert.deepEqual(
-      await withJob(ENABLING, async () => void (ran = true)),
-      { ran: false },
-    );
+    assert.deepEqual(await withJob(ENABLING, async () => void (ran = true)), { ran: false });
     assert.equal(ran, false);
     return 'lines';
   });
@@ -544,10 +549,7 @@ test('enabling the default modules is a job: a write that blocks the page, refus
   assert.equal(busy(), '', 'the job ends when the install fails');
   // a job that runs already: the install is skipped and that job is left alone
   assert.equal(beginJob('Uploading'), true);
-  assert.deepEqual(
-    await withJob(ENABLING, async () => 1),
-    { ran: false },
-  );
+  assert.deepEqual(await withJob(ENABLING, async () => 1), { ran: false });
   assert.equal(busy(), 'Uploading');
   endJob();
 });
