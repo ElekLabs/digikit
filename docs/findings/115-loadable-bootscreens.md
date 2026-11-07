@@ -970,3 +970,12 @@ The test-only entry hooks/configurations stay outside all default images. The
 accepted after-fix footprint is +192 bytes code and CF placement per image,
 with unchanged data/BSS. The 13 after-fix passes are distinct from the pre-fix
 normal control success and expected failure (15 total attempted baselines).
+
+
+**[D]** Local implementation commit `2ad071ef` passed the explicit-base cheap
+gate (`DIGI_GATE_BASE=1688d68f mise run test:changed`) once: 8/8 selected tasks,
+43.8 s, zero cache hits; final generation, layers and diff passed. Log:
+`/private/tmp/bootscreen-io-final-changed-gate.log`. Existing artifacts were
+reused; no additional emulator/native/dependency work or full merge gate. The
+[returned-error handover](../handovers/HANDOVER-2026-11-07-boot-returned-errors.md)
+records targets, commits, evidence and the three unrun updated-image cases.

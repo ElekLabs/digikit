@@ -181,5 +181,22 @@ with data/BSS unchanged. Evidence totals are 13 selected after-fix passes, one
 before-fix control success and one expected before-fix failure: 15 attempted
 baselines without retries. Blocked controller I/O, physical write protection,
 initial RECORD scan and display timing, and persistent late selection-read-error
-policy remain open. The changed-test gate is pending; the full merge gate is
+policy remain open. The changed-test gate passed as recorded below; the full merge gate is
 not part of this local finalization.
+
+## Local commit and final changed gate
+
+Implementation commit: `2ad071ef4a976cdc430a64c033db8f9f70cd072a`
+(`fix: defer early boot after uncertain selection reads`). The authorized
+`DIGI_GATE_BASE=1688d68f mise run test:changed` passed once: 8/8 tasks in
+43.8 s, zero cache hits. Selected targets were storage-error-proof:test-host,
+workspace fmt-check/lint/rust-fmt, tools:python-checks, desktop test-host/
+typecheck and nx-tools:test-host. No failed owner or rerun. Log:
+`/private/tmp/bootscreen-io-final-changed-gate.log`. Final generated-source,
+layer and diff checks passed. Existing local artifacts were reused; no native
+build, dependency change, additional emulator run or full merge gate.
+The earlier card-DKBS handover links this continuation at its top.
+
+No push, PR, merge or hardware action. Three registered updated-image cases
+remain unrun as listed above. Physical/controller and late-error limitations
+remain open.
