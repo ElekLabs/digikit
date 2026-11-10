@@ -20,7 +20,7 @@ vi.mock('vitest', async (original) => ({
 }));
 vi.mock('@digi/test-support', async (original) => ({ ...(await original<object>()), Session: { start: fake.start } }));
 import { flushFileTemps } from '../file-temp.ts';
-import { withReusablePatchedSession } from '../support.ts';
+import { BASELINE_BUDGET_MS, withReusablePatchedSession } from '../support.ts';
 
 async function fixture(
   options: {
@@ -139,8 +139,10 @@ test('a rejected reset cannot expose the prior protocol as the next case', async
 test('slow startup leaves only the remaining beforeAll budget for baseline preparation', async () => {
   vi.useFakeTimers();
   try {
-    const failed = expect(fixture({ startDelay: 119_000, hangPreparation: true })).rejects.toThrow('deadline');
-    await vi.advanceTimersByTimeAsync(119_000);
+    const failed = expect(fixture({ startDelay: BASELINE_BUDGET_MS - 1000, hangPreparation: true })).rejects.toThrow(
+      'deadline',
+    );
+    await vi.advanceTimersByTimeAsync(BASELINE_BUDGET_MS - 1000);
     const session = await fake.start.mock.results[0]!.value;
     expect(session.close).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(999);

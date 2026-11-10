@@ -38,7 +38,7 @@ export function resolveBinary(binary?: string): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function readSocket(runDir: string): string | null {
+export function readSocket(runDir: string): string | null {
   try {
     const info = JSON.parse(fs.readFileSync(path.join(runDir, 'current.json'), 'utf8'));
     const sock = String(info.socket);

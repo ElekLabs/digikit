@@ -532,6 +532,8 @@ Formatting an emulator crate or `dkneeds` changes the daemon key and the PGO key
   daemon whose DSP frames, main loop hits and audio frames stay the same for 120 s of wall time
   (`DIGI_NO_PROGRESS_MS`, in ms; 0 turns it off), so the test fails at once; a paused daemon without a
   job is idle and not counted. The runtime and conformance wall timeouts are 30 min backstops.
+- The firmware load of a runtime session is bounded by boot progress (`status` `boot.icount`, read on a second
+  connection), not by wall time. The `timeoutMs` of a baseline is the idle limit of that load; a 15 min cap stays as a backstop.
 - `pnpm nx:pilot run digi-control:daemons` builds the daemons and writes `dist/daemons.json`; helpers
   read it when `DIGI_EMUD_*` is unset. The builds use the daemon store (`<git common dir>/emud-cache`,
   `tools/devtools/verify_build.py`).

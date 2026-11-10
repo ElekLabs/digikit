@@ -4,6 +4,8 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   RpcError,
+  connect,
+  readSocket,
   spawnDaemon,
   type Client,
   type Daemon,
@@ -115,6 +117,7 @@ export interface RuntimeBaseline {
   relaxedReady?: boolean;
   /** Leave the emulator paused at the ready point (the default is free running); a test that times events in DSP frames steps from there. */
   paused?: boolean;
+  /** Idle limit of the firmware load (no boot progress for this long, default 120 s); other steps share it as a fixed deadline. */
   timeoutMs?: number;
 }
 
@@ -135,6 +138,102 @@ export async function withinRuntimeDeadline<T>(deadline: number, operation: () =
   }
 }
 
+/**
+ * Like `withinRuntimeDeadline`, but the limit is idleness: `poll` runs every `intervalMs`, and the idle clock restarts
+ * whenever its value differs from the last one (any change: a soft reset restarts a count at 0). `capMs` bounds the total.
+ */
+export async function withProgressDeadline<T>(
+  operation: () => Promise<T>,
+  opts: {
+    idleMs: number;
+    capMs?: number;
+    poll: () => Promise<number | undefined> | number | undefined;
+    intervalMs?: number;
+  },
+): Promise<T> {
+  const capMs = opts.capMs ?? 900_000;
+  const start = Date.now();
+  let lastChange = start;
+  let last: number | undefined;
+  let polling = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setInterval(() => {
+          const now = Date.now();
+          if (now - start > capMs) {
+            reject(new Error(`runtime lifecycle deadline exceeded (cap ${Math.round(capMs / 1000)} s)`));
+            return;
+          }
+          if (now - lastChange > opts.idleMs) {
+            reject(
+              new Error(
+                `runtime lifecycle deadline exceeded (no boot progress for ${Math.round(opts.idleMs / 1000)} s)`,
+              ),
+            );
+            return;
+          }
+          if (polling) return;
+          polling = true;
+          void Promise.resolve()
+            .then(() => opts.poll())
+            .then(
+              (value) => {
+                if (value !== last) {
+                  last = value;
+                  lastChange = Date.now();
+                }
+              },
+              () => {},
+            )
+            .finally(() => {
+              polling = false;
+            });
+        }, opts.intervalMs ?? 1000);
+      }),
+    ]);
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+/**
+ * Run one `firmware.load` bounded by boot progress: `status.boot.icount` read on a second connection to this daemon
+ * (the first one is busy). Without a second connection it falls back to a fixed `idleMs` deadline.
+ */
+async function loadWithBootProgress<T>(
+  runDir: string,
+  idleMs: number,
+  operation: () => Promise<T>,
+  guarded?: (on: boolean) => void,
+): Promise<T> {
+  let poller: Client | undefined;
+  try {
+    const sock = readSocket(runDir);
+    if (sock) {
+      poller = await connect(sock);
+      await poller.hello();
+    }
+  } catch {
+    poller?.close();
+    poller = undefined;
+  }
+  if (!poller) return withinRuntimeDeadline(Date.now() + idleMs, operation);
+  const client = poller;
+  guarded?.(true);
+  try {
+    return await withProgressDeadline(operation, {
+      idleMs,
+      poll: async () => (await client.status()).boot?.icount,
+    });
+  } finally {
+    guarded?.(false);
+    client.close();
+  }
+}
+
 export class Session {
   readonly options: SessionOptions;
   #daemon: Daemon;
@@ -148,12 +247,18 @@ export class Session {
   #guarded: Client | undefined;
   #closing: Promise<void> | undefined;
   #reloading = false;
+  #bootGuarded = false;
   #preserveDiagnostics = false;
 
   private constructor(options: SessionOptions, daemon: Daemon, ownedDir: string | null) {
     this.options = options;
     this.#daemon = daemon;
     this.#ownedDir = ownedDir;
+  }
+
+  /** True while a baseline's firmware load runs under its boot-progress deadline (the main connection is busy). */
+  get bootGuarded(): boolean {
+    return this.#bootGuarded;
   }
 
   /** The resolved DSP mode of this session. */
@@ -241,14 +346,16 @@ export class Session {
     const startupDeadline = Date.now() + (options.runtime ? 120_000 : 300_000);
     const controller = options.runtime ? new AbortController() : undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let expire: (() => void) | undefined;
     const expired = controller
       ? new Promise<never>((_resolve, reject) => {
           // Leave time for the owned daemon's ten-second close before Vitest's 150s runtime hook deadline.
-          timer = setTimeout(() => {
+          expire = () => {
             const error = new Error('runtime startup timed out after 120000 ms');
             controller.abort(error);
             reject(error);
-          }, 120_000);
+          };
+          timer = setTimeout(expire, 120_000);
         })
       : undefined;
     let session: Session | undefined;
@@ -294,7 +401,7 @@ export class Session {
       let card: string | undefined;
       if (options.card) card = (await checked(c.cardLoad(options.card))).card;
       session.#card = card;
-      session.#load = await checked(
+      const load = () =>
         c.firmwareLoad({
           syx: inp.syx,
           start: options.runtime ? 'auto' : 'snapshot',
@@ -302,8 +409,21 @@ export class Session {
           force: true,
           auto_no: options.autoNo ?? true,
           ...(card ? { card } : {}),
-        }),
-      );
+        });
+      if (options.runtime) {
+        // A cold boot that makes progress is not cut by the fixed startup timer: the load is bounded by boot progress.
+        clearTimeout(timer);
+        try {
+          session.#load = await checked(loadWithBootProgress(runDir, 120_000, load));
+        } catch (err) {
+          // The load's own deadline ends startup like the startup timer: abort, close the daemon, then reject.
+          if (err instanceof Error && err.message.startsWith('runtime lifecycle deadline exceeded')) expire!();
+          throw err;
+        }
+        timer = setTimeout(expire!, 120_000);
+      } else {
+        session.#load = await checked(load());
+      }
       session.#touchCacheHit(session.#load);
       await checked(c.watchdogConfig(options.stallMs ?? 1000));
       if (options.runtime) await checked(c.call('run.mode', { mode: 'free' }));
@@ -416,21 +536,28 @@ export class Session {
       if (baseline.paused)
         await checked('run.mode.before-load', () => this.client.call('run.mode', { mode: 'paused' }));
       const loadStart = performance.now();
-      const load = (resolvedLoad = await checked('firmware.load', () =>
-        this.client.firmwareLoad({
-          syx: prepared?.syx ?? inp.syx,
-          card: image,
-          ...(prepared
-            ? { base_sha256: prepared.baseSha256 }
-            : { runtime: true, patch_set: this.options.runtime!.patchSet }),
-          // Prepared images need validated stock bytes for the DSP diff; an empty coupled daemon resolves its profile.
-          // force still reconstructs the firmware and opens the explicit pristine card.
-          replace: !prepared,
-          force: true,
-          start: baseline.initialButtons === undefined ? 'auto' : 'cold',
-          initial_buttons: baseline.initialButtons,
-          auto_no: this.options.autoNo ?? true,
-        }),
+      phase = 'firmware.load';
+      const load = (resolvedLoad = await loadWithBootProgress(
+        this.runDir,
+        baseline.timeoutMs ?? 120_000,
+        () =>
+          this.client.firmwareLoad({
+            syx: prepared?.syx ?? inp.syx,
+            card: image,
+            ...(prepared
+              ? { base_sha256: prepared.baseSha256 }
+              : { runtime: true, patch_set: this.options.runtime!.patchSet }),
+            // Prepared images need validated stock bytes for the DSP diff; an empty coupled daemon resolves its profile.
+            // force still reconstructs the firmware and opens the explicit pristine card.
+            replace: !prepared,
+            force: true,
+            start: baseline.initialButtons === undefined ? 'auto' : 'cold',
+            initial_buttons: baseline.initialButtons,
+            auto_no: this.options.autoNo ?? true,
+          }),
+        (on) => {
+          this.#bootGuarded = on;
+        },
       ));
       loadMs = performance.now() - loadStart;
       phase = 'cache.touch';

@@ -18,6 +18,8 @@ export interface WatchedSession {
   /** Closing its socket fails the pending RPCs at once. */
   client?: { close(): void };
   runDir?: string;
+  /** True while a firmware load runs under its own boot-progress deadline. */
+  bootGuarded?: boolean;
 }
 
 export interface Watchdog {
@@ -74,6 +76,11 @@ export function startNoProgressWatchdog(session: WatchedSession, options: Watchd
 
   const tick = async (): Promise<void> => {
     if (busy || stopped) return;
+    if (session.bootGuarded) {
+      // The firmware load has its own boot-progress deadline.
+      lastChange = now();
+      return;
+    }
     busy = true;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {

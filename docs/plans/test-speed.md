@@ -81,6 +81,7 @@ Highest payoff first. Each step states its proof.
    - [x] History: Nx's own task history database already records project, target, hash, status and start and end of each task. `tools/nx/gate-history.mjs` (`mise run test:history`) reads it: slowest tasks, recent failures, slowdowns. It is per worktree and written at the end of a command. Nx already uses the database's average durations to order tasks, so longest-first needs no code. Flaky tests and timeouts: not built; Nx prints its own flaky-task message.
    - [x] No gate task runs alone (2026-11-10): builds run beside other tasks with capped cargo jobs; single-emulator gate targets take an emu-slot; multi-emulator targets keep their job counts.
    - [ ] Test timeouts in emulated time or firmware state, as AGENTS.md requires for waits. A wall-time limit fails healthy tests under load.
+     - [x] The runtime firmware load is bounded by boot progress, not wall time (2026-11-10).
 7. [ ] **Device test audit.** For each device test, one of: needs the emulator; can be a host test (Rust runtime unit test or TS); duplicates another
    test. Start with the reload-bound files (`card-safety`, `settings`, `bootscreen`, `introblank`, `memaudit`, `capacity`). Keep one device test per
    boundary. Split composite tests such as `fx-track-route` so they run in parallel.

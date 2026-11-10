@@ -18,6 +18,9 @@ import { recordPhase, setTimingContext, timePhase, timingContext } from './timin
 import { startNoProgressWatchdog, type Watchdog } from './watchdog.ts';
 
 /** An AggregateError whose message names its causes (Vitest prints only the message). */
+/** The beforeAll budget of a reusable runtime fixture: startup plus baseline preparation. Not shorter than the firmware load's progress cap (900 s), which bounds the boot. */
+export const BASELINE_BUDGET_MS = 930_000;
+
 export function aggregate(errors: unknown[], what: string): AggregateError {
   const causes = errors.map((e) => (e instanceof Error ? e.message : String(e))).join(' | ');
   return new AggregateError(errors, `${what}: ${causes}`);
@@ -296,7 +299,7 @@ export function withReusablePatchedSession(
     }
   };
   beforeAll(async () => {
-    const deadline = Date.now() + 120_000;
+    const deadline = Date.now() + BASELINE_BUDGET_MS;
     const { runDirClaim, ...sessionOptions } = opts;
     claim = runDirClaim?.();
     try {
