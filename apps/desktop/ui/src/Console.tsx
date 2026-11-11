@@ -41,7 +41,8 @@ import { running as flashRunning } from '@web/firmware/firmware-core';
 import FirmwarePage from '@web/firmware/FirmwarePage';
 import DefaultModules from '@web/firmware/DefaultModules';
 import { DefaultModuleError } from '@web/firmware/default-modules-core';
-import { tickedFor } from '@web/firmware/default-modules-state';
+import { tickedFor, untickedFor } from '@web/firmware/default-modules-state';
+import { ENABLING, withJob } from '@web/transfer/transfer-state';
 import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
@@ -247,18 +248,30 @@ export default function Console() {
    */
   const installDefaultModules = async (deviceId: string) => {
     const ids = tickedFor(deviceId);
-    if (ids.length === 0) return;
+    const drop = untickedFor(deviceId);
+    if (ids.length === 0 && drop.length === 0) return;
+    // a job of the Transfer page's own state: its buttons stay off and Remote keeps its requests while the runtime restarts
     try {
-      const lines = await desktopDefaultModules.install('emulator', deviceId, ids, (p) =>
-        setReloadNote(`Default modules: ${p.text}`),
+      const job = await withJob(ENABLING, () =>
+        desktopDefaultModules.install(
+          'emulator',
+          deviceId,
+          ids,
+          (p) => setReloadNote(`Default modules: ${p.text}`),
+          drop,
+        ),
       );
-      setReloadNote(`Default modules ready: ${ids.join(', ')}`);
-      logInput({
-        source: 'firmware',
-        level: 'info',
-        text: `default modules in the emulator: ${ids.join(', ')}`,
-        detail: lines.join('\n'),
-      });
+      if (!job.ran) {
+        setReloadNote('Default modules not checked: a Transfer job is running');
+      } else {
+        setReloadNote(`Default modules ready: ${ids.join(', ')}`);
+        logInput({
+          source: 'firmware',
+          level: 'info',
+          text: `default modules in the emulator: ${ids.join(', ')}`,
+          detail: job.value.join('\n'),
+        });
+      }
     } catch (e) {
       const what = e instanceof DefaultModuleError ? `default module ${e.id}` : 'default modules';
       setReloadNote(`${what} failed`);

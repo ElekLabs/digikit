@@ -79,6 +79,8 @@ export const [liveRate, setLiveRate] = createSignal<number>();
  * goes on, and the page that comes back must see the job (the buttons stay off, no second job, no read) and show its error. */
 export const [busy, setBusy] = createSignal('');
 export const [error, setError] = createSignal('');
+/** The busy word of the Workbench's own job that enables the default modules (a write: see `writing`). */
+export const ENABLING = 'Enabling';
 let readAgain = false;
 let stopAsked = false;
 
@@ -105,4 +107,18 @@ export function endJob(): boolean {
   const again = readAgain;
   readAgain = false;
   return again;
+}
+
+/**
+ * Run `f` as the one busy action `what` (the Workbench's own jobs, such as enabling the default modules, are not started by the page): the
+ * page's buttons stay off, Remote does not cancel its requests when it is left, and no second job starts. When another job runs, `f` is not
+ * called and the answer is `{ ran: false }`; the job always ends, also when `f` throws.
+ */
+export async function withJob<T>(what: string, f: () => Promise<T>): Promise<{ ran: false } | { ran: true; value: T }> {
+  if (!beginJob(what)) return { ran: false };
+  try {
+    return { ran: true, value: await f() };
+  } finally {
+    endJob();
+  }
 }

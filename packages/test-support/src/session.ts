@@ -90,6 +90,11 @@ export interface SessionOptions {
   snapshotDir?: string;
   /** Mirror the module store under this session's run directory. */
   mirror?: boolean;
+  /**
+   * The Workbench's launch: `--device-folders`. The load builds the card from the device's folder (`$DIGI_PLUS_DRIVE/<device>/`, set it in
+   * `env`), the module store and the selection are mirrored to it, and the quit exports to it.
+   */
+  deviceFolders?: boolean;
   /** Stall threshold in emulated ms for the watchdog (default 1000, as the Python harness). */
   stallMs?: number;
   binary?: string;
@@ -249,6 +254,7 @@ export class Session {
     if (options.runtime?.reuse) args.push('--no-card-sync');
     if (options.mirror) args.push('--mirror-dir', path.join(runDir, 'mirror'));
     // After the socket opens, the daemon and its load are watched through the no-progress watchdog (`onSession`); before it only the hang guards below apply.
+    if (options.deviceFolders) args.push('--device-folders');
     const controller = options.runtime ? new AbortController() : undefined;
     let session: Session | undefined;
     const started = (async () => {

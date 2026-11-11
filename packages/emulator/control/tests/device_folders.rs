@@ -310,3 +310,56 @@ fn a_load_builds_the_card_from_the_devices_folder_and_a_new_folder_applies_at_th
     join.join().unwrap();
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A runtime launch loads a patched image: its card, built from the device's folder, has that folder as its +Drive folder, so the quit
+/// exports to it (the selection too). The card is rebuilt from the folder at every launch, so no `overlay.bin` is saved for it: it would
+/// differ at every session (the runtime's boot counter), change the card's identity and force a cold boot at each launch.
+#[test]
+fn a_runtime_launch_records_the_card_folder_and_saves_no_overlay() {
+    let Some((_dt2, dn2)) = images() else { return };
+    let dir = scratch("runtime");
+    let run = dir.join("run");
+    let folder = dir.join("plus_drive/dn2");
+    fs::create_dir_all(folder.join("digikit/modules")).unwrap();
+    fs::write(folder.join("digikit/modules/m.dkm"), b"not a module").unwrap();
+    fs::write(folder.join("digikit/selection.txt"), "modules/m.dkm\n").unwrap();
+    let (handle, join) = start(&dir, true);
+
+    handle
+        .call(
+            "firmware.load",
+            json!({"syx": dn2.display().to_string(), "replace": true, "runtime": true}),
+        )
+        .unwrap();
+    assert_eq!(card_images(&run, "dn2"), 1, "the card of plus_drive/dn2");
+    // the folder of the card is known: card.export needs no dir
+    let report = handle
+        .call(
+            "card.export",
+            json!({"out": dir.join("out").display().to_string()}),
+        )
+        .unwrap();
+    assert!(
+        report["issues"].as_array().unwrap().is_empty(),
+        "{report:#}"
+    );
+    handle.call("quit", json!({})).unwrap();
+    drop(handle);
+    join.join().unwrap();
+
+    assert_eq!(
+        fs::read_to_string(folder.join("digikit/selection.txt")).unwrap(),
+        "modules/m.dkm\n",
+        "the user's file stays as it is"
+    );
+    let overlays = fs::read_dir(run.join("cards"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().join("overlay.bin").exists())
+        .count();
+    assert_eq!(
+        overlays, 0,
+        "a card built from the folder keeps no overlay.bin"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

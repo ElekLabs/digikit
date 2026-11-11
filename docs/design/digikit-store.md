@@ -261,6 +261,7 @@ The exporter above runs at the end of a session (and on `card.export`). Since 20
 card no longer has is removed from the folder (to the backup), so a DT2 card built from the folder at the next start does not bring it back. One way
 only: nothing is read from the folder except by the DT2 startup build. The mirror removes only paths it has seen on the card in the session, so a session
 that starts on an empty card (the DN2 has none at boot) leaves the files an earlier session mirrored. The selection record is not a store file: when its paths change, the mirror writes them to `digikit/selection.txt` (same file as the exporter), so a card built from the folder at the next start, DT2 or DN2, loads the same modules at its first boot.
+A launch with the runtime builds the card from the device's folder and records that folder as the card's +Drive folder, so the quit exports to it too. The emulator saves no `overlay.bin` for such a card: it would change at every session (the boot counter) and force a cold boot at each launch; the folder is the state.
 
 ## Open
 
@@ -268,5 +269,6 @@ that starts on an empty card (the DN2 has none at boot) leaves the files an earl
 - **[O]** The area was chosen from a static study of the firmware (finding 59), not measured on a device. The write-watch of the emulator proofs sees no firmware write in it.
 - **[O]** The ownership check reads the two headers, the two selection sectors and the first 1 MiB of the area; it cannot scan 22 GiB at every boot. Foreign data further in is not noticed.
 - **[O]** The emulator's state snapshots keep at most 131072 written card sectors (64 MiB) in the card overlay, so a store with more data than that cannot be saved with a state file.
+- **[O]** The settings record and the sticky type map are not in the folder (only the selection list is): a card built from the folder at a launch starts with default settings and an empty type map.
 - **[O]** The folder mirror and the exporter read every store file (and hash the folder's) at every pass; with samples in the store they need a cheaper comparison (step 6 of the storage plan).
 - The format has a version field and no compression.

@@ -2382,7 +2382,10 @@ impl Actor {
             return;
         };
         let path = overlay_path(&image);
-        if !overlay.is_empty() {
+        // A card built from the device's folder starts from the folder at every launch, so what the firmware wrote goes to the folder
+        // only. An `overlay.bin` would differ at every session (the runtime's boot counter), change the card's identity and force a cold
+        // boot at each launch, and a raised counter from a quick exit could start a rebuilt card in safe mode.
+        if !overlay.is_empty() && self.auto_card.is_none() {
             let merged = merge_overlay(std::fs::read(&path).ok(), overlay);
             let partial = path.with_extension("bin.part");
             let saved = std::fs::write(&partial, plusdrive_format::encode_overlay(&merged))
@@ -3838,6 +3841,9 @@ impl Actor {
     ) -> Result<bool, RpcError> {
         if self.reset_overlay.is_none() && self.reset_ram.is_none() {
             self.boot_resets = 0;
+            // A runtime launch loads a patched image: its card, built from the device's folder, has that folder as its +Drive folder
+            // (as after a stock load). A soft reset keeps the card and the folder it has.
+            self.adopt_card_folder(card.as_ref());
         }
         let rejected = |m: String| RpcError::new(code::FIRMWARE_REJECTED, m);
         let main_sha = new

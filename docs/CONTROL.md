@@ -289,6 +289,8 @@ device and returns `card.folder`'s answer; no `dir` goes back to `plus_drive/<de
 new folder that differ from the card's store are replaced, the old ones go to the backup); a device whose card is built from the folder (the DT2) takes it at the next load
 (`restart` builds the card again from the folder in use). `card.sync` mirrors now and returns the same as `card.folder`. Details: docs/plans/card-folder.md.
 
+A load with the runtime (`runtime: true`) that builds the card from the device's folder records that folder as the card's +Drive folder (as a stock load does), so `card.export` needs no `dir` and the quit exports to it; the mirror also writes the card's selection list to `digikit/selection.txt`. No `overlay.bin` is saved for such a card (the folder is rebuilt into the card at each launch).
+
 `card.load {dir, sync?, export_out?}` builds a card from `dir` (a `plus_drive/dt2/`-style folder: docs/SAMPLES.md) and also records `dir` as the card's +Drive folder. The same holds for a card given at start with `--card-image` and `--card-folder` (`mise run workbench` passes both; `sync` is on unless `--no-card-sync`). `card.export` and the quit export use the running device's `[card]` layout (found by the base firmware's hash). `card.export {dir?, out?, prune?}` brings
 that folder (or `dir`) up to date with what the firmware wrote to the card: files of the path filesystem by name in the
 native format, `.mmcfs/{projects,sounds,kits}/NNNN.bin` slots and `.mmcfs/boot/SSSSSS.bin` regions (finding 24). The tree goes

@@ -38,12 +38,16 @@ export interface FirmwareEnv {
   defaultModules?: {
     /** The list for the device id (`dt2`, `dn2`); the data is the device file's. */
     entries(device: string): DefaultModuleEntry[];
-    /** Install and enable `ids` (all ticked) on the selected MIDI device or on the emulator. Throws `DefaultModuleError` for the module that failed. */
+    /**
+     * Install and enable `ids` (all ticked) on the selected MIDI device or on the emulator, and disable the loaded modules of `drop` (the
+     * unticked ones). Throws `DefaultModuleError` for the module that failed.
+     */
     install(
       where: 'device' | 'emulator',
       device: string,
       ids: string[],
       progress: (p: DefaultProgress) => void,
+      drop?: string[],
     ): Promise<string[]>;
   };
 }
