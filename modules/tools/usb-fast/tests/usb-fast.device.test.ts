@@ -5,12 +5,14 @@ import { promisify } from 'node:util';
 import { BULK_CMD, BULK_STATUS } from '@digi/dk-session/gen_bulk';
 import {
   BulkDeviceError,
+  BulkSession,
   EmuBulkLink,
   bulkRequest,
   chooseBulk,
   fileHash,
   parseBulkReply,
   type BulkChoice,
+  type BulkLink,
   type DkSession,
 } from '@digi/dk-session';
 import { repoRoot } from '@digi/test-support';
@@ -714,6 +716,90 @@ for (const device of DEVICES) {
       await rig.session.expectNoFault('usb-fast session expiry');
     }, 1_800_000);
 
+    test('the receive ring: INFO reports the window and the host keeps that many DATA frames in flight, a bus reset with a full ring commits nothing, the switch off or a host that never asked INFO keeps 2', async () => {
+      const { dk, bulk } = await boot();
+      /** STATUS 'S' 1 [value]: the ring switch of core/usb-bulk (reads without a value). */
+      const ring = async (value?: number) => {
+        const r = await dk.request(0x37, Uint8Array.from(value === undefined ? [0x53, 1] : [0x53, 1, value]));
+        expect(r.status, 'STATUS S').toBe(0);
+        const w = Buffer.from(r.body).readUInt32BE(0);
+        return { on: w & 1, window: (w >>> 8) & 255 };
+      };
+      /** The most DATA requests sent and not yet answered, seen at the link. */
+      const meter = (link: BulkLink) => {
+        const m = { now: 0, max: 0 };
+        const send = link.send.bind(link);
+        const recv = link.recv.bind(link);
+        link.send = async (f: Uint8Array) => {
+          await send(f);
+          if (f[4] === BULK_CMD.DATA) m.max = Math.max(m.max, ++m.now);
+        };
+        link.recv = async (t: number, sig?: AbortSignal) => {
+          const r = await recv(t, sig);
+          if (r && r[4] === (BULK_CMD.DATA | 0x40)) m.now--;
+          return r;
+        };
+        return m;
+      };
+      const before = (await state(dk, 'ur0')).files;
+      expect(await ring(), 'the ring is on by default: 60 slots, 12 frames of 64 KiB').toEqual({ on: 1, window: 12 });
+      expect((await bulk.session.info()).window, 'INFO carries the window').toBe(12);
+      const m1 = meter(bulk.link);
+      const big = pattern(3 << 20, 21);
+      expect(await bulk.session.put(SAMPLES, rp('ring.bin'), big, { expected: hashU32(big, dt2) }), 'a file up with the window').toBe(hashU32(big, dt2));
+      expect(m1.max, 'twelve DATA frames in flight').toBe(12);
+      let s = await state(dk, 'ur1');
+      await expectFile(dk, s, 'ring.bin', big, 'ring.bin');
+
+      // a host that never asked INFO (an old host) keeps 2, whatever the device offers
+      const old = new BulkSession(bulk.link);
+      const m2 = meter(bulk.link);
+      const small = pattern(1 << 20, 22);
+      await old.put(SAMPLES, rp('old-host.bin'), small, { expected: hashU32(small, dt2) });
+      expect(m2.max, 'no INFO read: two in flight').toBe(2);
+
+      // a bus reset while the ring is full: nothing is committed, the next upload works on a new link
+      const reset = await connect(dk, { timeoutMs: 1500 });
+      const connectAddr = await EmuBulkLink.connectCallback(call);
+      let cut = false;
+      const failed = await reset.session
+        .put(SAMPLES, rp('ring-reset.bin'), pattern(4 << 20, 23), {
+          onProgress: (sent) => {
+            if (!cut && sent >= 1_500_000) {
+              cut = true;
+              void rpc(rig.session, 'usb.bulk.in', { connect: connectAddr });
+            }
+          },
+        })
+        .catch((e) => e);
+      expect(cut, 'the reset was delivered mid-file').toBe(true);
+      expect(failed, 'the upload fails').toBeInstanceOf(Error);
+      s = await state(dk, 'ur2');
+      expect(s.files.has('ring-reset.bin'), 'no partial file').toBe(false);
+      const again = await connect(dk);
+      const ok = pattern(300_000, 24);
+      await again.session.put(SAMPLES, rp('ring-reset.bin'), ok, { expected: hashU32(ok, dt2) });
+      s = await state(dk, 'ur3');
+      await expectFile(dk, s, 'ring-reset.bin', ok, 'after the reset with a full ring');
+
+      // the switch off: the old 8 slots, the host keeps 2; on again: 12
+      expect(await ring(0), 'switch off').toEqual({ on: 0, window: 0 });
+      const off = await connect(dk);
+      expect((await off.session.info()).window, 'INFO: no window').toBe(0);
+      const m3 = meter(off.link);
+      await off.session.put(SAMPLES, rp('ring-off.bin'), small, { expected: hashU32(small, dt2) });
+      expect(m3.max, 'switch off: two in flight').toBe(2);
+      expect(await ring(1), 'switch on').toEqual({ on: 1, window: 12 });
+      const on = await connect(dk);
+      const m4 = meter(on.link);
+      await on.session.put(SAMPLES, rp('ring-on.bin'), small, { expected: hashU32(small, dt2) });
+      expect(m4.max, 'switch on: twelve in flight').toBe(12);
+      s = await state(dk, 'ur4');
+      for (const n of ['old-host.bin', 'ring-off.bin', 'ring-on.bin']) await expectFile(dk, s, n, small, n);
+      unchanged(before, s.files, ['ring.bin', 'old-host.bin', 'ring-reset.bin', 'ring-off.bin', 'ring-on.bin']);
+      await rig.session.expectNoFault('usb-fast receive ring');
+    }, 3_600_000);
+
     test('bench: MB/s in emulated time, bulk against SysEx', async () => {
       const { dk } = await boot();
       const size = 1 << 20;
@@ -727,6 +813,12 @@ for (const device of DEVICES) {
       const lines: string[] = [];
       const tBulk = await clock(() => fast.session.put(STORE, 'data/bench-bulk.bin', data, { expected: hashU32(data, false) }));
       lines.push(`bulk to the store: ${(size / 1e6 / tBulk).toFixed(2)} MB/s`);
+      // the same upload with the receive ring off (the old 8 slots and window 2): a sanity check only, the emulator is not a speed reference
+      await dk.request(0x37, Uint8Array.from([0x53, 1, 0]));
+      const old = await connect(dk, { stepInstructions: 20_000 });
+      const tOld = await clock(() => old.session.put(STORE, 'data/bench-bulk-old.bin', data, { expected: hashU32(data, false) }));
+      lines.push(`bulk to the store, ring off: ${(size / 1e6 / tOld).toFixed(2)} MB/s`);
+      await dk.request(0x37, Uint8Array.from([0x53, 1, 1]));
       const tSys = await clock(() => dk.put('data/bench-sysex.bin', data));
       lines.push(`SysEx to the store: ${(size / 1e6 / tSys).toFixed(2)} MB/s`);
       if (dt2) {

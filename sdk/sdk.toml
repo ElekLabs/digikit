@@ -5,7 +5,7 @@
 # and sample.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.5.11"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
+version = "0.5.12"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
 
 [contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
@@ -723,6 +723,13 @@ name = "usb_bulk_giveback"
 sig = "i32 ()"
 doc = "End a take-over: about 50 ms later the adapter switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a command handler."
 requires = "core/usb-bulk"
+
+[[import]]
+name = "usb_bulk_ring"
+sig = "i32 (i32 set)"
+doc = "The receive ring of the adapter. `set` 0 or 1 sets the run-time ring switch (bit 1 of the speed word; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the switch in bit 0, bit 1 always set (the adapter has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). A stub returns 0 when the adapter does not have it: no ring, the old behaviour. Switching the ring off while buffers are live keeps the block and only stops queueing beyond 8 slots; the next session allocates the 8-slot block. See <dk/platform/usb_bulk.h>."
+requires = "core/usb-bulk"
+absent = "0"
 
 # The entry points of a .dkm (docs/design/digikit-dkm.md); `api` is the dk_api table. At least one must exist.
 [dkm]

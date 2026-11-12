@@ -5,7 +5,7 @@
  * pointer and length of the configuration descriptor. usb_bulk_enable repoints those four words (a 124-byte copy of the stock 101-byte descriptor
  * with interface 2 appended; callbacks of ours that call the stock ones) and re-enumerates through the firmware's own stop and restart pair.
  *
- * RX: RX_BUFS buffers of RX_BYTES (RX_PAGES 4 KiB pages: the firmware only builds single-page dTDs; ours name all five page pointers, see queue_transfer). Each is queued
+ * RX: a ring of up to RX_MAX slots of RX_BYTES (RX_PAGES 4 KiB pages: the firmware only builds single-page dTDs; ours name all five page pointers, see queue_transfer). Each is queued
  * as one dTD on EP2 OUT. A dTD completes when it is full or when a packet shorter than 512 bytes (a zero-length packet too) ends the transfer: the host
  * sends a zero-length packet after any frame whose length is a multiple of 512 bytes. The completion callback runs in the USB interrupt: it marks the buffer
  * full and queues a free one. With no free buffer nothing is queued, the host gets NAK, and that is the whole flow control. The dTDs come from the firmware's
@@ -62,9 +62,14 @@ typedef int i32;
 
 /* ---- the geometry ---- */
 #define PAGE 4096u
-/* 128 KiB of receive buffers: two 64 KiB frames of the usb-fast protocol, so the host can send the next frame while the CPU writes the last one.
- * dTDs in flight from the firmware's pool of 31 (finding 42): 8 RX + 2 TX = 10, leaving 21 for the firmware's own (EP0, EP1 MIDI: a few). */
-#define RX_BUFS 8u
+/* The receive ring: slots of 16 KiB. The block is allocated with the largest tier the heap can give (RING_TIERS): 60 slots (960 KiB, a 1 MiB block), 28 (a 512 KiB
+ * block) or 8 (128 KiB, a 256 KiB block: the old geometry). Only RX_INFLIGHT dTDs are queued on the controller at once, from the firmware's pool of 31 (finding 42):
+ * 12 RX + 2 TX = 14, leaving 17 for the firmware's own (EP0, EP1 MIDI: a few). The interrupt queues the next free slot whenever one completes, so the controller keeps
+ * receiving into free slots while the I/O task writes the card; the task takes the full slots in arrival order. With the ring switch off only RX_OLD (8) slots are used
+ * and all of them are queued, exactly the old behaviour. */
+#define RX_MAX 60u /* slots of the largest tier: state arrays are this long */
+#define RX_OLD 8u
+#define RX_INFLIGHT 12u
 #define RX_PAGES 4u
 #define RX_BYTES (RX_PAGES * PAGE)
 #define TX_SLOTS 2u
@@ -188,10 +193,17 @@ static volatile u32 live, alloc_busy, free_req, nomem;
 /* for the emulator test: the last block allocated (kept after the free) */
 volatile u32 usb_bulk_last_area, usb_bulk_last_bytes;
 volatile u32 usb_bulk_free_why; /* why the last buffers_free refused: 1 a receive buffer is held, 2 a send slot is reserved, 4 EP2 not idle (the flush, ENDPTSTAT and ENDPTPRIME bits are in bits 8 and up), 8 a transfer of ours is queued, 16 allocating; 0 freed */
-static volatile u8 rx_state[RX_BUFS];
-static u32 rx_len[RX_BUFS];
-static u8 order[RX_BUFS]; /* the full buffers in arrival order */
+static volatile u8 rx_state[RX_MAX];
+static u32 rx_len[RX_MAX];
+static u8 order[RX_MAX]; /* the full slots in arrival order */
 static u32 order_head, order_count;
+/* The ring. `rx_slots`: the slots of the block allocated for this session (0 while not live). `usb_bulk_ring_off`: the run-time switch (bit 1 of the speed word; on by default):
+ * off = only RX_OLD slots are used and all are queued, the old geometry. It is read at every queueing and at the next allocation (a block is sized by it). `prime_cur`:
+ * where the interrupt looks for the next free slot, so the slots are used round the ring. */
+static u32 rx_slots, prime_cur;
+volatile u32 usb_bulk_ring_off; /* 1 = the switch is off (0, the default, is on: bss); also the emulator test's handle on it */
+volatile u32 usb_bulk_tier_cap; /* emulator test knob: a tier of more slots than this (when not 0) counts as an allocation that failed */
+volatile u32 usb_bulk_last_slots; /* for the emulator test: the slots of the last block allocated (kept after the free) */
 static volatile u8 tx_state[TX_SLOTS];
 static volatile u32 enabled, connected, resets;
 /* `stopping`: ep2_stop is cancelling the queues; the callbacks it runs must not queue anything. `need_prime`: a receive buffer is free and the
@@ -278,7 +290,7 @@ static i32 rx_index(const u8 *p)
     if ((u32)p < (u32)rx_buf(0))
         p += usb_alias_delta; /* the cached address of the same memory */
     off = (u32)(p - rx_buf(0));
-    return off < RX_BUFS * RX_BYTES ? (i32)(off / RX_BYTES) : -1;
+    return off < rx_slots * RX_BYTES ? (i32)(off / RX_BYTES) : -1;
 }
 
 static i32 tx_index(const u8 *p)
@@ -352,6 +364,12 @@ static int usb_midi_mode(void)
     return *(volatile u32 *)usb_active_port == PORT_ENTRY;
 }
 
+/* the slots in use now: the whole ring, or RX_OLD of it with the switch off */
+static u32 rx_use(void)
+{
+    return !usb_bulk_ring_off || rx_slots < RX_OLD ? rx_slots : RX_OLD;
+}
+
 static void prime_one(u32 i)
 {
     if (stopping || !live || !connected || !usb_midi_mode())
@@ -363,21 +381,33 @@ static void prime_one(u32 i)
     }
 }
 
-/* queue every free receive buffer; a buffer the engine refused leaves `need_prime` set for the tick and the module's next call */
+/* Queue free slots round the ring until RX_INFLIGHT are on the controller (all of them with the ring off: at most RX_OLD). The next completion queues more, so this is the
+ * interrupt's re-prime too. A slot the engine refused (the dTD pool was empty) stops the scan and leaves `need_prime` set for the tick and the module's next call. */
 static void prime_all(void)
 {
-    u32 i, left = 0;
+    u32 n, i, use, cap, primed = 0, left = 0;
     if (stopping || !live || !connected)
         return;
     if (!usb_midi_mode()) {
         need_prime = 1; /* resumes when the mode is back and the firmware reconnects */
         return;
     }
-    for (i = 0; i < RX_BUFS; i++) {
-        if (rx_state[i] == B_FREE)
-            prime_one(i);
-        if (rx_state[i] == B_FREE)
+    use = rx_use();
+    cap = use <= RX_OLD ? use : RX_INFLIGHT;
+    for (i = 0; i < rx_slots; i++)
+        if (rx_state[i] == B_PRIMED)
+            primed++;
+    for (n = 0; n < use && primed < cap; n++) {
+        i = (prime_cur + n) % use;
+        if (rx_state[i] != B_FREE)
+            continue;
+        prime_one(i);
+        if (rx_state[i] != B_PRIMED) {
             left = 1;
+            break;
+        }
+        primed++;
+        prime_cur = (i + 1u) % use;
     }
     need_prime = left;
 }
@@ -399,20 +429,18 @@ void usb_bulk_rx_done(u32 bytes, u8 *buf)
             usb_bulk_rx_errors++;
             UB_LOG("ub.rx.err", bad);
             rx_state[i] = B_FREE;
-            prime_one((u32)i);
+            prime_all();
         } else if (bytes == 0) {
             rx_state[i] = B_FREE;
-            prime_one((u32)i);
+            prime_all();
         } else {
             rx_len[i] = bytes;
             rx_state[i] = B_FULL;
-            order[(order_head + order_count) % RX_BUFS] = (u8)i;
+            order[(order_head + order_count) % RX_MAX] = (u8)i;
             order_count++;
             prime_all();
             wake();
         }
-        if (rx_state[i] == B_FREE)
-            need_prime = 1;
     }
     sr_restore(sr);
 }
@@ -503,7 +531,7 @@ static void ep2_stop(void)
     usb_fw_cancel_ep(IDX_IN);
     ep2_lists_clear();
     USB_REG(ENDPTCOMPLETE) = FLUSH_EP2; /* write 1 to clear: a completion of the old connection must not be seen by the engine's loop */
-    for (i = 0; i < RX_BUFS; i++)
+    for (i = 0; i < rx_slots; i++)
         if (rx_state[i] != B_TAKEN)
             rx_state[i] = B_FREE;
     order_head = order_count = 0;
@@ -531,7 +559,7 @@ static void ep2_quiesce(void)
     usb_fw_cancel_ep(IDX_IN);
     ep2_lists_clear();
     USB_REG(ENDPTCOMPLETE) = FLUSH_EP2;
-    for (i = 0; i < RX_BUFS; i++)
+    for (i = 0; i < rx_slots; i++)
         if (rx_state[i] != B_TAKEN)
             rx_state[i] = B_FREE;
     order_head = order_count = 0;
@@ -604,12 +632,16 @@ static void ub_snapshot(void)
 
 /* ---- the buffers: allocated when the interface can go live, freed when the take-over ends ---- */
 
-/* The block: RX_BUFS receive buffers, then TX_SLOTS send slots, 4 KiB aligned, and two pages after them (the dTD page pointers of the last buffer). The firmware's
+/* The block: the receive slots (ring_tiers), then TX_SLOTS send slots, 4 KiB aligned, and two pages after them (the dTD page pointers of the last buffer). The firmware's
  * buddy allocator (heap at 0x44f39c40 on the DT2: not 4 KiB aligned itself) gives a block that is 16 byte aligned: the area is rounded up inside it. The allocator
  * rounds the size up to a power of two (256 KiB), the cost while live. The firmware's operator new and free take the heap mutex themselves (the anchors
  * cf.mem.site.heap.lock_lit and unlock_lit lie inside cf.mem.fn.new; finding 01), so they may be called from the I/O, MIDI and UI tasks, never from an interrupt. */
-#define BLOCK_AREA (RX_BUFS * RX_BYTES + TX_SLOTS * TX_BYTES)
-#define BLOCK_BYTES (BLOCK_AREA + 2u * PAGE)
+/* The size asked from the allocator for `n` receive slots: the area, the two pages after it, and a page of slack for the 4 KiB rounding of the start (the allocator's
+ * block is only 16-byte aligned). 60 slots ask 1,028,096 bytes (a 1 MiB block), 28 ask 503,808 (a 512 KiB block), 8 ask 172 KiB (a 256 KiB block). */
+#define BLOCK_AREA(n) ((n) * RX_BYTES + TX_SLOTS * TX_BYTES)
+#define BLOCK_BYTES(n) (BLOCK_AREA(n) + 3u * PAGE)
+/* the tiers tried in order, the largest first; with the ring off only the last */
+static const u8 ring_tiers[3] = {60, 28, 8};
 
 /* Allocate the buffers (task context, never under the mask or in an interrupt). 0 when live (also when it already was). E_STATE: another caller is allocating.
  * E_NOMEM: no memory, or the block is outside the cached DDR window the alias arithmetic needs (ST_NOMEM shows it; nothing is changed). The area is pushed
@@ -617,7 +649,7 @@ static void ub_snapshot(void)
  * before the buffers existed, or after they were freed), the buffers are queued at once, under the mask. */
 static i32 buffers_alloc(void)
 {
-    u32 sr, i;
+    u32 sr, i, n, t;
     u8 *raw, *a;
     sr = sr_mask();
     if (live) {
@@ -630,24 +662,40 @@ static i32 buffers_alloc(void)
     }
     alloc_busy = 1;
     sr_restore(sr);
-    raw = usb_fw_mem_new(BLOCK_BYTES);
-    a = (u8 *)(((u32)raw + PAGE - 1u) & ~(PAGE - 1u));
-    if (raw == 0 || (u32)a < usb_ddr_base || (u32)a + BLOCK_AREA + PAGE > usb_ddr_base + usb_ddr_bytes) {
-        if (raw != 0)
-            usb_fw_mem_free(raw);
+    /* the largest tier the heap gives (the ring switch is read once, here); a failure of every tier is E_NOMEM, never a half-enabled ring */
+    n = 0;
+    raw = 0;
+    a = 0;
+    for (t = usb_bulk_ring_off ? 2u : 0u; t < 3u; t++) {
+        u32 want = ring_tiers[t];
+        u8 *r = usb_bulk_tier_cap != 0u && want > usb_bulk_tier_cap ? 0 : usb_fw_mem_new(BLOCK_BYTES(want)); /* the cap: the emulator test's way to make a tier fail */
+        u8 *al = (u8 *)(((u32)r + PAGE - 1u) & ~(PAGE - 1u));
+        if (r != 0 && (u32)al >= usb_ddr_base && (u32)al + BLOCK_AREA(want) + PAGE <= usb_ddr_base + usb_ddr_bytes) {
+            raw = r;
+            a = al;
+            n = want;
+            break;
+        }
+        if (r != 0)
+            usb_fw_mem_free(r);
+    }
+    if (n == 0u) {
         nomem = 1;
         alloc_busy = 0;
         return E_NOMEM;
     }
-    for (i = 0; i < BLOCK_AREA; i += 16u)
+    for (i = 0; i < BLOCK_AREA(n); i += 16u)
         __asm__ volatile("cpushl %%bc,(%0)" : : "a"((u32)a + i) : "memory");
     usb_bulk_last_area = (u32)a;
-    usb_bulk_last_bytes = BLOCK_AREA;
+    usb_bulk_last_bytes = BLOCK_AREA(n);
+    usb_bulk_last_slots = n;
     sr = sr_mask();
     blk_raw = raw;
     rx_area = a;
-    tx_area = a + RX_BUFS * RX_BYTES;
-    for (i = 0; i < RX_BUFS; i++)
+    tx_area = a + n * RX_BYTES;
+    rx_slots = n;
+    prime_cur = 0;
+    for (i = 0; i < n; i++)
         rx_state[i] = B_FREE;
     for (i = 0; i < TX_SLOTS; i++)
         tx_state[i] = T_FREE;
@@ -686,7 +734,7 @@ static u32 buffers_free(void)
         sr_restore(sr);
         return 1;
     }
-    for (i = 0; i < RX_BUFS; i++)
+    for (i = 0; i < rx_slots; i++)
         if (rx_state[i] == B_TAKEN) {
             usb_bulk_free_why = 1;
             sr_restore(sr);
@@ -707,7 +755,7 @@ static u32 buffers_free(void)
             return 0;
         }
     } else {
-        for (i = 0; i < RX_BUFS; i++)
+        for (i = 0; i < rx_slots; i++)
             if (rx_state[i] == B_PRIMED) {
                 usb_bulk_free_why = 8;
                 sr_restore(sr);
@@ -725,8 +773,9 @@ static u32 buffers_free(void)
     raw = blk_raw;
     blk_raw = 0;
     rx_area = tx_area = 0;
-    for (i = 0; i < RX_BUFS; i++)
+    for (i = 0; i < rx_slots; i++)
         rx_state[i] = B_FREE;
+    rx_slots = 0;
     for (i = 0; i < TX_SLOTS; i++)
         tx_state[i] = T_FREE;
     order_head = order_count = 0;
@@ -1117,7 +1166,7 @@ i32 usb_bulk_disable(i32 io_id)
     sr = sr_mask();
     io_job = 0;
     /* the job is going away (the runtime waits for its running step before fini, then cancels it): what it still holds is released, so the free can happen */
-    for (i = 0; i < RX_BUFS; i++)
+    for (i = 0; i < rx_slots; i++)
         if (rx_state[i] == B_TAKEN)
             rx_state[i] = B_FREE;
     for (i = 0; i < TX_SLOTS; i++)
@@ -1137,7 +1186,7 @@ i32 usb_bulk_take(u8 **buf, u32 *len)
         prime_all();
     if (order_count != 0) {
         u32 i = order[order_head];
-        order_head = (order_head + 1u) % RX_BUFS;
+        order_head = (order_head + 1u) % RX_MAX;
         order_count--;
         rx_state[i] = B_TAKEN;
         *buf = rx_buf(i);
@@ -1292,4 +1341,26 @@ u32 usb_bulk_state(void)
     st |= (resets & 0xffu) << 24;
     sr_restore(sr);
     return st;
+}
+
+/* How many 64 KiB frames of the usb-fast protocol the receive ring takes before the controller NAKs: a frame (header, offset and 64 KiB) spans five 16 KiB slots, the last
+ * one short. */
+#define RING_SLOTS_PER_FRAME 5u
+
+/* The run-time ring switch and the receive window. `set` below 0 only reads; 0 or 1 sets the switch (bit 1 of the speed word: 1 = the ring, the default; 0 = the old 8 slots,
+ * all queued). The switch is read when the buffers are allocated (a block is sized by it) and at every queueing. Returns the switch in bit 0, bit 1 always set (so 0 means "no ring": the SDK's stub for an adapter without it), in bits 16..23 the slots of the live block and, in bits 8..15, the receive
+ * window in frames of 64 KiB that the buffers allocated now can take: 0 when none are live or the window is the old one (the host keeps 2 DATA frames in flight then). */
+i32 usb_bulk_ring(i32 set)
+{
+    u32 sr = sr_mask();
+    u32 frames;
+    i32 r;
+    if (set >= 0)
+        usb_bulk_ring_off = set != 0 ? 0u : 1u;
+    frames = live ? rx_use() / RING_SLOTS_PER_FRAME : 0u;
+    if (frames < 2u)
+        frames = 0;
+    r = (i32)((usb_bulk_ring_off ? 0u : 1u) | 2u | (frames << 8) | ((live ? rx_slots : 0u) << 16));
+    sr_restore(sr);
+    return r;
 }
