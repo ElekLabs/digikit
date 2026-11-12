@@ -628,11 +628,40 @@ static i32 place(void)
 }
 
 #if PDW_FAST_CLOSE
+/* The runtime's helper task and speed switches (dkrt.h). Lever C (bit 2 of the switches): the hash of file page p runs on the helper task while page p + 1 is
+ * read, which blocks this task on the card; the two pages alternate between the firmware's two 32 KiB buffers. */
+extern i32 dkrt_aux_run(uintptr_t f, u8 *ctx);
+extern i32 dkrt_aux_wait(void);
+extern u32 dkrt_speed_flags(void);
+#define SPEED_OVERLAP 4u
+
+struct hjob {
+    struct pdw_hash *h;
+    const u8 *buf;
+    u32 n;
+};
+
+static void hjob_run(u8 *ctx)
+{
+    struct hjob *j = (struct hjob *)ctx;
+    pdw_hash_update(j->h, j->buf, j->n);
+}
+
+/* Push and invalidate the data cache lines of [p, p + n): dirty lines are written back before a DMA and no stale line is left to be refilled or evicted over
+ * DMA data. The firmware's block read (FUN_4012e1b6) does the same for its destination before a direct DMA (its cpushl loop at 0x4012e27e, 16-byte aligned
+ * destinations only) and copies from a bounce buffer otherwise; it does nothing after the DMA. */
+static void cache_push(const u8 *p, u32 n)
+{
+    for (n = (n + 15u) >> 4; n; n--, p += 16)
+        __asm__ volatile("cpushl %%dc,(%0)" : : "a"(p) : "memory");
+}
+
 /* The firmware's close hash of the staged file (FUN_4015b1e8) without its re-read through the page cache. 0; E_HASH when the card's data differs from
  * the host's hash (nothing is changed then); HF_FALLBACK when the card cannot be read the way this function needs (not mounted, no inode, a size that is not what
  * was written, a page that the extent lookup misses, a failed block read; nothing is changed yet), and the caller closes with the firmware's own hash;
  * E_WRITE when the hash page could not be written (the page is restored; the table, the inode and the event are not touched). Everything runs under the filesystem
- * mutex, as in the firmware (FUN_4015b3aa). The firmware's own scratch buffers are used: both are 32 KiB, 16-byte aligned and used only under that mutex. */
+ * mutex, as in the firmware (FUN_4015b3aa). The firmware's own scratch buffers are used: both are 32 KiB, 16-byte aligned and used only under that mutex
+ * (the hash page buffer is free until the hash is done, so it is the second read buffer of the overlapped hash). */
 static i32 hash_fast(void)
 {
     struct pdw_hash h;
@@ -644,6 +673,9 @@ static i32 hash_fast(void)
     u32 id = hnd[0], pages = (total + (PAGE_BYTES - 1u)) >> PAGE_SHIFT, p, hv, i, sector, old;
     u32 *ino;
     i32 r = HF_FALLBACK;
+    struct hjob job;
+    u32 pending = 0;
+    u32 ovl = pages > 1u && (dkrt_speed_flags() & SPEED_OVERLAP) != 0;
     if (!mounted())
         return HF_FALLBACK;
     dk_fw_rtos_mutex_lock(mutex);
@@ -653,17 +685,35 @@ static i32 hash_fast(void)
     if (ino[1] != total || cut == 10)
         goto put; /* the inode size is what was written (knob 10 acts as a size mismatch) */
     pdw_hash_init(&h);
+    job.h = &h;
+    cache_push(rbuf, PAGE_BYTES);
+    if (ovl)
+        cache_push(pbuf, PAGE_BYTES);
     for (p = 0; p < pages; p++) {
         u32 n = total - (p << PAGE_SHIFT);
+        u8 *buf = (ovl && (p & 1u)) ? pbuf : rbuf;
         if (n > PAGE_BYTES)
             n = PAGE_BYTES;
-        if ((dk_fw_storage_file_page_find((u8 *)ino, p, &DKPW_DMA.phys) & PAGE_FIND_STATUS) == 0)
+        if ((dk_fw_storage_file_page_find((u8 *)ino, p, &DKPW_DMA.phys) & PAGE_FIND_STATUS) == 0 ||
+            dk_fw_storage_block_read(dsec + (DKPW_DMA.phys << PAGE_SECTOR_SHIFT),
+                                     (n + (SECTOR_BYTES - 1u)) & ~(SECTOR_BYTES - 1u), buf) != 0) {
+            if (pending)
+                dkrt_aux_wait();
             goto put;
-        if (dk_fw_storage_block_read(dsec + (DKPW_DMA.phys << PAGE_SECTOR_SHIFT),
-                                     (n + (SECTOR_BYTES - 1u)) & ~(SECTOR_BYTES - 1u), rbuf) != 0)
-            goto put;
-        pdw_hash_update(&h, rbuf, n);
+        }
+        if (pending) { /* page p - 1 is hashed: its buffer is free again, and the hash state is ours */
+            dkrt_aux_wait();
+            pending = 0;
+        }
+        job.buf = buf;
+        job.n = n;
+        if (ovl && dkrt_aux_run((uintptr_t)hjob_run, (u8 *)&job) == 0)
+            pending = 1;
+        else
+            pdw_hash_update(&h, buf, n);
     }
+    if (pending)
+        dkrt_aux_wait();
     hv = pdw_hash_finish(&h) | 1u;
     if (have_want) {
         for (i = 0; i < 4; i++) {

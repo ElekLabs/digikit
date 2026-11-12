@@ -7,7 +7,11 @@
       {
         "files": ["tests/usb-fast.device.test.ts"],
         "modules": ["digikit/usb-fast"],
-        "plusdrive": true
+        "plusdrive": true,
+        "sources": [
+          "modules/core/adapters/usb-bulk/src/**/*",
+          "modules/core/adapters/usb-bulk/build/usb-bulk.dko.json"
+        ]
       }
     ]
   }

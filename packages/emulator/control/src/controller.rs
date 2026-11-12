@@ -2021,6 +2021,7 @@ impl Actor {
             "midi.out" | "midi.usb.out" => self.rpc_midi_out(method, &p).map(Some),
             "usb.bulk.in" => self.rpc_bulk_in(&p).map(Some),
             "usb.bulk.out" => self.rpc_bulk_out(&p).map(Some),
+            "usb.phy" => self.rpc_usb_phy(&p).map(Some),
             "card.export" => self.rpc_card_export(&p).map(Some),
             "watchdog.config" => self.rpc_watchdog(&p).map(Some),
             "cpu.exceptions" => self.rpc_cpu_exceptions(&p).map(Some),
@@ -2769,6 +2770,33 @@ impl Actor {
         }
         let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         Ok(json!({"bytes": bytes.len(), "hex": hex, "status": status}))
+    }
+
+    /// `usb.phy {vbus?, run?}`: `vbus` sets VBUS present (OTGSC.BSV, off by default); `run` sets or clears USBCMD.RS as a write (a controller started or stopped by something else). The USB controller's PHY events since the last call, oldest first (`{"w": [reg, value]}` a ULPI viewport write, `{"r": [reg, value]}` a read,
+    /// `{"rs": 0 | 1}` a change of USBCMD.RS), and the PHY register file as hex.
+    fn rpc_usb_phy(&mut self, p: &Params) -> RpcResult {
+        if let Some(on) = p.opt_bool("run")? {
+            self.with_runtime(|r| {
+                r.set_usb_run(on);
+                Ok(())
+            })?;
+        }
+        if let Some(present) = p.opt_bool("vbus")? {
+            self.with_runtime(|r| {
+                r.set_usb_vbus(present);
+                Ok(())
+            })?;
+        }
+        let (events, regs) = self.with_runtime(|r| Ok(r.take_usb_phy()))?;
+        let events: Vec<Value> = events
+            .iter()
+            .map(|(kind, a, b)| match *kind {
+                "rs" => json!({"rs": a}),
+                k => json!({ k: [a, b] }),
+            })
+            .collect();
+        let hex: String = regs.iter().map(|b| format!("{b:02x}")).collect();
+        Ok(json!({"events": events, "regs": hex}))
     }
 
     /// `guard.set {protect: [{lo, hi, label?}], allow_pc: [{lo, hi}]}`: arm write-range guards

@@ -109,9 +109,14 @@ static int frame_ready;
 static int skipping; /* after a fatal error: discard buffers until the end of the transfer */
 static u32 last_len; /* length of the last buffer taken */
 
-/* the reply waiting for the engine */
-static u8 rep[HDR + 20u];
-static u32 rep_len;
+/* The replies waiting for the engine: a queue of REPQ, each in a slot of REP_SLOT bytes, sent one per usb_bulk_send in order. The job keeps parsing while the send
+ * slots are busy (the host may have a window of up to 12 DATA frames in flight and does not read replies while it is still sending: a single waiting reply would
+ * stop the job, the receive ring would fill and the host's next frame would never leave). Nothing is parsed while the queue is full. */
+#define REPQ 16u
+#define REP_SLOT (HDR + 20u)
+static u8 repq[REPQ][REP_SLOT];
+static u8 rep_n[REPQ];
+static u32 rep_head, rep_count;
 
 /* the file */
 static i32 handle; /* > 0 while a file is open */
@@ -127,10 +132,17 @@ static u32 st_expired; /* sessions the job dropped for the runtime's idle expiry
 /* the staging buffer of the open file */
 static u8 *acc_raw, *acc_buf; /* acc_buf: acc_raw rounded up to 16 bytes */
 static int acc_fw;            /* acc_raw came from fw_alloc */
-static u32 acc_cap;           /* 0: no buffer */
-static u32 acc_fill;          /* bytes in it */
-static u32 acc_off;           /* file offset of its first byte */
-static i32 acc_err;           /* sticky status of a failed flush */
+static int acc_is_res; /* acc_raw is the session's reservation (never freed by acc_release) */
+/* The staging reservation: taken before the adapter allocates its receive ring (TAKEOVER, or the enable step in USB MIDI mode), so the staging buffer gets the
+ * heap first and the ring takes the largest tier that still fits; kept for the session and freed when the adapter's buffers are gone (the take-over ended),
+ * or at unload. acc_open hands the reservation to each file. */
+static u8 *res_raw;
+static int res_fw;
+static u32 res_cap;
+static u32 acc_cap;  /* 0: no buffer */
+static u32 acc_fill; /* bytes in it */
+static u32 acc_off;  /* file offset of its first byte */
+static i32 acc_err;  /* sticky status of a failed flush */
 static u32 file_size;
 static u32 acc_limit =
     ACC_BIG; /* the largest buffer the next BEGIN asks for (a one-shot test knob, STATUS 'A' with UF_KNOBS; acc_open resets it) */
@@ -214,13 +226,14 @@ static void copy(u8 *d, const u8 *s, u32 n)
 
 static void acc_release(void)
 {
-    if (acc_raw) {
+    if (acc_raw && !acc_is_res) {
         if (acc_fw)
             fw_free(acc_raw);
         else
             sdk->free(acc_raw);
     }
     acc_raw = acc_buf = 0;
+    acc_is_res = 0;
     acc_cap = acc_fill = acc_off = 0;
     acc_err = 0;
     d_acc = 0;
@@ -237,6 +250,36 @@ static u8 *acc_try(u32 n)
     return p;
 }
 
+static void res_free(void)
+{
+    acc_release();
+    if (res_raw) {
+        if (res_fw)
+            fw_free(res_raw);
+        else
+            sdk->free(res_raw);
+    }
+    res_cap = 0;
+    res_raw = 0;
+}
+
+/* Take the staging reservation (1 MiB, then 256 KiB) unless one is held. The pointer is stored last: acc_open (I/O task) tests it, this may run in the MIDI task. */
+static void res_reserve(void)
+{
+    u32 want = ACC_BIG;
+    if (res_raw)
+        return;
+    for (u32 t = 0; t < 2u; t++, want = ACC_MID) {
+        u8 *p = acc_try(want);
+        if (p) {
+            res_fw = acc_fw;
+            res_cap = want;
+            res_raw = p;
+            return;
+        }
+    }
+}
+
 /* A staging buffer for a file of `size` bytes: the size rounded up to 512, at most acc_limit and ACC_BIG; ACC_MID when that cannot be had; else none.
  * acc_limit applies to this BEGIN only: it is reset to ACC_BIG here. */
 static void acc_open(u32 size)
@@ -247,6 +290,13 @@ static void acc_open(u32 size)
     if (want > acc_limit)
         want = acc_limit & ~511u;
     acc_limit = ACC_BIG;
+    if (res_raw && want >= 512u) { /* the reservation, as much of it as the file needs */
+        acc_raw = res_raw;
+        acc_fw = res_fw;
+        acc_is_res = 1;
+        if (want > res_cap)
+            want = res_cap;
+    }
     for (u32 t = 0; t < 2u && want >= 512u && !acc_raw; t++) {
         acc_raw = acc_try(want);
         if (!acc_raw) {
@@ -288,8 +338,19 @@ static i32 acc_flush(void)
     return r;
 }
 
+static void clear_stream(void);
+static void drop_file(void);
+
 static void reply(u8 cmd, u8 seq, i32 status, const u8 *body, u32 n)
 {
+    if (rep_count >=
+        REPQ) { /* the loop never parses with a full queue: this cannot happen; the host's view of the stream is lost, so start over */
+        st_send_err++;
+        clear_stream();
+        drop_file();
+        return;
+    }
+    u8 *rep = repq[(rep_head + rep_count) % REPQ];
     rep[0] = 'D';
     rep[1] = 'K';
     rep[2] = 'B';
@@ -301,7 +362,8 @@ static void reply(u8 cmd, u8 seq, i32 status, const u8 *body, u32 n)
     dk_bytes_put32(rep + 8, n);
     for (u32 i = 0; i < n; i++)
         rep[HDR + i] = body[i];
-    rep_len = HDR + n;
+    rep_n[(rep_head + rep_count) % REPQ] = (u8)(HDR + n);
+    rep_count++;
 }
 
 /* The frame in `frame` is handled. Returns 0 when its reply is staged, 1 when a file_* call was busy and the same frame is run again. */
@@ -317,7 +379,11 @@ static int dispatch(void)
         u8 b[20];
         b[0] = BULK_VERSION;
         b[1] = 0;
-        b[2] = b[3] = 0;
+        /* byte 2: the receive window in DATA frames of 64 KiB that the device takes before the USB controller NAKs (usb_bulk_ring); 0: an older device, or the old
+         * 8-slot buffers: the host keeps 2 in flight. At most REPQ - 2, so the reply queue always has room. */
+        u32 win = (u32)DK_USB_BULK_RING_WINDOW(usb_bulk_ring(-1));
+        b[2] = (u8)(win > REPQ - 2u ? REPQ - 2u : win);
+        b[3] = 0;
         dk_bytes_put32(b + 4, DATA_MAX);
         dk_bytes_put32(b + 8, ALIGN);
         int stable = 0;
@@ -690,11 +756,17 @@ static i32 step(u8 *ctx)
         enabled = 0;
         wm_logged = 1; /* the wait for the next take-over is not news */
         clear_stream();
-        rep_len = 0;
+        rep_count = 0;
         busy_tries = 0;
         drop_file();
+        res_free();
     }
     if (!enabled) {
+        u32 st0 = usb_bulk_state();
+        if (!(st0 & DK_USB_BULK_WRONG_MODE))
+            res_reserve(); /* before the adapter allocates its ring */
+        else if (!(st0 & DK_USB_BULK_TAKEN))
+            res_free(); /* a take-over that never happened: nothing to keep */
         i32 rc = usb_bulk_enable(job_id);
         enable_rc = rc;
         if (rc ==
@@ -733,7 +805,7 @@ static i32 step(u8 *ctx)
             epoch = now;
             st_resets++;
             clear_stream();
-            rep_len = 0;
+            rep_count = 0;
             busy_tries = 0;
             drop_file();
         }
@@ -750,25 +822,31 @@ static i32 step(u8 *ctx)
             busy_tries = 0;
             abort_h = 0;
         }
-        if (rep_len) {
-            i32 r = usb_bulk_send(rep, rep_len);
-            if (r == DK_FILE_E_BUSY) { /* both send slots in flight: the adapter wakes the job */
+        while (rep_count) {
+            i32 r = usb_bulk_send(repq[rep_head], rep_n[rep_head]);
+            if (r ==
+                DK_FILE_E_BUSY) { /* both send slots in flight: the adapter wakes the job; meanwhile the stream goes on */
                 st_tx_busy++;
-                return DK_IO_WAIT;
+                break;
             }
             if (r ==
                 DK_USB_BULK_E_AGAIN) /* the engine refused and nothing is in flight: the adapter's tick wakes the job */
-                return DK_IO_WAIT;
+                break;
             if (r <
                 0) { /* the reply cannot go out: the host's view of the stream is lost, so start over */
                 st_send_err++;
-                rep_len = 0;
+                rep_count = 0;
                 clear_stream();
                 drop_file();
-                continue;
+                break;
             }
-            rep_len = 0;
+            rep_head = (rep_head + 1u) % REPQ;
+            rep_count--;
         }
+        if (rep_count >=
+            REPQ -
+                1u) /* full: nothing is parsed until a reply has gone out (the completion of a send wakes the job) */
+            return DK_IO_WAIT;
         if (frame_ready) {
             if (dispatch())
                 return DK_IO_MORE;
@@ -795,11 +873,67 @@ static void finished(u8 *ctx, i32 status)
     (void)status;
 }
 
+/* STATUS (0x37) sub-commands by the first body byte: one line per tag (the speed levers' lanes each add theirs). A handler returns the reply length, or a status. */
+typedef i32 (*status_fn)(const u8 *body, u32 len, u8 *out);
+
+/* 'S' [bit [0|1]]: the four speed switches (RAM, all on at boot, never saved): bit 0 hash once and bit 2 read-back hash overlap (the runtime's speed word),
+ * bit 1 the USB receive ring (core/usb-bulk, `usb_bulk_ring`), bit 3 large card commands (core/sdhc-large, `sdhc_large_ctl`). Each adapter owns its switch; the
+ * mask is composed here. Reply: the mask now (u32; a switch of an adapter that is not in the image reads 0). With no bit, only the read. E_MSG for a bit
+ * above 3 or a value other than 0 or 1; E_STATE when a switch of an adapter is set and the adapter is not in the image. */
+static u32 speed_mask(void)
+{
+    u32 m = sdk->speed_flags(0, 0) & 5u;
+    if (usb_bulk_ring(-1) & 1)
+        m |= 2u;
+    if (sdhc_large_ctl(0, 2))
+        m |= 8u; /* the value 2 changes nothing: it reads the switch */
+    return m;
+}
+
+static i32 status_speed(const u8 *body, u32 len, u8 *out)
+{
+    if (len >= 3) {
+        u32 bit = body[1], v = body[2];
+        if (bit > 3u || v > 1u)
+            return E_MSG;
+        if (bit == 1u) {
+            if (usb_bulk_ring((i32)v) == 0) /* the SDK's stub: this adapter has no ring */
+                return E_STATE;
+        } else if (bit == 3u) {
+            /* the stub without the module returns 0 for every call: the switch is there only if it reads 1 after it was set to 1 (then it gets the value asked) */
+            if (!sdhc_large_ctl(0, 2)) {
+                sdhc_large_ctl(0, 1);
+                if (!sdhc_large_ctl(0, 2))
+                    return E_STATE;
+            }
+            sdhc_large_ctl(0, v);
+        } else if (v) {
+            sdk->speed_flags(0, 1u << bit);
+        } else {
+            sdk->speed_flags(1u << bit, 0);
+        }
+    }
+    dk_bytes_put32(out, speed_mask());
+    return 4;
+}
+
+static const struct {
+    u8 tag;
+    status_fn fn;
+} status_tab[] = {
+    {'S', status_speed},
+};
+
 /* SysEx service command USB_FAST_NONCE (0x36): body nonce[8], the host's proof of which USB device is on its MIDI port; reply empty. The INFO reply of the
- * bulk link returns it. 0x37 STATUS (a debug aid: sixteen u32 words). */
+ * bulk link returns it. 0x37 STATUS (a debug aid: twenty u32 words). */
 static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
 {
     (void)seq;
+    if (cmd == NONCE_CMD + 1 && len > 0) {
+        for (u32 i = 0; i < sizeof status_tab / sizeof status_tab[0]; i++)
+            if (body[0] == status_tab[i].tag)
+                return status_tab[i].fn(body, len, out);
+    }
 #if UF_KNOBS
     if (cmd == NONCE_CMD + 1 && len > 0 &&
         body[0] ==
@@ -820,7 +954,7 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
         dk_bytes_put32(out + 4, st_frames);
         dk_bytes_put32(out + 8, st_tx_busy);
         dk_bytes_put32(out + 12, (u32)handle);
-        dk_bytes_put32(out + 16, rep_len);
+        dk_bytes_put32(out + 16, rep_count);
         dk_bytes_put32(out + 20, have);
         dk_bytes_put32(out + 24, total);
         dk_bytes_put32(out + 28, (frame_ready ? 1u : 0u) | (cur ? 2u : 0u) | (enabled ? 4u : 0u));
@@ -834,10 +968,19 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
         dk_bytes_put32(out + 60, st_send_err);
         dk_bytes_put32(out + 64, acc_cap);
         dk_bytes_put32(out + 68, st_expired);
-        return 72;
+        dk_bytes_put32(out + 72,
+                       res_cap); /* the staging reservation (0: none), for the hardware A/B */
+        dk_bytes_put32(
+            out + 76,
+            (u32)(usb_bulk_ring(-1) >> 16) &
+                0xffu); /* receive ring slots of the live block (0: none live, or no ring) */
+        return 80;
     }
     if (cmd == TAKEOVER_CMD) { /* also the renew while the host works */
+        res_reserve(); /* the adapter allocates its ring from the tick of this take-over: the staging buffer first */
         i32 r = usb_bulk_takeover();
+        if (r < 0 && !enabled)
+            res_free();
         return r < 0 ? r : 0;
     }
     if (cmd == RELEASE_CMD) {
@@ -862,7 +1005,7 @@ void dkm_fini(const dk_api *api)
     uf_bench_fini(api);
 #endif
     api->io_cancel(job_id); /* the runtime aborts a file session the job leaves open */
-    acc_release();
+    res_free();
 }
 
 i32 dkm_init(const dk_api *api)

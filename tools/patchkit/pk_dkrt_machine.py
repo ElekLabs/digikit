@@ -184,6 +184,10 @@ def runtime_watch_env(
         holes.append((sym(plan, "core/runtime", "DKRT_IO_TASK"), 16496))
     with contextlib.suppress(
         ProofError
+    ):  # the helper task's stack, TCB and semaphores: the kernel writes them
+        holes.append((sym(plan, "core/runtime", "DKRT_AUX_TASK"), 4208))
+    with contextlib.suppress(
+        ProofError
     ):  # nor the store-peek sector (the card read of the store's header DMAs into it)
         holes.append((sym(plan, "core/runtime", "DKRT_STORE_PEEK"), 512))
     with contextlib.suppress(ProofError):  # the fingerprint sector of a store list

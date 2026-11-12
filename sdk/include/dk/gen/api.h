@@ -89,10 +89,11 @@ typedef struct dk_api {
     void (*hash32_init)(uint8_t *state);     /* (api 1.10) Start the file hash (the Elektron +Drive content hash, dk/platform/hash32.h) in the caller's 28-byte `dk_hash32`. */
     void (*hash32_update)(uint8_t *state, const uint8_t *p, uint32_t n); /* (api 1.10) Feed `n` bytes. */
     uint32_t (*hash32_finish)(uint8_t *state); /* (api 1.10) The file hash `hash|1`: the value the store keeps (4 bytes big-endian in a table slot). The state is spent. */
+    uint32_t (*speed_flags)(uint32_t clear, uint32_t set); /* (api 1.12) The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `usb_bulk_ring`, bit 3 `sdhc_large_ctl`), not in this word. Any task. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
-_Static_assert(sizeof(dk_api) == 212, "dk_api size");
+_Static_assert(sizeof(dk_api) == 216, "dk_api size");
 _Static_assert(offsetof(dk_api, version) == 0, "dk_api.version");
 _Static_assert(offsetof(dk_api, size) == 4, "dk_api.size");
 _Static_assert(offsetof(dk_api, device) == 8, "dk_api.device");
@@ -146,6 +147,7 @@ _Static_assert(offsetof(dk_api, io_wake) == 196, "dk_api.io_wake");
 _Static_assert(offsetof(dk_api, hash32_init) == 200, "dk_api.hash32_init");
 _Static_assert(offsetof(dk_api, hash32_update) == 204, "dk_api.hash32_update");
 _Static_assert(offsetof(dk_api, hash32_finish) == 208, "dk_api.hash32_finish");
+_Static_assert(offsetof(dk_api, speed_flags) == 212, "dk_api.speed_flags");
 #endif
 
 /* Imports: names the loader resolves in the runtime's table (Api.import gives the address at run time). */
@@ -183,6 +185,12 @@ int32_t usb_bulk_send(const uint8_t *buf, uint32_t len);
 /* State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the device is not in USB MIDI mode; read live), bit 3 taken over (usb_bulk_takeover is active), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then). Needs core/usb-bulk: the import is not found without it. */
 uint32_t usb_bulk_state(void);
 
+/* core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside [lo, hi), is 16-byte aligned and its length is a multiple of 512, while the switch is on (sdhc_large_ctl key 0). `lo` = `hi` = 0 clears the range. One range at a time: the caller sets it before the transfer and clears it after. Every other transfer keeps the firmware's 64 KiB limit. A no-op without the module. Needs core/sdhc-large: the import is not found without it. */
+void sdhc_large_range(uint32_t lo, uint32_t hi);
+
+/* core/sdhc-large: key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. A stub returning 0 without the module. Needs core/sdhc-large: the import is not found without it. */
+uint32_t sdhc_large_ctl(uint32_t key, uint32_t val);
+
 /* Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing. Needs core/dsp-link: the import is not found without it. */
 void dl_set_tick_cb(uint8_t *cb);
 
@@ -210,6 +218,9 @@ int32_t usb_bulk_takeover(void);
 /* End a take-over: about 50 ms later the adapter switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a command handler. Needs core/usb-bulk: the import is not found without it. */
 int32_t usb_bulk_giveback(void);
 
+/* The receive ring of the adapter. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the switch in bit 0, bit 1 always set (the adapter has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). A stub returns 0 when the adapter does not have it: no ring, the old behaviour. Switching the ring off while buffers are live keeps the block and only stops queueing beyond 8 slots; the next session allocates the 8-slot block. See <dk/platform/usb_bulk.h>. Needs core/usb-bulk: the import is not found without it. */
+int32_t usb_bulk_ring(int32_t set);
+
 /* Entry points of a .dkm (symbols of its object). */
 
 /* Runs once after the copy, relocation and cache flush. Returns 0 = ok; the module is unloaded otherwise. */
@@ -230,6 +241,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 11
+#define DK_API_MINOR 12
 
 #endif /* DK_GEN_API_H */

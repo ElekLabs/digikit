@@ -11118,7 +11118,8 @@
       "subsystem": "storage",
       "users": [
         "core/digikit-menu",
-        "core/runtime"
+        "core/runtime",
+        "core/sdhc-large"
       ],
       "was": [
         "cf.menu.fn.blk_read",
@@ -11172,7 +11173,8 @@
       "sig": "i32 (u32 sector, u32 bytes, const u8 *buf)",
       "subsystem": "storage",
       "users": [
-        "core/runtime"
+        "core/runtime",
+        "core/sdhc-large"
       ],
       "was": [
         "cf.storage.fn.block_write",
@@ -12106,6 +12108,162 @@
     },
     {
       "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c89c"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e1d8"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "As the write's chunk hook. Jump site+12.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.block_read.clamp_chunk",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "d5",
+          "ccr"
+        ],
+        "in": [
+          "d2",
+          "d3",
+          "d5"
+        ]
+      },
+      "site": "cf.storage.site.block_read.clamp_chunk",
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c88e"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e1ca"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "As the write's entry hook. Jump site+6.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.block_read.clamp_entry",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "ccr"
+        ],
+        "in": [
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.storage.site.block_read.clamp_entry",
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca82"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e3be"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "D5 = min(D2, limit) with the run-time limit of the entry hook (D3 is the buffer of the chunk to come). Jump site+12.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.block_write.clamp_chunk",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "d5",
+          "ccr"
+        ],
+        "in": [
+          "d2",
+          "d3",
+          "d5"
+        ]
+      },
+      "site": "cf.storage.site.block_write.clamp_chunk",
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca74"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e3b0"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Compare D2 with the run-time limit instead of 0x10000. The limit is 0x7fc00 (1022 blocks) only while the switch is on, the whole transfer lies inside the registered range, the buffer is 16-byte aligned and the length a multiple of 512; else 0x10000. Jump site+6.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.storage.hook.block_write.clamp_entry",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "ccr"
+        ],
+        "in": [
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.storage.site.block_write.clamp_entry",
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4012d5c2"
@@ -12197,6 +12355,162 @@
       "subsystem": "storage",
       "users": [
         "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c89c",
+            "len": 12
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e1d8",
+            "len": 12
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Block read chunk loop (twelve bytes, same shape as the write's).",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.block_read.clamp_chunk",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 12,
+          "offset": 34
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 12,
+          "offset": 34
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c88e",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e1ca",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Block read entry: `cmpi.l #0x10000,D2` (six bytes; same shape as the write).",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.block_read.clamp_entry",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 20
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 20
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca82",
+            "len": 12
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e3be",
+            "len": 12
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Block write chunk loop: `cmpi.l #0x10000,D2; ble; moveq 1,D5; swap D5` (twelve bytes; D5 = D2 before): the chunk size is min(D2, limit).",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.block_write.clamp_chunk",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 12,
+          "offset": 34
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 12,
+          "offset": 34
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca74",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e3b0",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Block write entry: `cmpi.l #0x10000,D2` (six bytes; D2 = bytes, D3 = buffer), then `ble`: a larger transfer is split into 64 KiB calls.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.storage.site.block_write.clamp_entry",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 20
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 20
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/sdhc-large"
       ],
       "was": []
     },
@@ -19378,7 +19692,7 @@
       "name": "samples"
     },
     {
-      "count": 39,
+      "count": 47,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",

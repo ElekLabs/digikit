@@ -25,6 +25,13 @@ test('bulk is a green FAST USB pill, sysex a neutral SYSEX pill', () => {
   assert.match(taken?.title ?? '', /USB audio is paused/);
 });
 
+test('a SysEx link in USB AUDIO/MIDI with the take-over off says to set USB CONFIG', () => {
+  const t = linkTag({ state: 'sysex', wrongMode: true });
+  assert.equal(t?.text, 'SYSEX');
+  assert.equal(t?.tone, 'warn');
+  assert.equal(t?.title, 'Set USB CONFIG to USB MIDI on the device for Fast USB');
+});
+
 test('a SysEx link with a usb-fast load failure names the module it needs', () => {
   const t = linkTag({ state: 'sysex', failure: { name: 'usb-fast.dkm', result: -7, needs: 'usb-bulk' } });
   assert.equal(t?.text, 'SYSEX: usb-fast not loaded (needs usb-bulk)');

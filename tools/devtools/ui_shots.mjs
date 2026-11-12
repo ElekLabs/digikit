@@ -214,6 +214,7 @@ const SCENES = [
   // the link pill after the free space (FAST USB / SYSEX / SYSEX: FALLBACK) and the "via" end of the progress line
   { name: 'samples-link-bulk', q: 'mode=samples&link=bulk', size: WIDE },
   { name: 'samples-link-sysex', q: 'mode=samples&link=sysex', size: WIDE },
+  { name: 'samples-link-wrongmode', q: 'mode=samples&link=wrongmode', size: WIDE },
   { name: 'samples-link-bulk-narrow', q: 'mode=samples&link=bulk', size: MIN },
   { name: 'samples-link-fallback-narrow', q: 'mode=samples&link=fallback&speed=3', size: MIN, steps: upload3 },
   {

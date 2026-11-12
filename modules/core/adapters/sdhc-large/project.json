@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/sdhc-large",
+  "implicitDependencies": ["core/runtime", "core/usb-bulk", "digikit/usb-fast"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/sdhc-large.device.test.ts"],
+        "modules": ["digikit/usb-fast"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

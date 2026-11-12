@@ -592,6 +592,15 @@ int32_t dkrt_job_post(uintptr_t step, uintptr_t done, uint8_t *ctx);
 /* Adapter to runtime: cancel the job id of dkrt_job_post. A queued job gets done with -80 at the next tick; a running one stops after its current step. OK or E_NOT_FOUND. */
 int32_t dkrt_job_cancel(uint32_t id);
 
+/* Adapter to runtime: the run-time switches of the speed levers, one word (bit 0 hash once, bit 2 read-back hash overlap; both set at boot; bits 1 and 3 of the usb-fast switch mask live in the usb-bulk and sdhc-large adapters). A module sets bits through the SDK speed_flags. */
+uint32_t dkrt_speed_flags(void);
+
+/* Adapter to runtime: run void f(u8 *ctx) (the address) on the runtime's helper task (priority 3, 4 KiB stack, no firmware calls, no waiting) while the caller does something that blocks. One run at a time: collect it with dkrt_aux_wait. Returns 0, E_BUSY (a run is not collected; the caller does the work itself) or E_NOT_FOUND (no task). */
+int32_t dkrt_aux_run(uintptr_t f, uint8_t *ctx);
+
+/* Adapter to runtime: wait until the run started by dkrt_aux_run has finished. Returns 0, or E_STATE when none was started. */
+int32_t dkrt_aux_wait(void);
+
 /* Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick. */
 void dkrt_pool_lost(void);
 

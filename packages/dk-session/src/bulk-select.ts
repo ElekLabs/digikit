@@ -105,6 +105,8 @@ export interface TakeOverOptions {
   pollMs?: number;
   /** How long an idle held link may take to answer the check at the start of a batch (default 2 s). A silent link is dropped and the take-over starts again. */
   aliveMs?: number;
+  /** The most a release waits until the device is back on its MIDI port and answers (default 8 s). A next run that starts while the device re-enumerates gets no reply. */
+  releaseWaitMs?: number;
   note?: (line: string) => void;
   bulk?: BulkOptions;
 }
@@ -118,6 +120,7 @@ export class BulkTakeOver {
   private startTimeoutMs: number;
   private pollMs: number;
   private aliveMs: number;
+  private releaseWaitMs: number;
   private note: (line: string) => void;
   private bulk: BulkOptions;
   private held: BulkChoice | undefined;
@@ -133,6 +136,7 @@ export class BulkTakeOver {
     this.startTimeoutMs = options.startTimeoutMs ?? 20_000;
     this.pollMs = options.pollMs ?? 250;
     this.aliveMs = options.aliveMs ?? 2000;
+    this.releaseWaitMs = options.releaseWaitMs ?? 8000;
     this.note = options.note ?? (() => {});
     this.bulk = options.bulk ?? {};
   }
@@ -222,16 +226,24 @@ export class BulkTakeOver {
     this.held = undefined;
     this.releasing = (async () => {
       await Promise.resolve(h.link.close()).catch(() => {});
-      await this.sendRelease();
+      if (!(await this.sendRelease())) return;
+      // the device switches back about 50 ms after the reply and leaves the bus: wait until it answers again, so that the next run does not start during that
+      try {
+        await this.device.reenumerated(this.releaseWaitMs);
+      } catch (e) {
+        this.note(`the device did not answer after the release: ${why(e)}`);
+      }
     })().finally(() => (this.releasing = undefined));
     return this.releasing;
   }
 
-  private async sendRelease(): Promise<void> {
+  private async sendRelease(): Promise<boolean> {
     try {
       await this.device.sysex().usbFastRelease();
+      return true;
     } catch (e) {
       this.note(`USB release failed (the device gives the mode back by itself after 30 s without traffic): ${why(e)}`);
+      return false;
     }
   }
 

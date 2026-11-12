@@ -3,7 +3,7 @@
 // A `BulkLink` moves whole frames: the desktop app's Tauri link, the WebUSB link of the web app, the `dkbulk` bridge of the command line and the fake
 // device of the tests implement it. `BulkSession` speaks the protocol over it (numbers in gen_bulk.ts, from sdk/sdk.toml [protocol.bulk]):
 //   request: 'DKB1' | cmd u8 | seq u8 | flags u16 | len u32 | body      reply: 'DKB1' | cmd|0x40 | seq | status i16 | len u32 | body   (big-endian)
-// Two DATA requests are in flight. The device takes the next offset only, so after a refused DATA (E_BUSY) the one behind it is refused too (E_OFFSET)
+// Two DATA requests are in flight, or as many as the device's INFO reports (`window`: the receive window in frames; an old device reports 0 and keeps 2). The device takes the next offset only, so after a refused DATA (E_BUSY) the one behind it is refused too (E_OFFSET)
 // and wrote nothing: the next request goes out at the first byte not acknowledged. The session keeps the sequence numbers of the requests whose reply it
 // has not read: a reply that is not the one awaited is dropped and logged (never an error), and after a timeout or a failure the owed replies are read or
 // discarded before the next request. Written without TS-only runtime syntax so node can import it.
@@ -163,7 +163,7 @@ export interface BulkOptions {
   timeoutMs?: number;
   /** How long `resync` waits for each reply still owed. */
   resyncMs?: number;
-  /** DATA requests in flight. */
+  /** DATA requests in flight. Unset: the window the device reported in INFO (`BulkSession.info` reads it), else 2. */
   window?: number;
   /** Data bytes of a DATA request: a multiple of BULK_ALIGN, at most BULK_DATA_MAX. */
   chunk?: number;
@@ -178,6 +178,8 @@ export interface BulkInfo {
   flags: number;
   dataMax: number;
   align: number;
+  /** The receive window of the device in DATA frames of 64 KiB (INFO byte 2); 0 when it does not report one: 2 frames then. */
+  window: number;
   /** What SET_NONCE left in the device (all zero before). */
   nonce: Uint8Array;
 }
@@ -201,12 +203,14 @@ export class BulkSession {
   /** Sequence numbers of the requests sent whose reply has not been read, oldest first. */
   private owed: number[] = [];
   private fatalError: Error | null = null;
+  /** The window INFO reported (0: none seen, or an old device). */
+  private deviceWindow = 0;
   constructor(link: BulkLink, o: BulkOptions = {}) {
     this.link = link;
     this.o = {
       timeoutMs: o.timeoutMs ?? 5000,
       resyncMs: o.resyncMs ?? 500,
-      window: o.window ?? 2,
+      window: o.window ?? 0,
       chunk: o.chunk ?? BULK_DATA_MAX,
       busyRetries: o.busyRetries ?? 150,
       busyWaitMs: o.busyWaitMs ?? 20,
@@ -335,9 +339,11 @@ export class BulkSession {
     if (b.length < 12 + BULK_NONCE_LEN)
       throw new DkError({ error: `bulk INFO body of ${b.length} bytes`, kind: 'protocol' });
     const v = new DataView(b.buffer, b.byteOffset, b.length);
+    this.deviceWindow = b[2]!;
     return {
       version: b[0]!,
       flags: b[1]!,
+      window: b[2]!,
       dataMax: v.getUint32(4),
       align: v.getUint32(8),
       nonce: b.slice(12, 12 + BULK_NONCE_LEN),
@@ -410,10 +416,11 @@ export class BulkSession {
     let busy = false;
     let tries = 0;
     const inflight: { seq: number; len: number }[] = [];
+    const window = this.o.window || (this.deviceWindow >= 2 ? this.deviceWindow : 2);
     onProgress?.(0, total);
     for (;;) {
       if (signal?.aborted) throw cancelled();
-      while (!busy && inflight.length < this.o.window && next < total) {
+      while (!busy && inflight.length < window && next < total) {
         const len = Math.min(this.o.chunk, total - next);
         const seq = await this.send(BULK_CMD.DATA, concat(be32(next), bytes.subarray(next, next + len)));
         inflight.push({ seq, len });

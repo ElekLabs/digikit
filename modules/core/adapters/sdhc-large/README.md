@@ -1,0 +1,10 @@
+# core/sdhc-large
+
+Lets the firmware's eSDHC block write and read run one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces, for the buffers that a caller registers. DT2 1.17 and DN2 1.12 run the same code at the same offsets (`devices/fw/storage.toml`, `cf.storage.site.block_*.clamp_*`).
+
+- **The firmware** cuts every transfer in 64 KiB commands: `cmpi.l #0x10000,D2` at offset 0x14 (entry test) and at 0x22 (chunk loop) of the block write and the block read. The eDMA channel counts `blocks * 32` in 15 bits, so 1023 blocks is the most one command can move; the limit here is 1022. The 64 KiB bounce buffer is used only for buffers that are not 16-byte aligned (reads: also lengths that are not whole blocks), so a raised limit is safe only for a 16-byte aligned buffer and a multiple of 512.
+- **The hooks** (`src/cf/sdhc.s`) replace the four compares with a limit: 0x7fc00 when the switch is on, D3 (the buffer) is 16-byte aligned, D2 (the bytes) is a multiple of 512 and `[D3, D3 + D2)` lies in the registered range; else 0x10000, and the firmware runs its stock path.
+- **Registration** (`sdk/sdk.toml`): `sdhc_large_range(lo, hi)` sets the one range, `(0, 0)` clears it. The runtime's store writer registers the data of a file write and its readback buffer (256 KiB pieces when the switch is on; one range at a time). `core/plusdrive-write` registers nothing: `hash_fast` reads one 32 KiB page per call, which gains nothing. Without this module the symbols are 0 and the callers skip the call.
+- **Switch** (`sdhc_large_ctl(0, val)`): on at every boot, RAM only. usb-fast STATUS 0x37 with body `'S' 3 <0|1>` sets it (reply: the mask of the four speed switches, bit 3 is this one; `'S'` alone reads it); off gives the stock limit for every transfer.
+- **Counters** (`sdhc_large_ctl(1, n)`): calls of the firmware's block write and read, and the calls that really moved more than 64 KiB (limit raised and bytes > 64 KiB). A transfer that the firmware splits counts one call per piece.
+- **Test**: `tests/sdhc-large.device.test.ts` (both devices).

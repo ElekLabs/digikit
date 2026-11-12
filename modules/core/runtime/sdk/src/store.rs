@@ -41,6 +41,9 @@ pub const SET_SECTORS: u32 = crate::gen_sdk::settings::COPIES * crate::gen_sdk::
 pub const TAIL: u32 = 1 + SET_SECTORS + SEL_SECTORS;
 /// Sectors one card read or write moves at most (the firmware's block read takes 64 KiB).
 pub const MAX_IO_SECTORS: u32 = 128;
+/// Sectors of one file-data write at most: 1022, the largest card command of core/sdhc-large (the eDMA counts 1023 blocks at most). The firmware's block
+/// write splits a transfer into 64 KiB commands itself unless the adapter raises its limit for the buffer, so a larger piece is safe without the adapter.
+pub const MAX_WRITE_SECTORS: u32 = 1022;
 
 /// Where the store is: the first card sector and the number of sectors (`devices/*.toml [card.store]`, per device).
 #[derive(Clone, Copy)]
@@ -84,7 +87,7 @@ impl Layout {
 }
 
 /// The firmware's eMMC block read and write: `(absolute sector, byte count, buffer)`; 0 = ok. Buffer 16-byte aligned, the count a multiple of 512,
-/// at most 0x10000 per call.
+/// at most 0x10000 per read call and `MAX_WRITE_SECTORS` sectors per write call (the firmware splits it in 64 KiB commands, or fewer with core/sdhc-large).
 pub type BlockIo = unsafe extern "C" fn(sector: u32, bytes: u32, buf: *mut u8) -> i32;
 
 /// The card: how the store reads and writes. The runtime's `wr` is its one gated card-write function.
@@ -1023,9 +1026,9 @@ impl Out {
     }
 }
 
-/// Write `n` sectors at store sector `rel` (data and tables: `[1, limit)`), at most `MAX_IO_SECTORS` at a time.
+/// Write `n` sectors at store sector `rel` (data and tables: `[1, limit)`), at most `MAX_WRITE_SECTORS` at a time.
 pub unsafe fn write_sectors(io: &Io, lay: &Layout, rel: u32, n: u32, buf: *const u8) -> i32 {
-    if rel < 1 || n == 0 || n > MAX_IO_SECTORS || rel > lay.limit() || n > lay.limit() - rel {
+    if rel < 1 || n == 0 || n > MAX_WRITE_SECTORS || rel > lay.limit() || n > lay.limit() - rel {
         return E_WRITE;
     }
     if (io.wr)(lay.first + rel, n * 512, buf as *mut u8) != 0 {
