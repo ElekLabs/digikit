@@ -31,9 +31,10 @@ pub const SCRATCH_AT: usize = 16 + MAX_CHUNK + 16;
 /// Largest chunk of one write (the protocol's DATA chunk).
 const MAX_CHUNK: usize = dkrt_sdk::proto::MAX_CHUNK as usize;
 
-/// Largest piece of one SDK write: `store::MAX_IO_SECTORS` sectors, the most that one firmware block write takes without splitting. The SDK
-/// path writes from the caller's buffer, so this needs no scratch (the SysEx path stays at `MAX_CHUNK`, the size of its body region).
-const WRITE_PIECE: usize = store::MAX_IO_SECTORS as usize * 512;
+/// Largest piece of one SDK write: `store::MAX_WRITE_SECTORS` sectors, the largest card command of core/sdhc-large (the firmware's block write
+/// splits a piece into 64 KiB commands itself when the module is not in the image). The SDK path writes from the caller's buffer, so this needs no
+/// scratch (the SysEx path stays at `MAX_CHUNK`, the size of its body region).
+const WRITE_PIECE: usize = store::MAX_WRITE_SECTORS as usize * 512;
 
 /// The three buffers of a store operation: the table's input and output streams (`TBL_CAP` bytes each) and a scratch (at least 512 bytes);
 /// all 16-byte aligned and apart.
@@ -727,6 +728,23 @@ fn mine(kind: u8, owner: u8, handle: i32) -> bool {
 /// (SysEx: the body region), so a short last chunk is padded in place; else its tail sector goes through the scratch. A retry of the
 /// previous SysEx chunk is ok and writes nothing. Statuses: `E_STATE`, `E_OFFSET`, `E_LENGTH`, `E_WRITE`.
 pub unsafe fn write(b: &Bufs, kind: u8, owner: u8, handle: i32, off: u32, data: *mut u8, len: u32, padded: bool) -> i32 {
+    // the card writes below may run as large commands (core/sdhc-large): `len` plus the padding of a last sector is the buffer's extent
+    large_range(data as u32, (data as u32).wrapping_add(len).wrapping_add(512));
+    let r = write_inner(b, kind, owner, handle, off, data, len, padded);
+    large_range(0, 0);
+    r
+}
+
+/// Tell core/sdhc-large which buffer the next card transfers use (`lo` = `hi` = 0: none). A no-op when the module is not in the image (the symbol is 0).
+#[inline(never)]
+unsafe fn large_range(lo: u32, hi: u32) {
+    let f: unsafe extern "C" fn(u32, u32) = crate::optional::sdhc_large_range;
+    if core::hint::black_box(f as usize) != 0 {
+        f(lo, hi);
+    }
+}
+
+unsafe fn write_inner(b: &Bufs, kind: u8, owner: u8, handle: i32, off: u32, data: *mut u8, len: u32, padded: bool) -> i32 {
     if !mine(kind, owner, handle) {
         return E_STATE;
     }
@@ -853,30 +871,22 @@ unsafe fn close_inner(b: &Bufs, out: *mut u8) -> i32 {
     do_commit_hinted(b, &t.h, Edit::Insert(ent.as_ptr()), pend, Some(&hint))
 }
 
-/// The read-back piece: the bytes of one card read of the close (a multiple of 512, at most `RB_MAX`). The firmware's block read takes 64 KiB at most
-/// (`store::MAX_IO_SECTORS` sectors); a larger piece needs the adapter that raises that clamp (docs/plans/usb-fast.md), which calls `set_readback_piece`.
+/// The read-back piece: the bytes of one card read of the close. The firmware's block read takes 64 KiB at most (`store::MAX_IO_SECTORS` sectors); with
+/// core/sdhc-large on, a read into a registered buffer takes up to 511 KiB, and the close reads 256 KiB pieces.
 const RB_DEFAULT: usize = store::MAX_IO_SECTORS as usize * 512;
-/// 511 KiB: the most one eSDHC command moves.
-const RB_MAX: usize = 511 * 1024;
-static mut RB_PIECE: usize = RB_DEFAULT;
+const RB_LARGE: usize = 256 * 1024;
 
-/// Set the read-back piece, rounded down to a multiple of 512 and kept between 512 and 511 KiB; returns it.
-pub fn set_readback_piece(bytes: usize) -> usize {
-    let n = if bytes < 512 { 512 } else if bytes > RB_MAX { RB_MAX } else { bytes & !511 };
-    unsafe { write_volatile(addr_of_mut!(RB_PIECE), n) };
-    n
-}
-
-/// Whether the large-command adapter (sdhc-large) is present and on, so a block read above `store::MAX_IO_SECTORS` sectors is possible. Hook point for
-/// the integration: return its presence here. Without it the firmware's block read would split or fail, so the piece stays at `RB_DEFAULT`.
+/// Whether the large-command adapter (core/sdhc-large) is present and its switch is on (`sdhc_large_ctl` key 0), so a block read of a registered buffer
+/// can exceed `store::MAX_IO_SECTORS` sectors. The absent stub returns 0: false. Without it the piece stays at `RB_DEFAULT`.
 fn large_reads_allowed() -> bool {
-    false
+    let f: unsafe extern "C" fn(u32, u32) -> u32 = crate::optional::sdhc_large_ctl;
+    // val 2 changes nothing: it reads the switch
+    core::hint::black_box(f as usize) != 0 && unsafe { f(0, 2) } == 1
 }
 
-/// The piece the close reads: the set value, never above `RB_DEFAULT` unless `large_reads_allowed`.
+/// The piece the close reads: `RB_LARGE` when `large_reads_allowed`, else `RB_DEFAULT`.
 fn readback_piece() -> usize {
-    let n = unsafe { read_volatile(addr_of!(RB_PIECE)) };
-    if large_reads_allowed() { n } else { core::cmp::min(n, RB_DEFAULT) }
+    if large_reads_allowed() { RB_LARGE } else { RB_DEFAULT }
 }
 
 /// `n` bytes, 16-byte aligned, from the firmware's allocator (null when it has none free or gives an unaligned block: the close then reads in the
@@ -911,7 +921,7 @@ fn cache_sync(p: *const u8, n: usize) {
 fn cache_sync(_: *const u8, _: usize) {}
 
 /// Read the file at store sector `start`, `size` bytes, back from the card and return its hash slot. A file of more than one small read gets a buffer of
-/// its own from the firmware's allocator, the read-back piece (lever A: 64 KiB by default), twice that when lever C (`speed::OVERLAP`) is on and the helper
+/// its own from the firmware's allocator, the read-back piece (64 KiB, 256 KiB with core/sdhc-large on), twice that when lever C (`speed::OVERLAP`) is on and the helper
 /// task exists; otherwise the caller's buffer.
 unsafe fn readback_file(b: &Bufs, start: u32, size: u32) -> Result<[u8; 32], i32> {
     let l = lay();
@@ -922,7 +932,16 @@ unsafe fn readback_file(b: &Bufs, start: u32, size: u32) -> Result<[u8; 32], i32
     let r = if big.is_null() {
         readback_hash(|s, n, p| block_read(l.first + s, n, p), start, size, b.rb, b.rb_cap, false)
     } else {
-        readback_hash(|s, n, p| block_read(l.first + s, n, p), start, size, big, piece, two)
+        // the card reads into `big` may run as large commands (core/sdhc-large); one range at a time: `write` clears its own before this runs
+        let ranged = piece > RB_DEFAULT;
+        if ranged {
+            large_range(big as u32, (big as u32).wrapping_add(want as u32));
+        }
+        let r = readback_hash(|s, n, p| block_read(l.first + s, n, p), start, size, big, piece, two);
+        if ranged {
+            large_range(0, 0);
+        }
+        r
     };
     if !big.is_null() {
         rb_free(big);
@@ -945,7 +964,7 @@ extern "C" fn hash_job(ctx: *mut u8) {
 }
 
 /// Read `size` bytes of the file at store sector `start` back through `rd(sector, bytes, buf)` and return their hash slot, in pieces of at most `cap`
-/// bytes (a multiple of 512; `buf` holds one piece, or two when `two`) of at most 64 KiB without `set_readback_piece`. `E_READ` when a read fails.
+/// bytes (a multiple of 512; `buf` holds one piece, or two when `two`) of at most `RB_LARGE`. `E_READ` when a read fails.
 /// With `two`, the hash of piece n runs on the helper task while piece n + 1 is read into the other half of `buf`; the call returns only when the helper is idle.
 unsafe fn readback_hash(mut rd: impl FnMut(u32, u32, *mut u8) -> i32, start: u32, size: u32, buf: *mut u8, cap: usize, two: bool) -> Result<[u8; 32], i32> {
     let piece = cap & !511;

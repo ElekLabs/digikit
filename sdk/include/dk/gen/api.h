@@ -182,6 +182,12 @@ int32_t usb_bulk_send(const uint8_t *buf, uint32_t len);
 /* State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the device is not in USB MIDI mode; read live), bit 3 taken over (usb_bulk_takeover is active), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then). Needs core/usb-bulk: the import is not found without it. */
 uint32_t usb_bulk_state(void);
 
+/* core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside [lo, hi), is 16-byte aligned and its length is a multiple of 512, while the switch is on (sdhc_large_ctl key 0). `lo` = `hi` = 0 clears the range. One range at a time: the caller sets it before the transfer and clears it after. Every other transfer keeps the firmware's 64 KiB limit. A no-op without the module. Needs core/sdhc-large: the import is not found without it. */
+void sdhc_large_range(uint32_t lo, uint32_t hi);
+
+/* core/sdhc-large: key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. A stub returning 0 without the module. Needs core/sdhc-large: the import is not found without it. */
+uint32_t sdhc_large_ctl(uint32_t key, uint32_t val);
+
 /* Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing. Needs core/dsp-link: the import is not found without it. */
 void dl_set_tick_cb(uint8_t *cb);
 

@@ -839,6 +839,12 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
         return 4;
     }
 #endif
+    if (cmd == NONCE_CMD + 1 && len >= 3 && body[0] == 'S') { /* 'S' bit 0|1: a RAM switch of the transfer path (on at every boot, never saved); replies the old value */
+        if (body[1] != 3)
+            return E_MSG;
+        put32(out, sdhc_large_ctl(0, body[2])); /* bit 3: the large card commands of core/sdhc-large (a stub without the module) */
+        return 4;
+    }
 #if UF_BENCH
     if (cmd == NONCE_CMD + 1 && len > 0)
         return uf_bench_command(body, len, out);
