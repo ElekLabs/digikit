@@ -1659,10 +1659,8 @@ mod tests {
             assert_ne!(readback_hash(fake(&BAD_MID, None), 100, GOOD.len() as u32, p, 16384, true), Ok(want));
             assert_eq!(readback_hash(fake(&GOOD, Some(150)), 100, GOOD.len() as u32, p, 16384, true), Err(E_READ));
         }
-        assert_eq!(set_readback_piece(0), 512);
-        assert_eq!(set_readback_piece(100_000), 99_840);
-        assert_eq!(set_readback_piece(10_000_000), 511 * 1024);
-        assert_eq!(set_readback_piece(RB_DEFAULT), RB_DEFAULT);
+        // without core/sdhc-large the close reads 64 KiB pieces
+        assert_eq!(readback_piece(), RB_DEFAULT);
     }
 
     #[test]

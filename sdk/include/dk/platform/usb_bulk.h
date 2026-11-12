@@ -71,6 +71,11 @@
 #define DK_USB_BULK_E_AGAIN                                                                        \
     DK_E_AGAIN /* usb_bulk_send: nothing in flight, the engine refused; wait for the wake and call again */
 
+/* usb_bulk_ring: the receive ring (up to 60 buffers of 16 KiB, so the controller keeps receiving while the job writes the card). */
+#define DK_USB_BULK_RING_ON(r) ((r) & 1)               /* the run-time switch */
+#define DK_USB_BULK_RING_HAVE(r) (((r) >> 1) & 1)      /* 0: the adapter has no ring (the stub returned 0): the old behaviour */
+#define DK_USB_BULK_RING_WINDOW(r) (((r) >> 8) & 0xff) /* frames of 64 KiB the live buffers take; 0: the old window of 2 */
+
 #define DK_USB_BULK_RX_BYTES 16384u /* the largest buffer usb_bulk_take gives */
 #define DK_USB_BULK_TX_BYTES 16384u /* the most one usb_bulk_send takes */
 

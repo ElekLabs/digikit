@@ -678,7 +678,7 @@ at = "worker"
 [[fn]]
 name = "dkrt_speed_flags"
 sig = "u32 dkrt_speed_flags()"
-doc = "Adapter to runtime: the run-time switches of the speed levers, one word (bit 0 hash once, bit 1 USB receive ring, bit 2 read-back hash overlap, bit 3 large card commands; all set at boot). A module sets bits through the SDK speed_flags."
+doc = "Adapter to runtime: the run-time switches of the speed levers, one word (bit 0 hash once, bit 2 read-back hash overlap; both set at boot; bits 1 and 3 of the usb-fast switch mask live in the usb-bulk and sdhc-large adapters). A module sets bits through the SDK speed_flags."
 at = "speed"
 
 [[fn]]

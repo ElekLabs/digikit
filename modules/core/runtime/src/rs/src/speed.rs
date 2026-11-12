@@ -1,18 +1,15 @@
 //! Run-time switches of the speed levers (docs/plans/usb-fast.md). One RAM word, never persisted, all levers on at boot. The host sets bits through the
-//! usb-fast service (STATUS body 'S' bit 0|1); a module through the SDK `speed_flags`, an adapter reads the word with `dkrt_speed_flags`. The bits are
+//! usb-fast service (STATUS body 'S' bit 0|2); a module through the SDK `speed_flags`, an adapter reads the word with `dkrt_speed_flags`. The bits are
 //! fixed across the lanes that implement the levers.
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 
 /// Bit 0, lever A: hash once. A store write with the expected hash (BEGIN's) does not hash the received bytes; the card read-back at close is the only hash.
 pub const HASH_ONCE: u32 = 1;
-/// Bit 1, lever B: the USB receive ring (the usb-bulk adapter).
-pub const RX_RING: u32 = 2;
 /// Bit 2, lever C: the close's card read-back hashes on the helper task (`aux`) while the next piece is read.
 pub const OVERLAP: u32 = 4;
-/// Bit 3, lever D: large card commands for registered buffers.
-pub const BIG_CMDS: u32 = 8;
-/// The bits that exist.
-pub const ALL: u32 = 15;
+/// The bits this word holds. Bit 1 (lever B, the USB receive ring) lives in the usb-bulk adapter and bit 3 (lever D, large card commands) in core/sdhc-large:
+/// each adapter owns its switch, and the usb-fast STATUS 'S' mask composes the four.
+pub const ALL: u32 = HASH_ONCE | OVERLAP;
 
 static mut FLAGS: u32 = ALL;
 

@@ -215,6 +215,9 @@ int32_t usb_bulk_takeover(void);
 /* End a take-over: about 50 ms later the adapter switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a command handler. Needs core/usb-bulk: the import is not found without it. */
 int32_t usb_bulk_giveback(void);
 
+/* The receive ring of the adapter. `set` 0 or 1 sets the run-time ring switch (bit 1 of the speed word; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the switch in bit 0, bit 1 always set (the adapter has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). A stub returns 0 when the adapter does not have it: no ring, the old behaviour. Switching the ring off while buffers are live keeps the block and only stops queueing beyond 8 slots; the next session allocates the 8-slot block. See <dk/platform/usb_bulk.h>. Needs core/usb-bulk: the import is not found without it. */
+int32_t usb_bulk_ring(int32_t set);
+
 /* Entry points of a .dkm (symbols of its object). */
 
 /* Runs once after the copy, relocation and cache flush. Returns 0 = ok; the module is unloaded otherwise. */
