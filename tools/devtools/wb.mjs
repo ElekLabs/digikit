@@ -5,7 +5,7 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] info
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] samples ls [FOLDER]
-//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] samples put FILE... [--folder F] [--bulk auto|off|force] [--bulk-bin PATH] [--verify auto|always|never]
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] samples put FILE... [--folder F] [--bulk auto|off|force] [--bulk-bin PATH] [--verify auto|always|never] [--speed MASK]
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] samples rm FOLDER...
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store ls [PREFIX]
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
@@ -18,6 +18,9 @@
 // $DKBULK_BIN or --bulk-bin) and over SysEx or MidiRpc otherwise; --bulk off forces SysEx, --bulk force fails when there is no bulk link. It prints the
 // When the device is in USB AUDIO/MIDI (no bulk interface there) and usb-fast is loaded, `samples put` takes USB over for the run (the device switches to USB
 // MIDI in RAM, USB audio pauses) and gives it back when the run ends: no flag; --bulk off never touches the USB mode.
+// --speed MASK (4 bits, decimal or 0x): sets the four speed switches through usb-fast STATUS 'S' before the put (bit 0 hash once, bit 1 USB receive ring,
+// bit 2 read-back hash overlap, bit 3 large card commands; all on at boot); the run prints the resulting mask and the usb-fast STATUS words 18 (staging bytes)
+// and 19 (receive ring slots): the hardware A/B of docs/findings/125-usb-fast-transfer-ceilings.md.
 // link and MB/s of every file and of the run: the repeatable bench (docs/plans/usb-fast.md step 6): run it once with --bulk off and once with auto.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -44,15 +47,45 @@ const opts = {
   folder: '',
   bulk: 'auto',
   verify: 'auto',
+  speed: undefined,
   'bulk-bin': process.env.DKBULK_BIN || path.join(targetRoot, 'nogen/release/dkbulk'),
 };
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
-  if (a === '--port' || a === '--bin' || a === '--folder' || a === '--bulk' || a === '--verify' || a === '--bulk-bin') {
+  if (
+    a === '--port' ||
+    a === '--bin' ||
+    a === '--folder' ||
+    a === '--bulk' ||
+    a === '--verify' ||
+    a === '--bulk-bin' ||
+    a === '--speed'
+  ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
     opts[a.slice(2)] = args[++i];
   } else words.push(a);
+}
+
+/** The four speed switches of usb-fast through STATUS 'S' (SysEx): each bit of MASK, then the mask the device reports. */
+async function setSpeed(session, mask) {
+  let now;
+  for (let bit = 0; bit < 4; bit++) {
+    const r = await session.request(0x37, Uint8Array.from([0x53, bit, (mask >> bit) & 1]));
+    if (r.status === 0) now = Buffer.from(r.body).readUInt32BE(0);
+    else console.error(`wb: speed bit ${bit}: status ${r.status} (the adapter is not in the image?)`);
+  }
+  return now;
+}
+
+/** The usb-fast STATUS words 18 (staging bytes) and 19 (receive ring slots of the live block), and the speed mask. */
+async function speedReport(session) {
+  const r = await session.request(0x37, new Uint8Array());
+  const m = await session.request(0x37, Uint8Array.from([0x53]));
+  const b = Buffer.from(r.body);
+  const word = (i) => (b.length >= 4 * i + 4 ? b.readUInt32BE(4 * i) : undefined);
+  const mask = m.status === 0 ? Buffer.from(m.body).readUInt32BE(0) : undefined;
+  return `speed mask ${mask === undefined ? '?' : `0x${mask.toString(16)}`} staging bytes ${word(18) ?? '?'} ring slots ${word(19) ?? '?'}`;
 }
 
 function fail(msg, code = 2) {
@@ -214,8 +247,15 @@ if (cmd === 'ports') {
   const sample = await loadSample();
   let bulk;
   const holder = { link: connect() };
+  let speedMask;
+  if (opts.speed !== undefined) {
+    speedMask = Number(opts.speed);
+    if (!Number.isInteger(speedMask) || speedMask < 0 || speedMask > 15) fail('--speed is a 4-bit mask (0 to 15)');
+  }
   try {
     await (async () => {
+      // the switches first: the receive ring is sized when the buffers are allocated (the take-over or enable of the bulk link)
+      if (speedMask !== undefined) await setSpeed(holder.link.session, speedMask);
       bulk = await connectBulk(holder);
       const session = holder.link.session;
       // the profile names the backend (`[storage] samples`); the Digitakt II is the stock +Drive, the Digitone II the digikit store
@@ -284,6 +324,7 @@ if (cmd === 'ports') {
       console.log(
         `total ${total} bytes ${s.toFixed(2)} s ${(total / 1e6 / s).toFixed(2)} MB/s via ${link()} (put and verify)`,
       );
+      if (speedMask !== undefined) console.log(await speedReport(holder.link.session));
       console.log(
         `phases prep ${tPrep.toFixed(0)} ms put ${tPut.toFixed(0)} ms verify ${tVerify.toFixed(0)} ms, ${count} files ${(count / s).toFixed(2)} files/s`,
       );

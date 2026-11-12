@@ -208,7 +208,7 @@ static volatile u8 rx_state[RX_MAX];
 static u32 rx_len[RX_MAX];
 static u8 order[RX_MAX]; /* the full slots in arrival order */
 static u32 order_head, order_count;
-/* The ring. `rx_slots`: the slots of the block allocated for this session (0 while not live). `usb_bulk_ring_off`: the run-time switch (bit 1 of the speed word; on by default):
+/* The ring. `rx_slots`: the slots of the block allocated for this session (0 while not live). `usb_bulk_ring_off`: the run-time switch (bit 1 of the usb-fast switch mask; on by default):
  * off = only RX_OLD slots are used and all are queued, the old geometry. It is read at every queueing and at the next allocation (a block is sized by it). `prime_cur`:
  * where the interrupt looks for the next free slot, so the slots are used round the ring. */
 static u32 rx_slots, prime_cur;
@@ -1395,7 +1395,7 @@ u32 usb_bulk_state(void)
  * one short. */
 #define RING_SLOTS_PER_FRAME 5u
 
-/* The run-time ring switch and the receive window. `set` below 0 only reads; 0 or 1 sets the switch (bit 1 of the speed word: 1 = the ring, the default; 0 = the old 8 slots,
+/* The run-time ring switch and the receive window. `set` below 0 only reads; 0 or 1 sets the switch (bit 1 of the usb-fast switch mask: 1 = the ring, the default; 0 = the old 8 slots,
  * all queued). The switch is read when the buffers are allocated (a block is sized by it) and at every queueing. Returns the switch in bit 0, bit 1 always set (so 0 means "no ring": the SDK's stub for an adapter without it), in bits 16..23 the slots of the live block and, in bits 8..15, the receive
  * window in frames of 64 KiB that the buffers allocated now can take: 0 when none are live or the window is the old one (the host keeps 2 DATA frames in flight then). */
 i32 usb_bulk_ring(i32 set)

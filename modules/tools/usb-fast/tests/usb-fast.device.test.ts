@@ -69,7 +69,7 @@ for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} digikit/usb-fast`, () => {
     const rig: CardRig = cardRig(device, 'usb-fast', {
       dsp: 'zero',
-      roots: [...RT, 'core/usb-bulk', ...(dt2 ? ['core/plusdrive-write'] : [])],
+      roots: [...RT, 'core/usb-bulk', 'core/sdhc-large', ...(dt2 ? ['core/plusdrive-write'] : [])],
       symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', 'DKRT_UPLOAD_FLIP', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
       project: true,
       uploads: true,
@@ -194,7 +194,7 @@ for (const device of DEVICES) {
       await rig.session.expectNoFault('usb-fast uploads');
     }, 1_800_000);
 
-    /** STATUS 'S' [bit [0|1]]: the speed switches (bit 0 hash once, bit 2 the overlapped read-back hash); the reply is the mask now. */
+    /** STATUS 'S' [bit [0|1]]: the four speed switches (bit 0 hash once, bit 1 the USB receive ring, bit 2 the overlapped read-back hash, bit 3 large card commands); the reply is the mask now. */
     const speedMask = async (dk: DkSession, bit?: number, on?: number) =>
       Buffer.from((await dk.request(0x37, Uint8Array.from(bit === undefined ? [0x53] : [0x53, bit, on!]))).body).readUInt32BE(0);
 
@@ -753,12 +753,11 @@ for (const device of DEVICES) {
 
     test('the receive ring: INFO reports the window and the host keeps that many DATA frames in flight, a bus reset with a full ring commits nothing, the switch off or a host that never asked INFO keeps 2', async () => {
       const { dk, bulk } = await boot();
-      /** STATUS 'S' 1 [value]: the ring switch of core/usb-bulk (reads without a value). */
+      /** STATUS 'S' 1 [value]: the ring switch of core/usb-bulk, bit 1 of the mask (reads without a value). */
       const ring = async (value?: number) => {
-        const r = await dk.request(0x37, Uint8Array.from(value === undefined ? [0x53, 1] : [0x53, 1, value]));
+        const r = await dk.request(0x37, Uint8Array.from(value === undefined ? [0x53] : [0x53, 1, value]));
         expect(r.status, 'STATUS S').toBe(0);
-        const w = Buffer.from(r.body).readUInt32BE(0);
-        return { on: w & 1, window: (w >>> 8) & 255 };
+        return { on: (Buffer.from(r.body).readUInt32BE(0) >>> 1) & 1 };
       };
       /** The most DATA requests sent and not yet answered, seen at the link. */
       const meter = (link: BulkLink) => {
@@ -777,7 +776,7 @@ for (const device of DEVICES) {
         return m;
       };
       const before = (await state(dk, 'ur0')).files;
-      expect(await ring(), 'the ring is on by default: 60 slots, 12 frames of 64 KiB').toEqual({ on: 1, window: 12 });
+      expect(await ring(), 'the ring is on by default: 60 slots, 12 frames of 64 KiB').toEqual({ on: 1 });
       expect((await bulk.session.info()).window, 'INFO carries the window').toBe(12);
       const m1 = meter(bulk.link);
       const big = pattern(3 << 20, 21);
@@ -818,13 +817,13 @@ for (const device of DEVICES) {
       await expectFile(dk, s, 'ring-reset.bin', ok, 'after the reset with a full ring');
 
       // the switch off: the old 8 slots, the host keeps 2; on again: 12
-      expect(await ring(0), 'switch off').toEqual({ on: 0, window: 0 });
+      expect(await ring(0), 'switch off').toEqual({ on: 0 });
       const off = await connect(dk);
       expect((await off.session.info()).window, 'INFO: no window').toBe(0);
       const m3 = meter(off.link);
       await off.session.put(SAMPLES, rp('ring-off.bin'), small, { expected: hashU32(small, dt2) });
       expect(m3.max, 'switch off: two in flight').toBe(2);
-      expect(await ring(1), 'switch on').toEqual({ on: 1, window: 12 });
+      expect(await ring(1), 'switch on').toEqual({ on: 1 });
       const on = await connect(dk);
       const m4 = meter(on.link);
       await on.session.put(SAMPLES, rp('ring-on.bin'), small, { expected: hashU32(small, dt2) });

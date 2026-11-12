@@ -403,12 +403,12 @@ pub mod api {
         pub hash32_update: unsafe extern "C" fn(state: *mut u8, p: *const u8, n: u32),
         /// (api 1.10) The file hash `hash|1`: the value the store keeps (4 bytes big-endian in a table slot). The state is spent.
         pub hash32_finish: unsafe extern "C" fn(state: *mut u8) -> u32,
-        /// (api 1.11) The run-time switches of the speed levers: one RAM word, all four bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 1: USB receive ring; bit 2: the read-back hash overlaps the next card read; bit 3: large card commands. Any task.
+        /// (api 1.11) The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `usb_bulk_ring`, bit 3 `sdhc_large_ctl`), not in this word. Any task.
         pub speed_flags: unsafe extern "C" fn(clear: u32, set: u32) -> u32,
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 45] = [
+    pub const IMPORT_NAMES: [&str; 47] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -426,6 +426,8 @@ pub mod api {
         "usb_bulk_release",
         "usb_bulk_send",
         "usb_bulk_state",
+        "sdhc_large_range",
+        "sdhc_large_ctl",
         "dk_ui_has",
         "dk_ui_menu_new",
         "dk_ui_open",
@@ -499,6 +501,12 @@ pub mod api {
     /// `usb_bulk_state`: State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the device is not in USB MIDI mode; read live), bit 3 taken over (usb_bulk_takeover is active), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then).
     pub type UsbBulkStateFn = unsafe extern "C" fn() -> u32;
 
+    /// `sdhc_large_range`: core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside [lo, hi), is 16-byte aligned and its length is a multiple of 512, while the switch is on (sdhc_large_ctl key 0). `lo` = `hi` = 0 clears the range. One range at a time: the caller sets it before the transfer and clears it after. Every other transfer keeps the firmware's 64 KiB limit. A no-op without the module.
+    pub type SdhcLargeRangeFn = unsafe extern "C" fn(lo: u32, hi: u32);
+
+    /// `sdhc_large_ctl`: core/sdhc-large: key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. A stub returning 0 without the module.
+    pub type SdhcLargeCtlFn = unsafe extern "C" fn(key: u32, val: u32) -> u32;
+
     /// `dl_set_tick_cb`: Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing.
     pub type DlSetTickCbFn = unsafe extern "C" fn(cb: *mut u8);
 
@@ -526,7 +534,7 @@ pub mod api {
     /// `usb_bulk_giveback`: End a take-over: about 50 ms later the adapter switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a command handler.
     pub type UsbBulkGivebackFn = unsafe extern "C" fn() -> i32;
 
-    /// `usb_bulk_ring`: The receive ring of the adapter. `set` 0 or 1 sets the run-time ring switch (bit 1 of the speed word; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the switch in bit 0, bit 1 always set (the adapter has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). A stub returns 0 when the adapter does not have it: no ring, the old behaviour. Switching the ring off while buffers are live keeps the block and only stops queueing beyond 8 slots; the next session allocates the 8-slot block. See <dk/platform/usb_bulk.h>.
+    /// `usb_bulk_ring`: The receive ring of the adapter. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the switch in bit 0, bit 1 always set (the adapter has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). A stub returns 0 when the adapter does not have it: no ring, the old behaviour. Switching the ring off while buffers are live keeps the block and only stops queueing beyond 8 slots; the next session allocates the 8-slot block. See <dk/platform/usb_bulk.h>.
     pub type UsbBulkRingFn = unsafe extern "C" fn(set: i32) -> i32;
 }
 
@@ -546,6 +554,8 @@ macro_rules! optional_imports {
                 pub fn usb_bulk_release(buf: *mut u8) -> i32;
                 pub fn usb_bulk_send(buf: *const u8, len: u32) -> i32;
                 pub fn usb_bulk_state() -> u32;
+                pub fn sdhc_large_range(lo: u32, hi: u32);
+                pub fn sdhc_large_ctl(key: u32, val: u32) -> u32;
                 pub fn dk_ui_has(cap: i32) -> i32;
                 pub fn dk_ui_menu_new(desc: *const u8) -> *mut u8;
                 pub fn dk_ui_open(menu: *mut u8) -> i32;
@@ -572,6 +582,8 @@ macro_rules! optional_imports {
 
             /// What an absent module's import calls: the failure value of the API.
             pub mod absent {
+                pub unsafe extern "C" fn sdhc_large_range(_a0: u32, _a1: u32) { }
+                pub unsafe extern "C" fn sdhc_large_ctl(_a0: u32, _a1: u32) -> u32 { 0 as _ }
                 pub unsafe extern "C" fn dk_ui_has(_a0: i32) -> i32 { 0 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_new(_a0: *const u8) -> *mut u8 { 0 as _ }
                 pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8) -> i32 { -1 as _ }
@@ -595,7 +607,7 @@ macro_rules! optional_imports {
             }
 
             /// (name, address from the module or 0, address of the stub or 0, the module that provides it)
-            pub fn table() -> [(&'static str, usize, usize, &'static str); 30] {
+            pub fn table() -> [(&'static str, usize, usize, &'static str); 32] {
                 [
                     ("input_key", core::hint::black_box(input_key as usize), 0, "core/input"),
                     ("input_turn", core::hint::black_box(input_turn as usize), 0, "core/input"),
@@ -605,6 +617,8 @@ macro_rules! optional_imports {
                     ("usb_bulk_release", core::hint::black_box(usb_bulk_release as usize), 0, "core/usb-bulk"),
                     ("usb_bulk_send", core::hint::black_box(usb_bulk_send as usize), 0, "core/usb-bulk"),
                     ("usb_bulk_state", core::hint::black_box(usb_bulk_state as usize), 0, "core/usb-bulk"),
+                    ("sdhc_large_range", core::hint::black_box(sdhc_large_range as usize), absent::sdhc_large_range as usize, "core/sdhc-large"),
+                    ("sdhc_large_ctl", core::hint::black_box(sdhc_large_ctl as usize), absent::sdhc_large_ctl as usize, "core/sdhc-large"),
                     ("dk_ui_has", core::hint::black_box(dk_ui_has as usize), absent::dk_ui_has as usize, "core/ui"),
                     ("dk_ui_menu_new", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, "core/ui"),
                     ("dk_ui_open", core::hint::black_box(dk_ui_open as usize), absent::dk_ui_open as usize, "core/ui"),

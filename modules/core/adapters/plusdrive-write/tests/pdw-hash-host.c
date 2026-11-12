@@ -33,39 +33,67 @@ static uint32_t fed(uint32_t n, uint32_t piece)
 }
 
 /* The textbook byte-wise lookup3 of the same variant (the seed in all three words, the last 1 to 12 bytes as the tail), apart from pdw_hash.h. */
-static uint32_t rotl(uint32_t x, uint32_t k) { return (x << k) | (x >> (32u - k)); }
+static uint32_t rotl(uint32_t x, uint32_t k)
+{
+    return (x << k) | (x >> (32u - k));
+}
 static uint32_t wb(const uint8_t *p, uint32_t n)
 {
     uint32_t w = 0, i;
-    for (i = 0; i < n; i++) w |= (uint32_t)p[i] << (24u - 8u * i);
+    for (i = 0; i < n; i++)
+        w |= (uint32_t)p[i] << (24u - 8u * i);
     return w;
 }
 static uint32_t reference(const uint8_t *d, uint32_t n)
 {
     uint32_t a = PDW_HASH_SEED, b = a, c = a, m;
-    if (n == 0) return c;
+    if (n == 0)
+        return c;
     while (n > 12) {
-        a += wb(d, 4); b += wb(d + 4, 4); c += wb(d + 8, 4);
-        a -= c; a ^= rotl(c, 4);  c += b;
-        b -= a; b ^= rotl(a, 6);  a += c;
-        c -= b; c ^= rotl(b, 8);  b += a;
-        a -= c; a ^= rotl(c, 16); c += b;
-        b -= a; b ^= rotl(a, 19); a += c;
-        c -= b; c ^= rotl(b, 4);  b += a;
+        a += wb(d, 4);
+        b += wb(d + 4, 4);
+        c += wb(d + 8, 4);
+        a -= c;
+        a ^= rotl(c, 4);
+        c += b;
+        b -= a;
+        b ^= rotl(a, 6);
+        a += c;
+        c -= b;
+        c ^= rotl(b, 8);
+        b += a;
+        a -= c;
+        a ^= rotl(c, 16);
+        c += b;
+        b -= a;
+        b ^= rotl(a, 19);
+        a += c;
+        c -= b;
+        c ^= rotl(b, 4);
+        b += a;
         d += 12;
         n -= 12;
     }
     m = n;
     a += wb(d, m < 4 ? m : 4);
-    if (m > 4) b += wb(d + 4, m < 8 ? m - 4 : 4);
-    if (m > 8) c += wb(d + 8, m - 8);
-    c ^= b; c -= rotl(b, 14);
-    a ^= c; a -= rotl(c, 11);
-    b ^= a; b -= rotl(a, 25);
-    c ^= b; c -= rotl(b, 16);
-    a ^= c; a -= rotl(c, 4);
-    b ^= a; b -= rotl(a, 14);
-    c ^= b; c -= rotl(b, 24);
+    if (m > 4)
+        b += wb(d + 4, m < 8 ? m - 4 : 4);
+    if (m > 8)
+        c += wb(d + 8, m - 8);
+    c ^= b;
+    c -= rotl(b, 14);
+    a ^= c;
+    a -= rotl(c, 11);
+    b ^= a;
+    b -= rotl(a, 25);
+    c ^= b;
+    c -= rotl(b, 16);
+    a ^= c;
+    a -= rotl(c, 4);
+    b ^= a;
+    b -= rotl(a, 14);
+    c ^= b;
+    c -= rotl(b, 24);
     return c;
 }
 
@@ -80,17 +108,27 @@ static int random_cases(void)
         uint32_t n = round % 10 == 0 ? RND(19000u) : RND(300u), skew = RND(4u), at = 0;
         struct pdw_hash h;
         uint8_t *d = base + skew;
-        for (i = 0; i < n; i++) d[i] = (uint8_t)RND(256u);
+        for (i = 0; i < n; i++)
+            d[i] = (uint8_t)RND(256u);
         pdw_hash_init(&h);
         while (at < n) {
             uint32_t k;
             switch (RND(4u)) {
-            case 0: k = 1 + RND(13u); break;
-            case 1: k = 1 + RND(40u); break;
-            case 2: k = 512u * (1 + RND(4u)); break;
-            default: k = 1 + RND(5000u); break;
+            case 0:
+                k = 1 + RND(13u);
+                break;
+            case 1:
+                k = 1 + RND(40u);
+                break;
+            case 2:
+                k = 512u * (1 + RND(4u));
+                break;
+            default:
+                k = 1 + RND(5000u);
+                break;
             }
-            if (k > n - at) k = n - at;
+            if (k > n - at)
+                k = n - at;
             pdw_hash_update(&h, d + at, k);
             at += k;
         }

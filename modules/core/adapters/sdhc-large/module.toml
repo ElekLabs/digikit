@@ -19,7 +19,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # The firmware's eSDHC block write and read (the same code on both devices) cut every transfer into 64 KiB commands: `cmpi.l #0x10000,D2` at the entry test and
 # in the chunk loop of each. The four hooks replace those compares with a limit of 1022 blocks for a transfer that lies inside the range a caller registered
 # (sdhc_large_range) and is 16-byte aligned with a length that is a multiple of 512, while the switch (sdhc_large_ctl key 0, on at every boot, never persisted)
-# is on. Every other transfer keeps the 64 KiB limit: the code path is the stock one. The runtime's store writer and core/plusdrive-write register their data
+# is on. Every other transfer keeps the 64 KiB limit: the code path is the stock one. The runtime's store writer registers its data
 # and readback buffers around their card transfers (optional symbols: 0 without this module). Details: sdhc.s.
 [[object]]
 path = "build/sdhc-large.dko.json"
