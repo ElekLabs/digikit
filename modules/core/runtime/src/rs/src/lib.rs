@@ -585,6 +585,35 @@ pub unsafe fn import_needs(name: *const u8) -> Option<&'static str> {
     None
 }
 
+/// The provider behind a service accessor (`dk_*_open`) of `table` that is bound to its stub: the row has no address from the module, only the
+/// stub. That stub answers DK_E_MISSING, and a module whose `init` returns it needs this provider ("usb-bulk" for `dk_usb_bulk_open`).
+/// None for any other import. `table` is `optional::table()`.
+pub unsafe fn stub_provider(
+    table: &[(&'static str, usize, usize, &'static str)],
+    name: *const u8,
+) -> Option<&'static str> {
+    let mut i = 0;
+    while i < table.len() {
+        let t = table[i];
+        if cstr_eq_str(name, t.0) {
+            if !t.0.ends_with("_open") || t.1 != 0 || t.2 == 0 {
+                return None;
+            }
+            return Some(match t.3.rfind('/') {
+                Some(at) => &t.3[at + 1..],
+                None => t.3,
+            });
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `stub_provider` of the runtime's own table.
+pub unsafe fn import_stub_provider(name: *const u8) -> Option<&'static str> {
+    stub_provider(&optional::table(), name)
+}
+
 /// Whether the NUL-terminated `a` equals `b`.
 unsafe fn cstr_eq_str(a: *const u8, b: &str) -> bool {
     let b = b.as_bytes();
@@ -1366,6 +1395,30 @@ unsafe fn mailbox_select(arg: *const u8, copy: u32) -> i32 {
 
 #[cfg(test)]
 mod cleanup_tests;
+
+#[cfg(test)]
+mod stub_tests {
+    use super::stub_provider;
+
+    const T: [(&str, usize, usize, &str); 4] = [
+        ("dk_usb_bulk_open", 0, 9, "core/usb-bulk"),
+        ("dk_usb_bulk_send", 0, 9, "core/usb-bulk"),
+        ("dk_ui_open", 5, 9, "core/ui"),
+        ("input_key", 0, 0, "core/input"),
+    ];
+
+    #[test]
+    fn only_an_open_call_bound_to_its_stub_names_its_provider() {
+        unsafe {
+            assert_eq!(stub_provider(&T, b"dk_usb_bulk_open\0".as_ptr()), Some("usb-bulk"));
+            // another call of the service, a provider that is loaded, an import without a stub and an unknown name
+            assert_eq!(stub_provider(&T, b"dk_usb_bulk_send\0".as_ptr()), None);
+            assert_eq!(stub_provider(&T, b"dk_ui_open\0".as_ptr()), None);
+            assert_eq!(stub_provider(&T, b"input_key\0".as_ptr()), None);
+            assert_eq!(stub_provider(&T, b"nothing\0".as_ptr()), None);
+        }
+    }
+}
 
 #[cfg(test)]
 pub fn irq_mask() -> u32 { 0 }

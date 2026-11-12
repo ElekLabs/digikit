@@ -129,7 +129,7 @@ A module reaches the device through named imports, grouped by service in `sdk.to
 - A service with per-module state, or one that may be absent, has a handle opened in `init`: `dk_settings_open`, `dk_files_open`,
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
-  code or do nothing. The module decides whether it can run without the service. Today a missing provider fails the load.
+  code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the first `_open` import that is bound to its stub as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
 
 ```toml

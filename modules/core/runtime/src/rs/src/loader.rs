@@ -217,6 +217,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         return E_FORMAT;
     }
     // imports: every name must be in the runtime's table
+    STUB_NEEDS = [0; NEEDS_LEN];
     let mut import_addrs = [0u32; 64];
     i = 0;
     while i < import_n as usize {
@@ -236,6 +237,14 @@ unsafe fn load_inner(path: *const u8) -> i32 {
                 }
             }
             return E_IMPORT;
+        }
+        if let (Some(n), true) = (crate::import_stub_provider(p), STUB_NEEDS[0] == 0) {
+            let b = n.as_bytes();
+            let mut k = 0;
+            while k < b.len() && k < NEEDS_LEN {
+                STUB_NEEDS[k] = b[k];
+                k += 1;
+            }
         }
         import_addrs[i] = a;
         i += 1;
@@ -456,12 +465,18 @@ unsafe fn complete(
         let arg = if ctx != 0 { ctx as usize as *const Api } else { addr_of!(dkrt_api) };
         let r = crate::dlog::call_init(rec as usize, call, arg);
         if r != 0 {
+            // a service accessor whose provider is not in the image answered DK_E_MISSING: the boot shows the provider as the module's need
+            let missing = r == E_MISSING && STUB_NEEDS[0] != 0;
+            if missing && MISSING[0] == 0 {
+                MISSING = STUB_NEEDS;
+            }
             crate::intro::discard(rec);
             let held = !crate::files::retire(rec) | !retire_sdk(rec);
             crate::upload::release_cmds(owner);
             crate::registry::remove(owner);
             if !dsp::release(rec) || held { return E_BUSY; }
-            return E_INIT;
+            // the load fails as for an unresolved import of a module that is not in the image (the LOADS and BOOT views know that code)
+            return if missing { E_IMPORT } else { E_INIT };
         }
     }
     let mut idx = 0;
@@ -495,6 +510,9 @@ pub static mut EARLY: bool = false;
 /// The name of the missing module of the last load that failed with E_IMPORT (`import_needs`), NUL padded; empty when none. The boot clears it
 /// before each load and takes it after.
 pub static mut MISSING: [u8; NEEDS_LEN] = [0; NEEDS_LEN];
+/// The provider of the first `_open` import of the module being loaded that is bound to its stub (`import_stub_provider`), NUL padded; empty when none.
+/// When `init` returns DK_E_MISSING, `MISSING` takes it and the load fails with E_IMPORT, as for an unresolved import.
+static mut STUB_NEEDS: [u8; NEEDS_LEN] = [0; NEEDS_LEN];
 /// The selection index of the module being loaded by the boot hook (`u32::MAX`: none).
 pub static mut BOOT_IDX: u32 = u32::MAX;
 
