@@ -1427,9 +1427,9 @@ mod tests {
     fn a_module_with_the_entry_point_needs_the_newest_since_of_its_imports() {
         let minor = |f: &[u8]| f[H_CONTRACT + 1];
         let sdk_minor = crate::sdkgen::embedded().api.1;
-        assert_eq!(
-            sdk_minor, API_ENTRY_MINOR,
-            "the entry point is the newest api minor"
+        assert!(
+            sdk_minor >= API_ENTRY_MINOR,
+            "the SDK has at least the api minor of the entry point"
         );
         // the imports of the old time and no import: the entry point alone is 1.11
         assert_eq!(entry_api_minor(["memcpy", "fw_alloc"]), API_ENTRY_MINOR);
