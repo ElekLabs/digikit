@@ -53,6 +53,7 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     41: ("INPUT_TAKEN", ("what", "control", "delta", "-", "-")),
     42: ("PARAM_CHANGE", ("track", "index", "old", "new", "-")),
     43: ("MOD_NEEDS", ("index", "name0", "name1", "name2", "-")),
+    44: ("USB_SW", ("phase", "ms", "sts_cmd", "portsc", "otg")),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

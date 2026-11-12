@@ -46,6 +46,11 @@ void dkrt_log_ev(uint32_t kind, uint32_t flags, const uint32_t *a)
     Ev e = { 0, clock_blocks, (u16)kind, (u16)flags, { a[0], a[1], a[2], a[3], a[4] } };
     the_sink(&e);
 }
+/* the menu and text imports of the card log: linked, not called (the fake api has size 0, so the card log is off) */
+void dk_ui_toggle(dk_ui_menu *m, const char *t, int *v, dk_ui_act_fn *f, void *c) { (void)m; (void)t; (void)v; (void)f; (void)c; }
+void dk_ui_text(dk_ui_menu *m, const char *t) { (void)m; (void)t; }
+uint32_t dk_text_itoa(char *o, int32_t v) { (void)o; (void)v; return 0; }
+uint32_t dk_text_utoa(char *o, uint32_t v) { (void)o; (void)v; return 0; }
 static void f_log(const u8 *m, u32 v) { (void)m; (void)v; }
 static int32_t f_reg(u32 first, u32 count, dk_service_cmd *h) { the_cmd = h; printf("reg %u %u\n", first, count); return 0; }
 

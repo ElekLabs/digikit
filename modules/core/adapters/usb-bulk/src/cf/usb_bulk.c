@@ -96,13 +96,17 @@ static inline __attribute__((always_inline)) u32 reg_rd(u32 off)
 }
 #define USBCMD 0x140u
 #define USBSTS 0x144u
+#define FRINDEX 0x14cu
+#define DEVICEADDR 0x154u
 #define PORTSC 0x184u
 #define PORTSC_SUSP 0x80u /* bit 7: the port is suspended */
 #define ENDPTPRIME 0x1b0u
 #define ENDPTCOMPLETE 0x1bcu
 #define ENDPTSTAT 0x1b8u
 #define ENDPTFLUSH 0x1b4u
+#define ENDPTCTRL1 0x1c4u
 #define ENDPTCTRL2 0x1c8u
+#define ENDPTCTRL3 0x1ccu
 #define USBCMD_RS 0x1u
 #define OTGSC 0x1a4u
 #define OTGSC_BSV                                                                                  \
@@ -276,6 +280,18 @@ static volatile u32 rec_armed;
 static u32 rec_at, rec_per, rec_target,
     rec_count; /* `rec_target`: the port our switch went to; `rec_count`: restarts forced for this switch */
 static volatile u32 to_pend_port;
+/* The switch timeline (USB_SW events, "the switch timeline" below). `sw_open`: a timeline window is open. `sw_pend`: a request was accepted (1 take-over, 2 release); the tick logs REQ.
+ * The two callbacks of the firmware run in the USB interrupt and only count, stamp the block clock and copy PORTSC; the tick logs them. */
+static volatile u32 sw_open, sw_pend, sw_drop, sw_con_cnt, sw_con_at, sw_con_ps, sw_dis_cnt,
+    sw_dis_at, sw_dis_ps;
+static void sw_cb(volatile u32 *cnt, volatile u32 *at, volatile u32 *ps)
+{
+    (*cnt)++;
+    if (sw_open) {
+        *at = dkrt_blocks();
+        *ps = reg_rd(PORTSC);
+    }
+}
 static void (*stock_connect)(u32);
 static u32 stock_free; /* the firmware's own free callback of a dTD (+0x38), which ours wraps */
 static volatile u32
@@ -631,7 +647,7 @@ static void ep2_quiesce(void)
 void usb_bulk_connect(void)
 {
     u32 sr = sr_mask();
-    UB_LOG("ub.connect", resets);
+    sw_cb(&sw_con_cnt, &sw_con_at, &sw_con_ps);
     ep2_stop();
     stock_connect(1); /* the wrapper reads and sets its argument slot */
     qh(QH_EP2_OUT)[0] = QH_CAPS_OUT;
@@ -650,7 +666,7 @@ static u32 sw_guard_open(void); /* take-over section */
 void usb_bulk_disconnect(void)
 {
     u32 sr = sr_mask();
-    UB_LOG("ub.disconn", resets);
+    sw_cb(&sw_dis_cnt, &sw_dis_at, &sw_dis_ps);
     if (taken && !to_quiet && sw_guard_open())
         to_gone =
             1; /* unplug, suspend or a mode change while taken over: the tick decides (this runs in the USB interrupt) */
@@ -658,36 +674,6 @@ void usb_bulk_disconnect(void)
     sr_restore(sr);
     usb_fw_disconnect();
 }
-
-#if UB_TRACE
-/* the controller registers and the EP2 queue head words, logged when they change (read only: USBSTS is write 1 to clear) */
-#define UB_SNAP_N 10u
-static void ub_snapshot(void)
-{
-    static u32 last[UB_SNAP_N];
-    static const char *const tags[UB_SNAP_N] = {
-        "ub.USBSTS",  "ub.PORTSC",  "ub.USBCMD",  "ub.EPPRIME", "ub.EPSTAT",
-        "ub.EPCOMPL", "ub.qhO.tok", "ub.qhI.tok", "ub.qhO.cur", "ub.qhI.cur"};
-    u32 v[UB_SNAP_N];
-    u32 i;
-    v[0] = reg_rd(USBSTS);
-    v[1] = reg_rd(PORTSC);
-    v[2] = reg_rd(USBCMD);
-    v[3] = reg_rd(ENDPTPRIME);
-    v[4] = reg_rd(ENDPTSTAT);
-    v[5] = reg_rd(ENDPTCOMPLETE);
-    v[6] = *(volatile u32 *)(QH_BASE + QH_EP2_OUT + 0x0cu);
-    v[7] = *(volatile u32 *)(QH_BASE + QH_EP2_IN + 0x0cu);
-    v[8] = *(volatile u32 *)(QH_BASE + QH_EP2_OUT + 0x04u);
-    v[9] = *(volatile u32 *)(QH_BASE + QH_EP2_IN + 0x04u);
-    for (i = 0; i < UB_SNAP_N; i++) {
-        if (v[i] != last[i]) {
-            last[i] = v[i];
-            ub_log(tags[i], v[i]);
-        }
-    }
-}
-#endif
 
 /* ---- the buffers: allocated when the interface can go live, freed when the take-over ends ---- */
 
@@ -929,6 +915,212 @@ static u32 sw_guard_open(void)
     return to_elapsed_ms(to_sw_at, now, per) >= TO_GUARD_MS;
 }
 
+/* ---- the switch timeline ----
+ * USB_SW events (sdk.toml kind 44, level info; layout in README.md) for one take-over or release: from the accepted request until the host has configured the device
+ * (DONE) or SW_WINDOW_MS have passed (TIMEOUT). UI task only. The tick samples the controller once a pass and logs a milestone when it first shows; the callbacks that run in
+ * the interrupt are logged from their stamps. At most SW_MAX_EVENTS events a window, STATE stops at SW_STATE_MAX (DONE, TIMEOUT, GIVEUP and DROPPED always log). Switch
+ * number: the switch this request makes. */
+enum {
+    SW_REQ = 1,
+    SW_WAIT,
+    SW_FW_SWITCH,
+    SW_DISCONNECT_CB,
+    SW_HOLD_BEGIN,
+    SW_PHY_PARK,
+    SW_PHY_RESTORE,
+    SW_RS_UP,
+    SW_CONNECT_CB,
+    SW_ADDRESSED,
+    SW_CONFIGURED,
+    SW_STATE,
+    SW_ENUM_LATE,
+    SW_RECOVERY,
+    SW_GIVEUP,
+    SW_DONE,
+    SW_TIMEOUT,
+    SW_DROPPED
+};
+#define SW_KIND 44u
+#define SW_FLAGS (2u << 1)       /* level 2 (info) in bits 1-3 */
+#define SW_FLAGS_STATE (3u << 1) /* STATE: level 3 (debug) */
+#define SW_MAX_EVENTS 32u
+#define SW_STATE_MAX 24u
+#define SW_WINDOW_MS 10000u
+#define SW_LATE_MS 3000u
+#define SW_NOCONF_MS 2000u /* DONE without CONFIGURED, this long after ADDRESSED */
+/* `last`: the sampled words of the previous pass; `fc`: the last ULPI function control value seen (0xff unknown); `ov_ms`, `ov_ps`: the stamp of a callback event (~0 / 0: none).
+ * `reset_seen`: after the switch a bus reset showed (connect callback, URI, or address 0); `en_cleared`: the EP1 enables were seen 0; `addr_at`: the time of ADDRESSED.
+ * `hold_ov`: the events of the switch carry the time and words stamped right after usb_fw_mode_switch (`hold_ms`, `hold_w`). */
+static struct {
+    u32 start, per, no, target, dir, n, seen, dis, con, last_fr, rs_at, stopped, waited, late;
+    u32 reset_seen, en_cleared, addr_at, hold_ov, hold_ms;
+    u32 last[3], hold_w[3];
+} sw;
+static u32 sw_fc = 0xffu, sw_ov_ms = ~0u, sw_ov_ps;
+
+static u32 sw_ms(void)
+{
+    u32 per, now = to_peek(&per);
+    return per == sw.per ? to_elapsed_ms(sw.start, now, per) : 0u;
+}
+
+/* RXE (bit 7) and TXE (bit 23) of an ENDPTCTRL word as bits 0 and 1 */
+static u32 sw_ep(u32 c)
+{
+    return ((c >> 7) & 1u) | ((c >> 22) & 2u);
+}
+
+/* words 2 to 4 of an event: USBSTS and RS and the PHY value, PORTSC, and the OTG word */
+static void sw_words(u32 *a)
+{
+    u32 otg = reg_rd(OTGSC), fr = reg_rd(FRINDEX);
+    u32 en = sw_ep(reg_rd(ENDPTCTRL1)) | (sw_ep(reg_rd(ENDPTCTRL2)) << 2) |
+             (sw_ep(reg_rd(ENDPTCTRL3)) << 4);
+    u32 audio = ((reg_rd(ENDPTSTAT) | reg_rd(ENDPTPRIME)) >> 19) & 1u;
+    a[2] = (reg_rd(USBSTS) & 0xffffu) | ((reg_rd(USBCMD) & USBCMD_RS) << 16) | (sw_fc << 24);
+    a[3] = reg_rd(PORTSC);
+    a[4] = ((otg >> 11) & 1u) | ((u32)(fr != sw.last_fr) << 1) | (audio << 2) |
+           (((reg_rd(DEVICEADDR) >> 25) & 0x7fu) << 8) | (en << 16) | ((sw_con_cnt & 0xffu) << 24);
+}
+
+static void sw_ev(u32 phase, u32 detail)
+{
+    u32 a[5];
+    if (!sw_open)
+        return;
+    sw.seen |= 1u << phase;
+    if (phase == SW_STATE ? sw.n >= SW_STATE_MAX
+                          : sw.n >= SW_MAX_EVENTS && phase != SW_DONE && phase != SW_TIMEOUT &&
+                                phase != SW_GIVEUP && phase != SW_DROPPED)
+        return;
+    sw.n++;
+    sw_words(a);
+    if (sw.hold_ov) {
+        a[2] = sw.hold_w[0];
+        a[3] = sw.hold_w[1];
+        a[4] = sw.hold_w[2];
+    }
+    a[0] = phase | ((sw.target & 0xfu) << 8) | (sw.dir << 12) | ((detail & 7u) << 13) |
+           ((sw.no & 0xffffu) << 16);
+    a[1] = sw_ov_ms != ~0u ? sw_ov_ms : sw.hold_ov ? sw.hold_ms : sw_ms();
+    if (sw_ov_ps != 0u)
+        a[3] = sw_ov_ps;
+    sw_ov_ms = ~0u;
+    sw_ov_ps = 0;
+    dkrt_log_ev(SW_KIND, phase == SW_STATE ? SW_FLAGS_STATE : SW_FLAGS, a);
+}
+
+/* An accepted request (usb_bulk_takeover, usb_bulk_giveback, the automatic give-back) opens the window; REQ is logged here, from the tick. */
+static void sw_pend_poll(void)
+{
+    u32 sr, d, per, a[5];
+    if (!sw_pend)
+        return;
+    sr = sr_mask();
+    d = sw_pend;
+    sw_pend = 0;
+    sr_restore(sr);
+    sw_open = 0;
+    sw.start = to_peek(&per);
+    sw.per = per;
+    sw.dir = d - 1u;
+    sw.target = d == 1u ? PORT_ENTRY : to_orig;
+    sw.no = usb_bulk_switches + (to_pend_port == 0u ? 1u : 0u);
+    sw.n = sw.seen = sw.stopped = sw.waited = sw.late = 0;
+    sw.reset_seen = sw.en_cleared = sw.addr_at = sw.hold_ov = 0;
+    sw.dis = sw_dis_cnt;
+    sw.con = sw_con_cnt;
+    sw_open = 1;
+    sw_words(a);
+    sw.last[0] = a[2];
+    sw.last[1] = a[3];
+    sw.last[2] = a[4] & ~2u;
+    sw.last_fr = reg_rd(FRINDEX);
+    sw_ev(SW_REQ, 0);
+}
+
+/* the time of a callback stamp (block clock), or `ms` when it has none */
+static u32 sw_cb_ms(u32 at, u32 ms)
+{
+    return at != 0u && sw.per == 1500u ? to_elapsed_ms(sw.start, at, 1500u) : ms;
+}
+
+#define SW_SEEN(p) ((sw.seen >> (p)) & 1u)
+/* Once a pass, after the switch: log the callbacks and the milestones that first show, else a changed register word. */
+static void sw_sample(void)
+{
+    u32 a[5], ms, fired = 0, rs, adr, en;
+    if (!sw_open)
+        return;
+    ms = sw_ms();
+    sw_words(a);
+    rs = (a[2] >> 16) & 1u;
+    adr = (a[4] >> 8) & 0x7fu;
+    en = (a[4] >> 16) & 0x3fu;
+    if (SW_SEEN(SW_FW_SWITCH)) {
+        if (sw_dis_cnt != sw.dis) {
+            sw.dis = sw_dis_cnt;
+            sw_ov_ms = sw_cb_ms(sw_dis_at, ms);
+            sw_ov_ps = sw_dis_ps;
+            sw_ev(SW_DISCONNECT_CB, 0);
+            fired = 1;
+        }
+        if (!rs) {
+            sw.stopped = 1;
+        } else if (sw.stopped && !SW_SEEN(SW_RS_UP)) {
+            sw.rs_at = ms;
+            sw_ev(SW_RS_UP, 0);
+            fired = 1;
+        }
+        if (sw_con_cnt != sw.con) {
+            sw.con = sw_con_cnt;
+            sw.reset_seen = 1;
+            sw_ov_ms = sw_cb_ms(sw_con_at, ms);
+            sw_ov_ps = sw_con_ps;
+            sw_ev(SW_CONNECT_CB, 0);
+            fired = 1;
+        }
+        if ((a[2] & 0x40u) != 0u || adr == 0u)
+            sw.reset_seen = 1;
+        if ((en & 3u) == 0u)
+            sw.en_cleared = 1;
+        /* CONFIGURED first: ADDRESSED must be from an earlier pass */
+        if (SW_SEEN(SW_ADDRESSED) && sw.en_cleared && (en & 3u) != 0u) {
+            sw_ev(SW_CONFIGURED, 0);
+            sw_ev(SW_DONE, 0);
+            sw_open = 0;
+            return;
+        }
+        if (SW_SEEN(SW_ADDRESSED) && ms - sw.addr_at >= SW_NOCONF_MS) {
+            sw_ev(SW_DONE, 1); /* no configure seen */
+            sw_open = 0;
+            return;
+        }
+        if (SW_SEEN(SW_RS_UP) && sw.reset_seen && !SW_SEEN(SW_ADDRESSED) && adr != 0u) {
+            sw.addr_at = ms;
+            sw_ev(SW_ADDRESSED, 0);
+            fired = 1;
+        }
+        if (SW_SEEN(SW_RS_UP) && !SW_SEEN(SW_ADDRESSED) && !sw.late &&
+            ms - sw.rs_at >= SW_LATE_MS) {
+            sw.late = 1;
+            sw_ev(SW_ENUM_LATE, 0);
+            fired = 1;
+        }
+    }
+    if (ms >= SW_WINDOW_MS) {
+        sw_ev(SW_TIMEOUT, 0);
+        sw_open = 0;
+        return;
+    }
+    if (!fired && (a[2] != sw.last[0] || a[3] != sw.last[1] || (a[4] & ~2u) != sw.last[2]))
+        sw_ev(SW_STATE, 0);
+    sw.last[0] = a[2];
+    sw.last[1] = a[3];
+    sw.last[2] = a[4] & ~2u;
+    sw.last_fr = reg_rd(FRINDEX);
+}
+
 /* record a switch made now. Interrupts masked by the caller. */
 static void sw_stamp(void)
 {
@@ -1004,6 +1196,8 @@ static i32 ulpi_xfer(u32 write, u32 reg, u32 data, u32 *rd)
         goto out;
     }
     *rd = (v >> 8) & 0xffu;
+    if (reg == ULPI_FUNC_CTRL)
+        sw_fc = write ? data & 0xffu : *rd;
     r = 0;
 out:
     sr_restore(sr);
@@ -1029,6 +1223,8 @@ static void phy_reset(void)
 #define PHY_TRIES_MAX 50u /* passes of the UI loop (about 0.4 s) */
 static volatile u32 hold_on, phy_parked;
 static u32 phy_saved, phy_tries;
+static u32 hold_began,
+    hold_park; /* the result of hold_begin for the timeline: the hold began; the park: 0 none, 1 done, 2 refused */
 /* for the emulator test and the hardware log */
 volatile u32 usb_bulk_hold_ticks, usb_bulk_phy_late, usb_bulk_phy_refused, usb_bulk_forced_restarts;
 
@@ -1037,9 +1233,10 @@ static void hold_begin(void)
 {
     u32 sr = sr_mask();
     volatile u32 *delay = (volatile u32 *)usb_restart_delay;
-    u32 d = *delay, stopped = 0;
+    u32 d = *delay, stopped = 0, began = 0;
     if (d != 0u &&
         d <= FW_STOP_TICKS) { /* the stop has just set it (the tick may have counted a few down) */
+        began = 1;
         *delay = FW_HOLD_TICKS;
         usb_bulk_hold_ticks = FW_HOLD_TICKS;
         hold_on = 1;
@@ -1048,6 +1245,10 @@ static void hold_begin(void)
         stopped = (reg32(USBCMD) & USBCMD_RS) == 0u;
     }
     sr_restore(sr);
+    hold_began = began;
+    hold_park = 0;
+    if (began)
+        sw.stopped |= stopped;
 #if UB_ULPI_DETACH
     if (stopped) { /* the hold is 2 s: the accesses need no mask around the pair */
         u32 fc = 0, back = 0;
@@ -1055,8 +1256,10 @@ static void hold_begin(void)
             ulpi_xfer(1, ULPI_FUNC_CTRL, ULPI_FC_DETACH, &back) == 0) {
             phy_saved = fc;
             phy_parked = 1;
+            hold_park = 1;
         } else {
             usb_bulk_phy_refused++;
+            hold_park = 2;
         }
     }
 #endif
@@ -1089,9 +1292,11 @@ static void hold_service(void)
         }
         if (ok == 0) {
             phy_parked = 0;
+            sw_ev(SW_PHY_RESTORE, 0);
         } else if (++phy_tries >= PHY_TRIES_MAX) {
             phy_parked = 0;
             usb_bulk_phy_refused++;
+            sw_ev(SW_PHY_RESTORE, 1);
             UB_NOTE("ub.phy.restore.no", phy_tries);
         }
     }
@@ -1107,7 +1312,7 @@ static void hold_service(void)
 #define RECOVERY_MAX 3u
 static void recovery_tick(void)
 {
-    u32 sr, per, now, act = 0, quiet, vbus, late;
+    u32 sr, per, now, act = 0, gave = 0, quiet, vbus, late;
     if (!rec_armed)
         return;
     sr = sr_mask();
@@ -1128,6 +1333,7 @@ static void recovery_tick(void)
             rec_at = now;
             if (rec_count >= RECOVERY_MAX) {
                 rec_armed = 0;
+                gave = 1;
                 UB_NOTE("ub.rstart.giveup", rec_count);
             } else {
                 rec_count++;
@@ -1137,7 +1343,10 @@ static void recovery_tick(void)
         }
     }
     sr_restore(sr);
+    if (gave)
+        sw_ev(SW_GIVEUP, 0);
     if (act) {
+        sw_ev(SW_RECOVERY, rec_count);
 #if UB_ULPI_DETACH
         phy_reset(); /* a PHY that a stop left in a state the restart does not undo */
 #endif
@@ -1158,14 +1367,22 @@ static u32 tx_in_flight(void)
     return 0;
 }
 
-/* the take-over ends without a switch (the user changed the mode, or the switch was never needed) */
-static void to_drop(void)
+/* the take-over ends (the decision for a release has run: its switch follows) */
+static void to_end(void)
 {
     free_req = 1; /* the tick frees the buffers once nothing holds them (buffers_free) */
     taken = 0;
     to_req = 0;
     to_gone = 0;
     to_sus = 0;
+}
+
+/* the take-over ends without a switch (the user changed the mode, or the switch was never needed); the tick logs DROPPED */
+static void to_drop(void)
+{
+    if (sw_open || sw_pend)
+        sw_drop = 1;
+    to_end();
 }
 
 /* The take-over's decision for this tick: updates the intervals and the request, and returns the port to switch to, or 0 for no switch. `port` is the active
@@ -1213,6 +1430,8 @@ static u32 takeover_decide(u32 now, u32 per_s, u32 port, u32 guard, u32 busy)
             to_sus = 0;
         }
         if (to_req == 2u) { /* no delay */
+            if (to_orig != PORT_ENTRY)
+                sw_pend = 2;
             to_due_ms = 0;
             to_due_set = 0;
         }
@@ -1238,14 +1457,14 @@ static u32 takeover_decide(u32 now, u32 per_s, u32 port, u32 guard, u32 busy)
         to_sus = 0;
         return PORT_ENTRY;
     }
-    to_drop();
+    to_end();
     return to_orig;
 }
 
 /* Called from usb_bulk_tick, the UI task: decide under the mask, then run the switch. */
 static void takeover_tick(void)
 {
-    u32 per_s, now, sr, port, target;
+    u32 per_s, now, sr, port, target, guard, busy, wait = 0;
     if (!taken)
         return;
     /* the switch to USB MIDI connects port 2 from the USB interrupt, which primes the buffers: they must be there before. A failure ends the take-over (ST_NOMEM) */
@@ -1262,7 +1481,12 @@ static void takeover_tick(void)
     now = to_clock(&per_s);
     sr = sr_mask();
     port = to_pend_port != 0u ? to_pend_port : *(volatile u32 *)usb_active_port;
-    target = takeover_decide(now, per_s, port, sw_guard_open(), tx_in_flight());
+    guard = sw_guard_open();
+    busy = tx_in_flight();
+    target = takeover_decide(now, per_s, port, guard, busy);
+    if (target == 0u && to_req != 0u && to_due_set &&
+        to_elapsed_ms(to_due_at, now, per_s) >= to_due_ms)
+        wait = !guard ? 1u : busy ? 2u : 0u; /* the request is due and waits */
     if (target != 0u && target != port) {
         /* claimed under the mask: from here a takeover() or giveback() on the MIDI task sees the new state, and any further request waits for the guard */
         sw_stamp();
@@ -1270,11 +1494,35 @@ static void takeover_tick(void)
         to_pend_port = target;
     }
     sr_restore(sr);
+    sw_pend_poll(); /* an automatic give-back is accepted in the decision above */
+    if (sw_drop) {
+        sw_drop = 0;
+        sw_ev(SW_DROPPED, 0);
+        sw_open = 0;
+    }
+    if (wait != 0u && !sw.waited) {
+        sw.waited = 1;
+        sw_ev(SW_WAIT, wait);
+    }
     if (target != 0u && target != port) {
+        u32 a[5];
         usb_fw_mode_switch(
             target); /* interrupts on, task context: the firmware's own menu action does the same */
         to_pend_port = 0; /* the firmware has written the active port */
+        sw.hold_ms =
+            sw_ms(); /* log nothing until the PHY is parked: stamp the time and the words */
+        sw_words(a);
+        sw.hold_w[0] = a[2];
+        sw.hold_w[1] = a[3];
+        sw.hold_w[2] = a[4];
+        sw.hold_ov = 1;
         hold_begin();
+        sw_ev(SW_FW_SWITCH, 0);
+        if (hold_began)
+            sw_ev(SW_HOLD_BEGIN, 0);
+        if (hold_park != 0u)
+            sw_ev(SW_PHY_PARK, hold_park - 1u);
+        sw.hold_ov = 0;
     }
 }
 
@@ -1304,12 +1552,11 @@ static void housekeeping_wake(void)
 void usb_bulk_tick(void)
 {
     u32 sr, again;
-#if UB_TRACE
-    ub_snapshot();
-#endif
+    sw_pend_poll();
     hold_service();
     recovery_tick();
     takeover_tick();
+    sw_sample();
     if (free_req && !taken)
         buffers_free();
     if (!enabled)
@@ -1609,6 +1856,8 @@ i32 usb_bulk_takeover(void)
         to_due_set = 0;
         to_due_ms = TO_DELAY_MS;
         to_req = port == PORT_AUDIO ? 1u : 0u;
+        if (port == PORT_AUDIO)
+            sw_pend = 1;
     }
     sr_restore(sr);
     /* the tick must run while bulk is not enabled: add it here (a second add is a no-op; the slot is kept for good, the tick is cheap while nothing is taken) */
@@ -1629,6 +1878,8 @@ i32 usb_bulk_giveback(void)
         if (to_req == 1u) {
             to_drop(); /* the switch never ran */
         } else {
+            if (to_req != 2u && to_orig != PORT_ENTRY)
+                sw_pend = 2;
             to_req = 2;
             to_due_set = 0;
             to_due_ms = TO_DELAY_MS;

@@ -9,6 +9,7 @@ import { advance, rpc } from '@digi/regression/runtime/fx-live.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import type { DkSession } from '@digi/dk-session';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 
 /**
  * core/usb-bulk (docs/plans/usb-fast.md step 3). The fixture test/usb-echo enables the bulk interface from an I/O job and echoes every buffer back on
@@ -683,6 +684,82 @@ for (const device of DEVICES) {
         expect(resetAt, 'which comes before RS = 1').toBeLessThan(forced.findIndex((x) => x.e.rs === 1));
         expect(await sym('usb_bulk_forced_restarts'), 'once').toBe(1);
         await rt.session.expectNoFault('takeover hold');
+      } finally {
+        await setPort(2);
+      }
+    }, 1_800_000);
+
+    test('USB_SW events: take-over and release log the switch timeline up to the bus reset, and ENUM_LATE when no host addresses the device (no host model in the emulator)', async () => {
+      const USB_SW = LOG_KIND.USB_SW;
+      const PHASE = { REQ: 1, FW_SWITCH: 3, HOLD_BEGIN: 5, PHY_PARK: 6, PHY_RESTORE: 7, RS_UP: 8, CONNECT_CB: 9, ADDRESSED: 10, ENUM_LATE: 13, DONE: 16 };
+      const rt = await kit.load('echo-sw-events', { modules: ['test/usb-echo', 'digikit/debug'], selection: [...SELECTION, 'modules/debug.dkm'] });
+      await enabled(rt);
+      const { setPort, port, takeover, run } = takeoverKit(rt);
+      const phaseOf = (e: { args: readonly number[] }) => e.args[0]! & 0xff;
+      const dirOf = (e: { args: readonly number[] }) => (e.args[0]! >>> 12) & 1;
+      // the daemon is paused between steps: read the log over the stepping `usb` helper and advance the emulator ourselves
+      let cursor = (await usb(rt, (dk) => dk.logPage(0xffffffff)))[1] + 1;
+      const seen: number[] = [];
+      /** Wait for the next USB_SW event of `phase` and `dir`; the events before it are skipped, so the calls check the order. */
+      const next = async (phase: number, dir: number, emulatedMs = 12_000) => {
+        for (let t = 0; t <= emulatedMs; t += 20) {
+          for (;;) {
+            const [, newest, page] = await usb(rt, (dk) => dk.logPage(cursor));
+            const fresh = page.filter((e) => e.seq >= cursor);
+            for (const e of fresh) {
+              cursor = e.seq + 1;
+              if (e.kind !== USB_SW) continue;
+              seen.push(phaseOf(e) | (dirOf(e) << 12));
+              if (phaseOf(e) === phase && dirOf(e) === dir) return e;
+            }
+            if (fresh.length === 0 || cursor > newest) break;
+          }
+          await advance(rt.session, 20);
+        }
+        throw new Error(`no USB_SW phase ${phase} dir ${dir} in ${emulatedMs} emulated ms; last seen (phase | dir << 12): ${seen.slice(-8).join(', ')}`);
+      };
+      /** No host model in the emulator: nobody sets an address, so the switch ends in ENUM_LATE about 3.2 s after RS_UP. */
+      const lateAfterRestart = async (dir: number) => {
+        const up = await next(PHASE.RS_UP, dir);
+        return { up, late: await next(PHASE.ENUM_LATE, dir, 6000) };
+      };
+      try {
+        await setPort(5);
+        await run(4500); // the boot's enable is a switch: let its guard pass
+        await rpc(rt.session, 'usb.phy', { vbus: true }); // OTGSC.BSV: VBUS present, so the firmware restarts the controller
+        expect(await takeover(0), 'takeover').toBe(0);
+        const req = await next(PHASE.REQ, 0);
+        expect((req.args[0]! >>> 8) & 0xf, 'REQ names the target port').toBe(2);
+        await next(PHASE.FW_SWITCH, 0);
+        await next(PHASE.HOLD_BEGIN, 0);
+        expect(((await next(PHASE.PHY_PARK, 0)).args[0]! >>> 13) & 7, 'the PHY was parked').toBe(0);
+        await next(PHASE.PHY_RESTORE, 0);
+        // the firmware's own restart sets RS; the connect callback comes after RS_UP (take-over only)
+        const up = await next(PHASE.RS_UP, 0);
+        await rpc(rt.session, 'usb.bulk.in', { connect: connect() });
+        await next(PHASE.CONNECT_CB, 0);
+        const late = await next(PHASE.ENUM_LATE, 0, 6000);
+        expect(late.args[1]! - up.args[1]!, 'ENUM_LATE comes 3.0 to 3.5 s after RS_UP').toBeGreaterThanOrEqual(3000);
+        expect(late.args[1]! - up.args[1]!).toBeLessThanOrEqual(3500);
+
+        // the release: the port 5 connect is the firmware's, so no CONNECT_CB
+        await run(4500);
+        expect(await takeover(1), 'giveback').toBe(0);
+        const rel = await next(PHASE.REQ, 1);
+        expect((rel.args[0]! >>> 8) & 0xf, 'REQ names the original port').toBe(5);
+        await next(PHASE.FW_SWITCH, 1);
+        await next(PHASE.HOLD_BEGIN, 1);
+        await next(PHASE.PHY_RESTORE, 1);
+        await lateAfterRestart(1);
+        expect(await port(), 'back in USB AUDIO/MIDI').toBe(5);
+
+        for (const phase of [PHASE.ADDRESSED, PHASE.DONE]) {
+          expect(
+            seen.filter((s) => (s & 0xff) === phase),
+            `no host: phase ${phase} never logged`,
+          ).toEqual([]);
+        }
+        await rt.session.expectNoFault('USB_SW');
       } finally {
         await setPort(2);
       }

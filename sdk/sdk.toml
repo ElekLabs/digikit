@@ -1702,7 +1702,13 @@ id = 43
 name = "MOD_NEEDS"
 args = ["index", "name0", "name1", "name2", "-"]
 
-[protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
+# USB_SW: core/usb-bulk mode switch timeline (take-over and release). Layout: spec in the usb-bulk README.
+[[log.kind]]
+id = 44
+name = "USB_SW"
+args = ["phase", "ms", "sts_cmd", "portsc", "otg"]
+
+[protocol]        # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
 [protocol.limits]   # sizes of the upload protocol; every host and the runtime take them from here
@@ -1751,7 +1757,7 @@ REMOTE_TURN = 0x39     # encoder (u8), delta (s8); the reply body is the delta t
 REMOTE_RELEASE = 0x3a  # release every key the module holds
 LOG = 0x20             # digikit/debug: body u32 from_seq; reply u32 oldest, u32 newest, u8 n, then n events of 32 bytes
 PEEK = 0x21            # digikit/debug: body u32 addr, u16 len (1 to 512, inside the device file's `[digikit] peek` ranges); reply u32 addr, u16 len, the bytes
-LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded)
+LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded); op 2 = card log get (no more body), op 3 = card log set (body: u8 op=3, u8 on); reply for op 2 and op 3 (16 bytes): u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes (this boot), i32 last_status, u32 ms_since_write (0xffffffff = none yet); a debug module without the card log replies to op 2 with an error status
 USB_FAST_NONCE = 0x36  # usb-fast: body nonce[8]; the module keeps it and returns it in the INFO reply of the bulk link; reply empty
 USB_FAST_TAKEOVER = 0x1e  # usb-fast: no body; the module asks core/usb-bulk to take the USB port over (USB AUDIO/MIDI -> USB MIDI, about 50 ms after the reply); also the renew. Reply empty, or E_STATE (Overbridge)
 USB_FAST_RELEASE = 0x1f   # usb-fast: no body; the module asks core/usb-bulk to give the USB port back. Reply empty

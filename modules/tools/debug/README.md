@@ -14,6 +14,28 @@ starts with the boot. Without the module the runtime keeps only that small ring,
 | PEEK | 0x21 | u32 address, u16 length (1 to 512) | u32 address, u16 length, the bytes; only RAM inside the ranges of the device file (`[digikit] peek`, from the import `dkrt_peek_range`), else `E_PEEK` |
 | LOGCFG | 0x22 | u8 op (0 get, 1 set), a set adds u8 default level and 8 module levels (0 to 4, 0xff: the default) | u8 default level, 8 module levels, u8 1 |
 
+## Card log
+
+The module can write its ring to the store, so a log survives a crash or a USB take-over that loses the host. It is off by default. The setting `cardlog`
+(8 bytes: version 2, on, last file, 0, u32 boot number; another version means the defaults) is read in `dkm_init`, so it is kept across restarts. Turn it on with the menu (DIGIKIT > DEBUG > SETTINGS...: row
+CARD LOG, and a STATUS row: OFF, ON n WR, FULL, ERR code) or with LOGCFG op 3.
+
+A boot writes one of two files, `data/digikit/debug/cardlog-a.bin` or `cardlog-b.bin`, and never the file of the boot before (the setting keeps the last file). A boot counts up the boot number. Before the first write of a boot, the tick saves the setting with this boot's file and
+boot number; if that fails the state is error and nothing is written. The first write comes at least 3 s after the save (the settings reach the card 2 s after
+the last change), so a file is written only when the card says that this boot owns it. The tick (UI task) decides when to write, at most once in 2 s, when
+events are not written yet and one of these holds: a warn or error event arrived, the newest event is 1 s old, or the oldest unwritten event is 5 s old. An I/O
+job then replaces the file in one write. Only a busy store (E_BUSY) or a file in use is retried later, and the warn or error trigger stays until a write
+succeeds. A full store stops the log (state full, one log line); any other error, E_INUSE included, stops it with the status (state error). Turning the log on
+again clears both. After a write, events that the write itself logged do not trigger another write.
+
+File (big endian), always 64 + 512 * 32 = 16448 bytes: header of 64 bytes (u32 magic `DKCL` 0x444b434c, u16 version 1, u16 header bytes 64, u16 event bytes 32,
+u16 events, u32 write number (from 1 in this boot), u8 file (0 a, 1 b), 3 zero bytes, u32 oldest seq, u32 newest seq, u32 block clock at the write, u32 ring size 512,
+u32 boot number (offset 36), zeros), then 512 records in the layout of a LOG event, oldest first; unused records are zero.
+
+LOGCFG op 2 (get, no more body) and op 3 (set, body u8 on) reply with 16 bytes: u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes
+(this boot), i32 last status, u32 ms since the last write (0xffffffff: none yet). An op 3 applies at once; the tick saves the setting. A debug module without the card
+log answers op 2 with an error status.
+
 The commands lie in the `debug` range of `sdk/sdk.toml`. INFO reports the capabilities LOG, PEEK and LOGCFG only while the module is loaded. The levels are in RAM and start again
 at each boot. Host side: `tools/device/dklog.py`, `packages/dk-session` (`logPage`, `logConfig`, `setLogConfig`), the Log drawer of the desktop workbench.
 Tests: `tests/test_debug_module.py` compiles `src/c/debug.c` with a fake runtime and drives the sink and the commands. Facts and sizes: `docs/findings/46-digikit-debug.md`.

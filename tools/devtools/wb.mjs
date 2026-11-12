@@ -11,6 +11,11 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] [--bulk-bin PATH] [--gap MS] [--wait MS] takeover-cycle N
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
+//
+// `log card` prints the card log state of the debug module (the log written to data/digikit/debug on the card, kept across restarts); `on` / `off` switch it;
+// `get` reads both card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the previous boot first.
+// `takeover-cycle --card-log` switches the card log on before the first cycle.
 //
 // `takeover-cycle N` is a hardware experiment for the USB take-over (docs/findings/123-usb-takeover.md): N times TAKEOVER, bulk INFO, RELEASE, and per switch it reads
 // the macOS USB object ids of the Elektron device (`ioreg`, vendor 0x1935) to see whether the host saw the device leave and return. It stops at the first cycle
@@ -28,10 +33,17 @@
 // and 19 (receive ring slots): the hardware A/B of docs/findings/126-usb-fast-transfer-ceilings.md.
 // link and MB/s of every file and of the run: the repeatable bench (docs/plans/usb-fast.md step 6): run it once with --bulk off and once with auto.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BulkTakeOver, DkSession, ProcessBulkLink, chooseBulk } from '../../packages/dk-session/src/index.ts';
+import {
+  BulkTakeOver,
+  DkSession,
+  ProcessBulkLink,
+  chooseBulk,
+  eventLine,
+  runtimeEvent,
+} from '../../packages/dk-session/src/index.ts';
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
 import { Sample, prepareUpload } from '../../packages/dk-session/src/dksample.ts';
 import { openSamples, skipVerifyAfterBulk } from '../../packages/dk-session/src/samples.ts';
@@ -42,7 +54,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | takeover-cycle N [--gap MS] [--wait MS]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | log card [on|off|get [--out DIR]] | takeover-cycle N [--gap MS] [--wait MS] [--card-log]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -70,11 +82,13 @@ for (let i = 0; i < args.length; i++) {
     a === '--bulk-bin' ||
     a === '--speed' ||
     a === '--gap' ||
-    a === '--wait'
+    a === '--wait' ||
+    a === '--out'
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
     opts[a.slice(2)] = args[++i];
   } else if (a === '--takeover') opts.takeover = true;
+  else if (a === '--card-log') opts['card-log'] = true;
   else words.push(a);
 }
 
@@ -269,6 +283,37 @@ async function loadSample() {
   return Sample.create(Uint8Array.from(readFileSync(wasm)));
 }
 
+/** The card log state in one line. */
+function cardLogText(s) {
+  if (!s) return 'not supported (this debug module has no card log)';
+  const since = s.msSinceWrite === null ? 'no write yet' : `last write ${(s.msSinceWrite / 1000).toFixed(1)} s ago`;
+  return `${s.state} (switch ${s.on ? 'on' : 'off'}), file cardlog-${s.file}.bin, ${s.writes} writes, ${since}, last status ${s.lastStatus}`;
+}
+
+/** `log card get`: both card log files, raw and decoded, to DIR. */
+async function cardLogGet(session) {
+  const files = await session.readCardLog();
+  if (files.length === 0) return console.log('no card log file on the card');
+  const stamp = new Date()
+    .toISOString()
+    .replace(/\.\d+Z$/, '')
+    .replace(/[-:]/g, '')
+    .replace('T', '-');
+  const dir = path.resolve(opts.out ?? path.join(root, 'out/runs/cardlog', stamp));
+  mkdirSync(dir, { recursive: true });
+  for (const f of files) {
+    const name = `boot${f.bootSeq}-cardlog-${f.file}`;
+    const lines = [
+      `# file ${f.file}, boot ${f.bootSeq}, write ${f.writeNo}, ${f.events.length} events, seq ${f.oldestSeq}..${f.newestSeq}`,
+    ];
+    lines.push(...f.events.map((e) => eventLine(runtimeEvent(e))));
+    if (f.raw) writeFileSync(path.join(dir, `${name}.bin`), f.raw);
+    writeFileSync(path.join(dir, `${name}.txt`), `${lines.join('\n')}\n`);
+    console.log(path.join(dir, `${name}.bin`));
+    console.log(path.join(dir, `${name}.txt`));
+  }
+}
+
 // ---- takeover-cycle: the hardware experiment of the USB take-over -------------------------------------------------------------------------------
 // the Elektron USB vendor id is 6453 (0x1935)
 
@@ -373,6 +418,7 @@ async function takeoverCycle(count) {
   try {
     if (!(await holder.link.session.usbFastWrongMode()))
       fail('the device is not in USB AUDIO/MIDI (or usb-fast is not loaded): there is nothing to take over');
+    if (opts['card-log']) console.log(`card log: ${cardLogText(await holder.link.session.setCardLog(true))}`);
     console.log(
       'cycle | takeover: gone back newids midi ident | bulk info | release: gone back newids midi ident rtinfo | verdict',
     );
@@ -616,6 +662,14 @@ if (cmd === 'ports') {
         status = 1;
       }
     }
+  });
+} else if (cmd === 'log' && sub === 'card') {
+  await withSession(async (session) => {
+    const [what] = rest;
+    if (what === 'on' || what === 'off') console.log(cardLogText(await session.setCardLog(what === 'on')));
+    else if (what === 'get') await cardLogGet(session);
+    else if (what === undefined) console.log(cardLogText(await session.cardLog()));
+    else fail(usage);
   });
 } else if (cmd === 'store' && sub === 'ls') {
   await withSession(async (session) => {

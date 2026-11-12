@@ -229,6 +229,7 @@ export const LOG_KIND = {
   INPUT_TAKEN: 41,
   PARAM_CHANGE: 42,
   MOD_NEEDS: 43,
+  USB_SW: 44,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -276,6 +277,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   41: ['INPUT_TAKEN', ['what', 'control', 'delta', '-', '-']],
   42: ['PARAM_CHANGE', ['track', 'index', 'old', 'new', '-']],
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
+  44: ['USB_SW', ['phase', 'ms', 'sts_cmd', 'portsc', 'otg']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

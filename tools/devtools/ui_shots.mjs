@@ -1006,6 +1006,17 @@ const SCENES = [
     ],
     // the debug module is loaded on the device, and on the emulator in the other scene it is not
     ['log-debug-module-loaded', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+    // the Card log button switched on (the fake device has a card log, the emulator's debug module has none)
+    [
+      'log-cardlog-on',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click('Card log');
+        await p.wait(3000);
+      },
+    ],
     ['log-debug-module-not-loaded', 'page=log&log=nodebug&logh=640', WIDE, 'device:all', async () => {}],
     ['log-debug-module-not-loaded-narrow', 'page=log&log=nodebug&logh=640', MIN, 'device:all', async () => {}],
     // Source is All and both origins are followed: the menu does not know which one is meant

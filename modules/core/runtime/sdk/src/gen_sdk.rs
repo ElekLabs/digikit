@@ -54,6 +54,7 @@ pub mod logk {
     pub const INPUT_TAKEN: u16 = 41;
     pub const PARAM_CHANGE: u16 = 42;
     pub const MOD_NEEDS: u16 = 43;
+    pub const USB_SW: u16 = 44;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;

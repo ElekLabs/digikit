@@ -88,6 +88,27 @@ const DIAG_DECIMAL = new Set([
   'fx_master_calls',
   'fx_send_calls',
 ]);
+// The phase ids of USB_SW (modules/core/adapters/usb-bulk README).
+const USB_SW_PHASES: Record<number, string> = {
+  1: 'REQ',
+  2: 'WAIT',
+  3: 'FW_SWITCH',
+  4: 'DISCONNECT_CB',
+  5: 'HOLD_BEGIN',
+  6: 'PHY_PARK',
+  7: 'PHY_RESTORE',
+  8: 'RS_UP',
+  9: 'CONNECT_CB',
+  10: 'ADDRESSED',
+  11: 'CONFIGURED',
+  12: 'STATE',
+  13: 'ENUM_LATE',
+  14: 'RECOVERY',
+  15: 'GIVEUP',
+  16: 'DONE',
+  17: 'TIMEOUT',
+  18: 'DROPPED',
+};
 const FX_ROW_BYTES = 96;
 const NONE = 0xffffffff;
 
@@ -134,6 +155,35 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
       f.name = asciiOf(a[2]!, a[3]!, a[4]!);
       if (name === 'MOD_LOAD') f.result = signed(a[1]!);
       break;
+    case 'USB_SW': {
+      const p = a[0]!;
+      const sts = a[2]!;
+      const otg = a[4]!;
+      const phase = p & 0xff;
+      const detail = (p >>> 13) & 7;
+      const eps = ['EP1RX', 'EP1TX', 'EP2RX', 'EP2TX', 'EP3RX', 'EP3TX'].filter((_, i) => (otg >>> (16 + i)) & 1);
+      f = {
+        phase: USB_SW_PHASES[phase] ?? `PHASE${phase}`,
+        dir: (p >>> 12) & 1 ? 'release' : 'take-over',
+        port: (p >>> 8) & 15,
+        detail,
+        switch_no: p >>> 16,
+        ms: a[1]!,
+        rs: (sts >>> 16) & 1,
+        uri: (sts >>> 6) & 1,
+        pci: (sts >>> 2) & 1,
+        sli: (sts >>> 8) & 1,
+        ulpi: (sts >>> 24) & 0xff,
+        portsc: `0x${hex8(a[3]!)}`,
+        bsv: otg & 1,
+        sof: (otg >>> 1) & 1,
+        audio: (otg >>> 2) & 1,
+        addr: (otg >>> 8) & 0x7f,
+        eps: eps.join(',') || '-',
+        connects: otg >>> 24,
+      };
+      break;
+    }
     case 'MOD_NEEDS':
       f = { index: a[0]!, needs: asciiOf(a[1]!, a[2]!, a[3]!) };
       break;

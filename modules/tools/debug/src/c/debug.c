@@ -10,11 +10,19 @@
  *   0x21 PEEK    body: u32 addr, u16 len   reply: u32 addr, u16 len, the bytes (RAM inside the device file's `[digikit] peek` ranges, 1 to 512 bytes)
  *   0x22 LOGCFG  body: u8 op (0 get, 1 set; a set adds u8 default level and 8 bytes, the level of module record 0 to 7, 0xff: the default)
  *                reply: u8 default level, 8 module levels, u8 1 (the debug module is loaded)
+ *                op 2 get the card log, op 3 set it (adds u8 on); reply: u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes,
+ *                i32 last status, u32 ms since the last write (0xffffffff: none yet). The card log writes the ring to a file of the store (see the card log below).
  *
  * The tick (once per pass of the UI task, set with the sink) reads the machine type of each of the 16 tracks every 20 ms from the firmware (`dkrt_track_type`) and logs a change (MACHINE_CHANGE). Each pass it also reads the Sound words of the selected track (`dkrt_selected_params`) and logs a changed word (PARAM_CHANGE, level 3). */
 
 #include <dk/core/api.h>
 #include <dk/core/bytes.h>
+#include <dk/core/status.h>
+#include <dk/core/text.h>
+#include <dk/platform/file.h>
+#include <dk/platform/io.h>
+#include <dk/platform/settings.h>
+#include <dk/platform/ui.h>
 
 typedef uint32_t u32;
 typedef uint16_t u16;
@@ -46,6 +54,7 @@ typedef uint8_t u8;
 #define LEVEL_SHIFT 1u
 #define LEVEL_MASK 7u
 #define SOURCE_SHIFT 8u
+#define L_WARN 1u
 #define L_INFO 2u
 #define L_DEBUG 3u
 #define LEVEL_NONE 0xffu
@@ -74,6 +83,25 @@ static volatile u32
     base; /* sequence numbers up to here were lost before this module loaded (the runtime's small ring overflowed) */
 static volatile u32 level_default = L_INFO;
 static volatile u8 level_module[MODULES];
+
+/* The card log's state (below). The sink only sets `urgent`. */
+static struct {
+    int on;            /* the setting; an int for the menu toggle */
+    volatile u8 fault; /* 0, CL_FULL or CL_ERROR: no more writes until the log is turned on again */
+    volatile u8 urgent; /* a warn or error event arrived since the last wake of the job */
+    volatile u8 save;   /* the setting is to be saved by the tick (set by a host op) */
+    u8 avail, file, last_file,
+        saved; /* `file`: this boot's file (0 a, 1 b); `saved`: last_file = `file` was saved before the first write */
+    u8 busy, has_try, has_write, was_urgent;
+    u32 writes, written, last_try, last_write, boot_seq, saved_at;
+    int32_t last_status;
+    /* the I/O job (the step and the tick pass these on) */
+    volatile u8 io_req, io_done;
+    volatile int32_t io_result;
+    u32 newest,
+        prev_n;     /* newest sequence number copied; events in the buffer after the last copy */
+    int32_t h, err; /* the open write session (0: none); the status to report after its abort */
+} cl;
 
 static u32 now(void)
 {
@@ -110,6 +138,8 @@ static void sink(const Ev *e)
         s->a[i] = e->a[i];
     s->seq = n;
     count = n;
+    if (((flags >> LEVEL_SHIFT) & LEVEL_MASK) <= L_WARN || (flags & F_ERROR))
+        cl.urgent = 1;
 }
 
 /* Copy event `seq` to `o` (32 bytes, big endian). False when it is gone, or was overwritten while it was copied (a writer in an interrupt). */
@@ -190,11 +220,304 @@ static int32_t cmd_peek(const u8 *body, u32 len, u8 *out)
     return (int32_t)(6u + n);
 }
 
+/* ---- the card log ------------------------------------------------------------------------------------------------------------- */
+
+/* The ring goes to a file of the store: 64 bytes of header and RING records of 32 bytes (those of LOG), always the full size. A boot writes one of two files
+ * (cardlog-a.bin, cardlog-b.bin) and never the one the boot before wrote (the setting "cardlog": u8 version 2, u8 on, u8 last file, u8 0, u32 boot
+ * number). Before the first write of a boot the tick saves the setting with this boot's file and waits 3 s, so the card owns the choice. The tick decides when
+ * to write (UI task); the I/O job writes. Header (big endian): u32 magic 'DKCL', u16 version 1, u16 header bytes 64, u16 event bytes 32, u16 events,
+ * u32 write number (from 1 in this boot), u8 file, 3 bytes 0, u32 oldest seq, u32 newest seq, u32 block clock, u32 ring size, u32 boot number, then zeros. */
+#define CL_HEADER 64u
+#define CL_SIZE (CL_HEADER + RING * 32u)
+#define CL_MAGIC 0x444b434cu
+#define CL_KEY "cardlog"
+#define CL_BLOCKS_S 1500u
+#define CL_GAP (2u * CL_BLOCKS_S)     /* between two writes */
+#define CL_QUIET CL_BLOCKS_S          /* since the newest event */
+#define CL_MAX_AGE (5u * CL_BLOCKS_S) /* of the oldest event not written */
+#define CL_SETTLE                                                                                  \
+    (3u *                                                                                          \
+     CL_BLOCKS_S) /* from the setting put to the first write: the settings reach the card 2 s after the last change */
+#define CL_FULL 2u
+#define CL_ERROR 3u
+#define CL_LETTER 27u /* the index of the file letter in cl_path */
+
+static u8 cl_raw[CL_SIZE + 15u];
+static u8 *cl_buf;
+static char cl_path[] = "data/digikit/debug/cardlog-a.bin";
+static const dk_api *sdk;
+static int32_t job_id;
+static int32_t settings_h;
+
+static int32_t cl_save(void)
+{
+    u8 v[8];
+    v[0] = 2u;
+    v[1] = cl.on != 0;
+    v[2] = cl.last_file;
+    v[3] = 0;
+    dk_bytes_put32(v + 4, cl.boot_seq);
+    if (!cl.avail)
+        return DK_E_STATE;
+    return dk_settings_put(sdk, settings_h, CL_KEY, v, 8u);
+}
+
+/* Save the setting with this boot's file as the last file. */
+static int32_t cl_save_boot(void)
+{
+    cl.last_file = cl.file;
+    return cl_save();
+}
+
+/* Turning the log on clears full and error. */
+static void cl_set_on(int on)
+{
+    cl.on = on != 0;
+    if (on)
+        cl.fault = 0;
+}
+
+/* Copy the ring into the buffer. Records after the events copied are zero: the buffer only grows, and `prev_n` clears what a shorter copy leaves. */
+static void cl_fill(void)
+{
+    u32 newest = count, oldest, s, n = 0, i;
+    oldest = newest > RING ? newest - RING + 1u : 1u;
+    if (oldest <= base)
+        oldest = base + 1u;
+    for (s = oldest; s <= newest; s++)
+        if (copy_event(s, cl_buf + CL_HEADER + 32u * n))
+            n++;
+    for (i = n * 8u; i < cl.prev_n * 8u; i++)
+        dk_bytes_put32(cl_buf + CL_HEADER + 4u * i, 0u);
+    cl.prev_n = n;
+    cl.newest = newest;
+    dk_bytes_put32(cl_buf, CL_MAGIC);
+    cl_buf[4] = 0;
+    cl_buf[5] = 1;
+    cl_buf[6] = 0;
+    cl_buf[7] = CL_HEADER;
+    cl_buf[8] = 0;
+    cl_buf[9] = 32;
+    cl_buf[10] = (u8)(n >> 8);
+    cl_buf[11] = (u8)n;
+    dk_bytes_put32(cl_buf + 12, cl.writes + 1u);
+    cl_buf[16] = cl.file;
+    dk_bytes_put32(cl_buf + 20, oldest);
+    dk_bytes_put32(cl_buf + 24, newest);
+    dk_bytes_put32(cl_buf + 28, now());
+    dk_bytes_put32(cl_buf + 32, RING);
+    dk_bytes_put32(cl_buf + 36, cl.boot_seq);
+}
+
+static int32_t cl_finish(int32_t r)
+{
+    cl.io_result = r;
+    cl.io_req = 0;
+    cl.io_done = 1;
+    return DK_IO_WAIT;
+}
+
+/* The I/O job: one write of the file per request. After an error with the session open, the next step aborts it and reports the error. */
+static int32_t cl_step(u8 *ctx)
+{
+    int32_t r;
+    (void)ctx;
+    if (!cl.io_req)
+        return DK_IO_WAIT;
+    if (cl.h == 0) {
+        cl_fill();
+        r = sdk->file_create(DK_FILES_STORE, cl_path, CL_SIZE, 0, DK_FILE_REPLACE);
+        if (r <= 0)
+            return cl_finish(r < 0 ? r : DK_E_STATE);
+        cl.h = r;
+        r = sdk->file_write(cl.h, 0u, cl_buf, CL_SIZE);
+        if (r == 0) {
+            r = sdk->file_close(cl.h, 0);
+            if (r != DK_E_BUSY) /* the session is closed whatever the result */
+                cl.h = 0;
+            if (r == 0)
+                cl.newest = count; /* events of our own store write are not new */
+        }
+        if (cl.h == 0)
+            return cl_finish(r);
+        cl.err = r;
+        return DK_IO_MORE;
+    }
+    if (sdk->file_abort(cl.h) == DK_E_BUSY)
+        return DK_IO_MORE;
+    cl.h = 0;
+    return cl_finish(cl.err);
+}
+
+static void cl_done(u8 *ctx, int32_t status)
+{
+    (void)ctx;
+    (void)status;
+}
+
+static int cl_retry(int32_t r)
+{
+    return r == DK_E_BUSY || r == DK_E_FILE_IN_USE;
+}
+
+/* In the UI task, from the debug tick: take the result of the job, save the setting, and wake the job when a write is due. */
+static void cl_tick(u32 b)
+{
+    u32 newest, first, newest_at, first_at;
+    const volatile Ev *e;
+    if (!cl.avail)
+        return;
+    if (cl.save) {
+        cl.save = 0;
+        cl_save();
+    }
+    if (cl.io_done) {
+        int32_t r = cl.io_result;
+        cl.io_done = 0;
+        cl.busy = 0;
+        cl.last_status = r;
+        if (r == 0) {
+            cl.writes++;
+            cl.written = cl.newest;
+            cl.last_write = b;
+            cl.has_write = 1;
+        } else if (r == DK_E_FULL) {
+            cl.fault = CL_FULL;
+            sdk->log((const u8 *)"card log: store full", 0);
+        } else if (!cl_retry(r)) {
+            cl.fault = CL_ERROR;
+        } else if (cl.was_urgent) {
+            cl.urgent = 1; /* kept until a write succeeds */
+        }
+    }
+    if (cl.on && !cl.fault &&
+        !cl.saved) { /* the card must say that this boot owns the file before the first write */
+        int32_t r = cl_save_boot();
+        if (r != 0) {
+            cl.fault = CL_ERROR;
+            cl.last_status = r;
+            return;
+        }
+        cl.saved = 1;
+        cl.saved_at = b;
+    }
+    newest = count;
+    if (!cl.on || cl.fault || cl.busy || newest <= cl.written || !cl.saved ||
+        b - cl.saved_at < CL_SETTLE)
+        return;
+    if (cl.has_try && b - cl.last_try < CL_GAP)
+        return;
+    e = &ring[(newest - 1u) % RING];
+    newest_at = e->seq == newest ? e->time : b;
+    first = cl.written + 1u;
+    e = &ring[(first - 1u) % RING];
+    first_at = e->seq == first ? e->time : b - CL_MAX_AGE;
+    if (!cl.urgent && b - newest_at < CL_QUIET && b - first_at < CL_MAX_AGE)
+        return;
+    cl.was_urgent = cl.urgent;
+    cl.urgent = 0;
+    cl.busy = 1;
+    cl.has_try = 1;
+    cl.last_try = b;
+    cl.io_req = 1;
+    sdk->io_wake(job_id);
+}
+
+static void cl_init(const dk_api *api)
+{
+    u8 v[8];
+    if (api->size < sizeof(dk_api))
+        return;
+    sdk = api;
+    cl_buf = (u8 *)(((u32)cl_raw + 15u) & ~15u);
+    cl.last_file = 1u;
+    settings_h = dk_settings_client(api);
+    if (settings_h > 0 && dk_settings_get(api, settings_h, CL_KEY, v, 8u) == 8 && v[0] == 2u) {
+        cl.on = v[1] != 0u;
+        cl.last_file = v[2] & 1u;
+        cl.boot_seq = dk_bytes_get32(v + 4);
+    }
+    cl.boot_seq++;
+    cl.file = cl.last_file ^ 1u;
+    cl_path[CL_LETTER] = (char)('a' + cl.file);
+    job_id = api->io_post(cl_step, cl_done, 0);
+    cl.avail = job_id > 0;
+}
+
+/* The reply of op 2 and op 3 (16 bytes). */
+static int32_t cl_reply(u8 *out)
+{
+    u32 d = now() - cl.last_write;
+    out[0] = cl.on != 0;
+    out[1] = cl.file;
+    out[2] = !cl.on ? 0u : cl.fault ? cl.fault : 1u;
+    out[3] = 0;
+    dk_bytes_put32(out + 4, cl.writes);
+    dk_bytes_put32(out + 8, (u32)cl.last_status);
+    dk_bytes_put32(out + 12, cl.has_write ? d - d / 3u : 0xffffffffu); /* blocks to ms */
+    return 16;
+}
+
+/* The menu: DIGIKIT > DEBUG > SETTINGS... */
+static void cl_toggled(void *ctx, int arg)
+{
+    (void)ctx;
+    cl_set_on(arg);
+    cl_save();
+}
+
+static int cl_put_str(char *s, int n, const char *t)
+{
+    while (*t)
+        s[n++] = *t++;
+    return n;
+}
+
+static void cl_fill_menu(dk_ui_menu *m, void *ctx)
+{
+    char t[DK_UI_ROW];
+    int n = cl_put_str(t, 0, "STATUS ");
+    (void)ctx;
+    if (!cl.avail) {
+        n = cl_put_str(t, n, "N/A");
+    } else if (!cl.on) {
+        n = cl_put_str(t, n, "OFF");
+    } else if (cl.fault == CL_FULL) {
+        n = cl_put_str(t, n, "FULL");
+    } else if (cl.fault == CL_ERROR) {
+        n = cl_put_str(t, n, "ERR ");
+        n += (int)dk_text_itoa(t + n, cl.last_status);
+    } else {
+        n = cl_put_str(t, n, "ON ");
+        n += (int)dk_text_utoa(t + n, cl.writes);
+        n = cl_put_str(t, n, " WR");
+    }
+    t[n] = 0;
+    if (cl.avail)
+        dk_ui_toggle(m, "CARD LOG", &cl.on, cl_toggled, 0);
+    dk_ui_text(m, t);
+}
+
+DK_MENU(cl_fill_menu)
+
 static int32_t cmd_logcfg(const u8 *body, u32 len, u8 *out)
 {
     u32 i;
     if (len < 1u)
         return E_MSG;
+    if (body[0] == 2u || body[0] == 3u) {
+        if (!cl.avail)
+            return E_PROTO;
+        if (len != (body[0] == 2u ? 1u : 2u))
+            return E_MSG;
+        if (body[0] == 3u) {
+            if (body[1] > 1u)
+                return E_PROTO;
+            cl_set_on(body[1]);
+            cl.save = 1;
+        }
+        return cl_reply(out);
+    }
     if (body[0] == 1u) {
         if (len != 10u)
             return E_MSG;
@@ -281,6 +604,7 @@ static void tick(void)
 {
     u32 t, a[5];
     u32 b = now();
+    cl_tick(b);
     if (!watch.started) {
         watch.started = 1u;
         watch.next = b + TRACKS_FROM;
@@ -318,6 +642,7 @@ int32_t dkm_init(const dk_api *api)
         api->log((const u8 *)"debug: register_cmds refused", 0);
         return -1;
     }
+    cl_init(api);
     dkrt_log_sink_set((uint8_t *)sink, (uint8_t *)tick);
     return 0;
 }
@@ -326,4 +651,7 @@ void dkm_fini(const dk_api *api)
 {
     (void)api;
     dkrt_log_sink_set(0, 0);
+    if (job_id > 0)
+        sdk->io_cancel(job_id); /* the runtime aborts a session the job leaves open */
+    job_id = 0;
 }
