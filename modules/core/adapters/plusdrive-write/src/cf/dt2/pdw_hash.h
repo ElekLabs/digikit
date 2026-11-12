@@ -26,6 +26,8 @@ static inline void pdw_hash_init(struct pdw_hash *h)
     h->n = 0;
 }
 
+static inline uint32_t pdw_be(const uint8_t *p);
+
 static inline uint32_t pdw_word(const uint8_t *p)
 {
     if (((uintptr_t)p & 3u) == 0u) {
@@ -34,30 +36,66 @@ static inline uint32_t pdw_word(const uint8_t *p)
         return *(const uint32_t *)p;
 #endif
     }
+    return pdw_be(p);
+}
+
+/* The mix of one block of the words k0 k1 k2 into a b c. */
+#define PDW_MIX(a, b, c, k0, k1, k2)                                                               \
+    do {                                                                                           \
+        (a) += (k0);                                                                               \
+        (b) += (k1);                                                                               \
+        (c) += (k2);                                                                               \
+        (a) -= (c);                                                                                \
+        (a) ^= pdw_rot((c), 4);                                                                    \
+        (c) += (b);                                                                                \
+        (b) -= (a);                                                                                \
+        (b) ^= pdw_rot((a), 6);                                                                    \
+        (a) += (c);                                                                                \
+        (c) -= (b);                                                                                \
+        (c) ^= pdw_rot((b), 8);                                                                    \
+        (b) += (a);                                                                                \
+        (a) -= (c);                                                                                \
+        (a) ^= pdw_rot((c), 16);                                                                   \
+        (c) += (b);                                                                                \
+        (b) -= (a);                                                                                \
+        (b) ^= pdw_rot((a), 19);                                                                   \
+        (a) += (c);                                                                                \
+        (c) -= (b);                                                                                \
+        (c) ^= pdw_rot((b), 4);                                                                    \
+        (b) += (a);                                                                                \
+    } while (0)
+
+static inline uint32_t pdw_be(const uint8_t *p)
+{
     return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
 static inline void pdw_hash_block(struct pdw_hash *h, const uint8_t *p)
 {
-    uint32_t a = h->a + pdw_word(p), b = h->b + pdw_word(p + 4), c = h->c + pdw_word(p + 8);
-    a -= c;
-    a ^= pdw_rot(c, 4);
-    c += b;
-    b -= a;
-    b ^= pdw_rot(a, 6);
-    a += c;
-    c -= b;
-    c ^= pdw_rot(b, 8);
-    b += a;
-    a -= c;
-    a ^= pdw_rot(c, 16);
-    c += b;
-    b -= a;
-    b ^= pdw_rot(a, 19);
-    a += c;
-    c -= b;
-    c ^= pdw_rot(b, 4);
-    b += a;
+    uint32_t a = h->a, b = h->b, c = h->c;
+    PDW_MIX(a, b, c, pdw_word(p), pdw_word(p + 4), pdw_word(p + 8));
+    h->a = a;
+    h->b = b;
+    h->c = c;
+}
+
+/* `blocks` whole blocks at `p`: the state stays in registers, and the alignment is decided once (long reads on the big-endian ColdFire). */
+static inline void pdw_hash_blocks(struct pdw_hash *h, const uint8_t *p, uint32_t blocks)
+{
+    uint32_t a = h->a, b = h->b, c = h->c;
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    if (((uintptr_t)p & 3u) == 0u) {
+        const uint32_t *q = (const uint32_t *)p, *end = q + 3u * blocks;
+        for (; q != end; q += 3)
+            PDW_MIX(a, b, c, q[0], q[1], q[2]);
+        h->a = a;
+        h->b = b;
+        h->c = c;
+        return;
+    }
+#endif
+    for (; blocks; blocks--, p += 12)
+        PDW_MIX(a, b, c, pdw_be(p), pdw_be(p + 4), pdw_be(p + 8));
     h->a = a;
     h->b = b;
     h->c = c;
@@ -92,10 +130,11 @@ static inline void pdw_hash_update(struct pdw_hash *h, const uint8_t *p, uint32_
         p += take;
         n -= take;
     }
-    while (n > 12u) {
-        pdw_hash_block(h, p);
-        p += 12;
-        n -= 12;
+    if (n > 12u) {
+        uint32_t blocks = (n - 1u) / 12u; /* the whole blocks that leave 1 to 12 bytes */
+        pdw_hash_blocks(h, p, blocks);
+        p += 12u * blocks;
+        n -= 12u * blocks;
     }
     for (i = 0; i < n; i++)
         h->buf[i] = p[i];

@@ -4,7 +4,7 @@
 pub const RUNTIME_VERSION: u32 = 0x00050b;
 
 pub mod contract {
-    pub const API: (u8, u8) = (1, 10);
+    pub const API: (u8, u8) = (1, 11);
     pub const MACHINE: (u8, u8) = (1, 6);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
@@ -403,6 +403,8 @@ pub mod api {
         pub hash32_update: unsafe extern "C" fn(state: *mut u8, p: *const u8, n: u32),
         /// (api 1.10) The file hash `hash|1`: the value the store keeps (4 bytes big-endian in a table slot). The state is spent.
         pub hash32_finish: unsafe extern "C" fn(state: *mut u8) -> u32,
+        /// (api 1.11) The run-time switches of the speed levers: one RAM word, all four bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 1: USB receive ring; bit 2: the read-back hash overlaps the next card read; bit 3: large card commands. Any task.
+        pub speed_flags: unsafe extern "C" fn(clear: u32, set: u32) -> u32,
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).

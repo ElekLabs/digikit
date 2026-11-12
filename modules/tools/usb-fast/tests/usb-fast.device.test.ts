@@ -68,7 +68,7 @@ for (const device of DEVICES) {
     const rig: CardRig = cardRig(device, 'usb-fast', {
       dsp: 'zero',
       roots: [...RT, 'core/usb-bulk', ...(dt2 ? ['core/plusdrive-write'] : [])],
-      symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
+      symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', 'DKRT_UPLOAD_FLIP', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
       project: true,
       uploads: true,
       relaxFs: true,
@@ -191,6 +191,41 @@ for (const device of DEVICES) {
       unchanged(before, s.files, ['Kits/big.bin', 'one.bin', 'old.bin']);
       await rig.session.expectNoFault('usb-fast uploads');
     }, 1_800_000);
+
+    /** STATUS 'S' [bit [0|1]]: the speed switches (bit 0 hash once, bit 2 the overlapped read-back hash); the reply is the mask now. */
+    const speedMask = async (dk: DkSession, bit?: number, on?: number) =>
+      Buffer.from((await dk.request(0x37, Uint8Array.from(bit === undefined ? [0x53] : [0x53, bit, on!]))).body).readUInt32BE(0);
+
+    test('the speed switches (hash once, overlapped read-back hash), on and off: the device hash is the host hash, and a corrupted read-back or a wrong hash refuses the commit', async () => {
+      const data = pattern(300_011, 17); // more than four 64 KiB pieces (DN2) and nine 32 KiB pages (DT2)
+      const more = pattern(70_001, 19);
+      const cases: [string, number, number][] = [['both on (the default)', 1, 1], ['hash once off', 0, 1], ['overlap off', 1, 0], ['both off', 0, 0]];
+      for (const [k, [label, a, c]] of cases.entries()) {
+        const dk = await rig.pausedBoot(await baseCard());
+        const bulk = await connect(dk);
+        expect(await speedMask(dk), `${label}: all switches are on after a boot`).toBe(15);
+        await speedMask(dk, 0, a);
+        expect(await speedMask(dk, 2, c), `${label}: the mask`).toBe((a ? 1 : 0) | 2 | (c ? 4 : 0) | 8);
+        // a corrupted read-back (DN2: the card holds another byte in its third write) or a wrong hash (DT2) refuses the commit
+        if (dt2) {
+          const bad = await bulk.session.put(SAMPLES, rp('Sw/bad.bin'), data, { expected: hashU32(pattern(300_011, 18), dt2) }).catch((e) => e);
+          expect((bad as BulkDeviceError).code, `${label}: a wrong hash`).toBe(BULK_STATUS.E_HASH);
+        } else {
+          await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', 3);
+          const bad = await bulk.session.put(SAMPLES, rp('Sw/bad.bin'), data, { expected: hashU32(data, dt2) }).catch((e) => e);
+          expect(bad, `${label}: a flipped byte`).toBeInstanceOf(BulkDeviceError);
+          expect((bad as BulkDeviceError).code, `${label}: the hash error`).toBe(BULK_STATUS.E_HASH);
+        }
+        // no host hash (the received bytes are hashed whatever the switch says), then with it
+        expect(await bulk.session.put(SAMPLES, rp('Sw/plain.bin'), data), `${label}: END returns the device hash`).toBe(hashU32(data, dt2));
+        expect(await bulk.session.put(SAMPLES, rp('Sw/hashed.bin'), more, { expected: hashU32(more, dt2) }), `${label}: END with a host hash`).toBe(hashU32(more, dt2));
+        const s = await state(dk, `sw${k}`);
+        expect(s.files.has('Sw/bad.bin'), `${label}: nothing of the refused file`).toBe(false);
+        await expectFile(dk, s, 'Sw/plain.bin', data, `${label}: plain`);
+        await expectFile(dk, s, 'Sw/hashed.bin', more, `${label}: hashed`);
+        await rig.session.expectNoFault(`usb-fast switches ${label}`);
+      }
+    }, 3_600_000);
 
     test('ABORT drops the open file and a cancel mid-transfer leaves the old file; a USB reset in the middle of a file leaves nothing and the next upload works', async () => {
       const { dk, bulk } = await boot('uf-base');

@@ -37,6 +37,8 @@ mod sample_source;
 mod tracks;
 mod files;
 mod hash32;
+pub mod aux;
+pub mod speed;
 mod intro;
 mod safe_screen;
 mod sha256;
@@ -619,6 +621,7 @@ unsafe extern "C" fn api_io_wake(id: i32) { io::wake(id) }
 unsafe extern "C" fn api_hash32_init(state: *mut u8) { core::ptr::write(state as *mut hash32::Hash32, hash32::Hash32::new()) }
 unsafe extern "C" fn api_hash32_update(state: *mut u8, p: *const u8, n: u32) { (*(state as *mut hash32::Hash32)).update(p, n) }
 unsafe extern "C" fn api_hash32_finish(state: *mut u8) -> u32 { core::ptr::read(state as *const hash32::Hash32).finish() | 1 }
+unsafe extern "C" fn api_speed_flags(clear: u32, set: u32) -> u32 { speed::update(clear, set) }
 
 /// The table is built at first use: pointers to the helpers are not constants.
 #[no_mangle]
@@ -676,6 +679,7 @@ pub static mut dkrt_api: Api = Api {
     hash32_init: api_hash32_init,
     hash32_update: api_hash32_update,
     hash32_finish: api_hash32_finish,
+    speed_flags: api_speed_flags,
 };
 
 pub unsafe fn log(msg: *const u8, value: u32) {

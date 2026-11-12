@@ -169,8 +169,11 @@ struct Up {
     size: u32,
     /// The expected hash slot (BEGIN's, or `hash4` of `file_create`); valid when `have_want`.
     sha: [u8; 32],
-    /// The hash of the bytes received so far (a large file is not read back from the card).
+    /// The hash of the bytes received so far (not fed when `skip_rx`).
     run: Hash32,
+    /// Lever A (`speed::HASH_ONCE`, decided at BEGIN): the received bytes are not hashed; the close's card read-back is the only hash and is compared with
+    /// the expected one (`have_want`).
+    skip_rx: bool,
     /// The session writes the +Drive through `core/plusdrive-write` (DT2 samples root): no store lock, no table, the adapter holds the file.
     pd: bool,
     /// Next expected byte offset.
@@ -215,6 +218,7 @@ static mut UP: Up = Up {
     size: 0,
     sha: [0; 32],
     run: Hash32::new(),
+    skip_rx: false,
     pd: false,
     next: 0,
     last_off: 0,
@@ -692,6 +696,7 @@ pub unsafe fn begin(
         u.sha = w;
     }
     u.run = Hash32::new();
+    u.skip_rx = want.is_some() && crate::speed::on(crate::speed::HASH_ONCE);
     u.pd = false;
     u.next = 0;
     u.have_last = false;
@@ -762,7 +767,9 @@ pub unsafe fn write(b: &Bufs, kind: u8, owner: u8, handle: i32, off: u32, data: 
     u.last_off = off;
     u.last_len = len;
     u.next = end as u32;
-    u.run.update(data, len);
+    if !u.skip_rx {
+        u.run.update(data, len);
+    }
     OK
 }
 
@@ -784,26 +791,40 @@ unsafe fn close_inner(b: &Bufs, out: *mut u8) -> i32 {
     if u.next != u.size {
         return E_LENGTH;
     }
-    // the hash of the bytes received (`write` fed it as they came)
-    let got = hash32::slot(core::mem::replace(&mut u.run, Hash32::new()).finish());
-    if !out.is_null() {
-        copy(out, got.as_ptr(), 4);
-    }
-    if u.have_want {
-        let mut i = 0;
-        while i < 32 {
-            if got[i] != u.sha[i] {
-                return E_HASH;
-            }
-            i += 1;
+    let got;
+    if u.skip_rx {
+        // lever A: nothing was hashed on the way in. The card holds what was received: read it back, hash it once, and that hash is the file's
+        // (compared with the expected one before anything commits: it covers the USB transfer and the card)
+        let r = if u.size == 0 { Ok(hash32::slot(Hash32::new().finish())) } else { readback_file(b, u.start, u.size) };
+        got = match r {
+            Ok(g) => g,
+            Err(e) => return e,
+        };
+        if !out.is_null() {
+            copy(out, got.as_ptr(), 4);
         }
-    }
-    // the card holds what was received: read the file back and hash it (the end-to-end check; capability READBACK of INFO)
-    if u.size != 0 {
-        let l = lay();
-        let r = readback(|s, n, p| block_read(l.first + s, n, p), u.start, u.size, b.rb, b.rb_cap, &got);
-        if r != OK {
-            return r;
+        if got != u.sha {
+            return E_HASH;
+        }
+    } else {
+        // the hash of the bytes received (`write` fed it as they came)
+        got = hash32::slot(core::mem::replace(&mut u.run, Hash32::new()).finish());
+        if !out.is_null() {
+            copy(out, got.as_ptr(), 4);
+        }
+        if u.have_want && got != u.sha {
+            return E_HASH;
+        }
+        // the card holds what was received: read the file back and hash it (the end-to-end check; capability READBACK of INFO)
+        if u.size != 0 {
+            match readback_file(b, u.start, u.size) {
+                Ok(g) => {
+                    if g != got {
+                        return E_HASH;
+                    }
+                }
+                Err(e) => return e,
+            }
         }
     }
     // the new table: the current one with the entry replaced or inserted
@@ -832,26 +853,153 @@ unsafe fn close_inner(b: &Bufs, out: *mut u8) -> i32 {
     do_commit_hinted(b, &t.h, Edit::Insert(ent.as_ptr()), pend, Some(&hint))
 }
 
-/// Read `size` bytes of the file at store sector `start` back through `rd(sector, bytes, buf)` into `buf` (`cap` bytes, a multiple of 512), in
-/// pieces of at most `store::MAX_IO_SECTORS` sectors, and compare their hash slot with `want`: `E_READ` when a read fails, `E_HASH` when the card's bytes differ.
-unsafe fn readback(mut rd: impl FnMut(u32, u32, *mut u8) -> i32, start: u32, size: u32, buf: *mut u8, cap: usize, want: &[u8; 32]) -> i32 {
-    let piece = core::cmp::min(cap / 512, store::MAX_IO_SECTORS as usize) as u32;
+/// The read-back piece: the bytes of one card read of the close (a multiple of 512, at most `RB_MAX`). The firmware's block read takes 64 KiB at most
+/// (`store::MAX_IO_SECTORS` sectors); a larger piece needs the adapter that raises that clamp (docs/plans/usb-fast.md), which calls `set_readback_piece`.
+const RB_DEFAULT: usize = store::MAX_IO_SECTORS as usize * 512;
+/// 511 KiB: the most one eSDHC command moves.
+const RB_MAX: usize = 511 * 1024;
+static mut RB_PIECE: usize = RB_DEFAULT;
+
+/// Set the read-back piece, rounded down to a multiple of 512 and kept between 512 and 511 KiB; returns it.
+pub fn set_readback_piece(bytes: usize) -> usize {
+    let n = if bytes < 512 { 512 } else if bytes > RB_MAX { RB_MAX } else { bytes & !511 };
+    unsafe { write_volatile(addr_of_mut!(RB_PIECE), n) };
+    n
+}
+
+/// Whether the large-command adapter (sdhc-large) is present and on, so a block read above `store::MAX_IO_SECTORS` sectors is possible. Hook point for
+/// the integration: return its presence here. Without it the firmware's block read would split or fail, so the piece stays at `RB_DEFAULT`.
+fn large_reads_allowed() -> bool {
+    false
+}
+
+/// The piece the close reads: the set value, never above `RB_DEFAULT` unless `large_reads_allowed`.
+fn readback_piece() -> usize {
+    let n = unsafe { read_volatile(addr_of!(RB_PIECE)) };
+    if large_reads_allowed() { n } else { core::cmp::min(n, RB_DEFAULT) }
+}
+
+/// `n` bytes, 16-byte aligned, from the firmware's allocator (null when it has none free or gives an unaligned block: the close then reads in the
+/// caller's smaller pieces). Free it with `rb_free`.
+#[cfg(not(test))]
+unsafe fn rb_alloc(n: usize) -> *mut u8 {
+    let p = dkfw::mem::new(n as u32);
+    if !p.is_null() && p as usize & 15 != 0 {
+        dkfw::mem::free(p);
+        return core::ptr::null_mut();
+    }
+    p
+}
+#[cfg(not(test))]
+unsafe fn rb_free(p: *mut u8) {
+    dkfw::mem::free(p)
+}
+#[cfg(test)]
+unsafe fn rb_alloc(_: usize) -> *mut u8 {
+    core::ptr::null_mut()
+}
+#[cfg(test)]
+unsafe fn rb_free(_: *mut u8) {}
+
+/// The card's DMA writes behind the data cache: make the lines of `[p, p + n)` clean first (`before`: a push of a dirty line after the DMA would write old
+/// bytes over it) and drop them after each read. Nothing writes these buffers but the DMA, so the lines stay clean between the two.
+#[cfg(not(test))]
+fn cache_sync(p: *const u8, n: usize) {
+    crate::flush(p as u32, n as u32);
+}
+#[cfg(test)]
+fn cache_sync(_: *const u8, _: usize) {}
+
+/// Read the file at store sector `start`, `size` bytes, back from the card and return its hash slot. A file of more than one small read gets a buffer of
+/// its own from the firmware's allocator, the read-back piece (lever A: 64 KiB by default), twice that when lever C (`speed::OVERLAP`) is on and the helper
+/// task exists; otherwise the caller's buffer.
+unsafe fn readback_file(b: &Bufs, start: u32, size: u32) -> Result<[u8; 32], i32> {
+    let l = lay();
+    let piece = readback_piece();
+    let two = crate::speed::on(crate::speed::OVERLAP) && size as usize > piece;
+    let want = if size as usize > b.rb_cap { if two { 2 * piece } else { piece } } else { 0 };
+    let big = if want != 0 { rb_alloc(want) } else { core::ptr::null_mut() };
+    let r = if big.is_null() {
+        readback_hash(|s, n, p| block_read(l.first + s, n, p), start, size, b.rb, b.rb_cap, false)
+    } else {
+        readback_hash(|s, n, p| block_read(l.first + s, n, p), start, size, big, piece, two)
+    };
+    if !big.is_null() {
+        rb_free(big);
+    }
+    r
+}
+
+/// The hash a read-back piece is fed to, on the helper task (`aux`) while the next piece is read.
+struct HashJob {
+    h: *mut Hash32,
+    buf: *const u8,
+    n: u32,
+}
+
+extern "C" fn hash_job(ctx: *mut u8) {
+    unsafe {
+        let j = &*(ctx as *const HashJob);
+        (*j.h).update(j.buf, j.n);
+    }
+}
+
+/// Read `size` bytes of the file at store sector `start` back through `rd(sector, bytes, buf)` and return their hash slot, in pieces of at most `cap`
+/// bytes (a multiple of 512; `buf` holds one piece, or two when `two`) of at most 64 KiB without `set_readback_piece`. `E_READ` when a read fails.
+/// With `two`, the hash of piece n runs on the helper task while piece n + 1 is read into the other half of `buf`; the call returns only when the helper is idle.
+unsafe fn readback_hash(mut rd: impl FnMut(u32, u32, *mut u8) -> i32, start: u32, size: u32, buf: *mut u8, cap: usize, two: bool) -> Result<[u8; 32], i32> {
+    let piece = cap & !511;
     let mut h = Hash32::new();
-    let (mut left, mut sector) = (size, start);
+    let hp: *mut Hash32 = &mut h;
+    let mut job = HashJob { h: hp, buf: core::ptr::null(), n: 0 };
+    let (mut left, mut sector, mut i) = (size, start, 0usize);
+    let mut pending = false;
+    let mut err = OK;
+    cache_sync(buf, if two { 2 * piece } else { piece });
     while left > 0 {
-        let n = core::cmp::min(left, piece * 512);
+        let n = core::cmp::min(left, piece as u32);
         let secs = sectors_of(n);
-        if rd(sector, secs * 512, buf) != 0 {
-            return E_READ;
+        let at = if two { buf.add((i & 1) * piece) } else { buf };
+        if rd(sector, secs * 512, at) != 0 {
+            err = E_READ;
+            break;
         }
-        h.update(buf, n);
+        cache_sync(at, (secs * 512) as usize);
+        if pending {
+            crate::aux::wait();
+            pending = false;
+        }
+        if two {
+            job.buf = at;
+            job.n = n;
+            if crate::aux::run(hash_job, &mut job as *mut HashJob as *mut u8) == OK {
+                pending = true;
+            } else {
+                (*hp).update(at, n);
+            }
+        } else {
+            (*hp).update(at, n);
+        }
         left -= n;
         sector += secs;
+        i += 1;
     }
-    if hash32::slot(h.finish()) != *want {
-        return E_HASH;
+    if pending {
+        crate::aux::wait();
     }
-    OK
+    if err != OK {
+        return Err(err);
+    }
+    Ok(hash32::slot(core::ptr::read(hp).finish()))
+}
+
+/// `readback_hash` of one buffer, compared with `want`: `E_READ` when a read fails, `E_HASH` when the card's bytes differ.
+#[cfg(test)]
+unsafe fn readback(rd: impl FnMut(u32, u32, *mut u8) -> i32, start: u32, size: u32, buf: *mut u8, cap: usize, want: &[u8; 32]) -> i32 {
+    match readback_hash(rd, start, size, buf, cap, false) {
+        Ok(g) => if g == *want { OK } else { E_HASH },
+        Err(e) => e,
+    }
 }
 
 /// Drop the session of `kind` (the partial file was never in the table). `E_STATE`: no such session.
@@ -1486,7 +1634,16 @@ mod tests {
             });
             assert_eq!(readback(fake(&GOOD, None), 100, 1, p, 32768, &w1), OK);
             assert_eq!(readback(fake(&GOOD, None), 100, 1, p, 32768, &want), E_HASH);
+            // two buffers (the hash of one piece overlaps the read of the next): the same slot, the same refusals, a bad read still returns
+            assert_eq!(readback_hash(fake(&GOOD, None), 100, GOOD.len() as u32, p, 16384, true), Ok(want));
+            assert_eq!(readback_hash(fake(&GOOD, None), 100, GOOD.len() as u32, p, 512, true), Ok(want));
+            assert_ne!(readback_hash(fake(&BAD_MID, None), 100, GOOD.len() as u32, p, 16384, true), Ok(want));
+            assert_eq!(readback_hash(fake(&GOOD, Some(150)), 100, GOOD.len() as u32, p, 16384, true), Err(E_READ));
         }
+        assert_eq!(set_readback_piece(0), 512);
+        assert_eq!(set_readback_piece(100_000), 99_840);
+        assert_eq!(set_readback_piece(10_000_000), 511 * 1024);
+        assert_eq!(set_readback_piece(RB_DEFAULT), RB_DEFAULT);
     }
 
     #[test]
