@@ -49,7 +49,7 @@ def test_pack_is_deterministic_and_the_file_checks_itself(tmp_path):
     pk_dkrt.pack(tools, "test/dyn-demo", b)
     assert a.read_bytes() == b.read_bytes()
     info = tools.patchkit_run("dkm-info", a)
-    assert "test/dyn-demo" in info and "dk_module init" in info
+    assert "test/dyn-demo" in info and "slots     []" in info
     bad = bytearray(a.read_bytes())
     bad[-1] ^= 1
     (tmp_path / "bad.dkm").write_bytes(bad)

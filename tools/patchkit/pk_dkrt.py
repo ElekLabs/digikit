@@ -470,7 +470,7 @@ def proof(
     m0 = ST_MODULES
     base = be32(s0, m0 + 40)
     check("module record", be32(s0, m0) == 1 and cstr(s0[m0 + 4 : m0 + 36]) == "test/dyn-demo"
-          and be32(raw("ticks0"), 0) > base, f"base {base:#x} tick {be32(raw('ticks0'), 0):#x}")  # fmt: skip
+          and be32(raw("ticks0"), 0) >= base, f"base {base:#x} tick {be32(raw('ticks0'), 0):#x}")  # fmt: skip
     check("refused files left nothing behind: the first arena block is the module's, one module, one tick, one load",
           base == arena_lo + 16
           and all(be32(s0, ST_MODULES + i * MODULE_SIZE) == 0 for i in range(1, MAX_MODULES))

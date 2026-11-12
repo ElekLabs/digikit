@@ -13,8 +13,8 @@ from support.paths import REPO_ROOT
 
 from tools.coldfire import isacheck
 from tools.firmware import config
+from tools.patchkit import modroots, pk_cdemo, pk_dkrt, pk_toolchains
 from tools.patchkit import patchkit as front_end  # noqa: E402
-from tools.patchkit import pk_cdemo, pk_dkrt, pk_toolchains
 
 ROOT = REPO_ROOT
 DEMO = ROOT / "tests/fixtures/modules/c-demo"
@@ -82,10 +82,13 @@ def test_c_demo_object_is_current_and_self_contained():
     if pk_toolchains.libgcc_cf() is None:
         pytest.skip("pk_toolchains libgcc-cf not run")
     front_end.build_module(DEMO)
-    built = ROOT / "out/cache/dko/test/c-demo/build/c-demo.dko.json"
+    built = modroots.cached_objects(DEMO)["build/c-demo.dko.json"]
     obj = json.loads(built.read_text())
-    assert [s["name"] for s in obj["symbols"] if s["section"] is None] == []
-    exported = {s["name"] for s in obj["symbols"] if s["global"]}
+    # the only undefined symbol is the runtime import dk_log: every libgcc helper is linked in
+    assert [s["name"] for s in obj["symbols"] if s["section"] is None] == ["dk_log"]
+    exported = {
+        s["name"] for s in obj["symbols"] if s["global"] and s["section"] is not None
+    }
     assert exported == {"dk_module", "c_demo_in", "c_demo_n", "c_demo_out"}
     assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32"}
     isacheck.check_file(built)
