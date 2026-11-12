@@ -208,12 +208,13 @@ for (const device of DEVICES) {
         expect(await speedMask(dk), `${label}: all switches are on after a boot`).toBe(15);
         await speedMask(dk, 0, a);
         expect(await speedMask(dk, 2, c), `${label}: the mask`).toBe((a ? 1 : 0) | 2 | (c ? 4 : 0) | 8);
-        // a corrupted read-back (DN2: the card holds another byte in its third write) or a wrong hash (DT2) refuses the commit
+        // a corrupted read-back (DN2: the card holds another byte in its first write) or a wrong hash (DT2) refuses the commit
         if (dt2) {
           const bad = await bulk.session.put(SAMPLES, rp('Sw/bad.bin'), data, { expected: hashU32(pattern(300_011, 18), dt2) }).catch((e) => e);
           expect((bad as BulkDeviceError).code, `${label}: a wrong hash`).toBe(BULK_STATUS.E_HASH);
         } else {
-          await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', 3);
+          // the first card write: with core/sdhc-large on, the 300 KB file is one write (the third write would be the table commit)
+          await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', 1);
           const bad = await bulk.session.put(SAMPLES, rp('Sw/bad.bin'), data, { expected: hashU32(data, dt2) }).catch((e) => e);
           expect(bad, `${label}: a flipped byte`).toBeInstanceOf(BulkDeviceError);
           expect((bad as BulkDeviceError).code, `${label}: the hash error`).toBe(BULK_STATUS.E_HASH);
