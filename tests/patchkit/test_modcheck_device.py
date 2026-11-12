@@ -55,14 +55,14 @@ def test_nested_test_only_project_owns_module_device_acceptance(monkeypatch):
     }
     monkeypatch.setattr(nx_graph, "nx_graph", lambda: {"nodes": nodes})
     assert pk_modcheck.own_device_targets("owned/module") == [
-        "owned/acceptance:test-device"
+        "owned/acceptance:test-device-all"
     ]
     nested["tags"] = []
     assert pk_modcheck.own_device_targets("owned/module") == []
     nested["tags"] = ["test-only"]
     nested["metadata"] = {}
     assert pk_modcheck.own_device_targets("owned/module") == [
-        "owned/acceptance:test-device"
+        "owned/acceptance:test-device-all"
     ]
     nested["targets"] = {}
     assert pk_modcheck.own_device_targets("owned/module") == []
@@ -95,7 +95,7 @@ def test_multiple_device_acceptance_owners_are_discovered_in_stable_order(
         }
     monkeypatch.setattr(nx_graph, "nx_graph", lambda: {"nodes": nodes})
     expected = [
-        f"{name}:test-device"
+        f"{name}:test-device-all"
         for name in sorted(nodes)
         if nodes[name]["data"].get("targets")
     ]
