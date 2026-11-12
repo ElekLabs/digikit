@@ -3411,7 +3411,13 @@ fn f_move(c: &mut Cur) -> Option<Insn> {
     if (1u16 << m0 as u16) & 0x220 != 0 && (1u16 << m1 as u16) & 0x1c0 != 0 {
         return None;
     }
-    if (1u16 << m0 as u16) & 0xdc0 != 0 && (1u16 << m1 as u16) & 0x1c0 != 0 {
+    if (1u16 << m0 as u16) & 0x5c0 != 0 && (1u16 << m1 as u16) & 0x1e0 != 0 {
+        return None;
+    }
+    if (1u16 << m0 as u16) & 0x800 != 0 && (1u16 << m1 as u16) & 0x1c0 != 0 {
+        return None;
+    }
+    if (1u16 << m0 as u16) & 0x800 != 0 && (1u16 << m1 as u16) & 0x020 != 0 && (size == Size::L) {
         return None;
     }
     let mut i = Insn::new(Form::Move, size);

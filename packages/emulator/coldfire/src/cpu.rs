@@ -2201,12 +2201,15 @@ impl Cpu {
                 };
                 let dst = ea!(i, 1);
                 let bit = bitnum & (if size == Size::L { 31 } else { 7 });
+                // BTST Dy,#imm (CFPRM p.92: the dynamic form takes #<data>)
+                // tests a bit of the immediate byte; it has no address.
                 let addr = match dst {
-                    Ea::Dn(_) => 0,
+                    Ea::Dn(_) | Ea::Imm(_) => 0,
                     _ => self.ea_addr(&dst, size).map_err(Ok)?,
                 };
                 let old = match dst {
                     Ea::Dn(r) => self.d[r as usize],
+                    Ea::Imm(v) => v,
                     _ => match size {
                         Size::B => bus.read8(addr).map_err(|e| Ok(e.into()))? as u32,
                         _ => bus.read32(addr).map_err(|e| Ok(e.into()))?,
