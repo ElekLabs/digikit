@@ -86,7 +86,7 @@ def test_c_demo_object_is_current_and_self_contained():
     obj = json.loads(built.read_text())
     assert [s["name"] for s in obj["symbols"] if s["section"] is None] == []
     exported = {s["name"] for s in obj["symbols"] if s["global"]}
-    assert exported == {"dkm_init", "c_demo_in", "c_demo_n", "c_demo_out"}
+    assert exported == {"dk_module", "c_demo_in", "c_demo_n", "c_demo_out"}
     assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32"}
     isacheck.check_file(built)
 

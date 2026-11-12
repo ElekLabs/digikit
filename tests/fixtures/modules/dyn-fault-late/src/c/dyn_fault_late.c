@@ -5,7 +5,10 @@
  * The delay and the kind of failure come from the store file `cfg/fault-after.bin` (5 bytes: u32 big endian blocks, then 0 = reset the
  * machine, as the firmware's exception path ends, 1 = hang in the UI task with the other tasks running); no file: never fails. */
 
-#include <dk/core/api.h>
+#include <dk/core/log.h>
+#include <dk/core/module.h>
+#include <dk/core/time.h>
+#include <dk/platform/files.h>
 
 typedef uint32_t u32;
 
@@ -14,22 +17,26 @@ static u32 mode;
 static u32 start;
 static u32 started;
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
     unsigned char cfg[16];
-    int n = api->store_read((const uint8_t *)"cfg/fault-after.bin", cfg, sizeof cfg);
+    dk_files *files;
+    int32_t r = dk_files_open(ctx, &files);
+    if (r != DK_OK)
+        return r;
+    int n = dk_files_read(files, "cfg/fault-after.bin", cfg, sizeof cfg);
     if (n >= 5) {
         after = ((u32)cfg[0] << 24) | ((u32)cfg[1] << 16) | ((u32)cfg[2] << 8) | cfg[3];
         mode = cfg[4];
     }
-    api->log((const uint8_t *)"fault-late after", after);
-    return 0;
+    dk_log(DK_LOG_INFO, "fault-late after", after);
+    return DK_OK;
 }
 
-void dkm_slot_0(const dk_api *api)
+static void tick(dk_module_ctx *ctx)
 {
-    u32 now = dkrt_blocks();
-    (void)api;
+    u32 now = dk_time_blocks();
+    (void)ctx;
     if (!started) {
         started = 1;
         start = now;
@@ -44,3 +51,5 @@ void dkm_slot_0(const dk_api *api)
     for (;;) {
     }
 }
+
+const dk_module_def dk_module = {.init = init, .tick = tick};

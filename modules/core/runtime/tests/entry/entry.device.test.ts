@@ -1,11 +1,16 @@
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { RANGES } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
+import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
+import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { E_SET_NOKEY } from '@digi/regression/runtime/project-kit.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
-import { pollEmulated, waitEmulated } from '@digi/regression/runtime/waits.ts';
+import { pollEmulated, waitEmulated, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * The entry point `dk_module` and the service imports (docs/plans/sdk.md section 5; the fixture test/entry-demo uses only the new contract).
@@ -15,6 +20,7 @@ import { pollEmulated, waitEmulated } from '@digi/regression/runtime/waits.ts';
 const REPORT = 0x1c;
 const WRITE = 0x1d;
 const E_MISSING = -73;
+const E_CONTRACT = -48;
 const DEVICE_ID = { dt2: 1, dn2: 2 } as const; // [digikit] id of devices/*.toml
 
 async function expectEntryPoint({ session, dk }: PatchedSession): Promise<void> {
@@ -71,5 +77,38 @@ async function expectEntryPoint({ session, dk }: PatchedSession): Promise<void> 
 }
 
 runtimeTests('a module of the new entry point loads, ticks and finds an optional service absent', expectEntryPoint, {
+  dsp: 'zero',
+});
+
+/**
+ * Version refusal. The packer writes the newest api minor its imports need (`since` in sdk/sdk.toml) into the header of a module of the new entry point
+ * (test/entry-demo: 1.11). A copy that declares an api minor above the runtime's (0xff, sha256 made right again, so only the version is wrong) is refused with
+ * E_CONTRACT and the module list shows no second entry; the file with the real minor loads after it.
+ */
+async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<void> {
+  const device = session.options.device;
+  await expectRuntimeReady(session);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'entry-version'), ['DKRT_BOOT']);
+  const good = fs.readFileSync(moduleArtifact(device, 'test/entry-demo'));
+  expect(good[0x38], 'the packer writes api major 1').toBe(1);
+  expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(11);
+  const future = Buffer.from(good);
+  future[0x39] = 0xff;
+  future.fill(0, 0x10, 0x30);
+  createHash('sha256').update(future).digest().copy(future, 0x10);
+  await dk.put('modules/entry-future.dkm', future);
+  await dk.put('modules/entry-demo.dkm', good);
+  await dk.select(['modules/entry-future.dkm', 'modules/entry-demo.dkm']);
+  await dk.restart();
+  await waitForBootEmulated(dk);
+  await expect
+    .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
+    .toEqual(['test/entry-demo']);
+  const boot = await bootInfo(session, plan);
+  expect(boot.results, 'the file of a newer api minor is E_CONTRACT, the real one loads').toEqual([E_CONTRACT, 0]);
+  await session.expectNoFault('version refusal');
+}
+
+runtimeTests('a module that declares a newer api minor than the runtime is refused with E_CONTRACT', expectVersionRefusal, {
   dsp: 'zero',
 });

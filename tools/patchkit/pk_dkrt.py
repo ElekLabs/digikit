@@ -10,7 +10,7 @@ with an import the runtime does not have, a file that is not there, the good mod
 minor 255 (both E_CONTRACT), the good module, and the good module again. The boot hook loads
 the selection (through packages/emulator/boot/examples/cf_script.rs); the proof reads the boot report (the five refusals, the load,
 the duplicate refused), the module's counter rising while the UI task runs, and checks that the refused files left nothing behind
-(arena, slots, module records). After the boot a `dkrt_load` (mailbox and direct call) answers `E_BOOT_ONLY` and a command 2 (the
+(arena, tick table, module records). After the boot a `dkrt_load` (mailbox and direct call) answers `E_BOOT_ONLY` and a command 2 (the
 old unload) is refused as unknown. The write-watch on `cf.expansion` (the runtime's code and the arena allowed as writers) and
 the flush check run through all of it. Prints one JSON report; exit status 0 when every check holds.
 
@@ -52,7 +52,7 @@ OK, E_NOT_FOUND, E_BAD_STORE, E_READ, E_SHA, E_FORMAT, E_RUNTIME, E_IMPORT = (
     -6,
     -7,
 )
-E_NOMEM, E_INIT, E_LOADED, E_SLOT = -8, -9, -10, -11
+E_NOMEM, E_INIT, E_LOADED = -8, -9, -10
 E_FORMAT_CMD, E_BOOT_ONLY, E_CONTRACT = -5, -45, -48
 SEL_MAGIC, SEL_VERSION, SEL_PATH = 0x444B534C, 1, 56
 # the selection record's paths (sdk/sdk.toml [limits.max])
@@ -408,6 +408,7 @@ def proof(
         run(30_000_000, "settle"),
         peek("boot", boot, 4 * (BOOT_FIELDS + SEL_MAX)),
         peek("state0", st, STATE_BYTES),
+        peek("ticks0", sym["DKRT_TICKS"], 4 * MAX_MODULES),
         peek("c1", counter_ptr, 16, ptr=True),
         run(RUN, "r1"),
         peek("c2", counter_ptr, 16, ptr=True),
@@ -457,10 +458,10 @@ def proof(
         E_CONTRACT,
         E_CONTRACT,
         OK,
-        E_SLOT,
-    ]  # the duplicate meets the taken slot before the name check
+        E_LOADED,
+    ]  # the duplicate meets the loaded name
     check(
-        "boot report: five refusals, the load, the duplicate refused (slot taken)",
+        "boot report: five refusals, the load, the duplicate refused (name loaded)",
         results == want,
         f"{results}, want {want}",
     )
@@ -469,12 +470,11 @@ def proof(
     m0 = ST_MODULES
     base = be32(s0, m0 + 40)
     check("module record", be32(s0, m0) == 1 and cstr(s0[m0 + 4 : m0 + 36]) == "test/dyn-demo"
-          and be32(s0, ST_SLOTS) != 0 and be32(s0, ST_SLOTS) > base,
-          f"base {base:#x} slot0 {be32(s0, ST_SLOTS):#x}")  # fmt: skip
-    check("refused files left nothing behind: the first arena block is the module's, one module, one slot, one load",
+          and be32(raw("ticks0"), 0) > base, f"base {base:#x} tick {be32(raw('ticks0'), 0):#x}")  # fmt: skip
+    check("refused files left nothing behind: the first arena block is the module's, one module, one tick, one load",
           base == arena_lo + 16
           and all(be32(s0, ST_MODULES + i * MODULE_SIZE) == 0 for i in range(1, MAX_MODULES))
-          and all(be32(s0, ST_SLOTS + 4 * i) == 0 for i in range(1, SLOTS)) and be32(s0, ST_LOADS) == 1,
+          and all(be32(raw("ticks0"), 4 * i) == 0 for i in range(1, MAX_MODULES)) and be32(s0, ST_LOADS) == 1,
           f"base {base:#x} (arena {arena_lo:#x}), loads {be32(s0, ST_LOADS)}")  # fmt: skip
     cs = [raw(f"c{i}") for i in range(1, 5)]
     n = [be32(c, 4) for c in cs]

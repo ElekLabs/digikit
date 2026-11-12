@@ -41,7 +41,7 @@ cardRigs(
   (h) => {
     for (const [kind, { blocks, mode, vector }] of Object.entries(KINDS)) {
       test(
-        `${kind}: a CPU exception in a module's slot is recorded, reported by the next boot, and two in a row lead to safe mode`,
+        `${kind}: a CPU exception in a module's tick is recorded, reported by the next boot, and two in a row lead to safe mode`,
         async () => {
           const debug = h.mod('digikit/debug', 'debug'); // the log: the crash events are read over LOG, and the safe boot loads no module
           const crash = h.mod('test/dyn-crash', 'crash');

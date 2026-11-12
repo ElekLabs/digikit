@@ -3,14 +3,15 @@
  * loaded together with test/file-write-b.
  *
  * 0x28 EXT_CSD  body (optional): u16 offset, u16 length (default 0 and 512; at most 512 in all)
- *               reply: u8 format (1), u8 device id (api->device: 1 DT2, 2 DN2), u32 address read, u16 offset, u16 length, the bytes.
+ *               reply: u8 format (1), u8 device id (dk_module_ctx_device: 1 DT2, 2 DN2), u32 address read, u16 offset, u16 length, the bytes.
  *               The bytes are the firmware's own copy of the EXT_CSD: its init reads it once with CMD8 (argument 0x083a0010) through eDMA channel 59 into
  *               the uncached alias of RAM below (the eSDHC bounce buffer follows at +0x200). The address is a constant per device (the init code is
  *               DT2 1.17 0x4012d78e, DN2 1.12 0x4012be52; both write the destination address to the TCD of channel 59 and read SEC_COUNT back at +0xd4).
  * 0x29 REGS     no body. reply: u8 format (1), u8 device id, u8 n, u8 0, then n pairs u32 address, u32 value, in the order of `regs` below. Every
  *               register of the list is read-only status or configuration (no register that clears or pops on read: no DATPORT, no ULPI viewport,
  *               no DMA timer or UART data). */
-#include <dk/core/api.h>
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -59,7 +60,7 @@ static const u32 regs[] = {
 };
 #define NREGS ((u32)(sizeof regs / sizeof regs[0]))
 
-static const dk_api *sdk;
+static u32 device;
 
 static void put16(u8 *p, u32 v)
 {
@@ -77,15 +78,17 @@ static void put32(u8 *p, u32 v)
 
 static u32 extcsd_addr(void)
 {
-    if (sdk->device == 1)
+    if (device == 1)
         return 0x4fe69100u; /* DT2 1.17 */
-    if (sdk->device == 2)
+    if (device == 2)
         return 0x4e6f9100u; /* DN2 1.12 */
     return 0;
 }
 
-static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
+static i32 command(u32 cmd, u32 seq, const void *request, u32 len, void *reply)
 {
+    const u8 *body = request;
+    u8 *out = reply;
     (void)seq;
     u32 base = extcsd_addr();
     if (cmd == CMD_EXTCSD) {
@@ -99,7 +102,7 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
         if (off > EXTCSD_LEN || n > EXTCSD_LEN - off)
             return E_ARG;
         out[0] = 1;
-        out[1] = (u8)sdk->device;
+        out[1] = (u8)device;
         put32(out + 2, base);
         put16(out + 6, off);
         put16(out + 8, n);
@@ -110,7 +113,7 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     }
     if (cmd == CMD_REGS) {
         out[0] = 1;
-        out[1] = (u8)sdk->device;
+        out[1] = (u8)device;
         out[2] = (u8)NREGS;
         out[3] = 0;
         for (u32 i = 0; i < NREGS; i++) {
@@ -122,15 +125,10 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     return E_ARG;
 }
 
-void dkm_fini(const dk_api *api)
+static i32 init(dk_module_ctx *ctx)
 {
-    (void)api;
+    device = dk_module_ctx_device(ctx);
+    return dk_host_register(CMD_EXTCSD, 2, command);
 }
 
-i32 dkm_init(const dk_api *api)
-{
-    if (api->size < sizeof(dk_api))
-        return -48;
-    sdk = api;
-    return api->register_cmds(CMD_EXTCSD, 2, command);
-}
+const dk_module_def dk_module = {.init = init};

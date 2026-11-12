@@ -8,11 +8,13 @@
  * stores the result (a refused enable leaves the job waiting, so a later REENABLE can enable again).
  * ECHO_CMD + 3 (0x2f) TAKEOVER, body u8 op: 0 usb_bulk_takeover (also the renew), 1 usb_bulk_giveback; reply: i32 result (the module does not enable the interface itself
  * after a take-over: REENABLE does, once the device is in USB MIDI mode).
- * ECHO_CMD (0x2c): STATUS, reply: i32 result of usb_bulk_enable, u32 usb_bulk_state, u32 steps, u32 buffers taken, u32 bytes taken, u32 bytes sent,
+ * ECHO_CMD (0x2c): STATUS, reply: i32 result of dk_usb_bulk_enable, u32 dk_usb_bulk_state, u32 steps, u32 buffers taken, u32 bytes taken, u32 bytes sent,
  * u32 times a send was busy, i32 job id, u32 the reset count seen by the job. */
-#include <dk/core/api.h>
 #include <dk/core/bytes.h>
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 #include <dk/platform/io.h>
+#include <dk/platform/usb_bulk.h>
 
 #ifndef ECHO_CMD
 #define ECHO_CMD 0x2c
@@ -25,7 +27,7 @@ typedef int32_t i32;
 #define E_AGAIN (-72) /* <dk/platform/usb_bulk.h> DK_USB_BULK_E_AGAIN */
 #define PIECE 4096u
 
-static const dk_api *sdk;
+static dk_usb_bulk *ub;
 static i32 job_id, enable_rc;
 static volatile u32 steps, taken, bytes_in, bytes_out, busy_count, last_epoch;
 static int enabled_done;
@@ -33,26 +35,28 @@ static volatile u32 hold;
 static u8 *cur;
 static u32 cur_len, cur_off;
 
-static i32 step(u8 *ctx)
+static i32 step(void *arg)
 {
-    (void)ctx;
+    (void)arg;
     steps++;
     if (!enabled_done) {
         enabled_done = 1;
-        enable_rc = usb_bulk_enable(job_id);
+        enable_rc = dk_usb_bulk_enable(ub, job_id);
         return DK_IO_WAIT; /* also after a refused enable: REENABLE wakes the job again */
     }
     for (;;) {
-        u32 epoch = (usb_bulk_state() >> 24) & 0xffu;
+        u32 epoch = (dk_usb_bulk_state(ub) >> 24) & 0xffu;
         if (epoch != last_epoch) { /* the bus was reset: what was half done is void */
             last_epoch = epoch;
             cur_off = cur_len;
         }
         if (cur == 0) {
-            if (usb_bulk_take(&cur, &cur_len) == 0) {
+            void *buf;
+            if (dk_usb_bulk_take(ub, &buf, &cur_len) == 0) {
                 cur = 0;
                 return DK_IO_WAIT;
             }
+            cur = buf;
             cur_off = 0;
             taken++;
             bytes_in += cur_len;
@@ -63,7 +67,7 @@ static i32 step(u8 *ctx)
             if (hold == 2 && cur_off != 0)
                 return DK_IO_WAIT;
             u32 n = cur_len - cur_off < PIECE ? cur_len - cur_off : PIECE;
-            i32 r = usb_bulk_send(cur + cur_off, n);
+            i32 r = dk_usb_bulk_send(ub, cur + cur_off, n);
             if (r == E_BUSY ||
                 r ==
                     E_AGAIN) { /* both slots in flight, or the engine refused: the adapter wakes the job */
@@ -77,46 +81,48 @@ static i32 step(u8 *ctx)
             if (hold == 2 && cur_off < cur_len)
                 return DK_IO_WAIT;
         }
-        usb_bulk_release(cur);
+        dk_usb_bulk_release(ub, cur);
         cur = 0;
     }
 }
 
-static void finished(u8 *ctx, i32 status)
+static void finished(void *arg, i32 status)
 {
-    (void)ctx;
+    (void)arg;
     (void)status;
 }
 
-static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
+static i32 command(u32 cmd, u32 seq, const void *request, u32 len, void *reply)
 {
+    const u8 *body = request;
+    u8 *out = reply;
     (void)seq;
     if (cmd == ECHO_CMD + 1) {
         hold = len > 0 ? body[0] : 0;
-        sdk->io_wake(job_id);
+        dk_io_wake(job_id);
         return 0;
     }
     if (cmd == ECHO_CMD + 2) {
-        (void)usb_bulk_disable(job_id);
+        (void)dk_usb_bulk_disable(ub, job_id);
         enabled_done = 0;
         if (cur != 0)
-            (void)usb_bulk_release(cur);
+            (void)dk_usb_bulk_release(ub, cur);
         cur = 0;
         cur_len = 0;
         cur_off = 0;
         hold = 0;
-        sdk->io_wake(job_id);
+        dk_io_wake(job_id);
         return 0;
     }
     if (cmd == ECHO_CMD + 3) {
-        dk_bytes_put32(out,
-                       (u32)(len > 0 && body[0] == 1 ? usb_bulk_giveback() : usb_bulk_takeover()));
+        dk_bytes_put32(out, (u32)(len > 0 && body[0] == 1 ? dk_usb_bulk_giveback(ub)
+                                                          : dk_usb_bulk_takeover(ub)));
         return 4;
     }
     if (cmd != ECHO_CMD)
         return -50;
     dk_bytes_put32(out, (u32)enable_rc);
-    dk_bytes_put32(out + 4, usb_bulk_state());
+    dk_bytes_put32(out + 4, dk_usb_bulk_state(ub));
     dk_bytes_put32(out + 8, steps);
     dk_bytes_put32(out + 12, taken);
     dk_bytes_put32(out + 16, bytes_in);
@@ -127,19 +133,22 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     return 36;
 }
 
-void dkm_fini(const dk_api *api)
+static void fini(dk_module_ctx *ctx)
 {
-    (void)api;
-    usb_bulk_disable(job_id);
+    (void)ctx;
+    dk_usb_bulk_disable(ub, job_id);
 }
 
-i32 dkm_init(const dk_api *api)
+static i32 init(dk_module_ctx *ctx)
 {
-    if (api->size < sizeof(dk_api))
-        return -48;
-    sdk = api;
-    job_id = api->io_post(step, finished, 0);
+    i32 r = dk_usb_bulk_open(
+        ctx, &ub); /* DK_E_MISSING without core/usb-bulk: this module has no use then */
+    if (r != DK_OK)
+        return r;
+    job_id = dk_io_post(step, finished, 0);
     if (job_id <= 0)
         return job_id ? job_id : -1;
-    return api->register_cmds(ECHO_CMD, 4, command);
+    return dk_host_register(ECHO_CMD, 4, command);
 }
+
+const dk_module_def dk_module = {.init = init, .fini = fini};

@@ -30,7 +30,7 @@ import { DSP_GRANULE, fullSet, geometryOf, LOADED, packSynth, usageOf, type Want
  * The ColdFire memory audit as a device test (port of the `memaudit` part of pk_digikit_memaudit.py; protected ranges and allowed writers: memaudit-kit.ts).
  * Per device and module set, two daemons: the first loads the set on a ColdFire-only rig, arms the write guard after the boot and drives the UI
  * (DIGIKIT menu, MODULES, machine on a track, p-lock, project save, edit, save, load); the second boots the same card cold with the write watch on the
- * same ranges from the first cache enable, so the load of the modules and their `dkm_init` are audited too.
+ * same ranges from the first cache enable, so the load of the modules and their `init` are audited too.
  */
 
 export interface AuditMachine {
