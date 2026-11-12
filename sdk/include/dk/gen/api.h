@@ -86,10 +86,11 @@ typedef struct dk_api {
     void (*hash32_init)(uint8_t *state);     /* (api 1.10) Start the file hash (the Elektron +Drive content hash, dk/platform/hash32.h) in the caller's 28-byte `dk_hash32`. */
     void (*hash32_update)(uint8_t *state, const uint8_t *p, uint32_t n); /* (api 1.10) Feed `n` bytes. */
     uint32_t (*hash32_finish)(uint8_t *state); /* (api 1.10) The file hash `hash|1`: the value the store keeps (4 bytes big-endian in a table slot). The state is spent. */
+    uint32_t (*speed_flags)(uint32_t clear, uint32_t set); /* (api 1.11) The run-time switches of the speed levers: one RAM word, all four bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 1: USB receive ring; bit 2: the read-back hash overlaps the next card read; bit 3: large card commands. Any task. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
-_Static_assert(sizeof(dk_api) == 212, "dk_api size");
+_Static_assert(sizeof(dk_api) == 216, "dk_api size");
 _Static_assert(offsetof(dk_api, version) == 0, "dk_api.version");
 _Static_assert(offsetof(dk_api, size) == 4, "dk_api.size");
 _Static_assert(offsetof(dk_api, device) == 8, "dk_api.device");
@@ -143,6 +144,7 @@ _Static_assert(offsetof(dk_api, io_wake) == 196, "dk_api.io_wake");
 _Static_assert(offsetof(dk_api, hash32_init) == 200, "dk_api.hash32_init");
 _Static_assert(offsetof(dk_api, hash32_update) == 204, "dk_api.hash32_update");
 _Static_assert(offsetof(dk_api, hash32_finish) == 208, "dk_api.hash32_finish");
+_Static_assert(offsetof(dk_api, speed_flags) == 212, "dk_api.speed_flags");
 #endif
 
 /* Imports: names the loader resolves in the runtime's table (Api.import gives the address at run time). */
@@ -227,6 +229,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 10
+#define DK_API_MINOR 11
 
 #endif /* DK_GEN_API_H */

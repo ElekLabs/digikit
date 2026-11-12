@@ -175,6 +175,7 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
   hole('DKRT_UPLOAD_BUF', 36896);
   hole('DKRT_SDK_BUF', 17408); // the SDK file calls' table streams (card reads land by DMA)
   hole('DKRT_IO_TASK', 16496); // the I/O task's stack, TCB and semaphore (the kernel writes them)
+  hole('DKRT_AUX_TASK', 4208); // the helper task's stack, TCB and semaphores (the kernel writes them)
   hole('DKRT_STORE_PEEK', 512);
   hole('DKRT_STORE_FP', 512);
   const pdw = ownedSymbol(plan, 'core/plusdrive-write', 'DKPW_DMA'); // the +Drive adapter's buffers that the firmware's file code writes

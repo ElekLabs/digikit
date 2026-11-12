@@ -756,11 +756,40 @@ static void finished(u8 *ctx, i32 status)
     (void)status;
 }
 
+/* STATUS (0x37) sub-commands by the first body byte: one line per tag (the speed levers' lanes each add theirs). A handler returns the reply length, or a status. */
+typedef i32 (*status_fn)(const u8 *body, u32 len, u8 *out);
+
+/* 'S' [bit [0|1]]: the speed switches (runtime bits, all on at boot, never saved: bit 0 hash once, 1 USB receive ring, 2 read-back hash overlap, 3 large card
+ * commands). Reply: the mask now (u32). With no bit, only the read. E_MSG for a bit above 3 or a value other than 0 or 1. */
+static i32 status_speed(const u8 *body, u32 len, u8 *out)
+{
+    u32 m = sdk->speed_flags(0, 0);
+    if (len >= 3) {
+        if (body[1] > 3u || body[2] > 1u)
+            return E_MSG;
+        m = body[2] ? sdk->speed_flags(0, 1u << body[1]) : sdk->speed_flags(1u << body[1], 0);
+    }
+    put32(out, m);
+    return 4;
+}
+
+static const struct {
+    u8 tag;
+    status_fn fn;
+} status_tab[] = {
+    {'S', status_speed},
+};
+
 /* SysEx service command USB_FAST_NONCE (0x36): body nonce[8], the host's proof of which USB device is on its MIDI port; reply empty. The INFO reply of the
  * bulk link returns it. 0x37 STATUS (a debug aid: sixteen u32 words). */
 static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
 {
     (void)seq;
+    if (cmd == NONCE_CMD + 1 && len > 0) {
+        for (u32 i = 0; i < sizeof status_tab / sizeof status_tab[0]; i++)
+            if (body[0] == status_tab[i].tag)
+                return status_tab[i].fn(body, len, out);
+    }
 #if UF_KNOBS
     if (cmd == NONCE_CMD + 1 && len > 0 && body[0] == 'A') { /* test knob: 'A' [max bytes u32] sets the largest staging buffer of the next BEGIN (0: none); replies the size of the last one */
         if (len >= 5)
