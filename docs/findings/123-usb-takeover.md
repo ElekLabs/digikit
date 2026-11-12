@@ -24,3 +24,5 @@ Now `usb_bulk_enable` prepares entry 2 in any mode (it writes only the port tabl
 ## Host side
 
 TAKEOVER and RELEASE are SysEx commands of the usb-fast module (`usb_fast_takeover` range 0x1e to 0x1f). The host (`BulkTakeOver` in `packages/dk-session/src/bulk-select.ts`) asks `usbFastWrongMode` (the wrong-mode bit of usb-fast's STATUS) and takes over only then, waits for the device to return on its MIDI port, runs the nonce handshake, transfers, and releases after a linger (10 s in the desktop app; at once in `wb.mjs`). The MIDI port name and the CoreMIDI connection across the configuration change, and the macOS re-enumeration time each way (expected 1 to 2 s), are open **[O]**.
+
+**[D]** After about 15 take-overs in quick succession, the macOS CoreMIDI connection to the DN2 went stale. The port stayed listed, but neither our runtime nor the firmware's universal identity request got replies. A device power cycle did not help; a USB cable replug did. The device itself was fine: no crash record, and the stored USB CONFIG unchanged.

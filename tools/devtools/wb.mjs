@@ -121,8 +121,28 @@ function connect(timeoutMs = 60000) {
   };
 }
 
+/**
+ * `connect`, then one quick INFO; a device that does not reply is tried again for up to `waitMs` with a new bridge. The device may still re-enumerate after
+ * the previous run (RELEASE): its MIDI port is gone or does not answer yet. After the time the last link is returned anyway (a stock device has no INFO) and
+ * the first real request reports the error. An answer with an error status is no re-enumeration: no retry.
+ */
+async function connectReady(waitMs = 8000) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const link = connect();
+    try {
+      await link.session.info(true);
+      return link;
+    } catch (e) {
+      if (e?.kind !== 'timeout' || Date.now() > deadline) return link;
+      await link.close();
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+
 async function withSession(run) {
-  const link = connect();
+  const link = await connectReady();
   try {
     return await run(link.session);
   } finally {
@@ -249,7 +269,7 @@ if (cmd === 'ports') {
   if (!['auto', 'always', 'never'].includes(opts.verify)) fail('--verify is auto, always or never');
   const sample = await loadSample();
   let bulk;
-  const holder = { link: connect() };
+  const holder = { link: await connectReady() };
   let speedMask;
   if (opts.speed !== undefined) {
     speedMask = Number(opts.speed);

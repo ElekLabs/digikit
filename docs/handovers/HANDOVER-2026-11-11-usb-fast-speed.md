@@ -41,16 +41,12 @@ usb-fast baseline) is already merged into main.
 
 ## Next
 
-1. PR #407 is OPEN (pushed c189d9d0) but CONFLICTS with main (6 new commits): merge origin/main into speed/usb-fast (regenerate generated files, never hand-merge them), rerun the affected device tests, push; ask Em before merging; full tier after merge.
-2. DN2 A/B with the experiment image (reliable write on/off, cached reads on/off), then decide.
-3. Merge fast-hash; measure; DN2 readback must beat the old verify.
-4. Larger card commands (firmware 64 KiB clamp in the eSDHC write/read, DN2 0x4012ca8a / DT2 0x4012e3c4; check the bounce buffer
-   0x4e6f9300 size first) and DT2 raw extent writes (firmware reserves, we write data with large commands, readback + firmware tail).
-   Target ~8-10 MB/s for large files.
-5. Emulator gap: the DDR cached window and its +0x08000000 alias are separate pages (packages/emulator/machine/src/board.rs page_index);
-   fix it before enabling cached RX by default (one full-tier run).
-6. Clean up the bench folders on both devices (`wb samples rm`; DT2: bench2-*, bench3-*, takeover-dt2, ab*; DN2: samples/bench*,
-   takeover1, ab*).
+Current state (2026-11-12): PRs 419, 421 and 425 are merged. The PR `speed/pipeline` (four speed levers, wb release wait) is open and must not be merged without Em. Results: [finding 126](../findings/126-usb-fast-transfer-ceilings.md). Devices: DN2 on image 68d6fdc3140778fb, DT2 on 441f252cd3df266a, both with the usb-fast pipeline. The bench folders are cleaned on both.
+
+1. DN2 store commit: do not rewrite and read back the whole table per file (per-batch commit). The cost grows about 0.46 ms per stored file at every upload.
+2. DT2 cost per file (about 195 ms fixed).
+3. Copy overlap: copy from the USB buffers to staging while the card writes (serial now, about 0.42 s of 8 MB on the DN2).
+4. Host side: the CoreMIDI connection can go stale after many take-overs (finding 123).
 
 ## Notes
 

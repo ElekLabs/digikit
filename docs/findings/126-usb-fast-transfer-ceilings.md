@@ -44,7 +44,39 @@ Code: `modules/core/adapters/sdhc-large`, `modules/core/runtime` (`store_writer`
 
 The upload writes the file once and reads it back once, so one second moves 1 / (1 / write + 1 / read) MB. At 37.7 MHz this gives about 7.2 MB/s with 64 KiB commands and about 7.8 MB/s with 511 KiB commands. A faster upload needs a faster card clock (open) or no read-back.
 
+## Hardware results of the speed levers (2026-11-12) **[D]**
+
+The four levers are the switches 0 to 3 of the usb-fast STATUS 'S' command: A hash once (bit 0), B read-back hash overlap (bit 2), C large card commands (bit 3), D receive ring (bit 1). All are on by default. Single runs unless stated; the numbers are seconds for 8 MB.
+
+DN2 1.12 (image 68d6fdc3140778fb, runtime 0.5.12), 8 MB upload with device readback:
+
+- All levers on: 2.08 / 2.25 / 2.20 s (3.8 to 4.0 MB/s). Three later runs, all on: 1.87 / 1.90 / 1.87 s.
+- All levers off: 2.96 / 3.02 s (2.8 MB/s), equal to the old build (2.94 s).
+- One lever off: A off 2.55 s, B off 2.20 s, C off 2.50 s, D off 2.41 s. Shares: A about 0.47 s, C about 0.42 s, D about 0.33 s, B about 0.12 s.
+
+DN2 per-phase split of one 8 MB upload (UF_TRACE build, all on):
+
+| phase | time |
+|---|---|
+| card writes | 0.58 to 0.62 s |
+| copy from the USB buffers to staging | 0.42 to 0.43 s (serial with the card writes, on the I/O task) |
+| close: readback, hash tail, table commit | 0.72 to 0.74 s |
+| host wait | 0.003 to 0.05 s |
+| begin | 7 ms |
+
+B gains little because USB already kept up. The copy and the card write still alternate.
+
+DN2 store: the cost per file grows with the number of files in the store. 40 files of 282 KB took 3.82 / 4.53 / 5.27 / 6.02 s with 0 / 40 / 80 / 120 files already in the store. This is about 95 ms plus 0.46 ms per stored file, for each upload: the store table is rewritten and read back at every commit.
+
+DT2 1.17 (image 441f252cd3df266a):
+
+- 8 MB, all on: 2.56 / 2.61 s. All off: 2.55 / 2.58 s. No gain and no regression.
+- 40 small files: 11.24 / 11.26 / 11.23 s in three new folders. There is no growth across folders; the fixed cost is about 195 ms per file.
+- Growth of the cost inside one large folder is not measured. **[O]**
+
+Sample library model (the library of the project owner: 1147 packs, median 577 MB, about 300 to 400 files per pack, median file about 1.5 MB): the cost per file is the main lever for packs, not the rate for large files.
+
 ## Open
 
 - **[O]** An upload after a run in discard mode hangs (experiment only, not in a product image).
-- **[O]** The gain of the integrated build (large commands, read-back overlap, receive ring) on hardware: `node tools/devtools/wb.mjs samples put FILE --speed MASK` sets the four switches and prints the mask and the usb-fast STATUS words 18 (staging bytes) and 19 (ring slots).
+- The switches: `node tools/devtools/wb.mjs samples put FILE --speed MASK` sets the four switches and prints the mask and the usb-fast STATUS words 18 (staging bytes) and 19 (ring slots).
