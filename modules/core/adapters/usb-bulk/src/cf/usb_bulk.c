@@ -105,17 +105,20 @@ static inline __attribute__((always_inline)) u32 reg_rd(u32 off)
 #define ENDPTCTRL2 0x1c8u
 #define USBCMD_RS 0x1u
 #define OTGSC 0x1a4u
-#define OTGSC_BSV 0x800u /* bit 11: B session valid (VBUS present); the firmware's restart waits for it */
+#define OTGSC_BSV                                                                                  \
+    0x800u /* bit 11: B session valid (VBUS present); the firmware's restart waits for it */
 #define ULPI_VIEWPORT 0x170u
 #define ULPI_WU 0x80000000u  /* bit 31: wake-up (clears itself) */
 #define ULPI_RUN 0x40000000u /* bit 30: a read or write is running (the controller clears it) */
 #define ULPI_RW 0x20000000u  /* bit 29: 1 write */
-#define ULPI_SS 0x08000000u  /* bit 27: the ULPI interface is in normal sync state; a run is undefined without it */
+#define ULPI_SS                                                                                    \
+    0x08000000u /* bit 27: the ULPI interface is in normal sync state; a run is undefined without it */
 #define ULPI_FUNC_CTRL 0x04u
 /* ULPI function control: XcvrSelect 01 (full speed), TermSelect 0 (no pull-up), OpMode 01 (non-driving), Reset 0, SuspendM 1 */
 #define ULPI_FC_DETACH 0x49u
 #define ULPI_SPINS 1000u
-#define EP_IN_CTRL_MIDI 0x00030000u /* ENDPTSTAT / ENDPTPRIME bits of the IN endpoints 0 and 1: a reply is on its way to the host */
+#define EP_IN_CTRL_MIDI                                                                            \
+    0x00030000u /* ENDPTSTAT / ENDPTPRIME bits of the IN endpoints 0 and 1: a reply is on its way to the host */
 #define FLUSH_EP2 ((1u << 2) | (1u << 18)) /* RX bit 2, TX bit 16 + 2 */
 #define FLUSH_SPINS 20000u
 #define QH_BASE 0x80000000u
@@ -270,7 +273,8 @@ static u32 to_orig, to_due_ms, to_due_set, to_due_at, to_act_at, to_sus, to_sus_
 static u32 to_sw_set, to_sw_at, to_sw_per;
 /* `rec_armed`: a switch of ours was made and the controller has not been seen running since (recovery_tick). `rec_at`, `rec_per`: when it was made, or when a restart was last forced. */
 static volatile u32 rec_armed;
-static u32 rec_at, rec_per, rec_target, rec_count; /* `rec_target`: the port our switch went to; `rec_count`: restarts forced for this switch */
+static u32 rec_at, rec_per, rec_target,
+    rec_count; /* `rec_target`: the port our switch went to; `rec_count`: restarts forced for this switch */
 static volatile u32 to_pend_port;
 static void (*stock_connect)(u32);
 static u32 stock_free; /* the firmware's own free callback of a dTD (+0x38), which ours wraps */
@@ -854,7 +858,8 @@ static u32 buffers_free(void)
  * cf.usb.value.restart_delay down from 30 and restarts at 0). Measured in the emulator on both images: about 1 s (33 ms a tick). That word is the exact answer to "is a restart
  * pending" and does not depend on any clock of ours, so the guard is open only when it is 0 (fw_restart_pending). TO_GUARD_MS is a floor on our own clock from the
  * stamp: it covers the moment between the stamp and the firmware setting the word, and a word that cannot be read. */
-#define TO_GUARD_MS 3500u /* the hold below (2 s) and the host's re-enumeration (1.3 to 1.5 s on macOS, finding 123) before the next switch may run */
+#define TO_GUARD_MS                                                                                \
+    3500u /* the hold below (2 s) and the host's re-enumeration (1.3 to 1.5 s on macOS, finding 123) before the next switch may run */
 #define TO_DELAY_MS                                                                                \
     50u /* a requested switch runs this long after the tick first saw it (the reply is out by then) */
 #define TO_IDLE_MS 30000u  /* no host activity for this long: give back */
@@ -895,9 +900,11 @@ static u32 to_elapsed_ms(u32 since, u32 now, u32 per_s)
  * every switch slower. */
 #define FW_HOLD_TICKS 60u
 #define FW_RESTART_TICKS FW_HOLD_TICKS /* the largest value the counter can have */
-#define HOLD_RESTORE_TICKS 3u          /* the PHY is put back this many ticks (100 ms) before the firmware restarts */
-#define TO_BUSY_MS 300u                /* a switch waits at most this long for a reply on EP0 or EP1 IN */
-#define TO_FORCE_MS 4000u              /* a restart that has not happened this long after a switch is forced (hold 2 s plus margin) */
+#define HOLD_RESTORE_TICKS                                                                         \
+    3u /* the PHY is put back this many ticks (100 ms) before the firmware restarts */
+#define TO_BUSY_MS 300u /* a switch waits at most this long for a reply on EP0 or EP1 IN */
+#define TO_FORCE_MS                                                                                \
+    4000u /* a restart that has not happened this long after a switch is forced (hold 2 s plus margin) */
 
 static u32 fw_restart_pending(void)
 {
@@ -959,7 +966,8 @@ static void sw_stamp(void)
  * list), so it runs in interrupt context, and the stop clears USBINTR: while the controller is stopped it does not run at all. The interrupt mask held during one access keeps
  * it from starting a run between our check and our write while the controller is running. The mask covers one access, with a spin bound of ULPI_SPINS reads for each of
  * the three waits (a run takes a few ULPI clocks of 60 MHz), so a dead PHY clock stalls interrupts for at most about 3 ms. */
-volatile u32 usb_bulk_phy_why; /* why the last ULPI access was refused: 1 not in sync state, 2 an earlier run did not finish, 3 ours did not finish */
+volatile u32
+    usb_bulk_phy_why; /* why the last ULPI access was refused: 1 not in sync state, 2 an earlier run did not finish, 3 ours did not finish */
 
 #define reg32(off) reg_rd(off)
 #define vp_read() reg32(ULPI_VIEWPORT)
@@ -969,7 +977,8 @@ static i32 ulpi_xfer(u32 write, u32 reg, u32 data, u32 *rd)
     u32 i, v, sr = sr_mask();
     i32 r = -1;
     v = vp_read();
-    if ((v & ULPI_SS) == 0u) { /* low power, serial or carkit state: the wake-up operation (RM 24.3.4.12) brings the interface back, a run without it is undefined */
+    if ((v & ULPI_SS) ==
+        0u) { /* low power, serial or carkit state: the wake-up operation (RM 24.3.4.12) brings the interface back, a run without it is undefined */
         USB_REG(ULPI_VIEWPORT) = ULPI_WU; /* port 0 */
         v = vp_read();
         for (i = 0; i < ULPI_SPINS && (v & ULPI_WU) != 0u; i++)
@@ -985,7 +994,8 @@ static i32 ulpi_xfer(u32 write, u32 reg, u32 data, u32 *rd)
         usb_bulk_phy_why = 2u;
         goto out;
     }
-    USB_REG(ULPI_VIEWPORT) = ULPI_RUN | (write ? ULPI_RW : 0u) | (reg << 16) | (data & 0xffu); /* port 0 */
+    USB_REG(ULPI_VIEWPORT) =
+        ULPI_RUN | (write ? ULPI_RW : 0u) | (reg << 16) | (data & 0xffu); /* port 0 */
     v = vp_read();
     for (i = 0; i < ULPI_SPINS && (v & ULPI_RUN) != 0u; i++)
         v = vp_read();
@@ -1028,7 +1038,8 @@ static void hold_begin(void)
     u32 sr = sr_mask();
     volatile u32 *delay = (volatile u32 *)usb_restart_delay;
     u32 d = *delay, stopped = 0;
-    if (d != 0u && d <= FW_STOP_TICKS) { /* the stop has just set it (the tick may have counted a few down) */
+    if (d != 0u &&
+        d <= FW_STOP_TICKS) { /* the stop has just set it (the tick may have counted a few down) */
         *delay = FW_HOLD_TICKS;
         usb_bulk_hold_ticks = FW_HOLD_TICKS;
         hold_on = 1;
@@ -1040,7 +1051,8 @@ static void hold_begin(void)
 #if UB_ULPI_DETACH
     if (stopped) { /* the hold is 2 s: the accesses need no mask around the pair */
         u32 fc = 0, back = 0;
-        if (ulpi_xfer(0, ULPI_FUNC_CTRL, 0, &fc) == 0 && ulpi_xfer(1, ULPI_FUNC_CTRL, ULPI_FC_DETACH, &back) == 0) {
+        if (ulpi_xfer(0, ULPI_FUNC_CTRL, 0, &fc) == 0 &&
+            ulpi_xfer(1, ULPI_FUNC_CTRL, ULPI_FC_DETACH, &back) == 0) {
             phy_saved = fc;
             phy_parked = 1;
         } else {
@@ -1062,7 +1074,8 @@ static void hold_service(void)
     d = *(volatile u32 *)usb_restart_delay;
     rs = (reg32(USBCMD) & USBCMD_RS) != 0u;
     sr_restore(sr);
-    if (phy_parked && (rs || d <= HOLD_RESTORE_TICKS)) { /* d == 0: the restart did not run (no VBUS) */
+    if (phy_parked &&
+        (rs || d <= HOLD_RESTORE_TICKS)) { /* d == 0: the restart did not run (no VBUS) */
         u32 fc = 0, junk = 0;
         i32 ok = 0;
         if (rs) {
@@ -1436,7 +1449,7 @@ i32 usb_bulk_enable(i32 io_id)
     ok = sw_guard_open();
     if (ok && restart_due) {
         restart_due = 0;
-        sw_stamp();   /* the stop and restart below are a switch */
+        sw_stamp(); /* the stop and restart below are a switch */
         rec_target = PORT_ENTRY;
         to_quiet = 1; /* the stop runs our disconnect callback: not a host leaving */
     } else if (ok) {

@@ -642,7 +642,7 @@ for (const device of DEVICES) {
         const fcBefore = parseInt(before.regs.slice(FC * 2, FC * 2 + 2), 16);
         const s0 = await sym('usb_bulk_switches');
         expect(await takeover(0), 'takeover').toBe(0);
-        const writes = (seen: { e: PhyEvent }[]) => seen.filter((x) => x.e.w !== undefined);
+        const writes = (seen: { t: number; e: PhyEvent }[]) => seen.filter((x) => x.e.w !== undefined);
         const first = await watch((seen) => writes(seen).length >= 1, 8000);
         expect(writes(first).map((x) => x.e.w), 'the first PHY write releases the line: function control, non-driving, no termination').toEqual([[FC, 0x49]]);
         expect(await port(), 'the switch ran').toBe(2);
@@ -717,7 +717,7 @@ for (const device of DEVICES) {
       const rt = await boot('echo-hold-late', true);
       await enabled(rt);
       const { setPort, port, takeover, run } = takeoverKit(rt);
-      const { sym, watch, untilPort } = phyKit(rt);
+      const { sym, watch } = phyKit(rt);
       try {
         await setPort(5);
         await run(4500);
