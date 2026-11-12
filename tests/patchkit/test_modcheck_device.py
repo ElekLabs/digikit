@@ -28,7 +28,7 @@ def test_only_the_nx_graph_test_device_target_declares_device_acceptance(
     }
     monkeypatch.setattr(nx_graph, "nx_graph", lambda: graph)
     assert pk_modcheck.own_device_targets("owned/effect") == [
-        "owned/effect:test-device"
+        "owned/effect:test-device-all"
     ]
     assert pk_modcheck.own_device_targets("other/effect") == []
     assert pk_modcheck.own_device_targets("missing/effect") == []
