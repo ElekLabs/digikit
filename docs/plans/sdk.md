@@ -128,7 +128,7 @@ A module reaches the device through named imports, grouped by service in `sdk.to
 - A service with per-module state, or one that may be absent, has a handle opened in `init`: `dk_settings_open`, `dk_files_open`,
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
-  code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the first `_open` import that is bound to its stub as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
+  code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
 
 ```toml
@@ -474,7 +474,7 @@ What shipped, in three steps on `lane/sdk-design`:
 - **S2b-1, the new contract beside the old one.** The entry type is `dk_module_def` and the constant `dk_module` (a typedef and an object of one name share a namespace in
   C, so `const dk_module dk_module` does not compile). The imports got `service`, `since`, `context` and `sig`; `dk_module_ctx` and the handle types are opaque; the
   providers (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`) export the new names; a per-module `tick` runs once per UI pass; the loader binds a stub for an
-  absent provider and records the provider of the first `_open` import that is bound to its stub as the module's need when `init` returns `DK_E_MISSING`.
+  absent provider and records the provider of the last `_open` stub that answered `DK_E_MISSING` during `init` as the module's need when `init` returns `DK_E_MISSING`.
 - **S2b-2, migration.** The five tools, `shot` and its picker, the chooser, the C fixtures, the two Rust fixtures and the `tool` template moved to `dk_module` and the named
   imports. The UI calls take the `dk_ui *` handle (`dk_ui_menu_new`, `dk_ui_toast`, `dk_ui_confirm`, `dk_ui_choice`, `dk_ui_tick`). The tests of the Api mechanism itself were
   rewritten as tests of the version refusal (a module that declares a newer api minor, or major 1, gets `E_CONTRACT`) and of a missing service. These test changes get an

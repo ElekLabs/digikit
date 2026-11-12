@@ -205,7 +205,6 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         return E_FORMAT;
     }
     // imports: every name must be in the runtime's table
-    STUB_NEEDS = [0; NEEDS_LEN];
     let mut import_addrs = [0u32; 64];
     i = 0;
     while i < import_n as usize {
@@ -225,14 +224,6 @@ unsafe fn load_inner(path: *const u8) -> i32 {
                 }
             }
             return E_IMPORT;
-        }
-        if let (Some(n), true) = (crate::import_stub_provider(p), STUB_NEEDS[0] == 0) {
-            let b = n.as_bytes();
-            let mut k = 0;
-            while k < b.len() && k < NEEDS_LEN {
-                STUB_NEEDS[k] = b[k];
-                k += 1;
-            }
         }
         import_addrs[i] = a;
         i += 1;
@@ -402,12 +393,13 @@ unsafe fn complete(rec: usize, reg: *const u8, reg_size: u32, init: u32, tick: u
     if init != 0 {
         let call: unsafe extern "C" fn(*const Ctx) -> i32 = core::mem::transmute(init as usize);
         let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
+        CALLED_NEED = [0; NEEDS_LEN];
         let r = crate::dlog::call_init(rec as usize, call, ctx);
         if r != 0 {
-            // a service accessor whose provider is not in the image answered DK_E_MISSING: the boot shows the provider as the module's need
-            let missing = r == E_MISSING && STUB_NEEDS[0] != 0;
+            // the last service accessor whose provider is not in the image answered DK_E_MISSING: the boot shows the provider as the module's need
+            let missing = r == E_MISSING && CALLED_NEED[0] != 0;
             if missing && MISSING[0] == 0 {
-                MISSING = STUB_NEEDS;
+                MISSING = CALLED_NEED;
             }
             crate::intro::discard(rec);
             let held = !crate::files::retire(rec) | !retire_sdk(rec);
@@ -441,9 +433,26 @@ pub static mut EARLY: bool = false;
 /// The name of the missing module of the last load that failed with E_IMPORT (`import_needs`), NUL padded; empty when none. The boot clears it
 /// before each load and takes it after.
 pub static mut MISSING: [u8; NEEDS_LEN] = [0; NEEDS_LEN];
-/// The provider of the first `_open` import of the module being loaded that is bound to its stub (`import_stub_provider`), NUL padded; empty when none.
+/// The provider of the last `_open` stub that answered DK_E_MISSING since the clear before `init` (`stub_missing`), NUL padded; empty when none.
 /// When `init` returns DK_E_MISSING, `MISSING` takes it and the load fails with E_IMPORT, as for an unresolved import.
-static mut STUB_NEEDS: [u8; NEEDS_LEN] = [0; NEEDS_LEN];
+static mut CALLED_NEED: [u8; NEEDS_LEN] = [0; NEEDS_LEN];
+
+/// Called by the stub of an absent service's `_open`: records `provider` (`core/usb-bulk` becomes `usb-bulk`) as the need, replacing an earlier one.
+pub fn stub_missing(provider: &'static str) {
+    let n = match provider.rfind('/') {
+        Some(at) => &provider[at + 1..],
+        None => provider,
+    };
+    let b = n.as_bytes();
+    unsafe {
+        CALLED_NEED = [0; NEEDS_LEN];
+        let mut k = 0;
+        while k < b.len() && k < NEEDS_LEN {
+            CALLED_NEED[k] = b[k];
+            k += 1;
+        }
+    }
+}
 /// The selection index of the module being loaded by the boot hook (`u32::MAX`: none).
 pub static mut BOOT_IDX: u32 = u32::MAX;
 

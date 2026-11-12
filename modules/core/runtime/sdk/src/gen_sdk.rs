@@ -785,7 +785,7 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_ui_choice(_a0: *mut u8, _a1: *const u8, _a2: *const u8, _a3: i32, _a4: Option<UiChoiceFn>, _a5: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_toast(_a0: *mut u8, _a1: *const u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_tick(_a0: *mut u8, _a1: Option<UiTickFn>, _a2: *mut u8, _a3: u32) -> i32 { -1 as _ }
-                pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing("core/ui"); -73 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_open(_a0: *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_close(_a0: *mut u8) { }
                 pub unsafe extern "C" fn dk_ui_menu_select(_a0: *mut u8, _a1: i32) { }
@@ -798,10 +798,10 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_ui_menu_add_value(_a0: *mut u8, _a1: *const u8, _a2: *mut i32, _a3: i32, _a4: i32, _a5: Option<UiActionFn>, _a6: *mut u8) { }
                 pub unsafe extern "C" fn dk_ui_menu_check(_a0: *mut u8, _a1: i32, _a2: i32) { }
                 pub unsafe extern "C" fn dk_ui_menu_checked(_a0: *const u8, _a1: i32) -> i32 { 0 as _ }
-                pub unsafe extern "C" fn dk_input_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_input_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing("core/input"); -73 as _ }
                 pub unsafe extern "C" fn dk_input_key(_a0: *mut u8, _a1: u32, _a2: u32) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_input_turn(_a0: *mut u8, _a1: u32, _a2: i32) -> i32 { -73 as _ }
-                pub unsafe extern "C" fn dk_usb_bulk_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_usb_bulk_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing("core/usb-bulk"); -73 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_enable(_a0: *mut u8, _a1: i32) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_disable(_a0: *mut u8, _a1: i32) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_take(_a0: *mut u8, _a1: *mut *mut u8, _a2: *mut u32) -> i32 { -73 as _ }
@@ -811,9 +811,9 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_usb_bulk_takeover(_a0: *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_giveback(_a0: *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_ring(_a0: *mut u8, _a1: i32) -> i32 { 0 as _ }
-                pub unsafe extern "C" fn dk_dsp_link_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_dsp_link_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing("core/dsp-link"); -73 as _ }
                 pub unsafe extern "C" fn dk_dsp_link_set_tick(_a0: *mut u8, _a1: *mut u8) -> i32 { -73 as _ }
-                pub unsafe extern "C" fn dk_sdhc_large_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_sdhc_large_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing("core/sdhc-large"); -73 as _ }
                 pub unsafe extern "C" fn dk_sdhc_large_ctl(_a0: *mut u8, _a1: u32, _a2: u32) -> u32 { 0 as _ }
             }
 

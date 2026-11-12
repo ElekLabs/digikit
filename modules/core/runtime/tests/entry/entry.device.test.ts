@@ -9,7 +9,7 @@ import { installModule, moduleArtifact } from '@digi/regression/runtime/install.
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { E_SET_NOKEY } from '@digi/regression/runtime/project-kit.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { apiContract, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
+import { apiContract, linkedApiMinor, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
 import { pollEmulated, waitEmulated, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
@@ -82,7 +82,7 @@ runtimeTests('a module of the new entry point loads, ticks and finds an optional
 
 /**
  * Version refusal. The packer writes the api contract (major 2) and the newest api minor its imports need (`since` in sdk/sdk.toml) into the header
- * (test/entry-demo: 2.11). A copy that declares an api minor above the runtime's (0xff), and one that declares major 1 (the Api table of the earlier runtimes),
+ * (of the imports test/entry-demo links). A copy that declares an api minor above the runtime's (0xff), and one that declares major 1 (the Api table of the earlier runtimes),
  * each with the sha256 made right again so that only the version is wrong, are refused with E_CONTRACT and the module list shows no second entry; the file
  * with the real version loads after them.
  */
@@ -91,9 +91,9 @@ async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<vo
   await expectRuntimeReady(session);
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'entry-version'), ['DKRT_BOOT']);
   const good = fs.readFileSync(moduleArtifact(device, 'test/entry-demo'));
-  const [apiMajor, apiMinor] = apiContract();
+  const [apiMajor] = apiContract();
   expect(good[0x38], 'the packer writes the api major of sdk/sdk.toml').toBe(apiMajor);
-  expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(apiMinor);
+  expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(linkedApiMinor(good));
   const withVersion = (major: number, minor: number): Buffer => {
     const file = Buffer.from(good);
     file[0x38] = major;

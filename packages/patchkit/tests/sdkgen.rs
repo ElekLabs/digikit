@@ -171,10 +171,13 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert!(h.contains(
         "Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING."
     ));
-    // a module that is not in the image gives DK_E_MISSING (E_MISSING of [load.status]) from `_open`; a void call does nothing
+    // a module that is not in the image gives DK_E_MISSING (E_MISSING of [load.status]) from `_open`; the accessor's stub records its provider as the module's need before it returns DK_E_MISSING; a void call does nothing
     assert!(rs.contains(
-        "pub unsafe extern \"C\" fn dk_usb_bulk_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }"
+        "pub unsafe extern \"C\" fn dk_usb_bulk_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing(\"core/usb-bulk\"); -73 as _ }"
     ));
+    assert!(
+        rs.contains("pub unsafe extern \"C\" fn dk_ui_menu_open(_a0: *mut u8) -> i32 { -73 as _ }")
+    );
     assert!(rs.contains("pub unsafe extern \"C\" fn dk_ui_menu_close(_a0: *mut u8) { }"));
     // the Api table is gone: no generated header of it, no `Api` struct
     assert!(!files.iter().any(|f| f.0.ends_with("gen/api.h")));

@@ -1895,6 +1895,16 @@ fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
         };
         let body = if a == "void" {
             String::new()
+        } else if a == "missing"
+            && im
+                .service
+                .as_ref()
+                .is_some_and(|service| im.name == format!("dk_{}_open", service))
+        {
+            format!(
+                " crate::loader::stub_missing({:?}); {missing} as _",
+                im.requires.as_deref().unwrap_or("")
+            )
         } else if a == "missing" {
             format!(" {missing} as _")
         } else {
