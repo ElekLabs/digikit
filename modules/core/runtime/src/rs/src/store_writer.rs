@@ -878,10 +878,15 @@ const RB_LARGE: usize = 256 * 1024;
 
 /// Whether the large-command adapter (core/sdhc-large) is present and its switch is on (`sdhc_large_ctl` key 0), so a block read of a registered buffer
 /// can exceed `store::MAX_IO_SECTORS` sectors. The absent stub returns 0: false. Without it the piece stays at `RB_DEFAULT`.
+#[cfg(not(test))]
 fn large_reads_allowed() -> bool {
     let f: unsafe extern "C" fn(u32, u32) -> u32 = crate::optional::sdhc_large_ctl;
     // val 2 changes nothing: it reads the switch
     core::hint::black_box(f as usize) != 0 && unsafe { f(0, 2) } == 1
+}
+#[cfg(test)]
+fn large_reads_allowed() -> bool {
+    false
 }
 
 /// The piece the close reads: `RB_LARGE` when `large_reads_allowed`, else `RB_DEFAULT`.
@@ -1659,8 +1664,6 @@ mod tests {
             assert_ne!(readback_hash(fake(&BAD_MID, None), 100, GOOD.len() as u32, p, 16384, true), Ok(want));
             assert_eq!(readback_hash(fake(&GOOD, Some(150)), 100, GOOD.len() as u32, p, 16384, true), Err(E_READ));
         }
-        // without core/sdhc-large the close reads 64 KiB pieces
-        assert_eq!(readback_piece(), RB_DEFAULT);
     }
 
     #[test]

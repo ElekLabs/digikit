@@ -565,12 +565,16 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
             if dev.short == "dt2" || set == "emulator" {
                 want.push("core/sample-pool");
             }
-            // the flashed set carries the fast-transfer adapters, inert until usb-fast asks: USB bulk on both devices, +Drive writes on the Digitakt II
+            // the flashed sets carry the fast-transfer adapters, inert until usb-fast asks: USB bulk on both devices, +Drive writes on the Digitakt II;
+            // core/sdhc-large (large card commands for registered buffers) is in every flashed set
             if set == "device" {
                 want.push("core/usb-bulk");
                 if dev.short == "dt2" {
                     want.push("core/plusdrive-write");
                 }
+            }
+            if set.starts_with("device") {
+                want.push("core/sdhc-large");
             }
             want.sort();
             assert_eq!(all, want, "{} set {set}", dev.short);
