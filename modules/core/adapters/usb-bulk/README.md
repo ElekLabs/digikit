@@ -11,7 +11,7 @@ section 4; facts: `docs/findings/42-usb-transfer-routes.md` section 4. EP2 IN ru
   switch is settling; bit 2 of `usb_bulk_state` shows the wrong mode live. While enabled, the adapter wakes the module's job four times a second (a timer for the module).
 - **Take-over** (`docs/plans/usb-fast-takeover.md`): `usb_bulk_takeover` records the original port (USB AUDIO/MIDI, port 5) and a request; `usb_bulk_tick` (UI task, on the runtime's
   `dkrt_poll_add` list from the first take-over call on, also while bulk is not enabled) calls the firmware's mode switch (`cf.usb.fn.mode_switch`) with port 2 at least 50 ms
-  later. `usb_bulk_giveback` and the automatic give-back (the disconnect callback, a bus suspend of 0.5 s, 30 s without a transfer or renew) switch back the same way. Refused in
+  later. `usb_bulk_giveback` and the automatic give-back (the disconnect callback, a bus suspend of 0.5 s, 30 s without a transfer or renew) switch back the same way. After each of these switches the adapter holds the firmware's restart for 2 s (counter 60 instead of 30), releases the PHY's line while the controller is stopped (ULPI function control through ULPI_VIEWPORT, written back before the restart; `UB_ULPI_DETACH 0` turns it off), waits for a reply on EP0 or EP1 IN before it switches and 3.5 s between switches, and forces the firmware's restart when USBCMD.RS is still clear 4 s after a switch with VBUS present (`usb_bulk_forced_restarts`). Facts and reasons: `docs/findings/123-usb-takeover.md`. Refused in
   Overbridge. A port change by another route drops the state without a switch. The USB CONFIG setting byte is never written (test: `cf.usb.value.config_mode`). Bit 3 of the state word.
 - **Anchors** (`devices/fw/usb.toml`): the port table, the active port, the USB CONFIG setting byte, the firmware's restart delay counter, connect, disconnect, queue, cancel, dTD allocation, stop, restart and the mode switch.
 - **Receive**: eight 16 KiB buffers (128 KiB: two 64 KiB frames of the usb-fast protocol, so the next frame arrives while the CPU writes the last one; four 4 KiB pages each: every dTD names all five page pointers) in the uncached alias of DDR, one dTD each on EP2 OUT.
@@ -19,5 +19,5 @@ section 4; facts: `docs/findings/42-usb-transfer-routes.md` section 4. EP2 IN ru
   gets NAK. **Send**: the bytes are copied into one of two slots and queued on EP2 IN.
 - **Reset**: the connect and disconnect callbacks cancel both EP2 queues with a bounded flush (the stock disconnect polls without a bound), drop buffers
   that were full and not taken, and change the reset count of `usb_bulk_state`.
-- **Emulator**: the controller is not modelled. `usb.bulk.in` and `usb.bulk.out` (`docs/CONTROL.md`) complete the dTDs through the guest's own callbacks.
+- **Emulator**: the controller is not modelled, except that ULPI_VIEWPORT completes at once and `usb.phy` (`docs/CONTROL.md`) lists the PHY accesses and USBCMD.RS changes. `usb.bulk.in` and `usb.bulk.out` (`docs/CONTROL.md`) complete the dTDs through the guest's own callbacks.
   Test: `tests/usb-bulk.device.test.ts` with the fixture `test/usb-echo`.

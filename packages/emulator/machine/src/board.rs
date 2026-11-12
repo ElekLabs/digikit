@@ -138,6 +138,28 @@ impl Board {
     }
 }
 
+/// USB ULPI_VIEWPORT and USBCMD (RM 24.3.4.12, 24.3.4.1).
+const USB_REGS: u32 = 0xfc0b_0000;
+const USB_USBCMD: u32 = 0xfc0b_0140;
+const USB_ULPI_VIEWPORT: u32 = 0xfc0b_0170;
+const USB_OTGSC: u32 = 0xfc0b_01a4;
+const OTGSC_BSV: u32 = 1 << 11;
+/// The log is bounded: a guest that polls the viewport for ever must not grow it without limit.
+const USB_PHY_LOG_MAX: usize = 4096;
+
+/// What the guest did at the USB controller's PHY interface, in order: a ULPI register write or read through the viewport, and every change of USBCMD.RS.
+/// The model keeps only what the RM states: the viewport completes a run at once (RUN clears, a read puts the register in DATRD) and reports the normal
+/// sync state (ULPI_SS); the PHY registers are plain storage. No PHY behaviour (set and clear aliases, resets, line states) is modelled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsbPhyEvent {
+    /// A viewport write: ULPI register address and data.
+    PhyWrite { reg: u8, value: u8 },
+    /// A viewport read: address and the value returned.
+    PhyRead { reg: u8, value: u8 },
+    /// USBCMD.RS changed to this value.
+    RunStop(bool),
+}
+
 /// Caller-mapped 1 MiB RAM pages.  The tagged 4096-entry table is indexed by
 /// address bits 31:20, so ordinary 1/2/4-byte RAM accesses take one table
 /// lookup.  MMIO is always dispatched before this table.
@@ -172,6 +194,11 @@ pub struct Board {
     /// batch plain RAM instructions until this changes.
     mmio_epoch: u64,
     last_epoch_addr: u32,
+    /// The ULPI PHY behind the USB controller's ULPI_VIEWPORT: its register file and the order of what the guest did to it (see `UsbPhyEvent`).
+    usb_phy: Box<[u8; 256]>,
+    usb_phy_log: Vec<UsbPhyEvent>,
+    /// VBUS present, as OTGSC.BSV shows it: a board input, off until a test or a host model sets it.
+    usb_vbus: bool,
     /// Opt-in only: ordinary long-running execution must not retain every Bus access.
     capture_guest_accesses: bool,
     guest_reads: Vec<GuestAccess>,
@@ -428,6 +455,9 @@ impl Board {
             sdram_fast: true,
             mmio_epoch: 0,
             last_epoch_addr: 0,
+            usb_phy: Box::new([0; 256]),
+            usb_phy_log: vec![],
+            usb_vbus: false,
             capture_guest_accesses: false,
             guest_reads: vec![],
             guest_writes: vec![],
@@ -1577,12 +1607,86 @@ impl Board {
         bits
     }
 
+    /// A 32-bit guest write to the USB controller registers that the PHY log or the viewport model sees. Returns the value to store.
+    fn usb_phy_write(&mut self, addr: u32, value: u32) -> u32 {
+        const WAKE: u32 = 1 << 31;
+        const RUN: u32 = 1 << 30;
+        const WRITE: u32 = 1 << 29;
+        match addr {
+            USB_USBCMD => {
+                let before = self.read_inner_unforced(addr, 4).unwrap_or(0) & 1;
+                if before != value & 1 {
+                    self.usb_phy_note(UsbPhyEvent::RunStop(value & 1 != 0));
+                }
+                value
+            }
+            USB_ULPI_VIEWPORT => {
+                let mut v = value & !(WAKE | RUN);
+                if value & RUN != 0 {
+                    let reg = (value >> 16) as u8;
+                    if value & WRITE != 0 {
+                        let data = value as u8;
+                        self.usb_phy[usize::from(reg)] = data;
+                        self.usb_phy_note(UsbPhyEvent::PhyWrite { reg, value: data });
+                    } else {
+                        let data = self.usb_phy[usize::from(reg)];
+                        v = (v & !0xff00) | (u32::from(data) << 8);
+                        self.usb_phy_note(UsbPhyEvent::PhyRead { reg, value: data });
+                    }
+                }
+                v
+            }
+            _ => value,
+        }
+    }
+
+    fn usb_phy_note(&mut self, event: UsbPhyEvent) {
+        if self.usb_phy_log.len() < USB_PHY_LOG_MAX {
+            self.usb_phy_log.push(event);
+        }
+    }
+
+    /// Set or clear VBUS (OTGSC.BSV reads 1 while set).
+    pub fn set_usb_vbus(&mut self, present: bool) {
+        self.usb_vbus = present;
+    }
+
+    /// The PHY events since the last call (oldest first), and the PHY register file.
+    pub fn usb_phy_take(&mut self) -> (Vec<UsbPhyEvent>, Vec<u8>) {
+        (std::mem::take(&mut self.usb_phy_log), self.usb_phy.to_vec())
+    }
+
+    /// The USB controller's registers are 32 bits wide; the model answers every access width from the 32-bit value. A byte or word read is the big-endian lane
+    /// of the long read (`Some`); an access that crosses a register boundary is left to the plain RAM path.
+    fn usb_lane(addr: u32, size: u8) -> Option<(u32, u32)> {
+        let offset = addr & 3;
+        if size == 4
+            || !(USB_REGS..USB_REGS + 0x200).contains(&addr)
+            || offset + u32::from(size) > 4
+        {
+            return None;
+        }
+        Some((addr & !3, 8 * (4 - u32::from(size) - offset)))
+    }
+
     #[inline(never)]
     fn read_inner_slow(&mut self, addr: u32, size: u8) -> Result<u32, BusError> {
         const ENDPTSTAT: u32 = 0xfc0b_01b8;
+        if let Some((base, shift)) = Self::usb_lane(addr, size) {
+            let long = self.read_inner_slow(base, 4)?;
+            return Ok((long >> shift) & ((1u32 << (8 * u32::from(size))) - 1));
+        }
         if addr == ENDPTSTAT && size == 4 {
             let stored = self.read_inner_unforced(addr, 4)?;
             return Ok((stored & !((1 << 2) | (1 << 18))) | self.usb_ep2_status());
+        }
+        if addr == USB_OTGSC && size == 4 && self.usb_vbus {
+            let stored = self.read_inner_unforced(addr, 4)?;
+            return Ok(stored | OTGSC_BSV);
+        }
+        if addr == USB_ULPI_VIEWPORT && size == 4 {
+            let stored = self.read_inner_unforced(addr, 4)?;
+            return Ok(stored | (1 << 27)); // ULPI_SS: the PHY is in normal sync state
         }
         if let Some((mut value, prefix)) = self.forced_prefix(addr, size) {
             for offset in prefix..size {
@@ -1819,6 +1923,20 @@ impl Board {
             if !self.ensure_oracle_sdram(addr, size) {
                 return Err(BoardWriteError::Bus(Self::bus_error(addr, true)));
             }
+            let (addr, size, value) = match Self::usb_lane(addr, size) {
+                // a byte or word write to a register with side effects: merge the lane into the stored long word and write that
+                Some((base, shift)) if matches!(base, USB_USBCMD | USB_ULPI_VIEWPORT) => {
+                    let mask = ((1u32 << (8 * u32::from(size))) - 1) << shift;
+                    let old = self.read_inner_unforced(base, 4).unwrap_or(0);
+                    (base, 4, (old & !mask) | ((value << shift) & mask))
+                }
+                _ => (addr, size, value),
+            };
+            let value = if size == 4 {
+                self.usb_phy_write(addr, value)
+            } else {
+                value
+            };
             let wrote = self
                 .ram_write(addr, size, value)
                 .then_some(())
@@ -2117,6 +2235,95 @@ mod tests {
             ]
         );
         assert!(board.take_guest_accesses().is_empty());
+    }
+
+    #[test]
+    fn ulpi_viewport_completes_runs_and_logs_the_phy_events_in_order() {
+        let mut b = Board::new(
+            Card::default(),
+            SemaphoreAddresses::default(),
+            CompletionPolicy::Oracle,
+        );
+        b.map_ram_page(USB_USBCMD & !PAGE_MASK).unwrap();
+        assert_ne!(
+            b.read32(USB_ULPI_VIEWPORT).unwrap() & (1 << 27),
+            0,
+            "normal sync state"
+        );
+        b.write32(USB_USBCMD, 1).unwrap();
+        b.write32(USB_ULPI_VIEWPORT, (1 << 30) | (1 << 29) | (4 << 16) | 0x49)
+            .unwrap();
+        assert_eq!(
+            b.read32(USB_ULPI_VIEWPORT).unwrap() & (1 << 30),
+            0,
+            "RUN clears"
+        );
+        b.write32(USB_ULPI_VIEWPORT, (1 << 30) | (4 << 16)).unwrap();
+        assert_eq!((b.read32(USB_ULPI_VIEWPORT).unwrap() >> 8) & 0xff, 0x49);
+        b.write32(USB_USBCMD, 0).unwrap();
+        b.write32(USB_USBCMD, 0).unwrap(); // no change: no event
+        let (events, regs) = b.usb_phy_take();
+        assert_eq!(
+            events,
+            [
+                UsbPhyEvent::RunStop(true),
+                UsbPhyEvent::PhyWrite {
+                    reg: 4,
+                    value: 0x49
+                },
+                UsbPhyEvent::PhyRead {
+                    reg: 4,
+                    value: 0x49
+                },
+                UsbPhyEvent::RunStop(false),
+            ]
+        );
+        assert_eq!(regs[4], 0x49);
+        assert!(b.usb_phy_take().0.is_empty());
+        assert_eq!(
+            b.read32(USB_OTGSC).unwrap() & OTGSC_BSV,
+            0,
+            "no VBUS by default"
+        );
+        b.set_usb_vbus(true);
+        assert_ne!(b.read32(USB_OTGSC).unwrap() & OTGSC_BSV, 0);
+    }
+
+    #[test]
+    fn usb_registers_answer_every_access_width_from_the_long_value() {
+        let mut b = Board::new(
+            Card::default(),
+            SemaphoreAddresses::default(),
+            CompletionPolicy::Oracle,
+        );
+        b.map_ram_page(USB_USBCMD & !PAGE_MASK).unwrap();
+        b.set_usb_vbus(true);
+        // OTGSC.BSV (bit 11) is bit 3 of byte 2 (big endian): the byte, the word and the long agree
+        assert_eq!(b.read8(USB_OTGSC + 2).unwrap() & 0x08, 0x08);
+        assert_eq!(b.read16(USB_OTGSC + 2).unwrap() & 0x0800, 0x0800);
+        assert_ne!(b.read32(USB_OTGSC).unwrap() & OTGSC_BSV, 0);
+        // ULPI_SS (bit 27) is bit 3 of byte 0
+        assert_eq!(b.read8(USB_ULPI_VIEWPORT).unwrap() & 0x08, 0x08);
+        // a byte write of USBCMD.RS (byte 3) is logged like a long write and keeps the other bytes
+        b.write32(USB_USBCMD, 0x0001_0000).unwrap();
+        b.write8(USB_USBCMD + 3, 1).unwrap();
+        assert_eq!(b.read32(USB_USBCMD).unwrap(), 0x0001_0001);
+        // a byte write of the viewport that sets RUN (byte 0, bit 6) with the address and data already stored runs the access
+        b.write32(USB_ULPI_VIEWPORT, (4 << 16) | 0x49).unwrap();
+        b.write8(USB_ULPI_VIEWPORT, 0x60).unwrap(); // RUN | RW
+        assert_eq!(b.read8(USB_ULPI_VIEWPORT).unwrap() & 0x40, 0, "RUN clears");
+        let (events, regs) = b.usb_phy_take();
+        assert_eq!(regs[4], 0x49);
+        assert_eq!(
+            events,
+            [
+                UsbPhyEvent::RunStop(true),
+                UsbPhyEvent::PhyWrite {
+                    reg: 4,
+                    value: 0x49
+                }
+            ]
+        );
     }
 
     #[test]
