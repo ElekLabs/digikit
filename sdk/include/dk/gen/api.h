@@ -31,6 +31,9 @@ typedef int32_t dk_job_step(uint8_t *ctx);
 /* The function type `service_cmd` of [api.types]. */
 typedef int32_t dk_service_cmd(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *out);
 
+/* The function type `ui_act` of [api.types]. */
+typedef void dk_ui_act(void *ctx, int32_t arg);
+
 /* The table `dkm_init` receives. Appended-to only; check `size`. */
 typedef struct dk_api {
     uint32_t version;                        /* Version of the `Api` table layout (`API_VERSION`). */
@@ -86,7 +89,7 @@ typedef struct dk_api {
     void (*hash32_init)(uint8_t *state);     /* (api 1.10) Start the file hash (the Elektron +Drive content hash, dk/platform/hash32.h) in the caller's 28-byte `dk_hash32`. */
     void (*hash32_update)(uint8_t *state, const uint8_t *p, uint32_t n); /* (api 1.10) Feed `n` bytes. */
     uint32_t (*hash32_finish)(uint8_t *state); /* (api 1.10) The file hash `hash|1`: the value the store keeps (4 bytes big-endian in a table slot). The state is spent. */
-    uint32_t (*speed_flags)(uint32_t clear, uint32_t set); /* (api 1.11) The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `usb_bulk_ring`, bit 3 `sdhc_large_ctl`), not in this word. Any task. */
+    uint32_t (*speed_flags)(uint32_t clear, uint32_t set); /* (api 1.12) The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `usb_bulk_ring`, bit 3 `sdhc_large_ctl`), not in this word. Any task. */
 } dk_api;
 
 #if UINTPTR_MAX == 0xffffffffu
@@ -238,6 +241,6 @@ void dkm_slot_5(const dk_api *api);
 void dkm_slot_6(const dk_api *api);
 void dkm_slot_7(const dk_api *api);
 
-#define DK_API_MINOR 11
+#define DK_API_MINOR 12
 
 #endif /* DK_GEN_API_H */
