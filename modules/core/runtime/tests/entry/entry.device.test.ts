@@ -9,7 +9,7 @@ import { installModule, moduleArtifact } from '@digi/regression/runtime/install.
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { E_SET_NOKEY } from '@digi/regression/runtime/project-kit.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
+import { apiContract, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
 import { pollEmulated, waitEmulated, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
@@ -91,8 +91,9 @@ async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<vo
   await expectRuntimeReady(session);
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'entry-version'), ['DKRT_BOOT']);
   const good = fs.readFileSync(moduleArtifact(device, 'test/entry-demo'));
-  expect(good[0x38], 'the packer writes api major 2').toBe(2);
-  expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(11);
+  const [apiMajor, apiMinor] = apiContract();
+  expect(good[0x38], 'the packer writes the api major of sdk/sdk.toml').toBe(apiMajor);
+  expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(apiMinor);
   const withVersion = (major: number, minor: number): Buffer => {
     const file = Buffer.from(good);
     file[0x38] = major;

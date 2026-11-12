@@ -84,6 +84,7 @@ pub unsafe fn poll_state() -> (u32, u32) {
 }
 pub unsafe fn fini(rec: usize, addr: u32) {
     assert_eq!((rec, addr), (0, 1));
+    assert!(!entry::has_tick(0), "the tick stops before fini");
     assert_eq!(dsp::ds().row_pub[0], 0);
     assert_eq!(dsp::ds().fx_pub[0], 0);
     assert_eq!(dsp::ds().mod_len[0], 256); // invalidated but still owned at fini
@@ -122,6 +123,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     s.modules[0].base = CF;
     s.modules[0].size = 256;
     s.modules[0].fini = 1;
+    entry::publish_tick(0, 0x9000);
     let d = dsp::ds();
     d.phase = if published {
         dsp::PH_ROWS
@@ -184,6 +186,7 @@ fn voice_latch_mask_is_published_before_the_type() {
 unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     let d = dsp::ds();
     assert!(dsp::retained());
+    assert!(!entry::has_tick(0), "teardown stops the tick before fini");
     assert_eq!(d.pending.rec, 0);
     assert_eq!(d.pending.send_buf, pending_buf);
     assert_eq!(d.mod_len[0], 256);
@@ -303,6 +306,7 @@ unsafe fn successful_case(fx: bool, published: bool) {
     seed(Completion::Ack, fx, published, true);
     dsp::step();
     assert!(!dsp::retained());
+    assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
     assert_eq!(dsp::ds().mod_len[0], 0);
     assert_eq!((dsp::ds().row_owner[0], dsp::ds().fx_owner[0]), (0, 0));

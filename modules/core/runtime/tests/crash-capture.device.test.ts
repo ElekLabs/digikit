@@ -77,6 +77,7 @@ cardRigs(
           expect(rec.vector, 'the vector of the exception').toBe(vector);
           expect(rec.module?.index, 'the crash is in the second module').toBe(1);
           expect(rec.module?.name, 'the module has a name').toBeTruthy();
+          expect(rec.module?.phase, 'dyn-crash crashes in its tick (phase 2)').toBe(2);
           expect(rec.regs, 'registers').toHaveLength(16);
           expect(rec.stack, 'stack words').toHaveLength(32);
           expect(rec.tail, "events before the crash from the runtime's small ring").toBeGreaterThanOrEqual(2);

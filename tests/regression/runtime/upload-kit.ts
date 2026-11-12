@@ -39,6 +39,14 @@ export function runtimeVersion(): number {
   return (major! << 16) | (minor! << 8) | patch!;
 }
 
+/** The api contract [major, minor] of sdk/sdk.toml: what a module that links the newest imports writes into its header. */
+export function apiContract(): [number, number] {
+  const toml = parse(fs.readFileSync(path.join(repoRoot(), 'sdk/sdk.toml'), 'utf8')) as {
+    contract: { api: [number, number] };
+  };
+  return toml.contract.api;
+}
+
 // ---- files, the device's LIST and the card ------------------------------------------------------------------------------------------
 
 export const deviceListing = async (dk: DkSession, prefix?: string): Promise<Listing> =>

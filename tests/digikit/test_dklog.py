@@ -202,6 +202,14 @@ def test_the_crash_record_is_rebuilt_from_its_events():
     )
 
 
+def test_the_crash_text_names_the_phase_of_the_module():
+    rec = L.crash_record([ev(1, "BOOT_START"), *crash_events(2), ev(30, "UI_FIRST")])
+    assert "during init" in L.crash_text(rec)
+    rec["module"] = {**rec["module"], "phase": 2}
+    assert L.PHASES[2] == "tick"
+    assert "during tick" in L.crash_text(rec)
+
+
 def test_a_panic_record_is_rebuilt_from_its_events():
     evs = [
         ev(1, "BOOT_START"),
