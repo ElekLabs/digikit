@@ -58,7 +58,7 @@ static u32 bn_mask, bn_mib, bn_phase, bn_running;
 static u32 bn_ms[BN_SLOTS]; /* the last results, in ms, by slot (0 = not run or failed) */
 static u8 *bn_raw, *bn_buf;
 static u32 bn_buf_len;
-static int bn_fw; /* bn_raw came from fw_alloc */
+static int bn_fw; /* bn_raw came from dk_fw_alloc */
 
 /* "bn." name suffix (names are at most 7 chars, so the tag fits 16) */
 static void bn_tag(char *t, const char *name, const char *suffix)
@@ -159,7 +159,7 @@ static void bn_read(const char *name, u32 call, u32 slot)
     u32 t0 = dk_time_blocks();
     while (off < total) {
         u32 n = total - off < call ? total - off : call;
-        i32 r = fw_block_read(sector, n, bn_buf);
+        i32 r = dk_fw_block_read(sector, n, bn_buf);
         if (r != 0) {
             bn_err(name, r);
             return;
@@ -200,7 +200,7 @@ static i32 bn_step(void *arg)
         bn_buf_len = 1u << 20;
         bn_raw = dk_alloc(bn_buf_len + 16u);
         if (!bn_raw) {
-            bn_raw = fw_alloc(bn_buf_len + 16u);
+            bn_raw = dk_fw_alloc(bn_buf_len + 16u);
             bn_fw = bn_raw != 0;
         }
         if (!bn_raw) {
@@ -262,7 +262,7 @@ static i32 bn_step(void *arg)
     if (++bn_phase < BN_PHASES)
         return DK_IO_MORE;
     if (bn_fw)
-        fw_free(bn_raw);
+        dk_fw_free(bn_raw);
     else
         dk_free(bn_raw);
     bn_raw = bn_buf = 0;

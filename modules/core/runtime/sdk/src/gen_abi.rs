@@ -118,7 +118,8 @@ pub struct DkrtStatus {
     /// result of the last load
     pub last_result: i32,
     pub loads: u32,
-    pub slot_calls: u32,
+    /// calls of module ticks
+    pub tick_calls: u32,
     /// STATE_IDLE or STATE_LOADING (a module's DSP code is being sent)
     pub state: u32,
     /// bytes of the DSP area (0: the image has none)
@@ -140,7 +141,7 @@ const _: () = assert!(offset_of!(DkrtStatus, modules) == 28, "DkrtStatus.modules
 const _: () = assert!(offset_of!(DkrtStatus, ticks) == 32, "DkrtStatus.ticks");
 const _: () = assert!(offset_of!(DkrtStatus, last_result) == 36, "DkrtStatus.last_result");
 const _: () = assert!(offset_of!(DkrtStatus, loads) == 40, "DkrtStatus.loads");
-const _: () = assert!(offset_of!(DkrtStatus, slot_calls) == 44, "DkrtStatus.slot_calls");
+const _: () = assert!(offset_of!(DkrtStatus, tick_calls) == 44, "DkrtStatus.tick_calls");
 const _: () = assert!(offset_of!(DkrtStatus, state) == 48, "DkrtStatus.state");
 const _: () = assert!(offset_of!(DkrtStatus, dsp_size) == 52, "DkrtStatus.dsp_size");
 const _: () = assert!(offset_of!(DkrtStatus, dsp_free) == 56, "DkrtStatus.dsp_free");
@@ -275,30 +276,27 @@ pub struct DkrtModule {
     pub version: u32,
     pub base: u32,
     pub size: u32,
-    /// bit n = slot n bound
-    pub slots: u32,
     /// store path the module was loaded from (NUL-terminated, at most 63 bytes kept), for example modules/dyn-demo.dkm
     pub path: [u8; 64],
     /// MOD_LOADED or MOD_LOADING
     pub state: u32,
     /// bytes of the module's range in the DSP area (0: none)
     pub dsp_size: u32,
-    /// address of the module's settings entry point (0: none): dkm_menu(dk_ui_menu *, void *), or menu(dk_module_ctx *, dk_ui_menu *) when ctx is not 0
+    /// address of the module's settings entry point (0: none): menu(dk_module_ctx *ctx, dk_ui_menu *menu)
     pub menu: u32,
-    /// the module's dk_module_ctx (a module of the new entry, dk_module); 0 for a module of the old entry
+    /// the module's dk_module_ctx, the first argument of its init, fini, tick and menu
     pub ctx: u32,
 }
-const _: () = assert!(size_of::<DkrtModule>() == 128, "DkrtModule size");
+const _: () = assert!(size_of::<DkrtModule>() == 124, "DkrtModule size");
 const _: () = assert!(offset_of!(DkrtModule, name) == 0, "DkrtModule.name");
 const _: () = assert!(offset_of!(DkrtModule, version) == 32, "DkrtModule.version");
 const _: () = assert!(offset_of!(DkrtModule, base) == 36, "DkrtModule.base");
 const _: () = assert!(offset_of!(DkrtModule, size) == 40, "DkrtModule.size");
-const _: () = assert!(offset_of!(DkrtModule, slots) == 44, "DkrtModule.slots");
-const _: () = assert!(offset_of!(DkrtModule, path) == 48, "DkrtModule.path");
-const _: () = assert!(offset_of!(DkrtModule, state) == 112, "DkrtModule.state");
-const _: () = assert!(offset_of!(DkrtModule, dsp_size) == 116, "DkrtModule.dsp_size");
-const _: () = assert!(offset_of!(DkrtModule, menu) == 120, "DkrtModule.menu");
-const _: () = assert!(offset_of!(DkrtModule, ctx) == 124, "DkrtModule.ctx");
+const _: () = assert!(offset_of!(DkrtModule, path) == 44, "DkrtModule.path");
+const _: () = assert!(offset_of!(DkrtModule, state) == 108, "DkrtModule.state");
+const _: () = assert!(offset_of!(DkrtModule, dsp_size) == 112, "DkrtModule.dsp_size");
+const _: () = assert!(offset_of!(DkrtModule, menu) == 116, "DkrtModule.menu");
+const _: () = assert!(offset_of!(DkrtModule, ctx) == 120, "DkrtModule.ctx");
 
 /// dkrt_fx result: one effect with a page (FX routing, finding 62 to 65). Routes are bit masks: 1 master, 2 send.
 #[repr(C)]

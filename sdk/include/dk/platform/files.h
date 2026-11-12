@@ -1,6 +1,6 @@
-/* Read-only listing, API contract 1.4. Poll copies one complete owned record;
- * pending/end/error leave output untouched. No source lease/content validation.
- * Acquire client ONLY in init. list copies root-relative path (NUL in 256 bytes;
+/* Listing and writing the digikit store. Listing: `dk_files_open(ctx, &files)` in `init` gives the one `dk_files *` handle of the module; dk_files_list starts
+ * a request and dk_files_poll copies one complete owned record; pending/end/error leave output untouched. No source lease/content validation.
+ * Open the handle ONLY in init. list copies root-relative path (NUL in 256 bytes;
  * empty=root, no slash at edges, empty/dot/dotdot parts or control/DEL bytes).
  * Provider limits may be smaller (store paths <=159 bytes including DN2
  * samples/ prefix; DT2 input directory <=254 bytes before its leading slash).
@@ -10,7 +10,7 @@
  * Callback/context must remain module-owned until teardown quiesces. */
 #ifndef DK_FILES_H
 #define DK_FILES_H
-#include <dk/core/api.h>
+#include <dk/core/module.h>
 #define DK_FILES_SAMPLES 1u
 #define DK_FILES_STORE 2u
 #define DK_FILE_FILE 1u
@@ -40,8 +40,8 @@ typedef struct dk_file_entry {
 _Static_assert(sizeof(dk_file_entry) == 304, "dk_file_entry layout");
 _Static_assert(__builtin_offsetof(dk_file_entry, path) == 48, "dk_file_entry path");
 
-/* Writing and deleting files of the digikit store (api 1.10 as api->file_create and the like, with no handle; since 1.11 the imports dk_files_create, dk_files_write, dk_files_close, dk_files_abort and
- * dk_files_delete, which take the `dk_files *` handle first). This text was <dk/platform/file.h>, which now only includes this header. The roots are those of the listing above.
+/* Writing and deleting files of the digikit store (the imports dk_files_create, dk_files_write, dk_files_close, dk_files_abort and
+ * dk_files_delete, which take the `dk_files *` handle first). The roots are those of the listing above.
  *
  * Only an I/O step (<dk/platform/io.h>, dk_io_post) may call these: the call must be made in the I/O task, by the step. Anywhere else (the UI or MIDI task
  * as well, even while a step waits) they return E_CONTEXT.
@@ -74,7 +74,7 @@ _Static_assert(__builtin_offsetof(dk_file_entry, path) == 48, "dk_file_entry pat
  * Roots (above): DK_FILES_STORE on both devices. DK_FILES_SAMPLES: on the Digitone II the `samples/` folder of the store; on the
  * Digitakt II the stock +Drive, written through the firmware's own file code by the adapter core/plusdrive-write (E_CONTRACT when it is not
  * in the image). On the +Drive: `size` is the sample file's size without the 16 zero bytes that the firmware stores after every file (the
- * adapter writes them); `hash4` and the `hash_out` of dk_files_close are the firmware's hash of the data plus those 16 zeros (hash32_* over both);
+ * adapter writes them); `hash4` and the `hash_out` of dk_files_close are the firmware's hash of the data plus those 16 zeros (dk_hash32_* over both);
  * missing folders of `path` are created; an existing file is E_FILE_IN_USE while the stock firmware has it open; dk_files_close can take seconds
  * for a large file (the firmware reads it back to hash it). The replace is a delete and a rename of a fully written, hashed file: a power cut
  * leaves the old or the new file, and the next boot finishes or drops the half-done step.
@@ -83,9 +83,8 @@ _Static_assert(__builtin_offsetof(dk_file_entry, path) == 48, "dk_file_entry pat
  * (-56), E_WRITE (-57), E_NOFILE (-59), E_NOSTORE (-61), E_INUSE (-62), E_FILE_IN_USE (-71, dk_files_delete: a sample is still loading from the file), and E_STATE (-53), E_OFFSET (-54), E_LENGTH (-55) for a misused handle,
  * offset or length. */
 
-/* The new entry (<dk/core/module.h>): `dk_files_open(ctx, &files)` in `init` gives the one `dk_files *` handle of the module: it takes dk_files_list, dk_files_poll and
-   dk_files_cancel (listing) and dk_files_create, dk_files_write, dk_files_close, dk_files_abort and dk_files_delete (writing) as the first argument. The runtime
-   may ignore the handle in the write calls today; it names the owner. */
+/* The handle takes dk_files_list, dk_files_poll and dk_files_cancel (listing) and dk_files_create, dk_files_write, dk_files_close, dk_files_abort and
+   dk_files_delete (writing) as the first argument. The runtime may ignore the handle in the write calls today; it names the owner. */
 #include <dk/core/status.h>
 
 #define DK_FILE_REPLACE 1u /* dk_files_create flag: replace an existing file atomically */

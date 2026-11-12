@@ -305,7 +305,7 @@ fields = [
     "u32 ticks // UI-loop passes seen",
     "i32 last_result // result of the last load",
     "u32 loads",
-    "u32 slot_calls",
+    "u32 tick_calls // calls of module ticks",
     "u32 state // STATE_IDLE or STATE_LOADING (a module's DSP code is being sent)",
     "u32 dsp_size // bytes of the DSP area (0: the image has none)",
     "u32 dsp_free // bytes of it free",
@@ -382,12 +382,11 @@ fields = [
     "u32 version",
     "u32 base",
     "u32 size",
-    "u32 slots // bit n = slot n bound",
     "u8 path[64] // store path the module was loaded from (NUL-terminated, at most 63 bytes kept), for example modules/dyn-demo.dkm",
     "u32 state // MOD_LOADED or MOD_LOADING",
     "u32 dsp_size // bytes of the module's range in the DSP area (0: none)",
-    "u32 menu // address of the module's settings entry point (0: none): dkm_menu(dk_ui_menu *, void *), or menu(dk_module_ctx *, dk_ui_menu *) when ctx is not 0",
-    "u32 ctx // the module's dk_module_ctx (a module of the new entry, dk_module); 0 for a module of the old entry",
+    "u32 menu // address of the module's settings entry point (0: none): menu(dk_module_ctx *ctx, dk_ui_menu *menu)",
+    "u32 ctx // the module's dk_module_ctx, the first argument of its init, fini, tick and menu",
 ]
 
 [[struct]]

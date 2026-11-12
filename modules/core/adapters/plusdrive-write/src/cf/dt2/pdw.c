@@ -121,7 +121,7 @@ static const u8 zeros[ZERO_TAIL] __attribute__((aligned(16)));
 #if PDW_TRACE
 /* the runtime (dkrt.h) */
 extern u32 dkrt_blocks(void); /* the 1500 Hz block counter: 1 unit = 0.667 ms */
-extern void dkrt_log_ev(u32 kind, u32 flags, const u32 *a);
+extern void dk_log_event(u32 kind, u32 flags, const u32 *a);
 /* sdk.toml [[log.kind]] 14 MOD_LOG: args msg0..msg3 (16 ASCII chars, big-endian words) and value; flags: not an error, level 2 (info) */
 #define PW_KIND_MOD_LOG 14u
 #define PW_FLAGS (2u << 1)
@@ -150,7 +150,7 @@ static void pw_log(const char *tag, u32 value)
         a[i >> 2] |= c << (24u - 8u * (i & 3u));
     }
     a[4] = value;
-    dkrt_log_ev(PW_KIND_MOD_LOG, PW_FLAGS, a);
+    dk_log_event(PW_KIND_MOD_LOG, PW_FLAGS, a);
 }
 
 static void pw_emit(void)

@@ -143,7 +143,7 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
           ? { frame_word: hex8(a[1]!), faults: a[2]!, name_tail: asciiOf(a[3]!) }
           : {
               module: a[0] === NONE ? null : a[0]!,
-              slots_entered: a[1]! & 0xffff,
+              phase: a[1]! & 0xffff,
               boot_was_stable: a[1]! >>> 16 !== 0,
               name: asciiOf(a[2]!, a[3]!, a[4]!),
             };
@@ -269,6 +269,9 @@ export function runtimeEvent(ev: DkLogEvent): RuntimeEvent {
     fields: fieldsOf(ev.kind, ev.args),
   };
 }
+
+/** What the module code was doing at a crash (`dlog::PHASE_*` of the runtime): the low half of the first argument of CRASH_MOD. */
+const CRASH_PHASES: Record<number, string> = { 0: 'no module code', 1: 'init', 2: 'tick', 3: 'fini', 4: 'a callback' };
 
 /** Module record index + 1 -> name, from MOD_LIST events. */
 export function moduleNames(events: DkLogEvent[]): Map<number, string> {
@@ -448,7 +451,7 @@ export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<n
       lines.push(
         m.module === null
           ? `outside any module, '${m.name}'`
-          : `in module '${m.name}' (index ${m.module}); slots entered mask 0x${Number(m.slots_entered).toString(16)}; the boot had ${m.boot_was_stable ? 'already' : 'not yet'} reached its stable period`,
+          : `in module '${m.name}' (index ${m.module}); during ${CRASH_PHASES[Number(m.phase)] ?? `phase ${m.phase}`}; the boot had ${m.boot_was_stable ? 'already' : 'not yet'} reached its stable period`,
       );
     }
     const regs = new Map<string, number>();

@@ -789,13 +789,6 @@ plan.json {}",
                 trace: rest.iter().any(|a| a == "--trace"),
                 stereo: false,
                 gate: false,
-                api_minor: {
-                    let mut newest = 0;
-                    for name in &m.manifest.module.uses_api {
-                        newest = newest.max(patchkit::sdkgen::api_since(name)?);
-                    }
-                    newest
-                },
             };
             // a run-time module: its typed sections, lowered for one device, are the `register` records
             let mut dsp: Vec<u8> = vec![];
@@ -966,31 +959,30 @@ plan.json {}",
                 d.sha256
             );
             println!("size     {out}: {}", d.size_summary(file.len()));
-            if d.entry {
-                // the entry point and what the module needs of the runtime, from the imports it links (docs/plans/sdk.md section 5.1)
-                let at = |v: Option<u32>| v.map_or("-".to_string(), |o| format!("{o:#x}"));
-                println!(
-                    "entry    {out}: dk_module init {} fini {} tick {} menu {}; needs api 1.{}",
-                    at(d.init),
-                    at(d.fini),
-                    at(d.tick),
-                    at(d.menu),
-                    file[patchkit::dkm::H_CONTRACT + 1]
-                );
-                let services = patchkit::dkm::services_of(d.imports.iter().map(String::as_str));
-                println!(
-                    "services {out}: {}",
-                    if services.is_empty() {
-                        "none".to_string()
-                    } else {
-                        services
-                            .iter()
-                            .map(|(s, names)| format!("{s} ({})", names.join(", ")))
-                            .collect::<Vec<_>>()
-                            .join("; ")
-                    }
-                );
-            }
+            // the entry point and what the module needs of the runtime, from the imports it links (docs/plans/sdk.md section 5.1)
+            let at = |v: Option<u32>| v.map_or("-".to_string(), |o| format!("{o:#x}"));
+            println!(
+                "entry    {out}: dk_module init {} fini {} tick {} menu {}; needs api {}.{}",
+                at(d.init),
+                at(d.fini),
+                at(d.tick),
+                at(d.menu),
+                file[patchkit::dkm::H_CONTRACT],
+                file[patchkit::dkm::H_CONTRACT + 1]
+            );
+            let services = patchkit::dkm::services_of(d.imports.iter().map(String::as_str));
+            println!(
+                "services {out}: {}",
+                if services.is_empty() {
+                    "none".to_string()
+                } else {
+                    services
+                        .iter()
+                        .map(|(s, names)| format!("{s} ({})", names.join(", ")))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                }
+            );
             if ui_preview {
                 println!(
                     "UI preview only: no module DSP or ColdFire hooks; use only in an isolated zero-DSP emulator run"
@@ -1146,7 +1138,7 @@ plan.json {}",
             println!("relocs    {}", d.relocs.len());
             println!("imports   {}", d.imports.join(", "));
             println!("init      {:?}  fini {:?}", d.init, d.fini);
-            println!("slots     {:?}", d.slots);
+            println!("tick      {:?}  menu {:?}", d.tick, d.menu);
             println!("register  {} bytes", d.register.len());
             println!("dsp       {} bytes", d.dsp.len());
             if !d.dsp.is_empty() {
@@ -1313,9 +1305,7 @@ mod tests {
             assert_eq!(preview.bss, 0);
             assert_eq!(preview.init, Some(0));
             assert!(preview.fini.is_none() && preview.menu.is_none());
-            assert!(
-                preview.slots.is_empty() && preview.relocs.is_empty() && preview.imports.is_empty()
-            );
+            assert!(preview.relocs.is_empty() && preview.imports.is_empty());
         }
     }
 
@@ -1655,7 +1645,7 @@ uses = ["DEVICE_ID"]
         root.module("modules", "test/selected", &[], true);
         std::fs::write(
             root.0.join("modules/test/selected/src/t.c"),
-            "int dkm_init(const void *api) { return api ? 0 : 1; }\n",
+            "static int init(void *ctx) { return ctx ? 0 : 1; }\nstruct m { int (*init)(void *); void (*fini)(void *); void (*tick)(void *); void (*menu)(void *, void *); };\nconst struct m dk_module = { init, 0, 0, 0 };\n",
         )
         .unwrap();
         let pack = |out: &str, explicit: bool| {

@@ -4,7 +4,7 @@
 //! or module callbacks. DT2 calls can block; one operation is not a latency bound.
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::{
-    api::FileEvent,
+    api::FilesEventFn,
     files::*,
     files_job::{Broker, EventState, Handle, Outcome, Poll, Ticket},
     store::{
@@ -18,14 +18,14 @@ use dkrt_sdk::{
 struct Request {
     root: u32,
     path: [u8; PATH_BYTES],
-    notify: Option<FileEvent>,
+    notify: Option<FilesEventFn>,
     context: *mut u8,
 }
 #[derive(Clone, Copy)]
 struct ClientInfo {
     handle: u32,
     ticket: u32,
-    notify: Option<FileEvent>,
+    notify: Option<FilesEventFn>,
     context: *mut u8,
 }
 const INFO: ClientInfo = ClientInfo {
@@ -77,7 +77,7 @@ pub unsafe fn retire(owner: usize) -> bool {
         jobs.retire(owner).unwrap_or(false)
     })
 }
-/// Is module record `owner` inside its `dkm_init` now? The check that `client` and the settings client share.
+/// Is module record `owner` inside its `init` now? The check that `client` and the settings client share.
 pub unsafe fn in_init(owner: usize) -> bool {
     owner < crate::MAX_MODULES && INIT_SCOPE == owner && READY[owner] == 1
 }
@@ -104,7 +104,7 @@ pub unsafe fn list(
     client: u32,
     root: u32,
     path: *const u8,
-    notify: Option<FileEvent>,
+    notify: Option<FilesEventFn>,
     context: *mut u8,
 ) -> i32 {
     if path.is_null() {
@@ -549,7 +549,7 @@ pub unsafe fn tick() {
                     EventState::Done => 2,
                     EventState::Error(error) => error,
                 };
-                let prev = crate::dlog::enter_module(lease.owner);
+                let prev = crate::dlog::enter_module(lease.owner, crate::dlog::PHASE_CALLBACK);
                 call(lease.handle.id(), lease.ticket.id(), state, context);
                 crate::dlog::leave_module(prev);
             }

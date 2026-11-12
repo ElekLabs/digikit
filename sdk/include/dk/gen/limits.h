@@ -13,7 +13,6 @@
 #define DK_GRANULE 64
 #define DK_DSP_SLACK 8
 #define DK_ARENA_HDR 16
-#define DK_SLOTS 8
 #define DK_MAX_VOICES 8
 #define DK_MAX_FX 4
 

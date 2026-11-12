@@ -81,34 +81,40 @@ runtimeTests('a module of the new entry point loads, ticks and finds an optional
 });
 
 /**
- * Version refusal. The packer writes the newest api minor its imports need (`since` in sdk/sdk.toml) into the header of a module of the new entry point
- * (test/entry-demo: 1.11). A copy that declares an api minor above the runtime's (0xff, sha256 made right again, so only the version is wrong) is refused with
- * E_CONTRACT and the module list shows no second entry; the file with the real minor loads after it.
+ * Version refusal. The packer writes the api contract (major 2) and the newest api minor its imports need (`since` in sdk/sdk.toml) into the header
+ * (test/entry-demo: 2.11). A copy that declares an api minor above the runtime's (0xff), and one that declares major 1 (the Api table of the earlier runtimes),
+ * each with the sha256 made right again so that only the version is wrong, are refused with E_CONTRACT and the module list shows no second entry; the file
+ * with the real version loads after them.
  */
 async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<void> {
   const device = session.options.device;
   await expectRuntimeReady(session);
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'entry-version'), ['DKRT_BOOT']);
   const good = fs.readFileSync(moduleArtifact(device, 'test/entry-demo'));
-  expect(good[0x38], 'the packer writes api major 1').toBe(1);
+  expect(good[0x38], 'the packer writes api major 2').toBe(2);
   expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(11);
-  const future = Buffer.from(good);
-  future[0x39] = 0xff;
-  future.fill(0, 0x10, 0x30);
-  createHash('sha256').update(future).digest().copy(future, 0x10);
-  await dk.put('modules/entry-future.dkm', future);
+  const withVersion = (major: number, minor: number): Buffer => {
+    const file = Buffer.from(good);
+    file[0x38] = major;
+    file[0x39] = minor;
+    file.fill(0, 0x10, 0x30);
+    createHash('sha256').update(file).digest().copy(file, 0x10);
+    return file;
+  };
+  await dk.put('modules/entry-old.dkm', withVersion(1, 11));
+  await dk.put('modules/entry-future.dkm', withVersion(2, 0xff));
   await dk.put('modules/entry-demo.dkm', good);
-  await dk.select(['modules/entry-future.dkm', 'modules/entry-demo.dkm']);
+  await dk.select(['modules/entry-old.dkm', 'modules/entry-future.dkm', 'modules/entry-demo.dkm']);
   await dk.restart();
   await waitForBootEmulated(dk);
   await expect
     .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
     .toEqual(['test/entry-demo']);
   const boot = await bootInfo(session, plan);
-  expect(boot.results, 'the file of a newer api minor is E_CONTRACT, the real one loads').toEqual([E_CONTRACT, 0]);
+  expect(boot.results, 'the files of api major 1 and of a newer api minor are E_CONTRACT, the real one loads').toEqual([E_CONTRACT, E_CONTRACT, 0]);
   await session.expectNoFault('version refusal');
 }
 
-runtimeTests('a module that declares a newer api minor than the runtime is refused with E_CONTRACT', expectVersionRefusal, {
+runtimeTests('a module that declares api major 1 or a newer api minor than the runtime is refused with E_CONTRACT', expectVersionRefusal, {
   dsp: 'zero',
 });

@@ -2,11 +2,11 @@
  * (in pieces of 4096 bytes: four sends a buffer, so both send slots run full when completions are slow), releases it and sleeps (DK_IO_WAIT) when no buffer is left or both send slots are in flight. The adapter's
  * interrupt callbacks wake the job.
  *
- * Commands: ECHO_CMD + 1 (0x2d) HOLD, body u8 mode, and an io_wake of the job: 0 echo as usual; 1 hold every taken buffer (nothing is sent or released while the mode
+ * Commands: ECHO_CMD + 1 (0x2d) HOLD, body u8 mode, and an dk_io_wake of the job: 0 echo as usual; 1 hold every taken buffer (nothing is sent or released while the mode
  * is 1); 2 send the first piece of a buffer, then hold it. A bus reset (the reset count changes) ends a hold: the buffer is released at once.
- * ECHO_CMD + 2 (0x2e) REENABLE, no body: usb_bulk_disable, forget the buffer and the hold mode, and an io_wake of the job: its next step calls usb_bulk_enable again and
+ * ECHO_CMD + 2 (0x2e) REENABLE, no body: dk_usb_bulk_disable, forget the buffer and the hold mode, and an dk_io_wake of the job: its next step calls dk_usb_bulk_enable again and
  * stores the result (a refused enable leaves the job waiting, so a later REENABLE can enable again).
- * ECHO_CMD + 3 (0x2f) TAKEOVER, body u8 op: 0 usb_bulk_takeover (also the renew), 1 usb_bulk_giveback; reply: i32 result (the module does not enable the interface itself
+ * ECHO_CMD + 3 (0x2f) TAKEOVER, body u8 op: 0 dk_usb_bulk_takeover (also the renew), 1 dk_usb_bulk_giveback; reply: i32 result (the module does not enable the interface itself
  * after a take-over: REENABLE does, once the device is in USB MIDI mode).
  * ECHO_CMD (0x2c): STATUS, reply: i32 result of dk_usb_bulk_enable, u32 dk_usb_bulk_state, u32 steps, u32 buffers taken, u32 bytes taken, u32 bytes sent,
  * u32 times a send was busy, i32 job id, u32 the reset count seen by the job. */

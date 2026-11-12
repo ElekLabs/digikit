@@ -29,33 +29,16 @@ fn the_fx_chain_cap_is_the_registrys() {
     }
 }
 
-/// `text` with its `[api]` fields replaced by `fields` (the lines of the `fields = [...]` array).
-fn with_api(text: &str, fields: &str) -> String {
-    let a = text.find("[api]\n").unwrap();
-    let b = a + text[a..].find("\n[api.types]\n").unwrap() + 1;
-    format!(
-        "{}[api]\nfields = [\n{fields}]\n\n{}",
-        &text[..a],
-        &text[b..]
-    )
-}
-
-const TWO_FIELDS: &str = "    { name = \"version\", type = \"u32\", doc = \"v\" },\n    { name = \"hook\", type = \"void (u32 a, service_cmd handler)\", doc = \"h\" },\n";
-
-#[test]
-fn the_api_table_is_generated_for_c_and_rust() {
-    let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
-    let files = sdkgen::render(&with_api(&text, TWO_FIELDS)).unwrap();
-    let get = |p: &str| &files.iter().find(|f| f.0 == p).unwrap().1;
-    let c = get(sdkgen::C_API_OUT);
-    assert!(c.contains("_Static_assert(sizeof(dk_api) == 8,"));
-    assert!(c.contains("_Static_assert(offsetof(dk_api, hook) == 4,"));
-}
-
 #[test]
 fn a_bad_type_or_view_is_refused() {
     let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
-    let bad = with_api(&text, &TWO_FIELDS.replace("u32 a", "u64 a"));
+    // an import signature with a type the contract does not know
+    let bad = text.replacen(
+        "i32 (dk_module_ctx *ctx, dk_settings **out)",
+        "i32 (dk_module_ctx *ctx, u64 *out)",
+        1,
+    );
+    assert_ne!(bad, text);
     assert!(sdkgen::render(&bad).unwrap_err().0.contains("unknown type"));
     // the names of a typed C view are the contract's name list, in order
     let broken = text.replace("\"i32 pitch // ", "\"i32 pitchx // ");
@@ -153,9 +136,9 @@ fn imports_of_other_modules_get_stubs_from_absent() {
     assert!(rs.contains(
         "(\"dk_ui_menu_new\", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, \"core/ui\"),"
     ));
-    // core/input has no stub: the import is not found without the module, and the row names the module the boot report asks for
+    // core/input has a stub too; the row names the module the boot report asks for
     assert!(rs.contains(
-        "(\"input_key\", core::hint::black_box(input_key as usize), 0, \"core/input\"),"
+        "(\"dk_input_key\", core::hint::black_box(dk_input_key as usize), absent::dk_input_key as usize, \"core/input\"),"
     ));
     // the runtime's own table is the imports without `requires`
     assert!(rs.contains("pub const BUILTIN_NAMES"));
@@ -183,8 +166,8 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert!(h.contains("typedef struct dk_settings dk_settings;"));
     assert!(h.contains("int32_t dk_settings_open(dk_module_ctx *ctx, dk_settings **out);"));
     assert!(h.contains("typedef int32_t dk_io_step_fn(void *arg);"));
-    assert!(h.contains("Context: init. Since api 1.11."));
-    assert!(h.contains("Context: io-step. Since api 1.11."));
+    assert!(h.contains("Context: init. Since api 2.11."));
+    assert!(h.contains("Context: io-step. Since api 2.11."));
     assert!(h.contains(
         "Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING."
     ));
@@ -193,10 +176,17 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
         "pub unsafe extern \"C\" fn dk_usb_bulk_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }"
     ));
     assert!(rs.contains("pub unsafe extern \"C\" fn dk_ui_menu_close(_a0: *mut u8) { }"));
-    // the old entries have no service and stay out of the new header; the Api header does not declare the new ones
-    assert!(!h.contains("usb_bulk_enable(int32_t io_id)"));
-    let api = &files.iter().find(|f| f.0 == sdkgen::C_API_OUT).unwrap().1;
-    assert!(!api.contains("dk_settings_open"));
+    // the Api table is gone: no generated header of it, no `Api` struct
+    assert!(!files.iter().any(|f| f.0.ends_with("gen/api.h")));
+    assert!(!rs.contains("pub struct Api"));
+    // only a compiler helper may have no service: an import without one is refused
+    let broken = text.replacen(
+        "name = \"dk_alloc\"\nservice = \"runtime\"\nsince = 11\ncontext = \"any\"\n",
+        "name = \"dk_alloc\"\n",
+        1,
+    );
+    assert_ne!(broken, text);
+    assert!(sdkgen::render(&broken).is_err());
     // the packer's table
     let infos = sdkgen::import_infos();
     assert_eq!(infos["dk_usb_bulk_open"].service, "usb_bulk");

@@ -179,6 +179,10 @@ VECTORS = {
 EVENT_FLAG_ERROR = 1
 
 
+# what the module code was doing at a crash (`dlog::PHASE_*` of the runtime): the low half of the first argument of CRASH_MOD
+PHASES = {0: "outside module code", 1: "init", 2: "tick", 3: "fini", 4: "a callback"}
+
+
 def ascii_of(*words: int) -> str:
     raw = b"".join(w.to_bytes(4, "big") for w in words).split(b"\0")[0]
     return "".join(chr(c) if 32 <= c < 127 else "?" for c in raw)
@@ -211,7 +215,7 @@ def fields_of(kind: int, a: tuple[int, ...]) -> dict[str, Any]:
         else:
             f = {
                 "module": None if a[0] == 0xFFFFFFFF else a[0],
-                "slots_entered": a[1] & 0xFFFF,
+                "phase": a[1] & 0xFFFF,
                 "boot_was_stable": bool(a[1] >> 16),
                 "name": ascii_of(a[2], a[3], a[4]),
             }
@@ -559,7 +563,7 @@ def crash_record(
                 rec["module"] = {
                     "index": None if a[0] == 0xFFFFFFFF else a[0],
                     "name": ascii_of(a[2], a[3], a[4]),
-                    "slots_entered": a[1] & 0xFFFF,
+                    "phase": a[1] & 0xFFFF,
                     "boot_was_stable": bool(a[1] >> 16),
                 }
         elif kind == K["CRASH_REG"]:
@@ -782,7 +786,7 @@ def crash_text(rec: dict[str, Any]) -> str:
             else f"outside any module, {m['name']!r}"
         )
         lines.append(
-            f"  in {where}; slots entered mask {m['slots_entered']:#x}; the boot had {'already' if m['boot_was_stable'] else 'not yet'} reached its stable period"
+            f"  in {where}; during {PHASES.get(m['phase'], 'phase ' + str(m['phase']))}; the boot had {'already' if m['boot_was_stable'] else 'not yet'} reached its stable period"
         )
     if rec["regs"]:
         for i in range(0, 16, 4):

@@ -30,7 +30,7 @@ static void put32(uint8_t *p, uint32_t v)
     p[3] = v;
 }
 /* Request: op (1 put, 2 get, 3 remove), key length, the key bytes, the value (at most VAL bytes).
-   Reply of PROOF_CMD + 1: pending (u8), the last result (i32), the result of the read in dkm_init (i32), its value (VAL bytes), the last get's value (VAL bytes). */
+   Reply of PROOF_CMD + 1: pending (u8), the last result (i32), the result of the read in init (i32), its value (VAL bytes), the last get's value (VAL bytes). */
 __attribute__((optimize("no-jump-tables"))) static int32_t
 command(uint32_t cmd, uint32_t seq, const void *request, uint32_t len, void *reply)
 {

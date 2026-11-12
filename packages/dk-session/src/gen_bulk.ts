@@ -59,7 +59,6 @@ export const BULK_STATUS = {
   L_E_NOMEM: -8,
   L_E_INIT: -9,
   L_E_LOADED: -10,
-  L_E_SLOT: -11,
   L_E_BUSY: -12,
   L_E_TOO_BIG: -13,
   L_E_TABLE_FULL: -14,

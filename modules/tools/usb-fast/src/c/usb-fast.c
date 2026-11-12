@@ -5,7 +5,7 @@
  * [protocol.bulk] (request: 'DKB1' | cmd u8 | seq u8 | flags u16 | len u32 | body; reply: 'DKB1' | cmd|0x40 | seq | status i16 | len u32 | body;
  * big-endian). SysEx stays the runtime's channel for everything else; this module adds three SysEx commands: SET_NONCE (0x36), by which the host proves
  * which USB device is on its MIDI port, and TAKEOVER (0x1e) and RELEASE (0x1f), by which the host has core/usb-bulk switch a device in USB AUDIO/MIDI to USB MIDI
- * for a transfer and back (docs/plans/usb-fast-takeover.md). The job calls usb_bulk_enable at its start and, while the device is not in USB MIDI mode (or a mode
+ * for a transfer and back (docs/plans/usb-fast-takeover.md). The job calls dk_usb_bulk_enable at its start and, while the device is not in USB MIDI mode (or a mode
  * switch is settling), again at every wake of the adapter (about four a second): it enables when the take-over, or the user's USB CONFIG, brings USB MIDI mode.
  *
  * Stream: a frame may span receive buffers and a buffer may hold several frames. Every frame is copied into one 16-byte-aligned frame buffer (header 12 +
@@ -19,10 +19,10 @@
  *
  * Requests are handled one at a time and in order, one reply each (a reply that cannot be sent yet is kept; nothing is parsed meanwhile). A file_*
  * call already waits about 3 s for the store lock; one that answers E_BUSY is called again twice (DK_IO_MORE, the runtime waits 1 ms), then the host
- * gets E_BUSY and asks again. A change of the reset count of usb_bulk_state (a bus reset or a disconnect) aborts the open file and clears the parser. A
- * usb_bulk_send error other than busy or E_AGAIN drops the reply, the open file and the parser (counted in STATUS).
+ * gets E_BUSY and asks again. A change of the reset count of dk_usb_bulk_state (a bus reset or a disconnect) aborts the open file and clears the parser. A
+ * dk_usb_bulk_send error other than busy or E_AGAIN drops the reply, the open file and the parser (counted in STATUS).
  *
- * Accumulation: at BEGIN the job tries to get a staging buffer (1 MiB, then 256 KiB, never more than the file needs; dk_alloc, then fw_alloc) and
+ * Accumulation: at BEGIN the job tries to get a staging buffer (1 MiB, then 256 KiB, never more than the file needs; dk_alloc, then dk_fw_alloc) and
  * keeps the DATA bytes in it in order. A DATA reply means "accepted": when the buffer is full, one file_write of the whole buffer goes out and that DATA
  * carries its status. A failed flush is sticky: every later DATA and END return it (the host aborts). A flush that stays E_BUSY after its tries is not
  * reported (the bytes are accepted): the next DATA or END flushes first and answers E_BUSY while it cannot. END flushes the tail with one more
@@ -131,7 +131,7 @@ static u32 st_expired; /* sessions the job dropped for the runtime's idle expiry
 
 /* the staging buffer of the open file */
 static u8 *acc_raw, *acc_buf; /* acc_buf: acc_raw rounded up to 16 bytes */
-static int acc_fw;            /* acc_raw came from fw_alloc */
+static int acc_fw;            /* acc_raw came from dk_fw_alloc */
 static u32 acc_cap;           /* 0: no buffer */
 static u32 acc_fill;          /* bytes in it */
 static u32 acc_off;           /* file offset of its first byte */
@@ -221,7 +221,7 @@ static void acc_release(void)
 {
     if (acc_raw) {
         if (acc_fw)
-            fw_free(acc_raw);
+            dk_fw_free(acc_raw);
         else
             dk_free(acc_raw);
     }
@@ -236,7 +236,7 @@ static u8 *acc_try(u32 n)
     u8 *p = dk_alloc(n + 16u);
     acc_fw = 0;
     if (!p) {
-        p = fw_alloc(n + 16u);
+        p = dk_fw_alloc(n + 16u);
         acc_fw = p != 0;
     }
     return p;

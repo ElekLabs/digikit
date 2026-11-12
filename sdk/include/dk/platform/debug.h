@@ -1,4 +1,4 @@
-/* <dk/platform/debug.h>: read-only views for the debug and probe modules (dk_debug_*). Hand-written. Include <dk/core/module.h> first.
+/* <dk/platform/debug.h>: read-only views for the debug and probe modules (dk_debug_*). Hand-written.
 
    dk_debug_peek(i, out): the RAM ranges `[lo, hi)` that the device file's `[digikit] peek` allows, for a module that implements PEEK.
    dk_debug_track_type(track): the machine type of a track of the active kit, read from the firmware.

@@ -2,7 +2,7 @@
  *
  * DIGIKIT is a menu: ABOUT, HEALTH and MEMORY (text pages), and MODULES (a list). MODULES has one
  * row per .dkm file of the store. The check mark of a row means "load at the next restart"; it starts from the saved selection.
- * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a dkm_menu, INFO).
+ * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a menu function, INFO).
  * The check mark is the only on/off of a module. Nothing is saved until NO leaves the list with
  * changes pending and APPLY & RESTART? is answered with YES.
  *
@@ -97,17 +97,14 @@ static int
 static dk_ui_menu *g_main, *g_about, *g_mem, *g_modules, *g_info;
 static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 
-/* The settings menu of each loaded module that has a dkm_menu, by the module's index in dkrt_module order. Each is built the first
+/* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
    time the user opens it and kept: no module is unloaded at run time, so the module's code and the ctx it passes stay valid. */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
-/* Calls the module's dkm_menu at address a (DkrtModule.menu) with the menu to fill. The host tests, where an address is wider than 32 bits, define their own. */
+/* Calls the module's menu function (dk_module.menu) at address a (DkrtModule.menu) with the module's ctx (DkrtModule.ctx) and the menu to fill: menu(ctx, menu).
+   The host tests, where an address is wider than 32 bits, define their own. */
 #ifndef DK_CALL_MENU
-#define DK_CALL_MENU(a, m) ((void (*)(dk_ui_menu *, void *))(uintptr_t)(a))((m), 0)
-#endif
-/* The same for a module of the new entry (dk_module.menu, DkrtModule.ctx not 0): menu(ctx, menu). */
-#ifndef DK_CALL_MENU_CTX
-#define DK_CALL_MENU_CTX(a, c, m)                                                                  \
+#define DK_CALL_MENU(a, c, m)                                                                      \
     ((void (*)(void *, dk_ui_menu *))(uintptr_t)(a))((void *)(uintptr_t)(c), (m))
 #endif
 static dk_ui_menu *g_set[MAX_SET];
@@ -1197,7 +1194,7 @@ static void panel_route(void *ctx, int32_t row)
         dk_ui_choice(g_ui, "ROUTE", items, (int)DK_ROUTE_N, route_done, 0);
 }
 
-/* The loaded module of a store row that has a dkm_menu: its dkrt_module index, or -1. */
+/* The loaded module of a store row that has a menu function: its dkrt_module index, or -1. */
 static int settings_module(int row, DkrtModule *mod)
 {
     if (row < 0 || row >= (int)NENT)
@@ -1212,12 +1209,8 @@ static int settings_module(int row, DkrtModule *mod)
 static void fill_settings(dk_ui_menu *m, void *ctx)
 {
     static DkrtModule mod;
-    if (dkrt_module((uint32_t)(uintptr_t)ctx, &mod) == DKRT_OK && mod.menu) {
-        if (mod.ctx)
-            DK_CALL_MENU_CTX(mod.menu, mod.ctx, m);
-        else
-            DK_CALL_MENU(mod.menu, m);
-    }
+    if (dkrt_module((uint32_t)(uintptr_t)ctx, &mod) == DKRT_OK && mod.menu)
+        DK_CALL_MENU(mod.menu, mod.ctx, m);
 }
 
 static void panel_settings(void *ctx, int32_t row)

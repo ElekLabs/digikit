@@ -6,7 +6,7 @@ category = "test"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Test fixture: a module that registers SysEx commands (Api.register_cmds) and echoes the request body"
+summary = "Test fixture: a module that registers SysEx commands (`dk_host_register`) and echoes the request body"
 requires = []
 conflicts = []
 

@@ -9,19 +9,18 @@
 #define DK_E_SHA (-4) /* store file hash or .dkm sha256 does not match */
 #define DK_E_FORMAT (-5) /* bad magic, version, bounds or alignment of the .dkm */
 #define DK_E_RUNTIME (-6) /* the module needs a newer runtime */
-#define DK_E_IMPORT (-7) /* an import name is not in the runtime's table */
+#define DK_E_IMPORT (-7) /* an import is unknown, or a provider the module needs is absent */
 #define DK_E_NOMEM (-8) /* arena full */
 #define DK_E_INIT (-9) /* init returned non-zero */
 #define DK_E_LOADED (-10) /* a module of that name is loaded */
-#define DK_E_SLOT (-11) /* a slot it binds is taken */
 #define DK_E_BUSY (-12) /* a task is still inside the module, or the store is in use (try again) */
 #define DK_E_TOO_BIG (-13) /* larger than the staging buffer */
 #define DK_E_TABLE_FULL (-14) /* no free module record */
 #define DK_E_LOST (-15) /* the sample backing was lost and the reload failed */
 #define DK_E_POOL (-16) /* the sample pool is full */
 #define DK_E_CHANGED (-17) /* the sample file differs from the selection snapshot */
-#define DK_E_EXISTS (-18) /* the file exists already (file_create does not overwrite) */
-#define DK_E_CONTEXT (-19) /* the call is not allowed in this context (file_* run in an I/O step) */
+#define DK_E_EXISTS (-18) /* the file exists already (dk_files_create does not overwrite) */
+#define DK_E_CONTEXT (-19) /* the call is not allowed in this context (dk_files_* writes run in an I/O step) */
 #define DK_E_NO_REGISTRY (-20) /* register records, but the image has no registry */
 #define DK_E_REG_DEVICE (-21) /* the records are for another device */
 #define DK_E_TYPE_RANGE (-22) /* machine type outside the range, or bad clone_of */

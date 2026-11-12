@@ -262,7 +262,7 @@ def _to_digikit(s: Script) -> Script:
 DG = 60_000_000  # a DIGIKIT row action rebuilds the list; the OLED shows it after about this many instructions
 KEY = 15_000_000  # a cursor move
 RUNTIME_LOG_VALUE = (
-    808 + 24
+    456 + 24
 )  # DKRT_STATE + this: the value of log entry 0 = the address of test/dyn-demo's DYN_COUNTER
 
 

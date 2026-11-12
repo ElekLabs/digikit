@@ -179,7 +179,7 @@ def test_the_crash_record_is_rebuilt_from_its_events():
     assert rec["module"] == {
         "index": 0,
         "name": "test/dyn-cra",
-        "slots_entered": 1,
+        "phase": 1,
         "boot_was_stable": False,
     }
     assert (

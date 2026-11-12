@@ -11,13 +11,12 @@ dynamic = true
 ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
-# Every dk_api field the module's sources call (module and picker); the packer takes the API floor from the newest.
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A stereo sample-playback machine (machine contract 1.2, track samples API 1.5). `patchkit pack digikit/shot --device dt2|dn2 -o shot.dkm` makes
+# A stereo sample-playback machine (machine contract 1.2, per-module sample pool). `patchkit pack digikit/shot --device dt2|dn2 -o shot.dkm` makes
 # the .dkm. The machine declaration, the parameters and the track table are in src/module.c; the DSP in src/dsp/shot.s.
 [[object]]
 path = "build/shot-cf.dko.json"

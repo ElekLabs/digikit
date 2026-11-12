@@ -369,7 +369,7 @@ A module can also ask for constants from the device files (`devices/*.toml`: `[b
 what each kind holds, which fact lives where and what a new device needs are in `docs/design/device-data.md`.
 
 `sdk/sdk.toml` is the one source of the runtime version (0.1.0, packed `major<<16|minor<<8|patch`; runtimes 1 to 5 read as 0.0.1 to 0.0.5), the
-contract versions (api, machine, fx, service) and the log kinds. `gen` writes the SDK headers in `sdk/include/dk/gen/` (`api.h`, `machine.h`, `fx.h`
+contract versions (api, machine, fx, service) and the log kinds. `gen` writes the SDK headers in `sdk/include/dk/gen/` (`imports.h`, `machine.h`, `fx.h`
 and their constants) and the SHARC+ includes in `sdk/dsp/contract/`, `modules/core/runtime/sdk/src/gen_sdk.rs` and
 `tools/device/dklog_kinds.py` from it, and the per-type limits (`[limits]` in `devices/*.toml`: modules, machine_rows, arena_bytes,
 stage_bytes) into the runtime's `device.rs`. The patchkit tests fail on a stale file. `runtime_min` (header byte 0x30) is informational;

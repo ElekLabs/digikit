@@ -17,9 +17,9 @@ does everything as before.
   the next bytes as a new stream.
 - **Busy**: a `file_*` call that answers `E_BUSY` is called again (the runtime waits 1 ms) up to 3 times (BEGIN 400 times, about 0.4 s: the +Drive staging folder is removed after an idle session), then the host gets `E_BUSY`. No receive buffer: the job
   sleeps and the adapter wakes it; the host is NAKed while all four are full. A send that finds both slots in flight waits for the wake.
-- **Reset**: a bus reset or a disconnect (the reset count of `usb_bulk_state` changes) aborts the open file and clears the parser.
-- **Enable**: the job calls `usb_bulk_enable` until it succeeds: the adapter wakes it four times a second while the device is not in USB MIDI mode or a mode switch is settling.
+- **Reset**: a bus reset or a disconnect (the reset count of `dk_usb_bulk_state` changes) aborts the open file and clears the parser.
+- **Enable**: the job calls `dk_usb_bulk_enable` until it succeeds: the adapter wakes it four times a second while the device is not in USB MIDI mode or a mode switch is settling.
 - **Idle session**: the runtime drops a write session with no write for 20 s; the job frees its staging buffer 1 s later.
 - **Build flags** (`src/c/uf.h`): `UF_TRACE`, `UF_BENCH` (the storage bench, `src/c/uf-bench.c`) and `UF_KNOBS` (STATUS 'A', the staging buffer test knob) are 0 in shipping builds; the staging buffer test skips its forced-size cases without `UF_KNOBS`.
-- **Unload**: `dkm_fini` disables the interface and cancels the job; the runtime aborts a file the job leaves open.
+- **Unload**: `fini` disables the interface and cancels the job; the runtime aborts a file the job leaves open.
 - **Test**: `tests/usb-fast.device.test.ts` (emulator, both devices) over `EmuBulkLink` of `packages/dk-session`.
