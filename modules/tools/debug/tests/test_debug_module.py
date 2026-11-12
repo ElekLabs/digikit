@@ -1,5 +1,5 @@
-"""digikit/debug: the module's logic on the host. The C file is compiled with a fake api and fake runtime imports (sink, clock, peek ranges, track types,
-`dkrt_log_ev`) and driven through the sink and the three commands. It checks the level filter (default and per module, errors always kept), the ring and its
+"""digikit/debug: the module's logic on the host. The C file is compiled with fakes of the runtime imports (sink, clock, peek ranges, track types,
+`dk_log_event`) and driven through the sink and the three commands. It checks the level filter (default and per module, errors always kept), the ring and its
 paging, PEEK's range rules, LOGCFG, the track watch and what fini clears. No firmware, no emulator."""
 
 import shutil
@@ -21,7 +21,7 @@ static unsigned char peek_mem[64];
 
 static void (*the_sink)(const Ev *);
 static void (*the_tick)(void);
-static int32_t (*the_cmd)(u32, u32, const u8 *, u32, u8 *);
+static dk_host_cmd_fn *the_cmd;
 static u32 clock_blocks;
 static int32_t track_ty[16];
 static int project = 1;
@@ -30,32 +30,29 @@ static int16_t sel_words[101];
 static u32 ranges[2][2];
 static u32 n_ranges;
 
-void dkrt_log_sink_set(uint8_t *s, uint8_t *t) { the_sink = (void (*)(const Ev *))s; the_tick = (void (*)(void))t; }
-uint32_t dkrt_blocks(void) { return clock_blocks; }
-uint32_t dkrt_peek_range(uint32_t i, uint32_t *out) { if (i < n_ranges) { out[0] = ranges[i][0]; out[1] = ranges[i][1]; } return n_ranges; }
-int32_t dkrt_track_type(uint32_t t) { return !project ? -2 : t < 16 ? track_ty[t] : -1; }
-int32_t dkrt_selected_params(int16_t *out, uint32_t n)
+void dk_debug_log_sink_set(uint8_t *s, uint8_t *t) { the_sink = (void (*)(const Ev *))s; the_tick = (void (*)(void))t; }
+uint32_t dk_time_blocks(void) { return clock_blocks; }
+uint32_t dk_debug_peek(uint32_t i, uint32_t *out) { if (i < n_ranges) { out[0] = ranges[i][0]; out[1] = ranges[i][1]; } return n_ranges; }
+int32_t dk_debug_track_type(uint32_t t) { return !project ? -2 : t < 16 ? track_ty[t] : -1; }
+int32_t dk_debug_selected_params(int16_t *out, uint32_t n)
 {
     if (!project) return -2;
     if (sel_track < 0) return -3;
     for (uint32_t i = 0; i < n; i++) out[i] = sel_words[i];
     return sel_track;
 }
-void dkrt_log_ev(uint32_t kind, uint32_t flags, const uint32_t *a)
+void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
 {
     Ev e = { 0, clock_blocks, (u16)kind, (u16)flags, { a[0], a[1], a[2], a[3], a[4] } };
     the_sink(&e);
 }
-static void f_log(const u8 *m, u32 v) { (void)m; (void)v; }
-static int32_t f_reg(u32 first, u32 count, dk_service_cmd *h) { the_cmd = h; printf("reg %u %u\n", first, count); return 0; }
+void dk_log(uint32_t level, const char *m, uint32_t v) { (void)level; (void)m; (void)v; }
+int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *h) { the_cmd = h; printf("reg %u %u\n", first, count); return 0; }
 
 int main(void)
 {
-    dk_api api;
     char line[4096];
-    memset(&api, 0, sizeof api);
-    api.log = f_log; api.register_cmds = f_reg;
-    printf("init %d %d\n", dkm_init(&api), the_sink != NULL);
+    printf("init %d %d\n", (int)dk_module.init(NULL), the_sink != NULL);
     while (fgets(line, sizeof line, stdin)) {
         unsigned a, b, c, d;
         char hex[2048];
@@ -92,7 +89,7 @@ int main(void)
             for (i = 0; r > 0 && i < (u32)r; i++) printf("%02x", out[i]);
             printf("\n");
         } else if (!strncmp(line, "fini", 4)) {
-            dkm_fini(&api);
+            dk_module.fini(NULL);
             printf("fini %d\n", the_sink == NULL && the_tick == NULL);
         }
         (void)d;

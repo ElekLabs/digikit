@@ -141,15 +141,17 @@ fn imports_of_other_modules_get_stubs_from_absent() {
     let text = std::fs::read_to_string(root().join("sdk/sdk.toml")).unwrap();
     let files = sdkgen::render(&text).unwrap();
     let rs = &files.iter().find(|f| f.0 == sdkgen::RUST_OUT).unwrap().1;
-    // the ui calls are linked by name and have the API's failure value as a stub; the table lists both addresses
-    assert!(rs.contains("pub fn dk_ui_open(menu: *mut u8) -> i32;"));
-    assert!(rs.contains("pub unsafe extern \"C\" fn dk_ui_open(_a0: *mut u8) -> i32 { -1 as _ }"));
+    // the ui calls are linked by name and have a failure value as a stub; the table lists both addresses
+    assert!(rs.contains("pub fn dk_ui_toast(ui: *mut u8, text: *const u8) -> i32;"));
     assert!(rs.contains(
-        "pub unsafe extern \"C\" fn dk_ui_menu_new(_a0: *const u8) -> *mut u8 { 0 as _ }"
+        "pub unsafe extern \"C\" fn dk_ui_toast(_a0: *mut u8, _a1: *const u8) -> i32 { -1 as _ }"
     ));
-    assert!(rs.contains("pub unsafe extern \"C\" fn dk_ui_close(_a0: *mut u8) { }"));
     assert!(rs.contains(
-        "(\"dk_ui_has\", core::hint::black_box(dk_ui_has as usize), absent::dk_ui_has as usize, \"core/ui\"),"
+        "pub unsafe extern \"C\" fn dk_ui_menu_new(_a0: *mut u8, _a1: *const u8) -> *mut u8 { 0 as _ }"
+    ));
+    assert!(rs.contains("pub unsafe extern \"C\" fn dk_ui_menu_close(_a0: *mut u8) { }"));
+    assert!(rs.contains(
+        "(\"dk_ui_menu_new\", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, \"core/ui\"),"
     ));
     // core/input has no stub: the import is not found without the module, and the row names the module the boot report asks for
     assert!(rs.contains(

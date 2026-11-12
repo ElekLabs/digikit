@@ -3,44 +3,45 @@
 #include <dk/platform/ui.h>
 #include <dk_ui_core.h>
 
-static int g_toggle = 1;
-int dk_demo_value = 64;
+static int32_t g_toggle = 1;
+int32_t dk_demo_value = 64;
 int dk_demo_checks[3];
 int dk_demo_events_n;
 int dk_demo_answer_v = -1;
+static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 static dk_ui_menu *g_main, *g_page, *g_list, *g_empty;
 
-static void on_answer(void *ctx, int v)
+static void on_answer(void *ctx, int32_t v)
 {
     (void)ctx;
     dk_demo_answer_v = v;
     dk_demo_events_n++;
 }
 
-static void do_toast(void *ctx, int arg)
+static void do_toast(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
     dk_demo_events_n++;
-    dk_ui_toast("HELLO FROM CORE UI");
+    dk_ui_toast(g_ui, "HELLO FROM CORE UI");
 }
 
-static void do_confirm(void *ctx, int arg)
+static void do_confirm(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
-    dk_ui_confirm("DELETE EVERYTHING?", "REALLY? Y/N", on_answer, 0);
+    dk_ui_confirm(g_ui, "DELETE EVERYTHING?", "REALLY? Y/N", on_answer, 0);
 }
 
-static void do_choice(void *ctx, int arg)
+static void do_choice(void *ctx, int32_t arg)
 {
     static const char *const items[] = {"SEND", "MASTER", "OFF"};
     (void)ctx;
     (void)arg;
-    dk_ui_choice("ROUTE", items, 3, on_answer, 0);
+    dk_ui_choice(g_ui, "ROUTE", items, 3, on_answer, 0);
 }
 
-static void changed(void *ctx, int v)
+static void changed(void *ctx, int32_t v)
 {
     (void)ctx;
     (void)v;
@@ -50,14 +51,14 @@ static void changed(void *ctx, int v)
 static void fill_page(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
-    dk_ui_text(m, "A TEXT PAGE HAS NO");
-    dk_ui_text(m, "HIGHLIGHTED ROW.");
-    dk_ui_text(m, "THE KEYS SCROLL IT.");
-    dk_ui_text(m, "LINE FOUR");
-    dk_ui_text(m, "LINE FIVE");
-    dk_ui_text(m, "LINE SIX");
-    dk_ui_text(m, "LINE SEVEN");
-    dk_ui_text(m, "LINE EIGHT");
+    dk_ui_menu_add_text(m, "A TEXT PAGE HAS NO");
+    dk_ui_menu_add_text(m, "HIGHLIGHTED ROW.");
+    dk_ui_menu_add_text(m, "THE KEYS SCROLL IT.");
+    dk_ui_menu_add_text(m, "LINE FOUR");
+    dk_ui_menu_add_text(m, "LINE FIVE");
+    dk_ui_menu_add_text(m, "LINE SIX");
+    dk_ui_menu_add_text(m, "LINE SEVEN");
+    dk_ui_menu_add_text(m, "LINE EIGHT");
 }
 
 static void fill_list(dk_ui_menu *m, void *ctx)
@@ -65,7 +66,7 @@ static void fill_list(dk_ui_menu *m, void *ctx)
     static const char *const names[] = {"FIRST ITEM", "SECOND ITEM", "THIRD ITEM"};
     (void)ctx;
     for (int i = 0; i < 3; i++)
-        dk_ui_text(m, names[i]);
+        dk_ui_menu_add_text(m, names[i]);
 }
 
 static void fill_none(dk_ui_menu *m, void *ctx)
@@ -74,22 +75,22 @@ static void fill_none(dk_ui_menu *m, void *ctx)
     (void)ctx;
 }
 
-static void panel_act(void *ctx, int arg)
+static void panel_act(void *ctx, int32_t arg)
 {
     (void)ctx;
     dk_demo_events_n++;
-    dk_ui_toast(arg ? "PANEL: SECOND" : "PANEL: FIRST");
+    dk_ui_toast(g_ui, arg ? "PANEL: SECOND" : "PANEL: FIRST");
 }
 
-static void list_panel(dk_ui_menu *p, int row, void *ctx)
+static void list_panel(dk_ui_menu *p, int32_t row, void *ctx)
 {
     (void)row;
     (void)ctx;
-    dk_ui_action(p, "LOAD", panel_act, 0, 0);
-    dk_ui_action(p, "INFO", panel_act, 0, 1);
+    dk_ui_menu_add_action(p, "LOAD", panel_act, 0, 0);
+    dk_ui_menu_add_action(p, "INFO", panel_act, 0, 1);
 }
 
-static void list_check(void *ctx, int row, int on)
+static void list_check(void *ctx, int32_t row, int32_t on)
 {
     (void)ctx;
     if (row >= 0 && row < 3)
@@ -98,7 +99,7 @@ static void list_check(void *ctx, int row, int on)
 }
 
 /* NO is refused while the third item is checked (the list stays open). */
-static int list_back(void *ctx)
+static int32_t list_back(void *ctx)
 {
     (void)ctx;
     dk_demo_events_n++;
@@ -126,32 +127,33 @@ static const dk_ui_menu_desc empty_desc = {.name = "UiDemoEmpty",
 static void fill_main(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
-    dk_ui_toggle(m, "TOGGLE", &g_toggle, changed, 0);
-    dk_ui_value(m, "VALUE", &dk_demo_value, 0, 127, changed, 0);
-    dk_ui_action(m, "TOAST", do_toast, 0, 0);
-    dk_ui_action(m, "CONFIRM", do_confirm, 0, 0);
-    dk_ui_action(m, "CHOICE", do_choice, 0, 0);
-    dk_ui_submenu(m, "TEXT PAGE", g_page);
-    dk_ui_submenu(m, "LIST", g_list);
-    dk_ui_submenu(m, "EMPTY LIST", g_empty);
-    dk_ui_text(m, "A TEXT ROW");
+    dk_ui_menu_add_toggle(m, "TOGGLE", &g_toggle, changed, 0);
+    dk_ui_menu_add_value(m, "VALUE", &dk_demo_value, 0, 127, changed, 0);
+    dk_ui_menu_add_action(m, "TOAST", do_toast, 0, 0);
+    dk_ui_menu_add_action(m, "CONFIRM", do_confirm, 0, 0);
+    dk_ui_menu_add_action(m, "CHOICE", do_choice, 0, 0);
+    dk_ui_menu_add_submenu(m, "TEXT PAGE", g_page);
+    dk_ui_menu_add_submenu(m, "LIST", g_list);
+    dk_ui_menu_add_submenu(m, "EMPTY LIST", g_empty);
+    dk_ui_menu_add_text(m, "A TEXT ROW");
 }
 
 static const dk_ui_menu_desc main_desc = {
     .name = "UiDemoMenu", .title = "UI DEMO", .fill = fill_main};
 
-static void open_main(void *ctx, int arg)
+static void open_main(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
     if (!g_main) {
-        g_page = dk_ui_menu_new(&page_desc);
-        g_list = dk_ui_menu_new(&list_desc);
-        g_empty = dk_ui_menu_new(&empty_desc);
-        g_main = dk_ui_menu_new(&main_desc);
+        g_ui = dk_ui_core_handle();
+        g_page = dk_ui_menu_new(g_ui, &page_desc);
+        g_list = dk_ui_menu_new(g_ui, &list_desc);
+        g_empty = dk_ui_menu_new(g_ui, &empty_desc);
+        g_main = dk_ui_menu_new(g_ui, &main_desc);
     }
     if (g_main)
-        dk_ui_open(g_main);
+        dk_ui_menu_open(g_main);
 }
 
 /* Called from the hook at the end of the SETTINGS rebuild (core/ui). */

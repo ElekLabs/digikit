@@ -20,9 +20,9 @@ pub fn is_wide() -> bool {
     desc_of(top()).is_some_and(|d| d.flags & DK_UI_WIDE != 0)
 }
 
-/// Opens a menu (as `dk_ui_open` does). Returns its result.
+/// Opens a menu (as `dk_ui_menu_open` does). Returns its result.
 pub fn open(m: *mut DkUiMenu) -> c_int {
-    dk_ui_open(m)
+    dk_ui_menu_open(m)
 }
 
 /// Number of open views (menus, lists and panels).
@@ -30,7 +30,7 @@ pub fn depth() -> usize {
     with(|s| s.stack.len())
 }
 
-/// The row the cursor is on in the top view (`dk_ui_select` and `press_yes` set it).
+/// The row the cursor is on in the top view (`dk_ui_menu_select` and `press_yes` set it).
 pub fn cursor() -> usize {
     let id = top();
     with(|s| s.menus[id].selected)
@@ -126,9 +126,9 @@ pub fn press_yes(row: usize) {
     if is_list(id) {
         let n = with(|s| s.menus[id].rows.len());
         assert!(row < n, "no row {row}");
-        let on = dk_ui_checked(handle(id), row as c_int) == 0;
-        dk_ui_check(handle(id), row as c_int, on as c_int);
-        if let Some(f) = desc_of(id).and_then(|d| d.check.map(|f| (f, d.ctx))) {
+        let on = dk_ui_menu_checked(handle(id), row as c_int) == 0;
+        dk_ui_menu_check(handle(id), row as c_int, on as c_int);
+        if let Some(f) = desc_of(id).and_then(|d| d.check.map(|f| (f, d.arg))) {
             f.0(f.1, row as c_int, on as c_int);
         }
     } else {
@@ -178,7 +178,7 @@ pub fn press_right(row: usize) {
         s.log(format!("panel {row}"));
         s.menus.len() - 1
     });
-    panel(handle(pid), row as c_int, d.ctx);
+    panel(handle(pid), row as c_int, d.arg);
     // core/ui shows no panel when the callback added no rows
     if with(|s| s.menus[pid].rows.is_empty()) {
         with(|s| s.stack.retain(|&x| x != pid));
@@ -210,7 +210,7 @@ pub fn press_no() {
     let id = top();
     if let Some(back) = desc_of(id)
         .filter(|d| d.flags & DK_UI_LIST != 0)
-        .and_then(|d| d.back.map(|b| (b, d.ctx)))
+        .and_then(|d| d.back.map(|b| (b, d.arg)))
     {
         if back.0(back.1) == 1 {
             return;

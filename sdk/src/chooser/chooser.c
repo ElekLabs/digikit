@@ -13,8 +13,8 @@
 
 enum { ST_IDLE, ST_READING, ST_DONE, ST_ERROR };
 
-static const dk_api *g_api;
-static uint32_t g_client;
+static dk_files *g_files;
+static dk_ui *g_ui;
 static const dk_chooser_desc *g_d;
 static dk_ui_menu *g_list, *g_browser, *g_finfo;
 static dk_ui_menu_desc g_list_desc, g_browser_desc, g_finfo_desc;
@@ -31,16 +31,16 @@ static dk_file_entry g_entry;
 static int g_ticking;
 static int g_info_at; /* the file INFO page shows the file at this sorted index */
 
-static void fill_list(dk_ui_menu *m, void *ctx);
-static void fill_browser(dk_ui_menu *m, void *ctx);
-static void fill_finfo(dk_ui_menu *m, void *ctx);
-static void panel_list(dk_ui_menu *p, int row, void *ctx);
-static void panel_browser(dk_ui_menu *p, int row, void *ctx);
-static int back_browser(void *ctx);
-static void check_list(void *ctx, int row, int on);
-static void check_browser(void *ctx, int row, int on);
-static void on_notify(uint32_t client, uint32_t request, int32_t hint, uint8_t *ctx);
-static void tick(void *ctx);
+static void fill_list(dk_ui_menu *m, void *arg);
+static void fill_browser(dk_ui_menu *m, void *arg);
+static void fill_finfo(dk_ui_menu *m, void *arg);
+static void panel_list(dk_ui_menu *p, int32_t row, void *arg);
+static void panel_browser(dk_ui_menu *p, int32_t row, void *arg);
+static int32_t back_browser(void *arg);
+static void check_list(void *arg, int32_t row, int32_t on);
+static void check_browser(void *arg, int32_t row, int32_t on);
+static void on_notify(uint32_t client, uint32_t request, int32_t state, void *arg);
+static void tick(void *arg);
 
 void dk_chooser_wrap(dk_ui_menu *m, const char *s)
 {
@@ -58,7 +58,7 @@ void dk_chooser_wrap(dk_ui_menu *m, const char *s)
         for (i = 0; i < cut; i++)
             row[i] = s[i];
         row[cut] = 0;
-        dk_ui_text(m, row);
+        dk_ui_menu_add_text(m, row);
         s += cut;
         while (*s == ' ')
             s++;
@@ -70,14 +70,14 @@ void dk_chooser_wrap(dk_ui_menu *m, const char *s)
 static void stop_listing(void)
 {
     if (g_state == ST_READING)
-        g_api->files_cancel(g_client, (uint32_t)g_ticket);
+        dk_files_cancel(g_files, (uint32_t)g_ticket);
     g_state = ST_IDLE;
 }
 
 static void stop_timer(void)
 {
     if (g_ticking)
-        dk_ui_tick(tick, 0, 0);
+        dk_ui_tick(g_ui, tick, 0, 0);
     g_ticking = 0;
 }
 
@@ -85,8 +85,8 @@ static void stop_timer(void)
 static void close_all(void)
 {
     stop_listing();
-    dk_ui_close(g_browser);
-    dk_ui_close(g_list);
+    dk_ui_menu_close(g_browser);
+    dk_ui_menu_close(g_list);
     stop_timer();
 }
 
@@ -96,7 +96,7 @@ static void finish(int result)
     const dk_chooser_desc *d = g_d;
     close_all();
     if (d && d->done)
-        d->done(d->ctx, result);
+        d->done(d->arg, result);
 }
 
 /* An error never opens a dialog: the flow closes and the page shows the text. */
@@ -107,12 +107,12 @@ static void fail(int code)
     close_all();
     text[0] = 0;
     if (d && d->error_text)
-        d->error_text(d->ctx, code, text);
+        d->error_text(d->arg, code, text);
     if (!text[0]) {
         dk_text_utoa(num, (uint32_t)(code < 0 ? -code : code));
         dk_text_cat(text, DK_CHOOSER_TEXT + 1, "ERROR -", num);
     }
-    dk_ui_toast(text);
+    dk_ui_toast(g_ui, text);
 }
 
 /* NO in the browser at the root: back to the list. The browser is closed here and the list is opened again: a list that opened another
@@ -120,38 +120,38 @@ static void fail(int code)
 static void leave_browser(void)
 {
     stop_listing();
-    dk_ui_close(g_browser);
-    dk_ui_open(g_list);
+    dk_ui_menu_close(g_browser);
+    dk_ui_menu_open(g_list);
 }
 
 /* ---- the list ---- */
 
-static void tick(void *ctx)
+static void tick(void *arg)
 {
-    (void)ctx;
-    if (g_list && dk_ui_is_open(g_list))
-        dk_ui_refresh(g_list); /* fill_list stops the timer when no row is busy any more */
+    (void)arg;
+    if (g_list && dk_ui_menu_is_open(g_list))
+        dk_ui_menu_refresh(g_list); /* fill_list stops the timer when no row is busy any more */
     else {
-        dk_ui_tick(tick, 0, 0);
+        dk_ui_tick(g_ui, tick, 0, 0);
         g_ticking = 0;
     }
 }
 
-static void fill_list(dk_ui_menu *m, void *ctx)
+static void fill_list(dk_ui_menu *m, void *arg)
 {
     char row[DK_UI_ROW];
     int i, busy;
-    (void)ctx;
+    (void)arg;
     if (!g_d)
         return;
     for (i = 0; i < g_d->count; i++) {
         row[0] = 0;
-        g_d->row(g_d->ctx, i, i == g_cur, row);
+        g_d->row(g_d->arg, i, i == g_cur, row);
         row[DK_UI_ROW - 1] = 0;
-        dk_ui_text(m, row);
+        dk_ui_menu_add_text(m, row);
     }
-    busy = g_d->busy && g_d->busy(g_d->ctx);
-    if (busy && !g_ticking && dk_ui_has(DK_UI_CAP_TICK) && dk_ui_tick(tick, 0, TICK_MS) == 0)
+    busy = g_d->busy && g_d->busy(g_d->arg);
+    if (busy && !g_ticking && dk_ui_tick(g_ui, tick, 0, TICK_MS) == 0)
         g_ticking = 1;
     else if (!busy)
         stop_timer();
@@ -162,16 +162,16 @@ static void relist(void);
 static void open_browser(void)
 {
     relist();
-    dk_ui_open(g_browser);
+    dk_ui_menu_open(g_browser);
 }
 
 /* YES on a slot opens the browser for it. The row has a check callback, so this is the only thing that happens: the stock handler of a list
    without one closes the list after the row's action. The mark core/ui sets is taken off at once, so a row never shows a check. */
-static void check_list(void *ctx, int row, int on)
+static void check_list(void *arg, int32_t row, int32_t on)
 {
-    (void)ctx;
+    (void)arg;
     (void)on;
-    dk_ui_check(g_list, row, 0);
+    dk_ui_menu_check(g_list, row, 0);
     if (!g_d || row < 0 || row >= g_d->count)
         return;
     g_slot = row;
@@ -179,12 +179,12 @@ static void check_list(void *ctx, int row, int on)
 }
 
 /* RIGHT on a slot row. */
-static void panel_list(dk_ui_menu *p, int row, void *ctx)
+static void panel_list(dk_ui_menu *p, int32_t row, void *arg)
 {
-    (void)ctx;
+    (void)arg;
     if (!g_d || !g_d->panel || row < 0 || row >= g_d->count)
         return;
-    g_d->panel(g_d->ctx, p, row);
+    g_d->panel(g_d->arg, p, row);
 }
 
 /* ---- the folder browser ---- */
@@ -194,7 +194,7 @@ static void relist(void)
     stop_listing();
     g_n = g_more = 0;
     g_state = ST_READING;
-    g_ticket = g_api->files_list(g_client, g_d->root, (const uint8_t *)g_dir, on_notify, 0);
+    g_ticket = dk_files_list(g_files, g_d->root, g_dir, on_notify, 0);
     if (g_ticket <= 0) {
         g_state = ST_ERROR;
         g_err = g_ticket < 0 ? g_ticket : -48;
@@ -225,14 +225,15 @@ static void add_entry(void)
 }
 
 /* The listing is ready: poll until pending. Rows are kept in sort order as they come; the screen shows them at the end. */
-static void on_notify(uint32_t client, uint32_t request, int32_t hint, uint8_t *ctx)
+static void on_notify(uint32_t client, uint32_t request, int32_t state, void *arg)
 {
-    (void)hint;
-    (void)ctx;
-    if (client != g_client || (int32_t)request != g_ticket || g_state != ST_READING)
+    (void)client;
+    (void)state;
+    (void)arg;
+    if ((int32_t)request != g_ticket || g_state != ST_READING)
         return;
     for (;;) {
-        int32_t rc = g_api->files_poll(client, request, (uint8_t *)&g_entry, sizeof g_entry);
+        int32_t rc = dk_files_poll(g_files, request, &g_entry, sizeof g_entry);
         if (rc == DK_FILES_ROW) {
             add_entry();
             continue;
@@ -246,26 +247,26 @@ static void on_notify(uint32_t client, uint32_t request, int32_t hint, uint8_t *
         break;
     }
     if (g_state != ST_READING)
-        dk_ui_refresh(g_browser);
+        dk_ui_menu_refresh(g_browser);
 }
 
-static void fill_browser(dk_ui_menu *m, void *ctx)
+static void fill_browser(dk_ui_menu *m, void *arg)
 {
     char row[DK_UI_ROW], nm[DK_CHOOSER_TEXT + 1], sz[8], tmp[DK_CHOOSER_TEXT + 1];
     int i;
-    (void)ctx;
+    (void)arg;
     dk_text_cat(tmp, DK_CHOOSER_TEXT + 1, "..  /", g_dir);
     dk_text_trunc(row, tmp, DK_CHOOSER_TEXT);
-    dk_ui_text(m, row);
+    dk_ui_menu_add_text(m, row);
     if (g_state == ST_READING) {
-        dk_ui_text(m, "READING...");
+        dk_ui_menu_add_text(m, "READING...");
         return;
     }
     if (g_state == ST_ERROR) {
         char num[12];
         dk_text_utoa(num, (uint32_t)(g_err < 0 ? -g_err : g_err));
         dk_text_cat(row, DK_CHOOSER_TEXT + 1, "LIST ERROR -", num);
-        dk_ui_text(m, row);
+        dk_ui_menu_add_text(m, row);
         return;
     }
     for (i = 0; i < g_n; i++) {
@@ -283,26 +284,26 @@ static void fill_browser(dk_ui_menu *m, void *ctx)
             dk_text_trunc(nm, r->name, DK_CHOOSER_TEXT - 2);
             dk_text_cat(row, DK_CHOOSER_TEXT + 1, "  ", nm);
         }
-        dk_ui_text(m, row);
+        dk_ui_menu_add_text(m, row);
     }
     if (g_n == 0)
-        dk_ui_text(m, "NO SAMPLES HERE");
+        dk_ui_menu_add_text(m, "NO SAMPLES HERE");
     if (g_more) {
         char num[12];
         dk_text_utoa(num, (uint32_t)g_more);
         dk_text_cat(tmp, DK_CHOOSER_TEXT + 1, "+", num);
         dk_text_cat(row, DK_CHOOSER_TEXT + 1, tmp, " MORE");
-        dk_ui_text(m, row);
+        dk_ui_menu_add_text(m, row);
     }
 }
 
 /* NO and the ".." row: up one folder, or out of the browser at the root. Always consumes the key. */
-static int back_browser(void *ctx)
+static int32_t back_browser(void *arg)
 {
-    (void)ctx;
+    (void)arg;
     if (dk_path_parent(g_dir)) {
         relist();
-        dk_ui_refresh(g_browser);
+        dk_ui_menu_refresh(g_browser);
     } else
         leave_browser();
     return 1;
@@ -316,7 +317,7 @@ static void select_file(int at)
     if (dk_path_join(g_path, sizeof g_path, g_dir, g_rows[g_idx[at]].name) == 0)
         rc = DK_CHOOSER_E_PATH;
     else
-        rc = g_d->fill(g_d->ctx, g_slot, g_path);
+        rc = g_d->fill(g_d->arg, g_slot, g_path);
     if (rc < 0)
         fail(rc);
     else
@@ -335,15 +336,15 @@ static void enter_folder(int at)
         g_dir[i] = 0;
         relist();
     }
-    dk_ui_refresh(g_browser);
+    dk_ui_menu_refresh(g_browser);
 }
 
-static void check_browser(void *ctx, int row, int on)
+static void check_browser(void *arg, int32_t row, int32_t on)
 {
     int at = row - 1;
-    (void)ctx;
+    (void)arg;
     (void)on;
-    dk_ui_check(g_browser, row, 0);
+    dk_ui_menu_check(g_browser, row, 0);
     if (row == 0) {
         back_browser(0);
         return;
@@ -356,73 +357,69 @@ static void check_browser(void *ctx, int row, int on)
         select_file(at);
 }
 
-static void select_cb(void *ctx, int at)
+static void select_cb(void *arg, int32_t at)
 {
-    (void)ctx;
+    (void)arg;
     select_file(at);
 }
 
-static void file_info_cb(void *ctx, int at)
+static void file_info_cb(void *arg, int32_t at)
 {
-    (void)ctx;
+    (void)arg;
     g_info_at = at;
-    dk_ui_open(g_finfo);
+    dk_ui_menu_open(g_finfo);
 }
 
 /* RIGHT on a listed file: row 0 is "..", the files are rows 1 to g_n. */
-static void panel_browser(dk_ui_menu *p, int row, void *ctx)
+static void panel_browser(dk_ui_menu *p, int32_t row, void *arg)
 {
-    (void)ctx;
+    (void)arg;
     if (g_state != ST_DONE || row < 1 || row > g_n || g_rows[g_idx[row - 1]].dir)
         return;
-    dk_ui_action(p, "SELECT", select_cb, 0, row - 1);
-    dk_ui_action(p, "INFO", file_info_cb, 0, row - 1);
+    dk_ui_menu_add_action(p, "SELECT", select_cb, 0, row - 1);
+    dk_ui_menu_add_action(p, "INFO", file_info_cb, 0, row - 1);
 }
 
-static void fill_finfo(dk_ui_menu *m, void *ctx)
+static void fill_finfo(dk_ui_menu *m, void *arg)
 {
     char nm[DK_CHOOSER_TEXT + 1], row[DK_UI_ROW], num[12];
     const dk_chooser_row *r;
-    (void)ctx;
+    (void)arg;
     if (g_info_at < 0 || g_info_at >= g_n)
         return;
     r = &g_rows[g_idx[g_info_at]];
     dk_text_trunc(nm, r->name, WRAP);
-    dk_ui_text(m, nm);
+    dk_ui_menu_add_text(m, nm);
     if (dk_path_join(g_path, sizeof g_path, g_dir, r->name) != 0)
         dk_chooser_wrap(m, g_path);
     if (r->size) {
         dk_text_utoa(num, r->size);
         dk_text_cat(nm, DK_CHOOSER_TEXT + 1, "SIZE ", num);
         dk_text_cat(row, DK_CHOOSER_TEXT + 1, nm, " BYTES");
-        dk_ui_text(m, row);
+        dk_ui_menu_add_text(m, row);
     }
 }
 
 /* ---- the module's calls ---- */
 
-int dk_chooser_init(const dk_api *api)
+int32_t dk_chooser_init(dk_files *files, dk_ui *ui)
 {
-    g_client = 0;
-    g_api = api;
+    g_files = 0;
+    g_ui = 0;
     g_d = 0;
-    if (!api || api->size < offsetof(dk_api, files_cancel) + sizeof api->files_cancel ||
-        !api->files_client || !api->files_list || !api->files_poll || !api->files_cancel)
-        return -1;
-    {
-        int32_t c = api->files_client();
-        if (c <= 0)
-            return -1;
-        g_client = (uint32_t)c;
-    }
-    return 0;
+    if (!files || !ui)
+        return DK_E_MISSING;
+    g_files = files;
+    g_ui = ui;
+    return DK_OK;
 }
 
-int dk_chooser_open(const dk_chooser_desc *d, int current)
+int32_t dk_chooser_open(const dk_chooser_desc *d, int32_t current)
 {
-    if (!g_api || !g_client || !d || !d->row || !d->fill || !dk_ui_has(DK_UI_CAP_LIST) ||
-        !dk_ui_has(DK_UI_CAP_TEXT_PAGE))
-        return -1;
+    if (!g_files || !g_ui)
+        return DK_E_STATE;
+    if (!d || !d->row || !d->fill)
+        return DK_E_CONTRACT;
     g_d = d;
     g_cur = current;
     if (!g_list) {
@@ -441,29 +438,30 @@ int dk_chooser_open(const dk_chooser_desc *d, int current)
                                            .back = back_browser};
         g_finfo_desc = (dk_ui_menu_desc){
             .name = "ChooserFile", .title = "INFO", .flags = DK_UI_TEXT_PAGE, .fill = fill_finfo};
-        g_list = dk_ui_menu_new(&g_list_desc);
-        g_browser = dk_ui_menu_new(&g_browser_desc);
-        g_finfo = dk_ui_menu_new(&g_finfo_desc);
+        g_list = dk_ui_menu_new(g_ui, &g_list_desc);
+        g_browser = dk_ui_menu_new(g_ui, &g_browser_desc);
+        g_finfo = dk_ui_menu_new(g_ui, &g_finfo_desc);
     }
     if (!g_list || !g_browser || !g_finfo)
-        return -1;
+        return DK_E_NOMEM;
     g_state = ST_IDLE;
-    dk_ui_select(g_list, current >= 0 && current < d->count ? current : 0);
-    return dk_ui_open(g_list);
+    dk_ui_menu_select(g_list, current >= 0 && current < d->count ? current : 0);
+    return dk_ui_menu_open(g_list);
 }
 
 void dk_chooser_refresh(void)
 {
-    if (g_list && dk_ui_is_open(g_list))
-        dk_ui_refresh(g_list);
+    if (g_list && dk_ui_menu_is_open(g_list))
+        dk_ui_menu_refresh(g_list);
 }
 
 void dk_chooser_fini(void)
 {
     stop_timer();
-    if (g_api && g_client)
+    if (g_files)
         stop_listing();
     g_state = ST_IDLE;
-    g_client = 0;
+    g_files = 0;
+    g_ui = 0;
     g_d = 0;
 }

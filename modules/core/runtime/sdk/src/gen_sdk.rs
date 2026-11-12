@@ -328,6 +328,15 @@ pub mod api {
     /// The callback type `ui_action_fn` of `[handle.callbacks]`.
     pub type UiActionFn = unsafe extern "C" fn(arg: *mut u8, value: i32);
 
+    /// The callback type `ui_choice_fn` of `[handle.callbacks]`.
+    pub type UiChoiceFn = unsafe extern "C" fn(arg: *mut u8, index: i32);
+
+    /// The callback type `ui_confirm_fn` of `[handle.callbacks]`.
+    pub type UiConfirmFn = unsafe extern "C" fn(arg: *mut u8, yes: i32);
+
+    /// The callback type `ui_tick_fn` of `[handle.callbacks]`.
+    pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
+
     #[repr(C)]
     pub struct Api {
         /// Version of the `Api` table layout (`API_VERSION`).
@@ -439,7 +448,7 @@ pub mod api {
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 117] = [
+    pub const IMPORT_NAMES: [&str; 104] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -457,20 +466,7 @@ pub mod api {
         "usb_bulk_release",
         "usb_bulk_send",
         "usb_bulk_state",
-        "dk_ui_has",
         "dk_ui_menu_new",
-        "dk_ui_open",
-        "dk_ui_close",
-        "dk_ui_select",
-        "dk_ui_is_open",
-        "dk_ui_refresh",
-        "dk_ui_action",
-        "dk_ui_submenu",
-        "dk_ui_text",
-        "dk_ui_toggle",
-        "dk_ui_value",
-        "dk_ui_check",
-        "dk_ui_checked",
         "dk_ui_confirm",
         "dk_ui_choice",
         "dk_ui_toast",
@@ -526,7 +522,7 @@ pub mod api {
         "dk_sample_pool_set",
         "dk_sample_pool_peaks",
         "dk_sample_pool_peaks_window",
-        "dk_ui_service_open",
+        "dk_ui_open",
         "dk_ui_menu_open",
         "dk_ui_menu_close",
         "dk_ui_menu_select",
@@ -647,6 +643,15 @@ pub mod api {
 
     /// `usb_bulk_state`: State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the device is not in USB MIDI mode; read live), bit 3 taken over (usb_bulk_takeover is active), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then).
     pub type UsbBulkStateFn = unsafe extern "C" fn() -> u32;
+
+    /// `dk_ui_confirm`: A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory).
+    pub type DkUiConfirmFn = unsafe extern "C" fn(ui: *mut u8, title: *const u8, text: *const u8, done: Option<UiConfirmFn>, arg: *mut u8) -> i32;
+
+    /// `dk_ui_toast`: A short message on the main screen that goes away by itself. 0 when shown, a negative code when not.
+    pub type DkUiToastFn = unsafe extern "C" fn(ui: *mut u8, text: *const u8) -> i32;
+
+    /// `dk_ui_tick`: Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>.
+    pub type DkUiTickFn = unsafe extern "C" fn(ui: *mut u8, r#fn: Option<UiTickFn>, arg: *mut u8, period_ms: u32) -> i32;
 
     /// `dl_set_tick_cb`: Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing.
     pub type DlSetTickCbFn = unsafe extern "C" fn(cb: *mut u8);
@@ -801,8 +806,8 @@ pub mod api {
     /// `dk_sample_pool_peaks_window`: Min/max of `columns` equal parts of the frames [first, first + frames) of a READY pool entry matching token, computed in the background. Returns `columns` when ready, 0 while it is computed, or a negative error. Poll from the draw callback.
     pub type DkSamplePoolPeaksWindowFn = unsafe extern "C" fn(p: *mut u8, index: u32, token: u32, first: u32, frames: u32, columns: u32, out: *mut u8, capacity: u32) -> i32;
 
-    /// `dk_ui_service_open`: Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Transitional name: renamed to `dk_ui_open` in S2b-2, when the old menu call of that name goes (docs/plans/sdk.md).
-    pub type DkUiServiceOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
+    /// `dk_ui_open`: Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched.
+    pub type DkUiOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
 
     /// `dk_ui_menu_open`: Fill and show a menu on top of the current view; negative when it cannot be.
     pub type DkUiMenuOpenFn = unsafe extern "C" fn(m: *mut u8) -> i32;
@@ -913,28 +918,15 @@ macro_rules! optional_imports {
                 pub fn usb_bulk_release(buf: *mut u8) -> i32;
                 pub fn usb_bulk_send(buf: *const u8, len: u32) -> i32;
                 pub fn usb_bulk_state() -> u32;
-                pub fn dk_ui_has(cap: i32) -> i32;
-                pub fn dk_ui_menu_new(desc: *const u8) -> *mut u8;
-                pub fn dk_ui_open(menu: *mut u8) -> i32;
-                pub fn dk_ui_close(menu: *mut u8);
-                pub fn dk_ui_select(menu: *mut u8, row: i32);
-                pub fn dk_ui_is_open(menu: *const u8) -> i32;
-                pub fn dk_ui_refresh(menu: *mut u8);
-                pub fn dk_ui_action(menu: *mut u8, text: *const u8, run: *mut u8, ctx: *mut u8, arg: i32);
-                pub fn dk_ui_submenu(menu: *mut u8, text: *const u8, sub: *mut u8);
-                pub fn dk_ui_text(menu: *mut u8, text: *const u8);
-                pub fn dk_ui_toggle(menu: *mut u8, text: *const u8, value: *mut i32, changed: *mut u8, ctx: *mut u8);
-                pub fn dk_ui_value(menu: *mut u8, text: *const u8, value: *mut i32, min: i32, max: i32, changed: *mut u8, ctx: *mut u8);
-                pub fn dk_ui_check(list: *mut u8, row: i32, on: i32);
-                pub fn dk_ui_checked(list: *const u8, row: i32) -> i32;
-                pub fn dk_ui_confirm(title: *const u8, text: *const u8, done: *mut u8, ctx: *mut u8) -> i32;
-                pub fn dk_ui_choice(title: *const u8, items: *mut u8, n: i32, done: *mut u8, ctx: *mut u8) -> i32;
-                pub fn dk_ui_toast(text: *const u8) -> i32;
-                pub fn dk_ui_tick(cb: *mut u8, ctx: *mut u8, period_ms: u32) -> i32;
+                pub fn dk_ui_menu_new(ui: *mut u8, desc: *const u8) -> *mut u8;
+                pub fn dk_ui_confirm(ui: *mut u8, title: *const u8, text: *const u8, done: Option<UiConfirmFn>, arg: *mut u8) -> i32;
+                pub fn dk_ui_choice(ui: *mut u8, title: *const u8, items: *const u8, n: i32, done: Option<UiChoiceFn>, arg: *mut u8) -> i32;
+                pub fn dk_ui_toast(ui: *mut u8, text: *const u8) -> i32;
+                pub fn dk_ui_tick(ui: *mut u8, r#fn: Option<UiTickFn>, arg: *mut u8, period_ms: u32) -> i32;
                 pub fn dl_set_tick_cb(cb: *mut u8);
                 pub fn usb_bulk_takeover() -> i32;
                 pub fn usb_bulk_giveback() -> i32;
-                pub fn dk_ui_service_open(ctx: *mut u8, out: *mut *mut u8) -> i32;
+                pub fn dk_ui_open(ctx: *mut u8, out: *mut *mut u8) -> i32;
                 pub fn dk_ui_menu_open(m: *mut u8) -> i32;
                 pub fn dk_ui_menu_close(m: *mut u8);
                 pub fn dk_ui_menu_select(m: *mut u8, row: i32);
@@ -967,26 +959,13 @@ macro_rules! optional_imports {
             pub mod absent {
                 #[allow(unused_imports)]
                 use $crate::api::*;
-                pub unsafe extern "C" fn dk_ui_has(_a0: i32) -> i32 { 0 as _ }
-                pub unsafe extern "C" fn dk_ui_menu_new(_a0: *const u8) -> *mut u8 { 0 as _ }
-                pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8) -> i32 { -1 as _ }
-                pub unsafe extern "C" fn dk_ui_close(_a0: *mut u8) { }
-                pub unsafe extern "C" fn dk_ui_select(_a0: *mut u8, _a1: i32) { }
-                pub unsafe extern "C" fn dk_ui_is_open(_a0: *const u8) -> i32 { 0 as _ }
-                pub unsafe extern "C" fn dk_ui_refresh(_a0: *mut u8) { }
-                pub unsafe extern "C" fn dk_ui_action(_a0: *mut u8, _a1: *const u8, _a2: *mut u8, _a3: *mut u8, _a4: i32) { }
-                pub unsafe extern "C" fn dk_ui_submenu(_a0: *mut u8, _a1: *const u8, _a2: *mut u8) { }
-                pub unsafe extern "C" fn dk_ui_text(_a0: *mut u8, _a1: *const u8) { }
-                pub unsafe extern "C" fn dk_ui_toggle(_a0: *mut u8, _a1: *const u8, _a2: *mut i32, _a3: *mut u8, _a4: *mut u8) { }
-                pub unsafe extern "C" fn dk_ui_value(_a0: *mut u8, _a1: *const u8, _a2: *mut i32, _a3: i32, _a4: i32, _a5: *mut u8, _a6: *mut u8) { }
-                pub unsafe extern "C" fn dk_ui_check(_a0: *mut u8, _a1: i32, _a2: i32) { }
-                pub unsafe extern "C" fn dk_ui_checked(_a0: *const u8, _a1: i32) -> i32 { 0 as _ }
-                pub unsafe extern "C" fn dk_ui_confirm(_a0: *const u8, _a1: *const u8, _a2: *mut u8, _a3: *mut u8) -> i32 { -1 as _ }
-                pub unsafe extern "C" fn dk_ui_choice(_a0: *const u8, _a1: *mut u8, _a2: i32, _a3: *mut u8, _a4: *mut u8) -> i32 { -1 as _ }
-                pub unsafe extern "C" fn dk_ui_toast(_a0: *const u8) -> i32 { -1 as _ }
-                pub unsafe extern "C" fn dk_ui_tick(_a0: *mut u8, _a1: *mut u8, _a2: u32) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_menu_new(_a0: *mut u8, _a1: *const u8) -> *mut u8 { 0 as _ }
+                pub unsafe extern "C" fn dk_ui_confirm(_a0: *mut u8, _a1: *const u8, _a2: *const u8, _a3: Option<UiConfirmFn>, _a4: *mut u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_choice(_a0: *mut u8, _a1: *const u8, _a2: *const u8, _a3: i32, _a4: Option<UiChoiceFn>, _a5: *mut u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_toast(_a0: *mut u8, _a1: *const u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_tick(_a0: *mut u8, _a1: Option<UiTickFn>, _a2: *mut u8, _a3: u32) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dl_set_tick_cb(_a0: *mut u8) { }
-                pub unsafe extern "C" fn dk_ui_service_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_open(_a0: *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_close(_a0: *mut u8) { }
                 pub unsafe extern "C" fn dk_ui_menu_select(_a0: *mut u8, _a1: i32) { }
@@ -1016,7 +995,7 @@ macro_rules! optional_imports {
             }
 
             /// (name, address from the module or 0, address of the stub or 0, the module that provides it)
-            pub fn table() -> [(&'static str, usize, usize, &'static str); 56] {
+            pub fn table() -> [(&'static str, usize, usize, &'static str); 43] {
                 [
                     ("input_key", core::hint::black_box(input_key as usize), 0, "core/input"),
                     ("input_turn", core::hint::black_box(input_turn as usize), 0, "core/input"),
@@ -1026,20 +1005,7 @@ macro_rules! optional_imports {
                     ("usb_bulk_release", core::hint::black_box(usb_bulk_release as usize), 0, "core/usb-bulk"),
                     ("usb_bulk_send", core::hint::black_box(usb_bulk_send as usize), 0, "core/usb-bulk"),
                     ("usb_bulk_state", core::hint::black_box(usb_bulk_state as usize), 0, "core/usb-bulk"),
-                    ("dk_ui_has", core::hint::black_box(dk_ui_has as usize), absent::dk_ui_has as usize, "core/ui"),
                     ("dk_ui_menu_new", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, "core/ui"),
-                    ("dk_ui_open", core::hint::black_box(dk_ui_open as usize), absent::dk_ui_open as usize, "core/ui"),
-                    ("dk_ui_close", core::hint::black_box(dk_ui_close as usize), absent::dk_ui_close as usize, "core/ui"),
-                    ("dk_ui_select", core::hint::black_box(dk_ui_select as usize), absent::dk_ui_select as usize, "core/ui"),
-                    ("dk_ui_is_open", core::hint::black_box(dk_ui_is_open as usize), absent::dk_ui_is_open as usize, "core/ui"),
-                    ("dk_ui_refresh", core::hint::black_box(dk_ui_refresh as usize), absent::dk_ui_refresh as usize, "core/ui"),
-                    ("dk_ui_action", core::hint::black_box(dk_ui_action as usize), absent::dk_ui_action as usize, "core/ui"),
-                    ("dk_ui_submenu", core::hint::black_box(dk_ui_submenu as usize), absent::dk_ui_submenu as usize, "core/ui"),
-                    ("dk_ui_text", core::hint::black_box(dk_ui_text as usize), absent::dk_ui_text as usize, "core/ui"),
-                    ("dk_ui_toggle", core::hint::black_box(dk_ui_toggle as usize), absent::dk_ui_toggle as usize, "core/ui"),
-                    ("dk_ui_value", core::hint::black_box(dk_ui_value as usize), absent::dk_ui_value as usize, "core/ui"),
-                    ("dk_ui_check", core::hint::black_box(dk_ui_check as usize), absent::dk_ui_check as usize, "core/ui"),
-                    ("dk_ui_checked", core::hint::black_box(dk_ui_checked as usize), absent::dk_ui_checked as usize, "core/ui"),
                     ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize, "core/ui"),
                     ("dk_ui_choice", core::hint::black_box(dk_ui_choice as usize), absent::dk_ui_choice as usize, "core/ui"),
                     ("dk_ui_toast", core::hint::black_box(dk_ui_toast as usize), absent::dk_ui_toast as usize, "core/ui"),
@@ -1047,7 +1013,7 @@ macro_rules! optional_imports {
                     ("dl_set_tick_cb", core::hint::black_box(dl_set_tick_cb as usize), absent::dl_set_tick_cb as usize, "core/dsp-link"),
                     ("usb_bulk_takeover", core::hint::black_box(usb_bulk_takeover as usize), 0, "core/usb-bulk"),
                     ("usb_bulk_giveback", core::hint::black_box(usb_bulk_giveback as usize), 0, "core/usb-bulk"),
-                    ("dk_ui_service_open", core::hint::black_box(dk_ui_service_open as usize), absent::dk_ui_service_open as usize, "core/ui"),
+                    ("dk_ui_open", core::hint::black_box(dk_ui_open as usize), absent::dk_ui_open as usize, "core/ui"),
                     ("dk_ui_menu_open", core::hint::black_box(dk_ui_menu_open as usize), absent::dk_ui_menu_open as usize, "core/ui"),
                     ("dk_ui_menu_close", core::hint::black_box(dk_ui_menu_close as usize), absent::dk_ui_menu_close as usize, "core/ui"),
                     ("dk_ui_menu_select", core::hint::black_box(dk_ui_menu_select as usize), absent::dk_ui_menu_select as usize, "core/ui"),

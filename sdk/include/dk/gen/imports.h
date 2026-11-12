@@ -28,6 +28,9 @@ typedef int32_t dk_io_step_fn(void *arg);
 typedef void dk_job_done_fn(void *arg, int32_t status);
 typedef int32_t dk_job_step_fn(void *arg);
 typedef void dk_ui_action_fn(void *arg, int32_t value);
+typedef void dk_ui_choice_fn(void *arg, int32_t index);
+typedef void dk_ui_confirm_fn(void *arg, int32_t yes);
+typedef void dk_ui_tick_fn(void *arg);
 
 /* ---- service runtime ---- */
 
@@ -175,8 +178,17 @@ int32_t dk_param_set(uint32_t track, uint32_t word, int32_t raw);
 
 /* ---- service ui ---- */
 
-/* Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Transitional name: renamed to `dk_ui_open` in S2b-2, when the old menu call of that name goes (docs/plans/sdk.md). Context: init. Since api 1.11. Needs core/ui: without it the import binds to a stub that returns DK_E_MISSING. */
-int32_t dk_ui_service_open(dk_module_ctx *ctx, dk_ui **out);
+/* A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory). Context: ui. Since api 1.11. Needs core/ui: without it the import binds to a stub that returns -1. */
+int32_t dk_ui_confirm(dk_ui *ui, const char *title, const char *text, dk_ui_confirm_fn *done, void *arg);
+
+/* A short message on the main screen that goes away by itself. 0 when shown, a negative code when not. Context: ui. Since api 1.11. Needs core/ui: without it the import binds to a stub that returns -1. */
+int32_t dk_ui_toast(dk_ui *ui, const char *text);
+
+/* Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>. Context: ui. Since api 1.11. Needs core/ui: without it the import binds to a stub that returns -1. */
+int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms);
+
+/* Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Context: init. Since api 1.11. Needs core/ui: without it the import binds to a stub that returns DK_E_MISSING. */
+int32_t dk_ui_open(dk_module_ctx *ctx, dk_ui **out);
 
 /* Fill and show a menu on top of the current view; negative when it cannot be. Context: ui. Since api 1.11. Needs core/ui: without it the import binds to a stub that returns DK_E_MISSING. */
 int32_t dk_ui_menu_open(dk_ui_menu *m);

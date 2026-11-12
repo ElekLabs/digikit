@@ -1,6 +1,6 @@
 /* digikit/debug: the runtime's event log, its level filter, and the commands that read it (docs/findings/46-digikit-debug.md).
  *
- * The runtime calls the sink (`dkrt_log_sink_set`) with every event it logs, with interrupts masked, in whatever task logs. The sink applies the level
+ * The runtime calls the sink (`dk_debug_log_sink_set`) with every event it logs, with interrupts masked, in whatever task logs. The sink applies the level
  * filter and appends to a ring of RING events (static memory). When the sink is set the runtime first hands over the events of its small ring (the boot and the
  * errors so far). An event is 32 bytes: seq (from 1, assigned here), time (the block counter, 1500 per second), kind, flags (bit 0: an error, bits 1 to 3: the
  * level, bits 8 to 15: the source module, record index + 1) and five words. An error event is always kept; the others pass when their level is not above the
@@ -11,10 +11,14 @@
  *   0x22 LOGCFG  body: u8 op (0 get, 1 set; a set adds u8 default level and 8 bytes, the level of module record 0 to 7, 0xff: the default)
  *                reply: u8 default level, 8 module levels, u8 1 (the debug module is loaded)
  *
- * The tick (once per pass of the UI task, set with the sink) reads the machine type of each of the 16 tracks every 20 ms from the firmware (`dkrt_track_type`) and logs a change (MACHINE_CHANGE). Each pass it also reads the Sound words of the selected track (`dkrt_selected_params`) and logs a changed word (PARAM_CHANGE, level 3). */
+ * The tick (once per pass of the UI task, set with the sink) reads the machine type of each of the 16 tracks every 20 ms from the firmware (`dk_debug_track_type`) and logs a change (MACHINE_CHANGE). Each pass it also reads the Sound words of the selected track (`dk_debug_selected_params`) and logs a changed word (PARAM_CHANGE, level 3). */
 
-#include <dk/core/api.h>
+#include <dk/core/module.h>
 #include <dk/core/bytes.h>
+#include <dk/core/log.h>
+#include <dk/core/time.h>
+#include <dk/platform/debug.h>
+#include <dk/platform/host.h>
 
 typedef uint32_t u32;
 typedef uint16_t u16;
@@ -67,7 +71,7 @@ typedef struct Ev {
     u32 a[5];
 } Ev;
 
-/* The ring is module bss, not an `Api.alloc` block: the arena need is then what `dkneeds` reads from the file (docs/design/digikit-dkm.md, "Needs are inferred from the contents"). */
+/* The ring is module bss, not a `dk_alloc` block: the arena need is then what `dkneeds` reads from the file (docs/design/digikit-dkm.md, "Needs are inferred from the contents"). */
 static Ev ring[RING];
 static volatile u32 count; /* events appended: the newest sequence number */
 static volatile u32
@@ -77,7 +81,7 @@ static volatile u8 level_module[MODULES];
 
 static u32 now(void)
 {
-    return dkrt_blocks();
+    return dk_time_blocks();
 }
 
 /* The sink: interrupts are masked, so the append needs no lock. */
@@ -162,11 +166,11 @@ static int peek_allowed(u32 addr, u32 len)
     u32 i, n, r[2];
     if (end < addr)
         return 0;
-    n = dkrt_peek_range(0u, r);
+    n = dk_debug_peek(0u, r);
     if (n > MAX_RANGES)
         n = MAX_RANGES;
     for (i = 0; i < n; i++) {
-        dkrt_peek_range(i, r);
+        dk_debug_peek(i, r);
         if (addr >= r[0] && end <= r[1])
             return 1;
     }
@@ -216,7 +220,7 @@ static int32_t cmd_logcfg(const u8 *body, u32 len, u8 *out)
     return 10;
 }
 
-static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
+static int32_t cmd(u32 c, u32 seq, const void *body, u32 len, void *out)
 {
     (void)seq;
     if (c == CMD_LOG)
@@ -248,7 +252,7 @@ static void watch_params(void)
     int16_t now[PARAMS];
     u32 i, a[5];
     int32_t was = watch.track;
-    int32_t t = dkrt_selected_params(now, PARAMS);
+    int32_t t = dk_debug_selected_params(now, PARAMS);
     if (t < 0) {
         watch.track = -1;
         return;
@@ -262,7 +266,7 @@ static void watch_params(void)
             a[2] = (u32)(int32_t)watch.words[i];
             a[3] = (u32)(int32_t)now[i];
             a[4] = 0u;
-            dkrt_log_ev(K_PARAM_CHANGE, L_DEBUG << LEVEL_SHIFT, a);
+            dk_log_event(K_PARAM_CHANGE, L_DEBUG << LEVEL_SHIFT, a);
         }
     }
     watch.track = t;
@@ -272,7 +276,7 @@ static void watch_params(void)
         a[0] = (u32)t;
         a[1] = 0xffffffffu;
         a[2] = a[3] = a[4] = 0u;
-        dkrt_log_ev(K_PARAM_CHANGE, L_INFO << LEVEL_SHIFT, a);
+        dk_log_event(K_PARAM_CHANGE, L_INFO << LEVEL_SHIFT, a);
     }
 }
 
@@ -291,39 +295,42 @@ static void tick(void)
     if ((int32_t)(b - watch.next) < 0)
         return;
     watch.next = b + TRACKS_EVERY;
-    if (dkrt_track_type(0u) == -2)
+    if (dk_debug_track_type(0u) == -2)
         return; /* no project yet */
     for (t = 0; t < TRACKS; t++) {
-        int32_t ty = dkrt_track_type(t);
+        int32_t ty = dk_debug_track_type(t);
         if (watch.valid && ty != watch.types[t]) {
             a[0] = t;
             a[1] = (u32)watch.types[t];
             a[2] = (u32)ty;
             a[3] = a[4] = 0u;
-            dkrt_log_ev(K_MACHINE_CHANGE, L_INFO << LEVEL_SHIFT, a);
+            dk_log_event(K_MACHINE_CHANGE, L_INFO << LEVEL_SHIFT, a);
         }
         watch.types[t] = ty;
     }
     watch.valid = 1u;
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
     u32 i;
+    (void)ctx;
     watch.track = -1;
     for (i = 0; i < MODULES; i++)
         level_module[i] = LEVEL_NONE;
     level_default = L_INFO;
-    if (api->register_cmds(CMD_FIRST, CMD_COUNT, cmd) != 0) {
-        api->log((const u8 *)"debug: register_cmds refused", 0);
-        return -1;
+    if (dk_host_register(CMD_FIRST, CMD_COUNT, cmd) != 0) {
+        dk_log(DK_LOG_INFO, "debug: dk_host_register refused", 0);
+        return DK_E_CMD_RANGE;
     }
-    dkrt_log_sink_set((uint8_t *)sink, (uint8_t *)tick);
-    return 0;
+    dk_debug_log_sink_set((uint8_t *)sink, (uint8_t *)tick);
+    return DK_OK;
 }
 
-void dkm_fini(const dk_api *api)
+static void fini(dk_module_ctx *ctx)
 {
-    (void)api;
-    dkrt_log_sink_set(0, 0);
+    (void)ctx;
+    dk_debug_log_sink_set(0, 0);
 }
+
+const dk_module_def dk_module = {.init = init, .fini = fini};

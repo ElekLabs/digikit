@@ -1,7 +1,7 @@
 /* shot.h: the internal header of the SHOT module. */
 #ifndef SHOT_H
 #define SHOT_H
-#include <dk/core/api.h>
+#include <dk/core/module.h>
 #include <dk/machine/machine.h>
 #include <dk/platform/param.h>
 #include <dk/sample/pool.h>

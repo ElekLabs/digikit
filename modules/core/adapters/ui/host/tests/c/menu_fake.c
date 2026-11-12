@@ -37,9 +37,15 @@ static struct {
 } fk;
 static int settings_runs, settings_acts;
 
-static dk_ui_act_fn *stock_fn;
+static int ui_token;
+dk_ui *dk_ui_core_handle(void)
+{
+    return (dk_ui *)&ui_token;
+}
 
-void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_act_fn *fn, void *ctx)
+static dk_ui_action_fn *stock_fn;
+
+void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_action_fn *fn, void *ctx)
 {
     (void)stock_menu;
     (void)text;
@@ -261,17 +267,17 @@ void fk_loaded(const char *path, const char *name)
 }
 
 /* A loaded module that has a dkm_menu: the menu gets the fake settings entry, which adds a text row and an action row. */
-static void settings_action(void *ctx, int arg)
+static void settings_action(void *arg, int32_t value)
 {
-    (void)ctx;
-    settings_acts += arg;
+    (void)arg;
+    settings_acts += value;
 }
 static void fake_dkm_menu(dk_ui_menu *m, void *ctx)
 {
     settings_runs++;
     assert(ctx == 0);
-    dk_ui_text(m, "HELD 0");
-    dk_ui_action(m, "RELEASE", settings_action, 0, 1);
+    dk_ui_menu_add_text(m, "HELD 0");
+    dk_ui_menu_add_action(m, "RELEASE", settings_action, 0, 1);
 }
 void fk_loaded_menu(const char *path, const char *name)
 {

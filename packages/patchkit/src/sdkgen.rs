@@ -1256,6 +1256,10 @@ fn c_consts(
         }
     }
     for (ty, f) in enums {
+        for c in consts.iter().filter(|c| f(&c.name) && c.name == "DK_OK") {
+            // <dk/core/module.h> defines DK_OK as a macro of the same value; the enumerator below takes over.
+            let _ = writeln!(s, "\n#undef {}", c.name);
+        }
         let _ = writeln!(s, "\ntypedef enum {{");
         for c in consts.iter().filter(|c| f(&c.name)) {
             if let Some(d) = &c.doc {

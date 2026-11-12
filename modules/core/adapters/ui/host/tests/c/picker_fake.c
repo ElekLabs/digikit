@@ -1,4 +1,4 @@
-/* Host test of the sample picker (sdk/src/sample/picker.c): its own source, compiled here against a fake dk_api (a listing provider and
+/* Host test of the sample picker (sdk/src/sample/picker.c): its own source, compiled here against fakes of the imports (a listing provider and
    a 16-entry sample pool) and the fake <dk/platform/ui.h> (src/lib.rs). picker.rs presses the keys. The source is included, not linked, so
    that pf_reset can clear its statics between tests. The pure functions (logic.c) are linked. */
 #include <stdint.h>
@@ -8,13 +8,13 @@
 
 #define MAXE 400
 
-static dk_api api;
+static int pool_token, files_token, ui_token; /* the fake handles */
 static struct {
-    int n, read, finished, list_calls, cancels, client_calls;
+    int n, read, finished, list_calls, cancels;
     int32_t ticket, list_result, poll_error;
     char dir[DK_CHOOSER_PATH];
     dk_file_entry e[MAXE];
-    dk_file_event *notify;
+    dk_files_event_fn *notify;
 } fl;
 static struct {
     int status[TRACKS];
@@ -24,29 +24,24 @@ static struct {
     char last_path[DK_CHOOSER_PATH];
 } sm;
 
-static int32_t f_client(void)
+int32_t dk_files_list(dk_files *f, uint32_t root, const char *path, dk_files_event_fn *notify,
+                      void *arg)
 {
-    fl.client_calls++;
-    return 7;
-}
-static int32_t f_list(uint32_t c, uint32_t root, const uint8_t *path, dk_file_event *notify,
-                      uint8_t *ctx)
-{
-    (void)c;
-    (void)ctx;
+    (void)f;
+    (void)arg;
     fl.list_calls++;
     if (root != DK_FILES_SAMPLES)
         return -1;
-    strcpy(fl.dir, (const char *)path);
+    strcpy(fl.dir, path);
     fl.n = fl.read = fl.finished = 0;
     fl.notify = notify;
     if (fl.list_result < 0)
         return fl.list_result;
     return ++fl.ticket;
 }
-static int32_t f_poll(uint32_t c, uint32_t t, uint8_t *out, uint32_t cap)
+int32_t dk_files_poll(dk_files *f, uint32_t t, void *out, uint32_t cap)
 {
-    (void)c;
+    (void)f;
     if (t != (uint32_t)fl.ticket || cap < sizeof(dk_file_entry))
         return -1;
     if (fl.poll_error)
@@ -57,51 +52,51 @@ static int32_t f_poll(uint32_t c, uint32_t t, uint8_t *out, uint32_t cap)
     }
     return fl.finished ? DK_FILES_END : DK_FILES_PENDING;
 }
-static int32_t f_cancel(uint32_t c, uint32_t t)
+int32_t dk_files_cancel(dk_files *f, uint32_t t)
 {
-    (void)c;
+    (void)f;
     (void)t;
     fl.cancels++;
     return 0;
 }
 /* The fake runtime: the path goes into slot `index` (a filled slot is replaced; set_result < 0 refuses; index >= 16 is E_CONTRACT). */
-static int32_t s_set(uint32_t h, uint32_t index, const uint8_t *path)
+int32_t dk_sample_pool_set(dk_sample_pool *p, uint32_t index, const char *path)
 {
-    (void)h;
+    (void)p;
     sm.sets++;
-    strcpy(sm.last_path, (const char *)path);
+    strcpy(sm.last_path, path);
     sm.last_index = (int)index;
     if (sm.set_result < 0)
         return sm.set_result;
     if (index >= TRACKS)
         return DK_SAMPLE_E_CONTRACT;
-    strcpy(sm.path[index], (const char *)path);
+    strcpy(sm.path[index], path);
     sm.status[index] = DK_SAMPLE_QUEUED;
     return 0;
 }
-static int32_t s_clear(uint32_t h, uint32_t t)
+int32_t dk_sample_pool_clear(dk_sample_pool *p, uint32_t t)
 {
-    (void)h;
+    (void)p;
     sm.clears++;
     sm.status[t] = 0;
     sm.path[t][0] = 0;
     return 0;
 }
-static int32_t s_status(uint32_t h, uint32_t t)
+int32_t dk_sample_pool_status(dk_sample_pool *p, uint32_t t)
 {
-    (void)h;
+    (void)p;
     return sm.status[t];
 }
-static int32_t s_info(uint32_t h, uint32_t t, uint8_t *out)
+int32_t dk_sample_pool_info(dk_sample_pool *p, uint32_t t, void *out)
 {
-    (void)h;
+    (void)p;
     memcpy(out, &sm.info[t], sizeof sm.info[t]);
     return 0;
 }
-static int32_t s_path(uint32_t h, uint32_t t, uint8_t *buf, uint32_t cap)
+int32_t dk_sample_pool_path(dk_sample_pool *p, uint32_t t, char *buf, uint32_t cap)
 {
     uint32_t n = (uint32_t)strlen(sm.path[t]);
-    (void)h;
+    (void)p;
     sm.path_calls++;
     if (!sm.path[t][0])
         return DK_SAMPLE_E_NOT_FOUND;
@@ -111,9 +106,9 @@ static int32_t s_path(uint32_t h, uint32_t t, uint8_t *buf, uint32_t cap)
     return (int32_t)n;
 }
 
-static void on_pick(void *ctx, int index)
+static void on_pick(void *arg, int32_t index)
 {
-    (void)ctx;
+    (void)arg;
     sm.picks++;
     sm.last_pick = index;
 }
@@ -123,9 +118,9 @@ void pf_reset(void)
 {
     memset(&fl, 0, sizeof fl);
     memset(&sm, 0, sizeof sm);
-    memset(&api, 0, sizeof api);
-    g_api = 0;
-    g_handle = g_client = 0;
+    g_pool = 0;
+    g_ui = 0;
+    g_files = 0;
     g_list = g_browser = g_finfo = 0;
     g_info = 0;
     g_d = 0;
@@ -133,31 +128,19 @@ void pf_reset(void)
     g_ticket = 0;
     g_dir[0] = 0;
     g_pick = 0;
-    g_pick_ctx = 0;
-    api.version = 1;
-    api.size = sizeof(dk_api);
-    api.files_client = f_client;
-    api.files_list = f_list;
-    api.files_poll = f_poll;
-    api.files_cancel = f_cancel;
-    api.sample_pool_set = s_set;
-    api.sample_pool_clear = s_clear;
-    api.sample_pool_status = s_status;
-    api.sample_pool_info = s_info;
-    api.sample_pool_path = s_path;
+    g_pick_arg = 0;
 }
 
-void pf_short_api(void)
+/* The picker with its three handles; `pool`, `files` and `ui` are 0 for a handle the module did not get. */
+int pf_init_with(int pool, int files, int ui)
 {
-    api.size = offsetof(dk_api, files_client);
+    return (int)dk_sample_picker_init(pool ? (dk_sample_pool *)&pool_token : 0,
+                                      files ? (dk_files *)&files_token : 0,
+                                      ui ? (dk_ui *)&ui_token : 0);
 }
-void pf_api_without_set(void)
+int pf_init(uint32_t pool)
 {
-    api.size = offsetof(dk_api, sample_pool_set);
-}
-int pf_init(uint32_t handle)
-{
-    return dk_sample_picker_init(&api, handle);
+    return pf_init_with(pool != 0, 1, 1);
 }
 void pf_open_pool(int current, int with_pick)
 {
@@ -213,10 +196,6 @@ const char *pf_list_dir(void)
 {
     return fl.dir;
 }
-int pf_client_calls(void)
-{
-    return fl.client_calls;
-}
 
 /* the fake sample table */
 void pf_track(int t, int status, const char *path, uint32_t frames, uint32_t rate,
@@ -269,45 +248,45 @@ static struct {
     dk_chooser_desc d;
 } cf;
 
-static void toy_row(void *ctx, int i, int is_current, char *text)
+static void toy_row(void *arg, int32_t i, int32_t is_current, char *text)
 {
-    (void)ctx;
+    (void)arg;
     text[0] = is_current ? '>' : ' ';
     text[1] = 'r';
     text[2] = (char)('0' + i);
     text[3] = 0;
 }
-static int toy_fill(void *ctx, int slot, const char *path)
+static int32_t toy_fill(void *arg, int32_t slot, const char *path)
 {
-    (void)ctx;
+    (void)arg;
     cf.fill_calls++;
     cf.last_slot = slot;
     strcpy(cf.last_fill, path);
     return cf.fill_rc < 0 ? cf.fill_rc : slot;
 }
-static void toy_error(void *ctx, int code, char *text)
+static void toy_error(void *arg, int32_t code, char *text)
 {
-    (void)ctx;
+    (void)arg;
     (void)code;
     if (cf.with_text)
         strcpy(text, "TOY FAILED");
 }
-static void toy_panel(void *ctx, dk_ui_menu *p, int entry)
+static void toy_panel(void *arg, dk_ui_menu *p, int32_t entry)
 {
-    (void)ctx;
+    (void)arg;
     cf.panel_entry = entry;
-    dk_ui_action(p, "ONE", 0, 0, entry);
+    dk_ui_menu_add_action(p, "ONE", 0, 0, entry);
 }
-static void toy_done(void *ctx, int result)
+static void toy_done(void *arg, int32_t result)
 {
-    (void)ctx;
+    (void)arg;
     cf.done_calls++;
     cf.last_done = result;
 }
 
 int cf_init(void)
 {
-    return dk_chooser_init(&api);
+    return (int)dk_chooser_init((dk_files *)&files_token, (dk_ui *)&ui_token);
 }
 int cf_open(int current, int with_text)
 {

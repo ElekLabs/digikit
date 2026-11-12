@@ -130,6 +130,12 @@ io_done_fn = "void (void *arg, i32 status)"
 # A menu row action or change (`dk_ui_menu_add_action`, `dk_ui_menu_add_toggle`, `dk_ui_menu_add_value`), in the UI task: `arg` is the pointer the row was added with, `value` the
 # value the row was added with (an action) or the new value.
 ui_action_fn = "void (void *arg, i32 value)"
+# The end of a YES/NO dialog (`dk_ui_confirm`), in the UI task, after the dialog closed: `yes` is 1 for YES, 0 for NO.
+ui_confirm_fn = "void (void *arg, i32 yes)"
+# The end of a choice dialog (`dk_ui_choice`), in the UI task, after the dialog closed: the index of the chosen item.
+ui_choice_fn = "void (void *arg, i32 index)"
+# A UI-task timer (`dk_ui_tick`): short, it runs between key events and must not wait.
+ui_tick_fn = "void (void *arg)"
 
 # The machine contract's numbers (sdk/include/dk/gen/machine.h is the generated C view; it includes the generated sdk/include/dk/gen/machine_consts.h).
 # `patchkit gen` writes sdk/dsp/contract/dk_machine.inc and sdk/include/dk/gen/machine_consts.h from this table: the constants, then the byte and word offsets of the fields (all 4 bytes).
@@ -567,116 +573,12 @@ doc = "State word: bit 0 enabled, bit 1 connected (the host configured interface
 requires = "core/usb-bulk"
 
 [[import]]
-name = "dk_ui_has"
-sig = "i32 (i32 cap)"
-doc = "1 when this device has the UI capability `cap` (DK_UI_CAP_*), else 0. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "0"
-
-[[import]]
 name = "dk_ui_menu_new"
 service = "ui"
 since = 11
 context = "ui"
-sig = "u8 *(const u8 *desc)"
-doc = "Make a menu from a dk_ui_menu_desc; 0 when out of memory. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "0"
-
-[[import]]
-name = "dk_ui_open"
-sig = "i32 (u8 *menu)"
-doc = "Fill and show a menu on top of the current view; -1 when it cannot. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "-1"
-
-[[import]]
-name = "dk_ui_close"
-sig = "void (u8 *menu)"
-doc = "Close a menu. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_select"
-sig = "void (u8 *menu, i32 row)"
-doc = "Put the cursor of a menu or list on a row (clamped); call before dk_ui_open to start on the current choice. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_is_open"
-sig = "i32 (const u8 *menu)"
-doc = "1 when the menu is open. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "0"
-
-[[import]]
-name = "dk_ui_refresh"
-sig = "void (u8 *menu)"
-doc = "Fill an open menu again. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_action"
-sig = "void (u8 *menu, const char *text, u8 *run, u8 *ctx, i32 arg)"
-doc = "Add a row that runs `fn(ctx, arg)` on YES. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_submenu"
-sig = "void (u8 *menu, const char *text, u8 *sub)"
-doc = "Add a row that opens another menu. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_text"
-sig = "void (u8 *menu, const char *text)"
-doc = "Add a row of text without an action. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_toggle"
-sig = "void (u8 *menu, const char *text, i32 *value, u8 *changed, u8 *ctx)"
-doc = "Add an ON/OFF row. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_value"
-sig = "void (u8 *menu, const char *text, i32 *value, i32 min, i32 max, u8 *changed, u8 *ctx)"
-doc = "Add a number row changed by the encoder. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_check"
-sig = "void (u8 *list, i32 row, i32 on)"
-doc = "Set the check mark of a list row. See <dk/platform/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_checked"
-sig = "i32 (const u8 *list, i32 row)"
-doc = "1 when the list row is checked. See <dk/platform/ui.h>."
+sig = "dk_ui_menu *(dk_ui *ui, const void *desc)"
+doc = "Make a menu from a `dk_ui_menu_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype); NULL when out of memory. Menus are never freed."
 kind = "helper"
 requires = "core/ui"
 absent = "0"
@@ -686,9 +588,8 @@ name = "dk_ui_confirm"
 service = "ui"
 since = 11
 context = "ui"
-sig = "i32 (const char *title, const char *text, u8 *done, u8 *ctx)"
-doc = "A YES/NO dialog; -1 when it cannot be shown. See <dk/platform/ui.h>."
-kind = "helper"
+sig = "i32 (dk_ui *ui, const char *title, const char *text, ui_confirm_fn done, void *arg)"
+doc = "A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory)."
 requires = "core/ui"
 absent = "-1"
 
@@ -697,8 +598,8 @@ name = "dk_ui_choice"
 service = "ui"
 since = 11
 context = "ui"
-sig = "i32 (const char *title, u8 *items, i32 n, u8 *done, u8 *ctx)"
-doc = "A choice of n items; -1 when it cannot be shown. See <dk/platform/ui.h>."
+sig = "i32 (dk_ui *ui, const char *title, const void *items, i32 n, ui_choice_fn done, void *arg)"
+doc = "A choice of `n` items (`items` is a `const char *const *`, declared in <dk/platform/ui.h>, which also has the typed prototype): `done(arg, index)` runs after the dialog closed; NO closes it without calling `done`. 0 when shown, a negative code when not."
 kind = "helper"
 requires = "core/ui"
 absent = "-1"
@@ -708,9 +609,8 @@ name = "dk_ui_toast"
 service = "ui"
 since = 11
 context = "ui"
-sig = "i32 (const char *text)"
-doc = "A short message on the main screen; -1 when it cannot be shown. See <dk/platform/ui.h>."
-kind = "helper"
+sig = "i32 (dk_ui *ui, const char *text)"
+doc = "A short message on the main screen that goes away by itself. 0 when shown, a negative code when not."
 requires = "core/ui"
 absent = "-1"
 
@@ -719,9 +619,8 @@ name = "dk_ui_tick"
 service = "ui"
 since = 11
 context = "ui"
-sig = "i32 (u8 *cb, u8 *ctx, u32 period_ms)"
-doc = "Call `cb(ctx)` about every `period_ms` in the UI task (period 0 removes it); 0 when set, -1 when it cannot be (no core/ui, table full). See <dk/platform/ui.h>."
-kind = "helper"
+sig = "i32 (dk_ui *ui, ui_tick_fn fn, void *arg, u32 period_ms)"
+doc = "Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>."
 requires = "core/ui"
 absent = "-1"
 
@@ -1120,12 +1019,12 @@ sig = "i32 (dk_sample_pool *p, u32 index, u32 token, u32 first, u32 frames, u32 
 doc = "Min/max of `columns` equal parts of the frames [first, first + frames) of a READY pool entry matching token, computed in the background. Returns `columns` when ready, 0 while it is computed, or a negative error. Poll from the draw callback."
 
 [[import]]
-name = "dk_ui_service_open"
+name = "dk_ui_open"
 service = "ui"
 since = 11
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, dk_ui **out)"
-doc = "Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Transitional name: renamed to `dk_ui_open` in S2b-2, when the old menu call of that name goes (docs/plans/sdk.md)."
+doc = "Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched."
 requires = "core/ui"
 absent = "missing"
 

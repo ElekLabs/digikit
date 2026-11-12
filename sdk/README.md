@@ -75,8 +75,8 @@ const dk_module_def dk_module = {.init = init};  /* init, fini, tick, menu: all 
   prototype. `patchkit pack` takes the runtime minor a module needs from the newest `since` it links and prints the services it needs
   (`services <file>: ...`).
 - A service that another module provides (`ui`, `input`, `usb_bulk`, `dsp_link`) may be absent: its `_open` returns `DK_E_MISSING`, the other
-  calls return the same code or do nothing, and the module still loads. Without `dk_ui_service_open` returning `DK_OK` a module does not call
-  the menu functions.
+  calls return the same code or do nothing, and the module still loads. Without `dk_ui_open` returning `DK_OK` a module does not call
+  the functions that need the `dk_ui` handle (`dk_ui_menu_new`, `dk_ui_confirm`, `dk_ui_choice`, `dk_ui_toast`, `dk_ui_tick`).
 - The headers of the services are `core/log.h`, `core/mem.h`, `core/time.h`, `platform/host.h`, `settings.h`, `files.h` (listing and writing),
   `io.h`, `hash32.h`, `intro.h`, `param.h`, `samples.h`, `ui.h`, `input.h`, `usb_bulk.h`, `dsp_link.h` and `debug.h`.
 
@@ -84,8 +84,7 @@ The old entry (`dkm_init(const dk_api *api)`, the `dk_api` table, `DK_API_HAS`, 
 `dkm_menu` export) still works in this version and goes away in S2b-2 when the modules and templates move. A module uses one entry or the
 other, never both (the packer refuses it). The old headers keep their old declarations for it; where an old name is the new name of
 another call (`dk_settings_get`, `dk_settings_put`, `dk_settings_remove`, `dk_intro_take`) the old wrapper is defined only when
-`<dk/core/module.h>` was not included before the header, and `module.h` stops the build if the old wrapper is already there. `dk_ui_open` is
-still the old call that opens a menu; the service accessor is `dk_ui_service_open` until then, when it is renamed `dk_ui_open`. The templates and the module guide still show the old entry.
+`<dk/core/module.h>` was not included before the header, and `module.h` stops the build if the old wrapper is already there. The templates and the module guide still show the old entry.
 
 ## Include paths
 

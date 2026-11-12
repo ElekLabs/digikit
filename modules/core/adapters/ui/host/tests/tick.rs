@@ -17,7 +17,6 @@ extern "C" {
     fn tk_module_fills() -> c_int;
     fn tk_module_stop() -> c_int;
     fn tk_module_restart(ms: u32) -> c_int;
-    fn tk_module_has_cap() -> c_int;
 }
 
 const BLOCKS: u32 = 1500;
@@ -187,7 +186,6 @@ fn a_period_over_the_limit_is_cut() {
 fn a_module_screen_redraws_while_a_load_runs_and_stops_its_timer() {
     let _g = session();
     unsafe {
-        assert_eq!(tk_module_has_cap(), 1);
         assert_eq!(tk_module_open(), 0);
         assert_eq!(tick_periods(), [100]);
         let fills = tk_module_fills();
@@ -235,7 +233,6 @@ fn without_the_capability_the_call_does_nothing_and_says_so() {
     let _g = session();
     set_cap(CAP_TICK, false);
     unsafe {
-        assert_eq!(tk_module_has_cap(), 0);
         assert_eq!(tk_module_open(), -1);
         assert!(tick_periods().is_empty());
         advance_ms(500);
