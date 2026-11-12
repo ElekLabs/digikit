@@ -2882,6 +2882,46 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.site.block_read.clamp_chunk"
+cpu = "cf"
+kind = "code"
+addr = 0x4012e1d8
+len = 12
+sha256 = "c697ab9119ff0138b8ee48eddb512a4f85c26f5833d7574b8ed39a153cab754f"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_read.clamp_entry"
+cpu = "cf"
+kind = "code"
+addr = 0x4012e1ca
+len = 6
+sha256 = "71b2ded1ac10554d6765c1cc38f75afc7a1ef0afd13b4d1f714bc71aa458a693"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_write.clamp_chunk"
+cpu = "cf"
+kind = "code"
+addr = 0x4012e3be
+len = 12
+sha256 = "c697ab9119ff0138b8ee48eddb512a4f85c26f5833d7574b8ed39a153cab754f"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_write.clamp_entry"
+cpu = "cf"
+kind = "code"
+addr = 0x4012e3b0
+len = 6
+sha256 = "71b2ded1ac10554d6765c1cc38f75afc7a1ef0afd13b4d1f714bc71aa458a693"
+mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.site.data_sector_base"
 cpu = "cf"
 kind = "code"
@@ -3850,6 +3890,26 @@ mode = "before"
 name = "cf.rtos.hook.main_os_task"
 site = "cf.rtos.site.main_os_task"
 mode = "before"
+
+[[hook]]
+name = "cf.storage.hook.block_read.clamp_chunk"
+site = "cf.storage.site.block_read.clamp_chunk"
+mode = "replace"
+
+[[hook]]
+name = "cf.storage.hook.block_read.clamp_entry"
+site = "cf.storage.site.block_read.clamp_entry"
+mode = "replace"
+
+[[hook]]
+name = "cf.storage.hook.block_write.clamp_chunk"
+site = "cf.storage.site.block_write.clamp_chunk"
+mode = "replace"
+
+[[hook]]
+name = "cf.storage.hook.block_write.clamp_entry"
+site = "cf.storage.site.block_write.clamp_entry"
+mode = "replace"
 
 [[hook]]
 name = "cf.storage.hook.fault_irqstat_a"

@@ -25,3 +25,5 @@ path = "build/plusdrive-write.dko.json"
 sources = ["src/cf/dt2/pdw.c"]
 place = "cf.expansion"
 devices = ["dt2"]
+# core/sdhc-large: hash_fast registers its readback buffer around the card reads (0 without the module).
+optional = ["sdhc_large_range"]

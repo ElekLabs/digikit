@@ -403,7 +403,7 @@ pub mod api {
     }
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 44] = [
+    pub const IMPORT_NAMES: [&str; 46] = [
         "fw_block_read",
         "fw_alloc",
         "fw_free",
@@ -421,6 +421,8 @@ pub mod api {
         "usb_bulk_release",
         "usb_bulk_send",
         "usb_bulk_state",
+        "sdhc_large_range",
+        "sdhc_large_ctl",
         "dk_ui_has",
         "dk_ui_menu_new",
         "dk_ui_open",
@@ -493,6 +495,12 @@ pub mod api {
     /// `usb_bulk_state`: State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the device is not in USB MIDI mode; read live), bit 3 taken over (usb_bulk_takeover is active), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then).
     pub type UsbBulkStateFn = unsafe extern "C" fn() -> u32;
 
+    /// `sdhc_large_range`: core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside [lo, hi), is 16-byte aligned and its length is a multiple of 512, while the switch is on (sdhc_large_ctl key 0). `lo` = `hi` = 0 clears the range. One range at a time: the caller sets it before the transfer and clears it after. Every other transfer keeps the firmware's 64 KiB limit. A no-op without the module.
+    pub type SdhcLargeRangeFn = unsafe extern "C" fn(lo: u32, hi: u32);
+
+    /// `sdhc_large_ctl`: core/sdhc-large: key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. A stub returning 0 without the module.
+    pub type SdhcLargeCtlFn = unsafe extern "C" fn(key: u32, val: u32) -> u32;
+
     /// `dl_set_tick_cb`: Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing.
     pub type DlSetTickCbFn = unsafe extern "C" fn(cb: *mut u8);
 
@@ -537,6 +545,8 @@ macro_rules! optional_imports {
                 pub fn usb_bulk_release(buf: *mut u8) -> i32;
                 pub fn usb_bulk_send(buf: *const u8, len: u32) -> i32;
                 pub fn usb_bulk_state() -> u32;
+                pub fn sdhc_large_range(lo: u32, hi: u32);
+                pub fn sdhc_large_ctl(key: u32, val: u32) -> u32;
                 pub fn dk_ui_has(cap: i32) -> i32;
                 pub fn dk_ui_menu_new(desc: *const u8) -> *mut u8;
                 pub fn dk_ui_open(menu: *mut u8) -> i32;
@@ -562,6 +572,8 @@ macro_rules! optional_imports {
 
             /// What an absent module's import calls: the failure value of the API.
             pub mod absent {
+                pub unsafe extern "C" fn sdhc_large_range(_a0: u32, _a1: u32) { }
+                pub unsafe extern "C" fn sdhc_large_ctl(_a0: u32, _a1: u32) -> u32 { 0 as _ }
                 pub unsafe extern "C" fn dk_ui_has(_a0: i32) -> i32 { 0 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_new(_a0: *const u8) -> *mut u8 { 0 as _ }
                 pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8) -> i32 { -1 as _ }
@@ -584,7 +596,7 @@ macro_rules! optional_imports {
             }
 
             /// (name, address from the module or 0, address of the stub or 0)
-            pub fn table() -> [(&'static str, usize, usize); 29] {
+            pub fn table() -> [(&'static str, usize, usize); 31] {
                 [
                     ("input_key", core::hint::black_box(input_key as usize), 0),
                     ("input_turn", core::hint::black_box(input_turn as usize), 0),
@@ -594,6 +606,8 @@ macro_rules! optional_imports {
                     ("usb_bulk_release", core::hint::black_box(usb_bulk_release as usize), 0),
                     ("usb_bulk_send", core::hint::black_box(usb_bulk_send as usize), 0),
                     ("usb_bulk_state", core::hint::black_box(usb_bulk_state as usize), 0),
+                    ("sdhc_large_range", core::hint::black_box(sdhc_large_range as usize), absent::sdhc_large_range as usize),
+                    ("sdhc_large_ctl", core::hint::black_box(sdhc_large_ctl as usize), absent::sdhc_large_ctl as usize),
                     ("dk_ui_has", core::hint::black_box(dk_ui_has as usize), absent::dk_ui_has as usize),
                     ("dk_ui_menu_new", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize),
                     ("dk_ui_open", core::hint::black_box(dk_ui_open as usize), absent::dk_ui_open as usize),

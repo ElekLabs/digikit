@@ -31,9 +31,10 @@ pub const SCRATCH_AT: usize = 16 + MAX_CHUNK + 16;
 /// Largest chunk of one write (the protocol's DATA chunk).
 const MAX_CHUNK: usize = dkrt_sdk::proto::MAX_CHUNK as usize;
 
-/// Largest piece of one SDK write: `store::MAX_IO_SECTORS` sectors, the most that one firmware block write takes without splitting. The SDK
-/// path writes from the caller's buffer, so this needs no scratch (the SysEx path stays at `MAX_CHUNK`, the size of its body region).
-const WRITE_PIECE: usize = store::MAX_IO_SECTORS as usize * 512;
+/// Largest piece of one SDK write: `store::MAX_WRITE_SECTORS` sectors, the largest card command of core/sdhc-large (the firmware's block write
+/// splits a piece into 64 KiB commands itself when the module is not in the image). The SDK path writes from the caller's buffer, so this needs no
+/// scratch (the SysEx path stays at `MAX_CHUNK`, the size of its body region).
+const WRITE_PIECE: usize = store::MAX_WRITE_SECTORS as usize * 512;
 
 /// The three buffers of a store operation: the table's input and output streams (`TBL_CAP` bytes each) and a scratch (at least 512 bytes);
 /// all 16-byte aligned and apart.
@@ -722,6 +723,23 @@ fn mine(kind: u8, owner: u8, handle: i32) -> bool {
 /// (SysEx: the body region), so a short last chunk is padded in place; else its tail sector goes through the scratch. A retry of the
 /// previous SysEx chunk is ok and writes nothing. Statuses: `E_STATE`, `E_OFFSET`, `E_LENGTH`, `E_WRITE`.
 pub unsafe fn write(b: &Bufs, kind: u8, owner: u8, handle: i32, off: u32, data: *mut u8, len: u32, padded: bool) -> i32 {
+    // the card writes below may run as large commands (core/sdhc-large): `len` plus the padding of a last sector is the buffer's extent
+    large_range(data as u32, (data as u32).wrapping_add(len).wrapping_add(512));
+    let r = write_inner(b, kind, owner, handle, off, data, len, padded);
+    large_range(0, 0);
+    r
+}
+
+/// Tell core/sdhc-large which buffer the next card transfers use (`lo` = `hi` = 0: none). A no-op when the module is not in the image (the symbol is 0).
+#[inline(never)]
+unsafe fn large_range(lo: u32, hi: u32) {
+    let f: unsafe extern "C" fn(u32, u32) = crate::optional::sdhc_large_range;
+    if core::hint::black_box(f as usize) != 0 {
+        f(lo, hi);
+    }
+}
+
+unsafe fn write_inner(b: &Bufs, kind: u8, owner: u8, handle: i32, off: u32, data: *mut u8, len: u32, padded: bool) -> i32 {
     if !mine(kind, owner, handle) {
         return E_STATE;
     }
@@ -801,7 +819,9 @@ unsafe fn close_inner(b: &Bufs, out: *mut u8) -> i32 {
     // the card holds what was received: read the file back and hash it (the end-to-end check; capability READBACK of INFO)
     if u.size != 0 {
         let l = lay();
+        large_range(b.rb as u32, (b.rb as u32).wrapping_add(b.rb_cap as u32));
         let r = readback(|s, n, p| block_read(l.first + s, n, p), u.start, u.size, b.rb, b.rb_cap, &got);
+        large_range(0, 0);
         if r != OK {
             return r;
         }

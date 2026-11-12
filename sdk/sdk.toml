@@ -532,6 +532,20 @@ doc = "State word: bit 0 enabled, bit 1 connected (the host configured interface
 requires = "core/usb-bulk"
 
 [[import]]
+name = "sdhc_large_range"
+sig = "void (u32 lo, u32 hi)"
+doc = "core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside [lo, hi), is 16-byte aligned and its length is a multiple of 512, while the switch is on (sdhc_large_ctl key 0). `lo` = `hi` = 0 clears the range. One range at a time: the caller sets it before the transfer and clears it after. Every other transfer keeps the firmware's 64 KiB limit. A no-op without the module."
+requires = "core/sdhc-large"
+absent = "void"
+
+[[import]]
+name = "sdhc_large_ctl"
+sig = "u32 (u32 key, u32 val)"
+doc = "core/sdhc-large: key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. A stub returning 0 without the module."
+requires = "core/sdhc-large"
+absent = "0"
+
+[[import]]
 name = "dk_ui_has"
 sig = "i32 (i32 cap)"
 doc = "1 when this device has the UI capability `cap` (DK_UI_CAP_*), else 0. See <dk/platform/ui.h>."

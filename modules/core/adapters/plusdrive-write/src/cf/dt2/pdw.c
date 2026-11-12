@@ -559,6 +559,16 @@ static i32 place(void)
 }
 
 #if PDW_FAST_CLOSE
+/* core/sdhc-large (optional: the symbol is 0 when the module is not in the image): the card transfers that follow may run as large commands when their buffer
+ * lies in [lo, hi); 0, 0 clears the range. */
+extern void sdhc_large_range(u32 lo, u32 hi);
+static void large_range(u32 lo, u32 hi)
+{
+    void (*f)(u32, u32) = sdhc_large_range;
+    __asm__ volatile("" : "+r"(f)); /* the compiler may not fold the address of an extern function to non-zero */
+    if (f) f(lo, hi);
+}
+
 /* The firmware's close hash of the staged file (FUN_4015b1e8) without its re-read through the page cache. 0; E_HASH when the card's data differs from
  * the host's hash (nothing is changed then); HF_FALLBACK when the card cannot be read the way this function needs (not mounted, no inode, a size that is not what
  * was written, a page that the extent lookup misses, a failed block read; nothing is changed yet), and the caller closes with the firmware's own hash;
@@ -581,6 +591,7 @@ static i32 hash_fast(void)
     if (!ino) goto unlock;
     if (ino[1] != total || cut == 10) goto put; /* the inode size is what was written (knob 10 acts as a size mismatch) */
     pdw_hash_init(&h);
+    large_range((u32)rbuf, (u32)rbuf + PAGE_BYTES); /* the block reads of the pages below read into rbuf */
     for (p = 0; p < pages; p++) {
         u32 n = total - (p << PAGE_SHIFT);
         if (n > PAGE_BYTES) n = PAGE_BYTES;
@@ -588,6 +599,7 @@ static i32 hash_fast(void)
         if (dk_fw_storage_block_read(dsec + (DKPW_DMA.phys << PAGE_SECTOR_SHIFT), (n + (SECTOR_BYTES - 1u)) & ~(SECTOR_BYTES - 1u), rbuf) != 0) goto put;
         pdw_hash_update(&h, rbuf, n);
     }
+    large_range(0, 0);
     hv = pdw_hash_finish(&h) | 1u;
     if (have_want) {
         for (i = 0; i < 4; i++) {
@@ -617,6 +629,7 @@ static i32 hash_fast(void)
     dk_fw_storage_inode_write((u8 *)ino);
     r = 0;
 put:
+    large_range(0, 0); /* also when the loop left early */
     dk_fw_storage_inode_put((u8 *)ino);
 unlock:
     dk_fw_rtos_mutex_unlock(mutex);
