@@ -9,6 +9,8 @@ export interface LinkState {
   reason?: string;
   /** `sysex` only: usb-fast is selected but did not load at the last boot (the device's LOADS record); `loadFailureText` says why. */
   failure?: LoadFailure;
+  /** `sysex` only: usb-fast is loaded but the device is in USB AUDIO/MIDI mode, which has no bulk interface, and the take-over is off. */
+  wrongMode?: boolean;
   /** `bulk` only: the device is taken over (it was in USB AUDIO/MIDI and runs in USB MIDI until the linger ends), so its USB audio is paused. */
   takenOver?: boolean;
 }
@@ -39,6 +41,8 @@ export function linkTag(link: LinkState | undefined): RowTag | undefined {
     default:
       if (link.failure)
         return { text: `SYSEX: ${loadFailureShort(link.failure)}`, tone: 'warn', title: loadFailureText(link.failure) };
+      if (link.wrongMode)
+        return { text: 'SYSEX', tone: 'warn', title: 'Set USB CONFIG to USB MIDI on the device for Fast USB' };
       return {
         text: 'SYSEX',
         tone: 'dim',

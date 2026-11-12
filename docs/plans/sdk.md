@@ -63,7 +63,7 @@ sdk/
     core/             module.h, log.h, mem.h, time.h, trace.h, status.h (generated)
     platform/         what the device provides, one header per service group:
                       ui.h, param.h, settings.h, files.h, host.h, samples.h, io.h, job.h, hash32.h,
-                      usb_bulk.h, input.h, dsp_link.h, debug.h, intro.h, data.h
+                      usb_bulk.h, input.h, dsp_link.h, sdhc_large.h, debug.h, intro.h, data.h
     page/             page.h, widgets.h
     machine/          machine.h
     fx/               fx.h
@@ -79,7 +79,7 @@ sdk/
 modules/core/runtime/vectors/   fit and settings expected results (moved from sdk/vectors)
 ```
 
-Shipped in S2b: `core/` has `module.h`, `log.h`, `mem.h` and `time.h` (`module.h` replaced `api.h`), `platform/` has `host.h`, `samples.h`, `input.h`, `dsp_link.h` and `debug.h`, and `file.h` is merged into `files.h`.
+Shipped in S2b: `core/` has `module.h`, `log.h`, `mem.h` and `time.h` (`module.h` replaced `api.h`), `platform/` has `host.h`, `samples.h`, `input.h`, `dsp_link.h`, `sdhc_large.h` and `debug.h`, and `file.h` is merged into `files.h`.
 Shipped in S2a: `core/` has `bytes.h`, `text.h` and `path.h`.
 Planned for later steps (not shipped): `page/canvas.h` (S3); `platform/draw.h` when a text-width query exists; `dsp/env/` when a module
 needs it.
@@ -126,7 +126,7 @@ A module reaches the device through named imports, grouped by service in `sdk.to
 
 - Stateless functions are plain imports: `dk_alloc`, `dk_log`, `dk_hash32_*`, `dk_io_post`.
 - A service with per-module state, or one that may be absent, has a handle opened in `init`: `dk_settings_open`, `dk_files_open`,
-  `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`.
+  `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
   code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the first `_open` import that is bound to its stub as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
@@ -144,7 +144,7 @@ since    = 11
 
 - The packer derives the runtime minor version a module needs from the newest `since` among the imports it links, and the services it
   needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone.
-- `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`. Today
+- `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,
   `machines` and `fx` into `.dks` services, the same names resolve to the service exports and the loader loads a service only when a
   selected module imports it. Modules do not change.
@@ -158,7 +158,7 @@ since    = 11
 | sample pool (and the sample bank, removed with the bank in S3) | `platform/samples.h` (drawing and picker stay in `sample/`) | runtime | `samples` service |
 | params | `platform/param.h` | runtime | `machines` service |
 | UI menus, dialogs, ticks | `platform/ui.h` | `core/ui` module | runtime-and-services decides |
-| input, USB bulk, DSP link | `platform/input.h`, `usb_bulk.h`, `dsp_link.h` | provider modules | provider modules |
+| input, USB bulk, DSP link, large card commands | `platform/input.h`, `usb_bulk.h`, `dsp_link.h`, `sdhc_large.h` | provider modules | provider modules |
 
 Renames that make the names consistent (the naming rules are in section 10): the file calls are one service, `dk_files_*` (`dk_files_open` gives one handle for
 listing and writing; `dk_file_create/write/close/abort/delete` become `dk_files_create/write/close/abort/delete` and take that handle first); menu functions become `dk_ui_menu_*` (`dk_ui_menu_new/open/close/select/refresh`), items

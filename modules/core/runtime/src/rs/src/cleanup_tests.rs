@@ -387,6 +387,14 @@ pub extern "C" fn dkpool_free_frames() -> u32 {
 #[no_mangle]
 pub extern "C" fn dkpool_tick() {}
 
+// core/sdhc-large, absent in this host fixture.
+#[no_mangle]
+pub extern "C" fn sdhc_large_range(_: u32, _: u32) {}
+#[no_mangle]
+pub extern "C" fn sdhc_large_ctl(_: u32, _: u32) -> u32 {
+    0
+}
+
 // The +Drive write adapter, absent in this host fixture (version 0 is refused).
 #[no_mangle]
 pub extern "C" fn dkpw_version() -> u32 {

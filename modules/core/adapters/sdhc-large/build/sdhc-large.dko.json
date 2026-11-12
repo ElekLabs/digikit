@@ -1,0 +1,327 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 36,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 50,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 70,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 92,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 6,
+   "offset": 100,
+   "section": ".text",
+   "symbol": "sl_wr_entry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 116,
+   "section": ".text",
+   "symbol": "sl_wr_chunk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 126,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 148,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 6,
+   "offset": 156,
+   "section": ".text",
+   "symbol": "sl_rd_entry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 172,
+   "section": ".text",
+   "symbol": "sl_rd_chunk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.sdhc_large_range",
+   "symbol": "sl_hi",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.sdhc_large_range",
+   "symbol": "sl_lo",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.sdhc_large_range",
+   "symbol": "sl_hi",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.sdhc_large_ctl",
+   "symbol": "sl_off",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.sdhc_large_ctl",
+   "symbol": "sl_off",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.sdhc_large_ctl",
+   "symbol": "sl_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.dk_sdhc_large_open",
+   "symbol": ".sec..bss.sl_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.dk_sdhc_large_ctl",
+   "symbol": ".sec..text.sdhc_large_ctl",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "203c000100004a39000000006630220302810000000f662622020281000001ff661cb6b90000000065142203d282650eb2b9000000006206203c0007fc004e756100ffbe52b9000000000c8000010000670e0c82000100006f0652b900000000b4804ef9000000006100ff96b4806f022a004ef9000000006100ff8652b9000000000c8000010000670e0c82000100006f0652b900000000b4804ef9000000006100ff5eb4806f022a004ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 176
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "42b90000000041ef000423d00000000041ef000823d0000000004e75",
+   "kind": "text",
+   "name": ".text.sdhc_large_range",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "2f02202f0008222f000c4a80661e4a390000000057c0740171004480b4816508b58113c100000000241f4e7553804a806704428060f27003b08165f641f90000000020301c0060e0",
+   "kind": "text",
+   "name": ".text.sdhc_large_ctl",
+   "size": 72
+  },
+  {
+   "align": 2,
+   "hex": "206f00084aaf0004660470d04e754a8867f820bc00000000428060f0",
+   "kind": "text",
+   "name": ".text.dk_sdhc_large_open",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "202f00082f6f000c00082f4000044ef900000000",
+   "kind": "text",
+   "name": ".text.dk_sdhc_large_ctl",
+   "size": 20
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.sl_token",
+   "size": 4
+  }
+ ],
+ "source_sha256": "69fbb6ec50d3af60ca4826eba9dcee6586f020d2ef5e9bae1d53fe145016dfe3",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.sl_token",
+   "section": ".bss.sl_token",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.sdhc_large_ctl",
+   "section": ".text.sdhc_large_ctl",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_sdhc_large_ctl",
+   "section": ".text.dk_sdhc_large_ctl",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_sdhc_large_open",
+   "section": ".text.dk_sdhc_large_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sdhc_large_chunk_r",
+   "section": ".text",
+   "value": 160
+  },
+  {
+   "global": true,
+   "name": "sdhc_large_chunk_w",
+   "section": ".text",
+   "value": 104
+  },
+  {
+   "global": true,
+   "name": "sdhc_large_ctl",
+   "section": ".text.sdhc_large_ctl",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sdhc_large_entry_r",
+   "section": ".text",
+   "value": 120
+  },
+  {
+   "global": true,
+   "name": "sdhc_large_entry_w",
+   "section": ".text",
+   "value": 64
+  },
+  {
+   "global": true,
+   "name": "sdhc_large_range",
+   "section": ".text.sdhc_large_range",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sl_cnt",
+   "section": ".bss",
+   "value": 12
+  },
+  {
+   "global": true,
+   "name": "sl_hi",
+   "section": ".bss",
+   "value": 8
+  },
+  {
+   "global": false,
+   "name": "sl_limit",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sl_lo",
+   "section": ".bss",
+   "value": 4
+  },
+  {
+   "global": true,
+   "name": "sl_off",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sl_rd_chunk",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sl_rd_entry",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "sl_token",
+   "section": ".bss.sl_token",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sl_wr_chunk",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "sl_wr_entry",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "93",
+  "isa_check": "ebef9eb4cd9b86698c8b172e777cec61c2a1291ea45d1892f3f814096de1c552",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

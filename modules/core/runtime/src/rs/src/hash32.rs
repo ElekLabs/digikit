@@ -42,11 +42,17 @@ fn finalise(a: u32, b: u32, c: u32) -> u32 {
 }
 
 #[inline(always)]
+unsafe fn be_bytes(p: *const u8) -> u32 {
+    ((*p as u32) << 24) | ((*p.add(1) as u32) << 16) | ((*p.add(2) as u32) << 8) | (*p.add(3) as u32)
+}
+
+/// The big-endian word at `p` (one long read when `p` is 4-byte aligned on the big-endian ColdFire).
+#[inline(always)]
 unsafe fn word(p: *const u8) -> u32 {
     if cfg!(target_endian = "big") && (p as usize) & 3 == 0 {
         *(p as *const u32)
     } else {
-        ((*p as u32) << 24) | ((*p.add(1) as u32) << 16) | ((*p.add(2) as u32) << 8) | (*p.add(3) as u32)
+        be_bytes(p)
     }
 }
 
@@ -116,10 +122,30 @@ impl Hash32 {
             p = p.add(take as usize);
             n -= take;
         }
-        while n > 12 {
-            self.block(p);
-            p = p.add(12);
-            n -= 12;
+        // the whole blocks that leave 1 to 12 bytes: the state stays in registers and the alignment is decided once
+        let blocks = (n - 1) / 12;
+        if blocks > 0 {
+            let (mut a, mut b, mut c) = (self.a, self.b, self.c);
+            let end = p.add(12 * blocks as usize);
+            if (p as usize) & 3 == 0 {
+                let mut q = p as *const u32;
+                let qend = end as *const u32;
+                while q != qend {
+                    mix(&mut a, &mut b, &mut c, u32::from_be(*q), u32::from_be(*q.add(1)), u32::from_be(*q.add(2)));
+                    q = q.add(3);
+                }
+            } else {
+                let mut q = p;
+                while q != end {
+                    mix(&mut a, &mut b, &mut c, be_bytes(q), be_bytes(q.add(4)), be_bytes(q.add(8)));
+                    q = q.add(12);
+                }
+            }
+            self.a = a;
+            self.b = b;
+            self.c = c;
+            p = end;
+            n -= 12 * blocks;
         }
         // 1 to 12 bytes left: carried
         let mut i = 0;
@@ -302,6 +328,80 @@ mod tests {
             // chunks as DATA sends them: multiples of 512, the last one short
             let cuts: Vec<usize> = (1..).map(|i| i * 512).take_while(|&c| c < n).collect();
             assert_eq!(streamed(&d, &cuts), want, "len {n} 512-chunks");
+        }
+    }
+
+    /// The textbook byte-wise lookup3 (seed in all three words, big-endian words, the last 1 to 12 bytes as the tail), kept apart from the chain
+    /// form of `mix` and from the word loads of `update`.
+    fn reference(d: &[u8]) -> u32 {
+        let r = |x: u32, k: u32| x.rotate_left(k);
+        let w = |s: &[u8]| s.iter().enumerate().fold(0u32, |acc, (i, &b)| acc | (b as u32) << (24 - 8 * i as u32));
+        let (mut a, mut b, mut c) = (SEED, SEED, SEED);
+        if d.is_empty() {
+            return c;
+        }
+        let mut rest = d;
+        while rest.len() > 12 {
+            a = a.wrapping_add(w(&rest[0..4]));
+            b = b.wrapping_add(w(&rest[4..8]));
+            c = c.wrapping_add(w(&rest[8..12]));
+            a = a.wrapping_sub(c); a ^= r(c, 4); c = c.wrapping_add(b);
+            b = b.wrapping_sub(a); b ^= r(a, 6); a = a.wrapping_add(c);
+            c = c.wrapping_sub(b); c ^= r(b, 8); b = b.wrapping_add(a);
+            a = a.wrapping_sub(c); a ^= r(c, 16); c = c.wrapping_add(b);
+            b = b.wrapping_sub(a); b ^= r(a, 19); a = a.wrapping_add(c);
+            c = c.wrapping_sub(b); c ^= r(b, 4); b = b.wrapping_add(a);
+            rest = &rest[12..];
+        }
+        let m = rest.len();
+        a = a.wrapping_add(w(&rest[..m.min(4)]));
+        if m > 4 {
+            b = b.wrapping_add(w(&rest[4..m.min(8)]));
+        }
+        if m > 8 {
+            c = c.wrapping_add(w(&rest[8..]));
+        }
+        c ^= b; c = c.wrapping_sub(r(b, 14));
+        a ^= c; a = a.wrapping_sub(r(c, 11));
+        b ^= a; b = b.wrapping_sub(r(a, 25));
+        c ^= b; c = c.wrapping_sub(r(b, 16));
+        a ^= c; a = a.wrapping_sub(r(c, 4));
+        b ^= a; b = b.wrapping_sub(r(a, 14));
+        c ^= b; c.wrapping_sub(r(b, 24))
+    }
+
+    #[test]
+    fn random_lengths_pieces_and_alignments_match_the_reference() {
+        let mut x = 0xc0ff_ee11u32;
+        let mut rnd = |m: usize| {
+            x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+            (x >> 8) as usize % m
+        };
+        for round in 0..3000 {
+            let n = if round % 10 == 0 { rnd(40000) } else { rnd(300) };
+            let skew = rnd(4); // the data starts at a 4-byte aligned address plus `skew`
+            let mut backing = vec![0u32; (n + skew) / 4 + 2];
+            let bytes = unsafe { core::slice::from_raw_parts_mut(backing.as_mut_ptr() as *mut u8, backing.len() * 4) };
+            for b in bytes.iter_mut() {
+                *b = rnd(256) as u8;
+            }
+            let d = &bytes[skew..skew + n];
+            let want = reference(d);
+            let mut h = Hash32::new();
+            let mut at = 0;
+            while at < n {
+                // piece sizes: 1 byte to a block or two, sometimes thousands
+                let m = match rnd(4) {
+                    0 => 1 + rnd(13),
+                    1 => 1 + rnd(40),
+                    2 => 512 * (1 + rnd(4)),
+                    _ => 1 + rnd(5000),
+                };
+                let m = m.min(n - at);
+                unsafe { h.update(d.as_ptr().add(at), m as u32) };
+                at += m;
+            }
+            assert_eq!(h.finish(), want, "len {n} skew {skew} round {round}");
         }
     }
 }

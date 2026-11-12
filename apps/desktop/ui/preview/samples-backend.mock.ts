@@ -151,7 +151,13 @@ const backend: SamplesBackend = {
 export async function openDeviceSamples(_forRun = false): Promise<OpenedSamples> {
   await asked(deviceRead);
   if (sim.link !== 'none' && !(sim.link === 'fallback' && sent > 1))
-    setSampleLink({ state: sim.link === 'sysex' ? 'sysex' : 'bulk' });
+    setSampleLink(
+      sim.link === 'sysex'
+        ? { state: 'sysex' }
+        : sim.link === 'wrongmode'
+          ? { state: 'sysex', wrongMode: true }
+          : { state: 'bulk' },
+    );
   noteConnection({ type: 'answered', device: { id: 'dt2', name: NAME, runtime: '0.5.2' } });
   return {
     name: NAME,

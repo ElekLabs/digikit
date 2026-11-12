@@ -66,7 +66,7 @@ pub struct Options {
     pub timeout: Duration,
     /// How long `resync` waits for each reply still owed.
     pub resync_timeout: Duration,
-    /// DATA requests in flight.
+    /// DATA requests in flight. 0: the window the device reported in INFO (`Client::info` reads it), else 2.
     pub window: usize,
     /// Data bytes of one DATA request: a multiple of `ALIGN`, at most `DATA_MAX`.
     pub chunk: usize,
@@ -79,7 +79,7 @@ impl Default for Options {
         Options {
             timeout: Duration::from_secs(5),
             resync_timeout: Duration::from_millis(500),
-            window: 2,
+            window: 0,
             chunk: DATA_MAX,
             busy_retries: 150,
             busy_wait: Duration::from_millis(20),
@@ -93,6 +93,8 @@ pub struct Info {
     pub flags: u8,
     pub data_max: u32,
     pub align: u32,
+    /// The receive window of the device in DATA frames of 64 KiB (INFO byte 2); 0 when it reports none: 2 frames then.
+    pub window: u8,
     /// What SET_NONCE left in the device (all zero before).
     pub nonce: [u8; NONCE_LEN],
 }
@@ -103,6 +105,8 @@ pub struct Client<L: Link> {
     pub link: L,
     pub opts: Options,
     seq: u8,
+    /// The window INFO reported (0: none seen, or an old device).
+    device_window: usize,
     /// Sequence numbers of the requests sent whose reply has not been read, oldest first.
     owed: VecDeque<u8>,
     fatal: Option<String>,
@@ -112,16 +116,12 @@ pub struct Client<L: Link> {
 
 impl<L: Link> Client<L> {
     pub fn new(link: L, opts: Options) -> Self {
-        assert!(
-            opts.window >= 1
-                && opts.chunk >= ALIGN
-                && opts.chunk <= DATA_MAX
-                && opts.chunk.is_multiple_of(ALIGN)
-        );
+        assert!(opts.chunk >= ALIGN && opts.chunk <= DATA_MAX && opts.chunk.is_multiple_of(ALIGN));
         Client {
             link,
             opts,
             seq: 0,
+            device_window: 0,
             owed: VecDeque::new(),
             fatal: None,
             notes: Vec::new(),
@@ -268,9 +268,11 @@ impl<L: Link> Client<L> {
         if b.len() < 12 + NONCE_LEN {
             return Err(Error::Protocol(format!("INFO body of {} bytes", b.len())));
         }
+        self.device_window = b[2] as usize;
         Ok(Info {
             version: b[0],
             flags: b[1],
+            window: b[2],
             data_max: u32::from_be_bytes(b[4..8].try_into().unwrap()),
             align: u32::from_be_bytes(b[8..12].try_into().unwrap()),
             nonce: b[12..12 + NONCE_LEN].try_into().unwrap(),
@@ -366,12 +368,17 @@ impl<L: Link> Client<L> {
         let (mut next, mut acked) = (0usize, 0usize);
         let mut inflight: VecDeque<(u8, usize)> = VecDeque::new(); // (seq, length)
         let (mut busy, mut tries) = (false, 0u32);
+        let window = match (self.opts.window, self.device_window) {
+            (0, w) if w >= 2 => w,
+            (0, _) => 2,
+            (w, _) => w,
+        };
         progress(0, total);
         loop {
             if cancel.load(Ordering::Relaxed) {
                 return Err(Error::Cancelled);
             }
-            while !busy && inflight.len() < self.opts.window && next < total {
+            while !busy && inflight.len() < window && next < total {
                 let len = self.opts.chunk.min(total - next);
                 let seq = self.send(
                     CMD_DATA,
@@ -480,6 +487,36 @@ mod tests {
         assert_eq!(seen.first(), Some(&(0, data.len())));
         assert_eq!(seen.last(), Some(&(data.len(), data.len())));
         assert!(!c.link.session_open());
+    }
+
+    #[test]
+    fn the_window_is_the_one_info_reported_an_explicit_window_wins_and_a_device_without_one_keeps_2()
+     {
+        let data = bytes(24 * 4096);
+        let mut dev = FakeDevice::new();
+        dev.info_window = 6;
+        let mut c = client(dev);
+        assert_eq!(c.info().unwrap().window, 6);
+        put(&mut c, "f", &data, false).unwrap();
+        assert_eq!(c.link.max_inflight, 6);
+        assert_eq!(c.link.files["f"], data);
+        let mut dev = FakeDevice::new();
+        dev.info_window = 6;
+        let mut c = Client::new(
+            dev,
+            Options {
+                window: 3,
+                chunk: 4096,
+                ..Options::default()
+            },
+        );
+        c.info().unwrap();
+        put(&mut c, "f", &data, false).unwrap();
+        assert_eq!(c.link.max_inflight, 3);
+        let mut c = client(FakeDevice::new()); // an old device reports 0
+        assert_eq!(c.info().unwrap().window, 0);
+        put(&mut c, "f", &data, false).unwrap();
+        assert_eq!(c.link.max_inflight, 2);
     }
 
     #[test]

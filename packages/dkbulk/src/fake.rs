@@ -43,6 +43,8 @@ pub struct FakeDevice {
     held: Vec<Vec<u8>>,
     /// Bytes added to the INFO reply body (to make the reply a multiple of 512 bytes).
     pub info_pad: usize,
+    /// The receive window the INFO reply reports (byte 2).
+    pub info_window: u8,
     pub nonce: [u8; NONCE_LEN],
     /// The device keeps ZLT on for EP2 IN (the real one does).
     pub zlt: bool,
@@ -131,7 +133,7 @@ impl FakeDevice {
         let err = |s: i16| Some(proto::reply(cmd, seq, s, &[]));
         match cmd {
             CMD_INFO => {
-                let mut b = vec![1, 0, 0, 0];
+                let mut b = vec![1, 0, self.info_window, 0];
                 b.extend_from_slice(&(DATA_MAX as u32).to_be_bytes());
                 b.extend_from_slice(&(ALIGN as u32).to_be_bytes());
                 b.extend_from_slice(&self.nonce);

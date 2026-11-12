@@ -33,6 +33,8 @@ export class FakeBulkDevice implements BulkLink {
   hold = false;
   /** Bytes added to the INFO reply body. */
   infoPad = 0;
+  /** The receive window the INFO reply reports (byte 2). */
+  infoWindow = 0;
   nonce = new Uint8Array(BULK_NONCE_LEN);
   /** The device keeps ZLT on EP2 IN (the real one does). */
   zlt = true;
@@ -159,6 +161,7 @@ export class FakeBulkDevice implements BulkLink {
       case BULK_CMD.INFO: {
         const b = new Uint8Array(12 + BULK_NONCE_LEN + this.infoPad);
         b[0] = 1;
+        b[2] = this.infoWindow;
         new DataView(b.buffer).setUint32(4, BULK_DATA_MAX);
         new DataView(b.buffer).setUint32(8, BULK_ALIGN);
         b.set(this.nonce, 12);

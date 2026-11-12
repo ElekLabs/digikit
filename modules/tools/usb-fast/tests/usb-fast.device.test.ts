@@ -5,12 +5,14 @@ import { promisify } from 'node:util';
 import { BULK_CMD, BULK_STATUS } from '@digi/dk-session/gen_bulk';
 import {
   BulkDeviceError,
+  BulkSession,
   EmuBulkLink,
   bulkRequest,
   chooseBulk,
   fileHash,
   parseBulkReply,
   type BulkChoice,
+  type BulkLink,
   type DkSession,
 } from '@digi/dk-session';
 import { repoRoot } from '@digi/test-support';
@@ -67,8 +69,8 @@ for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} digikit/usb-fast`, () => {
     const rig: CardRig = cardRig(device, 'usb-fast', {
       dsp: 'zero',
-      roots: [...RT, 'core/usb-bulk', ...(dt2 ? ['core/plusdrive-write'] : [])],
-      symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
+      roots: [...RT, 'core/usb-bulk', 'core/sdhc-large', ...(dt2 ? ['core/plusdrive-write'] : [])],
+      symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', 'DKRT_UPLOAD_FLIP', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
       project: true,
       uploads: true,
       relaxFs: true,
@@ -191,6 +193,73 @@ for (const device of DEVICES) {
       unchanged(before, s.files, ['Kits/big.bin', 'one.bin', 'old.bin']);
       await rig.session.expectNoFault('usb-fast uploads');
     }, 1_800_000);
+
+    /** STATUS 'S' [bit [0|1]]: the four speed switches (bit 0 hash once, bit 1 the USB receive ring, bit 2 the overlapped read-back hash, bit 3 large card commands); the reply is the mask now. */
+    const speedMask = async (dk: DkSession, bit?: number, on?: number) =>
+      Buffer.from((await dk.request(0x37, Uint8Array.from(bit === undefined ? [0x53] : [0x53, bit, on!]))).body).readUInt32BE(0);
+
+    test('the speed switches (hash once, overlapped read-back hash), on and off: the device hash is the host hash, and a corrupted read-back or a wrong hash refuses the commit', async () => {
+      const data = pattern(300_011, 17); // more than four 64 KiB pieces (DN2) and nine 32 KiB pages (DT2)
+      const more = pattern(70_001, 19);
+      const cases: [string, number, number][] = [['both on (the default)', 1, 1], ['hash once off', 0, 1], ['overlap off', 1, 0], ['both off', 0, 0]];
+      for (const [k, [label, a, c]] of cases.entries()) {
+        const dk = await rig.pausedBoot(await baseCard());
+        const bulk = await connect(dk);
+        expect(await speedMask(dk), `${label}: all switches are on after a boot`).toBe(15);
+        await speedMask(dk, 0, a);
+        expect(await speedMask(dk, 2, c), `${label}: the mask`).toBe((a ? 1 : 0) | 2 | (c ? 4 : 0) | 8);
+        // a corrupted read-back (DN2: the card holds another byte in its first write) or a wrong hash (DT2) refuses the commit
+        if (dt2) {
+          const bad = await bulk.session.put(SAMPLES, rp('Sw/bad.bin'), data, { expected: hashU32(pattern(300_011, 18), dt2) }).catch((e) => e);
+          expect((bad as BulkDeviceError).code, `${label}: a wrong hash`).toBe(BULK_STATUS.E_HASH);
+        } else {
+          // the first card write: with core/sdhc-large on, the 300 KB file is one write (the third write would be the table commit)
+          await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', 1);
+          const bad = await bulk.session.put(SAMPLES, rp('Sw/bad.bin'), data, { expected: hashU32(data, dt2) }).catch((e) => e);
+          expect(bad, `${label}: a flipped byte`).toBeInstanceOf(BulkDeviceError);
+          expect((bad as BulkDeviceError).code, `${label}: the hash error`).toBe(BULK_STATUS.E_HASH);
+        }
+        // no host hash (the received bytes are hashed whatever the switch says), then with it
+        expect(await bulk.session.put(SAMPLES, rp('Sw/plain.bin'), data), `${label}: END returns the device hash`).toBe(hashU32(data, dt2));
+        expect(await bulk.session.put(SAMPLES, rp('Sw/hashed.bin'), more, { expected: hashU32(more, dt2) }), `${label}: END with a host hash`).toBe(hashU32(more, dt2));
+        const s = await state(dk, `sw${k}`);
+        expect(s.files.has('Sw/bad.bin'), `${label}: nothing of the refused file`).toBe(false);
+        await expectFile(dk, s, 'Sw/plain.bin', data, `${label}: plain`);
+        await expectFile(dk, s, 'Sw/hashed.bin', more, `${label}: hashed`);
+        await rig.session.expectNoFault(`usb-fast switches ${label}`);
+      }
+    }, 3_600_000);
+
+    // DN2 only (the knob counts the store writer's card writes). Coverage of the other card faults: upload-faults.device.test.ts (core/runtime-tests) flips each of the
+    // three data writes of a small upload (E_HASH, nothing committed) and cuts or tears every write of the commit; this test adds the usb-fast geometry (two data writes, with the ring and large commands on and off) and the flipped table commit.
+    test('DN2: a flipped byte in the second data write is E_HASH, and a flipped table-commit write is E_WRITE; nothing of the file is committed either way', async () => {
+      if (dt2) return;
+      const data = pattern(300_011, 23);
+      // the 300 KB file is two card writes (the 256 KiB staging flush and the tail), the third write is the table commit
+      const cases: [string, number, number, number][] = [
+        ['ring and large commands off: the second data write', 0, 2, BULK_STATUS.E_HASH],
+        ['ring and large commands on: the second data write', 1, 2, BULK_STATUS.E_HASH],
+        ['ring and large commands off: the table commit', 0, 3, BULK_STATUS.E_WRITE],
+        ['ring and large commands on: the table commit', 1, 3, BULK_STATUS.E_WRITE],
+      ];
+
+      for (const [k, [label, large, write, code]] of cases.entries()) {
+        const dk = await rig.pausedBoot(await baseCard());
+        const bulk = await connect(dk);
+        await speedMask(dk, 1, large);
+        expect(await speedMask(dk, 3, large), `${label}: the mask`).toBe(large ? 15 : 5);
+        await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', write);
+        const bad = await bulk.session.put(SAMPLES, rp('Fl/bad.bin'), data, { expected: hashU32(data, dt2) }).catch((e) => e);
+        expect(bad, `${label}: refused`).toBeInstanceOf(BulkDeviceError);
+        expect((bad as BulkDeviceError).code, label).toBe(code);
+        await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', 0);
+        expect(await bulk.session.put(SAMPLES, rp('Fl/ok.bin'), data, { expected: hashU32(data, dt2) }), `${label}: the next upload works`).toBe(hashU32(data, dt2));
+        const s = await state(dk, `fl${k}`);
+        expect(s.files.has('Fl/bad.bin'), `${label}: nothing of the refused file`).toBe(false);
+        await expectFile(dk, s, 'Fl/ok.bin', data, `${label}: ok.bin`);
+        await rig.session.expectNoFault(`usb-fast flip ${label}`);
+      }
+    }, 3_600_000);
 
     test('ABORT drops the open file and a cancel mid-transfer leaves the old file; a USB reset in the middle of a file leaves nothing and the next upload works', async () => {
       const { dk, bulk } = await boot('uf-base');
@@ -714,6 +783,89 @@ for (const device of DEVICES) {
       await rig.session.expectNoFault('usb-fast session expiry');
     }, 1_800_000);
 
+    test('the receive ring: INFO reports the window and the host keeps that many DATA frames in flight, a bus reset with a full ring commits nothing, the switch off or a host that never asked INFO keeps 2', async () => {
+      const { dk, bulk } = await boot();
+      /** STATUS 'S' 1 [value]: the ring switch of core/usb-bulk, bit 1 of the mask (reads without a value). */
+      const ring = async (value?: number) => {
+        const r = await dk.request(0x37, Uint8Array.from(value === undefined ? [0x53] : [0x53, 1, value]));
+        expect(r.status, 'STATUS S').toBe(0);
+        return { on: (Buffer.from(r.body).readUInt32BE(0) >>> 1) & 1 };
+      };
+      /** The most DATA requests sent and not yet answered, seen at the link. */
+      const meter = (link: BulkLink) => {
+        const m = { now: 0, max: 0 };
+        const send = link.send.bind(link);
+        const recv = link.recv.bind(link);
+        link.send = async (f: Uint8Array) => {
+          await send(f);
+          if (f[4] === BULK_CMD.DATA) m.max = Math.max(m.max, ++m.now);
+        };
+        link.recv = async (t: number, sig?: AbortSignal) => {
+          const r = await recv(t, sig);
+          if (r && r[4] === (BULK_CMD.DATA | 0x40)) m.now--;
+          return r;
+        };
+        return m;
+      };
+      const before = (await state(dk, 'ur0')).files;
+      expect(await ring(), 'the ring is on by default: 60 slots, 12 frames of 64 KiB').toEqual({ on: 1 });
+      expect((await bulk.session.info()).window, 'INFO carries the window').toBe(12);
+      const m1 = meter(bulk.link);
+      const big = pattern(3 << 20, 21);
+      expect(await bulk.session.put(SAMPLES, rp('ring.bin'), big, { expected: hashU32(big, dt2) }), 'a file up with the window').toBe(hashU32(big, dt2));
+      expect(m1.max, 'twelve DATA frames in flight').toBe(12);
+      let s = await state(dk, 'ur1');
+      await expectFile(dk, s, 'ring.bin', big, 'ring.bin');
+
+      // a host that never asked INFO (an old host) keeps 2, whatever the device offers
+      const old = new BulkSession(bulk.link);
+      const m2 = meter(bulk.link);
+      const small = pattern(1 << 20, 22);
+      await old.put(SAMPLES, rp('old-host.bin'), small, { expected: hashU32(small, dt2) });
+      expect(m2.max, 'no INFO read: two in flight').toBe(2);
+
+      // a bus reset while the ring is full: nothing is committed, the next upload works on a new link
+      const reset = await connect(dk, { timeoutMs: 1500 });
+      const connectAddr = await EmuBulkLink.connectCallback(call);
+      let cut = false;
+      const failed = await reset.session
+        .put(SAMPLES, rp('ring-reset.bin'), pattern(4 << 20, 23), {
+          onProgress: (sent) => {
+            if (!cut && sent >= 1_500_000) {
+              cut = true;
+              void rpc(rig.session, 'usb.bulk.in', { connect: connectAddr });
+            }
+          },
+        })
+        .catch((e) => e);
+      expect(cut, 'the reset was delivered mid-file').toBe(true);
+      expect(failed, 'the upload fails').toBeInstanceOf(Error);
+      s = await state(dk, 'ur2');
+      expect(s.files.has('ring-reset.bin'), 'no partial file').toBe(false);
+      const again = await connect(dk);
+      const ok = pattern(300_000, 24);
+      await again.session.put(SAMPLES, rp('ring-reset.bin'), ok, { expected: hashU32(ok, dt2) });
+      s = await state(dk, 'ur3');
+      await expectFile(dk, s, 'ring-reset.bin', ok, 'after the reset with a full ring');
+
+      // the switch off: the old 8 slots, the host keeps 2; on again: 12
+      expect(await ring(0), 'switch off').toEqual({ on: 0 });
+      const off = await connect(dk);
+      expect((await off.session.info()).window, 'INFO: no window').toBe(0);
+      const m3 = meter(off.link);
+      await off.session.put(SAMPLES, rp('ring-off.bin'), small, { expected: hashU32(small, dt2) });
+      expect(m3.max, 'switch off: two in flight').toBe(2);
+      expect(await ring(1), 'switch on').toEqual({ on: 1 });
+      const on = await connect(dk);
+      const m4 = meter(on.link);
+      await on.session.put(SAMPLES, rp('ring-on.bin'), small, { expected: hashU32(small, dt2) });
+      expect(m4.max, 'switch on: twelve in flight').toBe(12);
+      s = await state(dk, 'ur4');
+      for (const n of ['old-host.bin', 'ring-off.bin', 'ring-on.bin']) await expectFile(dk, s, n, small, n);
+      unchanged(before, s.files, ['ring.bin', 'old-host.bin', 'ring-reset.bin', 'ring-off.bin', 'ring-on.bin']);
+      await rig.session.expectNoFault('usb-fast receive ring');
+    }, 3_600_000);
+
     test('bench: MB/s in emulated time, bulk against SysEx', async () => {
       const { dk } = await boot();
       const size = 1 << 20;
@@ -727,6 +879,12 @@ for (const device of DEVICES) {
       const lines: string[] = [];
       const tBulk = await clock(() => fast.session.put(STORE, 'data/bench-bulk.bin', data, { expected: hashU32(data, false) }));
       lines.push(`bulk to the store: ${(size / 1e6 / tBulk).toFixed(2)} MB/s`);
+      // the same upload with the receive ring off (the old 8 slots and window 2): a sanity check only, the emulator is not a speed reference
+      await dk.request(0x37, Uint8Array.from([0x53, 1, 0]));
+      const old = await connect(dk, { stepInstructions: 20_000 });
+      const tOld = await clock(() => old.session.put(STORE, 'data/bench-bulk-old.bin', data, { expected: hashU32(data, false) }));
+      lines.push(`bulk to the store, ring off: ${(size / 1e6 / tOld).toFixed(2)} MB/s`);
+      await dk.request(0x37, Uint8Array.from([0x53, 1, 1]));
       const tSys = await clock(() => dk.put('data/bench-sysex.bin', data));
       lines.push(`SysEx to the store: ${(size / 1e6 / tSys).toFixed(2)} MB/s`);
       if (dt2) {

@@ -77,6 +77,32 @@ describe('BulkSession.put', () => {
     expect(seen.at(-1)).toEqual([data.length, data.length]);
   });
 
+  test('DATA requests in flight: the window INFO reported, an explicit window wins, a device that reports none keeps 2', async () => {
+    const data = bytes(24 * 4096);
+    const reported = new FakeBulkDevice();
+    reported.infoWindow = 6;
+    const s = session(reported);
+    expect((await s.info()).window).toBe(6);
+    await s.put(1, 'f', data, { expected: hash(data) });
+    expect(reported.maxInflight).toBe(6);
+    expect(reported.files.get('f')).toEqual(data);
+    const explicit = new FakeBulkDevice();
+    explicit.infoWindow = 6;
+    const e = session(explicit, { window: 3 });
+    await e.info();
+    await e.put(1, 'f', data);
+    expect(explicit.maxInflight).toBe(3);
+    const old = new FakeBulkDevice(); // an old device: INFO byte 2 is 0
+    const o = session(old);
+    expect((await o.info()).window).toBe(0);
+    await o.put(1, 'f', data);
+    expect(old.maxInflight).toBe(2);
+    const noinfo = new FakeBulkDevice(); // INFO never asked: 2
+    noinfo.infoWindow = 6;
+    await session(noinfo).put(1, 'f', data);
+    expect(noinfo.maxInflight).toBe(2);
+  });
+
   test('E_BUSY on DATA: the next request goes out at the first byte not acknowledged', async () => {
     const dev = new FakeBulkDevice();
     dev.busy.set(BULK_CMD.DATA, 3);

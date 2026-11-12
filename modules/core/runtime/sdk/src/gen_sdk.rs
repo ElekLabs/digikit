@@ -4,7 +4,7 @@
 pub const RUNTIME_VERSION: u32 = 0x000600;
 
 pub mod contract {
-    pub const API: (u8, u8) = (2, 11);
+    pub const API: (u8, u8) = (2, 12);
     pub const MACHINE: (u8, u8) = (1, 6);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
@@ -310,7 +310,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 90] = [
+    pub const IMPORT_NAMES: [&str; 94] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -395,16 +395,20 @@ pub mod api {
         "dk_usb_bulk_state",
         "dk_usb_bulk_takeover",
         "dk_usb_bulk_giveback",
+        "dk_usb_bulk_ring",
         "dk_dsp_link_open",
         "dk_dsp_link_set_tick",
+        "dk_sdhc_large_open",
+        "dk_sdhc_large_ctl",
         "dk_debug_peek",
         "dk_debug_track_type",
         "dk_debug_selected_params",
         "dk_debug_log_sink_set",
+        "dk_debug_speed_flags",
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`.
-    pub const BUILTIN_NAMES: [&str; 58] = [
+    pub const BUILTIN_NAMES: [&str; 59] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -463,6 +467,7 @@ pub mod api {
         "dk_debug_track_type",
         "dk_debug_selected_params",
         "dk_debug_log_sink_set",
+        "dk_debug_speed_flags",
     ];
 
     /// `dk_ui_confirm`: A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory).
@@ -693,11 +698,20 @@ pub mod api {
     /// `dk_usb_bulk_giveback`: End a take-over: about 50 ms later the service switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a host command handler.
     pub type DkUsbBulkGivebackFn = unsafe extern "C" fn(ub: *mut u8) -> i32;
 
+    /// `dk_usb_bulk_ring`: The receive ring of the service. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the result word read with the DK_USB_BULK_RING_* macros of <dk/platform/usb_bulk.h>: the switch in bit 0, bit 1 always set (the service has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). 0 without core/usb-bulk or when the adapter has no ring: the old behaviour.
+    pub type DkUsbBulkRingFn = unsafe extern "C" fn(ub: *mut u8, set: i32) -> i32;
+
     /// `dk_dsp_link_open`: Open the DSP link service: `*out` is the handle, the result 0. Without core/dsp-link the result is DK_E_MISSING and `*out` is untouched.
     pub type DkDspLinkOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
 
     /// `dk_dsp_link_set_tick`: Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short; clear it in fini. See <dk/platform/dsp_link.h>.
     pub type DkDspLinkSetTickFn = unsafe extern "C" fn(dl: *mut u8, cb: *mut u8) -> i32;
+
+    /// `dk_sdhc_large_open`: Open the large card command service: `*out` is the handle, the result 0. Without core/sdhc-large the result is DK_E_MISSING and `*out` is untouched; `dk_sdhc_large_ctl` then returns 0, so a caller can go on without it.
+    pub type DkSdhcLargeOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
+
+    /// `dk_sdhc_large_ctl`: core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside the range the runtime sets, is 16-byte aligned and its length is a multiple of 512, while the switch is on. Key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. 0 without the module. See <dk/platform/sdhc_large.h>.
+    pub type DkSdhcLargeCtlFn = unsafe extern "C" fn(sl: *mut u8, key: u32, val: u32) -> u32;
 
     /// `dk_debug_peek`: The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK. See <dk/platform/debug.h>.
     pub type DkDebugPeekFn = unsafe extern "C" fn(i: u32, out: *mut u32) -> u32;
@@ -710,6 +724,9 @@ pub mod api {
 
     /// `dk_debug_log_sink_set`: Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none).
     pub type DkDebugLogSinkSetFn = unsafe extern "C" fn(sink: *mut u8, tick: *mut u8);
+
+    /// `dk_debug_speed_flags`: The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `dk_usb_bulk_ring`, bit 3 `dk_sdhc_large_ctl`), not in this word. See <dk/platform/debug.h>.
+    pub type DkDebugSpeedFlagsFn = unsafe extern "C" fn(clear: u32, set: u32) -> u32;
 }
 
 /// The imports that another module provides (`[[import]] requires`): the external functions, the stubs for an absent module and
@@ -752,8 +769,11 @@ macro_rules! optional_imports {
                 pub fn dk_usb_bulk_state(ub: *mut u8) -> u32;
                 pub fn dk_usb_bulk_takeover(ub: *mut u8) -> i32;
                 pub fn dk_usb_bulk_giveback(ub: *mut u8) -> i32;
+                pub fn dk_usb_bulk_ring(ub: *mut u8, set: i32) -> i32;
                 pub fn dk_dsp_link_open(ctx: *mut u8, out: *mut *mut u8) -> i32;
                 pub fn dk_dsp_link_set_tick(dl: *mut u8, cb: *mut u8) -> i32;
+                pub fn dk_sdhc_large_open(ctx: *mut u8, out: *mut *mut u8) -> i32;
+                pub fn dk_sdhc_large_ctl(sl: *mut u8, key: u32, val: u32) -> u32;
             }
 
             /// What an absent module's import calls: the failure value of the API.
@@ -790,12 +810,15 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_usb_bulk_state(_a0: *mut u8) -> u32 { 0 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_takeover(_a0: *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_usb_bulk_giveback(_a0: *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_usb_bulk_ring(_a0: *mut u8, _a1: i32) -> i32 { 0 as _ }
                 pub unsafe extern "C" fn dk_dsp_link_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_dsp_link_set_tick(_a0: *mut u8, _a1: *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_sdhc_large_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { -73 as _ }
+                pub unsafe extern "C" fn dk_sdhc_large_ctl(_a0: *mut u8, _a1: u32, _a2: u32) -> u32 { 0 as _ }
             }
 
             /// (name, address from the module or 0, address of the stub or 0, the module that provides it)
-            pub fn table() -> [(&'static str, usize, usize, &'static str); 32] {
+            pub fn table() -> [(&'static str, usize, usize, &'static str); 35] {
                 [
                     ("dk_ui_menu_new", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, "core/ui"),
                     ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize, "core/ui"),
@@ -827,8 +850,11 @@ macro_rules! optional_imports {
                     ("dk_usb_bulk_state", core::hint::black_box(dk_usb_bulk_state as usize), absent::dk_usb_bulk_state as usize, "core/usb-bulk"),
                     ("dk_usb_bulk_takeover", core::hint::black_box(dk_usb_bulk_takeover as usize), absent::dk_usb_bulk_takeover as usize, "core/usb-bulk"),
                     ("dk_usb_bulk_giveback", core::hint::black_box(dk_usb_bulk_giveback as usize), absent::dk_usb_bulk_giveback as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_ring", core::hint::black_box(dk_usb_bulk_ring as usize), absent::dk_usb_bulk_ring as usize, "core/usb-bulk"),
                     ("dk_dsp_link_open", core::hint::black_box(dk_dsp_link_open as usize), absent::dk_dsp_link_open as usize, "core/dsp-link"),
                     ("dk_dsp_link_set_tick", core::hint::black_box(dk_dsp_link_set_tick as usize), absent::dk_dsp_link_set_tick as usize, "core/dsp-link"),
+                    ("dk_sdhc_large_open", core::hint::black_box(dk_sdhc_large_open as usize), absent::dk_sdhc_large_open as usize, "core/sdhc-large"),
+                    ("dk_sdhc_large_ctl", core::hint::black_box(dk_sdhc_large_ctl as usize), absent::dk_sdhc_large_ctl as usize, "core/sdhc-large"),
                 ]
             }
         }

@@ -38,6 +38,8 @@ mod sample_source;
 mod tracks;
 mod files;
 mod hash32;
+pub mod aux;
+pub mod speed;
 mod intro;
 mod safe_screen;
 mod sha256;
@@ -407,6 +409,7 @@ import_table! {
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
     ("dk_debug_log_sink_set", dlog::dk_debug_log_sink_set),
+    ("dk_debug_speed_flags", debug_speed_flags),
 }
 
 const _: () = assert!(names_match(&NAMES, &dkrt_sdk::api::BUILTIN_NAMES), "IMPORTS names differ from [[import]] of sdk/sdk.toml");
@@ -463,6 +466,7 @@ const _: dkrt_sdk::api::DkDebugPeekFn = debug_peek;
 const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
 const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;
 const _: dkrt_sdk::api::DkDebugLogSinkSetFn = dlog::dk_debug_log_sink_set;
+const _: dkrt_sdk::api::DkDebugSpeedFlagsFn = debug_speed_flags;
 
 extern "C" {
     /// Per-device data from the device file (`[digikit] peek`), defined by `src/cf/<dev>/device.s`: the number of ranges and `lo, hi` pairs.
@@ -470,6 +474,11 @@ extern "C" {
     static dkrt_peek_ranges: [u32; 8];
     /// The s16 words of a Sound array on this device (`[fx] sound_words`).
     static dkrt_sound_words: u32;
+}
+
+/// Import `dk_debug_speed_flags`: the run-time switches of the speed levers (`speed::update`).
+unsafe extern "C" fn debug_speed_flags(clear: u32, set: u32) -> u32 {
+    speed::update(clear, set)
 }
 
 /// Import `dk_debug_peek`: how many RAM ranges the device file allows PEEK to read; for `i` below that, range `i` as `lo, hi` into `out`.

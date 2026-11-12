@@ -10,7 +10,7 @@ version = "0.6.0"    # 0.x: MINOR may break (contract major, store format, SysEx
 [contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
                     # An appended import is a minor bump; a changed or removed one is a major bump.
-api = [2, 11]       # the imports and the entry point `dk_module` of every module (`raw` included), docs/plans/sdk.md sections 5 and 5.1; `patchkit pack` writes the newest `since` among the imports a module links as the minor. Major 2: the Api table, `dkm_init` and the slots of major 1 are gone; the minor numbers go on, so `since` keeps its values
+api = [2, 12]       # the imports and the entry point `dk_module` of every module (`raw` included), docs/plans/sdk.md sections 5 and 5.1; `patchkit pack` writes the newest `since` among the imports a module links as the minor. Major 2: the Api table, `dkm_init` and the slots of major 1 are gone; the minor numbers go on, so `since` keeps its values. Minor 12 adds `dk_debug_speed_flags`, `dk_usb_bulk_ring` and `dk_sdhc_large_open`, `dk_sdhc_large_ctl`
 machine = [1, 6]    # minor 1: source track; 2: stereo; 3: executable parameter latches; 4: opt-in native callback page v1; 5: two replacement callback pages v2; 6: note gate appended to voice_in (DK_MACHINE_GATE); voice states start zeroed after a load
 fx = [1, 0]         # run-time effects (sdk/include/dk/gen/fx.h, DSP section version 4 of a .dkm); 0.4.0; effect pages (register kind 4) 0.5.0
 service = [1, 0]
@@ -18,8 +18,8 @@ service = [1, 0]
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_sample_bank", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link"]
-services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link"]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_sample_bank", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large"]
+services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
 # The callback types of the service imports (docs/plans/sdk.md section 10, Naming). The key ends in `_fn`; the C type is `dk_<key>` (the generated
@@ -473,8 +473,8 @@ doc = "Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes t
 requires = "core/ui"
 absent = "-1"
 
-# ---- The service imports (docs/plans/sdk.md section 5.1): contract api 2.11 -----------------------------------------------------------------
-# `service`: runtime, samples, machines, fx, ui, input, usb_bulk, dsp_link. `since`: the api minor that added the import; `patchkit pack` writes the newest `since` among the imports
+# ---- The service imports (docs/plans/sdk.md section 5.1): contract api 2.12 -----------------------------------------------------------------
+# `service`: runtime, samples, machines, fx, ui, input, usb_bulk, dsp_link, sdhc_large. `since`: the api minor that added the import; `patchkit pack` writes the newest `since` among the imports
 # a module links as the api minor it needs. `context`: where the call may run. `init`: only inside the
 # module's `init`. `ui`: the UI task, which includes init, fini, tick, menu and the callbacks that run there. `io-step`: only inside an I/O step.
 # `any`: any task, never an interrupt. `isr`: also from an interrupt handler. A handle type (`dk_module_ctx`, `dk_settings`, ...) is opaque: the runtime or
@@ -1118,6 +1118,16 @@ requires = "core/usb-bulk"
 absent = "missing"
 
 [[import]]
+name = "dk_usb_bulk_ring"
+service = "usb_bulk"
+since = 12
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, i32 set)"
+doc = "The receive ring of the service. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the result word read with the DK_USB_BULK_RING_* macros of <dk/platform/usb_bulk.h>: the switch in bit 0, bit 1 always set (the service has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). 0 without core/usb-bulk or when the adapter has no ring: the old behaviour."
+requires = "core/usb-bulk"
+absent = "0"
+
+[[import]]
 name = "dk_dsp_link_open"
 service = "dsp_link"
 since = 11
@@ -1136,6 +1146,26 @@ sig = "i32 (dk_dsp_link *dl, u8 *cb)"
 doc = "Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short; clear it in fini. See <dk/platform/dsp_link.h>."
 requires = "core/dsp-link"
 absent = "missing"
+
+[[import]]
+name = "dk_sdhc_large_open"
+service = "sdhc_large"
+since = 12
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_sdhc_large **out)"
+doc = "Open the large card command service: `*out` is the handle, the result 0. Without core/sdhc-large the result is DK_E_MISSING and `*out` is untouched; `dk_sdhc_large_ctl` then returns 0, so a caller can go on without it."
+requires = "core/sdhc-large"
+absent = "missing"
+
+[[import]]
+name = "dk_sdhc_large_ctl"
+service = "sdhc_large"
+since = 12
+context = "any"
+sig = "u32 (dk_sdhc_large *sl, u32 key, u32 val)"
+doc = "core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside the range the runtime sets, is 16-byte aligned and its length is a multiple of 512, while the switch is on. Key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. 0 without the module. See <dk/platform/sdhc_large.h>."
+requires = "core/sdhc-large"
+absent = "0"
 
 [[import]]
 name = "dk_debug_peek"
@@ -1168,6 +1198,14 @@ since = 11
 context = "any"
 sig = "void (u8 *sink, u8 *tick)"
 doc = "Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none)."
+
+[[import]]
+name = "dk_debug_speed_flags"
+service = "runtime"
+since = 12
+context = "any"
+sig = "u32 (u32 clear, u32 set)"
+doc = "The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `dk_usb_bulk_ring`, bit 3 `dk_sdhc_large_ctl`), not in this word. See <dk/platform/debug.h>."
 
 [log]
 f_error = 1        # flags bit 0: error (kept even when debug is off)

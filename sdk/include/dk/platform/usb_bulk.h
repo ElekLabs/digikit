@@ -2,7 +2,7 @@
  *
  * `dk_usb_bulk_open(ctx, &ub)` in `init` gives the handle, or DK_E_MISSING when core/usb-bulk is not in the image (the module then loads and decides what to
  * do; a module that cannot run without it returns the code from `init`, and the load fails with E_IMPORT and shows core/usb-bulk as the module's need).
- * dk_usb_bulk_enable, _disable, _take, _release, _send, _state, _takeover and _giveback take the handle as the first argument.
+ * dk_usb_bulk_enable, _disable, _take, _release, _send, _state, _takeover, _giveback and _ring take the handle as the first argument.
  *
  *   dk_usb_bulk_open(ctx, &ub);          in init
  *   id = dk_io_post(step, done, 0);      in init
@@ -73,6 +73,13 @@
     DK_E_NOMEM /* dk_usb_bulk_enable: no memory for the buffers (also: no slot on the runtime's per-pass list) */
 #define DK_USB_BULK_E_AGAIN                                                                        \
     DK_E_AGAIN /* dk_usb_bulk_send: nothing in flight, the engine refused; wait for the wake and call again */
+
+/* dk_usb_bulk_ring: the receive ring (up to 60 buffers of 16 KiB, so the controller keeps receiving while the job writes the card). */
+#define DK_USB_BULK_RING_ON(r) ((r) & 1) /* the run-time switch */
+#define DK_USB_BULK_RING_HAVE(r)                                                                   \
+    (((r) >> 1) & 1) /* 0: the adapter has no ring (the stub returned 0): the old behaviour */
+#define DK_USB_BULK_RING_WINDOW(r)                                                                 \
+    (((r) >> 8) & 0xff) /* frames of 64 KiB the live buffers take; 0: the old window of 2 */
 
 #define DK_USB_BULK_RX_BYTES 16384u /* the largest buffer dk_usb_bulk_take gives */
 #define DK_USB_BULK_TX_BYTES 16384u /* the most one dk_usb_bulk_send takes */

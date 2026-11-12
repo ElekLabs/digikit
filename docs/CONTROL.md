@@ -80,7 +80,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `card.overlay`, `card.export`, `card.load`, `card.status`, `card.cancel`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
 | `midi.in`, `midi.out` | `midi_in`, `midi_out` | `call` |
 | `midi.usb.in`, `midi.usb.out` | `usb_in`, `usb_out` | `call` |
-| `usb.bulk.in {bytes \| file, period?, connect?, zlp?}`, `usb.bulk.out {file?}` | | `call` |
+| `usb.bulk.in {bytes \| file, period?, connect?, zlp?}`, `usb.bulk.out {file?}`, `usb.phy {vbus?, run?}` | | `call` |
 | `flash.status`, `flash.read {offset, length}` | | `call`; `patchkit flash --emulator` |
 | `watchdog.config` | `watchdog` | `call` |
 | `cpu.exceptions` | `cpu_exceptions` | `call` |
@@ -224,6 +224,8 @@ the address of the adapter's connect callback (`usb_bulk_connect`, from the patc
 the interrupt and the pacing are those of `midi.usb.in`, so the two interleave. `usb.bulk.out {file?}` returns (and clears) what the guest queued on EP2 IN, as hex, seen where
 the firmware's queue function (`FUN_40005a86`, queue index 6) gets the dTD; the dTD is completed one period later. Both start the capture; The IN data is read through the dTD's page array; with zero-length termination on (QH caps bit 29 clear) a transfer of a multiple of 512 bytes counts one zero-length packet (`bulk_out_zlps`). The counters
 `bulk_in_bytes`, `bulk_out_bytes`, `bulk_out_pending`, `bulk_naks` and `bulk_out_zlps` are in the `status` of `usb.bulk.out`. `usb_sys_error` in the same status is null, or the reason text after a modelled controller system error (a dTD whose page pointer the USB bus master cannot reach, or that breaks a prime rule); all USB traffic stops after it, as on hardware.
+
+`usb.phy {vbus?, run?}` sets VBUS present (OTGSC.BSV reads 1; absent by default, as the model has no host on the wire) when `vbus` is given, sets or clears USBCMD.RS as a write when `run` is given (the event log sees it), and returns (and clears) what the guest did at the USB controller's PHY interface since the last call, oldest first, and the PHY register file as hex (256 bytes): `{"w": [reg, value]}` a write through ULPI_VIEWPORT (RM 24.3.4.12), `{"r": [reg, value]}` a read, `{"rs": 0 | 1}` a change of USBCMD.RS. The registers answer byte, word and long accesses alike from the 32-bit value (big-endian lanes). The viewport completes a run at once (RUN clears; a read puts the register in ULPI_DATRD) and always shows ULPI_SS set; the PHY registers are plain storage and no PHY behaviour is modelled. At most 4096 events are kept between two calls.
 
 The DIN input (`midi.in`) still keeps the one-instruction loop while bytes are queued.
 

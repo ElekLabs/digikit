@@ -173,6 +173,16 @@ describe('BulkTakeOver', () => {
     ).toHaveLength(1);
   });
 
+  test('close returns only after the device is back on its port', async () => {
+    const r = rig();
+    const t = new BulkTakeOver(r.device, r.opener, { bulk: { timeoutMs: 20 } });
+    await t.begin();
+    t.end();
+    r.log.length = 0;
+    await t.close();
+    expect(r.log).toEqual(['s1:release', 'reenumerated']);
+  });
+
   test('a refused take-over (Overbridge, usb-fast not loaded) is a note and no release', async () => {
     const r = rig({ refuse: true });
     const notes: string[] = [];

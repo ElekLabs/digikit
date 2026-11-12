@@ -8,7 +8,7 @@ cpu = "cf"
 sig = "i32 (u32 sector, u32 bytes, u8 *buf)"
 rule = { kind = "cf_func", hash = "dcf1d4873d4a4fb5ac903e8ada9c1a12", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/digikit-menu", "core/runtime"]
+users = ["core/digikit-menu", "core/runtime", "core/sdhc-large"]
 doc = "The firmware's eMMC block read: int f(u32 sector, u32 bytes, void *buf), 0 = ok (finding 23 S6)."
 
 [[fn]]
@@ -18,8 +18,83 @@ cpu = "cf"
 sig = "i32 (u32 sector, u32 bytes, const u8 *buf)"
 rule = { kind = "cf_func", hash = "0dd5a176b94c6e30225068661b58a898", offset = 0x0, len = 2 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/sdhc-large"]
 doc = "The firmware's eMMC block write: int f(u32 sector, u32 bytes, const void *buf), 0 = ok; it takes the ESDHC mutex itself (DT2 1.16 FUN_4012e0c0, DN2 1.11 FUN_4012c780). The runtime writes only the two sectors of the selection record with it."
+
+# Hooks of the eSDHC block write and read for core/sdhc-large. Both functions are the same code on the DT2 1.17 and the DN2 1.12 (same hash, same offsets). The
+# 64 KiB split: each function starts with `cmpi.l #0x10000,D2; ble` (offset 0x14, the entry test) and, in its chunk loop, `cmpi.l #0x10000,D2; ble; moveq 1,D5; swap D5`
+# (offset 0x22, twelve bytes: the chunk size). The hooks raise the limit to 1022 blocks (the eDMA's 15-bit CITER allows 1023) for a registered buffer only.
+[[site]]
+name = "cf.storage.site.block_write.clamp_entry"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "0dd5a176b94c6e30225068661b58a898", offset = 0x14, len = 6 }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "Block write entry: `cmpi.l #0x10000,D2` (six bytes; D2 = bytes, D3 = buffer), then `ble`: a larger transfer is split into 64 KiB calls."
+
+[[hook]]
+name = "cf.storage.hook.block_write.clamp_entry"
+site = "cf.storage.site.block_write.clamp_entry"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["d2", "d3"], clobbers = ["d0", "d1", "ccr"] }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "Compare D2 with the run-time limit instead of 0x10000. The limit is 0x7fc00 (1022 blocks) only while the switch is on, the whole transfer lies inside the registered range, the buffer is 16-byte aligned and the length a multiple of 512; else 0x10000. Jump site+6."
+
+[[site]]
+name = "cf.storage.site.block_write.clamp_chunk"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "0dd5a176b94c6e30225068661b58a898", offset = 0x22, len = 12 }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "Block write chunk loop: `cmpi.l #0x10000,D2; ble; moveq 1,D5; swap D5` (twelve bytes; D5 = D2 before): the chunk size is min(D2, limit)."
+
+[[hook]]
+name = "cf.storage.hook.block_write.clamp_chunk"
+site = "cf.storage.site.block_write.clamp_chunk"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["d2", "d3", "d5"], clobbers = ["d0", "d1", "d5", "ccr"] }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "D5 = min(D2, limit) with the run-time limit of the entry hook (D3 is the buffer of the chunk to come). Jump site+12."
+
+[[site]]
+name = "cf.storage.site.block_read.clamp_entry"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "dcf1d4873d4a4fb5ac903e8ada9c1a12", offset = 0x14, len = 6 }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "Block read entry: `cmpi.l #0x10000,D2` (six bytes; same shape as the write)."
+
+[[hook]]
+name = "cf.storage.hook.block_read.clamp_entry"
+site = "cf.storage.site.block_read.clamp_entry"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["d2", "d3"], clobbers = ["d0", "d1", "ccr"] }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "As the write's entry hook. Jump site+6."
+
+[[site]]
+name = "cf.storage.site.block_read.clamp_chunk"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "dcf1d4873d4a4fb5ac903e8ada9c1a12", offset = 0x22, len = 12 }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "Block read chunk loop (twelve bytes, same shape as the write's)."
+
+[[hook]]
+name = "cf.storage.hook.block_read.clamp_chunk"
+site = "cf.storage.site.block_read.clamp_chunk"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["d2", "d3", "d5"], clobbers = ["d0", "d1", "d5", "ccr"] }
+mark = "D"
+users = ["core/sdhc-large"]
+doc = "As the write's chunk hook. Jump site+12."
 
 # The firmware's normal writer of the boot record (finding 36 section 2; DT2 1.16 FUN_400f044a, 1.17 0x400f05ae; DN2 1.11 FUN_400f1e26,
 # 1.12 FUN_400f1f8a): writes the arena to the next of the two record slots, invalidates the other, one shot per boot. The arena size

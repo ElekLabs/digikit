@@ -2961,6 +2961,35 @@ impl Emulator {
         self.usb_bulk_in(&[], None, None, None).map(|_| ())
     }
 
+    /// The USB controller's PHY events since the last call (ULPI viewport accesses, USBCMD.RS changes) and the PHY register file.
+    /// Set or clear USBCMD.RS as a write to the register (the PHY log sees the change): a controller that something else started or stopped.
+    pub fn set_usb_run(&mut self, on: bool) {
+        const USBCMD: u32 = 0xfc0b_0140;
+        let old = self.bus.board.read32(USBCMD).unwrap_or(0);
+        let new = if on { old | 1 } else { old & !1 };
+        let _ = self.bus.board.write32(USBCMD, new);
+    }
+
+    /// VBUS present or absent at the USB controller (OTGSC.BSV).
+    pub fn set_usb_vbus(&mut self, present: bool) {
+        self.bus.board.set_usb_vbus(present);
+    }
+
+    /// Each event is `(kind, a, b)`: `("w", reg, value)` a ULPI viewport write, `("r", reg, value)` a read, `("rs", 0 or 1, 0)` a change of USBCMD.RS.
+    pub fn take_usb_phy(&mut self) -> (Vec<(&'static str, u8, u8)>, Vec<u8>) {
+        use machine::UsbPhyEvent;
+        let (events, regs) = self.bus.board.usb_phy_take();
+        let events = events
+            .into_iter()
+            .map(|e| match e {
+                UsbPhyEvent::PhyWrite { reg, value } => ("w", reg, value),
+                UsbPhyEvent::PhyRead { reg, value } => ("r", reg, value),
+                UsbPhyEvent::RunStop(on) => ("rs", u8::from(on), 0),
+            })
+            .collect();
+        (events, regs)
+    }
+
     /// What the guest queued on EP2 IN since the last call.
     pub fn take_bulk_out(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.midi.usb.bulk_out)

@@ -4,7 +4,9 @@
    dk_debug_track_type(track): the machine type of a track of the active kit, read from the firmware.
    dk_debug_selected_params(out, n): the selected track and its first `n` Sound parameter words, read from the firmware's own accessors.
    dk_debug_log_sink_set(sink, tick): the one log sink (every event the runtime logs, before any filter, in whatever task logs, with interrupts
-   masked) and its per-pass tick. A module that sets a sink clears it in `fini`. */
+   masked) and its per-pass tick. A module that sets a sink clears it in `fini`.
+   dk_debug_speed_flags(clear, set): the run-time switches of the speed levers (one RAM word, set at boot, never saved): clears the bits of `clear`, then
+   sets the bits of `set` (both 0 only reads) and returns the new word. Bit 0: hash once; bit 2: the read-back hash overlaps the next card read. */
 #ifndef DK_DEBUG_H
 #define DK_DEBUG_H
 #include <dk/core/module.h>
