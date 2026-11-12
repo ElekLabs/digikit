@@ -294,17 +294,15 @@ function cardLogText(s) {
 async function cardLogGet(session) {
   const files = await session.readCardLog();
   if (files.length === 0) return console.log('no card log file on the card');
-  const stamp = new Date()
-    .toISOString()
-    .replace(/\.\d+Z$/, '')
-    .replace(/[-:]/g, '')
-    .replace('T', '-');
+  const now = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`;
   const dir = path.resolve(opts.out ?? path.join(root, 'out/runs/cardlog', stamp));
   mkdirSync(dir, { recursive: true });
   for (const f of files) {
-    const name = `boot${f.bootSeq}-cardlog-${f.file}`;
+    const name = `boot${f.bootSeq}-cardlog-${f.file}${f.kind === 'incident' ? '-inc' : ''}`;
     const lines = [
-      `# file ${f.file}, boot ${f.bootSeq}, write ${f.writeNo}, ${f.events.length} events, seq ${f.oldestSeq}..${f.newestSeq}`,
+      `# file ${f.file} ${f.kind}, boot ${f.bootSeq}, write ${f.writeNo}, ${f.events.length} events, seq ${f.oldestSeq}..${f.newestSeq}`,
     ];
     lines.push(...f.events.map((e) => eventLine(runtimeEvent(e))));
     if (f.raw) writeFileSync(path.join(dir, `${name}.bin`), f.raw);

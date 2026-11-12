@@ -84,6 +84,7 @@ test('parseCardLog decodes the header and the valid events of a 16448 byte file'
   assert.equal(f.file, 'b');
   assert.equal(f.writeNo, 7);
   assert.equal(f.bootSeq, 4);
+  assert.equal(f.kind, 'rolling');
   assert.equal(f.newestSeq, 11);
   assert.equal(f.events.length, 2);
   assert.deepEqual(f.events[1], {
@@ -93,6 +94,9 @@ test('parseCardLog decodes the header and the valid events of a 16448 byte file'
     flags: 4,
     args: [11, 0, 0, 0, 0xdead000b],
   });
+  buf[17] = 1;
+  assert.equal(parseCardLog(buf).kind, 'incident');
+  buf[17] = 0;
   assert.throws(() => parseCardLog(new Uint8Array(buf.length)));
   v.setUint16(8, 64); // a wrong event_bytes
   assert.throws(
@@ -127,4 +131,6 @@ test('a USB_SW event reads as phase, direction, switch number and register bits'
     connects: 9,
   });
   assert.match(eventLine(d), /USB_SW/);
+  const a = runtimeEvent({ seq: 2, time: 0, kind: LOG_KIND.USB_SW, flags: 4, args: [10 | (2 << 13), 0, 0, 0, 0] });
+  assert.equal(a.fields.reset, 'uri');
 });

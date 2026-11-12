@@ -263,13 +263,6 @@
   },
   {
    "addend": 0,
-   "offset": 96,
-   "section": ".text.ub_log",
-   "symbol": "dkrt_log_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 10,
    "section": ".text.tick_register.part.0",
    "symbol": ".sec..bss.tick_added",
@@ -364,6 +357,13 @@
    "offset": 166,
    "section": ".text.queue_transfer.constprop.0",
    "symbol": ".sec..bss.stock_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.ub_log.constprop.0",
+   "symbol": "dkrt_log_ev",
    "type": "cf.32"
   },
   {
@@ -802,14 +802,21 @@
   },
   {
    "addend": 0,
-   "offset": 268,
+   "offset": 260,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..rodata.CSWTCH.309",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 280,
    "section": ".text.sw_ev",
    "symbol": "dkrt_log_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 282,
+   "offset": 294,
    "section": ".text.sw_ev",
    "symbol": ".sec..text.sw_ms",
    "type": "cf.32"
@@ -1756,7 +1763,7 @@
    "addend": 0,
    "offset": 342,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log",
+   "symbol": ".sec..text.ub_log.constprop.0",
    "type": "cf.32"
   },
   {
@@ -1847,7 +1854,7 @@
    "addend": 0,
    "offset": 500,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log",
+   "symbol": ".sec..text.ub_log.constprop.0",
    "type": "cf.32"
   },
   {
@@ -2006,275 +2013,275 @@
   },
   {
    "addend": 0,
-   "offset": 754,
+   "offset": 752,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_con_cnt",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 760,
+   "offset": 758,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 766,
+   "offset": 764,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 774,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 772,
+   "offset": 780,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_con_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 786,
+   "offset": 794,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_con_ps",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 792,
+   "offset": 800,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_ov_ps",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 800,
+   "offset": 808,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..data.sw_ov_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 810,
+   "offset": 818,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 836,
+   "offset": 828,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 850,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 60,
-   "offset": 852,
+   "offset": 866,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 858,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
    "offset": 872,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
+   "addend": 60,
+   "offset": 886,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
-   "offset": 894,
+   "offset": 908,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 906,
+   "offset": 920,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 912,
+   "offset": 926,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 922,
+   "offset": 936,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 930,
+   "offset": 944,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.taken",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 944,
+   "offset": 958,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.alloc_busy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 958,
+   "offset": 972,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 966,
+   "offset": 980,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.enabled",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 976,
+   "offset": 990,
    "section": ".text.usb_bulk_tick",
    "symbol": "dkrt_blocks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 984,
+   "offset": 998,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.io_job",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 998,
+   "offset": 1012,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_passes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1006,
+   "offset": 1020,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_passes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1014,
+   "offset": 1028,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1022,
+   "offset": 1036,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1034,
+   "offset": 1048,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1040,
+   "offset": 1054,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1060,
+   "offset": 1074,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1066,
+   "offset": 1080,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1072,
+   "offset": 1086,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hk_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1078,
+   "offset": 1092,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.wake",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1090,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1098,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.prime_all",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1104,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
+   "symbol": ".sec..bss.need_prime",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1110,
+   "offset": 1112,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.prime_all",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1118,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_retry",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1132,
+   "offset": 1124,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1140,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
+   "symbol": ".sec..bss.tx_retry",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1146,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "symbol": ".sec..text.wake",
    "type": "cf.32"
   },
   {
@@ -2286,219 +2293,226 @@
   },
   {
    "addend": 0,
-   "offset": 1164,
+   "offset": 1160,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1168,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1178,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1186,
+   "offset": 1200,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1216,
+   "offset": 1230,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1246,
+   "offset": 1260,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_forced_restarts",
    "type": "cf.32"
   },
   {
    "addend": 35,
-   "offset": 1252,
+   "offset": 1266,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1258,
+   "offset": 1272,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log",
+   "symbol": ".sec..text.ub_log.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1264,
+   "offset": 1278,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_fw_restart",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1286,
+   "offset": 1300,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_passes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1292,
+   "offset": 1306,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_peek",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1308,
+   "offset": 1322,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1318,
+   "offset": 1332,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_active_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1324,
+   "offset": 1338,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_guard_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1358,
+   "offset": 1372,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1378,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1386,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 1392,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1400,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1406,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_act_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1398,
+   "offset": 1412,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1404,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1410,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1418,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1424,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
+   "symbol": ".sec..bss.to_active",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1432,
    "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1438,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1446,
+   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1450,
+   "offset": 1464,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_drop",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1456,
+   "offset": 1470,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1466,
+   "offset": 1480,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1480,
+   "offset": 1494,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1486,
+   "offset": 1500,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1496,
+   "offset": 1510,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1524,
+   "offset": 1538,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_pend",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1532,
+   "offset": 1546,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_pend_poll.part.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1538,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_drop",
    "type": "cf.32"
   },
   {
@@ -2510,464 +2524,464 @@
   },
   {
    "addend": 0,
-   "offset": 1558,
+   "offset": 1566,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1572,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1564,
+   "offset": 1578,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 1576,
+   "offset": 1590,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 1592,
+   "offset": 1606,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1598,
+   "offset": 1612,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1626,
+   "offset": 1640,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_fw_mode_switch",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1632,
+   "offset": 1646,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1638,
+   "offset": 1652,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ms",
    "type": "cf.32"
   },
   {
    "addend": 72,
-   "offset": 1648,
+   "offset": 1662,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1654,
+   "offset": 1668,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_words",
    "type": "cf.32"
   },
   {
    "addend": 88,
-   "offset": 1666,
+   "offset": 1680,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 92,
-   "offset": 1676,
+   "offset": 1690,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 68,
-   "offset": 1686,
+   "offset": 1700,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 96,
-   "offset": 1692,
+   "offset": 1706,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1704,
+   "offset": 1718,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_restart_delay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1726,
+   "offset": 1740,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_restart_delay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1732,
+   "offset": 1746,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_hold_ticks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1738,
+   "offset": 1752,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1744,
+   "offset": 1758,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1750,
+   "offset": 1764,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1772,
+   "offset": 1786,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_park",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1778,
+   "offset": 1792,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_began",
    "type": "cf.32"
   },
   {
    "addend": 44,
-   "offset": 1788,
+   "offset": 1802,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1814,
+   "offset": 1828,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1842,
+   "offset": 1856,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1864,
+   "offset": 1878,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1870,
+   "offset": 1884,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1876,
+   "offset": 1890,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_park",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1888,
+   "offset": 1902,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1896,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_began",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1910,
    "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_began",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1924,
+   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1918,
+   "offset": 1932,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_park",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1936,
+   "offset": 1950,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 68,
-   "offset": 1944,
+   "offset": 1958,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1954,
+   "offset": 1968,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 1964,
+   "offset": 1978,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1990,
+   "offset": 2004,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1998,
+   "offset": 2012,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_gone",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2004,
+   "offset": 2018,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2014,
+   "offset": 2028,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2022,
+   "offset": 2036,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_gone",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2032,
+   "offset": 2046,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_gone",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2040,
+   "offset": 2054,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2048,
+   "offset": 2062,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2056,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_orig",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2064,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 2070,
    "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_orig",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2078,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2084,
+   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2076,
+   "offset": 2090,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2082,
+   "offset": 2096,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2092,
+   "offset": 2106,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2102,
+   "offset": 2116,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2108,
+   "offset": 2122,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2118,
+   "offset": 2132,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2124,
+   "offset": 2138,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2134,
+   "offset": 2148,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_due_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2170,
+   "offset": 2184,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_orig",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2178,
+   "offset": 2192,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2194,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2202,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 2208,
    "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2216,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2222,
+   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2234,
+   "offset": 2248,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_act_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2240,
+   "offset": 2254,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2260,
+   "offset": 2274,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2288,
+   "offset": 2302,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2298,
+   "offset": 2312,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2304,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
    "type": "cf.32"
   },
   {
@@ -2979,359 +2993,359 @@
   },
   {
    "addend": 0,
-   "offset": 2324,
+   "offset": 2332,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2338,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2346,
+   "offset": 2360,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2358,
+   "offset": 2372,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2364,
+   "offset": 2378,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.taken",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2370,
+   "offset": 2384,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2376,
+   "offset": 2390,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_gone",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2382,
+   "offset": 2396,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2398,
+   "offset": 2412,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_stamp",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2404,
+   "offset": 2418,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rec_target",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2410,
+   "offset": 2424,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2442,
+   "offset": 2456,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_phy_refused",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 2460,
+   "offset": 2474,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2476,
+   "offset": 2490,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2484,
+   "offset": 2498,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 44,
-   "offset": 2504,
+   "offset": 2518,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 2514,
+   "offset": 2528,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 2538,
+   "offset": 2552,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2544,
+   "offset": 2558,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 2564,
+   "offset": 2578,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2580,
+   "offset": 2594,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2588,
+   "offset": 2602,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 64,
-   "offset": 2604,
+   "offset": 2618,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2626,
+   "offset": 2640,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2632,
+   "offset": 2646,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 2658,
+   "offset": 2672,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 64,
-   "offset": 2676,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2682,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
    "offset": 2692,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 2698,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 2708,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
    "addend": 52,
-   "offset": 2712,
+   "offset": 2728,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 2722,
+   "offset": 2738,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 52,
-   "offset": 2744,
+   "offset": 2760,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2750,
+   "offset": 2766,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 76,
-   "offset": 2788,
+   "offset": 2804,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 80,
-   "offset": 2800,
+   "offset": 2816,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 84,
-   "offset": 2818,
+   "offset": 2834,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2832,
+   "offset": 2848,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 76,
-   "offset": 2850,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 2860,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
    "offset": 2866,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
+   "addend": 80,
+   "offset": 2876,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 2882,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
    "addend": 36,
-   "offset": 2878,
+   "offset": 2894,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2888,
+   "offset": 2904,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.live",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2896,
+   "offset": 2912,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_slots",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2904,
+   "offset": 2920,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2914,
+   "offset": 2930,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 2926,
+   "offset": 2942,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2936,
+   "offset": 2952,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.connected",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2946,
+   "offset": 2962,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2958,
+   "offset": 2974,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 2970,
+   "offset": 2986,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2986,
+   "offset": 3002,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3008,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
@@ -3343,226 +3357,240 @@
   },
   {
    "addend": 0,
-   "offset": 3036,
+   "offset": 3040,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3042,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_flush.isra.0",
+   "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 3052,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
+   "symbol": ".sec..bss.stopping",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3064,
+   "offset": 3058,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_flush.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3068,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_fw_cancel_ep",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3072,
+   "offset": 3080,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_cancel_ep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3088,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.ep2_lists_clear",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3094,
+   "offset": 3110,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_slots",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3100,
+   "offset": 3116,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3112,
+   "offset": 3128,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.order_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3118,
+   "offset": 3134,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3124,
+   "offset": 3140,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.order_head",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3138,
+   "offset": 3154,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 3144,
+   "offset": 3160,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 3158,
+   "offset": 3174,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3164,
+   "offset": 3180,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.need_prime",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3170,
+   "offset": 3186,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.stopping",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3288,
+   "offset": 3304,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3294,
+   "offset": 3310,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.need_prime",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3348,
+   "offset": 3364,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.blk_raw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3354,
+   "offset": 3370,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3360,
+   "offset": 3376,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.live",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3366,
+   "offset": 3382,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.blk_raw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3372,
+   "offset": 3388,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_area",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3378,
+   "offset": 3394,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_area",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3384,
+   "offset": 3400,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3396,
+   "offset": 3412,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rx_slots",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3402,
+   "offset": 3418,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.order_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3408,
+   "offset": 3424,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.order_head",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3414,
+   "offset": 3430,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 3420,
+   "offset": 3436,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3426,
+   "offset": 3442,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.need_prime",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3432,
+   "offset": 3448,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3442,
+   "offset": 3458,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_fw_mem_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 3512,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
@@ -4745,13 +4773,6 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffdc226e0008428148d7001c74014a82675e10311800675c71807803c8812601e48b2d43ffe84a84660442b63cec260178034683c6845281206effe8e78be7a881b68cec7010b08166c4486effec487800062d6e000cfffc4878000e4eb9000000004fef000c4cee001cffdc4e5e4e75428060a64280428260a0",
-   "kind": "text",
-   "name": ".text.ub_log",
-   "size": 124
-  },
-  {
-   "align": 2,
    "hex": "2f0240c246fc27004ab90000000066204879000000004eb900000000588f4a806608720123c10000000046c2241f4e75428060f6",
    "kind": "text",
    "name": ".text.tick_register.part.0",
@@ -4770,6 +4791,13 @@
    "kind": "text",
    "name": ".text.queue_transfer.constprop.0",
    "size": 180
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffdc226e0008428148d7001c74014a82675e10311800675c71807803c8812601e48b2d43ffe84a84660442b63cec260178034683c6845281206effe8e78be7a881b68cec7010b08166c4486effec487800022d6e000cfffc4878000e4eb9000000004fef000c4cee001cffdc4e5e4e75428060a64280428260a0",
+   "kind": "text",
+   "name": ".text.ub_log.constprop.0",
+   "size": 124
   },
   {
    "align": 2,
@@ -4822,10 +4850,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec2f0e2f022c6f00204ab900000000671e7001740c220ee3a881b900000000203900000000b48e66107217b280641a241f2c5f4fef00144e75741fb480640a0681fffffff1e48966e65280486f000823c0000000004eb900000000588f2079000000004a88671e43f9000000002f51001043f9000000002f51001443f9000000002f510018720c203900000000240ee3a8223900000000484142418081223900000000e189028100000f008081222f00248082740de5a973c1808172ff2f400008203900000000b280660a4a8867462039000000002f40000c2039000000004a8067042f40001474ff700c23c20000000042b900000000b08e66227006486f00082f004878002c4eb9000000004fef000c6000ff1c4eb90000000060b8700460dc",
+   "hex": "4fefffec2f0e2f022c6f00204ab900000000671e7001740c220ee3a881b900000000203900000000b48e66107217b280641a241f2c5f4fef00144e75741fb480640a0681fffffff1e48966e65280486f000823c0000000004eb900000000588f2079000000004a88671e43f9000000002f51001043f9000000002f51001443f9000000002f510018720c203900000000240ee3a8223900000000484142418081223900000000e189028100000f008081222f00248082740de5a973c1808172ff2f400008203900000000b280660a4a8867522039000000002f40000c2039000000004a8067042f40001474ff700523c20000000042b9000000004deefff4b08e652a41f90000000071b0e800486f00082f004878002c4eb9000000004fef000c6000ff104eb90000000060ac700460dc",
    "kind": "text",
    "name": ".text.sw_ev",
-   "size": 292
+   "size": 304
   },
   {
    "align": 2,
@@ -4871,10 +4899,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffc448d700fc4ab90000000067064eb9000000004ab900000000670000aa40c146fc27002439000000002039fc0b014046c14ab90000000067767201c2800800000066067003b082656642aeffe842aeffec4a81670000a6486effe842a742a74eb9000000004fef000c4a80660000aa7249b2aeffe8661e486effec2f3900000000487800014eb9000000004fef000c4a806600008452b90000000042a74878000742b9000000004eb900000000508f4ab900000000660e5382783bb882640642b9000000004ab9000000006700013a40c246fc27002039fc0b014008000000660e2a3900000000bab900000000677042b90000000046c26000010e486effec2f3900000000487800014eb9000000004fef000c4a806784203900000000528023c0000000007631b68064844878000142b9000000004878000752b9000000004eb9000000002f39000000004879000000004eb9000000004fef00106000ff52486effe44eb90000000026002239fc0b01a4202effe4588fb0b90000000066060801000b661023c00000000023c3000000006000ff62223900000000783b5381b8816400ff524ab9000000006600ff482f002f032f39000000004eb9000000004fef000c0c8000000f9f6300ff2a2039000000007a0223c300000000ba806400028e2f0048790000000042b9000000004eb90000000046c242a74878000f4eb9000000004fef00104ab90000000067327001b0b900000000660002e44ab900000000660002da4eb90000000072f8b280660002c640c246fc27004eb90000000046c24ab9000000006700014c4eb900000000486effec24004eb900000000588f7008c0b9000000004a8067000b22262efffc2803e08c207900000000727f424348432a2efff4c881b1f9000000006700072e41f90000000023d0000000002039000000004a80660006ea200241f90000000023d00000000042a723c000000000487800044eb900000000508f700108050010660006f0720123c1000000002a3900000000bab9000000006744700141f90000000023d00000000023c0000000002039000000004a80660006f0200241f90000000023d00000000042a723c000000000487800094eb900000000508f70017240c2aefff44a8166044a846608720123c1000000007a03c6854a836608720123c1000000002239000000000801000a670006ee4ab900000000670006ba4a83670006b442a74878000b4eb90000000042a7487800104eb90000000042b9000000004fef00104ab90000000067244ab900000000661c40c246fc27002839000000004a846700078e721023c10000000046c24ab900000000670009d24eb90000000024004ab9000000006f5c4a80660009a4243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a720123c10000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a806700093e4cee00fcffc44e5e4ef900000000528023c00000000052b90000000046c22f39000000004878000e4eb900000000486effec487800614878000142aeffe84eb9000000004fef00144a80662e260e74140683ffffffe82f0342a742a74eb9000000004fef000c4a8066107020c0aeffe84a80670653824a8266dc2f39000000004879000000004eb9000000004eb900000000508f6000fd124a806600fd46486effe052b9000000004eb900000000280040c646fc2700588f4ab9000000006600027e2a39000000004eb9000000002d40ffdc2039fc0b01b82239fc0b01b080810280000300004a80660e71b90000000055804a806600025274012e2effe0beb900000000671823c70000000023c40000000042b90000000042b9000000004ab900000000670c42b90000000023c4000000007001b0b900000000670002227202b2856700021a4eb9000000002639000000004a8367342639000000004a83672a2f072f042f39000000004eb9000000004fef000cb0b900000000650003944aaeffdc670003942602d68342aeffdc46c64ab90000000067064eb9000000004ab900000000671a42a74878001242b9000000004eb90000000042b900000000508f4a83671e4ab90000000066162f0374014878000223c2000000004eb900000000508f4aaeffdc6700fbfabaaeffdc6700fbf22f2effdc4eb90000000042b9000000004eb900000000486effec23c0000000004eb90000000041eefff4700123d00000000041eefff823d00000000041eefffc23c00000000023d00000000040c146fc2700203900000000508f5380741db480650002ca763c780123c30000000023c30000000023c40000000042b90000000042b9000000002439fc0b01407a0146827001c48546c142b90000000023c0000000004a80670685b9000000004a826754486effe442a742a742aeffe442aeffe84eb9000000004fef000c4a8066000266486effe848780049487800014eb9000000004fef000c4a806600024a41eeffe4700123d00000000023c00000000023c20000000042a7487800034eb900000000508f4ab900000000670e42a7487800054eb900000000508f2079000000004a8867104868ffff487800064eb900000000508f42b9000000006000faa62a39000000006000fd821439000000007602b7824a0257c2750244826000fd9e202effdc80b900000000661042b90000000042b9000000006000fdd44ab900000000663c4ab900000000670000c842b900000000760223c3000000007202b2b900000000661ab2b900000000670623c10000000042b90000000042b9000000004ab9000000006700fd864ab900000000660e760123c30000000023c4000000002f072f042f39000000004eb9000000004fef000c223900000000b2806200fd504aaeffdc6700fd484a82670c06810000012cb2806200fd382639000000007001b0b900000000660000aaba836600fd1a42b900000000760223c00000000042b900000000b685660000b42d43ffdc42836000fd3e2f072f042f39000000004eb9000000004fef000c0c800000752f630c700223c0000000006000ff222239fc0b01844a016a420c80000007cf633a4ab9000000006612720123c10000000023c4000000006000fef62f072f042f39000000004eb9000000004fef000c0c80000001f36300fed860a842b9000000006000fecc720123c10000000042b90000000042b90000000042b90000000042b9000000004a836600ff4e6000fc544eb90000000023c30000000023c3000000006000ff3a42aeffdc6000ff3676016000fc72428042826000fd6252b90000000074026000fdc0223c000005dcb2b9000000006600f90a487805dc2f0041f9000000002f104eb9000000004fef000c6000f8f042806000f90c4ab9000000006700f9122239000000000281000001004a816600f90042a74878000823c2000000004eb900000000508f70016000f8e6223c000005dcb2b9000000006600f904487805dc2f0041f9000000002f104eb9000000004fef000c6000f8ea220292b9000000000c81000007cf634a48780001487800104eb90000000042b900000000508f6000f9480281000005000c810000010066224ab900000000671a4a84671642a74878000a23c2000000004eb900000000508f70012239000000000281000005000c810000010066404ab9000000006638220292b9000000000c8100000bb7632842a770014878000d23c0000000004eb900000000508f0c820000270f634a42a7487800116000ff6c0c820000270f62ee4a806634223900000000b2aefff4661a243900000000b4aefff8660e70fdc0aefffcb0b900000000670e42a74878000c4eb900000000508f70fd41eefff4c0aefffc23d00000000041eefff823d00000000023c0000000002039fc0b014c23c0000000006000f8544ab900000000675a223900000000428041f900000000b280665271b9000000007601b680676071b900000000b68067562039000000004a80665841f900000000b0816600017273b9000000007602b681670c73b900000000b681660001707808602642b9000000006000f81277b0080057834a83660c700123c0000000006000f7fc52806090780223c4000000006000f7ec7a0123c5000000004eb9000000004878000241f9000000004e904878000641f9000000004e904eb900000000508f203c00040004428123c0fc0b01bc20390000000041f900000000b081660000c242b90000000073b90000000042b90000000053814a816708420513c50000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b42a39fc0b01b82639fc0b01b0828582830281000400044a816700008c2639fc0b01b42239fc0b01b82039fc0b01b00280000400040281000400044a8056c04a8156c17100730144804481d281e5888081220376010281000400044a8156c17301448180817204e188828023c10000000023c3000000006000f6de77b0180057834a83670642031183180052816000ff2677b0080053834a83660670086000feb452806000fe7622390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b880663c420042b90000000042b90000000042b90000000013c00000000013c00000000042b90000000042b90000000046c22f014eb900000000588f6000f64a420511854800528460b6263c000005dc6000f6660c820000270f6300fd4a6000fd304cee00fcffc44e5e4e75",
+   "hex": "4e56ffc448d700fc4ab90000000067064eb9000000004ab900000000670000aa40c146fc27002439000000002039fc0b014046c14ab90000000067767201c2800800000066067003b082656642aeffe842aeffec4a81670000a6486effe842a742a74eb9000000004fef000c4a80660000aa7249b2aeffe8661e486effec2f3900000000487800014eb9000000004fef000c4a806600008452b90000000042a74878000742b9000000004eb900000000508f4ab900000000660e5382783bb882640642b9000000004ab9000000006700013a40c246fc27002039fc0b014008000000660e2a3900000000bab900000000677042b90000000046c26000010e486effec2f3900000000487800014eb9000000004fef000c4a806784203900000000528023c0000000007631b68064844878000142b9000000004878000752b9000000004eb9000000002f39000000004879000000004eb9000000004fef00106000ff52486effe44eb90000000026002239fc0b01a4202effe4588fb0b90000000066060801000b661023c00000000023c3000000006000ff62223900000000783b5381b8816400ff524ab9000000006600ff482f002f032f39000000004eb9000000004fef000c0c8000000f9f6300ff2a2039000000007a0223c300000000ba806400029c2f0048790000000042b9000000004eb90000000046c242a74878000f4eb9000000004fef00104ab90000000067327001b0b900000000660002f24ab900000000660002e84eb90000000072f8b280660002d440c246fc27004eb90000000046c24ab9000000006700015a4eb900000000486effec24004eb900000000588f7008c0b9000000004a8067000b32282efffc2604e08b207900000000727f424448442a2efff4c681b1f9000000006700073c41f90000000023d0000000002039000000004a80660006f8200241f90000000023d00000000042a723c000000000487800044eb900000000508f700108050010660006fe720123c1000000002a3900000000bab900000000674c41f90000000023d0000000004ab9000000006608700123c0000000002039000000004a80660006f6200241f90000000023d00000000042a723c000000000487800094eb900000000508f70014ab90000000066147240c2aefff44a8167000a62720223c1000000007203c8814a8466087a0123c5000000002239000000000801000a670006ee4ab900000000670006ba4a84670006b442a74878000b4eb90000000042a7487800104eb90000000042b9000000004fef00104ab90000000067244ab900000000661c40c246fc27002839000000004a8467000790721023c10000000046c24ab900000000670009e64eb90000000024004ab9000000006f5c4a80660009a6243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a720123c10000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a80670009524cee00fcffc44e5e4ef900000000528023c00000000052b90000000046c22f39000000004878000e4eb900000000486effec487800614878000142aeffe84eb9000000004fef00144a80662e260e74140683ffffffe82f0342a742a74eb9000000004fef000c4a8066107020c0aeffe84a80670653824a8266dc2f39000000004879000000004eb9000000004eb900000000508f6000fd044a806600fd38486effe052b9000000004eb900000000280040c646fc2700588f4ab9000000006600027e2a39000000004eb9000000002d40ffdc2039fc0b01b82239fc0b01b080810280000300004a80660e71b90000000055804a806600025274012e2effe0beb900000000671823c70000000023c40000000042b90000000042b9000000004ab900000000670c42b90000000023c4000000007001b0b900000000670002227202b2856700021a4eb9000000002639000000004a8367342639000000004a83672a2f072f042f39000000004eb9000000004fef000cb0b900000000650003944aaeffdc670003942602d68342aeffdc46c64ab90000000067064eb9000000004ab900000000671a42a74878001242b9000000004eb90000000042b900000000508f4a83671e4ab90000000066162f0374014878000223c2000000004eb900000000508f4aaeffdc6700fbecbaaeffdc6700fbe42f2effdc4eb90000000042b9000000004eb900000000486effec23c0000000004eb90000000041eefff4700123d00000000041eefff823d00000000041eefffc23c00000000023d00000000040c146fc2700203900000000508f5380741db480650002ca763c780123c30000000023c30000000023c40000000042b90000000042b9000000002439fc0b01407a0146827001c48546c142b90000000023c0000000004a80670685b9000000004a826754486effe442a742a742aeffe442aeffe84eb9000000004fef000c4a8066000266486effe848780049487800014eb9000000004fef000c4a806600024a41eeffe4700123d00000000023c00000000023c20000000042a7487800034eb900000000508f4ab900000000670e42a7487800054eb900000000508f2079000000004a8867104868ffff487800064eb900000000508f42b9000000006000fa982a39000000006000fd821439000000007602b7824a0257c2750244826000fd9e202effdc80b900000000661042b90000000042b9000000006000fdd44ab900000000663c4ab900000000670000c842b900000000760223c3000000007202b2b900000000661ab2b900000000670623c10000000042b90000000042b9000000004ab9000000006700fd864ab900000000660e760123c30000000023c4000000002f072f042f39000000004eb9000000004fef000c223900000000b2806200fd504aaeffdc6700fd484a82670c06810000012cb2806200fd382639000000007001b0b900000000660000aab6856600fd1a42b900000000760223c00000000042b900000000b685660000b42d43ffdc42836000fd3e2f072f042f39000000004eb9000000004fef000c0c800000752f630c700223c0000000006000ff222239fc0b01844a016a420c80000007cf633a4ab9000000006612720123c10000000023c4000000006000fef62f072f042f39000000004eb9000000004fef000c0c80000001f36300fed860a842b9000000006000fecc720123c10000000042b90000000042b90000000042b90000000042b9000000004a836600ff4e6000fc544eb90000000023c30000000023c3000000006000ff3a42aeffdc6000ff3676016000fc72428042826000fd6252b90000000074026000fdc0223c000005dcb2b9000000006600f8fc487805dc2f0041f9000000002f104eb9000000004fef000c6000f8e242806000f8fe4ab9000000006700f9042239000000000281000001004a816600f8f242a74878000823c2000000004eb900000000508f70016000f8d8223c000005dcb2b9000000006600f8fe487805dc2f0041f9000000002f104eb9000000004fef000c6000f8e4220292b9000000000c81000007cf634c48780001487800104eb90000000042b900000000508f6000f9480281000005000c810000010066242239000000004a81671a4a8367162f014878000a23c2000000004eb900000000508f70012239000000000281000005000c810000010066404ab9000000006638220292b9000000000c8100000bb7632842a770014878000d23c0000000004eb900000000508f0c820000270f634a42a7487800116000ff6a0c820000270f62ee4a806634223900000000b2aefff4661a243900000000b4aefff8660e70fdc0aefffcb0b900000000670e42a74878000c4eb900000000508f70fd41eefff4c0aefffc23d00000000041eefff823d00000000023c0000000002039fc0b014c23c0000000006000f8524ab900000000675a223900000000428041f900000000b280665271b9000000007601b680676071b900000000b68067562039000000004a80665841f900000000b0816600017273b9000000007602b681670c73b900000000b681660001707808602642b9000000006000f81077b0080057834a83660c700123c0000000006000f7fa52806090780223c4000000006000f7ea7a0123c5000000004eb9000000004878000241f9000000004e904878000641f9000000004e904eb900000000508f203c00040004428123c0fc0b01bc20390000000041f900000000b081660000c242b90000000073b90000000042b90000000053814a816708420513c50000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b42a39fc0b01b82639fc0b01b0828582830281000400044a816700008c2639fc0b01b42239fc0b01b82039fc0b01b00280000400040281000400044a8056c04a8156c17100730144804481d281e5888081220376010281000400044a8156c17301448180817204e188828023c10000000023c3000000006000f6dc77b0180057834a83670642031183180052816000ff2677b0080053834a83660670086000feb452806000fe7622390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b084663c420042b90000000042b90000000042b90000000013c00000000013c00000000042b90000000042b90000000046c22f014eb900000000588f6000f648420511854800528460b6263c000005dc6000f6640c820000270f6300fd4a6000fd304a836600f5a47a0323c5000000006000f5984cee00fcffc44e5e4e75",
    "kind": "text",
    "name": ".text.usb_bulk_tick",
-   "size": 3496
+   "size": 3530
   },
   {
    "align": 2,
@@ -5007,6 +5035,13 @@
    "hex": "4ef900000000",
    "kind": "text",
    "name": ".text.dk_usb_bulk_giveback",
+   "size": 6
+  },
+  {
+   "align": 1,
+   "hex": "060204010402",
+   "kind": "data",
+   "name": ".rodata.CSWTCH.309",
    "size": 6
   },
   {
@@ -5668,7 +5703,7 @@
    "size": 101
   }
  ],
- "source_sha256": "3cd0bd5ef88ee90d8aa3927f439db5f230d6f0b7eb26e8f1a4ec169e0c56350b",
+ "source_sha256": "6f7029f5b719fcae1f932b01f8ff172f35b76fa249b2cc3907fc62b0291086bc",
  "symbols": [
   {
    "global": false,
@@ -6212,6 +6247,12 @@
   },
   {
    "global": false,
+   "name": ".sec..rodata.CSWTCH.309",
+   "section": ".rodata.CSWTCH.309",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..rodata.bulk_interface",
    "section": ".rodata.bulk_interface",
    "value": 0
@@ -6344,8 +6385,8 @@
   },
   {
    "global": false,
-   "name": ".sec..text.ub_log",
-   "section": ".text.ub_log",
+   "name": ".sec..text.ub_log.constprop.0",
+   "section": ".text.ub_log.constprop.0",
    "value": 0
   },
   {
@@ -6448,6 +6489,12 @@
    "global": false,
    "name": ".sec..text.wake",
    "section": ".text.wake",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "CSWTCH.309",
+   "section": ".rodata.CSWTCH.309",
    "value": 0
   },
   {
@@ -7106,8 +7153,8 @@
   },
   {
    "global": false,
-   "name": "ub_log",
-   "section": ".text.ub_log",
+   "name": "ub_log.constprop.0",
+   "section": ".text.ub_log.constprop.0",
    "value": 0
   },
   {
@@ -7415,8 +7462,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "2546",
-  "isa_check": "9230b41ae3ea937b1bb039b10fe0291f14bf621a66ba4ca24f6cc549f3bf8fe8",
+  "instructions_redecoded": "2556",
+  "isa_check": "b4b15f65970234e531e17c65db1b235b418fce33e70f7aa46b860e6e537bee5e",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

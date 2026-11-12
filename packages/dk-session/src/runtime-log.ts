@@ -182,6 +182,7 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
         eps: eps.join(',') || '-',
         connects: otg >>> 24,
       };
+      if (phase === 10) f.reset = ['?', 'connect', 'uri', 'addr0'][detail] ?? '?';
       break;
     }
     case 'MOD_NEEDS':

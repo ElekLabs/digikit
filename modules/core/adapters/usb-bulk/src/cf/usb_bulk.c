@@ -182,9 +182,11 @@ extern void dkrt_log_ev(u32 kind, u32 flags, const u32 *a);
 #define UB_KIND_MOD_LOG 14u
 /* flags: not an error (bit 0 clear), level 3 (debug) in bits 1-3 (sdk.toml level_shift 1) */
 #define UB_FLAGS (3u << 1)
+/* UB_NOTE: level 1 (warn) */
+#define UB_FLAGS_NOTE (1u << 1)
 
 /* `tag`: a string of at most 16 chars, padded with NULs */
-static void ub_log(const char *tag, u32 value)
+static void ub_log(const char *tag, u32 value, u32 flags)
 {
     u32 a[5];
     u32 i;
@@ -200,15 +202,15 @@ static void ub_log(const char *tag, u32 value)
         a[i >> 2] |= c << (24u - 8u * (i & 3u));
     }
     a[4] = value;
-    dkrt_log_ev(UB_KIND_MOD_LOG, UB_FLAGS, a);
+    dkrt_log_ev(UB_KIND_MOD_LOG, flags, a);
 }
 /* UB_LOG: trace builds only. UB_NOTE: always, for the rare events that a hardware run must be able to see (a forced restart). UI task only. */
 #if UB_TRACE
-#define UB_LOG(tag, v) ub_log((tag), (v))
+#define UB_LOG(tag, v) ub_log((tag), (v), UB_FLAGS)
 #else
 #define UB_LOG(tag, v) ((void)0)
 #endif
-#define UB_NOTE(tag, v) ub_log((tag), (v))
+#define UB_NOTE(tag, v) ub_log((tag), (v), UB_FLAGS_NOTE)
 
 /* the stock configuration descriptor with wTotalLength (bytes 2 and 3, written by the firmware at run time) left out, and the interface appended */
 static const u8 stock_config[STOCK_CONFIG_BYTES] = {
@@ -943,6 +945,8 @@ enum {
 #define SW_KIND 44u
 #define SW_FLAGS (2u << 1)       /* level 2 (info) in bits 1-3 */
 #define SW_FLAGS_STATE (3u << 1) /* STATE: level 3 (debug) */
+#define SW_FLAGS_WARN (1u << 1)  /* ENUM_LATE, TIMEOUT: level 1 (warn) */
+#define SW_FLAGS_ERROR 1u        /* GIVEUP: level 0 (error) and the error bit */
 #define SW_MAX_EVENTS 32u
 #define SW_STATE_MAX 24u
 #define SW_WINDOW_MS 10000u
@@ -1007,7 +1011,12 @@ static void sw_ev(u32 phase, u32 detail)
         a[3] = sw_ov_ps;
     sw_ov_ms = ~0u;
     sw_ov_ps = 0;
-    dkrt_log_ev(SW_KIND, phase == SW_STATE ? SW_FLAGS_STATE : SW_FLAGS, a);
+    dkrt_log_ev(SW_KIND,
+                phase == SW_STATE                              ? SW_FLAGS_STATE
+                : phase == SW_ENUM_LATE || phase == SW_TIMEOUT ? SW_FLAGS_WARN
+                : phase == SW_GIVEUP                           ? SW_FLAGS_ERROR
+                                                               : SW_FLAGS,
+                a);
 }
 
 /* An accepted request (usb_bulk_takeover, usb_bulk_giveback, the automatic give-back) opens the window; REQ is logged here, from the tick. */
@@ -1074,14 +1083,17 @@ static void sw_sample(void)
         }
         if (sw_con_cnt != sw.con) {
             sw.con = sw_con_cnt;
-            sw.reset_seen = 1;
+            if (!sw.reset_seen)
+                sw.reset_seen = 1;
             sw_ov_ms = sw_cb_ms(sw_con_at, ms);
             sw_ov_ps = sw_con_ps;
             sw_ev(SW_CONNECT_CB, 0);
             fired = 1;
         }
-        if ((a[2] & 0x40u) != 0u || adr == 0u)
-            sw.reset_seen = 1;
+        if (!sw.reset_seen && (a[2] & 0x40u) != 0u)
+            sw.reset_seen = 2;
+        if (!sw.reset_seen && adr == 0u)
+            sw.reset_seen = 3;
         if ((en & 3u) == 0u)
             sw.en_cleared = 1;
         /* CONFIGURED first: ADDRESSED must be from an earlier pass */
@@ -1098,7 +1110,7 @@ static void sw_sample(void)
         }
         if (SW_SEEN(SW_RS_UP) && sw.reset_seen && !SW_SEEN(SW_ADDRESSED) && adr != 0u) {
             sw.addr_at = ms;
-            sw_ev(SW_ADDRESSED, 0);
+            sw_ev(SW_ADDRESSED, sw.reset_seen);
             fired = 1;
         }
         if (SW_SEEN(SW_RS_UP) && !SW_SEEN(SW_ADDRESSED) && !sw.late &&

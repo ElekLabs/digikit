@@ -607,6 +607,8 @@ export interface CardLogFile {
   version: number;
   writeNo: number;
   file: 'a' | 'b';
+  /** Rolling (the latest events) or incident (the capture around a warn or error), from header byte 17. */
+  kind: 'rolling' | 'incident';
   /** The boot counter of the debug module when it wrote the file; the higher number is the newer boot. */
   bootSeq: number;
   oldestSeq: number;
@@ -646,6 +648,7 @@ export function parseCardLog(bytes: Uint8Array): CardLogFile {
     version: u16(bytes, 4),
     writeNo: u32(bytes, 12),
     file: bytes[16] === 0 ? 'a' : 'b',
+    kind: bytes[17] === 0 ? 'rolling' : 'incident',
     bootSeq: u32(bytes, 36),
     oldestSeq: u32(bytes, 20),
     newestSeq: u32(bytes, 24),
@@ -1213,7 +1216,7 @@ export class DkSession {
   async setCardLog(on: boolean, quick = false): Promise<CardLogState> {
     return parseCardLogState(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(3, on ? 1 : 0), quick));
   }
-  /** Both card log files of the store that exist, the older boot first (by the boot_seq in the header). */
+  /** The four card log files of the store that exist (rolling and incident, a and b), the older boot first (by the boot_seq in the header), rolling before incident. */
   async readCardLog(): Promise<CardLogFile[]> {
     const out: CardLogFile[] = [];
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -1228,8 +1231,8 @@ export class DkSession {
         }
       }
     };
-    for (const f of ['a', 'b']) {
-      const path = `data/digikit/debug/cardlog-${f}.bin`;
+    for (const name of ['a', 'b', 'a-inc', 'b-inc']) {
+      const path = `data/digikit/debug/cardlog-${name}.bin`;
       try {
         // header, all chunks, header again: a changed write_no means the file was replaced meanwhile
         let raw: Uint8Array | null = null;
@@ -1253,7 +1256,8 @@ export class DkSession {
         if (e.kind !== 'protocol') throw e; // an unreadable or foreign file (parseCardLog) is skipped
       }
     }
-    return out.sort((x, y) => x.bootSeq - y.bootSeq);
+    const rank = (x: CardLogFile) => (x.kind === 'rolling' ? 0 : 1);
+    return out.sort((x, y) => x.bootSeq - y.bootSeq || rank(x) - rank(y));
   }
   /** Every event of the log. */
   async readLog(quick = false): Promise<DkLogEvent[]> {

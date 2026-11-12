@@ -20,20 +20,26 @@ The module can write its ring to the store, so a log survives a crash or a USB t
 (8 bytes: version 2, on, last file, 0, u32 boot number; another version means the defaults) is read in `dkm_init`, so it is kept across restarts. Turn it on with the menu (DIGIKIT > DEBUG > SETTINGS...: row
 CARD LOG, and a STATUS row: OFF, ON n WR, FULL, ERR code) or with LOGCFG op 3.
 
-A boot writes one of two files, `data/digikit/debug/cardlog-a.bin` or `cardlog-b.bin`, and never the file of the boot before (the setting keeps the last file). A boot counts up the boot number. Before the first write of a boot, the tick saves the setting with this boot's file and
+A boot writes one of two slots, `a` or `b`, and never the slot of the boot before (the setting keeps the last slot). A slot has two files: the rolling file `data/digikit/debug/cardlog-a.bin` (or `-b`) and the incident file `cardlog-a-inc.bin` (or `-b-inc`). A boot counts up the boot number. Before the first write of a boot, the tick saves the setting with this boot's file and
 boot number; if that fails the state is error and nothing is written. The first write comes at least 3 s after the save (the settings reach the card 2 s after
-the last change), so a file is written only when the card says that this boot owns it. The tick (UI task) decides when to write, at most once in 2 s, when
-events are not written yet and one of these holds: a warn or error event arrived, the newest event is 1 s old, or the oldest unwritten event is 5 s old. An I/O
-job then replaces the file in one write. Only a busy store (E_BUSY) or a file in use is retried later, and the warn or error trigger stays until a write
-succeeds. A full store stops the log (state full, one log line); any other error, E_INUSE included, stops it with the status (state error). Turning the log on
-again clears both. After a write, events that the write itself logged do not trigger another write.
+the last change), so a file is written only when the card says that this boot owns it. The tick (UI task) decides when to write, at most once in 2 s. Both files
+use one staging buffer, one write at a time, and an I/O job replaces the file in one write.
+
+Rolling file: written when there are events newer than the last rolling write, and there was no rolling write yet in this boot or the last one is 60 s old. Incident
+writes do not reset that timer. Incident file: an incident is an event with the error flag or level warn or lower. With no capture open, an incident opens one: the incident file
+is written as soon as allowed, and once more 10 s after the first incident event (the aftermath); then the capture is done. Incidents while a capture is open, or
+less than 60 s after the last incident event, are a burst and open no capture; an incident 60 s or more after the last one opens a new capture, which replaces the file.
+So periodic events cannot push a failure out of the incident file after the aftermath write.
+
+Only a busy store (E_BUSY) or a file in use is retried later. A full store stops both files (state full, one log line); any other error, E_INUSE included, stops
+them with the status (state error). Turning the log on again clears both. After a write, events that the write itself logged do not trigger another write.
 
 File (big endian), always 64 + 512 * 32 = 16448 bytes: header of 64 bytes (u32 magic `DKCL` 0x444b434c, u16 version 1, u16 header bytes 64, u16 event bytes 32,
-u16 events, u32 write number (from 1 in this boot), u8 file (0 a, 1 b), 3 zero bytes, u32 oldest seq, u32 newest seq, u32 block clock at the write, u32 ring size 512,
+u16 events, u32 write number (from 1 in this boot), u8 file (0 a, 1 b), u8 kind (0 rolling, 1 incident; offset 17), 2 zero bytes, u32 oldest seq, u32 newest seq, u32 block clock at the write, u32 ring size 512,
 u32 boot number (offset 36), zeros), then 512 records in the layout of a LOG event, oldest first; unused records are zero.
 
 LOGCFG op 2 (get, no more body) and op 3 (set, body u8 on) reply with 16 bytes: u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes
-(this boot), i32 last status, u32 ms since the last write (0xffffffff: none yet). An op 3 applies at once; the tick saves the setting. A debug module without the card
+(this boot, both kinds), i32 last status, u32 ms since the last write (0xffffffff: none yet). An op 3 applies at once; the tick saves the setting. A debug module without the card
 log answers op 2 with an error status.
 
 The commands lie in the `debug` range of `sdk/sdk.toml`. INFO reports the capabilities LOG, PEEK and LOGCFG only while the module is loaded. The levels are in RAM and start again

@@ -88,12 +88,18 @@ static volatile u8 level_module[MODULES];
 static struct {
     int on;            /* the setting; an int for the menu toggle */
     volatile u8 fault; /* 0, CL_FULL or CL_ERROR: no more writes until the log is turned on again */
-    volatile u8 urgent; /* a warn or error event arrived since the last wake of the job */
+    volatile u8 urgent; /* an incident (warn or error event) arrived since the last tick */
     volatile u8 save;   /* the setting is to be saved by the tick (set by a host op) */
+    volatile u32 inc_first,
+        inc_last; /* block times of the first and the last incident event since the last tick */
     u8 avail, file, last_file,
         saved; /* `file`: this boot's file (0 a, 1 b); `saved`: last_file = `file` was saved before the first write */
-    u8 busy, has_try, has_write, was_urgent;
-    u32 writes, written, last_try, last_write, boot_seq, saved_at;
+    u8 busy, has_try, has_write;
+    u8 kind, cap, stage, has_roll,
+        has_inc; /* kind of the write in flight (0 rolling, 1 incident); incident capture: open, stage (1 first write, 2 aftermath) */
+    u32 writes, written[2], last_try, last_write, boot_seq, saved_at;
+    u32 last_roll, cap_at,
+        inc_prev; /* last rolling write; first incident event of the capture; last incident event so far */
     int32_t last_status;
     /* the I/O job (the step and the tick pass these on) */
     volatile u8 io_req, io_done;
@@ -138,8 +144,12 @@ static void sink(const Ev *e)
         s->a[i] = e->a[i];
     s->seq = n;
     count = n;
-    if (((flags >> LEVEL_SHIFT) & LEVEL_MASK) <= L_WARN || (flags & F_ERROR))
+    if (((flags >> LEVEL_SHIFT) & LEVEL_MASK) <= L_WARN || (flags & F_ERROR)) {
+        if (!cl.urgent)
+            cl.inc_first = e->time;
+        cl.inc_last = e->time;
         cl.urgent = 1;
+    }
 }
 
 /* Copy event `seq` to `o` (32 bytes, big endian). False when it is gone, or was overwritten while it was copied (a writer in an interrupt). */
@@ -224,17 +234,23 @@ static int32_t cmd_peek(const u8 *body, u32 len, u8 *out)
 
 /* The ring goes to a file of the store: 64 bytes of header and RING records of 32 bytes (those of LOG), always the full size. A boot writes one of two files
  * (cardlog-a.bin, cardlog-b.bin) and never the one the boot before wrote (the setting "cardlog": u8 version 2, u8 on, u8 last file, u8 0, u32 boot
- * number). Before the first write of a boot the tick saves the setting with this boot's file and waits 3 s, so the card owns the choice. The tick decides when
- * to write (UI task); the I/O job writes. Header (big endian): u32 magic 'DKCL', u16 version 1, u16 header bytes 64, u16 event bytes 32, u16 events,
- * u32 write number (from 1 in this boot), u8 file, 3 bytes 0, u32 oldest seq, u32 newest seq, u32 block clock, u32 ring size, u32 boot number, then zeros. */
+ * number). Before the first write of a boot the tick saves the setting with this boot's file and waits 3 s, so the card owns the choice. A boot has a rolling
+ * file (cardlog-a.bin) and an incident file (cardlog-a-inc.bin), same format, one staging buffer. The tick decides when to write (UI task); the I/O job writes.
+ * Rolling: when there are new events and no rolling write yet or 60 s since the last one. Incident: an event with the error flag or level warn or lower opens a
+ * capture (if none is open and the last incident event is 60 s old or more): write the incident file at once, and once more 10 s after the first incident event.
+ * Header (big endian): u32 magic 'DKCL', u16 version 1, u16 header bytes 64, u16 event bytes 32, u16 events,
+ * u32 write number (from 1 in this boot), u8 file, u8 kind (0 rolling, 1 incident), 2 bytes 0, u32 oldest seq, u32 newest seq, u32 block clock, u32 ring size, u32 boot number, then zeros. */
 #define CL_HEADER 64u
 #define CL_SIZE (CL_HEADER + RING * 32u)
 #define CL_MAGIC 0x444b434cu
 #define CL_KEY "cardlog"
 #define CL_BLOCKS_S 1500u
-#define CL_GAP (2u * CL_BLOCKS_S)     /* between two writes */
-#define CL_QUIET CL_BLOCKS_S          /* since the newest event */
-#define CL_MAX_AGE (5u * CL_BLOCKS_S) /* of the oldest event not written */
+#define CL_GAP (2u * CL_BLOCKS_S)   /* between two writes */
+#define CL_ROLL (60u * CL_BLOCKS_S) /* between two rolling writes */
+#define CL_BURST                                                                                   \
+    (60u * CL_BLOCKS_S) /* incident events this close to the last one do not open a capture */
+#define CL_AFTER                                                                                   \
+    (10u * CL_BLOCKS_S) /* from the first incident event to the second incident write */
 #define CL_SETTLE                                                                                  \
     (3u *                                                                                          \
      CL_BLOCKS_S) /* from the setting put to the first write: the settings reach the card 2 s after the last change */
@@ -244,7 +260,8 @@ static int32_t cmd_peek(const u8 *body, u32 len, u8 *out)
 
 static u8 cl_raw[CL_SIZE + 15u];
 static u8 *cl_buf;
-static char cl_path[] = "data/digikit/debug/cardlog-a.bin";
+static char cl_path[2][40] = {"data/digikit/debug/cardlog-a.bin",
+                              "data/digikit/debug/cardlog-a-inc.bin"};
 static const dk_api *sdk;
 static int32_t job_id;
 static int32_t settings_h;
@@ -302,6 +319,7 @@ static void cl_fill(void)
     cl_buf[11] = (u8)n;
     dk_bytes_put32(cl_buf + 12, cl.writes + 1u);
     cl_buf[16] = cl.file;
+    cl_buf[17] = cl.kind;
     dk_bytes_put32(cl_buf + 20, oldest);
     dk_bytes_put32(cl_buf + 24, newest);
     dk_bytes_put32(cl_buf + 28, now());
@@ -326,7 +344,7 @@ static int32_t cl_step(u8 *ctx)
         return DK_IO_WAIT;
     if (cl.h == 0) {
         cl_fill();
-        r = sdk->file_create(DK_FILES_STORE, cl_path, CL_SIZE, 0, DK_FILE_REPLACE);
+        r = sdk->file_create(DK_FILES_STORE, cl_path[cl.kind], CL_SIZE, 0, DK_FILE_REPLACE);
         if (r <= 0)
             return cl_finish(r < 0 ? r : DK_E_STATE);
         cl.h = r;
@@ -363,8 +381,8 @@ static int cl_retry(int32_t r)
 /* In the UI task, from the debug tick: take the result of the job, save the setting, and wake the job when a write is due. */
 static void cl_tick(u32 b)
 {
-    u32 newest, first, newest_at, first_at;
-    const volatile Ev *e;
+    u32 newest;
+    int k = -1;
     if (!cl.avail)
         return;
     if (cl.save) {
@@ -378,16 +396,38 @@ static void cl_tick(u32 b)
         cl.last_status = r;
         if (r == 0) {
             cl.writes++;
-            cl.written = cl.newest;
+            cl.written[cl.kind] = cl.newest;
             cl.last_write = b;
             cl.has_write = 1;
+            if (cl.kind == 0u) {
+                cl.last_roll = b; /* incident writes do not reset it */
+                cl.has_roll = 1;
+            } else if (cl.stage == 1u) {
+                cl.stage = 2;
+            } else {
+                cl.cap = 0;
+                cl.stage = 0;
+            }
         } else if (r == DK_E_FULL) {
             cl.fault = CL_FULL;
             sdk->log((const u8 *)"card log: store full", 0);
         } else if (!cl_retry(r)) {
             cl.fault = CL_ERROR;
-        } else if (cl.was_urgent) {
-            cl.urgent = 1; /* kept until a write succeeds */
+        }
+    }
+    if (cl.urgent) {
+        u32 first, last;
+        cl.urgent = 0;
+        first = cl.inc_first;
+        last = cl.inc_last;
+        if (cl.on) {
+            if (!cl.cap && (!cl.has_inc || first - cl.inc_prev >= CL_BURST)) {
+                cl.cap = 1; /* a burst, or an incident while a capture is open, adds nothing */
+                cl.stage = 1;
+                cl.cap_at = first;
+            }
+            cl.has_inc = 1;
+            cl.inc_prev = last;
         }
     }
     if (cl.on && !cl.fault &&
@@ -402,20 +442,23 @@ static void cl_tick(u32 b)
         cl.saved_at = b;
     }
     newest = count;
-    if (!cl.on || cl.fault || cl.busy || newest <= cl.written || !cl.saved ||
-        b - cl.saved_at < CL_SETTLE)
+    if (!cl.on || cl.fault || cl.busy || !cl.saved || b - cl.saved_at < CL_SETTLE)
         return;
     if (cl.has_try && b - cl.last_try < CL_GAP)
         return;
-    e = &ring[(newest - 1u) % RING];
-    newest_at = e->seq == newest ? e->time : b;
-    first = cl.written + 1u;
-    e = &ring[(first - 1u) % RING];
-    first_at = e->seq == first ? e->time : b - CL_MAX_AGE;
-    if (!cl.urgent && b - newest_at < CL_QUIET && b - first_at < CL_MAX_AGE)
+    if (cl.cap && (cl.stage == 1u || b - cl.cap_at >= CL_AFTER)) {
+        if (cl.stage == 2u && newest <= cl.written[1]) {
+            cl.cap = 0; /* nothing new since the first write: the capture is done */
+            cl.stage = 0;
+        } else {
+            k = 1;
+        }
+    }
+    if (k < 0 && newest > cl.written[0] && (!cl.has_roll || b - cl.last_roll >= CL_ROLL))
+        k = 0;
+    if (k < 0)
         return;
-    cl.was_urgent = cl.urgent;
-    cl.urgent = 0;
+    cl.kind = (u8)k;
     cl.busy = 1;
     cl.has_try = 1;
     cl.last_try = b;
@@ -439,7 +482,7 @@ static void cl_init(const dk_api *api)
     }
     cl.boot_seq++;
     cl.file = cl.last_file ^ 1u;
-    cl_path[CL_LETTER] = (char)('a' + cl.file);
+    cl_path[0][CL_LETTER] = cl_path[1][CL_LETTER] = (char)('a' + cl.file);
     job_id = api->io_post(cl_step, cl_done, 0);
     cl.avail = job_id > 0;
 }
