@@ -20,7 +20,7 @@
 // MIDI in RAM, USB audio pauses) and gives it back when the run ends: no flag; --bulk off never touches the USB mode.
 // --speed MASK (4 bits, decimal or 0x): sets the four speed switches through usb-fast STATUS 'S' before the put (bit 0 hash once, bit 1 USB receive ring,
 // bit 2 read-back hash overlap, bit 3 large card commands; all on at boot); the run prints the resulting mask and the usb-fast STATUS words 18 (staging bytes)
-// and 19 (receive ring slots): the hardware A/B of docs/findings/125-usb-fast-transfer-ceilings.md.
+// and 19 (receive ring slots): the hardware A/B of docs/findings/126-usb-fast-transfer-ceilings.md.
 // link and MB/s of every file and of the run: the repeatable bench (docs/plans/usb-fast.md step 6): run it once with --bulk off and once with auto.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -70,11 +70,14 @@ for (let i = 0; i < args.length; i++) {
 /** The four speed switches of usb-fast through STATUS 'S' (SysEx): each bit of MASK, then the mask the device reports. */
 async function setSpeed(session, mask) {
   let now;
+  const refused = [];
   for (let bit = 0; bit < 4; bit++) {
     const r = await session.request(0x37, Uint8Array.from([0x53, bit, (mask >> bit) & 1]));
     if (r.status === 0) now = Buffer.from(r.body).readUInt32BE(0);
-    else console.error(`wb: speed bit ${bit}: status ${r.status} (the adapter is not in the image?)`);
+    else refused.push(bit);
   }
+  if (refused.length)
+    fail(`--speed: the device refused bit ${refused.join(', ')} (status E_STATE: the adapter is not in the image)`, 1);
   return now;
 }
 

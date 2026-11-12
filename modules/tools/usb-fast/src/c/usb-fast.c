@@ -900,7 +900,13 @@ static i32 status_speed(const u8 *body, u32 len, u8 *out)
             if (usb_bulk_ring((i32)v) == 0) /* the SDK's stub: this adapter has no ring */
                 return E_STATE;
         } else if (bit == 3u) {
-            sdhc_large_ctl(0, v); /* the stub without the module reads 0 for every value */
+            /* the stub without the module returns 0 for every call: the switch is there only if it reads 1 after it was set to 1 (then it gets the value asked) */
+            if (!sdhc_large_ctl(0, 2)) {
+                sdhc_large_ctl(0, 1);
+                if (!sdhc_large_ctl(0, 2))
+                    return E_STATE;
+            }
+            sdhc_large_ctl(0, v);
         } else if (v) {
             sdk->speed_flags(0, 1u << bit);
         } else {
@@ -919,7 +925,7 @@ static const struct {
 };
 
 /* SysEx service command USB_FAST_NONCE (0x36): body nonce[8], the host's proof of which USB device is on its MIDI port; reply empty. The INFO reply of the
- * bulk link returns it. 0x37 STATUS (a debug aid: sixteen u32 words). */
+ * bulk link returns it. 0x37 STATUS (a debug aid: twenty u32 words). */
 static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
 {
     (void)seq;

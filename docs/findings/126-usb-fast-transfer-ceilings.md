@@ -19,8 +19,8 @@ Code: `modules/core/adapters/sdhc-large`, `modules/core/runtime` (`store_writer`
 
 ## The firmware's card driver **[D]**
 
-- The data moves by eDMA channel 59 to the eSDHC data port (DATPORT), 16 bytes per request. It is not ADMA (this corrects the wording of [120](120-dt2-plusdrive-c-file-api.md)).
-- One command moves 64 KiB at most. The cause is the 64 KiB bounce buffer: the firmware uses it for buffers that are not 16-byte aligned and for reads that are not whole blocks, and it cuts every transfer at that size. The eDMA's CITER field limits one command to 1023 blocks (511 KiB); `core/sdhc-large` uses 1022.
+- The data moves by eDMA channel 59 to the eSDHC data port (DATPORT), 16 bytes per request.
+- One command moves 64 KiB at most. This is read from the firmware code (static, not measured): the block read and write compare the length with 0x10000 at entry and in the chunk loop, and the 64 KiB bounce buffer (used for buffers that are not 16-byte aligned and for reads that are not whole blocks) is the likely reason; the code does not state it. The eDMA's CITER field (15 bits, `blocks * 32`) limits one command to 1023 blocks (511 KiB), also from the code; `core/sdhc-large` uses 1022.
 - Every write is issued with CMD23 and the reliable-write bit.
 
 ## Raw sweep on the DN2 **[D]**

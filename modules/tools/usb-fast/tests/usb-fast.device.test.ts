@@ -230,6 +230,37 @@ for (const device of DEVICES) {
       }
     }, 3_600_000);
 
+    // DN2 only (the knob counts the store writer's card writes). Coverage of the other card faults: upload-faults.device.test.ts (core/runtime-tests) flips each of the
+    // three data writes of a small upload (E_HASH, nothing committed) and cuts or tears every write of the commit; this test adds the usb-fast geometry (two data writes, with the ring and large commands on and off) and the flipped table commit.
+    test('DN2: a flipped byte in the second data write is E_HASH, and a flipped table-commit write is E_WRITE; nothing of the file is committed either way', async () => {
+      if (dt2) return;
+      const data = pattern(300_011, 23);
+      // the 300 KB file is two card writes (the 256 KiB staging flush and the tail), the third write is the table commit
+      const cases: [string, number, number, number][] = [
+        ['ring and large commands off: the second data write', 0, 2, BULK_STATUS.E_HASH],
+        ['ring and large commands on: the second data write', 1, 2, BULK_STATUS.E_HASH],
+        ['ring and large commands off: the table commit', 0, 3, BULK_STATUS.E_WRITE],
+        ['ring and large commands on: the table commit', 1, 3, BULK_STATUS.E_WRITE],
+      ];
+
+      for (const [k, [label, large, write, code]] of cases.entries()) {
+        const dk = await rig.pausedBoot(await baseCard());
+        const bulk = await connect(dk);
+        await speedMask(dk, 1, large);
+        expect(await speedMask(dk, 3, large), `${label}: the mask`).toBe(large ? 15 : 5);
+        await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', write);
+        const bad = await bulk.session.put(SAMPLES, rp('Fl/bad.bin'), data, { expected: hashU32(data, dt2) }).catch((e) => e);
+        expect(bad, `${label}: refused`).toBeInstanceOf(BulkDeviceError);
+        expect((bad as BulkDeviceError).code, label).toBe(code);
+        await pokeKnob(rig.session, rig.plan, 'DKRT_UPLOAD_FLIP', 0);
+        expect(await bulk.session.put(SAMPLES, rp('Fl/ok.bin'), data, { expected: hashU32(data, dt2) }), `${label}: the next upload works`).toBe(hashU32(data, dt2));
+        const s = await state(dk, `fl${k}`);
+        expect(s.files.has('Fl/bad.bin'), `${label}: nothing of the refused file`).toBe(false);
+        await expectFile(dk, s, 'Fl/ok.bin', data, `${label}: ok.bin`);
+        await rig.session.expectNoFault(`usb-fast flip ${label}`);
+      }
+    }, 3_600_000);
+
     test('ABORT drops the open file and a cancel mid-transfer leaves the old file; a USB reset in the middle of a file leaves nothing and the next upload works', async () => {
       const { dk, bulk } = await boot('uf-base');
       const before = (await state(dk, 'ua0')).files;
