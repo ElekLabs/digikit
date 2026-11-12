@@ -95,72 +95,9 @@
   },
   {
    "addend": 0,
-   "offset": 4,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 14,
-   "section": ".text.sw_guard_open",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 28,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_sw_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 36,
-   "section": ".text.sw_guard_open",
-   "symbol": "dkrt_blocks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 46,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_passes",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 54,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_sw_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 62,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_sw_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 68,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_sw_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 92,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..bss.to_sw_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 98,
-   "section": ".text.sw_guard_open",
-   "symbol": ".sec..text.to_elapsed_ms",
+   "offset": 96,
+   "section": ".text.ub_log",
+   "symbol": "dkrt_log_ev",
    "type": "cf.32"
   },
   {
@@ -189,6 +126,20 @@
    "offset": 38,
    "section": ".text.tick_register.part.0",
    "symbol": ".sec..bss.tick_added",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.ulpi_xfer.constprop.0",
+   "symbol": ".sec..bss.usb_bulk_phy_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 188,
+   "section": ".text.ulpi_xfer.constprop.0",
+   "symbol": ".sec..bss.usb_bulk_phy_why",
    "type": "cf.32"
   },
   {
@@ -382,48 +333,6 @@
   },
   {
    "addend": 0,
-   "offset": 10,
-   "section": ".text.usb_bulk_disconnect",
-   "symbol": ".sec..bss.taken",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 18,
-   "section": ".text.usb_bulk_disconnect",
-   "symbol": ".sec..bss.to_quiet",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 26,
-   "section": ".text.usb_bulk_disconnect",
-   "symbol": ".sec..text.sw_guard_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 38,
-   "section": ".text.usb_bulk_disconnect",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 44,
-   "section": ".text.usb_bulk_disconnect",
-   "symbol": ".sec..text.ep2_stop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 54,
-   "section": ".text.usb_bulk_disconnect",
-   "symbol": "usb_fw_disconnect",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 2,
    "section": ".text.tx_index",
    "symbol": ".sec..bss.live",
@@ -515,6 +424,118 @@
   },
   {
    "addend": 0,
+   "offset": 4,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.sw_guard_open",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_sw_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.sw_guard_open",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_sw_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_sw_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_sw_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..bss.to_sw_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": ".text.sw_guard_open",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.usb_bulk_disconnect",
+   "symbol": ".sec..bss.taken",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.usb_bulk_disconnect",
+   "symbol": ".sec..bss.to_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.usb_bulk_disconnect",
+   "symbol": ".sec..text.sw_guard_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.usb_bulk_disconnect",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.usb_bulk_disconnect",
+   "symbol": ".sec..text.ep2_stop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.usb_bulk_disconnect",
+   "symbol": "usb_fw_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 6,
    "section": ".text.sw_stamp",
    "symbol": "dkrt_blocks",
@@ -571,30 +592,58 @@
   },
   {
    "addend": 0,
-   "offset": 78,
+   "offset": 76,
    "section": ".text.sw_stamp",
-   "symbol": ".sec..bss.to_sw_per",
+   "symbol": ".sec..bss.rec_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 84,
    "section": ".text.sw_stamp",
-   "symbol": ".sec..bss.to_sw_set",
+   "symbol": ".sec..bss.to_sw_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 90,
    "section": ".text.sw_stamp",
+   "symbol": ".sec..bss.rec_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.sw_stamp",
+   "symbol": ".sec..bss.to_sw_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".text.sw_stamp",
    "symbol": ".sec..bss.restart_due",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 98,
+   "offset": 110,
+   "section": ".text.sw_stamp",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 116,
    "section": ".text.sw_stamp",
    "symbol": ".sec..bss.usb_bulk_switches",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 122,
+   "section": ".text.sw_stamp",
+   "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
@@ -1098,847 +1147,1260 @@
    "addend": 0,
    "offset": 10,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
+   "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 20,
+   "offset": 26,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 30,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": "usb_restart_delay",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 40,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.buffers_alloc",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 60,
+   "offset": 86,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_drop",
+   "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 68,
+   "offset": 114,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
+   "symbol": ".sec..bss.phy_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 76,
+   "offset": 124,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
+   "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 90,
+   "offset": 138,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.alloc_busy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 104,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 112,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.enabled",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 122,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "dkrt_blocks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 130,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.io_job",
+   "symbol": ".sec..bss.usb_bulk_phy_late",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 144,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_passes",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 152,
+   "offset": 150,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_passes",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 160,
+   "offset": 166,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_set",
+   "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 168,
+   "offset": 172,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_per",
+   "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 180,
+   "offset": 200,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 186,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
+   "symbol": ".sec..bss.rec_target",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 206,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_set",
+   "symbol": "usb_active_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 212,
+   "offset": 214,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_at",
+   "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 218,
+   "offset": 230,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_per",
+   "symbol": ".sec..bss.phy_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 224,
+   "offset": 240,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
+   "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 236,
+   "offset": 254,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
+   "symbol": ".sec..bss.phy_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 244,
+   "offset": 262,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.prime_all",
+   "symbol": ".sec..bss.phy_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 250,
+   "offset": 276,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 256,
+   "offset": 282,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 278,
+   "offset": 288,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
+   "symbol": ".sec..bss.usb_bulk_phy_refused",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 290,
+   "offset": 294,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_passes",
+   "symbol": ".sec..text.ub_log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 296,
+   "offset": 306,
    "section": ".text.usb_bulk_tick",
    "symbol": "dkrt_blocks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 308,
+   "offset": 318,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_passes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 322,
+   "offset": 332,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
+   "symbol": ".sec..bss.rec_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 330,
+   "offset": 346,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_active_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 336,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_guard_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 344,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
+   "symbol": ".sec..bss.rec_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 352,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 358,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 364,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
+   "symbol": ".sec..bss.rec_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 370,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
+   "symbol": "usb_restart_delay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 376,
+   "offset": 386,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
+   "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 384,
+   "offset": 400,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
+   "symbol": ".sec..bss.rec_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 390,
+   "offset": 406,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
+   "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 398,
+   "offset": 426,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 434,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 18,
+   "offset": 448,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 454,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_armed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 460,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 470,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.taken",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 480,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 412,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 432,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 442,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 450,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 456,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 464,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 472,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 482,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 490,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
+   "symbol": ".sec..bss.live",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 498,
+   "offset": 500,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
+   "symbol": ".sec..text.buffers_alloc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 506,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 512,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 518,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 526,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 536,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 542,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 552,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 558,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 568,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 584,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_orig",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 592,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 608,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 616,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 622,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 634,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_stamp",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 640,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 650,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_mode_switch",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 656,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 672,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 678,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 700,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 730,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 740,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 746,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 760,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 784,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 794,
+   "offset": 520,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_drop",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 810,
+   "offset": 528,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 820,
+   "offset": 536,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
+   "symbol": ".sec..bss.taken",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 828,
+   "offset": 550,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
+   "symbol": ".sec..bss.alloc_busy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 840,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 856,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 868,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.connected",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 880,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 902,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 914,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.blk_raw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 920,
+   "offset": 564,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 926,
+   "offset": 572,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": ".sec..bss.enabled",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 932,
+   "offset": 582,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.blk_raw",
+   "symbol": "dkrt_blocks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 938,
+   "offset": 590,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_area",
+   "symbol": ".sec..bss.io_job",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 944,
+   "offset": 604,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_area",
+   "symbol": ".sec..bss.hk_passes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 950,
+   "offset": 612,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
+   "symbol": ".sec..bss.hk_passes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 964,
+   "offset": 620,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
+   "symbol": ".sec..bss.hk_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 970,
+   "offset": 628,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_count",
+   "symbol": ".sec..bss.hk_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 976,
+   "offset": 640,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_head",
+   "symbol": ".sec..bss.hk_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 982,
+   "offset": 646,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 988,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
+   "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 994,
+   "offset": 666,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 672,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 678,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 684,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.wake",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 696,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.need_prime",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1000,
+   "offset": 704,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
+   "symbol": ".sec..text.prime_all",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1010,
+   "offset": 710,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_mem_free",
+   "symbol": ".sec..bss.tx_retry",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1022,
+   "offset": 716,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
+   "symbol": ".sec..bss.tx_retry",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1044,
+   "offset": 738,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
+   "symbol": ".sec..text.wake",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1062,
+   "offset": 746,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
+   "symbol": ".sec..bss.rec_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1074,
+   "offset": 752,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1080,
+   "offset": 776,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_flush.isra.0",
+   "symbol": ".sec..text.ulpi_xfer.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1090,
+   "offset": 792,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "type": "cf.32"
+  },
+  {
+   "addend": 35,
+   "offset": 798,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 804,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 810,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_restart",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 866,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 872,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 886,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 900,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 910,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_active_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 940,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 958,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_guard_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 966,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 974,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 980,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 986,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 992,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 998,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1006,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1012,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1020,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1034,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1056,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 1066,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1094,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1102,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
+   "symbol": ".sec..bss.to_gone",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1110,
+   "offset": 1108,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_lists_clear",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1132,
+   "offset": 1116,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1138,
+   "offset": 1124,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1134,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1142,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1150,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_count",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1158,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_head",
+   "symbol": ".sec..bss.to_due_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1172,
+   "offset": 1164,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1170,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1180,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1190,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1196,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1206,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1212,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1222,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1258,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_orig",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1266,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1282,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1290,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1296,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1308,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_stamp",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1314,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_target",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1320,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1330,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_mode_switch",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1336,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1352,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1376,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1382,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1404,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1432,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1442,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1448,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1462,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1486,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1496,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1516,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1522,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_hold_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1528,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1534,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1540,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1578,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ulpi_xfer.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1604,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ulpi_xfer.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1624,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1630,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1640,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_phy_refused",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1650,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1658,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1666,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1676,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 1178,
+   "offset": 1688,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1698,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.connected",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1708,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1720,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 1,
-   "offset": 1192,
+   "offset": 1732,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.tx_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1198,
+   "offset": 1748,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
+   "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1204,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1318,
+   "offset": 1770,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.usb_bulk_free_why",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1324,
+   "offset": 1786,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1798,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1804,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_flush.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1814,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_cancel_ep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1828,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_lists_clear",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1850,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1856,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1868,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1874,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1880,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_head",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1894,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 1900,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 1914,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1920,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1926,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2044,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2050,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2094,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2110,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.blk_raw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2116,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2122,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2128,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.blk_raw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2134,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_area",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2140,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_area",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2146,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2158,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2164,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2170,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_head",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2176,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 2182,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2188,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2194,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2204,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_mem_free",
    "type": "cf.32"
   },
   {
@@ -2202,77 +2664,84 @@
   },
   {
    "addend": 0,
-   "offset": 504,
+   "offset": 506,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..text.sw_guard_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 518,
+   "offset": 520,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..text.buffers_alloc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 532,
+   "offset": 534,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 550,
+   "offset": 552,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..bss.restart_due",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 558,
+   "offset": 560,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..bss.restart_due",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 564,
+   "offset": 566,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..text.sw_stamp",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 572,
+   "offset": 576,
+   "section": ".text.usb_bulk_enable",
+   "symbol": ".sec..bss.rec_target",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 582,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..bss.to_quiet",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 580,
+   "offset": 590,
    "section": ".text.usb_bulk_enable",
    "symbol": "usb_fw_stop",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 586,
+   "offset": 596,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..bss.to_quiet",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 592,
+   "offset": 602,
    "section": ".text.usb_bulk_enable",
    "symbol": "usb_fw_restart",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 600,
+   "offset": 610,
    "section": ".text.usb_bulk_enable",
    "symbol": ".sec..bss.to_active",
    "type": "cf.32"
@@ -2981,10 +3450,10 @@
   },
   {
    "align": 2,
-   "hex": "2f022439000000004a82666c203900000000721d5380b280642e4ab900000000675a4eb9000000004a8066222039000000007278b2b900000000671a23c10000000023c0000000002002241f4e75223c000005dc60de2f012f002f39000000004eb9000000004fef000c0c80000001f352c27502448260d0428260cc740160c8",
+   "hex": "4e56ffdc226e0008428148d7001c74014a82675e10311800675c71807803c8812601e48b2d43ffe84a84660442b63cec260178034683c6845281206effe8e78be7a881b68cec7010b08166c4486effec487800062d6e000cfffc4878000e4eb9000000004fef000c4cee001cffdc4e5e4e75428060a64280428260a0",
    "kind": "text",
-   "name": ".text.sw_guard_open",
-   "size": 128
+   "name": ".text.ub_log",
+   "size": 124
   },
   {
    "align": 2,
@@ -2995,6 +3464,13 @@
   },
   {
    "align": 2,
+   "hex": "40c046fc270020402039fc0b01700800001b6648223c8000000023c1fc0b01702039fc0b0170223c000003e84a806c0c2039fc0b017053814a8166f022000281880000000c81080000006710700123c00000000070ff220846c14e75223c000003e80800001e663e4aaf00046754223c60000000202f00087180808108c0001223c0fc0b01702039fc0b0170223c000003e80800001e6632e088226f000c71802280428060b02039fc0b017053814a8166b00800001e67b0720223c1000000006092223c4000000060aa2039fc0b017053814a8166bc0800001e67bc70036000ff6e",
+   "kind": "text",
+   "name": ".text.ulpi_xfer.constprop.0",
+   "size": 226
+  },
+  {
+   "align": 2,
    "hex": "2f0a2f02242f00104eb90000000024404a80660870ff241f245f4e75202a00380c8000000000670623c000000000202f0014204241e810002548000c41e81000484042402548001041e81000254200082548001441f900000000068200004000256f0014002024bcdead000125420018256f001800242548002808c0000725400004203c00000000254000382f0a2f2f00104eb900000000508f220042804a816c00ff742079000000002f0a4e90588f6000ff62",
    "kind": "text",
    "name": ".text.queue_transfer.constprop.0",
@@ -3002,7 +3478,7 @@
   },
   {
    "align": 2,
-   "hex": "203c0004000423c0fc0b01b4203c00004e202239fc0b01b40281000400044a81670653804a8066ea2039fc0b01b44e75",
+   "hex": "203c0004000423c0fc0b01b4223c00004e202039fc0b01b40280000400044a80670653814a8166ea2039fc0b01b44e75",
    "kind": "text",
    "name": ".text.ep2_flush.isra.0",
    "size": 48
@@ -3013,13 +3489,6 @@
    "kind": "text",
    "name": ".text.ep2_stop",
    "size": 228
-  },
-  {
-   "align": 2,
-   "hex": "2f0240c246fc27004ab900000000671a4ab90000000066124eb9000000004a806708700123c0000000004eb90000000046c2241f4ef900000000",
-   "kind": "text",
-   "name": ".text.usb_bulk_disconnect",
-   "size": 58
   },
   {
    "align": 2,
@@ -3044,10 +3513,24 @@
   },
   {
    "align": 2,
-   "hex": "2f032f024eb90000000024004a80665824390000000076784ab9000000006722b6b900000000661a2f032f022f39000000004eb9000000004fef000c23c00000000023c2000000007001241f23c30000000023c00000000042b900000000261f52b9000000004e75263c000005dc60a8",
+   "hex": "2f022439000000004a82666c203900000000723b5380b280642e4ab900000000675a4eb9000000004a8066222039000000007278b2b900000000671a23c10000000023c0000000002002241f4e75223c000005dc60de2f012f002f39000000004eb9000000004fef000c0c8000000dab52c27502448260d0428260cc740160c8",
+   "kind": "text",
+   "name": ".text.sw_guard_open",
+   "size": 128
+  },
+  {
+   "align": 2,
+   "hex": "2f0240c246fc27004ab900000000671a4ab90000000066124eb9000000004a806708700123c0000000004eb90000000046c2241f4ef900000000",
+   "kind": "text",
+   "name": ".text.usb_bulk_disconnect",
+   "size": 58
+  },
+  {
+   "align": 2,
+   "hex": "2f032f024eb90000000024004a80667024390000000076784ab9000000006722b6b900000000661a2f032f022f39000000004eb9000000004fef000c23c00000000023c200000000700123c200000000241f23c30000000023c30000000023c000000000261f42b90000000042b90000000052b90000000023c0000000004e75263c000005dc6090",
    "kind": "text",
    "name": ".text.sw_stamp",
-   "size": 112
+   "size": 136
   },
   {
    "align": 2,
@@ -3065,7 +3548,7 @@
   },
   {
    "align": 2,
-   "hex": "2f0240c246fc27004eb900000000487800012079000000004e90588f203c2200000023c080000100203c2040000023c0800001402039fc0b01b80280000400044a8067064eb900000000203c00c800c823c0fc0b01c8700123c0000000004eb90000000046c2241f4e75",
+   "hex": "2f0240c246fc27004eb900000000487800012079000000004e90203c2200000023c080000100203c2040000023c0800001402039fc0b01b8028000040004588f4a8067064eb900000000203c00c800c823c0fc0b01c8700123c0000000004eb90000000046c2241f4e75",
    "kind": "text",
    "name": ".text.usb_bulk_connect",
    "size": 106
@@ -3078,18 +3561,25 @@
    "size": 404
   },
   {
-   "align": 2,
-   "hex": "4fefffe848d7047c4ab90000000067327001b0b900000000660001064ab900000000660000fc4eb90000000072f8b280660000e840c246fc27004eb90000000046c24ab90000000067244ab900000000661c40c246fc27002639000000004a83670002c6721023c10000000046c24ab900000000670005004eb90000000024004ab9000000006f5c4a80660004e0243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a700123c00000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a806700046c4cd7047c4fef00184ef9000000004a806600ff2452b9000000004eb90000000024004a806674243900000000767840c546fc27004ab90000000066662839000000004eb9000000002c00b6b900000000671823c30000000023c20000000042b90000000042b9000000004ab900000000670c42b90000000023c2000000007001b0b90000000067227202b284671c4eb90000000046c56000fe9e263c000005dc608c2839000000006098200680b900000000660e42b90000000042b90000000060d24ab900000000662e4ab900000000670000bc42b900000000700223c0000000007002b0b900000000660c42b90000000042b9000000004ab90000000067944ab900000000660e720123c10000000023c2000000002f032f022f39000000004eb9000000004fef000cb0b9000000006500ff624a866700ff5c2439000000007001b0b900000000660000c2b8826600ff3e42b900000000740223c00000000042b900000000b4846700ff2a4eb90000000023c20000000046c52f024eb90000000042b900000000588f6000fdaa2f032f022f390000000045f9000000004e924fef000c0c800000752f630c720223c1000000006000ff2c207cfc0b01844a2800036a3e0c80000007cf63364ab9000000006612700123c00000000023c2000000006000fefe2f032f022f39000000004e924fef000c0c80000001f36300fee460aa42b9000000006000fed84eb9000000004a826600ff506000fe7a4ab900000000670000cc223900000000428041f900000000b280660000c245f90000000078017192b880670000ce71b900000000b880670000c22039000000004a80660000c241f900000000b081660001d273927802b881670001d273b900000000b881670001c622390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b083660001a2420542b90000000042b90000000042b90000000013c50000000013c50000000042b90000000042b90000000046c22f014eb900000000588f6000fc7442b9000000006000fc6879b0080057844a84660c700123c0000000006000fc5252806000ff207a0223c5000000006000fc40700123c0000000004eb9000000004878000241f9000000004e904878000641f9000000004e904eb900000000508f203c00040004428123c0fc0b01bc20390000000041f900000000b081660000ba42b900000000739242b90000000053814a816708420513c50000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b482b9fc0b01b882b9fc0b01b00281000400044a816700febc2639fc0b01b478012239fc0b01b82039fc0b01b00281000400040280000400044a8156c14a8056c07301710044814480d281e588808122030281000400044a8156c17301448180817204e188828023c10000000023c4000000006000fb3a7bb0180057854a85670642051185180052816000ff2e7bb0080053854a8566067a086000fecc52806000fe1642041184380052836000fe50263c000005dc6000fb2a4cd7047c4fef00184e75",
-   "kind": "text",
-   "name": ".text.usb_bulk_tick",
-   "size": 1408
+   "align": 1,
+   "hex": "75622e7068792e726573746f72652e6e6f0075622e7273746172742e6769766575700075622e666f726365642e72737461727400",
+   "kind": "data",
+   "name": ".rodata.usb_bulk_tick.str1.1",
+   "size": 52
   },
   {
    "align": 2,
-   "hex": "4feffff048d70c0c262f00144ab9000000006f0ab6b900000000660002522439000000004a82660001b82039000000000c8000000000620ed0b9000000000c8000000000640e74d020024cd70c0c4fef00104e757065b0b90000000066e87201b2b90000000066de41f900000000b1f90000000066d020790000000072707190b28066c271a8000153804a8066b871a80002722fb28066ae71a800037240b28066a44a280004669e71a8000559804a80669471a800067260b280668a4a28000766847168000841f00808b1fc000000006600ff7426790000000091c820085580e2886604528860f443f90000000073b3880071b18800b0816600ff4c52887065b08866d84ab900000000660c4eb9000000004a806600015e42802040d1fc00000000f4e80680000000100c800000009066e824790000000091c8d5fc0000000043f388007065159188005288b08866f0428041f90000000043f008007217159108655280b28066f0307c7c00700342b90000000023c300000000354800021540000440c146fc270070022641b0b90000000066084eb900000000240023c200000000707c41f90000000023d000000000223c0000000023c000000000700123c10000000041f90000000023ca0000000023c80000000023c000000000220b46c123c3000000007002b0b900000000667840c246fc270045f9000000004e9246c24a8067644eb90000000024004a806600fe3842b90000000040c346fc27004e924a8067424ab900000000673442b9000000004eb900000000720123c10000000046c34eb90000000042b9000000004eb900000000700123c0000000006000fdea46c36000fde446c374cb6000fddc74f46000fdd674f86000fdd0",
+   "hex": "4e56ffdc48d7047c4ab9000000006700009a40c146fc27002439000000002039fc0b014046c14ab90000000067667201c2800800000066067003b082655642aefff842aefffc4a8167000096486efff842a742a74eb9000000004fef000c4a806600009a7249b2aefff8661c486efffc2f3900000000487800014eb9000000004fef000c4a80667452b90000000042b9000000004ab900000000660e53827a3bba82640642b9000000004ab9000000006700012240c346fc27002039fc0b014008000000660e207900000000b1f900000000675c42b90000000046c3600000f6486efffc2f3900000000487800014eb9000000004fef000c4a806792203900000000528023c0000000007831b88064842f0042b90000000048790000000052b9000000004eb900000000508f6000ff664eb90000000024004a80662c24390000000070782239fc0b01a4b0b90000000066060801000b661823c00000000023c2000000006000ff74203c000005dc60d4223900000000783b5381b8816400ff5c4ab9000000006600ff522f002f022f39000000004eb9000000004fef000c0c8000000f9f6300ff342039000000007a0223c200000000ba806400012c2f0048790000000042b9000000004eb90000000046c3508f4ab90000000067327001b0b9000000006600017a4ab900000000660001704eb90000000072f8b2806600015c40c246fc27004eb90000000046c24ab90000000067244ab900000000661c40c246fc27002639000000004a8367000442721023c10000000046c24ab900000000670006784eb90000000024004ab9000000006f5c4a8066000658243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a700123c00000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a80670005e44cee047cffdc4e5e4ef900000000528023c00000000052b90000000046c3486efffc487800614878000142aefff845f9000000004e924fef000c4a80671c2f39000000004879000000004eb9000000004eb9000000006000fea2260e741451832f0342a742a74e924fef000c4a8066ce7020c0aefff84a8067c453824a8266e060bc4a806600feb052b9000000004eb90000000024004a80660000a2243900000000767840c546fc27004ab900000000660000942839000000002039fc0b01b82239fc0b01b080810280000300004a80660c71b90000000055804a80667272012d41fff44eb9000000002c00b6b900000000671823c30000000023c20000000042b90000000042b9000000004ab900000000670c42b90000000023c2000000007001b0b90000000067407202b284673a4eb90000000046c56000fdfc263c000005dc6000ff602839000000006000ff6c1039000000007202b3804a0057c0710044802d40fff46000ff7c200680b900000000660e42b90000000042b90000000060b44ab900000000662e4ab900000000670000f042b900000000700223c0000000007002b0b900000000660c42b90000000042b9000000004ab9000000006700ff764ab900000000660e720123c10000000023c2000000002f032f022f39000000004eb9000000004fef000c223900000000b2806200ff404a866700ff3a4aaefff4670c06810000012cb2806200ff282439000000007001b0b900000000660000deb4846600ff0a42b900000000740223c00000000042b900000000b4846700fef64eb90000000023c20000000023c20000000046c52f024eb90000000042b90000000040c046fc2700741d588f2239000000005381b4816400009446c06000fcb62f032f022f390000000045f9000000004e924fef000c0c800000752f630c720223c1000000006000fef82239fc0b01844a016a3e0c80000007cf63364ab9000000006612700123c00000000023c2000000006000fecc2f032f022f39000000004e924fef000c0c80000001f36300feb260ac42b9000000006000fea64eb9000000004a826600ff346000fe2a783c7a0123c40000000023c40000000023c50000000042b90000000042b9000000002239fc0b014046c0080100006600fbf8486efff842a742a742aefff842aefffc4eb9000000004fef000c4a806630486efffc48780049487800014eb9000000004fef000c4a80661641eefff8700123d00000000023c0000000006000fbaa52b9000000006000fba04ab900000000675a207900000000428043f900000000b1c0665271b9000000007201b280676071b900000000b28067562239000000004a81665843f900000000b2886600016c71b9000000007802b880670c71b900000000b880660001707a08601642b9000000006000fb5e73b1080057814a81660c7a0123c5000000006000fb4852806090780223c4000000006000fb387a0123c5000000004eb9000000004878000245f9000000004e92487800064e924eb900000000508f207c00040004428023c8fc0b01bc22390000000041f900000000b280660000c242b90000000071b90000000042b90000000053804a806708420513c50000000071b90000000053804a806708420513c50000000042b90000000042b9000000002039fc0b01b42a39fc0b01b82839fc0b01b0808580840280000400044a80670000922639fc0b01b42239fc0b01b82039fc0b01b002800004000402810004000478014a8056c04a8156c17100730144804481d281e588808122030281000400044a8156c17301448180817204e188828023c10000000023c4000000006000fa3079b0080057844a84670642041184080052806000ff2671b1180053804a80660c700823c0000000006000fa0452816000fe7620390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b283663c420542b90000000042b90000000042b90000000013c50000000013c50000000042b90000000042b90000000046c22f004eb900000000588f6000f996420411843800528360b6263c000005dc6000f9b24cee047cffdc4e5e4e75",
+   "kind": "text",
+   "name": ".text.usb_bulk_tick",
+   "size": 2244
+  },
+  {
+   "align": 2,
+   "hex": "4feffff048d70c0c262f00144ab9000000006f0ab6b9000000006600025c2439000000004a82660001b82039000000000c8000000000620ed0b9000000000c8000000000640e74d020024cd70c0c4fef00104e757065b0b90000000066e87201b2b90000000066de41f900000000b1f90000000066d020790000000072707190b28066c271a8000153804a8066b871a80002722fb28066ae71a800037240b28066a44a280004669e71a8000559804a80669471a800067260b280668a4a28000766847168000841f00808b1fc000000006600ff7426790000000091c820085580e2886604528860f443f90000000073b3880071b18800b0816600ff4c52887065b08866d84ab900000000660c4eb9000000004a806600016842802040d1fc00000000f4e80680000000100c800000009066e824790000000091c8d5fc0000000043f388007065159188005288b08866f0428041f90000000043f008007217159108655280b28066f0307c7c00700342b90000000023c300000000354800021540000440c146fc270070022641b0b90000000066084eb900000000240023c200000000707c41f90000000023d000000000223c0000000023c000000000700123c10000000041f90000000023ca0000000023c80000000023c000000000220b46c123c3000000007002b0b9000000006600008240c246fc270045f9000000004e9246c24a80676c4eb90000000024004a806600fe3642b90000000040c346fc27004e924a80674a4ab900000000673c42b9000000004eb9000000007202700123c10000000023c00000000046c34eb90000000042b9000000004eb900000000720123c1000000006000fde046c36000fdda46c374cb6000fdd274f46000fdcc74f86000fdc6",
    "kind": "text",
    "name": ".text.usb_bulk_enable",
-   "size": 634
+   "size": 644
   },
   {
    "align": 2,
@@ -3253,6 +3743,69 @@
    "size": 4
   },
   {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_forced_restarts",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_phy_refused",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_phy_late",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_hold_ticks",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.phy_tries",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.phy_saved",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.phy_parked",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.hold_on",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_phy_why",
+   "size": 4
+  },
+  {
    "align": 1,
    "hex": "3c1c08",
    "kind": "data",
@@ -3313,6 +3866,41 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.to_pend_port",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.rec_count",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.rec_target",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.rec_per",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.rec_at",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.rec_armed",
    "size": 4
   },
   {
@@ -3666,7 +4254,7 @@
    "size": 101
   }
  ],
- "source_sha256": "478fdbbf0da19b8e01082bee3c091e7e945bf4ab27a993a639f8a80170cc4822",
+ "source_sha256": "15b5271262f5f590733c1c0c3cc5dc5bb04755e98cb167de199ab54bf4c7abe5",
  "symbols": [
   {
    "global": false,
@@ -3730,6 +4318,12 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.hold_on",
+   "section": ".bss.hold_on",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.io_job",
    "section": ".bss.io_job",
    "value": 0
@@ -3772,6 +4366,24 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.phy_parked",
+   "section": ".bss.phy_parked",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.phy_saved",
+   "section": ".bss.phy_saved",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.phy_tries",
+   "section": ".bss.phy_tries",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.prime_cur",
    "section": ".bss.prime_cur",
    "value": 0
@@ -3780,6 +4392,36 @@
    "global": false,
    "name": ".sec..bss.qh_ready",
    "section": ".bss.qh_ready",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.rec_armed",
+   "section": ".bss.rec_armed",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.rec_at",
+   "section": ".bss.rec_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.rec_count",
+   "section": ".bss.rec_count",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.rec_per",
+   "section": ".bss.rec_per",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.rec_target",
+   "section": ".bss.rec_target",
    "value": 0
   },
   {
@@ -3976,8 +4618,20 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.usb_bulk_forced_restarts",
+   "section": ".bss.usb_bulk_forced_restarts",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.usb_bulk_free_why",
    "section": ".bss.usb_bulk_free_why",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_hold_ticks",
+   "section": ".bss.usb_bulk_hold_ticks",
    "value": 0
   },
   {
@@ -3996,6 +4650,24 @@
    "global": false,
    "name": ".sec..bss.usb_bulk_last_slots",
    "section": ".bss.usb_bulk_last_slots",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_phy_late",
+   "section": ".bss.usb_bulk_phy_late",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_phy_refused",
+   "section": ".bss.usb_bulk_phy_refused",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_phy_why",
+   "section": ".bss.usb_bulk_phy_why",
    "value": 0
   },
   {
@@ -4050,6 +4722,12 @@
    "global": false,
    "name": ".sec..rodata.stock_config",
    "section": ".rodata.stock_config",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.usb_bulk_tick.str1.1",
+   "section": ".rodata.usb_bulk_tick.str1.1",
    "value": 0
   },
   {
@@ -4128,6 +4806,18 @@
    "global": false,
    "name": ".sec..text.tx_index",
    "section": ".text.tx_index",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ub_log",
+   "section": ".text.ub_log",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ulpi_xfer.constprop.0",
+   "section": ".text.ulpi_xfer.constprop.0",
    "value": 0
   },
   {
@@ -4330,6 +5020,12 @@
   },
   {
    "global": true,
+   "name": "dkrt_log_ev",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dkrt_poll_add",
    "section": null,
    "value": 0
@@ -4390,6 +5086,12 @@
   },
   {
    "global": false,
+   "name": "hold_on",
+   "section": ".bss.hold_on",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "io_job",
    "section": ".bss.io_job",
    "value": 0
@@ -4432,6 +5134,24 @@
   },
   {
    "global": false,
+   "name": "phy_parked",
+   "section": ".bss.phy_parked",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "phy_saved",
+   "section": ".bss.phy_saved",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "phy_tries",
+   "section": ".bss.phy_tries",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "prime_all",
    "section": ".text.prime_all",
    "value": 0
@@ -4452,6 +5172,36 @@
    "global": false,
    "name": "queue_transfer.constprop.0",
    "section": ".text.queue_transfer.constprop.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "rec_armed",
+   "section": ".bss.rec_armed",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "rec_at",
+   "section": ".bss.rec_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "rec_count",
+   "section": ".bss.rec_count",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "rec_per",
+   "section": ".bss.rec_per",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "rec_target",
+   "section": ".bss.rec_target",
    "value": 0
   },
   {
@@ -4701,6 +5451,18 @@
    "value": 0
   },
   {
+   "global": false,
+   "name": "ub_log",
+   "section": ".text.ub_log",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ulpi_xfer.constprop.0",
+   "section": ".text.ulpi_xfer.constprop.0",
+   "value": 0
+  },
+  {
    "global": true,
    "name": "usb_active_port",
    "section": null,
@@ -4744,6 +5506,12 @@
   },
   {
    "global": true,
+   "name": "usb_bulk_forced_restarts",
+   "section": ".bss.usb_bulk_forced_restarts",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "usb_bulk_free_why",
    "section": ".bss.usb_bulk_free_why",
    "value": 0
@@ -4752,6 +5520,12 @@
    "global": true,
    "name": "usb_bulk_giveback",
    "section": ".text.usb_bulk_giveback",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_hold_ticks",
+   "section": ".bss.usb_bulk_hold_ticks",
    "value": 0
   },
   {
@@ -4770,6 +5544,24 @@
    "global": true,
    "name": "usb_bulk_last_slots",
    "section": ".bss.usb_bulk_last_slots",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_phy_late",
+   "section": ".bss.usb_bulk_phy_late",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_phy_refused",
+   "section": ".bss.usb_bulk_phy_refused",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_phy_why",
+   "section": ".bss.usb_bulk_phy_why",
    "value": 0
   },
   {
@@ -4969,8 +5761,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "1590",
-  "isa_check": "0ae6b81a8eb69741e1d5cc99bbbdc50076f5d4b4919f7e94c8c5305d4c48745d",
+  "instructions_redecoded": "1935",
+  "isa_check": "ce490d25d53dadccd1d1645f2b96874b49b8255a77a3e66c04dafcd9da697ddc",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }
