@@ -20,8 +20,9 @@
 // `mise run dkmidi:build` builds it). `samples put` needs apps/web/public/dksample.wasm (`mise run wasm:dksample`).
 // `samples put` sends the file bytes over the USB bulk link when the device offers its interface (usb-fast; the `dkbulk` bridge, `mise run dkbulk:build`,
 // $DKBULK_BIN or --bulk-bin) and over SysEx or MidiRpc otherwise; --bulk off forces SysEx, --bulk force fails when there is no bulk link. It prints the
-// When the device is in USB AUDIO/MIDI (no bulk interface there) and usb-fast is loaded, `samples put` takes USB over for the run (the device switches to USB
-// MIDI in RAM, USB audio pauses) and gives it back when the run ends: no flag; --bulk off never touches the USB mode.
+// When the device is in USB AUDIO/MIDI (no bulk interface there), `samples put` stays on SysEx; with --takeover (experimental: on macOS the device can end up
+// unreachable until a power cycle) it takes USB over for the run (the device switches to USB MIDI in RAM, USB audio pauses) and gives it back when the run
+// ends. --bulk off never touches the USB mode.
 // --speed MASK (4 bits, decimal or 0x): sets the four speed switches through usb-fast STATUS 'S' before the put (bit 0 hash once, bit 1 USB receive ring,
 // bit 2 read-back hash overlap, bit 3 large card commands; all on at boot); the run prints the resulting mask and the usb-fast STATUS words 18 (staging bytes)
 // and 19 (receive ring slots): the hardware A/B of docs/findings/126-usb-fast-transfer-ceilings.md.
@@ -41,7 +42,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | takeover-cycle N [--gap MS] [--wait MS]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | takeover-cycle N [--gap MS] [--wait MS]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -53,6 +54,7 @@ const opts = {
   verify: 'auto',
   speed: undefined,
   'bulk-bin': process.env.DKBULK_BIN || path.join(targetRoot, 'nogen/release/dkbulk'),
+  takeover: false,
   gap: '2000',
   wait: '10000',
 };
@@ -72,7 +74,8 @@ for (let i = 0; i < args.length; i++) {
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
     opts[a.slice(2)] = args[++i];
-  } else words.push(a);
+  } else if (a === '--takeover') opts.takeover = true;
+  else words.push(a);
 }
 
 /** The four speed switches of usb-fast through STATUS 'S' (SysEx): each bit of MASK, then the mask the device reports. */
@@ -191,7 +194,7 @@ function bulkOpener(bin, children) {
  * The bulk session for the device on the MIDI port (--port), or undefined (--bulk off, no dkbulk binary, no candidate, no candidate with this device's nonce).
  * The selection is the dk-session `chooseBulk` the desktop app uses: SET_NONCE over SysEx to the MIDI target, then each `dkbulk list` candidate is opened
  * (`dkbulk open ID`, a child process) and asked INFO; only the one that returns the nonce is used. --bulk force: those are errors.
- * When no device offers the interface and usb-fast reports that the device is not in USB MIDI mode (USB AUDIO/MIDI), the device is taken over (`BulkTakeOver`
+ * When no device offers the interface and usb-fast reports that the device is not in USB MIDI mode (USB AUDIO/MIDI), only with --takeover the device is taken over (`BulkTakeOver`
  * of dk-session: TAKEOVER, the device re-enumerates in USB MIDI mode, the handshake) and given back by `close`, at once. `holder.link` is the SysEx link; the
  * take-over replaces it (the MIDI port goes away and returns), so callers read `holder.link.session` after this returns.
  */
@@ -208,6 +211,10 @@ async function connectBulk(holder) {
   let choice = await chooseBulk(holder.link.session, opener, (n) => notes.push(n), { timeoutMs: 20000 });
   let takeover;
   if (!choice && (await holder.link.session.usbFastWrongMode())) {
+    if (!opts.takeover)
+      return none(
+        'the device is in USB AUDIO/MIDI; set USB CONFIG to USB MIDI on the device, or pass --takeover (experimental)',
+      );
     console.error('wb: the device is in USB AUDIO/MIDI: taking USB over for this run (USB audio pauses)');
     takeover = new BulkTakeOver(
       {

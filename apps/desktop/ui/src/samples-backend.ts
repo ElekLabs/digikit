@@ -15,6 +15,7 @@ import { joinPath, type LocalEntry, type Prepare } from './samples-core';
 import { setDeviceInfo, setSampleLink } from '@web/transfer/transfer-state';
 import type { LinkState } from '@web/transfer/link-core';
 import {
+  takeOverOn,
   localFolder,
   localPath,
   sampleFolder,
@@ -68,6 +69,8 @@ let last:
       /** Why usb-fast did not load at the last boot, read once per session when there is no bulk link (`usbFast` unset: it did load, or it is not selected). */
       failure?: { usbFast?: LoadFailure };
       bulk?: BulkChoice;
+      /** usb-fast is loaded but the device is in USB AUDIO/MIDI (no bulk interface); read at each choice while there is no bulk link. */
+      wrongMode?: boolean;
       /** The take-over of a device in USB AUDIO/MIDI (made at the first run that needs it). */
       takeover?: BulkTakeOver;
       /** The current run called `takeover.begin`: `endRun` calls `end`. */
@@ -163,12 +166,14 @@ export async function openDeviceSamples(forRun = false): Promise<OpenedSamples> 
   if (!last.bulk) {
     const env = transferEnv().bulk;
     last.bulk = env && target().kind !== 'none' ? await chooseBulk(s, env, note) : undefined;
-    // a device in USB AUDIO/MIDI has no bulk interface: a run takes USB over (no question; USB audio pauses until the linger after the run ends)
-    if (forRun && env && !last.bulk && target().kind === 'midi' && (await s.usbFastWrongMode())) {
+    // a device in USB AUDIO/MIDI has no bulk interface. Only when the user turned the experimental take-over on, a run takes USB over (USB audio
+    // pauses until the linger after the run ends); otherwise the transfer stays on SysEx and the pill says how to get Fast USB.
+    last.wrongMode = !last.bulk && target().kind === 'midi' ? await s.usbFastWrongMode() : false;
+    if (forRun && takeOverOn() === 'on' && env && !last.bulk && last.wrongMode) {
       last.takeover = new BulkTakeOver(takeOverDevice(), env, { note });
     }
   }
-  if (forRun && last.takeover && !last.began) {
+  if (forRun && takeOverOn() === 'on' && last.takeover && !last.began) {
     // `begin` returns the held link at once when the device is still ours, and takes over again when the device gave the mode back
     last.began = true;
     const c = await last.takeover.begin();
@@ -204,7 +209,8 @@ export async function openDeviceSamples(forRun = false): Promise<OpenedSamples> 
 function linkOf(link: 'bulk' | 'sysex', takenOver = false): LinkState {
   if (link === 'bulk') return { state: 'bulk', takenOver };
   const failure = last?.failure?.usbFast;
-  return failure ? { state: 'sysex', failure } : { state: 'sysex' };
+  if (failure) return { state: 'sysex', failure };
+  return last?.wrongMode && takeOverOn() !== 'on' ? { state: 'sysex', wrongMode: true } : { state: 'sysex' };
 }
 
 /** A run ended (also a failed one): the take-over, if any, keeps the device for its linger and then gives the USB mode back. */

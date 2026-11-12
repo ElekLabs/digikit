@@ -66,6 +66,7 @@ import {
   sampleEntries,
   sampleFolder,
   sampleTicks,
+  takeOverOn,
   setAddedFiles,
   setLocalFolder,
   setLocalKinds,
@@ -73,6 +74,7 @@ import {
   setLocalTicks,
   setSampleFolder,
   setSampleTicks,
+  setTakeOverOn,
   setUploadAverage,
   setUploadBase,
   setUploadNotes,
@@ -467,6 +469,19 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
         }
         actions={
           <>
+            <label
+              class="tests toggle"
+              title="Experimental. When the device is in USB AUDIO/MIDI mode, switch it to USB MIDI for the transfer so Fast USB works. On macOS the device can fail to come back until a power cycle. Off: the transfer stays on SysEx."
+            >
+              <input
+                type="checkbox"
+                role="switch"
+                checked={takeOverOn() === 'on'}
+                disabled={!!busy()}
+                onChange={(e) => setTakeOverOn(e.currentTarget.checked ? 'on' : '')}
+              />{' '}
+              take USB over
+            </label>
             <Show when={deviceInfo()?.canMkdir}>
               <button type="button" class="act" disabled={!!busy()} onClick={() => setNaming(!naming())}>
                 New folder

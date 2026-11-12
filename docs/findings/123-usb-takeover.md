@@ -73,3 +73,14 @@ m68k GCC folds `USB_REG(x) & small_mask` into a `btst` on one byte, so the code 
 ## Hardware test
 
 `wb.mjs takeover-cycle 50 --gap 2000`, then `takeover-cycle 50 --gap 0`, on the DT2 (and the DN2) in USB AUDIO/MIDI. Pass: in every cycle macOS reports a disconnect after TAKEOVER and after RELEASE (new interface object ids each time), the runtime INFO answers after each return, and the device is back within 4 s of each command. Fail on the first unchanged id or missing answer; then read `usb_bulk_phy_*` and `usb_bulk_forced_restarts` and the log. **[O]**
+
+## Hardware result with the hold and PHY park, 2026-11-13
+
+`wb.mjs takeover-cycle` on a DT2 in USB AUDIO/MIDI with the fix above. **[D]**
+
+- Cycles 1 to 10: clean. macOS saw the detach and the return (2.4 s) after every TAKEOVER and every RELEASE.
+- Cycle 11: failed on TAKEOVER the same way as cycle 5 before the fix (no disconnect seen, device unreachable). No self-recovery within 30 s. A cable replug did not bring the DT2 back; a power cycle did.
+- Both failures (cycle 5 without the fix, cycle 11 with it) were on TAKEOVER, never on RELEASE.
+- With USB CONFIG = USB MIDI (no switching) fast USB was fully reliable.
+
+The hold and the PHY park make the failure rarer, not absent. The take-over is therefore off by default: the desktop app has a "take USB over" switch in Samples mode (off, kept per app profile), `wb.mjs` takes over only with `--takeover` (`takeover-cycle` always does). Without it a device in USB AUDIO/MIDI stays on SysEx and the Target pill says `SYSEX`, with the hint "Set USB CONFIG to USB MIDI on the device for Fast USB". The device side is unchanged and does nothing until a host sends TAKEOVER. **[O]** Track 2 before the take-over can become the default again: a device-side enumeration watchdog, a persistent failure record, and runs with audio idle against audio playing.
