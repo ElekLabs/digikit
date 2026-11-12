@@ -76,7 +76,8 @@ for (const profile of profiles) {
         throw new Error('prepared listing patch/plan SHA mismatch');
       artifact = moduleArtifact(profile.device, 'test/files-proof');
       const dkm = fs.readFileSync(artifact);
-      if (dkm.readUInt32BE(0xa4) !== 0xffffffff) throw new Error('files-proof must define no tick; callbacks work without one');
+      if (dkm.readUInt32BE(0xa4) !== 0xffffffff)
+        throw new Error('files-proof must define no tick; callbacks work without one');
       if (dkm[0x38] !== 1 || dkm[0x39] !== 11 || (dkm.readUInt32BE(0x30) & 0x7fffffff) !== runtimeVersion())
         throw new Error('prepare files-proof with the current patchkit (entry point dk_module, api 1.11)');
       fs.mkdirSync(runDir, { recursive: true });
