@@ -58,7 +58,7 @@ Every reply body starts with `i8 status` (0 = ok). Codes, in the runtime's code 
 | -69 | E_SET_VALUE | a settings value is over 1024 bytes, or the caller's buffer is too small |
 | -70 | E_SET_OFF | the settings store is off: an older store on the card reaches into its area (or the store's headers do not read) |
 | -71 | E_FILE_IN_USE | BEGIN of a path that exists, DELETE or CLEAR while a reader still reads the file (on the Digitone II the sample pool, while it loads a sample from the store): nothing is changed; try again when the load is done. END answers it too when the lease came after BEGIN (the new bytes are dropped; BEGIN again) |
-| -64 | E_CMD_RANGE | `Api.register_cmds` with a range that is empty, outside every reserved range, or over a registered one (runtime 0.2.5) |
+| -64 | E_CMD_RANGE | `dk_host_register` with a range that is empty, outside every reserved range, or over a registered one (runtime 0.2.5) |
 
 SELECT also answers the selection record's own codes (runtime codes -40 to -49): -40 `E_SEL_PATH` (a path is empty, too long (over 55 bytes) or has a character outside 0x21 to 0x7e), -41 `E_SEL_COUNT` (more than 8 paths), -42 `E_SEL_WRITE` (the firmware's block write failed), -46 `E_RANGE`, -47 `E_CARD_RO`.
 
@@ -112,14 +112,14 @@ transport says `dataDepth` (the emulator's USB: 2); the real MIDI transports sta
 ## Service commands (runtime 0.2.5, capability bit 9)
 
 The runtime keeps its commands in a table (command number, flags, handler: one lookup after the other, since a jump table is not ColdFire code; the
-flag marks a read-only command whose reply is not logged). A run-time module can add commands of its own with `Api.register_cmds(first, count, handler)`
+flag marks a read-only command whose reply is not logged). A run-time module can add commands of its own with `dk_host_register(first, count, handler)`
 (api 1.2, `docs/design/module-sdk.md`). Only numbers in a range that `sdk/sdk.toml` `[protocol.ranges]` reserves can be registered; today `remote = [0x38, 0x3d]`
 (the panel's key, turn and release commands of `digikit/remote`) and `remote_state = [0x3e, 0x3f]` (its state). A request number is 6 bits (bit 6 of the command byte marks a reply), so ranges lie in 0x01 to 0x3f.
 A range that is empty, outside a reserved range or over a registered one is refused with `E_CMD_RANGE`; at most eight ranges are registered (a module should register one range per command group, with one handler that dispatches on the command number); the module's ranges are released
 when it is taken down (`fini`). INFO's `caps` bit 9 (`CAP_SERVICE_CMDS`) says the runtime has them.
 
 A service module is on exactly when it is loaded: the check mark of DIGIKIT > MODULES is the only switch, and no range is guarded (there is no REMOTE switch). A module with settings
-of its own shows them under SETTINGS... of its MODULES row (`dkm_menu`, `docs/design/digikit-dkm.md`).
+of its own shows them under SETTINGS... of its MODULES row (the `menu` field of `dk_module`, `docs/design/digikit-dkm.md`).
 
 A service command is handled in the firmware's MIDI task, like the built-in ones. The handler gets the command, `seq`, the body (at most 160 bytes: the same limit as
 every command but DATA and SELECT) and a buffer for the reply body (at most 879 bytes); it returns the reply length (the status is 0), or a negative status (sent with
