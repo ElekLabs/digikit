@@ -40,10 +40,10 @@ BREAKS = {
     ),
     "rows": (
         "tests/fixtures/modules/patched-pluck/src/module.c",
-        'DK_PARAM(pluck, 0, pluck_decay, "Decay", "DECAY", 0, 127, 64);\n'
-        'DK_PARAM(pluck, 1, pluck_pick, "Pick position", "PICK", 0, 127, 32);',
-        'DK_PARAM(pluck, 1, pluck_decay, "Decay", "DECAY", 0, 127, 64);\n'
-        'DK_PARAM(pluck, 0, pluck_pick, "Pick position", "PICK", 0, 127, 32);',
+        '    dk_page_add_param(p, "Decay", "DECAY", 64);\n'
+        '    dk_page_add_param(p, "Pick position", "PICK", 32);',
+        '    dk_page_add_param(p, "Pick position", "PICK", 32);\n'
+        '    dk_page_add_param(p, "Decay", "DECAY", 64);',
     ),
 }
 # kinds whose edit is in a C source: the module's objects are rebuilt for the copied root (the cache is keyed by the source hash)

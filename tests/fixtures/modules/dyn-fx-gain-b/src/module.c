@@ -7,8 +7,8 @@
 
 static int32_t init(dk_module_ctx *ctx)
 {
-    /* TODO(S3): the builder has no call for the MIX default; this effect needs 64 (the other fixtures use 127). */
     dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_GAIN, "Test Gain B", "GNB");
+    dk_fx_mix(fx, 64);
     dk_page *p = dk_fx_add_page(fx, "Test Gain B");
     dk_page_add_fx_param(p, "Gain", "GAIN", DK_PERCENT, 0.0f, 1.27f, 0.25f);
     return DK_OK;

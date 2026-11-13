@@ -84,6 +84,8 @@ pub struct CFx {
     pub routes_set: bool,
     pub allowed: u32,
     pub def: u32,
+    /// the MIX knob default 0 to 127 (`dk_fx_mix`)
+    pub mix: u32,
     pub page: i32,
 }
 #[derive(Clone, Copy)]
@@ -124,7 +126,7 @@ pub struct CParam {
 }
 
 const M0: CMachine = CMachine { key: 0, name: [0; TEXT], short: [0; TEXT] };
-const F0: CFx = CFx { id: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, page: -1 };
+const F0: CFx = CFx { id: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
 const G0: CPage = CPage { fx: false, owner: 0, name: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
 const P0: CParam = CParam {
     page: 0, fx: false, name: [0; 32], short: [0; 16], min: 0, max: 127 * 256, def: 0, glyph: 0, latched: false, click: 0, click_arg: 0, kind: 0, fmin: 0, fmax: 0, fdef: 0,
@@ -376,6 +378,12 @@ impl Collect {
             self.fxs[i].def = def;
         }
     }
+
+    pub fn fx_mix(&mut self, f: *mut u8, def: u32) {
+        if let Some(i) = find(&self.fxs, f) {
+            self.fxs[i].mix = def.min(127);
+        }
+    }
 }
 
 /// The index of the element `h` points to in `a`, None for the placeholder or any other pointer.
@@ -511,6 +519,11 @@ pub unsafe extern "C" fn dk_page_bind_local(p: *mut u8, local: u32, slot: u32) {
 pub unsafe extern "C" fn dk_fx_routes(f: *mut u8, allowed: u32, def: u32) {
     if let Some(c) = active() {
         c.fx_routes(f, allowed, def);
+    }
+}
+pub unsafe extern "C" fn dk_fx_mix(f: *mut u8, def: u32) {
+    if let Some(c) = active() {
+        c.fx_mix(f, def);
     }
 }
 
@@ -821,7 +834,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             }
             o.head(KIND_EFFECT, LEN_EFFECT);
             o.p32(fx_ordinal(keys, fx.id)?); // the effect record of the DSP section: the keys table order
-            o.p32(127); // MIX default
+            o.p32(fx.mix); // MIX default
             o.p32(n as u32);
             o.p32(fx.id);
             let mut tab = [0u8; 8];

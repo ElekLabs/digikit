@@ -343,6 +343,25 @@ fn an_effect_with_a_page_lowers_to_an_effect_record_in_keys_order() {
 }
 
 #[test]
+fn dk_fx_mix_sets_the_mix_default_of_the_effect_record_and_127_without_it() {
+    let mut f = Box::new(Collect::new());
+    let fx = f.add_fx(FXID, c(b"Freq shift\0"), c(b"FSH\0"));
+    let pg = f.fx_add_page(fx, c(b"Freq shift\0"));
+    f.page_add_fx_param(pg, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
+    let k = keys(&[], &[0x77, FXID], (0, 0, 0));
+    let mix_of = |f: &Collect| {
+        let mut plan = Plan::new();
+        let size = lower(f, &DT2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
+        let mut buf = std::vec![0u8; size];
+        lower(f, &DT2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
+        rd(&buf, 16 + 12)
+    };
+    assert_eq!(mix_of(&f), 127);
+    f.fx_mix(fx, 64);
+    assert_eq!(mix_of(&f), 64);
+}
+
+#[test]
 fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refused() {
     let mut b = Box::new(Collect::new());
     let m = b.add_machine(KEY, c(b"A\0"), c(b"A\0"));

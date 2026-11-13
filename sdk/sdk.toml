@@ -890,6 +890,14 @@ sig = "void (dk_fx *fx, u32 allowed, u32 def)"
 doc = "Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one."
 
 [[import]]
+name = "dk_fx_mix"
+service = "fx"
+since = 13
+context = "init"
+sig = "void (dk_fx *fx, u32 def)"
+doc = "Set the default of the effect's MIX knob, 0 to 127 (127 when this is not called)."
+
+[[import]]
 name = "dk_sample_pool_open"
 service = "samples"
 since = 11

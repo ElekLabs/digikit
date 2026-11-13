@@ -251,6 +251,9 @@ dk_param *dk_page_add_fx_param(dk_page *p, const char *name, const char *short_n
 /* Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one. Context: init. Since api 3.13. */
 void dk_fx_routes(dk_fx *fx, uint32_t allowed, uint32_t def);
 
+/* Set the default of the effect's MIX knob, 0 to 127 (127 when this is not called). Context: init. Since api 3.13. */
+void dk_fx_mix(dk_fx *fx, uint32_t def);
+
 /* ---- service ui ---- */
 
 /* A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory). Context: ui. Since api 3.11. Needs core/ui: without it the import binds to a stub that returns -1. */

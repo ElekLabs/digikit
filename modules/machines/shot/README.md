@@ -30,7 +30,7 @@ The ordinary `DK_PAGE` remains the storage/parameter schema; its fixed knob slot
   YES on an empty or filled slot opens its file browser; YES on a file loads that slot, sets SMP and returns to the control page. Slots retain
   their indexes when cleared. RIGHT on an entry gives CLEAR and INFO; NO goes back one level. The pick writes SMP of the clicked track with
   `param_set` (API 1.6); while TRIG or FUNC is held it writes nothing and the page shows `RELEASE TRIG TO SET SMP`. The chooser is described in
-  `docs/design/ui-rules.md`. `DK_PARAM_ACTION(shot, 0, shot_smp_click)` follows the custom D binding; the test route `test/track-select` fills the
+  `docs/design/ui-rules.md`. `dk_param_on_click(smp, shot_smp_click, 0)` follows the custom D binding; the test route `test/track-select` fills the
   pool in tests.
 - Pitch: MIDI note 60 plays the sample at its own speed; the cursor rate is `srcrate / 48000 * 2^(semitones / 12)` in Q16.16, limited to 1/65536 to 64
   frames per sample. As in the stock one-shot, SMP is read at note-on; START, END, PLAY, PITCH and the note follow every block. A PLAY

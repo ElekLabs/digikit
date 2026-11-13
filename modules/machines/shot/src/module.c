@@ -40,7 +40,6 @@ static int32_t init(dk_module_ctx *ctx)
     dk_files *files;
     int32_t r;
 
-    /* TODO(S3): the DK_MACHINE had .stereo = 1; the builder has no call for it. */
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "SHOT", "SHT");
     /* SMP: the pool entry that plays, 0 .. 15 (turn: steps through the pool; p-lockable; an empty entry is silent).
        START and END: 0 .. 127 spread over the whole sample (127 is its last frame boundary). PLAY: 0 REV, 1 REV.L, 2 FWD.L, 3 FWD (default); .L loops

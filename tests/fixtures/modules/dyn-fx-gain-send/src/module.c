@@ -8,8 +8,7 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_GAIN, "Test Gain Send", "GSN");
-    /* TODO(S3): the old record left `.routes` at 0 (the default for the route); check that allowed = send | master matches it. */
-    dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
+    dk_fx_routes(fx, DK_ROUTE_SEND, DK_ROUTE_SEND);
     dk_page *p = dk_fx_add_page(fx, "Test Gain Send");
     dk_page_add_fx_param(p, "Gain", "GAIN", DK_PERCENT, 0.0f, 1.27f, 0.5f);
     return DK_OK;

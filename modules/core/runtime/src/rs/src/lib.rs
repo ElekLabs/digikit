@@ -416,6 +416,7 @@ import_table! {
     ("dk_page_bind", collect::dk_page_bind),
     ("dk_page_bind_local", collect::dk_page_bind_local),
     ("dk_fx_routes", collect::dk_fx_routes),
+    ("dk_fx_mix", collect::dk_fx_mix),
     ("dk_sample_pool_open", entry::dk_sample_pool_open),
     ("dk_sample_pool_add", entry::dk_sample_pool_add),
     ("dk_sample_pool_clear", entry::dk_sample_pool_clear),
@@ -487,6 +488,7 @@ const _: dkrt_sdk::api::DkPageCanvasFn = collect::dk_page_canvas;
 const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
 const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
 const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
+const _: dkrt_sdk::api::DkFxMixFn = collect::dk_fx_mix;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = entry::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = entry::dk_sample_pool_add;
 const _: dkrt_sdk::api::DkSamplePoolClearFn = entry::dk_sample_pool_clear;

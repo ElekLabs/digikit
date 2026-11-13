@@ -309,8 +309,8 @@ const dk_module_def dk_module = { .init = analog_init };
 On a device that keeps a machine's knobs in page rows (Digitone II), the machine's knob page gets a page row with the name in capitals and the title as given: `dk_machine_add_page(m, "Analog")` gives name `ANALOG`, title `Analog`, as the machine's default page has today.
 
 Optional properties are setters with sensible defaults (range 0 to 127, no glyph, not latched). The setters keep their names:
-`dk_param_range`, `dk_param_glyph`, `dk_param_latched`, `dk_param_on_click`, `dk_page_canvas` and
-`dk_fx_routes`. The callback types are `dk_param_click_fn`, `dk_page_draw_fn` and `dk_page_event_fn`.
+`dk_param_range`, `dk_param_glyph`, `dk_param_latched`, `dk_param_on_click`, `dk_page_canvas`,
+`dk_fx_routes` and `dk_fx_mix` (the MIX knob default 0 to 127, 127 without the call). The callback types are `dk_param_click_fn`, `dk_page_draw_fn` and `dk_page_event_fn`.
 
 ```c
 dk_param *play = dk_page_add_param(p, "Play", "PLAY", 0);

@@ -8,7 +8,6 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_PD, "Phase Dist", "PD");
-    /* TODO(S3): the machine had parameters and no page; the builder needs a page to hold them. */
     dk_page *p = dk_machine_add_page(m, "Phase Dist");
     dk_page_add_param(p, "Distortion", "PD", 0);
     dk_page_add_param(p, "Curve", "CURVE", 0);

@@ -324,7 +324,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 108] = [
+    pub const IMPORT_NAMES: [&str; 109] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -386,6 +386,7 @@ pub mod api {
         "dk_page_bind",
         "dk_page_bind_local",
         "dk_fx_routes",
+        "dk_fx_mix",
         "dk_sample_pool_open",
         "dk_sample_pool_add",
         "dk_sample_pool_clear",
@@ -436,7 +437,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`.
-    pub const BUILTIN_NAMES: [&str; 73] = [
+    pub const BUILTIN_NAMES: [&str; 74] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -493,6 +494,7 @@ pub mod api {
         "dk_page_bind",
         "dk_page_bind_local",
         "dk_fx_routes",
+        "dk_fx_mix",
         "dk_sample_pool_open",
         "dk_sample_pool_add",
         "dk_sample_pool_clear",
@@ -670,6 +672,9 @@ pub mod api {
 
     /// `dk_fx_routes`: Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one.
     pub type DkFxRoutesFn = unsafe extern "C" fn(fx: *mut u8, allowed: u32, def: u32);
+
+    /// `dk_fx_mix`: Set the default of the effect's MIX knob, 0 to 127 (127 when this is not called).
+    pub type DkFxMixFn = unsafe extern "C" fn(fx: *mut u8, def: u32);
 
     /// `dk_sample_pool_open`: Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then.
     pub type DkSamplePoolOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
