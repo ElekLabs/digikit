@@ -212,7 +212,7 @@ export default function Console() {
   const knownDevice = () => status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
   const device = () => {
     const d = knownDevice();
-    return d !== undefined && d in panels ? d : defaultFaceplate;
+    return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
   };
   const panel = () => panels[device()];
   /** A device without `[digikit]` has no runtime, no modules and no remote: it starts stock, and those pages say so. */
@@ -702,7 +702,7 @@ export default function Console() {
       <Show when={card()}>
         <p class="note">{cardLine(card())}</p>
       </Show>
-      <Show when={registry.get(device()).capabilities.card === 'path-fs' && runtime()?.cards}>
+      <Show when={registry.ids.includes(device()) && registry.get(device()).capabilities.card === 'path-fs' && runtime()?.cards}>
         <div class="acts">
           <input
             ref={(el) => {
