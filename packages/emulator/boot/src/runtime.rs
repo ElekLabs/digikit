@@ -2247,6 +2247,7 @@ impl Emulator {
                     self.midi.usb.bulk_queue_fn,
                 ]
                 .into_iter()
+                .chain(self.midi.usb.trace_pcs.iter().copied())
                 .filter(|&pc| pc != 0),
             );
         }
@@ -2747,6 +2748,9 @@ impl Emulator {
                 self.set_error(format!("IdleYieldPoisoned({error:?})"));
                 return;
             }
+        }
+        if watched && self.midi.usb.enabled {
+            self.observe_usb_tx(pc);
         }
         self.bus.clear();
         self.bus.current_pc = pc;
@@ -3277,6 +3281,14 @@ impl Emulator {
         }
         self.cpu.a[7] = sp;
         self.cpu.pc = self.midi.usb.rx_cb;
+        if self.midi.usb.trace {
+            eprintln!(
+                "usbtrace rx ic={} len={} hash={:016x}",
+                self.cpu.icount,
+                chunk.len(),
+                crate::midi::trace_hash(&chunk)
+            );
+        }
         self.midi.usb.queue.pop_front();
         self.midi.usb.in_bytes += chunk.len() as u64;
         self.midi.usb.calls += 1;
@@ -3299,6 +3311,15 @@ impl Emulator {
             self.midi.usb.tx_fn = tx;
             self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, periph::clock::cf_ips());
             self.midi.usb.enabled = true;
+            self.midi.usb.trace =
+                std::env::var("DIGI_USB_TRACE").is_ok_and(|v| !v.is_empty() && v != "0");
+            if self.midi.usb.trace {
+                self.midi.usb.trace_pcs = std::env::var("DIGI_USB_TRACE_PCS")
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter_map(|a| u32::from_str_radix(a.trim().trim_start_matches("0x"), 16).ok())
+                    .collect();
+            }
             self.rebuild_watch();
         }
         Ok(())
@@ -3711,7 +3732,8 @@ impl Emulator {
         self.midi.usb.queue.clear();
     }
 
-    /// At the transmit function: record its (length, buffer) arguments. At the callback's return: unwind.
+    /// The guest queues a dTD on the bulk endpoint (the vendor interface's reply is captured now, its completion follows as an interrupt), and
+    /// the callback's return: unwind. Both run where the PC is first seen, with the other marks.
     fn observe_usb(&mut self, pc: u32) {
         if pc != 0 && pc == self.midi.usb.bulk_queue_fn {
             // the guest queues a dTD (index, dTD): on EP2 IN (index 6) it is the vendor bulk interface's reply; capture the bytes now (the controller
@@ -3776,16 +3798,6 @@ impl Emulator {
                     .insert(at, crate::midi::UsbItem::BulkTxDone(dtd));
             }
         }
-        if pc == self.midi.usb.tx_fn {
-            let sp = self.cpu.a[7];
-            let len = self.bus.board.read32(sp.wrapping_add(4)).unwrap_or(0);
-            let buf = self.bus.board.read32(sp.wrapping_add(8)).unwrap_or(0);
-            if (1..=0x10000).contains(&len)
-                && let Ok(bytes) = self.peek_bytes(buf, len as usize)
-            {
-                self.midi.usb.out.extend_from_slice(&bytes);
-            }
-        }
         if pc == self.midi.usb.ret_pc
             && let Some(call) = &self.midi.usb.active
             && self.cpu.a[7] == call.sp_after_rts
@@ -3793,6 +3805,44 @@ impl Emulator {
             self.cpu.a[7] = call.frame_sp;
             [self.cpu.d[0], self.cpu.d[1], self.cpu.a[0], self.cpu.a[1]] = call.saved;
             self.midi.usb.active = None;
+        }
+    }
+
+    /// The guest is about to execute the instruction at `pc`: at the transmit function record its (length, buffer) arguments (and log the
+    /// trace's addresses). This runs after the step's interrupt deliveries, so an arrival that an interrupt takes over does not count:
+    /// seen at the top of the step, a send whose first instruction the peer's frame interrupt preempted was recorded twice, once on arrival
+    /// and once when the task resumed (finding 131).
+    fn observe_usb_tx(&mut self, pc: u32) {
+        if self.midi.usb.trace && self.midi.usb.trace_pcs.contains(&pc) {
+            let sp = self.cpu.a[7];
+            let mut top = |k: u32| self.bus.board.read32(sp.wrapping_add(4 * k)).unwrap_or(0);
+            eprintln!(
+                "usbtrace pc={pc:#x} ic={} sp={sp:#x} top={:x},{:x},{:x} d0={:#x} a0={:#x}",
+                self.cpu.icount,
+                top(0),
+                top(1),
+                top(2),
+                self.cpu.d[0],
+                self.cpu.a[0]
+            );
+        }
+        if pc == self.midi.usb.tx_fn {
+            let sp = self.cpu.a[7];
+            let len = self.bus.board.read32(sp.wrapping_add(4)).unwrap_or(0);
+            let buf = self.bus.board.read32(sp.wrapping_add(8)).unwrap_or(0);
+            if (1..=0x10000).contains(&len)
+                && let Ok(bytes) = self.peek_bytes(buf, len as usize)
+            {
+                if self.midi.usb.trace {
+                    let ret = self.bus.board.read32(sp).unwrap_or(0);
+                    eprintln!(
+                        "usbtrace tx ic={} len={len} hash={:016x} ret={ret:#x} sp={sp:#x}",
+                        self.cpu.icount,
+                        crate::midi::trace_hash(&bytes)
+                    );
+                }
+                self.midi.usb.out.extend_from_slice(&bytes);
+            }
         }
     }
 
@@ -5851,6 +5901,54 @@ mod tests {
         assert_eq!(traced.unknown_touches.len(), plain.unknown_touches.len());
         assert!(!traced.accesses.is_empty());
         assert!(plain.accesses.is_empty());
+    }
+
+    /// A send is recorded when its first instruction executes, not when the PC arrives: an interrupt that takes the step over (the peer's
+    /// frame, the USB hand-over) makes the task resume at the same PC later, and the arrival used to be seen twice (finding 131).
+    #[test]
+    fn a_transmit_call_that_an_interrupt_preempts_is_recorded_once() {
+        // a device with a peer CPU: its constructor sets the clock rate the other tests of that device read
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        let base = 0x47e8_b000u32;
+        emu.bus.board.map_zeroed_ram_page(base & !0xf_ffff).unwrap();
+        let mut put = |at: u32, word: u32| emu.bus.board.write_guest(at, 4, word).unwrap();
+        put(base, 0x60fe_60fe); // the transmit function: bra.s *
+        put(base + 0x100, 0xf07d_f700); // the message
+        put(base + 0x800, base + 0x10); // the call frame: return address, length, buffer
+        put(base + 0x804, 3);
+        put(base + 0x808, base + 0x100);
+        put(base + 0x400 + 4 * u32::from(crate::midi::RX_VECTOR), base);
+        emu.cpu.ctrl.vbr = base + 0x400;
+        emu.midi.usb.enabled = true;
+        emu.midi.usb.tx_fn = base;
+        emu.midi.usb.rx_cb = base;
+        emu.midi.usb.ret_pc = base + 0x10;
+        emu.midi
+            .usb
+            .queue
+            .push_back(crate::midi::UsbItem::Midi(vec![0xf0, 0xf7]));
+        emu.rebuild_watch();
+        let arrive = |emu: &mut Emulator| {
+            emu.cpu.pc = base;
+            emu.cpu.sr = 0x2000;
+            emu.cpu.a[7] = base + 0x800;
+        };
+        arrive(&mut emu);
+        emu.step_once();
+        assert!(
+            emu.midi.usb.active.is_some(),
+            "the USB interrupt took the step"
+        );
+        assert!(emu.take_usb_out().is_empty(), "nothing executed yet");
+        // the task resumes at the same PC
+        emu.midi.usb.active = None;
+        arrive(&mut emu);
+        emu.step_once();
+        assert_eq!(emu.error, None);
+        assert_eq!(emu.take_usb_out(), [0xf0, 0x7d, 0xf7]);
     }
 
     #[test]

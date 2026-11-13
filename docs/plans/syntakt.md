@@ -122,7 +122,7 @@ read over USB MIDI.
       the 9 shared ColdFire rules that miss list their devices; the two regions are kept by hand in the device file.
 - [x] Workbench runtime path on st: `[patch_sets] emulator` (core/runtime), snapshot rate recorded per device, no boot cache with a running peer;
       runtime patched, main screen, INFO, debug module upload and log with the responder ([finding 131](../findings/131-syntakt-runtime-in-the-workbench.md)).
-- [ ] Duplicate replies with the peer program running (finding 131 "Open").
+- [x] Duplicate replies with the peer program running: a capture artifact, fixed (finding 131 "Duplicate replies").
 - [ ] Debug module on st: `ports`/`[targets]` add st-1.42; PEEK ranges and `sound_words` from the device file;
       `dk_time_blocks` has no SHARC block source (report unsupported); Sound layout and machine ids unchecked.
 - [ ] Runtime services without a Syntakt equivalent return "unsupported" (e.g. `dk_debug_track_type` -> -2, which

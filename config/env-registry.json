@@ -441,6 +441,14 @@
    "owner": "rust:packages/patchkit",
    "purpose": "Path to the stock DT2 image for the storage fault ISR patchkit Rust test."
   },
+  "DIGI_USB_TRACE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Any non-empty value except 0: log every USB MIDI hand-over to the guest callback and every call of its transmit function (instruction count, length, payload hash, caller) to stderr"
+  },
+  "DIGI_USB_TRACE_PCS": {
+   "owner": "rust:packages/emulator",
+   "purpose": "With DIGI_USB_TRACE: comma-separated hex addresses whose execution the trace also logs (instruction count, SP, stack top, d0, a0)"
+  },
   "DIGI_WRITE_WATCH": {
    "owner": "rust:packages/emulator",
    "purpose": "Hex guest ranges LO-HI or LO+LEN; logs every CPU and DMA write into them (write-watch instrument)."

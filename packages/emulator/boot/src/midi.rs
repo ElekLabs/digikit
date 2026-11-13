@@ -35,6 +35,10 @@ pub const QUEUE_MAX: usize = 1 << 20;
 #[derive(Default)]
 pub(crate) struct UsbPort {
     pub enabled: bool,
+    /// `DIGI_USB_TRACE`: log every hand-over to the callback and every call of the transmit function (instruction count, length, hash, caller) to stderr.
+    pub trace: bool,
+    /// `DIGI_USB_TRACE_PCS`: more addresses whose execution the trace logs (instruction count, SP, the stack top, d0, a0).
+    pub trace_pcs: Vec<u32>,
     pub rx_cb: u32,
     pub tx_fn: u32,
     /// An `rte` the callback returns to (resolved from the MIDI receive ISR).
@@ -58,6 +62,13 @@ pub(crate) struct UsbPort {
     pub bulk_out_zlps: u64,
     /// The controller's system error: set when a dTD made the DMA fault; no USB traffic after it, as on hardware, where only a module reset recovers.
     pub sys_error: Option<String>,
+}
+
+/// FNV-1a over `bytes`: the payload id in the USB trace lines (`DIGI_USB_TRACE`).
+pub(crate) fn trace_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+    })
 }
 
 /// One delivery to the guest at interrupt level, in order (`midi.usb.in` and `usb.bulk.in` share the queue, the period and the interrupt).
