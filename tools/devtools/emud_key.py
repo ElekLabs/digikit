@@ -28,6 +28,8 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from tools.firmware import device as device_files
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 # git pathspecs (glob magic) of the repository files cargo reads for digi-emud with coupled-audio.
@@ -246,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("key", "audit"):
         sp = sub.add_parser(name)
-        sp.add_argument("--device", required=True, choices=("dt2", "dn2"))
+        sp.add_argument("--device", required=True, choices=device_files.shorts())
     sub.choices["audit"].add_argument("--depfile", type=Path, required=True)
     sub.choices["audit"].add_argument(
         "--target-dir",

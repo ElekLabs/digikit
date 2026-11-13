@@ -19,7 +19,7 @@ export interface CardFolder {
   /** The card has writes the folder does not hold yet. */
   behind?: boolean;
   error: string | null;
-  /** The loaded device (`dt2`, `dn2`): the folder belongs to it. */
+  /** The loaded device id: the folder belongs to it. */
   device?: string;
   /** `plus_drive/<device>/`. */
   default_folder?: string | null;

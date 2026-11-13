@@ -36,7 +36,7 @@ export interface FirmwareEnv {
    * the flashed device after its flash and in the emulator after it loads the patched image. The site leaves it out (it has no module install).
    */
   defaultModules?: {
-    /** The list for the device id (`dt2`, `dn2`); the data is the device file's. */
+    /** The list for the device id; the data is the device file's. */
     entries(device: string): DefaultModuleEntry[];
     /** Install and enable `ids` (all ticked) on the selected MIDI device or on the emulator. Throws `DefaultModuleError` for the module that failed. */
     install(

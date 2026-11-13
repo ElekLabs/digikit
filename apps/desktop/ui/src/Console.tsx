@@ -5,7 +5,9 @@ import { setBrowseDevice } from '@web/transfer/transfer-state';
 import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
-import { panels } from '@web/data/faceplates';
+import { defaultFaceplate, panels } from '@web/data/faceplates';
+import { registry, type DeviceId } from '@web/data/device-profiles';
+import { deviceOfImage } from '@web/patch/identify';
 import {
   nativeRuntime,
   type EmulatorRuntime,
@@ -154,8 +156,8 @@ export default function Console() {
   const [opened, setOpened] = createSignal('');
   /** A firmware is starting: the old device information is gone until its first status. */
   const [booting, setBooting] = createSignal<Booting>();
-  /** The last load failed: its file, so the faceplate is the file's device, or none when the name does not tell. */
-  /** The device that was showing: a file whose name does not tell its device keeps that faceplate. */
+  /** The last load failed: its file, so the faceplate is the image's device, or none when the image does not tell. */
+  /** The device that was showing: an image of no known device keeps that faceplate. */
   const [lastDevice, setLastDevice] = createSignal<string>();
   const [failed, setFailed] = createSignal<Booting>();
   const [watching, setWatching] = createSignal(true);
@@ -191,7 +193,7 @@ export default function Console() {
   const panelsActive = createMemo(() => !!status());
   const device = () => {
     const d = status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
-    return d === 'dt2' || d === 'dn2' ? d : 'dn2';
+    return d !== undefined && d in panels ? d : defaultFaceplate;
   };
   const panel = () => panels[device()];
 
@@ -221,8 +223,10 @@ export default function Console() {
     }
     live?.show(event.snapshot);
     setStatus(event.snapshot.status);
-    if (target().kind === 'emulator' && lastDevice() !== event.snapshot.status.device)
-      setBrowseDevice(event.snapshot.status.device === 'dn2' ? 'dn2' : 'dt2');
+    const running = event.snapshot.status.device;
+    // the module browser follows the emulator's device when it is one modules are built for
+    if (target().kind === 'emulator' && lastDevice() !== running && registry.runtimeIds.includes(running))
+      setBrowseDevice(running);
     setLastDevice(event.snapshot.status.device);
     startDefaultsAtLaunch();
     setError(event.snapshot.status.error ?? '');
@@ -286,7 +290,11 @@ export default function Console() {
     bumpCardRefresh();
   };
   /** Start a new firmware session with `start` (every load goes through the controller's `firmware.load`). */
-  const boot = async (start: (r: EmulatorRuntime) => Promise<RuntimeSnapshot>, name: string) => {
+  const boot = async (
+    start: (r: EmulatorRuntime) => Promise<RuntimeSnapshot>,
+    name: string,
+    imageDevice?: DeviceId,
+  ) => {
     // Defaults may be restarting the runtime. Keep the current UI alive until that transaction is finished.
     await defaultsWork;
     const r = runtime();
@@ -298,8 +306,8 @@ export default function Console() {
     // a boot or reset of the emulator: the indicator asks again
     if (target().kind === 'emulator') noteConnection({ type: 'target' });
     setReloadNote('');
-    setBooting(startBoot(name));
-    logInput({ source: 'firmware', level: 'info', text: bootingScreen(startBoot(name)) });
+    setBooting(startBoot(name, imageDevice));
+    logInput({ source: 'firmware', level: 'info', text: bootingScreen(startBoot(name, imageDevice)) });
     setFailed(undefined);
     health = healthStart();
     const began = performance.now();
@@ -331,7 +339,7 @@ export default function Console() {
       return true;
     } catch (e) {
       setError(message(e));
-      setFailed(startBoot(name));
+      setFailed(startBoot(name, imageDevice));
       setReloadNote(loadFailure(name, message(e)));
       logInput(failureEntry('firmware', `loading ${name}`, message(e)));
       if (status()) await refreshInfo(); // A refused load can restore the previous live session.
@@ -340,7 +348,8 @@ export default function Console() {
       setBooting(undefined);
     }
   };
-  const load = (bytes: Uint8Array, name: string) => boot((r) => r.load(bytes, name, { runtime: bootRuntime() }), name);
+  const load = async (bytes: Uint8Array, name: string) =>
+    boot((r) => r.load(bytes, name, { runtime: bootRuntime() }), name, await deviceOfImage(bytes));
   /** Boot the startup file again: the controller reads it from its path. */
   const reload = async (why: string) => {
     const path = source()?.path;
@@ -655,7 +664,7 @@ export default function Console() {
       <Show when={card()}>
         <p class="note">{cardLine(card())}</p>
       </Show>
-      <Show when={device() === 'dt2' && runtime()?.cards}>
+      <Show when={registry.get(device()).capabilities.card === 'path-fs' && runtime()?.cards}>
         <div class="acts">
           <input
             ref={(el) => {

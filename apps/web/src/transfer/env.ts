@@ -16,7 +16,7 @@ export interface LibraryFile {
   size: number;
 }
 
-/** The modules the app can offer for install, per device id (`dt2`, `dn2`). */
+/** The modules the app can offer for install, per device id. */
 export interface TransferLibrary {
   /** The .dkm files of the device; read again at each call (a rebuild shows up at the next read). */
   scan(device: string): Promise<LibraryFile[]>;
@@ -112,7 +112,7 @@ export interface TransferEnv {
   library: TransferLibrary;
   /** The bytes of patchkit.wasm (its `pk_needs` tells what a .dkm takes of the device). */
   patchkitWasm(): Promise<ArrayBuffer>;
-  /** The name of the device with this id (`dt2`: "Digitakt II"). */
+  /** The name of the device with this id (`[device] name`). */
   deviceName(device: string): Promise<string>;
   targets: TransferTargets;
   /** The bulk link, where the app can open one. */

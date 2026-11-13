@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
 from tools.firmware import config  # noqa: E402
-from tools.patchkit import modroots, patchkit  # noqa: E402
+from tools.patchkit import modroots, patchkit, pk_device  # noqa: E402
 
 # kind -> (module manifest relative to the copied root, old text, new text); the old text must occur exactly once
 BREAKS = {
@@ -48,10 +48,7 @@ BREAKS = {
 }
 # kinds whose edit is in a C source: the module's objects are rebuilt for the copied root (the cache is keyed by the source hash)
 REBUILD = {"rows": "tests/fixtures/modules/patched-pluck"}
-FIRMWARE = {
-    ("dt2", "1.17"): "Digitakt_II_OS1.17.syx",
-    ("dn2", "1.12"): "Digitone_II_OS1.12.syx",
-}
+FIRMWARE = pk_device.port_firmware()
 
 
 def build(kind: str, mods: str, device: str, fw: str, out: Path) -> Path:

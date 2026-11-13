@@ -5,6 +5,7 @@
 import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
+import type { DeviceId } from '@web/data/device-profiles';
 import type { DkSession, RemoteState } from '@digi/dk-session';
 import {
   deviceOfPort,
@@ -39,12 +40,12 @@ const HIDDEN_MS = 500;
 // Keys and knobs are LivePanel's (the knobs turn by drag and wheel), so the page has no extra buttons for them.
 const HINT = 'Click keys; drag or scroll knobs. Shift: ×10.';
 
-export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JSX.Element {
+export default function RemotePage(props: { fallbackDevice: DeviceId }): JSX.Element {
   const [state, setState] = createSignal<RemoteState>();
   const [stateError, setStateError] = createSignal<unknown>();
   const [screenError, setScreenError] = createSignal('');
   // oxlint-disable-next-line solid/reactivity -- the emulator's device is only the first guess; the target's INFO names the device
-  const [device, setDevice] = createSignal<'dt2' | 'dn2'>(props.fallbackDevice);
+  const [device, setDevice] = createSignal<DeviceId>(props.fallbackDevice);
   let live: LivePanelApi | undefined;
   let alive = true;
   const panel = () => panels[device()];
@@ -76,7 +77,7 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
   const stateLoop = async () => {
     // set when the device answered E_PROTO: from then on the MODULES list says when digikit/remote is there (no failing request every poll)
     let missing = false;
-    // INFO only names the device (dt2 or dn2) for the faceplate: ask when the target changed, after an error and now and then, not every poll
+    // INFO only names the device for the faceplate: ask when the target changed, after an error and now and then, not every poll
     let infoKey = '';
     let infoAt: number | undefined;
     while (alive) {
@@ -94,7 +95,7 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
           infoKey = key;
           infoAt = Date.now();
           const d = deviceOfPort(info.port);
-          if (d && d !== device()) setDevice(d);
+          if (d && d !== device() && d in panels) setDevice(d);
         }
         const loaded = missing ? await s.modules().catch(() => undefined) : undefined;
         if (remoteStateWanted(missing, loaded)) {

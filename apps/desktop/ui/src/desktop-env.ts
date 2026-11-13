@@ -8,6 +8,7 @@ import { MODULE_FILES } from '../../../web/src/transfer/module-files.generated';
 import { target, targetLabel, type Target } from '../../../web/src/transfer/target';
 import { sampleLink, setSampleLink } from '../../../web/src/transfer/transfer-state';
 import { failureLine } from '../../../web/src/transfer/wait-core';
+import { runtimeDeviceIds } from '../../../web/src/data/device-profiles';
 import './desktop-firmware';
 import { bumpCardRefresh } from './card-state';
 import { reloadWithRuntime } from './emulator-actions';
@@ -64,7 +65,7 @@ const samples: SamplesSlot = {
 const emulatorBulk = EmuBulkLink.opener(emuCall);
 
 export const desktopEnv: TransferEnv = {
-  libraryDevices: ['dt2', 'dn2'],
+  libraryDevices: [...runtimeDeviceIds],
   library: {
     scan: (device) => invoke<{ path: string; size: number }[]>('lib_scan', { device }),
     read: async (device, path) => new Uint8Array(await invoke<ArrayBuffer>('lib_read', { device, path })),

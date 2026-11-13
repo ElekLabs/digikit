@@ -76,7 +76,7 @@ from tools import python_env  # noqa: E402
 from tools.control.digi_client import Emu, EmuError  # noqa: E402
 from tools.emulator import card_check  # noqa: E402
 from tools.firmware import config  # noqa: E402
-from tools.patchkit import modroots, pk_dsp_budget  # noqa: E402
+from tools.patchkit import modroots, pk_device, pk_dsp_budget  # noqa: E402
 
 MS = 132_000  # ColdFire instructions per emulated millisecond (the oracle clock)
 OUT = ROOT / "out" / "runs" / "patchkit"
@@ -129,20 +129,11 @@ def default_jobs(n: int) -> int:
     return max(1, min(n, max(int(free // 2), floor), MAX_JOBS))
 
 
-# firmware: (device, version) -> base .syx and the ready directory (override: DIGI_PK_READY_<DEV>_<VER>)
+# firmware: (device, version) -> base .syx and the ready directory (override: DIGI_PK_READY_<DEV>_<VER>); the firmwares that
+# have a port in devices/*.toml
 FIRMWARE: dict[tuple[str, str], dict[str, str]] = {
-    ("dt2", "1.17"): {
-        "syx": "Digitakt_II_OS1.17.syx",
-        "ready": "out/ready-pk-dt2-117",
-    },
-    ("dn2", "1.11"): {
-        "syx": "Digitone_II_OS1.11.syx",
-        "ready": "out/ready-dn2-111",
-    },
-    ("dn2", "1.12"): {
-        "syx": "Digitone_II_OS1.12.syx",
-        "ready": "out/ready-fix-dn2-112",
-    },
+    (short, version): {"syx": syx, "ready": pk_device.ready_dir(short, version)}
+    for (short, version), syx in pk_device.port_firmware().items()
 }
 
 BUTTONS: dict[str, int] = {
@@ -801,7 +792,7 @@ class Session:
         emu.subscribe()
         if self.card_override:
             self.card = self.card_override
-        elif cell.device == "dt2":
+        elif pk_device.load(cell.device).get("acceptance", {}).get("sample_card"):
             samples = OUT / "samples"
             card_check.make_samples(samples)
             with boot_lock(self.cache_dir, Path(f"card-{self.cell.device}")):
@@ -1294,7 +1285,7 @@ def module_tests(
         for f in sorted((modroots.module_dir(mod) / "tests").glob("*.toml")):
             data = tomllib.loads(f.read_text())
             t = data.get("test", {})
-            if device not in t.get("devices", ["dt2", "dn2"]):
+            if device not in t.get("devices", list(pk_device.acceptance_firmware())):
                 continue
             if quick_only and not t.get("quick", True):
                 continue

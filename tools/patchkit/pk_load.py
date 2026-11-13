@@ -15,6 +15,7 @@ import os
 import sys
 from typing import Any
 
+from tools.firmware import device as device_files
 from tools.patchkit import pk_harness as h
 
 
@@ -47,7 +48,7 @@ def measure(cell: h.Cell, seconds: float) -> dict[str, Any]:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("device", choices=("dt2", "dn2"))
+    ap.add_argument("device", choices=device_files.shorts())
     ap.add_argument("--modules", default="")
     ap.add_argument("--firmware", help="default: 1.17 (dt2), 1.12 (dn2)")
     ap.add_argument("--seconds", type=float, default=4.0)

@@ -557,6 +557,8 @@ SC_ALLOWED_PREFIXES = (
 )
 # Runtime integration acceptance uses shipped modules as fixtures. Only this test
 # and the runtimeAcceptance metadata may name them; runtime implementation may not.
+# The device-literal baseline lists file paths, among them module directories.
+SC_PATH_LIST = "tools/nx/device-literals.baseline.json"
 SC_RUNTIME_TEST = (
     "modules/core/runtime/tests/capacity/inferred/inferred-needs.device.test.ts"
 )
@@ -621,7 +623,7 @@ def sc_hits(root: Path, mods: list[Module]) -> list[tuple[str, int, Module, str]
         if (
             f.endswith(".md")
             or f.startswith(SC_ALLOWED_PREFIXES)
-            or f == SC_RUNTIME_TEST
+            or f in (SC_RUNTIME_TEST, SC_PATH_LIST)
         ):
             continue
         data = (root / f).read_bytes()

@@ -60,9 +60,13 @@ it exactly).
 """
 import hashlib
 import hmac
+import pathlib
 import struct
 
+from tools.firmware import device as device_files
 from tools.firmware.container import decode_syx
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
 
 DEVICES = {
     'dt2': dict(string=b'Master Overdrive',
@@ -75,7 +79,12 @@ DEVICES = {
                     '07ff6fa0f312d2393cb2f5849f9670e5')),
 }
 
-DEVICE_BY_ID = {0x14: 'dt2', 0x15: 'dn2'}
+# syx_id -> short name, from devices/*.toml; a device with no seal key in DEVICES cannot be sealed here
+DEVICE_BY_ID = {
+    d.syx_id: d.short
+    for d in device_files.load_all(str(REPO / 'devices'))
+    if d.syx_id is not None
+}
 
 
 def derive_key(string, const):

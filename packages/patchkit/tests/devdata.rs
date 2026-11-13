@@ -268,7 +268,7 @@ fn the_code_knows_the_devices_of_the_device_files() {
     for (i, a) in all.iter().enumerate() {
         for b in &all[i + 1..] {
             assert_ne!((a.syx_id, a.digikit_id), (b.syx_id, b.digikit_id));
-            assert_ne!(a.digikit_id, b.digikit_id);
+            assert!(a.digikit_id.is_none() || a.digikit_id != b.digikit_id);
         }
     }
 }
@@ -718,4 +718,13 @@ fn the_sample_pool_facts_are_checked() {
         let e = Facts::from_texts([a.as_str(), b.as_str()]).unwrap_err().0;
         assert!(e.contains("sample_pool"), "{what}: {e}");
     }
+}
+
+#[test]
+fn only_runtime_targets_enter_the_shared_constants() {
+    // an identity-only file (no [digikit]) is skipped; a [digikit] without its board tables is an error
+    let ident = "[device]\nname = \"X\"\nshort = \"x\"\n";
+    assert!(Facts::from_texts([ident]).is_ok());
+    let half = "[device]\nname = \"X\"\nshort = \"x\"\n[digikit]\nid = 9\nname = \"x\"\n";
+    assert!(Facts::from_texts([half]).is_err());
 }

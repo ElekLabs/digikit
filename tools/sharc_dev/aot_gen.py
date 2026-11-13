@@ -36,6 +36,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools import python_env  # noqa: E402
 from tools.emulator import digi_env, ready  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.sharc_dev import sharc_dn2_aot  # noqa: E402
 
 MODEL_FLAGS = ["--model-safe", "--explicit-memory-model", "0", "--chain"]
@@ -73,9 +74,14 @@ def sharc_db(syx: pathlib.Path, image: str) -> None:
     )  # fmt: skip
 
 
+def _has_path_fs(short: str) -> bool:
+    """True when the device keeps its samples on a +Drive card image (`[capabilities] card = "path-fs"`)."""
+    return device_files.by_short(short).capabilities.get("card") == "path-fs"
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("device", choices=["dn2", "dt2"])
+    p.add_argument("device", choices=device_files.dsp_shorts())
     p.add_argument(
         "--card-image", type=pathlib.Path, help="the +Drive image (DT2 only, required)"
     )
@@ -88,8 +94,10 @@ def main(argv: list[str] | None = None) -> int:
         "previous cycle's blocks on (that run records the block transitions)",
     )
     a = p.parse_args(argv)
-    if (a.device == "dt2") != (a.card_image is not None):
-        p.error("--card-image is required for dt2 and not taken for dn2")
+    if _has_path_fs(a.device) != (a.card_image is not None):
+        p.error(
+            "--card-image is required for a device with a path filesystem card and not taken for the others"
+        )
     cfg = ready.DEVICES[a.device]
     syx = digi_env.firmware_for(a.device)
     out = ROOT / "out" / "native" / f"{a.device}-audio"
