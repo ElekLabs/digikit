@@ -70,9 +70,15 @@ In the emulator, the daemon can read it directly (`mem.cf.peek`, `dsp.peek`).
 
 ### 3.3 sharcdb tables for our own DSP code
 
-Run the sharcdb builder on each module's DSP section, with the `.dko` symbols as names. A module then gets blocks, loops, register use, memory
-accesses and a call graph from the same tables we use for the firmware. Uses: static loop cost, the DSP rule check
-([sdk.md](sdk.md) section 9), and naming in profiles. First test: does the builder accept a relocatable L2 section? [O]
+Module analysis is the Rust crate `packages/dksharc` (README there). The workbench uses it through wasm and never runs Python, so the
+module DSP analysis does not go through the Python sharcdb builder. The crate reads a module's DKDS section and its DSP `.dko` and
+decodes the text with the decoder of `sharc_rt`. It gives functions (named from the `.dko`), basic blocks with delay slots, DO loops (literal
+or register count, nesting), calls inside the module, import calls resolved through relocations (`import:<symbol>`) and the memory
+operands of each instruction at form level. A decode that is not confident is reported and never guessed. On the pluck module for the
+Digitone II it gives 306 instructions, 3 functions, 4 DO loops (one literal count of 32, three register counts) and 4 import calls; the Python
+module mode of sharcdb, an oracle only and not merged, gave the same numbers. Slice 2 adds register def/use per instruction, from a table
+generated from `tools/sharc_dev/sharc_core`, so the instruction semantics stay in one place. Uses: static loop cost, the DSP rule check
+([sdk.md](sdk.md) section 9), and naming in profiles.
 
 ### 3.4 Export
 
@@ -276,7 +282,7 @@ Item numbers are ids, not an order. The order lives in [sdk-runtime-roadmap.md](
 | --- | --- | --- | --- | --- |
 | 1 | Address map v1, emulator only: `.dko` symbols kept, map export, names in emulator tools and crash records. **Done** (docs/ADDRMAP.md) | B | 1-2 days | Nothing. Runs in parallel with runtime-and-services item 4 |
 | 2 | Shared Rust library and `wb:cli` profile and addrmap commands with JSON output | B | 1-2 days | 1 |
-| 3 | sharcdb tables for module DSP sections | B | 1 day | 1; the [O] in 3.3 |
+| 3 | Module DSP analysis: the Rust crate `dksharc` (slice 1 done; slice 2 register def/use) | B | 1 day | 1 |
 | 4 | Per-module cost, machine budget check, fast-tier refusals per module | B | 1-2 days | 1, 3 |
 | 5 | Host profiles named from sharcdb, first ranking | A | 1-2 days | Nothing; in a lane |
 | 6 | Workbench: names in the Log pane, first utilisation pane | B | 2-3 days | 2 |
@@ -289,7 +295,7 @@ Before each item over a day: state payoff and confidence, and stop when they are
 
 ## 14. Open items
 
-- [O] Does the sharcdb builder accept a relocatable module DSP section?
+- Answered by `packages/dksharc` (3.3): a module DSP section is analysed in Rust. The DSP load address per run is still open (3.2).
 - Answered by item 1 (emulator): load addresses come from a PEEK of the runtime's module table `DKRT_STATE` (`mem.cf.peek`); no event field. On a device the same table is read by the debug module's PEEK (`dklog crash --image`); not run on hardware [O].
 - [O] Host transport for the DSP stats window: `dkrt_peek_range` or a new command?
 - [O] The device transport (`dklog`, `dkupload`) has not run on hardware.
