@@ -13,6 +13,7 @@ use periph::{
     esdhc::{self, DmaCompletion, Esdhc, RegisterPolicy},
     gpio::{GPIO_BASE, PPDSDR_C, SdGate},
     intc::BASES as INTC_BASES,
+    peer::{self, MailboxPeer},
     pit::BASES as PIT_BASES,
     regfile::SLOT_SIZE,
     spilink::SerqEffect,
@@ -233,6 +234,9 @@ pub struct Board {
     /// DSPI1 RX completion (eDMA channel 14) waiting for the host to raise
     /// its interrupt. Not part of the snapshot: `snap_save` refuses while set.
     dspi1_irq: bool,
+    /// The second CPU's mailbox (`enable_peer`): eDMA channel 29 is its image stream, a GPIO port A pin its doorbell. `None` on a
+    /// board without a peer.
+    peer: Option<MailboxPeer>,
 }
 impl Board {
     /// Enable the recovered SSI/eDMA clock only for bounded diagnostics.
@@ -476,7 +480,116 @@ impl Board {
             midi_tx37: edma::TxChannel::new(MIDI_TX_CHAN, u16::from(MIDI_TX_VECTOR)),
             midi_tx37_started: 0,
             dspi1_irq: false,
+            peer: None,
         }
+    }
+
+    /// Gives the board a mailbox peer (`[emulator] peer`): maps the FlexBus window it shares with MAIN (plain RAM, 1 MiB page; the window is the
+    /// first `peer::WINDOW_BYTES`), takes over eDMA channel 29 as the peer's image stream and watches the GPIO doorbell.
+    pub fn enable_peer(&mut self) -> Result<(), BusError> {
+        self.map_zeroed_ram_page(peer::WINDOW_BASE)?;
+        self.peer = Some(MailboxPeer::new());
+        Ok(())
+    }
+
+    pub fn peer(&self) -> Option<&MailboxPeer> {
+        self.peer.as_ref()
+    }
+
+    pub fn peer_mut(&mut self) -> Option<&mut MailboxPeer> {
+        self.peer.as_mut()
+    }
+
+    /// Stores `bytes` at `offset` in the peer window (host side; no MMIO, no access record).
+    pub fn peer_window_store(&mut self, offset: u32, bytes: &[u8]) {
+        for (i, byte) in bytes.iter().enumerate() {
+            let wrote = self.ram_write(peer::WINDOW_BASE + offset + i as u32, 1, u32::from(*byte));
+            debug_assert!(wrote, "peer window page is mapped by enable_peer");
+        }
+    }
+
+    /// eDMA channel 29 armed with a peer on the board: the peer clocks the bytes out of the DSPI2 slave. Runs major loops now, feeding the
+    /// peer's frame parser, until a loop with DREQ is done or (free-running loop) the second image is complete. A major loop with INT_MAJOR
+    /// tells the peer to raise the channel interrupt. At most `LOOPS` major loops per arm.
+    fn peer_stream_run(&mut self) -> Result<(), BoardWriteError> {
+        const LOOPS: usize = 64;
+        let now = self.clock;
+        if let Some(peer) = self.peer.as_mut() {
+            peer.begin_transfer();
+        }
+        for _ in 0..LOOPS {
+            let (mask, tcd) = {
+                let view = edma::TcdView::new(&mut self.dma.edma_regs, peer::STREAM_CHAN);
+                (view.smod_mask(), view.snapshot())
+            };
+            if tcd.citer == 0 {
+                break;
+            }
+            let elem = 1usize << (tcd.attr & 7);
+            let nbytes = tcd.nbytes as usize;
+            if nbytes == 0 || !nbytes.is_multiple_of(elem) {
+                return Err(BoardWriteError::DspiDma {
+                    address: tcd.saddr,
+                    bytes: nbytes,
+                });
+            }
+            let free_running = tcd.csr & edma::CSR_D_REQ == 0;
+            let base = tcd.saddr & !mask;
+            let mut addr = tcd.saddr;
+            let mut citer = tcd.citer;
+            let mut booted = false;
+            let mut minor = Vec::with_capacity(nbytes);
+            while citer > 0 {
+                minor.clear();
+                for _ in 0..nbytes / elem {
+                    for offset in 0..elem {
+                        let at = addr.wrapping_add(offset as u32);
+                        let byte = if Self::owned_mmio(at) {
+                            None
+                        } else {
+                            self.ram_read(at, 1)
+                        };
+                        minor.push(byte.ok_or(BoardWriteError::DspiDma {
+                            address: at,
+                            bytes: nbytes,
+                        })? as u8);
+                    }
+                    addr = addr.wrapping_add_signed(i32::from(tcd.soff));
+                    if mask != 0 {
+                        addr = base | (addr & mask);
+                    }
+                }
+                citer -= 1;
+                booted = self
+                    .peer
+                    .as_mut()
+                    .is_some_and(|peer| peer.consume(&minor, now));
+                if free_running && booted {
+                    break;
+                }
+            }
+            let view_base = edma::tcd_offset(peer::STREAM_CHAN);
+            let regs = &mut self.dma.edma_regs;
+            if citer == 0 {
+                addr = addr.wrapping_add_signed(tcd.slast);
+                if mask != 0 {
+                    addr = base | (addr & mask);
+                }
+                regs.set_u32_at(view_base + edma::SADDR, addr);
+                regs.set_u16_at(view_base + edma::CITER, tcd.biter);
+                regs.set_u16_at(view_base + edma::CSR, tcd.csr | edma::CSR_DONE);
+                if let Some(peer) = self.peer.as_mut() {
+                    peer.end_major_loop(now, tcd.csr & edma::CSR_INT_MAJOR != 0);
+                }
+            } else {
+                regs.set_u32_at(view_base + edma::SADDR, addr);
+                regs.set_u16_at(view_base + edma::CITER, citer);
+            }
+            if !free_running || booted {
+                break;
+            }
+        }
+        Ok(())
     }
 
     /// Opt-in machine snapshot: RAM pages (zero 4 KiB blocks elided), DMA/DSPI/
@@ -528,6 +641,10 @@ impl Board {
             gate.snap_save(w);
         }
         w.bytes(&self.uart_tx);
+        if let Some(peer) = &self.peer {
+            w.tag("PEER");
+            peer.snap_save(w);
+        }
         Ok(())
     }
 
@@ -575,6 +692,10 @@ impl Board {
             _ => return Err("snapshot SD gate presence differs".into()),
         }
         self.uart_tx = r.bytes()?.to_vec();
+        if let Some(peer) = self.peer.as_mut() {
+            r.tag("PEER")?;
+            peer.snap_load(r)?;
+        }
         Ok(())
     }
 
@@ -1833,6 +1954,15 @@ impl Board {
             {
                 return Ok(());
             }
+            // The peer's image stream: the DSPI2 slave channel is not the master link of the SHARC path.
+            if self.peer.is_some()
+                && addr == edma::SERQ
+                && size == 1
+                && value as u8 & 0xc0 == 0
+                && (value as u8 & 0x3f) as usize == peer::STREAM_CHAN
+            {
+                return self.peer_stream_run();
+            }
             let tx35_citer =
                 edma::TcdView::new(&mut self.dma.edma_regs, self.dma.tx35.chan).citer();
             let is_tx35_serq = addr == edma::SERQ
@@ -1957,6 +2087,13 @@ impl Board {
                 .ok_or(BoardWriteError::Bus(Self::bus_error(addr, true)));
             if wrote.is_ok() && addr == RCM_RCR && size == 1 && value & 0x80 != 0 {
                 self.soft_reset = true;
+            }
+            if wrote.is_ok()
+                && size == 1
+                && matches!(addr, peer::PPDSDR_A | peer::PCLRR_A)
+                && let Some(peer) = self.peer.as_mut()
+            {
+                peer.gpio_write(addr, value as u8, self.clock);
             }
             if wrote.is_ok()
                 && addr >= GPIO_BASE

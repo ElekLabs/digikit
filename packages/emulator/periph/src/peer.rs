@@ -1,0 +1,332 @@
+//! The second CPU's mailbox, answered without a second CPU.
+//!
+//! A two-CPU board (finding 128): MAIN streams the peer's boot images through DSPI2 (slave, eDMA channel 29) and talks to it through a
+//! 128 KB FlexBus window, a GPIO doorbell (port A bit 4) and EPORT IRQ4. `MailboxPeer` is the peer's side as data transport only: it
+//! consumes the image bytes, counts and keeps them, and answers every doorbell edge with one IRQ4 after a fixed delay. It runs no peer
+//! code and models no FPGA logic. The reply sequence is MAIN's own state machine, read from the firmware (finding 70 "Peer link"):
+//!
+//! 1. The first transfer on channel 29 is the stage-1 loader, raw after a run of 0xFF bytes, with an interrupt on its major loop: eDMA
+//!    interrupt, vector 149.
+//! 2. The second transfer is `0xAA | length | payload` (the sound-engine program, which the stage-1 loader reads): when its frame is
+//!    complete the peer has booted, IRQ4 #1.
+//! 3. Each doorbell edge gets one IRQ4. Before IRQ4 #2 and #3 the window holds the hello block (`HO`, `HA`, 0xA5A5).
+//!
+//! The model is pure: the board feeds it events with the instruction count and takes due interrupts from it.
+
+use std::collections::VecDeque;
+
+use crate::snap::{Reader, Result as SnapResult, Writer};
+
+/// MAIN's FlexBus window onto the peer (CS0): base and size.
+pub const WINDOW_BASE: u32 = 0x1000_0000;
+pub const WINDOW_BYTES: usize = 0x2_0000;
+/// The eDMA channel that carries the images (DSPI2 slave transmit).
+pub const STREAM_CHAN: usize = 29;
+/// GPIO port A pin-data/set and clear registers, and the doorbell pin.
+pub const PPDSDR_A: u32 = 0xEC09_4018;
+pub const PCLRR_A: u32 = 0xEC09_4024;
+const DOORBELL_BIT: u8 = 0x10;
+/// Instructions between an event and the interrupt that answers it.
+pub const REPLY_DELAY: u64 = 50_000;
+/// The hello block MAIN checks before IRQ4 #2 and samples before IRQ4 #3: +0 `HO`, +2 `HA`, +4 0xA5A5.
+pub const HELLO: [u8; 6] = [0x48, 0x4f, 0x48, 0x41, 0xa5, 0xa5];
+/// IRQ4 numbers (1-based) that need the hello block in the window.
+const HELLO_FROM: u64 = 2;
+const HELLO_TO: u64 = 3;
+/// 0xFF bytes in front of the stage-1 loader in MAIN's stream buffer.
+const LEADER: usize = 8;
+/// A frame longer than this is not a boot image (MAIN's own limit for the sound engine is 0x5fffb).
+const MAX_IMAGE: usize = 0x6_0000;
+
+/// An interrupt the peer raises.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PeerIrq {
+    /// eDMA channel 29 major loop done: INTC1 source 21, vector 149.
+    Edma29,
+    /// EPORT IRQ4: INTC0 source 4, vector 68.
+    Eport4,
+}
+
+/// Reads `0xAA | length (4 bytes, big endian) | payload` out of the byte stream (what the stage-1 loader of the peer does).
+#[derive(Default)]
+struct FrameParser {
+    header: Vec<u8>,
+    payload: Vec<u8>,
+    want: Option<usize>,
+}
+
+impl FrameParser {
+    /// Feeds one byte; returns the payload when this byte completes a frame.
+    fn feed(&mut self, byte: u8) -> Option<Vec<u8>> {
+        match self.want {
+            None => {
+                if self.header.is_empty() {
+                    if byte == 0xaa {
+                        self.header.push(byte);
+                    }
+                    return None;
+                }
+                self.header.push(byte);
+                if self.header.len() == 5 {
+                    let len = u32::from_be_bytes(self.header[1..5].try_into().expect("4 bytes"));
+                    self.header.clear();
+                    let len = len as usize;
+                    if len == 0 || len > MAX_IMAGE {
+                        return None; // not a frame: look for the next marker
+                    }
+                    self.want = Some(len);
+                    self.payload = Vec::with_capacity(len);
+                }
+                None
+            }
+            Some(len) => {
+                self.payload.push(byte);
+                if self.payload.len() == len {
+                    self.want = None;
+                    return Some(std::mem::take(&mut self.payload));
+                }
+                None
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct MailboxPeer {
+    parser: FrameParser,
+    /// The images the peer was sent, in order: the stage-1 loader (raw bytes after the 0xFF run), then the framed payloads. Not part of a
+    /// snapshot.
+    pub images: Vec<Vec<u8>>,
+    /// Transfers started on channel 29 (the first is raw, the later ones framed).
+    transfers: u32,
+    raw: Vec<u8>,
+    image_lens: Vec<u32>,
+    /// Bytes consumed from channel 29.
+    pub stream_bytes: u64,
+    pub doorbell_edges: u64,
+    /// IRQ4 delivered so far (the next one is `irq4_delivered + 1`).
+    pub irq4_delivered: u64,
+    pin_high: bool,
+    queue: VecDeque<(u64, PeerIrq)>,
+}
+
+impl MailboxPeer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A new transfer starts on channel 29 (the stage-1 loader of the peer begins at a frame marker again).
+    pub fn begin_transfer(&mut self) {
+        self.parser = FrameParser::default();
+        self.transfers += 1;
+        self.raw.clear();
+    }
+
+    /// A major loop of channel 29 finished. The raw stage-1 transfer becomes an image here; with INT_MAJOR set the peer raises the channel
+    /// interrupt.
+    pub fn end_major_loop(&mut self, now: u64, int_major: bool) {
+        if self.transfers == 1 && !self.raw.is_empty() {
+            // MAIN puts eight 0xFF bytes in front of the loader (the loader itself may start with 0xFF).
+            let image = self.raw.split_off(LEADER.min(self.raw.len()));
+            self.raw.clear();
+            self.image_lens.push(image.len() as u32);
+            self.images.push(image);
+        }
+        if int_major {
+            self.queue.push_back((now + REPLY_DELAY, PeerIrq::Edma29));
+        }
+    }
+
+    /// Image bytes taken from channel 29. Returns true when the sound-engine image (the second one) is complete: the peer has booted.
+    pub fn consume(&mut self, bytes: &[u8], now: u64) -> bool {
+        self.stream_bytes += bytes.len() as u64;
+        if self.transfers <= 1 {
+            self.raw.extend_from_slice(bytes);
+            return false;
+        }
+        let mut booted = false;
+        for &byte in bytes {
+            if let Some(image) = self.parser.feed(byte) {
+                self.image_lens.push(image.len() as u32);
+                self.images.push(image);
+                if self.images.len() == 2 {
+                    booted = true;
+                }
+            }
+        }
+        if booted {
+            self.queue.push_back((now + REPLY_DELAY, PeerIrq::Eport4));
+        }
+        booted
+    }
+
+    /// Images complete so far.
+    pub fn image_count(&self) -> usize {
+        self.image_lens.len()
+    }
+
+    /// A one-byte store to GPIO port A. A change of the doorbell pin is one edge, and every edge is answered with IRQ4.
+    pub fn gpio_write(&mut self, addr: u32, value: u8, now: u64) {
+        let pin = match addr {
+            PPDSDR_A if value & DOORBELL_BIT != 0 => true,
+            PCLRR_A if value & DOORBELL_BIT == 0 => false,
+            _ => return,
+        };
+        if pin != self.pin_high {
+            self.pin_high = pin;
+            self.doorbell_edges += 1;
+            self.queue.push_back((now + REPLY_DELAY, PeerIrq::Eport4));
+        }
+    }
+
+    /// The next interrupt that is due at `now`, without taking it.
+    pub fn due(&self, now: u64) -> Option<PeerIrq> {
+        self.queue
+            .front()
+            .filter(|(at, _)| *at <= now)
+            .map(|(_, irq)| *irq)
+    }
+
+    /// The window bytes to store at +0 before the due interrupt is delivered (the hello block for IRQ4 #2 and #3).
+    pub fn window_before(&self, irq: PeerIrq) -> Option<[u8; 6]> {
+        let number = self.irq4_delivered + 1;
+        (irq == PeerIrq::Eport4 && (HELLO_FROM..=HELLO_TO).contains(&number)).then_some(HELLO)
+    }
+
+    /// The due interrupt was delivered to the CPU.
+    pub fn delivered(&mut self) {
+        if let Some((_, irq)) = self.queue.pop_front()
+            && irq == PeerIrq::Eport4
+        {
+            self.irq4_delivered += 1;
+        }
+    }
+
+    /// Whether any interrupt is waiting (due or not).
+    pub fn pending(&self) -> bool {
+        !self.queue.is_empty()
+    }
+
+    /// Run state for a snapshot: the counters, the pin, the queue and the image lengths (not the images).
+    pub fn snap_save(&self, w: &mut Writer) {
+        w.u64(self.stream_bytes);
+        w.u64(self.doorbell_edges);
+        w.u64(self.irq4_delivered);
+        w.bool(self.pin_high);
+        w.u64(self.queue.len() as u64);
+        for (at, irq) in &self.queue {
+            w.u64(*at);
+            w.u8(u8::from(*irq == PeerIrq::Eport4));
+        }
+        w.u64(self.image_lens.len() as u64);
+        for len in &self.image_lens {
+            w.u32(*len);
+        }
+    }
+
+    pub fn snap_load(&mut self, r: &mut Reader) -> SnapResult<()> {
+        self.stream_bytes = r.u64()?;
+        self.doorbell_edges = r.u64()?;
+        self.irq4_delivered = r.u64()?;
+        self.pin_high = r.bool()?;
+        let n = r.len(1 << 12)?;
+        self.queue = (0..n)
+            .map(|_| {
+                let at = r.u64()?;
+                let irq = if r.u8()? != 0 {
+                    PeerIrq::Eport4
+                } else {
+                    PeerIrq::Edma29
+                };
+                Ok((at, irq))
+            })
+            .collect::<SnapResult<_>>()?;
+        let n = r.len(1 << 8)?;
+        self.image_lens = (0..n).map(|_| r.u32()).collect::<SnapResult<_>>()?;
+        self.images.clear();
+        self.parser = FrameParser::default();
+        self.transfers = self.image_lens.len().min(2) as u32;
+        self.raw.clear();
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn framed(payload: &[u8]) -> Vec<u8> {
+        let mut out = vec![0xff; 8];
+        out.push(0xaa);
+        out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    #[test]
+    fn stage1_is_raw_the_second_transfer_is_framed_and_boots() {
+        let mut p = MailboxPeer::new();
+        p.begin_transfer();
+        assert!(!p.consume(&[0xff; 8], 0));
+        assert!(!p.consume(&[0xff, 8, 9], 0));
+        p.end_major_loop(5, true);
+        assert_eq!(p.images, vec![vec![0xff, 8, 9]]);
+        assert_eq!(p.due(5 + REPLY_DELAY), Some(PeerIrq::Edma29));
+        p.delivered();
+        p.begin_transfer();
+        let two = framed(&[9; 20]);
+        let (a, b) = two.split_at(11);
+        assert!(!p.consume(a, 10));
+        assert!(p.consume(b, 20));
+        assert_eq!(p.images, vec![vec![0xff, 8, 9], vec![9; 20]]);
+        assert_eq!(p.due(20), None);
+        assert_eq!(p.due(20 + REPLY_DELAY), Some(PeerIrq::Eport4));
+    }
+
+    #[test]
+    fn doorbell_edges_each_get_one_irq4_and_hello_comes_before_two_and_three() {
+        let mut p = MailboxPeer::new();
+        // A clear while the pin is low is no edge (the thread's own initial clear).
+        p.gpio_write(PCLRR_A, 0xef, 0);
+        assert_eq!(p.doorbell_edges, 0);
+        let mut seen = vec![];
+        for (i, (addr, value)) in [
+            (PPDSDR_A, 0x10),
+            (PCLRR_A, 0xef),
+            (PPDSDR_A, 0x10),
+            (PCLRR_A, 0xef),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let now = 1000 * i as u64;
+            p.gpio_write(addr, value, now);
+            let at = now + REPLY_DELAY;
+            let irq = p.due(at).expect("due");
+            seen.push(p.window_before(irq).is_some());
+            p.delivered();
+        }
+        // numbers 1..=4: hello before 2 and 3 only
+        assert_eq!(seen, [false, true, true, false]);
+        assert!(!p.pending());
+        // A set of another pin is ignored.
+        p.gpio_write(PPDSDR_A, 0x20, 0);
+        assert!(!p.pending());
+    }
+
+    #[test]
+    fn snapshot_keeps_counters_and_queue() {
+        let mut p = MailboxPeer::new();
+        p.gpio_write(PPDSDR_A, 0x10, 5);
+        p.begin_transfer();
+        p.end_major_loop(6, true);
+        let mut w = Writer::new();
+        p.snap_save(&mut w);
+        let mut q = MailboxPeer::new();
+        q.snap_load(&mut Reader::new(&w.buf)).unwrap();
+        assert_eq!(q.doorbell_edges, 1);
+        assert_eq!(q.due(5 + REPLY_DELAY), Some(PeerIrq::Eport4));
+        q.delivered();
+        assert_eq!(q.due(6 + REPLY_DELAY), Some(PeerIrq::Edma29));
+    }
+}

@@ -61,11 +61,11 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
       0x52424F5A, sum checksum at +0xC, u16 +0x10 == 1, 8 marker bytes nonzero) is invalid, or boot flag 0x80000.
 - [x] Emulated NOR: the ELE3 container at 0x80000 (already served) and a synthesised calibration record at 0x300000; PCB revision byte at
       address 0 (`board_revision`). No dialog on a cold boot ([finding 70](../findings/70-syntakt-1-42.md) "Emulated NOR").
-- [ ] Peer responder for MAIN (no peer CPU): hello 0x484F/0x4841 at +0/+2, 0xA5A5 at +4, IRQ4 after each doorbell,
-      DSPI2 eDMA ch 29 completion; status word 0x41bbf448 reaches 6.
+- [x] Peer responder for MAIN (no peer CPU): hello 0x484F/0x4841 at +0/+2, 0xA5A5 at +4, IRQ4 after each doorbell,
+      DSPI2 eDMA ch 29 completion; status word 0x41bbf448 reaches 6 ([finding 70](../findings/70-syntakt-1-42.md) "Mailbox responder").
 - [x] The peer gets section 7 from MAIN: DSPI2 slave + eDMA ch 29 stream NOR ids 6/7 (finding 128 corrected, 646a6cdb).
-- [ ] Ready snapshot for st.
-- [ ] Later (audio, not UI): EPORT IRQ4, mailbox responder at 0x10000000. Unmapped pages are zero RAM today.
+- [x] Ready snapshot for st: `out/ready/st-1.42/main.state` from `panel_drive --save-state` (finding 70 "Mailbox responder").
+- [x] EPORT IRQ4 and the mailbox window at 0x10000000 (responder, no audio).
 
 ### P2 Workbench and faceplate
 

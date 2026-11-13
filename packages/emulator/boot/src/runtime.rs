@@ -20,6 +20,16 @@ use coldfire::fused::Loop;
 mod call;
 pub use call::{CallResult, CallSpec};
 
+/// `Emulator::peer_report`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PeerReport {
+    pub stream_bytes: u64,
+    /// Each image the peer was sent: length and SHA-256.
+    pub images: Vec<(usize, String)>,
+    pub doorbell_edges: u64,
+    pub irq4_delivered: u64,
+}
+
 /// ENDPTCTRL2 of the USB controller (the RX enable bit is 0x80).
 const USB_ENDPTCTRL2: u32 = 0xfc0b_01c8;
 
@@ -659,6 +669,12 @@ impl Emulator {
             .install_forced_mmio(forced)
             .expect("install forced status hooks");
         board.enable_oracle_sdram_faults();
+        // `[emulator] peer`: the second CPU's mailbox (window, image stream, doorbell, IRQ4).
+        if device.peer.is_some() {
+            board
+                .enable_peer()
+                .map_err(|e| format!("peer window: {e:?}"))?;
+        }
         map_image(&mut board, &main);
         board
             .map_zeroed_ram_page(STACK & !((PAGE as u32) - 1))
@@ -932,6 +948,22 @@ impl Emulator {
             self.panel_leds.leds_hex(),
             self.panel_leds.rgb_hex(),
         )
+    }
+
+    /// What the mailbox peer received and did: bytes taken from the image stream, the images (length and SHA-256), doorbell edges and
+    /// IRQ4 delivered. `None` on a board without a peer.
+    pub fn peer_report(&self) -> Option<PeerReport> {
+        let peer = self.bus.board.peer()?;
+        Some(PeerReport {
+            stream_bytes: peer.stream_bytes,
+            images: peer
+                .images
+                .iter()
+                .map(|image| (image.len(), digest(image)))
+                .collect(),
+            doorbell_edges: peer.doorbell_edges,
+            irq4_delivered: peer.irq4_delivered,
+        })
     }
 
     /// Export observations without stepping, reading guest memory, or consuming a frame.
@@ -2310,6 +2342,20 @@ impl Emulator {
                 self.set_error(error);
                 self.drain_board();
                 return;
+            }
+        }
+        if self.bus.board.peer().is_some_and(|peer| peer.pending()) {
+            let now = self.bus.current_icount;
+            match service_peer(&mut self.bus, &mut self.cpu, now) {
+                Ok(true) => {
+                    self.drain_board();
+                    return;
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    self.set_error(error);
+                    return;
+                }
             }
         }
         if self.bus.board.dspi1_irq() || self.irq1_pending {

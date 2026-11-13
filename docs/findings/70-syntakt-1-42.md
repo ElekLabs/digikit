@@ -95,7 +95,8 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 - The peer is the section 7 ColdFire **[V]** (finding 128). The exact reply
   sequence: **[O]**.
 - To boot in the emulator, stub: the hello magic and 0xA5A5 on the window,
-  IRQ4, and DSPI2 eDMA channel 29 data.
+  IRQ4, and DSPI2 eDMA channel 29 data. This is done by the mailbox responder
+  (next section).
 
 ## Anchors on 1.42
 
@@ -174,8 +175,33 @@ Two counts, with different scope:
   The main screen is reached at 609,984,465 instructions (about 5 s of host time): project
   A01 "ADRIANA" at 135.0 BPM with the dialog "RUN WARM-UP CALIBRATION, ARE YOU SURE?" on top.
   Why that dialog shows: the NOR record at 0x300000 is zero (see "Emulated NOR" below).
-- Through 1.21 G instructions the display stays the same and "DSP BOOT FAILURE" has not appeared
-  (the peer mailbox is not modelled: unmapped pages read as zero). When it shows: **[O]**.
+- Through 1.21 G instructions the display stayed the same and "DSP BOOT FAILURE" had not appeared (the peer mailbox was not modelled).
+  Without the responder the poll callback sets status 2 (TIMEOUT) after 0x12 periods, at about 1.04 G instructions.
+
+## Mailbox responder (`[emulator] peer = "mailbox-responder"`) [D]
+
+- Model: `packages/emulator/periph/src/peer.rs` (state machine, no bus access), wired by `machine/src/board.rs` (channel 29, GPIO) and
+  `boot/src/common.rs` `service_peer` (interrupt delivery). It runs no peer code and no FPGA logic: data transport only.
+- Image stream: when MAIN arms eDMA channel 29 (DSPI2 slave PUSHR 0xEC038037), the board runs the major loops at once and feeds the bytes
+  to the peer (a free-running loop stops when the second image is complete). The first transfer is the stage-1 loader: MAIN's buffer holds
+  eight 0xFF bytes, then section 6 with byte 1 changed from 0x01 to 0x0f by MAIN (0x4f8af2ca), then 4 more bytes (1748 bytes). Its
+  TCD has DREQ and INT_MAJOR: the peer raises the channel interrupt, INTC1 source 21, vector 149 (ICR level 1). The second transfer is
+  `0xAA | length | payload` (the TCD has no DREQ and no interrupt): **its payload is section 7 byte for byte** (383,760 bytes, same SHA-256
+  as `section_7_BLOB.bin`). The peer keeps both images for a later peer CPU (not in snapshots, only their lengths).
+- Replies: the second image complete gives IRQ4 #1 (EPORT IRQ4, INTC0 source 4, vector 68, ICR level 6, EPIER 0xFC090003 bit 4 must be
+  set). After that every doorbell edge (a change of GPIO port A pin 4: PPDSDR_A 0xEC094018 with bit 4, PCLRR_A 0xEC094024 with bit 4
+  clear) gets one IRQ4 after 50,000 instructions. Before IRQ4 #2 and #3 the window holds `HO`, `HA`, 0xA5A5 at +0, +2, +4: the RAM test
+  of thread 0x40083288 overwrites +0 and +4 with 0xAAAAAAAA and 0x55555555 between them, so the block is written again before #3.
+- Sequence seen on 1.42 (one sample chunk, the sample buffer length is 0x100): IRQ4 #1 at 329.41 M instructions (state 0 to 1), #2 at 329.47 M
+  (hello, state 2), then the thread's RAM test and its sleeps (2 s emulated, 264 M instructions), #3 to #6 at 597.05 M to 597.24 M
+  (state 2 to 3, one chunk, state 4, state 5, state 6). Doorbell edges 5, IRQ4 delivered 6.
+- Result: status word 0x41bbf448 == 6 and state 0x41bb32b0 == 6 after boot (read at 740 M and at 2.03 G instructions); the main screen has
+  no "DSP BOOT FAILURE" at 2.03 G. Before: status 0 and the poll callback's counter would have passed 0x12 at about 1.04 G (status 2).
+- Window: a 1 MiB RAM page at 0x10000000 (the window is its first 128 KB). `panel_drive` step `peer` reports bytes, image lengths and
+  SHA-256, doorbell edges and IRQ4 delivered.
+- Ready snapshot: `panel_drive firmware/Syntakt_OS1.42.syx --after 130M --save-state out/ready/st-1.42/main.state --steps wait:1M`
+  writes the state at 741 M instructions (status 6); `--state` resumes it in 0.2 s. The peer's counters and queue are in the state
+  (section `PEER`), the image bytes are not.
 
 ## Emulated NOR and the calibration dialog [D]
 

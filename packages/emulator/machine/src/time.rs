@@ -274,6 +274,12 @@ impl Time {
         self.intc.level_for_vector(223)
     }
 
+    /// The ICR level of an interrupt vector's source (1-7), or `None` when the level is 0 or the source is masked. The CPU IPL is checked
+    /// by the caller.
+    pub fn interrupt_level(&self, vector: u16) -> Option<u8> {
+        self.intc.level_for_vector(vector)
+    }
+
     /// Eligibility of INTC2 source 0 (eDMA channels 56..63).
     pub fn storage_dma_interrupt_level(&self) -> Option<u8> {
         self.intc.level_for_vector(192)

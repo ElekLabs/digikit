@@ -46,6 +46,10 @@ Sections are numbered as in finding 70. Extract:
 
 ## Mailbox and frames
 
+- **[D]** Emulated without a peer CPU: the mailbox responder answers MAIN's handshake (finding 70 "Mailbox responder") and receives
+  both images through channel 29. The image MAIN sends as id 7 is section 7 byte for byte (SHA-256 checked); the id 6 image is
+  section 6 with byte 1 set to 0x0f by MAIN.
+
 - **[D]** Window layout: +0 "HO" or "NO", +2 command, +4 0xA5A5, +8 state
   (1 to 0xC), +0xC chunk sequence, +0x800 a 2 KB chunk. Chunks go to
   0x4004f750 + seq * 0x800 (64 MB, probably 64 sample slots). MAIN tests the

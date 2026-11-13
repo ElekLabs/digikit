@@ -52,6 +52,8 @@
 //!   leds                 report the panel LED values (UART8 `b9 idx val` records, up to
 //!                        64 indices; `b5 idx r g b` records as `rgb`) as hex
 //!   peek:ADDR:LEN        read guest memory: reported as hex
+//!   peer                 report the mailbox peer (a device with `[emulator] peer`): bytes taken from
+//!                        the image stream, each image's length and SHA-256, doorbell edges, IRQ4 delivered
 //!   touched              every 1 MiB RAM page the guest touched that nothing had
 //!                        mapped beforehand, with its first touch (PC, kind, address)
 //!   poke:ADDR:HEX        write guest memory
@@ -466,6 +468,11 @@ fn main() -> ExitCode {
                 "leds" => {
                     let (revision, hex, rgb) = run.emulator.current_leds();
                     results.push(json!({"leds": hex, "rgb": rgb, "revision": revision, "icount": run.icount}));
+                    Ok(())
+                }
+                "peer" => {
+                    let report = run.emulator.peer_report().ok_or("no peer on this board")?;
+                    results.push(json!({"peer": report, "icount": run.icount}));
                     Ok(())
                 }
                 "touched" => {
