@@ -137,7 +137,11 @@ pub fn generate(lib: &Library, models: &Models, module: &str) -> Result<Vec<GenF
     let m = lib
         .get(module)
         .ok_or_else(|| err!("unknown module {module}"))?;
-    if !crate::typed::has_typed(&m.manifest) {
+    // a module of api major 3 declares in `init`: `module:check` writes its gallery.json from the emulated device (docs/plans/sdk.md 6.4)
+    if !m.manifest.machines.is_empty()
+        || !m.manifest.fxs.is_empty()
+        || !crate::typed::has_typed(&m.manifest)
+    {
         return Ok(vec![]);
     }
     let rs = resolve(&m.manifest, models)?;
