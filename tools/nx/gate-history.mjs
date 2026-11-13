@@ -90,6 +90,19 @@ const readJsonLines = (file) =>
         })
     : [];
 
+// Retries of device targets after a load symptom (emu-slot.mjs writes retries.jsonl): never hidden in the summary.
+export function retrySummary(dir) {
+  const events = readJsonLines(join(dir, 'retries.jsonl'));
+  const retried = events.filter((event) => event.retried);
+  const lines = [`retried (${retried.length})`];
+  for (const event of retried) {
+    const outcome = events.find((e) => e.target === event.target && e.attempt === 2 && e.passed !== undefined);
+    const result = outcome ? (outcome.passed ? 'passed on retry' : 'failed again') : 'outcome unknown';
+    lines.push(`  ${event.target}  ${event.symptom}  ${result}`);
+  }
+  return lines.join('\n');
+}
+
 // Summary of one gate run from its trace dir (nx-profile.json from Nx, slots-trace.json from emu-slot.mjs).
 // Writes trace.json (Chrome trace format, open in ui.perfetto.dev): Nx task spans plus the slot wait and run spans.
 export function traceSummary(dir, top = 10) {
@@ -150,6 +163,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const args = process.argv.slice(2);
   if (args[0] === '--trace') {
     console.log(traceSummary(args[1]));
+    console.log(retrySummary(args[1]));
     process.exit(0);
   }
   const flag = (name, fallback) => Number(args[args.indexOf(name) + 1] || fallback);

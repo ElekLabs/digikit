@@ -152,6 +152,21 @@ Highest payoff first. Each step states its proof.
 13. [ ] **Test quality: mutation testing**, later and occasionally, on host unit tests of logic-heavy code only (runtime loader, store format and
     settings record; patchkit), with `cargo-mutants`. It checks that tests assert our behaviour. Never on device tests: it reruns the tests once per
     mutant. Not a speed step.
+13a. [x] **Retry a device target once on a load symptom** (2026-11-14). `tools/devtools/emu-slot.mjs` wraps every device and conformance command and
+    already holds the slot, so the rerun lives there: one rerun of the same command inside the same Nx task and slot, which gives one cache result.
+    `tools/nx/retry.mjs` classifies the failed run's output: `no new boot within N s`, `no new boot: not seen within N ms of emulated time`,
+    `runtime lifecycle deadline exceeded`, `emulator closed the connection` and `remote release timed out`. A run with an assertion failure is never
+    retried, and neither is a second failure. A retry prints `emu-slot: RETRY <target>: load symptom ...` in the task output and appends to
+    `retries.jsonl` in the gate trace dir; the gate summary prints `retried (n)` with target, symptom and outcome. Proof: `tools/nx/tests/retry.test.ts`.
+14. [ ] **Longest device tasks first.** The gate printed "recoverable time 36%" and 466 to 1640 task-minutes of slot waits. Nx starts ready tasks in
+    graph order, so a long task that starts late sets the wall time. Read the per-target durations of the gate history (`readRuns` in
+    `tools/nx/gate-history.mjs`) and give Nx a start order: device tasks sorted by their last measured run time, longest first (a target with no
+    history goes first). Proof: one paired gate run on the same base, wall time and slot wait before and after.
+15. [ ] **Machine-readable gate result.** Next to `trace.json` in `out/runs/gate/<stamp>/`, write `result.json`: the failed targets, each with its
+    symptom class (from `tools/nx/retry.mjs`, or `other`), its log path, and whether a retry ran and passed (read from `retries.jsonl`). Tools and
+    agents then read the result instead of the console. Proof: a host test on a fake trace dir and Nx history rows.
+
+16. [ ] **Key device tests on the bytes they load.** Device test targets are keyed on the source of the tools that build their inputs (patchkit's Rust code among them), so a patchkit refactor that changes no packed byte reselects nearly the whole device suite: S3b patched-in deletion changed 0 bytes of 102 `.dkm`, 47 core objects and 2 images (`mise run sdk:hashes`), yet the affected gate selected about 360 device tasks. Key each device target on the packed `.dkm` files, the patched image and the emulator binary it loads (an Nx input from dependency outputs or a runtime input; `tools/nx/device-bytes.mjs` does part of this), so an unchanged byte set replays from the cache. Biggest single saving per gate for tool refactors.
 
 ## Later (deferred, 2026-11-10)
 

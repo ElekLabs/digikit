@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readRuns, report, traceSummary } from './gate-history.mjs';
+import { readRuns, report, retrySummary, traceSummary } from './gate-history.mjs';
 
 const MERGE_TARGETS = [
   'lint',
@@ -187,6 +187,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
         console.log(traceSummary(traceDir));
       } catch (error) {
         console.log(`gate: no trace summary (${error.message})`);
+      }
+      try {
+        console.log(retrySummary(traceDir));
+      } catch (error) {
+        console.log(`gate: no retry summary (${error.message})`);
       }
     }
     if (result.status !== 0) process.exit(result.status ?? 1);
