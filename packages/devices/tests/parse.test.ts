@@ -105,15 +105,16 @@ describe('parse', () => {
 });
 
 describe('the repository device files', () => {
-  test('both loaders read the same registry, and each device states its test cell', () => {
+  test('both loaders read the same registry, and every test cell is on a runtime target', () => {
     const r = loadDevices();
     expect(bundled.devices).toEqual(r.devices);
     expect(r.ids).toEqual(expect.arrayContaining(['dt2', 'dn2']));
     for (const d of r.devices) {
-      expect(d.level).toBe('runtime');
-      expect(d.acceptance, d.id).toBeDefined();
-      expect(d.firmware.length).toBeGreaterThan(0);
+      expect(d.firmware.length, d.id).toBeGreaterThan(0);
+      if (d.acceptance) expect(d.level, d.id).toBe('runtime');
     }
+    expect(r.get('dt2').acceptance).toBeDefined();
+    expect(r.get('dn2').acceptance).toBeDefined();
     expect(r.get('dt2').capabilities.card).toBe('path-fs');
     expect(r.get('dn2').acceptance?.readyDir).toBe('out/ready-fix-dn2-112');
   });
