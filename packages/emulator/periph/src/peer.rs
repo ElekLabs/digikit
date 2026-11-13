@@ -239,12 +239,27 @@ impl MailboxPeer {
             .chain(self.frame_pending.then_some(PeerIrq::Frame))
     }
 
-    /// Peer CPU mode: the audio frame source. Once per `FRAME_TICKS` of MAIN time the frame interrupt becomes pending (at most one waits).
+    /// Peer CPU mode: the audio frame source. The frame interrupt becomes pending at exact multiples of `FRAME_TICKS` of MAIN time (at
+    /// most one waits). The next deadline moves by one period from the last one, not from `now`: the frame rate does not depend on how
+    /// late the caller looked. The run loop stops at `next_deadline` so it never looks late.
     pub fn frame_source(&mut self, now: u64) {
         if self.cpu_mode && now >= self.next_frame {
             self.frame_pending = true;
-            self.next_frame = now + FRAME_TICKS;
+            self.next_frame += FRAME_TICKS;
         }
+    }
+
+    /// Peer CPU mode: the MAIN tick after `now` of the next event the run loop must stop at, the frame or the next queued reply.
+    /// A deadline that has passed is not returned: its interrupt waits for MAIN, and stopping again would not move it.
+    pub fn next_deadline(&self, now: u64) -> Option<u64> {
+        if !self.cpu_mode {
+            return None;
+        }
+        [Some(self.next_frame), self.queue.front().map(|(at, _)| *at)]
+            .into_iter()
+            .flatten()
+            .filter(|at| *at > now)
+            .min()
     }
 
     /// The window bytes to store at +0 before the due interrupt is delivered (the hello block for IRQ4 #2 and #3).
@@ -422,6 +437,24 @@ mod tests {
         p.frame_source(FRAME_TICKS);
         assert_eq!(p.due_list(0).collect::<Vec<_>>(), [PeerIrq::Frame]);
         assert_eq!(FRAME_TICKS, 88_000);
+    }
+
+    #[test]
+    fn frames_fall_on_exact_ticks_however_late_the_source_is_looked_at() {
+        let mut p = MailboxPeer::new();
+        p.cpu_mode = true;
+        p.frame_source(0);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.next_deadline(0), Some(FRAME_TICKS));
+        // looked at 100 ticks late: the next deadline is still the next multiple
+        p.frame_source(FRAME_TICKS + 100);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.next_deadline(0), Some(2 * FRAME_TICKS));
+        // a long gap: frames come one per call at their own deadlines, none is skipped by drift
+        p.frame_source(5 * FRAME_TICKS);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.next_deadline(0), Some(3 * FRAME_TICKS));
+        assert!(MailboxPeer::new().next_deadline().is_none(), "no peer CPU, no deadline");
     }
 
     #[test]

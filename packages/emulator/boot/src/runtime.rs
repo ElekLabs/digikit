@@ -974,7 +974,7 @@ impl Emulator {
             #[cfg(feature = "cf-profile")]
             let t0 = crate::cputime::thread_cpu_ns();
             let fast = self.run_fast(if self.peer_cpu.is_some() {
-                (budget - iterations).min(PEER_SLICE as u32)
+                (budget - iterations).min(self.peer_slice_limit())
             } else {
                 budget - iterations
             });
@@ -1189,6 +1189,18 @@ impl Emulator {
         (0..len)
             .map(|i| self.bus.board.peer_window_load(offset + i, 1).unwrap_or(0) as u8)
             .collect()
+    }
+
+    /// MAIN instructions to run before the next peer slice: `PEER_SLICE`, cut at the next frame or reply deadline, so the audio frame
+    /// starts at its own tick and not up to a slice late.
+    fn peer_slice_limit(&self) -> u32 {
+        let slice = match (self.oracle_ticks(), self.bus.board.peer()) {
+            (Ok(now), Some(m)) => m
+                .next_deadline(now)
+                .map_or(PEER_SLICE, |at| (at - now).min(PEER_SLICE)),
+            _ => PEER_SLICE,
+        };
+        slice as u32
     }
 
     /// Runs the peer CPU up to MAIN's current tick: first the doorbell edges MAIN made (the first one after the program arrived is what the
@@ -2112,6 +2124,16 @@ impl Emulator {
         }
         let timer_deadline = time.deadline(now);
         let deadline = match (timer_deadline, ssi_deadline) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        // A running peer CPU has its own events: the audio frame and the replies. Idle time never skips past one.
+        let peer_deadline = self
+            .peer_cpu
+            .is_some()
+            .then(|| self.bus.board.peer().and_then(|m| m.next_deadline(now)))
+            .flatten();
+        let deadline = match (deadline, peer_deadline) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
@@ -5419,6 +5441,56 @@ mod tests {
             assert_eq!(emu.cpu, before);
         }
         assert_eq!(emu.ram_clear_fast_forwarded_instructions, 0);
+    }
+
+    /// Boots Syntakt until its peer CPU runs, plays a note, then runs `total` more ticks in chunks of `chunk`.
+    /// Returns the MAIN tick, the peer CPU's state and the PCM captured.
+    fn syntakt_after_chunks(syx: &[u8], chunk: u32, total: u32) -> (u64, String, Vec<f32>) {
+        let mut emu = Emulator::new(syx, None).unwrap();
+        emu.enable_ssi_diagnostic(96_000).unwrap();
+        while !emu.peer_started {
+            emu.step_chunk(250_000);
+            assert!(emu.error.is_none(), "{:?}", emu.error);
+        }
+        // past the main UI, then trig 1 and PLAY, as the headless proof does
+        for _ in 0..2800 {
+            emu.step_chunk(250_000);
+        }
+        for code in [1, 37] {
+            emu.button(code, true).unwrap();
+            for _ in 0..40 {
+                emu.step_chunk(250_000);
+            }
+            emu.button(code, false).unwrap();
+            for _ in 0..40 {
+                emu.step_chunk(250_000);
+            }
+        }
+        emu.take_pcm();
+        for _ in 0..total / chunk {
+            emu.step_chunk(chunk);
+        }
+        assert!(emu.error.is_none(), "{:?}", emu.error);
+        let peer = emu.peer_cpu().unwrap();
+        let state = format!("raised {} taken {}", peer.frames_raised, peer.frames_taken);
+        (emu.cpu.icount, state, emu.take_pcm())
+    }
+
+    /// The host's chunking (how many ticks one `step_chunk` call runs) must not change what the peer CPU does or the PCM.
+    /// Boots Syntakt: slow in a debug build, so it runs on request: `cargo test --release -p elektron-native-boot --lib -- --ignored`.
+    #[test]
+    #[ignore = "boots Syntakt to its running peer CPU"]
+    fn the_peer_frames_do_not_depend_on_the_chunk_size() {
+        let Ok(syx) = std::fs::read("../../../firmware/Syntakt_OS1.42.syx") else {
+            return;
+        };
+        let a = syntakt_after_chunks(&syx, 5000, 1_000_000);
+        let b = syntakt_after_chunks(&syx, 1000, 1_000_000);
+        assert_eq!(a.0, b.0, "MAIN ticks");
+        assert_eq!(a.1, b.1, "peer frames");
+        assert!(!a.2.is_empty(), "the run produced PCM");
+        assert_eq!(a.2.len(), b.2.len(), "PCM length");
+        assert_eq!(a.2, b.2, "PCM");
     }
 
     #[test]
