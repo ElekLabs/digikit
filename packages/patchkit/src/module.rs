@@ -437,6 +437,11 @@ pub struct ModuleInfo {
     /// Restrict to these ports (`dt2-1.17`); empty = any firmware whose anchors resolve.
     #[serde(default)]
     pub ports: Vec<String>,
+    /// Names of anchors and hooks that the module can do without. A firmware whose port lacks one still takes the module: the
+    /// object's link to the anchor is 0, a hook op of that name is skipped (and the tail symbols of its site, `hook.<site>.tail`, are 0),
+    /// and the plan lists `<owner>:<name>` under `disabled`. The module's code checks the link for 0 before it uses it.
+    #[serde(default)]
+    pub optional_anchors: Vec<String>,
     /// A module that is loaded at run time (`patchkit pack`, a `.dkm`), never patched into an image. Its typed sections
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]

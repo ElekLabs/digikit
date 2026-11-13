@@ -137,9 +137,10 @@ fn rs() -> &'static mut RegState {
     unsafe { &mut *addr_of_mut!(DKRT_REG) }
 }
 
+/// The registry table of `core/dynreg`; null without it, and on a device without a DSP (it has no run-time machines, so the machine rows are never set up).
 pub(crate) unsafe fn info() -> *const u32 {
     let a = core::hint::black_box(dynreg_info as usize);
-    if a == 0 {
+    if a == 0 || !crate::dev::has_dsp() {
         return core::ptr::null();
     }
     let p = a as *const u32;

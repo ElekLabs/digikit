@@ -51,6 +51,9 @@ pub struct Plan {
     /// P4: hooks
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hooks: Vec<prim::PlanHook>,
+    /// `<owner>:<name>` of every optional anchor or hook (`optional_anchors` of a manifest) that the port lacks: what the module does without
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled: Vec<String>,
     pub record: Record,
     pub output: Option<PlanOutput>,
 }
@@ -240,15 +243,27 @@ pub fn compatible(m: &Module, port: &Port) -> Result<()> {
         }
         for sy in dko.symbols.iter().filter(|s| s.section.is_none()) {
             let name = o.externs.get(&sy.name).unwrap_or(&sy.name);
-            // an export of another object cannot be seen here; only names that look like anchors are checked
-            if (name.starts_with("dsp.") || name.starts_with("cf.")) && port.anchor(name).is_none()
+            // an export of another object cannot be seen here; only names that look like anchors are checked; an optional anchor may be missing
+            if (name.starts_with("dsp.") || name.starts_with("cf."))
+                && port.anchor(name).is_none()
+                && !disabled_anchors(m, port).contains(name)
             {
                 missing.push(format!("anchor {name}"));
             }
         }
     }
+    let off = disabled_anchors(m, port);
     for op in &m.manifest.op {
         if !on(&op.devices, dev) {
+            continue;
+        }
+        // an optional hook or anchor the port lacks switches the op off instead of refusing the module
+        let name = op
+            .hook
+            .as_deref()
+            .filter(|_| op.op == "hook")
+            .unwrap_or(&op.anchor);
+        if off.iter().any(|n| n == name) {
             continue;
         }
         let op = &match expand_op(m, port, op) {
@@ -342,14 +357,43 @@ fn expand_op(m: &Module, port: &Port, op: &Op) -> Result<Op> {
     Ok(x)
 }
 
-/// The ops of a module that are active on the port's device, hook ops expanded.
+/// The names in the module's `optional_anchors` that the port has neither as an anchor nor as a hook: what the module does without on this firmware.
+pub fn disabled_anchors(m: &Module, port: &Port) -> Vec<String> {
+    m.manifest
+        .module
+        .optional_anchors
+        .iter()
+        .filter(|n| port.anchor(n).is_none() && port.hook(n).is_none())
+        .cloned()
+        .collect()
+}
+
+/// The ops of a module that are active on the port's device, hook ops expanded. An op whose hook or anchor is optional and missing is left out.
 fn device_ops(m: &Module, port: &Port) -> Result<Vec<Op>> {
+    let off = disabled_anchors(m, port);
     m.manifest
         .op
         .iter()
         .filter(|o| on(&o.devices, &port.port.device))
+        .filter(|o| match o.hook.as_deref().filter(|_| o.op == "hook") {
+            Some(h) => !off.iter().any(|n| n == h),
+            None => !off.contains(&o.anchor),
+        })
         .map(|o| expand_op(m, port, o))
         .collect()
+}
+
+/// Is `name`, an undefined symbol's anchor name, one that an optional anchor switched off: the optional anchor itself, or a tail
+/// (`hook.<site>.tail`, `hook.<site>.return`) of a hook whose site is one?
+fn switched_off(name: &str, off: &[String]) -> bool {
+    if off.iter().any(|n| n == name) {
+        return true;
+    }
+    let site = name.strip_prefix("hook.").and_then(|r| {
+        r.strip_suffix(".tail")
+            .or_else(|| r.strip_suffix(".return"))
+    });
+    site.is_some_and(|s| off.iter().any(|n| n == s))
 }
 
 /// Region of a hook's tail: `place`, else the CPU's code region.
@@ -922,6 +966,8 @@ pub fn apply_with(
         dko: &'a Dko,
         externs: &'a BTreeMap<String, String>,
         optional: &'a [String],
+        /// the anchors and hooks the module's port lacks and the module can do without (`disabled_anchors`)
+        off: Vec<String>,
         place: String,
         base: u64,
         cpu: &'static str,
@@ -950,6 +996,7 @@ pub fn apply_with(
                     dko,
                     externs: &no_externs,
                     optional: &no_optional,
+                    off: vec![],
                     place: (*region).into(),
                     base,
                     cpu: if dko.arch == "sharc" { SHARC } else { CF },
@@ -985,6 +1032,7 @@ pub fn apply_with(
                 dko,
                 externs: &o.externs,
                 optional: &o.optional,
+                off: disabled_anchors(m, port),
                 place: o.place.clone(),
                 base,
                 cpu,
@@ -1114,6 +1162,9 @@ pub fn apply_with(
                 ext.insert(sy.name.clone(), anchor_value(a));
             } else if !ext.contains_key(&sy.name) && p.optional.contains(&sy.name) {
                 // an optional link to a module that is not selected
+                ext.insert(sy.name.clone(), 0);
+            } else if switched_off(&aname, &p.off) {
+                // an optional anchor the port lacks: the link is 0 and the module's code checks for it
                 ext.insert(sy.name.clone(), 0);
             }
         }
@@ -1655,6 +1706,15 @@ pub fn apply_with(
         registries: plan_regs,
         sections: plan_secs,
         hooks: plan_hooks,
+        disabled: order
+            .iter()
+            .flat_map(|i| {
+                let m = lib.get(i).unwrap();
+                disabled_anchors(m, port)
+                    .into_iter()
+                    .map(|n| format!("{}:{n}", m.tag()))
+            })
+            .collect(),
         record: rec,
         output: None,
     };

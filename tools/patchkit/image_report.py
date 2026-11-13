@@ -11,7 +11,8 @@ files with `tools/firmware/container.py`, then checks and prints
   * the sections that `[container] readonly` of the device names are byte for byte the stock ones;
   * the MAIN OS: the byte ranges that differ, and that each one is a plan write or the appended segment chain;
   * every patch site: the stock bytes equal the plan's old hash and the hash of each port anchor that covers the site;
-  * the regions of the port: placements inside them, and the instruction operands that name them (listed, not failed).
+  * the regions of the port: placements inside them, and the instruction operands that name them (listed, not failed);
+  * the features a module switched off for want of an optional anchor (`disabled: <owner>:<anchor>`, listed).
 
 Exit 1 when a check fails.
 """
@@ -119,6 +120,10 @@ def report(stock: Path, patched: Path, plan_path: Path) -> tuple[list[str], bool
     readonly = set(cont.get("readonly", []))
     out.append(f"image {name}: stock {sha(stock.read_bytes())}")
     out.append(f"       patched {sha(patched.read_bytes())}")
+
+    # features a module switched off because the port lacks an optional anchor (`optional_anchors` of the manifest)
+    for d in plan.get("disabled", []):
+        out.append(f"disabled: {d}")
 
     n, bad = packet_checks(patched)
     line(

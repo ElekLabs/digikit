@@ -60,7 +60,12 @@ pub fn info() -> &'static mut CardInfo {
     unsafe { &mut *addr_of_mut!(DKRT_CARD) }
 }
 
+/// The state of the card's store area. A device without a store (`DEV_HAS_STORE` clear) has the state of a card too small for one: nothing is read or
+/// written, uploads answer `E_NOSTORE`, the boot goes on.
 pub fn state() -> u32 {
+    if !crate::dev::has_store() {
+        return CARD_TOO_SMALL;
+    }
     unsafe { read_volatile(addr_of!(DKRT_CARD.state)) }
 }
 
@@ -161,6 +166,10 @@ pub unsafe fn check() {
         return;
     }
     c.checked = 1;
+    if !crate::dev::has_store() {
+        c.state = CARD_TOO_SMALL;
+        return;
+    }
     let l = lay();
     // the card must reach the end of the area: the firmware's block read refuses a start at or past the card's capacity
     if block_read(l.first + l.sectors - 1, 512, stage()) != 0 {

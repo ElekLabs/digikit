@@ -129,6 +129,14 @@ A constant the sources use but the list lacks is not in the include, so the buil
 
 The kinds `sharc-adapter`, `gas-sample-pool`, `sharc-sample-pool` and `c-shared` take no `uses`.
 
+## Optional anchors
+
+A manifest may list `optional_anchors = [...]` in `[module]`: names of anchors and hooks that the module can do without. When a port lacks
+one, `patchkit` still takes the module: an object's link to the anchor is 0 (and the tail symbols `hook.<site>.tail` and `.return` of a
+listed site are 0), a hook op whose `hook` or `anchor` is listed is skipped, and `plan.json` lists `<owner>:<name>` under `disabled`
+(`tools/patchkit/image_report.py` prints `disabled: ...`). The module's code checks the link for 0 before it uses it. A name that the port
+has is not disabled; a missing anchor that is not listed still refuses the module.
+
 ## Adding a device (what exists today, what is still hand work)
 
 1. `devices/<name>.toml`: `[device]` (name, short, `syx_id`), `[[firmware]]` entries (add `port = true` when a port is wanted),

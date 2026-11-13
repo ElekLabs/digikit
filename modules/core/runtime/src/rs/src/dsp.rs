@@ -238,7 +238,7 @@ unsafe fn info() -> *const u32 {
     #[cfg(test)] { return crate::cleanup_tests::voice_info(); }
     #[cfg(not(test))] {
         let a = fn_addr(dyndsp_info);
-        if a == 0 {
+        if a == 0 || !crate::dev::has_dsp() {
             return core::ptr::null();
         }
         let p = a as *const u32;
@@ -463,7 +463,7 @@ pub unsafe fn init_once() {
 
 /// Bytes of the area (0: the image has no DSP loader).
 pub unsafe fn area_bytes() -> u32 {
-    if info().is_null() {
+    if !crate::dev::has_dsp() || info().is_null() {
         0
     } else {
         iw(I_AREA_BYTES)

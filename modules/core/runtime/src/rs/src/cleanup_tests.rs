@@ -435,6 +435,11 @@ pub extern "C" fn dkpool_cancel(_: u32) {
 // No firmware file systems or DSP tick callback are installed in this host fixture.
 #[no_mangle]
 pub static dkrt_device_id: u32 = 0;
+/// core/health is not in the host fixture: the runtime's links to it answer nothing (the magic stays 0).
+#[no_mangle]
+pub extern "C" fn health_read() {}
+#[no_mangle]
+pub extern "C" fn health_heap() {}
 /// The device object of a device with a DSP, a store and an eSDHC (the host fixture's board).
 #[no_mangle]
 pub static dkrt_dev: dkrt_sdk::DkrtDevice = dkrt_sdk::DkrtDevice {

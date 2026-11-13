@@ -83,7 +83,11 @@ fn the_runtime_constants_are_the_device_files_numbers() {
     assert_eq!(objects.len(), 2);
     assert!(objects.iter().all(|o| o == &common), "{objects:?}");
     let offsets = get("build/gen/dkdv-offsets.inc");
-    for want in [".equ DKDV_CAPS, 12", ".equ DKDV_DDR_UNCACHED_ALIAS, 20", ".equ DKDV_DYN_TYPES, 56"] {
+    for want in [
+        ".equ DKDV_CAPS, 12",
+        ".equ DKDV_DDR_UNCACHED_ALIAS, 20",
+        ".equ DKDV_DYN_TYPES, 56",
+    ] {
         assert!(offsets.contains(want), "{want}");
     }
     let dn2 = get("build/gen/device-dn2.inc");

@@ -52,6 +52,8 @@ pub const HEALTH_HEAP_CUT: u32 = 16;
 pub const HEALTH_HEAP_BAD: u32 = 32;
 /// DkrtHealth.flags: the store figures are valid (a store header was read; a card without a store has none).
 pub const HEALTH_STORE: u32 = 64;
+/// DkrtHealth.flags: the device has no DSP (DEV_HAS_DSP clear): the DSP figures and the DSP area are 0 and dsp_period is 0.
+pub const HEALTH_NO_DSP: u32 = 128;
 /// Bytes of one path of the selection, with the NUL: a store path has at most SEL_PATH - 1 characters.
 pub const SEL_PATH: usize = 56;
 /// Bytes of DkrtBootInfo.needs per selected module: the name of the missing module, 12 characters at most, NUL padded (with 12 there is no NUL).

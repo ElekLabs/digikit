@@ -1069,7 +1069,11 @@ pub fn dyn_range(lib: &Library, dev: &str) -> Result<(i64, i64)> {
 fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     let has_dsp = e.caps & DEV_HAS_DSP != 0;
     // run-time machine types exist only where the DSP does
-    let (first, last) = if has_dsp { dyn_range(lib, dev)? } else { (0, -1) };
+    let (first, last) = if has_dsp {
+        dyn_range(lib, dev)?
+    } else {
+        (0, -1)
+    };
     let (store_first, store_sectors) = match &e.store {
         Some(s) => {
             if s.selection_sectors != 2 {
@@ -1187,7 +1191,11 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             block_cycles(b.dsp_clock_hz, b.dsp_blocks_per_second).unwrap_or(0),
             "[board] dsp_clock_hz / dsp_blocks_per_second, rounded (the clock is open, finding 41; 0: no DSP)",
         ),
-        c("DKDV_CAPS", e.caps, "DEV_HAS_* bits (core/runtime/abi.toml), derived from [capabilities] and the tables present"),
+        c(
+            "DKDV_CAPS",
+            e.caps,
+            "DEV_HAS_* bits (core/runtime/abi.toml), derived from [capabilities] and the tables present",
+        ),
         c(
             "DL_AREA_BYTES",
             k.dsp_area_bytes,
@@ -1198,11 +1206,7 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             k.dsp_area_bytes / 4,
             "[digikit] dsp_area_bytes / 4",
         ),
-        c(
-            "DL_TAIL_OFF",
-            k.dsp_tail_off,
-            "[digikit] dsp_tail_off",
-        ),
+        c("DL_TAIL_OFF", k.dsp_tail_off, "[digikit] dsp_tail_off"),
         c(
             "DL_TAIL_WORDS",
             k.dsp_tail_words,
@@ -1261,11 +1265,7 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         inp.button_channels,
         "[panel] button_channels (the button decoder's tables: a key channel is below it)",
     ));
-    v.push(c(
-        "PANEL_ENCODERS",
-        inp.encoders,
-        "[panel] encoders",
-    ));
+    v.push(c("PANEL_ENCODERS", inp.encoders, "[panel] encoders"));
     v.push(c(
         "PANEL_EXC_N",
         inp.exceptions.len() as u64,
@@ -1617,19 +1617,23 @@ fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
             .map(|k| k.value)
             .ok_or_else(|| err!("{module}: no device constant {name}"))
     };
-    let mut s = format!("/* {module} on {dev}: {NOTE}. The struct DkrtDevice of core/runtime/abi.toml. */\n");
+    let mut s = format!(
+        "/* {module} on {dev}: {NOTE}. The struct DkrtDevice of core/runtime/abi.toml. */\n"
+    );
     s.push_str("    .balign 4\n    .globl dkrt_dev\ndkrt_dev:\n");
     for f in &fields {
         let (v, note) = match f.as_str() {
             "magic" => (abi["DEV_MAGIC"] as i64, "DEV_MAGIC".to_string()),
             "version" => (abi["DEV_VERSION"] as i64, "DEV_VERSION".to_string()),
-            "size" => ((fields.len() * 4) as i64, "the bytes of the struct".to_string()),
+            "size" => (
+                (fields.len() * 4) as i64,
+                "the bytes of the struct".to_string(),
+            ),
             "caps" => (value("DKDV_CAPS")?, "DEV_HAS_* bits".to_string()),
             f => {
-                let (_, c) = DKDV_VALUE
-                    .iter()
-                    .find(|(n, _)| *n == f)
-                    .ok_or_else(|| err!("{module}: DkrtDevice.{f} has no source in devgen DKDV_VALUE"))?;
+                let (_, c) = DKDV_VALUE.iter().find(|(n, _)| *n == f).ok_or_else(|| {
+                    err!("{module}: DkrtDevice.{f} has no source in devgen DKDV_VALUE")
+                })?;
                 (value(c)?, (*c).to_string())
             }
         };
@@ -1640,7 +1644,9 @@ fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
 
 /// The field offsets of `DkrtDevice` as `.equ DKDV_<FIELD>, n` (`gas-dkdv-offsets`), for assembly that reads `dkrt_dev`.
 fn gas_dkdv_offsets(module: &str) -> String {
-    let mut s = format!("/* {module}: {NOTE}. Byte offsets of the fields of struct DkrtDevice (core/runtime/abi.toml). */\n");
+    let mut s = format!(
+        "/* {module}: {NOTE}. Byte offsets of the fields of struct DkrtDevice (core/runtime/abi.toml). */\n"
+    );
     for (i, f) in dkdv_fields().unwrap_or_default().iter().enumerate() {
         let _ = writeln!(s, "    .equ DKDV_{}, {}", f.to_uppercase(), i * 4);
     }

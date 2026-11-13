@@ -163,6 +163,12 @@ value = 64
 doc = "DkrtHealth.flags: the store figures are valid (a store header was read; a card without a store has none)."
 
 [[const]]
+name = "HEALTH_NO_DSP"
+type = "u32"
+value = 128
+doc = "DkrtHealth.flags: the device has no DSP (DEV_HAS_DSP clear): the DSP figures and the DSP area are 0 and dsp_period is 0."
+
+[[const]]
 name = "SEL_PATH"
 type = "usize"
 value = 56

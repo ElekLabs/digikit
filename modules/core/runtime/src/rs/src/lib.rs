@@ -758,6 +758,9 @@ pub static mut DKRT_POLL: usize = 0;
 /// image has no `core/health` (whose own count is the fallback). Any task; reads one word.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_blocks() -> u32 {
+    if !dev::has_dsp() {
+        return 0; // the block counter is the DSP's
+    }
     if let Some(b) = fw_blocks() {
         return b;
     }
@@ -871,11 +874,14 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     o.arena_free = afree;
     o.arena_largest = alargest;
     o.dsp_area_total = dsp::area_bytes();
+    if !dev::has_dsp() {
+        o.flags |= HEALTH_NO_DSP;
+    }
     let (dfree, dlargest) = dsp::area_stats();
     o.dsp_area_free = dfree;
     o.dsp_area_largest = dlargest;
     o.dsp_period = dev::dsp_block_cycles();
-    o.store_total = store::layout().limit() / 2;
+    o.store_total = if dev::has_store() { store::layout().limit() / 2 } else { 0 };
     if health_fn(health_read) == 0 {
         return;
     }
@@ -885,7 +891,7 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     if r.magic != RAW_MAGIC {
         return;
     }
-    let mut fl = HEALTH_MODULE;
+    let mut fl = o.flags | HEALTH_MODULE;
     o.blocks = r.blocks;
     o.windows = r.windows;
     o.idle_win = r.idle_win;
@@ -897,7 +903,7 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
         o.cpu_x10 = 1000u32.saturating_sub(share.min(1000));
         fl |= HEALTH_CPU;
     }
-    if r.flags & RAW_WINDOW != 0 && r.dsp_n != 0 {
+    if dev::has_dsp() && r.flags & RAW_WINDOW != 0 && r.dsp_n != 0 {
         o.dsp_avg = r.dsp_avg;
         o.dsp_max = r.dsp_max;
         let period = dev::dsp_block_cycles().max(1);
@@ -1147,7 +1153,7 @@ unsafe fn save_working_state() {
 /// MCF5441x eSDHC: offset of the present-state register (`PRSSTAT`); bits 0 to 2 are command inhibit, data inhibit and data line active.
 const MCF5441X_ESDHC_PRSSTAT: u32 = 0x24;
 /// Is a card transfer in flight? The card's eSDHC controller is the device object's (`esdhc_base`); a device without one has no busy card.
-unsafe fn card_busy() -> bool {
+pub(crate) unsafe fn card_busy() -> bool {
     dev::has_sdhc() && read_volatile((dev::esdhc_base() + MCF5441X_ESDHC_PRSSTAT) as *const u32) & 7 != 0
 }
 
