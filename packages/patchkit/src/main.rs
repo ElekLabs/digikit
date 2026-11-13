@@ -491,6 +491,7 @@ fn run(a: Args) -> Result<()> {
                     }
                     let mut files = patchkit::modgen::generate(&lib, &models, m.id())?;
                     files.extend(patchkit::devgen::generate(&lib, &facts, m.id())?);
+                    files.extend(patchkit::modgen::module_ids(&lib, m.id())?);
                     for (rel, text) in files {
                         let path = m.dir.join(&rel);
                         let have = std::fs::read_to_string(&path).ok();

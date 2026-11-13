@@ -28,6 +28,53 @@ CONFORMANCE = "tests/modules/test_machine_conformance.py"
 FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
 
 
+USES_KEYS = ("machine_rows", "param_rows", "page_rows")
+
+
+def write_uses(toml_path: Path, uses: dict[str, int]) -> bool:
+    """Write the `[uses]` table of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES has the three counts of USES_KEYS, committed
+    rows read from the emulated device. The file changes only when a count differs, and then only the `[uses]` lines: other text,
+    comments and the order of the tables stay. Returns True when the file was written."""
+    want = [f"{k} = {int(uses[k])}" for k in USES_KEYS]
+    text = toml_path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == "[uses]"), None)
+    if start is None:
+        new = text.rstrip("\n") + "\n\n[uses]\n" + "\n".join(want) + "\n"
+    else:
+        end = start + 1
+        while end < len(lines) and not lines[end].lstrip().startswith("["):
+            end += 1
+        body = lines[start + 1 : end]
+        have = {
+            m.group(1): m.group(2)
+            for ln in body
+            if (m := re.match(r"\s*(\w+)\s*=\s*(\d+)\s*(?:#.*)?$", ln))
+        }
+        if all(have.get(k) == str(int(uses[k])) for k in USES_KEYS):
+            return False
+        # keep comments and blank lines of the table; the count lines take their place, missing ones follow the last count
+        out, seen = [], set()
+        for ln in body:
+            m = re.match(r"\s*(\w+)\s*=", ln)
+            if m and m.group(1) in USES_KEYS:
+                seen.add(m.group(1))
+                out.append(f"{m.group(1)} = {int(uses[m.group(1)])}")
+            else:
+                out.append(ln)
+        missing = [w for w in want if w.split(" ")[0] not in seen]
+        trail = 0
+        while out and out[-1].strip() == "":
+            out.pop()
+            trail += 1
+        out += missing + [""] * trail
+        new = "\n".join(lines[: start + 1] + out + lines[end:])
+    if new == text:
+        return False
+    toml_path.write_text(new, encoding="utf-8")
+    return True
+
+
 def resolve(name: str) -> str:
     mods = list(modroots.manifests())
     if name in mods:
