@@ -415,14 +415,6 @@ export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void): Emula
   };
 }
 
-/** The params of the controller's `firmware.load` for a load of the webview (`dsp` only when the caller chose). */
-const loadParams = (syx: string, options?: LoadOptions) => ({
-  syx,
-  replace: true,
-  runtime: !!options?.runtime,
-  ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
-});
-
 export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): Promise<EmulatorRuntime | undefined> {
   let api: typeof import('@tauri-apps/api/core');
   try {
@@ -704,3 +696,12 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
     },
   };
 }
+
+// After nativeRuntime: apps/web/tests/audio-health.test.mjs evaluates the source from `nativeRuntime` on.
+/** The params of the controller's `firmware.load` for a load of the webview (`dsp` only when the caller chose). */
+const loadParams = (syx: string, options?: LoadOptions) => ({
+  syx,
+  replace: true,
+  runtime: !!options?.runtime,
+  ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+});
