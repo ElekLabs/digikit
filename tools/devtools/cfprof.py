@@ -21,6 +21,7 @@ from tools.control.digi_client import Emu, EmuError, discover
 from tools.devtools.addrnames import (
     AddrNames,
     AddrNamesError,
+    dsp_symbols,
     plan_symbol,
     read_load_table,
 )
@@ -75,12 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with Emu.connect(discover(args.run_dir)) as emu:
             report = emu.call("cf.profile")
-            state = plan_symbol(
-                json.loads(args.image.with_suffix(".plan.json").read_text()),
-                "DKRT_STATE",
-            )
+            plan = json.loads(args.image.with_suffix(".plan.json").read_text())
+            state = plan_symbol(plan, "DKRT_STATE")
             names = AddrNames.for_image(
-                args.image, args.module, read_load_table(emu.peek32, state)
+                args.image,
+                args.module,
+                read_load_table(emu.peek32, state, dsp=dsp_symbols(plan)),
             )
             print(format_report(report, names, args.top))
     except (AddrNamesError, EmuError, OSError) as e:

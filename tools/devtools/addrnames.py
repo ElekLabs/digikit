@@ -33,6 +33,14 @@ DEV_DIR = ROOT / "out" / "addrmap"
 STATE_HEADER_BYTES = 40
 MODULE_RECORD_BYTES = 52
 
+# DKRT_DSP (`DspState`, modules/core/runtime/src/rs/src/dsp.rs): 13 words, then mod_off[MAX_MODULES] (the byte offset of a module's DSP range in
+# the area) and mod_len[MAX_MODULES] (0: the module has no DSP part). The area is word 3 of `dyndsp_info`, an L2 byte address. The patchkit
+# constants L2_BYTE_BASE and L2_SW_BASE (packages/patchkit/src/dsp.rs) turn the placement into a software PC.
+DSP_HEADER_BYTES = 52
+INFO_AREA_BYTES = 12
+L2_BYTE_BASE = 0x2000_0000
+L2_SW_BASE = 0x00B8_0000
+
 
 class AddrNamesError(RuntimeError):
     pass
@@ -61,11 +69,24 @@ def plan_symbol(plan: dict[str, Any], name: str) -> int:
     return found.pop()
 
 
+def dsp_symbols(plan: dict[str, Any]) -> tuple[int, int] | None:
+    """`(DKRT_DSP, dyndsp_info)` of a patch plan, or None when the image has no run-time DSP loader."""
+    try:
+        return plan_symbol(plan, "DKRT_DSP"), plan_symbol(plan, "dyndsp_info")
+    except AddrNamesError:
+        return None
+
+
 def read_load_table(
-    peek32: Callable[[int], int | None], state: int, max_modules: int = 8
+    peek32: Callable[[int], int | None],
+    state: int,
+    max_modules: int = 8,
+    dsp: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
-    """The load table of a running emulator: `{"modules": [{"id", "base", "size"}]}` from the runtime's module table at `state` (DKRT_STATE).
-    `peek32` reads one guest longword (`digi_client` `peek32`)."""
+    """The load table of a running emulator: `{"modules": [{"id", "base", "size", "dsp_base"?}]}` from the runtime's module table at `state`
+    (DKRT_STATE). `peek32` reads one guest longword (`digi_client` `peek32`). With `dsp` = `(DKRT_DSP, dyndsp_info)` (`dsp_symbols`) a module that
+    has a DSP part also gets `dsp_base`: the software PC where its DSP image starts (the record index is the DKRT_DSP index)."""
+    area = (peek32(dsp[1] + INFO_AREA_BYTES) or 0) if dsp else 0
     out = []
     first = state + STATE_HEADER_BYTES
     for i in range(max_modules):
@@ -78,7 +99,13 @@ def read_load_table(
             continue
         raw = b"".join(word(1 + k).to_bytes(4, "big") for k in range(8))
         name = raw.split(b"\0")[0].decode("ascii", "replace")
-        out.append({"id": name, "base": word(10), "size": word(11)})
+        load: dict[str, Any] = {"id": name, "base": word(10), "size": word(11)}
+        if dsp and area:
+            off = peek32(dsp[0] + DSP_HEADER_BYTES + 4 * i) or 0
+            length = peek32(dsp[0] + DSP_HEADER_BYTES + 4 * (max_modules + i)) or 0
+            if length:
+                load["dsp_base"] = L2_SW_BASE + (area + off - L2_BYTE_BASE) // 2
+        out.append(load)
     return {"modules": out}
 
 
@@ -139,6 +166,8 @@ class AddrNames:
             argv += ["--map", str(m)]
         for mod in self.loads["modules"]:
             argv += ["--load", f"{mod['id']}={mod['base']:x}"]
+            if "dsp_base" in mod:
+                argv += ["--dsp-base", f"{mod['id']}={mod['dsp_base']:x}"]
         if ret:
             argv.append("--ret")
         argv.append("--stdin")

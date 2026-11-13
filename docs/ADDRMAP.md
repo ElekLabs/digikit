@@ -8,14 +8,14 @@ A lookup uses the most specific layer that holds the address and falls back to t
 
 | Layer | `layer` | Holds | Written by | Ships |
 | --- | --- | --- | --- | --- |
-| 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
+| 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address; the DSP code of loaded modules, rebased to the start of their DSP image | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
 | 2 Anchors | `anchor` | Code anchors of `devices/ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
 | 3 Firmware names | `fw` | Functions of the firmware databases (cfdb: ColdFire; sharcdb: SHARC) | `tools/coldfire/addrmap_export.py` | no, developer machines only |
 
 Names of Rust symbols are demangled without the hash (`dkrt::card::gate`). A return address is looked up at the address minus 2: a call to a
 function that does not return is often the last instruction of its caller.
 
-SHARC: only layer 3 (stock firmware, software PC). Our own DSP code and module DSP names wait for plan item 3 (sharcdb tables for module DSP).
+SHARC: layer 3 (stock firmware, software PC) and, in layer 1, the DSP code of loaded modules (symbols of the module's DSP object). The patched image has no DSP code of its own in the map.
 
 ## Files
 
@@ -32,7 +32,8 @@ JSON, one object. `kind` is `ship`, `module` or `dev`.
 - `cpu`: `cf` (byte address) or `sharc` (software PC, in words).
 - `size`: bytes (words) from `addr`; 0 holds only `addr`.
 - `module`: set on the entries of a module map. `addr` is then the offset from the module's load address; the lookup adds the base from the load
-  table. A module that is not in the load table has no names.
+  table. A module that is not in the load table has no names. For a `sharc` entry `addr` is the offset in words from the start of the module's DSP
+  image and the lookup adds the module's `dsp_base` (below); a module without `dsp_base` has no DSP names.
 - `key` of a ship map: the stock image (`image_sha256`), the patched image (`output_sha256`) and the modules the patch placed. A module map has
   `module` (the name the runtime reports), `source_sha256` (its object) and `dkm_sha256`. The dev map has the stock image hash from the port file.
   The lookup refuses maps that name different stock images.
@@ -52,17 +53,23 @@ A ship map and a module map hold no firmware bytes and no firmware-derived text 
 
 ## Load table
 
-`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512}]}`. In the emulator it is read from the runtime's module table
+`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512, "dsp_base": 12062720}]}`. `dsp_base` is optional: the software PC where the module's
+DSP image starts. A module without a DSP part, or a table written without it, leaves it out. In the emulator it is read from the runtime's module table
 `DKRT_STATE` (symbol of the patch plan; `State` in `modules/core/runtime/src/rs/src/lib.rs`: ten header words, then one record of 13 words per
 slot: used, name[32], version, base, size, fini). `tools.devtools.addrnames.read_load_table` and `tests/regression/runtime/addrmap.ts` read it.
 No firmware or runtime change.
+
+The DSP placement comes from `DKRT_DSP` (`DspState` in `modules/core/runtime/src/rs/src/dsp.rs`) and the `dyndsp_info` table of `core/dyndsp`. The
+module record index of `DKRT_STATE` is also the index in `DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]`
+(`area` is word 3 of `dyndsp_info`); `dsp_base` is `0xB80000 + (that address - 0x20000000) / 2`. The readers (`read_load_table` with `dsp=dsp_symbols(plan)`,
+`readLoadTable` with its `dsp` argument) fill it.
 
 ## Lookup
 
 Rust: crate `dkaddrmap` (`packages/dkaddrmap`: format, `Resolver`), the map writers and `patchkit addr` in `packages/patchkit/src/addrmap.rs`.
 
 ```sh
-patchkit addr --map X.addrmap.json --map M.addrmap.json --map out/addrmap/dt2-1.17.dev.json --load test/dyn-demo=47e10000 [--ret] 0x401be1be sharc:0xb80105
+patchkit addr --map X.addrmap.json --map M.addrmap.json --map out/addrmap/dt2-1.17.dev.json --load test/dyn-demo=47e10000 [--dsp-base test/dyn-demo=b81000] [--ret] 0x401be1be sharc:0xb80105
 patchkit addr ... --stdin          # one address per line
 patchkit addr ... --format text    # "0x401be1be name+0x4" per line
 ```
