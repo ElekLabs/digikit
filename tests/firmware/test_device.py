@@ -297,5 +297,44 @@ class ImageKeyTest(unittest.TestCase):
                 self.assertEqual(config.image_key(fw), "a")
 
 
+class BasicValidity(unittest.TestCase):
+    def _load(self, extra="", short='short = "td"\n', second=None):
+        with tempfile.TemporaryDirectory() as d:
+            text = SYNTHETIC.replace('short = "td"\n', short) + extra
+            with open(os.path.join(d, "a.toml"), "w") as fh:
+                fh.write(text)
+            if second is not None:
+                with open(os.path.join(d, "b.toml"), "w") as fh:
+                    fh.write(second)
+            return device.load_all(d)
+
+    def test_short_is_required(self):
+        with self.assertRaisesRegex(device.DeviceError, "short is required"):
+            self._load(short="")
+
+    def test_a_capability_word_must_be_in_its_closed_set(self):
+        self.assertEqual(len(self._load('\n[capabilities]\ndsp = "none"\n')), 1)
+        with self.assertRaisesRegex(device.DeviceError, "dsp = 'sharx'"):
+            self._load('\n[capabilities]\ndsp = "sharx"\n')
+        with self.assertRaisesRegex(device.DeviceError, "card = 'sd'"):
+            self._load('\n[capabilities]\ncard = "sd"\n')
+
+    def test_a_repeated_short_or_syx_id_is_refused(self):
+        other = SYNTHETIC.replace('name = "Test Device"', 'name = "Other"')
+        with self.assertRaisesRegex(device.DeviceError, "short 'td' repeats"):
+            self._load(second=other)
+        with_id = SYNTHETIC.replace('short = "td"', 'short = "t1"\nsyx_id = 5')
+        other_id = SYNTHETIC.replace('short = "td"', 'short = "t2"\nsyx_id = 5')
+        with tempfile.TemporaryDirectory() as d:
+            for name, text in (("a.toml", with_id), ("b.toml", other_id)):
+                with open(os.path.join(d, name), "w") as fh:
+                    fh.write(text)
+            with self.assertRaisesRegex(device.DeviceError, "syx_id 5 repeats"):
+                device.load_all(d)
+
+    def test_the_real_device_files_pass(self):
+        self.assertTrue(device.load_all(DEVICES))
+
+
 if __name__ == "__main__":
     unittest.main()

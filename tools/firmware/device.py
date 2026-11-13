@@ -196,7 +196,47 @@ def _read(path):
         return tomllib.load(fh)
 
 
+# The closed sets of `[capabilities]` (the same as packages/devices/src/parse.ts).
+CAPABILITY_VALUES = {
+    "dsp": ("sharc", "none"),
+    "seal": ("hmac", "none"),
+    "sample_pool": ("stock", "ddr", "none"),
+    "card": ("path-fs", "slots", "none", "unknown"),
+}
+
+
+def check_basic(raw, path):
+    """Refuse a device file with no `[device] short`, or a capability word outside its closed set."""
+    dev = _require(raw, "device", path)
+    short = dev.get("short")
+    if not isinstance(short, str) or not short:
+        raise DeviceError("%s: [device] short is required" % path)
+    for key, value in raw.get("capabilities", {}).items():
+        allowed = CAPABILITY_VALUES.get(key)
+        if allowed is not None and value not in allowed:
+            raise DeviceError(
+                "%s: [capabilities] %s = %r is not one of %s"
+                % (path, key, value, ", ".join(allowed))
+            )
+
+
+def check_unique(devices):
+    """Refuse two device files that share a `[device] short` or a `[device] syx_id`."""
+    seen = {}
+    for d in devices:
+        for what, value in (("short", d.short), ("syx_id", d.syx_id)):
+            if value is None:
+                continue
+            other = seen.setdefault((what, value), d)
+            if other is not d:
+                raise DeviceError(
+                    "%s: [device] %s %r repeats the one of %s"
+                    % (d.path, what, value, other.path)
+                )
+
+
 def _from_raw(raw, path):
+    check_basic(raw, path)
     dev = _require(raw, "device", path)
     # [panel] is optional: an identity-only device file has none
     panel = raw.get("panel", {})
@@ -260,6 +300,7 @@ def load_all(dirpath=None):
         # which have no [device] table
         if "device" in raw:
             out.append(_from_raw(raw, path))
+    check_unique(out)
     return sorted(out, key=lambda d: d.name)
 
 
