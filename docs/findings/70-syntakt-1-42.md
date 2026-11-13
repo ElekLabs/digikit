@@ -253,9 +253,19 @@ Two counts, with different scope:
   - `b5 n r g b` sets palette entry n (41 entries, 5 bits per channel); `b0..b3 led n` sets the palette entry of a LED's state 0-3.
   - `0x20 + k, v` sets LEDs 4k..4k+3: two bits each, the state of the LED (3 is the idle state).
   - LED 0-15 are the trig keys 1-16 (the selected track's key is lit, FUNC lights all 16); LED 40-43 are the pattern-page LEDs
-    1:4-4:4 (order **[O]**). PLAY, RECORD, FUNC, TRK, PTN, BANK, page and arrow key LEDs are not tied to an index: the page keys'
-    LEDs did not change on a press in the sweep. `devices/syntakt-leds.toml` lists only the 16 trig LEDs and the four indicators.
-  - `panel_leds.rs` decodes only the `b9` and `b5` records, so a faceplate does not light these LEDs yet.
+    1:4-4:4 (order **[O]**). The first sweep found no LED for PLAY, RECORD and the page keys because it read only the `b9` records of
+    the other devices; the decoder below corrects that.
+  - Decoder: `[emulator] led_protocol = "packed-states"` selects it in `panel_leds.rs` (the other devices keep `b9 idx val`). It keeps the
+    palette (`b5`), the palette entry of each LED state (`b0..b3`) and each LED's state (`0x20 + k`), and reports per LED the colour of
+    its current state in `rgb` (5 bits per channel) and, for the web faceplate, the value `leds` (0x01 off, colour mask in bits 4-7, 1
+    bright or 0x0a dim: a channel at 0x08 or more counts as on). The state is in `panel_drive --save-state` snapshots (section `LEDS`).
+    Records seen on 1.42: `b5` 41 entries, `b3` 44 (idle state), `b2` 4 (state 2), `0x20..0x2a` 11 groups; `b0` and `b1` not seen.
+  - Second pass with the decoder (`panel_drive --state out/ready/st-1.42/main.state`, one key press each, LED values before and during
+    the press) [D]: trig keys 1-12 select a track and move the dim red LED (idle trig LEDs of a track are palette 4, half red); PLAY lights
+    LED 37 green and the playhead (LED 0 bright red, pattern LED 43); RECORD lights LED 36 red; the page keys are a radio group on
+    LEDs 18-22 (TRIG, SYN, FLTR, AMP, LFO; SYN is lit on the main screen); FUNC lights all 16 trig LEDs white; PAGE sets the four pattern
+    LEDs 40-43. Many keys change several LEDs at once (a view or a mode): the map names only the ones above.
+    `devices/syntakt-leds.toml` now has the page keys, RECORD and PLAY besides the 16 trig LEDs and the four indicators.
 
 ## Analysis databases
 

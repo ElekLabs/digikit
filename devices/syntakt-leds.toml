@@ -7,6 +7,10 @@
 # two bits per LED, 3 = idle), so `led` is the LED's place in that stream, and a lit LED is a state other than 3. This is not the
 # `b9 idx val` scheme of the other devices: `seen` has the same meaning as there, without an `on` value. A key without `led` has no
 # LED that the sweep tied to it (open).
+#
+# Second pass, 2026-11-13, with the decoder of packed-states (packages/emulator/boot panel_leds.rs: the LED state changes of one key
+# press, from the ready state): the five page keys (radio group, SYN is lit on the main screen), RECORD (red) and PLAY (green). The
+# other keys' LED changes are several LEDs at once (a view or a mode) or none: open.
 
 [[key]]
 code = 1
@@ -133,27 +137,37 @@ seen = "none"
 [[key]]
 code = 19
 label = "TRIG"
-seen = "none"
+led = 18
+led_name = "TRIGPAGE"
+seen = "radio"
 
 [[key]]
 code = 20
 label = "SYN"
-seen = "none"
+led = 19
+led_name = "SYNPAGE"
+seen = "radio"
 
 [[key]]
 code = 22
 label = "FLTR"
-seen = "none"
+led = 20
+led_name = "FLTRPAGE"
+seen = "radio"
 
 [[key]]
 code = 23
 label = "AMP"
-seen = "none"
+led = 21
+led_name = "AMPPAGE"
+seen = "radio"
 
 [[key]]
 code = 24
 label = "LFO"
-seen = "none"
+led = 22
+led_name = "LFOPAGE"
+seen = "radio"
 
 [[key]]
 code = 25
@@ -213,12 +227,16 @@ seen = "none"
 [[key]]
 code = 36
 label = "RECORD"
-seen = "none"
+led = 36
+led_name = "RECORD"
+seen = "own"
 
 [[key]]
 code = 37
 label = "PLAY"
-seen = "none"
+led = 37
+led_name = "PLAY"
+seen = "own"
 
 [[key]]
 code = 38

@@ -92,11 +92,11 @@ SYNTAKT_KEYS = {
     **{n: (f"TRIG {n}", f"TRIG{n:02d}", "own", None) for n in range(1, 17)},
     17: ("FUNC", None, "none", None),
     18: ("TRK", None, "none", None),
-    19: ("TRIG", None, "none", None),
-    20: ("SYN", None, "none", None),
-    22: ("FLTR", None, "none", None),
-    23: ("AMP", None, "none", None),
-    24: ("LFO", None, "none", None),
+    19: ("TRIG", "TRIGPAGE", "radio", None),
+    20: ("SYN", "SYNPAGE", "radio", None),
+    22: ("FLTR", "FLTRPAGE", "radio", None),
+    23: ("AMP", "AMPPAGE", "radio", None),
+    24: ("LFO", "LFOPAGE", "radio", None),
     25: ("SETTINGS", None, "none", None),
     26: ("FX", None, "none", None),
     27: ("TEMPO", None, "none", None),
@@ -108,8 +108,8 @@ SYNTAKT_KEYS = {
     33: ("BANK", None, "none", None),
     34: ("PTN", None, "none", None),
     35: ("SOUND", None, "none", None),
-    36: ("RECORD", None, "none", None),
-    37: ("PLAY", None, "none", None),
+    36: ("RECORD", "RECORD", "own", None),
+    37: ("PLAY", "PLAY", "own", None),
     38: ("STOP", None, "none", None),
     39: ("YES", None, "none", None),
     40: ("UP", None, "none", None),
@@ -121,6 +121,14 @@ SYNTAKT_KEYS = {
 }
 SYNTAKT_LEDS = {
     **{n: f"TRIG{n + 1:02d}" for n in range(16)},
+    # Page keys (a radio group: the lit one goes out when another is pressed), RECORD and PLAY: from the decoded packed-states stream.
+    18: "TRIGPAGE",
+    19: "SYNPAGE",
+    20: "FLTRPAGE",
+    21: "AMPPAGE",
+    22: "LFOPAGE",
+    36: "RECORD",
+    37: "PLAY",
     **{40 + n: f"PAGE{n + 1}" for n in range(4)},
 }
 
@@ -208,6 +216,10 @@ SYNTAKT_HEADER = """\
 # two bits per LED, 3 = idle), so `led` is the LED's place in that stream, and a lit LED is a state other than 3. This is not the
 # `b9 idx val` scheme of the other devices: `seen` has the same meaning as there, without an `on` value. A key without `led` has no
 # LED that the sweep tied to it (open).
+#
+# Second pass, 2026-11-13, with the decoder of packed-states (packages/emulator/boot panel_leds.rs: the LED state changes of one key
+# press, from the ready state): the five page keys (radio group, SYN is lit on the main screen), RECORD (red) and PLAY (green). The
+# other keys' LED changes are several LEDs at once (a view or a mode) or none: open.
 """
 
 

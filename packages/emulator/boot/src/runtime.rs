@@ -762,7 +762,7 @@ impl Emulator {
             frame_source: None,
             frame_revision: 0,
             emitted_revision: None,
-            panel_leds: Default::default(),
+            panel_leds: crate::panel_leds::PanelLeds::new(device.led_protocol),
             emitted_led_revision: 0,
             replay_restored_frame: false,
             delivery_counts: [0; 256],
@@ -4197,6 +4197,10 @@ impl Emulator {
         w.u8(c.last_exception.unwrap_or(0));
         w.bool(c.last_exception.is_some());
         self.bus.board.snap_save(&mut w)?;
+        if self.panel_leds.is_stateful() {
+            w.tag("LEDS");
+            self.panel_leds.snap_save(&mut w);
+        }
         w.tag("BUS_");
         w.u32(self.bus.current_pc);
         w.u64(self.bus.current_icount);
@@ -4368,6 +4372,10 @@ impl Emulator {
         c.last_exception = r.bool()?.then_some(exc);
         c.last_unimplemented = None;
         self.bus.board.snap_load(&mut r)?;
+        if self.panel_leds.is_stateful() {
+            r.tag("LEDS")?;
+            self.panel_leds.snap_load(&mut r)?;
+        }
         r.tag("BUS_")?;
         self.bus.current_pc = r.u32()?;
         self.bus.current_icount = r.u64()?;
