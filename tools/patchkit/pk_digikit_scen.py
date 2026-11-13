@@ -86,7 +86,7 @@ CACHE = (
     else ROOT / "out" / "cache" / "digikit"
 )
 # every device with a module store and its newest image that has a port (`port = true` in the device file)
-QUICK_IMAGES = {d: pk_device.port_images(d)[-1] for d in pk_device.digikit_devices()}
+QUICK_IMAGES = {d: pk_device.port_images(d)[-1] for d in pk_device.dsp_devices()}
 RT = B.RT
 CACHE_LIMIT = 20 * 2**30  # bytes on disk the card cache may hold
 
@@ -116,7 +116,7 @@ def card_used(card: Path, written: bool) -> None:
 # `wait_dsp`); the boot tool's own proof keeps 1500
 SETTLE_MS = int(os.environ.get("DIGIKIT_SETTLE_MS", "300"))
 FIRMWARE_FIRST = {
-    d: pk_device.working_project_sector(d) for d in pk_device.digikit_devices()
+    d: pk_device.working_project_sector(d) for d in pk_device.dsp_devices()
 }  # per device: the working project; the project slots follow (finding 02, storage records)
 
 

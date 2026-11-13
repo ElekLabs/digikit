@@ -2,8 +2,9 @@
 
     from tools.patchkit import pk_device
     s = pk_device.store_of("dt2")  # the module store's geometry of a device (absolute sectors): the area differs per device
-    pk_device.store_devices()    # short names of the devices that have a module store
-    pk_device.digikit_devices()    # the ones of them that have a DSP
+    pk_device.runtime_devices()  # short names of the runtime targets (`[digikit]`)
+    pk_device.store_devices()    # the ones of them that have a module store
+    pk_device.dsp_devices()      # the ones of them that have a module store and a DSP
 
 The store area is per device (docs/design/digikit-store.md): the runtime reads it from its device object (`devices/*.toml [card.store]`).
 """
@@ -37,6 +38,11 @@ def load(short: str) -> dict:
         raise KeyError(f"no device file for {short!r}: {sorted(load_all())}") from None
 
 
+def runtime_devices() -> list[str]:
+    """Devices with a `[digikit]` section: the runtime runs there (it is one image: what its static arrays hold is the same on every one)."""
+    return [s for s, d in load_all().items() if "digikit" in d]
+
+
 def store_devices() -> list[str]:
     """Devices with a `[card.store]` and a `[digikit]` section: the runtime runs there and keeps its module store on the card."""
     return [
@@ -46,7 +52,7 @@ def store_devices() -> list[str]:
     ]
 
 
-def digikit_devices() -> list[str]:
+def dsp_devices() -> list[str]:
     """The `store_devices` that have a DSP (`[capabilities] dsp`): the targets of the run-time machine, effect and DSP tools and tests."""
     return [s for s in store_devices() if load(s)["capabilities"]["dsp"] != "none"]
 
@@ -150,21 +156,24 @@ def limits(short: str) -> Limits:
 
 def shared_limits() -> Limits:
     """The limits every digikit device agrees on, except the per-device ones (`dsp_area_bytes`, `fx_slots`, `page_rows`), which are
-    taken from the first device. Raises when a shared limit differs: the runtime is one image for all devices."""
-    devs = digikit_devices()
-    first = limits(devs[0])
-    for d in devs[1:]:
-        o = limits(d)
-        for k in (
-            "modules",
-            "machine_rows",
-            "arena_bytes",
-            "stage_bytes",
-            "param_rows",
-        ):
-            if getattr(o, k) != getattr(first, k):
+    taken from the first DSP device. Raises when a shared limit differs: the runtime is one image for all devices. The module count and
+    the arena and staging sizes are the runtime's static arrays and are checked on every runtime target; the machine and parameter rows
+    exist only where there is a DSP, and are checked on those."""
+    dsp = dsp_devices()
+    first = limits(dsp[0])
+    for key, devs in (
+        ("modules", runtime_devices()),
+        ("arena_bytes", runtime_devices()),
+        ("stage_bytes", runtime_devices()),
+        ("machine_rows", dsp),
+        ("param_rows", dsp),
+    ):
+        want = getattr(first, key)
+        for d in devs:
+            have = load(d)["limits"][key]
+            if have != want:
                 raise RuntimeError(
-                    f"[limits] {k} differs between {devs[0]} and {d}; the runtime is one image for all devices"
+                    f"[limits] {key} differs between {dsp[0]} and {d}; the runtime is one image for all devices"
                 )
     return first
 

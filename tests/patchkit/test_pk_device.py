@@ -45,7 +45,7 @@ def test_the_store_geometry_is_the_device_files() -> None:
 
 def test_dynreg_reserves_one_machine_row_per_run_time_type() -> None:
     d = module("core/dynreg")
-    for dev in pk_device.digikit_devices():
+    for dev in pk_device.dsp_devices():
         t = TYPES[dev]
         want = [f"dyn{n}" for n in range(t["dynamic_first"], t["last"] + 1)]
         rows = [
@@ -61,7 +61,7 @@ def test_dynreg_reserves_one_machine_row_per_run_time_type() -> None:
 
 def test_dyndsp_reserves_one_voice_row_per_run_time_type() -> None:
     rows = [e for e in module("core/dyndsp")["entry"] if e["registry"] == "voices"]
-    for dev in pk_device.digikit_devices():
+    for dev in pk_device.dsp_devices():
         t = TYPES[dev]
         assert len(rows) == t["last"] - t["dynamic_first"] + 1, dev
 

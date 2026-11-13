@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 from tools.patchkit import modroots, pk_device, pk_dsp_budget  # noqa: E402
 
-DEVICES = tuple(pk_device.digikit_devices())
+DEVICES = tuple(pk_device.dsp_devices())
 # Stock rows of the knob list that a DSP routine reads (a code in `knobs`, not a `[[param]]` id): name, min, max, default.
 # 0xca is TUNE of SAMPLE (a pitch offset in semitones, 64.0 at rest; the routines read it as 64 * 256 at rest).
 STOCK_KNOBS = {0xCA: ("tune", 0, 0x7F00, 0x4000)}
@@ -512,7 +512,7 @@ def cases(sp: MachineSpec) -> list[Case]:
 # An effect module is a DSP object behind an `[[entry]] registry = "fx"` row. It is run on the concrete core through core/fx
 # (tests/support/fx_rig.py) one block at a time; the cases and checks are those of tests/modules/test_fx_conformance.py.
 FX_MAX = max(
-    pk_device.limits(d).fx_slots for d in pk_device.digikit_devices()
+    pk_device.limits(d).fx_slots for d in pk_device.dsp_devices()
 )  # effects in the chain (devices/*.toml [limits] fx_slots, at most <dk/fx/fx.h> DK_FX_MAX)
 # Instructions of core/fx around one process call at most (a fade block: copy, output check, crossfade; measured 855 with an effect of 210).
 # The budget below is the effect's own.

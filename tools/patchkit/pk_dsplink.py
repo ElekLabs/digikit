@@ -67,7 +67,7 @@ L_WIN = 64
 DL_IDLE, DL_BUSY, DL_DONE, DL_ERROR, DL_START = 0, 1, 2, 3, 4
 AREA_WORDS = {
     d: pk_device.load(d)["digikit"]["dsp_area_bytes"] // 4
-    for d in pk_device.digikit_devices()
+    for d in pk_device.dsp_devices()
 }  # DL_AREA_WORDS
 FRAME = 88_000  # ColdFire instructions per DSP block (132 M / 1500)
 TRIG1 = 25
