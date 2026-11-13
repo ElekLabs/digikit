@@ -24,7 +24,17 @@ import {
 import { needsOf } from './dkm.ts';
 import { dynType, type PanelMachine } from './project-kit.ts';
 import { dmaHoles } from './write-safety.ts';
-import { COLLECT_BLOCK, DSP_GRANULE, fullSet, geometryOf, LOADED, packSynth, usageOf, type Want } from './synth.ts';
+import {
+  ARENA_HDR,
+  COLLECT_BLOCK,
+  DSP_GRANULE,
+  fullSet,
+  geometryOf,
+  LOADED,
+  packSynth,
+  usageOf,
+  type Want,
+} from './synth.ts';
 
 /**
  * The ColdFire memory audit as a device test (port of the `memaudit` part of pk_digikit_memaudit.py; protected ranges and allowed writers: memaudit-kit.ts).
