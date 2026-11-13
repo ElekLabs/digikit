@@ -418,7 +418,6 @@ impl<W: Window> PeerBus<'_, W> {
                 m.io_set(reg, 4, old | 1 << (ch % 32));
             };
             match outcome {
-                edma::SoftOutcome::Idle => {}
                 edma::SoftOutcome::Fault {
                     es,
                     saddr,

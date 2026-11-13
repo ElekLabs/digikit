@@ -431,51 +431,74 @@ pub enum SoftOutcome {
         clear_request: bool,
         es: u32,
     },
-    /// Nothing to do (the iteration count is zero).
-    Idle,
 }
+
+/// Most bytes a software-started transfer may move in one call.
+pub const MAX_SOFT_BYTES: u64 = 1 << 26;
 
 /// Runs a software-started (SSRT) transfer whole: the model has no bus contention. Checks the configuration as RM 19.4.2 lists it (reserved
 /// transfer sizes, alignment of addresses and offsets, NBYTES a multiple of both sizes), then moves `nbytes` per minor loop for the
-/// iteration count. NBYTES = 0 is a 4 GiB transfer (RM p.386); it ends at the first access that fails. The major loop adds SLAST to the
+/// iteration count. NBYTES = 0 is a 4 GiB transfer (RM p.386), above `MAX_SOFT_BYTES`: refused with NCE. The major loop adds SLAST to the
 /// source and, without E_SG, DLAST_SGA to the destination; with E_SG, DLAST_SGA is the address of the next descriptor (32-byte aligned,
 /// RM p.388) and is read from memory.
 pub fn software_start(t: &SoftTcd, bus: &mut impl SoftBus) -> SoftOutcome {
     let count_mask = if t.citer & 0x8000 != 0 { 0x1ff } else { 0x7fff };
     let loops = u32::from(t.citer & count_mask);
-    if loops == 0 {
-        return SoftOutcome::Idle;
-    }
     let config = |es: u32| SoftOutcome::Fault {
         es,
         saddr: t.saddr,
         daddr: t.daddr,
         citer: t.citer,
     };
-    let (Some(ssize), Some(dsize)) = (transfer_size(t.attr >> 8), transfer_size(t.attr)) else {
-        // A reserved size code is a configuration error; the manual names no bit, so it is the address error of its side.
-        return config(if transfer_size(t.attr >> 8).is_none() {
-            es::SAE
-        } else {
-            es::DAE
-        });
-    };
+    // Every configuration error that applies is reported together (RM 19.4.2 p.366-367, p.370).
+    let mut bits = 0;
+    // CITER = 0, or CITER[E_LINK] != BITER[E_LINK] (p.370).
+    if loops == 0 || (t.citer ^ t.biter) & 0x8000 != 0 {
+        bits |= es::NCE;
+    }
+    let ssize = transfer_size(t.attr >> 8);
+    let dsize = transfer_size(t.attr);
+    // A reserved size code is a configuration error; the manual names no bit, so it is the address error of its side.
+    if ssize.is_none() {
+        bits |= es::SAE;
+    }
+    if dsize.is_none() {
+        bits |= es::DAE;
+    }
     let nbytes = if t.nbytes == 0 {
         1u64 << 32
     } else {
         u64::from(t.nbytes)
     };
-    if !nbytes.is_multiple_of(u64::from(ssize)) || !nbytes.is_multiple_of(u64::from(dsize)) {
-        return config(es::NCE);
+    if let (Some(ssize), Some(dsize)) = (ssize, dsize) {
+        if !nbytes.is_multiple_of(u64::from(ssize)) || !nbytes.is_multiple_of(u64::from(dsize)) {
+            bits |= es::NCE;
+        }
+        if t.saddr % ssize != 0 {
+            bits |= es::SAE;
+        }
+        if t.soff.unsigned_abs() as u32 % ssize != 0 {
+            bits |= es::SOE;
+        }
+        if t.daddr % dsize != 0 {
+            bits |= es::DAE;
+        }
+        if t.doff.unsigned_abs() as u32 % dsize != 0 {
+            bits |= es::DOE;
+        }
     }
-    let bad = (t.saddr % ssize != 0)
-        .then_some(es::SAE)
-        .or((t.soff.unsigned_abs() as u32 % ssize != 0).then_some(es::SOE))
-        .or((t.daddr % dsize != 0).then_some(es::DAE))
-        .or((t.doff.unsigned_abs() as u32 % dsize != 0).then_some(es::DOE));
-    if let Some(bits) = bad {
+    // The model has no bus contention and runs the transfer inside one host call, so a transfer above MAX_SOFT_BYTES (NBYTES = 0 is
+    // 4 GiB) is refused as an NBYTES/CITER configuration error instead of hanging the host: nothing moves, the TCD is unchanged. No
+    // firmware transfer is near this size (the largest is a few KiB).
+    if nbytes.saturating_mul(u64::from(loops)) > MAX_SOFT_BYTES {
+        bits |= es::NCE;
+    }
+    if bits != 0 {
         return config(bits);
     }
+    let (Some(ssize), Some(dsize)) = (ssize, dsize) else {
+        return config(es::SAE);
+    };
     let (mut src, mut dst) = (t.saddr, t.daddr);
     // A chunk is the larger transfer size: whole elements on both sides.
     let chunk = ssize.max(dsize);
@@ -632,12 +655,76 @@ mod tests {
                 citer: 2
             }
         );
-        // NBYTES = 0 is a 4 GiB transfer: it runs until the first access that fails.
-        let t = SoftTcd { nbytes: 0, ..tcd() };
+        // NBYTES = 0 is a 4 GiB transfer: refused at once (NCE, nothing moves), even with SOFF = DOFF = 0 in mapped memory.
+        let before = m.0.clone();
+        let t = SoftTcd {
+            nbytes: 0,
+            soff: 0,
+            doff: 0,
+            ..tcd()
+        };
+        let start = std::time::Instant::now();
         assert!(matches!(
             software_start(&t, &mut m),
-            SoftOutcome::Fault { es: es::DBE, .. } | SoftOutcome::Fault { es: es::SBE, .. }
+            SoftOutcome::Fault { es: es::NCE, .. }
         ));
+        assert!(start.elapsed().as_secs() < 1);
+        assert_eq!(m.0, before);
+    }
+
+    #[test]
+    fn every_configuration_error_that_applies_is_reported() {
+        let mut m = mem();
+        let run = |t: SoftTcd, m: &mut Mem| match software_start(&t, m) {
+            SoftOutcome::Fault { es, .. } => es,
+            other => panic!("{other:?}"),
+        };
+        // CITER = 0 and an E_LINK mismatch are NBYTES/CITER errors (RM p.370).
+        assert_eq!(run(SoftTcd { citer: 0, ..tcd() }, &mut m), es::NCE);
+        assert_eq!(
+            run(
+                SoftTcd {
+                    citer: 0x8002,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::NCE
+        );
+        // A misaligned address and offset on the same side are both reported.
+        assert_eq!(
+            run(
+                SoftTcd {
+                    saddr: 0x1002,
+                    soff: 2,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::SAE | es::SOE
+        );
+        assert_eq!(
+            run(
+                SoftTcd {
+                    daddr: 0x1081,
+                    doff: 1,
+                    nbytes: 6,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::DAE | es::DOE | es::NCE
+        );
+        assert_eq!(
+            run(
+                SoftTcd {
+                    attr: 0x0303,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::SAE | es::DAE
+        );
     }
 
     #[test]

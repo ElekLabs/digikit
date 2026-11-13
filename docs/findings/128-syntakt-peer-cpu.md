@@ -177,7 +177,8 @@ MAIN mixes the 8 voices of the peer itself; the emulator reads MAIN's output, so
 - Proof (`syntakt-digital.wav`, 3.9 s, headless): trig 1 and PLAY give peak 0.185 and RMS 0.049; the same run without keys gives exact
   zero (2.9 s). The note is a kick: the spectrum of the loudest window peaks at 70 Hz and the envelope repeats every 1.75 s (16 steps at
   135 BPM). Real time: 0.30 of real time for the whole emulator on this host (3.9 s of audio in 12.9 s after the boot); the peer core runs about
-  80 M instructions a second against 132 M needed at 88,000 a frame.
+  80 M instructions a second on the host, against about 190 M a second that it needs at 87,000 instructions in each 126,619-tick frame
+  (1500 frames a second at 189.928 M ticks a second).
 - At the 132 MHz one-instruction-a-tick model the period was 88,000 ticks and MAIN's own tick work did not fit in it (73 frame resyncs in
   400 M ticks, frames slower than real time). With the device's instruction rate (above) the same run, trig 1 and PLAY (`tap:1`, `wait:200M`,
   `tap:37`, `wait:200M`, headless cold boot) gives 3,475 frames in 440 M ticks (nominal 3,475.1), no resync inside the window (30 during

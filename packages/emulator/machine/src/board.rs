@@ -570,7 +570,6 @@ impl Board {
         let r = &mut self.dma.edma_regs;
         let csr = r.u16_at(base + edma::CSR);
         match outcome {
-            edma::SoftOutcome::Idle => {}
             edma::SoftOutcome::Fault {
                 es,
                 saddr,
