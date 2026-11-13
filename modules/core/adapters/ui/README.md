@@ -22,3 +22,6 @@ call is a generated anchor (`modules/core/fw/include/dk_fw_*.h`). The host fake 
 
 Proof and demo: `tests/fixtures/modules/ui-demo`, driven by `uv run python -m tools.patchkit.pk_uidemo shots|leak --device dt2|dn2`.
 Details: [docs/findings/71-ui-components-1-17.md](../../../../docs/findings/71-ui-components-1-17.md).
+
+The font of a plain menu or text page is read from the operand of one instruction of the firmware's VerticalMenuView constructor
+(`cf.menu.site.vertical_menu_view_ctor.font_ref`), not from a fixed offset in the view: the class layout differs between firmwares.

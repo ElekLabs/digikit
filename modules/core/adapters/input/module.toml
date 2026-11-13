@@ -10,7 +10,7 @@ status = "experimental"
 summary = "Presses keys and turns encoders from software through the firmware's own panel decoders: dk_input_key(code, down) and dk_input_turn(encoder, delta) for modules"
 requires = ["core/runtime"]
 conflicts = []
-ports = ["dt2-1.17", "dn2-1.12"]
+ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -47,3 +47,9 @@ path = "build/device-dn2.dko.json"
 sources = ["src/cf/dn2/device.s"]
 place = "cf.expansion"
 devices = ["dn2"]
+
+[[object]]
+path = "build/device-st.dko.json"
+sources = ["src/cf/st/device.s"]
+place = "cf.expansion"
+devices = ["st"]

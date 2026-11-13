@@ -71,3 +71,23 @@ and an eMMC image the emulator seeds (`capabilities.card` is `unknown`).
 
 Missing anchors and hooks the other adapters need: core/ui (`cf.menu.site.settings_list.system_icon_ref`, `cf.menu.hook.settings_list.tail`), core/health (the DSP block interrupt
 `cf.link.site.reply_copy_lit`, `cf.link.hook.block_isr`, and `cf.rtos.hook.idle`), core/input (a per-device `input_cfg` object and `[input]` for the Syntakt).
+
+## Adapters on 1.42 (core/ui, core/health, core/input, core/digikit-menu, core/introblank) **[D]**
+
+Anchors and hooks added (rule.st or `devices` list, all from the same code as on DT2: instruction by instruction at the site): the SETTINGS list rebuild
+(`cf.menu.site.settings_list.tail` and its hook, `system_icon_ref`; the rebuild is 0x4005ed72, its last instructions equal DT2's, the hook site is 0x4005f176),
+the idle site hook (`cf.rtos.hook.idle`, boot thread 0x40082578, site 0x40082896), the intro setup hook (`cf.rtos.hook.intro_setup.table_arg`, 0x40087d0a, same
+function bytes). New site `cf.menu.site.vertical_menu_view_ctor.font_ref`: the VerticalMenuView constructor 0x400fed6c does the same steps as DT2's but the
+class has three words fewer, so the font pointer is at +0x9c (DT2 +0xa8); core/ui now reads the font from the constructor's `move.l #font,d0` operand, on all devices.
+`[input] backend = "panel-uart"` in `devices/syntakt.toml` and `modules/core/adapters/input/src/cf/st/device.s` (the `[panel]` map is the measured one).
+Optional (no DSP): `cf.link.hook.block_isr`, `cf.link.fn.block_isr`, `cf.link.site.reply_copy_lit` (core/health): no window closes, the idle count and the heap walk work.
+
+Dry run (`core/runtime`, `core/health`, `core/input`, `core/introblank`, `core/digikit-menu`, with `core/ui`, `core/expansion`): `image_report` ALL CHECKS PASSED, only section 3
+differs, read-only sections identical, 11 differing ranges: reset call 0x4000053e, main-OS task 0x4000abd6, UI loop 0x4000b2d8, SETTINGS tail 0x4005f176,
+idle 0x40082896, intro setup 0x40087d0a, MIDI rx 0x40103f5e, loader in the cave, the segment chain.
+
+Boot (ColdFire-only `digi-emud`, 700 M instructions to the main screen): SETTINGS lists ..., SYSTEM, DIGIKIT; DIGIKIT opens its menu (ABOUT, HEALTH, MEMORY, MODULES) and the ABOUT
+page shows the runtime version and free RAM in the firmware font. `health_idle` counts (the boot thread called the create-main function first); `health_hs` stays 0. A call of
+`dk_input_key(5, down)` from a stub (core/input) sets bit 4 of the firmware's previous-mask byte 0 and the main screen shows TRK 5. The OLED lags the key by one UI pass in `framebuffer.get`
+(a later key shows the earlier one's result). **Not checked:** the HEALTH and MEMORY pages (a second key after the menu opened did not change the screen; the cause is open), `dk_input_turn`.
+

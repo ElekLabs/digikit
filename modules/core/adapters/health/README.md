@@ -13,3 +13,6 @@ on a device.
 The runtime's `dkrt_health` (C ABI) combines these with its own arena and DSP area; the DIGIKIT menu shows them. Results and costs:
 [docs/findings/41-digikit-health.md](../../../../docs/findings/41-digikit-health.md). Proof:
 `uv run python -m tools.coldfire.digikit_health_proof run`.
+
+Without a DSP (no block interrupt, `cf.link.hook.block_isr` and `cf.link.site.reply_copy_lit` are `optional_anchors`) the block
+hook is not installed: no window closes, `blocks`, `windows` and the DSP figures stay 0, and the idle counter and the heap walk still work.
