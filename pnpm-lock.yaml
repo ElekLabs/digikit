@@ -193,6 +193,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@digi/devices':
+        specifier: workspace:*
+        version: link:../../packages/devices
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../../packages/dk-session
@@ -236,6 +239,9 @@ importers:
       '@astrojs/solid-js':
         specifier: 7.0.2
         version: 7.0.2(@types/node@22.15.0)(esbuild@0.28.2)(solid-js@1.9.15)(supports-color@7.2.0)(yaml@2.9.1)
+      '@digi/devices':
+        specifier: workspace:*
+        version: link:../../packages/devices
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../../packages/dk-session

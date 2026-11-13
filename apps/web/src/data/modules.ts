@@ -1,7 +1,7 @@
 // The module gallery, read at build time from the committed modules/**/module.toml and each module's
 // gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.mjs checks what an icon may contain).
 import { parse } from 'smol-toml';
-import type { DeviceId } from './device-profiles';
+import { runtimeDeviceIds, type DeviceId } from './device-profiles';
 import { isShipped } from './shipped.mjs';
 import type { Category } from './module-labels';
 
@@ -109,7 +109,7 @@ type Manifest = {
   claim?: { resource: string }[];
 };
 
-const order: DeviceId[] = ['dt2', 'dn2'];
+const order: readonly DeviceId[] = runtimeDeviceIds;
 
 export const modules: ModuleInfo[] = Object.entries(manifests)
   .map(([path, text]) => {

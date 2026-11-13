@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from tools import python_env
+from tools.firmware import device as device_files
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -143,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
     r.add_argument("label")
-    r.add_argument("--device", choices=["dn2", "dt2"], required=True)
+    r.add_argument("--device", choices=device_files.shorts(), required=True)
     r.add_argument("--scenario", required=True)
     r.add_argument("--patch")
     r.add_argument("--seconds", type=float)

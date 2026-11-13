@@ -15,6 +15,8 @@ name = "Digitone II"
 short = "dn2"
 # The device byte of the firmware SysEx framing (docs/findings/01).
 syx_id = 0x15
+# Glob of the user manual's extracted pages under out/refs/ (tools/coldfire/atlas.py); optional.
+manual = "Digitone-2-User-Manual*"
 
 # Identity is the hash. The filename is a hint for error messages only:
 # people rename firmware files, and tools/firmware/config.py resolving one BY NAME is

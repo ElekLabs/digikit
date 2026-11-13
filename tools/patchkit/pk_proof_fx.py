@@ -38,6 +38,7 @@ from collections.abc import Iterator
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.control.digi_client import Emu  # noqa: E402
 from tools.emulator import card_check  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import fx_rings as R  # noqa: E402
 from tools.patchkit import hook_ab  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
@@ -493,7 +494,7 @@ PARTS = [
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("device", nargs="?", default="dt2", choices=("dn2", "dt2"))
+    ap.add_argument("device", nargs="?", default="dt2", choices=device_files.shorts())
     ap.add_argument(
         "--run-dir",
         type=pathlib.Path,

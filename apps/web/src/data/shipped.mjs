@@ -14,10 +14,10 @@ export function isShipped(manifest, dir) {
   return Boolean(m.dynamic) || m.type === 'raw' || m.type === 'service';
 }
 
-/** The device ids ('dt2', 'dn2') that the manifest does not mark unsupported (a pack that fails still leaves a device out). */
-export function shippedDevices(manifest) {
+/** The ids in `deviceIds` (the registry's runtime devices) that the manifest does not mark unsupported (a pack that fails still leaves a device out). */
+export function shippedDevices(manifest, deviceIds) {
   const out = new Set();
   for (const [port, status] of Object.entries(manifest.targets ?? {}))
     if (status !== 'unsupported') out.add(port.split('-')[0]);
-  return ['dt2', 'dn2'].filter((d) => out.has(d));
+  return deviceIds.filter((d) => out.has(d));
 }

@@ -34,6 +34,8 @@ export interface Firmware {
   sha256: string;
   filename?: string;
   port: boolean;
+  /** The MAIN OS section hash and the contracts the boot oracle runs under; all three or none. */
+  boot?: { mainSha256: string; contract: string; symbolProfile: string };
 }
 
 /** `identity`: `[device]` + `[capabilities]`; `patchable`: also `[patch]`; `runtime`: also `[digikit]`. */
@@ -41,6 +43,8 @@ export type Level = 'identity' | 'patchable' | 'runtime';
 
 export interface DeviceRecord {
   id: Device;
+  /** The file name stem of the device file (for example `some-device`): it pairs the device with `<stem>-leds.toml` and with a faceplate file. */
+  stem: string;
   name: string;
   level: Level;
   /** `[device] syx_id`, the transport id of the firmware framing. */
@@ -49,12 +53,18 @@ export interface DeviceRecord {
   container: Container;
   acceptance?: Acceptance;
   firmware: readonly Firmware[];
+  /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
+  patchSets: Readonly<Record<string, readonly string[]>>;
+  /** `[digikit] default_modules`: the module ids the apps install after a flash; empty when the file has none. */
+  defaultModules: readonly string[];
 }
 
 export interface Registry {
   /** In file-name order. */
   readonly devices: readonly DeviceRecord[];
   readonly ids: readonly Device[];
+  /** The ids of the devices of level `runtime` (they run the digikit runtime: module lists, patch sets). */
+  readonly runtimeIds: readonly Device[];
   /** `id` when it is a known device, else an error that lists the known ids. */
   device(id: string): Device;
   get(id: string): DeviceRecord;
@@ -122,8 +132,38 @@ function firmware(file: string, t: unknown): Firmware[] {
       port: w.port === true,
     };
     if (typeof w.filename === 'string') out.filename = w.filename;
+    const bootKeys = [w.main_sha256, w.boot_contract, w.symbol_profile];
+    if (bootKeys.some((v) => v !== undefined)) {
+      if (!bootKeys.every(isString))
+        throw new Error(`devices/${file}: [[firmware]] main_sha256, boot_contract and symbol_profile go together`);
+      out.boot = {
+        mainSha256: (w.main_sha256 as string).toLowerCase(),
+        contract: w.boot_contract as string,
+        symbolProfile: w.symbol_profile as string,
+      };
+    }
     return out;
   });
+}
+
+function patchSets(file: string, t: unknown): Record<string, string[]> {
+  if (t === undefined) return {};
+  const sets = need(file, '[patch_sets]', t, isTable);
+  const out: Record<string, string[]> = {};
+  for (const [name, ids] of Object.entries(sets)) {
+    if (!Array.isArray(ids) || !ids.every(isString))
+      throw new Error(`devices/${file}: [patch_sets] ${name} must list module ids`);
+    out[name] = ids;
+  }
+  return out;
+}
+
+function defaultModules(file: string, t: unknown): string[] {
+  const ids = isTable(t) ? t.default_modules : undefined;
+  if (ids === undefined) return [];
+  if (!Array.isArray(ids) || !ids.every(isString))
+    throw new Error(`devices/${file}: [digikit] default_modules is not a list of module ids`);
+  return ids;
 }
 
 function acceptance(file: string, t: unknown, fw: readonly Firmware[]): Acceptance | undefined {
@@ -156,11 +196,14 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     const fw = firmware(file, doc.firmware);
     const rec: DeviceRecord = {
       id,
+      stem: file.replace(/\.toml$/, ''),
       name: need(file, '[device] name', d.name, isString),
       level: doc.digikit !== undefined ? 'runtime' : doc.patch !== undefined ? 'patchable' : 'identity',
       capabilities: caps,
       container: container(file, doc.container, caps),
       firmware: fw,
+      patchSets: patchSets(file, doc.patch_sets),
+      defaultModules: defaultModules(file, doc.digikit),
     };
     if (d.syx_id !== undefined) rec.syxId = need(file, '[device] syx_id', d.syx_id, isInt);
     const acc = acceptance(file, doc.acceptance, fw);
@@ -178,5 +221,6 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     if (!r) throw new Error(`unknown device ${JSON.stringify(id)} (known: ${ids.join(', ')})`);
     return r;
   };
-  return { devices, ids, device: (id) => get(id).id, get };
+  const runtimeIds = devices.filter((x) => x.level === 'runtime').map((x) => x.id);
+  return { devices, ids, runtimeIds, device: (id) => get(id).id, get };
 }

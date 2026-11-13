@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// The library folder, relative to the repository root (one subfolder per device: `dt2`, `dn2`).
+/// The library folder, relative to the repository root (one subfolder per device short name).
 const LIBRARY_DIR: &str = "out/modules";
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -81,7 +81,7 @@ fn root() -> Result<PathBuf, String> {
     digi_control::runtime_patch::find_root(None)
 }
 
-/// The built modules of a device (`dt2`, `dn2`): path and size of each.
+/// The built modules of a device (its short name): path and size of each.
 #[tauri::command]
 pub async fn lib_scan(device: String) -> Result<Vec<LibFile>, String> {
     tauri::async_runtime::spawn_blocking(move || scan(&root()?, &device))
@@ -134,7 +134,7 @@ pub struct DeviceStorage {
     pub samples: String,
 }
 
-/// The `[storage]` of a device (`dt2`, `dn2`) from `devices/*.toml`.
+/// The `[storage]` of a device (its short name) from `devices/*.toml`.
 pub fn storage_of(device: &str) -> Result<DeviceStorage, String> {
     let registry = device_profile::Registry::load().map_err(|e| e.to_string())?;
     let profile = registry
@@ -164,11 +164,18 @@ pub async fn device_storage(device: String) -> Result<DeviceStorage, String> {
 mod tests {
     use super::*;
 
+    /// The short names of the first two devices of the registry (a device with a library, and one without).
+    fn two_devices() -> (String, String) {
+        let registry = device_profile::Registry::load().unwrap();
+        let mut shorts = registry.devices().iter().map(|d| d.short.clone());
+        (shorts.next().unwrap(), shorts.next().unwrap())
+    }
+
     fn library(name: &str) -> PathBuf {
         let root =
             std::env::temp_dir().join(format!("digi-library-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let dir = root.join(LIBRARY_DIR).join("dt2");
+        let dir = root.join(LIBRARY_DIR).join(two_devices().0);
         std::fs::create_dir_all(dir.join("acme")).unwrap();
         std::fs::create_dir_all(dir.join("test")).unwrap();
         std::fs::write(dir.join("acme/synth.dkm"), b"SYNTH").unwrap();
@@ -180,8 +187,9 @@ mod tests {
     #[test]
     fn the_scan_lists_dkm_files_by_path_and_a_missing_folder_is_empty() {
         let root = library("scan");
+        let (full, empty) = two_devices();
         assert_eq!(
-            scan(&root, "dt2").unwrap(),
+            scan(&root, &full).unwrap(),
             vec![
                 LibFile {
                     path: "acme/synth.dkm".into(),
@@ -193,41 +201,45 @@ mod tests {
                 }
             ]
         );
-        assert_eq!(scan(&root, "dn2").unwrap(), vec![]);
+        assert_eq!(scan(&root, &empty).unwrap(), vec![]);
         assert!(scan(&root, "../x").is_err());
-        assert_eq!(read(&root, "dt2", "acme/synth.dkm").unwrap(), b"SYNTH");
+        assert_eq!(read(&root, &full, "acme/synth.dkm").unwrap(), b"SYNTH");
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn the_storage_comes_from_the_profile() {
-        let dt2 = storage_of("dt2").unwrap();
-        assert_eq!(
-            (dt2.name.as_str(), dt2.samples.as_str()),
-            ("Digitakt II", "stock-rpc")
-        );
-        let dn2 = storage_of("dn2").unwrap();
-        assert_eq!(
-            (dn2.name.as_str(), dn2.samples.as_str()),
-            ("Digitone II", "digikit")
-        );
+        let registry = device_profile::Registry::load().unwrap();
+        let mut found = 0;
+        for profile in registry.devices().iter().filter(|d| d.storage.is_some()) {
+            let storage = storage_of(&profile.short).unwrap();
+            assert_eq!(storage.name, profile.name);
+            assert_eq!(
+                Some(&storage.samples),
+                profile.storage.as_ref().map(|s| &s.samples)
+            );
+            found += 1;
+        }
+        assert!(found > 0);
         assert!(storage_of("nothing").is_err());
     }
 
     #[test]
     fn a_read_stays_inside_the_device_folder() {
         let root = library("read");
+        let (full, empty) = two_devices();
+        let outside = format!("../{empty}/x.dkm");
         for bad in [
-            "../dn2/x.dkm",
+            outside.as_str(),
             "digikit/../../x.dkm",
             "/etc/passwd",
             "notes.txt",
             "",
             "a//b.dkm",
         ] {
-            assert!(read(&root, "dt2", bad).is_err(), "{bad}");
+            assert!(read(&root, &full, bad).is_err(), "{bad}");
         }
-        assert!(read(&root, "dt2", "nothing.dkm").is_err());
+        assert!(read(&root, &full, "nothing.dkm").is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

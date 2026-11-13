@@ -37,6 +37,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import hook_ab, pk_device  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
@@ -482,7 +483,7 @@ def main(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("proof", "frame"):
         p = sub.add_parser(name)
-        p.add_argument("--device", choices=["dt2", "dn2"], default="dt2")
+        p.add_argument("--device", choices=device_files.shorts(), default="dt2")
         p.add_argument("--fw")
         if name == "proof":
             p.add_argument("--sizes", default="4096,65536")

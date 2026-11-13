@@ -66,7 +66,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools import python_env  # noqa: E402
-from tools.firmware import config  # noqa: E402
+from tools.firmware import config, device  # noqa: E402
 
 MAIN_BASE = 0x40000400
 RESET_ENTRY = 0x400004E8
@@ -76,16 +76,18 @@ PAGE = 0x1000
 DMA_MARGIN = 0x10000  # beyond the highest absolute reference into the DMA arena
 STACK_RESERVE = 0x20000  # below the reset stack top; the canary saw one 4 KiB page used
 
-# image name -> (sections dir name, firmware file, base image whose profile boots it)
+# image name -> (sections dir name, firmware file, base image whose profile boots it): the firmwares of devices/*.toml that
+# name a MAIN OS (`device.boot_images`)
 IMAGES = {
-    "dt2-1.16": ("dt2-1.16", "Digitakt_II_OS1.16.syx", None),
-    "dt2-1.17": ("dt2-1.17", "Digitakt_II_OS1.17.syx", "dt2-1.16"),
-    "dn2-1.11": ("dn2-1.11", "Digitone_II_OS1.11.syx", None),
-    "dn2-1.12": ("dn2-1.12", "Digitone_II_OS1.12.syx", "dn2-1.11"),
+    name: (name, b.firmware.filename, b.base)
+    for name, b in device.boot_images(config.DEVICES_DIR).items()
 }
+# the cold audio-ready boot snapshot of each device's base image
 SNAPSHOTS = {
-    "dt2-1.16": "out/snapshots/dt2-audio-ready-cold-2026-10-07/digi-audio-m5.snap",
-    "dn2-1.11": "out/snapshots/dn2-audio-ready-cold-2026-10-07/digi-audio-m5.snap",
+    name: "out/snapshots/%s-audio-ready-cold-2026-10-07/digi-audio-m5.snap"
+    % b.device.short
+    for name, b in device.boot_images(config.DEVICES_DIR).items()
+    if b.base is None
 }
 
 # The reset helpers, with their address operands masked ("." = any byte).

@@ -2,6 +2,7 @@
 // as targets (no emulator), patchkit.wasm from the site, and a console log. `startWebTransfer` asks for MIDI access and picks the first target.
 // Every URL goes through BASE_URL (GitHub Pages serves the site under a sub-path).
 import type { DkTransport } from '@digi/dk-session';
+import { deviceNameOf, deviceOfPort, runtimeDeviceIds } from '../data/device-profiles';
 import { noteConnection } from './connection-state';
 import { setTransferEnv, type TransferEnv } from './env';
 import { portLost, selectTarget, startOn, target, type Target } from './target';
@@ -26,11 +27,10 @@ const fetchOk = async (url: string): Promise<Response> => {
   return r;
 };
 
-const DEVICE_NAMES: Record<string, string> = { dt2: 'Digitakt II', dn2: 'Digitone II' };
-export const deviceNameOf = (id: string): string => DEVICE_NAMES[id] ?? id;
+export { deviceNameOf };
 
 /** A port that has a device of ours on it. */
-export const isElektronPort = (name: string): boolean => /digitakt|digitone/i.test(name);
+export const isElektronPort = (name: string): boolean => deviceOfPort(name) !== undefined;
 
 /** The names of the ports that have both an input and an output (a device is talked to both ways). */
 export function usablePorts(access: MidiAccessLike): string[] {
@@ -69,7 +69,7 @@ export const webEnv: TransferEnv = {
   moduleFiles: (id) => MODULE_FILES[id],
   patchkitWasm: async () => (await fetchOk(`${BASE}patchkit.wasm`)).arrayBuffer(),
   deviceName: async (device) => deviceNameOf(device),
-  libraryDevices: ['dt2', 'dn2'],
+  libraryDevices: [...runtimeDeviceIds],
   // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another
   ...(webUsbAvailable() ? { bulk: { ...webUsbOpener(), requestAccess: () => WebUsbBulkLink.requestAccess() } } : {}),
   targets: {

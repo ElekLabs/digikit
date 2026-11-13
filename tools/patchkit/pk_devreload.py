@@ -44,10 +44,10 @@ ROOT = HERE.parent.parent
 
 from tools.control.digi_client import Emu, EmuError, oled_png  # noqa: E402
 from tools.devtools.portable_flock import LOCK_EX, LOCK_NB, LOCK_UN, flock  # noqa: E402
-from tools.patchkit import modroots, patchkit  # noqa: E402
+from tools.patchkit import modroots, patchkit, pk_device  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
-FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}
+FIRMWARE = pk_device.acceptance_firmware()  # the harness' default firmware per device
 STOCK_SYX = {"dt2": "Digitakt_II_OS1.17.syx", "dn2": "Digitone_II_OS1.12.syx"}
 DEVICE_FILE = {"dt2": "digitakt-ii.toml", "dn2": "digitone-ii.toml"}
 SHEET_COLUMNS = 4

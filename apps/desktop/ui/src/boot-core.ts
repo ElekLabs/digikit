@@ -1,26 +1,18 @@
 // The pure part of the loading state in Console.tsx: what the status bar and the Log say while a firmware starts.
 // Host tests: apps/desktop/ui/tests/boot.test.ts.
+import { deviceNameOf, type DeviceId } from '../../../web/src/data/device-profiles';
 
-export type BootDevice = 'dt2' | 'dn2';
-/** A firmware that is starting: its file name, and the device when the name tells it. */
+export type BootDevice = DeviceId;
+/** A firmware that is starting: its file name, and the device when the image tells it (`deviceOfImage`). */
 export type Booting = { name: string; device?: BootDevice };
 
-export const DEVICE_NAMES: Record<BootDevice, string> = { dt2: 'Digitakt II', dn2: 'Digitone II' };
-
-/** The device a firmware file is for, from its name (Digitakt_II_OS1.17.syx), or undefined when the name does not say. */
-export function deviceFromName(name: string): BootDevice | undefined {
-  if (/digitakt|dt2/i.test(name)) return 'dt2';
-  if (/digitone|dn2/i.test(name)) return 'dn2';
-  return undefined;
-}
-
-export function booting(name: string): Booting {
-  return { name, device: deviceFromName(name) };
+export function booting(name: string, device?: BootDevice): Booting {
+  return device === undefined ? { name } : { name, device };
 }
 
 /** The status bar text: the device name once known, else the file name, else a bare `Booting…`. */
 export function bootingStatus(b: Booting): string {
-  const what = b.device ? DEVICE_NAMES[b.device] : b.name;
+  const what = b.device ? deviceNameOf(b.device) : b.name;
   return what ? `Booting ${what}…` : 'Booting…';
 }
 

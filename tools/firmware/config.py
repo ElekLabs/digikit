@@ -38,6 +38,8 @@ import glob
 import os
 import pathlib
 
+from tools.firmware import device
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 # $DIGI_FIRMWARE_DIR overrides it, as it does for the control daemon (packages/emulator/control, Loaded::find_base)
 FIRMWARE_DIR = pathlib.Path(os.environ.get("DIGI_FIRMWARE_DIR") or REPO / "firmware")
@@ -60,11 +62,9 @@ def stock(name: str) -> pathlib.Path:
     return FIRMWARE_DIR / name
 
 
-# The firmware files of the current analysis images, by image key (AGENTS.md: DT2 OS 1.17, DN2 OS 1.12).
-DEVICE_SYX = {
-    "dt2-1.17": "Digitakt_II_OS1.17.syx",
-    "dn2-1.12": "Digitone_II_OS1.12.syx",
-}
+DEVICES_DIR = str(REPO / "devices")
+# The firmware files of the current analysis images, by image key: `[acceptance] firmware` of each device file.
+DEVICE_SYX = device.acceptance_images(DEVICES_DIR)
 
 
 def image_key(syx) -> str:
@@ -75,8 +75,6 @@ def image_key(syx) -> str:
     computed before the image is present. An image no device file knows (for
     example another product) is keyed by its file stem. A device directory with an error raises.
     """
-    from tools.firmware import device
-
     devdir = str(REPO / "devices")
     try:
         dev, fw = device.identify(str(syx), devdir)

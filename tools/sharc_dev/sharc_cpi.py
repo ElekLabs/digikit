@@ -30,6 +30,7 @@ import sys
 from collections import Counter, defaultdict
 
 from tools import python_env
+from tools.firmware import device as device_files
 from tools.sharc_dev import sharc_timing as T
 from tools.sharc_dev.sharcimm import name_address
 
@@ -571,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out")
     p.set_defaults(fn=cmd_memspec)
     p = sub.add_parser("run")
-    p.add_argument("device", choices=("dn2", "dt2"))
+    p.add_argument("device", choices=device_files.dsp_shorts())
     p.add_argument("image")
     p.add_argument("scenarios", nargs="+")
     p.add_argument("--patch")
