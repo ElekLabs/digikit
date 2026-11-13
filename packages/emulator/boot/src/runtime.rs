@@ -1197,13 +1197,10 @@ impl Emulator {
     /// MAIN instructions to run before the next peer slice: `PEER_SLICE`, cut at the next frame or reply deadline, so the audio frame
     /// starts at its own tick and not up to a slice late.
     fn peer_slice_limit(&self) -> u32 {
-        let slice = match (self.oracle_ticks(), self.bus.board.peer()) {
-            (Ok(now), Some(m)) => m
-                .next_deadline(now)
-                .map_or(PEER_SLICE, |at| (at - now).min(PEER_SLICE)),
-            _ => PEER_SLICE,
-        };
-        slice as u32
+        match (self.oracle_ticks(), self.bus.board.peer()) {
+            (Ok(now), Some(m)) => peer_slice(now, m.next_deadline(now)),
+            _ => PEER_SLICE as u32,
+        }
     }
 
     /// Runs the peer CPU up to MAIN's current tick: first the doorbell edges MAIN made (the first one after the program arrived is what the
@@ -2136,10 +2133,7 @@ impl Emulator {
             .is_some()
             .then(|| self.bus.board.peer().and_then(|m| m.next_deadline(now)))
             .flatten();
-        let deadline = match (deadline, peer_deadline) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        };
+        let deadline = earliest(deadline, peer_deadline);
         // Instructions to skip. The counting loop has no yield pass (it never
         // had one while interpreted) and skips whole passes of two.
         let count = if counter.is_some() {
@@ -4365,6 +4359,19 @@ fn decode_intro_bitmap(board: &mut Board, bmp: u32) -> Option<Vec<u8>> {
     Some(raw)
 }
 
+/// MAIN instructions to run before the peer's next event: `PEER_SLICE`, cut at `deadline` (a tick after `now`; none without a peer).
+fn peer_slice(now: u64, deadline: Option<u64>) -> u32 {
+    deadline.map_or(PEER_SLICE, |at| at.saturating_sub(now).min(PEER_SLICE)) as u32
+}
+
+/// The earlier of two optional deadlines.
+fn earliest(a: Option<u64>, b: Option<u64>) -> Option<u64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
 fn idle_advance_limit(remaining: u32, passes: u64, now: u64, deadline: Option<u64>) -> u32 {
     let before_yield = 19_999 - passes % 20_000;
     let before_timer = deadline.map_or(u64::MAX, |due| due.saturating_sub(now).saturating_sub(1));
@@ -5788,6 +5795,42 @@ mod tests {
         assert_eq!(idle_advance_limit(20, 1, 100, Some(101)), 0);
         assert_eq!(idle_advance_limit(20, 1, 100, Some(99)), 0);
         assert_eq!(idle_advance_limit(3, 1, 100, None), 3);
+    }
+
+    /// The run loop's deadline handling for a peer CPU, without firmware: the MAIN slice stops at the peer's deadline and the idle
+    /// fast-forward never jumps past it; with no peer both limits are the ones MAIN already had.
+    #[test]
+    fn the_peer_deadline_cuts_the_main_slice_and_the_idle_fast_forward() {
+        let now = 1_000_000;
+        let mut peer = periph::peer::MailboxPeer::new();
+        peer.cpu_mode = true;
+        peer.frame_source(0);
+        peer.delivered(periph::peer::PeerIrq::Frame);
+        // the next frame is due at FRAME_TICKS: far away, so the slice is the full PEER_SLICE
+        let far = peer.next_deadline(0).unwrap();
+        assert_eq!(peer_slice(0, Some(far)), PEER_SLICE as u32);
+        // a deadline 100 ticks ahead cuts the slice there, and the idle skip stops one instruction before it
+        let due = now + 100;
+        assert_eq!(peer_slice(now, Some(due)), 100);
+        let skip = idle_advance_limit(250_000, 1, now, earliest(None, Some(due)));
+        assert_eq!(u64::from(skip), 99);
+        assert!(now + u64::from(skip) < due);
+        // a timer deadline that is earlier still wins; a later one does not
+        assert_eq!(earliest(Some(now + 10), Some(due)), Some(now + 10));
+        assert_eq!(earliest(Some(now + 500), Some(due)), Some(due));
+        // a deadline that has passed (MAIN has not taken its interrupt) does not stall the slice
+        assert_eq!(peer_slice(now, Some(now - 5)), 0);
+        // no peer: inert
+        assert_eq!(peer_slice(now, None), PEER_SLICE as u32);
+        assert_eq!(earliest(None, None), None);
+        assert_eq!(
+            idle_advance_limit(250_000, 1, now, earliest(None, None)),
+            19_998
+        );
+        assert_eq!(
+            idle_advance_limit(250_000, 1, now, earliest(Some(now + 50), None)),
+            49
+        );
     }
 
     /// Code in DDR (outside MAIN), written at run time and rewritten by the
