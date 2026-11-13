@@ -104,10 +104,17 @@ pub struct PeerMem {
 
 impl PeerMem {
     fn new() -> Self {
+        // INTC reset values (RM 17.2.2, 17.2.7, 17.2.8, p.338, p.342-343): every source masked, level masks 0xF.
+        let mut io = BTreeMap::new();
+        for a in INTC0 + 8..INTC0 + 16 {
+            io.insert(a, 0xff);
+        }
+        io.insert(INTC0 + 0x1e, 0x0f);
+        io.insert(INTC0 + 0x1f, 0x0f);
         Self {
             sdram: vec![0; SDRAM_BYTES],
             sram: vec![0; SRAM_BYTES],
-            io: BTreeMap::new(),
+            io,
             inputs: BTreeMap::new(),
             log: Vec::new(),
             log_limit: 0,
@@ -245,15 +252,15 @@ impl PeerMem {
                 continue;
             }
             if a == INTC0 + 0x1c || a == INTC0 + 0x1d {
-                let src = u32::from(b & 0x7f);
+                // SIMR/CIMR (RM 17.2.5, 17.2.6, p.341-342): bits 5:0 name the source, bit 6 (SALL/CALL) acts on every source and ignores
+                // the field. Bit 7 is reserved. Reads give zero (`io_read`).
                 let set = a == INTC0 + 0x1c;
-                if src == 0x40 {
-                    let (h, l) = (INTC0 + 8..INTC0 + 12, INTC0 + 12..INTC0 + 16);
-                    for r in h.chain(l) {
+                if b & 0x40 != 0 {
+                    for r in INTC0 + 8..INTC0 + 16 {
                         self.io.insert(r, if set { 0xff } else { 0 });
                     }
                 } else {
-                    let (byte, bit) = intc_mask_bit(src);
+                    let (byte, bit) = intc_mask_bit(u32::from(b & 0x3f));
                     let old = self.io.get(&byte).copied().unwrap_or(0);
                     self.io
                         .insert(byte, if set { old | bit } else { old & !bit });
@@ -300,10 +307,9 @@ impl PeerMem {
         let src = FRAME_VECTOR - 64;
         let icr = self.io_byte(INTC0 + 0x40 + src);
         let level = icr & 7;
-        // the source's own mask bit, or IMRL bit 0 (mask all)
+        // the source's own mask bit (IMRL bit 0 is source 0, not used: there is no mask-all bit, RM Table 17-15 p.345)
         let (byte, bit) = intc_mask_bit(src);
-        let (all_byte, all_bit) = intc_mask_bit(0);
-        let masked = self.io_byte(byte) & bit != 0 || self.io_byte(all_byte) & all_bit != 0;
+        let masked = self.io_byte(byte) & bit != 0;
         (level != 0 && !masked).then_some(level)
     }
 
@@ -312,8 +318,7 @@ impl PeerMem {
     }
 }
 
-/// The IMRH/IMRL byte and bit that mask INTC0 source number `source` (0..=63, not a vector; sources 32..=63 are in IMRH, IMRL bit 0 is
-/// mask-all).
+/// The IMRH/IMRL byte and bit that mask INTC0 source number `source` (0..=63, not a vector; sources 32..=63 are in IMRH).
 fn intc_mask_bit(source: u32) -> (u32, u8) {
     let reg = if source >= 32 { INTC0 + 8 } else { INTC0 + 12 };
     (reg + (3 - (source & 31) / 8), 1u8 << (source & 7))
@@ -871,6 +876,44 @@ mod tests {
         assert_eq!(mem.frame_level(), Some(3), "unmasked through IMRH");
         mem.io_write(INTC0 + 8, 4, 0x0000_0001); // IMRH: only source 32 masked
         assert_eq!(mem.frame_level(), None);
+    }
+
+    #[test]
+    fn the_interrupt_controller_resets_masked_and_simr_cimr_follow_the_manual() {
+        let mem = PeerMem::new();
+        assert_eq!(
+            mem.io_get(INTC0 + 8, 4),
+            0xffff_ffff,
+            "IMRH resets to all ones"
+        );
+        assert_eq!(mem.io_get(INTC0 + 12, 4), 0xffff_ffff, "IMRL too");
+        assert_eq!(
+            mem.io_get(INTC0 + 0x1e, 2),
+            0x0f0f,
+            "CLMASK and SLMASK reset to 0xF"
+        );
+        let mut mem = PeerMem::new();
+        mem.io_write(INTC0 + 0x40 + 32, 1, 3);
+        // IMRL bit 0 is source 0 (not used), not a mask-all bit: it does not hide source 32.
+        mem.io_write(INTC0 + 8, 4, 0);
+        mem.io_write(INTC0 + 12, 4, 0xffff_ffff);
+        assert_eq!(mem.frame_level(), Some(3));
+        // CIMR/SIMR: bit 6 acts on every source and ignores the field (0x7f is not source 63).
+        mem.io_write(INTC0 + 0x1c, 1, 0x7f);
+        assert_eq!(
+            (mem.io_get(INTC0 + 8, 4), mem.io_get(INTC0 + 12, 4)),
+            (0xffff_ffff, 0xffff_ffff),
+            "SALL sets both registers"
+        );
+        assert_eq!(mem.frame_level(), None);
+        mem.io_write(INTC0 + 0x1d, 1, 0x45);
+        assert_eq!(mem.io_get(INTC0 + 8, 4), 0);
+        assert_eq!(mem.io_get(INTC0 + 12, 4), 0);
+        mem.io_write(INTC0 + 0x1c, 1, 0x3f); // source 63 only (bit 7 is reserved)
+        assert_eq!(mem.io_get(INTC0 + 8, 4), 0x8000_0000);
+        assert_eq!(mem.io_get(INTC0 + 12, 4), 0);
+        // The registers read zero.
+        assert_eq!(mem.io_get(INTC0 + 0x1c, 2), 0);
     }
 
     #[test]
