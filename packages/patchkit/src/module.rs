@@ -44,11 +44,11 @@ pub struct Manifest {
     pub native_page: Vec<crate::typed::NativePageDef>,
     #[serde(skip)]
     pub voice: Vec<crate::typed::VoiceDef>,
-    /// `[[machine]] id = "..."`: the machines the module declares in C (DK_MACHINE); the id is all the manifest says of one. Their keys go in the
+    /// `[[machine]] id = "..."`: the machines the module declares in init (`dk_module_ctx_add_machine`); the id is all the manifest says of one. Their keys go in the
     /// `.dkm` keys table (`dkneeds::keys`).
     #[serde(default, rename = "machine")]
     pub machines: Vec<IdRef>,
-    /// `[[fx]] id = "..."`: the same for effects (DK_FX).
+    /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
@@ -118,7 +118,7 @@ impl Manifest {
         ] {
             if old.is_some() {
                 return Err(err!(
-                    "[[{name}]] is no longer read: declare machines with DK_MACHINE in C (sdk/include/dk/machine/machine.h)"
+                    "[[{name}]] is no longer read: declare machines and effects with `dk_module_ctx_add_machine` / `dk_module_ctx_add_fx` in init and list their ids as [[machine]] / [[fx]] in module.toml"
                 ));
             }
         }

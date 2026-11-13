@@ -11,10 +11,7 @@
           "digikit/pluck"
         ],
         "plusdrive": true,
-        "compiles": true,
-        "sources": [
-          "tests/fixtures/modules/patched-pluck/**/*"
-        ]
+        "compiles": true
       }
     ]
   }

@@ -135,7 +135,7 @@ def install() -> Prof:
         ("diff_tables", "oracle: table diff"),
     ):
         p.wrap(S, fn, label)
-    p.wrap(M, "pcm_check", "oracle: PCM compare")
+    p.wrap(M, "pcm_pin", "oracle: PCM pin")
     for fn in (
         "diff_slot",
         "slot_image",

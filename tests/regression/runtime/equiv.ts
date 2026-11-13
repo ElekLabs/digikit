@@ -7,7 +7,6 @@ import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import {
   bounded,
   frames,
-  pcmMatches,
   pcmWindow,
   peak,
   pickSine,
@@ -21,42 +20,31 @@ import {
   dynType,
   selectType,
   voiceRows,
-  type Tables,
 } from '@digi/regression/runtime/project-kit.ts';
 
 /**
- * A run-time module set against the patched-in static twin (port of tools/patchkit/pk_digikit_scen.py `run_equiv`).
- * The reference boot (the twin patched in) and the run-time boot (the set loaded from the card) are two daemons; their machine, parameter and page rows are compared.
- * A set without a twin is compared with a boot of no module. A module without a twin has its note pinned by the SHA-256 of its PCM from the onset;
- * a module with a twin (pluck) must play the same note as the twin, sample for sample from the onset.
+ * A run-time module set against a boot of no module (port of tools/patchkit/pk_digikit_scen.py `run_equiv`).
+ * The run-time boot (the set loaded from the card) has the machine, parameter and page rows of a boot of no module, apart from the machines named in `ignoreRunMachines`.
+ * A set with a sound has its note pinned by the SHA-256 of its PCM from the onset.
  */
 
 export interface Equiv {
   name: string;
   device: Device;
   modules: string[];
-  /** The patched-in twin; none: the rows are compared with a boot of no module. */
-  twin?: string;
-  /** The twin leaves no room for the runtime's DSP area: the reference image holds the twin only, with no runtime. */
-  refPlain?: boolean;
   /** Full tier only (`DIGIKIT_TIER=full`). */
   full?: boolean;
   /** DT2: the run-time machine to put on track 1 (its type is read from the runtime). DN2: the sound proves the choice. */
   play?: { module: string; machine: string };
-  /** DT2: the type number and list position of the patched-in machine on the reference's track 1. */
-  staticType?: number;
-  /** The list position of the patched-in machine (twin boot, and DT2 run-time hint when `hintRun` is absent). */
-  hint?: number;
-  /** The list position of the played machine (DN2: the run-time machines follow MIDI). */
-  hintRun?: number;
+  /** The list position of the played machine (DN2: the run-time machines follow MIDI; DT2: where the type is chosen). */
   /** Daemon environment of the run-time boot. */
   envRun?: Record<string, string>;
   trigFrame: number;
   /** Voice rows the set claims. */
   voices: number;
-  /** Machines of the run-time set that have no twin: their machine row, parameters and pages are not compared. */
+  /** Machines of the run-time set: their machine row, parameters and pages are not compared. */
   ignoreRunMachines: string[];
-  /** SHA-256 of the PCM from the onset, `PIN_SAMPLES` interleaved float32; none: the note equals the twin's. */
+  /** SHA-256 of the PCM from the onset, `PIN_SAMPLES` interleaved float32; none: the note is only audible. */
   pcmSha256?: string;
 }
 
@@ -117,39 +105,14 @@ export function defineEquiv(scenarios: Equiv[]): void {
             selection: sc.modules.map((id) => `modules/${id.split('/').at(-1)}.dkm`),
           }),
         });
-        // the reference: the twin patched in, a card with no selection
-        const ref = sc.twin
-          ? cardRig(device, `${sc.name}-ref`, {
-              dsp: 'sharc',
-              roots: sc.refPlain ? [sc.twin] : [...RT, sc.twin],
-              plain: sc.refPlain,
-              symbols: sc.refPlain ? SYMBOLS.filter((x) => !x.startsWith('DKRT_')) : SYMBOLS,
-              initial: () => ({}),
-              hold: true,
-            })
-          : undefined;
-
         /** Machine 1 of the track: DT2 reads the type; DN2 uses the list position (finding 33), the sound proves the type. */
         const pickRun = async (session: Session) => {
-          if (!sc.play || device === 'dn2') return pickSine(session, sc.hintRun ?? sc.hint);
+          if (!sc.play || device === 'dn2') return pickSine(session, sc.hint);
           const type = await dynType(session, run.plan, sc.play.module, sc.play.machine);
-          await selectType(session, 1, type, sc.hintRun ?? sc.hint ?? 7);
+          await selectType(session, 1, type, sc.hint ?? 7);
         };
 
         test('the rows equal the reference; the note matches', async () => {
-          let want: Tables;
-          let refPcm: Float32Array | undefined;
-          if (ref) {
-            const refRt = await ref.first();
-            want = await decodeTables(refRt.session, ref.plan);
-            if (sc.play && !sc.pcmSha256) {
-              if (device === 'dt2') await selectType(refRt.session, 1, sc.staticType!, sc.hint ?? 7);
-              else await pickSine(refRt.session, sc.hint);
-              refPcm = await playNote(refRt.session, path.join(ref.artifacts, 'ref.wav'), sc.trigFrame);
-              expect(peak(refPcm), 'the reference note is audible').toBeGreaterThan(0.01);
-            }
-          }
-
           const rt = await run.first();
           const { session } = rt;
           const info = await bootInfo(session, run.plan);
@@ -173,19 +136,14 @@ export function defineEquiv(scenarios: Equiv[]): void {
               { ok: onset >= 0 && onset % 2 === 0 && window.length / 4 === PIN_SAMPLES, sha },
               `PCM from the onset (${onset}) over ${PIN_SAMPLES} samples has the pinned SHA-256`,
             ).toEqual({ ok: true, sha: sc.pcmSha256 });
-          } else if (refPcm) {
-            const same = pcmMatches(refPcm, runPcm, 128);
-            expect(same.ok, `PCM of the run-time machine equals the patched-in machine's: ${same.detail}`).toBe(true);
-          } else if (sc.play && !ref) {
-            // no pin and no twin: the note is only audible
+          } else if (sc.play) {
+            // no pin: the note is only audible
             expect(peak(runPcm), 'the run-time note is audible').toBeGreaterThan(0.01);
           }
 
-          if (!ref) {
-            // a set with no twin: the rows are compared with a boot of no module
-            const none = await run.load('none', {});
-            want = await decodeTables(none.session, run.plan);
-          }
+          // the rows are compared with a boot of no module
+          const none = await run.load('none', {});
+          const want = await decodeTables(none.session, run.plan);
           for (const name of sc.ignoreRunMachines) {
             const gone = (got.machines[name] ?? {}) as { knobs?: (string | number)[] };
             delete got.machines[name];
@@ -193,16 +151,7 @@ export function defineEquiv(scenarios: Equiv[]): void {
             for (const k of [...(gone.knobs ?? []), ...mine.flatMap((p) => p.knobs)]) delete got.params[String(k)];
             got.pages = got.pages.filter((p) => p.machine !== name);
           }
-          const diff = diffTables(got, want!);
-          expect(
-            diff,
-            ref ? "machine, parameter and page rows equal the static twin's" : "rows equal the no-module boot's",
-          ).toEqual([]);
-          if (ref)
-            expect(
-              Object.keys(got.machines).length + Object.keys(got.params).length + got.pages.length,
-              'the run-time set added rows',
-            ).toBeGreaterThan(0);
+          expect(diffTables(got, want), "rows equal the no-module boot's").toEqual([]);
         });
       },
       sc.full === true && !FULL_TIER,
