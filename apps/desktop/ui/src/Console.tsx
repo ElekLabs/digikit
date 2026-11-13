@@ -342,8 +342,7 @@ export default function Console() {
       setBooting(undefined);
     }
   };
-  const load = async (bytes: Uint8Array, name: string) =>
-    {
+  const load = async (bytes: Uint8Array, name: string) => {
     const imageDevice = await deviceOfImage(bytes);
     return boot((r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice) }), name, imageDevice);
   };
@@ -355,7 +354,10 @@ export default function Console() {
     try {
       setOpened('');
       await boot(
-        (r) => (r.loadPath ? r.loadPath(path, { runtime: bootRuntime() && runtimeHere() }) : Promise.reject(new Error('no reload'))),
+        (r) =>
+          r.loadPath
+            ? r.loadPath(path, { runtime: bootRuntime() && runtimeHere() })
+            : Promise.reject(new Error('no reload')),
         source()?.name ?? path,
       );
       setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
