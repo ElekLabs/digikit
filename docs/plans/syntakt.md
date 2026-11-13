@@ -158,6 +158,20 @@ read over USB MIDI.
       (device data and registry, emulator, patchkit and Python tools, web and desktop), one cross-cutting pass for device
       decoupling; findings verified before fixing.
 
+- [x] Review of syntakt/bringup at abbca772: five reviewers (device data, emulator, patchkit and tools, apps,
+      device decoupling); no critical findings; no path by which patchkit writes a read-only section.
+- [ ] Batch A fixes (correctness and safety): Rust in branch review/rust-fixes, apps/tools/docs in review/app-fixes.
+- [ ] Design follow-ups from the review:
+  - Boot signatures (task_create, UART init, USB, the older *_SIG) as per-firmware rules in devices/fw, not code.
+  - Split `[emulator]`: device facts (peer wiring: window, channels, vectors; peer audio path; LED protocol;
+    calibration record format) apart from emulator choices (peer model, synthetic calibration, board revision).
+  - A `ready_snapshot` capability instead of inferring it from "has a DSP"; peer substitute as its own flag.
+  - Nx per-device halves and ready env from the registry (registry slice S1).
+  - One eDMA TCD helper in periph instead of two copies; document the zero-time shortcuts (image stream, whole
+    major loops, the 1500 Hz frame source) and fix them when touched.
+  - Decisions for Em: stock-firmware hashes in the browser bundle (existing conflict with patchkit's rule);
+    `verify` requiring the base image for devices with read-only sections.
+
 ### Later
 
 - Syntakt machines need a peer-ColdFire module contract (not SHARC). Not planned.
