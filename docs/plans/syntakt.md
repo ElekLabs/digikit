@@ -86,6 +86,17 @@ read over USB MIDI.
 - [x] Patchkit: no-seal path, optional DSP section, refuse sections 1, 2, 4, 6, 7, 8 explicitly (from `[container]`, not names).
 - [ ] Runtime target on st (blocks the dry run with core/runtime and digikit/debug): `patchkit gen` needs DSP facts that a device
       without a DSP may not have, and the runtime's shared constants have no Syntakt value (finding 129 "Runtime target").
+      Design: no device-specific values in the runtime. A per-device data object ("DKDV" struct, versioned, generated per
+      device, placed in cf.expansion like `dkrt_device_id`) holds the facts and capability bits (has DSP, store, eSDHC, safe
+      key). The runtime keeps only what it uses itself (console UART, DDR and keep RAM, safe key, eSDHC); services read their
+      own facts (DSP timing and area: DSP link; machine type range: machines; store layout: store) from the same object.
+      `[limits]` sizes static arrays and moves to the runtime ABI. Modules may list `optional_anchors`: a missing one is
+      linked to 0, its hook skipped, and reported. Proof replaces byte identity: image_report shows only runtime/device
+      objects changed, struct values equal the old constants, runtime device tests pass on DT2 and DN2.
+  - [ ] Syntakt runtime facts, static (finding 130): UART, eSDHC, DDR, keep area, store location, safe key, PEEK ranges.
+  - [ ] Device struct and gen kind, capability bits, optional anchors: after the SDK S3 branch merges (it changes the same
+        runtime and patchkit files), aligned with the services split.
+  - [ ] Syntakt `[digikit]`, then the dry run with core/runtime + core/expansion + digikit/debug.
 - [x] Runtime anchor proposals on 1.42 [D] (scratchpad st-1.42-anchors.tsv): 111 anchors, 73 high, 22 med/med-high,
       3 low, 15 miss. Misses: DSP link ISR (no SHARC; health loses the DSP measurement), source page hooks,
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.
