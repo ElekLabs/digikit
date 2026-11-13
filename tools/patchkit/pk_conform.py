@@ -169,8 +169,21 @@ def _fx_records(mid: str, man: dict) -> list[dict]:
 
 
 def _voices(mid: str, man: dict) -> list[dict]:
-    """The voice records of a machine module (`patchkit desc`); only `type = "machine"` modules, so `desc` does not run for every module."""
+    """The voice records of a machine module: `patchkit desc` for a module with `.dk.desc` records, and for a module of api major 3 (`[[machine]]` in
+    module.toml) the DSP entry names of its machine (`_<prefix>_render`, `_<prefix>_note_on`, `_<prefix>_desc`; the prefix is the id, or `dsp`).
+    Only `type = "machine"` modules, so `desc` does not run for every module."""
     if man.get("module", {}).get("type") == "machine":
+        if man.get("machine"):
+            m = man["machine"][0]
+            p = m.get("dsp") or m["id"].replace("-", "_")
+            return [
+                {
+                    "machine": m["id"],
+                    "render": f"_{p}_render",
+                    "note_on": f"_{p}_note_on",
+                    "desc": f"_{p}_desc",
+                }
+            ]
         return desc_records(mid)["voices"]
     return []
 
@@ -214,10 +227,15 @@ def _type_number(mid: str, man: dict, device: str, literal: str | None) -> int:
     types = tomllib.loads(
         (ROOT / "modules/core/adapters/machines/types.toml").read_text()
     )[device]
-    recs = desc_records(mid) if man.get("module", {}).get("type") == "machine" else {}
-    mach = (recs.get("machines") or [{}])[0].get("id") or (recs.get("voices") or [{}])[
-        0
-    ].get("machine")
+    if man.get("machine"):  # a module of api major 3: the id of module.toml
+        mach = man["machine"][0]["id"]
+    else:
+        recs = (
+            desc_records(mid) if man.get("module", {}).get("type") == "machine" else {}
+        )
+        mach = (recs.get("machines") or [{}])[0].get("id") or (
+            recs.get("voices") or [{}]
+        )[0].get("machine")
     if literal is not None:  # "machines.<name>.index": the type allocated to <name>
         mach = str(literal).split(".")[1]
     key = f"{mid}:{mach}"
@@ -313,11 +331,17 @@ def spec(mid: str, device: str) -> MachineSpec | None:
     )
 
 
+# Fixtures that declare a machine and that the suite does not run.
+MACHINE_SKIP = {
+    "test/commit-demo": "its DSP does nothing; the fixture of modules/core/runtime/tests/capacity/commit.device.test.ts"
+}
+
+
 def machine_specs(negative: bool = False) -> list[MachineSpec]:
     """Every (machine module, device) the suite runs (NEGATIVE fixtures only with `negative`)."""
     out = []
     for mid in modroots.manifests():
-        if (mid in NEGATIVE) != negative:
+        if (mid in NEGATIVE) != negative or mid in MACHINE_SKIP:
             continue
         for dev in DEVICES:
             s = spec(mid, dev)

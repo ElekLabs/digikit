@@ -13,12 +13,12 @@ def test_machine_parameters_come_from_the_manifest_and_the_device_frame():
     dn2 = c.spec("test/sine", "dn2")
     assert dt2 is not None and dn2 is not None
     # Digitakt II: TUNE is the stock row 0xca on knob 0; the module's parameters follow from knob 1
-    assert [(p.id, p.knob) for p in dt2.params] == [("tune", 0), ("sine_level", 1)]
+    assert [(p.id, p.knob) for p in dt2.params] == [("tune", 0), ("level", 1)]
     assert [dt2.frame.hw(0, p.knob) - dt2.frame.base for p in dt2.params] == [0, 1]
     # the frame skips two halfwords per group of four knobs
     assert [dt2.frame.hw(0, k) - dt2.frame.base for k in (3, 4, 5)] == [3, 6, 7]
     # Module word 0 sits on knob B on both devices; DN2 has no stock TUNE knob.
-    assert [(p.id, p.knob) for p in dn2.params] == [("sine_level", 1)]
+    assert [(p.id, p.knob) for p in dn2.params] == [("level", 1)]
     assert dn2.frame.hw(3, 1) == dn2.frame.base + 3 * dn2.frame.stride + 1
     # a run-time machine has no fixed number: the rig takes the first number of the run-time range of the device (core/machines types.toml)
     types = tomllib.loads(
