@@ -61,6 +61,60 @@ value = 16
 doc = "Room for the entries a caller of dkrt_capacity gives (the runtime has 14 kinds; new kinds are appended)."
 
 [[const]]
+name = "ARENA_BYTES"
+type = "usize"
+value = 524288
+doc = "The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it)."
+
+[[const]]
+name = "STAGE_BYTES"
+type = "usize"
+value = 65536
+doc = "The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml)."
+
+[[const]]
+name = "MACHINE_ROWS"
+type = "usize"
+value = 8
+doc = "Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start)."
+
+[[const]]
+name = "DEV_MAGIC"
+type = "u32"
+value = 0x444b4456
+doc = "DkrtDevice.magic: DKDV."
+
+[[const]]
+name = "DEV_VERSION"
+type = "u32"
+value = 1
+doc = "DkrtDevice.version."
+
+[[const]]
+name = "DEV_HAS_DSP"
+type = "u32"
+value = 1
+doc = "DkrtDevice.caps: the device has the DSP (a SHARC+ that the digikit link drives). Clear: no DSP area, no machine rows, no DSP figures."
+
+[[const]]
+name = "DEV_HAS_STORE"
+type = "u32"
+value = 2
+doc = "DkrtDevice.caps: the device file has a module store ([card.store]). Clear: every store call answers not found and the card is never written."
+
+[[const]]
+name = "DEV_HAS_SDHC"
+type = "u32"
+value = 4
+doc = "DkrtDevice.caps: the card is on an eSDHC controller whose present-state register the runtime may read (DkrtDevice.esdhc_base). Clear: the card is never busy."
+
+[[const]]
+name = "DEV_HAS_SAFE_KEY"
+type = "u32"
+value = 8
+doc = "DkrtDevice.caps: DkrtDevice.safe_key is the firmware key index held at power-on for safe mode. Clear: no key starts safe mode."
+
+[[const]]
 name = "HEALTH_MAGIC"
 type = "u32"
 value = 0x484c5448
@@ -321,6 +375,27 @@ fields = [
     "u32 limit",
     "u32 used",
     "u32 largest",
+]
+
+[[struct]]
+name = "DkrtDevice"
+doc = "The per-device data object `dkrt_dev` (the device files' facts, written by `patchkit gen` as the `gas-dkdv` kind of core/runtime's module.toml and placed in cf.expansion with the runtime). The runtime and the services read their facts from it; nothing in them names a device. The layout only grows at the end."
+fields = [
+    "u32 magic // DEV_MAGIC",
+    "u32 version // DEV_VERSION",
+    "u32 size // the bytes of this struct",
+    "u32 caps // DEV_HAS_* bits",
+    "u32 console_uart_base // [board] console_uart_base: the UART of the console (drained before a soft reset)",
+    "u32 ddr_uncached_alias // [board] ddr_uncached_alias: the uncached view of DDR (the soft reset clears its first word through it)",
+    "u32 ddr_cached_base // [board] ddr_cached_base",
+    "u32 ddr_bytes // [board] ddr_bytes",
+    "u32 esdhc_base // [board] esdhc_base (0 without DEV_HAS_SDHC)",
+    "u32 safe_key // [digikit] safe_key: a firmware key index (0 without DEV_HAS_SAFE_KEY)",
+    "u32 keep_base // [digikit] keep_base: RAM a soft reset is assumed to keep (the crash record)",
+    "u32 keep_bytes // [digikit] keep_bytes",
+    "u32 dsp_block_cycles // [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP)",
+    "u32 dyn_type_first // core/machines types.toml dynamic_first",
+    "u32 dyn_types // run-time machine types (0 without DEV_HAS_DSP)",
 ]
 
 [[struct]]

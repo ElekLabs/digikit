@@ -475,8 +475,7 @@ unsafe fn seed_row(inf: *const u32, k: usize, arr: u32) {
 /// addresses (its sound arrays have an odd stride), so the array's halfwords are read and written a byte at a time.
 pub(crate) unsafe fn kit(inf: *const u32) -> u32 {
     let k = rd(iw(inf, w::KIT_PTR));
-    let ddr = dkrt_sdk::device::DDR_CACHED_BASE..dkrt_sdk::device::DDR_CACHED_BASE + dkrt_sdk::device::DDR_BYTES;
-    if !ddr.contains(&k) {
+    if !crate::dev::ddr_contains(k) {
         return 0;
     }
     k

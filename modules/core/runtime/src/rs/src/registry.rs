@@ -896,7 +896,7 @@ pub unsafe fn counts() -> [(u32, u32); 3] {
 /// The machine type numbers of the machine rows `owner` filled (at most 8), in type order; returns how many.
 pub fn types_of(owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
     let s = rs();
-    let first = dkrt_sdk::device::DYN_TYPE_FIRST;
+    let first = crate::dev::dyn_type_first();
     let mut n = 0;
     let mut k = 0;
     while k < MAX_MACH {

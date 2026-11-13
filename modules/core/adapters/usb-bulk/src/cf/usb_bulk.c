@@ -164,10 +164,15 @@ extern u8 *usb_fw_mem_new(
 extern void usb_fw_mem_free(u8 *p);
 extern void usb_fw_mode_switch(
     u32 port); /* FUN_40006c16: returns when `port` is active; else stop, write the port, restart after about 30 USB ticks. Task context. */
-/* the board: the uncached alias of DDR is this far above the cached window (device.s) */
-extern const u32 usb_alias_delta;
-extern const u32 usb_ddr_base; /* the cached DDR window: base and size */
-extern const u32 usb_ddr_bytes;
+/* the board, from the runtime's device object: the first eight words of struct DkrtDevice (core/runtime/abi.toml, which only grows at its end).
+ * The uncached alias of DDR is this far above the cached window; the cached DDR window is a base and a size. */
+struct dkrt_dev_head {
+    u32 magic, version, size, caps, console_uart_base, ddr_uncached_alias, ddr_cached_base, ddr_bytes;
+};
+extern const struct dkrt_dev_head dkrt_dev;
+#define usb_alias_delta (dkrt_dev.ddr_uncached_alias - dkrt_dev.ddr_cached_base)
+#define usb_ddr_base (dkrt_dev.ddr_cached_base)
+#define usb_ddr_bytes (dkrt_dev.ddr_bytes)
 /* the runtime (dkrt.h) */
 extern void dkrt_io_wake(i32 id);
 extern i32 dkrt_poll_add(u32 f); /* the UI loop calls f once a pass */

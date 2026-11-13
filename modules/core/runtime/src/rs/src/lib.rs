@@ -16,6 +16,7 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
 mod arena;
+pub mod dev;
 pub mod collect;
 mod assign;
 pub mod boot;
@@ -59,10 +60,10 @@ fn panic(_: &PanicInfo) -> ! {
 
 /// Arena bytes. A sub-region of `cf.expansion` that is part of this object's bss: patchkit places it with the object, so no
 /// static object of any module can overlap it, and the reset-path loader zeroes it.
-pub const ARENA_BYTES: usize = dkrt_sdk::device::LIMIT_ARENA_BYTES as usize;
+pub use dkrt_sdk::ARENA_BYTES;
 /// Staging buffer for a `.dkm` file (and the store directory): files are at most this size in v0.
-pub const STAGE_BYTES: usize = dkrt_sdk::device::LIMIT_STAGE_BYTES as usize;
-pub const MAX_MODULES: usize = dkrt_sdk::device::LIMIT_MODULES as usize;
+pub use dkrt_sdk::STAGE_BYTES;
+pub const MAX_MODULES: usize = dkrt_sdk::SEL_MAX;
 pub const LOG_ENTRIES: usize = 16;
 pub const STATE_MAGIC: u32 = 0x444b_5254; // "DKRT"
 
@@ -204,7 +205,7 @@ unsafe fn word_at_literal(lit: *const u32) -> Option<u32> {
         return None;
     }
     let a = read_volatile(l as *const u32);
-    if !(dkrt_sdk::device::DDR_CACHED_BASE..dkrt_sdk::device::DDR_CACHED_BASE + dkrt_sdk::device::DDR_BYTES).contains(&a) || a & 3 != 0 {
+    if !dev::ddr_contains(a) || a & 3 != 0 {
         return None;
     }
     Some(read_volatile(a as *const u32))
@@ -873,7 +874,7 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     let (dfree, dlargest) = dsp::area_stats();
     o.dsp_area_free = dfree;
     o.dsp_area_largest = dlargest;
-    o.dsp_period = DSP_BLOCK_CYCLES;
+    o.dsp_period = dev::dsp_block_cycles();
     o.store_total = store::layout().limit() / 2;
     if health_fn(health_read) == 0 {
         return;
@@ -899,8 +900,9 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     if r.flags & RAW_WINDOW != 0 && r.dsp_n != 0 {
         o.dsp_avg = r.dsp_avg;
         o.dsp_max = r.dsp_max;
-        o.dsp_avg_x10 = (r.dsp_avg.min(DSP_BLOCK_CYCLES * 4) * 1000) / DSP_BLOCK_CYCLES;
-        o.dsp_max_x10 = (r.dsp_max.min(DSP_BLOCK_CYCLES * 4) * 1000) / DSP_BLOCK_CYCLES;
+        let period = dev::dsp_block_cycles().max(1);
+        o.dsp_avg_x10 = (r.dsp_avg.min(period * 4) * 1000) / period;
+        o.dsp_max_x10 = (r.dsp_max.min(period * 4) * 1000) / period;
         fl |= HEALTH_DSP;
     }
     if walk_heap && health_fn(health_heap) != 0 {
@@ -1144,11 +1146,9 @@ unsafe fn save_working_state() {
 
 /// MCF5441x eSDHC: offset of the present-state register (`PRSSTAT`); bits 0 to 2 are command inhibit, data inhibit and data line active.
 const MCF5441X_ESDHC_PRSSTAT: u32 = 0x24;
-/// The card's eSDHC controller (`[board] esdhc_base` of the device files) and its present-state register.
-const ESDHC_PRSSTAT: u32 = dkrt_sdk::device::ESDHC_BASE + MCF5441X_ESDHC_PRSSTAT;
-
+/// Is a card transfer in flight? The card's eSDHC controller is the device object's (`esdhc_base`); a device without one has no busy card.
 unsafe fn card_busy() -> bool {
-    read_volatile(ESDHC_PRSSTAT as *const u32) & 7 != 0
+    dev::has_sdhc() && read_volatile((dev::esdhc_base() + MCF5441X_ESDHC_PRSSTAT) as *const u32) & 7 != 0
 }
 
 /// `dkrt_restart()`: write pending settings (`settings::flush_if_dirty`), save the working state (`save_working_state`), then the firmware's own soft reset: interrupts masked, console drained,

@@ -89,6 +89,7 @@ const GATE = {
         '{workspaceRoot}/devices/**/*',
         '{workspaceRoot}/tests/scenarios/dn2.json',
         '{workspaceRoot}/sdk/sdk.toml',
+        '{workspaceRoot}/modules/core/runtime/abi.toml',
         '{workspaceRoot}/tools/patchkit/toolchain/**/*',
         '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
         '{workspaceRoot}/tools/devtools/emud_key.py',
@@ -176,6 +177,7 @@ const SHARED_SOURCE = { 'sharc-native-2': ['{workspaceRoot}/packages/emulator/sh
 const COMPILE_SOURCE = {
   patchkit: [
     '{workspaceRoot}/sdk/sdk.toml',
+    '{workspaceRoot}/modules/core/runtime/abi.toml',
     '{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json',
     '{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json',
     '{workspaceRoot}/devices/*.toml',

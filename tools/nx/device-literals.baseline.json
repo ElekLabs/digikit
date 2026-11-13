@@ -403,7 +403,7 @@
   "packages/patchkit/src/verify.rs": 1,
   "packages/patchkit/tests/codec.rs": 2,
   "packages/patchkit/tests/conflicts.rs": 9,
-  "packages/patchkit/tests/devdata.rs": 115,
+  "packages/patchkit/tests/devdata.rs": 112,
   "packages/patchkit/tests/dynamic.rs": 6,
   "packages/patchkit/tests/flash.rs": 39,
   "packages/patchkit/tests/frameworks.rs": 17,

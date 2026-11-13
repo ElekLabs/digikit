@@ -53,6 +53,7 @@ SOURCE_GLOBS = (
     "devices/**",
     "tests/scenarios/dn2.json",
     "sdk/sdk.toml",
+    "modules/core/runtime/abi.toml",
     "tools/patchkit/toolchain/**",
     "tools/sharc_dev/sharc_core/seed_tables.py",
 )

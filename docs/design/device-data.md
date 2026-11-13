@@ -61,15 +61,15 @@ readers that scan `devices/` skip them. The public site offers only the faceplat
 | DMA timer counters that the emulator runs free at the bus clock (a firmware that polls one without starting it) | `[emulator] free_running_dtcn` (channels 0..3; absent = none) | emulator boot (`device-profile` `free_running_dtcn_mask`); `DIGI_DTCN0=bus\|off` overrides channel 0 | read directly |
 | SysEx device byte of the `.syx` framing | `[device] syx_id` | patchkit (`syx.rs`, `devdata.rs`) | embedded by `packages/patchkit/build.rs` |
 | Device id and name digikit uses (runtime, `core/dynreg`, `core/dyndsp`, `.dkm`, the INFO reply) | `[digikit] id`, `name` (at most 3 characters) | patchkit `register.rs`, `dkmdsp.rs`; the device objects | `devdata.rs` (embedded); `DEVICE_ID`, `DEVICE_NAME_WORD` in `build/gen/device-<dev>.inc` |
-| Module store: first sector, length, header B, selection record copies | `[card.store]` | runtime (`dkrt_sdk::store`, `sel`), tools | `modules/core/runtime/sdk/src/device.rs` (`STORE_*`); Python: `tools/patchkit/pk_device.py` |
+| Module store: first sector, length (0 without `[card.store]`), header B, selection record copies | `[card.store]` | runtime (`dkrt_sdk::store`, `sel`), tools | `STORE_FIRST`, `STORE_SECTORS` in `build/gen/device-<dev>.inc`, laid out by `device.s` as `dkrt_store_first`, `dkrt_store_sectors`; Python: `tools/patchkit/pk_device.py` |
 | Working-project sector (firmware area above the store) | `[[card.regions]]` role `working-project` | `pk_digikit_scen.py` | `pk_device.working_project_sector()` |
-| Run-time machine type range (`dynamic_first ..= last`) and with it the number of reserved machine rows and voice rows | `modules/core/adapters/machines/types.toml` | runtime `dsp.rs`, `core/dynreg`, `core/dyndsp` | `DYN_TYPE_FIRST`, `DYN_TYPE_LAST`, `DYN_TYPES` in the generated files |
+| Run-time machine type range (`dynamic_first ..= last`) and with it the number of reserved machine rows and voice rows | `modules/core/adapters/machines/types.toml` | runtime `dsp.rs`, `core/dynreg`, `core/dyndsp` | `dyn_type_first`, `dyn_types` of `dkrt_dev`; `DYN_TYPE_*` in the generated files of the other modules |
 | DSP area size (window 0) and frame tail geometry | `[digikit] dsp_area_bytes`, `dsp_tail_off`, `dsp_tail_words` | `core/dsp-link` DSP object, `core/dyndsp` table | `DL_AREA_BYTES`, `DL_AREA_WORDS`, `DL_TAIL_*` in `build/gen/device-<dev>.inc` (SHARC `#define`s and gas `.equ`s) |
-| Console UART, DDR window and uncached alias, eSDHC controller | `[board]` | `tramp.s` (soft reset), `boot.rs` (`key_held`), `lib.rs` (`card_busy`) | `CONSOLE_UART_BASE`, `DDR_*`, `ESDHC_BASE` in `device.rs` / `build/gen/device.inc` |
-| Safe-mode key (a panel control code) | `[digikit] safe_key` | runtime boot | `SAFE_KEY_CODE` |
-| RAM that the firmware and boot code leave alone and that the emulator keeps across a soft reset (the crash record, the keep probe) | `[digikit] keep_base`, `keep_bytes` | runtime `crash.rs`; emulator (`device-profile` `keep_ram`) | `KEEP_BASE`, `KEEP_BYTES` in `device.rs` / `device.inc`; the emulator reads the file |
+| Console UART, DDR window and uncached alias, eSDHC controller (absent: no `DEV_HAS_SDHC`) | `[board]` | `tramp.s` (soft reset), `boot.rs`, `lib.rs` (`card_busy`), `crash.rs`, `usb-bulk` | the device object `dkrt_dev` (below) |
+| Safe-mode key (a firmware key index; absent: no `DEV_HAS_SAFE_KEY`) | `[digikit] safe_key` | runtime boot | `dkrt_dev` |
+| RAM that the firmware and boot code leave alone and that the emulator keeps across a soft reset (the crash record, the keep probe) | `[digikit] keep_base`, `keep_bytes` | runtime `crash.rs`; emulator (`device-profile` `keep_ram`) | `dkrt_dev`; the emulator reads the file |
 | RAM ranges the PEEK command may read (at most four `[lo, hi)`: the firmware's data, the runtime's region with the keep area; no peripheral registers) | `[digikit] peek` | runtime `upload.rs` (`cmd_peek`) | `PEEK_N`, `PEEK_LO_i`, `PEEK_HI_i` in `build/gen/device-<dev>.inc`; `device.s` lays them out as `dkrt_peek_ranges` (the ranges differ per device, so they are a per-device object, not a shared constant) |
-| DSP clock and blocks per second (so cycles per block) | `[board] dsp_clock_hz`, `dsp_blocks_per_second`. The clock word in the start-up code decodes to 1 GHz **[D]** ([finding 100](../findings/100-module-limits.md); the control-register write is not traced). | runtime HEALTH figures | `DSP_BLOCK_CYCLES` (rounded) |
+| DSP clock and blocks per second (so cycles per block) | `[board] dsp_clock_hz`, `dsp_blocks_per_second`. The clock word in the start-up code decodes to 1 GHz **[D]** ([finding 100](../findings/100-module-limits.md); the control-register write is not traced). | runtime HEALTH figures | `dsp_block_cycles` of `dkrt_dev` (rounded; 0 without a DSP) |
 | Container and section limits of a port, DSP L2 range and its excluded ranges, MAIN OS load address | `[patch]` | `port_resolve.py` (written into `devices/ports/*.toml` `[limits]`), patchkit `verify.rs` (an image with no port) | `port_resolve.load_profiles()`; `devdata.rs` |
 | User manual of the device (glob of its extracted pages under `out/refs/`; optional) | `[device] manual` | `tools/coldfire/atlas.py` | `Device.manual` in `tools/firmware/device.py` |
 | Board facts that only the emulator uses (below, "The `[emulator]` table") | `[emulator]` | emulator boot, launcher, panel | `device-profile` fields; `Device.emulator` in Python |
@@ -99,26 +99,31 @@ DDR is and which eSDHC holds the card are board choices and live in `[board]`.
 A module asks for generated files with `[[gen]]` in its `module.toml` (`kind`, `path`, and `uses` for four kinds). `patchkit gen` writes them from the device
 files and `types.toml`; `gen --check` fails when one is stale. The kinds (`packages/patchkit/src/devgen.rs`):
 
-- `rust`: `pub const`s in one file, for a crate that is one image for all devices (the runtime). Only constants that every device
-  file agrees on are written; a difference is an error naming the constant. Used for `modules/core/runtime/sdk/src/device.rs`.
-- `gas-shared`: the same constants as `.equ` lines for ColdFire assembly shared by all devices (`tramp.s`).
+- `gas-dkdv`: the runtime's device object `dkrt_dev` (struct `DkrtDevice` of `modules/core/runtime/abi.toml`: magic, version, size, `DEV_HAS_*`
+  capability bits, then the console UART, the DDR window and alias, the eSDHC base, the safe key, the keep area, the DSP cycles per block and
+  the run-time machine types), one file per device, as `.long` lines that `device.s` includes into its `.rodata`. The field order is the ABI
+  file's; each field takes its value from a device constant (`DKDV_VALUE` in `devgen.rs`). `gas-dkdv-offsets`: `.equ DKDV_<FIELD>, offset`
+  for assembly that reads the object (`tramp.s`), one file for all devices. The capability bits are derived: `DEV_HAS_DSP` from
+  `[capabilities] dsp = "sharc"`, `DEV_HAS_STORE` from `[card.store]`, `DEV_HAS_SDHC` from `[board] esdhc_base`, `DEV_HAS_SAFE_KEY` from
+  `[digikit] safe_key`; the facts of an absent capability are absent from the file (the validator refuses DSP facts when `dsp = "none"`).
 - `gas`: `.equ` lines, one file per device (`path` contains `{dev}`), for the device objects: `.include "device-dt2.inc"`.
 - `sharc`: `#define` lines, one file per device, for DSP sources (`#include "device-dt2.inc"`). Each note is on its own line:
   the assembler's preprocessor keeps a trailing comment in a macro body, which swallows the rest of a line that uses the macro.
   `.PKBSS name, MACRO;` takes a `#define`d number as its size (`packages/patchkit/src/build/sharc_obj.rs`).
 
-Because the runtime object is built once and used on every device, a constant it uses as an immediate must be the same on all
-devices. If a new device needs a different store, a different safe key and so on, that fact has to become a per-device value
-that the runtime reads from its device object (like `dkrt_device_id`), which changes the runtime's code; `gen` refuses to write the
-shared file until it is done.
+The runtime object is built once and used on every device, so it has no device value in its code: what differs between devices is data of
+`dkrt_dev` (and of the other per-device symbols of `device.s`: `dkrt_device_id`, `dkrt_store_*`, `dkrt_peek_*`), which the runtime and the
+services read. The sizes of the runtime's static arrays (`ARENA_BYTES`, `STAGE_BYTES`, `MACHINE_ROWS` and the selection's `SEL_MAX`) are constants of
+`abi.toml`; `gen` checks that the device files' `[limits]` agree with them, and the runtime checks at start that the device's machine type count fits
+(`dev::valid`).
 
-`uses = [...]` is required on the kinds `rust`, `gas-shared`, `gas` and `sharc`: it lists the constant names the module reads.
+`uses = [...]` is required on the kinds `gas` and `sharc`: it lists the constant names the module reads.
 A trailing `*` matches a family by prefix (`FX_VALUE_*`). The generator writes only the listed names, in its own order. It refuses:
 
 - a listed name that matches no constant;
 - a listed name that the module's own sources never reference (whole word, comments count as references; the scan skips the
   directories `build`, `target`, `node_modules` and `tests`, directories whose name starts with `.`, and the generator's own
-  output files; `rust` entries are checked against `*.rs`, the other kinds against `*.s *.S *.inc *.c *.h`).
+  output files; they are checked against `*.s *.S *.inc *.c *.h`).
 
 A constant the sources use but the list lacks is not in the include, so the build fails on the undefined name.
 

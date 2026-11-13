@@ -51,27 +51,41 @@ fn the_runtime_constants_are_the_device_files_numbers() {
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
     let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
     let get = |p: &str| &files.iter().find(|f| f.0 == p).unwrap().1;
-    let rs = get("sdk/src/device.rs");
-    // the numbers of devices/*.toml [board] that both devices share (the store is per device: below)
-    assert!(
-        !rs.contains("STORE_FIRST"),
-        "the store area differs per device"
-    );
-    for want in [
-        "DYN_TYPE_FIRST: u32 = 0x10;",
-        "DYN_TYPE_LAST: u32 = 0x17;",
-        "SAFE_KEY_CODE: u32 = 0x13;",
-        "DSP_BLOCK_CYCLES: u32 = 0xa2c2b;",
-        "KEEP_BASE: u32 = 0x47fe0000;",
-        "KEEP_BYTES: u32 = 0x1000;",
-    ] {
-        assert!(rs.contains(want), "{want}");
+    // the device object `dkrt_dev` of each device: the numbers of devices/*.toml [board] and [digikit], in the order of struct DkrtDevice
+    let objects: Vec<Vec<String>> = files
+        .iter()
+        .filter(|f| f.0.starts_with("build/gen/dkdv-d"))
+        .map(|f| {
+            f.1.lines()
+                .filter_map(|l| l.trim().strip_prefix(".long "))
+                .map(|l| l.split_whitespace().next().unwrap().to_string())
+                .collect()
+        })
+        .collect();
+    let common = [
+        "0x444b4456", // magic
+        "0x1",        // version
+        "0x3c",       // size
+        "0xf",        // caps: DSP, store, eSDHC, safe key
+        "0xec070000", // console UART
+        "0x48000000", // uncached alias
+        "0x40000000", // cached base
+        "0x8000000",  // DDR bytes
+        "0xfc0cc000", // eSDHC
+        "0x13",       // safe key
+        "0x47fe0000", // keep base
+        "0x1000",     // keep bytes
+        "0xa2c2b",    // DSP cycles in a block
+        "0x10",       // first run-time machine type
+        "0x8",        // run-time machine types
+    ];
+    // both devices have the same numbers today
+    assert_eq!(objects.len(), 2);
+    assert!(objects.iter().all(|o| o == &common), "{objects:?}");
+    let offsets = get("build/gen/dkdv-offsets.inc");
+    for want in [".equ DKDV_CAPS, 12", ".equ DKDV_DDR_UNCACHED_ALIAS, 20", ".equ DKDV_DYN_TYPES, 56"] {
+        assert!(offsets.contains(want), "{want}");
     }
-    // the effect slots differ per device (the Digitakt II reserves 3 run-time effect rows, core/dynfx): not in the shared file
-    assert!(
-        !rs.contains("LIMIT_FX_SLOTS"),
-        "the effect slots differ per device"
-    );
     let dn2 = get("build/gen/device-dn2.inc");
     assert!(dn2.contains(".equ DEVICE_ID, 0x2 "), "{dn2}");
     // the effect slots and the DSP area are read by other modules: their generated files hold them
@@ -141,16 +155,6 @@ fn a_uses_list_names_constants_the_module_reads() {
     // a name that is no constant
     if let Some(r) = generate_with("core/fxpages", "gas", gas, &["NO_SUCH_*", "FX_KIT_PTR"]) {
         assert!(r.unwrap_err().0.contains("NO_SUCH_*"));
-    }
-    // a per-device name in a shared-only kind
-    for kind in ["rust", "gas-shared"] {
-        if let Some(r) = generate_with("core/runtime", kind, "build/gen/x", &["PEEK_N"]) {
-            let e = r.unwrap_err().0;
-            assert!(
-                e.contains("per-device") && e.contains("PEEK_N"),
-                "{kind}: {e}"
-            );
-        }
     }
     // a constant that the sources of the module never use
     if let Some(r) = generate_with(
@@ -227,7 +231,7 @@ fn peek_and_keep_ranges_are_checked() {
 }
 
 #[test]
-fn a_fact_that_devices_disagree_on_is_refused_for_the_shared_runtime() {
+fn a_fact_that_devices_disagree_on_becomes_data_of_the_device_object() {
     let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
@@ -235,20 +239,21 @@ fn a_fact_that_devices_disagree_on_is_refused_for_the_shared_runtime() {
         .unwrap();
     let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
     let dn2 = std::fs::read_to_string(root().join("devices/digitone-ii.toml")).unwrap();
-    // move the Digitone's safe key (a fact the shared runtime image has once)
+    // move the Digitone's safe key: the runtime is one image, so the device object carries the difference and `gen` accepts it
     let moved = dn2.replace("safe_key = 19", "safe_key = 20");
     assert_ne!(moved, dn2);
     let facts = Facts::from_texts([dt2.as_str(), moved.as_str()]).unwrap();
-    let e = devgen::generate(&lib, &facts, "core/runtime")
-        .unwrap_err()
-        .0;
-    assert!(
-        e.contains("SAFE_KEY_CODE") && e.contains("one image for all devices"),
-        "{e}"
-    );
-    // per-device files (the device objects) are still fine for numbers that differ
-    let ok = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
-    assert!(devgen::generate(&lib, &ok, "core/dsp-link").is_ok());
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let mut keys: Vec<String> = files
+        .iter()
+        .filter(|f| f.0.starts_with("build/gen/dkdv-d"))
+        .map(|f| {
+            let l = f.1.lines().find(|l| l.contains("safe_key:")).unwrap();
+            l.trim().split_whitespace().nth(1).unwrap().to_string()
+        })
+        .collect();
+    keys.sort();
+    assert_eq!(keys, ["0x13", "0x14"]);
 }
 
 #[test]

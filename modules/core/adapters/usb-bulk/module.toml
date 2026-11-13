@@ -22,15 +22,9 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # (the engine is identical code at the same addresses); the anchors give the data address and the engine entries.
 # The module imports dk_usb_bulk_* are the `[[import]] requires = "core/usb-bulk"` entries of sdk/sdk.toml; the runtime lists them as optional.
 
-# DDR's cached window and its uncached alias (the DMA buffers are used through the alias).
-[[gen]]
-kind = "gas-shared"
-path = "build/gen/device.inc"
-uses = ["DDR_CACHED_BASE", "DDR_BYTES", "DDR_UNCACHED_ALIAS"]
-
 [[object]]
 path = "build/usb-bulk.dko.json"
-sources = ["src/cf/usb_bulk.c", "src/cf/device.s"]
+sources = ["src/cf/usb_bulk.c"]
 place = "cf.expansion"
 
 [object.externs]

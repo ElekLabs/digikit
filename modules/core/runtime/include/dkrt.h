@@ -23,6 +23,24 @@
 #define DKRT_MOD_LOADING 1
 /* Room for the entries a caller of dkrt_capacity gives (the runtime has 14 kinds; new kinds are appended). */
 #define DKRT_CAP_MAX 16
+/* The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it). */
+#define DKRT_ARENA_BYTES 524288
+/* The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml). */
+#define DKRT_STAGE_BYTES 65536
+/* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
+#define DKRT_MACHINE_ROWS 8
+/* DkrtDevice.magic: DKDV. */
+#define DKRT_DEV_MAGIC 0x444b4456u
+/* DkrtDevice.version. */
+#define DKRT_DEV_VERSION 1
+/* DkrtDevice.caps: the device has the DSP (a SHARC+ that the digikit link drives). Clear: no DSP area, no machine rows, no DSP figures. */
+#define DKRT_DEV_HAS_DSP 1
+/* DkrtDevice.caps: the device file has a module store ([card.store]). Clear: every store call answers not found and the card is never written. */
+#define DKRT_DEV_HAS_STORE 2
+/* DkrtDevice.caps: the card is on an eSDHC controller whose present-state register the runtime may read (DkrtDevice.esdhc_base). Clear: the card is never busy. */
+#define DKRT_DEV_HAS_SDHC 4
+/* DkrtDevice.caps: DkrtDevice.safe_key is the firmware key index held at power-on for safe mode. Clear: no key starts safe mode. */
+#define DKRT_DEV_HAS_SAFE_KEY 8
 /* DkrtHealth.magic, "HLTH". */
 #define DKRT_HEALTH_MAGIC 0x484c5448u
 /* DkrtHealth.flags: the image has core/health. */
@@ -195,6 +213,25 @@ typedef struct DkrtCap {
     uint32_t used;
     uint32_t largest;
 } DkrtCap;
+
+/* The per-device data object `dkrt_dev` (the device files' facts, written by `patchkit gen` as the `gas-dkdv` kind of core/runtime's module.toml and placed in cf.expansion with the runtime). The runtime and the services read their facts from it; nothing in them names a device. The layout only grows at the end. */
+typedef struct DkrtDevice {
+    uint32_t magic;                              /* DEV_MAGIC */
+    uint32_t version;                            /* DEV_VERSION */
+    uint32_t size;                               /* the bytes of this struct */
+    uint32_t caps;                               /* DEV_HAS_* bits */
+    uint32_t console_uart_base;                  /* [board] console_uart_base: the UART of the console (drained before a soft reset) */
+    uint32_t ddr_uncached_alias;                 /* [board] ddr_uncached_alias: the uncached view of DDR (the soft reset clears its first word through it) */
+    uint32_t ddr_cached_base;                    /* [board] ddr_cached_base */
+    uint32_t ddr_bytes;                          /* [board] ddr_bytes */
+    uint32_t esdhc_base;                         /* [board] esdhc_base (0 without DEV_HAS_SDHC) */
+    uint32_t safe_key;                           /* [digikit] safe_key: a firmware key index (0 without DEV_HAS_SAFE_KEY) */
+    uint32_t keep_base;                          /* [digikit] keep_base: RAM a soft reset is assumed to keep (the crash record) */
+    uint32_t keep_bytes;                         /* [digikit] keep_bytes */
+    uint32_t dsp_block_cycles;                   /* [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP) */
+    uint32_t dyn_type_first;                     /* core/machines types.toml dynamic_first */
+    uint32_t dyn_types;                          /* run-time machine types (0 without DEV_HAS_DSP) */
+} DkrtDevice;
 
 /* dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
 typedef struct DkrtHealth {
@@ -377,6 +414,22 @@ _Static_assert(offsetof(DkrtCap, kind) == 0, "DkrtCap.kind");
 _Static_assert(offsetof(DkrtCap, limit) == 4, "DkrtCap.limit");
 _Static_assert(offsetof(DkrtCap, used) == 8, "DkrtCap.used");
 _Static_assert(offsetof(DkrtCap, largest) == 12, "DkrtCap.largest");
+_Static_assert(sizeof(DkrtDevice) == 60, "DkrtDevice size");
+_Static_assert(offsetof(DkrtDevice, magic) == 0, "DkrtDevice.magic");
+_Static_assert(offsetof(DkrtDevice, version) == 4, "DkrtDevice.version");
+_Static_assert(offsetof(DkrtDevice, size) == 8, "DkrtDevice.size");
+_Static_assert(offsetof(DkrtDevice, caps) == 12, "DkrtDevice.caps");
+_Static_assert(offsetof(DkrtDevice, console_uart_base) == 16, "DkrtDevice.console_uart_base");
+_Static_assert(offsetof(DkrtDevice, ddr_uncached_alias) == 20, "DkrtDevice.ddr_uncached_alias");
+_Static_assert(offsetof(DkrtDevice, ddr_cached_base) == 24, "DkrtDevice.ddr_cached_base");
+_Static_assert(offsetof(DkrtDevice, ddr_bytes) == 28, "DkrtDevice.ddr_bytes");
+_Static_assert(offsetof(DkrtDevice, esdhc_base) == 32, "DkrtDevice.esdhc_base");
+_Static_assert(offsetof(DkrtDevice, safe_key) == 36, "DkrtDevice.safe_key");
+_Static_assert(offsetof(DkrtDevice, keep_base) == 40, "DkrtDevice.keep_base");
+_Static_assert(offsetof(DkrtDevice, keep_bytes) == 44, "DkrtDevice.keep_bytes");
+_Static_assert(offsetof(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevice.dsp_block_cycles");
+_Static_assert(offsetof(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
+_Static_assert(offsetof(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
 _Static_assert(sizeof(DkrtHealth) == 108, "DkrtHealth size");
 _Static_assert(offsetof(DkrtHealth, magic) == 0, "DkrtHealth.magic");
 _Static_assert(offsetof(DkrtHealth, version) == 4, "DkrtHealth.version");

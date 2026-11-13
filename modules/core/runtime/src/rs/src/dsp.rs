@@ -28,7 +28,7 @@ use dkrt_sdk::*;
 const INFO_MAGIC: u32 = 0x4444_5350; // "DDSP"
 const STATE_MAGIC: u32 = 0x444b_4453; // "DKDS"
 /// Free voice rows core/dyndsp reserves: one per run-time machine type (a module's voice takes a row).
-pub const MAX_ROWS: usize = DYN_TYPES as usize;
+pub const MAX_ROWS: usize = MACHINE_ROWS;
 const MAX_VOICES: usize = MAX_ROWS;
 const MAX_RELOCS: u32 = dkneeds::MAX_RELOCS;
 const MAX_IMPORTS: u32 = dkneeds::MAX_IMPORTS;
@@ -80,12 +80,8 @@ const WIN_FX: u32 = 2;
 const FX_INFO_MAGIC: u32 = 0x4446_5849; // "DFXI"
 const L2_BYTE_BASE: u32 = 0x2000_0000;
 const L2_SW_BASE: u32 = 0x00B8_0000;
-/// The run-time machine types (`dynamic_first ..= last` of modules/core/adapters/machines/types.toml, through `patchkit gen`).
-const TYPE_FIRST: u32 = device::DYN_TYPE_FIRST;
-const TYPE_LAST: u32 = device::DYN_TYPE_LAST;
-const DYN_TYPES: u32 = device::DYN_TYPES;
-// the row count of the runtime's tables (`[limits] machine_rows`) is the count of run-time machine types that the firmware tables reserve
-const _: () = assert!(device::LIMIT_MACHINE_ROWS == device::DYN_TYPES);
+// The run-time machine types (`dynamic_first ..= last` of modules/core/adapters/machines/types.toml) are the device object's (`dev::dyn_type_first`,
+// `dev::dyn_types`); the tables here have `MACHINE_ROWS` rows, and `dev::valid` checks that the device's count fits.
 /// A free voice row's type: no machine type equals it.
 const FREE_TYPE: u32 = 0xffff_ffff;
 /// UI-loop passes a phase may last before the load is given up.
@@ -816,7 +812,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         // the voice names its machine by key (or by a pinned number): `assign` has the type
         let t = crate::assign::resolve(rd32(e));
         let entry = rd32(e.add(4));
-        if !(TYPE_FIRST..=TYPE_LAST).contains(&t) || entry >= image_size || entry & 1 != 0 {
+        if !crate::dev::is_dyn_type(t) || entry >= image_size || entry & 1 != 0 {
             return E_DSP_TYPE;
         }
         let mut k = 0;

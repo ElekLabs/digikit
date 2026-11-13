@@ -19,7 +19,7 @@
 use crate::{dlog, loader};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{Record, MAP_N};
-use dkrt_sdk::sticky::{assign, clean, in_range, Event, MAX_KEYS};
+use dkrt_sdk::sticky::{assign, clean, Event, Types, MAX_KEYS};
 use dkrt_sdk::*;
 
 /// The boot's assignment, peekable by the proof tools (`DKRT_ASSIGN`): `magic` "DKAS", `n` machines planned, `dirty` 1 when the map changed.
@@ -57,11 +57,17 @@ pub fn map_used() -> u32 {
 }
 
 /// Assign the numbers of every machine of the selected modules. Call once, at the start of the boot load, with the record the boot started from.
+/// The device's run-time machine types (the device object's).
+fn types() -> Types {
+    Types { first: crate::dev::dyn_type_first(), count: crate::dev::dyn_types() }
+}
+
 pub unsafe fn plan(rec: &Record) {
     let a = st();
     a.magic = 0x444b_4153; // "DKAS"
     a.n = 0;
-    a.map = clean(&rec.map);
+    let tys = types();
+    a.map = clean(tys, &rec.map);
     // the machines of the selection, in load order
     let mut k = 0;
     while k < rec.count as usize {
@@ -78,7 +84,7 @@ pub unsafe fn plan(rec: &Record) {
         k += 1;
     }
     let n = a.n;
-    a.dirty = assign(&rec.map, &mut a.map, &a.key, &mut a.ty, n, &mut |ev: &Event| {
+    a.dirty = assign(tys, &rec.map, &mut a.map, &a.key, &mut a.ty, n, &mut |ev: &Event| {
         let flags = if ev.error { logk::F_ERROR } else { dlog::INFO };
         dlog::ev(ev.kind, flags, ev.args);
     });
@@ -88,7 +94,7 @@ pub unsafe fn plan(rec: &Record) {
 /// number as it is (when it is in the run-time range), 0 when there is none.
 pub unsafe fn resolve(key: u32) -> u32 {
     if key >> 8 == 0 {
-        return if in_range(key) { key } else { 0 }; // a pinned number (0: none)
+        return if types().contains(key) { key } else { 0 }; // a pinned number (0: none)
     }
     let a = st();
     let at = core::ptr::read_volatile(addr_of_mut!(loader::BOOT_IDX));

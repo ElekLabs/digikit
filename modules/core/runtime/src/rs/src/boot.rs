@@ -266,13 +266,19 @@ unsafe fn update(mut r: Record, current_copy: u32, valid: bool) -> i32 {
 /// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
 /// channel-2 report. Hardware timing not yet proved **[O]**.
 unsafe fn key_held() -> bool {
-    dkfw::input::key_down(SAFE_KEY_CODE) != 0
+    match crate::dev::safe_key() {
+        Some(k) => dkfw::input::key_down(k) != 0,
+        None => false,
+    }
 }
 
 /// The boot hook (once per boot, main-OS task).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_boot() {
     crate::init_once();
+    if !crate::dev::valid() {
+        return; // a device object this runtime cannot read (a patch bug): load nothing, leave the firmware alone
+    }
     let b = info();
     if b.magic == INFO_MAGIC {
         return; // the constructor ran once already: a second call is a bug, not a second boot

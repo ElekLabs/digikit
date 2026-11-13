@@ -18,7 +18,7 @@
 use crate::{dlog, watch};
 use crate::{dkrt_flush, dkrt_soft_reset, st};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
-use dkrt_sdk::device::{DDR_BYTES, DDR_CACHED_BASE, KEEP_BASE, KEEP_BYTES};
+use crate::dev;
 use dkrt_sdk::store::crc32_of;
 use dkrt_sdk::*;
 
@@ -67,7 +67,7 @@ extern "C" {
 }
 
 fn rec() -> *mut u32 {
-    KEEP_BASE as usize as *mut u32
+    dev::keep_base() as usize as *mut u32
 }
 
 /// What `at_boot` found, kept for `dkrt_diag`, the proofs and the boot code.
@@ -111,7 +111,7 @@ unsafe fn hook_word() -> Option<*mut u32> {
         return None;
     }
     let a = read_volatile(lit as *const u32);
-    if !(DDR_CACHED_BASE..DDR_CACHED_BASE + DDR_BYTES).contains(&a) || a & 3 != 0 {
+    if !dev::ddr_contains(a) || a & 3 != 0 {
         return None;
     }
     Some(a as usize as *mut u32)
@@ -141,7 +141,7 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
     if faults != 0 {
         // a fault inside the handler: keep the first record (with the count) and reset
         write_volatile(r.add(W_FAULTS), faults + 1);
-        dkrt_flush(KEEP_BASE, 64);
+        dkrt_flush(dev::keep_base(), 64);
         dkrt_soft_reset()
     }
     write_volatile(r.add(W_MAGIC), 0); // an older record is not valid while this one is written
@@ -225,9 +225,7 @@ unsafe fn copy_stack(r: *mut u32, a7: u32) {
     let mut i = 0;
     while i < STACK_WORDS {
         let at = a7.wrapping_add(4 * i as u32);
-        let ok = a7 & 3 == 0
-            && a7 >= DDR_CACHED_BASE
-            && at < DDR_CACHED_BASE + DDR_BYTES - 4;
+        let ok = a7 & 3 == 0 && a7 >= dev::ddr_base() && at < dev::ddr_base() + dev::ddr_bytes() - 4;
         write_volatile(r.add(W_STACK + i), if ok { read_volatile(at as usize as *const u32) } else { 0 });
         i += 1;
     }
@@ -274,7 +272,7 @@ unsafe fn seal(reset: bool) {
     let crc = crc32_of(v.as_ptr() as *const u8, W_CRC * 4);
     write_volatile(r.add(W_CRC), crc);
     write_volatile(r.add(W_MAGIC), MAGIC); // the record is valid from here
-    dkrt_flush(KEEP_BASE, (REC_WORDS * 4) as u32);
+    dkrt_flush(dev::keep_base(), (REC_WORDS * 4) as u32);
     if reset {
         dkrt_soft_reset()
     }
@@ -416,7 +414,7 @@ pub unsafe fn at_boot() -> bool {
     }
     // clear first: a record that crashes the boot again must not be found a third time
     write_volatile(rec().add(W_MAGIC), 0);
-    dkrt_flush(KEEP_BASE, 64);
+    dkrt_flush(dev::keep_base(), 64);
     if v[W_VERSION] != VERSION || crc32_of(v.as_ptr() as *const u8, W_CRC * 4) != v[W_CRC] {
         c.bad = 1;
         dlog::ev(logk::CRASH_FOUND, logk::F_ERROR, [0, 0, 0, 0, 0xbad]);
@@ -543,7 +541,7 @@ unsafe fn store_fault(f: &dkrt_sdk::fault::Fault) -> u32 {
 
 /// The probe word: log whether the one from the boot before is still in RAM, then write a new one.
 pub unsafe fn keep_probe() {
-    let p = (KEEP_BASE + PROBE_AT) as usize as *mut u32;
+    let p = (dev::keep_base() + PROBE_AT) as usize as *mut u32;
     let c = &mut *addr_of_mut!(DKRT_CRASH);
     let magic = read_volatile(p);
     let gen = read_volatile(p.add(1));
@@ -554,6 +552,5 @@ pub unsafe fn keep_probe() {
     write_volatile(p, PROBE_MAGIC);
     write_volatile(p.add(1), ngen);
     write_volatile(p.add(2), !ngen);
-    dkrt_flush(KEEP_BASE + PROBE_AT, 16);
-    let _ = KEEP_BYTES;
+    dkrt_flush(dev::keep_base() + PROBE_AT, 16);
 }

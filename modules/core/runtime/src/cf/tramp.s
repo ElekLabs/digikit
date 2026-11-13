@@ -1,7 +1,7 @@
 /* core/runtime: hook trampoline and cache maintenance (docs/design/digikit-runtime.md).
  *
- * Board facts (which UART is the console, where DDR is) come from the device files through build/gen/device.inc; the register
- * offsets of the MCF5441x itself are named here.
+ * Board facts (which UART is the console, where DDR is) are read from the device object `dkrt_dev` (struct DkrtDevice of abi.toml;
+ * field offsets in build/gen/dkdv-offsets.inc); the register offsets of the MCF5441x itself are named here.
  *
  * dkrt_loop_hook replaces the target of the `jsr` at the top of the UI task's event loop (the call that pops the next event
  * from the UI queue; the queue pointer is on the stack, the stock function returns the event in d0). It runs the runtime's
@@ -10,7 +10,7 @@
  * has just pushed the argument, and the result comes back in d0). d2-d7/a2-a6 are preserved by the C function.
  * fw_queue_pop is the stock function (anchor cf.rtos.fn.queue_pop).
  */
-    .include "device.inc"
+    .include "dkdv-offsets.inc"
     .include "dk_fw_view.inc"
     .include "dk_fw_rtos.inc"
     .equ MCF5441X_UART_USR_OFF, 4       /* UART status register, offset from the UART base; bit 3 is TXEMP (transmitter empty) */
@@ -70,13 +70,16 @@ dkrt_irq_restore:
     .globl dkrt_soft_reset
 dkrt_soft_reset:
     move.w  #0x2700,%sr
+    lea     dkrt_dev,%a0
+    movea.l DKDV_CONSOLE_UART_BASE(%a0),%a1
     move.l  #200000,%d1
-1:  move.b  CONSOLE_UART_BASE + MCF5441X_UART_USR_OFF,%d0
+1:  move.b  MCF5441X_UART_USR_OFF(%a1),%d0
     btst    #3,%d0
     bne.s   2f
     subq.l  #1,%d1
     bne.s   1b
-2:  clr.l   DDR_UNCACHED_ALIAS
+2:  movea.l DKDV_DDR_UNCACHED_ALIAS(%a0),%a1
+    clr.l   (%a1)
     .rept 25
     nop
     .endr
