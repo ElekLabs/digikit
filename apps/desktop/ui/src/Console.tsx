@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { defaultFaceplate, panels } from '@web/data/faceplates';
-import { registry, type DeviceId } from '@web/data/device-profiles';
+import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@web/data/device-profiles';
 import { deviceOfImage } from '@web/patch/identify';
 import {
   nativeRuntime,
@@ -190,11 +190,19 @@ export default function Console() {
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
   const sidePanelsShown = createMemo(() => page() === 'emulator');
   const panelsActive = createMemo(() => !!status());
+  const knownDevice = () => status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
   const device = () => {
-    const d = status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
+    const d = knownDevice();
     return d !== undefined && d in panels ? d : defaultFaceplate;
   };
   const panel = () => panels[device()];
+  /** A device without `[digikit]` has no runtime, no modules and no remote: it starts stock, and those pages say so. */
+  const hasRuntime = (id: string | undefined) => id === undefined || runtimeDeviceIds.includes(id);
+  const runtimeHere = () => hasRuntime(knownDevice());
+  const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
+  createEffect(() => {
+    if (!runtimeHere() && (page() === 'transfer' || page() === 'remote')) setPage('emulator');
+  });
 
   /** Set when a default-modules install has started since the app opened (boot() or the first status of a startup with the runtime). */
   let defaultsStarted = false;
@@ -243,7 +251,7 @@ export default function Console() {
    * runtime. Tick off: pending when this boot patched the runtime in (a file loaded as it is, with its own runtime, keeps it either way). */
   const runtimePending = () => {
     const i = info();
-    if (i === undefined) return false;
+    if (i === undefined || !runtimeHere()) return false;
     return bootRuntime() ? !i.runtime : !!i.runtime?.patched;
   };
   /** What the running image got from the runtime patch, for the header. */
@@ -335,7 +343,10 @@ export default function Console() {
     }
   };
   const load = async (bytes: Uint8Array, name: string) =>
-    boot((r) => r.load(bytes, name, { runtime: bootRuntime() }), name, await deviceOfImage(bytes));
+    {
+    const imageDevice = await deviceOfImage(bytes);
+    return boot((r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice) }), name, imageDevice);
+  };
   /** Boot the startup file again: the controller reads it from its path. */
   const reload = async (why: string) => {
     const path = source()?.path;
@@ -344,7 +355,7 @@ export default function Console() {
     try {
       setOpened('');
       await boot(
-        (r) => (r.loadPath ? r.loadPath(path, { runtime: bootRuntime() }) : Promise.reject(new Error('no reload'))),
+        (r) => (r.loadPath ? r.loadPath(path, { runtime: bootRuntime() && runtimeHere() }) : Promise.reject(new Error('no reload'))),
         source()?.name ?? path,
       );
       setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
@@ -727,8 +738,12 @@ export default function Console() {
             class="side"
             classList={{ on: page() === 'transfer' }}
             aria-current={page() === 'transfer' ? 'page' : undefined}
-            disabled={!status() && target().kind === 'emulator'}
-            title="Choose the modules that run on the target (the emulator or a device on a MIDI port) and install them"
+            disabled={(!status() && target().kind === 'emulator') || (target().kind === 'emulator' && !runtimeHere())}
+            title={
+              target().kind === 'emulator' && !runtimeHere()
+                ? noRuntimeTitle()
+                : 'Choose the modules that run on the target (the emulator or a device on a MIDI port) and install them'
+            }
             onClick={() => setPage('transfer')}
           >
             <Icon d={MODULES} />
@@ -739,8 +754,12 @@ export default function Console() {
             class="side"
             classList={{ on: page() === 'remote' }}
             aria-current={page() === 'remote' ? 'page' : undefined}
-            disabled={!status() && target().kind === 'emulator'}
-            title="Press the keys and turn the encoders of the target, and see its screen"
+            disabled={(!status() && target().kind === 'emulator') || (target().kind === 'emulator' && !runtimeHere())}
+            title={
+              target().kind === 'emulator' && !runtimeHere()
+                ? noRuntimeTitle()
+                : 'Press the keys and turn the encoders of the target, and see its screen'
+            }
             onClick={() => setPage('remote')}
           >
             <Icon d={REMOTE} />
@@ -793,11 +812,16 @@ export default function Console() {
               <span class="sp" />
               <label
                 class="tag opt"
-                title="Patch the digikit runtime into a stock firmware when it is opened or reloaded (the next Open or Reload)"
+                title={
+                  runtimeHere()
+                    ? 'Patch the digikit runtime into a stock firmware when it is opened or reloaded (the next Open or Reload)'
+                    : noRuntimeTitle()
+                }
               >
                 <input
                   type="checkbox"
-                  checked={bootRuntime()}
+                  checked={bootRuntime() && runtimeHere()}
+                  disabled={!runtimeHere()}
                   onChange={(e) => {
                     setBootRuntime(e.currentTarget.checked);
                     writeRuntimePref(e.currentTarget.checked);

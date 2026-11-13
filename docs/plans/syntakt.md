@@ -69,7 +69,11 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 
 ### P2 Workbench and faceplate
 
-- [ ] Device chosen by firmware hash (no file-name regex).
+- [x] Device chosen by firmware hash (no file-name regex): launcher `launch_device` (hash, patch record), desktop `deviceOfImage`.
+- [x] Launcher on device data: no DSP (`capabilities.dsp`) runs the ColdFire-only build with no audio inputs or PGO; no `[digikit]`
+      starts stock with a notice; no seedable card (`capabilities.card`) gets no card options; `module:pack-all` skips non-runtime devices.
+- [x] Desktop workbench runs the Syntakt: faceplate, screen, trig keys and encoder A work, LEDs lit. Transfer, Remote and the runtime
+      tick are disabled with "no digikit runtime" for a device without one.
 - [x] Panel codes from an emulator sweep (finding 70 "Panel sweep"); LED map for the trig keys and the four page LEDs.
 - [x] `panel_leds` decoder for the Syntakt LED records (`led_protocol = "packed-states"`); page keys, RECORD and PLAY mapped.
 - [ ] The other key LEDs (FUNC, TRK, PTN, BANK, arrows: several LEDs change at once, needs per-LED naming from the firmware).
@@ -77,6 +81,16 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 - [x] Faceplate component: Sound and Routing icons, Modifier Setup glyph, extra LED (TRK), accent colour on knob
       sub-labels and split labels (registry S5).
 - [x] Panel codes from the sweep replace the DN2 placeholders.
+
+Run it (Em):
+
+```sh
+mise run workbench -- firmware/Syntakt_OS1.42.syx   # first run builds the ColdFire-only app (about 4 min), then boots cold
+mise run workbench -- firmware/Digitakt_II_OS1.17.syx   # unchanged (run `mise run emu:ready -- dt2 --syx ...` once before)
+```
+
+The Syntakt needs no `emu:ready`: the app boots cold to the main screen in about 20 s and the CF-only build has no way to load
+`out/ready/st-1.42/main.state` (that file is for `panel_drive --state`).
 
 ### P3 Patchkit, runtime and modules in the emulator
 
