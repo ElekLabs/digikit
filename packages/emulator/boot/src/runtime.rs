@@ -646,6 +646,10 @@ impl Emulator {
         forced.insert(UART8_USR, 0x0d00_0000);
         forced.insert(DSPI0_SR, 0x1000_00f0);
         forced.insert(DSPI2_SR, 0x9000_0000);
+        // `[emulator] board_revision`: the PCB revision byte at FlexBus CS1 address 0.
+        if let Some(revision) = device.board_revision {
+            forced.insert(0, u32::from(revision) << 24);
+        }
         // USB ENDPTFLUSH: the controller clears the flush bits at once; the firmware's disconnect callback polls them without a bound (`FUN_4000436e`).
         forced.insert(0xfc0b_01b4, 0);
         // USB ENDPTPRIME: the controller clears a prime bit as soon as it has read the queue head and set ENDPTSTAT. Priming takes no time in this model
@@ -659,7 +663,12 @@ impl Emulator {
         board
             .map_zeroed_ram_page(STACK & !((PAGE as u32) - 1))
             .expect("map stack RAM");
-        let flash = flash_image(&main, flash_read, container)?;
+        let flash = flash_image(
+            &main,
+            flash_read,
+            container,
+            device.calibration_record.is_some(),
+        )?;
         let idle_spins = main
             .windows(2)
             .enumerate()
@@ -3883,7 +3892,14 @@ fn resolve_context_switch(main: &[u8]) -> Result<(u32, u32), String> {
     ))
 }
 
-fn flash_image(main: &[u8], flash_read: u32, container: &[u8]) -> Result<Vec<u8>, String> {
+/// The model's NOR: the OS container at 0x80000, and with `calibration` the synthetic calibration record at 0x300000
+/// (`[emulator] calibration_record`; synthetic emulator data, see `nor_records`). The rest reads as zero.
+fn flash_image(
+    main: &[u8],
+    flash_read: u32,
+    container: &[u8],
+    calibration: bool,
+) -> Result<Vec<u8>, String> {
     let at = (flash_read - MAIN_LOAD) as usize;
     if main.get(at..at + FLASH_READ_SIG.len()) != Some(FLASH_READ_SIG) {
         return Err("flash_read signature changed after resolution".into());
@@ -3894,6 +3910,14 @@ fn flash_image(main: &[u8], flash_read: u32, container: &[u8]) -> Result<Vec<u8>
         .ok_or("ELE3 container does not fit flash")?;
     let mut flash = vec![0; FLASH_SIZE];
     flash[FLASH_SLOT..end].copy_from_slice(container);
+    if calibration {
+        use crate::nor_records::{CALIBRATION_OFFSET, synthetic_calibration};
+        let record = synthetic_calibration();
+        if end > CALIBRATION_OFFSET {
+            return Err("ELE3 container overlaps the calibration record".into());
+        }
+        flash[CALIBRATION_OFFSET..CALIBRATION_OFFSET + record.len()].copy_from_slice(&record);
+    }
     Ok(flash)
 }
 

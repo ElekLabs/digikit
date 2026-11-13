@@ -173,9 +173,29 @@ Two counts, with different scope:
 - 600 M instructions: black screen, the boot thread has finished and spins at 0x4008288e.
   The main screen is reached at 609,984,465 instructions (about 5 s of host time): project
   A01 "ADRIANA" at 135.0 BPM with the dialog "RUN WARM-UP CALIBRATION, ARE YOU SURE?" on top.
-  Why that dialog shows: **[O]**.
+  Why that dialog shows: the NOR record at 0x300000 is zero (see "Emulated NOR" below).
 - Through 1.21 G instructions the display stays the same and "DSP BOOT FAILURE" has not appeared
   (the peer mailbox is not modelled: unmapped pages read as zero). When it shows: **[O]**.
+
+## Emulated NOR and the calibration dialog [D]
+
+- The emulator already served MAIN's NOR through its `flash_read` hook (`FUN_40116d7a`, the same signature as DT2 and DN2): the ELE3 container
+  of the syx at 0x80000, zero elsewhere. The calibration record at 0x300000 therefore read as zeros.
+- Boot task 0x4000abd6 shows "RUN WARM-UP CALIBRATION" when `FUN_4006edca` is negative or boot flag 0x80000 is set. `FUN_4006ecb8` reads
+  0x22d40 bytes from NOR 0x300000. The record is valid when long[0] == 0x52424F5A ("RBOZ"), long[+0xC] equals the sum over i = 1..0x22d30
+  of `i ^ byte[0x10 + i - 1]` (32 bit, `FUN_4006eb5c`), u16[+0x10] == 1, and the bytes +0x17, +0x18, +0x19, +0xda, +0x14f, +0x15c, +0x1885
+  and +0x2fae are nonzero. The firmware's own default record (+4 = 0x22d30, +8 = 1) fails the u16 test, so a blank NOR always asks.
+- `[emulator] calibration_record = "synthetic"` makes the emulator build such a record from the format alone (`boot/src/nor_records.rs`):
+  header, checksum, the 8 marker bytes set to 1, every table zero. It is synthetic emulator data; nothing comes from a unit, and no tool
+  writes calibration data to a real unit. The OS upgrade path in the emulator rewrites the container area only below 0x380000; the
+  record is outside the 2 MB container.
+- The calibration dialog hid a second dialog: "TOO OLD HARDWARE FOR THIS OS". The boot task reads a PCB revision byte at address 0
+  (FlexBus CS1: CSAR1 = 0, CSMR1 0x10001, set up by `FUN_400824ea`) and the self-test prints it as `PCBA0046%c%d` (letter = bits 0-4,
+  number - 1 = bits 5-7). Letter below D is "too old"; 0x23, 0x43 and 0x82 are "will not be compatible". `FUN_4008248c` also reads it
+  (letter >= E: newer board). `[emulator] board_revision = 0x04` serves that byte as a constant (`install_forced_mmio`); 0x04 is the
+  smallest value that passes both checks, an emulator choice, not read from a unit. What else CS1 holds is **[O]**; no logic behind it
+  is modelled.
+- Result: cold boot reaches the main screen ("A01 ADRIANA") with no dialog at 630 M instructions (about 5 s host).
 
 ## Panel sweep (OS 1.42) [D]
 

@@ -16,6 +16,7 @@ pub mod dsp_stream;
 mod guard;
 mod late_send;
 pub mod midi;
+mod nor_records;
 pub mod panel_leds;
 #[cfg(feature = "play")]
 pub mod pcm_play;

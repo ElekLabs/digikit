@@ -66,6 +66,18 @@ main_dest = 0x40000400
 # free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).
 [emulator]
 free_running_dtcn = [2]
+# board_revision: MAIN reads a PCB revision byte from FlexBus CS1 at address 0 (code at 0x4000aec0 and 0x4008248c: letter = bits 0-4, number - 1 =
+# bits 5-7; the boot task shows TOO OLD HARDWARE FOR THIS OS below letter D and a WILL NOT BE COMPATIBLE screen for 0x23, 0x43 and 0x82). 0x04 is
+# the smallest value that passes both checks and enables the newer-board path of 0x4008248c; it is an emulator choice, not read from a unit.
+board_revision = 0x04
+# calibration_record: MAIN checks the analog calibration record in the SPI NOR at 0x300000 and shows "RUN WARM-UP CALIBRATION" when it is
+# invalid (finding 70). "synthetic": the emulated NOR holds a record built from the format alone (valid, tables zero), never data from a unit.
+calibration_record = "synthetic"
+# peer: the second CPU's mailbox is answered by a model with no peer code (finding 128). "mailbox-responder": hello, 0xA5A5, IRQ4 and the
+# DSPI2 image stream, so MAIN's peer link reaches status 6 (finding 70 "Peer link").
+peer = "mailbox-responder"
+# led_protocol: the panel UART carries packed 2-bit LED states and palette records, not `b9 idx val` (finding 70 "Panel sweep").
+led_protocol = "packed-states"
 
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:

@@ -50,6 +50,41 @@ pub struct DeviceProfile {
     /// `[emulator] free_running_dtcn`: the DMA timer counter channels (0..=3) that the firmware reads as free-running counters at the
     /// bus clock. Empty when absent.
     pub free_running_dtcn: Vec<u8>,
+    /// `[emulator] board_revision`: the PCB revision byte that MAIN reads from FlexBus CS1 at address 0 (letter in bits 0-4, number - 1 in
+    /// bits 5-7). The emulator serves it as a constant; `None` leaves address 0 unmodelled.
+    pub board_revision: Option<u8>,
+    /// `[emulator] calibration_record`: the analog calibration record in the emulated SPI NOR, when the firmware checks one.
+    pub calibration_record: Option<CalibrationRecord>,
+    /// `[emulator] peer`: the model that stands in for the second CPU's mailbox, when the device has one.
+    pub peer: Option<PeerModel>,
+    /// `[emulator] led_protocol`: how the panel UART carries LED state. `Indexed` when absent.
+    pub led_protocol: LedProtocol,
+}
+
+/// What the emulated NOR holds at the calibration record offset. `Synthetic` is a record built from the format alone: valid, tables zero.
+/// The emulator never serves a record from a real unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CalibrationRecord {
+    Synthetic,
+}
+
+/// The stand-in for the second CPU of a two-CPU device. `MailboxResponder` answers MAIN's mailbox handshake from the shared window and
+/// runs no peer code (data transport only; no FPGA logic).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PeerModel {
+    MailboxResponder,
+}
+
+/// The panel LED records on UART8. `Indexed`: `b9 idx val` and `b5 idx r g b`. `PackedStates`: `b5` and `b0..b3`
+/// palette records plus `0x20 + k` records of four LEDs at two bits each (finding 70 "Panel sweep").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LedProtocol {
+    #[default]
+    Indexed,
+    PackedStates,
 }
 
 impl DeviceProfile {
@@ -249,6 +284,11 @@ struct SourceDocument {
 struct SourceEmulator {
     #[serde(default)]
     free_running_dtcn: Vec<u8>,
+    board_revision: Option<u8>,
+    calibration_record: Option<CalibrationRecord>,
+    peer: Option<PeerModel>,
+    #[serde(default)]
+    led_protocol: LedProtocol,
 }
 
 #[derive(Debug, Deserialize)]
@@ -371,10 +411,14 @@ impl Registry {
                     detail: format!("[card] {detail}"),
                 })?;
             }
-            let free_running_dtcn = parsed
-                .emulator
-                .map(|e| e.free_running_dtcn)
-                .unwrap_or_default();
+            let emulator = parsed.emulator.unwrap_or(SourceEmulator {
+                free_running_dtcn: Vec::new(),
+                board_revision: None,
+                calibration_record: None,
+                peer: None,
+                led_protocol: LedProtocol::default(),
+            });
+            let free_running_dtcn = emulator.free_running_dtcn;
             if free_running_dtcn.iter().any(|&c| c > 3) || {
                 let mut seen = free_running_dtcn.clone();
                 seen.sort_unstable();
@@ -399,6 +443,10 @@ impl Registry {
                 container: parsed.container,
                 acceptance: parsed.acceptance,
                 free_running_dtcn,
+                board_revision: emulator.board_revision,
+                calibration_record: emulator.calibration_record,
+                peer: emulator.peer,
+                led_protocol: emulator.led_protocol,
             });
         }
         Ok(Self { devices })
@@ -736,6 +784,31 @@ mod tests {
                 ("st", "1.42")
             ]
         );
+    }
+
+    #[test]
+    fn emulator_section_carries_the_board_models() {
+        let registry = Registry::embedded().unwrap();
+        // The device without a DSP has the peer CPU, the synthetic calibration record and the packed LED protocol.
+        let twin: Vec<_> = registry
+            .devices()
+            .iter()
+            .filter(|d| d.capabilities.as_ref().is_some_and(|c| c.dsp == "none"))
+            .collect();
+        assert_eq!(twin.len(), 1);
+        let twin = twin[0];
+        assert_eq!(twin.calibration_record, Some(CalibrationRecord::Synthetic));
+        assert_eq!(twin.peer, Some(PeerModel::MailboxResponder));
+        assert_eq!(twin.led_protocol, LedProtocol::PackedStates);
+        assert!(twin.board_revision.is_some());
+        for d in registry.devices().iter().filter(|d| d.short != twin.short) {
+            assert_eq!(d.calibration_record, None);
+            assert_eq!(d.peer, None);
+            assert_eq!(d.led_protocol, LedProtocol::Indexed);
+            assert_eq!(d.board_revision, None);
+        }
+        let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\npeer = \"fpga\"\n";
+        assert!(Registry::parse(&[("x.toml", bad)]).is_err());
     }
 
     #[test]
