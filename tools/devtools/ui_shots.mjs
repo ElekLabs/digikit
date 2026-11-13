@@ -587,6 +587,8 @@ const SCENES = [
     size: WIDE,
     steps: async (p) => {
       await p.wait(2600);
+      const rows = await p.eval(`document.querySelectorAll('input[aria-label^="Install "]').length`);
+      if (!rows) throw new Error('The local module library is empty while the device waits.');
     },
   },
   {
@@ -642,6 +644,8 @@ const SCENES = [
       await p.wait(4500);
       p.say(`file added on disk: shown after the poll = ${await has('new_file_xyz.wav')} (expect true)`);
       const c2 = JSON.parse(await counts());
+      if (c2.deviceRead !== c1.deviceRead || !(await has('new_file_xyz.wav')))
+        throw new Error('A local file change must refresh local files without reading the device.');
       await p.eval("window.dispatchEvent(new Event('focus'))");
       await p.wait(1500);
       const c3 = JSON.parse(await counts());

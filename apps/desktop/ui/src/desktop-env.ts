@@ -38,6 +38,7 @@ export const PAUSED =
 
 const samples: SamplesSlot = {
   Mode: SamplesMode,
+  readLocal,
   async read() {
     await readSamplePanes(readLocal, readSamples, (e) => failureLine(e, targetLabel(target())));
   },
@@ -63,6 +64,7 @@ const samples: SamplesSlot = {
 const emulatorBulk = EmuBulkLink.opener(emuCall);
 
 export const desktopEnv: TransferEnv = {
+  libraryDevices: ['dt2', 'dn2'],
   library: {
     scan: (device) => invoke<{ path: string; size: number }[]>('lib_scan', { device }),
     read: async (device, path) => new Uint8Array(await invoke<ArrayBuffer>('lib_read', { device, path })),
