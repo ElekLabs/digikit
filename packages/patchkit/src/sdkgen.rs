@@ -261,6 +261,7 @@ struct FormatLimits {
     granule: u32,
     dsp_slack: u32,
     arena_hdr: u32,
+    collect_bytes: u32,
 }
 /// The format limits in file order, then the ones that come from other keys: (generated name, value).
 /// `MAX_VOICES` and `MAX_FX` are the contract maxima `machine_rows` and `fx_slots`.
@@ -278,6 +279,7 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("GRANULE", f.granule),
         ("DSP_SLACK", f.dsp_slack),
         ("ARENA_HDR", f.arena_hdr),
+        ("COLLECT_BYTES", f.collect_bytes),
         ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
         ("MAX_FX", sdk.limits.max.fx_slots as u32),
     ]

@@ -851,7 +851,7 @@ mod tests {
         assert_eq!(needs(&f).unwrap().dsp_area, 128);
         // a keys table: the row counts the packer wrote
         let mut keys = vec![0u8; dkneeds::keys::keys_size(1, 0)];
-        dkneeds::keys::write_keys((1, 2, 1), &[0x123400], &[], &mut keys).unwrap();
+        dkneeds::keys::write_keys((1, 2, 1), 0, &[0x123400], &[], &mut keys).unwrap();
         let f = pack_keys(None, &keys, &[], &opts()).unwrap();
         let n = needs(&f).unwrap();
         assert_eq!(

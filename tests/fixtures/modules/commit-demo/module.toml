@@ -27,12 +27,14 @@ id = "cfx"
 [uses.dt2]
 machine_rows = 1
 param_rows = 3
-page_rows = 1
+page_rows = 0
+record_bytes = 800
 
 [uses.dn2]
 machine_rows = 1
 param_rows = 3
 page_rows = 1
+record_bytes = 896
 
 [[object]]
 path = "build/commit-demo-cf.dko.json"

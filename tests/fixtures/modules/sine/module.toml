@@ -28,11 +28,13 @@ dsp = "sn"
 machine_rows = 1
 param_rows = 1
 page_rows = 0
+record_bytes = 204
 
 [uses.dn2]
 machine_rows = 1
 param_rows = 1
 page_rows = 1
+record_bytes = 300
 
 [[object]]
 path = "build/sine-cf.dko.json"

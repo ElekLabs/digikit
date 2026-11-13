@@ -108,7 +108,7 @@ impl Error {
 pub struct Needs {
     /// The file's size: it must fit the staging buffer.
     pub file_size: u32,
-    /// The arena block of image and bss (the payload rounded to 16, plus the block header).
+    /// The arena blocks the module keeps: image and bss (the payload rounded to 16, plus the block header), and the record block its `init` committed (the keys table's `record_bytes`).
     pub arena: u32,
     /// The arena block of the relocated DSP image, held while it is sent (0: no DSP section).
     pub arena_xfer: u32,
@@ -235,8 +235,7 @@ fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Resu
     }
     let w = |at: usize| u16::from_be_bytes([b[at], b[at + 1]]);
     let (nm, nf) = (w(keys::K_N_MACHINES) as usize, w(keys::K_N_FX) as usize);
-    if w(keys::K_RESERVED) != 0
-        || nm > MAX_RECORDS as usize
+    if nm > MAX_RECORDS as usize
         || nf > MAX_RECORDS as usize
         || keys::keys_size(nm, nf) != size as usize
     {
@@ -245,6 +244,14 @@ fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Resu
     n.machine_rows = w(keys::K_MACHINE_ROWS) as u32;
     n.param_rows = w(keys::K_PARAM_ROWS) as u32;
     n.page_rows = w(keys::K_PAGE_ROWS) as u32;
+    // the record block the module keeps after `init` is one more arena block (the loader's `arena::alloc` of the records)
+    let records = w(keys::K_RECORD_BYTES) as u32;
+    if records != 0 {
+        n.arena = n
+            .arena
+            .checked_add(arena_block(records).ok_or(Error::Sizes)?)
+            .ok_or(Error::Sizes)?;
+    }
     Ok(())
 }
 

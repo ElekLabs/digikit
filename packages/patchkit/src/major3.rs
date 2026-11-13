@@ -217,6 +217,7 @@ pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Secti
     let mut keys = vec![0u8; dkneeds::keys::keys_size(mk.len(), fk.len())];
     dkneeds::keys::write_keys(
         (u.machine_rows, u.param_rows, u.page_rows),
+        u.record_bytes,
         &mk,
         &fk,
         &mut keys,
@@ -306,8 +307,7 @@ mod tests {
         }
     }
 
-    const MACHINE: &str =
-        "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\n";
+    const MACHINE: &str = "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\nrecord_bytes = 560\n";
 
     #[test]
     fn a_run_time_module_has_no_declaration_macros() {
@@ -346,6 +346,7 @@ mod tests {
         assert!(s.stereo);
         let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
         assert_eq!((k.machine_rows(), k.param_rows(), k.page_rows()), (1, 4, 1));
+        assert_eq!(k.record_bytes(), 560);
         assert!(
             k.machine_keys()
                 .eq([crate::register::machine_key("test/m", "foo")])

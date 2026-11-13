@@ -1738,7 +1738,7 @@ dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick of
 #   +4  u16 page_rows      page rows
 #   +6  u16 n_machines     number of machine keys
 #   +8  u16 n_fx           number of effect keys
-#   +10 u16 reserved       0 (keeps the arrays aligned to 4)
+#   +10 u16 record_bytes   payload bytes of the record block `init` commits and the module keeps in the arena (`[uses]`; 0: it declares nothing)
 #   +12 u32 machine_key[n_machines]   hash of `<module id>:<machine id>` (register.rs), in module.toml order
 #   +.. u32 fx_key[n_fx]              hash of `<module id>:<effect id>`
 # keys_size = 12 + 4 * (n_machines + n_fx), so the table is a multiple of 4. A module with no machine and no effect has keys_size 0.
@@ -1752,6 +1752,7 @@ max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's mo
 granule = 64        # the DSP area's placement granule
 dsp_slack = 8       # bytes the DSP range may start before its alignment
 arena_hdr = 16      # the arena's block header
+collect_bytes = 6320  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection
 # record. `sectors` is the size of ONE copy; the runtime keeps the record in RAM and writes the copy that is not current. The area is part of the

@@ -7,6 +7,7 @@ PARAM = 0x80000000
 
 def device(knobs, pages):
     return {
+        "commit": {"size": 224},
         "records": {
             "counts": {"machine_rows": 1, "param_rows": 2, "page_rows": len(pages)},
             "machines": [
@@ -41,7 +42,8 @@ def device(knobs, pages):
                 },
             ],
             "pages": pages,
-        }
+            "effects": [],
+        },
     }
 
 
@@ -92,6 +94,12 @@ def test_uses_is_one_table_per_device():
             "machine_rows": a["records"]["counts"]["machine_rows"],
             "param_rows": a["records"]["counts"]["param_rows"],
             "page_rows": a["records"]["counts"]["page_rows"],
+            "record_bytes": 224,
         },
-        "dn2": {"machine_rows": 1, "param_rows": 9, "page_rows": 2},
+        "dn2": {
+            "machine_rows": 1,
+            "param_rows": 9,
+            "page_rows": 2,
+            "record_bytes": 224,
+        },
     }

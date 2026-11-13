@@ -42,10 +42,14 @@ def committed(
 
 
 def uses(per_device: dict[str, dict[str, Any]]) -> dict[str, dict[str, int]]:
-    """The `[uses.<device>]` counts: what each device committed (the runtime builds different rows per device)."""
+    """The `[uses.<device>]` counts: what each device committed (the runtime builds different rows per device), and `record_bytes`, the size of the
+    record block it keeps in the arena (the `records_size` of the `MODULE_COMMIT` event)."""
     keys = ("machine_rows", "param_rows", "page_rows")
     return {
-        dev: {k: int(d["records"]["counts"][k]) for k in keys}
+        dev: {
+            **{k: int(d["records"]["counts"][k]) for k in keys},
+            "record_bytes": int(d["commit"]["size"]),
+        }
         for dev, d in per_device.items()
     }
 

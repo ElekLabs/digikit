@@ -953,7 +953,12 @@ plan.json {}",
             let file = patchkit::dkmsynth::synth(&spec, &dev, &models, decl.as_ref())?;
             if rest.iter().any(|a| a == "--size") {
                 let d = patchkit::dkm::Dkm::parse(&file)?;
-                println!("image {} bss {}", d.image.len(), d.bss);
+                println!(
+                    "image {} bss {} records {}",
+                    d.image.len(),
+                    d.bss,
+                    patchkit::dkmsynth::record_bytes(&spec, &dev)
+                );
             }
             write(&out, &file)?;
         }

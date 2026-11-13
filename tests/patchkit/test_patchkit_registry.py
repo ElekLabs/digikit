@@ -55,3 +55,15 @@ def test_pack_refuses_a_module_for_the_wrong_device(tmp_path):
         tmp_path / "y.dkm",
     )
     assert r.returncode != 0
+
+
+def test_pack_of_a_builder_module_is_deterministic(tmp_path):
+    # the Digitone II module: machine (own_dsp), parameters and one page, declared by builder calls in init; the keys table and the DSP section come from
+    # module.toml and the objects only, so two packs give the same bytes
+    tools = pk_dkrt.Tools()
+    files = []
+    for name in ("a.dkm", "b.dkm"):
+        out = tmp_path / name
+        tools.patchkit_run("pack", "test/dyn-dn2", "--device", "dn2", "-o", out)
+        files.append(out.read_bytes())
+    assert files[0] == files[1]

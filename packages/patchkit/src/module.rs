@@ -179,6 +179,9 @@ pub struct Uses {
     pub param_rows: u16,
     #[serde(default)]
     pub page_rows: u16,
+    /// Payload bytes of the record block `init` commits (the `module_commit` event's `records_size`): the keys table's `record_bytes`.
+    #[serde(default)]
+    pub record_bytes: u16,
 }
 
 /// One generated file of device data: `kind` is `rust` (constants every device agrees on, one file), `gas-shared` (the same as `.equ` lines), `gas` (a ColdFire assembler
@@ -1257,7 +1260,7 @@ mod manifest_tests {
 
     #[test]
     fn machine_fx_and_uses_are_read() {
-        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
+        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
         let ids = |v: &[IdRef]| v.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&m.machines), ["analog", "b-2_x"]);
         assert_eq!(ids(&m.fxs), ["fshift"]);
@@ -1266,7 +1269,8 @@ mod manifest_tests {
             Uses {
                 machine_rows: 2,
                 param_rows: 0,
-                page_rows: 3
+                page_rows: 3,
+                record_bytes: 700
             }
         );
         assert_eq!(m.uses.for_device("dn2").page_rows, 4);

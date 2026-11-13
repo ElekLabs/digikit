@@ -245,3 +245,28 @@ def test_the_module_declares_one_effect_by_builder_calls():
     man = tomllib.loads((MODULE / "module.toml").read_text())
     assert len(man["module"]["summary"]) < 120
     assert [(f["id"], f["dsp"]) for f in man["fx"]] == [("fshift", "fs")]
+
+
+def test_the_committed_shift_knob_is_bipolar():
+    """`module:check` writes build/gen/gallery.json from the records `init` committed: the SHIFT knob carries the bipolar display of the record (DK_P_BIPOLAR) and -64 .. +63."""
+    consts = {
+        c["name"]: c["value"]
+        for c in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["machine"][
+            "consts"
+        ]
+    }
+    gallery = json.loads((MODULE / "build/gen/gallery.json").read_text())
+    (knob,) = gallery["effects"][0]["knobs"]
+    assert (
+        knob["short"],
+        knob["display"],
+        knob["min"],
+        knob["max"],
+        knob["default"],
+    ) == (
+        "SHIFT",
+        consts["DK_P_BIPOLAR"],
+        -64,
+        63,
+        0,
+    )

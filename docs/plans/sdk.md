@@ -210,13 +210,13 @@ Only what the device needs before any module code runs:
 | --- | --- | --- |
 | Module id | `module.toml` | Identity |
 | One `[[machine]] id` or `[[fx]] id` line per machine or effect | `module.toml` | Machine type numbers are assigned for all selected modules before any loads (`assign::plan`), and stay the same across boots so projects stay valid. Projects refer to these ids |
-| `[uses.dt2]`, `[uses.dn2]`: machine rows, param rows, page rows per device | `module.toml`, written by `module:check` | The tick check in the device menu (`dkrt_scan`, `dkrt_fit`) reads counts and sizes only |
+| `[uses.dt2]`, `[uses.dn2]`: machine rows, param rows, page rows and record bytes per device | `module.toml`, written by `module:check` | The tick check in the device menu (`dkrt_scan`, `dkrt_fit`) reads counts and sizes only |
 | DSP section (code, relocations, named imports, voice and FX entries) | Built from `src/dsp/` as today | Voice rows, FX slots, DSP memory |
 
 `module:check` runs the module in the emulator and writes each device's `[uses.<device>]` table from what `init` declared on that device, like a lock file. Nobody maintains it by
 hand. The tables are per device because the runtime builds different rows per device (DT2 has no page rows); a module has only the tables of the devices it builds for.
 
-The packer copies the machine and effect keys and the device's `[uses.<device>]` counts into the keys table of the `.dkm` header (6.3).
+The packer copies the machine and effect keys and the device's `[uses.<device>]` counts into the keys table of the `.dkm` header (6.3). `record_bytes` is the `records_size` of the `MODULE_COMMIT` event: the module keeps that record block in the arena for as long as it is loaded, so the needs of the module (`ARENA`) include it.
 
 Ids are written once. `patchkit gen` writes `build/gen/module_ids.h` from the `module.toml` ids, in the same way it writes other
 committed per-module files (for example `build/gen/dl-limits.h`), and `patchkit gen --check` guards it. Every module has `build/gen`
@@ -262,11 +262,13 @@ dsp = "va"          # optional: the prefix of the DSP symbols (_va_render, ...) 
 machine_rows = 1
 param_rows = 4
 page_rows = 0       # DT2 has no page rows
+record_bytes = 112  # the record block the module keeps in the arena (payload bytes)
 
 [uses.dn2]
 machine_rows = 1
 param_rows = 4
 page_rows = 1
+record_bytes = 272
 ```
 
 The Transfer tab does not check fit: the card holds as many modules as fit on disk. Limits matter only for the modules ticked to load.
@@ -389,8 +391,8 @@ the staged file is not read again, except for today's register records, which bu
 
 The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 (today `H_REG_OFF` and `H_REG_SIZE`, the register table) becomes
 `keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
-machine count, the FX count, then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
-this table. Every `.dkm` has a keys table at the 0x90 pair (size 0 for a module with no machine and no effect: a tool or a service); the runtime has no other format. The version is the runtime 0.7.0.
+machine count, the FX count, `record_bytes` (the size of the record block the module keeps), then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
+this table; `needs_of` adds the arena block of `record_bytes` (rounded to 16, plus the 16-byte block header, as `arena::alloc` takes it) to `ARENA`. Every `.dkm` has a keys table at the 0x90 pair (size 0 for a module with no machine and no effect: a tool or a service); the runtime has no other format. The version is the runtime 0.7.0.
 
 The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS`, which stays 32 (a shot-like
 machine needs about 10 records, the other modules 3 to 7). When `init` returns `DK_OK`:

@@ -29,11 +29,11 @@ CONFORMANCE = "tests/modules/test_machine_conformance.py"
 FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
 
 
-USES_KEYS = ("machine_rows", "param_rows", "page_rows")
+USES_KEYS = ("machine_rows", "param_rows", "page_rows", "record_bytes")
 
 
 def write_uses(toml_path: Path, uses: dict[str, dict[str, int]]) -> bool:
-    """Write the `[uses.<device>]` tables of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES maps a device to the three counts of
+    """Write the `[uses.<device>]` tables of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES maps a device to the counts of
     USES_KEYS, committed rows read from that device's emulated run. The file changes only when a count differs, and then only the table lines:
     other text, comments and the order of the tables stay. Returns True when the file was written."""
     text = toml_path.read_text(encoding="utf-8")
@@ -145,6 +145,7 @@ def seed_uses(dev: str) -> dict[str, int]:
         "machine_rows": lim.machine_rows,
         "param_rows": lim.param_rows,
         "page_rows": lim.page_rows,
+        "record_bytes": 0,  # the loader does not check it; the measured size replaces it
     }
 
 

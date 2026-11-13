@@ -1,5 +1,5 @@
 //! The keys table of a `.dkm` (sdk/sdk.toml `[limits.format]`): the header pair `H_KEYS_OFF`/`H_KEYS_SIZE` locates it. Big-endian:
-//! three row counts, the number of machine and effect keys, a reserved zero, then the machine keys and the effect keys.
+//! three row counts, the number of machine and effect keys, the size of the record block the module keeps, then the machine keys and the effect keys.
 //! A module with no machine and no effect has size 0 and no table.
 
 use crate::MAX_RECORDS;
@@ -14,15 +14,13 @@ pub const K_PARAM_ROWS: usize = 2;
 pub const K_PAGE_ROWS: usize = 4;
 pub const K_N_MACHINES: usize = 6;
 pub const K_N_FX: usize = 8;
-pub const K_RESERVED: usize = 10;
+pub const K_RECORD_BYTES: usize = 10;
 pub const K_KEYS: usize = 12;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeysError {
     /// The size does not match the counts, or the buffer is too small.
     Size,
-    /// The reserved field is not 0.
-    Reserved,
     /// A count is above `MAX_RECORDS`.
     Count,
 }
@@ -58,9 +56,6 @@ impl<'a> Keys<'a> {
         if bytes.len() < K_KEYS {
             return Err(KeysError::Size);
         }
-        if u16_at(bytes, K_RESERVED) != 0 {
-            return Err(KeysError::Reserved);
-        }
         let n_machines = u16_at(bytes, K_N_MACHINES) as usize;
         let n_fx = u16_at(bytes, K_N_FX) as usize;
         if n_machines > MAX_RECORDS as usize || n_fx > MAX_RECORDS as usize {
@@ -88,6 +83,11 @@ impl<'a> Keys<'a> {
         u16_at(self.bytes, K_PAGE_ROWS)
     }
 
+    /// The payload bytes of the record block the module keeps in the arena after `init` (0: it declares nothing).
+    pub fn record_bytes(&self) -> u16 {
+        u16_at(self.bytes, K_RECORD_BYTES)
+    }
+
     pub fn n_machines(&self) -> usize {
         self.n_machines
     }
@@ -111,6 +111,7 @@ impl<'a> Keys<'a> {
 /// Writes the table to `out` and returns its size (0, writing nothing, for no machine and no effect). Counts are checked against `MAX_RECORDS`.
 pub fn write_keys(
     rows: (u16, u16, u16),
+    record_bytes: u16,
     machine_keys: &[u32],
     fx_keys: &[u32],
     out: &mut [u8],
@@ -130,6 +131,7 @@ pub fn write_keys(
     out[K_MACHINE_ROWS..][..2].copy_from_slice(&rows.0.to_be_bytes());
     out[K_PARAM_ROWS..][..2].copy_from_slice(&rows.1.to_be_bytes());
     out[K_PAGE_ROWS..][..2].copy_from_slice(&rows.2.to_be_bytes());
+    out[K_RECORD_BYTES..][..2].copy_from_slice(&record_bytes.to_be_bytes());
     out[K_N_MACHINES..][..2].copy_from_slice(&(nm as u16).to_be_bytes());
     out[K_N_FX..][..2].copy_from_slice(&(nf as u16).to_be_bytes());
     for (i, k) in machine_keys.iter().chain(fx_keys).enumerate() {
@@ -145,11 +147,12 @@ mod tests {
     #[test]
     fn round_trip() {
         let mut out = [0xaau8; 64];
-        let n = write_keys((2, 3, 4), &[0x11223344, 5], &[0xdeadbeef], &mut out).unwrap();
+        let n = write_keys((2, 3, 4), 700, &[0x11223344, 5], &[0xdeadbeef], &mut out).unwrap();
         assert_eq!(n, 12 + 12);
         assert_eq!(&out[..4], &[0, 2, 0, 3]);
         let k = Keys::parse(&out[..n]).unwrap();
         assert_eq!((k.machine_rows(), k.param_rows(), k.page_rows()), (2, 3, 4));
+        assert_eq!(k.record_bytes(), 700);
         assert!(k.machine_keys().eq([0x11223344, 5]));
         assert!(k.fx_keys().eq([0xdeadbeef]));
     }
@@ -157,24 +160,21 @@ mod tests {
     #[test]
     fn empty_module_has_no_table() {
         let mut out = [0u8; 16];
-        assert_eq!(write_keys((0, 0, 0), &[], &[], &mut out), Ok(0));
+        assert_eq!(write_keys((0, 0, 0), 0, &[], &[], &mut out), Ok(0));
         assert_eq!(Keys::parse(&[]).unwrap_err(), KeysError::Size);
     }
 
     #[test]
     fn bad_tables_are_refused() {
         let mut out = [0u8; 32];
-        let n = write_keys((0, 0, 0), &[1], &[2], &mut out).unwrap();
+        let n = write_keys((0, 0, 0), 0, &[1], &[2], &mut out).unwrap();
         assert_eq!(Keys::parse(&out[..n - 4]).unwrap_err(), KeysError::Size);
         assert_eq!(Keys::parse(&out[..n + 4]).unwrap_err(), KeysError::Size);
-        let mut bad = out;
-        bad[K_RESERVED + 1] = 1;
-        assert_eq!(Keys::parse(&bad[..n]).unwrap_err(), KeysError::Reserved);
         let mut many = out;
         many[K_N_FX + 1] = 33;
         assert_eq!(Keys::parse(&many[..n]).unwrap_err(), KeysError::Count);
         assert_eq!(
-            write_keys((0, 0, 0), &[1], &[2], &mut out[..n - 1]),
+            write_keys((0, 0, 0), 0, &[1], &[2], &mut out[..n - 1]),
             Err(KeysError::Size)
         );
     }

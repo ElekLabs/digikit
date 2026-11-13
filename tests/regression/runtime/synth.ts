@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { COLLECT_BYTES } from '../../../packages/dk-session/src/gen_proto.ts';
 import { repoRoot, type Device } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { deviceProfile } from './device-data.ts';
@@ -68,8 +69,14 @@ export function synthToml(spec: SynthSpec): string {
   return `${lines.join('\n')}\n`;
 }
 
-/** The ColdFire image and bss bytes of the module SPEC packs to for DEVICE (`synth-dkm --size`; a spec with machines has the fixture's code and table). */
-export async function synthSize(device: Device, spec: SynthSpec): Promise<{ image: number; bss: number }> {
+/**
+ * The ColdFire image and bss bytes of the module SPEC packs to for DEVICE (`synth-dkm --size`; a spec with machines has the fixture's code and table),
+ * and `records`, the payload bytes of the record block its `init` keeps in the arena (the keys table's `record_bytes`; 0 without machines).
+ */
+export async function synthSize(
+  device: Device,
+  spec: SynthSpec,
+): Promise<{ image: number; bss: number; records: number }> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synth-size-'));
   try {
     const toml = path.join(dir, 'spec.toml');
@@ -83,9 +90,9 @@ export async function synthSize(device: Device, spec: SynthSpec): Promise<{ imag
       path.join(dir, 'out.dkm'),
       '--size',
     ]);
-    const m = /image (\d+) bss (\d+)/.exec(stdout);
+    const m = /image (\d+) bss (\d+) records (\d+)/.exec(stdout);
     if (!m) throw new Error(`synth-dkm --size: ${stdout}`);
-    return { image: Number(m[1]), bss: Number(m[2]) };
+    return { image: Number(m[1]), bss: Number(m[2]), records: Number(m[3]) };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -169,26 +176,16 @@ export function geometryOf(device: Device, plan: RuntimePlan): Geometry {
   };
 }
 
-/**
- * The record block a module that declares machines keeps in the arena after `init` (runtime collect.rs `lower`): the 16-byte header, a MACHINE record
- * (0x6c bytes) and a PARAM record (0x50) each, and on the Digitone II a page record (0x60) for each machine.
- */
-export const recordBytes = (device: Device, machines: number, params: number): number =>
-  16 + machines * 0x6c + params * 0x50 + (device === 'dn2' ? machines * 0x60 : 0);
-
-/** The record block of a module that declares one effect and nothing else: the header and an EFFECT record (0x1a4 bytes; the page is part of it). */
-export const fxRecordBytes = 16 + 0x1a4;
-
 /** The arena bytes a module of image + bss = N takes: its payload rounded to 16 and the header. */
 export const block = (n: number): number => ((n + 15) & ~15) + ARENA_HDR;
 
 /**
  * Every load takes a `Collect` (the builder calls of `init`) from the arena until the commit is done (runtime loader.rs `complete`): `size_of::<Collect>()`
- * of collect.rs on the ColdFire (6336 bytes; the host's 6384 has more padding). No module can take the arena to its last byte: the one that loads last leaves this block free. A module that declares machines
+ * of collect.rs on the ColdFire (`COLLECT_BYTES`, generated from sdk/sdk.toml and checked by the runtime at compile time). No module can take the arena to its last byte: the one that loads last leaves this block free. A module that declares machines
  * allocates its record block while the `Collect` is alive, so the `Collect`'s block is a hole before the record block when it is freed; only blocks
  * smaller than the hole fill it, and no later module can take it as part of a large one.
  */
-export const COLLECT_BLOCK = block(6336);
+export const COLLECT_BLOCK = block(COLLECT_BYTES);
 
 /** `pad` of a raw module whose file is `stageBytes + extra` bytes (the file is the header, the code and the pad). */
 export const stageFilePad = (stageBytes: number, extra = 0): number => stageBytes + extra - DKM_HEADER - CODE;
@@ -212,8 +209,8 @@ export interface Usage {
   machines: number;
   params: number;
   pages: number;
-  /** The record block the module's declarations keep in the arena (`recordBytes`, `fxRecordBytes`), 0 for a module that declares nothing. */
-  records?: number;
+  /** The module declares machines or effects: its `init` takes a `Collect` block that leaves a hole when freed (its record block is in `arena`). */
+  declares?: boolean;
 }
 
 export function usageOf(n: Record<string, number>): Usage {
@@ -226,6 +223,7 @@ export function usageOf(n: Record<string, number>): Usage {
     machines: n.MACHINE_ROWS!,
     params: n.PARAM_ROWS!,
     pages: n.PAGE_ROWS!,
+    declares: n.MACHINE_ROWS! > 0 || n.FX_SLOTS! > 0,
   };
 }
 
@@ -237,7 +235,7 @@ export function usageOf(n: Record<string, number>): Usage {
  * Z (a DSP module: E_DSP_NOSPACE).
  */
 export async function fullSet(g: Geometry, refs: Usage[]): Promise<{ spec: SynthSpec; want: Want }[]> {
-  const sum = (key: Exclude<keyof Usage, 'records'>) => refs.reduce((n, r) => n + r[key], 0);
+  const sum = (key: Exclude<keyof Usage, 'declares'>) => refs.reduce((n, r) => n + r[key], 0);
   const typesLeft = g.machineRows - sum('machines');
   const rowsLeft = g.machineRows - sum('rows');
   const paramsLeft = g.paramRows - sum('params');
@@ -268,10 +266,10 @@ export async function fullSet(g: Geometry, refs: Usage[]): Promise<{ spec: Synth
   const mSize = await synthSize(g.device, m);
   // the small blocks of V and D (and their DSP copies) go into M's hole; F takes the tail and leaves the `Collect` block of its own load
   const used =
-    refs.reduce((n, r) => n + r.arena + r.arenaXfer + (r.records ? COLLECT_BLOCK + block(r.records) : 0), 0) +
+    refs.reduce((n, r) => n + r.arena + r.arenaXfer + (r.declares ? COLLECT_BLOCK : 0), 0) +
     block(mSize.image + mSize.bss) +
     COLLECT_BLOCK +
-    block(recordBytes(g.device, typesLeft, paramsLeft)) +
+    block(mSize.records) +
     COLLECT_BLOCK;
   const fTotal = g.arenaFree - used - 16;
   if (fTotal < CODE) throw new Error('the references leave no arena for F');

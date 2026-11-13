@@ -16,7 +16,6 @@ import {
   DSP_GRANULE,
   E_NOMEM,
   fullSet,
-  fxRecordBytes,
   geometryOf,
   LOADED,
   packSynth,
@@ -163,7 +162,7 @@ cardRigs('capacity, coupled', { dsp: 'sharc', roots: COUPLED_ROOTS, hold: true, 
       const g = geometryOf(rig.device, rig.plan);
       const refFile = moduleArtifact(rig.device, REFERENCE);
       const [refNeeds] = await needsOf([refFile]);
-      const fill = await synthEntries(rig, 'coupled-full', await fullSet(g, [{ ...usageOf(refNeeds!), records: fxRecordBytes }]));
+      const fill = await synthEntries(rig, 'coupled-full', await fullSet(g, [usageOf(refNeeds!)]));
       const entries: Entry[] = [{ name: REFERENCE, file: refFile, want: LOADED }, ...fill];
       const got = await bootEntries(rig, 'coupled-full', entries);
       const mods = await expectBoot(rig, g, entries, got);

@@ -160,6 +160,21 @@ fn add_padding(spec: &Spec, obj: &mut Dko) {
     }
 }
 
+/// The payload bytes of the record block that `init` of a spec with machines commits on DEV (runtime collect.rs `lower`): the 16-byte header, a
+/// MACHINE record (0x6c bytes) and a PARAM record (0x50) each, and on the Digitone II a page record (0x60) for each machine. 0 for a spec without machines.
+pub fn record_bytes(spec: &Spec, dev: &str) -> u32 {
+    if spec.machines == 0 {
+        return 0;
+    }
+    16 + spec.machines * 0x6c
+        + spec.params * 0x50
+        + if dev == "dn2" {
+            spec.machines * 0x60
+        } else {
+            0
+        }
+}
+
 /// Make the `.dkm` of SPEC for device DEV (`dt2`, `dn2`): the device gives the parameter slots and the DSP section its device word. DECL is the
 /// object of the fixture synth-decl, needed for a spec with machines.
 pub fn synth(spec: &Spec, dev: &str, models: &Models, decl: Option<&Dko>) -> Result<Vec<u8>> {
@@ -232,6 +247,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models, decl: Option<&Dko>) -> Res
     if !keys.is_empty() {
         dkneeds::keys::write_keys(
             (spec.machines as u16, spec.params as u16, spec.pages as u16),
+            record_bytes(spec, dev) as u16,
             &machine_keys,
             &[],
             &mut keys,

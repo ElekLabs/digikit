@@ -265,6 +265,7 @@ fn a_digitone_machine_with_canvas_pages_lowers_pages_and_native_records() {
     assert_eq!(size, 16 + 2 * 0x50 + 0x6c + 0x60 + 0x10 + 2 * 0x98);
     // slot = 25 + knob position: word 0 at position 1, word 1 at position 2
     assert_eq!(rd(&buf, 16 + 8 + 8), 25 + 1);
+    assert_eq!(rd(&buf, 16 + 12), 0xd5, "the Digitone II template of the default glyph");
     assert_eq!(rd(&buf, 16 + 0x50 + 8 + 8), 25 + 2);
     let page = 16 + 2 * 0x50 + 0x6c;
     assert_eq!(rd(&buf, page), 3);

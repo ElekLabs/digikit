@@ -52,6 +52,7 @@ fn register(kinds: &[u32]) -> Vec<u8> {
                 n(KIND_PARAM) as u16,
                 n(KIND_PAGE) as u16,
             ),
+            0,
             &machines,
             &[],
             &mut t,
@@ -127,18 +128,18 @@ fn a_coldfire_only_module_takes_an_arena_block() {
 fn the_rows_come_from_the_keys_table() {
     let t = {
         let mut t = [0u8; 64];
-        let size = keys::write_keys((2, 9, 3), &[0x11, 0x22], &[0x33], &mut t).unwrap();
+        let size = keys::write_keys((2, 9, 3), 0x1b0, &[0x11, 0x22], &[0x33], &mut t).unwrap();
         t[..size].to_vec()
     };
     let n = of(&dkm(4, 0, &t, &[])).unwrap();
     assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (2, 9, 3));
+    // the record block is one more arena block: 0x1b0 payload bytes and the header
+    let plain = of(&dkm(4, 0, &[], &[])).unwrap().arena;
+    assert_eq!(n.arena, plain + arena_block(0x1b0).unwrap());
     // a module with no machine and no effect has no table
     assert_eq!(of(&dkm(4, 0, &[], &[])).unwrap().machine_rows, 0);
-    // a table whose size is not the counts' size, or with the reserved field set, is refused
+    // a table whose size is not the counts' size, is refused
     assert_eq!(of(&dkm(4, 0, &t[..t.len() - 4], &[])), Err(Error::Register));
-    let mut bad = t.clone();
-    bad[keys::K_RESERVED + 1] = 1;
-    assert_eq!(of(&dkm(4, 0, &bad, &[])), Err(Error::Register));
 }
 
 #[test]
@@ -346,10 +347,6 @@ fn absurd_sizes_and_counts_are_refused_without_a_panic() {
         of(&edit(reg_off + keys::K_N_FX, 1 << 16)),
         Err(Error::Register)
     ); // and shorter than one effect key
-    assert_eq!(
-        of(&edit(reg_off + keys::K_RESERVED, 1 << 16)),
-        Err(Error::Register)
-    );
     assert_eq!(of(&edit(H_REG_SIZE as usize, 8)), Err(Error::Register)); // too short for its head
                                                                          // DSP section
     let d = |at: usize, v: u32| edit(dsp_off + at, v);

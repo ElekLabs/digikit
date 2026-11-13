@@ -2,7 +2,9 @@
 header says fx 1.0 and no machine, its DSP section (version 4) holds one effect record that the reference loader and the packer's own numbers agree on, and the needs
 the file infers are one effect slot and no row of any other kind. The emulator proof is modules/core/adapters/dynfx/tests/fx-chain.device.test.ts (both devices)."""
 
+import re
 import struct
+import tomllib
 
 import pytest
 from support.paths import REPO_ROOT
@@ -45,9 +47,22 @@ def test_committed_objects_are_current(mod):
 def test_the_header_has_no_contract_pairs(packed):
     _, out = packed
     b = out.read_bytes()
-    # 0x38..0x40 are reserved zero; the word at 0x30 is the newest `since` among the linked imports (0: none)
+    # 0x38..0x40 are reserved zero; the word at 0x30 is the newest `since` among the imports the fixture links (the builder calls of its init),
+    # packed major << 16 | minor << 8 | patch, with the trace flag in the top bit
     assert bytes(b[0x38:0x40]) == bytes(8)
-    assert int.from_bytes(b[0x30:0x34], "big") & 0x7FFFFFFF in (0, 0x000700)
+    since = {
+        i["name"]: i["since"]
+        for i in tomllib.loads((ROOT / "sdk/sdk.toml").read_text())["import"]
+        if "since" in i
+    }
+    source = (ROOT / "tests/fixtures/modules/dyn-fx-gain/src/module.c").read_text()
+    linked = {n for n in re.findall(r"\b(dk_\w+)\(", source) if n in since}
+    assert linked == {"dk_module_ctx_add_fx", "dk_fx_add_page", "dk_page_add_fx_param"}
+    want = max(
+        int(a) << 16 | int(b_) << 8 | int(c)
+        for a, b_, c in (since[n].split(".") for n in linked)
+    )
+    assert int.from_bytes(b[0x30:0x34], "big") & 0x7FFFFFFF == want
 
 
 def effect_ids(dkm: bytes) -> list[int]:

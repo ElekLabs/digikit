@@ -148,6 +148,10 @@ pub struct Collect {
     records: usize,
 }
 
+// The host tests' tables (`COLLECT_BYTES`, sdk/sdk.toml `[limits.format]`) are for the ColdFire layout; the host's 64-bit pointers pad it more.
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(core::mem::size_of::<Collect>() == dkneeds::COLLECT_BYTES as usize);
+
 impl Collect {
     pub const fn new() -> Collect {
         Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, records: 0 }
