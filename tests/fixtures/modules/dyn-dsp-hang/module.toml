@@ -17,6 +17,10 @@ conflicts = []
 
 # Like test/dyn-guard-nan, a machine of the SDK contract whose render hangs on the third block of a note (src/dsp/hang.s). `patchkit pack test/dyn-dsp-hang --device dt2` makes the .dkm.
 # Never select this module on a device you care about: the DSP stops until the next restart. It is the negative fixture of the machine conformance suite (tools/patchkit/pk_conform.py).
+[[machine]]
+id = "hang"
+dsp = "hg"
+
 [[object]]
 path = "build/dyn-dsp-hang-cf.dko.json"
 sources = ["src/module.c"]
