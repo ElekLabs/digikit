@@ -249,9 +249,7 @@ impl PeerMem {
                         self.io.insert(r, if set { 0xff } else { 0 });
                     }
                 } else {
-                    let reg = if src >= 32 { INTC0 + 8 } else { INTC0 + 12 };
-                    let byte = reg + (3 - (src & 31) / 8);
-                    let bit = 1u8 << (src & 7);
+                    let (byte, bit) = intc_mask_bit(src);
                     let old = self.io.get(&byte).copied().unwrap_or(0);
                     self.io
                         .insert(byte, if set { old | bit } else { old & !bit });
@@ -287,13 +285,22 @@ impl PeerMem {
         let src = FRAME_VECTOR - 64;
         let icr = self.io_byte(INTC0 + 0x40 + src);
         let level = icr & 7;
-        let masked = self.io_byte(INTC0 + 8) & 1 != 0 || self.io_byte(INTC0 + 15) & 1 != 0;
+        // the source's own mask bit, or IMRL bit 0 (mask all)
+        let (byte, bit) = intc_mask_bit(src + 64);
+        let (all_byte, all_bit) = intc_mask_bit(0);
+        let masked = self.io_byte(byte) & bit != 0 || self.io_byte(all_byte) & all_bit != 0;
         (level != 0 && !masked).then_some(level)
     }
 
     pub fn take_pin_edges(&mut self) -> u32 {
         std::mem::take(&mut self.pin_edges)
     }
+}
+
+/// The IMRH/IMRL byte and bit that mask INTC0 source `src` (0..=63; sources 32..=63 are in IMRH, IMRL bit 0 is mask-all).
+fn intc_mask_bit(src: u32) -> (u32, u8) {
+    let reg = if src >= 32 { INTC0 + 8 } else { INTC0 + 12 };
+    (reg + (3 - (src & 31) / 8), 1u8 << (src & 7))
 }
 
 /// The bus the core sees: the private memory plus the shared window.
@@ -716,6 +723,20 @@ mod tests {
         // DONE (CSR bit 7) is set and the iteration count is reloaded from BITER.
         assert_eq!(peer.mem.io_peek(ch47 + 0x1f, 1)[0] & 0x81, 0x80);
         assert_eq!(peer.mem.io_peek(ch47 + 0x14, 2), [0x80, 0x08]);
+    }
+
+    #[test]
+    fn the_frame_source_mask_is_the_same_bit_for_the_writer_and_the_reader() {
+        let mut mem = PeerMem::new();
+        mem.io_write(INTC0 + 0x40 + 32, 1, 3); // ICR32 level 3
+        mem.io_write(INTC0 + 0x1d, 1, 32); // CIMR: unmask source 32
+        assert_eq!(mem.frame_level(), Some(3));
+        mem.io_write(INTC0 + 0x1c, 1, 32); // SIMR: mask source 32
+        assert_eq!(mem.frame_level(), None, "masked through SIMR");
+        mem.io_write(INTC0 + 8, 4, 0xFFFF_FFFE); // IMRH: source 32 unmasked, the rest masked
+        assert_eq!(mem.frame_level(), Some(3), "unmasked through IMRH");
+        mem.io_write(INTC0 + 8, 4, 0x0000_0001); // IMRH: only source 32 masked
+        assert_eq!(mem.frame_level(), None);
     }
 
     #[test]
