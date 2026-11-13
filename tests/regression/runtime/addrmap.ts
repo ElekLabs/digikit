@@ -52,6 +52,7 @@ export async function resolveAddresses(
   maps: string[],
   loads: Pick<ModuleLoad, 'id' | 'base' | 'dspBase'>[],
   addrs: number[],
+  cpu: 'cf' | 'sharc' = 'cf',
 ): Promise<Resolved[]> {
   const { stdout } = await patchkit([
     'addr',
@@ -61,7 +62,7 @@ export async function resolveAddresses(
       `${l.id}=${l.base.toString(16)}`,
       ...(l.dspBase === undefined ? [] : ['--dsp-base', `${l.id}=${l.dspBase.toString(16)}`]),
     ]),
-    ...addrs.map((a) => `0x${a.toString(16)}`),
+    ...addrs.map((a) => `${cpu}:0x${a.toString(16)}`),
   ]);
   return JSON.parse(stdout).results as Resolved[];
 }
