@@ -139,6 +139,14 @@ read over USB MIDI.
 - [ ] Peer as a second ColdFire core started at 0x40000400 (skip stage 1), shared 128 KB window, DTIM0 frame tick,
       FPGA DONE bit stubbed. Digital voice output read from window+0x1b0. Analog tracks stay silent; events logged.
 
+### R Review before merge
+
+- [ ] Independent review of all changes on `syntakt/bringup` against main (after P4 audio merges): correctness and bugs,
+      architecture (layers, services split), code quality, and device decoupling: no device-name branches or tables in
+      the emulator, patchkit, tools, apps or runtime; every device fact from `devices/*.toml`. Parallel reviewers by area
+      (device data and registry, emulator, patchkit and Python tools, web and desktop), one cross-cutting pass for device
+      decoupling; findings verified before fixing.
+
 ### Later
 
 - Syntakt machines need a peer-ColdFire module contract (not SHARC). Not planned.
