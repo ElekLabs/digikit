@@ -13912,6 +13912,92 @@
       "at": {
         "dn2-1.12": [
           {
+            "addr": "0x40006c52"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40006c52"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_usb_init_hook",
+        "gas": "dk_fw_usb_init_hook",
+        "rust": "dkfw::usb::InitHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Entry of the USB init, before it starts the controller; the point where the adapter extends the USB AUDIO/MIDI port entry. Runs in the boot thread and in interrupt context.",
+      "file": "devices/fw/usb.toml",
+      "handler": {
+        "args": [],
+        "sig": "void ()"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.usb.hook.init",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "sig": "void ()",
+      "site": "cf.usb.site.init",
+      "subsystem": "usb",
+      "users": [
+        "core/usb-bulk"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x40006c52",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40006c52",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The entry of the USB init `FUN_40006c52(port)` (0x40006c52 on DT2 1.17 and DN2 1.12), a 6-byte prologue `move.l d2,-(sp); move.l (4,sp),d2`. It runs at boot and again from the firmware tick after a controller reset.",
+      "file": "devices/fw/usb.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.usb.site.init",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "usb",
+      "users": [
+        "core/usb-bulk"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
             "addr": "0x4058f2a8",
             "len": 4
           }
@@ -19764,7 +19850,7 @@
       "name": "text"
     },
     {
-      "count": 13,
+      "count": 15,
       "cpu": "cf",
       "file": "devices/fw/usb.toml",
       "meaning": "the USB device engine: port table, connect and disconnect callbacks, endpoint queues, mode switch",

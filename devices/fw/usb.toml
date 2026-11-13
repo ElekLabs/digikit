@@ -35,6 +35,26 @@ mark = "D"
 users = ["core/usb-bulk"]
 doc = "The USB CONFIG setting byte (u8: 0 USB MIDI, 1 Overbridge, 2 USB AUDIO/MIDI), the operand of its getter (`FUN_400c1168`). The stored mode: the mode switch never writes it, only the three menu actions, the settings load and the factory defaults do. Tests read it to prove a take-over leaves it alone. DT2 1.17 0x4099d5c4, DN2 1.12 0x405ce898. RAM at run time."
 
+[[site]]
+name = "cf.usb.site.init"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "f03ec31f1a1ddefb142245bfd5006936", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/usb-bulk"]
+doc = "The entry of the USB init `FUN_40006c52(port)` (0x40006c52 on DT2 1.17 and DN2 1.12), a 6-byte prologue `move.l d2,-(sp); move.l (4,sp),d2`. It runs at boot and again from the firmware tick after a controller reset."
+
+[[hook]]
+name = "cf.usb.hook.init"
+site = "cf.usb.site.init"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "void ()", args = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/usb-bulk"]
+doc = "Entry of the USB init, before it starts the controller; the point where the adapter extends the USB AUDIO/MIDI port entry. Runs in the boot thread and in interrupt context."
+
 [[fn]]
 name = "cf.usb.fn.connect"
 cpu = "cf"

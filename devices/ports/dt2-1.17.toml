@@ -3225,6 +3225,16 @@ mark = "D"
 rule = "fw/usb:cf_func"
 
 [[anchor]]
+name = "cf.usb.site.init"
+cpu = "cf"
+kind = "code"
+addr = 0x40006c52
+len = 6
+sha256 = "20577862965e35b56da3cc4660ac5df6a325e455467496552d181b68fff15e2d"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
 name = "cf.usb.value.active_port"
 cpu = "cf"
 kind = "value"
@@ -3939,6 +3949,11 @@ mode = "replace"
 [[hook]]
 name = "cf.test.hook.kit_vfunc_12"
 site = "cf.test.fn.kit_vfunc_12"
+mode = "before"
+
+[[hook]]
+name = "cf.usb.hook.init"
+site = "cf.usb.site.init"
 mode = "before"
 
 [[hook]]

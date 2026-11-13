@@ -46,7 +46,7 @@ for (const device of DEVICES) {
     const kit = cardRig(device, 'usb-bulk', {
       dsp: 'zero',
       roots: [...RT, 'core/usb-bulk'],
-      symbols: ['DKRT_MAILBOX', 'usb_bulk_connect', 'usb_bulk_disconnect', 'usb_bulk_switches', 'usb_bulk_switch_gap_ms', 'usb_bulk_last_area', 'usb_bulk_last_bytes', 'usb_bulk_last_slots', 'usb_bulk_ring_off', 'usb_bulk_tier_cap', 'usb_bulk_free_why', 'usb_bulk_hold_ticks', 'usb_bulk_phy_late', 'usb_bulk_phy_refused', 'usb_bulk_forced_restarts', 'usb_bulk_phy_why', 'usb_bulk_enum_recoveries'],
+      symbols: ['DKRT_MAILBOX', 'usb_bulk_connect', 'usb_bulk_disconnect', 'usb_bulk_switches', 'usb_bulk_switch_gap_ms', 'usb_bulk_last_area', 'usb_bulk_last_bytes', 'usb_bulk_last_slots', 'usb_bulk_ring_off', 'usb_bulk_tier_cap', 'usb_bulk_free_why', 'usb_bulk_hold_ticks', 'usb_bulk_phy_late', 'usb_bulk_phy_refused', 'usb_bulk_forced_restarts', 'usb_bulk_phy_why', 'usb_bulk_enum_recoveries', 'usb_bulk_audio_state', 'usb_bulk_audio_rx_bytes', 'usb_bulk_audio_rx_frames', 'ua_connect'],
       initial: () => ({ selection: [] }),
       project: true,
       uploads: true,
@@ -779,6 +779,47 @@ for (const device of DEVICES) {
         await setPort(2);
       }
     }, 1_800_000);
+
+    test('USB AUDIO/MIDI bulk OUT probe: entry 5 serves the 0x158-byte descriptor with interface 5 appended, and the host\'s bulk data on EP2 OUT is counted', async () => {
+      const rt = await boot('echo-audio-probe', true);
+      await enabled(rt);
+      const { setPort, port } = takeoverKit(rt);
+      const sym = (name: string) => word(rt, planSymbol(kit.plan, name));
+      try {
+        await setPort(5);
+        expect(await port(), 'USB AUDIO/MIDI is the active port').toBe(5);
+        expect(await sym('usb_bulk_audio_state'), 'ua_prepare ran and accepted the stock descriptor').toBe(1);
+        const e5 = tableBase() + 5 * 0x28;
+        const length = await word(rt, e5 + 0x10);
+        expect(length, 'entry 5 descriptor length').toBe(0x158);
+        const d = await word(rt, e5 + 0xc);
+        const desc = await bytesAt(rt, d, length);
+        expect(desc.readUInt16LE(2), 'wTotalLength').toBe(0x0158);
+        expect(desc[4], 'bNumInterfaces').toBe(6);
+        expect(desc.subarray(0x148).toString('hex'), 'interface 5: vendor class, EP2 OUT bulk 512').toBe('09040500' + '01ff000000' + '07050202000200');
+
+        // delivery: usb.bulk.in is generic (the QH 0x80000100 list and ENDPTCTRL2 of the model), independent of the active port. `connect` stands for the
+        // SET_CONFIGURATION that runs the port 5 connect callback (ua_connect), which primes the receive ring; the emulator has no host to send it.
+        // If the model lacks something for port 5 here (e.g. it NAKs because ENDPTCTRL2 RX is not set), the counters stay at 0 and `bulk_naks` grows.
+        const rx = async () => ({ bytes: await sym('usb_bulk_audio_rx_bytes'), frames: await sym('usb_bulk_audio_rx_frames') });
+        const r0 = await rx();
+        const size = 64 * 1024;
+        await rpc(rt.session, 'usb.bulk.in', { file: hostFile(rt, 'audio-probe-0.bin', pattern(size, 1)), connect: planSymbol(kit.plan, 'ua_connect') });
+        await advance(rt.session, 300);
+        for (let i = 1; i < 3; i++) {
+          await rpc(rt.session, 'usb.bulk.in', { file: hostFile(rt, `audio-probe-${i}.bin`, pattern(size, 1 + i)) });
+          await advance(rt.session, 300);
+        }
+        const status = (await out(rt)).status;
+        noSysError({ status });
+        const r1 = await rx();
+        expect(r1.bytes - r0.bytes, 'rx_bytes grew by the three transfers').toBe(3 * size);
+        expect(r1.frames - r0.frames, 'rx_frames grew by at least one per transfer').toBeGreaterThanOrEqual(3);
+        await rt.session.expectNoFault('audio probe');
+      } finally {
+        await setPort(2);
+      }
+    }, 900_000);
 
     /** The PHY-log helpers of the hold tests below: the restart counter, symbols, the log of `usb.phy`, and a watch that advances in steps and returns the events seen. */
     const phyKit = (rt: PatchedSession) => {

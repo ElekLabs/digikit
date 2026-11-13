@@ -4,6 +4,20 @@
  "relocs": [
   {
    "addend": 0,
+   "offset": 10,
+   "section": ".text",
+   "symbol": "ua_prepare",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "ua_init_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 8,
    "section": ".text.rx_index",
    "symbol": ".sec..bss.live",
@@ -42,6 +56,34 @@
    "offset": 20,
    "section": ".text.usb_bulk_td_free",
    "symbol": ".sec..bss.td_status",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4095,
+   "offset": 8,
+   "section": ".text.ua_cancel",
+   "symbol": ".sec..bss.ua_ring",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.ua_cancel",
+   "symbol": ".sec..bss.td_status",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.ua_cancel",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.ua_cancel",
+   "symbol": ".sec..bss.ua_state",
    "type": "cf.32"
   },
   {
@@ -126,6 +168,48 @@
    "offset": 52,
    "section": ".text.to_drop",
    "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.queue_transfer",
+   "symbol": "usb_fw_td_alloc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.queue_transfer",
+   "symbol": ".sec..text.usb_bulk_td_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.queue_transfer",
+   "symbol": ".sec..bss.stock_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.queue_transfer",
+   "symbol": ".sec..text.usb_bulk_td_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.queue_transfer",
+   "symbol": "usb_fw_queue_td",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.queue_transfer",
+   "symbol": ".sec..bss.stock_free",
    "type": "cf.32"
   },
   {
@@ -291,6 +375,76 @@
   },
   {
    "addend": 0,
+   "offset": 4,
+   "section": ".text.ua_out_stop",
+   "symbol": ".sec..bss.ua_stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.ua_out_stop",
+   "symbol": ".sec..bss.ua_up",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.ua_out_stop",
+   "symbol": "usb_fw_cancel_ep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 136,
+   "section": ".text.ua_out_stop",
+   "symbol": ".sec..bss.ua_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 142,
+   "section": ".text.ua_out_stop",
+   "symbol": ".sec..bss.ua_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text.ua_out_stop",
+   "symbol": ".sec..bss.ua_up",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.ua_out_stop",
+   "symbol": ".sec..bss.ua_stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ua_disconnect",
+   "symbol": ".sec..text.ua_out_stop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.ua_disconnect",
+   "symbol": ".sec..bss.ua_stock_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.ub_log",
+   "symbol": "dkrt_log_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 30,
    "section": ".text.tx_in_flight",
    "symbol": ".sec..bss.tx_state",
@@ -301,6 +455,146 @@
    "offset": 42,
    "section": ".text.tx_in_flight",
    "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..bss.ua_stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..bss.ua_up",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..text.ua_cancel",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..text.ua_rx_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4095,
+   "offset": 44,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..bss.ua_ring",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text.ua_prime",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..text.queue_transfer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.ua_prime",
+   "symbol": ".sec..bss.ua_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4095,
+   "offset": 12,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..bss.ua_ring",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.ua_rx_done",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..bss.td_status",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..bss.td_status",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..bss.ua_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..bss.usb_bulk_audio_rx_bytes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..bss.usb_bulk_audio_rx_frames",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 110,
+   "section": ".text.ua_rx_done",
+   "symbol": ".sec..text.ua_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.ua_connect",
+   "symbol": ".sec..bss.ua_stock_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.ua_connect",
+   "symbol": ".sec..text.ua_out_stop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.ua_connect",
+   "symbol": ".sec..text.ua_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
+   "section": ".text.ua_connect",
+   "symbol": ".sec..bss.ua_up",
    "type": "cf.32"
   },
   {
@@ -329,62 +623,6 @@
    "offset": 38,
    "section": ".text.tick_register.part.0",
    "symbol": ".sec..bss.tick_added",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 10,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": "usb_fw_td_alloc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 34,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": ".sec..text.usb_bulk_td_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 42,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": ".sec..bss.stock_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 86,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": ".sec..text.usb_bulk_cancel",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 132,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": ".sec..text.usb_bulk_td_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 148,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": "usb_fw_queue_td",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 166,
-   "section": ".text.queue_transfer.constprop.0",
-   "symbol": ".sec..bss.stock_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 96,
-   "section": ".text.ub_log.constprop.0",
-   "symbol": "dkrt_log_ev",
    "type": "cf.32"
   },
   {
@@ -853,7 +1091,7 @@
    "addend": 0,
    "offset": 300,
    "section": ".text.sw_ev",
-   "symbol": ".sec..rodata.CSWTCH.371",
+   "symbol": ".sec..rodata.CSWTCH.419",
    "type": "cf.32"
   },
   {
@@ -1308,33 +1546,40 @@
    "addend": 0,
    "offset": 216,
    "section": ".text.prime_all",
-   "symbol": ".sec..text.usb_bulk_rx_done",
+   "symbol": ".sec..text.usb_bulk_cancel",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 226,
+   "offset": 222,
    "section": ".text.prime_all",
-   "symbol": "usb_alias_delta",
+   "symbol": ".sec..text.usb_bulk_rx_done",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 232,
    "section": ".text.prime_all",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 238,
+   "section": ".text.prime_all",
    "symbol": ".sec..bss.rx_area",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 244,
+   "offset": 250,
    "section": ".text.prime_all",
-   "symbol": ".sec..text.queue_transfer.constprop.0",
+   "symbol": ".sec..text.queue_transfer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 282,
+   "offset": 288,
    "section": ".text.prime_all",
    "symbol": ".sec..bss.prime_cur",
    "type": "cf.32"
@@ -1742,739 +1987,739 @@
    "addend": 0,
    "offset": 10,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 18,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_pend_poll.part.0",
+   "symbol": ".sec..bss.usb_bulk_audio_rx_bytes",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 24,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_on",
+   "symbol": ".sec..bss.ua_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 40,
+   "offset": 30,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
+   "symbol": ".sec..bss.ua_up",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 58,
+   "offset": 48,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_retry",
+   "symbol": ".sec..bss.ua_tick_init",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 102,
+   "offset": 62,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 108,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 138,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 146,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 180,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.pid_done",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 188,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 254,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.pid_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 262,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.pid_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 280,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 294,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 300,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 316,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.pid_done",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 332,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 340,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_switches",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 404,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "dkrt_log_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 418,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_retry",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 428,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_park_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 436,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 462,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 510,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 536,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_phy_late",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 548,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 554,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 562,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 578,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_on",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 584,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_active_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 590,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_armed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 618,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_target",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 630,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_armed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 646,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.park_retry",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 664,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 690,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 698,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 716,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 726,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_phy_refused",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 732,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 738,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 744,
+   "offset": 68,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 750,
+   "offset": 74,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
+   "symbol": ".sec..bss.ua_tick_init",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 768,
+   "offset": 80,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_peek",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 788,
+   "offset": 114,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_per",
+   "symbol": ".sec..bss.ua_seen",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 802,
+   "offset": 122,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_per",
+   "symbol": ".sec..bss.ua_seen_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 808,
+   "offset": 132,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_at",
+   "symbol": ".sec..bss.ua_seen",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 818,
+   "offset": 138,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
+   "symbol": ".sec..bss.ua_seen_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 834,
+   "offset": 144,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.ua_seen_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 150,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 158,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_pend_poll.part.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 848,
+   "offset": 180,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_at",
+   "symbol": "usb_restart_delay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 854,
+   "offset": 198,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ulpi_xfer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 248,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 278,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 320,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.pid_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 328,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 396,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.pid_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 404,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.pid_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 432,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ua_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 446,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.ua_emitted",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 460,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.ua_seen_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 466,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 874,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 882,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 18,
-   "offset": 896,
+   "addend": 9,
+   "offset": 492,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 902,
+   "offset": 498,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.ua_emitted",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 504,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 518,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 532,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 538,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 558,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.pid_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 564,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 580,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_switches",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 636,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_log_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 650,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 660,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_park_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 668,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 694,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ulpi_xfer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 740,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 766,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_phy_late",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 778,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 784,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 792,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 808,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 814,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_active_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 820,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 908,
+   "offset": 848,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
+   "symbol": ".sec..bss.rec_target",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 922,
+   "offset": 860,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 934,
+   "offset": 876,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
+   "symbol": ".sec..bss.park_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 892,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 918,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 926,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 944,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 954,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": ".sec..bss.usb_bulk_phy_refused",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 964,
+   "offset": 960,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.buffers_alloc",
+   "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 984,
+   "offset": 970,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_drop",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 15,
+   "offset": 976,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 994,
+   "offset": 982,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.last_set.3",
+   "symbol": ".sec..text.ub_log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1006,
+   "offset": 1014,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.last_set.3",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1012,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.last_port.2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1018,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
+   "symbol": ".sec..bss.rec_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1028,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ms",
+   "symbol": ".sec..bss.rec_per",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1040,
+   "offset": 1034,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 1050,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.rec_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1070,
+   "offset": 1044,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 28,
-   "offset": 1088,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": "usb_restart_delay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1098,
+   "offset": 1060,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 28,
-   "offset": 1104,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1110,
+   "offset": 1074,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_at",
+   "symbol": ".sec..bss.rec_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1124,
+   "offset": 1080,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_ps",
+   "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1130,
+   "offset": 1100,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_ov_ps",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1108,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1114,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 33,
+   "offset": 1132,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1138,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..data.sw_ov_ms",
+   "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1148,
+   "offset": 1144,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..text.ub_log",
    "type": "cf.32"
   },
   {
-   "addend": 44,
-   "offset": 1168,
+   "addend": 0,
+   "offset": 1164,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.taken",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1174,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 1180,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1188,
+   "offset": 1184,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_cnt",
+   "symbol": ".sec..bss.live",
    "type": "cf.32"
   },
   {
-   "addend": 32,
+   "addend": 0,
    "offset": 1194,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 1200,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 1210,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..text.buffers_alloc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1216,
+   "offset": 1214,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_at",
+   "symbol": ".sec..text.to_drop",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1230,
+   "offset": 1224,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_ps",
+   "symbol": ".sec..bss.last_set.3",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1236,
    "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_set.3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1242,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_port.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1248,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1258,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1268,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 1278,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1298,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 1316,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1326,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 1332,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1338,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1352,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1358,
+   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_ov_ps",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1244,
+   "offset": 1366,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..data.sw_ov_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1254,
+   "offset": 1376,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
-   "addend": 56,
-   "offset": 1264,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 1286,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
-   "offset": 1302,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 1308,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
-   "offset": 1322,
+   "addend": 44,
+   "offset": 1396,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1344,
+   "offset": 1402,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.sw_con_cnt",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 1356,
+   "addend": 32,
+   "offset": 1408,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1362,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1372,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_rehook",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1398,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_rehook",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1404,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.enabled",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1416,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
+   "symbol": ".sec..bss.sw_con_cnt",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 1424,
+   "addend": 32,
+   "offset": 1422,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 1432,
+   "addend": 56,
+   "offset": 1428,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_no",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 8,
+   "addend": 56,
    "offset": 1438,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
@@ -2482,933 +2727,982 @@
   },
   {
    "addend": 0,
-   "offset": 1446,
+   "offset": 1444,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_rec",
+   "symbol": ".sec..bss.sw_con_at",
    "type": "cf.32"
   },
   {
-   "addend": 80,
-   "offset": 1452,
+   "addend": 0,
+   "offset": 1458,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_con_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1464,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_ov_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1472,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..data.sw_ov_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1482,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 1492,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 1474,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1480,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 52,
-   "offset": 1490,
+   "addend": 56,
+   "offset": 1514,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 92,
-   "offset": 1500,
+   "addend": 60,
+   "offset": 1530,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 1506,
+   "offset": 1536,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 84,
-   "offset": 1512,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 1532,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 1544,
+   "addend": 60,
+   "offset": 1550,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1554,
+   "offset": 1572,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1568,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1574,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_forced_restarts",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1582,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1592,
+   "offset": 1584,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1590,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1600,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_forced_restarts",
-   "type": "cf.32"
-  },
-  {
-   "addend": 35,
-   "offset": 1606,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "symbol": ".sec..bss.wd_rehook",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1612,
+   "offset": 1626,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
+   "symbol": ".sec..bss.wd_rehook",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1618,
+   "offset": 1632,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_restart",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1638,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_passes",
+   "symbol": ".sec..bss.enabled",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1644,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_peek",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1652,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1660,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
+   "symbol": ".sec..bss.wd_wk_no",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 1666,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1672,
+   "offset": 1674,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_guard_open",
+   "symbol": ".sec..bss.wd_wk_rec",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 1682,
+   "addend": 80,
+   "offset": 1680,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.tx_in_flight",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1694,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1702,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
+   "symbol": ".sec..bss.wd_wk",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 1708,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1714,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1720,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1726,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1734,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1740,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1748,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1766,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1772,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1782,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1796,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1802,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1812,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1840,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1848,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_pend_poll.part.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1854,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1868,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1874,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1880,
-   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
-   "addend": 48,
-   "offset": 1892,
+   "addend": 52,
+   "offset": 1716,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 48,
-   "offset": 1908,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1914,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1942,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_mode_switch",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1948,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1954,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 72,
-   "offset": 1964,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1970,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 108,
-   "offset": 1982,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 112,
-   "offset": 1996,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 68,
-   "offset": 2002,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 116,
-   "offset": 2008,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2024,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2042,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2048,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_hold_ticks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2054,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_on",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2060,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2066,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2088,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_park",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2094,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_began",
-   "type": "cf.32"
-  },
-  {
-   "addend": 44,
-   "offset": 2104,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2116,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2124,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_began",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2138,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2146,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_park",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2164,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2174,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_park",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2188,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_park_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 68,
-   "offset": 2196,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2206,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2220,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2228,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2234,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2244,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2252,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2262,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2270,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2278,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2286,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_orig",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2294,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2300,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2306,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2312,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2322,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2332,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2338,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2348,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2354,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2364,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2400,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_orig",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2408,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2424,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2432,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2438,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2464,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2470,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2490,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2518,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2528,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2534,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2548,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2554,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2576,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2588,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2594,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2600,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2606,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2612,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2628,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_stamp",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2634,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_target",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2640,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2672,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.last_port.2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2682,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.last_port.2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2688,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2698,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2708,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2718,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2734,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_switches",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2752,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_begin",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 2770,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2786,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2794,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 44,
-   "offset": 2814,
+   "addend": 92,
+   "offset": 1724,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 2824,
+   "offset": 1730,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 40,
-   "offset": 2848,
+   "addend": 84,
+   "offset": 1736,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 1754,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 1770,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2854,
+   "offset": 1776,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
-   "addend": 4,
-   "offset": 2874,
+   "addend": 0,
+   "offset": 1784,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1792,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.taken",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1806,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.alloc_busy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1820,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1828,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.enabled",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1838,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1846,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.io_job",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1860,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1868,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1876,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1884,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1896,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1902,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1922,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1928,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1934,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1940,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.wake",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1952,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1960,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.prime_all",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1966,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1972,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1994,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.wake",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2002,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2008,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2016,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2032,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "type": "cf.32"
+  },
+  {
+   "addend": 50,
+   "offset": 2038,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2044,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2050,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_restart",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2070,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2090,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2102,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_guard_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2112,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.tx_in_flight",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2124,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2132,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2138,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2144,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2150,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2156,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2164,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2170,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2178,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2196,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2202,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2212,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2226,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2232,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2242,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2272,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2280,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_pend_poll.part.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2286,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2300,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2306,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2312,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 2324,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 2340,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2890,
+   "offset": 2346,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2374,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_mode_switch",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2380,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2386,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 72,
+   "offset": 2394,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2400,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 108,
+   "offset": 2412,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 112,
+   "offset": 2426,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 68,
+   "offset": 2432,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 116,
+   "offset": 2438,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2454,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2472,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2478,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_hold_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2484,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2490,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2496,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2516,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_park",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2522,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_began",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 2532,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2544,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2552,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_began",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2566,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2574,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_park",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2594,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2602,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_park",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2616,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_park_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 68,
+   "offset": 2624,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2634,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2648,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2656,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2662,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2672,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2680,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2690,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2698,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2706,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2714,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_orig",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2722,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2728,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2734,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2740,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2750,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2760,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2766,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2776,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2782,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2792,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2828,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_orig",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2836,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2852,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2860,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2866,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2892,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
    "type": "cf.32"
   },
   {
@@ -3419,162 +3713,176 @@
    "type": "cf.32"
   },
   {
-   "addend": 64,
-   "offset": 2914,
+   "addend": 0,
+   "offset": 2918,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2936,
+   "offset": 2946,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2942,
+   "offset": 2956,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 2968,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 64,
-   "offset": 2988,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2994,
+   "offset": 2962,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.to_sus_at",
    "type": "cf.32"
   },
   {
-   "addend": 24,
+   "addend": 0,
+   "offset": 2976,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2982,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 3004,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
-   "addend": 88,
+   "addend": 0,
+   "offset": 3016,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3022,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.taken",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 3028,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
-   "addend": 52,
+   "addend": 0,
+   "offset": 3034,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 3040,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 40,
-   "offset": 3050,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 88,
-   "offset": 3064,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 52,
-   "offset": 3076,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3082,
+   "offset": 3056,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 76,
-   "offset": 3092,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..text.sw_stamp",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3118,
+   "offset": 3062,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 3126,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 3134,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 3150,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.rec_target",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3156,
+   "offset": 3068,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3164,
+   "offset": 3100,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_port.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3110,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_port.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3116,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
-   "addend": 96,
-   "offset": 3182,
+   "addend": 0,
+   "offset": 3126,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3136,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3146,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3162,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_switches",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3180,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_begin",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 3198,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 100,
-   "offset": 3190,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 104,
-   "offset": 3208,
+   "addend": 0,
+   "offset": 3214,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
@@ -3583,1209 +3891,1251 @@
    "addend": 0,
    "offset": 3222,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
-   "addend": 96,
-   "offset": 3244,
+   "addend": 44,
+   "offset": 3242,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 100,
+   "addend": 24,
    "offset": 3252,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 104,
-   "offset": 3258,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 36,
-   "offset": 3270,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 120,
-   "offset": 3294,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 124,
-   "offset": 3300,
+   "addend": 40,
+   "offset": 3276,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3310,
+   "offset": 3282,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.usb_bulk_disconnect",
+   "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
-   "addend": 84,
+   "addend": 4,
+   "offset": 3302,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 3318,
    "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 3326,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.usb_bulk_connect",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 3332,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3340,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_alias_delta",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3346,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.desc_mem",
-   "type": "cf.32"
-  },
-  {
-   "addend": 92,
-   "offset": 3364,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 96,
-   "offset": 3380,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3394,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.usb_bulk_connect",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3400,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.usb_bulk_disconnect",
-   "type": "cf.32"
-  },
-  {
-   "addend": 92,
-   "offset": 3406,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 96,
-   "offset": 3412,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 3418,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 3424,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 52,
-   "offset": 3434,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3440,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3460,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3466,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3484,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
-   "type": "cf.32"
-  },
-  {
-   "addend": 124,
-   "offset": 3516,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3548,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3554,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_a2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3560,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_a3",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3566,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3580,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3586,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3604,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "dkrt_blocks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3656,
-   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 3688,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_a3",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3696,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3702,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_a2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3708,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3730,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_bsv",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3754,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_bsv",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3764,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_bsv",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3770,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_bsv_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3780,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_bsv_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3796,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3806,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3812,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_restart",
-   "type": "cf.32"
-  },
-  {
-   "addend": 88,
-   "offset": 3822,
+   "addend": 64,
+   "offset": 3342,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3834,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 3848,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3854,
+   "offset": 3364,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3862,
+   "offset": 3370,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.cap_noted.1",
+   "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 3872,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3878,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.cap_noted.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 62,
-   "offset": 3884,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3890,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3934,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_armed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3944,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_on",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3954,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3964,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 3974,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3986,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3996,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.tx_in_flight",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4008,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_guard_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4020,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 4028,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4042,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_peek",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 4048,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4060,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4066,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sw_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4072,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sw_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4078,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sw_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4084,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 4092,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 4106,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4114,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4128,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_quiet",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4134,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_reset_stop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4140,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_quiet",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4146,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4158,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_rehook",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4170,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 4176,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 88,
-   "offset": 4182,
+   "addend": 56,
+   "offset": 3396,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 64,
-   "offset": 4188,
+   "offset": 3416,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 8,
-   "offset": 4194,
+   "addend": 0,
+   "offset": 3422,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 3432,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 80,
-   "offset": 4200,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 76,
-   "offset": 4206,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
-   "offset": 4212,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 4218,
+   "addend": 88,
+   "offset": 3456,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 52,
-   "offset": 4224,
+   "offset": 3468,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 44,
-   "offset": 4230,
+   "addend": 40,
+   "offset": 3478,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 3492,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 3504,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4236,
+   "offset": 3510,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 76,
+   "offset": 3520,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4242,
+   "offset": 3546,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_at",
+   "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 4252,
+   "addend": 80,
+   "offset": 3554,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_no",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4258,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_rec",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4264,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4272,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4286,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.alloc_busy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4300,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4308,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.enabled",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4318,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "dkrt_blocks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4326,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.io_job",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4340,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_passes",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4348,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_passes",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4356,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4364,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4376,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4382,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4402,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4408,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4414,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4420,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4432,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4440,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.prime_all",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4446,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4452,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4474,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 84,
-   "offset": 4490,
+   "offset": 3562,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 3578,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4500,
+   "offset": 3584,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.take_noted.0",
+   "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4514,
+   "offset": 3592,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.take_noted.0",
+   "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
-   "addend": 75,
-   "offset": 4520,
+   "addend": 96,
+   "offset": 3610,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 100,
+   "offset": 3618,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 104,
+   "offset": 3636,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3650,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 3672,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 100,
+   "offset": 3680,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 104,
+   "offset": 3686,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 3698,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 120,
+   "offset": 3722,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 124,
+   "offset": 3728,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3738,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.usb_bulk_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 3744,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3752,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.usb_bulk_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 3758,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3766,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3772,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.desc_mem",
+   "type": "cf.32"
+  },
+  {
+   "addend": 92,
+   "offset": 3790,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 3808,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 92,
+   "offset": 3820,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3828,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.usb_bulk_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3834,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.usb_bulk_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 3840,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 3846,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 3852,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 67,
+   "offset": 3866,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4536,
+   "offset": 3872,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": ".sec..text.ub_log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4544,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4552,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4562,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 4576,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4586,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.connected",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4596,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 4616,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4632,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4654,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4670,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4682,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4688,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_flush.isra.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4698,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4708,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4714,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_lists_clear",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4734,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4742,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4754,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4762,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_head",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4776,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 4782,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 4796,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4802,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4808,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4926,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4932,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4986,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.blk_raw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4992,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4998,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5004,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.blk_raw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5010,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_area",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5016,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_area",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5022,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5034,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5040,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5046,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_head",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5052,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 5058,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5064,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5070,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5080,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_mem_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 5120,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5146,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5166,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5172,
+   "offset": 3894,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5178,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.wd_wk_bsv",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5184,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_a2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5190,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_x_a3",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5198,
+   "offset": 3900,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.wd_wk_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5204,
+   "offset": 3918,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 124,
+   "offset": 3950,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3982,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3988,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3994,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4000,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4014,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4020,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4038,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4090,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4122,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4130,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4136,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4142,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4164,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4188,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4198,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4204,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4214,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4230,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4240,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4246,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_restart",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 4256,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4268,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 4282,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4288,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4296,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.cap_noted.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4312,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4318,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.cap_noted.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 77,
+   "offset": 4324,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4330,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4374,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_armed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4384,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4394,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4404,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 4414,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4426,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4436,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.tx_in_flight",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4448,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_guard_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4460,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 4468,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 4482,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4494,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4500,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sw_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4506,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sw_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4512,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sw_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4518,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 4526,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 4536,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4548,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4562,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4568,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_reset_stop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4574,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4580,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4592,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_rehook",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4604,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 4610,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 4616,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 4622,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 4628,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 4634,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 76,
+   "offset": 4640,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 60,
+   "offset": 4646,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 4652,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 4658,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 4664,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4670,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4676,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4682,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_no",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4688,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_rec",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 4712,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4722,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.take_noted.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4740,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.take_noted.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 90,
+   "offset": 4746,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4762,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4770,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4778,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4788,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 4802,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4812,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.connected",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4822,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 4842,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4858,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4880,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4896,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4908,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4914,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_flush.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4924,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_cancel_ep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4938,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_lists_clear",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4958,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4966,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4978,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4986,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_head",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5000,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 5006,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 5020,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5026,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5032,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5148,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5154,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5208,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.blk_raw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5214,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5220,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5226,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.blk_raw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5232,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_area",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5238,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_area",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5244,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5256,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5262,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5268,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_head",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5274,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 5280,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5286,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5292,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5302,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_mem_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5362,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5382,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5388,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5394,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5400,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5406,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5414,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5420,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw_x_set",
    "type": "cf.32"
@@ -4865,6 +5215,167 @@
    "offset": 92,
    "section": ".text.usb_bulk_disconnect",
    "symbol": "usb_fw_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 216,
+   "offset": 52,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 212,
+   "offset": 60,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_ddr_base",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_ddr_bytes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 352,
+   "offset": 118,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4095,
+   "offset": 126,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_ring",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 166,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 188,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 194,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 200,
+   "offset": 264,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 204,
+   "offset": 270,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 290,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..text.ua_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 296,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_stock_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 302,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_stock_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 212,
+   "offset": 308,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 314,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..text.ua_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 216,
+   "offset": 320,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 200,
+   "offset": 328,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 204,
+   "offset": 334,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
@@ -5487,19 +5998,26 @@
    "addend": 0,
    "offset": 236,
    "section": ".text.usb_bulk_send",
+   "symbol": ".sec..text.usb_bulk_cancel",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text.usb_bulk_send",
    "symbol": ".sec..text.usb_bulk_tx_done",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 252,
+   "offset": 258,
    "section": ".text.usb_bulk_send",
-   "symbol": ".sec..text.queue_transfer.constprop.0",
+   "symbol": ".sec..text.queue_transfer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 274,
+   "offset": 280,
    "section": ".text.usb_bulk_send",
    "symbol": ".sec..bss.tx_retry",
    "type": "cf.32"
@@ -5899,6 +6417,13 @@
  ],
  "sections": [
   {
+   "align": 4,
+   "hex": "4feffff048d703034eb9000000004cd703034fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 28
+  },
+  {
    "align": 2,
    "hex": "080000004000000008000000",
    "kind": "data",
@@ -5928,6 +6453,13 @@
   },
   {
    "align": 2,
+   "hex": "40c046fc2700223c000000000281fffff0002040202f000842b900000000d2b90000000090810c8000007fff6210720ee2a8420143f90000000013810800200846c04e75",
+   "kind": "text",
+   "name": ".text.ua_cancel",
+   "size": 68
+  },
+  {
+   "align": 2,
    "hex": "2f03263c000003e82f02202f0010242f001490af000c4c4200014c4200004c0318004c421001243c000003e84c020800241f261fd0814e75",
    "kind": "text",
    "name": ".text.to_elapsed_ms",
@@ -5946,6 +6478,13 @@
    "kind": "text",
    "name": ".text.to_drop",
    "size": 58
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02242f00104eb90000000024404a8067000090202a00380c8000000000670623c000000000202f0014204241e810002548000c41e81000484042402548001041e81000254200082548001441f900000000068200004000256f0014002024bcdead000125420018256f001800242548003808c00007256f001c0028254000042f0a2f2f00104eb900000000508f220042804a816c0e2079000000002f0a4e90588f70ff241f245f4e75",
+   "kind": "text",
+   "name": ".text.queue_transfer",
+   "size": 172
   },
   {
    "align": 2,
@@ -5977,6 +6516,27 @@
   },
   {
    "align": 2,
+   "hex": "700123c0000000002039fc0b01c80280ffff000023c0fc0b01c8700423c0fc0b01b4203c00004e202239fc0b01b444c1660653804a8066f04ab900000000660c42b98000013042b980000134487800024eb90000000042b980000104588f203cdead000123c080000108700442b98000010c42b98000013042b98000013423c0fc0b01bc420013c00000000013c00000000042b90000000042b9000000004e75",
+   "kind": "text",
+   "name": ".text.ua_out_stop",
+   "size": 160
+  },
+  {
+   "align": 2,
+   "hex": "2f0240c246fc27004eb90000000046c2227900000000241f4ed1",
+   "kind": "text",
+   "name": ".text.ua_disconnect",
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffdc226e0008428148d7001c74014a82675e10311800675c71807803c8812601e48b2d43ffe84a84660442b63cec260178034683c6845281206effe8e78be7a881b68cec7010b08166c4486effec2f2e00102d6e000cfffc4878000e4eb9000000004fef000c4cee001cffdc4e5e4e75428060a64280428260a0",
+   "kind": "text",
+   "name": ".text.ub_log",
+   "size": 124
+  },
+  {
+   "align": 2,
    "hex": "2239fc0b01b82039fc0b01b080810280000300004a80670470014e7571b9000000007202b28067f0103900000000b3804a0057c07100448060e0",
    "kind": "text",
    "name": ".text.tx_in_flight",
@@ -5984,24 +6544,31 @@
   },
   {
    "align": 2,
+   "hex": "4ab900000000665a4ab9000000006752487900000000720e4879000000004878400071ef0012e3a82040203c000000000280fffff000d1f90000000048700800487800024eb9000000004fef00144a8066107001222f000441f900000000118018004e75",
+   "kind": "text",
+   "name": ".text.ua_prime",
+   "size": 100
+  },
+  {
+   "align": 2,
+   "hex": "2f032f0240c246fc2700223c000000000281fffff000202f0010d2b900000000908122390000000042b9000000000c8000007fff623e760ee6a841f90000000077b0080022437601b68966284203118308007668c2834a816610222f000cd3b90000000052b9000000002f004eb900000000588f46c2241f261f4e75",
+   "kind": "text",
+   "name": ".text.ua_rx_done",
+   "size": 124
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f0240c246fc2700207900000000487800014e904eb900000000203c2200000023c0800001002039fc0b01c80080000000c845f90000000023c0fc0b01c8700142a723c0000000004e92487800014e9246c24fef000c241f245f4e75",
+   "kind": "text",
+   "name": ".text.ua_connect",
+   "size": 94
+  },
+  {
+   "align": 2,
    "hex": "2f0240c246fc27004ab90000000066204879000000004eb900000000588f4a806608720123c10000000046c2241f4e75428060f6",
    "kind": "text",
    "name": ".text.tick_register.part.0",
    "size": 52
-  },
-  {
-   "align": 2,
-   "hex": "2f0a2f02242f00104eb90000000024404a80660870ff241f245f4e75202a00380c8000000000670623c000000000202f0014204241e810002548000c41e81000484042402548001041e81000254200082548001441f900000000068200004000256f0014002024bcdead000125420018256f001800242548002808c0000725400004203c00000000254000382f0a2f2f00104eb900000000508f220042804a816c00ff742079000000002f0a4e90588f6000ff62",
-   "kind": "text",
-   "name": ".text.queue_transfer.constprop.0",
-   "size": 180
-  },
-  {
-   "align": 2,
-   "hex": "4e56ffdc226e0008428148d7001c74014a82675e10311800675c71807803c8812601e48b2d43ffe84a84660442b63cec260178034683c6845281206effe8e78be7a881b68cec7010b08166c4486effec487800022d6e000cfffc4878000e4eb9000000004fef000c4cee001cffdc4e5e4e75428060a64280428260a0",
-   "kind": "text",
-   "name": ".text.ub_log.constprop.0",
-   "size": 124
   },
   {
    "align": 2,
@@ -6082,10 +6649,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffe048d70cfc2e39000000004a8766244ab900000000671c4ab900000000671447f9000000007002b0936712720123c1000000004cd70cfc4fef00204e752039000000004ab90000000067307c07bc80643676087a084284428141f900000000b081662a428645f900000000b6866704ba84622a23c70000000060b872082600b28064067a0c60ce26002a0060c875b0180053824a8266025284528160c22006d0b9000000004c4300024a322800666c4ab900000000664c4ab90000000067444ab900000000673c7002b0936636720e2002e3a848790000000048784000d0b900000000d0b9000000002f00487800024eb9000000004fef00104a80660670011580280071b2280053804a80661452824c432000528423c00000000052866000ff4c7e016000ff4e",
+   "hex": "4fefffe048d70cfc2e39000000004a8766244ab900000000671c4ab900000000671447f9000000007002b0936712720123c1000000004cd70cfc4fef00204e752039000000004ab90000000067307c07bc80643676087a084284428141f900000000b081662a428645f900000000b6866704ba84622a23c70000000060b872082600b28064067a0c60ce26002a0060c875b0180053824a8266025284528160c22006d0b9000000004c4300024a32280066724ab90000000066524ab900000000674a4ab90000000067427002b093663c720e2002e3a848790000000048790000000048784000d0b900000000d0b9000000002f00487800024eb9000000004fef00144a80660670011580280071b2280053804a80661452824c432000528423c00000000052866000ff467e016000ff48",
    "kind": "text",
    "name": ".text.prime_all",
-   "size": 298
+   "size": 304
   },
   {
    "align": 2,
@@ -6110,17 +6677,17 @@
   },
   {
    "align": 1,
-   "hex": "75622e7068792e726573746f72652e6e6f0075622e7273746172742e6769766575700075622e666f726365642e7273746172740075622e7265686f6f6b0075622e72657365742e6361700075622e72657365742e74616b6500",
+   "hex": "75612e73746174650075612e72780075622e7068792e726573746f72652e6e6f0075622e7273746172742e6769766575700075622e666f726365642e7273746172740075622e7265686f6f6b0075622e72657365742e6361700075622e72657365742e74616b6500",
    "kind": "data",
    "name": ".rodata.usb_bulk_tick.str1.1",
-   "size": 89
+   "size": 104
   },
   {
    "align": 2,
-   "hex": "4e56ffb448d704fc4ab90000000067064eb9000000004ab9000000006700022840c046fc27002639000000002839fc0b01407201c88146c04ab900000000670001724a846600023a200374385980b4806500022e486effd442a74878000442a742aeffd445f90000000052b9000000004e924fef00104a8066000138202effd47a49ba806700009023c000000000700123c000000000486effd84878004948780004487800014e924fef00104a80660001022439000000007a0123c5000000004a82660000d82c0e428542aeffe842aeffe442aeffe042aeffdc0686ffffffdc2f0642a72f0542a74e9252854fef00107204b285673e58864a8067e4203900000000528023c0000000007431b4806400008c740160224ab9000000006600ff787241740123c10000000023c2000000006000ff644a8066c47a0123c5000000002a0e0685ffffffec2f054eb9000000002f0520390000000048780004720d4878002ce3aa42aefff0484042408480701480822d40ffec202effe0e18880aeffdc2d40fff4202effe8e18880aeffe42d40fff84eb9000000004fef00104878000242b900000000487800064eb900000000508f4ab90000000067764a8466067203b283656c42aeffdc42aeffec45f9000000004a84670000bc486effdc42a74878000442a74e924fef00104a80660000c27449b4aeffdc661e486effec2f390000000048780004487800014e924fef00104a806600009c52b90000000042a74878000742b9000000004eb900000000508f4ab900000000660e53837a3bba83640642b90000000045f9000000004ab9000000006700015040c246fc27002039fc0b014008000000660c207900000000b1d26700008842b90000000046c2600001264878000342b900000000487800136000ff1a486effec2f390000000048780004487800014e924fef00104a806700ff6e203900000000528023c0000000007831b8806400ff6c4878000142b9000000004878000752b9000000004eb9000000002f39000000004879000000004eb9000000004fef00106000ff38486effec4eb90000000026002239fc0b01a4202effec588fb0b90000000066060801000b661023c00000000023c3000000006000ff4c223900000000783b5381b8816400ff3c4ab9000000006600ff322f002f032f39000000004eb9000000004fef000c0c8000000f9f6300ff142039000000007a0223c300000000ba80640002a22f0048790000000042b9000000004eb90000000046c242a74878000f41f9000000004e904fef00104ab90000000067327001b0b900000000660002aa4ab900000000660002a04eb90000000072f8b2806600028c40c246fc27004eb90000000046c220124ab90000000066000686720123c10000000023c0000000004ab9000000006700015a4eb900000000486effec24004eb900000000588f7008c0b9000000004a80670007f0282efffc2604e08b223900000000707f424448442a2efff4c680b2b900000000670006b041f90000000023d0000000002039000000004a806600066e200243f90000000023d10000000042a723c000000000487800044eb900000000508f70010805001066000672720123c1000000002a3900000000bab900000000674c41f90000000023d0000000004ab9000000006608700123c0000000002039000000004a806600066a200243f90000000023d10000000042a723c000000000487800094eb900000000508f70014ab90000000066147240c2aefff44a8167000ef6720223c1000000007203c8814a8466087a0123c5000000002239000000000801000a670006624ab9000000006700062e4a846700062842a74878000b4eb90000000042a7487800104eb90000000042b9000000004fef00104ab90000000067242039fc0b014008000000671840c246fc270042b9000000004ab9000000006600076a46c24ab90000000067384ab900000000672a207900000000b1f900000000661c227900000000b3f900000000660e2039fc0b014008000000670007c442b9000000004ab90000000067000ad84ab90000000067000ace20390000000022390000000080b900000000028100000400808166000ab07801b8b900000000640008ea42a723c4000000004878000f4eb900000000508f60000a8c528023c00000000052b90000000046c22f39000000004878000e43f9000000004e912f39000000004879000000004eb9000000004eb9000000006000fd484a806600fd80486effdc52b9000000004eb900000000240040c746fc2700588f4ab9000000006600021a2a124eb9000000002d40ffd04eb900000000282effdc2c00b8b900000000671823c40000000023c20000000042b90000000042b9000000004ab900000000670c42b90000000023c2000000007601b6b900000000670001cc7002b085670001c44eb9000000002639000000004a8367342639000000004a83672a2f042f022f39000000004eb9000000004fef000cb0b9000000006500033e4aaeffd06700033e2606d68342aeffd046c74ab90000000067064eb9000000004ab900000000671a42a74878001242b9000000004eb90000000042b900000000508f4a83671e4ab90000000066162f0374014878000223c2000000004eb900000000508f4aaeffd06700fc58baaeffd06700fc502f2effd04eb90000000042b9000000004eb900000000486effec23c0000000004eb90000000041eefff4700123d00000000043eefff841eefffc23d10000000023c00000000023d00000000040c246fc2700721d508f2039000000005380b28065000274763c780123c30000000023c30000000023c40000000042b90000000042b9000000002039fc0b01407a0146807201c08546c242b90000000023c1000000004a81670681b90000000042a7487800034eb900000000508f4ab900000000670e42a7487800054eb900000000508f2079000000004a8867284868ffff487800064eb900000000508f7002b0b900000000660e42a7487800134eb900000000508f42b9000000006000fb442a39000000006000fde2202effd080b900000000661042b90000000042b9000000006000fe2a4ab900000000663c4ab900000000670000c842b900000000720223c1000000007202b2b900000000661ab2b900000000670623c10000000042b90000000042b9000000004ab9000000006700fddc4ab900000000660e760123c30000000023c2000000002f042f022f39000000004eb9000000004fef000c223900000000b2806200fda64aaeffd06700fd9e4a86670c06810000012cb2806200fd8e2639000000007001b0b900000000660000aab6856600fd7042b900000000760223c00000000042b900000000b685660000b42d43ffd042836000fd942f042f022f39000000004eb9000000004fef000c0c800000752f630c700223c0000000006000ff222239fc0b01844a016a420c80000007cf633a4ab9000000006612720123c10000000023c2000000006000fef62f042f022f39000000004eb9000000004fef000c0c80000001f36300fed860a842b9000000006000fecc720123c10000000042b90000000042b90000000042b90000000042b9000000004a836600ff4e6000fcaa4eb90000000023c30000000023c3000000006000ff3a42aeffd06000ff3676016000fcc8428142806000fdb8b0b9000000006700f98223c0000000004ab9000000006600f9724ab9000000006600f9684ab9000000006600f95e4ab9000000006600f9544878000174022f39000000002f00b48056c0710044802f004eb9000000004fef00106000f92e327c05dcb3f9000000006600f988487805dc2f0041f9000000002f104eb9000000004fef000c6000f96e42806000f98a4ab9000000006700f9902239000000000281000001004a816600f97e42a74878000823c2000000004eb900000000508f70016000f964223c000005dcb2b9000000006600f98a487805dc2f0041f9000000002f104eb9000000004fef000c6000f970220292b9000000000c81000007cf634c48780001487800104eb90000000042b900000000508f6000f9d40281000005000c810000010066242239000000004a81671a4a8367162f014878000a23c2000000004eb900000000508f700122390000000008010008674c7602c6aefffc4a836708760123c30000000002810000040082b900000000662c220292b9000000000c8100000bb7631c2f390000000078014878000d23c4000000004eb900000000508f7001223900000000b282624894810c820000270f633e42a7487800114eb900000000508f4ab900000000671e4ab900000000661642a77a014878000f23c5000000004eb900000000508f42b9000000006000f8f84a806634206efff4b1f900000000661a227900000000b3eefff8660e70f5c0aefffcb0b900000000670e42a74878000c4eb900000000508f72f541eefff4202efffc43eefff823d000000000c28023d10000000023c1000000002239fc0b014c23c1000000002239fc0b0084e6887401028100ffffffc48023c10000000023c2000000006000f870263c000000007a7cb6b90000000056c0283c00000000b8b90000000056c1207900000000d1fc00000000710073014480d08044818081b1f90000000056c173014481e7898081bab900000000674072108081767c283c000000002a3c0000000023c80000000023c30000000023c40000000023c50000000046c22f004879000000004eb900000000508f6000f80e4a8066c06000f8044eb900000000207900000000b1c06200f834220074019288b4b900000000660000e60c81000005db6300f81a2039fc0b01a402800000080080b9000000006600f8042039fc0b017024000282400000000800001e6734760342b90000000023c00000000042b90000000023c30000000048780002487800154eb90000000042b900000000508f6000f7bc283c800000002a3c0000000023c4fc0b01702c3c00004e2020454e9026002839fc0b01704a846c0005d44a83672022454e91487805dc2f002f034eb9000000004fef000c2400700eb082650005b453864a8666ca4a83660005a823c200000000740342b90000000023c40000000023c200000000487800016000ff700c81000007d0630a4ab9000000006700f7282239fc0b01a40801000b6700f7204ab9000000006612760123c30000000023c0000000006000f70690b9000000000c80000003e76300f6f64ab9000000006600f6ec42b9000000004eb9000000006000f6dc4ab900000000660001b27a01bab900000000643a42a74878000f23c5000000004eb900000000508f4ab9000000006600018a2f390000000023c5000000004879000000004eb9000000006000f6de40c246fc27002039fc0b014008000000670002642039fc0b01a40800000b670002564ab9000000006600024c4ab900000000660002424ab900000000660002384ab9000000006600022e207900000000b1d2660002224ab900000000660002184eb9000000004a806600020c4eb9000000004a806700020045f9000000007002b0b900000000670001bc486effec4eb90000000043f900000000720141eeffec23d10000000023c10000000023c00000000023d00000000023c10000000046c220390000000052802f004878000e23c0000000004e9252b90000000040c246fc2700700123c0000000004eb90000000042b90000000042b90000000046c27201760123c100000000243cfffff2ff4eb900000000c5b90000000042b90000000042b90000000041f90000000043f90000000023c00000000042b90000000042b90000000042b90000000023c30000000023c30000000023c0000000004fef000c23d00000000023d1000000004ab90000000067244ab900000000661c40c246fc27002639000000004a83670000f0761023c30000000046c24ab900000000670003844eb90000000024004ab9000000006f5c4a80660002fc243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a700123c00000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a80670002f04cee04fcffb44e5e4ef90000000046c2700142a74878000f23c0000000004e92508f4ab9000000006600ff0c720142a723c1000000004879000000006000fd8246c26000fef24ab9000000006758223900000000428041f900000000b280665045f90000000078017192b880675c71b900000000b88067522039000000004a80665441f900000000b0816600016673927802b881670c73b900000000b881660001687a08602642b9000000006000feb279b0080057844a84660c700123c0000000006000fe9c528060927a0223c5000000006000fe8c700123c0000000004eb900000000487800024eb900000000487800064eb9000000004eb900000000508f223c0004000423c1fc0b01bc203900000000428141f900000000b081660000be42b900000000739242b90000000053814a816708420113c10000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b42a39fc0b01b82839fc0b01b0828582840281000400044a816700008c2639fc0b01b42039fc0b01b82239fc0b01b00280000400040281000400044a8056c04a8156c17100730144804481e589d0808081220376010281000400044a8156c17301448180817204e188828023c10000000023c3000000006000fd8679b0180057844a84670642041184180052816000ff2a79b0080053844a84660670086000febc52806000fe8222390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b083663c420542b90000000042b90000000042b90000000013c50000000013c50000000042b90000000042b90000000046c22f014eb900000000588f6000fcf2420411843800528360b6263c000005dc6000fd0e4a836600f1107a0323c5000000006000f1044a83671e20454e90487805dc2f002f034eb9000000004fef000c24004a846d00fa3e700223c0000000004eb90000000042b90000000023c40000000023c200000000720323c00000000023c10000000042a76000f99a4cee04fcffb44e5e4e75",
+   "hex": "4e56ffac48d71cfc24390000000040c446fc2700428345f9000000004ab90000000067087002b0836600017c46c44ab90000000066224878000472012f390000000048790000000023c1000000004eb9000000004fef000c260e0683ffffffec2f0345f9000000004e92588f222effecb4b900000000660ab2b9000000006700013c23c20000000023c00000000023c1000000004ab90000000067064eb9000000004ab9000000006700028240c046fc27002839000000002a39fc0b01407401ca8246c04ab900000000670001ce4a8566000294200472385980b28065000288486effd442a74878000442a742aeffd447f90000000052b9000000004e934fef00104a8066000194202effd47449b480670000f223c000000000700123c000000000486effd84878004948780004487800014e934fef00104a806600015e243900000000700123c0000000004a82660001342e0e428642aeffe842aeffe442aeffe042aeffdc0687ffffffdc2f0742a72f0642a74e9352864fef00107204b286670000a058874a8067e2203900000000528023c0000000007431b480640000e67401600000844a323800660a2f034eb900000000588f52836000fe62b4b9000000006700fed02f012f002f39000000004eb9000000004fef000c0c80000001f36300feb2487800042f0248790000000023c2000000004eb9000000004fef000c6000fe924ab9000000006600ff167241740123c10000000023c2000000006000ff024a806600ff6470012f0323c0000000004eb9000000002f03487800044878002c203900000000720d42aefff0e3aa484042408480701480822d40ffec202effe0e18880aeffdc2d40fff4202effe8e18880aeffe42d40fff84eb9000000004fef00104878000242b900000000487800064eb900000000508f4ab90000000067744a8566067203b284656a42aeffdc42aeffec47f9000000004a85670000ba486effdc42a74878000442a74e934fef00104a80660000be7449b4aeffdc661c2f032f390000000048780004487800014e934fef00104a806600009a52b90000000042a74878000742b9000000004eb900000000508f4ab900000000660e5384703bb084640642b90000000047f9000000004ab9000000006700015040c246fc27002039fc0b014008000000660c223900000000b2936700008a42b90000000046c2600001264878000342b900000000487800136000ff1c2f032f390000000048780004487800014e934fef00104a806700ff70203900000000528023c0000000007a31ba806400ff6e4878000142b9000000004878000752b9000000004eb900000000487800022f39000000004879000000004eb9000000004fef00146000ff362f034e9228002239fc0b01a4202effec588fb0b90000000066060801000b661023c00000000023c4000000006000ff502239000000007a3b5381ba816400ff404ab9000000006600ff362f002f042f39000000004eb9000000004fef000c0c8000000f9f6300ff18203900000000720223c40000000049f900000000b2806400036c487800022f0048790000000042b9000000004eb90000000046c242a74878000f4e944fef00144ab90000000067327401b4b900000000660003744ab9000000006600036a4eb90000000078f8b8806600035640c246fc27004eb90000000046c220134ab9000000006600074c780123c40000000023c0000000004ab900000000670001584eb9000000002f0324004eb900000000588f7008c0b9000000004a80670008b82a2efffc2805e08c223900000000707f424548452c2efff4c880b2b9000000006700077841f90000000023d0000000002039000000004a8066000736200243f90000000023d10000000042a723c000000000487800044eb900000000508f7001080600106600073a720123c100000000207900000000b1f900000000674c43f90000000023d1000000004ab9000000006608700123c0000000002039000000004a8066000732200243f90000000023d10000000042a723c000000000487800094eb900000000508f70014ab90000000066147240c2aefff44a8167000ef0720223c1000000007203ca814a856608720123c1000000002239000000000801000a6700072a4ab900000000670006f64a85670006f042a74878000b4eb90000000042a7487800104eb90000000042b9000000004fef00104ab90000000067242039fc0b014008000000671840c246fc270042b9000000004ab9000000006600083246c24ab90000000067384ab900000000672a203900000000b0b900000000661c223900000000b2b900000000660e2039fc0b0140080000006700089242b9000000004ab90000000067444ab900000000673c20390000000022390000000080b900000000028100000400808166207a01bab900000000640009be42a74878000f23c5000000004eb900000000508f4ab90000000067244ab900000000661c40c246fc27002639000000004a8367000b82781023c40000000046c24ab90000000067000e0c4eb90000000024004ab9000000006f5c4a8066000d8a243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a700123c00000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a8067000d784cee1cfcffac4e5e4ef900000000528023c00000000052b90000000046c22f39000000004878000e4e94487800022f39000000004879000000004eb9000000004eb9000000006000fc7e4a806600fcb6486effdc52b9000000004e92240040c546fc27002845588f4ab900000000660002182c134eb9000000002d40ffd04eb9000000002a2effdc2e00bab900000000671823c50000000023c20000000042b90000000042b9000000004ab900000000670c42b90000000023c2000000007001b0b900000000670001ca7202b286670001c24eb9000000002839000000004a8467342839000000004a84672a2f052f022f39000000004eb9000000004fef000cb0b9000000006500033c4aaeffd06700033c2807d88442aeffd0240c46c24ab90000000067064eb9000000004ab900000000671a42a74878001242b9000000004eb90000000042b900000000508f4a84671e4ab90000000066162f047a014878000223c5000000004eb900000000508f4aaeffd06700fb8ebcaeffd06700fb862f2effd04eb90000000042b9000000004eb9000000002f0323c0000000004eb90000000041eefff4700123d00000000043eefff841eefffc23d10000000023c00000000023d00000000040c246fc2700721d508f2039000000005380b28065000272783c7a0123c40000000023c40000000023c50000000042b90000000042b9000000002039fc0b014072014680c08146c242b90000000023c1000000004a81670681b90000000042a7487800034eb900000000508f4ab900000000670e42a7487800054eb900000000508f2079000000004a8867284868ffff7402487800064eb900000000508fb4b900000000660e42a7487800134eb900000000508f42b9000000006000fa7e2c39000000006000fde4202effd080b900000000661042b90000000042b9000000006000fe2c4ab900000000663c4ab900000000670000c842b900000000780223c4000000007202b2b900000000661ab2b900000000670623c10000000042b90000000042b9000000004ab9000000006700fdde4ab900000000660e780123c40000000023c2000000002f052f022f39000000004eb9000000004fef000c223900000000b2806200fda84aaeffd06700fda04a87670c06810000012cb2806200fd902839000000007001b0b900000000660000aab8866600fd7242b900000000780223c00000000042b900000000b886660000b42d44ffd042846000fd962f052f022f39000000004eb9000000004fef000c0c800000752f630c700223c0000000006000ff222239fc0b01844a016a420c80000007cf633a4ab9000000006612720123c10000000023c2000000006000fef62f052f022f39000000004eb9000000004fef000c0c80000001f36300fed860a842b9000000006000fecc720123c10000000042b90000000042b90000000042b90000000042b9000000004a846600ff4e6000fcac4eb90000000023c40000000023c4000000006000ff3a42aeffd06000ff3678016000fcca428142806000fdb8b0b9000000006700f8bc23c0000000004ab9000000006600f8ac4ab9000000006600f8a24ab9000000006600f8984ab9000000006600f88e487800017a022f39000000002f00ba8056c0710044802f004eb9000000004fef00106000f868327c05dcb3f9000000006600f8c0487805dc2f0041f9000000002f104eb9000000004fef000c6000f8a642806000f8c24ab9000000006700f8c82239000000000281000001004a816600f8b642a74878000823c2000000004eb900000000508f70016000f89c223c000005dcb2b9000000006600f8c2487805dc2f0041f9000000002f104eb9000000004fef000c6000f8a8220292b9000000000c81000007cf634c48780001487800104eb90000000042b900000000508f6000f90c0281000005000c810000010066242239000000004a81671a4a8467162f014878000a23c2000000004eb900000000508f700122390000000008010008674c7802c8aefffc4a846708780123c40000000002810000040082b900000000662c220292b9000000000c8100000bb7631c2f39000000007a014878000d23c5000000004eb900000000508f7001223900000000b282624894810c820000270f633e42a7487800114eb900000000508f4ab900000000671e4ab900000000661642a770014878000f23c0000000004eb900000000508f42b9000000006000f8304a806634222efff4b2b900000000661a243900000000b4aefff8660e70f5c0aefffcb0b900000000670e42a74878000c4eb900000000508f72f541eefff4202efffc43eefff823d000000000c28023d10000000023c1000000002239fc0b014c23c1000000002239fc0b0084e6887401028100ffffffc48023c10000000023c2000000006000f7a8283c00000000b8b90000000056c02a3c00000000bab90000000056c1207900000000d1fc00000000710073014480d08044818081b1f90000000056c173014481e7898081727cb2b90000000067467810808423c8000000007a7c41f90000000043f90000000023c50000000023c80000000023c90000000046c2487800022f004879000000004eb9000000004fef000c6000f7404a8066ba6000f7364eb900000000207900000000b1c06200f766220074019288b4b900000000660000e60c81000005db6300f74c2039fc0b01a402800000080080b9000000006600f7362039fc0b017024000282400000000800001e6734780342b90000000023c00000000042b90000000023c40000000048780002487800154eb90000000042b900000000508f6000f6ee2a3c800000002c3c0000000023c5fc0b01702e3c00004e2020464e9028002a39fc0b01704a856c0004fa4a84672022464e91487805dc2f002f044eb9000000004fef000c2400700eb082650004da53874a8766ca4a84660004ce23c200000000740342b90000000023c50000000023c200000000487800016000ff700c81000007d0630a4ab9000000006700f65a2239fc0b01a40801000b6700f6524ab9000000006612780123c40000000023c0000000006000f63890b9000000000c80000003e76300f6284ab9000000006600f61e42b9000000004eb9000000006000f60e4ab9000000006600f6507001b0b900000000644042a74878000f23c0000000004eb900000000508f4ab9000000006600f6284878000272012f390000000023c1000000004879000000004eb9000000006000016440c246fc27002039fc0b0140080000006700018e2039fc0b01a40800000b670001804ab900000000660001764ab9000000006600016c4ab900000000660001624ab90000000066000158283900000000b8936600014c4ab900000000660001424eb9000000004a80660001364eb9000000004a806700012a47f9000000007a02bab900000000670000e22f034e9243f900000000720141eeffec23d10000000023c10000000023c00000000023d00000000023c10000000046c220390000000052802f0023c0000000004878000e4e9352b90000000040c246fc2700700123c0000000004eb90000000042b90000000042b90000000046c27201780123c100000000243cfffff2ff4eb900000000c5b90000000042b90000000042b90000000041f90000000043f90000000023c00000000042b90000000042b90000000042b90000000023c40000000023c40000000023c00000000023d00000000023d1000000004fef000c6000f49c46c2700142a74878000f23c0000000004e93508f4ab9000000006600f47e48780002720142a723c1000000004879000000006000fe5846c26000f4604ab9000000006758223900000000428041f900000000b280665045f90000000078017192b880675c71b900000000b88067522039000000004a80665441f900000000b0816600016273927802b881670c73b900000000b881660001647a08602642b9000000006000f42079b0080057844a84660c700123c0000000006000f40a528060927a0223c5000000006000f3fa700123c0000000004eb9000000004878000247f9000000004e93487800064e934eb900000000508f223c0004000423c1fc0b01bc203900000000428141f900000000b081660000bc42b900000000739242b90000000053814a816708420113c10000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b42a39fc0b01b82839fc0b01b0828582840281000400044a816700008a2639fc0b01b42039fc0b01b82239fc0b01b002800004000402810004000402830004000478014a8056c04a8156c17100730144804481e589d08080814a8356c17301448180817204e188828023c10000000023c4000000006000f2f879b0180057844a84670642041184180052816000ff2c79b0080053844a84660670086000fec052806000fe8622390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b083663c420542b90000000042b90000000042b90000000013c50000000013c50000000042b90000000042b90000000046c22f014eb900000000588f6000f264420411843800528360b6263c000005dc6000f2804a846600f11672036000f10a4a84671e20464e90487805dc2f002f044eb9000000004fef000c24004a856d00fb18700223c0000000004eb90000000042b90000000023c50000000023c200000000720323c00000000023c10000000042a76000fa744cee1cfcffac4e5e4e75",
    "kind": "text",
    "name": ".text.usb_bulk_tick",
-   "size": 5224
+   "size": 5440
   },
   {
    "align": 2,
@@ -6128,6 +6695,13 @@
    "kind": "text",
    "name": ".text.usb_bulk_disconnect",
    "size": 96
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d7040c4ab900000000661240c246fc27002279000000004a89670c46c24cd7040c4fef000c4e75203c00000148b0b900000000665c203900000000204073907609b681664c73a8000155814a81664273a800045b814a816638207900000000b1fc00000000622a2608d6b9000000000c8300000000651a223c000000000281fffff000b288650a068100009000b283630a700223c000000000608042812041d1fc00000000f4e80681000000100c810000016066e8207900000000d1fc0000000045f10800119298005289b3fc0000014866ee203c09040500263c01ff000021400148227c000705022143014c247c02000200303c5801760621490150214a015443f90000000045f9000000003140000211430004203c00000158263c0000000023d10000000023d20000000023c80000000041f90000000023c000000000700123c30000000023c8000000006000ff44",
+   "kind": "text",
+   "name": ".text.ua_prepare",
+   "size": 342
   },
   {
    "align": 2,
@@ -6159,10 +6733,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec202f001c538048d70c1c0c8000003fff6200010c40c446fc27004ab900000000671c4ab90000000067142639000000004a83660a7002b0b900000000670e46c470cb4cd70c1c4fef00144e754ab90000000067064eb90000000047f9000000004a13677e74ff4a3900000000661c74017201200217812800720ee3a82440d5f900000000d5f90000000020390000000046c472ffb2826700008c206f001843f03800159138005283b6af001c66ec40c346fc27004ab90000000067184ab90000000067104ab9000000006608b0b900000000671242001780280070cb46c36000ff624282608a4879000000002f2f00202f0a487800064eb9000000004fef00104a806712420170011781280023c00000000070b860c672021781280060be70c96000ff2070f46000ff1a",
+   "hex": "4fefffec202f001c538048d70c1c0c8000003fff6200011240c446fc27004ab900000000671c4ab90000000067142639000000004a83660a7002b0b900000000670e46c470cb4cd70c1c4fef00144e754ab90000000067064eb90000000047f9000000004a13677e74ff4a3900000000661c74017201200217812800720ee3a82440d5f900000000d5f90000000020390000000046c472ffb28267000092206f001843f03800159138005283b6af001c66ec40c346fc27004ab90000000067184ab90000000067104ab9000000006608b0b900000000671242001780280070cb46c36000ff624282608a4879000000004879000000002f2f00242f0a487800064eb9000000004fef00144a806712420170011781280023c00000000070b860c072021781280060b870c96000ff1a70f46000ff14",
    "kind": "text",
    "name": ".text.usb_bulk_send",
-   "size": 302
+   "size": 308
   },
   {
    "align": 2,
@@ -6259,7 +6833,7 @@
    "align": 1,
    "hex": "0602040104020402",
    "kind": "data",
-   "name": ".rodata.CSWTCH.371",
+   "name": ".rodata.CSWTCH.419",
    "size": 8
   },
   {
@@ -6302,6 +6876,41 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.tick_added",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_emitted",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_seen_per",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_seen_at",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_seen",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_tick_init",
    "size": 4
   },
   {
@@ -6548,6 +7157,76 @@
    "kind": "bss",
    "name": ".bss.sw",
    "size": 128
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_stock_disconnect",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_stock_connect",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_stopping",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_up",
+   "size": 4
+  },
+  {
+   "align": 1,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_state",
+   "size": 2
+  },
+  {
+   "align": 4096,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_ring",
+   "size": 40960
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_desc",
+   "size": 352
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_audio_rx_frames",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_audio_rx_bytes",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_audio_state",
+   "size": 4
   },
   {
    "align": 1,
@@ -7061,7 +7740,7 @@
    "size": 101
   }
  ],
- "source_sha256": "011bd4683cf460bb166fa03c0986fb061a20a7d0a79300444f414534657c34d1",
+ "source_sha256": "60338ac72b2ab3f40a6b4553fadd8ee675da45458625414287a6df65c912b5d3",
  "symbols": [
   {
    "global": false,
@@ -7575,6 +8254,96 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.ua_desc",
+   "section": ".bss.ua_desc",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_emitted",
+   "section": ".bss.ua_emitted",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_ring",
+   "section": ".bss.ua_ring",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_seen",
+   "section": ".bss.ua_seen",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_seen_at",
+   "section": ".bss.ua_seen_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_seen_per",
+   "section": ".bss.ua_seen_per",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_state",
+   "section": ".bss.ua_state",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_stock_connect",
+   "section": ".bss.ua_stock_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_stock_disconnect",
+   "section": ".bss.ua_stock_disconnect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_stopping",
+   "section": ".bss.ua_stopping",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_tick_init",
+   "section": ".bss.ua_tick_init",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_up",
+   "section": ".bss.ua_up",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_audio_rx_bytes",
+   "section": ".bss.usb_bulk_audio_rx_bytes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_audio_rx_frames",
+   "section": ".bss.usb_bulk_audio_rx_frames",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_audio_state",
+   "section": ".bss.usb_bulk_audio_state",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.usb_bulk_enum_recoveries",
    "section": ".bss.usb_bulk_enum_recoveries",
    "value": 0
@@ -7725,8 +8494,8 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.CSWTCH.371",
-   "section": ".rodata.CSWTCH.371",
+   "name": ".sec..rodata.CSWTCH.419",
+   "section": ".rodata.CSWTCH.419",
    "value": 0
   },
   {
@@ -7785,8 +8554,8 @@
   },
   {
    "global": false,
-   "name": ".sec..text.queue_transfer.constprop.0",
-   "section": ".text.queue_transfer.constprop.0",
+   "name": ".sec..text.queue_transfer",
+   "section": ".text.queue_transfer",
    "value": 0
   },
   {
@@ -7881,8 +8650,44 @@
   },
   {
    "global": false,
-   "name": ".sec..text.ub_log.constprop.0",
-   "section": ".text.ub_log.constprop.0",
+   "name": ".sec..text.ua_cancel",
+   "section": ".text.ua_cancel",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_connect",
+   "section": ".text.ua_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_disconnect",
+   "section": ".text.ua_disconnect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_out_stop",
+   "section": ".text.ua_out_stop",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_prime",
+   "section": ".text.ua_prime",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_rx_done",
+   "section": ".text.ua_rx_done",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ub_log",
+   "section": ".text.ub_log",
    "value": 0
   },
   {
@@ -7989,8 +8794,8 @@
   },
   {
    "global": false,
-   "name": "CSWTCH.371",
-   "section": ".rodata.CSWTCH.371",
+   "name": "CSWTCH.419",
+   "section": ".rodata.CSWTCH.419",
    "value": 0
   },
   {
@@ -8307,8 +9112,8 @@
   },
   {
    "global": false,
-   "name": "queue_transfer.constprop.0",
-   "section": ".text.queue_transfer.constprop.0",
+   "name": "queue_transfer",
+   "section": ".text.queue_transfer",
    "value": 0
   },
   {
@@ -8738,9 +9543,135 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "ua_cancel",
+   "section": ".text.ua_cancel",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_connect",
+   "section": ".text.ua_connect",
+   "value": 0
+  },
+  {
    "global": false,
-   "name": "ub_log.constprop.0",
-   "section": ".text.ub_log.constprop.0",
+   "name": "ua_desc",
+   "section": ".bss.ua_desc",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_disconnect",
+   "section": ".text.ua_disconnect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_emitted",
+   "section": ".bss.ua_emitted",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_init_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_init_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_out_stop",
+   "section": ".text.ua_out_stop",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_prepare",
+   "section": ".text.ua_prepare",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_prime",
+   "section": ".text.ua_prime",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_ring",
+   "section": ".bss.ua_ring",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_rx_done",
+   "section": ".text.ua_rx_done",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_seen",
+   "section": ".bss.ua_seen",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_seen_at",
+   "section": ".bss.ua_seen_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_seen_per",
+   "section": ".bss.ua_seen_per",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_state",
+   "section": ".bss.ua_state",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_stock_connect",
+   "section": ".bss.ua_stock_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_stock_disconnect",
+   "section": ".bss.ua_stock_disconnect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_stopping",
+   "section": ".bss.ua_stopping",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_tick_init",
+   "section": ".bss.ua_tick_init",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_up",
+   "section": ".bss.ua_up",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ub_log",
+   "section": ".text.ub_log",
    "value": 0
   },
   {
@@ -8759,6 +9690,24 @@
    "global": true,
    "name": "usb_alias_delta",
    "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_audio_rx_bytes",
+   "section": ".bss.usb_bulk_audio_rx_bytes",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_audio_rx_frames",
+   "section": ".bss.usb_bulk_audio_rx_frames",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_audio_state",
+   "section": ".bss.usb_bulk_audio_state",
    "value": 0
   },
   {
@@ -9102,8 +10051,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3078",
-  "isa_check": "b8a87ad079e246f85dd0f198b16e8ddc29cd32a0be8f942120c07ff0acbd904a",
+  "instructions_redecoded": "3380",
+  "isa_check": "123acc1b62c80b8fd00d8b3f05eb55a3ea5006a84287905d434b0e3bb3b4f82c",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

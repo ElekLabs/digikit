@@ -844,6 +844,195 @@ static u32 buffers_free(void)
     return 1;
 }
 
+/* ---- USB AUDIO/MIDI bulk OUT probe (docs: README "USB AUDIO/MIDI bulk OUT probe") ----
+ * Port entry 5 (USB AUDIO/MIDI) gets one more interface: interface 5, one vendor bulk OUT endpoint (EP2 OUT, unused by the stock configuration). No mode switch, no
+ * controller stop: ua_prepare only repoints the entry (it runs in the boot thread before the firmware's USB start, and from the firmware tick after a controller reset,
+ * in interrupt context: it is idempotent). The ring is static (the runtime may not exist yet): UA_SLOTS slots of RX_BYTES, queued as multi-page dTDs on EP2 OUT; a completed
+ * transfer is counted and its slot queued again. Nothing here calls the runtime. */
+#define UA_ENTRY 5u
+#define UA_STOCK_BYTES 0x148u
+#define UA_BYTES 0x158u
+#define UA_SLOTS 2u
+#define UA_RING_BYTES                                                                              \
+    (UA_SLOTS * RX_BYTES +                                                                         \
+     2u *                                                                                          \
+         PAGE) /* the slots, a page after them (dTD page pointer 5), a page of slack for the 4 KiB rounding */
+#define CTRL_RX_MASK 0x0000ffffu /* RXE, RXR, RXT and the rest of the receive half of ENDPTCTRL2 */
+#define CTRL_RX_BULK                                                                               \
+    0x000000c8u /* RXE (bit 7), RXR data toggle reset (bit 6), RXT bulk (bits 3:2 = 2) */
+
+/* usb_bulk_audio_state: 0 not prepared, 1 prepared, 2 refused (entry 5 is not the expected one, or the buffers lie outside the cached DDR window) */
+volatile u32 usb_bulk_audio_state;
+volatile u32 usb_bulk_audio_rx_bytes, usb_bulk_audio_rx_frames;
+static u8 ua_desc[UA_BYTES + 8u]
+    __attribute__((aligned(16))); /* 0x160: a whole number of 16-byte lines */
+static u8 ua_ring[UA_RING_BYTES] __attribute__((aligned(4096)));
+static volatile u8 ua_state[UA_SLOTS]; /* 0 free, 1 queued */
+static volatile u32 ua_up, ua_stopping;
+static u32 ua_stock_connect, ua_stock_disconnect;
+
+static u8 *ua_area(void)
+{
+    return alias_of((u8 *)(((u32)ua_ring + PAGE - 1u) & ~(PAGE - 1u)));
+}
+
+void ua_rx_done(u32 bytes, u8 *buf);
+void ua_cancel(u32 bytes, u8 *buf);
+
+/* queue slot i on EP2 OUT; interrupts masked by the caller */
+static void ua_prime(u32 i)
+{
+    if (ua_stopping || !ua_up)
+        return;
+    if (queue_transfer(IDX_OUT, ua_area() + i * RX_BYTES, RX_BYTES, (void *)ua_rx_done,
+                       (void *)ua_cancel) == 0)
+        ua_state[i] = 1;
+}
+
+/* completion (interrupt): count what arrived, queue the slot again */
+void ua_rx_done(u32 bytes, u8 *buf)
+{
+    u32 sr = sr_mask();
+    u32 off = (u32)buf - (u32)ua_area();
+    u32 i = off / RX_BYTES;
+    u32 bad = td_status & (TD_HALTED | TD_BUFERR | TD_XACTERR);
+    td_status = 0;
+    if (off < UA_SLOTS * RX_BYTES && ua_state[i] == 1) {
+        ua_state[i] = 0;
+        if (bad == 0u) {
+            usb_bulk_audio_rx_bytes += bytes;
+            usb_bulk_audio_rx_frames++;
+        }
+        ua_prime(i);
+    }
+    sr_restore(sr);
+}
+
+void ua_cancel(u32 bytes, u8 *buf)
+{
+    u32 sr = sr_mask();
+    u32 off = (u32)buf - (u32)ua_area();
+    (void)bytes;
+    td_status = 0;
+    if (off < UA_SLOTS * RX_BYTES)
+        ua_state[off / RX_BYTES] = 0;
+    sr_restore(sr);
+}
+
+/* EP2 OUT off and empty: the receive half of ENDPTCTRL2 cleared (the transmit half is the firmware's), flush, cancel, the queue head's lists empty. Interrupts masked. */
+static void ua_out_stop(void)
+{
+    volatile u32 *q = qh(QH_EP2_OUT);
+    u32 spins, i;
+    ua_stopping = 1;
+    USB_REG(ENDPTCTRL2) = reg_rd(ENDPTCTRL2) & ~CTRL_RX_MASK;
+    USB_REG(ENDPTFLUSH) = 1u << 2;
+    for (spins = 0; spins < FLUSH_SPINS && (reg_rd(ENDPTFLUSH) & (1u << 2)) != 0u; spins++)
+        ;
+    if (!ua_up) {
+        /* the ring is not ready (first connect, or after a bus reset): the engine's init cleared the queue heads, but another USB mode (Overbridge, port 2) may have left words:
+         * empty the lists before cancel walks them */
+        q[0x30 / 4] = 0;
+        q[0x34 / 4] = 0;
+    }
+    usb_fw_cancel_ep(IDX_OUT);
+    q[1] = 0;
+    q[2] = TD_END;
+    q[3] = 0;
+    q[0x30 / 4] = 0;
+    q[0x34 / 4] = 0;
+    USB_REG(ENDPTCOMPLETE) = 1u << 2;
+    for (i = 0; i < UA_SLOTS; i++)
+        ua_state[i] = 0;
+    ua_up = 0;
+    ua_stopping = 0;
+}
+
+/* the host's bus reset or SET_CONFIGURATION in USB AUDIO/MIDI: the stock work first, then EP2 OUT. The ring is rebuilt from scratch (a bus reset drops the dTDs without callbacks). */
+void ua_connect(void)
+{
+    u32 sr = sr_mask();
+    u32 i;
+    ((void (*)(u32))ua_stock_connect)(
+        1); /* the port 5 connect reads no argument; the slot is passed as for port 2, for safety */
+    ua_out_stop();
+    qh(QH_EP2_OUT)[0] = QH_CAPS_OUT;
+    USB_REG(ENDPTCTRL2) = reg_rd(ENDPTCTRL2) | CTRL_RX_BULK;
+    ua_up = 1;
+    for (i = 0; i < UA_SLOTS; i++)
+        ua_prime(i);
+    sr_restore(sr);
+}
+
+void ua_disconnect(void)
+{
+    u32 sr = sr_mask();
+    ua_out_stop();
+    sr_restore(sr);
+    ((void (*)(void))ua_stock_disconnect)();
+}
+
+/* Make entry 5 ours (see above). ISR-safe and idempotent; never stops or restarts the controller. */
+void ua_prepare(void)
+{
+    u32 *e = (u32 *)(usb_port_table + UA_ENTRY * PORT_ENTRY_BYTES);
+    const u8 *cfg;
+    u8 *d;
+    u32 sr, i, area;
+    if (usb_bulk_audio_state != 0u)
+        return;
+    sr = sr_mask();
+    if (usb_bulk_audio_state != 0u) {
+        sr_restore(sr);
+        return;
+    }
+    cfg = (const u8 *)e[3];
+    area = (u32)ua_area() - usb_alias_delta;
+    /* wTotalLength (bytes 2 and 3) is not checked: the firmware fills it in after this hook (FUN_4000677a, the first call of the USB init), so it is 0 here;
+     * enable_prepare skips the same bytes. Our copy gets its own wTotalLength below. */
+    if (e[4] != UA_STOCK_BYTES || cfg[0] != 9u || cfg[1] != 2u || cfg[4] != 5u ||
+        (u32)ua_desc < usb_ddr_base ||
+        (u32)ua_desc + sizeof ua_desc > usb_ddr_base + usb_ddr_bytes || area < usb_ddr_base ||
+        area + UA_SLOTS * RX_BYTES + PAGE > usb_ddr_base + usb_ddr_bytes) {
+        usb_bulk_audio_state = 2;
+        sr_restore(sr);
+        return;
+    }
+    /* as enable_prepare: push the bss lines of the descriptor out, then write through the alias only */
+    for (i = 0; i < sizeof ua_desc; i += 16u)
+        __asm__ volatile("cpushl %%bc,(%0)" : : "a"((u32)ua_desc + i) : "memory");
+    d = alias_of(ua_desc);
+    for (i = 0; i < UA_STOCK_BYTES; i++)
+        d[i] = cfg[i];
+    d[UA_STOCK_BYTES + 0] = 0x09; /* interface 5, alt 0, one endpoint, vendor class */
+    d[UA_STOCK_BYTES + 1] = 0x04;
+    d[UA_STOCK_BYTES + 2] = 0x05;
+    d[UA_STOCK_BYTES + 3] = 0x00;
+    d[UA_STOCK_BYTES + 4] = 0x01;
+    d[UA_STOCK_BYTES + 5] = 0xff;
+    d[UA_STOCK_BYTES + 6] = 0x00;
+    d[UA_STOCK_BYTES + 7] = 0x00;
+    d[UA_STOCK_BYTES + 8] = 0x00;
+    d[UA_STOCK_BYTES + 9] = 0x07; /* EP2 OUT, bulk, 512, interval 0 */
+    d[UA_STOCK_BYTES + 10] = 0x05;
+    d[UA_STOCK_BYTES + 11] = 0x02;
+    d[UA_STOCK_BYTES + 12] = 0x02;
+    d[UA_STOCK_BYTES + 13] = 0x00;
+    d[UA_STOCK_BYTES + 14] = 0x02;
+    d[UA_STOCK_BYTES + 15] = 0x00;
+    d[2] = UA_BYTES & 0xffu; /* wTotalLength, little endian */
+    d[3] = UA_BYTES >> 8;
+    d[4] = 6; /* bNumInterfaces */
+    ua_stock_connect = e[0];
+    ua_stock_disconnect = e[1];
+    e[3] = (u32)d;
+    e[4] = UA_BYTES;
+    e[0] = (u32)ua_connect;
+    e[1] = (u32)ua_disconnect;
+    usb_bulk_audio_state = 1;
+    sr_restore(sr);
+}
+
 /* ---- take-over ---- */
 
 /* Guard after every mode switch. The firmware restarts the device after a delay of 30 ticks of its USB tick (FUN_4000713e counts the word of
@@ -1907,9 +2096,38 @@ static void housekeeping_wake(void)
 }
 
 /* once a pass of the UI loop (dkrt_poll_add): the take-over, then retry what the engine refused */
+/* The probe's readback for the host (info level MOD_LOG): "ua.state" once at the first tick, "ua.rx" (value = bytes counted) when the counter has stayed unchanged for
+ * UA_BURST_MS after a change (a burst ended). Sampled here: the completion interrupt does not read the clock. UI task only. */
+#define UA_BURST_MS 500u
+static u32 ua_tick_init, ua_seen, ua_seen_at, ua_seen_per, ua_emitted;
+
+static void ua_tick(void)
+{
+    u32 per, now, sr, i, bytes = usb_bulk_audio_rx_bytes;
+    sr = sr_mask(); /* a slot the engine refused (empty dTD pool) is queued again */
+    for (i = 0; ua_up && i < UA_SLOTS; i++)
+        if (ua_state[i] == 0)
+            ua_prime(i);
+    sr_restore(sr);
+    if (!ua_tick_init) {
+        ua_tick_init = 1;
+        ub_log("ua.state", usb_bulk_audio_state, SW_FLAGS);
+    }
+    now = to_peek(&per);
+    if (bytes != ua_seen || per != ua_seen_per) {
+        ua_seen = bytes;
+        ua_seen_at = now;
+        ua_seen_per = per;
+    } else if (bytes != ua_emitted && to_elapsed_ms(ua_seen_at, now, per) >= UA_BURST_MS) {
+        ua_emitted = bytes;
+        ub_log("ua.rx", bytes, SW_FLAGS);
+    }
+}
+
 void usb_bulk_tick(void)
 {
     u32 sr, again;
+    ua_tick();
     sw_pend_poll();
     hold_service();
     recovery_tick();

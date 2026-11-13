@@ -1043,6 +1043,9 @@ pub mod usb {
         #[link_name = "cf.usb.value.restart_delay"]
         pub static RESTART_DELAY: u8;
     }
+
+    /// Entry of the USB init, before it starts the controller; the point where the adapter extends the USB AUDIO/MIDI port entry. Runs in the boot thread and in interrupt context.
+    pub type InitHook = unsafe extern "C" fn();
 }
 
 pub mod view {

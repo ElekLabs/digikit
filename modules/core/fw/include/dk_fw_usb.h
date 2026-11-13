@@ -32,5 +32,7 @@ extern const uint8_t dk_fw_usb_active_port __asm__("cf.usb.value.active_port");
 extern const uint8_t dk_fw_usb_config_mode __asm__("cf.usb.value.config_mode");
 /* The restart delay of the USB mode switch (u32): the stop (`FUN_40006bac`) sets it to 30, the USB tick `FUN_4000713e` counts it down (one a tick, about 33 ms) and calls the restart (`FUN_40006bc6`) when it reaches 0. Non-zero while a stop waits to restart. The operand of the tick's first read. DT2 1.17 0x40965a38, DN2 1.12 0x4058f280. RAM at run time. */
 extern const uint8_t dk_fw_usb_restart_delay __asm__("cf.usb.value.restart_delay");
+/* Entry of the USB init, before it starts the controller; the point where the adapter extends the USB AUDIO/MIDI port entry. Runs in the boot thread and in interrupt context. */
+typedef void dk_fw_usb_init_hook(void);
 
 #endif

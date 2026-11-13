@@ -125,6 +125,81 @@ impl UsbLink {
     }
 }
 
+/// A claimed interface with one bulk OUT endpoint and no IN endpoint (the USB AUDIO/MIDI probe: interface 5, EP 0x02). Only that interface is claimed:
+/// the class drivers keep the others, and no kernel driver is detached.
+pub struct OutOnly {
+    out: Endpoint<Bulk, Out>,
+    _interface: Interface,
+}
+
+impl OutOnly {
+    /// Open the device `id` (`bus:address`), or the first device with the vendor id that has an interface `number`; claim it and take the OUT endpoint `ep`.
+    pub fn open(id: Option<&str>, number: u8, ep: u8) -> Result<OutOnly, String> {
+        let all = nusb::list_devices().wait().map_err(|e| e.to_string())?;
+        let info = all
+            .filter(|d| d.vendor_id() == VID && d.interfaces().any(|i| i.interface_number() == number))
+            .find(|d| id.is_none_or(|w| id_of(d) == w))
+            .ok_or_else(|| match id {
+                Some(w) => format!("no USB device {w} with an interface {number}"),
+                None => format!("no USB device {VID:#06x} with an interface {number} (is the probe image loaded?)"),
+            })?;
+        let device = info.open().wait().map_err(|e| format!("open: {e}"))?;
+        let interface = device
+            .claim_interface(number)
+            .wait()
+            .map_err(|e| format!("claim interface {number}: {e}"))?;
+        let out = interface
+            .endpoint::<Bulk, Out>(ep)
+            .map_err(|e| format!("endpoint {ep:#04x}: {e}"))?;
+        Ok(OutOnly {
+            out,
+            _interface: interface,
+        })
+    }
+
+    /// Write `total` bytes of a pattern in `chunk`-byte transfers, up to `depth` in flight. Returns the bytes the device accepted.
+    pub fn write(
+        &mut self,
+        total: usize,
+        chunk: usize,
+        depth: usize,
+        timeout: Duration,
+    ) -> Result<usize, String> {
+        let (mut submitted, mut done) = (0usize, 0usize);
+        while done < total {
+            while submitted < total && self.out.pending() < depth {
+                let n = chunk.min(total - submitted);
+                let data: Vec<u8> = (0..n).map(|k| (submitted + k) as u8).collect();
+                self.out.submit(data.into());
+                submitted += n;
+            }
+            match self.out.wait_next_complete(timeout) {
+                Some(c) => {
+                    done += c.actual_len;
+                    c.status.map_err(|e| {
+                        if e == TransferError::Stall {
+                            let _ = self.out.clear_halt().wait();
+                        }
+                        format!("after {done} of {total} bytes: {e}")
+                    })?;
+                }
+                None => {
+                    self.out.cancel_all();
+                    let _ = self.out.wait_next_complete(Duration::from_millis(500));
+                    return Err(format!("timeout after {done} of {total} bytes"));
+                }
+            }
+        }
+        Ok(done)
+    }
+}
+
+impl Drop for OutOnly {
+    fn drop(&mut self) {
+        self.out.cancel_all();
+    }
+}
+
 fn map(e: TransferError) -> LinkError {
     match e {
         TransferError::Disconnected => LinkError::Disconnected,

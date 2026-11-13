@@ -18,7 +18,8 @@ ports = ["dt2-1.17", "dn2-1.12"]
 
 # The firmware's USB engine is not patched (docs/plans/usb-fast.md section 4, docs/findings/42-usb-transfer-routes.md section 4): entry 2 of its RAM port
 # table (USB MIDI) gets a longer configuration descriptor and our connect and disconnect callbacks when a module calls usb_bulk_enable, and the firmware's
-# own stop and restart pair re-enumerates. Without a module that calls it, nothing is written and USB is stock. The code is the same on both devices
+# own stop and restart pair re-enumerates. USB MIDI mode is unchanged by the boot hook. The boot hook (ua_prepare) extends entry 5 (USB AUDIO/MIDI) on every
+# image with core/usb-bulk (interface 5, EP2 OUT bulk); it refuses and leaves USB stock if entry 5 is not the stock layout. The code is the same on both devices
 # (the engine is identical code at the same addresses); the anchors give the data address and the engine entries.
 # The module imports usb_bulk_* are the `[[import]] requires = "core/usb-bulk"` entries of sdk/sdk.toml; the runtime lists them as optional.
 
@@ -30,7 +31,7 @@ uses = ["DDR_CACHED_BASE", "DDR_BYTES", "DDR_UNCACHED_ALIAS"]
 
 [[object]]
 path = "build/usb-bulk.dko.json"
-sources = ["src/cf/usb_bulk.c", "src/cf/device.s"]
+sources = ["src/cf/usb_bulk.c", "src/cf/device.s", "src/cf/ua_tramp.s"]
 place = "cf.expansion"
 
 [object.externs]
@@ -48,3 +49,14 @@ usb_fw_reset_stop = "cf.usb.fn.reset_stop"
 usb_fw_restart = "cf.usb.fn.restart"
 usb_fw_mode_switch = "cf.usb.fn.mode_switch"
 usb_restart_delay = "cf.usb.value.restart_delay"
+ua_init_next = "hook.cf.usb.site.init.tail"
+
+# USB AUDIO/MIDI bulk OUT probe: the entry of the firmware's USB init jumps to ua_init_hook, which runs ua_prepare (it extends the port 5 entry
+# of the RAM port table) and then the displaced prologue. The init runs at boot and again from the firmware tick after a controller reset.
+[[op]]
+op = "hook"
+hook = "cf.usb.hook.init"
+to = "ua_init_hook"
+
+[[claim]]
+resource = "cf.usb.site.init"

@@ -5,6 +5,8 @@
 //!                                          (the TypeScript session code of tools/devtools/wb.mjs speaks the protocol over it)
 //!     dkbulk echo [--id ID] [--sizes N,N,...]
 //!                                          the first hardware run (test/usb-echo, step 3): send each size of bytes, read the same bytes back, compare, print MB/s
+//!     dkbulk send [--id ID] [--interface N] [--ep ADDR] [--bytes N]
+//!                                          claim only interface N (default 5) and write N bytes (default 1 MiB) to its bulk OUT endpoint ADDR (default 0x02), no IN endpoint; print MB/s
 //!     dkbulk put [--id ID] [--root N] [--chunk N] [--trailer] [--replace] LOCAL REMOTE [LOCAL REMOTE ...]
 //!                                          upload files with the Rust client and print MB/s (--trailer: the expected hash covers 16 zero bytes more, as on the DT2 +Drive)
 use std::io::{Read, Write};
@@ -38,11 +40,42 @@ fn main() {
         "open" => bridge(args.first().map(String::as_str)),
         "put" => put(args),
         "echo" => echo(args),
+        "send" => send(args),
         _ => die(
             2,
-            "usage: dkbulk list | dkbulk open [ID] | dkbulk echo [--id ID] [--sizes N,N,...] | dkbulk put [--id ID] [--root N] [--chunk N] [--trailer] [--replace] LOCAL REMOTE ...",
+            "usage: dkbulk list | dkbulk open [ID] | dkbulk send [--id ID] [--interface N] [--ep ADDR] [--bytes N] |dkbulk echo [--id ID] [--sizes N,N,...] | dkbulk put [--id ID] [--root N] [--chunk N] [--trailer] [--replace] LOCAL REMOTE ...",
         ),
     }
+}
+
+/// Write N bytes to a bulk OUT endpoint of one interface that has no IN endpoint (default: interface 5, EP 0x02, 1 MiB) and print bytes and MB/s.
+fn send(mut args: Vec<String>) {
+    let mut take = |flag: &str| -> Option<String> {
+        let at = args.iter().position(|a| a == flag)?;
+        args.remove(at);
+        (at < args.len()).then(|| args.remove(at))
+    };
+    let device = take("--id");
+    let interface: u8 =
+        take("--interface").map_or(5, |v| v.parse().unwrap_or_else(|_| die(2, "--interface N")));
+    let ep: u8 = take("--ep").map_or(0x02, |v| {
+        let h = v.trim_start_matches("0x");
+        u8::from_str_radix(h, 16).unwrap_or_else(|_| die(2, "--ep ADDR (hex)"))
+    });
+    let bytes: usize = take("--bytes").map_or(1 << 20, |v| {
+        v.parse().unwrap_or_else(|_| die(2, "--bytes N"))
+    });
+    let mut link =
+        usb::OutOnly::open(device.as_deref(), interface, ep).unwrap_or_else(|e| die(1, &e));
+    let start = Instant::now();
+    let sent = link
+        .write(bytes, 16384, 4, Duration::from_secs(10))
+        .unwrap_or_else(|e| die(1, &format!("send: {e}")));
+    let s = start.elapsed().as_secs_f64();
+    println!(
+        "sent {sent} bytes to interface {interface} endpoint {ep:#04x} in {s:.3} s, {:.2} MB/s",
+        sent as f64 / 1e6 / s
+    );
 }
 
 fn bridge(id: Option<&str>) {

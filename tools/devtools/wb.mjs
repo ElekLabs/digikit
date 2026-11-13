@@ -12,7 +12,10 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] [--bulk-bin PATH] [--gap MS] [--wait MS] [--card-log] [--continue] takeover-cycle N
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]|summary [DIR]]
+//     node tools/devtools/wb.mjs [--bulk-bin PATH] bulk-probe [--bytes N]
 //
+// `bulk-probe` writes N bytes (default 1 MiB) to bulk OUT endpoint 0x02 of interface 5 in USB AUDIO/MIDI (`dkbulk send`) and prints bytes and MB/s.
+// With the debug module it reads the MOD_LOG events "ua.state" and "ua.rx" before and after and prints the device's byte count and whether it matches.
 // `log card` prints the card log state of the debug module (the log written to data/digikit/debug on the card, kept across restarts); `on` / `off` switch it;
 // `get` reads the card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the older boot first.
 // `summary [DIR]` prints one line per USB switch from the saved .bin files in DIR (default: the newest folder of out/runs/cardlog); it works offline.
@@ -62,7 +65,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | log card [on|off|get [--out DIR]|summary [DIR]] | takeover-cycle N [--gap MS] [--wait MS] [--card-log] [--continue]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | log card [on|off|get [--out DIR]|summary [DIR]] | takeover-cycle N [--gap MS] [--wait MS] [--card-log] [--continue] | bulk-probe [--bytes N] [--bulk-bin PATH]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -91,6 +94,7 @@ for (let i = 0; i < args.length; i++) {
     a === '--speed' ||
     a === '--gap' ||
     a === '--wait' ||
+    a === '--bytes' ||
     a === '--out'
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
@@ -623,11 +627,75 @@ async function takeoverCycle(count) {
   }
 }
 
+/**
+ * `bulk-probe`: write N bytes to EP 0x02 OUT of interface 5 in USB AUDIO/MIDI (`dkbulk send`; only interface 5 is claimed, the class drivers keep 0-4).
+ * The device counters come from the debug module's live log: the adapter writes MOD_LOG "ua.state" (value = usb_bulk_audio_state) at its first tick and
+ * "ua.rx" (value = total bytes received) when a receive burst ends. Without the debug module (LOG refused) only the send result is printed.
+ */
+async function bulkProbe() {
+  const bytes = Number(opts.bytes ?? 1048576);
+  if (!Number.isInteger(bytes) || bytes < 1) fail('--bytes is an integer >= 1');
+  const bin = opts['bulk-bin'];
+  if (!existsSync(bin)) fail(`no dkbulk binary at ${bin} (run: mise run dkbulk:build)`);
+  const tagOf = (e) =>
+    String(runtimeEvent(e).fields.msg ?? '')
+      .replace(/\0/g, '')
+      .trim();
+  const valueOf = (e) => runtimeEvent(e).args[4] >>> 0;
+  const latest = (events, tag) => events.filter((e) => tagOf(e) === tag).at(-1);
+  let link;
+  let before;
+  try {
+    link = await connectReady();
+    before = await link.session.readLog();
+  } catch (e) {
+    console.log(`debug log not available (${e instanceof Error ? e.message : e}): printing the send result only`);
+    await link?.close();
+    link = undefined;
+  }
+  const baseSeq = before?.at(-1)?.seq ?? -1;
+  const stateEv = before && latest(before, 'ua.state');
+  const rxEv = before && latest(before, 'ua.rx');
+  const base = rxEv ? valueOf(rxEv) : 0;
+  const t = Date.now();
+  const r = spawnSync(bin, ['send', '--interface', '5', '--ep', '0x02', '--bytes', String(bytes)], {
+    stdio: 'inherit',
+  });
+  const secs = (Date.now() - t) / 1000;
+  status = r.status ?? 1;
+  if (!link) return;
+  try {
+    let state = stateEv && valueOf(stateEv);
+    let counted;
+    const deadline = Date.now() + 3000;
+    for (;;) {
+      const fresh = (await link.session.readLog()).filter((e) => e.seq > baseSeq);
+      const rx = latest(fresh, 'ua.rx');
+      const st = latest(fresh, 'ua.state');
+      if (st) state = valueOf(st);
+      if (rx) {
+        counted = valueOf(rx) - base;
+        break;
+      }
+      if (Date.now() > deadline) break;
+      await new Promise((res) => setTimeout(res, 250));
+    }
+    const names = { 0: 'not run', 1: 'prepared', 2: 'refused' };
+    console.log(
+      `ua.state ${state === undefined ? 'not seen' : `${state} (${names[state] ?? '?'})`}; sent ${bytes} bytes; device counted ${counted ?? 'no new ua.rx within 3 s'}; match ${counted === bytes ? 'yes' : 'no'}; ${(bytes / 1e6 / secs).toFixed(2)} MB/s (host, whole run incl. process start)`,
+    );
+  } finally {
+    await link.close();
+  }
+}
+
 const [cmd, sub, ...rest] = words;
 let status = 0;
 if (cmd === 'ports') {
   const r = spawnSync(opts.bin, ['ports'], { stdio: 'inherit' });
   status = r.status ?? 1;
+} else if (cmd === 'bulk-probe') {
+  await bulkProbe();
 } else if (cmd === 'takeover-cycle') {
   await takeoverCycle(Number(sub));
 } else if (cmd === 'info') {
