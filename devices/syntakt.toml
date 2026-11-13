@@ -1,0 +1,80 @@
+# Syntakt. Identity level (docs/design/device-data.md "Device levels") plus what the emulator needs: a panel and the free-running timers.
+# No [patch], [digikit] or [acceptance]: nothing is patched or run on the device yet. Plan: docs/plans/syntakt.md; findings 70 and 128.
+#
+# The CPUs are ColdFire only. Sections 1 (FPGA bitstream), 6 and 7 (the peer CPU) are never written, and the FPGA is never modelled
+# (docs/findings/70-syntakt-1-42.md "Scope").
+
+[device]
+name = "Syntakt"
+short = "st"
+# The device byte of the firmware SysEx framing (docs/findings/01). The OS stream byte is 0x11.
+syx_id = 0x16
+
+[[firmware]]
+version = "1.42"
+sha256 = "ded3c59fdb909eb9e2c3307b30a486452c8fa6947b12c14e0ce35a187b7f37c1"
+filename = "Syntakt_OS1.42.syx"
+# Section 5 (meta) of the container.
+build_stamp = "260930 11:17:25"
+main_sha256 = "1a9723b19fb54d0566c1f690379d2e6dfe43227f77e170ad731dd029430eb3e7"
+boot_contract = "main-os-oracle-v1"
+symbol_profile = "elektron-rtos-v1"
+# MAIN has no filesystem worker (finding 70).
+readiness_contract = "main-panel-v1"
+softfloat_abi = false
+
+# No SHARC and no seal (finding 70 "Container": no HMAC trailer). Section 7 is the peer CPU's ColdFire program (finding 128).
+[capabilities]
+dsp = "none"
+seal = "none"
+sample_pool = "none"
+card = "unknown"
+
+# Container section roles. Section 1 holds the FPGA bitstream, 6 and 7 the peer CPU: none of them is ever written.
+[container]
+main = 3
+cf2 = 7
+fpga = 1
+readonly = [1, 2, 4, 6, 7, 8]
+
+# Board facts that only the emulator uses. free_running_dtcn: the DMA timer counter channels (DTCN0..3) that the firmware reads as
+# free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).
+[emulator]
+free_running_dtcn = [2]
+
+# The panel is a placeholder, from finding 70 "Panel wire" (measured by use on OS 1.41): codes follow the linear scheme of the
+# other devices (code = channel * 8 + bit + 1), which the panel sweep has not confirmed here. Only the controls named below are known;
+# every other code of the linear channels is unknown. The panel sweep replaces this table.
+[panel]
+linear_channels = 6
+button_channels = 6
+encoders = 9
+
+# Known: channel 0 bits 0-7 are tracks 1-8 (codes 1-8), channel 1 bits 0-3 are tracks 9-12 (codes 9-12).
+[[panel.group]]
+name = "tracks"
+kind = "button"
+codes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+layout = "grid"
+columns = 6
+
+# Known: channel 2 bit 7 is the LFO page (code 24), channel 3 bit 3 is NO (code 28).
+[[panel.group]]
+name = "known"
+kind = "button"
+codes = [24, 28]
+layout = "row"
+
+# Encoder rotation: A-H are channels 0-7, LEVEL is channel 8.
+[[panel.group]]
+name = "encoders"
+kind = "encoder"
+codes = [1, 2, 3, 4, 5, 6, 7, 8]
+layout = "grid"
+columns = 4
+
+[[panel.group]]
+name = "level"
+kind = "encoder"
+codes = [9]
+layout = "single"

@@ -271,7 +271,7 @@ fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) 
             return bad(format!("[container] section {r} has two roles"));
         }
     }
-    // a role section may be read-only (Syntakt), except the MAIN OS: patchkit has to change it
+    // a role section may be read-only (a device with a bootstrap or peer CPU), except the MAIN OS: patchkit has to change it
     if c.readonly.contains(&c.main) {
         return bad(format!("[container] main section {} is read-only", c.main));
     }
@@ -452,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn a_syntakt_like_identity_with_read_only_role_sections_parses() {
+    fn a_peer_cpu_identity_with_read_only_role_sections_parses() {
         let text = "[device]\nname = \"S\"\nshort = \"st\"\n[capabilities]\ndsp = \"none\"\nseal = \"none\"\nsample_pool = \"none\"\ncard = \"unknown\"\n[container]\nmain = 3\ncf2 = 7\nfpga = 1\nreadonly = [1, 2, 4, 6, 7, 8]\n";
         let (ids, patchable) = parse_all(&[("s.toml", text)]).unwrap();
         assert_eq!(

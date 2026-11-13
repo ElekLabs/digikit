@@ -92,6 +92,11 @@ firmware = "1.17"
 ready_dir = "out/ready-pk-dt2-117"
 sample_card = true
 
+# Board facts that only the emulator uses (docs/design/device-data.md). free_running_dtcn: the DMA timer counter channels (DTCN0..3) that run at
+# the bus clock in the emulator. None here: DTCN0 is not checked on this device (finding 07).
+[emulator]
+free_running_dtcn = []
+
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
 # constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: a fact it uses as a
 # constant must be the same in every device file, and `patchkit gen` refuses a difference. Register offsets inside a peripheral

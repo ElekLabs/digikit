@@ -618,14 +618,12 @@ impl Emulator {
             }
         };
         let mut board = Board::new(card, semaphores, CompletionPolicy::Oracle);
-        // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`).
-        // The mask comes from `dtcn0_on` for now (DN2: channel 0 only). It will come from device
-        // data (the registry branch adds it), so a device whose firmware polls another channel
-        // (Syntakt MAIN polls DTCN2) lists it there.
-        let dtcn_mask = u8::from(dtcn0_on(
-            &device.short,
+        // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`): the device's
+        // `[emulator] free_running_dtcn`, or every channel of `DIGI_DTCN0` (`bus` / `off`) for channel 0.
+        let dtcn_mask = dtcn_mask(
+            device.free_running_dtcn_mask(),
             std::env::var("DIGI_DTCN0").ok().as_deref(),
-        )?);
+        )?;
         board.enable_dtcn_channels(dtcn_mask);
         board
             .enable_sd_gate(false)
@@ -3977,14 +3975,13 @@ fn idle_advance_limit(remaining: u32, passes: u64, now: u64, deadline: Option<u6
     u64::from(remaining).min(before_yield).min(before_timer) as u32
 }
 
-/// Whether DMA timer 0's counter runs at the bus clock (finding 07). On by default on DN2, where
-/// the pinned PCM holds with it. Off by default on other devices, where it is not checked.
-/// `DIGI_DTCN0=bus` turns it on, `DIGI_DTCN0=off` turns it off.
-fn dtcn0_on(device: &str, env: Option<&str>) -> Result<bool, String> {
+/// The DMA timer counters that run at the bus clock: the device's mask (`[emulator] free_running_dtcn`),
+/// with channel 0 forced by `DIGI_DTCN0=bus` or cleared by `DIGI_DTCN0=off`.
+fn dtcn_mask(device: u8, env: Option<&str>) -> Result<u8, String> {
     match env {
-        None => Ok(device == "dn2"),
-        Some("bus") => Ok(true),
-        Some("off") => Ok(false),
+        None => Ok(device),
+        Some("bus") => Ok(device | 1),
+        Some("off") => Ok(device & !1),
         Some(other) => Err(format!("DIGI_DTCN0={other}: use bus or off")),
     }
 }
@@ -4592,12 +4589,23 @@ mod tests {
     }
 
     #[test]
-    fn dtcn0_runs_by_default_on_dn2_only() {
-        assert_eq!(dtcn0_on("dn2", None), Ok(true));
-        assert_eq!(dtcn0_on("dt2", None), Ok(false));
-        assert_eq!(dtcn0_on("dn2", Some("off")), Ok(false));
-        assert_eq!(dtcn0_on("dt2", Some("bus")), Ok(true));
-        assert!(dtcn0_on("dn2", Some("on")).is_err());
+    fn dtcn_channels_come_from_the_device_and_dtcn0_env_overrides_channel_0() {
+        let registry = device_profile::Registry::embedded().unwrap();
+        let mask = |short: &str| {
+            registry
+                .devices()
+                .iter()
+                .find(|d| d.short == short)
+                .unwrap()
+                .free_running_dtcn_mask()
+        };
+        assert_eq!(dtcn_mask(mask("dn2"), None), Ok(0b0001));
+        assert_eq!(dtcn_mask(mask("dt2"), None), Ok(0));
+        assert_eq!(dtcn_mask(mask("st"), None), Ok(0b0100));
+        assert_eq!(dtcn_mask(mask("dn2"), Some("off")), Ok(0));
+        assert_eq!(dtcn_mask(mask("dt2"), Some("bus")), Ok(1));
+        assert_eq!(dtcn_mask(mask("st"), Some("bus")), Ok(0b0101));
+        assert!(dtcn_mask(0, Some("on")).is_err());
     }
 
     #[test]

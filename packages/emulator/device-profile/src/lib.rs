@@ -20,23 +20,8 @@ pub use card::{
     CardLayout, PathFsLayout, Pool, PoolLayout, PoolSet, RegionLayout, RegionRole, StoreLayout,
 };
 
-/// The profiles embedded at compile time: file name under `devices/` and its text. A new device is one more line.
-const EMBEDDED: &[(&str, &str)] = &[
-    (
-        "digitakt-ii.toml",
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../devices/digitakt-ii.toml"
-        )),
-    ),
-    (
-        "digitone-ii.toml",
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../devices/digitone-ii.toml"
-        )),
-    ),
-];
+// The profiles embedded at compile time: file name under `devices/` and its text, one for every device file (`build.rs`).
+include!(concat!(env!("OUT_DIR"), "/device_files.rs"));
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registry {
@@ -62,6 +47,16 @@ pub struct DeviceProfile {
     pub container: Option<ContainerProfile>,
     /// `[acceptance]`: the device's test cell.
     pub acceptance: Option<Acceptance>,
+    /// `[emulator] free_running_dtcn`: the DMA timer counter channels (0..=3) that the firmware reads as free-running counters at the
+    /// bus clock. Empty when absent.
+    pub free_running_dtcn: Vec<u8>,
+}
+
+impl DeviceProfile {
+    /// The free-running DMA timer counters as a channel mask (bit n = DTCNn).
+    pub fn free_running_dtcn_mask(&self) -> u8 {
+        self.free_running_dtcn.iter().fold(0, |m, c| m | 1 << c)
+    }
 }
 
 /// `[capabilities]`: closed sets of words (`dsp`: sharc | none; `seal`: hmac | none; `sample_pool`: stock | ddr | none; `card`:
@@ -245,6 +240,15 @@ struct SourceDocument {
     capabilities: Option<Capabilities>,
     container: Option<ContainerProfile>,
     acceptance: Option<Acceptance>,
+    emulator: Option<SourceEmulator>,
+}
+
+/// `[emulator]`: board facts that only the emulator uses.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceEmulator {
+    #[serde(default)]
+    free_running_dtcn: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -367,6 +371,17 @@ impl Registry {
                     detail: format!("[card] {detail}"),
                 })?;
             }
+            let free_running_dtcn = parsed.emulator.map(|e| e.free_running_dtcn).unwrap_or_default();
+            if free_running_dtcn.iter().any(|&c| c > 3) || {
+                let mut seen = free_running_dtcn.clone();
+                seen.sort_unstable();
+                seen.windows(2).any(|w| w[0] == w[1])
+            } {
+                return invalid(
+                    source,
+                    "[emulator] free_running_dtcn lists distinct channels 0..=3",
+                );
+            }
             devices.push(DeviceProfile {
                 name: parsed.device.name,
                 short: parsed.device.short,
@@ -380,6 +395,7 @@ impl Registry {
                 capabilities: parsed.capabilities,
                 container: parsed.container,
                 acceptance: parsed.acceptance,
+                free_running_dtcn,
             });
         }
         Ok(Self { devices })
@@ -654,15 +670,27 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../devices/digitone-ii.toml"
     ));
+    const ST: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../devices/syntakt.toml"
+    ));
 
     #[test]
     fn embedded_devices_carry_capabilities_container_and_acceptance() {
         let registry = Registry::embedded().unwrap();
         for device in registry.devices() {
             let caps = device.capabilities.as_ref().unwrap();
-            assert_eq!(caps.dsp, "sharc", "{}", device.short);
             assert_eq!(device.container.as_ref().unwrap().main, 3);
-            let acceptance = device.acceptance.as_ref().unwrap();
+            assert_eq!(
+                caps.dsp == "sharc",
+                device.container.as_ref().unwrap().dsp.is_some(),
+                "{}",
+                device.short
+            );
+            // An identity-level device has no test cell yet.
+            let Some(acceptance) = device.acceptance.as_ref() else {
+                continue;
+            };
             assert!(
                 device
                     .firmwares
@@ -681,7 +709,7 @@ mod tests {
     }
 
     #[test]
-    fn embedded_registry_has_the_four_canonical_releases() {
+    fn embedded_registry_has_the_canonical_releases() {
         let registry = Registry::embedded().unwrap();
         let releases: Vec<_> = registry
             .devices()
@@ -701,7 +729,8 @@ mod tests {
                 ("dt2", "1.17"),
                 ("dn2", "1.10E"),
                 ("dn2", "1.11"),
-                ("dn2", "1.12")
+                ("dn2", "1.12"),
+                ("st", "1.42")
             ]
         );
     }
@@ -741,6 +770,7 @@ mod tests {
         );
         std::fs::write(dir.join("digitakt-ii.toml"), extra).unwrap();
         std::fs::write(dir.join("digitone-ii.toml"), DN2).unwrap();
+        std::fs::write(dir.join("syntakt.toml"), ST).unwrap();
         // SAFETY: no other test in this crate reads the variable.
         unsafe { std::env::set_var("DIGI_DEVICES_DIR", &dir) };
         let registry = Registry::load().unwrap();
@@ -784,7 +814,7 @@ mod tests {
             .flat_map(|device| device.firmwares.iter())
             .filter(|firmware| firmware.build_stamp.is_some())
             .count();
-        assert_eq!(stamps, 6, "every canonical release has its stamp");
+        assert_eq!(stamps, 7, "every canonical release has its stamp");
     }
 
     #[test]

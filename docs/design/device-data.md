@@ -34,6 +34,7 @@ Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator
 | Fact | Source (data) | Used by | How it gets there |
 |---|---|---|---|
 | Short name, long name, firmware list (sha256, version) | `devices/<dev>.toml` `[device]`, `[[firmware]]` | everything | read directly |
+| DMA timer counters that the emulator runs free at the bus clock (a firmware that polls one without starting it) | `[emulator] free_running_dtcn` (channels 0..3; absent = none) | emulator boot (`device-profile` `free_running_dtcn_mask`); `DIGI_DTCN0=bus\|off` overrides channel 0 | read directly |
 | SysEx device byte of the `.syx` framing | `[device] syx_id` | patchkit (`syx.rs`, `devdata.rs`) | embedded by `packages/patchkit/build.rs` |
 | Device id and name digikit uses (runtime, `core/dynreg`, `core/dyndsp`, `.dkm`, the INFO reply) | `[digikit] id`, `name` (at most 3 characters) | patchkit `register.rs`, `dkmdsp.rs`; the device objects | `devdata.rs` (embedded); `DEVICE_ID`, `DEVICE_NAME_WORD` in `build/gen/device-<dev>.inc` |
 | Module store: first sector, length, header B, selection record copies | `[card.store]` | runtime (`dkrt_sdk::store`, `sel`), tools | `modules/core/runtime/sdk/src/device.rs` (`STORE_*`); Python: `tools/patchkit/pk_device.py` |

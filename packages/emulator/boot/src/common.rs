@@ -114,7 +114,7 @@ pub(crate) fn data_mask(sig: &[u8], wild: Option<usize>) -> Vec<bool> {
     mask
 }
 
-/// `task_create`: loads its stack-passed arguments first. Unique on DT2, DN2 and Syntakt MAIN images.
+/// `task_create`: loads its stack-passed arguments first. Unique on every MAIN image of the registry.
 const TASK_CREATE_SIG: &[u8] = &[0x20, 0x2f, 0x00, 0x0c, 0x72, 0xfc, 0xc2, 0xaf];
 /// The UART8 initializer: saves d2, sets d2 = 15, then addresses the UART and GPIO blocks.
 const UART_INIT_SIG: &[u8] = &[

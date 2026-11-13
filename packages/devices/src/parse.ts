@@ -104,7 +104,7 @@ function container(file: string, t: unknown, caps: Capabilities): Container {
   out.readonly = ro;
   const roles = [out.main, out.dsp, out.cf2, out.fpga].filter((r): r is number => r !== undefined);
   if (new Set(roles).size !== roles.length) throw new Error(`devices/${file}: [container] two roles share a section`);
-  // a role section may be read-only (Syntakt), except the MAIN OS: patchkit has to change it
+  // a role section may be read-only (a device with a bootstrap or peer CPU), except the MAIN OS: patchkit has to change it
   if (ro.includes(out.main)) throw new Error(`devices/${file}: [container] the main section is read-only`);
   if ((caps.dsp === 'sharc') !== (out.dsp !== undefined))
     throw new Error(`devices/${file}: [container] dsp is present exactly when [capabilities] dsp = "sharc"`);

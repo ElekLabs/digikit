@@ -39,7 +39,8 @@ const END = '(?![a-z0-9])';
 
 /** The literals of the registry: each short id and the first word of each name, bounded by non-alphanumerics (in text and in paths). */
 export function literalPatterns(registry) {
-  const ids = registry.devices.map((d) => escape(d.id));
+  // an id of two characters is an ordinary token in code and text (`st`): such a device is found by its name word only
+  const ids = registry.devices.filter((d) => d.id.length >= 3).map((d) => escape(d.id));
   const words = [...new Set(registry.devices.map((d) => escape(d.name.split(/\s+/)[0].toLowerCase())))];
   const one = new RegExp(`${BOUND}(?:${[...ids, ...words].join('|')})${END}`, 'i');
   return { text: new RegExp(one.source, 'gi'), path: one };
