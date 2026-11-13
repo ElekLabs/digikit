@@ -62,7 +62,7 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 - [ ] Emulated NOR: MAIN's OS directory at 0x80000 ("ELE3", ids 6 and 7) and a synthesised calibration record.
 - [ ] Peer responder for MAIN (no peer CPU): hello 0x484F/0x4841 at +0/+2, 0xA5A5 at +4, IRQ4 after each doorbell,
       DSPI2 eDMA ch 29 completion; status word 0x41bbf448 reaches 6.
-- [ ] Resolve how the peer gets section 6/7: its own NOR (finding 128) or MAIN's DSPI2 serving NOR ids 6/7.
+- [x] The peer gets section 7 from MAIN: DSPI2 slave + eDMA ch 29 stream NOR ids 6/7 (finding 128 corrected, 646a6cdb).
 - [ ] Ready snapshot for st.
 - [ ] Later (audio, not UI): EPORT IRQ4, mailbox responder at 0x10000000. Unmapped pages are zero RAM today.
 
