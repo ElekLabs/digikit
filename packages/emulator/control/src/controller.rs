@@ -3491,17 +3491,36 @@ impl Actor {
         // `replace`: load as the first firmware (nothing of the running one is reused, and a different device is fine): the webview's
         // Open and Reload. Without it the image is a variant of the running one (injection).
         let replace = p.opt_bool("replace")?.unwrap_or(false);
+        // The image's device decides which of the caller's preferences apply (the UI sends its own unconditionally).
+        let offers = LoadOffers::of(&bytes);
+        let mut dsp_note = None;
         // `dsp`: the DSP choice of this load and the loads after it (true when the controller started without `--no-dsp`).
         if let Some(dsp) = p.opt_bool("dsp")? {
-            if dsp != self.dsp && !replace {
+            if !offers.dsp_choice {
+                dsp_note = Some(json!({
+                    "requested": dsp, "in_force": self.dsp, "applied": false,
+                    "reason": "device has no DSP choice",
+                }));
+            } else if dsp != self.dsp && !replace {
                 return Err(RpcError::bad_params(
                     "dsp changes with replace: true (a load that starts the firmware over)",
                 ));
+            } else {
+                self.dsp = dsp;
             }
-            self.dsp = dsp;
         }
         let mut stock_base: Option<Vec<u8>> = None;
         let mut runtime_report = None;
+        let runtime_requested = if runtime_requested && !offers.runtime {
+            runtime_report = Some(json!({
+                "patched": false,
+                "skipped": "device has no digikit runtime",
+                "reason": "runtime: skipped (device has no digikit runtime)",
+            }));
+            false
+        } else {
+            runtime_requested
+        };
         if runtime_requested {
             let set = patch_set.unwrap_or("emulator");
             let started = Instant::now();
@@ -3551,6 +3570,9 @@ impl Actor {
         });
         if let Some(r) = runtime_report {
             report["runtime"] = r;
+        }
+        if let Some(note) = dsp_note {
+            report["dsp_choice"] = note;
         }
         // Fields a caller that loads on behalf of another method (`dev.reload`) adds to the report, the cold boot's included.
         if let Some(extra) = p.get("report_extra").and_then(Value::as_object) {
@@ -5064,6 +5086,95 @@ fn summarize_audio(runtime: &mut Runtime) -> Value {
         "source_audio_seconds": report["source_audio_seconds"],
         "dsp_tiers": report["dsp_tiers"], "dsp_core": report["dsp_core"],
     })
+}
+
+/// What the device of a firmware image offers the caller: the preferences of a load (`runtime`, `dsp`) apply only where it does.
+/// An image that cannot be identified offers everything: the load then fails or proceeds on its own checks, as it always did.
+struct LoadOffers {
+    /// `[digikit]` is in the device file: the digikit runtime can be patched in.
+    runtime: bool,
+    /// The device has a DSP (`[capabilities] dsp = "sharc"`) or a peer CPU (`[emulator] peer`): there is something to switch.
+    dsp_choice: bool,
+}
+
+impl LoadOffers {
+    fn of(syx: &[u8]) -> Self {
+        let all = Self {
+            runtime: true,
+            dsp_choice: true,
+        };
+        let Ok(fw) = patchkit::firmware::Firmware::parse(syx) else {
+            return all;
+        };
+        let short = fw.device.short();
+        let Some(id) = patchkit::devdata::identities()
+            .iter()
+            .find(|i| i.short == short)
+        else {
+            return all;
+        };
+        let peer = plusdrive_format::device_profile::Registry::load()
+            .ok()
+            .is_some_and(|r| {
+                r.devices()
+                    .iter()
+                    .any(|d| d.short == short && d.peer.is_some())
+            });
+        Self::from_device(id.runtime_target, &id.capabilities.dsp, peer)
+    }
+
+    fn from_device(runtime_target: bool, dsp: &str, peer: bool) -> Self {
+        Self {
+            runtime: runtime_target,
+            dsp_choice: dsp == "sharc" || peer,
+        }
+    }
+}
+
+#[cfg(test)]
+mod load_offers_tests {
+    use super::*;
+
+    #[test]
+    fn a_device_offers_the_runtime_and_the_dsp_choice_by_its_data() {
+        let full = LoadOffers::from_device(true, "sharc", false);
+        assert!((full.runtime, full.dsp_choice) == (true, true));
+        // a peer CPU is a choice too; without a DSP or a peer there is none, and without [digikit] there is no runtime
+        let peer = LoadOffers::from_device(false, "none", true);
+        assert!((peer.runtime, peer.dsp_choice) == (false, true));
+        let plain = LoadOffers::from_device(false, "none", false);
+        assert!((plain.runtime, plain.dsp_choice) == (false, false));
+    }
+
+    /// Every firmware in `firmware/` is judged by its own device file: the runtime offer follows `[digikit]`, the DSP choice follows
+    /// the DSP or the peer CPU; an image that is no firmware offers everything.
+    #[test]
+    fn real_images_are_judged_by_their_device_file() {
+        let registry = plusdrive_format::device_profile::Registry::load().unwrap();
+        let mut judged = 0;
+        for device in registry.devices() {
+            let id = patchkit::devdata::identities()
+                .iter()
+                .find(|i| i.short == device.short)
+                .unwrap();
+            for file in device.firmwares.iter().filter_map(|f| f.filename.as_ref()) {
+                let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
+                    continue;
+                };
+                let offers = LoadOffers::of(&syx);
+                assert_eq!(offers.runtime, id.runtime_target, "{file}");
+                assert_eq!(
+                    offers.dsp_choice,
+                    id.capabilities.dsp == "sharc" || device.peer.is_some(),
+                    "{file}"
+                );
+                judged += 1;
+            }
+        }
+        eprintln!("{judged} images judged");
+        let garbage = LoadOffers::of(b"not firmware");
+        assert!(garbage.runtime && garbage.dsp_choice);
+    }
 }
 
 #[cfg(test)]
