@@ -4,6 +4,7 @@
 // uploads and verifies each ticked module on the card; that is all. The device's selection is the device's own: the user selects the module
 // in MODULES on the device, then applies and restarts there. Restart only restarts the device and reports what loaded. Delete removes the
 // ticked files from the card; a loaded module stays loaded until the restart.
+import WaitNotice from './WaitNotice';
 import { For, Show, createSignal, type JSX } from 'solid-js';
 import Segmented, { type SegmentedOption } from '../components/Segmented';
 import { errorLine, formatBytes } from '../modules/backend';
@@ -400,6 +401,7 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
           </>
         }
       >
+        <WaitNotice active={!!busy()} cancel={busy() !== 'Installing'} />
         <Show when={lastView()}>
           {(v) => (
             <Show

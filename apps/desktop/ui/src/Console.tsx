@@ -1,6 +1,7 @@
 // The desktop developer console: the file the app runs, the live panel, and the audio and CPU meters.
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
+import { setBrowseDevice } from '@web/transfer/transfer-state';
 import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
@@ -220,6 +221,8 @@ export default function Console() {
     }
     live?.show(event.snapshot);
     setStatus(event.snapshot.status);
+    if (target().kind === 'emulator' && lastDevice() !== event.snapshot.status.device)
+      setBrowseDevice(event.snapshot.status.device === 'dn2' ? 'dn2' : 'dt2');
     setLastDevice(event.snapshot.status.device);
     startDefaultsAtLaunch();
     setError(event.snapshot.status.error ?? '');

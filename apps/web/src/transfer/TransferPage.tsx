@@ -32,9 +32,11 @@ import {
   endJob,
   error,
   log,
+  lastView,
   pendingAdd,
   progress,
   setBrowsing,
+  setBrowseDevice,
   setDelTicks,
   setDeviceInfo,
   setError,
@@ -43,7 +45,6 @@ import {
   setPendingAdd,
   setTicks,
 } from './transfer-state';
-import WaitNotice from './WaitNotice';
 import { failureLine } from './wait-core';
 import './transfer-page.css';
 
@@ -60,23 +61,33 @@ function applyPendingAdd(view: TransferView): void {
 async function read(): Promise<void> {
   const env = transferEnv();
   if (activeMode() === 'samples' && env.extras?.samples) return env.extras.samples.read();
-  let v: TransferView;
-  try {
-    v = await transferBackend.list();
-  } catch (e) {
-    if (!env.libraryDevices) throw e;
-    // no device answered: show the library and keep the reason on the error line
-    const library = await transferBackend.listLibrary(browseDevice());
+  const readingTarget = target();
+  const current = () => target() === readingTarget && activeMode() === 'modules';
+  let local: TransferView | undefined;
+  const showLocal = (library: TransferView) => {
     setBrowsing(true);
     setLastView(library);
     setDeviceInfo(undefined);
     applyPendingAdd(library);
+  };
+  let v: TransferView;
+  try {
+    v = await transferBackend.list(browseDevice(), (library) => {
+      local = library;
+      // Keep the previous device rows during a refresh; only a first read needs the library-only view.
+      if (current() && (!lastView() || browsing())) showLocal(library);
+    });
+  } catch (e) {
+    if (current() && local) showLocal(local);
     throw e;
   }
+  if (!current()) return;
   setBrowsing(false);
+  setBrowseDevice(v.device === 'dn2' ? 'dn2' : 'dt2');
   setLastView(v);
   applyPendingAdd(v);
-  setDeviceInfo({ name: await env.deviceName(v.device), runtime: v.runtime, storage: storageLine(v) });
+  const name = await env.deviceName(v.device);
+  if (current()) setDeviceInfo({ name, runtime: v.runtime, storage: storageLine(v) });
 }
 
 // After "no reply" or "no runtime" the page does not read by itself; Try again, another target, a change of the emulator's runtime or a
@@ -244,12 +255,6 @@ export default function TransferPage(): JSX.Element {
           });
         }}
       />
-
-      <Show when={activeMode() !== 'samples'}>
-        <div class="notices">
-          <WaitNotice active={!!busy()} cancel={!cancellable(busy())} />
-        </div>
-      </Show>
 
       <Show when={error()}>
         <p class="err" role="alert">
