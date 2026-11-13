@@ -7,20 +7,20 @@
           "knobs": [
             null,
             {
-              "param": "analog_detune",
+              "param": "detune",
               "slot": 26
             },
             {
-              "param": "analog_wave",
+              "param": "wave",
               "slot": 27
             },
             null,
             {
-              "param": "analog_sub",
+              "param": "sub",
               "slot": 29
             },
             {
-              "param": "analog_fold",
+              "param": "fold",
               "slot": 30
             }
           ],
@@ -43,20 +43,20 @@
               "stock": 202
             },
             {
-              "param": "analog_detune",
+              "param": "detune",
               "slot": 1
             },
             {
-              "param": "analog_wave",
+              "param": "wave",
               "slot": 2
             },
             null,
             {
-              "param": "analog_sub",
+              "param": "sub",
               "slot": 4
             },
             {
-              "param": "analog_fold",
+              "param": "fold",
               "slot": 5
             },
             null,
@@ -84,7 +84,7 @@
     "dn2": [
       {
         "default": 10240,
-        "id": "analog_detune",
+        "id": "detune",
         "max": 32512,
         "min": 0,
         "name": "Detune",
@@ -94,7 +94,7 @@
       },
       {
         "default": 0,
-        "id": "analog_wave",
+        "id": "wave",
         "max": 32512,
         "min": 0,
         "name": "Wave",
@@ -104,7 +104,7 @@
       },
       {
         "default": 0,
-        "id": "analog_sub",
+        "id": "sub",
         "max": 32512,
         "min": 0,
         "name": "Sub",
@@ -114,7 +114,7 @@
       },
       {
         "default": 0,
-        "id": "analog_fold",
+        "id": "fold",
         "max": 32512,
         "min": 0,
         "name": "Fold",
@@ -126,7 +126,7 @@
     "dt2": [
       {
         "default": 10240,
-        "id": "analog_detune",
+        "id": "detune",
         "max": 32512,
         "min": 0,
         "name": "Detune",
@@ -136,7 +136,7 @@
       },
       {
         "default": 0,
-        "id": "analog_wave",
+        "id": "wave",
         "max": 32512,
         "min": 0,
         "name": "Wave",
@@ -146,7 +146,7 @@
       },
       {
         "default": 0,
-        "id": "analog_sub",
+        "id": "sub",
         "max": 32512,
         "min": 0,
         "name": "Sub",
@@ -156,7 +156,7 @@
       },
       {
         "default": 0,
-        "id": "analog_fold",
+        "id": "fold",
         "max": 32512,
         "min": 0,
         "name": "Fold",

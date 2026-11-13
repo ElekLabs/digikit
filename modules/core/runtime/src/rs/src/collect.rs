@@ -777,7 +777,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             let n = len_of(name);
             let mut j = 0;
             while j < n {
-                upper[j] = if kp.is_none() && name[j].is_ascii_lowercase() { name[j] - 32 } else { name[j] };
+                upper[j] = if name[j].is_ascii_lowercase() { name[j] - 32 } else { name[j] };
                 j += 1;
             }
             o.head(KIND_PAGE, LEN_PAGE);

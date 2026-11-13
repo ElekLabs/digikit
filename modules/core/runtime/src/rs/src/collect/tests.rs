@@ -368,3 +368,20 @@ fn a_dsp_section_must_match_the_keys_table() {
     assert_eq!(check_dsp_keys(&k, 1, |_| KEY, 1), E_DECL_ID, "an effect record fewer than the table's effects");
     assert_eq!(check_dsp_keys(&k, 0, |_| 0, 3), E_DECL_ID, "an effect record more than the table's effects");
 }
+
+#[test]
+fn a_digitone_knob_page_has_its_name_in_capitals_and_its_title_as_given() {
+    let mut b = Box::new(Collect::new());
+    let m = b.add_machine(KEY, c(b"Sine\0"), c(b"SIN\0"));
+    let pg = b.machine_add_page(m, c(b"Sine\0"));
+    b.page_add_param(pg, c(b"Level\0"), c(b"LEVEL\0"), 127);
+    let k = keys(&[KEY], &[], (1, 1, 1));
+    let mut plan = Plan::new();
+    let size = lower(&b, &DN2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let mut buf = std::vec![0u8; size];
+    lower(&b, &DN2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    let page = 16 + 0x50 + 0x6c;
+    assert_eq!(rd(&buf, page), 3);
+    assert_eq!(&buf[page + 8 + 4 * 10..][..5], b"SINE\0");
+    assert_eq!(&buf[page + 8 + 4 * 10 + 24..][..5], b"Sine\0");
+}

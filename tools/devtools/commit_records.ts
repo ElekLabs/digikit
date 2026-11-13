@@ -7,7 +7,7 @@
 // Prints one JSON object on stdout: { module, commit: {index, machineRows, paramRows, pageRows, addr, size}, records: {counts, params, ...} }.
 // `module:check` (tools/patchkit/pk_modcheck.py) writes `[uses]` and the gallery params from it; conformance reads its cases from it.
 // The event's encoding is isolated in `decodeCommitEvent` (packages/test-support/src/commit-records.ts). Not run end to end yet: it needs
-// a module of api major 3 and the runtime's `MODULE_COMMIT` event (S3 packages B and E), so the first run is at integration.
+// a module of api major 3 and the runtime's `MODULE_COMMIT` event.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -16,7 +16,7 @@ import { LOG_KIND } from '../../packages/dk-session/src/gen_proto.ts';
 import { committedRecords } from '../../packages/test-support/src/commit-records.ts';
 import { Events } from '../../packages/test-support/src/events.ts';
 import { repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
-import { MS, Session } from '../../packages/test-support/src/session.ts';
+import { Session } from '../../packages/test-support/src/session.ts';
 
 const FIRMWARE: Record<Device, string> = { dt2: '1.17', dn2: '1.12' };
 
@@ -58,11 +58,17 @@ try {
     runtime: { patchSet: 'emulator' },
   });
   const s = session;
-  const dk = new DkSession(
-    new EmuUsbTransport((method, params) => s.client.call(method, params), { stepInstructions: 20_000_000 }),
-  );
-  const step = (seconds: number) => s.client.step(seconds * 1000 * MS, { timeout_wall_s: 300 }).then(() => undefined);
-  await step(15);
+  // a runtime session runs freely: the daemon advances emulated time by itself, so the protocol waits in wall time
+  const dk = new DkSession(new EmuUsbTransport((method, params) => s.client.call(method, params)));
+  // the first boot: the runtime answers INFO once its protocol is up
+  for (const end = Date.now() + 120_000; ; await new Promise((r) => setTimeout(r, 500))) {
+    try {
+      await dk.info();
+      break;
+    } catch (e) {
+      if (Date.now() > end) throw e;
+    }
+  }
   const paths: string[] = [];
   for (const file of [debugDkm, values.dkm]) {
     const store = `modules/${path.basename(file)}`;
@@ -71,7 +77,7 @@ try {
   }
   await dk.select(paths);
   await dk.restart();
-  await dk.waitForBoot(() => step(5));
+  await dk.waitForBoot();
   const events = new Events(dk, s, { bootStart: LOG_KIND.BOOT_START });
   await events.listen({ fromBoot: true });
   const modules = await dk.modules();
