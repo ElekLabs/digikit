@@ -3437,7 +3437,23 @@ impl Actor {
 
     /// `firmware.load`: decide how to get from the running firmware to `bytes`
     /// (see the design's "Firmware injection"), do it, and report.
+    /// Loads firmware. The load reads the DSP choice from `self.dsp`, so a `dsp` parameter is applied first and put back when the
+    /// load fails: a rejected image must not change the choice of the running firmware.
     fn firmware_load(
+        &mut self,
+        p: &Params,
+        bytes: Vec<u8>,
+        reply: &RpcReply,
+    ) -> Result<Option<Value>, RpcError> {
+        let before = self.dsp;
+        let result = self.firmware_load_inner(p, bytes, reply);
+        if result.is_err() {
+            self.dsp = before;
+        }
+        result
+    }
+
+    fn firmware_load_inner(
         &mut self,
         p: &Params,
         mut bytes: Vec<u8>,
@@ -5602,6 +5618,20 @@ mod mem_write_tests {
 #[cfg(test)]
 mod framebuffer_tests {
     use super::*;
+
+    #[test]
+    fn a_rejected_load_keeps_the_dsp_choice() {
+        let (_commands, rx) = mpsc::channel();
+        let mut actor = Actor::new(rx, Config::new(None));
+        let (reply, _answers) = mpsc::channel();
+        let before = actor.dsp;
+        let params = json!({"replace": true, "dsp": !before});
+        let e = actor
+            .firmware_load(&Params(&params), b"not firmware".to_vec(), &reply)
+            .unwrap_err();
+        assert_eq!(e.code, code::FIRMWARE_REJECTED);
+        assert_eq!(actor.dsp, before);
+    }
 
     #[test]
     fn source_is_validated_before_runtime_access_with_current_as_default() {
