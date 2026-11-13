@@ -803,7 +803,6 @@
   "tools/emulator/frame_poke_ab.py": 4,
   "tools/emulator/fxcheck.py": 23,
   "tools/emulator/gen_led_sweep.py": 10,
-  "tools/emulator/gen_led_toml.py": 15,
   "tools/emulator/led_map.py": 4,
   "tools/emulator/live_audio.py": 3,
   "tools/emulator/native_emu.py": 48,
