@@ -140,6 +140,36 @@ Result (cold boot, `panel_drive --after 100M`, step `peer`):
 - **[O]** The real frame rate and its source (the ch 54 period), the peer clock against MAIN's, the peer state in snapshots (not saved: a
   state restored with `peer = "coldfire"` has no running peer), the mixing of the 8 voices (the parameter block names it).
 
+## Audio: MAIN's own mix [D]
+
+MAIN mixes the 8 voices of the peer itself; the emulator reads MAIN's output, so no mix is guessed.
+
+- The engine tick (vector 191 handler 0x400a38ce, `FUN_4008f242`) takes the voices that MAIN's eDMA ch 47 copied from window + 0x1b0 to
+  0x80003d50 (8 voices x 32 samples x 4 bytes), applies per-voice level, pan and send gains (parameter block words, `emacSaturate`
+  products, Q31), runs the effect buses (delay ring at 0x4fc00000) and writes stereo to the output buffer 0x80004760 (32 frames x 20
+  words; left word 0, right word 1 of the first pair). The code ends in `FUN_4008ef42` calls that clamp and convert, and a copy loop.
+- The output is not read from that buffer: the converter ring is. eDMA ch 54 (TCD 0xFC0456C0) streams SRAM 0x80000000, 0x40 loops of 0x20
+  bytes (64 frames of 8 words, 2 KB), to the SSI TX FIFO 0xFC0C8000; CSR 0x0006 (INT_HALF, INT_MAJOR). The half-way interrupt is the 1500 Hz
+  audio frame (32 frames per half, 48 kHz). The tick fills the second half (the model's TCD never advances, so the tick always picks it).
+  Measured after trig 1 and PLAY: words 3 and 5 of every frame carry the main left and right; they equal word 1 and word 0 of the buffer
+  0x80004760 shifted right by 8 (0x029c2460 gives 0x029c25); word 6 holds a small DC-like value; the other words are zero.
+- Sample scale: the mixer works in Q31 (unity constant 0x80000000, saturation to 0x7fffffff); the converter words are the same value
+  shifted right by 8: 24-bit signed, right-aligned in 32 bits. One full-scale sample is 2^23. The WAV scale is 2^-23, left from word 5.
+  The left/right order follows the buffer (word 0 is left, word 1 right, and the ring carries word 0 in 5 and word 1 in 3) **[O]**.
+- Model (`[emulator.peer_audio]` in `devices/syntakt.toml`: channel 54, slots 5 and 3, 24 bits): at MAIN's doorbell edge (the frame
+  handler, before the next tick) `capture_peer_audio` reads the second half named by the channel's TCD, so the PCM is what the DMA would send,
+  32 stereo samples per frame, 48 kHz. `Emulator::take_pcm` hands it to `digi_coupled::cf_audio::CfAudio`, which uses the DSP session's own
+  output path (`pcm_play::PcmPlayer`, then the `live-audio` ring) and the same `audio_status` report. `DIGI_EMU_PEER_AUDIO=1` turns playback on
+  (the launcher sets it); `panel_drive` steps `pcmreset` and `wav:PATH` write a float WAV.
+- Analog tracks have no output here: the analog voices are the board's, not MAIN's mix of the peer.
+- Proof (`syntakt-digital.wav`, 3.9 s, headless): trig 1 and PLAY give peak 0.185 and RMS 0.049; the same run without keys gives exact
+  zero (2.9 s). The note is a kick: the spectrum of the loudest window peaks at 70 Hz and the envelope repeats every 1.75 s (16 steps at
+  135 BPM). Real time: 0.30 of real time for the whole emulator on this host (3.9 s of audio in 12.9 s after the boot); the peer core runs about
+  80 M instructions a second against 132 M needed at 88,000 a frame.
+- The frame period stays 88,000 MAIN ticks. MAIN's own tick work does not fit in it at the 132 MHz tick model (it takes about 87 percent of
+  the frames), so frames come slower than real time. Each tick still gets one 32-sample block from the peer, so the PCM has no gaps or skipped blocks.
+- **[O]** Other output words (cue, FX out) and the later stages of the tick, the level knob path, snapshot of the peer.
+
 ## Hardware (hearsay)
 
 - **[D]** Forum PCB photos: two ColdFire CPUs, two Xilinx Spartan-3A

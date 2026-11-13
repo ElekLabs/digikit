@@ -131,8 +131,10 @@ read over USB MIDI.
 - [x] Slice proof: the peer runs from entry through init and the real handshake (MAIN status 6 from its own writes), installs the frame handler,
       and renders 8 voices per frame; window + 0x1b0 is zero without a note and non-zero with trig 1 and PLAY (cost 86-89 k instructions a frame,
       0.65 of real time on the host).
-- [ ] Audio out: read 8 voices x 32 samples from window + 0x1b0 each frame, mix to stereo, feed the output path at 1500 frames a second.
-      Analog tracks stay silent; events logged. Before it: the frame rate source (ch 54) and the peer state in snapshots.
+- [x] Audio out: MAIN mixes the voices itself; the emulator reads MAIN's converter ring (eDMA ch 54, 24-bit words, 32 frames per audio frame, 48 kHz)
+      from device data (`[emulator.peer_audio]`) and feeds the DSP session's output path (`cf_audio`). Analog tracks stay silent. WAV proof:
+      finding 128 "Audio". The launcher builds `cf-audio` for such a device and sets `DIGI_EMU_PEER_AUDIO=1`; the real workbench is not checked yet.
+- [ ] Peer state in snapshots; the real frame period; other output words (cue, FX out).
 
 ### Later
 
