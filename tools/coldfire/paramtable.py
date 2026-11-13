@@ -200,14 +200,25 @@ _READER = re.compile(
 )
 
 
-def find_table(image):
+def locate_table(image):
     """-> (table_addr, count) found by the reader's signature in `image` (the
-    bytes of a MAIN OS file); SystemExit if it is not present exactly once."""
+    bytes of a MAIN OS file), or None if the signature is absent (a firmware without
+    this sound engine has no table); SystemExit if it is present more than once."""
     hits = list(_READER.finditer(image))
-    if len(hits) != 1:
+    if not hits:
+        return None
+    if len(hits) > 1:
         raise SystemExit("descriptor table reader: %d signature hits" % len(hits))
     m = hits[0]
     return struct.unpack(">I", m.group(2))[0], struct.unpack(">H", m.group(1))[0]
+
+
+def find_table(image):
+    """-> (table_addr, count) as locate_table; SystemExit if it is not found."""
+    found = locate_table(image)
+    if found is None:
+        raise SystemExit("descriptor table reader: 0 signature hits")
+    return found
 
 
 class Descriptor(NamedTuple):

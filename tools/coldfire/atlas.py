@@ -388,7 +388,10 @@ def extract_params(section: str) -> list[dict[str, Any]]:
         return []
     with open(section, "rb") as fh:
         data = fh.read()
-    addr, count = paramtable.find_table(data)
+    found = paramtable.locate_table(data)
+    if found is None:
+        return []
+    addr, count = found
     read = machineprofile.image_reader(section)
     rows = []
     for e in paramtable.scan_all(read, addr, count):
@@ -863,7 +866,8 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
     con.executescript(SCHEMA)
     descr = extract_descriptors(img, section)
     insert(con, "descriptors", descr)
-    insert(con, "params", extract_params(section))
+    params = extract_params(section)
+    insert(con, "params", params)
     classes, vfuncs = extract_classes(img)
     insert(con, "classes", classes)
     con.executemany("INSERT INTO vfuncs VALUES (?,?,?,?,?)", vfuncs)
@@ -881,6 +885,7 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
         ("image_sha256", img.meta.get("image_sha256", "")),
         ("built", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
         ("manual", manual_dir(image) or "none"),
+        ("params", "table" if params else "absent (no descriptor table reader)"),
     ):
         con.execute("INSERT INTO meta VALUES (?,?)", (k, v))
     con.commit()
