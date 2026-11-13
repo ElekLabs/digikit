@@ -239,8 +239,16 @@ _bd_last: MODIFY(I0, 4);
 
 _bd_note_on:
     I3 = R4;
-    R0 = 0x2545f491;                      // seed the noise: a zero xorshift state stays zero
+    // Seed the noise only while the state is still zero (the first note after load, when contract 1.6
+    // has zeroed the state). Reseeding to a fixed value on every note made each hit replay the same
+    // noise bytes; on later notes the xorshift has already advanced, so leaving it alone continues the
+    // sequence and every hit gets different noise. A zero state would stay zero, so it is seeded once.
+    R0 = DM(5, I3);
+    R0 = PASS R0;
+    IF NE JUMP _bd_seeded;
+    R0 = 0x2545f491;
     DM(5, I3) = R0;
+_bd_seeded:
     R0 = 0;
     JUMP (M13, I13);
 
@@ -252,7 +260,7 @@ _bd_note_on:
 .VAR _bd_desc3 = DK_MAX_VOICES;
 .VAR _bd_desc4 = 32;                      // 8 words: carrier phase, counter, mod phase, index, mod value, noise state, noise env, noise level
 .VAR _bd_desc5 = 12;                      // phase, counter, modulator phase zeroed at note-on
-.VAR _bd_desc6 = 1200;
-.VAR _bd_desc7 = 200;
+.VAR _bd_desc6 = 4450;                    // worst render block (measured by the conformance)
+.VAR _bd_desc7 = 4500;                    // note-on block = note_on + one render block
 .VAR _bd_desc8 = 2;
 .VAR _bd_desc9 = 0;

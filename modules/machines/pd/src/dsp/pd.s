@@ -78,8 +78,6 @@ _pd_booted:
     R1 = 0x3e800000;                      // 0.25
     F9 = F0 * F1;
 
-
-
     // ---- DETUNE -> increment 2 = increment 1 x (1 + detune x 0.03) ----
     R1 = 0x38010204;
     R0 = DM(3, I1);                       // FOLD, the fourth parameter
@@ -359,7 +357,7 @@ _pd_note_on:
 .VAR _pd_desc3 = DK_MAX_VOICES;
 .VAR _pd_desc4 = 36;                      // state bytes (9 words: 2 phases, spare, 3 curve numbers, magic, snap flag, fold gain)
 .VAR _pd_desc5 = 8;                       // the two phases are zeroed at note-on (see _pd_note_on)
-.VAR _pd_desc6 = 1200;                    // max cycles per block
-.VAR _pd_desc7 = 200;
+.VAR _pd_desc6 = 5300;                    // worst render block (measured by the conformance)
+.VAR _pd_desc7 = 5400;                    // note-on block = note_on + one render block
 .VAR _pd_desc8 = 2;
 .VAR _pd_desc9 = 0;
