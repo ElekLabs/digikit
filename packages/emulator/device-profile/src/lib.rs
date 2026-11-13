@@ -371,7 +371,10 @@ impl Registry {
                     detail: format!("[card] {detail}"),
                 })?;
             }
-            let free_running_dtcn = parsed.emulator.map(|e| e.free_running_dtcn).unwrap_or_default();
+            let free_running_dtcn = parsed
+                .emulator
+                .map(|e| e.free_running_dtcn)
+                .unwrap_or_default();
             if free_running_dtcn.iter().any(|&c| c > 3) || {
                 let mut seen = free_running_dtcn.clone();
                 seen.sort_unstable();

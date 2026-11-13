@@ -24,7 +24,11 @@ fn main() {
             continue;
         }
         let path = path.canonicalize().unwrap();
-        let _ = writeln!(out, "    ({name:?}, include_str!({:?})),", path.to_string_lossy());
+        let _ = writeln!(
+            out,
+            "    ({name:?}, include_str!({:?})),",
+            path.to_string_lossy()
+        );
     }
     out.push_str("];\n");
     let file = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("device_files.rs");

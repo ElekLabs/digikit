@@ -102,8 +102,7 @@ impl Analysis {
     /// As `of`, with the section roles given. Without a DSP role, no section is a DSP stream (a
     /// device without a SHARC): every section is digested and none is checked or kept as DSP.
     pub fn with_roles(syx: &[u8], roles: Roles) -> Result<Self, String> {
-        let firmware =
-            container::parse(syx).map_err(|e| format!("parse SYX/ELE3: {e}"))?;
+        let firmware = container::parse(syx).map_err(|e| format!("parse SYX/ELE3: {e}"))?;
         let mut sections = BTreeMap::new();
         let mut dsp = None;
         for section in &firmware.sections {

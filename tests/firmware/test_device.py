@@ -186,6 +186,9 @@ class ShippedDeviceFilesTest(unittest.TestCase):
         for dev in self.devices:
             for key in ("dsp", "seal", "sample_pool", "card"):
                 self.assertIn(key, dev.capabilities, dev.name)
+            if not dev.acceptance:
+                # an identity-level device has no test cell yet
+                continue
             self.assertIn("firmware", dev.acceptance, dev.name)
             self.assertTrue(
                 any(f.version == dev.acceptance["firmware"] for f in dev.firmwares),
