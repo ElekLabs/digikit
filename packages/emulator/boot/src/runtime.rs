@@ -5244,23 +5244,42 @@ mod tests {
     /// and the rate itself follow each emulator, in any order of creation and use (the rate is no process-wide state).
     #[test]
     fn emulators_of_two_devices_keep_their_own_rate() {
-        let load = |file: &str| std::fs::read(format!("../../../firmware/{file}")).ok();
-        let (Some(syntakt_syx), Some(dt2_syx)) =
-            (load("Syntakt_OS1.42.syx"), load("Digitakt_II_OS1.17.syx"))
-        else {
+        // one device with its own rate, one on the base rate (from the registry)
+        let firmware_of = |own_rate: bool| {
+            let registry = device_profile::Registry::embedded().unwrap();
+            let device = registry
+                .devices()
+                .iter()
+                .find(|d| d.instructions_per_second.is_some() == own_rate)?;
+            let file = device
+                .firmwares
+                .iter()
+                .rev()
+                .find_map(|f| f.filename.clone())?;
+            std::fs::read(format!("../../../firmware/{file}")).ok()
+        };
+        let (Some(fast_syx), Some(base_syx)) = (firmware_of(true), firmware_of(false)) else {
             return;
         };
-        let mut syntakt = Emulator::new(&syntakt_syx, None).unwrap();
-        let mut dt2 = Emulator::new(&dt2_syx, None).unwrap();
+        let mut fast = Emulator::new(&fast_syx, None).unwrap();
+        let mut base = Emulator::new(&base_syx, None).unwrap();
         // started in the opposite order, then used alternately
-        syntakt.enable_usb().unwrap();
-        dt2.enable_usb().unwrap();
-        let (want_syntakt, want_dt2) = if std::env::var_os("DIGI_CF_IPS").is_some() {
-            (dt2.cf_ips(), dt2.cf_ips())
+        fast.enable_usb().unwrap();
+        base.enable_usb().unwrap();
+        let (want_fast, want_base) = if std::env::var_os("DIGI_CF_IPS").is_some() {
+            (base.cf_ips(), base.cf_ips())
         } else {
-            (189_928_000, periph::clock::BASE_IPS)
+            (
+                device_profile::Registry::embedded()
+                    .unwrap()
+                    .devices()
+                    .iter()
+                    .find_map(|d| d.instructions_per_second)
+                    .unwrap(),
+                periph::clock::BASE_IPS,
+            )
         };
-        for (emu, want) in [(&mut syntakt, want_syntakt), (&mut dt2, want_dt2)] {
+        for (emu, want) in [(&mut fast, want_fast), (&mut base, want_base)] {
             assert_eq!(emu.cf_ips(), want);
             assert_eq!(
                 emu.midi.usb.period,
