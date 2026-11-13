@@ -555,7 +555,11 @@ def extract_structs(img: fw.CF) -> list[dict[str, Any]]:
 
 def manual_dir(image: str) -> str | None:
     dev = next(
-        (d for d in device.load_all(config.DEVICES_DIR) if image.startswith(d.short + "-")),
+        (
+            d
+            for d in device.load_all(config.DEVICES_DIR)
+            if image.startswith(d.short + "-")
+        ),
         None,
     )
     pat = dev.manual if dev else None
@@ -911,9 +915,7 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
 
 # Old firmware per image, for the stability column (same h_strict as the matched old function).
 CATALOG_OLD = {
-    name: b.base
-    for name, b in device.boot_images(config.DEVICES_DIR).items()
-    if b.base
+    name: b.base for name, b in device.boot_images(config.DEVICES_DIR).items() if b.base
 }
 # Score weights (see catalog_score).
 W_GRADE, W_PAIR, W_UI_CALLERS, W_NEAR, W_STRING, W_ROLE, W_ANCHORED = (

@@ -27,7 +27,11 @@ import hashlib
 import os
 import tomllib
 
-DEVICES_DEFAULT = "devices"
+# the repository's devices/, whatever the working directory is
+DEVICES_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "devices",
+)
 
 BUTTON = "button"
 ENCODER = "encoder"
@@ -257,6 +261,11 @@ def by_short(short, dirpath=None):
     raise DeviceError(
         "No device %r (known: %s)" % (short, ", ".join(d.short for d in devices))
     )
+
+
+def by_image(image, dirpath=None):
+    """-> the Device of an image key ("<short>-<version>"); refuses, listing the known ones."""
+    return by_short(image.partition("-")[0], dirpath)
 
 
 def by_syx_id(syx_id, dirpath=None):

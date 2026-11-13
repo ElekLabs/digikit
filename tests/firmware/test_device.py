@@ -163,7 +163,10 @@ main_sha256 = "b"
     def test_syx_id_and_manual_are_optional_device_keys(self):
         with tempfile.TemporaryDirectory() as d:
             write_device(
-                d, self.TWO.replace('short = "td"', 'short = "td"\nsyx_id = 0x30\nmanual = "M*"')
+                d,
+                self.TWO.replace(
+                    'short = "td"', 'short = "td"\nsyx_id = 0x30\nmanual = "M*"'
+                ),
             )
             self.assertEqual(device.by_syx_id(0x30, d).manual, "M*")
             self.assertIsNone(device.by_syx_id(0x31, d))
