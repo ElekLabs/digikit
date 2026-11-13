@@ -370,7 +370,11 @@ export default function Console() {
   };
   const load = async (bytes: Uint8Array, name: string) => {
     const imageDevice = await deviceOfImage(bytes);
-    return boot((r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice), dsp: bootDsp() }), name, imageDevice);
+    return boot(
+      (r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice), dsp: bootDsp() }),
+      name,
+      imageDevice,
+    );
   };
   /** Boot the startup file again: the controller reads it from its path. */
   const reload = async (why: string) => {
