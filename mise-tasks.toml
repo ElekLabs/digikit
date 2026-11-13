@@ -20,7 +20,7 @@ description = "Build once and open the desktop app with nothing loaded (DN2 and 
 
 ["workbench:inputs"]
 hide = true
-run = "pnpm nx:pilot run @digi/desktop:workbench-inputs"
+run = "pnpm nx:pilot run @digi/desktop:workbench-inputs --output-style=stream"
 description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist) and apps/web/public/{patchkit,dkupload,dksample}.wasm"
 
 ["emu:serve"]
