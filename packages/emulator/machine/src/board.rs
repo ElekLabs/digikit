@@ -170,8 +170,18 @@ const EDMA_ES: usize = 0x04;
 const EDMA_ERRH: usize = 0x28;
 const EDMA_ERRL: usize = 0x2C;
 const EDMA_ES_VLD: u32 = 1 << 31;
-const EDMA_ES_SAE: u32 = 1 << 7;
-const EDMA_ES_DAE: u32 = 1 << 4;
+
+/// Guest RAM for a software-started eDMA transfer: a byte that no mapped page holds is a bus error.
+struct BoardBus<'a>(&'a mut Board);
+
+impl edma::SoftBus for BoardBus<'_> {
+    fn read_byte(&mut self, addr: u32) -> Option<u8> {
+        self.0.ram_read(addr, 1).map(|v| v as u8)
+    }
+    fn write_byte(&mut self, addr: u32, value: u8) -> bool {
+        self.0.ram_write(addr, 1, u32::from(value))
+    }
+}
 
 /// Caller-mapped 1 MiB RAM pages.  The tagged 4096-entry table is indexed by
 /// address bits 31:20, so ordinary 1/2/4-byte RAM accesses take one table
@@ -532,73 +542,96 @@ impl Board {
         }
     }
 
-    /// A channel started by software (SSRT) runs its whole transfer at once: `nbytes` per minor loop, `citer` loops (nine bits when channel
-    /// linking is enabled, where every minor loop requests the next), then the major-loop writeback (SADDR and DADDR advanced plus SLAST
-    /// and DLASTSGA, CITER reloaded from BITER, DONE set, START cleared). Peer CPU board only: MAIN copies the peer's voices out of the
-    /// window this way every frame (finding 128). Guest memory that is not mapped ends the transfer with an eDMA error (ES, ERRH/ERRL) and no DONE.
+    /// A channel started by software (SSRT) runs its whole transfer at once (`periph::edma::software_start`): the major-loop writeback
+    /// (addresses advanced, CITER reloaded from BITER, DONE set, START cleared), the channel's INTH/INTL bit for INT_MAJOR or INT_HALF, its
+    /// ERQ bit cleared for D_REQ, and with E_SG the next descriptor loaded from DLAST_SGA. Peer CPU board only: MAIN copies the peer's
+    /// voices out of the window this way every frame (finding 128). An access that no slave answers is a bus error (ES SBE or DBE, the
+    /// TCD keeps the state at the fault, no DONE); a bad configuration is a recorded error and moves nothing (RM 19.4.2).
     fn edma_software_start(&mut self, chan: usize) {
         let base = edma::tcd_offset(chan);
         let r = &self.dma.edma_regs;
-        let (mut src, mut dst) = (r.u32_at(base + edma::SADDR), r.u32_at(base + edma::DADDR));
-        let (attr, nbytes) = (r.u16_at(base + edma::ATTR), r.u32_at(base + edma::NBYTES));
-        let (soff, doff) = (
-            r.u16_at(base + edma::SOFF) as i16,
-            r.u16_at(base + edma::DOFF) as i16,
-        );
-        let (slast, dlast) = (
-            r.u32_at(base + edma::SLAST) as i32,
-            r.u32_at(base + edma::DLAST) as i32,
-        );
-        let raw = r.u16_at(base + edma::CITER);
-        let biter = r.u16_at(base + edma::BITER);
-        let loops = if raw & 0x8000 != 0 {
-            raw & 0x1ff
-        } else {
-            raw & 0x7fff
+        let tcd = edma::SoftTcd {
+            saddr: r.u32_at(base + edma::SADDR),
+            attr: r.u16_at(base + edma::ATTR),
+            soff: r.u16_at(base + edma::SOFF) as i16,
+            nbytes: r.u32_at(base + edma::NBYTES),
+            slast: r.u32_at(base + edma::SLAST) as i32,
+            daddr: r.u32_at(base + edma::DADDR),
+            citer: r.u16_at(base + edma::CITER),
+            doff: r.u16_at(base + edma::DOFF) as i16,
+            dlast_sga: r.u32_at(base + edma::DLAST),
+            biter: r.u16_at(base + edma::BITER),
+            csr: r.u16_at(base + edma::CSR),
         };
-        // Transfer sizes are coded 0..5 for 1, 2, 4, 8, 16 and 32 bytes.
-        let (ssize, dsize) = (1u32 << ((attr >> 8) & 7).min(5), 1u32 << (attr & 7).min(5));
-        if nbytes == 0 || loops == 0 || ssize != dsize || !nbytes.is_multiple_of(ssize) {
-            return;
-        }
-        // The eDMA stops at the first access that fails and reports it in ES (source or destination address error) and ERR.
-        let mut error = 0u32;
-        'run: for _ in 0..loops {
-            for _ in 0..nbytes / ssize {
-                for k in 0..ssize {
-                    let Some(v) = self.ram_read(src.wrapping_add(k), 1) else {
-                        error = EDMA_ES_SAE;
-                        break 'run;
-                    };
-                    if !self.ram_write(dst.wrapping_add(k), 1, v) {
-                        error = EDMA_ES_DAE;
-                        break 'run;
+        let outcome = edma::software_start(&tcd, &mut BoardBus(self));
+        let r = &mut self.dma.edma_regs;
+        let csr = r.u16_at(base + edma::CSR);
+        match outcome {
+            edma::SoftOutcome::Idle => {}
+            edma::SoftOutcome::Fault {
+                es,
+                saddr,
+                daddr,
+                citer,
+            } => {
+                r.set_u32_at(base + edma::SADDR, saddr);
+                r.set_u32_at(base + edma::DADDR, daddr);
+                r.set_u16_at(base + edma::CITER, citer);
+                r.set_u16_at(base + edma::CSR, csr & !edma::CSR_START);
+                self.record_edma_error(chan, es);
+            }
+            edma::SoftOutcome::Done {
+                saddr,
+                daddr,
+                citer,
+                csr,
+                next,
+                interrupt,
+                clear_request,
+                es,
+            } => {
+                if let Some(raw) = next {
+                    // The channel's TCD is the next descriptor; its own CSR decides, START is never kept.
+                    for (i, byte) in raw.iter().enumerate() {
+                        r.set_u8_at(base + i, *byte);
                     }
+                    let loaded = r.u16_at(base + edma::CSR);
+                    r.set_u16_at(base + edma::CSR, loaded & !edma::CSR_START);
+                } else {
+                    r.set_u32_at(base + edma::SADDR, saddr);
+                    r.set_u32_at(base + edma::DADDR, daddr);
+                    r.set_u16_at(base + edma::CITER, citer);
+                    r.set_u16_at(base + edma::CSR, csr);
                 }
-                src = src.wrapping_add_signed(i32::from(soff));
-                dst = dst.wrapping_add_signed(i32::from(doff));
+                let (high, bit) = (chan >= 32, 1u32 << (chan % 32));
+                if interrupt {
+                    let reg = if high { edma::INTH } else { edma::INTL };
+                    let old = r.read(reg, 4);
+                    r.write(reg, 4, old | bit);
+                }
+                if clear_request {
+                    let reg = if high { edma::ERQH } else { edma::ERQL };
+                    let old = r.read(reg, 4);
+                    r.write(reg, 4, old & !bit);
+                }
+                if es != 0 {
+                    self.record_edma_error(chan, es);
+                }
             }
         }
-        if error != 0 {
-            let r = &mut self.dma.edma_regs;
-            r.set_u32_at(EDMA_ES, EDMA_ES_VLD | (chan as u32) << 8 | error);
-            let (reg, bit) = if chan >= 32 {
-                (EDMA_ERRH, chan - 32)
-            } else {
-                (EDMA_ERRL, chan)
-            };
-            let old = r.u32_at(reg);
-            r.set_u32_at(reg, old | 1 << bit);
-            let csr = r.u16_at(base + edma::CSR);
-            r.set_u16_at(base + edma::CSR, csr & !edma::CSR_START);
-            return;
-        }
+    }
+
+    /// EDMA_ES (the last error: VLD, channel, cause bits) and the channel's bit in ERRH/ERRL (RM p.369, p.382).
+    fn record_edma_error(&mut self, chan: usize, es: u32) {
         let r = &mut self.dma.edma_regs;
-        r.set_u32_at(base + edma::SADDR, src.wrapping_add_signed(slast));
-        r.set_u32_at(base + edma::DADDR, dst.wrapping_add_signed(dlast));
-        r.set_u16_at(base + edma::CITER, biter);
-        let csr = r.u16_at(base + edma::CSR);
-        r.set_u16_at(base + edma::CSR, (csr & !edma::CSR_START) | edma::CSR_DONE);
+        r.set_u32_at(EDMA_ES, EDMA_ES_VLD | (chan as u32) << 8 | es);
+        let (reg, bit) = if chan >= 32 {
+            (EDMA_ERRH, chan - 32)
+        } else {
+            (EDMA_ERRL, chan)
+        };
+        let old = r.u32_at(reg);
+        r.set_u32_at(reg, old | 1 << bit);
     }
 
     /// A channel started with E_SG loads the descriptor at its DLASTSGA into its TCD, as the eDMA does when the major loop ends, and the
@@ -2476,10 +2509,45 @@ mod tests {
         let mut bad = edma_channel_5(0x7000_0000);
         assert_eq!(bad.read16(t + 0x1e).unwrap() & edma::CSR_DONE, 0);
         let es = bad.read32(edma::EDMA_BASE + 4).unwrap();
-        assert_eq!(es, EDMA_ES_VLD | 5 << 8 | EDMA_ES_DAE);
+        assert_eq!(es, EDMA_ES_VLD | 5 << 8 | edma::es::DBE);
         assert_eq!(
             bad.read32(edma::EDMA_BASE + EDMA_ERRL as u32).unwrap(),
             1 << 5
+        );
+        // The TCD keeps the state at the fault: the failing destination, the iteration count not decremented, START cleared.
+        assert_eq!(bad.read32(t + 0x10).unwrap(), 0x7000_0000);
+        assert_eq!(bad.read16(t + 0x14).unwrap(), 1);
+        assert_eq!(bad.read16(t + 0x1e).unwrap() & edma::CSR_START, 0);
+    }
+
+    #[test]
+    fn a_software_started_transfer_ends_with_its_interrupt_bit_request_clear_and_descriptor_load() {
+        let t = edma::TCD_BASE + 5 * 0x20;
+        // INT_MAJOR sets the channel's INTL bit; D_REQ clears its ERQL bit.
+        let mut b = edma_channel_5(RAM + 0x300);
+        b.write32(edma::ERQL, 1 << 5 | 1 << 6).unwrap();
+        b.write16(t + 0x1e, edma::CSR_INT_MAJOR | edma::CSR_D_REQ)
+            .unwrap();
+        b.write8(edma::SSRT, 5).unwrap();
+        assert_eq!(b.read32(edma::INTL).unwrap(), 1 << 5);
+        assert_eq!(b.read32(edma::ERQL).unwrap(), 1 << 6);
+        // E_SG: DLAST_SGA is the address of the next descriptor, which replaces the channel's TCD.
+        let mut b = edma_channel_5(RAM + 0x300);
+        for (i, byte) in (0..32u8).enumerate() {
+            b.write8(RAM + 0x400 + i as u32, byte).unwrap();
+        }
+        b.write32(t + 0x18, RAM + 0x400).unwrap();
+        b.write16(t + 0x1e, edma::CSR_E_SG).unwrap();
+        b.write8(edma::SSRT, 5).unwrap();
+        assert_eq!(b.read32(RAM + 0x300).unwrap(), 0x0102_0304, "data moved");
+        assert_eq!(b.read32(t).unwrap(), 0x0001_0203, "the next descriptor");
+        // A reserved transfer size is a recorded error.
+        let mut b = edma_channel_5(RAM + 0x300);
+        b.write16(t + 4, 0x0302).unwrap();
+        b.write8(edma::SSRT, 5).unwrap();
+        assert_eq!(
+            b.read32(edma::EDMA_BASE + 4).unwrap(),
+            EDMA_ES_VLD | 5 << 8 | edma::es::SAE
         );
     }
     use emmc_card::CardIdentity;
