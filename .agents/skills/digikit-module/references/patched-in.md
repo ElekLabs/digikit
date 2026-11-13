@@ -15,7 +15,7 @@ The browser patch page lists patched-in modules only; a `.dkm` goes to the devic
 
 | step | command |
 | --- | --- |
-| new | Copy an existing patched-in module (`modules/core/adapters/fx`, or the machine fixture `tests/fixtures/modules/machine-clone` for registry rows). `module:new` makes run-time content modules only. |
+| new | Copy an existing patched-in module (`modules/core/adapters/fx`). `module:new` makes run-time content modules only. |
 | toolchains | `mise run patch:toolchains` once |
 | patch | `mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules fx/NAME -o out/patch/x.syx` |
 | explain | `mise run patch:explain -- --firmware ... --modules ...` |
@@ -23,5 +23,5 @@ The browser patch page lists patched-in modules only; a `.dkm` goes to the devic
 | edit loop | `mise run module:dev -- --modules fx/NAME [--device dt2\|dn2]` |
 | test | `mise run patch:test -- --cell "dt2-1.17:fx/NAME"` (a new module set needs `-- --update` once for frame goldens) |
 
-A patched-in machine has a permanent type number in `modules/core/adapters/machines/types.toml`. Documents: `docs/PATCHING.md`, `modules/README.md`,
+Documents: `docs/PATCHING.md`, `modules/README.md`,
 `docs/findings/21-patchkit-core.md`.
