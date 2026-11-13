@@ -2217,13 +2217,7 @@ impl Actor {
         let cf = serde_json::to_value(&status).unwrap_or(Value::Null);
         let audio = summarize_audio(runtime);
         let load = poll_load(&mut self.load_meter, &status, &audio);
-        let dsp = if runtime.has_audio() {
-            "sharc"
-        } else if runtime.is_zero() {
-            "zero"
-        } else {
-            "none"
-        };
+        let dsp = runtime.companion();
         let frame = runtime.current_frame().map(|(revision, _)| revision);
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),

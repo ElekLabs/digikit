@@ -170,8 +170,9 @@ export interface StatusResult {
   firmware?: { base_sha256?: string; syx_sha256?: string; injected?: boolean; runtime?: RuntimeIdentity | null } | null;
   cf: CfStatus;
   heartbeat: Heartbeat;
-  /** "zero", "sharc" or "none". */
-  dsp?: 'zero' | 'sharc' | 'none' | (string & {});
+  /** The device's second processor as it runs: "sharc" (a SHARC DSP session), "peer" (a peer CPU runs its program), "responder"
+   * (the mailbox stand-in for a peer CPU), "zero" (a DSP stand-in that answers zeros) or "none". */
+  dsp?: 'sharc' | 'peer' | 'responder' | 'zero' | 'none' | (string & {});
   audio?: { halted?: unknown; [key: string]: unknown } | null;
   /** null until the first window has closed (about a second of emulated time) or without a firmware. */
   load?: LoadStatus | null;
