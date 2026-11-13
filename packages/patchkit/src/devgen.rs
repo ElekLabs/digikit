@@ -257,9 +257,17 @@ fn profile_facts(short: &str, model: Option<&crate::typed::DeviceModel>) -> Resu
         clone_of: kn.clone_of as u64,
         level: kn.level_default as u64,
         own_dsp: u64::from(kn.own_dsp),
-        tune_code: if to_machine { kn.tune.unwrap_or(0) as u64 } else { 0 },
+        tune_code: if to_machine {
+            kn.tune.unwrap_or(0) as u64
+        } else {
+            0
+        },
         tune_slot: m.tune_slot.unwrap_or(0) as u64,
-        level_code: if to_machine { kn.level.unwrap_or(0) as u64 } else { 0 },
+        level_code: if to_machine {
+            kn.level.unwrap_or(0) as u64
+        } else {
+            0
+        },
         level_knob: kn.level_knob.unwrap_or(0) as u64,
         slots: m.param_slots.iter().map(|&x| x as u64).collect(),
         templates,
@@ -1355,12 +1363,36 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     for (name, value, note) in [
         ("PROFILE_CLONE_OF", pf.clone_of, "[modules.knobs] clone_of"),
         ("PROFILE_LEVEL", pf.level, "[modules.knobs] level_default"),
-        ("PROFILE_OWN_DSP", pf.own_dsp, "[modules.knobs] own_dsp (0 or 1)"),
-        ("PROFILE_TUNE_CODE", pf.tune_code, "[modules.knobs] tune on a machine-row device (0: none)"),
-        ("PROFILE_TUNE_SLOT", pf.tune_slot, "[adapter.machine] tune_slot"),
-        ("PROFILE_LEVEL_CODE", pf.level_code, "[modules.knobs] level on a machine-row device (0: none)"),
-        ("PROFILE_LEVEL_KNOB", pf.level_knob, "[modules.knobs] level_knob"),
-        ("PROFILE_SLOT_COUNT", pf.slots.len() as u64, "[adapter.machine] param_slots, the count"),
+        (
+            "PROFILE_OWN_DSP",
+            pf.own_dsp,
+            "[modules.knobs] own_dsp (0 or 1)",
+        ),
+        (
+            "PROFILE_TUNE_CODE",
+            pf.tune_code,
+            "[modules.knobs] tune on a machine-row device (0: none)",
+        ),
+        (
+            "PROFILE_TUNE_SLOT",
+            pf.tune_slot,
+            "[adapter.machine] tune_slot",
+        ),
+        (
+            "PROFILE_LEVEL_CODE",
+            pf.level_code,
+            "[modules.knobs] level on a machine-row device (0: none)",
+        ),
+        (
+            "PROFILE_LEVEL_KNOB",
+            pf.level_knob,
+            "[modules.knobs] level_knob",
+        ),
+        (
+            "PROFILE_SLOT_COUNT",
+            pf.slots.len() as u64,
+            "[adapter.machine] param_slots, the count",
+        ),
     ] {
         v.push(c(name, value, PerDevice, note));
     }
@@ -1373,7 +1405,12 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         ));
     }
     for (name, value) in PROFILE_TPL.iter().zip(pf.templates) {
-        v.push(c(name, value, PerDevice, "[modules.templates] (stock parameter row of a glyph)"));
+        v.push(c(
+            name,
+            value,
+            PerDevice,
+            "[modules.templates] (stock parameter row of a glyph)",
+        ));
     }
     for i in 0..PEEK_MAX {
         let r = k.peek.get(i).copied().unwrap_or([0, 0]);

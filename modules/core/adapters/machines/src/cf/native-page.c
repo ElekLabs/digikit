@@ -118,8 +118,8 @@ static int32_t register_page(uint32_t type, uint32_t index, uint32_t mode, uint3
 }
 
 int32_t mf_native_register(uint32_t type, const char *title, uint32_t draw, uint32_t event,
-                           const uint32_t *bindings, const uint32_t *words, uint32_t word_count, uint32_t arg,
-                           uint32_t with_arg)
+                           const uint32_t *bindings, const uint32_t *words, uint32_t word_count,
+                           uint32_t arg, uint32_t with_arg)
 {
     return register_page(type, 1, 1, 0, title, draw, event, bindings, words, word_count, arg,
                          with_arg);
@@ -127,7 +127,8 @@ int32_t mf_native_register(uint32_t type, const char *title, uint32_t draw, uint
 
 int32_t mf_native_register_v2(uint32_t type, uint32_t index, uint32_t flags, const char *title,
                               uint32_t draw, uint32_t event, const uint32_t *bindings,
-                              const uint32_t *words, uint32_t word_count, uint32_t arg, uint32_t with_arg)
+                              const uint32_t *words, uint32_t word_count, uint32_t arg,
+                              uint32_t with_arg)
 {
     return register_page(type, index, 2, flags, title, draw, event, bindings, words, word_count,
                          arg, with_arg);

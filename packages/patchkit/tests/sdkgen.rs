@@ -168,8 +168,8 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert!(h.contains("typedef int32_t dk_io_step_fn(void *arg);"));
     assert!(h.contains("typedef struct dk_page_frame dk_page_frame;"));
     assert!(h.contains("typedef void dk_page_draw_fn(void *arg, const dk_page_frame *frame);"));
-    assert!(h.contains("Context: init. Since api 2.11."));
-    assert!(h.contains("Context: io-step. Since api 2.11."));
+    assert!(h.contains("Context: init. Since api 3.11."));
+    assert!(h.contains("Context: io-step. Since api 3.11."));
     assert!(h.contains(
         "Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING."
     ));

@@ -26,7 +26,14 @@ export interface CommitEvent {
  */
 export function decodeCommitEvent(event: LogEvent): CommitEvent {
   const [index, rows, addr, size] = event.args as [number, number, number, number, number];
-  return { index, machineRows: rows & 0xff, paramRows: (rows >>> 8) & 0xff, pageRows: (rows >>> 16) & 0xff, addr, size };
+  return {
+    index,
+    machineRows: rows & 0xff,
+    paramRows: (rows >>> 8) & 0xff,
+    pageRows: (rows >>> 16) & 0xff,
+    addr,
+    size,
+  };
 }
 
 /** `size` bytes of guest memory at `addr` (a multiple of 4), from longword reads, big-endian as the guest holds them. */
