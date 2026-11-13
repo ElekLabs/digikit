@@ -12,7 +12,7 @@ and the device profiles (`devices/*.toml`).
 | `include/dk/core/` | The module contract: `<dk/core/module.h>` (`dk_module_def`, `dk_module_ctx` and the prototypes of every import), `<dk/core/log.h>`, `<dk/core/mem.h>`, `<dk/core/time.h>` (the runtime services), `<dk/core/trace.h>` (trace marks), `<dk/core/bytes.h>` (big-endian 32-bit access, header only), `<dk/core/text.h>` (bounded text: length, copy, equal, append, concatenate, number text, truncation, size and time text), `<dk/core/path.h>` (join, parent, leaf) and `<dk/core/status.h>` (the `DK_E_*` status codes; generated, do not edit). No device access. | `module.h`, `log.h`, `mem.h`, `time.h`, `trace.h`, `bytes.h`, `text.h`, `path.h` yes; `status.h` no |
 | `include/dk/platform/` | What the device provides, one header per service group: `ui.h` (menus, lists and dialogs on the screen), `param.h` (read and write a machine parameter from a `dk_param_on_click` callback), `settings.h`, `files.h` (file listing and writing), `io.h`, `job.h` (background jobs), `hash32.h`, `usb_bulk.h`, `intro.h`, `data.h`. | yes |
 | `include/dk/page/` | Pages: `page.h` (the frame and event of a canvas page, the page flags) and `widgets.h` (small page widgets). | yes |
-| `patched-in/include/dk/` | The declaration macros (`DK_MACHINE`, `DK_FX`, `DK_PARAM`, `DK_PAGE`, `DK_SAMPLE_TRACKS`) and their record layouts (`gen/desc.h`) for patched-in modules only; patchkit adds this directory to the include path of builds with `dynamic = false`. | yes |
+| `patched-in/include/dk/` | The declaration macros and record layouts of patched-in (`core/*`) modules only. Content modules declare with builder calls and do not include them. | yes |
 | `include/dk/chooser/` | The slot list chooser (`chooser.h`) and its pure functions of row sort order and pool row text (`logic.h`). | yes |
 | `include/dk/sample/` | Sample components: `pool.h` (per-module stereo sample pool), `view.h` (waveform drawing for native pages) and `picker.h` (on-device sample picker for a 16-entry pool). | yes |
 | `include/dk/gen/` | C layouts and constants generated from `sdk.toml` (including `imports.h`, the prototypes of the service imports, and `sample.h`, the word layout of a sample pool entry). Included by the headers above, not by modules. | no |
@@ -43,44 +43,20 @@ machine parameter units, effect parameter values, DSP symbols and routing.
 It needs no firmware or DSP toolchain. Each shipped module still owns its device
 conformance checks; this fast SDK check does not replace them.
 
-## The entry point and the services
+## Entry point, services and builder calls
 
-A module of the new contract defines one constant, `dk_module`, and calls the device through named imports grouped by service. There is no
-Api table and no `dkm_*` symbol: the old entry (`dkm_init(api)`, the slots, `dkm_menu`) is gone (docs/plans/sdk.md section 5). `include/dk/core/module.h` has `dk_module_def` and `dk_module_ctx`; the prototypes of the
-imports are generated into `include/dk/gen/imports.h` from the `[[import]]` entries of `sdk.toml` that have a `service`.
+A module defines one constant, `dk_module` (`<dk/core/module.h>`), and reaches the device through named imports. The prototypes of the imports,
+including the builder calls that declare machines and effects, are generated into `include/dk/gen/imports.h` from the `[[import]]` entries of
+`sdk.toml`. Each import has a `service`, a `since` (the runtime version that added it) and a `context`; the generated header repeats the last two
+in the comment of each prototype.
 
-```c
-#include <dk/core/module.h>
-#include <dk/core/log.h>
-#include <dk/platform/settings.h>
+- [docs/MODULES.md](../docs/MODULES.md) says what a module is and why: the entry point, services and optional providers, the builder calls,
+  what `module.toml` fixes, the load path and the versions.
+- [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md) has the steps and a code sample for a machine, an effect and a tool.
+- The naming rules (`dk_<area>_<verb>`, `ctx` and `arg`, `_fn` callback types) are in [docs/plans/sdk.md](../docs/plans/sdk.md) section 10.
 
-static dk_settings *settings;
-
-static int32_t init(dk_module_ctx *ctx)
-{
-    int32_t r = dk_settings_open(ctx, &settings);   /* a handle per service, opened in init */
-    if (r != DK_OK)
-        return r;
-    dk_log(DK_LOG_INFO, "ready", 0);
-    return DK_OK;
-}
-
-const dk_module_def dk_module = {.init = init};  /* init, fini, tick, menu: all optional */
-```
-
-- `tick(ctx)` runs once per UI pass for every loaded module. `menu(ctx, menu)` adds the rows of the module's SETTINGS... menu.
-- The type is `dk_module_def` and the constant is `dk_module` (the packer looks the symbol up). `ctx` is only the module context; the user-data pointer of a callback is `arg`, and callback types end in `_fn` (`dk_io_step_fn`). The naming rules are in docs/plans/sdk.md section 10.
-- Each import has a `service` (`runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`), a `since` (the runtime version
-  that added it, "0.7.0") and a `context` (`init`, `ui`, `io-step`, `any`, `isr`). The generated header repeats the last two in the comment of each
-  prototype. `patchkit pack` writes the newest `since` a module links as the runtime version it needs and prints the services it needs
-  (`services <file>: ...`).
-- A service that another module provides (`ui`, `input`, `usb_bulk`, `dsp_link`) may be absent: its `_open` returns `DK_E_MISSING`, the other
-  calls return the same code or do nothing, and the module still loads. Without `dk_ui_open` returning `DK_OK` a module does not call
-  the functions that need the `dk_ui` handle (`dk_ui_menu_new`, `dk_ui_confirm`, `dk_ui_choice`, `dk_ui_toast`, `dk_ui_tick`).
-- The headers of the services are `core/log.h`, `core/mem.h`, `core/time.h`, `platform/host.h`, `settings.h`, `files.h` (listing and writing),
-  `io.h`, `hash32.h`, `intro.h`, `param.h`, `samples.h`, `ui.h`, `input.h`, `usb_bulk.h`, `dsp_link.h` and `debug.h`.
-
-A `.dkm` that needs another runtime major or minor, or a higher patch, than the runtime is refused with `E_CONTRACT`; the packer refuses an object that exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`.
+The headers of the services are `core/log.h`, `core/mem.h`, `core/time.h`, `platform/host.h`, `settings.h`, `files.h`, `io.h`, `hash32.h`,
+`intro.h`, `param.h`, `samples.h`, `ui.h`, `input.h`, `usb_bulk.h`, `dsp_link.h` and `debug.h`, and `page/page.h` for canvas pages.
 
 ## Include paths
 
@@ -90,68 +66,6 @@ The build passes these search paths, in this order:
 - SHARC+ assembly: the module's `build/gen/`, the module's `src/`, `sdk/dsp/contract`, `sdk` (for `#include "dsp/<concept>/<name>.inc"`), then the directories of the module's sources.
 
 A header in the module's `src/` is shared by C and SHARC+ sources. Use only decimal `#define`s and `//` comments on their own line: the SHARC+ assembler keeps a trailing comment in the macro text.
-
-## Declaring an effect
-
-An effect is built in `init` with the builder calls of `<dk/gen/imports.h>` (`dk_module_ctx_add_fx`, `dk_fx_routes`, `dk_fx_add_page`, `dk_page_add_fx_param`).
-The effect id goes in `module.toml` as `[[fx]]`; `patchkit gen` writes `build/gen/module_ids.h` with `DK_FX_ID_<ID>`, the index of the id in the `[[fx]]` list (the packer computes the keys from the packed name). This is `modules/fx/freqshift/src/module.c`:
-
-```c
-#include <dk/core/module.h>
-#include <dk/gen/page_consts.h>
-#include "module_ids.h"
-
-static int32_t init(dk_module_ctx *ctx)
-{
-    dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq Shifter", "FSH");
-    dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
-    dk_page *p = dk_fx_add_page(fx, "Freq Shifter", "FSH");
-    dk_page_add_fx_param(p, "Freq Shift", "SHIFT", DK_BIPOLAR, -64.0f, 63.0f, 0.0f);
-    return DK_OK;
-}
-
-const dk_module_def dk_module = {.init = init};
-```
-
-List the file as an `[[object]]` in `module.toml`. The declaration macros (`DK_FX`, `DK_PAGE`, ...) are for patched-in modules only and are not in the public SDK
-(`sdk/patched-in/include`). The guide ([docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)) is rewritten for the builders in S4.
-
-## Declaring a machine
-
-A machine is built the same way (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`, `dk_param_range`, `dk_param_glyph`, ...), with `[[machine]]` in
-`module.toml` and `DK_MACHINE_ID_<ID>` (the index of the id in the `[[machine]]` list) from `module_ids.h`. This is `modules/machines/analog/src/module.c`:
-
-```c
-#include <dk/core/module.h>
-#include "module_ids.h"
-
-static int32_t init(dk_module_ctx *ctx)
-{
-    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANA");
-    dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
-    dk_page_add_param(p, "Detune", "DET", 40);
-    dk_page_add_param(p, "Wave", "WAVE", 0);
-    dk_page_add_param(p, "Sub", "SUB", 0);
-    dk_page_add_param(p, "Fold", "FOLD", 0);
-    return DK_OK;
-}
-
-const dk_module_def dk_module = {.init = init};
-```
-
-Parameter values are knob units 0 to 127 (`dk_param_range` changes the range). The DSP symbols (`_<id>_render`, `_<id>_note_on`, optional `_<id>_desc`) are found by name: a machine has no
-data-only form. `[uses.<device>]` in `module.toml` (written by `module:check`) says how many machine, parameter and page rows `init` takes.
-
-`dk_param_glyph(param, GLYPH)` sets the knob look of a parameter (the constants are in `<dk/gen/page_consts.h>`). Without it the glyph is `DK_GLYPH_ENCODER`:
-
-| Glyph | Range |
-| --- | --- |
-| `DK_GLYPH_ENCODER` (default) | 0 .. 127 |
-| `DK_GLYPH_FADER` | 0 .. 127 |
-| `DK_GLYPH_PAN` | 0 .. 127 (centre 64, shows L/R) |
-| `DK_GLYPH_ONOFF` | 0 .. 1 |
-| `DK_GLYPH_TUNE` | 4 .. 124 (centre 64, one unit = one semitone) |
-| `DK_GLYPH_PLAY` | 0 .. 3 (REV, REV.L, FWD.L, FWD; the Digitone II shows 0 .. 3) |
 
 ## Tracing
 
@@ -182,5 +96,4 @@ instruction, data or import, and the `.dkm` is byte-identical to one built from 
 
 ## Writing modules
 
-See [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md). The plan for the SDK API is
-[docs/plans/sdk-api.md](../docs/plans/sdk-api.md).
+See [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md). The plan for the SDK API is [docs/plans/sdk-api.md](../docs/plans/sdk-api.md).

@@ -3,7 +3,7 @@
 Date: 2026-11-12. Base: `main` at 25378434. Targets: DT2 OS 1.17, DN2 OS 1.12.
 
 Status: **design agreed with Em on 2026-11-12, S2 detail (sections 5, 5.1, S2a, S2b) agreed the same day. S1 (restructure) shipped
-(PR 416); S2a (C hygiene, PR 424) and S2b (entry point and imports, the old contract deleted, PRs 426 and 433) shipped; S3 (builders and the runtime commit path, one runtime version, PR 443) shipped; S4 and S5 not built.**
+(PR 416); S2a (C hygiene, PR 424) and S2b (entry point and imports, the old contract deleted, PRs 426 and 433) shipped; S3 (builders and the runtime commit path, one runtime version, PR 443) shipped; the S4 templates are on the builder API and the S4 docs are in progress (`docs/MODULES.md`); S5 not built.**
 
 This plan replaces sections 7.1 (Cleanup) and 7.2 (Contract) of [runtime-and-services.md](runtime-and-services.md), that is the SDK
 parts of its items 1 and 5. The order of its steps is in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). It links to
@@ -81,7 +81,7 @@ modules/core/runtime/vectors/   fit and settings expected results (moved from sd
 
 Shipped in S2b: `core/` has `module.h`, `log.h`, `mem.h` and `time.h` (`module.h` replaced `api.h`), `platform/` has `host.h`, `samples.h`, `input.h`, `dsp_link.h`, `sdhc_large.h` and `debug.h`, and `file.h` is merged into `files.h`.
 Shipped in S2a: `core/` has `bytes.h`, `text.h` and `path.h`.
-Planned for later steps (not shipped): `page/canvas.h` (S3); `platform/draw.h` when a text-width query exists; `dsp/env/` when a module
+The canvas flags and callback types live in `page/page.h`; there is no `page/canvas.h`. Planned for later steps (not shipped): `platform/draw.h` when a text-width query exists; `dsp/env/` when a module
 needs it.
 
 Include direction: `core` <- `platform` <- components (`page`, `machine`, `fx`, `sample`, later `lfo`, `filter`, `mixer`).
@@ -228,8 +228,7 @@ module id) and the ids, with `register::machine_key` (hash of `<name>:<machine i
 writes them into the keys table in `module.toml` order. A normal pack therefore gives the keys the runtime has always used (saved projects stay
 valid), and an alias made with `pack --name` gets keys of its own, so two copies of one module do not share an effect id. At commit the runtime
 maps each index to its key through the keys table; an index outside the table is refused with `E_DECL_ID`.
-A typo is a compile error. `module.toml` refuses `[[machine]]` and `[[fx]]` tables today (`module.rs:47-57`); S3 allows them again,
-with an id only.
+A typo is a compile error. `module.toml` accepts `[[machine]]` and `[[fx]]` entries with an `id` and an optional `dsp` (`packages/patchkit/src/module.rs`).
 
 DSP entry points are found by name, so the packer needs no declaration to build the DSP section. The C name of an entry point is
 `<id>_render` and `<id>_note_on` for a machine and `<id>_process` for an effect: machine `analog` has `analog_render` and
@@ -251,12 +250,12 @@ defined. An effect needs `_<id>_desc` and `_<id>_process`. The DSP effect record
 is the order of the keys table.
 
 Machine and effect ids are the keys' input: the key is the hash of `<module id>:<id>`. Projects and kit values refer to the keys, so a
-machine or effect id stays the id it has today (the first argument of today's `DK_MACHINE` and `DK_FX`). Renaming an id loses the user's
+machine or effect id stays the id it had before S3. Renaming an id loses the user's
 projects.
 
 ```toml
 [module]
-id = "analog"
+id = "fadedlimes/analog"
 
 [[machine]]
 id = "analog"
@@ -266,13 +265,13 @@ dsp = "va"          # optional: the prefix of the DSP symbols (_va_render, ...) 
 machine_rows = 1
 param_rows = 4
 page_rows = 0       # DT2 has no page rows
-record_bytes = 112  # the record block the module keeps in the arena (payload bytes)
+record_bytes = 444  # the record block the module keeps in the arena (payload bytes)
 
 [uses.dn2]
 machine_rows = 1
 param_rows = 4
 page_rows = 1
-record_bytes = 272
+record_bytes = 540
 ```
 
 The Transfer tab does not check fit: the card holds as many modules as fit on disk. Limits matter only for the modules ticked to load.
@@ -297,13 +296,13 @@ adds pages, and a page adds params.
 
 static int32_t analog_init(dk_module_ctx *ctx)
 {
-    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANLG");   /* DSP: analog_render, analog_note_on */
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANA");   /* DSP: va_render, va_note_on (dsp = "va") */
 
     dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
-    dk_page_add_param(p, "Tone",  "TONE",  64);
-    dk_page_add_param(p, "Decay", "DECAY", 80);
-    dk_page_add_param(p, "Pitch", "PITCH", 0);
-    dk_page_add_param(p, "Level", "LEVEL", 127);
+    dk_page_add_param(p, "Detune", "DET",  40);
+    dk_page_add_param(p, "Wave",   "WAVE", 0);
+    dk_page_add_param(p, "Sub",    "SUB",  0);
+    dk_page_add_param(p, "Fold",   "FOLD", 0);
     return DK_OK;
 }
 
@@ -324,19 +323,19 @@ dk_param_latched(play);
 
 dk_param *smp = dk_page_add_param(p, "Sample", "SMP", 0);
 dk_param_range(smp, 0, 15);
-dk_param_on_click(smp, smp_click);               /* a dk_param_click_fn; the compiler checks the type */
+dk_param_on_click(smp, smp_click, 0);            /* a dk_param_click_fn and its arg; the compiler checks the type */
 
 dk_page *wave = dk_machine_add_page(m, "Shot wave", "SHT");
-dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event);
+dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event, 0);   /* the last argument is arg, passed to both callbacks */
 ```
 
 A param shown on more than one page is bound to a slot of each canvas page. `dk_page_bind(page, param, slot)` places a param.
 `dk_page_bind_local(page, local, slot)` places a page-local control (a value that is not a param) at a slot. The canvas flags
 `DK_PAGE_WIDE_CANVAS` and `DK_PAGE_STOCK_OVERLAY` are the `flags` argument of `dk_page_canvas`. A shot-like machine, with a knob page
-and two canvas pages (today `DK_PAGE_PARAM` and `DK_PAGE_LOCAL` in `modules/machines/shot/src/module.c`):
+and two canvas pages (`modules/machines/shot/src/module.c`):
 
 ```c
-dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "Shot", "SHOT");
+dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "SHOT", "SHT");
 
 dk_page *knobs = dk_machine_add_page(m, "SHOT", "SHT");         /* knob page: params go on knobs 1 to 5 */
 dk_param *smp   = dk_page_add_param(knobs, "Sample", "SMP",   0);
@@ -344,10 +343,10 @@ dk_param *start = dk_page_add_param(knobs, "Start",  "START", 0);
 dk_param *end   = dk_page_add_param(knobs, "End",    "END",   127);
 dk_param *play  = dk_page_add_param(knobs, "Play",   "PLAY",  0);
 dk_param *pitch = dk_page_add_param(knobs, "Pitch",  "PITCH", 64);
-dk_param_on_click(smp, smp_click);
+dk_param_on_click(smp, smp_click, 0);
 
 dk_page *ctl = dk_machine_add_page(m, "SHOT", "SHT");           /* canvas page over the stock page */
-dk_page_canvas(ctl, DK_PAGE_STOCK_OVERLAY, controls_draw, range_event);
+dk_page_canvas(ctl, DK_PAGE_STOCK_OVERLAY, controls_draw, range_event, 0);
 dk_page_bind(ctl, pitch, 0);
 dk_page_bind(ctl, play,  1);
 dk_page_bind(ctl, smp,   3);
@@ -355,7 +354,7 @@ dk_page_bind(ctl, start, 4);
 dk_page_bind(ctl, end,   7);
 
 dk_page *wave = dk_machine_add_page(m, "SHOT WAVE", "SHT");    /* wide canvas */
-dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event);
+dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event, 0);
 dk_page_bind(wave, start, 4);
 dk_page_bind_local(wave, 0, 6);
 dk_page_bind(wave, end, 7);
@@ -389,36 +388,31 @@ placeholder, so chained calls stay safe.
 
 ### 6.3 Commit
 
-DSP check and reserve stay before `init`, as today. They read only the static DSP section and the machine and effect keys from the
-header: reserve copies the DSP image into its own arena block and fills the voice and FX row tables (`dsp.rs:842-989`). After reserve
-the staged file is not read again, except for today's register records, which builder calls replace.
+The load order is: store and file checks (magic, size, sha256, runtime version, name, import resolution with `E_IMPORT`, relocations, keys table), the module record, the DSP check, a comparison of the header keys with the DSP voice and effect counts (`collect::check_dsp_keys`, `E_DECL_ID`), `dsp::reserve`, the arena copy, then `init`. The DSP check and reserve stay before `init`. They read only the static DSP section and the machine and effect keys from the
+header: reserve copies the DSP image into its own arena block and fills the voice and FX row tables. After reserve the staged file is not read again.
 
-The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 (today `H_REG_OFF` and `H_REG_SIZE`, the register table) becomes
-`keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
+The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
 machine count, the FX count, `record_bytes` (the size of the record block the module keeps), then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
 this table; `needs_of` adds the arena block of `record_bytes` (rounded to 16, plus the 16-byte block header, as `arena::alloc` takes it) to `ARENA`. Every `.dkm` has a keys table at the 0x90 pair (size 0 for a module with no machine and no effect: a tool or a service); the runtime has no other format. The version is the runtime 0.7.0.
 
-The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS`, which stays 32 (a shot-like
-machine needs about 10 records, the other modules 3 to 7). When `init` returns `DK_OK`:
+The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (6320 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
+machine needs about 10 records, the other modules 3 to 7. The collection is refused with `E_DECL_ID` (-27: an index outside the keys table), `E_DECL_USES` (-28: more rows than `[uses]` says) or `E_DECL_FULL` (-74: more calls than the limits allow). When `init` returns `DK_OK`:
 
-1. Check the collected records with the existing `registry::check` rules: against the device limits, against `[uses]`, against the
-   machine and effect keys in the header, and against FX ids of modules already loaded (a duplicate FX id is refused with a reason).
+1. Check the collection (device limits, `[uses]`, the keys in the header, FX ids of modules already loaded: a duplicate is `E_FX_ID_DUP`), lower it to records and check the records with the `registry::check` rules.
 2. Fill each voice row's 8 ranges and its latched mask from the collected params. The ranges are the knob params' min and max, a clamp
-   guard the DSP voice code reads (`typed.rs:755-771` builds them today).
+   guard the DSP voice code reads.
 3. Apply the records (`registry::apply`). FX pages need their FX row, which reserve already claimed.
-4. Start the DSP upload (`dsp::launch`) as today.
+4. Start the DSP upload (`dsp::launch`). For a module with a DSP part the commit runs before `launch`, and the load returns LOADING.
 
-If any step fails, nothing is written, the runtime undoes the DSP reservation as it does today on a failed `init`, and the module is
-refused with a reason. A refused module changes no byte of the firmware tables, as today.
+If any step fails, nothing is written, the runtime undoes the DSP reservation, and the module is refused with a reason. A refused module changes no byte of the firmware tables. If the DSP part or the files cannot be given back, the result is `E_BUSY` and not the original reason (`loader.rs`, `complete`).
 
 Facts behind this (reviews of 2026-11-12):
 
-- `dsp::check` keeps pointers into the staged file only until `dsp::reserve`; `launch` and later passes use the arena copy (`Pending`,
-  `dsp.rs:152-169`). Only `registry::apply` and the page and send handlers read the staged register records (`loader.rs:417`).
+- `dsp::check` keeps pointers into the staged file only until `dsp::reserve`; `launch` and later passes use the arena copy (`Pending`).
 - Type numbers need every selected module's machine keys up front only for the eviction rule (`sticky.rs:173`). Static machine ids in
   the header keep `assign.rs` unchanged.
-- FX ids are a 16-bit hash with no cross-module check today (`register.rs:78`, `fxpage.rs:183-195`); a clash (about 1 in 65535 per
-  pair) makes one effect load the other's saved kit values. Machines have a sticky map for clashes; FX get a refusal instead.
+- FX ids are a 16-bit hash (`register.rs`); a clash (about 1 in 65535 per
+  pair) makes one effect load the other's saved kit values. Machines have a sticky map for clashes; FX get a refusal (`E_FX_ID_DUP`).
 - The runtime's firmware views are built after the boot hook, so rows written at commit land before the firmware reads them.
 
 ### 6.4 Users of declaration content off the device
@@ -614,8 +608,8 @@ Work packages, in this order:
 
 ### S4 Templates and docs
 
-- Rewrite the `machine`, `fx` and `tool` templates on the new API, ready for Nx generators.
-- Update `sdk/README.md`, `MODULE-AUTHORING.md` and the `digikit-module` skill.
+- The `machine`, `fx` and `tool` templates are on the builder API (done). Nx generators: not done.
+- Write `docs/MODULES.md` (architecture and reasons); update `sdk/README.md`, `MODULE-AUTHORING.md` and the `digikit-module` skill. The skill is done.
 
 ### S5 DSP contract
 
@@ -624,4 +618,5 @@ Work packages, in this order:
 
 ## 13. Open items
 
+- [O] `type`, `status`, `ports`, `conflicts` and `[[object]]` are still in content manifests (analog, shot, the templates), and the packer still parses `type`. Section 7 states the end state. Remove them in a code item.
 - [O] `state_bytes` and `stack_bytes` stay in the DSP descriptor block (asm); the packer reads them as today.

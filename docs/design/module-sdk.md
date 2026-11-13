@@ -1,14 +1,8 @@
-# Module SDK: one contract per module type, one adapter per device
+# Module SDK design (history)
 
-Status: design, 2026-10-19. Nothing here is built. Nothing was run to write it; every claim about today's code cites file:line, read in the
-tree at `f02cf0ac`. Marks as in AGENTS.md: **[D]** read once here, **[O]** open. Proposals are written as "proposal"; they are not facts. Decisions of 2026-10-20: section 11.5.
-Related: `docs/plans/digikit-runtime.md` (Phase 11), `docs/design/digikit-dkm.md`, `digikit-runtime.md`, `digikit-registry.md`,
-`digikit-store.md`, `digikit-upload.md`, `device-data.md`, finding 27 (typed schema), finding 51 (guard).
-
-Note (2026-10-27): this document is history for the manifest sections. Machines are now declared in C with `DK_MACHINE`, `DK_PARAM` and
-`DK_PAGE` (`sdk/include/dk/machine/machine.h`), and effects with `DK_FX`, `DK_FX_PARAM` and `DK_PAGE`. The manifest sections `[[voice]]`, `[[machine]]`,
-`[[param]]` and `[[page]]` are refused, and `build/gen/consts.rs`, `dt2.inc`, `dn2.inc` and `module.h` are gone. Current rules:
-`docs/MODULE-AUTHORING.md`, section 5.
+Status: history of the 2026-10 module SDK design. The current architecture is `docs/MODULES.md`; the contract is `sdk/sdk.toml`. This file keeps the DSP routine
+ABI (section 1.4), the guard and memory design (5, 6), the checks (8), the decisions D4 to D12 (11.5), hot reload (12) and logging (13). Marks as in AGENTS.md: **[D]** read once here, **[O]** open.
+Related: `docs/plans/digikit-runtime.md` (Phase 11), `docs/design/digikit-dkm.md`, `digikit-registry.md`, `digikit-store.md`, `digikit-upload.md`, `device-data.md`, finding 27, finding 51.
 
 ## 1. Today
 
@@ -19,7 +13,7 @@ Note (2026-10-27): this document is history for the manifest sections. Machines 
 | framework | `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/machines`, `core/params` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
 | content, patched in | `test/patched-pluck`, `test/xslice` | machine rows and a DSP routine, placed by patchkit | patched into the image |
 | content, run time | `digikit/pluck`, `test/dyn-xslice` | the same machine as a `.dkm` (`dynamic = true`) | `dkrt_load` at boot (`docs/design/digikit-runtime.md:161-183`) |
-| ColdFire service | `test/c-demo`, `test/rust-demo` | `dkm_init`, `dkm_fini`, `dkm_slot_n` | `.dkm` (`docs/design/digikit-dkm.md:73-75`) |
+| ColdFire tool | `test/c-demo`, `test/rust-demo` | the constant `dk_module` with `init`, `fini`, `tick`, `menu` (`docs/MODULES.md`) | `.dkm` |
 | fixture | `test/dyn-guard-nan`, `dyn-dsp-hang`, `dyn-fault`, `dyn-crash`, `twin-*`, `dn2-*` | framework tests, today beside real modules | both ways |
 
 `tests/fixtures/modules/` holds 23 directories; about 15 of them are fixtures, not modules (`ls tests/fixtures/modules`).
@@ -108,7 +102,7 @@ reaching an unstable filter; the guard now clamps), the parameter kind (`pk_conf
 Goals
 
 1. A content module implements a type contract and nothing else. It contains no firmware address, no engine frame offset, no firmware code.
-2. One routine source serves both devices when the contract allows it. For `pluck` it does (section 10; one compiled module for all devices: D4, section 11.5).
+2. One routine source serves both devices when the contract allows it. For `pluck` it does (one compiled module for all devices: D4, section 11.5).
 3. One adapter per device, driven by the device profile, is the only code that knows the engine layout.
 4. The runtime knows every loaded module, its memory, its rows and its limits in one table, and refuses a load that would overlap or exceed.
 5. As much of the contract as possible is checked at build time; what cannot be (cycles on a data-dependent path, memory writes through computed pointers) is
@@ -117,9 +111,8 @@ Goals
 
 Non-goals
 
-- No change to stock behaviour. An image with the framework and no content module plays the stock audio (`dsp-voice` README :5-6). Oracle in section 10.
+- No change to stock behaviour. An image with the framework and no content module plays the stock audio (`dsp-voice` README :5-6).
 - No Digitone II feature that the Digitakt II does not get; Digitakt II first, Digitone II through the same contract.
-- Browser patching keeps working (section 10.4).
 - No hot reload (archived, `digikit-runtime.md:116-117`), no memory protection (none exists on the SHARC; the ColdFire MMU is not used, **[O]** whether it could be).
 - No FX, sequencer or UI contract is designed now (outlines only, section 4.2).
 - No run-time compilation, no DSP intermediate language (`docs/plans/digikit-runtime.md:466-467`).
@@ -244,32 +237,8 @@ Notes on the header:
 | Type | Shape of the contract | Open points |
 | --- | --- | --- |
 | FX (insert or send) | **Built (P3d-1a, `sdk/dk_fx.h`, patched-in only).** `process(state, in, params)`: `dk_fx_in` = `{in, out, block}`, the master block as 64 planar floats (32 left, then 32 right), `in` read only, `out` the adapter's scratch; `dk_fx_desc` = magic, contract, `n_params` (at most 8, 4 in the first rows), `state_bytes`, `max_cycles_block`, `max_call_depth`, `stack_bytes`. The adapter `core/fx` hooks a post-master function (finding 55), checks the output (finite, below 8.0), plays dry on a fault, crossfades one block when an effect switches, and switches an effect off after 8 faults in 1500 blocks. Run-time (`.dkm`) effects: built on the Digitakt II (F4 step 1, `[contract] fx = [1, 0]`, runtime 0.4.0: DSP section version 4, `core/dynfx`, 3 slots; finding 55). Effect pages and knobs: built on the Digitakt II (F4 step 2, runtime 0.5.0: `core/fxpages`, EFFECT record, MIX in the adapter; below). Knob values are saved with the kit (F4 step 3, Digitakt II). Insert or send (FX routing steps 1 to 4, Digitakt II; step 6: also the Digitone II, one send effect, finding 67): the manifest gives the default route and the allowed ones (`[[fx]] route`, `routes`), the user decides the route (a setting, DIGIKIT > FX ROUTES, effective after a restart) and the framework owns the send amounts (one knob per send effect on a second page of the FX key, one amount per track, kept in the settings store and the DSP row, never in a kit file); the effect's `process` is the same and never sees an amount (findings 62, 64 and 65). All of it also on the Digitone II 1.12 (F4 step 5: the same modules, device facts in `devices/digitone-ii.toml`; in the `device` patch set, not in `emulator`: the hook costs the emulator x2.4 DSP CPU there, finding 55). Not built: `tail_blocks` | send versus insert; latency declaration |
-| ColdFire service | `dkm_init`, `dkm_fini`, `dkm_slot_0` as today (`digikit-dkm.md:73-75`), plus a declared slot use and stack/heap bytes; Rust or C | which slots exist beyond 0 (`digikit-runtime.md:90-91`: 1-7 are bound and not called) |
 | UI page / key handler | needs slots 1-7 from the sequencer or key hooks | not designed; no firmware hook exists |
 | Sample / data | no code; a `.dkm` with a data section | store layout (`digikit-store.md`) |
-
-#### 4.2.1 An effect with a page of its own (Digitakt II, F4 step 2)
-
-Note: effects are now declared with `DK_FX` in C (`sdk/include/dk/fx/fx.h`); the `[[fx]]` and `[[fx.knob]]` names below are the fields of that record.
-
-An `[[fx]]` with a `tab` has a page in the FX view; the runtime builds the page and its knob rows from the module's records, with no effect-specific code (finding 61,
-`docs/design/digikit-registry.md` "Effect pages"; the cookbook is `.agents/skills/digikit-module/references/contract-fx.md`, "Define an effect with its own page").
-
-| Manifest key | Meaning | Limit |
-| --- | --- | --- |
-| `[[fx]] tab` | the page's tab label | 1 to 3 characters |
-| `[[fx]] title` | the page title (the view adds `(n/N)`); mixed case like stock, the firmware font draws a capital Q like an O | 1 to 23 characters |
-| `[[fx]] mix` | default of the MIX knob on the page's level slot | 0 to 127 (default 127) |
-| `[[fx]] route` | the route the effect starts on when the settings do not say: `master` (an insert on the master chain, the default) or `send` (a send bus: one amount per track, set on the FX key's second page) | `master` or `send` |
-| `[[fx]] routes` | the routes the user may choose in DIGIKIT > FX ROUTES | a non-empty list of `master` and `send`, no repeat, containing `route`; left out: `["master"]`, or `["send", "master"]` when `route = "send"`; a send route needs a `tab` |
-| `[[fx.knob]] name`, `short` | the long name shown while the knob turns, the label under it | 23 and 6 characters |
-| `[[fx.knob]] min`, `max`, `default` | the float range the effect gets, and the default (also the word's value at load) | `min < max`, the default inside |
-| `[[fx.knob]] display` | `percent` (0 .. 127) or `bipolar` (-64 .. +63) | |
-| `[[fx.knob]] position` | the place on the page, 0 to 7 (default: the knob's place in the list) | distinct |
-
-Knob i is the parameter word p_i of the effect's row (7 knobs, p0 to p6); MIX is not a word: it is the adapter's dry/wet blend of the row (`master = dry + mix * (wet - dry)`, 0 is the dry signal bit for bit).
-The page lives with the effect row (3 on the Digitakt II); its value indices in the kit, the page numbers and the template rows are device facts (`[fx]` of the device file), its patch-time
-resources are `core/fxpages`. The packer writes the page as a `register` record of kind 4 (EFFECT) next to the effect's DSP record. The values are saved with the kit with the effect's ID (`register::effect_id`: module id and effect id): Load Kit gives an effect its stored values only when the ID in its row is its own, else the manifest's defaults. Not supported: p-locks, modulation, MIDI CC.
 
 ## 5. The adapter
 
@@ -435,61 +404,7 @@ and whether the module fits an empty device. Because the module set is fixed per
 
 ## 7. The manifest
 
-Author concepts only. Firmware codes move to the device profile.
-
-```toml
-# modules/machines/pluck/module.toml
-[module]
-id      = "digikit/pluck"
-name    = "Pluck"
-short   = "PLK"
-type    = "machine"                     # contract: machine v1
-version = "0.2.0"
-summary = "A plucked-string synth machine."
-devices = ["dt2", "dn2"]                # which profiles have been conformance-checked; firmware ports come from the profiles
-
-[machine]
-pitched = true                          # uses the pitch (adds the device's tune knob where the profile has one)
-voices  = 16
-source  = { dsp = "src/dsp/pluck.s" }   # the one routine for every device; per-device override: [machine.source.dn2]; one compiled module for all devices: D4, section 11.5
-
-[[param]]
-id = "decay"   name = "Decay"           short = "DECAY"  kind = "percent" min = 0 max = 0x7f00 default = 0x4000
-[[param]]
-id = "pick"    name = "Pick position"   short = "PICK"   kind = "percent" min = 0 max = 0x7f00 default = 0x2000
-[[param]]
-id = "bright"  name = "Brightness"      short = "BRIGHT" kind = "percent" min = 0 max = 0x7f00 default = 0x5000
-[[param]]
-id = "color"   name = "Excitation colour" short = "COLOR" kind = "percent" min = 0 max = 0x7f00 default = 0x2800
-# order of the [[param]] tables = knob order. `knobs = [...]` exists only to reorder: knobs = ["decay", "pick", "bright", "color"]. (slot rule: D1, section 11.5)
-
-[budget]
-block_instructions   = 2200             # the author's claim; the rig must stay below it; both must stay below the device headroom / voices
-note_on_instructions = 8000
-```
-
-What disappears from the manifest, and where it goes:
-
-| Today (`pluck/module.toml`) | Moves to |
-| --- | --- |
-| `knobs = [0xca, ..., 0xd1]`, `template = 0xd1`, `[param.dn2] template = 0xd5` | profile `stock_knobs`, `param_template` (5.2); `kind` selects the template |
-| `clone_of = 0`, `[machine.dn2] position = 4, own_dsp = true`, `[[page]]` | profile `[adapter.machine.rows]`: `clone_of`, `position`, `own_dsp`, page naming rule (page name = machine short name, title = name) |
-| `[[voice]] machine, entry = "_pk_render"` | the fixed symbols `dk_machine_note_on`, `dk_machine_render`, `dk_machine_desc` |
-| `place = "dsp.l2"`, `[object.externs]`, anchor rules | framework only; a content module has none |
-| `ports = [...]`, `[targets]` | generated from the profiles that pass `module:check` (the test status table stays, as generated output) |
-| type number in `types.toml` | static machines: stays in `types.toml`, key `<module id>:<machine id>`, allocated by `module:new`, never by hand. Run-time machines: no entry; the runtime assigns the number at load and the card's sticky map keeps it (D7, section 11.5, implemented) |
-
-One schema, written once in Rust (`packages/patchkit/src/modschema.rs`, extending `typed.rs`), generated into JSON Schema for editors and into the authoring guide. Errors name the
-file, the key path, the rule and the fix, and are produced by the same code in the CLI and in `patchkit.wasm`:
-
-```
-modules/machines/pluck/module.toml: [[param]] "decay": max 0x8000 is above the largest word 0x7f00 for kind "percent".
-modules/machines/pluck/module.toml: 5 parameters declared; digitakt-ii allows 5 ([adapter.machine] param_slots in devices/digitakt-ii.toml).
-```
-
-Generated constants: `build/gen/` per module as today (`consts.rs`, `<dev>.inc`, `gallery.json`; finding 27, `27-module-schema.md:20-21`), plus `desc.inc` (`n_params`, ranges) that the
-assembly can `#include` to check its own assumptions at assembly time (a `.if` on the parameter count).
-
+The manifest and the declarations of a module are described in `docs/MODULES.md` (the files of a module and what is static).
 ## 8. Checks: build, pack, load
 
 | Check | Today | Moves to | How |
@@ -507,141 +422,11 @@ assembly can `#include` to check its own assumptions at assembly time (a `.if` o
 | pack: one CF + DSP object, relocation kinds, imports | pack | pack | unchanged (`digikit-dkm.md:57-62`) |
 | load: sha, format, runtime version, imports, device, space, rows, types | load | load | unchanged order (`digikit-dkm.md:131-147`); no write before the last check |
 
-`.dkm` header fields the runtime checks, with new ones marked: `runtime_min` (raise to 6 for contract modules; compatibility: D3, section 11.5), module version, name, **`types` bitmask** (the loader refuses a type the
-profile has no limit for), **`contract`** (the highest contract version per type; the runtime lists the versions it supports), DSP section version 3 with `voices`, `state_off` and
-`desc` (copied into the table), and the existing device word, bounds and relocation checks. An older runtime refuses version 3 with `E_DSP_FORMAT`; the old and new loaders never mix because
-of `runtime_min` (compatibility: D3, section 11.5). The sha256 stays an integrity check, not authentication (`digikit-dkm.md:159-160`).
 
 Run-time checks that stay because they cannot be made at build time: clamp (kept, against the host calling with out-of-range words from an LFO), output finite and bounded, fault count and disable, the
 `entered[]` counter for ColdFire slots, the card-safety gates.
 
-## 9. Authoring flow and tooling
-
-```
-mise run module:new machine NAME      create modules/machines/NAME from the template: module.toml, src/dsp/NAME.s with the three symbols and a silent render,
-                                      tests/test_NAME.py (sound tests), gallery/icon.svg, a type number in types.toml, builds it
-mise run module:check NAME            build (pk_build), static checks (section 8), conformance on every device in `devices`, then the module's own tests, the packed size, the inferred needs and whether the module fits an empty device (6.5)
-mise run module:pack NAME [--device]  .dkm (what `patchkit pack` does)
-dk run NAME                           build, pack, check that it fits (6.5; `--force` uploads a module that does not), upload, select, restart a device or the emulator, wait for the boot, report the log (tools/device/dkrun.py)
-mise run module:emu NAME              the same through the emulator Target (Phase 11 item 6)
-```
-
-| Step | State today | Change |
-| --- | --- | --- |
-| `module:new` | `patch:new` makes a module from a template (`mise.toml:275-277`) with category/name, no types | one template per type; `machine` first |
-| `module:check` | exists for machines (`pk_modcheck.py`, `mise.toml:98-100`) | add the static checks of section 8; non-machine modules get their type's checks |
-| emulator run | `tests/digikit` scenarios; `menu-dkrun-pluck` drives `dk run` in the emulator | the Target abstraction (Phase 11 item 6, `plans/digikit-runtime.md:455`): emulator and device backends behind one API, so one system scenario runs on both |
-| device run | `tools/device/dkrun.py`, INFO, PUT, SELECT, RESTART, LOG (`digikit-upload.md:165-166`) | unchanged; the guard's `MACHINE_FAULT` events become a pass/fail line in the report |
-| guide | `docs/MODULE-AUTHORING.md` (Phase 11 item 5) | one page: the contract header, the manifest, four commands, a worked example (pluck), the failure messages and what they mean. It is generated in part from `<dk/machine/machine.h>` and the schema, so it cannot drift. Plain, short, with tables: written for a human and for a model reading it cold |
-| C modules | not supported on SHARC (finding 20 recommends assembly for the hot path) | allowed by the contract; `module:new machine NAME --lang c` is offered only after the measurement in section 11 |
-| ColdFire side | Rust (`rust-demo`) and C (`c-demo`) | the `dkrt-sdk` crate stays the SDK of the service type |
-
-The SDK a module author sees: `<dk/machine/machine.h>` (or `sdk/dsp/contract/dk_machine.inc`), the template, the four commands, the guide. No firmware knowledge, no hook, no frame offset.
-
-## 10. Migration
-
-Every step keeps `main` green (`mise run test`), is one lane, and starts from a recorded oracle. PCM pins in `tests/scenarios/*.json` change only with Em's approval (AGENTS.md):
-a step that would move a pin stops and asks.
-
-### 10.1 Order
-
-| Step | Content | Oracle |
-| --- | --- | --- |
-| 0. Record | with the current tree, record on the rig and in the emulator what the later steps compare against: float32 samples of `MachineRig` pluck for DT2 and DN2 on the conformance cases plus the finding-51 grid (every note x six TUNE words, 200 blocks each: `51-pluck-tune-guard.md:30-34`), and the PCM hashes of `equiv-dyn-pluck`, `menu-dkrun-pluck`, `pages-dyn-pluck`, `debug-guard`, `rung-c` | files under `out/` (not committed), plus the existing PCM pins |
-| 1. Contract and generator | `sdk/dk_machine.h`, `pk_sdkgen.py`, `dk_machine.inc/.rs`; no behaviour change | a unit test round-trips the header into the two outputs; ruff, mypy |
-| 2. DT2 adapter v2 + pluck | adapter calls `dk_machine_*`; pluck gets the new entry points and one source; state in rows; guard moved into the adapter | see 10.2 |
-| 3. DN2 adapter | same for DN2 incl. guard and reset; pluck's DN2 source is deleted (same source) | rig PCM equal to step 0 for DN2; `equiv-dn2-set`, `pages-dyn-pluck`, `roundtrip-dn2` |
-| 4. Runtime table, limits, state placement | section 6; DSP section v3 | `table_check` unit test; `tests/digikit` boot scenarios (`card-safety`, `crash-capture`, `safe-fault`, `debug-*`) unchanged results; a new test that fills the machine rows, the DSP area and the module table and expects the named error codes |
-| 5. Manifest v2 and profile fields | section 7 | pluck rebuilt from the v2 manifest produces rows equal to today's `plan.json` rows for the same firmware (the test of finding 27, `27-module-schema.md:23-40`, with the new inputs); `patchkit gen --check` |
-| 6. Build-time checks | section 8 | each check has a negative fixture that must fail with the named message (as `pk_conform.NEGATIVE`, `:58-61`) |
-| 7. Fixtures | `dyn-guard-nan`, `dyn-dsp-hang`, `dyn-fault`, `dyn-fault-late`, `dyn-crash`, `c-demo`, `rust-demo`, `dn2-*`, `twin-*`, `registry-demo`, `dyn-demo`, `dyn-params`, `dyn-sine-dn2` move to `tests/fixtures/modules/`; scenarios and `types.toml` keys are renamed | the scenarios' PCM and log results unchanged |
-| 8. Retire patched-in content | delete `digikit/pluck` as patched-in and `test/dyn-pluck`; one `digikit/pluck`, always run time; same for `xslice` if it fits a contract (`master-gain` is deleted) | see 10.3 |
-| 9. Tooling and guide | `module:new`, `module:check` extensions, Target, the guide | `module:new machine demo` then `module:check demo` passes on both devices, in CI |
-
-### 10.2 Pluck first: what is compared
-
-Pluck is one module with one routine for both devices if the kernel (lines 100-405 of both files) is word-identical after the contract: it is, except lines 220 and 267-272 **[D]**; step 2 must
-read those hunks and say whether they are ABI (record versus slot) or algorithm. Expected result: yes, ABI.
-
-Byte-identical images are not expected: the framework object changes (adapter), the `.dkm` of pluck changes (new entry points, desc, state in rows). What is compared, exactly:
-
-| Compared | Expected |
-| --- | --- |
-| rig output, DT2 and DN2, new pluck through the new adapter vs step-0 record: the 32 samples of every block, bit for bit, on the conformance cases and the finding-51 grid | equal, including the clamped corner cases (the clamps move into the adapter and into pluck unchanged) |
-| the three clamps of finding 51 are still in pluck, and the adapter's clamp range equals the manifest range | equal |
-| `equiv-dyn-pluck`, `menu-dkrun-pluck`, `pages-dyn-pluck`, `debug-guard` PCM and event logs | equal PCM hash; `debug-guard` (both images since P3b-2): `MACHINE_FAULT` of the fixture's assigned type, count 8, `MACHINE_DISABLED` once, as in finding 51 section 5 |
-| stock path: the seven DN2 pins and the 61 DT2/DN2 scenario oracles with the framework and no content module | unchanged (stock behaviour) |
-| conformance on both devices; `max_cycles_block` observed at most the declared | pass |
-| cost table of 5.4 | within target |
-| `.dkm` DSP kernel bytes: relocation-masked bytes of lines 100-405 equal to today's | equal; a difference is explained in the commit |
-
-The new guard test: a fixture that outputs NaN and one that leaves an out-of-range parameter reach it through the adapter on **both** devices (today DT2 only).
-
-### 10.3 Retiring the patched-in content modules
-
-Patched-in `test/patched-pluck` (before 2026-10-21: `digikit/pluck`) has type 9; the run-time one has 18 (DT2) and 17 (DN2) (`types.toml:27,41,54,67`). A project saved with type 9 would load as a gap row that plays as type 0
-(`digikit-registry.md:99`). Options: (a) accept, if no saved project uses type 9 (Em has the only device); (b) keep type 9 reserved as an alias that the loader maps to the run-time pluck (needs a
-firmware-side map; not built). Recommendation: (a), after Em confirms. **[O]**
-
-`xslice` clones SLICE and needs the sample renderer, not a synthesized voice: it is not a Machine-contract module. It either stays patched in as a framework-adjacent module until a "sample machine"
-type exists, or it is dropped from the SDK scope. **[C]** `digikit/master-gain` and `master-drive` are deleted (Em, 2026-10-29): the devices have master overdrive, and `digikit/freqshift` is the example of an effect on the master route.
-
-### 10.4 Committed `.dko.json` versus CI-built
-
-| | Keep committed | Built in CI only |
-| --- | --- | --- |
-| browser patching of framework modules | works with no toolchain (`patchkit.wasm` reads the objects) | the Pages build needs Selache, m68k gcc and rustc_codegen_gcc (about 1 h cold: `pk_toolchains.py:14-18`); a local clone cannot patch without them |
-| review | diffs of JSON objects (the runtime object is 388 KB) | clean diffs |
-| drift | `pk_build --check` fails on a stale object (`pk_build.py:14-16`) | cannot drift; the artifact is rebuilt |
-| reproducibility | the object holds the source hash | needs pinned toolchains (already pinned: `pk_toolchains.py:39-60`) |
-
-Recommendation: framework objects stay committed (few, change with firmware ports, needed by the browser). Content modules are not committed as objects: they are built by CI into `.dkm` files
-(small, hashed, no firmware bytes) published with the site, and the browser copies a `.dkm` into the store; no browser linking of content is needed because a content module no longer has a patch-time form. A local author builds
-with the toolchains (`module:check` needs only Selache, no firmware). If the web app should also let a user *edit* a module in the browser, that needs the toolchain in wasm, which does not exist: out of scope.
-
-## 11. Risks, open questions, estimates
-
-### 11.1 Risks
-
-| Risk | Detail | Mitigation |
-| --- | --- | --- |
-| C on SHARC | the public compiler was evaluated on six small functions; no optimiser to speak of (24 instructions against 7 by hand for a scale loop); pointers are byte addresses, so whether silicon agrees is open (`20-patch-toolchains.md:71-82`); the frame call convention | assembly remains the supported language of v1; a C pilot (the `pluck` string loop in C, measured against the assembly on the rig for cycles) before `--lang c` is offered |
-| contract cost | adapter and frame call add cycles; DT2 has 16 tracks x 666,667 (1 GHz, [D] finding 100) cycles per block of headroom shared with the firmware | cost targets in 5.4, measured on the rig in step 2 before step 3 starts |
-| DN2 memory | 320 KiB DSP area; pluck alone uses 256 KiB | state is declared and reported; `voices` per module and per device is in the profile |
-| DN2 engine constraints | the note-on is a one-block trig bit; the amp envelope and gate come after the module; whether the engine reads `own_dsp` machines the same for every module is only read for pluck (finding 33) | the DN2 adapter is the only place that knows; step 3 re-runs `equiv-dn2-set` and `pages-dyn-pluck` |
-| "write only own state" is not provable statically | computed pointers | write-set check on the rig (needs a store hook) plus a canary word after each state block, checked by the adapter, cost about 4 instructions per call |
-| the ColdFire side is unprotected | a Rust or C service module can write anywhere | not addressed; the arena and the write watch (`digikit-runtime.md:114`) catch only emulator-visible cases |
-| contract churn | a field added to `dk_machine_desc` after modules exist | `contract` version per type; the adapter supports the last two; fields only appended |
-| project compatibility | type numbers, knob slots and values are stored in projects | permanent numbers stay; `param_slots` keep pluck's positions (5.2) |
-
-### 11.2 Questions for Em
-
-1. Is a saved project with pluck as type 9 (the patched-in one) in use? If not, retire it without an alias (10.3).
-2. C on SHARC: do you want the pilot measured before the contract is frozen, or contract first with assembly only? Recommendation: contract first; the contract does not depend on the language.
-3. DN2 DSP memory: accept 256 KiB for one pluck, or shorten the lines (changes the sound at low notes) or reduce `voices` on DN2?
-4. Should `xslice` (a SLICE clone, no synthesis) be part of the SDK as a second Machine kind ("sample machine") or stay outside?
-5. Cycle enforcement: SHARC cannot be preempted; only the guard's output check and the DSP hang breadcrumbs (finding 48) exist. Is a declared-and-measured budget enough, or should the runtime take the DSP block time from HEALTH and disable the heaviest machine when the block time is over budget?
-6. A new command `MODULES` and DSP section v3 raise `RUNTIME_VERSION` to 6; a card with runtime-5 `.dkm` files must still load (the plan: yes, both loaders in one runtime). Confirm. (Superseded by D3, section 11.5.)
-
-### 11.3 Estimates (agent time, a lane each; wall time is shorter with lanes in parallel; outcome risk stated separately)
-
-| Step | Agent hours | Outcome risk |
-| --- | --- | --- |
-| 0 record oracle | 1-2 | low |
-| 1 contract header and generator | 3-5 | low |
-| 2 DT2 adapter v2 and pluck | 8-12 | medium: cost and exact PCM equality |
-| 3 DN2 adapter with guard and reset | 8-12 | medium-high: engine details read only for pluck |
-| 4 runtime table, limits, DSP v3, MODULES | 8-12 (the runtime object rebuilds fast; the generated SHARC core does not change) | medium |
-| 5 manifest v2, profile fields, errors, wasm | 6-9 | low |
-| 6 build-time checks (static register/call-depth scan, write-set hook) | 6-10 | medium: the store hook on the core |
-| 7 fixtures | 3-5 | low |
-| 8 retire patched-in, CI `.dkm` | 3-5 | low |
-| 9 tooling and guide | 4-6 | low |
-| C pilot (optional) | 4-8 | high that quality is poor |
-
-Revised: section 11.5. Total about 50-80 agent hours; 3 to 6 days of wall time with two or three lanes. Payoff: one pluck instead of four files and two routines, every later machine written once for two
-devices, a guard on the Digitone II, a table that proves memory is not shared, and an SDK a model can use from one header and one guide. Confidence that the contract carries pluck: high (the kernel is shared).
-Confidence that it carries a machine that needs the engine's own stages (filters, `xslice`): low, and out of scope for v1.
+## 11. Answers and decisions
 
 ### 11.4 Answers (Em, 2026-10-19)
 
@@ -663,9 +448,9 @@ Confidence that it carries a machine that needs the engine's own stages (filters
 
 These supersede earlier text where they conflict; the passages they change point here.
 
-- **D1. Parameters and knob slots.** The `knobs` array of `[[machine]]` (and of `[machine.dn2]`) fixes each parameter's slot: its position is the knob. There is no auto-fill and no slot file. The build refuses a module parameter on knob 3 of a DT2 SAMPLE clone (the sample slot: only the sample number bits reach the DSP, measured with and without a sample assigned: docs/findings/02-machines-and-parameters.md; the fact is `[[modules.knobs.reserved]]` in `devices/digitakt-ii.toml`), a name in `knobs` that is no `[[param]]` of the module, and a parameter named twice. Projects store parameter values by slot, so a released parameter must keep its slot: a moved parameter at export is checked against the previous `.dkmod` (P3c-5, optional). Pluck's DT2 slots stay 1, 2, 4 and 5; knob 6 is usable (xslice holds a parameter there, docs/findings/30-runtime-machines.md).
-- **D2. Module types.** `[module] type = "machine" | "fx" | "service" | "raw"`. Each typed kind has its own SDK and contract version. `raw` has no contract: arbitrary code with only the generic load checks (format, SHA-256, imports, bounds), shown as unchecked in the menu; it can move to a typed SDK later. A raw SHARC routine has no guard; safe mode is the recovery. A tool with a UI page is a `service` once a UI hook exists.
-- **D3. Metadata and compatibility.** `id = "author/name"`, `version` (major.minor.patch), `author`. A module records the contract version of each type it implements; the runtime refuses a module whose contract major version differs from its own. It does not refuse a module only because it was built for another runtime version. This supersedes answer 7 and the `runtime_min` rule.
+- **D1. Parameters and knob slots.** A parameter's slot is its position on the page; the device profile's `param_slots` gives the knob. There is no auto-fill and no slot file. A module parameter on knob 3 of a DT2 SAMPLE clone is refused (the sample slot: only the sample number bits reach the DSP, `docs/findings/02-machines-and-parameters.md`; the fact is `[[modules.knobs.reserved]]` in `devices/digitakt-ii.toml`). Projects store parameter values by slot, so a released parameter keeps its slot. Pluck's DT2 slots stay 1, 2, 4 and 5; knob 6 is usable (`docs/findings/30-runtime-machines.md`).
+- **D2. Module kinds.** The packer infers the kind from what the module declares (machine, effect, tool). There is no per-kind contract version. The `type` field still in content manifests is a leftover that the loader does not use; a later code item removes it (`docs/plans/sdk.md` section 13, `docs/MODULES.md`).
+- **D3. Metadata and compatibility.** `id = "author/name"`, `version` (major.minor.patch), `author`. The runtime has one version; a module is accepted when its major and minor equal the runtime's and its patch is not higher (`docs/MODULES.md`, versions).
 - **D4. One compiled module for all devices.** A `.dkm` holds one code body for every device it lists. The device adapter is part of the runtime image, which is built per device and firmware; it carries the layout differences (voice record, knob frame, tracks against voices, guard). Module DSP code is relocatable: the runtime applies DSP relocations at load. A module declares its state size and is refused on a device where it does not fit (DN2 320 KiB, DT2 512 KiB DSP area). A per-device code section is allowed only where the algorithm itself differs. Pluck already works on DT2, so its DT2 output is the oracle; the DN2 copy is folded into the same body after its kernel hunks (section 1.3) are classified. A new device or firmware needs a new runtime image, not new modules.
 - **D5. Size.** Modules and the runtime are as small as possible for a given device and firmware. The runtime image carries only that device's adapter and the services it uses. A module carries one code body and compact relocations, no per-device copies. `module:check` and `patch:mem` report the sizes, and a PR states size changes.
 - **D6. Languages and containment.** ColdFire: Rust or C. SHARC: assembly in v1 (no usable SHARC C compiler: docs/findings/20-patch-toolchains.md). Neither CPU has memory protection, so the runtime's Rust does not contain module code. Containment is the build-time checks, the load checks, the adapter guard on both devices and the write-set check in the rig. **ColdFire audit implemented (P4b):** `mise run module:audit` and the `memaudit-*` scenarios arm the emulator's write guard on the free ColdFire regions outside each module's block while the UI is driven, and report any store by module or stock code (docs/TESTING.md); DMA is not covered.
@@ -676,28 +461,6 @@ These supersede earlier text where they conflict; the passages they change point
 - **D11. Export.** The export format is `.dkmod`: a deterministic zip without `build/`, plus `package.toml` (id, version, sha256 per file).
 - **D12. Raw path and public module.** The old-form voice row (a row with no `note_on`) stays as the path of a `raw` module (D2): no contract, no guard clamp. The patched-in pluck stays the public browser module until the web flow delivers a `.dkm`.
 - **Estimate.** With D4 (DSP relocation, one pluck body) and the steps merged into three PRs, about 30 to 45 agent hours. Most of the risk is in the DN2 adapter. The table in 11.3 is the earlier per-step upper bound.
-
-### 11.6 Service commands (api 1.2, runtime 0.2.5)
-
-A module that needs a SysEx command of its own (the first is `digikit/remote`: key, turn and state of the panel) calls `Api.register_cmds(first, count, handler)` from `init`.
-The handler is `int handler(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)`: it returns the number of reply bytes written to `out`, or a negative status. It runs in the firmware's
-MIDI task, so it is short and never waits. The ranges a module may take are reserved in `sdk/sdk.toml` `[protocol.ranges]`; a request outside them, over another module's, or empty
-returns `E_CMD_RANGE` (-64). The ranges are released when the module's `fini` has run. `docs/design/digikit-upload.md` ("Service commands") has the wire side; the fixture
-`test/svc-echo` and `modules/core/runtime/tests/service-commands/service-commands.device.test.ts` show the round trip; the acceptance cases run with default verification or `pnpm nx:pilot run core/runtime-service-tests:test-device` (see `tests/regression/README.md` for prerequisites).
-
-### 11.7 The input adapter (`core/input`, runtime 0.2.5)
-
-A module that wants to press a key or turn an encoder imports two functions by name from the runtime's table (a runtime without `core/input` does not have them; the load fails with
-`E_IMPORT`): `int input_key(u32 code, u32 down)` and `int input_turn(u32 encoder, int delta)`. They return 0, or `-1` (not a key code, or an encoder that does not exist), `-2` (the UI
-queue is full), `-3` (the device profile names no backend `core/input` has). Codes are the device file's `[panel]` codes; the backend is the device file's `[input] backend`. They call the
-firmware's own panel decoders (`docs/findings/58-panel-input-path.md`) and are for the MIDI task; the first user is `digikit/remote`, the proof is `test/input-probe` and the scenario `input-adapter`.
-A device that reaches its events another way adds a backend to `core/input` and names it in its profile; modules and hosts keep calling the same two functions.
-
-### 11.8 digikit/remote
-
-`digikit/remote` (`modules/tools/remote`, a run-time `.dkm`, the same file for both devices) registers KEY 0x38 (`code`, `down`), TURN 0x39 (`encoder`, signed `delta`; the reply is the delta
-taken, at most 30 either way, and the host sends the rest again), RELEASE 0x3a (lets go of every key the module holds) in the `remote` range, and STATE 0x3e (`enabled`, always 1 while the module is loaded, format, turn
-limit) in the `remote_state` range. The module knows no device: codes and encoders are the device file's `[panel]` (the host lays the keys out from them). The module is on exactly when its check mark in DIGIKIT > MODULES is set (there is no REMOTE switch and no guarded range). Its settings page (`dkm_menu`, SETTINGS... of the MODULES row) shows the keys it holds, the last command and RELEASE ALL KEYS. Proof: scenario `remote-control`, the host tests `modules/core/adapters/ui/host/tests/remote.rs`.
 
 ## 12. Hot reload as a later goal
 
@@ -747,7 +510,7 @@ Scope: what the SDK contract and the adapter must provide. The tools and the tra
 | log | events of 32 bytes: `seq`, block-counter `time`, `kind`, `flags` (bit 0 error), five words; a small ring of 32 in the runtime (`dlog.rs`), 512 in the module `digikit/debug` (`46-digikit-debug.md`) |
 | switch | the module `digikit/debug` loaded or not; levels by LOGCFG (RAM only), no categories |
 | transport | SysEx LOG 0x20, PEEK 0x21, INFO (`upload.rs:36-45`); the emulator answers the same (`dklog.py --emu`); one decoder, `tools/device/dklog.py` (`KINDS`, :111), a hand copy of `dkrt_sdk::logk` (`lib.rs:866`) |
-| module logging | ColdFire only: `Api.log(msg, value)`, 24 characters, kind MOD_LOG (14), no module id (`digikit-runtime.md:82`, `46-digikit-debug.md`, table row 14) |
+| module logging | ColdFire only: the import `dk_log(msg, value)`, 24 characters, kind MOD_LOG (14), no module id (`46-digikit-debug.md`, table row 14) |
 | DSP | no API. The wrapper writes fixed words: heartbeat, context registers, breadcrumb, dispatch and return counters, guard words, 24 words in the reply record (`dlog.rs:123-134`; `48-dsp-breadcrumbs.md:8-40`; `51:59-62`) |
 | faults | MACHINE_FAULT and MACHINE_DISABLED carry a machine type, not a module (`46` kinds 27, 28); crash capture records the module of the PC (`crash.rs`) |
 | other | PEEK of RAM ranges from the device profile (`[digikit] peek`, `devices/digitakt-ii.toml:102-104`), firmware screenshot, HEALTH snapshots |
@@ -767,7 +530,7 @@ Scope: what the SDK contract and the adapter must provide. The tools and the tra
 
 | CPU | API | Rules |
 | --- | --- | --- |
-| ColdFire | `Api.log_ev(level, code, a0, a1, a2)` appended to the `Api` table (fields only appended: `digikit-runtime.md:79-80`) next to the old `log` | the runtime filters by level, stamps module index and gen, applies a rate limit per module (token bucket, proposal 20 events/s, then one "N dropped" event); no allocation; callable from slot functions only |
+| ColdFire | the import `dk_log(msg, value)` (`sdk/sdk.toml`) | the runtime stamps the module; no allocation |
 | SHARC | macro `DK_LOG level, code, value` in `dk_machine.inc`; expands to nothing when `DK_LOG_LEVEL` at assembly time is below `level` (release builds), else to: load the row's level word, compare, branch (about 3 instructions when the level is off), else store one record (`code | level << 16 | voice << 24`, `value`) into a per-row ring | no CALL, no allocation; the ring is owned by the adapter, in the module's reserved range, written only by the DSP; at most 4 records per voice-block, overflow counted; the oldest record is overwritten |
 | declared codes | the manifest lists `[[log]] code = 3, name = "line_clamped", args = ["x"]`; the build generates the constants for the assembly and the table for the decoder | a code not declared fails the build |
 | conformance | the rig runs with `DK_LOG_LEVEL = trace` and with it off: the output block must be bit-identical, and the cost at off is below 10 instructions per block |
