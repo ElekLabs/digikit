@@ -618,7 +618,10 @@ fn main() {
             bulk_port::bulk_close,
             bulk_port::bulk_send,
             bulk_port::bulk_recv,
-            bulk_port::bulk_cancel
+            bulk_port::bulk_cancel,
+            bulk_port::bulk_open_out_only,
+            bulk_port::bulk_send_out_only,
+            bulk_port::bulk_close_out_only
         ])
         .build(context)
         .expect("tauri build error");

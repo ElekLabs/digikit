@@ -40,8 +40,8 @@ impl<const N: usize> PageSet<N> {
 
 #[cfg(not(test))]
 extern "C" {
-    fn mf_native_register(kind: u32, title: *const u8, draw: u32, event: u32, bindings: *const u32, words: *const u32, word_count: u32) -> i32;
-    fn mf_native_register_v2(kind: u32, page: u32, flags: u32, title: *const u8, draw: u32, event: u32, bindings: *const u32, words: *const u32, word_count: u32) -> i32;
+    fn mf_native_register(kind: u32, title: *const u8, draw: u32, event: u32, bindings: *const u32, words: *const u32, word_count: u32, arg: u32, with_arg: u32) -> i32;
+    fn mf_native_register_v2(kind: u32, page: u32, flags: u32, title: *const u8, draw: u32, event: u32, bindings: *const u32, words: *const u32, word_count: u32, arg: u32, with_arg: u32) -> i32;
     fn mf_native_remove(kind: u32);
     fn mf_native_turn(view: *const u8, event: *const u8) -> u32;
 }
@@ -91,7 +91,9 @@ pub unsafe fn check(kind: u32, body: *const u8, params: u32, image_size: u32) ->
     if positions == 0 { E_FORMAT } else { OK }
 }
 
-pub unsafe fn apply(kind: u32, body: *const u8, base: u32, codes: &[u32], words: &[u32]) -> i32 {
+/// `arg`: Some for a page (`dk_page_canvas`): its callbacks are `draw(arg, frame)` and `event(arg, event)`.
+pub unsafe fn apply(kind: u32, body: *const u8, base: u32, codes: &[u32], words: &[u32], arg: Option<u32>) -> i32 {
+    let (arg, with_arg) = match arg { Some(a) => (a, 1u32), None => (0, 0) };
     if words.len() > 8 { return E_FORMAT; }
     let mut bindings = [[0u32; 3]; 8];
     for (i, binding) in bindings.iter_mut().enumerate() {
@@ -105,13 +107,13 @@ pub unsafe fn apply(kind: u32, body: *const u8, base: u32, codes: &[u32], words:
         let owner = crate::assign::resolve(rd32(body.add(4)));
         if kind == KIND_V2 {
             mf_native_register_v2(owner, page_index(kind, body), rd32(body.add(44)), body.add(16),
-                base + rd32(body.add(8)), base + rd32(body.add(12)), bindings.as_ptr() as *const u32, words.as_ptr(), words.len() as u32)
+                base + rd32(body.add(8)), base + rd32(body.add(12)), bindings.as_ptr() as *const u32, words.as_ptr(), words.len() as u32, arg, with_arg)
         } else {
             mf_native_register(owner, body.add(16), base + rd32(body.add(8)), base + rd32(body.add(12)),
-                bindings.as_ptr() as *const u32, words.as_ptr(), words.len() as u32)
+                bindings.as_ptr() as *const u32, words.as_ptr(), words.len() as u32, arg, with_arg)
         }
     }
-    #[cfg(test)] { let _ = (base, bindings); OK }
+    #[cfg(test)] { let _ = (base, bindings, arg, with_arg); OK }
 }
 
 pub unsafe fn remove(kind: u32) {

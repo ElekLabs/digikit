@@ -42,6 +42,9 @@ pub struct Plan {
     /// region name -> bytes used / capacity
     pub regions: BTreeMap<String, (u64, u64)>,
     pub symbols: BTreeMap<String, u64>,
+    /// The ColdFire code the plan placed and the port's code anchors, as address map entries (`patchkit apply --addrmap`).
+    #[serde(skip)]
+    pub addr_entries: Vec<dkaddrmap::Entry>,
     /// P2: registries and their entries with the assigned indices
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub registries: Vec<prim::PlanRegistry>,
@@ -1083,6 +1086,7 @@ pub fn apply_with(
 
     let mut writes: Vec<PlanWrite> = vec![];
     let mut all_symbols: BTreeMap<String, u64> = BTreeMap::new();
+    let mut addr_entries: Vec<dkaddrmap::Entry> = crate::addrmap::anchor_entries(port);
     for (owner, name, v) in &prim_owner {
         all_symbols.insert(format!("{owner}:{name}"), *v);
     }
@@ -1109,6 +1113,9 @@ pub fn apply_with(
         let l = link::link(p.dko, p.base, &ext)?;
         for (k, v) in &l.symbols {
             all_symbols.insert(format!("{}:{k}", p.owner), *v);
+        }
+        if p.cpu == CF {
+            addr_entries.extend(crate::addrmap::text_entries(p.dko, &l, None));
         }
         chunks.push(Chunk {
             owner: p.owner.clone(),
@@ -1628,6 +1635,7 @@ pub fn apply_with(
         writes,
         regions,
         symbols: all_symbols,
+        addr_entries,
         registries: plan_regs,
         sections: plan_secs,
         hooks: plan_hooks,

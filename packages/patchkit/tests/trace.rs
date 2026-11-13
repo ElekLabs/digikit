@@ -22,9 +22,14 @@ fn stripped_root(dir: &Path) {
     symlink(Env::new(&real).tools, dir.join("out/tools")).unwrap();
     let from = real.join("tests/fixtures/modules/trace-demo");
     let to = dir.join("tests/fixtures/modules/trace-demo");
-    for rel in ["module.toml", "src/module.c", "src/dsp/trace_demo.s"] {
+    for rel in [
+        "module.toml",
+        "build/gen/module_ids.h",
+        "src/module.c",
+        "src/dsp/trace_demo.s",
+    ] {
         let text = std::fs::read_to_string(from.join(rel)).unwrap();
-        let text = if rel == "module.toml" {
+        let text = if rel == "module.toml" || rel.ends_with(".h") {
             text
         } else {
             text.lines()

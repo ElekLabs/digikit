@@ -110,7 +110,7 @@ const backend: SamplesBackend = {
     sampleTree.set(f, [...list, { name: file.name, kind: 'file', size: total }]);
   },
   async verify(_folder, file) {
-    await delay(200);
+    await delay(sim.verify);
     const size = file.stored.length;
     return {
       ok: true,
@@ -171,9 +171,6 @@ export async function openDeviceSamples(_forRun = false): Promise<OpenedSamples>
   };
 }
 
-/** A run ended: the real backend lets go of a take-over; the mock has none. */
-export function endRun(): void {}
-
 export async function readSamples(): Promise<void> {
   control.counts.deviceRead++;
   const { name, runtime, samples } = await openDeviceSamples();
@@ -215,15 +212,19 @@ export async function listLocalNow(): Promise<LocalEntry[] | undefined> {
   return listLocal(localPath());
 }
 
+let localReadGeneration = 0;
 /** Read the open level of the chosen folder and label its files; the same effects as the real `readLocal`. */
 export async function readLocal(): Promise<void> {
+  const generation = ++localReadGeneration;
+  const folder = localFolder();
+  const path = localPath();
   if (!localFolder() || sim.folder === 'none') {
     setLocalEntries(undefined);
     return;
   }
   control.counts.localList++;
   await delay(60);
-  const path = localPath();
+  if (generation !== localReadGeneration || localFolder() !== folder || localPath() !== path) return;
   const entries: LocalEntry[] = listLocal(path);
   setLocalEntries(entries);
   const kinds: Record<string, Prepared['kind']> = {};

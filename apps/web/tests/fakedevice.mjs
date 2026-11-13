@@ -201,7 +201,8 @@ export class FakeDevice {
             [i],
             nm,
             be32(0x10000),
-            [1, 1, 1, 0, 0, 0, 1, 0],
+            be32(0x204), // needs: the runtime version
+            [0, 0, 0, 0],
             be32(0x47e8b000),
             be32(256),
             be32(0),

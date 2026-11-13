@@ -20,7 +20,7 @@ conflicts = []
 
 # A run-time module (`.dkm`, `patchkit pack digikit/debug --device dt2`), built from C. `init` registers the debug range of sdk/sdk.toml (LOG, PEEK, LOGCFG)
 # with `dk_host_register` and sets the runtime's log sink (`dk_debug_log_sink_set`). The 512-event ring is a static array, so the arena need is what `dkneeds` reads from
-# the file. Its tick (set with the sink, once per UI pass) watches the machine type of each track and the Sound words of the selected track. The debug log is on exactly when the module is loaded.
+# the file. Its tick (set with the sink, once per UI pass) watches the machine type of each track and the Sound words of the selected track. The debug log is on exactly when the module is loaded. The optional card log writes the ring to the store (see the README): its decisions run in `dk_module.tick`, its menu rows are the `menu` page, and the `dk_ui_*` calls are imports that bind to stubs when core/ui is not in the image.
 [[object]]
 path = "build/debug.dko.json"
 sources = ["src/c/debug.c"]

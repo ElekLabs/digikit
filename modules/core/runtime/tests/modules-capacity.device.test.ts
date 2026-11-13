@@ -35,7 +35,7 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   ids.slice(0, 2).forEach((id, i) => {
     const raw = fs.readFileSync(moduleArtifact(device, id));
     expect(modules[i]!.version, `${id}: the file's version`).toBe(raw.readUInt32BE(0x34));
-    expect(Buffer.from(modules[i]!.contracts.flat()), `${id}: the contract bytes`).toEqual(raw.subarray(0x38, 0x40));
+    expect(modules[i]!.needs, `${id}: the runtime version it needs`).toBe(raw.readUInt32BE(0x30) & 0x7fffffff);
   });
 
   const cap = await dk.capacity();

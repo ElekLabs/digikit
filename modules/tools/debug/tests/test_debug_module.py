@@ -47,6 +47,22 @@ void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
     the_sink(&e);
 }
 void dk_log(uint32_t level, const char *m, uint32_t v) { (void)level; (void)m; (void)v; }
+/* the services of the card log: linked, not run (the open calls fail, so the card log is off) */
+int32_t dk_files_open(dk_module_ctx *c, dk_files **o) { (void)c; (void)o; return DK_E_NOT_FOUND; }
+int32_t dk_settings_open(dk_module_ctx *c, dk_settings **o) { (void)c; (void)o; return DK_E_NOT_FOUND; }
+int32_t dk_settings_get(dk_settings *s, const char *k, void *o, uint32_t cap) { (void)s; (void)k; (void)o; (void)cap; return DK_E_SET_OFF; }
+int32_t dk_settings_put(dk_settings *s, const char *k, const void *v, uint32_t n) { (void)s; (void)k; (void)v; (void)n; return DK_E_SET_OFF; }
+int32_t dk_io_post(dk_io_step_fn *s, dk_io_done_fn *d, void *a) { (void)s; (void)d; (void)a; return DK_E_BUSY; }
+int32_t dk_io_cancel(int32_t id) { (void)id; return 0; }
+void dk_io_wake(int32_t id) { (void)id; }
+int32_t dk_files_create(dk_files *f, uint32_t r, const char *p, uint32_t n, const void *h, uint32_t fl) { (void)f; (void)r; (void)p; (void)n; (void)h; (void)fl; return DK_E_STATE; }
+int32_t dk_files_write(dk_files *f, int32_t h, uint32_t o, const void *b, uint32_t n) { (void)f; (void)h; (void)o; (void)b; (void)n; return DK_E_STATE; }
+int32_t dk_files_close(dk_files *f, int32_t h, void *o) { (void)f; (void)h; (void)o; return DK_E_STATE; }
+int32_t dk_files_abort(dk_files *f, int32_t h) { (void)f; (void)h; return DK_E_STATE; }
+void dk_ui_menu_add_toggle(dk_ui_menu *m, const char *t, int32_t *v, dk_ui_action_fn *f, void *a) { (void)m; (void)t; (void)v; (void)f; (void)a; }
+void dk_ui_menu_add_text(dk_ui_menu *m, const char *t) { (void)m; (void)t; }
+uint32_t dk_text_itoa(char *o, int32_t v) { (void)o; (void)v; return 0; }
+uint32_t dk_text_utoa(char *o, uint32_t v) { (void)o; (void)v; return 0; }
 int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *h) { the_cmd = h; printf("reg %u %u\n", first, count); return 0; }
 
 int main(void)

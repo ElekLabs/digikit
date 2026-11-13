@@ -2975,7 +2975,7 @@ impl Emulator {
         self.bus.board.set_usb_vbus(present);
     }
 
-    /// Each event is `(kind, a, b)`: `("w", reg, value)` a ULPI viewport write, `("r", reg, value)` a read, `("rs", 0 or 1, 0)` a change of USBCMD.RS.
+    /// Each event is `(kind, a, b)`: `("w", reg, value)` a ULPI viewport write, `("r", reg, value)` a read, `("rs", 0 or 1, 0)` a change of USBCMD.RS, `("rst", 1, 0)` a controller reset (USBCMD.RST written 1).
     pub fn take_usb_phy(&mut self) -> (Vec<(&'static str, u8, u8)>, Vec<u8>) {
         use machine::UsbPhyEvent;
         let (events, regs) = self.bus.board.usb_phy_take();
@@ -2985,6 +2985,7 @@ impl Emulator {
                 UsbPhyEvent::PhyWrite { reg, value } => ("w", reg, value),
                 UsbPhyEvent::PhyRead { reg, value } => ("r", reg, value),
                 UsbPhyEvent::RunStop(on) => ("rs", u8::from(on), 0),
+                UsbPhyEvent::Reset => ("rst", 1, 0),
             })
             .collect();
         (events, regs)

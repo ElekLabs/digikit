@@ -21,6 +21,7 @@ path = "src/main.rs"
 [dependencies]
 dt2-firmware-loader = { path = "../emulator/loader" }
 coldfire = { path = "../emulator/coldfire" }
+dkaddrmap = { path = "../dkaddrmap" }
 dkneeds = { path = "../dkneeds" }
 dkupload = { path = "../dkupload" }
 serde = { version = "1", features = ["derive"] }
@@ -37,6 +38,8 @@ selinstr = { git = "https://github.com/ElekLabs/selache", rev = "02d6d785b8e3a12
 # The instruction decoder of the SHARC+ runtime (public ISA table): the re-decode of every assembled instruction. No dependencies.
 sharc-rt = { path = "../emulator/sharc-rt" }
 regex-lite = "0.1"
+# Readable names of Rust symbols in the address map (no_std features: builds for wasm32).
+rustc-demangle = "0.1"
 # The settings record's decoder (the code the runtime uses); no_std, builds for every target.
 dkrt-sdk = { path = "../../modules/core/runtime/sdk" }
 # The fit rule (the code the DIGIKIT menu runs); no_std, builds for every target.

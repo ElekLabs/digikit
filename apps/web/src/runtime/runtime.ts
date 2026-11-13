@@ -420,6 +420,8 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
   }
   if (!api.isTauri()) return undefined;
   const metrics = hostMetrics('native_ipc');
+  // A refused load leaves the controller's current session intact. Keep enough state to resume that session.
+  let accepted: { session: number; snapshot: RuntimeSnapshot; paused: boolean } | undefined;
   let generation = 0,
     activeSession: number | undefined,
     loaded = false,
@@ -439,6 +441,7 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
   const fault = (error: unknown) => {
     clearPump();
     loaded = false;
+    accepted = undefined;
     onUpdate({ type: 'error', error: String(error) });
   };
   // One protocol method of the controller (docs/CONTROL.md). With a session, the controller refuses the call when the webview's
@@ -455,10 +458,12 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
     const work = lifecycle
       .catch(() => {})
       .then(async () => {
-        metrics.reset();
         await starts(token);
+        metrics.reset();
         const snapshot = await api.invoke<RuntimeSnapshot>('emu_startup');
-        if (disposed || token !== generation) return snapshot;
+        if (disposed) return snapshot;
+        accepted = { session: token, snapshot, paused: false };
+        if (token !== generation) return snapshot;
         metrics.loaded();
         activeSession = token;
         loaded = true;
@@ -471,19 +476,30 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
       () => {},
     );
     return work.catch((error) => {
-      if (token === generation) fault(error);
+      const refused = String(error).includes('a job is running; wait for it before loading firmware');
+      if (!refused) accepted = undefined;
+      if (!disposed && token === generation) {
+        if (refused && accepted) {
+          activeSession = accepted.session;
+          loaded = true;
+          onUpdate({ type: 'snapshot', snapshot: accepted.snapshot });
+          if (!accepted.paused) start(accepted.session);
+          onUpdate({ type: 'error', error: String(error) });
+        } else fault(error);
+      }
       throw error;
     });
   };
   const pump = async (token: number, run: number) => {
-    if (disposed || paused || token !== generation || run !== epoch || activeSession !== token) return;
+    if (disposed || paused || run !== epoch || activeSession !== token) return;
     await input.catch(() => {});
-    if (disposed || paused || token !== generation || run !== epoch || activeSession !== token) return;
+    if (disposed || paused || run !== epoch || activeSession !== token) return;
     try {
       const begin = performance.now();
       const snapshot = await api.invoke<RuntimeSnapshot>('emu_step', { sessionId: token, budget: 250_000 });
-      if (disposed || paused || token !== generation || run !== epoch || activeSession !== token) return;
+      if (disposed || paused || run !== epoch || activeSession !== token) return;
       if (!snapshot.polled) metrics.step(begin, performance.now(), snapshot);
+      if (accepted?.session === token) accepted.snapshot = snapshot;
       onUpdate({ type: 'snapshot', snapshot });
       if (snapshot.status.error) {
         fault(snapshot.status.error);
@@ -499,7 +515,7 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
           void pump(token, run);
         }, 0);
     } catch (error) {
-      if (token === generation && run === epoch) fault(error);
+      if (activeSession === token && run === epoch) fault(error);
     }
   };
   const start = (token: number) => {
@@ -541,6 +557,7 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
     generation = 1;
     activeSession = 1;
     loaded = true;
+    accepted = { session: 1, snapshot: startup, paused: false };
     onUpdate({ type: 'snapshot', snapshot: startup });
     start(1);
   } catch (error) {
@@ -631,10 +648,14 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
       return work;
     },
     pause() {
+      if (accepted) accepted.paused = true;
       clearPump();
     },
     resume() {
-      if (loaded && activeSession !== undefined && paused) start(activeSession);
+      if (loaded && activeSession !== undefined && paused) {
+        if (accepted) accepted.paused = false;
+        start(activeSession);
+      }
     },
     press: (code) => queueInput((session) => call<void>('input.button', { code, down: true }, session)),
     release: (code) => queueInput((session) => call<void>('input.button', { code, down: false }, session)),
@@ -651,6 +672,7 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
       clearPump();
       loaded = false;
       activeSession = undefined;
+      accepted = undefined;
       await (lifecycle = lifecycle.catch(() => {}).then(() => api.invoke<void>('emu_stop', { sessionId: token })));
     },
     dispose() {
@@ -659,6 +681,7 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
       clearPump();
       loaded = false;
       activeSession = undefined;
+      accepted = undefined;
       void api.invoke<void>('emu_stop', { sessionId: token });
     },
   };

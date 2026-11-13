@@ -8,8 +8,10 @@ import { dspBytes } from '@digi/regression/runtime/fx-live.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { bootEntries, COUPLED_ROOTS, expectBoot, SYMBOLS, type Entry } from './capacity-helpers.ts';
 import {
+  ARENA_HDR,
   block,
   CODE,
+  COLLECT_BLOCK,
   DKM_HEADER,
   DSP_GRANULE,
   E_NOMEM,
@@ -76,14 +78,17 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
     async () => {
       await rig.first();
       const g = geometryOf(rig.device, rig.plan);
-      const entries = await synthEntries(rig, 'full', fullSet(g, []));
+      const entries = await synthEntries(rig, 'full', await fullSet(g, []));
       const got = await bootEntries(rig, 'full', entries);
       const mods = await expectBoot(rig, g, entries, got);
       expectFull(g, mods, got.cap);
-      expect(
-        [got.cap.ARENA!.used, got.cap.ARENA!.largest],
-        'the arena has no free byte (the DSP images keep their arena copy on a ColdFire-only rig)',
-      ).toEqual([g.arenaFree, 0]);
+      // M's hole (the freed `Collect` before its record block) holds V's and D's blocks and the arena copies of their DSP images (kept on a
+      // ColdFire-only rig); F leaves the `Collect` block of the load that follows
+      const hole = COLLECT_BLOCK - 2 * block(CODE) - 2 * block(DSP_GRANULE);
+      expect(got.cap.ARENA!.used, 'the arena is full but the hole of M and the block every load needs').toBe(
+        g.arenaFree - COLLECT_BLOCK - hole,
+      );
+      expect(got.cap.ARENA!.largest, 'a free block is left for the next load').toBe(COLLECT_BLOCK - ARENA_HDR);
     },
   );
 
@@ -118,7 +123,7 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
     async () => {
       await rig.first();
       const g = geometryOf(rig.device, rig.plan);
-      const fTotal = g.arenaFree - block(CODE) - 16; // the block of F is its payload rounded up and the header: it takes the rest
+      const fTotal = g.arenaFree - block(CODE) - 16 - COLLECT_BLOCK; // the block of F is its payload rounded up and the header: it takes the rest but the `Collect` block
       const entries = await synthEntries(rig, 'arena', [
         { spec: { name: 'cap/a-r' }, want: LOADED },
         { spec: { name: 'cap/a-f', bss: fTotal - CODE }, want: LOADED },
@@ -131,8 +136,8 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
       const mods = await expectBoot(rig, g, entries, got);
       expect(
         [got.cap.ARENA!.used, got.cap.ARENA!.largest, mods.reduce((n, m) => n + block(m.cf_size), 0)],
-        'every byte of the arena is in use, no free block',
-      ).toEqual([g.arenaFree, 0, g.arenaFree]);
+        'the arena is in use but the block every load needs',
+      ).toEqual([g.arenaFree - COLLECT_BLOCK, COLLECT_BLOCK - ARENA_HDR, g.arenaFree - COLLECT_BLOCK]);
       expect(
         [got.cap.DSP_AREA!.used, got.cap.VOICE_ROWS!.used],
         'the refused DSP module left no range in the DSP area and no row',
@@ -157,7 +162,7 @@ cardRigs('capacity, coupled', { dsp: 'sharc', roots: COUPLED_ROOTS, hold: true, 
       const g = geometryOf(rig.device, rig.plan);
       const refFile = moduleArtifact(rig.device, REFERENCE);
       const [refNeeds] = await needsOf([refFile]);
-      const fill = await synthEntries(rig, 'coupled-full', fullSet(g, [usageOf(refNeeds!)]));
+      const fill = await synthEntries(rig, 'coupled-full', await fullSet(g, [usageOf(refNeeds!)]));
       const entries: Entry[] = [{ name: REFERENCE, file: refFile, want: LOADED }, ...fill];
       const got = await bootEntries(rig, 'coupled-full', entries);
       const mods = await expectBoot(rig, g, entries, got);

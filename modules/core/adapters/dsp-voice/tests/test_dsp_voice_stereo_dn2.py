@@ -106,7 +106,7 @@ def play(rig, slots, trig=()):
 def start(rig, slots, select=0):
     for v in slots:
         rig.select(v)
-        rig.set_params({"sine_level": select * 256})
+        rig.set_params({"level": select * 256})
         rig.set_note(60, 100)
     play(rig, slots, trig=set(slots))  # the edge block: silent
     return play(rig, slots)  # the first block of the machine (note_on, render)
@@ -129,7 +129,7 @@ def test_a_stereo_machine_writes_r_scales_it_and_stamps_the_slot():
 
 def test_a_mono_machine_is_unchanged_and_never_stamps():
     rig = MachineRig("test/sine", "dn2")
-    rig.set_params({"sine_level": 0x7F00})
+    rig.set_params({"level": 0x7F00})
     rig.set_note(60, 100)
     rig.trigger()
     rig.block("friendly")
@@ -150,7 +150,7 @@ def test_a_bad_r_block_plays_r_equals_l_without_a_fault_and_without_a_stamp(sele
     assert set(blocks[0].samples) == {0.25}
     assert stamp(rig, 0) in (0, None)
     # the machine goes on: a good R is stamped again
-    rig.set_params({"sine_level": 0})
+    rig.set_params({"level": 0})
     play(rig, [0])
     assert stamp(rig, 0) == heartbeat(rig)
 
@@ -159,7 +159,7 @@ def test_the_r_stage_records_restart_at_the_note_on_block():
     rig = stereo_rig()
     for v in (0, 3):
         rig.select(v)
-        rig.set_params({"sine_level": 0})
+        rig.set_params({"level": 0})
         rig.set_note(60, 100)
     fill_records(rig, 0, NAN)
     fill_records(rig, 3, NAN)
@@ -261,7 +261,7 @@ def test_a_bad_r_block_is_counted_and_raised_in_the_health_word():
     assert word(rig, "_gs_cnt", 16) == 1
     play(rig, [0])
     assert word(rig, "_gs_health") == 0b0101
-    rig.set_params({"sine_level": 0})
+    rig.set_params({"level": 0})
     play(rig, [0])
     play(rig, [0])
     assert word(rig, "_gs_health") == 0
@@ -269,7 +269,7 @@ def test_a_bad_r_block_is_counted_and_raised_in_the_health_word():
 
 def test_a_mono_machine_leaves_the_latch_the_counters_and_the_health_word_alone():
     rig = MachineRig("test/sine", "dn2")
-    rig.set_params({"sine_level": 0x7F00})
+    rig.set_params({"level": 0x7F00})
     rig.set_note(60, 100)
     rig.trigger()
     for _ in range(4):

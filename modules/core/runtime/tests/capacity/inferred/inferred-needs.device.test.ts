@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { expect, test } from 'vitest';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { needsOf } from '@digi/regression/runtime/dkm.ts';
@@ -55,9 +56,13 @@ cardRigs('inferred needs', { dsp: 'sharc', roots: COUPLED_ROOTS, hold: true, ful
           `taken (CAPACITY), inferred ${JSON.stringify(n)}`,
         ).toEqual(Object.fromEntries(kinds.map((k) => [k, n![k]])));
         const rec = mods[0]!;
+        // ARENA is the module's image block and the record block its `init` keeps (`record_bytes` of the keys table, header pair 0x90/0x94; offset 10)
+        const bytes = fs.readFileSync(file);
+        const keysOff = bytes.readUInt32BE(0x90);
+        const records = bytes.readUInt32BE(0x94) === 0 ? 0 : bytes.readUInt16BE(keysOff + 10);
         expect(
-          [block(rec.cf_size), rec.dsp_len, popcount(rec.rows)],
-          'the MODULES record: arena block, DSP range, voice rows',
+          [block(rec.cf_size) + (records ? block(records) : 0), rec.dsp_len, popcount(rec.rows)],
+          'the MODULES record: arena blocks (image, records), DSP range, voice rows',
         ).toEqual([n!.ARENA, n!.DSP_AREA, n!.VOICE_ROWS]);
       },
     );

@@ -1,12 +1,18 @@
-/* The machine declaration of digikit/pluck: one machine `pluck` with four parameters. patchkit pack reads these records;
-   the device never sees them. The DSP reads the words in this order: DECAY, PICK, BRIGHT, COLOR (src/dsp/pluck.s).
+/* The machine of digikit/pluck, declared by builder calls in init: one machine `pluck` with four parameters. The DSP reads the words in
+   this order: DECAY, PICK, BRIGHT, COLOR (src/dsp/pluck.s); its symbols are _pk_render, _pk_note_on and _pk_desc (`dsp = "pk"` in module.toml).
    The twin test/patched-pluck (tests/fixtures/modules) has its own copy of the DSP source; keep the two equal. */
-#include <dk/machine/machine.h>
+#include <dk/core/module.h>
+#include "module_ids.h"
 
-DK_MACHINE(pluck, .name = "Pluck", .short_name = "PLK", .render = "_pk_render",
-           .note_on = "_pk_note_on", .desc = "_pk_desc");
-DK_PARAM(pluck, 0, pluck_decay, "Decay", "DECAY", 0, 127, 64);
-DK_PARAM(pluck, 1, pluck_pick, "Pick position", "PICK", 0, 127, 32);
-DK_PARAM(pluck, 2, pluck_bright, "Brightness", "BRIGHT", 0, 127, 80);
-DK_PARAM(pluck, 3, pluck_color, "Excitation colour", "COLOR", 0, 127, 40);
-DK_PAGE(pluck, "PLUCK", "Pluck", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2), DK_KNOB(3));
+static int32_t init(dk_module_ctx *ctx)
+{
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_PLUCK, "Pluck", "PLK");
+    dk_page *p = dk_machine_add_page(m, "Pluck", "PLUCK");
+    dk_page_add_param(p, "Decay", "DECAY", 64);
+    dk_page_add_param(p, "Pick position", "PICK", 32);
+    dk_page_add_param(p, "Brightness", "BRIGHT", 80);
+    dk_page_add_param(p, "Excitation colour", "COLOR", 40);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};

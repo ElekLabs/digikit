@@ -83,3 +83,6 @@ apps/web/public/modules/
 *.img
 *.img.gz
 .pi/
+
+# cargo build output of the runtime crate (built in place by module:build)
+modules/core/runtime/src/rs/target/

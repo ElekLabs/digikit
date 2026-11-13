@@ -22,16 +22,20 @@ CLI:
     uv run python -m tools.emulator.snapread SNAP regs
     uv run python -m tools.emulator.snapread SNAP tasks
 
-A known address (tools/coldfire/cf_names.py, DT2 1.16 only) is shown next to `regs`'
-pc/a-registers and `tasks`' entry/tcb when the CLI prints them.
+A firmware function name (the address map, tools/devtools/addrnames.py) is shown next to `regs`' pc/a-registers and `tasks`' entry/tcb
+when the CLI prints them. The image comes from the snapshot's path (dt2-1.17, dn2-1.12, ...) or `--image IMAGE`; an image without a
+port (devices/ports/) has no names.
 """
 
 from __future__ import annotations
 
 import pickle
+import re
 import struct
 import sys
 from typing import Any
+
+from tools.devtools.addrnames import AddrNames, AddrNamesError
 
 
 class _SnapshotUnpickler(pickle.Unpickler):
@@ -54,11 +58,6 @@ def _load_blob(path):
         raise RuntimeError("invalid checkpoint blob")
     return blob
 
-
-try:
-    from tools.coldfire import cf_names
-except ImportError:  # pragma: no cover - cf_names.py always ships alongside this file
-    cf_names = None  # type: ignore[assignment]
 
 PAGE = 0x100000
 RUST_MAGIC = b"DT2SNP01"
@@ -91,12 +90,32 @@ def _load_rust_pages(path: str) -> dict[int, bytearray]:
     return pages
 
 
+_names: AddrNames | None = None
+
+
+def use_image(image: str | None) -> None:
+    """Name addresses with the firmware names of IMAGE (`dt2-1.17`); None, or an image without a port: no names."""
+    global _names
+    _names = None
+    if image is None:
+        return
+    try:
+        _names = AddrNames.for_stock(image)
+    except AddrNamesError as e:
+        print("snapread: no names (%s)" % e, file=sys.stderr)
+
+
+def image_of(path: str) -> str | None:
+    """The image a snapshot path names: out/snapshots/dt2-1.17-x/loaded.snap -> dt2-1.17."""
+    m = re.search(r"(?:dt2|dn2)-\d+\.\d+[A-Z]?", path)
+    return m.group(0) if m else None
+
+
 def name_for(addr: int) -> str | None:
-    """A tools/coldfire/cf_names.py label for addr, or None if unknown or the table
-    isn't importable."""
-    if cf_names is None or addr is None:
+    """The firmware function name of addr (name+0xoff inside a function), or None."""
+    if _names is None or addr is None:
         return None
-    return cf_names.NAME_BY_ADDR.get(addr)
+    return _names.name(addr)
 
 
 class Snapshot:
@@ -220,7 +239,7 @@ class Snapshot:
         """One dict per TASK_CREATE hit this capture recorded (see
         unicorn-reference-final:emu/dspboot.py's do_task_create): call_site, tcb, entry, prio, stack,
         stacksize, n (instruction count at capture), plus entry_name/
-        call_site_name from tools/coldfire/cf_names.py when known. [] if this
+        call_site_name from the address map (`use_image`) when known. [] if this
         snapshot's `extra` has no 'tasks' key (most snapshots don't -- only
         ones taken with task-tracking state threaded through, see
         unicorn-reference-final:emu/snapshot.py's restore_into's own st['task_create_hits'] merge),
@@ -319,7 +338,14 @@ def main(argv=None):
     if len(argv) < 2:
         print(__doc__.split("CLI:")[1].strip("\n"), file=sys.stderr)
         return 2
+    argv = list(argv)
+    image = None
+    if "--image" in argv:
+        i = argv.index("--image")
+        image = argv[i + 1]
+        del argv[i : i + 2]
     path, cmd, rest = argv[0], argv[1], argv[2:]
+    use_image(image or image_of(path))
     s = Snapshot(path)
     if cmd == "read":
         return _cmd_read(s, rest)

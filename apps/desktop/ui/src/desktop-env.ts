@@ -8,6 +8,7 @@ import { MODULE_FILES } from '../../../web/src/transfer/module-files.generated';
 import { target, targetLabel, type Target } from '../../../web/src/transfer/target';
 import { sampleLink, setSampleLink } from '../../../web/src/transfer/transfer-state';
 import { failureLine } from '../../../web/src/transfer/wait-core';
+import { runtimeDeviceIds } from '../../../web/src/data/device-profiles';
 import './desktop-firmware';
 import { bumpCardRefresh } from './card-state';
 import { reloadWithRuntime } from './emulator-actions';
@@ -31,22 +32,16 @@ import {
   uploads,
 } from './samples-state';
 import SamplesMode from './SamplesMode';
+import { readSamplePanes } from './samples-read';
 
 export const PAUSED =
   'The emulator is paused: nothing would run the transfer. Resume it (the Run button of the workbench), then try again.';
 
 const samples: SamplesSlot = {
   Mode: SamplesMode,
+  readLocal,
   async read() {
-    // the device and the folder fail apart: both are read, the errors are shown together
-    const errors: string[] = [];
-    for (const step of [readSamples, readLocal])
-      try {
-        await step();
-      } catch (e) {
-        errors.push(failureLine(e, targetLabel(target())));
-      }
-    if (errors.length) throw new Error(errors.join('\n'));
+    await readSamplePanes(readLocal, readSamples, (e) => failureLine(e, targetLabel(target())));
   },
   reset() {
     setSampleEntries(undefined);
@@ -70,6 +65,7 @@ const samples: SamplesSlot = {
 const emulatorBulk = EmuBulkLink.opener(emuCall);
 
 export const desktopEnv: TransferEnv = {
+  libraryDevices: [...runtimeDeviceIds],
   library: {
     scan: (device) => invoke<{ path: string; size: number }[]>('lib_scan', { device }),
     read: async (device, path) => new Uint8Array(await invoke<ArrayBuffer>('lib_read', { device, path })),
@@ -81,6 +77,9 @@ export const desktopEnv: TransferEnv = {
   bulk: {
     candidates: () => (target().kind === 'emulator' ? emulatorBulk.candidates() : TauriBulkLink.candidates()),
     open: (id) => (id === 'emulator' ? emulatorBulk.open(id) : TauriBulkLink.open(id)),
+    // the OUT-only interface of a real device (USB AUDIO/MIDI mode); the Emulator target has none here
+    outOnlyCandidates: () => (target().kind === 'emulator' ? Promise.resolve([]) : TauriBulkLink.outOnlyCandidates()),
+    openOutOnly: (id, poll) => TauriBulkLink.openOutOnly(id, poll),
   },
   targets: {
     emulator: true,

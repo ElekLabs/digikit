@@ -50,12 +50,6 @@ pub mod input {
 pub mod link {
     // cf.link.fn.block_isr: no sig yet
 
-    unsafe extern "C" {
-        /// DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first.
-        #[link_name = "cf.link.fn.bulk_send"]
-        pub fn bulk_send(tag: u32, source: *const u32, format: u32);
-    }
-
     // cf.link.fn.frame: no sig yet
 
     unsafe extern "C" {
@@ -985,12 +979,6 @@ pub mod usb {
     }
 
     unsafe extern "C" {
-        /// The USB mode switch (`FUN_40006c16`, 0x40006c16): returns when `port` is the active port; else stops USB (the old port's disconnect callback runs), writes the active port and starts again about 30 USB ticks later. It never writes the USB CONFIG setting byte. Task context, not an ISR; the stop cuts a reply in flight on EP1.
-        #[link_name = "cf.usb.fn.mode_switch"]
-        pub fn mode_switch(port: u32);
-    }
-
-    unsafe extern "C" {
         /// Queue a transfer descriptor on endpoint queue `index` = endpoint + 4 * direction (IN = 1) and prime it (`FUN_40005a86`, 0x40005a86).
         #[link_name = "cf.usb.fn.queue_td"]
         pub fn queue_td(index: u32, dtd: *mut u8) -> i32;
@@ -1027,16 +1015,13 @@ pub mod usb {
     }
 
     unsafe extern "C" {
-        /// The USB CONFIG setting byte (u8: 0 USB MIDI, 1 Overbridge, 2 USB AUDIO/MIDI), the operand of its getter (`FUN_400c1168`). The stored mode: the mode switch never writes it, only the three menu actions, the settings load and the factory defaults do. Tests read it to prove a take-over leaves it alone. DT2 1.17 0x4099d5c4, DN2 1.12 0x405ce898. RAM at run time.
-        #[link_name = "cf.usb.value.config_mode"]
-        pub static CONFIG_MODE: u8;
-    }
-
-    unsafe extern "C" {
         /// The restart delay of the USB mode switch (u32): the stop (`FUN_40006bac`) sets it to 30, the USB tick `FUN_4000713e` counts it down (one a tick, about 33 ms) and calls the restart (`FUN_40006bc6`) when it reaches 0. Non-zero while a stop waits to restart. The operand of the tick's first read. DT2 1.17 0x40965a38, DN2 1.12 0x4058f280. RAM at run time.
         #[link_name = "cf.usb.value.restart_delay"]
         pub static RESTART_DELAY: u8;
     }
+
+    /// Entry of the USB init, before it starts the controller; the point where the adapter extends the USB AUDIO/MIDI port entry. Runs in the boot thread and in interrupt context.
+    pub type InitHook = unsafe extern "C" fn();
 }
 
 pub mod view {

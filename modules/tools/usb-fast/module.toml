@@ -19,7 +19,7 @@ conflicts = []
 "dn2-1.12" = "experimental"
 
 # A run-time module (`.dkm`, `patchkit pack digikit/usb-fast --device dt2`), built from C. `init` posts the transfer job on the runtime's I/O task and
-# registers SET_NONCE, TAKEOVER and RELEASE (the usb_fast and usb_fast_takeover ranges of sdk/sdk.toml); the job enables the bulk interface of core/usb-bulk and runs the bulk protocol
+# registers SET_NONCE (the usb_fast range of sdk/sdk.toml); the job enables the bulk interface of core/usb-bulk and runs the bulk protocol
 # ([protocol.bulk]) on `dk_files_create`, `dk_files_write`, `dk_files_close` and `dk_files_abort`. Plan: docs/plans/usb-fast.md section 5 and usb-fast-hardware.md "Step 4".
 [[object]]
 path = "build/usb-fast.dko.json"

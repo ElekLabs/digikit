@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "test/step-beacon",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

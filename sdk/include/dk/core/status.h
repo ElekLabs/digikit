@@ -28,6 +28,9 @@
 #define DK_E_PARAM_FULL (-24) /* no free reserved parameter row */
 #define DK_E_PAGE_FULL (-25) /* no free reserved page row (Digitone II) */
 #define DK_E_TYPE_IN_USE (-26) /* reserved (hot reload is archived); never returned */
+#define DK_E_DECL_ID (-27) /* a builder call names a machine or effect id that the keys table of the header lacks */
+#define DK_E_DECL_USES (-28) /* init declared more machine, param or page rows than the [uses] counts of the header say */
+#define DK_E_FX_ID_DUP (-29) /* an effect id of the module is already loaded (or twice in the module) */
 #define DK_E_NO_DSP (-30) /* DSP code in the file, no DSP loader in the image */
 #define DK_E_DSP_FORMAT (-31) /* the DSP section is malformed */
 #define DK_E_DSP_IMPORT (-32) /* a DSP symbol is not exported by the image */
@@ -44,9 +47,10 @@
 #define DK_E_BOOT_ONLY (-45) /* the module set is fixed after the boot hook */
 #define DK_E_RANGE (-46) /* a card write outside the store range */
 #define DK_E_CARD_RO (-47) /* the card's store area is not ours and not blank */
-#define DK_E_CONTRACT (-48) /* the module was built for another SDK contract */
+#define DK_E_CONTRACT (-48) /* the module needs another runtime version than this one (another major or minor, or a higher patch) */
 #define DK_E_TABLE (-49) /* the runtime's tables failed their check */
 #define DK_E_MISSING (-73) /* the service is not in the image (the module that provides it is not loaded) */
+#define DK_E_DECL_FULL (-74) /* init made more builder calls than the record limit allows */
 
 /* Replies of the upload commands ([protocol.status]). */
 #define DK_E_MSG (-50) /* body too short or malformed */

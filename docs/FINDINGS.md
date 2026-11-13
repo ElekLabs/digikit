@@ -139,8 +139,10 @@ with one bounded support/session timing pair. Rust/runtime cache audits and merg
 | [`design/`](design/) | Design notes: `emulator-control.md` (control protocol), `p5-machine.md` |
 | [`plans/native-emulator.md`](plans/native-emulator.md) | The native emulator plan (design history) |
 | [`plans/digikit-runtime.md`](plans/digikit-runtime.md) | The digikit runtime plan: modules loaded from the +Drive at run time |
+| [`plans/usb-fast-audio-bulk.md`](plans/usb-fast-audio-bulk.md) | Fast USB in USB AUDIO/MIDI with a bulk OUT endpoint, no mode switch |
 | [`refs/`](refs/) | Notes on public references (MCF5441x, Linux and QEMU sources, DSPI2/eDMA) |
 | [`INSTRUMENTATION.md`](INSTRUMENTATION.md) | Where run output goes and the diagnostic and tuning switches |
+| [`ADDRMAP.md`](ADDRMAP.md) | The address map: names for code addresses (format, layers, lookup, consumers) |
 | [`TOOLS.md`](TOOLS.md) | Index of the tools |
 | `UNICORN.md` (removed with the Unicorn emulator; in git history at tag `unicorn-reference-final`) | The patched Unicorn requirement |
 | [`handovers/`](handovers/) | Dated handovers: state and next steps at the time, not results |
@@ -195,7 +197,8 @@ occupied regions and the remaining production ownership questions.
 | [`120-dt2-plusdrive-c-file-api.md`](findings/120-dt2-plusdrive-c-file-api.md) | DT2 1.17 +Drive C-level file API for writes: open/write/hash/close/info/delete/mkdir with hashes and signatures, the 16-byte handle, the trailer, open-file bitmap, what a power cut leaves; the call sequence for core/plusdrive-write (**[D] [O]**). |
 | [`121-project-kit-storage-dt2-1-17.md`](findings/121-project-kit-storage-dt2-1-17.md) | DT2 1.17 project and kit storage beyond finding 110: pattern and kit RAM table bases and strides, the flag-driven serializer `0x400df66c` and its load twin, pattern and kit serializer and loader, unwritten byte ranges, hook sites, save-buffer behaviour, kit memcpy copies (**[D] [O]**). |
 | [`122-ui-surfaces-for-mods-dt2-1-17.md`](findings/122-ui-surfaces-for-mods-dt2-1-17.md) | DT2 1.17 UI surfaces for mods: encoder filter and cfg tables, per-frame value block hooks, LED frame and setter, the LED palette against finding 19, QuickMute and TrackSelection views, key flags, PERSONALIZE rows, the two NameView constructors (**[D] [O]**). |
-| [`123-usb-takeover.md`](findings/123-usb-takeover.md) | USB take-over: the firmware mode switch (RAM only, never writes the USB CONFIG byte), the config byte and restart delay anchors, the 30-tick restart (about 1 s), the switch guard, one enumeration instead of two. [D]/[O] |
+| [`123-usb-takeover.md`](findings/123-usb-takeover.md) | Why the deleted USB take-over was not reliable on hardware (the ULPI PHY stops at the controller stop; only a power cycle helps), the firmware mode switch and controller reset facts, and the bulk OUT endpoint in USB AUDIO/MIDI that replaced it. [D]/[O] |
 | [`124-dt2-drive-fast-close-ceilings.md`](findings/124-dt2-drive-fast-close-ceilings.md) | DT2 +Drive fast close hash (card readback, run-time fallback) and the measured storage and USB ceilings of DN2 and DT2. [D]/[O] |
 | [`125-dsp-cycle-counter-consumers.md`](findings/125-dsp-cycle-counter-consumers.md) | DSP cycle counter (EMUCLK, EMUCLK2) consumers on DT2 1.17 and DN2 1.12: one reader per image, the block handler (`0x1c74cd`, `0x1c9d6b`), low-word delta stored in the reply record; reporting only, no control use; ColdFire readers, emulator model, open items (**[V] [D] [O]**). |
 | [`126-usb-fast-transfer-ceilings.md`](findings/126-usb-fast-transfer-ceilings.md) | eMMC and eSDHC facts of DN2 and DT2 (EXT_CSD, card clock, eDMA channel 59 driver, 64 KiB command limit) and the raw card sweep with the ceilings of a fully read-back upload. [D]/[O] |
+| [`128-r4-hooks-in-services.md`](findings/128-r4-hooks-in-services.md) | R4 static spike: SHARC hooks cannot move into a `.dks` (image keeps stubs with pointer slots; dispatch moves into `machines` and `fx`); ColdFire hooks can, installed at the main-OS task entry; open points and the checks deferred to R8 (**[D] [O]**). |

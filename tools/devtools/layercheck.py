@@ -186,12 +186,16 @@ class Resolver:
         self.global_dirs = [
             root / d for d in dict.fromkeys([*pins["cf"], *pins["sharc"]])
         ]
+        # the declaration headers (sdk/patched-in/include): only a patched-in module (`dynamic = false`) sees them
+        self.patched_dirs = [root / d for d in pins["patched"]]
 
     def find(self, name: str, file: Path, mod: Module, quoted: bool) -> Path | None:
         dirs = []
         if quoted:
             dirs += [file.parent]
         dirs += [mod.dir / "src", mod.dir / "build/gen", mod.dir, *self.global_dirs]
+        if not mod.mod.get("dynamic", False):
+            dirs += self.patched_dirs
         for d in dirs:
             p = d / name
             if p.is_file():

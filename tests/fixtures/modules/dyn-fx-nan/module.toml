@@ -16,7 +16,12 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# `patchkit pack test/dyn-fx-nan --device dt2` makes the .dkm. The runtime-loaded twin of test/fx-nan, on the send route (src/module.c).
+# `patchkit pack test/dyn-fx-nan --device dt2` makes the .dkm. The runtime-loaded twin of test/fx-nan, on the send route.
+# The effect is declared by builder calls in init (src/module.c). The id `nan` is what the keys hash; the DSP symbols start with `fnn`.
+[[fx]]
+id = "nan"
+dsp = "fnn"
+
 [[object]]
 path = "build/dyn-fx-nan-cf.dko.json"
 sources = ["src/module.c"]
@@ -27,3 +32,15 @@ path = "build/dyn-fx-nan-dsp.dko.json"
 sources = ["src/dsp/nan.s"]
 place = "dsp.l2"
 devices = ["dt2", "dn2"]
+
+[uses.dt2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0
+record_bytes = 436
+
+[uses.dn2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0
+record_bytes = 436

@@ -21,7 +21,7 @@ from support.fx_rig import NFAULT, ONE, P0, FxRig, Row, f2w
 from support.paths import REPO_ROOT
 
 from tools import python_env
-from tools.patchkit import pk_conform, pk_toolchains
+from tools.patchkit import pk_toolchains
 
 pytestmark = pytest.mark.skipif(
     pk_toolchains.selache_dir() is None,
@@ -240,23 +240,33 @@ def test_the_oscillator_does_not_drift_in_a_run_of_a_minute():
     check_long(long_run(90000, 3600))
 
 
-def test_the_module_declares_the_page_and_the_knob():
+def test_the_module_declares_one_effect_by_builder_calls():
+    """The page, the knob, the route and the MIX default are builder calls in init: the device test reads the rows the module commits."""
     man = tomllib.loads((MODULE / "module.toml").read_text())
     assert len(man["module"]["summary"]) < 120
-    assert "fx" not in man  # the effect is declared in src/module.c
-    (fx,) = pk_conform.fx_records(man["module"]["id"])
-    assert (fx["id"], fx["tab"], fx["title"], fx["mix"]) == (
-        "fshift",
-        "FSH",
-        "Freq Shifter",
-        127,
-    )
-    # a send effect that may move to the master (step 5): MIX is the return level, so its default is 127
-    assert (fx["route"], fx["routes"]) == ("send", ["send", "master"])
-    (knob,) = fx["knob"]
-    assert (knob["short"], knob["name"], knob["display"]) == (
+    assert [(f["id"], f["dsp"]) for f in man["fx"]] == [("fshift", "fs")]
+
+
+def test_the_committed_shift_knob_is_bipolar():
+    """`module:check` writes build/gen/gallery.json from the records `init` committed: the SHIFT knob carries the bipolar display of the record (DK_P_BIPOLAR) and -64 .. +63."""
+    consts = {
+        c["name"]: c["value"]
+        for c in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["machine"][
+            "consts"
+        ]
+    }
+    gallery = json.loads((MODULE / "build/gen/gallery.json").read_text())
+    (knob,) = gallery["effects"][0]["knobs"]
+    assert (
+        knob["short"],
+        knob["display"],
+        knob["min"],
+        knob["max"],
+        knob["default"],
+    ) == (
         "SHIFT",
-        "Freq Shift",
-        "bipolar",
+        consts["DK_P_BIPOLAR"],
+        -64,
+        63,
+        0,
     )
-    assert (knob["min"], knob["max"], knob["default"]) == (-64.0, 63.0, 0.0)

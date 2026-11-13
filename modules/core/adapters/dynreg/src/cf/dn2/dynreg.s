@@ -65,7 +65,7 @@ dynreg_empty:
     .globl dynreg_info
 dynreg_info:
     .long   0x44594e52                  |  0 'DYNR'
-    .long   2                           |  4 version (2: page, unload words from 200)
+    .long   3                           |  4 version (3: builder profile from 260; 2: page, unload from 200)
     .long   DEVICE_ID                   |  8 device ([digikit] id: 2 = dn2)
     .long   _dr_rows                    | 12 machines.rows
     .long   _dr_row_size                | 16 row size
@@ -118,3 +118,16 @@ dynreg_info:
     .long   0                           | 248 (was kit_of)
     .long   0                           | 252 (was track_type)
     .long   0                           | 256 (was the track count)
+    | 260: the builder profile (core/runtime commit of a module that declares through builder calls): the device facts the packer
+    | took from the device file's [modules] and [adapter.machine] before builders (clone_of, level default, knob positions of
+    | a machine's words, stock rows by glyph). Generated from devices/*.toml (`patchkit gen`, build/gen/device-{dev}.inc).
+    .long   PROFILE_CLONE_OF   | 260 clone_of: the machine type every run-time machine clones
+    .long   PROFILE_LEVEL      | 264 level code a machine or page carries
+    .long   PROFILE_OWN_DSP    | 268 a machine may render with its own DSP routine
+    .long   PROFILE_TUNE_CODE  | 272 stock tune code on a machine-row device (0: none)
+    .long   PROFILE_TUNE_SLOT  | 276 knob position of the tune code
+    .long   PROFILE_LEVEL_CODE | 280 stock level code on a machine-row device (0: none)
+    .long   PROFILE_LEVEL_KNOB | 284 knob position of the level code
+    .long   PROFILE_SLOT_COUNT | 288 knob positions for words 0.. (count)
+    .long   PROFILE_SLOT_0, PROFILE_SLOT_1, PROFILE_SLOT_2, PROFILE_SLOT_3, PROFILE_SLOT_4, PROFILE_SLOT_5, PROFILE_SLOT_6, PROFILE_SLOT_7   | 292 .. 320 positions
+    .long   PROFILE_TPL_ENCODER, PROFILE_TPL_FADER, PROFILE_TPL_PAN, PROFILE_TPL_ONOFF, PROFILE_TPL_TUNE, PROFILE_TPL_PLAY   | 324 .. 344 stock rows: encoder, fader, pan, onoff, tune, play

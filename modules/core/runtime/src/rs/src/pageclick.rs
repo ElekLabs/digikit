@@ -95,6 +95,8 @@ pub fn resolve(actions: &[u32], first: u32, code: i32, track: impl FnOnce() -> u
 
 static mut DET: Detector = Detector::new();
 static mut ACTIONS: [u32; limits::PARAM_ROWS] = [0; limits::PARAM_ROWS];
+/// The `arg` of an action registered through `dk_param_on_click` : such a callback is `void fn(void *arg, u32 track)`.
+static mut ARGS: [(bool, u32); limits::PARAM_ROWS] = [(false, 0); limits::PARAM_ROWS];
 /// The number of parameter rows that have an action: 0 keeps both hooks at one test.
 static mut ARMED: u32 = 0;
 /// A click waiting for the next UI pass: the callback (0: none), the track, the clicked view and the clicked parameter code.
@@ -118,6 +120,7 @@ pub unsafe fn set(k: usize, addr: u32) {
     let a = &mut *addr_of_mut!(ACTIONS);
     let old = a[k];
     a[k] = addr;
+    (*addr_of_mut!(ARGS))[k] = (false, 0);
     let mut n = 0;
     let mut i = 0;
     while i < limits::PARAM_ROWS {
@@ -134,6 +137,13 @@ pub unsafe fn set(k: usize, addr: u32) {
             *p = NO_CLICK;
         }
         (*addr_of_mut!(HELD)).input(); // the module that owns the flow is going away
+    }
+}
+
+/// Give the action of parameter row `k` an argument (the callback is then called `fn(arg, track)`).
+pub unsafe fn set_arg(k: usize, arg: u32) {
+    if k < limits::PARAM_ROWS {
+        (*addr_of_mut!(ARGS))[k] = (true, arg);
     }
 }
 
@@ -207,8 +217,14 @@ pub unsafe fn tick() {
         let owners = &(*addr_of!(registry::DKRT_REG)).param_owner;
         let Some(ctx) = context(&p, owners, registry::param_first()) else { return };
         (*addr_of_mut!(HELD)).begin(ctx);
-        let call: unsafe extern "C" fn(u32) = core::mem::transmute(p.callback as usize);
-        call(p.track);
+        let (with_arg, arg) = (*addr_of!(ARGS))[(p.code.wrapping_sub(registry::param_first())) as usize % limits::PARAM_ROWS];
+        if with_arg {
+            let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
+            call(arg, p.track);
+        } else {
+            let call: unsafe extern "C" fn(u32) = core::mem::transmute(p.callback as usize);
+            call(p.track);
+        }
     }
 }
 

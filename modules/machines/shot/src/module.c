@@ -1,46 +1,78 @@
-/* The machine declaration of digikit/shot: one stereo machine `shot` that plays a sample of its pool, with five
-   parameters shown through two opt-in native pages. patchkit pack reads these records; the device never sees them.
+/* The machine of digikit/shot, declared by builder calls in init: one stereo machine `shot` that plays a sample of its pool, with five
+   parameters shown through a knob page and two canvas pages.
    The DSP symbols are in src/dsp/shot.s; the parameter words (src/shot_params.h) are shared with it.
-   src/pages.c draws the two pages; src/sample_view.c reads the pool slot they show.
+   src/pages.c draws the two canvas pages; src/sample_view.c reads the pool slot they show.
    The pool (16 entries) is the runtime's per-module table (<dk/sample/pool.h>); SMP picks the entry of a note. The module only plays;
    files are loaded into pool slots by the picker (the SMP click list) through the runtime. */
 #include <dk/sample/picker.h>
 #include "shot.h"
-
-DK_MACHINE(shot, .name = "SHOT", .short_name = "SHT", .render = "_shot_render",
-           .note_on = "_shot_note_on", .desc = "_shot_desc", .stereo = 1);
-/* SMP: the pool entry that plays, 0 .. 15 (turn: steps through the pool; p-lockable; an empty entry is silent).
-   START and END: 0 .. 127 spread over the whole sample (127 is its last frame boundary). PLAY: 0 REV, 1 REV.L, 2 FWD.L, 3 FWD (default); .L loops
-   START .. END (the glyph is the stock PLAY knob on the Digitakt II).
-   PITCH: 64 is the played note unchanged, each unit is 0.375 semitones, so 0 .. 127 is -24 .. +23.6 semitones. */
-DK_PARAM(shot, SHOT_P_SMP, shot_smp, "Sample", "SMP", 0, 15, 0);
-DK_PARAM_LATCHED(shot, SHOT_P_SMP);
-DK_PARAM(shot, SHOT_P_START, shot_start, "Start", "START", 0, 127, 0);
-DK_PARAM(shot, SHOT_P_END, shot_end, "End", "END", 0, 127, 127);
-DK_PARAM(shot, SHOT_P_PLAY, shot_play, "Play", "PLAY", 0, 3, 3);
-DK_PARAM_GLYPH(shot, SHOT_P_PLAY, DK_GLYPH_PLAY);
-DK_PARAM(shot, SHOT_P_PITCH, shot_pitch, "Pitch", "TUNE", 0, 127, 64);
-DK_PAGE(shot, "SHT", "SHOT", DK_KNOB(SHOT_P_SMP), DK_KNOB(SHOT_P_START), DK_KNOB(SHOT_P_END),
-        DK_KNOB(SHOT_P_PLAY), DK_KNOB(SHOT_P_PITCH));
-DK_NATIVE_PAGE_V2_FLAGS(shot, 0, DK_PAGE_STOCK_OVERLAY, "SHOT", shot_controls_draw,
-                        shot_range_event, DK_PAGE_PARAM(SHOT_P_PITCH, 0),
-                        DK_PAGE_PARAM(SHOT_P_PLAY, 1), DK_PAGE_PARAM(SHOT_P_SMP, 3),
-                        DK_PAGE_PARAM(SHOT_P_START, 4), DK_PAGE_PARAM(SHOT_P_END, 7));
-DK_NATIVE_PAGE_V2_FLAGS(shot, 1, DK_PAGE_WIDE_CANVAS, "SHOT WAVE", shot_range_draw,
-                        shot_range_event, DK_PAGE_PARAM(SHOT_P_START, 4), DK_PAGE_LOCAL(0, 6),
-                        DK_PAGE_PARAM(SHOT_P_END, 7));
-DK_SAMPLE_TRACKS(0, _shot_rec, _shot_ctl);
+#include "module_ids.h"
 
 sample_view shot_samples;
 static dk_ui *g_ui;
 static uint32_t
     click_track; /* the track of the page the SMP click came from: where the pick sets SMP */
 
+static void shot_smp_click(void *arg, uint32_t track);
+
+/* The page callbacks of src/pages.c take no state: these adapt them to dk_page_draw_fn and dk_page_event_fn. */
+static void controls_draw(void *arg, const dk_page_frame *f)
+{
+    (void)arg;
+    shot_controls_draw(f);
+}
+
+static void range_draw(void *arg, const dk_page_frame *f)
+{
+    (void)arg;
+    shot_range_draw(f);
+}
+
+static void range_event(void *arg, const dk_page_event *event)
+{
+    (void)arg;
+    shot_range_event(event);
+}
+
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_sample_pool *pool;
     dk_files *files;
-    int32_t r = dk_sample_pool_open(ctx, &pool);
+    int32_t r;
+
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "SHOT", "SHT");
+    /* SMP: the pool entry that plays, 0 .. 15 (turn: steps through the pool; p-lockable; an empty entry is silent).
+       START and END: 0 .. 127 spread over the whole sample (127 is its last frame boundary). PLAY: 0 REV, 1 REV.L, 2 FWD.L, 3 FWD (default); .L loops
+       START .. END (the glyph is the stock PLAY knob on the Digitakt II).
+       PITCH: 64 is the played note unchanged, each unit is 0.375 semitones, so 0 .. 127 is -24 .. +23.6 semitones.
+       The words are in the order of SHOT_P_*: SMP, START, END, PLAY, PITCH. */
+    dk_page *knobs = dk_machine_add_page(m, "SHOT", "SHT");
+    dk_param *smp = dk_page_add_param(knobs, "Sample", "SMP", 0);
+    dk_param_range(smp, 0, 15);
+    dk_param_latched(smp);
+    dk_param_on_click(smp, shot_smp_click, 0);
+    dk_param *start = dk_page_add_param(knobs, "Start", "START", 0);
+    dk_param *end = dk_page_add_param(knobs, "End", "END", 127);
+    dk_param *play = dk_page_add_param(knobs, "Play", "PLAY", 3);
+    dk_param_range(play, 0, 3);
+    dk_param_glyph(play, DK_GLYPH_PLAY);
+    dk_param *pitch = dk_page_add_param(knobs, "Pitch", "TUNE", 64);
+
+    dk_page *controls = dk_machine_add_page(m, "SHOT", "SHT");
+    dk_page_canvas(controls, DK_PAGE_STOCK_OVERLAY, controls_draw, range_event, 0);
+    dk_page_bind(controls, pitch, 0);
+    dk_page_bind(controls, play, 1);
+    dk_page_bind(controls, smp, 3);
+    dk_page_bind(controls, start, 4);
+    dk_page_bind(controls, end, 7);
+
+    dk_page *wave = dk_machine_add_page(m, "SHOT WAVE", "SHT");
+    dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event, 0);
+    dk_page_bind(wave, start, 4);
+    dk_page_bind_local(wave, 0, 6);
+    dk_page_bind(wave, end, 7);
+
+    r = dk_sample_pool_open(ctx, &pool);
     if (r != DK_OK)
         return r;
     sample_view_init(&shot_samples, pool);
@@ -77,10 +109,10 @@ static void smp_pick(void *arg, int32_t index)
    It opens the slot list over the page (sdk/src/sample/picker.c) with the current SMP value marked and the cursor on it. YES on a slot opens
    the file browser for it; YES on a file loads it into that slot, sets SMP to the slot and returns to the page in one step
    (docs/design/ui-rules.md); NO goes back one level. */
-DK_PARAM_ACTION(shot, SHOT_P_SMP, shot_smp_click);
-void shot_smp_click(uint32_t track)
+static void shot_smp_click(void *arg, uint32_t track)
 {
     int32_t raw;
+    (void)arg;
     click_track = track;
     raw = dk_param_get(track, SHOT_P_SMP);
     dk_sample_picker_open_pool(DK_PARAM_IS_ERROR(raw) || raw < 0 ? -1 : (int32_t)(raw >> 8),

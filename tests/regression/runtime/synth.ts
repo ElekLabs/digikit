@@ -1,5 +1,7 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { COLLECT_BYTES } from '../../../packages/dk-session/src/gen_proto.ts';
 import { repoRoot, type Device } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { deviceProfile } from './device-data.ts';
@@ -65,6 +67,35 @@ export function synthToml(spec: SynthSpec): string {
     }
   }
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The ColdFire image and bss bytes of the module SPEC packs to for DEVICE (`synth-dkm --size`; a spec with machines has the fixture's code and table),
+ * and `records`, the payload bytes of the record block its `init` keeps in the arena (the keys table's `record_bytes`; 0 without machines).
+ */
+export async function synthSize(
+  device: Device,
+  spec: SynthSpec,
+): Promise<{ image: number; bss: number; records: number }> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synth-size-'));
+  try {
+    const toml = path.join(dir, 'spec.toml');
+    fs.writeFileSync(toml, synthToml(spec));
+    const { stdout } = await patchkit([
+      'synth-dkm',
+      toml,
+      '--device',
+      device,
+      '-o',
+      path.join(dir, 'out.dkm'),
+      '--size',
+    ]);
+    const m = /image (\d+) bss (\d+) records (\d+)/.exec(stdout);
+    if (!m) throw new Error(`synth-dkm --size: ${stdout}`);
+    return { image: Number(m[1]), bss: Number(m[2]), records: Number(m[3]) };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** Pack SPEC for DEVICE into DIR/FILE (default: the spec's name with `/` as `-`); returns the path. */
@@ -148,6 +179,14 @@ export function geometryOf(device: Device, plan: RuntimePlan): Geometry {
 /** The arena bytes a module of image + bss = N takes: its payload rounded to 16 and the header. */
 export const block = (n: number): number => ((n + 15) & ~15) + ARENA_HDR;
 
+/**
+ * Every load takes a `Collect` (the builder calls of `init`) from the arena until the commit is done (runtime loader.rs `complete`): `size_of::<Collect>()`
+ * of collect.rs on the ColdFire (`COLLECT_BYTES`, generated from sdk/sdk.toml and checked by the runtime at compile time). No module can take the arena to its last byte: the one that loads last leaves this block free. A module that declares machines
+ * allocates its record block while the `Collect` is alive, so the `Collect`'s block is a hole before the record block when it is freed; only blocks
+ * smaller than the hole fill it, and no later module can take it as part of a large one.
+ */
+export const COLLECT_BLOCK = block(COLLECT_BYTES);
+
 /** `pad` of a raw module whose file is `stageBytes + extra` bytes (the file is the header, the code and the pad). */
 export const stageFilePad = (stageBytes: number, extra = 0): number => stageBytes + extra - DKM_HEADER - CODE;
 
@@ -170,6 +209,8 @@ export interface Usage {
   machines: number;
   params: number;
   pages: number;
+  /** The module declares machines or effects: its `init` takes a `Collect` block that leaves a hole when freed (its record block is in `arena`). */
+  declares?: boolean;
 }
 
 export function usageOf(n: Record<string, number>): Usage {
@@ -182,6 +223,7 @@ export function usageOf(n: Record<string, number>): Usage {
     machines: n.MACHINE_ROWS!,
     params: n.PARAM_ROWS!,
     pages: n.PAGE_ROWS!,
+    declares: n.MACHINE_ROWS! > 0 || n.FX_SLOTS! > 0,
   };
 }
 
@@ -189,11 +231,11 @@ export function usageOf(n: Record<string, number>): Usage {
  * The modules that, behind the reference modules REFS (loaded first), use every limit at once, followed by three that do not fit:
  * M takes the machine types, parameter rows and page rows the references leave; V the voice rows (pinned types, behind the references' hashed ones);
  * D the DSP area, to its last whole granule; F the arena, to the last byte (the references' and V's and D's blocks and the arena copies of their DSP
- * images counted: a ColdFire-only rig keeps those until a transfer that never comes). Then X (a raw module: E_NOMEM), Y (a voice: E_DSP_ROWS) and
+ * images counted: a ColdFire-only rig keeps those until a transfer that never comes). Then X (a raw module larger than the largest free block: E_NOMEM), Y (a voice: E_DSP_ROWS) and
  * Z (a DSP module: E_DSP_NOSPACE).
  */
-export function fullSet(g: Geometry, refs: Usage[]): { spec: SynthSpec; want: Want }[] {
-  const sum = (key: keyof Usage) => refs.reduce((n, r) => n + r[key], 0);
+export async function fullSet(g: Geometry, refs: Usage[]): Promise<{ spec: SynthSpec; want: Want }[]> {
+  const sum = (key: Exclude<keyof Usage, 'declares'>) => refs.reduce((n, r) => n + r[key], 0);
   const typesLeft = g.machineRows - sum('machines');
   const rowsLeft = g.machineRows - sum('rows');
   const paramsLeft = g.paramRows - sum('params');
@@ -218,12 +260,21 @@ export function fullSet(g: Geometry, refs: Usage[]): { spec: SynthSpec; want: Wa
   const dStart = Math.ceil((g.dspBase + cursor) / 8) * 8 - g.dspBase;
   const dLen = Math.floor((g.dspArea - dStart) / DSP_GRANULE) * DSP_GRANULE;
   if (dLen < DSP_GRANULE) throw new Error('the references leave no DSP area for D');
-  // every raw block is `block(CODE)`; V's and D's DSP images keep an arena copy of `block(64)` each (as does every reference's)
-  const used = refs.reduce((n, r) => n + r.arena + r.arenaXfer, 0) + 3 * block(CODE) + 2 * block(DSP_GRANULE);
+  // M declares its machines by builder calls: its image is the fixture's code and table. The other blocks are raw (`block(CODE)`); V's and D's DSP
+  // images keep an arena copy of `block(64)` each (as does every reference's)
+  const m: SynthSpec = { name: 'cap/full-m', machines: typesLeft, params: paramsLeft, pages: pagesLeft };
+  const mSize = await synthSize(g.device, m);
+  // the small blocks of V and D (and their DSP copies) go into M's hole; F takes the tail and leaves the `Collect` block of its own load
+  const used =
+    refs.reduce((n, r) => n + r.arena + r.arenaXfer + (r.declares ? COLLECT_BLOCK : 0), 0) +
+    block(mSize.image + mSize.bss) +
+    COLLECT_BLOCK +
+    block(mSize.records) +
+    COLLECT_BLOCK;
   const fTotal = g.arenaFree - used - 16;
   if (fTotal < CODE) throw new Error('the references leave no arena for F');
   return [
-    { spec: { name: 'cap/full-m', machines: typesLeft, params: paramsLeft, pages: pagesLeft }, want: LOADED },
+    { spec: m, want: LOADED },
     {
       spec: {
         name: 'cap/full-v',
@@ -233,7 +284,8 @@ export function fullSet(g: Geometry, refs: Usage[]): { spec: SynthSpec; want: Wa
     },
     { spec: { name: 'cap/full-d', dsp: { image: 64, bss: dLen - 64 } }, want: LOADED },
     { spec: { name: 'cap/full-f', bss: fTotal - CODE }, want: LOADED },
-    { spec: { name: 'cap/full-x' }, want: E_NOMEM },
+    // X: a raw module that needs more than the largest free block (the hole of M is smaller than the block the `Collect` takes)
+    { spec: { name: 'cap/full-x', bss: 2 * COLLECT_BLOCK }, want: E_NOMEM },
     { spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([firstPinned]) } }, want: E_DSP_ROWS },
     { spec: { name: 'cap/full-z', dsp: { image: 64 } }, want: E_DSP_NOSPACE },
   ];

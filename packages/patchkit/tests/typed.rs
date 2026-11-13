@@ -34,17 +34,17 @@ fn digest_without_dsp(syx: &[u8]) -> String {
     sha256_hex(&buf)
 }
 
-/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with the move of a plucked-string machine to test/patched-pluck (P3e-1): patch record only; DN2 pin moved 2026-11-02 with the shared knob map (param_slots [1, 2, 4, 5, 6, 0, 3, 7]): the page knobs sit on B C E F; both pins moved 2026-11-05 with native machine pages (the machines adapter patches the native-page hooks); both pins moved 2026-11-09 with core/params' param_edits (its accessor hook looks up an edited code's class)
+/// (stock image, modules, digest_without_dsp of the patched image); moved 2026-10-20 with the id renames (P3c-3a) and 2026-10-21 with the move of a plucked-string machine to test/patched-pluck (P3e-1): patch record only; DN2 pin moved 2026-11-02 with the shared knob map (param_slots [1, 2, 4, 5, 6, 0, 3, 7]): the page knobs sit on B C E F; both pins moved 2026-11-05 with native machine pages (the machines adapter patches the native-page hooks); both pins moved 2026-11-09 with core/params' param_edits (its accessor hook looks up an edited code's class); both pins moved 2026-11-13 with S3 (the runtime commit path, runtime 0.7.0, dynreg_info profile words, native-page arg words: committed core objects only)
 const PINS: &[(&str, &str, &str)] = &[
     (
         "Digitakt_II_OS1.17.syx",
         "test/patched-pluck",
-        "5fee3b10bb218b91821a77cb1e5255e7ba4870fc3aca82ea1328550b354d6f3c",
+        "6febad22ba708823a26aac58291eb9b34726d34989aa978c7aaf8787185ddb79",
     ),
     (
         "Digitone_II_OS1.12.syx",
         "test/patched-pluck",
-        "aafbaa977d7d8a628cf0f3f6c0f6d50212e245a70f1e3623800cffc02cc5ebb9",
+        "ee4b41600021f445fb907af80ccd06cf9cd6ff8973dd71fd9ec0f279bb1b56c5",
     ),
 ];
 
@@ -205,7 +205,7 @@ fn bundle_lowering_matches_the_scan() {
     );
 }
 
-/// A manifest that still declares `[[fx]]` is refused, so an effect is never dropped without a word.
+/// An `[[fx]]` table takes an id only; the old fields (`process`, `desc`) are refused, so an effect is never dropped without a word.
 #[test]
 fn a_manifest_fx_section_is_refused() {
     let dir = root().join("tests/fixtures/modules/dyn-fx-gain");
@@ -213,16 +213,16 @@ fn a_manifest_fx_section_is_refused() {
     text.push_str("\n[[fx]]\nid = \"gain\"\nprocess = \"_dg_process\"\ndesc = \"_dg_desc\"\n");
     let none = |p: &str| Err(patchkit::Error(format!("{p}: no such file")));
     let e = patchkit::module::Module::from_parts_lenient(&text, &none).unwrap_err();
-    assert!(e.to_string().contains("DK_FX"), "{e}");
+    assert!(e.to_string().contains("unknown field"), "{e}");
 }
 
-/// A manifest that still declares machines, params, pages or voices is refused: they are DK_MACHINE, DK_PARAM and DK_PAGE records now.
+/// A manifest that still declares params, pages or voices is refused: they are DK_PARAM and DK_PAGE records now (`[[machine]]` takes an id only).
 #[test]
 fn a_manifest_machine_section_is_refused() {
     let dir = root().join("tests/fixtures/modules/patched-pluck");
     let base = std::fs::read_to_string(dir.join("module.toml")).unwrap();
     let none = |p: &str| Err(patchkit::Error(format!("{p}: no such file")));
-    for section in ["machine", "param", "page", "voice"] {
+    for section in ["param", "page", "voice"] {
         let text = format!("{base}\n[[{section}]]\nid = \"x\"\n");
         let e = patchkit::module::Module::from_parts_lenient(&text, &none).unwrap_err();
         assert!(

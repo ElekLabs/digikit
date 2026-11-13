@@ -2,7 +2,9 @@
 
 Date: 2026-11-06. Base: `main` at 9a849b7b. Targets: DT2 OS 1.17, DN2 OS 1.12.
 
-Status: **draft for Em's review. Nothing is built.** This is the only active plan for this work.
+Status: **draft for Em's review. The service split and the `.dks` format are not built.** This is the only active plan for this work.
+
+Built so far (SDK steps S2b and S3, runtime 0.7.0, see [sdk.md](sdk.md)): modules call the runtime through named imports (no Api table); a module reaches an optional provider (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`, `core/sdhc-large`) through a handle, and an absent provider binds the imports to stubs that answer `DK_E_MISSING` and record the missing provider as the module's need; one runtime version with `since` per import and a loader check (same major and minor, patch not higher); and the builder commit (machines, pages and parameters declared in `init`, checked and written at commit). Section 12 item 1 (`since` and the loader check) is done; the text below is the design these parts follow.
 
 2026-11-10: proposals added for Em's review, each marked **Proposal**: DSP cycles as a resource (5.3), sink slots (5.11), the owner of per-block DSP dispatch (6.1), DSP rules, cycle cost and `DK_SPAN` in the contract (now [sdk.md](sdk.md) section 9), and the SDK contract earlier in the order (13.1). They come from the [profiling plan](profiling.md). The order across the plans is in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md).
 
@@ -348,9 +350,9 @@ Target: `submit(owner, addr, bytes, done)` with one FIFO. Delete all `busy()` cr
 
 ### 6.1 Per-block DSP dispatch
 
-Today the per-block calls into machine and FX DSP code sit in the `dsp-voice` and `fx` adapters (26 and 2 SHARC hooks, section 11.1). This plan does not yet say who owns that dispatch in the target.
+Today the per-block calls into machine and FX DSP code sit in the `dsp-voice` and `fx` adapters (28 and 2 SHARC hooks, section 11.1). This plan does not yet say who owns that dispatch in the target.
 
-**Proposal:** each kind's per-block dispatcher belongs to the service that owns the kind: `machines` for voice rows, `fx` for effect rows, and a new kind's service brings its own. If SHARC hooks cannot move (section 11.2), the dispatcher stays in the image as a generic stub that walks the rows services registered. Either way the dispatcher is the one place for `DK_SPAN` ([sdk.md](sdk.md) section 9) and the DSP stack guard (section 8), so content modules need neither.
+**Decided** ([finding 128](../findings/128-r4-hooks-in-services.md)): SHARC hooks cannot move into a `.dks`, so the image keeps every SHARC hook site as a thin stub. The stub jumps through a pointer slot; a zero slot runs the stock path. Each kind's per-block dispatch code and rows belong to the service that owns the kind: `machines` for voice rows, `fx` for effect rows, and a new kind's service brings its own. A service loads its DSP code at run time (already relocated by the runtime) and writes its entry into the slot. `DK_SPAN` ([sdk.md](sdk.md) section 9) and the DSP stack guard (section 8) live in the stub, so content modules need neither. The stub overhead per block is checked in R8 whole-path spike.
 
 ## 7. SDK
 
@@ -465,7 +467,7 @@ Question: can a service with its hooks load from device storage at boot? If yes,
 ### 11.1 Static part (item 4)
 
 1. Static classifier under `tools/`, as described in `module-architecture.md` 11.2: when each hook site first runs, what it writes, its context. No such tool exists. Hooks are `op = "hook"` entries in module manifests: 55 ColdFire and 38 SHARC, proof adapters included. Port files hold anchors only.
-2. SHARC hooks (`dsp-voice` 26, `fx` 2): can they move? DSP code comes from the boot stream. `dsp-link` writes to DSP memory while running, but only inside its own area today (`README:74`). Writing live hook sites is unproven. This is the biggest unknown.
+2. SHARC hooks (`dsp-voice` 28, `fx` 2): **answered, they cannot move** ([finding 128](../findings/128-r4-hooks-in-services.md), [D], about 80% confidence). The boot routine uploads the whole DSP image before our code can read the card, and live writes into running stock DSP code are unproven. The image keeps each SHARC hook site as a stub that jumps through a pointer slot; section 6.1.
 3. Row reservations: firmware table changes written at patch time. Can they happen at boot, before the firmware reads the tables?
 4. Writing a jump while other tasks and interrupts run: a 6-byte write is not atomic. Mark sites where this is a risk, such as the audio interrupt.
 5. Measure `machines` and `dsp-voice` output sizes against the 64 KiB limit.
@@ -533,7 +535,7 @@ Items 7, 9 and 10 link services into the image as a temporary step, so each boun
 | 7 | Generic records, service registry, `samples` linked in, storage interface, files memory | 4, 5, 9 | 4-5 days | High: first real proof of the model | Medium |
 | 8 | Spike, whole path | 11.2 | 3-4 days | High: decides item 12 and the small-image goal | Medium for ColdFire; unknown for SHARC |
 | **Stop** | Report to Em; review the model against what was learned | | | | |
-| 9 | `fx` linked in, with neutral adapter functions | 3.2, 10 | 4-5 days | High | Medium |
+| 9 | `fx` linked in, with neutral adapter functions. Check that each service object is a separate input of the device tests (`tools/nx/device-inputs.mjs`), so a service edit selects only the tests that load it. | 3.2, 10 | 4-5 days | High | Medium |
 | 10 | `machines` linked in, with neutral adapter functions; layer check final | 3.2, 10 | 4-5 days | High: done criterion 1 | Medium |
 | 11 | Boot plan with one verdict per module; module states; refusal fixtures | 5, 8 | 2-3 days | High: users see why | Medium-high |
 | 12 | Services as `.dks`, hooks at boot, workbench binding and install | 5 | 6-8 days | High: small runtime; done criteria 5 and 6 | Medium |
@@ -592,6 +594,8 @@ Base documents to rewrite when each item lands. These decisions are amended: `do
 ## 18. Rationale
 
 Why modules live in memory we own. Modules are copied into the runtime's arena inside `cf.expansion` (1.33 MiB on DT2, about 25 MiB on DN2), memory the firmware does not use. The firmware reaches them only through hooks and rows. Changing the module set needs no reflash, a bad module cannot damage the image, and safe mode skips it. Most limits are our own constants in `devices/*.toml [limits]`. Hard ceilings are the firmware's machine-table sizes and DSP cycles.
+
+Why services are separate from the runtime, also for tests. Today every device test loads the runtime, so a runtime edit selects almost every device test. When a service is its own object, a test's inputs are the runtime and the services it loads: an edit to `fx` reruns only the tests that load `fx`, and the others replay from the cache. A small runtime changes rarely. A service talks to the rest only through `sdk.toml`, so host tests can drive it with fake imports, and its pure checks become unit tests.
 
 Ideas not adopted:
 

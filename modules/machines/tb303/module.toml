@@ -15,7 +15,11 @@ conflicts = []
 [targets]
 "dt2-1.17" = "experimental"
 
-# The machine declaration (DK_MACHINE and DK_PARAM in src/module.c). It holds only .dk.desc records.
+# The machine is declared by builder calls in init (src/module.c). The DSP symbols start with `_tb_`.
+[[machine]]
+id = "tb303"
+dsp = "tb"
+
 [[object]]
 path = "build/tb303-cf.dko.json"
 sources = ["src/module.c"]
@@ -27,3 +31,15 @@ place = "cf.expansion"
 path = "build/tb303-dsp.dko.json"
 sources = ["src/dsp/tb303.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 6
+page_rows = 0
+record_bytes = 604
+
+[uses.dn2]
+machine_rows = 8
+param_rows = 16
+page_rows = 8
+record_bytes = 0

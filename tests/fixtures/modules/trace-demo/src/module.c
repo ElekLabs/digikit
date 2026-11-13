@@ -1,15 +1,14 @@
-/* The effect page of test/trace-demo: one effect `gain` with one knob (as test/dyn-fx-gain), and trace marks in init. */
+/* The effect of test/trace-demo: one effect `gain` with one knob (as test/dyn-fx-gain), declared with builder calls in init, and trace marks in init. */
 #include <dk/core/module.h>
-#include <dk/fx/fx.h>
+#include <dk/gen/page_consts.h>
 #include <dk/core/trace.h>
-
-DK_FX(gain, .process = "_dg_process", .desc = "_dg_desc", .mix = 127);
-DK_FX_PARAM(gain, 0, "Gain", "GAIN", DK_PERCENT, 0, 1.27, 0.5);
-DK_PAGE(gain, "GAN", "Test Gain", DK_KNOB_AT(0, 0));
+#include "module_ids.h"
 
 static int32_t init(dk_module_ctx *ctx)
 {
-    (void)ctx;
+    dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_GAIN, "Test Gain", "GAN");
+    dk_page *p = dk_fx_add_page(fx, "Test Gain", "GAN");
+    dk_page_add_fx_param(p, "Gain", "GAIN", DK_PERCENT, 0.0f, 1.27f, 0.5f);
     DK_TRACE_LOG("trace-demo init", 1);
     return DK_OK;
 }

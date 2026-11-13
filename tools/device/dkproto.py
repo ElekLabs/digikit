@@ -19,6 +19,7 @@ MAX_STATE_BYTES = 16777216
 GRANULE = 64
 DSP_SLACK = 8
 ARENA_HDR = 16
+COLLECT_BYTES = 6320
 MAX_VOICES = 8
 MAX_FX = 4
 
@@ -64,8 +65,6 @@ CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 
 SERVICE_CMD: dict[str, int] = {
-    "USB_FAST_TAKEOVER": 0x1E,
-    "USB_FAST_RELEASE": 0x1F,
     "LOG": 0x20,
     "PEEK": 0x21,
     "LOGCFG": 0x22,
@@ -145,6 +144,18 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -24: ("E_PARAM_FULL", "no free reserved parameter row"),
     -25: ("E_PAGE_FULL", "no free reserved page row (Digitone II)"),
     -26: ("E_TYPE_IN_USE", "reserved (hot reload is archived); never returned"),
+    -27: (
+        "E_DECL_ID",
+        "a builder call names a machine or effect id that the keys table of the header lacks",
+    ),
+    -28: (
+        "E_DECL_USES",
+        "init declared more machine, param or page rows than the [uses] counts of the header say",
+    ),
+    -29: (
+        "E_FX_ID_DUP",
+        "an effect id of the module is already loaded (or twice in the module)",
+    ),
     -30: ("E_NO_DSP", "DSP code in the file, no DSP loader in the image"),
     -31: ("E_DSP_FORMAT", "the DSP section is malformed"),
     -32: ("E_DSP_IMPORT", "a DSP symbol is not exported by the image"),
@@ -161,12 +172,16 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -45: ("E_BOOT_ONLY", "the module set is fixed after the boot hook"),
     -46: ("E_RANGE", "a card write outside the store range"),
     -47: ("E_CARD_RO", "the card's store area is not ours and not blank"),
-    -48: ("E_CONTRACT", "the module was built for another SDK contract"),
+    -48: (
+        "E_CONTRACT",
+        "the module needs another runtime version than this one (another major or minor, or a higher patch)",
+    ),
     -49: ("E_TABLE", "the runtime's tables failed their check"),
     -73: (
         "E_MISSING",
         "the service is not in the image (the module that provides it is not loaded)",
     ),
+    -74: ("E_DECL_FULL", "init made more builder calls than the record limit allows"),
 }
 
 CAP: dict[str, int] = {
@@ -198,7 +213,6 @@ RANGES: dict[str, tuple[int, int]] = {
     "remote_state": (0x3E, 0x3F),
     "usb_echo_test": (0x2C, 0x2F),
     "usb_fast": (0x36, 0x37),
-    "usb_fast_takeover": (0x1E, 0x1F),
 }
 
 CAPACITY_KINDS: dict[str, int] = {

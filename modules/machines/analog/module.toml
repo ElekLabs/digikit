@@ -16,7 +16,24 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The machine declaration (DK_MACHINE and DK_PARAM in src/module.c). It holds only .dk.desc records.
+# The machine is declared by builder calls in init (src/module.c). The id `analog` is what the keys hash; the DSP symbols start with `va`.
+# `[uses.<device>]` is written by `mise run module:check`.
+[[machine]]
+id = "analog"
+dsp = "va"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 4
+page_rows = 0
+record_bytes = 444
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 4
+page_rows = 1
+record_bytes = 540
+
 [[object]]
 path = "build/analog-cf.dko.json"
 sources = ["src/module.c"]

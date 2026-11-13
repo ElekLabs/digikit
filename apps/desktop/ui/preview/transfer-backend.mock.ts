@@ -23,14 +23,26 @@ async function pace(bytes: number, emit: (sent: number) => void): Promise<void> 
 }
 
 export const transferBackend = {
-  async list(): Promise<TransferView> {
+  async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
+    showLibrary(await this.listLibrary(device));
     control.counts.deviceRead++;
     await asked(deviceRead);
     noteConnection({ type: 'answered', device: { id: 'dt2', name: 'Digitakt II', runtime: '0.5.2' } });
     return view();
   },
   async listLibrary(_device: string): Promise<TransferView> {
-    throw new Error('not in the preview');
+    const v = view();
+    return {
+      ...v,
+      runtime: '',
+      free_bytes: 0,
+      loaded: [],
+      capacity: null,
+      card_only: [],
+      modules: v.modules
+        .filter((m) => LIBRARY.some((l) => l.id === m.id))
+        .map((m) => ({ ...m, on_card: 'no', loaded: false, warnings: [] })),
+    };
   },
   async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
     await deviceRead();

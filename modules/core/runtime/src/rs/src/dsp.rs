@@ -329,6 +329,48 @@ pub unsafe fn fx_row_of(owner: u8, ordinal: u32) -> Option<usize> {
     None
 }
 
+/// The voice row of machine type `t` that module record `rec` claimed.
+pub unsafe fn voice_row(rec: usize, t: u32) -> Option<usize> {
+    let d = ds();
+    let mut k = 0;
+    while k < MAX_ROWS {
+        if d.row_owner[k] == rec as u8 + 1 && d.row_type[k] == t {
+            return Some(k);
+        }
+        k += 1;
+    }
+    None
+}
+
+/// What `init` declared for the voice row `row` (a module): the eight knob ranges and the latch mask, published with the row. A latch mask needs a
+/// note_on routine (as the DSP section check says for version 3). Returns OK or E_FORMAT.
+pub unsafe fn set_declared(row: usize, rng: [u32; 8], latched: u32) -> i32 {
+    let d = ds();
+    if row >= MAX_ROWS || (latched & !0xff != 0) || (latched != 0 && d.row_note_on[row] == 0) {
+        return E_FORMAT;
+    }
+    d.row_rng[row] = rng;
+    d.row_latched[row] = latched;
+    OK
+}
+
+/// What `init` declared for effect record `ordinal` of module `rec`: its route flags (`Some`) and the defaults of the words p0 to p7 (`Some`).
+pub unsafe fn fx_set_declared(rec: usize, ordinal: u32, flags: Option<u32>, par: Option<[u32; 8]>) -> bool {
+    match fx_row_of(rec as u8 + 1, ordinal) {
+        Some(k) => {
+            let d = ds();
+            if let Some(f) = flags {
+                d.fx_flags[k] = f;
+            }
+            if let Some(p) = par {
+                d.fx_par[k] = p;
+            }
+            true
+        }
+        None => false,
+    }
+}
+
 /// The flags word of the record that effect row `k` was claimed for (`FXF_SEND`, `FXF_NOMASTER`, `FXF_DEFAULT_SEND`; 0 for a free row).
 pub unsafe fn fx_flags_of(k: usize) -> u32 {
     if k < MAX_FX {
@@ -357,7 +399,7 @@ pub unsafe fn fx_set_route(k: usize, route: u32, amt: [u32; 4]) {
 /// An effect row whose words are in the DSP: claimed, published and no load in progress, so a one-word write can go out.
 pub unsafe fn fx_live(k: usize) -> bool {
     let d = ds();
-    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !crate::sample::busy() && !crate::tracks::busy()
+    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !crate::tracks::busy()
 }
 
 /// The effect row's words in the chain: word `w` of row `k` (a one-word write through window 2).
@@ -665,32 +707,18 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         let b = s.add(bank_off as usize);
         let record = core::slice::from_raw_parts(b, 32);
         let image = core::slice::from_raw_parts(s.add(image_off as usize), image_size as usize);
-        // The record is a bank (kind 1) with its descriptor, or a per-track table (kind 2) with its two blocks.
-        if rd32le(b) == 2 {
-            if !dkrt_sdk::sample_job::valid_tracks(record, image) {
+        // The record is a per-track table (kind 2) with its two blocks.
+        if rd32le(b) != 2 || !dkrt_sdk::sample_job::valid_tracks(record, image) {
+            return E_DSP_FORMAT;
+        }
+        // Relocations cannot turn the initially empty table into a published one.
+        let (records, control) = (rd32le(b.add(8)), rd32le(b.add(12)));
+        for k in 0..nreloc {
+            let at = rd32(s.add((reloc_off + k * 8) as usize));
+            if (at < records + dkrt_sdk::sample_job::TRACK_RECORDS_BYTES && records < at.saturating_add(6))
+                || (at < control + dkrt_sdk::sample_job::TRACK_CONTROL_BYTES && control < at.saturating_add(6))
+            {
                 return E_DSP_FORMAT;
-            }
-            // Relocations cannot turn the initially empty table into a published one.
-            let (records, control) = (rd32le(b.add(8)), rd32le(b.add(12)));
-            for k in 0..nreloc {
-                let at = rd32(s.add((reloc_off + k * 8) as usize));
-                if (at < records + dkrt_sdk::sample_job::TRACK_RECORDS_BYTES && records < at.saturating_add(6))
-                    || (at < control + dkrt_sdk::sample_job::TRACK_CONTROL_BYTES && control < at.saturating_add(6))
-                {
-                    return E_DSP_FORMAT;
-                }
-            }
-        } else {
-            if !dkrt_sdk::sample_job::valid_bank(record, image, bss) {
-                return E_DSP_FORMAT;
-            }
-            let desc = rd32le(b.add(16));
-            // Relocations cannot turn the initially empty descriptor into a published one.
-            for k in 0..nreloc {
-                let at = rd32(s.add((reloc_off + k * 8) as usize));
-                if at < desc + 16 && desc < at.saturating_add(6) {
-                    return E_DSP_FORMAT;
-                }
             }
         }
     }
@@ -963,18 +991,8 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         f += 1;
     }
     if !job.bank.is_null() {
-        if rd32le(job.bank) == 2 {
-            // a client slot was checked free at the start of this function
-            crate::tracks::reserve(rec, rd32le(job.bank.add(4)), base + rd32le(job.bank.add(8)), base + rd32le(job.bank.add(12)));
-        } else {
-            crate::sample::reserve(
-                rec,
-                rd32le(job.bank.add(4)),
-                base + rd32le(job.bank.add(8)),
-                rd32le(job.bank.add(12)),
-                base + rd32le(job.bank.add(16)),
-            );
-        }
+        // a client slot was checked free at the start of this function
+        crate::tracks::reserve(rec, rd32le(job.bank.add(4)), base + rd32le(job.bank.add(8)), base + rd32le(job.bank.add(12)));
     }
     d.mod_fx[rec] = fclaimed;
     d.mod_off[rec] = off;
@@ -988,7 +1006,6 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
 
 /// Give back what `reserve` took for module record `rec` (the rows must have been cleared first).
 unsafe fn unreserve(rec: usize) {
-    crate::sample::remove(rec);
     crate::tracks::remove(rec);
     let d = ds();
     let mut k = 0;
@@ -1356,7 +1373,6 @@ pub unsafe fn step() {
                 }
                 if row == MAX_ROWS && frow == MAX_FX {
                     // every row is in: list the machine
-                    crate::sample::ready(rec);
                     crate::tracks::ready(rec);
                     crate::boot::note_result(d.pending.boot_idx, OK);
                     crate::st().last_result = OK;

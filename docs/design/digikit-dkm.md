@@ -4,9 +4,7 @@ Status: built, 2026-10-16 (packer `packages/patchkit/src/dkm.rs`, loader `module
 `docs/plans/digikit-runtime.md` (Module file, Load sequence). Runtime: `docs/design/digikit-runtime.md`. Store the file lives in:
 `docs/design/digikit-store.md`.
 
-Note (2026-10-27): where this file says `[[machine]]`, `[[param]]`, `[[page]]` or `[[voice]]` in `module.toml`, machines are now declared in C
-with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` (`sdk/include/dk/machine/machine.h`). The packer reads these records and the `.dkm` format is unchanged.
-See `docs/MODULE-AUTHORING.md`, section 5.2.
+Machines and effects are declared by builder calls in `init`, so the file holds no register records; the module architecture is `docs/MODULES.md`.
 
 A `.dkm` is one ColdFire module in a form the runtime can load at run time. It holds no firmware address and no host path: the
 same file serves every image whose runtime has the imports it names. It is made from the module's `.dko` object (the object
@@ -31,9 +29,9 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x08 | 4 | file size in bytes |
 | 0x0c | 4 | header size = 0xa0 |
 | 0x10 | 32 | sha256 of the whole file with these 32 bytes read as zeros |
-| 0x30 | 4 | `runtime_min`: informational, the runtime version the module was built for (packed semantic version; informational; `dkrt_sdk::RUNTIME_VERSION`, now 0.1.0); since runtime 0.1.0 the loader does not refuse on it (the contract bytes at 0x38 decide). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
+| 0x30 | 4 | `runtime`: the runtime version the module needs, packed `major << 16 \| minor << 8 \| patch`: the newest `since` of the imports it links (0 when it links none). The loader refuses (`E_CONTRACT`) a module whose version has another major or minor than the runtime's (`dkrt_sdk::RUNTIME_VERSION`) or a higher patch (0.x semver). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
 | 0x34 | 4 | module version, `major << 16 \| minor << 8 \| patch` |
-| 0x38 | 8 | contracts built against, a (major, minor) byte pair each: api, machine, fx, service. Major 0 = the module does not implement that contract (api is never 0). `pack` writes api always (major 2, minor: the newest `since` of the imports the module links, 0 when it links none; a file of major 1, the Api table of the earlier runtimes, is refused with `E_CONTRACT`), machine when the file has a DSP section or its `register` records hold a machine record (a data-only machine), service when it has a real entry point (not the stub of a data-only module), fx when the DSP section has effect records (version 4; a section of effects only carries no machine contract) |
+| 0x38 | 8 | reserved, zero (earlier formats had the (major, minor) pairs of the api, machine, fx and service contracts here; the one version is at 0x30) |
 | 0x40 | 32 | name, NUL padded |
 | 0x60 | 4 | `image_off` (multiple of 16) |
 | 0x64 | 4 | `image_size`: text and data, as the patch-time linker lays them out at base 0 |
@@ -47,15 +45,15 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x84 | 4 | `fini`: image offset of `dk_module.fini`, or 0xffffffff |
 | 0x88 | 4 | `menu`: image offset of `dk_module.menu`, or 0xffffffff |
 | 0x8c | 4 | `tick`: image offset of `dk_module.tick`, or 0xffffffff |
-| 0x90 | 4 | `register_off` |
-| 0x94 | 4 | `register_size` (0: none) |
+| 0x90 | 4 | `keys_off`: offset of the keys table (multiple of 4) |
+| 0x94 | 4 | `keys_size`: its size (0: a tool, no machine and no effect) |
 | 0x98 | 4 | `dsp_off`: offset of the DSP section (0: none) |
 | 0x9c | 4 | `dsp_size`: its size in bytes |
 
 The four entry points are the fields of the constant `dk_module` of the module (`dk_module_def`, `sdk/include/dk/core/module.h`); the packer finds the symbol, follows the relocation of each field to a function of the image and writes the offsets above. The runtime calls `init(ctx)`, `fini(ctx)`, `tick(ctx)` and `menu(ctx, menu)` with a `dk_module_ctx *` (docs/plans/sdk.md section 5). Until 0.5 the header had a slot table at 0x88 and a header size of 0xa0, 0xa4 or 0xa8; runtime 0.6.0 reads only the layout above.
 
-After the header, in this order, each table where its offset says: imports, relocations, the `register` records,
-the DSP section (16-byte aligned), padding to 16, then the image. A file with a DSP section carries the machine contract at 0x38 (a section of version 2; runtime 5 and later also load version 1).
+After the header, in this order, each table where its offset says: imports, relocations, the keys table,
+the DSP section (16-byte aligned), padding to 16, then the image. 
 
 - **Imports**: `import_count` entries of 32 bytes, a NUL-padded name. Every undefined symbol of the object that a relocation
   names. The names the runtime provides: the `dk_*` imports of `sdk/sdk.toml` (`<dk/gen/imports.h>`), and `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` for the compiler. A name the runtime does not have makes the load fail with `E_IMPORT` before anything is written.
@@ -65,11 +63,7 @@ the DSP section (16-byte aligned), padding to 16, then the image. A file with a 
   of import `index`. The word is stored big endian. Only 32-bit absolute relocations (`R_68K_32`) can be loaded; PC-relative
   references between the module's own sections are resolved by the packer (the base cancels), and a PC-relative reference to an
   import is refused by the packer (the distance to the firmware would depend on where the module is loaded).
-- **`register` records**: typed machine and parameter records (`docs/design/digikit-registry.md`; layout in
-  `packages/patchkit/src/register.rs`). `patchkit pack MODULE --device dt2` lowers a `dynamic = true` module's `[[machine]]` and `[[param]]`
-  sections into them (and an `[[fx]]` with a `tab` into an EFFECT record, kind 4, the page of the effect: "Effect pages" in the registry design); the loader checks them with the rest of the file (before anything is written) and hands them to the registry
-  (`registry.rs`), which fills the rows `core/dynreg` reserved. A module with no code at all packs with a four-byte image (`init` is
-  `moveq #0,d0; rts`).
+- **Keys table** (`keys_off`, layout in `sdk/sdk.toml` `[limits.format]`): six u16 (`machine_rows`, `param_rows`, `page_rows`, `n_machines`, `n_fx`, `record_bytes`), then the u32 machine keys and effect keys; `keys_size` is 12 + 4 * (n_machines + n_fx). The three row counts and `record_bytes` are the `[uses]` lines of `module.toml` for this device. The keys are hashes the packer computes from the packed name and the id (`register.rs`: `machine_key`, `effect_id`). The machine, parameter, page and effect records are not in the file: `init` declares them and the runtime builds them at commit (`docs/design/digikit-registry.md`).
 - **Image**: the linked bytes at base 0; every word named by a relocation holds `S + A` (symbol offset plus addend) for kind 0 and
   `A` for kind 1.
 
@@ -88,7 +82,7 @@ header of format 1, and every format 1 file has needs.
 slice. It reads, and checks as the loader checks (bounds, counts; a file the loader refuses for its format has no needs, never a crash):
 
 - the header: magic, format 1, the size fields against the file, the image size and offset, `bss`, alignment, and the reloc and import tables in the file;
-- the `register` table: its header (magic, count at most 32) and each record's kind and length word (the loader's walk: the length of its kind, the table ends where the last record does);
+- the keys table: its bounds and counts;
 - the DSP section: its header (magic, version 1 to 4, the sizes, the table bounds and counts), for a version 3 or 4 section the `state_bytes` and `voices` words of each voice record, and for a version 4 section the `state_bytes` word of each effect record.
 
 It does not read the image, the tables' entries, the records' bodies or the DSP image, and it does not check the file's sha256 (the loader does).
@@ -96,11 +90,11 @@ It does not read the image, the tables' entries, the records' bodies or the DSP 
 | Need | Meaning |
 | --- | --- |
 | `file_size` | the file's size: it must fit the staging buffer |
-| `ARENA` | the arena bytes the loaded module keeps: `(image_size + bss_size)` rounded up to 16, plus the 16-byte block header |
+| `ARENA` | the arena bytes the loaded module keeps: `(image_size + bss_size)` rounded up to 16, plus the 16-byte block header, plus `record_bytes` of the keys table (the record block `init` commits) |
 | `ARENA_XFER` | arena bytes held only while the DSP code is sent: the same for the relocated DSP image (its `image_size`); 0 without a DSP section |
 | `DSP_AREA` | the DSP range: `align8(image + bss)` plus the voice states (`voices * align8(state_bytes)` per voice record of version 3 and 4) and the effect states (`align8(state_bytes)` per version 4 effect record), rounded up to the 64-byte granule; 0 without a DSP section |
 | `DSP_ALIGN` | the range's placement alignment (the DSP section's `align`): the range starts at the next multiple of it, so up to `DSP_ALIGN - 8` bytes of the free range can be lost; 0 without a DSP section |
-| `MACHINE_ROWS`, `PARAM_ROWS`, `PAGE_ROWS` | the number of records of that kind in the `register` records (an effect's page, kind 4, counts nothing: it belongs to the effect slot of its DSP record) |
+| `MACHINE_ROWS`, `PARAM_ROWS`, `PAGE_ROWS` | the `[uses]` counts of the keys table (an effect's page counts nothing: it belongs to the effect slot of its DSP record) |
 | `VOICE_ROWS` | the number of voice records of the DSP section |
 | `FX_SLOTS` | effect slots: the number of effect records of the DSP section (version 4) |
 
@@ -118,8 +112,7 @@ CAPACITY and MODULES with `needs_of` of the file (rows of a DSP module come in a
 ## DSP section
 
 A run-time machine can bring its own SHARC+ code (finding 32). `patchkit pack MODULE --device dt2|dn2` links the module's DSP object
-(`[[object]] place = "dsp.l2"` for that device; at most one) into the section; the typed `[[voice]]` entries (machine id and the routine's
-global symbol) give the voice rows. The code holds no address of the image it
+(`[[object]] place = "dsp.l2"` for that device; at most one) into the section; the `[[machine]]` and `[[fx]]` entries of `module.toml` (the id, and the optional `dsp` prefix) name the entry points and give the voice rows. The code holds no address of the image it
 runs in: it is linked at the nominal base `0x20000000` (L2 byte base) and **relocated by the runtime on the ColdFire** before it sends
 the bytes, so several DSP modules coexist in the DSP area (`_dl_area` of `core/dsp-link`, 512 KiB on the Digitakt II, 320 KiB on the
 Digitone II; first fit, freed when a boot-time DSP part fails). Relocation is cheap here: the repository's DSP objects use only two kinds, `sharc.abs24`
@@ -154,33 +147,29 @@ All integers are big endian. Offsets are from the start of the section.
   the import `import` (add its value). `abs24` with class 1 is refused by the packer (a data address does not fit 24 bits).
   A result that does not fit its field fails the load.
 - **Voices**: 48 bytes (version 2): `u32` machine type, `u32` byte offset of the entry routine in the image, eight `u32` ranges of machine
-  knob 0 to 7 (`min | max << 16`, from the `[[param]]` the knob names; 0: a stock code, an empty knob or no range declared) for the runtime guard of
+  knob 0 to 7 (`min | max << 16`; 0: a stock code, an empty knob or no range declared) for the runtime guard of
   `core/dsp-voice` (finding 51), two reserved words. The type is in the run-time range 16 to 23, not used by a loaded module. The routine's pc at placement `B` is `0xb80000 + (B - 0x20000000 + entry) / 2`.
   Version 3 voices are 64 bytes: 0 `type`, 4 render entry, 8 note_on entry (image byte offsets; note_on 0: none), 12 `state_bytes` (per voice),
   16 `clear_bytes` (zeroed at note-on), 20 to 51 the eight ranges, 52 `voices` (number of voice states to reserve), 56 to 63 reserved 0. The packer
-  takes them from `[[voice]] render, note_on, desc` (`desc`: a `dk_machine_desc` data symbol). The runtime reserves
+  finds the entry points by name (`<id>_render`, `<id>_note_on`, `_<id>_desc`: a `dk_machine_desc` data symbol; `dsp` of the `[[machine]]` entry replaces the `<id>` prefix). The runtime reserves
   `align8(image + bss)` plus, per voice record, `voices * align8(state_bytes)` for state, in record order, in the module's range.
-- **Effects** (version 4): 64 bytes each, the effects of the FX contract (`<dk/fx/fx.h>`) that the module brings, from the effect's `DK_FX` record (`sdk/include/dk/fx/fx.h`; this section says `[[fx]]` for its fields) (`id`, `process`: the process
-  routine's global symbol, `desc`: the `dk_fx_desc` data symbol, `defaults`: the words p0 ... of the row, at most `n_params`, the words the DSP reads as they are;
-  `devices`). Record: 0 `process` (image byte offset of the routine), 4 `desc` (image byte offset of its `dk_fx_desc`), 8 `state_bytes`, 12 `n_params` (both
+- **Effects** (version 4): 64 bytes each, the effects of the FX contract (`<dk/fx/fx.h>`) that the module brings, (found by the names `<id>_process` and `_<id>_desc`, the `dk_fx_desc` data symbol). Record: 0 `process` (image byte offset of the routine), 4 `desc` (image byte offset of its `dk_fx_desc`), 8 `state_bytes`, 12 `n_params` (both
   from the descriptor, which the packer reads and checks: magic `DKFX`, contract 1, `n_params` at most 8, `state_bytes` a multiple of 4), 16 flags (the routes, below; 0 = master only), 20 to 51 the words
-  p0 to p7 of the row (0 where the manifest gives none), 52 to 63 reserved 0. The effect's state is not a symbol of the object: the runtime reserves
+  p0 to p7 of the row (0 where no default is given), 52 to 63 reserved 0. The effect's state is not a symbol of the object: the runtime reserves
   `align8(state_bytes)` for each record in the module's range, behind the image, the bss and the voice states, in record order (the adapter zeroes the state when the effect
   switches on). The process routine's pc at placement `B` is `0xb80000 + (B - 0x20000000 + process) / 2` (as a voice's). The runtime checks the record against the descriptor in the
   image (a record that says more state than the descriptor, or another parameter count, is `E_DSP_FORMAT`).
-  **Flags (the routes, FX routing step 4).** From the manifest's `[[fx]] route` and `routes`: bit 0 `FXF_SEND` (1): the effect may run on a send bus; bit 1 `FXF_NOMASTER` (2): it may not run on the master chain; bit 2 `FXF_DEFAULT_SEND` (4): its
+  **Flags (the routes, FX routing step 4).** bit 0 `FXF_SEND` (1): the effect may run on a send bus; bit 1 `FXF_NOMASTER` (2): it may not run on the master chain; bit 2 `FXF_DEFAULT_SEND` (4): its
   default route is the send bus. The master is always allowed unless bit 1 says not, so the word 0 that every record made before the routes has means "master only, default master": an old `.dkm` loads unchanged, and a module that leaves the
-  fields out packs to the same bytes as before. The values the packer writes: 0 master only; 1 allowed both, default master (`route = "master"`, `routes = ["master", "send"]`); 5 both, default send (`route = "send"` with `routes` left out); 7 send only
-  (`routes = ["send"]`). Other combinations (a default that is not allowed, a bit above 4, bit 1 without bit 0 or without bit 2) are refused by the packer's parser and by the loader (`E_DSP_FORMAT`). The runtime uses the default when the settings
-  have no `fx/route/<module id>` and when the stored route is not allowed; a runtime older than the flags ignores them (the effect runs on the master). The contract version is not changed: the record layout only gives a meaning to a word that was 0.
+  fields out packs to the same bytes as before. The commit writes the flags from `dk_fx_routes(fx, allowed, default)` in `init`: no call gives 0 (master only); `(MASTER|SEND, MASTER)` gives 1 (both, default master); `(MASTER|SEND, SEND)` gives 5 (both, default send); `(SEND, SEND)` gives 7 (send only). Other combinations (a default that is not allowed) are refused at commit, and the loader refuses a record with other flag bits (`E_DSP_FORMAT`). The runtime uses the default when the settings
+  have no `fx/route/<module id>` and when the stored route is not allowed; a runtime older than the flags ignores them (the effect runs on the master).
 - **Image**: the linked bytes at the nominal base; every relocated field holds `S + A`. The sections are text, data, bss in that order,
   so a `.PKBSS` buffer (pluck's 256 KiB delay lines) follows the sent bytes in the reserved range.
 
 The runtime reserves `image_size + bss_size` rounded up to 64 bytes (`E_DSP_NOSPACE`, -33, when no range is free), copies and relocates
 the image in an arena block, sends it with `dl_send` (window 0 of the link) and, when the DSP acknowledges (the DSP has the bytes in L2
 and has invalidated its instruction caches), publishes the voice rows (window 1: **one word per transfer**, a row is 24 words: 0 type, 1 pc, 2 to 9 the eight ranges, 10 to 15 the guard's words, 16 note_on pc, 17 state_base, 18 stride, 19 clear, 20 gen, 21 level, 22 and 23 spare; written: the ranges, the pc, words 16 to 19, the guard's disabled-type word cleared and the type
-last; a free row has type `0xffffffff`, which no machine equals, so the DSP's render scan never sees a half-written row). Only then
-it writes the machine and parameter rows, runs `init` and binds the slots.
+last; a free row has type `0xffffffff`, which no machine equals, so the DSP's render scan never sees a half-written row). The machine and parameter rows are written later, at commit after `init`.
 
 **Effect rows.** An effect record takes a free row of the effect chain of `core/fx` (`core/dynfx` reserves one for each of the device's `fx_slots`: 3 on the Digitakt II; a free row has pc
 `0xffffffff`, which the adapter skips). The runtime claims the lowest free rows when it reserves the range (CAPACITY `FX_SLOTS` counts them from then on) and publishes each row
@@ -200,19 +189,12 @@ type 0's (finding 30). A machine that clones SAMPLE, like `pluck`, is right alre
 
 1. Store: header, table checksum, the path, the table's file hash of the file (`E_NOT_FOUND`, `E_BAD_STORE`, `E_SHA`, `E_TOO_BIG`).
 2. Magic, format 1, size fields equal the file (`E_FORMAT`); the file's own sha256 (`E_SHA`).
-3. Contracts (0x38): for each contract the module declares (major not 0), its major equals the runtime's and its minor is not above the runtime's (`E_CONTRACT`: built for another SDK contract, rebuild the module). `runtime_min` is not checked.
-4. Name, alignment, table bounds, reloc kinds and offsets, slot numbers and function offsets (`E_FORMAT`).
-5. Every import resolves (`E_IMPORT`); every slot it binds is free (`E_SLOT`); no module of that name is loaded (`E_LOADED`); a
-   free module record (`E_TABLE_FULL`).
-6. The DSP section, if any (`E_NO_DSP`, `E_DSP_DEVICE`, `E_DSP_FORMAT`, `E_DSP_IMPORT`, `E_DSP_NOSPACE`, `E_DSP_ROWS`, `E_DSP_TYPE`; nothing is
-   reserved yet), then the `register` records, if any: `E_NO_REGISTRY` (the image has no `core/dynreg`), `E_REG_DEVICE`, `E_FORMAT`, `E_TYPE_RANGE`,
-   `E_TYPE_USED`, `E_PARAM_FULL`, `E_PAGE_FULL` (-20 to -25; docs/design/digikit-registry.md); -26 (`E_TYPE_IN_USE`, the unload refusal) is reserved: hot reload is archived.
-7. Then: allocate `image_size + bss_size` (`E_NOMEM`), copy, zero bss, relocate, flush both caches over the range, record, `init`
-   (`E_INIT`: the block is freed again), publish the slots. The registry rows are written after the copy and before `init` (`init` may reuse the
-   staging buffer, which holds the records); a failed `init` removes them again.
-   With a DSP section the DSP range, the relocated DSP image and the voice rows are reserved first, the ColdFire image is copied as
-   above, and the rest (voice rows on the DSP, then the registry rows, `init`, the slots) runs over the next UI-loop passes once the DSP
-   has acknowledged the code: `dkrt_load` returns `LOADING` (docs/design/digikit-runtime.md, "DSP code of a module").
+3. Version (0x30): the runtime version the module needs has the runtime's major and minor and a patch that is not above the runtime's (`E_CONTRACT`: rebuild the module); 0 passes.
+4. Name, alignment, table bounds, reloc kinds and offsets, entry point offsets, keys table (`E_FORMAT`).
+5. Every import resolves (`E_IMPORT`; the name is kept as the module's need); no module of that name is loaded (`E_LOADED`); a free module record (`E_TABLE_FULL`).
+6. The DSP section, if any (`E_NO_DSP`, `E_DSP_DEVICE`, `E_DSP_FORMAT`, `E_DSP_IMPORT`, `E_DSP_NOSPACE`, `E_DSP_ROWS`, `E_DSP_TYPE`), then the keys against the DSP voice and effect counts (`E_DECL_ID`). Nothing is reserved yet.
+7. Then: reserve the DSP range and rows; allocate `image_size + bss_size` (`E_NOMEM`), copy, zero bss, relocate, flush both caches over the range, record; `init` (builder calls are collected; `E_INIT`, or `E_IMPORT` when it returns `DK_E_MISSING`). At commit the runtime checks the collection against `[uses]` and the keys (`E_DECL_USES`, `E_DECL_ID`, `E_DECL_FULL`, `E_FX_ID_DUP`), lowers it to records, checks them (`E_NO_REGISTRY`, `E_REG_DEVICE`, `E_TYPE_RANGE`, `E_TYPE_USED`, `E_PARAM_FULL`, `E_PAGE_FULL`; docs/design/digikit-registry.md) and writes the rows. Any failure undoes the load; the result is `E_BUSY` when a part cannot be given back.
+   With a DSP section the commit runs before `dsp::launch`, and `dkrt_load` returns `LOADING`; the DSP code and the voice rows follow over the next UI-loop passes once the DSP has acknowledged the code (docs/design/digikit-runtime.md, "DSP code of a module").
 
 ## Check
 

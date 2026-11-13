@@ -50,6 +50,22 @@ const upload3 = async (p) => {
   await p.click(/^Upload/);
   await p.wait(2300);
 };
+/** A slow sample check keeps the same progress element and reveals the hint in both the row and footer. */
+const checkingSample = async (p) => {
+  await p.tick('^Upload kick_punchy');
+  await p.click(/^Upload/);
+  await p.wait(600);
+  const state = await p.eval(`new Promise((resolve) => {
+    const bar = document.querySelectorAll('section.col')[1].querySelector('.up progress');
+    setTimeout(() => resolve({
+      sameBar: !!bar && bar.isConnected && bar.value === bar.max,
+      hints: [...document.querySelectorAll('.phase')].filter((el) => el.textContent === 'Checking…').length,
+      message: document.querySelector('.bar .msg')?.textContent,
+    }), 2600);
+  })`);
+  if (!state.sameBar || state.hints !== 2 || !state.message?.startsWith('Transferring 1 of 1'))
+    throw new Error(`sample check lost its progress bar or hints: ${JSON.stringify(state)}`);
+};
 /** Wait (up to 10 s) until the Transfer page has read the device: no "reading…" or "Connecting…" text and a module row. */
 const modulesReady = async (p) => {
   for (let i = 0; i < 100; i++) {
@@ -200,6 +216,8 @@ const SCENES = [
       await p.wait(4000);
     },
   },
+  { name: 'samples-checking', q: 'mode=samples&speed=0.8&verify=4000', size: WIDE, steps: checkingSample },
+  { name: 'samples-narrow-checking', q: 'mode=samples&speed=0.8&verify=4000', size: MIN, steps: checkingSample },
   { name: 'samples-narrow', q: 'mode=samples', size: MIN },
   {
     name: 'samples-narrow-uploading',
@@ -569,6 +587,8 @@ const SCENES = [
     size: WIDE,
     steps: async (p) => {
       await p.wait(2600);
+      const rows = await p.eval(`document.querySelectorAll('input[aria-label^="Install "]').length`);
+      if (!rows) throw new Error('The local module library is empty while the device waits.');
     },
   },
   {
@@ -624,6 +644,8 @@ const SCENES = [
       await p.wait(4500);
       p.say(`file added on disk: shown after the poll = ${await has('new_file_xyz.wav')} (expect true)`);
       const c2 = JSON.parse(await counts());
+      if (c2.deviceRead !== c1.deviceRead || !(await has('new_file_xyz.wav')))
+        throw new Error('A local file change must refresh local files without reading the device.');
       await p.eval("window.dispatchEvent(new Event('focus'))");
       await p.wait(1500);
       const c3 = JSON.parse(await counts());
@@ -1006,6 +1028,17 @@ const SCENES = [
     ],
     // the debug module is loaded on the device, and on the emulator in the other scene it is not
     ['log-debug-module-loaded', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+    // the Card log button switched on (the fake device has a card log, the emulator's debug module has none)
+    [
+      'log-cardlog-on',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click('Card log');
+        await p.wait(3000);
+      },
+    ],
     ['log-debug-module-not-loaded', 'page=log&log=nodebug&logh=640', WIDE, 'device:all', async () => {}],
     ['log-debug-module-not-loaded-narrow', 'page=log&log=nodebug&logh=640', MIN, 'device:all', async () => {}],
     // Source is All and both origins are followed: the menu does not know which one is meant

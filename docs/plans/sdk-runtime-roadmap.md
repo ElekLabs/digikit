@@ -28,14 +28,15 @@ Status: `todo`, `active`, `done`, `parked`.
 | Phase | Item | What | Depends on | Status | Branch / PR |
 | --- | --- | --- | --- | --- | --- |
 | 1 | S1 | SDK restructure, byte-identical, with hash task | - | done | PR 416 |
-| 1 | S2a | SDK C hygiene: clang-format, `-std=c11`, helpers into `core/`, SDK sources linked automatically | S1 | done | lane/sdk-design |
-| 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated; the Api table, `dkm_init` and the slots deleted | S2a | done | lane/sdk-design |
-| 1 | S3 | SDK builders in `init` and the runtime commit path; machines, FX and fixtures migrated | S2b | todo | |
+| 1 | S2a | SDK C hygiene: clang-format, `-std=c11`, helpers into `core/`, SDK sources linked automatically | S1 | done | PR 424 |
+| 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated; the Api table, `dkm_init` and the slots deleted | S2a | done | PRs 426, 433 |
+| 1 | S3 | SDK builders in `init` and the runtime commit path; machines, FX and fixtures migrated | S2b | done | PR 443 |
 | 1 | S4 | SDK templates and docs | S3 | todo | |
+| 1 | S3b | Delete the patched-in content path: the twins test/patched-pluck and test/twin-dn2, patchkit desc.rs and the typed lowering for patched-in machines, the macros in sdk/patched-in/include; move or drop the equivalence tests, smoke-matrix rows and the sharc_matrix input that use the twins | S3 | todo | |
 | 1 | P7 | Clock audit (static) | - | done | finding 125 |
-| 1 | P1 | Address map v1, emulator only (own lane) | - | todo | |
-| 2 | R4 | Spike, static part: can SHARC hooks move into a `.dks` | S4 | todo | |
-| Stop | | Review the R4 answer with Em: it decides the owner of DSP dispatch and where `DK_SPAN` lives | R4 | | |
+| 1 | P1 | Address map v1, emulator only (own lane) | - | done | PR 444 |
+| 2 | R4 | Spike, static part: can SHARC hooks move into a `.dks` | S4 | done | finding 128 |
+| Stop | | Review the R4 answer with Em: it decides the owner of DSP dispatch and where `DK_SPAN` lives | R4 | reviewed | DSP dispatch is owned by the `machines` and `fx` services; `DK_SPAN` lives in the image stub |
 | 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | todo | |
 | 2 | P3 | sharcdb tables for module DSP sections | P1 | todo | |
 | 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |

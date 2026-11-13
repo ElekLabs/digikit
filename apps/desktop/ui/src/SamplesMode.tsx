@@ -7,9 +7,10 @@
 // the same on every device. A WAV is converted to the native sample file before it goes; a native sample goes as it is; any other file is
 // uploaded unchanged. Each upload is verified against the bytes sent. The page speaks the protocol in TypeScript over the selected target; the
 // local files come through the native `local_*` commands (local.rs); no process is started.
-import { For, Show, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
 import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
-import { endRun, openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocalFile } from './samples-backend';
+import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocal, readLocalFile } from './samples-backend';
+import WaitNotice from '@web/transfer/WaitNotice';
 import {
   applyUpload,
   confirmDeleteLabel,
@@ -66,7 +67,6 @@ import {
   sampleEntries,
   sampleFolder,
   sampleTicks,
-  takeOverOn,
   setAddedFiles,
   setLocalFolder,
   setLocalKinds,
@@ -74,7 +74,6 @@ import {
   setLocalTicks,
   setSampleFolder,
   setSampleTicks,
-  setTakeOverOn,
   setUploadAverage,
   setUploadBase,
   setUploadNotes,
@@ -113,6 +112,15 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
     up: () => localPath() && openLocal(parentOf(localPath())),
   });
 
+  const refreshLocal = async () => {
+    try {
+      await readLocal();
+    } catch (e) {
+      setError(errorLine(e));
+    }
+  };
+  // A device read may already belong to the other mode or a previous visit to the page.
+  onMount(() => void refreshLocal());
   const choose = async () => {
     try {
       const dir = await pickFolder(localFolder());
@@ -120,7 +128,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
       setLocalFolder(dir);
       setLocalPath('');
       setLocalTicks(new Set<string>());
-      void run('Reading', async () => {});
+      await refreshLocal();
     } catch (e) {
       setError(errorLine(e));
     }
@@ -129,7 +137,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
     if (writing(busy())) return;
     setLocalPath(path);
     setLocalTicks(new Set<string>());
-    void run('Reading', async () => {});
+    void refreshLocal();
   };
   /** Files added by hand join the list (same name: the newer one) and are ticked; their first bytes tell what the upload will do. */
   const addFiles = (files: File[], folders = 0) => {
@@ -146,42 +154,38 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
   /** Send `items` (and make `mkdirs` first) into the device; the bar counts them all. */
   const send = async (mkdirs: string[], items: UploadItem[]): Promise<boolean> => {
     let done = false;
-    try {
-      await run('Uploading', async (): Promise<void | CancelledRun> => {
-        const o = await openDeviceSamples(true);
-        if (mkdirs.length && !(await o.backend.canMkdir())) throw new Error(noFoldersMessage(o.name));
-        setNote('');
-        const base = uploads();
-        setUploadBase(base);
-        setUploadNotes([]);
-        const started = Date.now();
-        setUploadAverage(undefined);
-        await uploadItems(
-          o.backend,
-          o.prepare,
-          mkdirs,
-          items,
-          (e) => {
-            noteActivity();
-            if (e.event === 'note') setUploadNotes((n) => [...n, e.message]);
-            setUploads((u) => applyUpload(u, e));
-          },
-          stopWasAsked,
-        );
-        // the run's bytes over its time, for the end text of the bar
-        const sent = samplesBar(uploads(), base, false)?.sent ?? 0;
-        setUploadAverage(sent > 0 && Date.now() > started ? sent / ((Date.now() - started) / 1000) : undefined);
-        // the real error of a file is on the row only; the run shows and logs it, and the selection stays for a retry
-        const failure = uploadFailure(uploads(), base);
-        if (failure) throw new Error(failure);
-        // stopped by the user: not an error; the bar and the Log say what was done, and the selection stays for a retry
-        const stopped = uploadCancelled(uploads(), base);
-        if (stopped) return { cancelled: stopped };
-        done = true;
-      });
-    } finally {
-      endRun();
-    }
+    await run('Uploading', async (): Promise<void | CancelledRun> => {
+      const o = await openDeviceSamples(true);
+      if (mkdirs.length && !(await o.backend.canMkdir())) throw new Error(noFoldersMessage(o.name));
+      setNote('');
+      const base = uploads();
+      setUploadBase(base);
+      setUploadNotes([]);
+      const started = Date.now();
+      setUploadAverage(undefined);
+      await uploadItems(
+        o.backend,
+        o.prepare,
+        mkdirs,
+        items,
+        (e) => {
+          noteActivity();
+          if (e.event === 'note') setUploadNotes((n) => [...n, e.message]);
+          setUploads((u) => applyUpload(u, e));
+        },
+        stopWasAsked,
+      );
+      // the run's bytes over its time, for the end text of the bar
+      const sent = samplesBar(uploads(), base, false)?.sent ?? 0;
+      setUploadAverage(sent > 0 && Date.now() > started ? sent / ((Date.now() - started) / 1000) : undefined);
+      // the real error of a file is on the row only; the run shows and logs it, and the selection stays for a retry
+      const failure = uploadFailure(uploads(), base);
+      if (failure) throw new Error(failure);
+      // stopped by the user: not an error; the bar and the Log say what was done, and the selection stays for a retry
+      const stopped = uploadCancelled(uploads(), base);
+      if (stopped) return { cancelled: stopped };
+      done = true;
+    });
     return done;
   };
   const itemOf = (folder: string, name: string, size: number, read: () => Promise<Uint8Array>): UploadItem => ({
@@ -268,7 +272,8 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
       await (await openDeviceSamples()).backend.mkdir(joinPath(sampleFolder(), name));
     });
   };
-  const rows = () => sampleRows(sampleFolder(), sampleEntries() ?? [], uploads());
+  const rows = createMemo(() => sampleRows(sampleFolder(), sampleEntries() ?? [], uploads()));
+  const rowsByPath = createMemo(() => new Map(rows().map((r) => [r.path, r])));
   const nDelete = () => deleteRows(rows(), sampleTicks()).length;
   const removeSelected = () =>
     run('Deleting', async (): Promise<void | CancelledRun> => {
@@ -363,7 +368,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
             <button
               type="button"
               class="act small"
-              disabled={!!busy()}
+              disabled={writing(busy())}
               title="Choose the folder on this computer that holds your samples"
               onClick={() => void choose()}
             >
@@ -372,7 +377,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
             <button
               type="button"
               class="act small"
-              disabled={!!busy()}
+              disabled={writing(busy())}
               title="Add files to the list, from any folder"
               onClick={() => input?.click()}
             >
@@ -469,19 +474,6 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
         }
         actions={
           <>
-            <label
-              class="tests toggle"
-              title="Experimental. When the device is in USB AUDIO/MIDI mode, switch it to USB MIDI for the transfer so Fast USB works. On macOS the device can fail to come back until a power cycle. Off: the transfer stays on SysEx."
-            >
-              <input
-                type="checkbox"
-                role="switch"
-                checked={takeOverOn() === 'on'}
-                disabled={!!busy()}
-                onChange={(e) => setTakeOverOn(e.currentTarget.checked ? 'on' : '')}
-              />{' '}
-              take USB over
-            </label>
             <Show when={deviceInfo()?.canMkdir}>
               <button type="button" class="act" disabled={!!busy()} onClick={() => setNaming(!naming())}>
                 New folder
@@ -498,6 +490,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
           </>
         }
       >
+        <WaitNotice active={!!busy()} cancel={busy() !== 'Uploading'} />
         <Crumbs
           items={crumbs(sampleFolder())}
           current={sampleFolder()}
@@ -544,30 +537,35 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
         <Show when={sampleEntries()} fallback={<p class="empty">{busy() ? `${busy()}…` : 'No listing yet.'}</p>}>
           <Show when={rows().length} fallback={<p class="empty">This folder is empty.</p>}>
             <ul class="rows">
-              <For each={rows()}>
-                {(r) => (
-                  <ListRow
-                    rowKey={r.pending ? undefined : r.path}
-                    selected={sampleTicks().has(r.path)}
-                    onSelect={r.pending ? undefined : (e) => dsel.click(r.path, e)}
-                    check={{
-                      label: `Delete ${r.name}`,
-                      checked: sampleTicks().has(r.path),
-                      disabled: writing(busy()) || r.pending,
-                      onChange: () => dsel.tick(r.path),
-                    }}
-                    name={r.name}
-                    title={r.path}
-                    folder={
-                      r.kind === 'folder'
-                        ? { disabled: writing(busy()) || r.pending, onOpen: () => open(r.path) }
-                        : undefined
-                    }
-                    dropPath={r.kind === 'folder' && !r.pending ? r.path : undefined}
-                    size={r.kind === 'file' ? formatBytes(r.size) : ''}
-                    status={r.status}
-                  />
-                )}
+              <For each={rows().map((r) => r.path)}>
+                {(path) => {
+                  // Keep the DOM row and its checking timer across progress objects. Retain its last row during removal.
+                  const initial = rowsByPath().get(path)!;
+                  const r = () => rowsByPath().get(path) ?? initial;
+                  return (
+                    <ListRow
+                      rowKey={r().pending ? undefined : r().path}
+                      selected={sampleTicks().has(r().path)}
+                      onSelect={r().pending ? undefined : (e) => dsel.click(r().path, e)}
+                      check={{
+                        label: `Delete ${r().name}`,
+                        checked: sampleTicks().has(r().path),
+                        disabled: writing(busy()) || r().pending,
+                        onChange: () => dsel.tick(r().path),
+                      }}
+                      name={r().name}
+                      title={r().path}
+                      folder={
+                        r().kind === 'folder'
+                          ? { disabled: writing(busy()) || r().pending, onOpen: () => open(r().path) }
+                          : undefined
+                      }
+                      dropPath={r().kind === 'folder' && !r().pending ? r().path : undefined}
+                      size={r().kind === 'file' ? formatBytes(r().size) : ''}
+                      status={r().status}
+                    />
+                  );
+                }}
               </For>
             </ul>
           </Show>

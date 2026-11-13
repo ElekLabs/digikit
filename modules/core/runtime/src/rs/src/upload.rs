@@ -231,8 +231,8 @@ unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
 }
 
 /// MODULES: the loaded modules and what they hold. Body: `u8 start` (a module record index). Reply: `u32 arena_free, arena_largest, dsp_free,
-/// dsp_largest`, `u8 total` (loaded modules), `u8 n` (records in this reply), then per record `u8 index`, `name[32]`, `u32 version`, 8 contract bytes
-/// (api, machine, fx, service as major, minor), `u32 cf_base, cf_size, dsp_off, dsp_len, rows` (voice rows as a mask), `u8 n_types` and that many machine
+/// dsp_largest`, `u8 total` (loaded modules), `u8 n` (records in this reply), then per record `u8 index`, `name[32]`, `u32 version`, 8 bytes (`u32` the runtime
+/// version the module needs, then four zero bytes), `u32 cf_base, cf_size, dsp_off, dsp_len, rows` (voice rows as a mask), `u8 n_types` and that many machine
 /// type bytes (at most 8: the machine rows of the module, then its voice rows' types), `u32 faults` (the guard's count for those types), `u8 flags` (bit 0:
 /// the guard switched one of them off). A reply holds the records from `start` on that fit; the host asks again from the last index + 1 until it has `total`.
 unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 {
@@ -293,7 +293,9 @@ unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 {
         *rb.add(at) = i as u8;
         copy(rb.add(at + 1), m.name.as_ptr(), 32);
         wr32(rb.add(at + 33), m.version);
-        copy(rb.add(at + 37), (*addr_of!(crate::DKRT_CONTRACTS))[i].as_ptr(), 8);
+        // the version of the runtime the module needs, then four reserved zero bytes
+        wr32(rb.add(at + 37), (*addr_of!(crate::DKRT_MODULE_RUNTIME))[i]);
+        wr32(rb.add(at + 41), 0);
         wr32(rb.add(at + 45), m.base);
         wr32(rb.add(at + 49), m.size);
         wr32(rb.add(at + 53), d.mod_off[i]);

@@ -1,0 +1,84 @@
+# Address map
+
+Names for code addresses in profiles, crash records and analysis tools. Plan: [profiling.md](plans/profiling.md) section 3.
+
+## Layers
+
+A lookup uses the most specific layer that holds the address and falls back to the raw address.
+
+| Layer | `layer` | Holds | Written by | Ships |
+| --- | --- | --- | --- | --- |
+| 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
+| 2 Anchors | `anchor` | Code anchors of `devices/ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
+| 3 Firmware names | `fw` | Functions of the firmware databases (cfdb: ColdFire; sharcdb: SHARC) | `tools/coldfire/addrmap_export.py` | no, developer machines only |
+
+Names of Rust symbols are demangled without the hash (`dkrt::card::gate`). A return address is looked up at the address minus 2: a call to a
+function that does not return is often the last instruction of its caller.
+
+SHARC: only layer 3 (stock firmware, software PC). Our own DSP code and module DSP names wait for plan item 3 (sharcdb tables for module DSP).
+
+## Files
+
+JSON, one object. `kind` is `ship`, `module` or `dev`.
+
+```json
+{
+  "format": "dk-addrmap", "version": 1, "kind": "ship",
+  "key": { "device": "dt2", "firmware": "1.17", "image_sha256": "...", "output_sha256": "...", "modules": ["core/runtime@0.6.0"] },
+  "entries": [ { "cpu": "cf", "addr": 1076959172, "size": 54, "name": "pk_loader", "layer": "our" } ]
+}
+```
+
+- `cpu`: `cf` (byte address) or `sharc` (software PC, in words).
+- `size`: bytes (words) from `addr`; 0 holds only `addr`.
+- `module`: set on the entries of a module map. `addr` is then the offset from the module's load address; the lookup adds the base from the load
+  table. A module that is not in the load table has no names.
+- `key` of a ship map: the stock image (`image_sha256`), the patched image (`output_sha256`) and the modules the patch placed. A module map has
+  `module` (the name the runtime reports), `source_sha256` (its object) and `dkm_sha256`. The dev map has the stock image hash from the port file.
+  The lookup refuses maps that name different stock images.
+- Entries are sorted by (cpu, layer, module, addr, name): equal inputs give equal files.
+- Sizes of our code: the `.dko` objects hold no symbol sizes. With one function per section (`-ffunction-sections`) the section size is the
+  function size; otherwise the size runs to the next symbol of the section.
+
+Where the files are:
+
+| File | Path |
+| --- | --- |
+| Ship map | `X.addrmap.json` beside the image `X.syx` (`patchkit patch` writes it with `X.plan.json`) |
+| Module map | `M.addrmap.json` beside `M.dkm` (`dist/modules/<device>/` from `nx run <module>:pack`; `patchkit pack --addrmap FILE`) |
+| Dev map | `out/addrmap/<device>-<version>.dev.json` (`uv run python -m tools.coldfire.addrmap_export dt2-1.17`); derived from firmware, never committed |
+
+A ship map and a module map hold no firmware bytes and no firmware-derived text beyond the anchor names of the port files (committed).
+
+## Load table
+
+`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512}]}`. In the emulator it is read from the runtime's module table
+`DKRT_STATE` (symbol of the patch plan; `State` in `modules/core/runtime/src/rs/src/lib.rs`: ten header words, then one record of 13 words per
+slot: used, name[32], version, base, size, fini). `tools.devtools.addrnames.read_load_table` and `tests/regression/runtime/addrmap.ts` read it.
+No firmware or runtime change.
+
+## Lookup
+
+Rust: crate `dkaddrmap` (`packages/dkaddrmap`: format, `Resolver`), the map writers and `patchkit addr` in `packages/patchkit/src/addrmap.rs`.
+
+```sh
+patchkit addr --map X.addrmap.json --map M.addrmap.json --map out/addrmap/dt2-1.17.dev.json --load test/dyn-demo=47e10000 [--ret] 0x401be1be sharc:0xb80105
+patchkit addr ... --stdin          # one address per line
+patchkit addr ... --format text    # "0x401be1be name+0x4" per line
+```
+
+JSON on stdout: `{"unloaded": [...], "results": [{"cpu", "addr", "name", "text", "layer", "sym_addr", "offset", "size", "module"}]}`. `name` is null
+when no layer holds the address. Python tools do not read maps: `tools/devtools/addrnames.py` (`AddrNames`) runs this command once for a batch.
+
+## Consumers
+
+| Tool | Use |
+| --- | --- |
+| `tools/device/dklog.py crash --image X.syx [--module M.dkm]` | pc, registers and return-address-looking stack words of a crash record |
+| `tools/devtools/cfprof.py` | `cf.profile` of the emulator (feature `cf-profile`) by function |
+| `tools/devtools/fastcov.py` | SHARC function names of the interpreter report |
+| `tools/emulator/snapread.py` | ColdFire names for `regs` and `tasks` (the image comes from the snapshot path or `--image`) |
+| `tools/devtools/pcdump_names.py` | a `func` column and names in the `#stack-max` line of a `pcdump.csv` |
+
+Device crash records name modules with the load addresses of the boot that reads the record. A module loaded at another address in the crashed
+boot is named wrongly [O]; the record has the module index and name for a check.

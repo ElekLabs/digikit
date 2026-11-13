@@ -99,13 +99,13 @@ static void rect(int32_t a, int32_t b, int32_t c, int32_t d, int32_t color)
 int main(void)
 {
     static int pool_token;
-    dk_page_frame_v1 f = {.version = 1,
-                          .size = sizeof(f),
-                          .track = 0,
-                          .params = {[7] = 127 << 8},
-                          .word_count = 5,
-                          .word_values = {[2] = 127 << 8},
-                          .canvas = {107, 53, text, rect}};
+    dk_page_frame f = {.version = 1,
+                       .size = sizeof(f),
+                       .track = 0,
+                       .params = {[7] = 127 << 8},
+                       .word_count = 5,
+                       .word_values = {[2] = 127 << 8},
+                       .canvas = {107, 53, text, rect}};
     sample_view_init(&shot_samples, (dk_sample_pool *)&pool_token);
     range_draw = 1;
     shot_range_draw(&f);
@@ -150,7 +150,7 @@ int main(void)
     shot_range_draw(&f);
     assert(queries == 4);
     /* Zoom is observed in the ZOOM label on the value row (y 46); "x1.0" is 14 wide, left 61. */
-    dk_page_event_v1 event = {
+    dk_page_event event = {
         .version = 1, .size = sizeof(event), .track = 0, .control = 0, .delta = 1, .coarse = 0};
     /* One detent is one step of 2^(1/8); a delta clamps to 16 steps per event. */
     shot_range_event(&event);

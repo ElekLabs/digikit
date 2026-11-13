@@ -669,35 +669,6 @@ fn an_unknown_backend_or_a_bad_panel_exception_is_refused() {
     }
 }
 
-/// `patchkit gen` loads a content module's objects for its gallery.json: a run-time module declares its machines in its objects, so a
-/// library without them generates nothing and `gen --check` could not see a stale file (test/dyn-params is a fixture with a gallery).
-#[test]
-fn a_content_modules_gallery_needs_its_objects() {
-    let id = vec!["test/dyn-params".to_string()];
-    let models = Models::from_dir(&root().join("devices")).unwrap();
-    // the fixture root read without a build: its objects are files of the module folder, which has none (the object cache is not read)
-    let light = Library::scan_in(None, &root().join("tests/fixtures/modules"), true).unwrap();
-    assert!(
-        modgen::generate_many(&light, &models, &id)
-            .unwrap()
-            .is_empty(),
-        "without objects the module has no typed sections"
-    );
-    let Some(full) = Library::scan_repo_for_or_skip(&root(), Some(&id)) else {
-        return;
-    };
-    let files = modgen::generate_many(&full, &models, &id).unwrap();
-    assert_eq!(files.len(), 1);
-    let (path, text) = &files[0];
-    assert!(path.ends_with("build/gen/gallery.json"));
-    assert_eq!(
-        &std::fs::read_to_string(path).unwrap(),
-        text,
-        "{} is stale",
-        path.display()
-    );
-}
-
 #[test]
 fn the_sample_pool_facts_are_checked() {
     let (dt2, dn2) = device_texts();

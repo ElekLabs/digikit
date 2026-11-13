@@ -212,6 +212,66 @@ struct Entry {
     sample_pool: Option<SamplePoolF>,
     input: InputF,
     fx: FxF,
+    profile: ProfileF,
+}
+/// The device facts of the builder commit (`core/runtime` reads them from `dynreg_info` version 3): what the packer took from `[modules]` and
+/// `[adapter.machine]` before modules declared through builder calls. All 0 on a device without `[modules]`.
+#[derive(Debug, Default)]
+struct ProfileF {
+    clone_of: u64,
+    level: u64,
+    own_dsp: u64,
+    tune_code: u64,
+    tune_slot: u64,
+    level_code: u64,
+    level_knob: u64,
+    slots: Vec<u64>,
+    /// encoder, fader, pan, onoff, tune, play
+    templates: [u64; 6],
+}
+/// The glyph templates a profile carries, in the order of the runtime's `Profile::tpl` (`dk_glyph` names of `[modules.templates]`).
+const PROFILE_GLYPHS: [&str; 6] = ["encoder", "fader", "pan", "onoff", "tune", "play"];
+/// The most knob positions a profile carries (`dk_machine` params per machine).
+const PROFILE_SLOTS_MAX: usize = 8;
+
+fn profile_facts(short: &str, model: Option<&crate::typed::DeviceModel>) -> Result<ProfileF> {
+    let Some(m) = model else {
+        return Ok(ProfileF::default());
+    };
+    let kn = &m.knobs;
+    let to_machine = kn.to == "machine";
+    if m.param_slots.len() > PROFILE_SLOTS_MAX {
+        return Err(err!(
+            "{short}: [adapter.machine] param_slots lists {}, a profile carries at most {PROFILE_SLOTS_MAX}",
+            m.param_slots.len()
+        ));
+    }
+    let mut templates = [0u64; 6];
+    for (t, g) in templates.iter_mut().zip(PROFILE_GLYPHS) {
+        *t = *m
+            .templates
+            .get(g)
+            .ok_or_else(|| err!("{short}: [modules.templates] has no `{g}`"))? as u64;
+    }
+    Ok(ProfileF {
+        clone_of: kn.clone_of as u64,
+        level: kn.level_default as u64,
+        own_dsp: u64::from(kn.own_dsp),
+        tune_code: if to_machine {
+            kn.tune.unwrap_or(0) as u64
+        } else {
+            0
+        },
+        tune_slot: m.tune_slot.unwrap_or(0) as u64,
+        level_code: if to_machine {
+            kn.level.unwrap_or(0) as u64
+        } else {
+            0
+        },
+        level_knob: kn.level_knob.unwrap_or(0) as u64,
+        slots: m.param_slots.iter().map(|&x| x as u64).collect(),
+        templates,
+    })
 }
 /// A device's effect page facts (all 0 / empty on a device without run-time effect pages).
 #[derive(Debug, Default)]
@@ -315,6 +375,8 @@ struct StoreF {
 impl Facts {
     pub fn from_texts<'a>(texts: impl IntoIterator<Item = &'a str>) -> Result<Facts> {
         let mut docs = BTreeMap::new();
+        let texts: Vec<&str> = texts.into_iter().collect();
+        let models = crate::typed::Models::from_texts(texts.iter().copied())?;
         for t in texts {
             // a sidecar file (the LED maps) has no [device]
             let table: toml::Table = toml::from_str(t)?;
@@ -411,6 +473,7 @@ impl Facts {
                         sample_pool,
                         input,
                         fx,
+                        profile: profile_facts(&short, models.by_device.get(&short))?,
                     },
                 )
                 .is_some()
@@ -1303,6 +1366,59 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "[fx] send_indices (a Sound array index the send page's knob uses)",
         ));
     }
+    let pf = &e.profile;
+    for (name, value, note) in [
+        ("PROFILE_CLONE_OF", pf.clone_of, "[modules.knobs] clone_of"),
+        ("PROFILE_LEVEL", pf.level, "[modules.knobs] level_default"),
+        (
+            "PROFILE_OWN_DSP",
+            pf.own_dsp,
+            "[modules.knobs] own_dsp (0 or 1)",
+        ),
+        (
+            "PROFILE_TUNE_CODE",
+            pf.tune_code,
+            "[modules.knobs] tune on a machine-row device (0: none)",
+        ),
+        (
+            "PROFILE_TUNE_SLOT",
+            pf.tune_slot,
+            "[adapter.machine] tune_slot",
+        ),
+        (
+            "PROFILE_LEVEL_CODE",
+            pf.level_code,
+            "[modules.knobs] level on a machine-row device (0: none)",
+        ),
+        (
+            "PROFILE_LEVEL_KNOB",
+            pf.level_knob,
+            "[modules.knobs] level_knob",
+        ),
+        (
+            "PROFILE_SLOT_COUNT",
+            pf.slots.len() as u64,
+            "[adapter.machine] param_slots, the count",
+        ),
+    ] {
+        v.push(c(name, value, PerDevice, note));
+    }
+    for (i, name) in PROFILE_SLOT.iter().enumerate() {
+        v.push(c(
+            name,
+            pf.slots.get(i).copied().unwrap_or(0),
+            PerDevice,
+            "[adapter.machine] param_slots (knob position of the machine's word i)",
+        ));
+    }
+    for (name, value) in PROFILE_TPL.iter().zip(pf.templates) {
+        v.push(c(
+            name,
+            value,
+            PerDevice,
+            "[modules.templates] (stock parameter row of a glyph)",
+        ));
+    }
     for i in 0..PEEK_MAX {
         let r = k.peek.get(i).copied().unwrap_or([0, 0]);
         v.push(C {
@@ -1385,6 +1501,24 @@ const FX_VALUE: [&str; FX_VALUES_MAX] = [
     "FX_VALUE_29",
     "FX_VALUE_30",
     "FX_VALUE_31",
+];
+const PROFILE_SLOT: [&str; PROFILE_SLOTS_MAX] = [
+    "PROFILE_SLOT_0",
+    "PROFILE_SLOT_1",
+    "PROFILE_SLOT_2",
+    "PROFILE_SLOT_3",
+    "PROFILE_SLOT_4",
+    "PROFILE_SLOT_5",
+    "PROFILE_SLOT_6",
+    "PROFILE_SLOT_7",
+];
+const PROFILE_TPL: [&str; 6] = [
+    "PROFILE_TPL_ENCODER",
+    "PROFILE_TPL_FADER",
+    "PROFILE_TPL_PAN",
+    "PROFILE_TPL_ONOFF",
+    "PROFILE_TPL_TUNE",
+    "PROFILE_TPL_PLAY",
 ];
 const PEEK_LO: [&str; PEEK_MAX] = ["PEEK_LO_0", "PEEK_LO_1", "PEEK_LO_2", "PEEK_LO_3"];
 const PEEK_HI: [&str; PEEK_MAX] = ["PEEK_HI_0", "PEEK_HI_1", "PEEK_HI_2", "PEEK_HI_3"];

@@ -417,8 +417,7 @@ export async function inspect(
   let oracle: FxExpectations | undefined;
   if (wet) {
     const effect = modules[1]!;
-    expect(effect.contracts[2]).toEqual([1, 0]);
-    expect(effect.contracts[1]).toEqual([0, 0]);
+    expect(effect.needs, 'the effect module needs the runtime of sdk/sdk.toml').toBeGreaterThan(0);
     expect(effect.rows).toBe(0);
     const base = planSymbol(plan, '_dl_area') + effect.dsp_off;
     const artifact = moduleArtifact(session.options.device, GAIN); // the module that the card was built from
@@ -440,9 +439,9 @@ export async function inspect(
   expect(status.dsp).toBe('sharc');
   const semantic = {
     boot: { count: fields[7], loaded: fields[8], safe: fields[2], counter: fields[4] },
-    modules: modules.map(({ name, contracts, types, rows: count, dsp_len }) => ({
+    modules: modules.map(({ name, needs, types, rows: count, dsp_len }) => ({
       name,
-      contracts,
+      needs,
       types,
       rows: count,
       dsp_len,

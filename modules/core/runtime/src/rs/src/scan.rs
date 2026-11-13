@@ -19,7 +19,6 @@ static mut SECT: *mut u8 = core::ptr::null_mut();
 static mut READS: u32 = 0;
 
 const DKM_MAGIC: u32 = 0x444b_4d46; // "DKMF"
-const REG_MAGIC: u32 = 0x444b_5247; // "DKRG"
 
 unsafe fn sect() -> *mut u8 {
     if (*addr_of!(SECT)).is_null() {
@@ -59,43 +58,24 @@ pub unsafe fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
     OK
 }
 
-/// Whether the file at store sector `first` can be loaded by this runtime on this device, judged from its header: the `.dkm`
-/// format's SDK contracts (header 0x38..0x3f, the loader's rule: a declared contract with another major or a minor above the
-/// runtime's refuses), and the device of its register records (docs/design/digikit-dkm.md; a module without records runs on
-/// either device). A file that is not a `.dkm` or cannot be read passes: the runtime then names the real reason at boot.
+/// Whether the file at store sector `first` can be loaded by this runtime on this device, judged from its header: the runtime version the module
+/// needs (header word 0x30, the loader's rule `runtime_accepts`), and the device of its DSP section (a module without one runs on either device).
+/// A file that is not a `.dkm` or cannot be read passes: the runtime then names the real reason at boot.
 unsafe fn compatible(first: u32, device: u32) -> bool {
     match file_word(first, 0) {
         Some(DKM_MAGIC) => {}
         _ => return true,
     }
-    let rt = [
-        contract::API,
-        contract::MACHINE,
-        contract::FX,
-        contract::SERVICE,
-    ];
-    for half in 0..2u32 {
-        if let Some(w) = file_word(first, 0x38 + 4 * half) {
-            for k in 0..2usize {
-                let c = 2 * half as usize + k;
-                let major = (w >> (24 - 16 * k as u32)) as u8;
-                let minor = (w >> (16 - 16 * k as u32)) as u8;
-                if major != 0 && (major != rt[c].0 || minor > rt[c].1) {
-                    return false;
-                }
-            }
-        }
+    if !file_word(first, 0x30).is_none_or(crate::runtime_accepts) {
+        return false;
     }
-    let (Some(off), Some(size)) = (file_word(first, 0x90), file_word(first, 0x94)) else {
+    let (Some(off), Some(size)) = (file_word(first, 0x98), file_word(first, 0x9c)) else {
         return true;
     };
-    if size == 0 || off % 16 != 0 {
+    if size == 0 {
         return true;
     }
-    if file_word(first, off) != Some(REG_MAGIC) {
-        return true;
-    }
-    match file_word(first, off + 8) {
+    match file_word(first, off.wrapping_add(8)) {
         Some(d) => d == device || device == 0,
         None => true,
     }

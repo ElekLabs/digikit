@@ -818,6 +818,8 @@ def run_transfer(
     from tools.device import dkupload as DK
     from tools.patchkit import pk_digikit_upload as U
 
+    # out/ is shared by all worktrees and the pack reuse rule compares file times: a file another run packed from other sources would be reused
+    os.environ["DIGI_TRANSFER_DIR"] = str(c.work / "transfer")
     (module,) = c.table()["modules"]
     (path,) = blobs
     steps = {"n": 0}
