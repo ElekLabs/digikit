@@ -77,11 +77,7 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
             ))
         })?;
         let ports = &m.manifest.module.ports;
-        if !ports.is_empty()
-            && !ports
-                .iter()
-                .any(|p| p.split('-').next() == Some(dev.as_str()))
-        {
+        if !m.manifest.module.builds_for(&dev) {
             return Err(Error(format!(
                 "{id} is not built for {dev}: its ports are {}",
                 ports.join(", ")

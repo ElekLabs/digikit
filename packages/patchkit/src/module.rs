@@ -440,6 +440,25 @@ pub struct ModuleInfo {
     pub dynamic: bool,
 }
 
+impl ModuleInfo {
+    /// A module the run-time loader takes as a `.dkm`: not `core`, not a framework, and dynamic, raw or a service
+    /// (the rule of the workbench library and of `apps/web/src/data/shipped.mjs`).
+    pub fn is_runtime(&self) -> bool {
+        self.category != "core"
+            && !matches!(self.kind, ModuleKind::Framework)
+            && (self.dynamic || matches!(self.kind, ModuleKind::Raw | ModuleKind::Service))
+    }
+
+    /// Whether the module builds for the device `short` (`dt2`): no `ports`, or a port of that device.
+    pub fn builds_for(&self, short: &str) -> bool {
+        self.ports.is_empty()
+            || self
+                .ports
+                .iter()
+                .any(|p| p.split('-').next() == Some(short))
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct ObjectRef {
     pub path: String,

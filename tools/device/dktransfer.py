@@ -3,7 +3,8 @@
 
 This is the command line for scripts and the scenarios. The desktop workbench does not use it: its Transfer page speaks the same protocol in
 TypeScript (packages/dk-session/src/dkupload-core.ts `DkSession`, dktransfer.py's port in apps/web/src/modules/dktransfer.ts) and reads
-built modules from out/modules/<device>/ (`mise run module:pack-all`, tools/device/dkpackall.py). Python is for reverse engineering and
+built modules from out/modules/<device>/ (the workbench app builds and packs there when it reads the library: `lib_build`,
+apps/desktop/src-tauri/src/library.rs). Python is for reverse engineering and
 dev tooling; the app starts no process.
 
     uv run python -m tools.device.dktransfer list --emu [--json]

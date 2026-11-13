@@ -1,7 +1,7 @@
-//! The module library: the built `.dkm` files the Transfer page offers. The app does not build or pack; a dev task (`mise run
-//! module:pack-all`, run by `mise run workbench`) writes one folder per device, `out/modules/<device>/<id>.dkm`, and this file lets
-//! the page read it (the one thing the page cannot do itself: file access). The folder is the single constant below; a packaged app
-//! would bundle a folder and point it here.
+//! The module library: the `.dkm` files of the run-time modules, one folder per device (`out/modules/<device>/<id>.dkm`).
+//! `lib_build` builds the stale objects and packs every run-time module for a device in this process (patchkit); `lib_scan` and
+//! `lib_read` let the page read the folder (the one thing the page cannot do itself: file access). A packaged app would bundle a
+//! folder and point LIBRARY_DIR there.
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -79,6 +79,120 @@ pub fn read(root: &Path, device: &str, rel: &str) -> Result<Vec<u8>, String> {
 
 fn root() -> Result<PathBuf, String> {
     digi_control::runtime_patch::find_root(None)
+}
+
+/// A module that did not build or pack for the device.
+#[derive(Serialize, Debug)]
+pub struct LibFailure {
+    pub id: String,
+    pub error: String,
+}
+
+/// What `lib_build` did for one device.
+#[derive(Serialize, Debug, Default)]
+pub struct LibBuildReport {
+    /// Modules packed for the device.
+    pub packed: usize,
+    /// Ids whose `.dkm` was new or changed (written).
+    pub changed: Vec<String>,
+    /// Library paths (`<author/name>.dkm`) deleted because their module no longer packs for the device.
+    pub removed: Vec<String>,
+    pub failed: Vec<LibFailure>,
+    pub ms: u64,
+}
+
+/// One build at a time: the Transfer page, the memory panel and the default modules may ask together.
+static BUILD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Build and pack every run-time module that builds for `device` into its library folder. A `.dkm` is written only when its bytes
+/// changed; a `.dkm` whose module did not pack this time is deleted. One module's failure does not stop the others.
+fn build(root: &Path, device: &str) -> Result<LibBuildReport, String> {
+    let _one = BUILD_LOCK.lock().map_err(|e| e.to_string())?;
+    let started = std::time::Instant::now();
+    let dir = device_dir(root, device)?;
+    let source = patchkit::module::LibrarySource::default();
+    // the manifests only: no content module objects are loaded or built here
+    let headers = patchkit::module::library_with(root, &source, false, Some(&[][..]))
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<String> = headers
+        .modules
+        .iter()
+        .map(|m| &m.manifest.module)
+        .filter(|m| m.is_runtime() && m.builds_for(device))
+        .map(|m| m.id.clone())
+        .collect();
+    let mut report = LibBuildReport::default();
+    let mut kept = std::collections::BTreeSet::new();
+    for id in &ids {
+        let packed = patchkit::module::selected_library(
+            root,
+            &source,
+            false,
+            std::slice::from_ref(id),
+            std::slice::from_ref(id),
+        )
+        .and_then(|lib| {
+            patchkit::pack::pack_module(
+                &lib,
+                id,
+                &patchkit::pack::PackOptions {
+                    device: Some(device.to_string()),
+                    ..Default::default()
+                },
+            )
+        });
+        let packed = match packed {
+            Ok(p) => p,
+            Err(e) => {
+                report.failed.push(LibFailure {
+                    id: id.clone(),
+                    error: e.to_string(),
+                });
+                continue;
+            }
+        };
+        let rel = format!("{id}.dkm");
+        let path = dir.join(&rel);
+        if std::fs::read(&path).ok().as_deref() != Some(packed.bytes.as_slice()) {
+            let written = match path.parent() {
+                Some(parent) => std::fs::create_dir_all(parent),
+                None => Ok(()),
+            }
+            .and_then(|()| std::fs::write(&path, &packed.bytes));
+            if let Err(e) = written {
+                report.failed.push(LibFailure {
+                    id: id.clone(),
+                    error: format!("{}: {e}", path.display()),
+                });
+                continue;
+            }
+            report.changed.push(id.clone());
+        }
+        report.packed += 1;
+        kept.insert(rel);
+    }
+    for file in scan(root, device)? {
+        if !kept.contains(&file.path) {
+            let path = dir.join(&file.path);
+            match std::fs::remove_file(&path) {
+                Ok(()) => report.removed.push(file.path),
+                Err(e) => report.failed.push(LibFailure {
+                    id: file.path,
+                    error: format!("{}: {e}", path.display()),
+                }),
+            }
+        }
+    }
+    report.ms = started.elapsed().as_millis() as u64;
+    Ok(report)
+}
+
+/// Build and pack the run-time modules of a device (`dt2`, `dn2`) into the library.
+#[tauri::command]
+pub async fn lib_build(device: String) -> Result<LibBuildReport, String> {
+    tauri::async_runtime::spawn_blocking(move || build(&root()?, &device))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// The built modules of a device (`dt2`, `dn2`): path and size of each.
@@ -196,6 +310,13 @@ mod tests {
         assert_eq!(scan(&root, "dn2").unwrap(), vec![]);
         assert!(scan(&root, "../x").is_err());
         assert_eq!(read(&root, "dt2", "acme/synth.dkm").unwrap(), b"SYNTH");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_build_of_an_unknown_device_is_refused() {
+        let root = library("build");
+        assert!(build(&root, "DT2!").is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
 

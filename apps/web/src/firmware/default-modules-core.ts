@@ -102,7 +102,7 @@ export async function installDefaults(
   };
   for (const id of ids)
     if (!ops.pathOf(id))
-      throw new DefaultModuleError(id, 'no built .dkm for this device (build it: mise run module:pack-all)');
+      throw new DefaultModuleError(id, 'no built .dkm for this device (its build failed: see the Log)');
   progress({ text: 'Waiting for the runtime to answer', done: 0, total });
   await wrap(ids[0]!, ops.waitForRuntime());
   for (const [i, id] of ids.entries()) {

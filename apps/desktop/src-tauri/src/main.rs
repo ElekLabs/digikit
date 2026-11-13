@@ -678,6 +678,7 @@ fn main() {
             firmware::firmware_save,
             log_save::log_save,
             library::lib_scan,
+            library::lib_build,
             library::lib_read,
             library::sample_wasm,
             library::patchkit_wasm,

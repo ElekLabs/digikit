@@ -308,10 +308,6 @@ description = "Check one module: module:check ID [--device dt2|dn2] [--trace]. M
 run = "sh tools/devtools/module_audit.sh"
 description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (modules/core/runtime/tests/memaudit-module.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
 
-["module:pack-all"]
-run = "uv run python -m tools.device.dkpackall"
-description = "Build and pack every run-time module for every device into out/modules/<device>/<id>.dkm, the folder the workbench's Transfer page reads (only what changed costs time; `mise run workbench` runs it first): mise run module:pack-all [-- --force]"
-
 ["module:pack"]
 run = "uv run python -m tools.patchkit.patchkit pack"
 description = "Build the stale objects and pack a run-time module as a .dkm in one command: mise run module:pack -- <author/name> --device dt2 [--trace] [-o FILE] (default out/patch/<name>-<device>.dkm; --trace defines DK_TRACE for the module's C and DSP sources and sets the trace bit)"
