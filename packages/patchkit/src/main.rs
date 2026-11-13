@@ -33,14 +33,12 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
   addr    --map FILE... [--loads FILE | --load ID=BASE...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
                                          names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
-  pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--ui-preview] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
+  pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
                                          (a `dynamic = true` module: its machine and param records for --device)
                                          (--trace: built with DK_TRACE defined, trace bit set in the header; objects cached apart)
-                                         --ui-preview: declarative machine UI only, stub init and no DSP; for isolated zero-DSP emulator previews
                                          --manifest PATH (repeatable, relative to cwd): explicit library instead of discovery; include the module and its requires closure
                                          explicit manifests replace modules/, --modules-dir and PATCHKIT_MODULES
-  desc    MODULE_ID                      the effects the module declares (the DK_FX records of its ColdFire object), as JSON
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
@@ -111,46 +109,6 @@ fn flag(rest: &[String], name: &str) -> Option<String> {
     rest.iter()
         .position(|a| a == name)
         .and_then(|i| rest.get(i + 1).cloned())
-}
-
-/// Preview only declarations: dropping arbitrary CF bytes could silently hide callbacks or
-/// initialization. Require descriptor-only CF objects rather than recognizing hook names.
-fn check_ui_preview(m: &patchkit::module::Module) -> Result<()> {
-    let id = &m.manifest.module.id;
-    let reject = |reason: &str| Error(format!("{id}: --ui-preview {reason}"));
-    if !m.manifest.module.dynamic
-        || m.manifest.module.kind != patchkit::module::ModuleKind::Machine
-        || m.manifest.machine.is_empty()
-    {
-        return Err(reject("requires a declarative run-time machine"));
-    }
-    if !patchkit::desc::module_fx(m)?.is_empty() {
-        return Err(reject("does not support effects"));
-    }
-    if m.manifest.sample_bank.is_some() || m.manifest.sample_tracks.is_some() {
-        return Err(reject("does not support sample banks or sample tracks"));
-    }
-    if m.manifest.param.iter().any(|p| p.action.is_some()) {
-        return Err(reject("does not support parameter click actions"));
-    }
-    if !m.manifest.native_page.is_empty() {
-        return Err(reject("does not support native callback pages"));
-    }
-    for obj in m.objects.iter().filter(|o| o.arch == "cf") {
-        if let Some(obj) = patchkit::desc::strip(obj) {
-            let sections: Vec<_> = obj
-                .sections
-                .iter()
-                .filter(|s| s.size > 0)
-                .map(|s| s.name.as_str())
-                .collect();
-            return Err(reject(&format!(
-                "requires descriptor-only ColdFire objects; remaining sections {} could contain hooks or callbacks",
-                sections.join(", ")
-            )));
-        }
-    }
-    Ok(())
 }
 
 fn registry(root: &Path) -> Result<Registry> {
@@ -521,41 +479,6 @@ fn run(a: Args) -> Result<()> {
                         }
                     }
                 }
-                // A content module declares its machines in its objects (.dk.desc), so its gallery.json needs them: a second library loads
-                // (and builds when stale) the objects, after the files above are written, which the build reads.
-                let with_gallery: Vec<String> = lib
-                    .modules
-                    .iter()
-                    .filter(|m| patchkit::typed::has_typed(&m.manifest))
-                    .map(|m| m.id().to_string())
-                    .collect();
-                let content: Vec<String> = lib
-                    .modules
-                    .iter()
-                    .filter(|m| !with_gallery.iter().any(|g| g == m.id()))
-                    .filter(|m| only.is_empty() || only.iter().any(|o| o == m.id()))
-                    .map(|m| m.id().to_string())
-                    .collect();
-                if !content.is_empty() {
-                    let full = selected_library(&a.root, rest, true, &content, &only)?;
-                    for (path, text) in patchkit::modgen::generate_many(&full, &models, &content)? {
-                        let have = std::fs::read_to_string(&path).ok();
-                        if have.as_deref() == Some(text.as_str()) {
-                            continue;
-                        }
-                        if check {
-                            println!("stale    {}", path.display());
-                            stale += 1;
-                        } else {
-                            if let Some(d) = path.parent() {
-                                std::fs::create_dir_all(d)
-                                    .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                            }
-                            write(&path.to_string_lossy(), text.as_bytes())?;
-                            println!("wrote    {}", path.display());
-                        }
-                    }
-                }
             }
             if scope.as_deref() != Some("modules") {
                 for (rel, text) in patchkit::sdkgen::generate(&a.root)? {
@@ -771,10 +694,6 @@ plan.json {}",
             let m = lib
                 .get(id)
                 .ok_or_else(|| Error(format!("no module {id}")))?;
-            let ui_preview = rest.iter().any(|a| a == "--ui-preview");
-            if ui_preview {
-                check_ui_preview(m)?;
-            }
             let cf: Vec<_> = m
                 .objects
                 .iter()
@@ -795,14 +714,8 @@ plan.json {}",
                 stereo: false,
                 gate: false,
             };
-            // a run-time module declares in `init`: `[[machine]]`/`[[fx]]` in module.toml, no `.dk.desc` records; the table at 0x90 is the keys table
+            // a run-time module declares in `init`: `[[machine]]`/`[[fx]]` in module.toml; the table at 0x90 is the keys table
             let mut dsp: Vec<u8> = vec![];
-            patchkit::major3::refuse_declarations(m)?;
-            if ui_preview {
-                return Err(Error(format!(
-                    "{id}: --ui-preview needs a module with declarations; a run-time module declares in init"
-                )));
-            }
             let reg = if dynamic {
                 let dev = flag(rest, "--device").ok_or_else(|| {
                     Error(format!(
@@ -905,35 +818,6 @@ plan.json {}",
                         .collect::<Vec<_>>()
                         .join("; ")
                 }
-            );
-            if ui_preview {
-                println!(
-                    "UI preview only: no module DSP or ColdFire hooks; use only in an isolated zero-DSP emulator run"
-                );
-            }
-        }
-        "desc" => {
-            let id = need(rest)?;
-            // Only this module's compiled declarations are needed. Unrelated content
-            // may have stale or unbuildable sources, just as when packing one module.
-            let lib = library_with(&a.root, rest, false, Some(std::slice::from_ref(id)))?;
-            let m = lib
-                .get(id)
-                .ok_or_else(|| Error(format!("no module {id}")))?;
-            let fx = patchkit::desc::module_fx(m)?;
-            let mf = &m.manifest;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "fx": fx,
-                    "machines": mf.machine,
-                    "params": mf.param,
-                    "pages": mf.page,
-                    "native_pages": mf.native_page,
-                    "voices": mf.voice,
-                    "sample_bank": mf.sample_bank,
-                    "sample_tracks": mf.sample_tracks,
-                }))?
             );
         }
         "dkm-dsp-image" => {
@@ -1188,129 +1072,6 @@ mod tests {
         }
     }
 
-    // TODO(S3): no fixture with `.dk.desc` records is left that a preview can use (test/sample-proof has a sample bank), so these tests have
-    // nothing to run on: package F deletes them with the `--ui-preview` path.
-    #[test]
-    #[ignore = "S3: every declarative machine fixture is on builder calls; package F deletes the --ui-preview path"]
-    fn ui_preview_preserves_machine_registration_without_module_code() {
-        let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let output = ApplyRoot::new("ui-preview-pack");
-        // (device, module, directory, params): the fixtures that still declare with `.dk.desc` records (a module declares in `init`)
-        for (dev, id, dir, n_params) in [
-            ("dt2", "test/dyn-params", "dyn-params", 4),
-            ("dn2", "test/dyn-dn2", "dyn-dn2", 4),
-        ] {
-            let pack = |preview: bool| {
-                let path = output.0.join(format!("{dev}-{preview}.dkm"));
-                let mut rest: Vec<String> = vec![
-                    "pack".into(),
-                    id.into(),
-                    "--device".into(),
-                    dev.into(),
-                    "-o".into(),
-                    path.display().to_string(),
-                    "--manifest".into(),
-                    real.join(format!("tests/fixtures/modules/{dir}/module.toml"))
-                        .display()
-                        .to_string(),
-                ];
-                if preview {
-                    rest.push("--ui-preview".into());
-                }
-                run(Args {
-                    root: real.clone(),
-                    rest,
-                })
-                .unwrap();
-                patchkit::dkm::Dkm::parse(&std::fs::read(path).unwrap()).unwrap()
-            };
-            let full = pack(false);
-            let preview = pack(true);
-            assert!(!full.dsp.is_empty());
-            assert_eq!(preview.register, full.register);
-            let reg = patchkit::register::Register::parse(&preview.register).unwrap();
-            assert_eq!(
-                (reg.machines.len(), reg.params.len(), reg.pages.len()),
-                (1, n_params, usize::from(dev == "dn2"))
-            );
-            assert!(preview.dsp.is_empty());
-            assert_eq!(preview.image, [0x70, 0x00, 0x4e, 0x75]);
-            assert_eq!(preview.bss, 0);
-            assert_eq!(preview.init, Some(0));
-            assert!(preview.fini.is_none() && preview.menu.is_none());
-            assert!(preview.relocs.is_empty() && preview.imports.is_empty());
-        }
-    }
-
-    // TODO(S3): no fixture with `.dk.desc` records is left that a preview can use (test/sample-proof has a sample bank), so these tests have
-    // nothing to run on: package F deletes them with the `--ui-preview` path.
-    #[test]
-    #[ignore = "S3: every declarative machine fixture is on builder calls; package F deletes the --ui-preview path"]
-    fn ui_preview_refuses_declarations_and_cf_content_it_cannot_preserve() {
-        let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        // a module declares in `init`: it has nothing for a preview to preserve (test/dyn-params still has `.dk.desc` records)
-        let id = "test/dyn-params".to_string();
-        let lib = selected_library(
-            &real,
-            &[],
-            false,
-            std::slice::from_ref(&id),
-            std::slice::from_ref(&id),
-        )
-        .unwrap();
-        let machine = lib.get(&id).unwrap();
-        check_ui_preview(machine).unwrap();
-        let rejected = |m: &patchkit::module::Module, message: &str| {
-            let err = check_ui_preview(m).unwrap_err().0;
-            assert!(err.contains(message), "{err}");
-        };
-        let mut m = machine.clone();
-        m.manifest.module.kind = patchkit::module::ModuleKind::Fx;
-        rejected(&m, "requires a declarative run-time machine");
-        let mut m = machine.clone();
-        m.manifest.module.dynamic = false;
-        rejected(&m, "requires a declarative run-time machine");
-        let mut m = machine.clone();
-        m.manifest.sample_bank = Some(patchkit::typed::SampleBankDef {
-            local_id: 0,
-            bank: "bank".into(),
-            descriptor: "desc".into(),
-            capacity_frames: 32,
-        });
-        rejected(&m, "sample banks or sample tracks");
-        let mut m = machine.clone();
-        m.manifest.sample_tracks = Some(patchkit::typed::SampleTracksDef {
-            local_id: 0,
-            records: "records".into(),
-            control: "control".into(),
-        });
-        rejected(&m, "sample banks or sample tracks");
-        let mut m = machine.clone();
-        m.manifest.param[0].action = Some("click".into());
-        rejected(&m, "parameter click actions");
-        // Even anonymous/static code and state must not be stripped silently.
-        for (name, kind, hex) in [
-            (".text", "text", "4e75"),
-            (".data", "data", "0000"),
-            (".bss", "bss", ""),
-        ] {
-            let mut m = machine.clone();
-            m.objects
-                .iter_mut()
-                .find(|o| o.arch == "cf")
-                .unwrap()
-                .sections
-                .push(patchkit::dko::DkoSection {
-                    name: name.into(),
-                    kind: kind.into(),
-                    size: 2,
-                    align: 2,
-                    hex: hex.into(),
-                });
-            rejected(&m, "requires descriptor-only ColdFire objects");
-        }
-    }
-
     #[test]
     fn scoped_generation_checks_detect_stale_outputs_without_writing() {
         let fixture = ApplyRoot::new("generation");
@@ -1503,22 +1264,6 @@ uses = ["DEVICE_ID"]
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
-    }
-
-    #[test]
-    fn desc_does_not_build_unrelated_content() {
-        let root = ApplyRoot::new("desc-selection");
-        root.module("modules", "test/selected", &[], true);
-        root.module("tests/fixtures/modules", "test/unrelated", &[], false);
-        let describe = |id: &str| {
-            run(Args {
-                root: root.0.clone(),
-                rest: vec!["desc".into(), id.into()],
-            })
-        };
-        describe("test/selected").unwrap();
-        // The same missing source still fails when explicitly requested.
-        assert!(describe("test/unrelated").is_err());
     }
 
     #[test]

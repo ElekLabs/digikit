@@ -145,30 +145,11 @@ def _manifest(moddir: Path) -> dict:
     return tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8"))
 
 
-@cache
-def desc_records(mid: str) -> dict:
-    """The records of module `mid` as `patchkit desc` prints them (from the `DK_*` records of its ColdFire object): keys fx, machines, params, pages, voices."""
-    from tools.patchkit import patchkit
-
-    r = patchkit.run(["desc", mid], capture=True)
-    if r.returncode:
-        raise RuntimeError(f"patchkit desc {mid} failed:\n{r.stderr}")
-    return json.loads(r.stdout)
-
-
-def fx_records(mid: str) -> list[dict]:
-    """The effects of module `mid` as `patchkit desc` prints them."""
-    return desc_records(mid)["fx"]
-
-
 def _fx_records(mid: str, man: dict) -> list[dict]:
-    """The effects of an effect module: for a module (`[[fx]]` in module.toml) the DSP entry names (`_<prefix>_process`,
-    `_<prefix>_desc`; the prefix is the id, or `dsp`) and the knob ranges of the committed rows (build/gen/gallery.json, written by `module:check`);
-    otherwise the records `patchkit desc` finds. Only `type = "fx"` modules, so `desc` does not run for every module."""
-    if man.get("module", {}).get("type") != "fx":
+    """The effects of an effect module (`[[fx]]` in module.toml): the DSP entry names (`_<prefix>_process`, `_<prefix>_desc`; the prefix is the
+    id, or `dsp`) and the knob ranges of the committed rows (build/gen/gallery.json, written by `module:check`)."""
+    if man.get("module", {}).get("type") != "fx" or not man.get("fx"):
         return []
-    if not man.get("fx"):
-        return fx_records(mid)
     path = modroots.module_dir(mid) / "build/gen/gallery.json"
     if not path.is_file():
         raise ConformError(f"{mid}: no build/gen/gallery.json: run `module:check`")
@@ -189,22 +170,19 @@ def _fx_records(mid: str, man: dict) -> list[dict]:
 
 
 def _voices(mid: str, man: dict) -> list[dict]:
-    """The voice records of a machine module: `patchkit desc` for a module with `.dk.desc` records, and for a module (`[[machine]]` in
-    module.toml) the DSP entry names of its machine (`_<prefix>_render`, `_<prefix>_note_on`, `_<prefix>_desc`; the prefix is the id, or `dsp`).
-    Only `type = "machine"` modules, so `desc` does not run for every module."""
-    if man.get("module", {}).get("type") == "machine":
-        if man.get("machine"):
-            m = man["machine"][0]
-            p = m.get("dsp") or m["id"].replace("-", "_")
-            return [
-                {
-                    "machine": m["id"],
-                    "render": f"_{p}_render",
-                    "note_on": f"_{p}_note_on",
-                    "desc": f"_{p}_desc",
-                }
-            ]
-        return desc_records(mid)["voices"]
+    """The voice records of a machine module (`[[machine]]` in module.toml): the DSP entry names of its machine (`_<prefix>_render`,
+    `_<prefix>_note_on`, `_<prefix>_desc`; the prefix is the id, or `dsp`)."""
+    if man.get("module", {}).get("type") == "machine" and man.get("machine"):
+        m = man["machine"][0]
+        p = m.get("dsp") or m["id"].replace("-", "_")
+        return [
+            {
+                "machine": m["id"],
+                "render": f"_{p}_render",
+                "note_on": f"_{p}_note_on",
+                "desc": f"_{p}_desc",
+            }
+        ]
     return []
 
 
@@ -247,15 +225,8 @@ def _type_number(mid: str, man: dict, device: str, literal: str | None) -> int:
     types = tomllib.loads(
         (ROOT / "modules/core/adapters/machines/types.toml").read_text()
     )[device]
-    if man.get("machine"):  # a module: the id of module.toml
-        mach = man["machine"][0]["id"]
-    else:
-        recs = (
-            desc_records(mid) if man.get("module", {}).get("type") == "machine" else {}
-        )
-        mach = (recs.get("machines") or [{}])[0].get("id") or (
-            recs.get("voices") or [{}]
-        )[0].get("machine")
+    # a module: the id of module.toml
+    mach = man["machine"][0]["id"] if man.get("machine") else None
     if literal is not None:  # "machines.<name>.index": the type allocated to <name>
         mach = str(literal).split(".")[1]
     key = f"{mid}:{mach}"

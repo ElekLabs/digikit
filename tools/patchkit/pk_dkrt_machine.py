@@ -3,8 +3,8 @@
 
 The proof that used to live here (a machine loaded through the mailbox while the firmware ran, against the patched-in one) was
 hot-reload only and is archived (tag `digikit-hot-reload-v1`, docs/plans/digikit-hot-reload.md). Its boot-time successor is
-tools/patchkit/pk_digikit_scen.py (equivalence scenarios: the same PCM, sample for sample, from a module selected at boot; finding 37),
-which uses `Rig`, `pcm_check`, `parse_dsp_section` and `relocate` from here.
+tools/patchkit/pk_digikit_scen.py (equivalence scenarios: the pinned PCM from a module selected at boot; finding 37),
+which uses `Rig`, `pcm_pin`, `parse_dsp_section` and `relocate` from here.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ FREE_TYPE = 0xFFFF_FFFF
 L2_BYTE_BASE, L2_SW_BASE = 0x2000_0000, 0x00B8_0000
 TRACK_OBJ_WORD = 0x4265338C  # the type byte is the third byte of this word (finding 02)
 MODULES_STATIC = "core/runtime,core/dynreg,core/dyndsp"
-PLUCK_STATIC_TYPE = 9
 MODULE = "test/sine"
 MACHINE = "sine"  # its machine
 # DspState (modules/core/runtime/src/rs/src/dsp.rs), byte offsets of the fields the proof reads
@@ -283,7 +282,6 @@ class Rig:
         self.s.card_img = card_img
         self.syx = syx
         self.checks: list[tuple[str, bool, str]] = []
-        # (a reference image without the runtime, `ref_plain` scenarios, has none of these)
         self.mb = sym(plan, "core/runtime", "DKRT_MAILBOX") if has_rt(plan) else 0
         self.state = sym(plan, "core/runtime", "DKRT_STATE") if has_rt(plan) else 0
         self.dsp = sym(plan, "core/runtime", "DKRT_DSP") if has_rt(plan) else 0
@@ -447,44 +445,6 @@ class Rig:
         return out
 
 
-def pcm_check(
-    run: Rig,
-    ref_pcm: np.ndarray,
-    run_pcm: np.ndarray,
-    report: dict[str, Any],
-    what: str,
-    until: int | None = None,
-    max_shift: int = 128,
-) -> None:
-    """The run-time PCM equals the reference's: exactly, or sample for sample from the note's onset on. The two images do not
-    reach the audition at the same ColdFire instruction (the run-time image has loaded a module, the Digitone II reference has
-    a machine module's code on the key path) and the PCM tap starts at the block in progress, so the capture may start up to a
-    few frames apart; the sound, from the onset on, must not differ in a single sample. UNTIL (interleaved samples after the onset)
-    cuts the comparison before the key is released: on the Digitone II the release reaches the engine a block apart in the two images.
-    MAX_SHIFT is the largest onset shift (samples) that is accepted."""
-    exact = len(run_pcm) == len(ref_pcm) and bool(np.array_equal(run_pcm, ref_pcm))
-    shift, aligned_differ = aligned_compare(ref_pcm, run_pcm, until)
-    report["pcm"] = {
-        "samples": len(run_pcm),
-        "exact": exact,
-        "onset_shift_samples": shift,
-        "differ_after_alignment": aligned_differ,
-        "compared_samples_after_onset": until,
-        "peak": float(abs(run_pcm).max()),
-    }
-    run.check(
-        f"PCM of the run-time {what} equals the patched-in {what}'s (exact, or sample for sample from the onset on)",
-        (exact and until is None)
-        or (
-            shift is not None
-            and shift % 2 == 0
-            and abs(shift) <= max_shift
-            and aligned_differ == 0
-        ),
-        f"{len(run_pcm)} samples, exact {exact}, onset shift {shift}, {aligned_differ} differ after alignment",
-    )
-
-
 def pcm_pin(
     run: Rig,
     run_pcm: np.ndarray,
@@ -495,7 +455,7 @@ def pcm_pin(
 ) -> None:
     """The run-time PCM from the note's onset on, N interleaved samples as little-endian float32, has the SHA-256 PIN.
 
-    The onset is the first sample above 1e-6 (as `aligned_compare`); it must lie on a whole stereo frame, and the N samples must
+    The onset is the first sample above 1e-6 (the first sample the note makes); it must lie on a whole stereo frame, and the N samples must
     end before the key is released (the release reaches the engine a block apart in two images). PIN "record" fails and reports
     the hash, to record a pin: the value is approved by Em, not by a run."""
     nz = np.flatnonzero(np.abs(run_pcm) > 1e-6)
@@ -515,24 +475,6 @@ def pcm_pin(
         onset >= 0 and onset % 2 == 0 and len(window) == n and got == pin,
         f"sha256 {got}, onset {onset}, {len(window)} samples",
     )
-
-
-def aligned_compare(
-    ref: np.ndarray, run: np.ndarray, until: int | None = None
-) -> tuple[int | None, int]:
-    """(onset of RUN minus onset of REF in samples, samples that differ over the common length from the onsets on)."""
-
-    def onset(x: np.ndarray) -> int:
-        nz = np.flatnonzero(np.abs(x) > 1e-6)
-        return int(nz[0]) if len(nz) else -1
-
-    a, b = onset(ref), onset(run)
-    if a < 0 or b < 0:
-        return None, -1
-    n = min(len(ref) - a, len(run) - b)
-    if until is not None:
-        n = min(n, until)
-    return b - a, int((ref[a : a + n] != run[b : b + n]).sum())
 
 
 def run_imports(run: Rig, plan: dict) -> dict[str, int]:

@@ -31,8 +31,8 @@ Status: `todo`, `active`, `done`, `parked`.
 | 1 | S2a | SDK C hygiene: clang-format, `-std=c11`, helpers into `core/`, SDK sources linked automatically | S1 | done | PR 424 |
 | 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated; the Api table, `dkm_init` and the slots deleted | S2a | done | PRs 426, 433 |
 | 1 | S3 | SDK builders in `init` and the runtime commit path; machines, FX and fixtures migrated | S2b | done | PR 443 |
-| 1 | S4 | SDK templates and docs | S3 | todo | |
-| 1 | S3b | Delete the patched-in content path: the twins test/patched-pluck and test/twin-dn2, patchkit desc.rs and the typed lowering for patched-in machines, the macros in sdk/patched-in/include; move or drop the equivalence tests, smoke-matrix rows and the sharc_matrix input that use the twins | S3 | todo | |
+| 1 | S4 | SDK templates and docs | S3 | done | PRs 443, 446 |
+| 1 | S3b | Delete the patched-in content path: the twins test/patched-pluck and test/twin-dn2, patchkit desc.rs and the typed lowering for patched-in machines, the macros in sdk/patched-in/include; move or drop the equivalence tests, smoke-matrix rows and the sharc_matrix input that use the twins | S3 | done | PR 449 |
 | 1 | P7 | Clock audit (static) | - | done | finding 125 |
 | 1 | P1 | Address map v1, emulator only (own lane) | - | done | PR 444 |
 | 2 | R4 | Spike, static part: can SHARC hooks move into a `.dks` | S4 | done | finding 128 |

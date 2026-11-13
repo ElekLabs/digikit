@@ -44,11 +44,11 @@ pub struct Manifest {
     pub native_page: Vec<crate::typed::NativePageDef>,
     #[serde(skip)]
     pub voice: Vec<crate::typed::VoiceDef>,
-    /// `[[machine]] id = "..."`: the machines the module declares in C (DK_MACHINE); the id is all the manifest says of one. Their keys go in the
+    /// `[[machine]] id = "..."`: the machines the module declares in init (`dk_module_ctx_add_machine`); the id is all the manifest says of one. Their keys go in the
     /// `.dkm` keys table (`dkneeds::keys`).
     #[serde(default, rename = "machine")]
     pub machines: Vec<IdRef>,
-    /// `[[fx]] id = "..."`: the same for effects (DK_FX).
+    /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
@@ -68,9 +68,6 @@ pub struct Manifest {
     /// Set by `typed::lower`.
     #[serde(skip)]
     pub lowered: bool,
-    /// Set by `Library::lower`: the state block of each patched-in contract voice, by machine id.
-    #[serde(skip)]
-    pub voice_state: BTreeMap<String, crate::typed::VoiceState>,
 }
 
 impl Manifest {
@@ -118,7 +115,7 @@ impl Manifest {
         ] {
             if old.is_some() {
                 return Err(err!(
-                    "[[{name}]] is no longer read: declare machines with DK_MACHINE in C (sdk/include/dk/machine/machine.h)"
+                    "[[{name}]] is no longer read: declare machines and effects with `dk_module_ctx_add_machine` / `dk_module_ctx_add_fx` in init and list their ids as [[machine]] / [[fx]] in module.toml"
                 ));
             }
         }
@@ -530,95 +527,6 @@ pub struct Module {
     pub dir: std::path::PathBuf,
 }
 
-/// A patched-in contract voice (`[[voice]]` with `desc`) needs memory for the state of its voices, which a `.dkm` gets from the runtime at load
-/// (`dkmdsp.rs`). Here the module's DSP object gets a bss section `dk.state.<machine>` of `voices` x `stride` bytes and the global symbol
-/// `_dkstate_<machine>`, which the voice row names as its state base; the patch linker places it with the rest of the object. `desc` is read
-/// from the object's data (`dk_machine_desc`, little endian: voices at word 3, state_bytes at 4, state_clear_bytes at 5).
-fn reserve_voice_state(m: &mut Module) -> Result<()> {
-    let voices: Vec<(String, String)> = m
-        .manifest
-        .voice
-        .iter()
-        .map(|v| (v.machine.clone(), v.desc.clone()))
-        .collect();
-    for (machine, desc) in voices {
-        if m.manifest.voice_state.contains_key(&machine) {
-            continue;
-        }
-        let found = m.objects.iter().position(|o| {
-            o.arch == "sharc"
-                && o.symbols
-                    .iter()
-                    .any(|s| s.name == desc && s.section.is_some())
-        });
-        let Some(oi) = found else {
-            return Err(err!(
-                "voice {machine}: desc {desc} is not defined by a DSP object of the module"
-            ));
-        };
-        let o = &mut m.objects[oi];
-        let sym = o.symbols.iter().find(|s| s.name == desc).unwrap().clone();
-        let sec = o
-            .sections
-            .iter()
-            .find(|x| Some(&x.name) == sym.section.as_ref())
-            .unwrap();
-        if sec.kind != "data" {
-            return Err(err!("voice {machine}: desc {desc} is not initialised data"));
-        }
-        let bytes = unhex(&sec.hex)?;
-        let at = sym.value as usize;
-        let words = bytes
-            .get(at..at + crate::dkmdsp::DESC_WORDS * 4)
-            .ok_or_else(|| {
-                err!(
-                    "voice {machine}: desc {desc} is shorter than {} bytes",
-                    crate::dkmdsp::DESC_WORDS * 4
-                )
-            })?;
-        let w = |i: usize| u32::from_le_bytes(words[i * 4..i * 4 + 4].try_into().unwrap());
-        if w(0) != crate::dkmdsp::DESC_MAGIC
-            || w(1) & !crate::dkmdsp::DESC_STEREO != crate::dkmdsp::DESC_CONTRACT
-        {
-            return Err(err!(
-                "voice {machine}: desc {desc} is no dk_machine_desc of contract {}",
-                crate::dkmdsp::DESC_CONTRACT
-            ));
-        }
-        let (voices_n, state, clear) = (w(3), w(4), w(5));
-        if clear > state || voices_n == 0 {
-            return Err(err!(
-                "voice {machine}: desc {desc}: {voices_n} voices, state {state} bytes, clear {clear}"
-            ));
-        }
-        let stride = state.div_ceil(8) * 8;
-        let name = format!("dk.state.{machine}");
-        let symbol = format!("_dkstate_{machine}");
-        o.sections.push(crate::dko::DkoSection {
-            name: name.clone(),
-            kind: "bss".into(),
-            align: 8,
-            size: voices_n * stride,
-            hex: String::new(),
-        });
-        o.symbols.push(crate::dko::DkoSymbol {
-            name: symbol.clone(),
-            section: Some(name),
-            value: 0,
-            global: true,
-        });
-        m.manifest.voice_state.insert(
-            machine,
-            crate::typed::VoiceState {
-                symbol,
-                stride,
-                clear,
-            },
-        );
-    }
-    Ok(())
-}
-
 impl Module {
     /// Build a module from its manifest text and a reader for the object paths it names.
     pub fn from_parts(
@@ -642,7 +550,7 @@ impl Module {
         read: &dyn Fn(&str) -> Result<String>,
         lenient: bool,
     ) -> Result<Module> {
-        let mut manifest: Manifest = toml::from_str(manifest_text)?;
+        let manifest: Manifest = toml::from_str(manifest_text)?;
         manifest.validate_header()?;
         let mut objects = vec![];
         let mut all = manifest_text.to_string();
@@ -654,41 +562,6 @@ impl Module {
             };
             all.push_str(&t);
             objects.push(Dko::parse(&t).map_err(|e| err!("{}: {e}", o.path))?);
-        }
-        // the descriptor records of the objects fill the typed sections; a module loaded without all its objects has none
-        if objects.len() == manifest.object.len() {
-            let d = crate::desc::read_objects(&objects)
-                .map_err(|e| err!("{}: {e}", manifest.module.id))?;
-            manifest.machine = d.machines;
-            manifest.param = d.params;
-            manifest.page = d.pages;
-            manifest.native_page = d.native_pages;
-            manifest.voice = d.voices;
-            manifest.sample_bank = d.sample_bank;
-            manifest.sample_tracks = d.sample_tracks;
-            // a patched-in module keeps the records out of the image: the objects lose their descriptor sections
-            if !manifest.module.dynamic {
-                // an object that held only records is removed with its manifest entry (the two lists stay aligned)
-                let section = crate::sdkgen::desc_spec().section;
-                let mut kept = vec![];
-                let mut kept_refs = vec![];
-                for (o, r) in objects.drain(..).zip(manifest.object.drain(..)) {
-                    if o.sections.iter().any(|s| s.name == section) {
-                        match crate::desc::strip(&o) {
-                            Some(s) => {
-                                kept.push(s);
-                                kept_refs.push(r);
-                            }
-                            None => {}
-                        }
-                    } else {
-                        kept.push(o);
-                        kept_refs.push(r);
-                    }
-                }
-                objects = kept;
-                manifest.object = kept_refs;
-            }
         }
         let mut alloc = BTreeMap::new();
         for r in &manifest.registry {
@@ -731,17 +604,9 @@ impl Library {
         self.modules.iter().find(|m| m.id() == id)
     }
 
-    /// Lower the typed sections of every module with the device models (`crate::typed`). A patched-in module with contract voices first gets
-    /// the state blocks of its voices (`reserve_voice_state`).
+    /// Lower the typed sections of every module with the device models (`crate::typed`).
     pub fn lower(&mut self, models: &crate::typed::Models) -> Result<()> {
         for m in &mut self.modules {
-            // a module loaded without its objects (`from_parts_lenient`) has no descriptors to read
-            if !m.manifest.module.dynamic
-                && !m.manifest.lowered
-                && m.objects.len() == m.manifest.object.len()
-            {
-                reserve_voice_state(m).map_err(|e| err!("{}: {e}", m.manifest.module.id))?;
-            }
             crate::typed::lower(&mut m.manifest, models)
                 .map_err(|e| err!("{}: {e}", m.manifest.module.id))?;
         }
@@ -1137,112 +1002,6 @@ mod cache_generation_tests {
             ids.len(),
             started.elapsed()
         );
-    }
-
-    #[test]
-    fn generation_reads_cached_declarations_without_building_and_tolerates_missing_cache() {
-        let root = std::env::temp_dir().join(format!("digikit-cached-gen-{}", std::process::id()));
-        let dir = root.join("modules").join("new-machine");
-        let cache = root.join("out/cache/dko/test/new-machine/k/build/module.dko.json");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-        // No sources or toolchains exist here: either a freshness check or a
-        // build would fail. Generation must use the existing cache only.
-        std::fs::write(
-            dir.join("module.toml"),
-            r#"
-[module]
-id = "test/new-machine"
-version = "0.1.0"
-name = "New machine"
-category = "test"
-type = "machine"
-author = "digikit"
-status = "experimental"
-summary = "Cached generation fixture."
-dynamic = true
-[[object]]
-path = "build/module.dko.json"
-sources = ["missing.c"]
-place = "cf.expansion"
-"#,
-        )
-        .unwrap();
-        let spec = crate::sdkgen::desc_spec();
-        let rec = spec
-            .records
-            .iter()
-            .find(|r| r.name == "dk_desc_machine")
-            .unwrap();
-        let mut bytes = vec![0u8; rec.size];
-        for (field, word) in [("kind", rec.kind.unwrap()), ("size", rec.size as u32)] {
-            let at = rec.field(field).unwrap().off;
-            bytes[at..at + 4].copy_from_slice(&word.to_be_bytes());
-        }
-        for (field, value) in [
-            ("id", "new"),
-            ("name", "New machine"),
-            ("short_name", "NEW"),
-            ("render", "_render"),
-            ("note_on", "_note_on"),
-            ("desc", "_desc"),
-        ] {
-            let at = rec.field(field).unwrap().off;
-            bytes[at..at + value.len()].copy_from_slice(value.as_bytes());
-        }
-        let object = serde_json::json!({
-            "format": crate::dko::FORMAT, "arch": "cf", "source_sha256": "stale",
-            "sections": [{ "name": spec.section, "kind": "data", "align": 4,
-                "size": bytes.len(), "hex": hex(&bytes) }], "symbols": [], "relocs": []
-        })
-        .to_string();
-        std::fs::write(&cache, &object).unwrap();
-        let env = crate::build::toolchain::Env::new(&root);
-        let build = Build {
-            root: &root,
-            only: Some(&[]),
-            defines: &[],
-        };
-        let models = crate::typed::Models::from_texts([
-            include_str!("../../../devices/digitakt-ii.toml"),
-            include_str!("../../../devices/digitone-ii.toml"),
-        ])
-        .unwrap();
-        let load = || Library {
-            modules: Library::read_root(&root.join("modules"), true, Some((&env, build))).unwrap(),
-        };
-        let lib = load();
-        let files = crate::modgen::generate(&lib, &models, "test/new-machine").unwrap();
-        assert_eq!(files[0].0, "build/gen/gallery.json");
-        let gallery: serde_json::Value = serde_json::from_str(&files[0].1).unwrap();
-        assert_eq!(gallery["machines"][0]["id"], "new");
-        assert_eq!(gallery["machines"][0]["name"], "New machine");
-        let mut explicit = Library::from_manifests(
-            build,
-            &[dir.join("module.toml")],
-            true,
-            &["test/new-machine".into()],
-        )
-        .unwrap();
-        explicit.lower(&models).unwrap();
-        assert_eq!(
-            crate::modgen::generate(&lib, &models, "test/new-machine").unwrap(),
-            crate::modgen::generate(&explicit, &models, "test/new-machine").unwrap(),
-        );
-        assert_eq!(std::fs::read_to_string(&cache).unwrap(), object);
-        // Excluded modules in a pack still omit objects even if cache exists.
-        let excluded =
-            Library::read_root(&root.join("modules"), false, Some((&env, build))).unwrap();
-        assert!(excluded[0].objects.is_empty());
-        std::fs::remove_file(&cache).unwrap();
-        let lib = load();
-        assert!(
-            crate::modgen::generate(&lib, &models, "test/new-machine")
-                .unwrap()
-                .is_empty()
-        );
-        assert!(!cache.exists());
-        std::fs::remove_dir_all(root).unwrap();
     }
 }
 

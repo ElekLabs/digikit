@@ -97,13 +97,6 @@ impl Main {
     }
 }
 
-fn err_of(r: patchkit::Result<Applied>) -> String {
-    match r {
-        Ok(_) => panic!("expected an error"),
-        Err(e) => e.0,
-    }
-}
-
 fn stock_len(file: &str) -> usize {
     Firmware::parse(&image(file).unwrap())
         .unwrap()
@@ -135,32 +128,17 @@ fn section<'a>(p: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
         .unwrap_or_else(|| panic!("no section {name}"))
 }
 
-const PL: [&str; 4] = [
-    "core/dsp-voice",
-    "core/machines",
-    "core/params",
-    "test/patched-pluck",
-];
+const CLONE: [&str; 2] = ["core/machines", "test/machine-clone"];
 
 #[test]
 fn the_selection_order_does_not_change_the_bytes() {
     let Some(lib) = library(vec![]) else {
         return;
     };
-    let Some(r1) = run(DT2_117, &lib, &PL) else {
+    let Some(r1) = run(DT2_117, &lib, &CLONE) else {
         return;
     };
-    let r2 = run(
-        DT2_117,
-        &lib,
-        &[
-            "test/patched-pluck",
-            "core/params",
-            "core/machines",
-            "core/dsp-voice",
-        ],
-    )
-    .unwrap();
+    let r2 = run(DT2_117, &lib, &["test/machine-clone", "core/machines"]).unwrap();
     assert!(r1.unwrap().syx == r2.unwrap().syx);
 }
 
@@ -170,7 +148,7 @@ fn every_instruction_the_framework_places_decodes() {
         return;
     };
     for (file, ids) in [
-        (DT2_117, &PL[..]),
+        (DT2_117, &CLONE[..]),
         (DN2_112, &["core/machines", "test/dn2-clone"][..]),
     ] {
         let Some(r) = run(file, &lib, ids) else {
@@ -239,70 +217,6 @@ fn digitone_ii_clone_gets_type_5() {
         ] {
             assert!(hooks.iter().any(|x| x == h), "{file}: no hook on {h}");
         }
-    }
-}
-
-#[test]
-fn core_params_and_pluck_assign_codes_and_relocate_the_table() {
-    let Some(lib) = library(vec![]) else {
-        return;
-    };
-    for file in [DT2_117] {
-        let Some(r) = run(
-            file,
-            &lib,
-            &[
-                "core/dsp-voice",
-                "core/machines",
-                "core/params",
-                "test/patched-pluck",
-            ],
-        ) else {
-            continue;
-        };
-        let a = r.unwrap();
-        let p = plan(&a);
-        let pr = reg(&p, "params");
-        assert_eq!(
-            (pr["first"].as_u64(), pr["count"].as_u64()),
-            (Some(0x113), Some(4))
-        );
-        assert_eq!(pr["entries"][0]["index"], 0x113);
-        assert_eq!(pr["row_size"], 28);
-        let t = section(&p, "pf_table");
-        assert_eq!(t["copied"], 0x113 * 60);
-        assert_eq!(t["appended_rows"], 4);
-        // 56 references repointed, 54 bounds raised
-        let refs = a
-            .plan
-            .writes
-            .iter()
-            .filter(|w| w.what.contains("cf.param.sites.descriptor_table.ref."))
-            .count();
-        let bounds = a
-            .plan
-            .writes
-            .iter()
-            .filter(|w| w.what.contains("cf.param.sites.descriptor_table.bound."))
-            .count();
-        assert_eq!((refs, bounds), (56, 54), "{file}");
-        // the machine's fields carry the assigned codes
-        let m = reg(&p, "machines");
-        let main = Main::new(&a.syx, stock_len(file));
-        // PLUCK's permanent number is 9: rows 7 and 8 are gaps (clones of type 0, not listed)
-        assert_eq!(m["gaps"], serde_json::json!([7, 8]));
-        assert_eq!(m["entries"][0]["index"], 9);
-        let rows = main.u32s(m["addr"].as_u64().unwrap() as u32, 48);
-        assert_eq!(rows[16 + 12], 0xffff_ffff, "gap row position: hidden");
-        assert_eq!(rows[16 + 11], 0, "gap row clones type 0");
-        let rows = &rows[32..];
-        assert_eq!(
-            &rows[2..11],
-            &[0xca, 0x113, 0x114, 0, 0x115, 0x116, 0, 0xd1, 0x0a]
-        );
-        // the voice registry ends in a zero row
-        let v = reg(&p, "voices");
-        assert_eq!(v["count"], 1);
     }
 }
 

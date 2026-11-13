@@ -21,24 +21,21 @@ project and working sectors).
 
 Kinds:
 
-  equiv      a selection loaded at boot gives the same machine, parameter, page and voice rows as the image patchkit builds
-             with the static twin of the set patched in (compared by decoded content: names, ranges, defaults, slots, knobs
-             by parameter name; the type numbers and the pointers differ by construction), and the same PCM for a note when
-             the set has a sound (`play`). A set without a twin (`twin = ""`) must leave every table as a boot with no module.
-             `pcm_sha256` (with `play`) replaces the PCM compare when no twin has the sound: the SHA-256 of the run-time note from its onset over
-             `pcm_samples` (default 24000) interleaved float32 samples; "record" fails and prints the hash. `env_run` and `env_ref` set environment variables of the run-time and the reference boot (`SHARC_UNINIT` for a machine that
-             reads voice state beyond its cleared bytes: the run-time state is uninitialised L2). `ignore_run_machines` drops a run-time
-             machine (with its parameters and pages) that the twin has no counterpart of. `play_module` and `play_machine` (default: the machine of `tools/patchkit/pk_dkrt_machine.py`, a sine) name the run-time machine the note is played with.
+  equiv      a selection loaded at boot leaves every machine, parameter and page row as a boot with no module has it (compared by decoded
+             content), except the rows of `ignore_run_machines` (the run-time module's own machines, with their parameters and pages), claims
+             the voice rows in `voices`, and plays an audible note when the set has a sound (`play`). `pcm_sha256` (with `play`) pins the note: the SHA-256 of the run-time note from its onset over
+             `pcm_samples` (default 24000) interleaved float32 samples. `env_run` sets environment variables of the run-time boot (`SHARC_UNINIT` for a machine that
+             reads voice state beyond its cleared bytes: the run-time state is uninitialised L2). `play_module` and `play_machine` (default: the machine of `tools/patchkit/pk_dkrt_machine.py`, a sine) name the run-time machine the note is played with.
   safe       a module whose init resets the machine, twice: the third boot is safe mode (no module, reported). With `[safe] part = "late"`: a
              module that hangs the UI task some time into a session, before (early) or after (late) the stable period that clears the boot
              counter: early leads to safe mode at the third boot, late never does (finding 37).
   menu       a set checked in SETTINGS > DIGIKIT > MODULES on a boot with no selection and applied with NO and YES on APPLY & RESTART? is
-             loaded by the next boot and compares as `equiv` does (rows, machine in the list, PCM of a note equal to the patched-in set's).
+             loaded by the next boot: the machine is in the list, its voice row is claimed, a note is audible.
   card       `[card] part = "torn"` only: a power cut inside the first writes to a blank card (finding 46, residual risk). The other card-safety
              cases are the TypeScript card-safety test.
   crash      a CPU exception in a module's slot: the runtime's hook records it in RAM that a soft reset keeps and resets; the next boot reports
              the record (right PC), two in a row lead to safe mode (before and after the stable period).
-  pages      the parameter pages of a machine chosen on track 1 (SRC, SRC again, encoder turns): the run-time module's frames equal the patched-in twin's, an
+  pages      the parameter pages of a machine chosen on track 1 (SRC, SRC again, encoder turns): an
              added machine never draws the sample view, stock sample machines still do (finding 50; tools/patchkit/pk_digikit_pages.py).
   upload     module upload over USB SysEx (docs/design/digikit-upload.md): `[upload] part` = rust, see
              tools/patchkit/pk_digikit_upload.py. The `menu` kind with `upload = true` is the through-the-menu proof.
@@ -569,41 +566,23 @@ def diff_tables(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
     return out
 
 
-class PlainRig(B.BootRig):
-    """A reference image without the runtime (no mailbox, no boot info): only the firmware and the patched-in set."""
-
-    def start(self) -> None:
-        self.s.open(self.syx)
-        self.s.segment = "boot"
-        self.s.reset()
-        self.s.run_ms(1500)
-
-
 # ---- the kinds ------------------------------------------------------------------------------------------------------------------
 
 
 def run_equiv(c: Ctx) -> None:
-    """The reference boot (the static twin patched in) and the run-time boot (the set loaded from the card) are independent daemons:
-    they run in two threads and their results are compared afterwards. A set without a twin is compared with a boot of no module."""
+    """The run-time boot (the set loaded from the card) and a boot of no module are independent daemons: they run in two threads and
+    their tables are compared afterwards. The note of a set with a sound is pinned by the hash of its PCM."""
     t = c.table()
     mods = [
         c.pack(m, f"m{i}.dkm") for i, m in enumerate(t["modules"])
     ]  # the run-time set, in selection order
-    twin = t.get("twin", "")
     run_img = c.image_for(RT, "run")
     empty = c.card(None)
     play = t.get("play", "")
     trig = t.get("trig_frame", M.TRIG_FRAME if c.dt2 else M.TRIG_FRAME_DN2)
     # e.g. SHARC_UNINIT: a machine that keeps state beyond its cleared bytes reads uninitialised L2 at its first call, as on the device
-    env_ref: dict[str, str] = dict(t.get("env_ref", {}))
     env_run: dict[str, str] = dict(t.get("env_run", {}))
-    pin = t.get(
-        "pcm_sha256", ""
-    )  # the run-time note is compared with this hash, not with a twin's note
-    plain = bool(
-        t.get("ref_plain")
-    )  # the patched-in set does not fit next to the runtime's DSP area (DN2 pluck)
-    ref_img = (c.image_for(twin if plain else RT + "," + twin, "ref")) if twin else None
+    pin = t.get("pcm_sha256", "")  # the run-time note has this hash
     card = c.card(mods)
     out: dict[str, Any] = {}
 
@@ -615,43 +594,11 @@ def run_equiv(c: Ctx) -> None:
         ):  # DN2: the machine list position (finding 33); the sound proves the type
             rig.select(t[hint_key] if hint_key in t else t["hint"])
 
-    def base_boot() -> (
-        None
-    ):  # the tables of a boot with no module (the reference of a set with no twin)
+    def base_boot() -> None:  # the tables of a boot with no module
         with c.rig(run_img, empty, "none") as rig:
             out["ref"] = decode_tables(rig)
             c.report["boot_none"] = rig.boot_info()
             c.done(rig)
-
-    def ref_boot() -> None:
-        assert ref_img is not None
-        ref_rig = (
-            PlainRig(
-                c.env,
-                ref_img,
-                "ref",
-                empty,
-                False,
-                {"DIGI_WRITE_WATCH_SEQ": "1", **env_ref},
-            )
-            if plain
-            else c.rig(ref_img, empty, "ref", env_ref)
-        )
-        with ref_rig as rig:
-            out["ref"] = decode_tables(rig)
-            if play and not pin:
-                if c.dt2:
-                    rig.select_type(t["static_type"], t.get("hint", 7))
-                select(rig, "hint")
-                pcm = rig.note(c.work / "ref.wav", trig)
-                out["ref_pcm"] = pcm
-                c.check(
-                    "the reference note is audible",
-                    float(abs(pcm).max()) > 0.01,
-                    f"peak {float(abs(pcm).max()):.3f}",
-                )
-            if not plain:
-                c.done(rig)
 
     def run_boot() -> None:
         with c.rig(run_img, card, "run", env_run) as rig:
@@ -693,18 +640,14 @@ def run_equiv(c: Ctx) -> None:
                     )
                 select(rig, "hint_run")
                 out["run_pcm"] = rig.note(c.work / "run.wav", trig)
-                out["run_rig_checks"] = rig  # pcm_check reports through a rig
+                out["run_rig_checks"] = rig  # pcm_pin reports through a rig
             c.done(rig)
 
-    c.parallel(run_boot, ref_boot if twin else base_boot)
+    c.parallel(run_boot, base_boot)
     ref, got = out["ref"], out["got"]
     for name in t.get(
-        "ignore_machines", []
-    ):  # a static twin's machine with no run-time counterpart
-        ref["machines"].pop(name, None)
-    for name in t.get(
         "ignore_run_machines", []
-    ):  # a run-time module's machine with no twin: its machine row, its parameters and its pages
+    ):  # a run-time module's machine: its machine row, its parameters and its pages
         gone = got["machines"].pop(name, None) or {}
         mine = [p for p in got["pages"] if p["machine"] == name]
         for k in list(gone.get("knobs", [])) + [k for p in mine for k in p["knobs"]]:
@@ -712,16 +655,10 @@ def run_equiv(c: Ctx) -> None:
         got["pages"] = [p for p in got["pages"] if p["machine"] != name]
     d = diff_tables(got, ref)
     c.check(
-        "machine, parameter and page rows equal the "
-        + ("static twin's" if twin else "no-module boot's"),
+        "machine, parameter and page rows equal the no-module boot's",
         not d,
         "; ".join(d[:3]),
     )
-    if twin:
-        c.check(
-            "the run-time set added rows",
-            bool(got["machines"]) or bool(got["params"]) or bool(got["pages"]),
-        )
     if play and pin:
         rr = out["run_rig_checks"]
         M.pcm_pin(
@@ -734,15 +671,8 @@ def run_equiv(c: Ctx) -> None:
         )
         c.checks += rr.checks
     elif play:
-        rr = out["run_rig_checks"]
-        M.pcm_check(
-            rr,
-            out["ref_pcm"],
-            out["run_pcm"],
-            c.report,
-            "machine" if c.dt2 else "voice",
-        )
-        c.checks += rr.checks
+        peak = float(abs(out["run_pcm"]).max())
+        c.check("the run-time note is audible", peak > 0.01, f"peak {peak:.3f}")
     c.common_checks()
 
 
@@ -975,8 +905,7 @@ def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
 
 def run_menu(c: Ctx) -> None:
     """Boot with an empty selection, install the set over USB (`dk run` or `dktransfer install`, by the table), and after the boot
-    compare with the patched-in set as `equiv` does (rows, machine in the list, PCM of a note). The set may hold a code-only module
-    next to the machine."""
+    check the machine in the list, its voice row and an audible note. The set may hold a code-only module next to the machine."""
     from tools.coldfire import digikit_menu_proof as D
 
     t = c.table()
@@ -997,29 +926,6 @@ def run_menu(c: Ctx) -> None:
     plan = D.Plan(menu_img.plan)
     empty = c.card(None)
     trig = t.get("trig_frame", M.TRIG_FRAME if c.dt2 else M.TRIG_FRAME_DN2)
-    twin = t["twin"]
-    plain = bool(t.get("ref_plain"))
-    ref_img = c.image_for(twin if plain else RT + "," + twin, "ref")
-    ref_rig = (
-        PlainRig(c.env, ref_img, "ref", empty, False, {"DIGI_WRITE_WATCH_SEQ": "1"})
-        if plain
-        else c.rig(ref_img, empty, "ref")
-    )
-    with ref_rig as rig:
-        ref = decode_tables(rig)
-        if c.dt2:
-            rig.select_type(t["static_type"], t.get("hint", 7))
-        else:
-            rig.select(t["hint"])
-        ref_pcm = rig.note(c.work / "ref.wav", trig)
-        c.check(
-            "the reference note is audible",
-            float(abs(ref_pcm).max()) > 0.01,
-            f"peak {float(abs(ref_pcm).max()):.3f}",
-        )
-        if not plain:
-            c.done(rig)
-
     with c.rig(menu_img, empty, "menu") as rig:
         b0 = rig.boot_info()
         c.check("the first boot has no module", b0["count"] == 0 and b0["loaded"] == 0)
@@ -1051,12 +957,7 @@ def run_menu(c: Ctx) -> None:
             str(rec),
         )
         got = decode_tables(rig)
-        d = diff_tables(got, ref)
-        c.check(
-            "the machine is in the list: machine, parameter and page rows equal the patched-in set's",
-            not d and bool(got["machines"]),
-            "; ".join(d[:3]),
-        )
+        c.check("the machine is in the list", bool(got["machines"]))
         used = [r for r in rig.voice_rows() if r[0] != B.FREE_TYPE]
         c.check("voice row claimed", len(used) == t.get("voices", 1), str(used))
         if c.dt2:
@@ -1070,7 +971,8 @@ def run_menu(c: Ctx) -> None:
             rig.select(t.get("hint_run", t["hint"]))
         # the DSP block count runs on through the panel script and the restart: the note starts a little after the setup
         pcm = rig.note(c.work / "run.wav", max(trig, rig.frames() + 300))
-        M.pcm_check(rig, ref_pcm, pcm, c.report, "machine" if c.dt2 else "voice")
+        peak = float(abs(pcm).max())
+        c.check("the run-time note is audible", peak > 0.01, f"peak {peak:.3f}")
         check_memory_page(c, rig, plan)
         c.checks += rig.checks
         c.done(rig)

@@ -80,6 +80,6 @@ candidate on both devices and confirm callers with `tools/coldfire/refscan.py`. 
 - `references/dsp-recipes.md`: tested assembly from pluck and the deleted master-drive (parameter to float, block loop, noise, one-pole, all-pass, delay line, comb, silence, ramp).
 - `references/selas-pitfalls.md`: assembler forms that are wrong on the silicon and what to write instead.
 - `references/devices.md`: Digitakt II against Digitone II (budget, voices, parameters, memory, loader limits, effects).
-- `references/patched-in.md`: patched-in modules (anchors, claims, `patch`, `module:dev`, `patch:test`). A patched-in content machine is a test fixture only.
+- `references/patched-in.md`: patched-in modules (anchors, claims, `patch`, `module:dev`, `patch:test`). Only `core/*` adapters are patched in.
 - `docs/findings/54-module-cookbook.md`: what each reference module taught. Add to it with every module.
 - `docs/MODULES.md` (architecture and reasons), `modules/README.md`, `docs/PATCHING.md`.

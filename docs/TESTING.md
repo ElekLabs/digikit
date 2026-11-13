@@ -162,9 +162,7 @@ Keep the command running while using the panel. Ctrl-C stops its browser server 
 `mise run dk:dev -- emulator --stop` or `mise run dk:dev -- test/ui-demo --stop` stops the respective emulator.
 The commands also write `out/runs/devreload/dn2/digikit-menu.png` or `ui-demo.png`. Use `dk:dev` directly to choose DT2, load a particular module or card store, or provide another key script.
 
-For a content module, `mise run dk:module ID [--device dn2|dt2] [--dsp]` packs its card `.dkm`, selects it for boot and opens the MODULES list in the live faceplate. It uses the `emulator` patch set. Declarative machines default to a data-only UI preview pack with zero DSP and no audio; preview packs reject actions, samples and hooks. ColdFire-only services keep normal packing with zero DSP. Effects and other DSP-backed modules require `--dsp` for the full pack and automatic SHARC selection. `dk:module` delegates to generic `dk:dev --store`: the generic path stages content and compares the exact request and initial selection. Unchanged content keeps the daemon and overlay, including a user-edited live selection; changed content rebuilds the card and restarts that exact daemon. Stop and restart to restore the initial selected card after changing selection live. `mise run dk:module ID --stop` stops it. See [visible previews](DEVELOPMENT.md#visible-preview) for aliases and selection behavior. This interactive preview does not replace the module's acceptance checks.
-
-The Pluck zero-DSP UI proof is `pnpm nx:pilot run digikit-pluck-preview-tests:test-device`. It runs two UI-only tests across DT2 1.17 and DN2 1.12 (42.5s for the named target) and has no dependency on the full Pluck pack. Full module conformance remains coupled to SHARC.
+For a content module, `mise run dk:module ID [--device dn2|dt2]` packs its card `.dkm`, selects it for boot and opens the MODULES list in the live faceplate. It uses the `emulator` patch set. The module is packed in full; the DSP mode follows the module closure (ColdFire-only services run with zero DSP, machines and effects select SHARC automatically). `dk:module` delegates to generic `dk:dev --store`: the generic path stages content and compares the exact request and initial selection. Unchanged content keeps the daemon and overlay, including a user-edited live selection; changed content rebuilds the card and restarts that exact daemon. Stop and restart to restore the initial selected card after changing selection live. `mise run dk:module ID --stop` stops it. See [visible previews](DEVELOPMENT.md#visible-preview) for aliases and selection behavior. This interactive preview does not replace the module's acceptance checks.
 
 `dk:dev` automatically reports and selects DSP `zero` for ColdFire-only module closures (such as `test/ui-demo`), skipping PCM
 capture. `tools/patchkit/pk_devreload.toml` lists base patch sets whose menu/runtime supports a zero DSP
@@ -396,7 +394,7 @@ production files without its object sources (`src`, `include`, `fit`, `sdk`; the
 files in `READ_BY_TESTS` (`tools/nx/module-targets.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`, `sdk/sdk.toml`, `types.toml`,
 fixture files, the Vitest and TypeScript config; tests read these without importing them),
 each record's `sources`. A record that runs `patchkit build` or `pack` at run time, or patches with explicit fixture modules (`patchModules`),
-also keeps the SDK and the toolchain as inputs (record flag `compiles`; the equiv tests with a patched-in twin set it, because `apply` builds the twin at run time),
+also keeps the SDK and the toolchain as inputs (record flag `compiles`; a record that patches fixture modules or packs at run time sets it),
 the toolchain, the emulator env switches,
 `config/emulator.json`, and the firmware, ready dirs and DT2 sample card (hashed by
 `tools/nx/device-inputs.mjs`). That digest also hashes path, contents and file permissions of
@@ -434,10 +432,10 @@ and a table named like the kind. Kinds:
 
 | Kind | Checks |
 | --- | --- |
-| `equiv` | Machine, parameter, page and voice rows of a boot with set S equal those of the image patchkit builds with S's static twin; PCM of a note equal, or pinned by `pcm_sha256` (Em approves a new value). |
+| `equiv` | Machine, parameter, page and voice rows of a boot with set S equal those of a boot of no module (apart from S's own machines); the note is audible, and the TypeScript cells pin its PCM by `pcmSha256` (Em approves a new value). |
 | `upload` | Module upload over USB SysEx: only `rust` is Python. The other parts are in `modules/core/runtime/tests/upload.device.test.ts` and `upload-faults.device.test.ts`. |
-| `menu` | Ticking a set in SETTINGS > DIGIKIT > MODULES and restarting loads the set; PCM equals the patched-in set. |
-| `pages` | Parameter pages of a machine on track 1: the run-time module's frames equal the patched-in twin's. |
+| `menu` | Ticking a set in SETTINGS > DIGIKIT > MODULES and restarting loads the set: the machine is in the list, claims its voice row and plays an audible note. |
+| `pages` | Parameter pages of a machine on track 1: an added machine has one SRC page (no page dots, no sample view) and the stock sample machines keep two. |
 
 Every scenario ends with the write-watch over `cf.expansion` (0 stray writes), the flush check (0 hits)
 and the card-sector check. Tiers: `DIGIKIT_TIER=quick` is the default. The store's cut and tear tests (`modules/core/runtime/tests/upload-faults.device.test.ts`: upload cuts, torn headers, the CLEAR double fault) are full tier: the default gate skips them. Run them with `DIGIKIT_TIER=full pnpm nx:pilot run core/runtime-tests:test-device--upload-faults` (add `--dt2` or `--dn2` for one device). The default `mise run test` gate does not select full-tier tests. `mise run test:full` selects the separate `core/runtime-inferred-needs-tests:test-device-full` target and sets `DIGIKIT_TIER=full`; `mise run module:check` sets it for a module's own scenarios.

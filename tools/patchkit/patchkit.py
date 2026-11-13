@@ -478,7 +478,6 @@ def main(argv: list[str]) -> int:
         "reference",
         "needs",
         "dkm-info",
-        "desc",
     ):
         return run([cmd, *args]).returncode
     print(__doc__)

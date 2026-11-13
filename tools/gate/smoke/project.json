@@ -97,7 +97,6 @@
         "{workspaceRoot}/modules/core/expansion/include/**/*",
         "{workspaceRoot}/modules/core/expansion/tests/*.toml",
         "{workspaceRoot}/tests/fixtures/modules/machine-clone/**/*",
-        "{workspaceRoot}/tests/fixtures/modules/patched-pluck/**/*",
         "{workspaceRoot}/tests/fixtures/modules/rust-demo/**/*",
         "{workspaceRoot}/tests/fixtures/modules/cf-demo/**/*",
         "{workspaceRoot}/tests/fixtures/modules/dn2-clone/**/*",

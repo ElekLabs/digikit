@@ -262,8 +262,6 @@ it in the source header, as `modules/machines/pluck/src/dsp/pluck.s` does.
 Put the word numbers in a header in the module's `src/` when C and assembly both need them (`shot_params.h` of SHOT). Use only decimal
 `#define`s and `//` comments on their own line: the SHARC+ assembler keeps a trailing comment in the macro text and upper-cases macro text.
 
-`patchkit desc MODULE_ID` prints the machines, parameters and pages of a module as JSON.
-
 ### 5.3 What the device profile fills in
 
 You declare words. The profile (`[modules.knobs]`, `[adapter.machine]` and `[modules.frame]` in `devices/<device>.toml`) places them on

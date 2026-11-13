@@ -101,9 +101,6 @@ pub struct ModuleToml {
 struct ModuleHead {
     id: String,
     category: String,
-    /// A run-time module (loaded as a `.dkm`); the others patch the firmware.
-    #[serde(default)]
-    dynamic: bool,
 }
 
 #[derive(Deserialize)]
@@ -125,11 +122,6 @@ impl ModuleToml {
     /// A content module: its objects are build output (the cache), not committed.
     pub fn is_content(&self) -> bool {
         self.module.category != "core"
-    }
-
-    /// A patched-in module (not `dynamic`): its C sources may include the declaration macros of `sdk/patched-in/include`.
-    pub fn is_patched_in(&self) -> bool {
-        !self.module.dynamic
     }
 
     /// Is the object at `path` of a content module built from sources (and so stored in the cache)?
@@ -180,7 +172,7 @@ fn object_file_at(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml, hash
 /// The stored file of the object for the sources now (see [`object_file_at`]); an error when the sources cannot be hashed (a missing
 /// source, or the SDK library does not compile).
 fn object_file(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<PathBuf> {
-    let hash = source_hash(env, moddir, &o.sources, m.is_content(), m.is_patched_in())?;
+    let hash = source_hash(env, moddir, &o.sources, m.is_content())?;
     Ok(object_file_at(env, moddir, m, o, &hash))
 }
 
@@ -243,32 +235,18 @@ fn kind_of(sources: &[String]) -> Kind {
 }
 
 /// The include directories of a ColdFire C or assembly object of the module.
-/// Only a patched-in module sees the declaration headers of `sdk/patched-in/include`: a run-time module that includes one fails to compile.
-pub fn cf_include_dirs(root: &Path, moddir: &Path, patched_in: bool) -> Vec<PathBuf> {
+pub fn cf_include_dirs(root: &Path, moddir: &Path) -> Vec<PathBuf> {
     let mut v = vec![moddir.join("build/gen"), moddir.join("src")];
     v.extend(
         toolchain::global_include_dirs(true)
             .iter()
             .map(|d| root.join(d)),
     );
-    if patched_in {
-        v.extend(
-            toolchain::patched_include_dirs()
-                .iter()
-                .map(|d| root.join(d)),
-        );
-    }
     v
 }
 
 /// The `source_sha256` a build of the object would write, computed the same way as the builders do and without compiling.
-fn source_hash(
-    env: &Env,
-    moddir: &Path,
-    sources: &[String],
-    sdk: bool,
-    patched_in: bool,
-) -> Result<String> {
+fn source_hash(env: &Env, moddir: &Path, sources: &[String], sdk: bool) -> Result<String> {
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
         Kind::Sharc => {
@@ -276,12 +254,7 @@ fn source_hash(
             Ok(sharc::source_hash(&text))
         }
         Kind::Rust => rust::source_sha256(&paths[0]),
-        Kind::Cf => cf::source_digest(
-            env,
-            &paths,
-            &cf_include_dirs(&env.root, moddir, patched_in),
-            sdk,
-        ),
+        Kind::Cf => cf::source_digest(env, &paths, &cf_include_dirs(&env.root, moddir), sdk),
     }
 }
 
@@ -291,7 +264,7 @@ fn committed_hash(path: &Path) -> Option<String> {
 }
 
 fn object_unchanged(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<bool> {
-    let want = source_hash(env, moddir, &o.sources, m.is_content(), m.is_patched_in())?;
+    let want = source_hash(env, moddir, &o.sources, m.is_content())?;
     let out = object_file_at(env, moddir, m, o, &want);
     let same = committed_hash(&out).is_some_and(|h| h == want);
     if same && m.is_content() {
@@ -351,7 +324,6 @@ fn build_object(
     o: &ObjectToml,
     defines: &[String],
     sdk: bool,
-    patched_in: bool,
 ) -> Result<Dko> {
     let paths: Vec<PathBuf> = o.sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(&o.sources) {
@@ -373,12 +345,7 @@ fn build_object(
                 let (proto, sha, toolchain) = rust::object_proto(env, &paths[0])?;
                 cf::dko_from_proto(&proto, sha, toolchain)
             } else {
-                cf::cf_object(
-                    env,
-                    &paths,
-                    &cf_include_dirs(&env.root, moddir, patched_in),
-                    sdk,
-                )
+                cf::cf_object(env, &paths, &cf_include_dirs(&env.root, moddir), sdk)
             }
         }
     }
@@ -431,7 +398,7 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
         .iter()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    let want = source_hash(env, moddir, &o.sources, m.is_content(), m.is_patched_in())
+    let want = source_hash(env, moddir, &o.sources, m.is_content())
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     let file = object_file_at(env, moddir, m, o, &want);
     if committed_hash(&file).is_some_and(|h| h == want)
@@ -448,7 +415,7 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     } else {
         vec![]
     };
-    let obj = build_object(env, moddir, o, &defines, m.is_content(), m.is_patched_in())
+    let obj = build_object(env, moddir, o, &defines, m.is_content())
         .map_err(|e| err!("{}: {rel}: build failed: {e}", moddir.display()))?;
     let text = to_text(&obj)?;
     write_object(&file, &text)?;
@@ -470,7 +437,7 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     let m = manifest(moddir)?;
     let mut report = BuildReport::default();
     for o in m.object.iter().filter(|o| !o.sources.is_empty()) {
-        let hash = source_hash(&env, moddir, &o.sources, m.is_content(), m.is_patched_in())?;
+        let hash = source_hash(&env, moddir, &o.sources, m.is_content())?;
         let stored = |h: &str| object_file_at(&env, moddir, &m, o, h);
         if !opts.check
             && opts.defines.is_empty()
@@ -484,14 +451,7 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
             });
             continue;
         }
-        let obj = build_object(
-            &env,
-            moddir,
-            o,
-            &opts.defines,
-            m.is_content(),
-            m.is_patched_in(),
-        )?;
+        let obj = build_object(&env, moddir, o, &opts.defines, m.is_content())?;
         let out = match &opts.out {
             Some(d) => d.join(&o.path),
             None => stored(&hash),

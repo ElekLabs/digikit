@@ -14,27 +14,6 @@ use crate::module::Module;
 use crate::typed::SampleTracksDef;
 use std::collections::BTreeMap;
 
-/// A run-time module declares in `init` (builder calls) and lists its machines and effects in `[[machine]]`/`[[fx]]` of module.toml; the
-/// `.dk.desc` declaration macros (DK_MACHINE, DK_FX, ...) are for patched-in modules only.
-pub fn refuse_declarations(m: &Module) -> Result<()> {
-    let mf = &m.manifest;
-    let decls = !mf.machine.is_empty()
-        || !mf.param.is_empty()
-        || !mf.page.is_empty()
-        || !mf.native_page.is_empty()
-        || !mf.voice.is_empty()
-        || mf.sample_bank.is_some()
-        || mf.sample_tracks.is_some()
-        || !crate::desc::module_fx(m)?.is_empty();
-    if decls {
-        return Err(err!(
-            "{}: a run-time module has `.dk.desc` declarations (DK_MACHINE, DK_FX, ...); declare with builder calls in init and list [[machine]]/[[fx]] in module.toml",
-            mf.module.id
-        ));
-    }
-    Ok(())
-}
-
 #[derive(Debug)]
 pub struct Sections {
     /// The keys table of the header (`dkneeds::keys`).
@@ -309,20 +288,6 @@ mod tests {
     }
 
     const MACHINE: &str = "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\nrecord_bytes = 560\n";
-
-    #[test]
-    fn a_run_time_module_has_no_declaration_macros() {
-        refuse_declarations(&module(MACHINE)).unwrap();
-        refuse_declarations(&module("")).unwrap();
-        let mut m = module(MACHINE);
-        m.manifest.sample_tracks = Some(SampleTracksDef {
-            local_id: 0,
-            records: "r".into(),
-            control: "c".into(),
-        });
-        let e = refuse_declarations(&m).unwrap_err().to_string();
-        assert!(e.contains("builder calls"), "{e}");
-    }
 
     #[test]
     fn a_tool_without_tables_has_an_empty_keys_table_and_no_dsp() {

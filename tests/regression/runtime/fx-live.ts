@@ -328,7 +328,7 @@ export function alignedCompare(ref: Float32Array, run: Float32Array) {
   return { shift: b - a, differ };
 }
 
-/** Python `M.pcm_check`: equal, or equal sample for sample from the onsets on with an even onset shift of at most `maxShift` samples. */
+/** Equal, or equal sample for sample from the onsets on with an even onset shift of at most `maxShift` samples. */
 export function pcmMatches(ref: Float32Array, run: Float32Array, maxShift: number) {
   const exact = ref.length === run.length && ref.every((v, i) => v === run[i]);
   const { shift, differ } = alignedCompare(ref, run);

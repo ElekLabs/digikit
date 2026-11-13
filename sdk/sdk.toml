@@ -1,7 +1,7 @@
 # The module contract: version numbers, log kinds and the SysEx protocol numbers. `patchkit gen` writes
 # modules/core/runtime/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
 # packages/dkupload/src/gen_proto.rs, packages/dk-session/src/gen_proto.ts, sdk/dsp/contract/dk_machine.inc, sdk/dsp/contract/dk_fx.inc,
-# sdk/dsp/contract/dk_sample_pool.inc, sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h, and sdk/patched-in/include/dk/gen/desc.h
+# sdk/dsp/contract/dk_sample_pool.inc, sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
 # and sample.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
@@ -163,32 +163,12 @@ fns = [
     "i32 process(void *state, const dk_fx_in *in, const i32 *params) // Block entry point. params: DK_FX_MAX_PARAMS words. Returns dk_fx_status; a negative number is a fault: the block plays dry. Entered as note_on of dk_machine.h.",
 ]
 
-# Descriptor records: what a module declares with the DK_* macros of <dk/fx/fx.h> and <dk/machine/machine.h>. The macros place them in the
-# `.dk.desc` section of the module's ColdFire object. `patchkit` reads them when it loads the module and lowers them to the register
-# records of the .dkm or to the registry rows of a patched-in module; they never reach the device. `patchkit gen` writes
-# sdk/patched-in/include/dk/gen/desc.h from this table (the declaration macros are for patched-in modules only; a run-time module declares in `init`).
-# Fields are 4 bytes (big-endian) or char arrays whose length is a multiple of 4: text is printable ASCII, NUL-padded.
-[desc]
-section = ".dk.desc"
+# Page constants. `patchkit gen` writes `consts` to the public sdk/include/dk/gen/page_consts.h: the knob glyphs, the display of an effect
+# parameter and the routes of an effect, which builders pass to dk_param_glyph, dk_page_add_fx_param and dk_fx_routes. `knobs` is
+# DK_PAGE_KNOBS, the encoders on a page: the array length of the register records (`patchkit::register::KNOBS`) and a runtime limit.
+[page]
+knobs = 8
 consts = [
-    { name = "DK_DESC_SAMPLE_BANK", value = 6, doc = "Record kind of dk_desc_sample_bank." },
-    { name = "DK_DESC_SAMPLE_TRACKS", value = 7, doc = "Record kind of dk_desc_sample_tracks." },
-    { name = "DK_DESC_FX", value = 1, doc = "Record kind of dk_desc_fx." },
-    { name = "DK_DESC_MACHINE", value = 2, doc = "Record kind of dk_desc_machine." },
-    { name = "DK_DESC_PARAM", value = 3, doc = "Record kind of dk_desc_param." },
-    { name = "DK_DESC_PAGE", value = 4, doc = "Record kind of dk_desc_page." },
-    { name = "DK_DESC_FX_PARAM", value = 5, doc = "Record kind of dk_desc_fx_param." },
-    { name = "DK_DESC_PARAM_ACTION", value = 8, doc = "Record kind of dk_desc_param_action." },
-    { name = "DK_DESC_PARAM_GLYPH", value = 9, doc = "Record kind of dk_desc_param_glyph." },
-    { name = "DK_DESC_PARAM_LATCHED", value = 10, doc = "Record kind of dk_desc_param_latched (machine contract 1.3)." },
-    { name = "DK_DESC_NATIVE_PAGE", value = 11, doc = "Record kind of dk_desc_native_page (machine contract 1.4)." },
-    { name = "DK_DESC_NATIVE_PAGE_V2", value = 12, doc = "Record kind of dk_desc_native_page_v2 (machine contract 1.5)." },
-    { name = "DK_PAGE_KNOBS", value = 8, doc = "Encoders on a page." },
-    { name = "DK_POS_AUTO", value = 255, doc = "The knob takes the lowest free position." },
-]
-# The constants builders use too (glyphs, the display of an effect parameter, the routes of an effect): `patchkit gen` writes them to the public
-# sdk/include/dk/gen/page_consts.h. The records and the other constants above go to the patched-in header sdk/patched-in/include/dk/gen/desc.h.
-shared_consts = [
     { name = "DK_GLYPH_ENCODER", value = 0, doc = "Glyph (the dk_glyph values): a plain encoder knob, values 0 .. 127 (the default)." },
     { name = "DK_GLYPH_FADER", value = 1, doc = "Glyph: a fader, values 0 .. 127." },
     { name = "DK_GLYPH_PAN", value = 2, doc = "Glyph: a pan knob, values 0 .. 127 (centre 64, shows L/R)." },
@@ -199,194 +179,6 @@ shared_consts = [
     { name = "DK_BIPOLAR", value = 2, doc = "A knob shown as -64 .. +63." },
     { name = "DK_ROUTE_MASTER", value = 1, doc = "The effect runs on the master block." },
     { name = "DK_ROUTE_SEND", value = 2, doc = "The effect runs on a send bus (one amount per track)." },
-]
-
-[[desc.record]]
-name = "dk_desc_sample_bank"
-kind = "DK_DESC_SAMPLE_BANK"
-doc = "One module-owned DSP BSS sample bank and initialized zero descriptor. At most one per module."
-fields = [
-    "u32 kind // DK_DESC_SAMPLE_BANK",
-    "u32 size // sizeof(dk_desc_sample_bank)",
-    "u32 local_id // module-local numeric id",
-    "char bank[32] // module DSP BSS symbol",
-    "char descriptor[32] // module DSP initialized data symbol, four zero words",
-    "u32 capacity_frames // mono float frames, 1 .. 8192",
-]
-
-[[desc.record]]
-name = "dk_desc_sample_tracks"
-kind = "DK_DESC_SAMPLE_TRACKS"
-doc = "Per-track stereo sample table (API 1.5): 16 initially zero dk_sample_pool_entry records and one control set per track. At most one per module; not with a sample bank."
-fields = [
-    "u32 kind // DK_DESC_SAMPLE_TRACKS",
-    "u32 size // sizeof(dk_desc_sample_tracks)",
-    "u32 local_id // module-local numeric id",
-    "char records[32] // module DSP data symbol: 16 dk_sample_pool_entry records, 8 words each, zero",
-    "char control[32] // module DSP data symbol: 16 control sets of 4 words (closed, count, fault, reserved), zero",
-]
-
-[[desc.record]]
-name = "dk_desc_fx"
-kind = "DK_DESC_FX"
-doc = "One effect. The process routine and its dk_fx_desc are symbols of the module's SHARC+ object."
-fields = [
-    "u32 kind // DK_DESC_FX",
-    "u32 size // sizeof(dk_desc_fx)",
-    "char id[16] // the effect id, unique in the module with the machine ids; saved kits keep module id + effect id",
-    "char process[32] // the SHARC+ symbol of the process routine",
-    "char desc[32] // the SHARC+ symbol of the dk_fx_desc",
-    "u32 mix // 0 .. 127, the MIX knob default",
-    "u32 route // DK_ROUTE_MASTER or DK_ROUTE_SEND; 0 = DK_ROUTE_MASTER",
-    "u32 routes // the routes the user may choose, a mask; 0 = the default for `route`",
-]
-
-[[desc.record]]
-name = "dk_desc_fx_param"
-kind = "DK_DESC_FX_PARAM"
-doc = "One parameter word of an effect. Word i is p_i of the effect's row; the effect reads it as a float."
-fields = [
-    "u32 kind // DK_DESC_FX_PARAM",
-    "u32 size // sizeof(dk_desc_fx_param)",
-    "char fx[16] // the id of the effect",
-    "u32 word // 0 .. 6, the parameter word; the words of an effect have no gaps",
-    "u32 display // DK_PERCENT or DK_BIPOLAR; 0 = DK_PERCENT",
-    "float min // the value at the lowest knob position",
-    "float max // the value at the highest knob position",
-    "float def // the default, from min to max",
-    "char name[24] // 1 to 23 characters, shown while the knob turns",
-    "char short_name[8] // 1 to 6 characters, under the knob",
-]
-
-[[desc.record]]
-name = "dk_desc_machine"
-kind = "DK_DESC_MACHINE"
-doc = "One machine. The render and note-on routines and the dk_machine_desc are symbols of the module's SHARC+ object."
-fields = [
-    "u32 kind // DK_DESC_MACHINE",
-    "u32 size // sizeof(dk_desc_machine)",
-    "char id[16] // the machine id, unique in the module with the effect ids",
-    "char name[24] // 1 to 23 characters, the machine's name in the menu",
-    "char short_name[24] // 1 to 23 characters, the short name",
-    "char render[32] // the SHARC+ symbol of the render routine",
-    "char note_on[32] // the SHARC+ symbol of the note-on routine",
-    "char desc[32] // the SHARC+ symbol of the dk_machine_desc",
-    "u32 stereo // 0 mono, 1 stereo (contract 1.2); must agree with DK_MACHINE_STEREO in the dk_machine_desc",
-]
-
-[[desc.record]]
-name = "dk_desc_param"
-kind = "DK_DESC_PARAM"
-doc = "One parameter of a machine. Values are knob units times 256 (0x7f00 = 127.0)."
-fields = [
-    "u32 kind // DK_DESC_PARAM",
-    "u32 size // sizeof(dk_desc_param)",
-    "char machine[16] // the id of the machine",
-    "char id[24] // the parameter id, unique in the module",
-    "u32 word // 0 .. 7, the place in the params array of the machine; the words of a machine have no gaps",
-    "i32 min // the lowest value, raw",
-    "i32 max // the highest value, raw",
-    "i32 def // the default, raw",
-    "char name[32] // 1 to 31 characters, shown while the knob turns",
-    "char short_name[16] // 1 to 15 characters, under the knob",
-]
-
-[[desc.record]]
-name = "dk_desc_param_action"
-kind = "DK_DESC_PARAM_ACTION"
-doc = "A click on the knob of one parameter word of a machine calls a function of the module (docs/design/machine-page-click.md). At most one per parameter."
-fields = [
-    "u32 kind // DK_DESC_PARAM_ACTION",
-    "u32 size // sizeof(dk_desc_param_action)",
-    "char machine[16] // the id of the machine",
-    "u32 word // 0 .. 7, the parameter word of the machine whose knob is clicked; the machine declares it with DK_PARAM",
-    "char fn[32] // the ColdFire symbol of the callback, `void fn(u32 track)`: a global function of the module, called in the UI task",
-]
-
-[[desc.record]]
-name = "dk_desc_param_glyph"
-kind = "DK_DESC_PARAM_GLYPH"
-doc = "The look of one parameter word of a machine: its glyph (a dk_glyph value) selects the stock row whose knob picture, value text and step behaviour the parameter copies. At most one per parameter; without it the glyph is DK_GLYPH_ENCODER. Glyphs on effect parameters are not supported yet."
-fields = [
-    "u32 kind // DK_DESC_PARAM_GLYPH",
-    "u32 size // sizeof(dk_desc_param_glyph)",
-    "char owner[16] // the id of the machine (an effect id is refused for now)",
-    "u32 word // 0 .. 7, the parameter word of the machine; the machine declares it with DK_PARAM",
-    "u32 glyph // DK_GLYPH_ENCODER .. DK_GLYPH_PLAY",
-]
-
-[[desc.record]]
-name = "dk_desc_param_latched"
-kind = "DK_DESC_PARAM_LATCHED"
-doc = "Snapshot one machine parameter at actual note_on, after effective values and clamping. Render sees that value until the next note_on; undeclared words remain live. At most one declaration per parameter. Requires machine contract 1.3."
-fields = [
-    "u32 kind // DK_DESC_PARAM_LATCHED",
-    "u32 size // sizeof(dk_desc_param_latched)",
-    "char owner[16] // the declared machine id",
-    "u32 word // the declared machine parameter word, 0 .. 7",
-]
-
-[[desc.record]]
-name = "dk_desc_page_knob"
-doc = "One encoder of a page. An unused entry is all zero."
-fields = [
-    "u32 used // 1 when the encoder is set, else 0",
-    "u32 word // the parameter word of the machine or the effect that the encoder sets",
-    "u32 position // 0 .. 7, the encoder on the page, or DK_POS_AUTO",
-]
-
-[[desc.record]]
-name = "dk_desc_page"
-kind = "DK_DESC_PAGE"
-doc = "A page of encoders for a machine or an effect."
-fields = [
-    "u32 kind // DK_DESC_PAGE",
-    "u32 size // sizeof(dk_desc_page)",
-    "char owner[16] // the id of the machine or the effect",
-    "char name[24] // 1 to 23 characters; for an effect, 1 to 3: the tab of the FX page",
-    "char title[24] // 1 to 23 characters, the page title",
-    "dk_desc_page_knob knob[DK_PAGE_KNOBS] // the encoders, from entry 0, without gaps",
-]
-
-[[desc.record]]
-name = "dk_desc_native_binding"
-doc = "One encoder of an opt-in native page: kind 1 PARAM names an existing parameter word; kind 2 LOCAL names a UI-local control id; kind 0 is unused."
-fields = [
-    "u32 kind // 0 unused, 1 PARAM, 2 LOCAL",
-    "u32 value // parameter word or local control id",
-    "u32 position // encoder 0 .. 7",
-]
-
-[[desc.record]]
-name = "dk_desc_native_page"
-kind = "DK_DESC_NATIVE_PAGE"
-doc = "One additional native page, after a machine's ordinary page zero. Version 1 has a bounded draw callback and an event callback for LOCAL controls only; PARAM controls use the native parameter edit path."
-fields = [
-    "u32 kind // DK_DESC_NATIVE_PAGE",
-    "u32 size // sizeof(dk_desc_native_page)",
-    "u32 version // 1",
-    "char owner[16] // declared machine id",
-    "char title[24] // 1 to 23 printable characters",
-    "char draw[32] // ColdFire draw callback symbol",
-    "char event[32] // ColdFire LOCAL event callback symbol",
-    "dk_desc_native_binding binding[DK_PAGE_KNOBS] // contiguous used entries, unique positions",
-]
-
-[[desc.record]]
-name = "dk_desc_native_page_v2"
-kind = "DK_DESC_NATIVE_PAGE_V2"
-doc = "One of exactly two replacement native pages, indexes zero and one, of a machine. Uses the shared callback frame/event v1 ABI; cannot mix with append-only native page v1."
-fields = [
-    "u32 kind // DK_DESC_NATIVE_PAGE_V2",
-    "u32 size // sizeof(dk_desc_native_page_v2)",
-    "u32 version // 2",
-    "char owner[16] // declared machine id",
-    "char title[24] // 1 to 23 printable characters",
-    "char draw[32] // ColdFire draw callback symbol",
-    "char event[32] // ColdFire LOCAL event callback symbol",
-    "u32 page // replacement page index 0 or 1; both are required",
-    "u32 flags // 0, DK_PAGE_STOCK_OVERLAY (1, page zero only) or DK_PAGE_WIDE_CANVAS (2, page one only, 107x53 canvas); the two flags are mutually exclusive",
-    "dk_desc_native_binding binding[DK_PAGE_KNOBS] // contiguous used entries, unique positions",
 ]
 
 # The names a module may import. The service imports (`service`, `since` and `context` set) are the SDK of the entry point `dk_module` (docs/plans/sdk.md
