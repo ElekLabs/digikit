@@ -10,7 +10,10 @@ const NAN: u32 = 0x00aa_0001;
 const SINE: u32 = 0x00bb_0002;
 const PARAMS: u32 = 0x00cc_0003;
 /// The run-time machine types of the devices that have a DSP: 16 to 23.
-const T: Types = Types { first: 16, count: 8 };
+const T: Types = Types {
+    first: 16,
+    count: 8,
+};
 
 fn key(h: u32) -> u32 {
     h << 8
