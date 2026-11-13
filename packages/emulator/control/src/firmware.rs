@@ -72,18 +72,6 @@ impl Roles {
     }
 }
 
-/// Whether the stock firmware with this file digest has a DSP (true for an unknown digest).
-pub fn stock_has_dsp(syx_sha256: &str) -> bool {
-    plusdrive_format::device_profile::Registry::load()
-        .ok()
-        .and_then(|r| {
-            r.identify(syx_sha256)
-                .ok()
-                .map(|(device, _)| Roles::of_device(device).dsp.is_some())
-        })
-        .unwrap_or(true)
-}
-
 pub fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))
 }

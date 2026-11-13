@@ -38,7 +38,9 @@
 
 #define UB_TRACE 0 /* 1 for hardware debug builds: log calls */
 
+#include <stddef.h>
 #include <stdint.h>
+#include "dkrt.h" /* the runtime: dkrt_io_wake, dkrt_poll_add (the UI loop calls f once a pass), dkrt_blocks, struct DkrtDevice */
 
 /* The opaque handle types of the service imports (sdk/sdk.toml [handle]); <dk/gen/imports.h> is not included: it also declares the old import names with the SDK's integer types. */
 typedef struct dk_module_ctx dk_module_ctx;
@@ -164,19 +166,15 @@ extern u8 *usb_fw_mem_new(
 extern void usb_fw_mem_free(u8 *p);
 extern void usb_fw_mode_switch(
     u32 port); /* FUN_40006c16: returns when `port` is active; else stop, write the port, restart after about 30 USB ticks. Task context. */
-/* the board, from the runtime's device object: the first eight words of struct DkrtDevice (core/runtime/abi.toml, which only grows at its end).
+/* the board, from the runtime's device object (struct DkrtDevice of dkrt.h, generated from core/runtime/abi.toml, which only grows at its end).
  * The uncached alias of DDR is this far above the cached window; the cached DDR window is a base and a size. */
-struct dkrt_dev_head {
-    u32 magic, version, size, caps, console_uart_base, ddr_uncached_alias, ddr_cached_base, ddr_bytes;
-};
-extern const struct dkrt_dev_head dkrt_dev;
+_Static_assert(offsetof(DkrtDevice, ddr_bytes) == 28,
+               "the DDR window words this file reads are where abi.toml puts them");
+extern const DkrtDevice dkrt_dev;
 #define usb_alias_delta (dkrt_dev.ddr_uncached_alias - dkrt_dev.ddr_cached_base)
 #define usb_ddr_base (dkrt_dev.ddr_cached_base)
 #define usb_ddr_bytes (dkrt_dev.ddr_bytes)
-/* the runtime (dkrt.h) */
-extern void dkrt_io_wake(i32 id);
-extern i32 dkrt_poll_add(u32 f); /* the UI loop calls f once a pass */
-extern u32 dkrt_blocks(void);    /* DSP blocks since boot (1500 a second); 0 without core/health */
+/* the runtime log (sdk.toml) */
 extern void dk_log_event(u32 kind, u32 flags, const u32 *a);
 
 /* sdk.toml [[log.kind]] 14 MOD_LOG: args msg0..msg3 (16 ASCII chars, big-endian words) and value */

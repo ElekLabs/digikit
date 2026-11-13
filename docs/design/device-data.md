@@ -22,7 +22,7 @@ What a device file contains decides what the tools do with the device:
 |---|---|---|
 | `[device]`, `[[firmware]]`, `[capabilities]`, `[container]` | identity | firmware lookup by sha256, analysis tools |
 | + `[patch]` (needs `[device] syx_id`) | patchable | patchkit and `port_resolve` accept the firmware |
-| + `[digikit]` with `[board]`, `[card.store]`, `[limits]` | runtime target | `patchkit gen` shared constants, runtime objects |
+| + `[digikit]` with `[board]`, `[limits]` (and `[card.store]` for a module store: optional) | runtime target | `patchkit gen` shared constants, runtime objects |
 | + `[acceptance]` | test cell | the firmware, ready directory and sample-card input of the device tests |
 
 `[digikit]` without `[patch]` is an error: a runtime target must be patchable. `[panel]` is optional.

@@ -2,7 +2,8 @@
 //! for all devices and has no device value in its code; `patchkit gen` writes the object from the device files (the `gas-dkdv` kind of
 //! module.toml) and patchkit places it in `cf.expansion` with the runtime. Services read their own facts from the same object.
 use core::ptr::addr_of;
-use dkrt_sdk::{DkrtDevice, DEV_HAS_DSP, DEV_HAS_SAFE_KEY, DEV_HAS_SDHC, DEV_HAS_STORE, DEV_MAGIC, MACHINE_ROWS};
+use core::sync::atomic::{AtomicU8, Ordering};
+use dkrt_sdk::{DkrtDevice, DEV_HAS_DSP, DEV_HAS_SAFE_KEY, DEV_HAS_SDHC, DEV_HAS_STORE, DEV_MAGIC, DEV_VERSION, MACHINE_ROWS};
 
 extern "C" {
     static dkrt_dev: DkrtDevice;
@@ -36,9 +37,13 @@ pub fn with_caps<R>(caps: u32, f: impl FnOnce() -> R) -> R {
     r
 }
 
-/// Does the object carry the capability bit `cap` (`DEV_HAS_*`)?
+/// Does the device have the capability `cap` (`DEV_HAS_*`)? An object this runtime cannot read (`valid`) has none.
 pub fn has(cap: u32) -> bool {
-    caps() & cap != 0
+    #[cfg(test)]
+    if let Some(c) = CAPS.with(|c| c.get()) {
+        return c & cap != 0;
+    }
+    valid() && caps() & cap != 0
 }
 
 pub fn has_dsp() -> bool {
@@ -106,13 +111,30 @@ pub fn is_dyn_type(t: u32) -> bool {
     t >= d().dyn_type_first && t - d().dyn_type_first < d().dyn_types
 }
 
-/// Is the object one this runtime reads? Its magic, a size that has every field the runtime knows, and a number of machine types that fits the
-/// runtime's tables (`MACHINE_ROWS`). Checked once at start.
+/// Validity of the object: 0 not checked yet, 1 valid, 2 invalid. The object is constant, so one check answers for the whole run.
+static CHECKED: AtomicU8 = AtomicU8::new(0);
+
+/// Is the object one this runtime reads? Its magic, its version, a size that has every field the runtime knows, and a number of machine types
+/// that is the runtime's table size (`MACHINE_ROWS`) or 0 (a device without a DSP has none and no machine rows are used). Checked once, on the
+/// first call (`init_once` makes it); the answer is kept.
 pub fn valid() -> bool {
-    let o = d();
+    match CHECKED.load(Ordering::Relaxed) {
+        1 => true,
+        2 => false,
+        _ => {
+            let ok = check(d());
+            CHECKED.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+            ok
+        }
+    }
+}
+
+/// The rules of `valid` for one object.
+fn check(o: &DkrtDevice) -> bool {
     o.magic == DEV_MAGIC
+        && o.version == DEV_VERSION
         && o.size as usize >= core::mem::size_of::<DkrtDevice>()
-        && o.dyn_types as usize <= MACHINE_ROWS
+        && (o.dyn_types as usize == MACHINE_ROWS || o.dyn_types == 0)
         && (o.caps & DEV_HAS_DSP != 0 || o.dyn_types == 0)
 }
 
@@ -128,6 +150,31 @@ mod tests {
         assert!(valid());
         assert!(has_dsp() && has_store() && has_sdhc() && safe_key() == Some(19));
         assert!(is_dyn_type(16) && is_dyn_type(23) && !is_dyn_type(15) && !is_dyn_type(24));
+    }
+
+    #[test]
+    fn an_object_the_runtime_cannot_read_is_not_valid() {
+        let good = unsafe { core::ptr::read(addr_of!(dkrt_dev)) };
+        assert!(check(&good));
+        let bad = |f: &dyn Fn(&mut DkrtDevice)| {
+            let mut o = unsafe { core::ptr::read(addr_of!(dkrt_dev)) };
+            f(&mut o);
+            check(&o)
+        };
+        assert!(!bad(&|o| o.magic ^= 1));
+        assert!(!bad(&|o| o.version += 1));
+        assert!(!bad(&|o| o.size -= 4));
+        // the machine rows are a table of MACHINE_ROWS: a count of 0 (no DSP) or exactly that
+        assert!(!bad(&|o| o.dyn_types = MACHINE_ROWS as u32 - 1));
+        assert!(!bad(&|o| o.dyn_types = MACHINE_ROWS as u32 + 1));
+        assert!(bad(&|o| {
+            o.dyn_types = 0;
+            o.caps &= !DEV_HAS_DSP;
+        }));
+        // machine types without a DSP are a contradiction
+        assert!(!bad(&|o| {
+            o.caps &= !DEV_HAS_DSP;
+        }));
     }
 
     #[test]

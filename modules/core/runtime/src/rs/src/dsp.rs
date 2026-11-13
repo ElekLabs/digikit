@@ -81,7 +81,7 @@ const FX_INFO_MAGIC: u32 = 0x4446_5849; // "DFXI"
 const L2_BYTE_BASE: u32 = 0x2000_0000;
 const L2_SW_BASE: u32 = 0x00B8_0000;
 // The run-time machine types (`dynamic_first ..= last` of modules/core/adapters/machines/types.toml) are the device object's (`dev::dyn_type_first`,
-// `dev::dyn_types`); the tables here have `MACHINE_ROWS` rows, and `dev::valid` checks that the device's count fits.
+// `dev::dyn_types`); the tables here have `MACHINE_ROWS` rows, and `dev::valid` requires the device's count to be `MACHINE_ROWS` (or 0 with no DSP, where no row is used).
 /// A free voice row's type: no machine type equals it.
 const FREE_TYPE: u32 = 0xffff_ffff;
 /// UI-loop passes a phase may last before the load is given up.

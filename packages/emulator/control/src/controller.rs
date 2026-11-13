@@ -3769,9 +3769,10 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        // A stock firmware with a DSP restores a ready snapshot (it holds the DSP state); one
-        // without a DSP has none and boots cold.
-        if start == "cold" && firmware::stock_has_dsp(&new.sha256) {
+        // A firmware with a DSP restores a ready snapshot (it holds the DSP state); one
+        // without a DSP has none and boots cold. The roles come from the registry, or from the stock
+        // base a patch record names, so a patched image answers as its base does.
+        if start == "cold" && new.roles.dsp.is_some() {
             return Err(RpcError::bad_params(
                 "start cold needs a patched MAIN; a stock firmware restores its snapshot",
             ));
@@ -3815,7 +3816,7 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" && firmware::stock_has_dsp(&new.sha256) {
+        if start == "cold" && new.roles.dsp.is_some() {
             return Err(RpcError::bad_params(
                 "start cold is for a patched MAIN; this MAIN is the base's",
             ));

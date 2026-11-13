@@ -211,10 +211,13 @@ unsafe fn word_at_literal(lit: *const u32) -> Option<u32> {
     Some(read_volatile(a as *const u32))
 }
 
-/// The firmware's DSP block counter (1500 per second, from boot; wraps), `None` when the anchor does not point at a DDR word.
+/// The firmware's DSP block counter (1500 per second, from boot; wraps), `None` on a device without a DSP and when the anchor does not point at a DDR word.
 /// `BLOCK_COUNTER_LIT` is the 4-byte address literal in the firmware's code, whose value is the address of the word.
 #[cfg(not(test))]
 pub unsafe fn fw_blocks() -> Option<u32> {
+    if !dev::has_dsp() {
+        return None; // the counter is the DSP block interrupt's: a device without a DSP has none
+    }
     word_at_literal(addr_of!(dkfw::link::BLOCK_ISR_COUNTER_LIT) as *const u32)
 }
 
@@ -689,6 +692,7 @@ pub unsafe fn init_once() {
     if s.magic == STATE_MAGIC {
         return;
     }
+    dev::valid(); // checks and keeps the device object's validity (an invalid object has no capability)
     arena::init();
     s.runtime = RUNTIME_VERSION;
     s.magic = STATE_MAGIC;
