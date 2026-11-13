@@ -237,7 +237,7 @@ export function usageOf(n: Record<string, number>): Usage {
  * Z (a DSP module: E_DSP_NOSPACE).
  */
 export async function fullSet(g: Geometry, refs: Usage[]): Promise<{ spec: SynthSpec; want: Want }[]> {
-  const sum = (key: keyof Usage) => refs.reduce((n, r) => n + r[key], 0);
+  const sum = (key: Exclude<keyof Usage, 'records'>) => refs.reduce((n, r) => n + r[key], 0);
   const typesLeft = g.machineRows - sum('machines');
   const rowsLeft = g.machineRows - sum('rows');
   const paramsLeft = g.paramRows - sum('params');

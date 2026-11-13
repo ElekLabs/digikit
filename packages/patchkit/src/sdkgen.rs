@@ -895,7 +895,18 @@ fn ts_proto(sdk: &Sdk) -> String {
             "/** [code, name, text] */\nexport const {name}: [number, string, string][] = ["
         );
         for (n, st) in by_code(table) {
-            let _ = writeln!(s, "  [{}, '{n}', {}],", st.code, ts_str(&st.text));
+            let one = format!("  [{}, '{n}', {}],", st.code, ts_str(&st.text));
+            if one.chars().count() <= TS_WIDTH {
+                s.push_str(&one);
+                s.push('\n');
+            } else {
+                let _ = writeln!(
+                    s,
+                    "  [\n    {},\n    '{n}',\n    {},\n  ],",
+                    st.code,
+                    ts_str(&st.text)
+                );
+            }
         }
         s.push_str("];\n\n");
     }

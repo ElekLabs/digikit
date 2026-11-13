@@ -130,7 +130,11 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-45, 'E_BOOT_ONLY', 'the module set is fixed after the boot hook'],
   [-46, 'E_RANGE', 'a card write outside the store range'],
   [-47, 'E_CARD_RO', "the card's store area is not ours and not blank"],
-  [-48, 'E_CONTRACT', 'the module needs another runtime version than this one (another major or minor, or a higher patch)'],
+  [
+    -48,
+    'E_CONTRACT',
+    'the module needs another runtime version than this one (another major or minor, or a higher patch)',
+  ],
   [-49, 'E_TABLE', "the runtime's tables failed their check"],
   [-73, 'E_MISSING', 'the service is not in the image (the module that provides it is not loaded)'],
   [-74, 'E_DECL_FULL', 'init made more builder calls than the record limit allows'],
