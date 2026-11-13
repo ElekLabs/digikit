@@ -7,7 +7,7 @@ import {
   type SessionOptions,
   type PreparedRuntimeImage,
 } from '@digi/test-support';
-import { patchkit } from './patchkit.ts';
+import { patchkit } from './patchkit-exec.ts';
 
 export interface RuntimePlan {
   base: { device: string; version: string; syx_sha256: string };

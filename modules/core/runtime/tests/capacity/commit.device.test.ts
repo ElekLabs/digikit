@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { committedRecords } from '@digi/test-support';
+import { committedRecords } from '@digi/test-support/commit-records';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { dspBytes, word } from '@digi/regression/runtime/fx-live.ts';
