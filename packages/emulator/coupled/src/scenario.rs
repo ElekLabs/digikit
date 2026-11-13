@@ -3,12 +3,9 @@ use serde_json::Value;
 
 /// DSPI2 frames per audio second (one 32-sample block each).
 pub const FRAMES_PER_SECOND: f64 = 1500.0;
-/// ColdFire instructions per emulated second: 132,000,000 (one per bus tick, so 88,000 per DSPI2
-/// frame at 1500 Hz) unless `DIGI_CF_IPS` says otherwise. Instruction counts in scenario files
-/// are authored at 132,000,000 and are scaled to this rate when parsed.
-pub fn cf_instructions_per_second() -> f64 {
-    elektron_native_boot::clock::cf_ips() as f64
-}
+// Instruction counts in scenario files are authored at 132,000,000 ColdFire instructions per emulated second (one per bus tick, so
+// 88,000 per DSPI2 frame at 1500 Hz). A parsed scenario keeps them so; `Scenario::at_rate` scales them to the rate of the emulator
+// that runs it.
 pub const DEFAULT_SCENARIOS: &str = include_str!("../../../../tests/scenarios/dn2.json");
 
 #[derive(Clone, Copy, Debug)]
@@ -45,7 +42,7 @@ pub struct Event {
     pub action: Action,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Scenario {
     pub name: String,
     pub description: String,
@@ -63,6 +60,20 @@ pub struct Scenario {
     pub events: Vec<Event>,
 }
 
+impl Scenario {
+    /// This scenario with its instruction counts (authored at the base rate) scaled to `ips`, the rate of the emulator that runs it.
+    pub fn at_rate(mut self, ips: u64) -> Self {
+        let scale = |n| elektron_native_boot::clock::scale_instr(n, ips);
+        self.instructions = self.instructions.map(scale);
+        for event in &mut self.events {
+            if let When::Instr(n) = event.when {
+                event.when = When::Instr(scale(n));
+            }
+        }
+        self
+    }
+}
+
 pub fn parse_scenarios(text: &str) -> Result<Vec<Scenario>, String> {
     let root: Value = serde_json::from_str(text).map_err(|e| format!("scenario file: {e}"))?;
     let list = root["scenarios"]
@@ -78,10 +89,7 @@ pub fn parse_scenario(v: &Value) -> Result<Scenario, String> {
         .to_string();
     let err = |m: &str| format!("scenario {name}: {m}");
     let seconds = v["seconds"].as_f64();
-    let ips = elektron_native_boot::clock::cf_ips();
-    let instructions = v["instructions"]
-        .as_u64()
-        .map(|n| elektron_native_boot::clock::scale_instr(n, ips));
+    let instructions = v["instructions"].as_u64();
     if seconds.is_none() == instructions.is_none() {
         return Err(err("give exactly one of \"seconds\" and \"instructions\""));
     }
@@ -89,7 +97,7 @@ pub fn parse_scenario(v: &Value) -> Result<Scenario, String> {
     for e in v["events"].as_array().map_or(&[][..], Vec::as_slice) {
         let when = match (e["at_s"].as_f64(), e["at_instr"].as_u64()) {
             (Some(s), None) if s >= 0.0 => When::Frames((s * FRAMES_PER_SECOND).round() as u64),
-            (None, Some(n)) => When::Instr(elektron_native_boot::clock::scale_instr(n, ips)),
+            (None, Some(n)) => When::Instr(n),
             _ => return Err(err("an event needs one of at_s (>= 0) and at_instr")),
         };
         let action = if let Some(code) = e["button"].as_u64() {

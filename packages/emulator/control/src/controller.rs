@@ -45,18 +45,14 @@ use crate::{
 pub const MAX_SYX: usize = 32 * 1024 * 1024;
 /// Guest instructions NO is held when the controller closes the boot modal.
 const NO_HOLD: u64 = 2_000_000;
-/// Guest instructions per emulated second (the device's rate, or `DIGI_CF_IPS`).
-fn cf_ips() -> f64 {
-    elektron_native_boot::clock::cf_ips() as f64
-}
 /// How far a paced runtime may lag the wall clock before its stretch starts again, in seconds.
 const PACE_SLACK_S: f64 = 0.05;
 
 /// Pacing of a free-running runtime without audio: after `wall_s` seconds of wall clock a runtime that executed `executed` instructions
 /// (`None`: its count went back) is ahead of the clock (`Some(true)`: wait), on time or a little behind (`Some(false)`: step), or
 /// lagging by more than the slack (`None`: start the stretch again).
-fn pace_ahead(wall_s: f64, executed: Option<u64>) -> Option<bool> {
-    let seconds = executed? as f64 / cf_ips();
+fn pace_ahead(wall_s: f64, executed: Option<u64>, ips: u64) -> Option<bool> {
+    let seconds = executed? as f64 / ips as f64;
     if seconds + PACE_SLACK_S < wall_s {
         None
     } else {
@@ -1071,8 +1067,8 @@ impl Actor {
             && self.mode == Mode::Free
             && self.job.is_none()
             && self.runtime.as_ref().is_some_and(|r| !r.has_audio());
-        let elapsed = match self.runtime.as_ref() {
-            Some(r) if paced => r.elapsed_instructions(),
+        let (elapsed, ips) = match self.runtime.as_ref() {
+            Some(r) if paced => (r.elapsed_instructions(), r.cf_ips()),
             _ => {
                 self.pace_anchor = None;
                 return false;
@@ -1083,6 +1079,7 @@ impl Actor {
         match pace_ahead(
             now.duration_since(start).as_secs_f64(),
             elapsed.checked_sub(base),
+            ips,
         ) {
             Some(ahead) => ahead,
             // the clock went back (rebased) or the stretch lags: start a new one
@@ -1188,6 +1185,7 @@ impl Actor {
             .map_or(0, Runtime::elapsed_instructions);
         let obs = health::Observation {
             elapsed,
+            instr_per_ms: self.runtime.as_ref().map_or(0, |r| r.cf_ips() / 1000),
             hits: status.mainloop_hits,
             main_ui: status.main_ui_reached,
             cpu_running: status.cpu_state == "running",
@@ -1787,6 +1785,10 @@ impl Actor {
         let (Some(runtime), Some(run)) = (self.runtime.as_mut(), self.scenario_run.as_mut()) else {
             return Ok(budget);
         };
+        if run.started.is_none() {
+            // the file's instruction counts are authored at the base rate: scale them to this runtime's
+            run.scenario = run.scenario.clone().at_rate(runtime.cf_ips());
+        }
         let started = *run.started.get_or_insert_with(Instant::now);
         let elapsed = runtime.elapsed_instructions();
         while let Some(event) = run.scenario.events.get(run.next).copied() {
@@ -5318,16 +5320,17 @@ mod card_key_tests {
 
 #[cfg(test)]
 mod pace_tests {
-    use super::{cf_ips, pace_ahead};
+    use super::pace_ahead;
 
     #[test]
     fn pacing_waits_when_ahead_steps_when_on_time_and_restarts_when_lagging() {
-        let seconds = |s: f64| Some((s * cf_ips()) as u64);
-        assert_eq!(pace_ahead(1.0, seconds(1.5)), Some(true));
-        assert_eq!(pace_ahead(1.0, seconds(1.0)), Some(false));
-        assert_eq!(pace_ahead(1.0, seconds(0.97)), Some(false));
-        assert_eq!(pace_ahead(1.0, seconds(0.5)), None);
-        assert_eq!(pace_ahead(1.0, None), None);
+        let ips = 189_928_000;
+        let seconds = |s: f64| Some((s * ips as f64) as u64);
+        assert_eq!(pace_ahead(1.0, seconds(1.5), ips), Some(true));
+        assert_eq!(pace_ahead(1.0, seconds(1.0), ips), Some(false));
+        assert_eq!(pace_ahead(1.0, seconds(0.97), ips), Some(false));
+        assert_eq!(pace_ahead(1.0, seconds(0.5), ips), None);
+        assert_eq!(pace_ahead(1.0, None, ips), None);
     }
 }
 
