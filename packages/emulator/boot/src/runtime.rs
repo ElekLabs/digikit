@@ -1228,7 +1228,10 @@ impl Emulator {
                 );
                 peer.frame_tick(board);
             } else if let Some(program) = board.peer().and_then(|m| m.program()) {
-                peer.start(program);
+                if let Err(error) = peer.start(program) {
+                    self.set_error(format!("PeerCpuStart({error})"));
+                    return;
+                }
                 self.peer_started = true;
                 self.peer_clock = now;
                 // MAIN's frame handler now forces vector 191 (the engine tick) and nothing else delivers it.
