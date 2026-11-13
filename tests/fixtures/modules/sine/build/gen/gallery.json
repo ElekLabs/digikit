@@ -7,7 +7,7 @@
           "knobs": [
             null,
             {
-              "param": "sine_level",
+              "param": "level",
               "slot": 26
             }
           ],
@@ -30,7 +30,7 @@
               "stock": 202
             },
             {
-              "param": "sine_level",
+              "param": "level",
               "slot": 1
             },
             null,
@@ -62,7 +62,7 @@
     "dn2": [
       {
         "default": 32512,
-        "id": "sine_level",
+        "id": "level",
         "max": 32512,
         "min": 0,
         "name": "Level",
@@ -74,7 +74,7 @@
     "dt2": [
       {
         "default": 32512,
-        "id": "sine_level",
+        "id": "level",
         "max": 32512,
         "min": 0,
         "name": "Level",
