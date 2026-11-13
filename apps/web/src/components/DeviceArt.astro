@@ -14,6 +14,7 @@ interface Props {
 }
 const { device, playing = false, label, class: className } = Astro.props;
 const panel = panels[device];
+if (!panel) throw new Error(`no faceplate for device ${device}`);
 // An empty label marks the picture as decoration (it sits next to the device name).
 const decorative = label === '';
 const lit = new Set(['1', '5', '9', '13']);

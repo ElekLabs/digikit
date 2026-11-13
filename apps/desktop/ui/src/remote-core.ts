@@ -3,6 +3,7 @@
 import { DkError, type DkSession, type RemoteState } from '@digi/dk-session';
 import { writing } from '../../../web/src/transfer/transfer-core.ts';
 import { isNoRuntime } from '../../../web/src/modules/backend.ts';
+import { isDeviceId, type DeviceId } from '../../../web/src/data/device-profiles.ts';
 
 /** The message under the faceplate for the state of digikit/remote (or for the error that asking for it gave). */
 export function remoteNotice(state: RemoteState | undefined, error?: unknown): string {
@@ -41,10 +42,10 @@ export function remoteRuntime(get: () => Promise<DkSession>) {
   };
 }
 
-/** `dt2` or `dn2` from the INFO port name of a session (`dt2`, or `dt2-1.17`), or undefined when it is another device. */
-export function deviceOfPort(port: string): 'dt2' | 'dn2' | undefined {
-  const d = port.split('-')[0];
-  return d === 'dt2' || d === 'dn2' ? d : undefined;
+/** The device id from the INFO port name of a session (the id, or the id and a version: `<id>-1.17`), or undefined when it is not a known device. */
+export function deviceOfPort(port: string): DeviceId | undefined {
+  const d = port.split('-')[0] ?? '';
+  return isDeviceId(d) ? d : undefined;
 }
 
 /** The Remote page asks INFO (it only names the device) at most this often while the target stays the same. */

@@ -6,9 +6,9 @@ import { isCancelled, isNoRuntime, isTimeout } from '../modules/backend.ts';
 
 /** What INFO says about the device (the runtime has no serial number and no OS version; see docs/design/digikit-upload.md, INFO). */
 export interface DeviceFacts {
-  /** The device id INFO reports (`dt2`, `dn2`): the most specific id there is. */
+  /** The device id INFO reports: the most specific id there is. */
   id: string;
-  /** The profile's name of the device (`Digitakt II`). */
+  /** The profile's name of the device (`[device] name`). */
   name: string;
   /** The firmware version, when the app knows it (INFO does not carry it). */
   os?: string;
@@ -93,7 +93,7 @@ export interface ConnectionView {
   title: string;
 }
 
-/** The text of the indicator; `port` is the name of the target (`MIDI: Elektron Digitakt II`, `Emulator`). */
+/** The text of the indicator; `port` is the name of the target (`MIDI: <port name>`, `Emulator`). */
 export function connectionView(c: Connection, port: string): ConnectionView {
   if (c.state === 'connected') {
     const d = c.device;

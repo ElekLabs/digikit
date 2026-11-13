@@ -53,7 +53,7 @@ export interface PreparedFlash {
   /** Every check passed and there is something to send. */
   ok: boolean;
   restore: boolean;
-  /** `dt2` or `dn2`. */
+  /** The device id. */
   device: string;
   /** The OS version of the stock image (`1.17`). */
   os: string;
@@ -316,7 +316,7 @@ export class PatchKit {
   }
 }
 
-/** The file name of a patched image: `Digitakt_II_OS1.17+core-fx.syx`. */
+/** The file name of a patched image: `<Device_name>_OS<version>+core-fx.syx`. */
 export function patchedFileName(deviceName: string, version: string, ids: string[]): string {
   const base = `${deviceName.replace(/\s+/g, '_')}_OS${version}`;
   return `${base}+${ids.map((id) => id.replace(/\//g, '-')).join('+')}.syx`;

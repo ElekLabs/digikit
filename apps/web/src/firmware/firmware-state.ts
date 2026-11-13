@@ -7,7 +7,7 @@ import { target } from '../transfer/target';
 import { installAfterFlash, patchSet, resetPostRun, postWorking, setCustomBootScreen } from './default-modules-state';
 import { firmwareEnv } from './env';
 import {
-  DEVICE_NAMES,
+  deviceNameOf,
   IDLE,
   imageFileName,
   isDeviceId,
@@ -111,7 +111,7 @@ export async function probeDevice(): Promise<void> {
   try {
     const a = await asked(() => askDevice());
     if (running(run()) || target().kind !== 'midi') return;
-    const model = isDeviceId(a.model ?? '') ? (a.model as DeviceFacts['model']) : modelOfPort(a.port);
+    const model = isDeviceId(a.model ?? '') ? a.model : modelOfPort(a.port);
     const facts: DeviceFacts = {
       port: a.port,
       model,
@@ -124,7 +124,7 @@ export async function probeDevice(): Promise<void> {
       type: 'answered',
       device: {
         id: model ?? '',
-        name: model ? DEVICE_NAMES[model] : 'MIDI device',
+        name: model ? deviceNameOf(model) : 'MIDI device',
         ...(a.os ? { os: a.os } : {}),
         ...(a.runtime ? { runtime: a.runtime } : {}),
       },

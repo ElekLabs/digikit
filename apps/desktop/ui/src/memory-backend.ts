@@ -6,7 +6,7 @@ import { buildBars, type Bar, type KnownModule } from './memory-core';
 import { loadLibrary } from '@web/transfer/transfer-backend';
 
 export interface MemoryReading {
-  /** The device the session talks to: the INFO port name (`dt2-1.17`). */
+  /** The device the session talks to: the INFO port name (`<id>-<version>`). */
   port: string;
   bars: Bar[];
   /** How many modules the runtime has loaded. */

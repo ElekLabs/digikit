@@ -1,4 +1,5 @@
 ---
+import { deviceNamesText } from '../data/device-profiles';
 import Base from '../layouts/Base.astro';
 import ModuleBrowser from '../components/ModuleBrowser';
 import { shippedModules } from '../data/modules';
@@ -8,7 +9,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 
 <Base
   title="Modules · digikit"
-  description="Machines, effects and tools for the Digitakt II and Digitone II that you install over USB."
+  description={`Machines, effects and tools for the ${deviceNamesText('and')} that you install over USB.`}
   active="modules"
 >
   <main>

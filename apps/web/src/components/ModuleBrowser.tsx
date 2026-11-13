@@ -1,5 +1,6 @@
 // The Modules page: filter the shipped modules, pick some, and hand the picks to the Transfer page.
 import { For, Show, createMemo, createSignal } from 'solid-js';
+import { deviceNameOf, runtimeDeviceIds } from '../data/device-profiles';
 import type { Category } from '../data/module-labels';
 import type { ModuleInfo } from '../data/modules';
 import ModuleCard from './ModuleCard';
@@ -21,13 +22,12 @@ const FILTER_LABEL: Partial<Record<Category, string>> = {
 
 const DEVICE_OPTIONS = [
   { id: 'any', label: 'Any device' },
-  { id: 'dt2', label: 'Digitakt II' },
-  { id: 'dn2', label: 'Digitone II' },
-] as const;
+  ...runtimeDeviceIds.map((id) => ({ id, label: deviceNameOf(id) })),
+];
 
 export default function ModuleBrowser(props: ModuleBrowserProps) {
   const [category, setCategory] = createSignal<'all' | Category>('all');
-  const [device, setDevice] = createSignal<'any' | 'dt2' | 'dn2'>('any');
+  const [device, setDevice] = createSignal<string>('any');
   const [added, setAdded] = createSignal<Set<string>>(new Set());
 
   const categories = createMemo(() => {
@@ -37,8 +37,7 @@ export default function ModuleBrowser(props: ModuleBrowserProps) {
   const shown = createMemo(() =>
     props.modules.filter(
       (m) =>
-        (category() === 'all' || m.category === category()) &&
-        (device() === 'any' || m.devices.includes(device() as 'dt2' | 'dn2')),
+        (category() === 'all' || m.category === category()) && (device() === 'any' || m.devices.includes(device())),
     ),
   );
   const toggle = (id: string) =>

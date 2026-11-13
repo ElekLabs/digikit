@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'smol-toml';
 import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { loadDevices } from '@digi/devices/node';
 import { PatchKit, patchedFileName } from '../src/patch/patchkit-core.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -87,7 +88,9 @@ test('the shipped modules: the index describes them, the sources hold no build o
     .flatMap((r) => manifestFiles(join(root, 'modules', r)))
     .map((file) => ({ file, d: parse(readFileSync(file, 'utf8')) }))
     .filter(
-      ({ file, d }) => isShipped(d, relative(root, dirname(file)).split(sep).join('/')) && shippedDevices(d).length,
+      ({ file, d }) =>
+        isShipped(d, relative(root, dirname(file)).split(sep).join('/')) &&
+        shippedDevices(d, loadDevices().runtimeIds).length,
     )
     .map(({ d }) => d.module.id)
     .sort();
