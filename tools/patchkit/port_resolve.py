@@ -18,6 +18,7 @@ entry is one declaration; its `rule` is shared, or `rule.dt2` / `rule.dn2` give 
                                            # subsystems are listed in devices/fw/subsystems.toml
     cpu = "sharc"
     devices = ["dt2"]                # the devices that have it; the entry is skipped on the others
+                                     # (a SHARC rule and a SHARC hook are also skipped on a device without a DSP)
     rule = { kind = "sharc_func", reloc_hash = "...", offset = 0x0, len = 6 }   # kind: see below
     mark = "D"
 
@@ -133,6 +134,9 @@ def load_profiles(root: Path = ROOT) -> dict[str, dict]:
                 "patch": d.get("patch") or {},
                 # RAM inside cf.expansion that another patcher's build uses at fixed addresses (`[[firmware]] cf_expansion_excludes`)
                 "cf_expansion_excludes": fw.get("cf_expansion_excludes", []),
+                # a region the analysis cannot find, kept by hand: `[start, end]` each (`[[firmware]] cf_flash_cave`, `cf_expansion`)
+                "cf_flash_cave": fw.get("cf_flash_cave"),
+                "cf_expansion": fw.get("cf_expansion"),
             }
     return out
 
@@ -781,6 +785,36 @@ def expansion_excludes(excludes: list, start: int, end: int) -> list:
     return out
 
 
+def manual_cave(cf: CfFacts, span: list) -> dict:
+    """The flash cave a firmware entry keeps by hand (`cf_flash_cave = [start, end]`): the analysis rejects a zero run that a
+    pointer literal reaches, and the init table that ends where the cave starts is such a pointer. The kept run must be zero bytes in
+    the image and end at the clear start (the linker puts bss and tables before it), the same two facts `cave()` demands."""
+    start, end = (int(v) for v in span)
+    clear = cf.reset["clear_start"]
+    if end != clear:
+        raise ResolveError(
+            f"cf_flash_cave [{start:#x}, {end:#x}] does not end at the reset clear start {clear:#x}"
+        )
+    if start >= end or any(cf.bytes_at(start, end - start)):
+        raise ResolveError(
+            f"cf_flash_cave [{start:#x}, {end:#x}] is not all zero bytes of the image"
+        )
+    return {"start": start, "size": end - start}
+
+
+def manual_expansion(cf: CfFacts, span: list) -> dict:
+    """The expansion region a firmware entry keeps by hand (`cf_expansion = [start, end]`) where the DMA-arena heuristic of
+    `regions.analyse` finds no cluster: inside the analysis' own bounds (above the bss end, below the stack reserve)."""
+    start, end = (int(v) for v in span)
+    auto = cf.analysis["expansion"]
+    bss_end = cf.reset["clear_end"]
+    if not bss_end <= start < end <= auto["end"]:
+        raise ResolveError(
+            f"cf_expansion [{start:#x}, {end:#x}] is not between the bss end {bss_end:#x} and the stack reserve {auto['end']:#x}"
+        )
+    return {"start": start, "end": end}
+
+
 def dsp_l2_region(stream, patch: dict) -> dict:
     lo, hi = patch["dsp_l2_lo"], patch["dsp_l2_hi"]
     end = max(
@@ -824,6 +858,8 @@ def render(
         "dsp_sha256",
         "resolved_by",
     ):
+        if k == "dsp_sha256" and not port[k]:
+            continue  # a device without a DSP has no stream to name
         o.append(f'{k} = "{port[k]}"')
     o += ["", "[limits]"]
     for k, v in limits.items():
@@ -874,13 +910,12 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         if rule.get("kind") in MULTI_KINDS:
             pending.append(rule)  # after the single anchors they may exclude
             continue
-        if rule.get("cpu") != "cf" and dsp is None:
-            raise ResolveError(f"{rule['name']}: needs a DSP image, {device} has none")
-        a = (
-            resolve_cf_anchor(cf, rule)
-            if rule.get("cpu") == "cf"
-            else resolve_anchor(dsp, rule)
-        )
+        if rule.get("cpu") == "cf":
+            a = resolve_cf_anchor(cf, rule)
+        elif dsp is None:
+            continue  # a SHARC rule cannot apply to a device without a DSP (`[capabilities] dsp = "none"`)
+        else:
+            a = resolve_anchor(dsp, rule)
         anchor = {
             "name": rule["name"],
             "cpu": rule.get("cpu", "sharc"),
@@ -932,6 +967,8 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
     for h in fw_hooks(root):
         if h.get("devices") and device not in h["devices"]:
             continue
+        if h["cpu"] != "cf" and dsp is None:
+            continue  # its SHARC site is not in this port
         site = by_name.get(h["site"])
         if site is None:
             raise ResolveError(
@@ -942,8 +979,14 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
                 f"{h['name']}: cpu {h['cpu']} differs from the cpu {site['cpu']} of site {h['site']}"
             )
         hooks.append({k: h[k] for k in ("name", "site", "offset", "mode")})
-    cave = cf.cave()
-    exp = cf.analysis["expansion"]
+    cave = (
+        manual_cave(cf, prof["cf_flash_cave"]) if prof["cf_flash_cave"] else cf.cave()
+    )
+    exp = (
+        manual_expansion(cf, prof["cf_expansion"])
+        if prof["cf_expansion"]
+        else cf.analysis["expansion"]
+    )
     regions = [
         {
             "name": "cf.flash_cave",
@@ -973,7 +1016,8 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         "dsp_sha256": sha(secs[dsp_sec]) if dsp_sec is not None else "",
         "resolved_by": RESOLVED_BY,
     }
-    limits = {k: prof["patch"][k] for k in LIMIT_KEYS}
+    # the dsp_* limits are absent from the `[patch]` of a device without a DSP
+    limits = {k: prof["patch"][k] for k in LIMIT_KEYS if k in prof["patch"]}
     return f"{device}-{version}", render(port, limits, regions, unique, hooks)
 
 

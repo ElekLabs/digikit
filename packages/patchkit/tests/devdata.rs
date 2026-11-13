@@ -545,7 +545,8 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    for dev in devdata::all() {
+    // a device that is patched with explicit modules only (no `[patch_sets]`) has no set to check
+    for dev in devdata::all().iter().filter(|d| !d.patch_sets.is_empty()) {
         // both sets are the flash modules and core/input
         for (set, extra) in [
             ("device", vec!["core/input"]),

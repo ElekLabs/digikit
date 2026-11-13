@@ -345,14 +345,20 @@ fn split(image: &[u8]) -> Result<Vec<Range<usize>>> {
 
 fn read_id(image: &[u8]) -> Result<Option<([u8; 8], bool)>> {
     let fw = Firmware::parse(image)?;
-    let (Some(main), Some(dsp)) = (fw.section(3), fw.section(7)) else {
+    // the image id mixes the DSP stream in; a device without a DSP has none
+    let Some(main) = fw.main() else {
         return Ok(None);
+    };
+    let no_dsp = Vec::new();
+    let dsp = match (fw.device.dsp_section(), fw.dsp()) {
+        (Some(_), None) => return Ok(None),
+        (_, d) => d.map_or(&no_dsp, |d| &d.data),
     };
     let base = match verify::patch_record(image)? {
         Some(r) => unhex(&r.base_sha256)?,
         None => return Ok(None),
     };
-    imageid::read(&base, &main.data, &dsp.data)
+    imageid::read(&base, &main.data, dsp)
 }
 
 /// The stream id byte of both framing messages is the device's (`[patch] stream_id`): the device refuses a header with another id,
@@ -416,12 +422,18 @@ fn floor_of(word: [u8; 4], info: &DeviceInfo) -> Result<String> {
     }
 }
 
-/// The DSP section (7) holds no store the SHARC+ ISA excludes (`dspscan`; the stock images have none). With `code` (the plan's SHARC code ranges), appended blocks are scanned only inside those ranges.
+/// The DSP section (`[container] dsp`) holds no store the SHARC+ ISA excludes (`dspscan`; the stock images have none). With `code` (the plan's SHARC code ranges), appended blocks are scanned only inside those ranges. A device without a DSP has nothing to scan.
 pub fn dsp_scan(image: &[u8], code: Option<&[(u64, u64)]>) -> Result<((), String)> {
     let fw = Firmware::parse(image)?;
+    if fw.device.dsp_section().is_none() {
+        return Ok((
+            (),
+            format!("{} has no DSP section: nothing to scan", fw.device.short()),
+        ));
+    }
     let dsp = fw
-        .section(7)
-        .ok_or_else(|| err!("the image has no DSP section (7)"))?;
+        .dsp()
+        .ok_or_else(|| err!("the image has no DSP section"))?;
     Ok(((), crate::dspscan::check_section7(&dsp.data, code)?))
 }
 
@@ -528,7 +540,7 @@ pub fn device_validate(stream: &[u8], info: &DeviceInfo) -> Result<()> {
     }
     floor_of(build_word(stream)?, info)?;
     let dev = syx::Device::from_id(info.syx_id)?;
-    if syx::trailer(container, dev)[..] != container[total - 32..] {
+    if !syx::trailer_matches(container, dev) {
         return Err(err!("HMAC fails: the device shows \"Checksum error!\""));
     }
     Ok(())
@@ -571,7 +583,7 @@ pub fn container_of(image: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// The `.syx` for a container read back from flash (from its first byte on; erased bytes may follow). The container's length is
-/// its last section's end, rounded up to 16, and the 32-byte trailer; the trailer must be the device's HMAC. The framing messages
+/// its last section's end, rounded up to 16, and the 32-byte trailer (a device without a seal has none); the trailer must be the device's HMAC. The framing messages
 /// come from `like`, an image of the same device (the emulator boots what the device flashed).
 pub fn image_from_flash(flash: &[u8], like: &[u8]) -> Result<Vec<u8>> {
     let fw = Firmware::parse(like)?;
@@ -593,11 +605,11 @@ pub fn image_from_flash(flash: &[u8], like: &[u8]) -> Result<Vec<u8>> {
         let e = syx::TABLE_OFF + i * syx::ENTRY_SZ;
         end = end.max(be(e + 4)? + be(e + 8)?);
     }
-    let total = end.div_ceil(16) * 16 + 32;
+    let total = end.div_ceil(16) * 16 + syx::trailer_len(fw.device);
     let container = flash
         .get(..total)
         .ok_or_else(|| err!("the container ({total} bytes) is cut"))?;
-    if syx::trailer(container, fw.device)[..] != container[total - 32..] {
+    if !syx::trailer_matches(container, fw.device) {
         return Err(err!("the flash container does not carry the device's HMAC"));
     }
     let mut stream = (total as u32).to_be_bytes().to_vec();

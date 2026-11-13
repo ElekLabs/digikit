@@ -19,6 +19,12 @@
             "addr": "0x40113700",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f8508",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -38,6 +44,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -69,6 +80,12 @@
             "addr": "0x40114168",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f8f70",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -88,6 +105,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -119,6 +141,12 @@
             "addr": "0x401131ae",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f7fb6",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -138,6 +166,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -169,6 +202,12 @@
             "addr": "0x401132c0",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f80c8",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -188,6 +227,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -219,6 +263,12 @@
             "addr": "0x40112f92",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f7d9a",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -238,6 +288,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -269,6 +324,12 @@
             "addr": "0x4011e598",
             "len": 2
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40103314",
+            "len": 2
+          }
         ]
       },
       "bindings": {
@@ -288,6 +349,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 2,
           "offset": 0
@@ -318,6 +384,12 @@
         "dt2-1.17": [
           {
             "addr": "0x4011e318",
+            "len": 2
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40103094",
             "len": 2
           }
         ]
@@ -377,6 +449,12 @@
             "addr": "0x4011e150",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40102f40",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -396,6 +474,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -425,6 +508,12 @@
         "dt2-1.17": [
           {
             "addr": "0x4011e328",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401030a4",
             "len": 4
           }
         ]
@@ -4155,6 +4244,12 @@
             "addr": "0x4011eb5a",
             "len": 2
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401038d6",
+            "len": 2
+          }
         ]
       },
       "bindings": {
@@ -4213,6 +4308,12 @@
             "addr": "0x4011e954",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401036d0",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4232,6 +4333,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4267,6 +4373,12 @@
             "addr": "0x4011e972",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401036ee",
+            "len": 4
+          }
         ]
       },
       "cpu": "cf",
@@ -4282,6 +4394,11 @@
           "offset": 30
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 30
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 30
@@ -4315,6 +4432,12 @@
             "addr": "0x4011e968",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401036e4",
+            "len": 4
+          }
         ]
       },
       "cpu": "cf",
@@ -4330,6 +4453,11 @@
           "offset": 20
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 20
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 20
@@ -4363,6 +4491,12 @@
             "addr": "0x4011e962",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401036de",
+            "len": 4
+          }
         ]
       },
       "cpu": "cf",
@@ -4378,6 +4512,11 @@
           "offset": 14
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 14
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 14
@@ -4411,6 +4550,12 @@
             "addr": "0x4011e9e6",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40103762",
+            "len": 4
+          }
         ]
       },
       "cpu": "cf",
@@ -4426,6 +4571,11 @@
           "offset": 146
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 146
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 146
@@ -4459,6 +4609,12 @@
             "addr": "0x4021cbf0",
             "len": 156
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40240b54",
+            "len": 156
+          }
         ]
       },
       "bindings": {
@@ -4478,6 +4634,11 @@
           "offset": 104
         },
         "dt2": {
+          "kind": "cf_ptr",
+          "len": 156,
+          "offset": 104
+        },
+        "st": {
           "kind": "cf_ptr",
           "len": 156,
           "offset": 104
@@ -4508,6 +4669,12 @@
             "addr": "0x4021d1b0",
             "len": 172
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40241114",
+            "len": 172
+          }
         ]
       },
       "bindings": {
@@ -4527,6 +4694,11 @@
           "offset": 88
         },
         "dt2": {
+          "kind": "cf_ptr",
+          "len": 172,
+          "offset": 88
+        },
+        "st": {
           "kind": "cf_ptr",
           "len": 172,
           "offset": 88
@@ -4557,6 +4729,12 @@
             "addr": "0x4011527a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa082",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4576,6 +4754,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4607,6 +4790,12 @@
             "addr": "0x40115520",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa328",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4626,6 +4815,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4657,6 +4851,12 @@
             "addr": "0x40114d1a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f9b22",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4676,6 +4876,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4707,6 +4912,12 @@
             "addr": "0x40114d4c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f9b54",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4726,6 +4937,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4757,6 +4973,12 @@
             "addr": "0x4011539c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa1a4",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4776,6 +4998,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4807,6 +5034,12 @@
             "addr": "0x40110624",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f53e0",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4826,6 +5059,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4907,6 +5145,12 @@
             "addr": "0x40114d34",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f9b3c",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4926,6 +5170,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -4957,6 +5206,12 @@
             "addr": "0x40114d6c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f9b74",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -4976,6 +5231,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5007,6 +5267,12 @@
             "addr": "0x40115b90",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa998",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5026,6 +5292,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5057,6 +5328,12 @@
             "addr": "0x40115a44",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa84c",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5076,6 +5353,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5107,6 +5389,12 @@
             "addr": "0x4011077c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f5538",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5126,6 +5414,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5157,6 +5450,12 @@
             "addr": "0x40110760",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f551c",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5176,6 +5475,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5207,6 +5511,12 @@
             "addr": "0x40115f7a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fad82",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5226,6 +5536,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5257,6 +5572,12 @@
             "addr": "0x40115f30",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fad38",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5276,6 +5597,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5307,6 +5633,12 @@
             "addr": "0x4011547c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa284",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5326,6 +5658,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5357,6 +5694,12 @@
             "addr": "0x4011083c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f55f8",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5376,6 +5719,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5407,6 +5755,12 @@
             "addr": "0x401108f0",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f56ac",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5426,6 +5780,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5457,6 +5816,12 @@
             "addr": "0x40114df8",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f9c00",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5476,6 +5841,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5507,6 +5877,12 @@
             "addr": "0x401153cc",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fa1d4",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -5526,6 +5902,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -5555,6 +5936,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40119f6c",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fed6c",
             "len": 4
           }
         ]
@@ -5681,6 +6068,10 @@
         "rust": "dkfw::menu::SETTINGS_LIST_SYSTEM_ICON_REF"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its operand is the address of a stock icon object built at run time.",
       "file": "devices/fw/menu.toml",
       "kind": "site",
@@ -5729,6 +6120,10 @@
         ]
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "The last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding a menu item.",
       "file": "devices/fw/menu.toml",
       "kind": "site",
@@ -6034,6 +6429,12 @@
             "addr": "0x40121adc",
             "len": 2
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40106728",
+            "len": 2
+          }
         ]
       },
       "bindings": {
@@ -6053,6 +6454,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 2,
           "offset": 0
@@ -6128,6 +6534,12 @@
             "addr": "0x40120bce",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010586a",
+            "len": 4
+          }
         ]
       },
       "bind": "static",
@@ -6148,6 +6560,11 @@
           "offset": 2
         },
         "dt2": {
+          "kind": "cf_words",
+          "len": 4,
+          "offset": 2
+        },
+        "st": {
           "kind": "cf_words",
           "len": 4,
           "offset": 2
@@ -6178,6 +6595,12 @@
             "addr": "0x4011f1e2",
             "len": 6
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40103f5e",
+            "len": 6
+          }
         ]
       },
       "cpu": "cf",
@@ -6193,6 +6616,11 @@
           "offset": 2
         },
         "dt2": {
+          "kind": "cf_words",
+          "len": 6,
+          "offset": 2
+        },
+        "st": {
           "kind": "cf_words",
           "len": 6,
           "offset": 2
@@ -6225,6 +6653,12 @@
             "addr": "0x40004776",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40004a62",
+            "len": 4
+          }
         ]
       },
       "bind": "static",
@@ -6245,6 +6679,11 @@
           "offset": 66
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 66
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 66
@@ -6494,6 +6933,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40035cca",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000f04c",
             "len": 4
           }
         ]
@@ -6789,6 +7234,12 @@
             "addr": "0x4004abb8",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4001ff74",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -6808,6 +7259,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -7919,6 +8375,10 @@
         "rust": "dkfw::param::DESCRIPTOR_TABLE_MASTER_SIDECHAIN_FILTER"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "The descriptor row (60 bytes) of that parameter: mirror index 66, range 0..0x7f00, default 0x5000.",
       "file": "devices/fw/param.toml",
       "kind": "data",
@@ -7956,6 +8416,12 @@
         "dt2-1.17": [
           {
             "addr": "0x4003b570",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40012b6e",
             "len": 4
           }
         ]
@@ -9503,6 +9969,12 @@
             "addr": "0x40041d24",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40018464",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -9562,6 +10034,12 @@
             "addr": "0x40030c9c",
             "len": 2
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40008598",
+            "len": 2
+          }
         ]
       },
       "bindings": {
@@ -9581,6 +10059,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 2,
           "offset": 0
@@ -9612,6 +10095,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40041d18",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40018458",
             "len": 4
           }
         ]
@@ -9668,6 +10157,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40198b7e",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4016e9c8",
             "len": 4
           }
         ]
@@ -9729,6 +10224,12 @@
             "addr": "0x40036266",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000f692",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -9785,6 +10286,12 @@
         "dt2-1.17": [
           {
             "addr": "0x4003324e",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000a658",
             "len": 4
           }
         ]
@@ -9916,6 +10423,12 @@
             "addr": "0x40001928",
             "len": 2
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40001ca0",
+            "len": 2
+          }
         ]
       },
       "bindings": {
@@ -9935,6 +10448,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 2,
           "offset": 0
@@ -9967,6 +10485,12 @@
             "addr": "0x4000053e",
             "len": 8
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000053e",
+            "len": 8
+          }
         ]
       },
       "bindings": {
@@ -9984,6 +10508,9 @@
           "kind": "cf_reset_init_calls"
         },
         "dt2": {
+          "kind": "cf_reset_init_calls"
+        },
+        "st": {
           "kind": "cf_reset_init_calls"
         }
       },
@@ -10015,6 +10542,12 @@
             "addr": "0x40001398",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40001710",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10034,6 +10567,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -10065,6 +10603,12 @@
             "addr": "0x4000141a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40001792",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10084,6 +10628,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -10115,6 +10664,12 @@
             "addr": "0x4000155c",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400018d4",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10134,6 +10689,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -10159,6 +10719,12 @@
             "addr": "0x40136544",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401162f8",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10178,6 +10744,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -10210,6 +10781,12 @@
             "addr": "0x400012c8",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40001640",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10229,6 +10806,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -10260,6 +10842,12 @@
             "addr": "0x40001314",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000168c",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10279,6 +10867,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -10446,6 +11039,12 @@
             "addr": "0x40001266",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400015de",
+            "len": 4
+          }
         ]
       },
       "bind": "static",
@@ -10466,6 +11065,11 @@
           "offset": 18
         },
         "dt2": {
+          "kind": "cf_words",
+          "len": 4,
+          "offset": 18
+        },
+        "st": {
           "kind": "cf_words",
           "len": 4,
           "offset": 18
@@ -10496,6 +11100,12 @@
         "dt2-1.17": [
           {
             "addr": "0x400cce4a",
+            "len": 6
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40082896",
             "len": 6
           }
         ]
@@ -10551,6 +11161,12 @@
             "addr": "0x400d183a",
             "len": 6
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40087d0a",
+            "len": 6
+          }
         ]
       },
       "cpu": "cf",
@@ -10566,6 +11182,11 @@
           "offset": 8
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 8
+        },
+        "st": {
           "kind": "cf_func",
           "len": 6,
           "offset": 8
@@ -10594,6 +11215,12 @@
         "dt2-1.17": [
           {
             "addr": "0x400337ba",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000abd6",
             "len": 8
           }
         ]
@@ -10650,6 +11277,12 @@
             "addr": "0x47db3f64",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x454e49a8",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10669,6 +11302,11 @@
           "offset": 20
         },
         "dt2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 20
+        },
+        "st": {
           "kind": "cf_literal",
           "len": 4,
           "offset": 20
@@ -10699,6 +11337,12 @@
             "addr": "0x43153a00",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x43bc9b34",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -10718,6 +11362,11 @@
           "offset": 116
         },
         "dt2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 116
+        },
+        "st": {
           "kind": "cf_literal",
           "len": 4,
           "offset": 116
@@ -10748,6 +11397,12 @@
             "addr": "0x400004b2",
             "len": 8
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400004b2",
+            "len": 8
+          }
         ]
       },
       "bindings": {
@@ -10765,6 +11420,9 @@
           "kind": "cf_reset_helper"
         },
         "dt2": {
+          "kind": "cf_reset_helper"
+        },
+        "st": {
           "kind": "cf_reset_helper"
         }
       },
@@ -10796,6 +11454,12 @@
             "addr": "0x4000045c",
             "len": 8
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000045c",
+            "len": 8
+          }
         ]
       },
       "bindings": {
@@ -10813,6 +11477,9 @@
           "kind": "cf_reset_helper"
         },
         "dt2": {
+          "kind": "cf_reset_helper"
+        },
+        "st": {
           "kind": "cf_reset_helper"
         }
       },
@@ -11156,6 +11823,12 @@
             "addr": "0x4012e1b6",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f612",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -11175,6 +11848,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -11212,6 +11890,12 @@
             "addr": "0x4012e39c",
             "len": 2
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f7f8",
+            "len": 2
+          }
         ]
       },
       "bindings": {
@@ -11231,6 +11915,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 2,
           "offset": 0
@@ -11264,6 +11953,12 @@
         "dt2-1.17": [
           {
             "addr": "0x400f05ae",
+            "len": 2
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400bd570",
             "len": 2
           }
         ]
@@ -12189,6 +12884,11 @@
           {
             "addr": "0x4012e1d8"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f634"
+          }
         ]
       },
       "cpu": "cf",
@@ -12229,6 +12929,11 @@
           {
             "addr": "0x4012e1ca"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f626"
+          }
         ]
       },
       "cpu": "cf",
@@ -12266,6 +12971,11 @@
         "dt2-1.17": [
           {
             "addr": "0x4012e3be"
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f81a"
           }
         ]
       },
@@ -12306,6 +13016,11 @@
         "dt2-1.17": [
           {
             "addr": "0x4012e3b0"
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f80c"
           }
         ]
       },
@@ -12443,6 +13158,12 @@
             "addr": "0x4012e1d8",
             "len": 12
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f634",
+            "len": 12
+          }
         ]
       },
       "cpu": "cf",
@@ -12458,6 +13179,11 @@
           "offset": 34
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 12,
+          "offset": 34
+        },
+        "st": {
           "kind": "cf_func",
           "len": 12,
           "offset": 34
@@ -12482,6 +13208,12 @@
             "addr": "0x4012e1ca",
             "len": 6
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f626",
+            "len": 6
+          }
         ]
       },
       "cpu": "cf",
@@ -12497,6 +13229,11 @@
           "offset": 20
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 20
+        },
+        "st": {
           "kind": "cf_func",
           "len": 6,
           "offset": 20
@@ -12521,6 +13258,12 @@
             "addr": "0x4012e3be",
             "len": 12
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f81a",
+            "len": 12
+          }
         ]
       },
       "cpu": "cf",
@@ -12536,6 +13279,11 @@
           "offset": 34
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 12,
+          "offset": 34
+        },
+        "st": {
           "kind": "cf_func",
           "len": 12,
           "offset": 34
@@ -12560,6 +13308,12 @@
             "addr": "0x4012e3b0",
             "len": 6
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f80c",
+            "len": 6
+          }
         ]
       },
       "cpu": "cf",
@@ -12575,6 +13329,11 @@
           "offset": 20
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 20
+        },
+        "st": {
           "kind": "cf_func",
           "len": 6,
           "offset": 20
@@ -12914,6 +13673,12 @@
             "addr": "0x4011a0ba",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400feea8",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -12979,6 +13744,10 @@
         "rust": "dkfw::string::shared_ptr_move"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "Moves a `shared_ptr` from `src` to `dst`. core/digikit-menu uses it when it pushes a popup view.",
       "file": "devices/fw/string.toml",
       "kind": "fn",
@@ -13023,6 +13792,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40197d26",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4016dfac",
             "len": 4
           }
         ]
@@ -13084,6 +13859,12 @@
             "addr": "0x40197ce0",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4016dc10",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13103,6 +13884,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13134,6 +13920,12 @@
             "addr": "0x401e7570",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401bea14",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13153,6 +13945,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13184,6 +13981,12 @@
             "addr": "0x401e7e7a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401bf31e",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13203,6 +14006,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13237,6 +14045,12 @@
             "addr": "0x401e63ca",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401bd86e",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13256,6 +14070,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13422,6 +14241,12 @@
             "addr": "0x40113d60",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f8b68",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13441,6 +14266,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13472,6 +14302,12 @@
             "addr": "0x40113fd4",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f8ddc",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13491,6 +14327,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13522,6 +14363,12 @@
             "addr": "0x40113dc8",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f8bd0",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13541,6 +14388,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13566,6 +14418,12 @@
             "addr": "0x4029ef80",
             "len": 280
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4029a808",
+            "len": 280
+          }
         ]
       },
       "bindings": {
@@ -13585,6 +14443,11 @@
           "offset": 34
         },
         "dt2": {
+          "kind": "cf_ptr",
+          "len": 280,
+          "offset": 34
+        },
+        "st": {
           "kind": "cf_ptr",
           "len": 280,
           "offset": 34
@@ -13616,6 +14479,10 @@
         "rust": "dkfw::usb::cancel_ep"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "Cancel and free every transfer descriptor queued on endpoint queue `index` (`FUN_400059aa`, 0x400059aa); each one's cancel callback (+0x28) is called.",
       "file": "devices/fw/usb.toml",
       "kind": "fn",
@@ -13660,6 +14527,10 @@
         "rust": "dkfw::usb::connect"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "The connect body of the USB MIDI port (`FUN_400043e2`, 0x400043e2): sets the EP1 queue heads, ENDPTCTRL1 and primes EP1 OUT.",
       "file": "devices/fw/usb.toml",
       "kind": "fn",
@@ -13697,6 +14568,12 @@
             "addr": "0x4000436e",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000465a",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13716,6 +14593,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13741,6 +14623,12 @@
             "addr": "0x40006c16",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40006f02",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13760,6 +14648,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13792,6 +14685,10 @@
         "rust": "dkfw::usb::queue_td"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "Queue a transfer descriptor on endpoint queue `index` = endpoint + 4 * direction (IN = 1) and prime it (`FUN_40005a86`, 0x40005a86).",
       "file": "devices/fw/usb.toml",
       "kind": "fn",
@@ -13829,6 +14726,12 @@
             "addr": "0x40006bc6",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40006eb2",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13848,6 +14751,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13871,6 +14779,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40006bac",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40006e98",
             "len": 4
           }
         ]
@@ -13895,6 +14809,11 @@
           "kind": "cf_func",
           "len": 4,
           "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
         }
       },
       "sig": "void ()",
@@ -13917,6 +14836,12 @@
             "addr": "0x40005764",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40005a50",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13936,6 +14861,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -13961,6 +14891,12 @@
             "addr": "0x40965a60",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x405d44a4",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -13980,6 +14916,11 @@
           "offset": 20
         },
         "dt2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 20
+        },
+        "st": {
           "kind": "cf_literal",
           "len": 4,
           "offset": 20
@@ -14004,6 +14945,12 @@
             "addr": "0x4099d5c4",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40653440",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14023,6 +14970,11 @@
           "offset": 2
         },
         "dt2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 2
+        },
+        "st": {
           "kind": "cf_literal",
           "len": 4,
           "offset": 2
@@ -14047,6 +14999,12 @@
             "addr": "0x40965a38",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x405d447c",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14066,6 +15024,11 @@
           "offset": 10
         },
         "dt2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 10
+        },
+        "st": {
           "kind": "cf_literal",
           "len": 4,
           "offset": 10
@@ -14094,6 +15057,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40198c24",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4016e044",
             "len": 4
           }
         ]
@@ -14155,6 +15124,12 @@
             "addr": "0x4011a592",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400ff292",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14212,6 +15187,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40030a42",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40008392",
             "len": 4
           }
         ]
@@ -14273,6 +15254,12 @@
             "addr": "0x4011b126",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400ffe22",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14292,6 +15279,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -14332,6 +15324,10 @@
         "rust": "dkfw::view::shared_ptr_as_view"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "Converting copy `shared_ptr<View>(const shared_ptr<Derived> &)` for a class with its View sub-object at +0x38 (the Menu views): out.ptr = src.ptr + 0x38 (0 stays 0), out.ctl = src.ctl, and the use count of the control block is incremented. It does not make a new control block; a raw pointer cannot be wrapped with it. The caller releases `out` afterwards.",
       "file": "devices/fw/view.toml",
       "kind": "fn",
@@ -14373,6 +15369,12 @@
         "dt2-1.17": [
           {
             "addr": "0x4011c08a",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40100d86",
             "len": 4
           }
         ]
@@ -14434,6 +15436,12 @@
             "addr": "0x4011b22a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fff26",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14453,6 +15461,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -14536,6 +15549,12 @@
             "addr": "0x40033d06",
             "len": 6
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000b2d8",
+            "len": 6
+          }
         ]
       },
       "cpu": "cf",
@@ -14587,6 +15606,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40033d02",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000b2d4",
             "len": 4
           }
         ]
@@ -14679,6 +15704,12 @@
             "addr": "0x4011139a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400f6156",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14698,6 +15729,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -14729,6 +15765,12 @@
             "addr": "0x40116b1e",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fb916",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14748,6 +15790,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -14786,6 +15833,10 @@
         "rust": "dkfw::window::popup_make"
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "The firmware's `make_shared<PopupWindow>(const char *const &)`: `out` in a0, a reference to the message pointer on the stack. core/digikit-menu calls it through its dk_popup_make shim.",
       "file": "devices/fw/window.toml",
       "kind": "fn",
@@ -14830,6 +15881,12 @@
             "addr": "0x4005b23a",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400c347c",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14849,6 +15906,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -14880,6 +15942,12 @@
             "addr": "0x4005b1e0",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400c3422",
+            "len": 4
+          }
         ]
       },
       "bindings": {
@@ -14899,6 +15967,11 @@
           "offset": 0
         },
         "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
           "kind": "cf_func",
           "len": 4,
           "offset": 0
@@ -14928,6 +16001,12 @@
         "dt2-1.17": [
           {
             "addr": "0x401998c0",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4016ea6e",
             "len": 4
           }
         ]
@@ -14986,6 +16065,12 @@
             "addr": "0x401ed3b0",
             "len": 4
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401c2548",
+            "len": 4
+          }
         ]
       },
       "cpu": "cf",
@@ -15035,6 +16120,12 @@
         "dt2-1.17": [
           {
             "addr": "0x40204fb4",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401d1df4",
             "len": 4
           }
         ]
@@ -16174,6 +17265,11 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 244
+        },
+        "st": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 244
         }
       },
       "subsystem": "link",
@@ -16355,6 +17451,11 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 0
+        },
+        "st": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 0
         }
       },
       "subsystem": "master",
@@ -16453,6 +17554,11 @@
           "kind": "sharc_func",
           "len": 6,
           "offset": 348
+        },
+        "st": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 348
         }
       },
       "subsystem": "master",
@@ -16495,6 +17601,10 @@
           "offset": 15
         },
         "dt2": {
+          "kind": "sharc_literal",
+          "offset": 15
+        },
+        "st": {
           "kind": "sharc_literal",
           "offset": 15
         }
@@ -19742,6 +20852,11 @@
       "device": "dt2",
       "id": "dt2-1.17",
       "version": "1.17"
+    },
+    {
+      "device": "st",
+      "id": "st-1.42",
+      "version": "1.42"
     }
   ],
   "subsystems": [
