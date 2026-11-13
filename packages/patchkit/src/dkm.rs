@@ -61,6 +61,8 @@ pub const H_CONTRACT: usize = 0x38;
 /// The api major of a module that declares through builder calls and has a keys table at the 0x90 pair (docs/plans/sdk.md 6.3). The sdk contract
 /// moves to it for every module at integration; until then a module without register records and with `[[machine]]` or `[[fx]]` has it.
 pub const API_KEYS_MAJOR: u8 = dkneeds::API_KEYS_MAJOR as u8;
+/// The api major of a module without a keys table (the `.dk.desc` path, tools, services) until S3 package F; the runtime still loads it.
+pub const LEGACY_API_MAJOR: u8 = 2;
 pub const H_NAME: usize = 0x40;
 pub const H_IMAGE_OFF: usize = 0x60;
 pub const H_IMAGE_SIZE: usize = 0x64;
@@ -515,7 +517,7 @@ fn pack_inner(
     }
     let pairs = [
         (
-            if keys { API_KEYS_MAJOR } else { sdk.api.0 },
+            if keys { sdk.api.0 } else { LEGACY_API_MAJOR },
             api_minor(imports.iter().copied()).min(sdk.api.1),
         ),
         if (dsp.is_empty() || fx_only) && !has_machine {

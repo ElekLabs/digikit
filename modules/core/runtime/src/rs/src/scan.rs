@@ -80,7 +80,7 @@ unsafe fn compatible(first: u32, device: u32) -> bool {
                 let c = 2 * half as usize + k;
                 let major = (w >> (24 - 16 * k as u32)) as u8;
                 let minor = (w >> (16 - 16 * k as u32)) as u8;
-                if major != 0 && (major != rt[c].0 || minor > rt[c].1) {
+                if major != 0 && (!crate::contract_major_ok(c, major) || minor > rt[c].1) {
                     return false;
                 }
             }

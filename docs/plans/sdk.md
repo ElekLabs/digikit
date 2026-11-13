@@ -237,8 +237,16 @@ underscored symbol. A machine with a sample pool also has `<machine>_sample_rec`
 `_shot_ctl` for `shot`, passed today to `DK_SAMPLE_TRACKS(0, _shot_rec, _shot_ctl)`). The packer refuses a module when a symbol is
 missing.
 
-[O] What the first argument of `DK_SAMPLE_TRACKS` means (it is `0` for `shot`). Settle it at implementation, before the pool symbols
-get their final rule.
+The first argument of `DK_SAMPLE_TRACKS` is a per-module table id: the number of the sample table of the module. A module has one table
+(`dk_sample_pool_open` takes the lowest id), so the id is always 0 and the packer writes 0; the pool symbols carry no id.
+
+A machine may also have a DSP descriptor, the symbol `_<id>_desc` (data); the packer reads its flags (stereo) when the symbol is
+defined. An effect needs `_<id>_desc` and `_<id>_process`. The DSP effect records are written in the order of the `[[fx]]` lines, which
+is the order of the keys table.
+
+Machine and effect ids are the keys' input: the key is the hash of `<module id>:<id>`. Projects and kit values refer to the keys, so a
+machine or effect id stays the id it has today (the first argument of today's `DK_MACHINE` and `DK_FX`). Renaming an id loses the user's
+projects.
 
 ```toml
 [module]
@@ -340,7 +348,7 @@ dk_page_bind(wave, end, 7);
 An FX:
 
 ```c
-dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq shift", "FSHF");   /* DSP: fshift_process */
+dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq shift", "FSH");    /* short name: at most 3 characters; DSP: fshift_process */
 dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);              /* allowed, default */
 dk_page *p = dk_fx_add_page(fx, "Freq shift");
 dk_page_add_fx_param(p, "Shift", "SHFT", DK_BIPOLAR, -1.0f, 1.0f, 0.0f);
@@ -372,7 +380,7 @@ the staged file is not read again, except for today's register records, which bu
 The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 (today `H_REG_OFF` and `H_REG_SIZE`, the register table) becomes
 `keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
 machine count, the FX count, then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
-this table. A `.dkm` of api major 2 is refused with `E_CONTRACT`: the contract is api major 3 and the runtime 0.7.0.
+this table. The contract is api major 3 and the runtime 0.7.0. Until package F removes the `.dk.desc` path, the runtime also loads a `.dkm` of api major 2 (a module with no machine or effect tables, or one not yet migrated); after F a major 2 file is refused with `E_CONTRACT`.
 
 The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS`, which stays 32 (a shot-like
 machine needs about 10 records, the other modules 3 to 7). When `init` returns `DK_OK`:
@@ -599,4 +607,3 @@ Work packages, in this order:
 ## 13. Open items
 
 - [O] `state_bytes` and `stack_bytes` stay in the DSP descriptor block (asm); the packer reads them as today.
-- [O] The meaning of the first argument of `DK_SAMPLE_TRACKS`, settled at S3 implementation (6.1).

@@ -1495,6 +1495,20 @@
   },
   {
    "addend": 0,
+   "offset": 66,
+   "section": ".text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
+   "symbol": ".sec..rodata.global.13",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
+   "section": ".text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 18,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt5entry8ctx_addr",
    "symbol": ".sec..bss.DKRT_CTXS",
@@ -7438,14 +7452,21 @@
   },
   {
    "addend": 0,
-   "offset": 232,
+   "offset": 210,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt7collect20dk_module_ctx_add_fx",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt7collect6len_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 260,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt7collect20dk_module_ctx_add_fx",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 266,
+   "offset": 294,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt7collect20dk_module_ctx_add_fx",
    "symbol": "memcpy",
    "type": "cf.32"
@@ -12338,23 +12359,30 @@
   },
   {
    "addend": 0,
-   "offset": 62,
-   "section": ".text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "offset": 50,
+   "section": ".text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
    "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt4scan5READS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 68,
-   "section": ".text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "offset": 56,
+   "section": ".text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan4sect",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 138,
-   "section": ".text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "offset": 62,
+   "section": ".text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5store11read_sector",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "symbol": ".sec..text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
    "type": "cf.32"
   },
   {
@@ -24672,511 +24700,511 @@
   },
   {
    "addend": 0,
-   "offset": 110,
+   "offset": 114,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5store13load_to_stage",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 134,
+   "offset": 138,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 140,
+   "offset": 144,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 158,
+   "offset": 162,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 164,
+   "offset": 168,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 8,
-   "offset": 184,
+   "offset": 188,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 190,
+   "offset": 194,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 206,
+   "offset": 210,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 212,
+   "offset": 216,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 16,
-   "offset": 248,
+   "offset": 252,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 258,
+   "offset": 262,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 380,
+   "offset": 384,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 398,
+   "offset": 402,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 408,
+   "offset": 412,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMNtCsdWzhuXZnywa_4dkrt6sha256NtB2_3Sha6update",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 454,
+   "offset": 458,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMNtCsdWzhuXZnywa_4dkrt6sha256NtB2_3Sha6update",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 470,
+   "offset": 474,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 520,
+   "offset": 524,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 552,
+   "offset": 556,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMNtCsdWzhuXZnywa_4dkrt6sha256NtB2_3Sha6update",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 586,
+   "offset": 590,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMNtCsdWzhuXZnywa_4dkrt6sha256NtB2_3Sha6update",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 692,
+   "offset": 696,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMNtCsdWzhuXZnywa_4dkrt6sha256NtB2_3Sha6update",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 760,
+   "offset": 764,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvXs7_NtNtCs6uNbiqmv1Ak_4core5array8equalityhINtB5_11SpecArrayEqhKj20_E7spec_eqCsdWzhuXZnywa_4dkrt",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 816,
+   "offset": 820,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 64,
-   "offset": 850,
+   "offset": 854,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 856,
+   "offset": 860,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt8cstr_len",
    "type": "cf.32"
   },
   {
    "addend": 108,
-   "offset": 878,
+   "offset": 882,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 884,
+   "offset": 888,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 100,
-   "offset": 918,
+   "offset": 922,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 924,
+   "offset": 928,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 104,
-   "offset": 950,
+   "offset": 954,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 956,
+   "offset": 960,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 96,
-   "offset": 978,
+   "offset": 982,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 984,
+   "offset": 988,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 116,
-   "offset": 1036,
+   "offset": 1040,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1042,
+   "offset": 1046,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 124,
-   "offset": 1064,
+   "offset": 1068,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1070,
+   "offset": 1074,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 112,
-   "offset": 1090,
+   "offset": 1094,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1096,
+   "offset": 1100,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 120,
-   "offset": 1140,
+   "offset": 1144,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1146,
+   "offset": 1150,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 128,
-   "offset": 1182,
+   "offset": 1186,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1188,
+   "offset": 1192,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 132,
-   "offset": 1218,
+   "offset": 1222,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1224,
+   "offset": 1228,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 136,
-   "offset": 1254,
+   "offset": 1258,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1260,
+   "offset": 1264,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 140,
-   "offset": 1290,
+   "offset": 1294,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1296,
+   "offset": 1300,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1352,
+   "offset": 1356,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1368,
+   "offset": 1372,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 2628,
-   "offset": 1380,
+   "offset": 1384,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata._RNvCsdWzhuXZnywa_4dkrt7IMPORTS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1386,
+   "offset": 1390,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt7cstr_eq",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1422,
+   "offset": 1426,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1432,
+   "offset": 1436,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1442,
+   "offset": 1446,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 144,
-   "offset": 1462,
+   "offset": 1466,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1468,
+   "offset": 1472,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 148,
-   "offset": 1486,
+   "offset": 1490,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1492,
+   "offset": 1496,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1518,
+   "offset": 1522,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 1528,
+   "offset": 1532,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1538,
+   "offset": 1546,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMs_NtCsdWzhuXZnywa_4dkrt7collectNtB4_8KeysCopy5empty",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1566,
+   "offset": 1574,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt8registry5check",
    "type": "cf.32"
   },
   {
    "addend": 152,
-   "offset": 1588,
+   "offset": 1596,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1594,
+   "offset": 1602,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 156,
-   "offset": 1604,
+   "offset": 1612,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1706,
+   "offset": 1714,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 1724,
+   "addend": 40,
+   "offset": 1732,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp9init_once",
+   "symbol": ".sec..bss.DKRT_STATE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1756,
+   "offset": 1744,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt7cstr_eq",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1766,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvMs_NtCsdWzhuXZnywa_4dkrt7collectNtB4_8KeysCopy10from_bytes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1788,
+   "offset": 1806,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1844,
+   "offset": 1854,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena5alloc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1864,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_STAGE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1916,
+   "offset": 1874,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
@@ -25190,860 +25218,825 @@
   },
   {
    "addend": 0,
-   "offset": 1938,
+   "offset": 1936,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_STAGE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1948,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4wr32",
    "type": "cf.32"
   },
   {
    "addend": 64,
-   "offset": 1948,
+   "offset": 1958,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2020,
+   "offset": 2006,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp9init_once",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2048,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2028,
+   "offset": 2056,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2050,
+   "offset": 2078,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2102,
+   "offset": 2130,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "dl_send",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2132,
+   "offset": 2160,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "dl_send_win",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2150,
+   "offset": 2178,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "dl_poll",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2174,
+   "offset": 2202,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp4info",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2190,
+   "offset": 2218,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2204,
+   "offset": 2232,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2222,
+   "offset": 2250,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2388,
+   "offset": 2416,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2408,
+   "offset": 2436,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2742,
+   "offset": 2770,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2748,
+   "offset": 2776,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2854,
+   "offset": 2882,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3002,
+   "offset": 3030,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvXNtNtNtCs6uNbiqmv1Ak_4core4iter6traits10exact_sizeQNtNtNtB8_3ops11index_range10IndexRangeNtB2_17ExactSizeIterator3lenB8_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3102,
+   "offset": 3130,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk10sample_job12valid_tracks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3120,
+   "offset": 3148,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3152,
+   "offset": 3180,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3366,
+   "offset": 3394,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3372,
+   "offset": 3400,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3550,
+   "offset": 3576,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3570,
+   "offset": 3596,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 468,
-   "offset": 3582,
+   "offset": 3608,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3588,
+   "offset": 3614,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk8capacity9free_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3624,
+   "offset": 3654,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3630,
+   "offset": 3660,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6assign7resolve",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3706,
+   "offset": 3728,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 468,
-   "offset": 3712,
+   "offset": 3734,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3724,
+   "offset": 3746,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp5finfo",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3736,
+   "offset": 3758,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp12fx_free_rows",
    "type": "cf.32"
   },
   {
    "addend": 972,
-   "offset": 3748,
+   "offset": 3770,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3754,
+   "offset": 3776,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk8capacity9free_rows",
    "type": "cf.32"
   },
   {
-   "addend": 40,
-   "offset": 3902,
+   "addend": 0,
+   "offset": 3952,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_STATE",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3914,
+   "offset": 3966,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt7cstr_eq",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt7collect8contains",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4144,
+   "offset": 4248,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt8cstr_len",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4164,
+   "offset": 4268,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4184,
+   "offset": 4288,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp4info",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4200,
+   "offset": 4302,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt7cstr_eq",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4414,
+   "offset": 4520,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4528,
+   "offset": 4634,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6extent",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4544,
+   "offset": 4650,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4562,
+   "offset": 4668,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 4724,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..rodata.global.13",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4738,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
    "addend": 4,
-   "offset": 4634,
+   "offset": 4758,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4654,
+   "offset": 4778,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4696,
+   "offset": 4820,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6extent",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4728,
+   "offset": 4852,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 116,
-   "offset": 4778,
+   "offset": 4902,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4792,
+   "offset": 4918,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 4804,
+   "offset": 4932,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
    "type": "cf.32"
   },
   {
    "addend": 84,
-   "offset": 4856,
+   "offset": 4986,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4974,
+   "offset": 5104,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 972,
-   "offset": 5016,
+   "offset": 5146,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5036,
+   "offset": 5166,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5068,
+   "offset": 5198,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 5080,
+   "offset": 5210,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
    "type": "cf.32"
   },
   {
    "addend": 1268,
-   "offset": 5098,
+   "offset": 5228,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 52,
-   "offset": 5116,
+   "offset": 5246,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 84,
-   "offset": 5130,
+   "offset": 5260,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 116,
-   "offset": 5144,
+   "offset": 5274,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 5162,
+   "offset": 5292,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 28,
-   "offset": 5172,
+   "offset": 5302,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 5182,
+   "offset": 5312,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5192,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena5alloc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5210,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6cancel",
-   "type": "cf.32"
-  },
-  {
-   "addend": 15168,
-   "offset": 5224,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5246,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
-   "type": "cf.32"
-  },
-  {
-   "addend": 15168,
-   "offset": 5252,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5266,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5308,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks5LOCAL",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 5322,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks7RECORDS",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena5alloc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5336,
+   "offset": 5340,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks7CONTROL",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6cancel",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 5350,
+   "addend": 15168,
+   "offset": 5354,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks4LIVE",
+   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
    "type": "cf.32"
   },
   {
-   "addend": 576,
-   "offset": 5378,
+   "addend": 15168,
+   "offset": 5376,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks3OPS",
+   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 5386,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks3OPS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5392,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..rodata.global.2i",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5398,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": "memcpy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 15169,
-   "offset": 5432,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 5442,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
    "type": "cf.32"
   },
   {
-   "addend": 15169,
-   "offset": 5448,
+   "addend": 0,
+   "offset": 5396,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5462,
+   "offset": 5438,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..rodata.global.13",
+   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks5LOCAL",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5474,
+   "offset": 5452,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks7RECORDS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5466,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks7CONTROL",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 5480,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks4LIVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 576,
+   "offset": 5508,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks3OPS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5516,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6tracks3OPS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5522,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..rodata.global.2i",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5528,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 15169,
+   "offset": 5562,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 15169,
+   "offset": 5572,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks4CORE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 5582,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6tracks5OWNER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5592,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5492,
+   "offset": 5604,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5498,
+   "offset": 5610,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5512,
+   "offset": 5622,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5534,
+   "offset": 5628,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..rodata.global.13",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5642,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5664,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5554,
+   "offset": 5684,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5620,
+   "offset": 5750,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6sample5BANKS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5670,
+   "offset": 5800,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp12fx_free_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5692,
+   "offset": 5822,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 980,
-   "offset": 5710,
+   "offset": 5840,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5730,
+   "offset": 5860,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 996,
-   "offset": 5738,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1012,
-   "offset": 5752,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5774,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5814,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1156,
-   "offset": 5830,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1172,
-   "offset": 5846,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1188,
-   "offset": 5862,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1204,
    "offset": 5868,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
+   "addend": 1012,
+   "offset": 5882,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
-   "offset": 5888,
+   "offset": 5904,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
-   "addend": 1252,
-   "offset": 5896,
+   "addend": 0,
+   "offset": 5944,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1156,
+   "offset": 5960,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
-   "addend": 976,
-   "offset": 5914,
+   "addend": 1172,
+   "offset": 5976,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
-   "addend": 812,
-   "offset": 5978,
+   "addend": 1188,
+   "offset": 5992,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
-   "addend": 844,
-   "offset": 5988,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 876,
+   "addend": 1204,
    "offset": 5998,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
-   "addend": 908,
-   "offset": 6008,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 940,
+   "addend": 0,
    "offset": 6018,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 468,
-   "offset": 6028,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 476,
-   "offset": 6042,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 468,
-   "offset": 6088,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 6102,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 6116,
+   "addend": 1252,
+   "offset": 6026,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 976,
+   "offset": 6044,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 812,
-   "offset": 6142,
+   "offset": 6108,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 844,
-   "offset": 6152,
+   "offset": 6118,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 876,
-   "offset": 6174,
+   "offset": 6128,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 6188,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 908,
-   "offset": 6196,
+   "offset": 6138,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 6210,
+   "addend": 940,
+   "offset": 6148,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
-   "addend": 940,
+   "addend": 468,
+   "offset": 6158,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 476,
+   "offset": 6172,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 468,
    "offset": 6218,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
@@ -26058,546 +26051,616 @@
   },
   {
    "addend": 0,
-   "offset": 6254,
+   "offset": 6246,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
+   "addend": 812,
+   "offset": 6272,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 844,
+   "offset": 6282,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 876,
+   "offset": 6304,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
-   "offset": 6296,
+   "offset": 6318,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 908,
    "offset": 6326,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6340,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 940,
+   "offset": 6348,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6362,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6384,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6400,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6456,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6358,
+   "offset": 6488,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6366,
+   "offset": 6496,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6assign7resolve",
    "type": "cf.32"
   },
   {
    "addend": 148,
-   "offset": 6376,
+   "offset": 6506,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6390,
+   "offset": 6520,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 180,
-   "offset": 6402,
+   "offset": 6532,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6618,
+   "offset": 6748,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6632,
+   "offset": 6762,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6704,
+   "offset": 6834,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6724,
+   "offset": 6854,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "dkrt_flush",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 6746,
+   "offset": 6876,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STATE",
    "type": "cf.32"
   },
   {
    "addend": 64,
-   "offset": 6758,
+   "offset": 6888,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 44,
-   "offset": 6766,
+   "offset": 6896,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STATE",
    "type": "cf.32"
   },
   {
    "addend": 96,
-   "offset": 6772,
+   "offset": 6902,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6794,
+   "offset": 6924,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt8cstr_len",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6810,
+   "offset": 6940,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_PATHS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6826,
+   "offset": 6956,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6838,
+   "offset": 6968,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 52,
-   "offset": 6844,
+   "offset": 6974,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_STAGE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6850,
+   "offset": 6980,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6868,
+   "offset": 6998,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_CONTRACTS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6918,
+   "offset": 7048,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_CTXS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6950,
+   "offset": 7080,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_MENUS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7024,
+   "offset": 7154,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6loader8complete",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 7044,
+   "offset": 7174,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7056,
+   "offset": 7186,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5files6retire",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7072,
+   "offset": 7202,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6loader10retire_sdk",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7088,
+   "offset": 7218,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena4free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 7098,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5entry6unbind",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 7164,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6loader8complete",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 7182,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 7192,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6cancel",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 7200,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5files6retire",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 7214,
-   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6loader10retire_sdk",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 7228,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5entry6unbind",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 7294,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6loader8complete",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 7312,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 7322,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6cancel",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 7330,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5files6retire",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 7344,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6loader10retire_sdk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 7358,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7238,
+   "offset": 7368,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5entry6unbind",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7278,
+   "offset": 7408,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..data._RNvNtCsdWzhuXZnywa_4dkrt6loader8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 7288,
+   "offset": 7418,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 7300,
+   "offset": 7430,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 28,
-   "offset": 7310,
+   "offset": 7440,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 7320,
+   "offset": 7450,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 7330,
+   "offset": 7460,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 808,
-   "offset": 7340,
+   "offset": 7470,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 808,
-   "offset": 7348,
+   "offset": 7478,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 520,
-   "offset": 7374,
+   "offset": 7504,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7382,
+   "offset": 7512,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 808,
-   "offset": 7388,
+   "offset": 7518,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7408,
+   "offset": 7538,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp5start",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7418,
+   "offset": 7548,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7430,
+   "offset": 7560,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7468,
+   "offset": 7598,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7480,
+   "offset": 7610,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7510,
+   "offset": 7640,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7554,
+   "offset": 7684,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7572,
+   "offset": 7702,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7712,
+   "offset": 7842,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt8optional5table",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7792,
+   "offset": 7922,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt8cstr_len",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7808,
+   "offset": 7938,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata._RNvCsdWzhuXZnywa_4dkrt7IMPORTS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7840,
+   "offset": 7970,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt8optional5table",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 7980,
+   "offset": 8110,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvXs0_NtNtCs6uNbiqmv1Ak_4core3str7patternNtB5_12CharSearcherNtB5_15ReverseSearcher15next_match_back",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8012,
+   "offset": 8142,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8026,
+   "offset": 8156,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core3str16slice_error_fail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8064,
+   "offset": 8194,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6loader7MISSING",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8144,
+   "offset": 8234,
+   "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8260,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6loader7MISSING",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8164,
+   "offset": 8280,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..bss._RNvNtCsdWzhuXZnywa_4dkrt6loader7MISSING",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8212,
+   "offset": 8328,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8220,
+   "offset": 8336,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt6assign7resolve",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8226,
+   "offset": 8342,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..rodata.global.13",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8240,
+   "offset": 8356,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8266,
+   "offset": 8382,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8298,
+   "offset": 8414,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk10sample_job10valid_bank",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8318,
+   "offset": 8434,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8334,
+   "offset": 8450,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8478,
+   "offset": 8592,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt5arena5alloc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8500,
+   "offset": 8614,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt3dsp2iw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8568,
+   "offset": 8682,
    "section": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
    "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt4rd32",
    "type": "cf.32"
@@ -30678,86 +30741,86 @@
   },
   {
    "addend": 0,
-   "offset": 298,
+   "offset": 302,
    "section": ".text.dkrt_scan",
    "symbol": "memset",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 320,
+   "offset": 324,
    "section": ".text.dkrt_scan",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 366,
+   "offset": 380,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 402,
+   "offset": 416,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 440,
+   "offset": 458,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 614,
+   "offset": 640,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..bss.DKRT_STATE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 620,
+   "offset": 646,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..bss.DKRT_PATHS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 766,
+   "offset": 798,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 814,
+   "offset": 884,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 886,
+   "offset": 956,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 928,
+   "offset": 998,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvNtCsdWzhuXZnywa_4dkrt4scan9file_word",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1046,
+   "offset": 1044,
    "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "symbol": ".sec..text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
    "type": "cf.32"
   },
   {
@@ -30769,203 +30832,175 @@
   },
   {
    "addend": 0,
-   "offset": 1124,
+   "offset": 1130,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1156,
+   "offset": 1168,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1202,
+   "offset": 1200,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1234,
+   "offset": 1250,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1270,
+   "offset": 1282,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1302,
+   "offset": 1314,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1334,
+   "offset": 1346,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1366,
+   "offset": 1378,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1398,
+   "offset": 1410,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1430,
+   "offset": 1442,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1614,
+   "offset": 1474,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1652,
    "section": ".text.dkrt_scan",
    "symbol": "_RNvCs7RjeRL46GKI_7dkneeds11arena_block",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1650,
+   "offset": 1688,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1682,
+   "offset": 1720,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1752,
+   "offset": 1790,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1788,
+   "offset": 1822,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1954,
+   "offset": 1976,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1996,
+   "offset": 2026,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2034,
+   "offset": 2068,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2162,
+   "offset": 2106,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2198,
+   "offset": 2152,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2364,
+   "offset": 2462,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2736,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2424,
+   "offset": 2792,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2498,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2564,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2602,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2708,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2762,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2816,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2870,
+   "offset": 2862,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
@@ -30979,65 +31014,86 @@
   },
   {
    "addend": 0,
-   "offset": 2974,
+   "offset": 2958,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3028,
+   "offset": 3060,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3090,
+   "offset": 3110,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3144,
+   "offset": 3160,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3232,
+   "offset": 3210,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3260,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3306,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3356,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3414,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3464,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3552,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3238,
+   "offset": 3558,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvYINtNtNtCs6uNbiqmv1Ak_4core3ops5range14RangeInclusivemEINtB6_11RangeBoundsmE8containsmECsdWzhuXZnywa_4dkrt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3484,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3648,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RNvMs8_NtNtNtCs6uNbiqmv1Ak_4core5array4iter10iter_innerINtB5_15PolymorphicIterSINtNtNtBb_3mem12maybe_uninit11MaybeUninitTmmEEE4nextCsdWzhuXZnywa_4dkrt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3740,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
@@ -31049,147 +31105,168 @@
   },
   {
    "addend": 0,
-   "offset": 3850,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3902,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3946,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3996,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4016,
-   "section": ".text.dkrt_scan",
-   "symbol": "__bswapsi2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4042,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4124,
+   "offset": 3964,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RNvMs8_NtNtNtCs6uNbiqmv1Ak_4core5array4iter10iter_innerINtB5_15PolymorphicIterSINtNtNtBb_3mem12maybe_uninit11MaybeUninitTmmEEE4nextCsdWzhuXZnywa_4dkrt",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4304,
+   "offset": 4054,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4490,
+   "offset": 4114,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4542,
+   "offset": 4164,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4716,
+   "offset": 4216,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4260,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4310,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4330,
    "section": ".text.dkrt_scan",
    "symbol": "__bswapsi2",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4782,
+   "offset": 4356,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4438,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RNvMs8_NtNtNtCs6uNbiqmv1Ak_4core5array4iter10iter_innerINtB5_15PolymorphicIterSINtNtNtBb_3mem12maybe_uninit11MaybeUninitTmmEEE4nextCsdWzhuXZnywa_4dkrt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4614,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4796,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4848,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5022,
+   "section": ".text.dkrt_scan",
+   "symbol": "__bswapsi2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5088,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..rodata.global.14",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4788,
+   "offset": 5094,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvYINtNtNtCs6uNbiqmv1Ak_4core3ops5range14RangeInclusivemEINtB6_11RangeBoundsmE8containsmECsdWzhuXZnywa_4dkrt",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4870,
+   "offset": 5176,
    "section": ".text.dkrt_scan",
    "symbol": "__bswapsi2",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4940,
+   "offset": 5246,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5082,
+   "offset": 5384,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5126,
+   "offset": 5428,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5284,
+   "offset": 5570,
+   "section": ".text.dkrt_scan",
+   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5588,
    "section": ".text.dkrt_scan",
    "symbol": "_RNvCs7RjeRL46GKI_7dkneeds11arena_block",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5326,
+   "offset": 5630,
    "section": ".text.dkrt_scan",
    "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 5416,
-   "section": ".text.dkrt_scan",
-   "symbol": ".sec..text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 5902,
+   "offset": 6210,
    "section": ".text.dkrt_scan",
    "symbol": "__bswapsi2",
    "type": "cf.32"
@@ -41642,6 +41719,13 @@
   },
   {
    "align": 2,
+   "hex": "598f202f00081ebc000372011f4100011f4100021f4100037203b280652273b70800204173af000fb28867264a80662c102f000f7202b3804a0057c044806014487900000000487800042f004eb90000000070017201c081588f4e75420060f4",
+   "kind": "text",
+   "name": ".text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
+   "size": 96
+  },
+  {
+   "align": 2,
    "hex": "202f00047207b280640442804e75e788068000000000223c444b43582040b29066e860e8",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt5entry8ctx_addr",
@@ -42244,7 +42328,7 @@
   },
   {
    "align": 2,
-   "hex": "518f2f2f000c41ef00064eb900000000588f71ef00027201b28067064280508f4e75203c0000060060f4",
+   "hex": "518f2f2f000c41ef00064eb900000000588f71ef00027201b28067064280508f4e75203c0000070060f4",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt5entry29dk_module_ctx_runtime_version",
    "size": 42
@@ -42335,7 +42419,7 @@
   },
   {
    "align": 2,
-   "hex": "518f42b947fe0000207c47fe00084298b1fc47fe02b066f6700223c047fe000441ef00024eb9000000004a6f00026746202f000423c047fe000841f90000000023d047fe001c70ff23c047fe00242f3c47fe00004eb90000000041ef001023d047fe0204203c0000060023c047fe021c4fef000c4e75428060ba",
+   "hex": "518f42b947fe0000207c47fe00084298b1fc47fe02b066f6700223c047fe000441ef00024eb9000000004a6f00026746202f000423c047fe000841f90000000023d047fe001c70ff23c047fe00242f3c47fe00004eb90000000041ef001023d047fe0204203c0000070023c047fe021c4fef000c4e75428060ba",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt5crash5begin",
    "size": 122
@@ -42615,10 +42699,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff682079000000002d48ff684a88671a2f2e000841eeff724eb900000000588f71eeff727201b280671241f9000000002d48ff6c202eff6c4e5e4e75206eff68202817102d40ff6c7203b280650e2f084eb900000000588f4a00661c206eff684aa81568660670b62140156841f9000000002d48ff6c60bc48780042487900000000486eff784eb9000000002d6e000cff7842aeffba486effba2f2e001048780018486eff7c4eb900000000486effba2f2e001448780018486eff944eb9000000004fef002c226eff684aa91568660841eeffba2350156848780042486eff78486effbe4eb900000000202eff6c72424c010800d0aeff682d40ff6c48780042486effbe2f004eb900000000206eff6852a817104fef00186000ff1a",
+   "hex": "4e56ff682079000000002d48ff684a88671a2f2e000841eeff724eb900000000588f71eeff727201b280671241f9000000002d48ff6c202eff6c4e5e4e75206eff68202817102d40ff6c7203b280650e2f084eb900000000588f4a00661c206eff684aa81568660670b62140156841f9000000002d48ff6c60bc48780042487900000000486eff784eb9000000002d6e000cff7842aeffba486effba2f2e001048780018486eff7c4eb900000000486effba2f2e001448780018486eff944eb9000000004fef002c48780018486eff944eb900000000508f7203b280640670fb2d40ffba206eff684aa81568660843eeffba2151156848780042486eff78486effbe4eb900000000202eff6c72424c010800d0aeff682d40ff6c48780042486effbe2f004eb900000000206eff6852a817104fef00186000fefe",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt7collect20dk_module_ctx_add_fx",
-   "size": 286
+   "size": 314
   },
   {
    "align": 2,
@@ -42755,7 +42839,7 @@
   },
   {
    "align": 2,
-   "hex": "203c444b5254b0b90000000066024e7570f002800000000023c000000000223c0000000023c10000000092802040208142a8000423c000000000203c0000060023c000000000223c444b525423c10000000060ba",
+   "hex": "203c444b5254b0b90000000066024e7570f002800000000023c000000000223c0000000023c10000000092802040208142a8000423c000000000203c0000070023c000000000223c444b525423c10000000060ba",
    "kind": "text",
    "name": ".text._RNvCsdWzhuXZnywa_4dkrt9init_once",
    "size": 84
@@ -43140,10 +43224,17 @@
   },
   {
    "align": 2,
-   "hex": "4fefffd848d77c3c24482c6f002c222f003042001f4000241f4000251f4000261f400027202e0004b0816500008290817403b48064782a015885240149f90000000047f9000000004bef00249bc1601a4e9322020281000001ff204043f018001b9128005282ba82675a26027009e0abb6ae000867da70ff2d40000852942803d8964e932f002f044eb900000000508f4a80661a4e9322020281000001ff204043f018001b9128002d43000860b642001540000170011480200a4cd77c3c4fef00284e75256f00240002420060e8",
+   "hex": "4fefffdc48d77c3c246f0028222f002c202a0004b28062329081b0af0034652a4aaf00346700008e282f0034d881240149f90000000047f9000000004df9000000002a6f00309bc1602a42007201c0814cd77c3c4fef00244e754e9322020281000001ff204043f018001b9128005282b882674026027009e0abb6aa000867da70ff2540000852942a03da924e932f002f054e96508f4a8066b04e9322020281000001ff204043f018001b9128002543000860ba70016094",
+   "kind": "text",
+   "name": ".text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
+   "size": 184
+  },
+  {
+   "align": 2,
+   "hex": "4e56fff82d48fff842001d40fffc1d40fffd1d40fffe1d40ffff48780004486efffc2f2e000c2f2e00084eb9000000004fef00104a006616206efff8114000017001226efff8128020094e5e4e7541eefffc226efff823500002420060e4",
    "kind": "text",
    "name": ".text._RINvCs7RjeRL46GKI_7dkneeds4wordNtNtCsdWzhuXZnywa_4dkrt4scan8CardFileEBx_",
-   "size": 206
+   "size": 94
   },
   {
    "align": 2,
@@ -43791,10 +43882,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56f1d048d73cfc4eb9000000004a390000000067262f2e000841eef2b24eb900000000588f4a6ef2b26718262ef2b420034cee3cfcf1d04e5e4e7576d360f076fc60ec286ef2d82d4cf1fc43eef2b441eef28a20d920d920d920d920d920d920d920d920d92091486ef28a4eb9000000002600588f4a8066b6b9fc0000009f63001d484879000000004eb900000000588f0c80444b4d4666001d304879000000004eb900000000588f2d40f21c7201b28066001d164879000000004eb900000000588fb0aef1fc66001d004879000000004eb900000000588f0c80000000a066001ce841eef2dc200e0680fffff2fc4218b08866fa41f90000000043eef2dc203c0000000012d8b08866fa41eef81a200e0680fffff85a4218b08866fa243c6a09e6672d42f2fc263cbb67ae852d43f3002a3c3c6ef3722d45f3042c3ca54ff53a2d46f3082e3c510e527f2d47f30c207c9b05688c2d48f310287c1f83d9ab2d4cf3142a7c5be0cd192d4df31848780040486ef81a486ef31c4eb90000000042aef35c42aef36048780010487900000000486ef2fc4eb9000000004fef001841eef7fa200e0680fffff81a4218b08866fa48780020486ef7fa240e0682fffff2fc2f0245f9000000004e92286ef1fc486cffd04879000000002f024e924fef001841eef364200e0680fffff3844218b08866fa240e0682fffff38448780068486ef2fc2f024eb900000000282ef3e870801d40f85a42011d41f85b48780001486ef85a2f024eb9000000004fef00187438b4aef3e4672c260e0683fffff85b240e0682fffff38445f900000000487800012f032f024e924fef000c7e38beaef3e466ea42031d43f85c1d43f85d1d43f85e20047a1deaa81d40f85f2004e78822007c18eca91d41f8602200424148411d41f861e0881d40f862e78c1d44f86348780008486ef85c240e0682fffff3842f024eb900000000224241eef3640682000000204fef000c201922007618e6a91081220042414841114100012200e08911410002114000035888b3c266da486ef2dc486ef3644eb900000000508f4a006700fd3e7a021d45f3ec7c0d1d46f3ed7e011d47f3ee70061d40f3ef1d47f3f042011d41f3f11d47f3f21d41f3f349f9000000002d4cf26043eef3ec204c42aef210428060001c742d40f210487800204879000000004eb900000000508f4a8067001a687220b28067001a604879000000004eb900000000588f4a8067001a4c7410b48065001a4422005381c0814a8066001a384879000000004eb900000000588f2d40f2044a8067001a20b0aef1fc62001a184879000000004eb900000000588f2d40f2440c8000080000620019fc4879000000004eb900000000588f2d40f214b0aef1fc620019e2202ef1fc90aef214b0aef204650019d2760fc6aef2142d43f2084a83660019c24879000000004eb900000000588f2d40f2480c8000001000620019a64879000000004eb900000000588f2d40f20c7a40ba806500198c4879000000004eb900000000588f2d40f22cb0aef1fc620019722c2ef248e78e2d46f26c202ef1fc90aef22cb0866500195a4879000000004eb900000000588f2400b0aef1fc62001942282ef20ceb8c202ef1fc9082b084650019304879000000004eb900000000588f2d40f2347effbe80670c262ef234b6aef2046400190c4879000000004eb900000000588f2d40f23872ffb280670c2c2ef238bcaef204640018e84879000000004eb900000000588f2d40f23c7affba80670c286ef23cb9eef204640018c44879000000004eb900000000588f2d40f2407effbe80675c2a6ef240bbeef204640018a041eef3f4200e0680fffff4f44298b08866fa4aaef20c673e26020683000000002a0e0685fffff3f42004068000000000d0822d40f200243c0000000045f90000000049eefc942d4cf2182805600018ea41eef3f460ae4aaef248672c246ef22cd5fc00000000242ef26c068200000000d4aef22c47f900000000262ef2045983282ef20c600017ee4879000000004eb900000000588f2400b0aef1fc620018004879000000004eb900000000588f2d40f270202ef1fc9082b0aef270650017e00682000000002d42f27c14390000000041eef4f44eb90000000075827603b682670000c02f2ef2042f2ef2702f2ef27c4eb90000000026004fef000c4a806600fa0442aef28048790000000047f9000000004e9324402ebc000000004e93588f2d40f20041eef864200e0680fffff8e44298b08866fa42aef79e42aef7a242aef7a642aef7aa42aef7ae42aef7b242aef7b642aef7ba42aef7be42aef7c27a302d45f7c642aef7ca42aef7ce42aef7d248780080486ef864486ef71e4eb9000000004fef000c4aaef200670008844eb900000000b5eef1fc6300010476e16000f9642f2ef2702f2ef27c41eef6084eb900000000508f4a6ef6086624240e0682fffff4f448780114486ef60a2f024eb9000000004fef000c2d42f2806000ff28262ef60a6000f91e7c08bc8267000af0262ef204d6aef2442d43f2204aaef20066000ae82f034eb9000000002800588f4a8067000d20246ef214d5fc000000002a04206ef204d1c4224412dab3c866fa4aaef244670c202ef220d0854218b1c066fa4aaef248670012c8266ef22cd7fc00000000202ef26c0680000000002c2ef22cdc8049f900000000600015b8487900000000486a00044e93508f4a0066000a64528345ea00347008b0836700ff5a4a9266da7e08be8266e8240360e4202ef1fc908ab0aef20065000434723fb2aef2006400042ad5fc000000002f0a4eb900000000588f0c80444b445366000410486a00044eb900000000588f2d40f20c7401b48067227e02beaef20c671a7003b0aef20c67127204b2aef20c670a7405b4aef20c660003d8263c000000002d43f93c200e0680fffff93c4aaef93c660676e26000f7e02a3c000000002d45f94058804aaef94067e82c3c000000002d46f944200e0680fffff9444aaef94467d04eb9000000004a8067000242486a00084eb90000000024002ebc000000024eb900000000588fb0826600178e486a000c47f9000000004e93588f2d40f1f8486a00104e93588f2d40f268486a00144e93588f2d40f274486a00184e93588f2d40f254486a001c4e93588f2d40f24c486a00204e93588f2d40f258486a00244e93588f2d40f264486a00284e93588f2d40f284486a002c4e93588f2d40f220486a00304e93588f2d40f2507603b6aef20c640001a0486a00344e93588f2d40f1fc486a00384e93588f2d40f2287a402d45f218487800044eb900000000588fb0aef1f8650002aa487800044eb900000000588fb0aef268650002964aaef1f86700028e202ef1f880aef2687603c0834a806600027c7a07baaef2746400fd307c40bcaef27465000268202ef2745380c0aef2742d40f2244a80660002542e2ef2580c8700001000620002467020b0aef2846500023c7208b2aef250650002327404b4aef22865000228262ef1fcb6aef2006200fcda2a2ef228ed8d2d45f25c202ef2009083b085650002062c2ef254bcaef2006200fcb8202ef2009086b0aef1f8650001ec2e2ef24cbeaef2006200fc9e242ef258e78a202ef2009087b082650001ce286ef264b9eef2006200fc80262ef284eb8b202ef200908cb083650001b02a6ef220bbeef2006200fc622a2ef2502c2ef2184c065800202ef200908db0856500018c7e05beaef20c670000982e2ef2242d47f2307a40baaef218670002704aaef228670006e02a2ef1fcda8a2c2ef25cdc852d46f25c263c0000000049f90000000026452a0a6000061076e26000f5647c01bcaef20c66162a2ef2082d45f1fc2d45f2287c102d46f2186000fe647e02beaef20c66162e2ef2082d47f1fc2d47f22874302d42f2186000fe46286ef2082d4cf1fc2d4cf22876402d43f2186000fe30486a003c4eb900000000588f2d40f230723fb280640000d47003c0aef2304a80660000c82c2ef230bcaef2006200fb7a202ef20090867e1fbe80640000ae42aef8e470052d40f8e82c2ef2542d46f8ec2e2ef1f82d47f8f0286ef24c2d4cf8f42d42f8f82a6ef2642d4df8fc2d43f9002c2ef2202d46f9042d45f9082e2ef1fc2d47f90c2c2ef25c2d46f91047eef8e42c0e0686fffff94849f9000000002e2ef2300687000000202d47f2782d4bf9482f064e942800588f4a80670014c2206ef948201052802080e78841f30800202800044a8067d62210d081b0aef23063ccb2aef27864c66000fac076e16000f4222f2ef1f82f02487800202f0b4eb9000000004fef00104a0067e0486b0008243c0000000020424e90588f2600486b000c28424e94588f2a00242ef24cd48a47f900000000284349ec02002c00068600000100600452845082b8aef2586700fe242f024e93588fb9c063167efabe8053c1730120405c882e088287b2836200fa3abc8063d022005c817efabe8053c071008081b08563be6000fa2052845082b8aef2586700fdde2f024e93588fba8063ea22005c817cfabc8053c071008081b08363d86000f9f45088b1cb67284a8867244a8067f2222800044a8167ea2410d282b28963e2b68263de6000f9ce41eef9146000140a508b600013e64aaef2506700fd8c262ef22047f23808202ef250ed882c00dc8b2a3c0000000049f900000000601a486b003420454e90588f4a806600f98847eb0040bc8b6700fd522f0b20454e90588f2400b0aef1f86400f96c080000006600f964486b00042a454e95588f2600486b00084e95588fb0836200f94a486b002c4e9528002ebc000000044e94588fb0836500f9327040b0846500f92a486b00304e95588f0c80000000ff6200f9184a806700ff7c4a826600ff766000f90876df6000f26a2a0a246ef1f82d42f1f8266ef24cd7ca242ef224263c00000000282ef1f85d84600001c0487800074eb9000000002f00487800084879000000004eb9000000004fef0010b0aef250650000a84aaef2286670286ef220d9ca2d4cf220280c47f90000000049f9000000002c052004280a2440262ef224b6aef250677c2f0a4e932e804e942400588f700fb082640001427217b2826500013a486a00044e93588fb0aef1f86400012a080000006600012243f90000000041f9000000007608600000e64eb9000000004a806700fc344eb9000000002f00487800044879000000004eb9000000004fef000cb0aef2286400ff6276de6000f17224442a062c2ef254dc842d46f79e2e2ef1f82d47f7a2242ef2682d42f7a6262ef2742d43f7aa2c2ef24cdc842d46f7ae2e2ef2582d47f7b2286ef264d9c42d4cf7b62d45f7ba2a6ef25c2d4df7be242ef2242d42f7c2262ef2182d43f7c62a2ef1fc2d45f7ca2c2ef2282d46f7ce7e05beaef20c671c95ca2d4af7d245f900000000262ef208740847f9000000006000f86cd5eef23060e052aef224d5eef2186000fed85288538358894a83670c4a1067f2b4a9009466ec601e2a2ef220b6aef22467d42f054e932e804e945283daaef218588fb08266e676db6000f09471c0b0856400f7245282508bb4aef2586700fe3c2f0b20434e90588fb8806500f70a486b000420434e90588f0c801fffffff6200f6f622007c18eca97e0fc2877c02bc816500f6e4220002810f0000000c810200000067a80280ff0000000c800100000066a26000f6c2202c001c47eb00204a80676a204620c02c08528ab5eef2846700fda62d4bf278487800202f0b4eb900000000508f7e20be806700f68c487800094eb9000000002600588f4a80672e2a2ef22478284eb9000000002840d9c42f2ef2782f0c4eb900000000508f4a0066965285068400000020ba8366d876e06000efae202ef254d0822445d5c02f0a4e94588f0c80444b46586600f62c486a00044e94588f7201b2806600f61c486a00084e94588fb0866600f60e486a000c4e94588fb0846600f60047eb0040b7eef25c670000ac2f0b20434e90588fb0aef1f86400f5e4080000006600f5dc486b00042a434e95588f24007003c0824a806600f5c6b4aef1f86200f5be202ef1f89082721bb2806400f5b0486b00084e95588f28007003c0844a806600f59c486b000c4e952c002ebc000000044eb900000000588fb0846500f5807e08be866500f578486b00104e95588f7207b2806500f5687206c2804a816700ff1a080000006700f5567e02be816600ff0a6000f54a2445262ef220d68a2d43f25c2a2ef1fcda8a2d45f1fc2f2ef2282f052f2ef2182f2ef2502f032f2ef2682f2ef1f84eb9000000004fef001c2400487800044eb900000000588fb0826500fbf8487800044eb900000000220206810000003f74c0c282588fb2806200fbda2c0e0686fffff71e266ef264d7ca2a2ef224242ef1f82d4af1f824456000fe1476f26000ee2276f66000ee1c7a04bab90000000067000a30202ef7d24a8067102f004eb900000000588f7c02bc80677a2f2ef7ce2f2ef7ca2f2ef7c62f2ef7c22f2ef7be2f2ef7a62f2ef7a24eb9000000004fef001c2a2ef7aa06800000003f76c0c6802d43f24c4878000345f9000000004e922640487800044e92508fb083654441f358ff2d48f1fc44852208c285928b2d41f224244095c3b5c16528283c00000000387c000160427effbeb9000000006700ff7c76f2beb9000000006600ed666000ff6c76df6000ed5c200224052a0a246ef1fc2d40f1fc4a0367000e2cd2aef1fcc285928bb5c165da41f9000000004203202ef1fc2d4af1fc24452a02240060082200360cb1c467c020184a8067f62268ffdcd089b08163ec2c2ef24cdc81bc8962de60e0202ef7a2d0aef7a65e8076f8c6802d43f20c2a2ef7c22d45f2304a85672e262ef2082d43f2182a032d43f2302c2ef1fc0686e00000002d46f25449f90000000049ec00d42d4cf25860000442262ef7ce2d43f2184a83670002062a2ef2082d45f218260549f9000000002a6ef1fcdbfce00000002d4df2504bf9000000004bed04042d4df2582c0252862d46f2642d42f2686000025870ffb0b9000000006700009472ffb2b900000000670001587007b0826500018041f9000000002002e588262ef2182183080041f9000000002a2ef2242185080041f9000000002c2ef24c2186080041f9000000002e2ef23021870800286ef1fc23cc000000004beef7a223d500000000262ef22823c3000000002f2ef2204eb9000000002800588f4a806600f2ee2f024eb900000000588f76f86000ebcc4a39000000006600ff662a6ef2082d4df2102d4df21c263c0000000049f9000000002d4cf20c486a000447f9000000004e93588f2a00486a00084e93588f2800486a000c4e93588f2a6ef20c1abc00012043208241f900000000286ef2102185c80041f900000000d8aef1fc2184c80041f900000000d0aef1fc2180c80041f9000000004200262ef21c1180380020034480028000000240280006840000000026000683000000002a3c0000000045f900000000b8836700fec2487800242f052f034e920683000000244fef000c60e44a39000000006600fea2263c0000000049f9000000002d4cf20c6000ff3a487900000000487800082f024eb900000000487900000000487800082f024eb90000000048790000000048780004487800044eb900000000242ef268246ef7d24a8a6700fe482f0a4eb900000000588f7e02be806700fe1e486a000447f9000000004e93588f2600486a00084e93588f2a2ef1fcda80486a000c4e93588f2800486a00104e93588f222ef1fcd2807c07bc826500ff6c70164c0208002040d1fc00000000208321450004214400082141000c42a800104207114700146000fdd652837204b2836700ff5c4a34380066f04eb900000000b08363e62005ed88246ef7cad5c02f0a4eb900000000588f2403e58ad0aef250e28841f900000000068000b8000021803c00486a00044eb900000000588f41f900000000d0aef1fc2180280041f9000000002c2ef20cdcaef1fc21862800486a00084eb900000000588f2d40f254280a0684000000142003eb88266ef258d7c02c0a0686000000342f044eb900000000588f26c05884bc8466ee41f9000000002e3c3f8000002187280041f90000000042b028002003e9882040d1fc00000000068000000000b08867064298b08866fa486a00104eb900000000588f41f9000000002180280041eef2671990380041f9000000004200118038007001e7a881aef2185285baaef7ce6400fe5852837c03bc836500fe3a202ef2545e807ef8c087d1aef20c6000fece7040b086677841f90000000042b0380041f90000000042b0380041f90000000042b0380041f90000000042b0380041f90000000042b0380041f900000000200252801180580041f9000000004200118058007001eba881aef230528552aef218262ef218b6aef7c26400fbc27007b0856500083c45f900000000600000dc486a00084eb900000000588f2800486a000c4eb900000000588f5e804a84670cd8aef254e28c068400b8000041f9000000002184380041f900000000286ef1fcd9eef20c218c380078f8c88041f90000000021843800486a00104eb900000000588f41f90000000021803800486a00384eb900000000588f41f90000000021803800486a00344eb900000000588f4c004800d9aef20c6000ff222f044eb900000000588f26c05884b9c46700fed67230b28667e67e40be866706202ef25060e420444868000c4eb900000000588f60d452857008b085670007584a32580066f0487800074eb900000000588fba8064e0202ef21841eef7c64c100800246ef7bed5c02f0a4eb9000000002e804eb9000000002605e58b41f90000000021803800486a00044eb900000000d0aef254e28841f900000000068000b80000218038002c2ef7c62005eb88266ef258d7c0280a508449ea0028508f2a6ef2082d4df2506000ff4c26066004262ef20c2f0a4e93588f206ef228d1c0721ce2ac6600009e71a800024840424073a80005e189808173a800048081d6800c8300ffffff620000ba2003424048401140000277c31203e08b11410004114300055285baaef7b26400f9a02005e788246ef7aed5c0486a00044e93588f28007218e2a8760fc0834a8067807e01be806700ff7e200402800000ffe04a806610200471c041f60c002628f71e6000ff66487900000000487800203f0442674eb90000000071a80003e18873a8000280814840424073a80005e18979a8000482848081d6802003424048401140000220037e18eea81140000377c31203e08b6000ff5a2f2ef2284eb900000000588f76e16000e5f62f2ef2202f054eb900000000508f7007b082655870344c0208002440d5fc0000000024bc0000000147f9000000002040d1fc00000000203c00000000224b10d9b3c066fa4878003f2f2e00084eb900000000508f22402002ed882040d1fc00000000202ef208420360000278487900000000487800082f024eb9000000004879000000004eb900000000588f254000242002e7882040d1fc00000000226ef26010d9b3cb66fa254500282c2ef2202546002c7effbeaef238670000ce222ef238d285254100302040d1fc000000002142000420bc444b435870ffb0aef23c670000b0202ef23cd08541f90000000021802c0072ffb2aef2346700009e202ef234d08576ffb6aef2406708daaef2402d45f2084aaef200660000882f2ef2042f2ef2802f2ef2082f002f2ef2702f2ef27c2f024eb90000000026004fef001c4a806700e4b27a04bab900000000670000c62f024eb900000000588f4a00670000b62f024eb900000000588f4a00670000a62f044eb90000000042922f024eb900000000508f6000e46e222ef2086000ff34202ef2086000ff52202ef2086000ff6424bc000000012f2ef2042f2ef2802f2ef2082f002f2ef2702f2ef27c2f024eb90000000026004fef001c4a80674c7a04bab900000000673c2f024eb9000000002f024eb900000000508f4a0067262f024eb900000000588f4a0067182f044eb90000000042922f024eb900000000508f6000e3e276f46000e3dc2d42f7d642aef7da42aef7de42aef7e27c012d46f7e641f9000000002d50f7ea2039000000007204b280676241f9000000002d50f7ee49f9000000002d54f7f24bf9000000002d55f7f642b9000000004a8066084ab90000000067382039000000007207b280653a74244c02080048780024486ef7d60680000000002f004eb90000000052b9000000004fef000c76016000e348486ef7d64eb900000000588f60ec487900000000487800082f004eb900000000286e00081234080010c152807240b2806700fd9eb08965e8120360ec24452f0b4eb9000000002604d6802e834eb900000000588f487208002f034e94508b508fb7c66700fcee486b00044eb900000000588f22007618e6a967c22200028100ffffc04a816610028000ffffff41f60c002468f3f460a848790000000048780040028000ffffff2f004eb900000000508ab5c26700e8162f0a4e93588fb6806520486a00044e93588f22007a18eaa967de7c01bc81660a028000ffffffb88062ce76fb6000e262286ef2202d4cf1fc60402a6ef2204a35b800675049ec0018b9eef21867242a0c266c00044a8b67e222542c03dc8b204373907191b08166dc52885289b1c666f060c8206ef2202d48f1fc41eefc944eb90000000045eefc942a0e0685ffffffdc6000008e2d4df2202845202c00084a80660e202c000c6004202b00204a806780204420c02808068300000020b6aef2006700e7202d43f220487800202f034eb900000000508f7220b2806700ff4e47f9000000002f2ef2202f0b4e92508f4a0066b647eb0024b7c266ea41eef94c4eb90000000049eef94c6000ff442a6ef1fc4a354800672e45ea0018b5c56700013c264a282a00044a8467e222522403d484204373907191b08166dc52885289b1c266f060c84aab0008660001104aab000c66000108246b0010242b00142d4affea2d42ffee42aefff22d42fff6702f2d40ffe672011d41fffe263c2f0000002d43fffa486effe641eeffdc4eb900000000588f4a6effdc67000096202effde52804a80672eb0826516671e4879000000002f022f002f022f0a4eb900000000733208007ac0ba816ee2204291c0220ad280600c204291c0220ad2804a8167cc10390000000024082441604e75817603b682670e4a01670001ea73817591b481662875aa000173a90001b282651c52807a04ba806700e39454885489244812104a8067c84a0167e660d076d06000e0641039000000004a8a67224a00661e4a82671a204a43f900000000d48a45ea000c1298b48867065289b5c866f476f96000e032202ef21841eef7c64c100800d0aef7be2f004eb9000000002e804eb90000000048790000000048780008487800084eb90000000076dc6000dff8266ef230d7ca242ef254d48a2f0b4eb900000000588f7202b2806700ebba2f2ef2682f2ef1f82f02487800202f0b4eb9000000004fef00144a006700eb94486b00104eb900000000588f2600242ef24cd48a47f9000000002a000685000000106000ec122c2ef1f82e2ef2542d47f9142d46f918286ef24c2d4cf91c2d42f9202a6ef2642d4df9242d43f928242ef2202d42f92c2d45f930262ef1fc2d43f9342a2ef25c2d45f9382a3cfffff93cda8e47eef914b7c56700ff482253202b00044a806700ebfe7e3fbe896400e5c241eef9142609d6806000ebc62d41f2242f2ef7a24eb9000000002d40f228588f4a806700f334487800034eb900000000d0aef2242d40f1fc202ef7a2588f4a806710206ef79e226ef228d08812d8b08866fa4aaef7b26700f1d22c2ef1fc0686e00000002d46f20ce28e2a2ef20847f9000000006000f8165280548854896000fe32",
+   "hex": "4e56f1cc48d73cfc4eb9000000004a390000000067262f2e000841eef2b24eb900000000588f4a6ef2b2671c262ef2b420034cee3cfcf1cc4e5e4e7576d360f076fc60ec76db60e8286ef2d82d4cf1fa43eef2b441eef28a20d920d920d920d920d920d920d920d920d92091486ef28a4eb9000000002600588f4a8066b2b9fc0000009f63001dc64879000000004eb900000000588f0c80444b4d4666001dae4879000000004eb900000000588f2d40f21a7201b28066001d944879000000004eb900000000588fb0aef1fa66001d7e4879000000004eb900000000588f0c80000000a066001d6641eef2dc200e0680fffff2fc4218b08866fa41f90000000043eef2dc203c0000000012d8b1c066fa41eef81a200e0680fffff85a4218b08866fa243c6a09e6672d42f2fc263cbb67ae852d43f3002a3c3c6ef3722d45f3042c3ca54ff53a2d46f3082e3c510e527f2d47f30c207c9b05688c2d48f310287c1f83d9ab2d4cf3142a7c5be0cd192d4df31848780040486ef81a486ef31c4eb90000000042aef35c42aef36048780010487900000000486ef2fc4eb9000000004fef001841eef7fa200e0680fffff81a4218b08866fa48780020486ef7fa240e0682fffff2fc2f0245f9000000004e92286ef1fa486cffd04879000000002f024e924fef001841eef364200e0680fffff3844218b08866fa240e0682fffff38448780068486ef2fc2f024eb900000000282ef3e870801d40f85a42011d41f85b48780001486ef85a2f024eb9000000004fef00187438b4aef3e4672c260e0683fffff85b240e0682fffff38445f900000000487800012f032f024e924fef000c7e38beaef3e466ea42031d43f85c1d43f85d1d43f85e20047a1deaa81d40f85f2004e78822007c18eca91d41f8602200424148411d41f861e0881d40f862e78c1d44f86348780008486ef85c240e0682fffff3842f024eb900000000224241eef3640682000000204fef000c201922007618e6a91081220042414841114100012200e08911410002114000035888b3c266da486ef2dc486ef3644eb900000000508f4a006700fd3a7a031d45f3ec7c0d1d46f3ed7e011d47f3ee70061d40f3ef1d47f3f042011d41f3f11d47f3f21d41f3f349f9000000002d4cf26247eef3ed244c42aef20e428260001cd02d42f20e487800204879000000004eb900000000508f4a8067001ae67220b28067001ade4879000000004eb900000000588f4a8067001aca7410b48065001ac222005381c0814a8066001ab64879000000004eb900000000588f2d40f2064a8067001a9eb0aef1fa62001a964879000000004eb900000000588f2d40f2420c800008000062001a7a4879000000004eb900000000588f2d40f216b0aef1fa62001a60202ef1fa90aef216b0aef20665001a50760fc6aef2162d43f20a4a8366001a404879000000004eb900000000588f2d40f2460c800000100062001a244879000000004eb900000000588f2d40f2027a40ba8065001a0a4879000000004eb900000000588f2d40f226b0aef1fa620019f02c2ef246e78e2d46f26e202ef1fa90aef226b086650019d84879000000004eb900000000588f2400b0aef1fa620019c0282ef202eb8c202ef1fa9082b084650019ae4879000000004eb900000000588f2d40f22e7effbe80670c262ef22eb6aef2066400198a4879000000004eb900000000588f2d40f23272ffb280670c2c2ef232bcaef206640019664879000000004eb900000000588f2d40f2367affba80670c286ef236b9eef206640019424879000000004eb900000000588f2d40f23a7effbe80675c2a6ef23abbeef2066400191e41eef3f4200e0680fffff4f44298b08866fa4aaef202673e26020683000000002a0e0685fffff3f42004068000000000d0822d40f1fe243c0000000045f90000000049eefc942d4cf21228056000196841eef3f460ae4aaef246672c246ef226d5fc00000000242ef26e068200000000d4aef22647f900000000262ef2065983282ef2026000186c4879000000004eb900000000588f2400b0aef1fa6200187e4879000000004eb900000000588f2d40f272202ef1fa9082b0aef2726500185e0682000000002d42f27a1439000000001d42f28741eef4f44eb90000000071827603b680670000c22f2ef2062f2ef2722f2ef27a4eb90000000026004fef000c4a806600f9fc42aef27e48790000000047f9000000004e9324402ebc000000004e93588f2d40f1fe41eef864200e0680fffff8e44298b08866fa42aef79e42aef7a242aef7a642aef7aa42aef7ae42aef7b242aef7b642aef7ba42aef7be42aef7c27a302d45f7c642aef7ca42aef7ce42aef7d248780080486ef864486ef71e4eb9000000004fef000c4aaef1fe6600011445f900000000262ef20a740847f900000000600000f02f2ef2722f2ef27a41eef6084eb900000000508f4a6ef6086708262ef60a6000f938240e0682fffff4f448780114486ef60a2f024eb9000000004fef000c2d42f27e6000ff1e7c08bc8267000b62286ef206d9eef2422d4cf2224aaef1fe66000b5a2f0c4eb9000000002800588f4a8067000d98246ef216d5fc000000002a04206ef206d1c4224412dab3c866fa4aaef242670c202ef222d0854218b1c066fa4aaef24667001340266ef226d7fc00000000202ef26e0680000000002c2ef226dc8049f90000000060001630487900000000486a00044e93508f4a0066000ad6528345ea00347008b0836700ff5a4a9266da7e08be8266e8240360e44eb900000000b5eef1fa630676e16000f84c202ef1fa908ab0aef1fe65000434723fb2aef1fe6400042ad5fc000000002f0a4eb900000000588f0c80444b445366000410486a00044eb900000000588f2d40f21e7401b48067227e02beaef21e671a7003b0aef21e67127204b2aef21e670a7405b4aef21e660003d8263c000000002d43f93c200e0680fffff93c4aaef93c660676e26000f7c42a3c000000002d45f94058804aaef94067e82c3c000000002d46f944200e0680fffff9444aaef94467d04eb9000000004a8067000242486a00084eb90000000024002ebc000000024eb900000000588fb082660017e6486a000c47f9000000004e93588f2d40f1f6486a00104e93588f2d40f266486a00144e93588f2d40f276486a00184e93588f2d40f24e486a001c4e93588f2d40f23e486a00204e93588f2d40f25a486a00244e93588f2d40f25e486a00284e93588f2d40f282486a002c4e93588f2d40f212486a00304e93588f2d40f2527603b6aef21e640001a0486a00344e93588f2d40f1fa486a00384e93588f2d40f2027a402d45f222487800044eb900000000588fb0aef1f6650002aa487800044eb900000000588fb0aef266650002964aaef1f66700028e202ef1f680aef2667603c0834a806600027c7a07baaef2766400fe2c7c40bcaef27665000268202ef2765380c0aef2762d40f24a4a80660002542e2ef25a0c8700001000620002467020b0aef2826500023c7208b2aef252650002327404b4aef20265000228262ef1fab6aef1fe6200fdd62a2ef202ed8d2d45f256202ef1fe9083b085650002062c2ef24ebcaef1fe6200fdb4202ef1fe9086b0aef1f6650001ec2e2ef23ebeaef1fe6200fd9a242ef25ae78a202ef1fe9087b082650001ce286ef25eb9eef1fe6200fd7c262ef282eb8b202ef1fe908cb083650001b02a6ef212bbeef1fe6200fd5e2a2ef2522c2ef2224c065800202ef1fe908db0856500018c7e05beaef21e670000982e2ef24a2d47f22a7a40baaef222670002704aaef2026700072e2a2ef1fada8a2c2ef256dc852d46f256263c0000000049f90000000026452a0a6000065a76e26000f5487c01bcaef21e67347e02beaef21e66162e2ef20a2d47f1fa2d47f20274302d42f2226000fe5c286ef20a2d4cf1fa2d4cf20276402d43f2226000fe462a2ef20a2d45f1fa2d45f2027c102d46f2226000fe30486a003c4eb900000000588f2d40f22a723fb280640000d47003c0aef22a4a80660000c82c2ef22abcaef1fe6200fc76202ef1fe90867e1fbe80640000ae42aef8e470052d40f8e82c2ef24e2d46f8ec2e2ef1f62d47f8f0286ef23e2d4cf8f42d42f8f82a6ef25e2d4df8fc2d43f9002c2ef2122d46f9042d45f9082e2ef1fa2d47f90c2c2ef2562d46f91047eef8e42c0e0686fffff94849f9000000002e2ef22a0687000000202d47f26a2d4bf9482f064e942800588f4a806700151a206ef948201052802080e78841f30800202800044a8067d62210d081b0aef22a63ccb2aef26a64c66000fbbc76e16000f4062f2ef1f62f02487800202f0b4eb9000000004fef00104a0067e0486b0008243c0000000020424e90588f2600486b000c28424e94588f2a00242ef23ed48a47f900000000284349ec02002c00068600000100600452845082b8aef25a6700fe242f024e93588fb9c063167efabe8053c1730120405c882e088287b2836200fb36bc8063d022005c817efabe8053c071008081b08563be6000fb1c52845082b8aef25a6700fdde2f024e93588fba8063ea22005c817cfabc8053c071008081b08363d86000faf05088b1cb67284a8867244a8067f2222800044a8167ea2410d282b28963e2b68263de6000faca41eef91460001462508b6000143e4aaef2526700fd8c262ef21247f23808202ef252ed882c00dc8b2a3c0000000049f900000000601a486b003420454e90588f4a806600fa8447eb0040bc8b6700fd522f0b20454e90588f2400b0aef1f66400fa68080000006600fa60486b00042a454e95588f2600486b00084e95588fb0836200fa46486b002c4e9528002ebc000000044e94588fb0836500fa2e7040b0846500fa26486b00304e95588f0c80000000ff6200fa144a806700ff7c4a826600ff766000fa0476df6000f24e246ef1f62d42f1f6266ef23ed7ca242ef24a263c00000000282ef1f65d846000020c487800074eb9000000002f00487800084879000000004eb9000000004fef0010b0aef252650000a44aaef202666c286ef212d9ca2d4cf212280c2a2ef24a47f90000000049f9000000002c0abaaef252677e2f044e932e804e942400588f700fb082640001927217b2826500018a2044486800044e93588fb0aef1f664000178080000006600017043f90000000041f9000000007608600001364eb9000000004a806700fc3a4eb9000000002f00487800044879000000004eb9000000004fef000cb0aef2026400ff6676de6000f15c2446262ef1f62c2ef24edc8a2d46f79e2d43f7a22e2ef2662d47f7a6242ef2762d42f7aa262ef23ed68a2d43f7ae2c2ef25a2d46f7b22e2ef25ede8a2d47f7b6286ef2562d4cf7ba2a6ef26a2d4df7be2d45f7c2242ef2222d42f7c6262ef1fa2d43f7ca2c2ef2022d46f7ce7e05beaef21e670495ca6004d5eef22a2d4af7d271aef2877403b4806600f7624a856748242ef600262ef26a45f900000000280e0684fffff4f447f9000000007e20be82650002ea2f034e922e802f022f044e934fef000c4a006700f0a652aef24ad6aef222baaef24a66d4262ef202b6aef6046700f70a76e56000f0725285d8aef2226000fe8a5288538358894a83670c4a1067f2b4a9009466ec601c246ef212b68567d82f0a4e932e804e945283d5eef222588fb08266e876db6000f03071c0b0aef2566400f7d65282508bb4aef25a6700fdf02f0b20434e90588fb8806500f7bc486b000420434e90588f0c801fffffff6200f7a822007a18eaa97c0fc2867e02be816500f796220002810f0000000c810200000067a60280ff0000000c800100000066a26000f774202c001c0685000000204a80676826c052aef2562c2ef256bcaef2826700fd582c05487800202f054eb900000000508f7220b2806700f73c487800094eb9000000002600588f4a80672c246ef24a78284eb9000000002840d9c42f062f0c4eb900000000508f4a006696528a068400000020b5c366da76e06000ef48202ef24ed0822445d5c02f0a4e94588f0c80444b46586600f6de486a00044e94588f7201b2806600f6ce486a00084e94588fb0866600f6c0486a000c4e94588fb0846600f6b247eb0040b7eef256670000b02f0b20434e90588fb0aef1f66400f696080000006600f68e486b000420434e90588f24007003c0824a806600f678b4aef1f66200f670202ef1f69082721bb2806400f662486b000820434e90588f28007003c0844a806600f64c486b000c2a434e952c002ebc000000044eb900000000588fb0846500f62e7008b0866500f626486b00104e95588f7207b2806500f6167206c2804a816700ff16080000006700f6047e02be816600ff066000f5f82445262ef212d68a2d43f26a2a2ef1fada8a2d45f1fa2f2ef2022f052f2ef2222f2ef2522f032f2ef2662f2ef1f64eb9000000004fef001c2400487800044eb900000000588fb0826500fbaa487800044eb900000000220206810000003f74c0c282588fb2806200fb8c47eef71e2a2ef25eda8a262ef24a2d43f256242ef1f62d4af1f66000fe12487900000000487800202f0242a74eb90000000076f26000eda676f66000eda07004b0b90000000067000a36202ef7d24a8067102f004eb900000000588f7202b280677c2f2ef7ce2f2ef7ca2f2ef7c62f2ef7c22f2ef7be2f2ef7a62f2ef7a24eb9000000004fef001c2a2ef7aa06800000003f7cc0cc802d46f24e4878000345f9000000004e922640487800044e92508fb086654841f358ff2d48f1fa44852208c285928b2d41f202244095c6b5c1652c283c0000000099cc76012242604676ffb6b9000000006700ff7a76f27affbab9000000006600ece66000ff6876df6000ecdc200922452a0a24404a0267000e26202ef202d0aef1fac085908b2d40f202b5c065d841f900000000340c200a24452a092240600a2d40f2021403b1c467c220184a8067f62228ffdcd081b0aef20263ea2c2ef24edcaef202bc8162d860dc202ef7a2d0aef7a65e8076f8c6802d43f21e2a2ef7c22d45f22a4a85672e262ef20a2d43f2122a032d43f22a2c2ef1fa0686e00000002d46f25249f90000000049ec00d42d4cf25a60000442262ef7ce2d43f2124a83670002062a2ef20a2d45f212260549f9000000002a6ef1fadbfce00000002d4df24a4bf9000000004bed04042d4df25a2c0252862d46f25e2d42f2666000025870ffb0b9000000006700009472ffb2b900000000670001587007b0826500018041f9000000002002e588262ef2122183080041f9000000002a2ef2022185080041f9000000002c2ef24e2186080041f9000000002e2ef22a21870800286ef1fa23cc000000004beef7a223d500000000262ef23e23c3000000002f2ef2224eb9000000002800588f4a806600f2762f024eb900000000588f76f86000eb4a4a39000000006600ff66262ef20a2d43f21a2d43f20e49f9000000002d4cf21e263c00000000486a000447f9000000004e93588f2a00486a00084e93588f2800486a000c4e93588f2a6ef21e1abc00012043208241f900000000286ef20e2185c80041f900000000d8aef1fa2184c80041f900000000d0aef1fa2180c80041f9000000004200262ef21a1180380020034480028000000240280006840000000026000683000000002a3c0000000045f900000000b8836700fec2487800242f052f034e920683000000244fef000c60e44a39000000006600fea249f9000000002d4cf21e263c000000006000ff3a487900000000487800082f024eb900000000487900000000487800082f024eb90000000048790000000048780004487800044eb900000000242ef266246ef7d24a8a6700fe482f0a4eb900000000588f7e02be806700fe1e486a000447f9000000004e93588f2600486a00084e93588f2a2ef1fada80486a000c4e93588f2800486a00104e93588f222ef1fad2807c07bc826500ff6c70164c0208002040d1fc00000000208321450004214400082141000c42a800104207114700146000fdd652837204b2836700ff5c4a34380066f04eb900000000b68064e62005ed88246ef7cad5c02f0a4eb900000000588f2403e58ad0aef24ae28841f900000000068000b8000021803c00486a00044eb900000000588f41f900000000d0aef1fa2180280041f9000000002c2ef21edcaef1fa21862800486a00084eb900000000588f2d40f252280a0684000000142003eb88266ef25ad7c02c0a0686000000342f044eb900000000588f26c05884b88666ee41f9000000002e3c3f8000002187280041f90000000042b028002003e9882040d1fc00000000068000000000b08867064298b08866fa486a00104eb900000000588f41f9000000002180280041eef2611990380041f9000000004200118038007001e7a881aef2125285baaef7ce6400fe5852837c03bc836500fe3a202ef2525e807ef8c087d1aef21e6000fece7040b086677841f90000000042b0380041f90000000042b0380041f90000000042b0380041f90000000042b0380041f90000000042b0380041f900000000200252801180580041f9000000004200118058007001eba881aef22a528552aef212262ef212b6aef7c26400fbc27007b0856500082e45f900000000600000dc486a00084eb900000000588f2800486a000c4eb900000000588f5e804a84670cd8aef252e28c068400b8000041f9000000002184380041f900000000286ef1fad9eef21e218c380078f8c88041f90000000021843800486a00104eb900000000588f41f90000000021803800486a00384eb900000000588f41f90000000021803800486a00344eb900000000588f4c004800d9aef21e6000ff222f044eb900000000588f600e20444868000c4eb900000000588f26c05884b9c46700fec67230b28667d67e40be8667dc202ef24a60e452857008b0856700074a4a32580066f0487800074eb900000000588fba8064e0202ef21241eef7c64c100800246ef7bed5c02f0a4eb9000000002e804eb9000000002605e58b41f90000000021803800486a00044eb900000000d0aef252e28841f900000000068000b80000218038002c2ef7c62005eb88266ef25ad7c0280a508449ea0028508f2a6ef20a2d4df24a6000ff5c26062f0a4e93588f206ef23ed1c0721ce2ac660000a471a800024840424073a80005e189808173a800048081d6800c8300ffffff620000c02003424048401140000277c31203e08b11410004114300055285baaef7b26400f9a62005e788246ef7aed5c0486a00044e93588f28007218e2a8760fc0834a8067867e01be80671c200402800000ffe04a806618200471c041f60c002628f71e6000ff68262ef2126000ff60487900000000487800203f0442674eb90000000071a80003e18873a8000280814840424073a80005e18979a8000482848081d6802003424048401140000220037e18eea81140000377c31203e08b6000ff542f2ef23e4eb900000000588f76e16000e5742f2ef2222f054eb900000000508f7007b082655870344c0208002440d5fc0000000024bc0000000147f9000000002040d1fc00000000203c00000000224b10d9b3c066fa4878003f2f2e00084eb900000000508f22402002ed882040d1fc00000000202ef20a420360000278487900000000487800082f024eb9000000004879000000004eb900000000588f254000242002e7882040d1fc00000000226ef26210d9b3cb66fa254500282c2ef2222546002c7effbeaef232670000ce222ef232d285254100302040d1fc000000002142000420bc444b435870ffb0aef236670000b0202ef236d08541f90000000021802c0072ffb2aef22e6700009e202ef22ed08576ffb6aef23a6708daaef23a2d45f20a4aaef1fe660000882f2ef2062f2ef27e2f2ef20a2f002f2ef2722f2ef27a2f024eb90000000026004fef001c4a806700e4307a04bab900000000670000c62f024eb900000000588f4a00670000b62f024eb900000000588f4a00670000a62f044eb90000000042922f024eb900000000508f6000e3ec222ef20a6000ff34202ef20a6000ff52202ef20a6000ff6424bc000000012f2ef2062f2ef27e2f2ef20a2f002f2ef2722f2ef27a2f024eb90000000026004fef001c4a80674c7a04bab900000000673c2f024eb9000000002f024eb900000000508f4a0067262f024eb900000000588f4a0067182f044eb90000000042922f024eb900000000508f6000e36076f46000e35a2d42f7d642aef7da42aef7de42aef7e27c012d46f7e641f9000000002d50f7ea2039000000007204b280676241f9000000002d50f7ee49f9000000002d54f7f24bf9000000002d55f7f642b9000000004a8066084ab90000000067382039000000007207b280653a74244c02080048780024486ef7d60680000000002f004eb90000000052b9000000004fef000c76016000e2c6486ef7d64eb900000000588f60ec487900000000487800082f004eb900000000286e00081234080010c152807240b2806700fd9eb08965e8120360ec24452f0b4eb9000000002604d6802e834eb900000000588f487208002f034e94508b508fb7c66700fcee486b00044eb900000000588f22007618e6a967c22200028100ffffc04a816610028000ffffff41f60c002468f3f460a848790000000048780040028000ffffff2f004eb900000000508ab5c26700e7982f0a4e93588fb6806520486a00044e93588f22007a18eaa967de7c01bc81660a028000ffffffb88062ce76fb6000e1e0286ef21e2d4cf1fa60402a6ef21e4a35b800675049ec0018b9eef21267242a0c266c00044a8b67e222542c03dc8b204373907191b08166dc52885289b1c666f060c8206ef21e2d48f1fa41eefc944eb90000000045eefc942a0e0685ffffffdc6000008e2d4df21e2845202c00084a80660e202c000c6004202b00204a806780204420c02808068300000020b6aef1fe6700e6a22d43f21e487800202f034eb900000000508f7220b2806700ff4e47f9000000002f2ef21e2f0b4e92508f4a0066b647eb0024b7c266ea41eef94c4eb90000000049eef94c6000ff442a6ef1fa4a354800672e45ea0018b5c56700012e264a282a00044a8467e222522403d484204373907191b08166dc52885289b1c266f060c84aab0008660001024aab000c660000fa246b0010242b00142d4affea2d42ffee42aefff22d42fff6702f2d40ffe672011d41fffe263c2f0000002d43fffa486effe641eeffdc4eb900000000588f4a6effdc67000088202effde52804a80672eb0826516671e4879000000002f022f002f022f0a4eb900000000733208007ac0ba816ee2204291c0220ad280600c204291c0220ad2804a8167cc1039000000002408244160405282548a548b7004b0826700e334101267ee162a000171802f002f024eb900000000508f4a00670877837193b08364d076d06000dff01039000000004a8a67224a00661e4a82671a204a43f900000000d48a45ea000c1298b48867065289b5c866f476f96000dfbe202ef21241eef7c64c100800d0aef7be2f004eb9000000002e804eb90000000048790000000048780008487800084eb90000000076dc6000df84266ef22ad7ca242ef24ed48a2f0b4eb900000000588f7202b2806700eb622f2ef2662f2ef1f62f02487800202f0b4eb9000000004fef00144a006700eb3c486b00104eb900000000588f2600242ef23ed48a47f9000000002a000685000000106000ebba2c2ef1f62e2ef24e2d47f9142d46f918286ef23e2d4cf91c2d42f9202a6ef25e2d4df9242d43f928242ef2122d42f92c2d45f930262ef1fa2d43f9342a2ef2562d45f9382a3cfffff93cda8e47eef914b7c56700ff482253202b00044a806700eba67e3fbe896400e66641eef9142609d6806000eb6e24092f2ef7a24eb9000000002d40f23e588f4a806700f344487800034eb900000000d0aef2022d40f1fa202ef7a2588f4a806710206ef79e226ef23ed08812d8b08866fa4aaef7b26700f1e22c2ef1fa0686e00000002d46f212e28e2a2ef20a47f9000000006000f820",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt6loader10load_inner",
-   "size": 8586
+   "size": 8690
   },
   {
    "align": 2,
@@ -43819,7 +43910,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffd02f0a2f022f2e000c41eeffde4eb900000000588f71aefffe7202b280660001604282420013c000000000720113c100000000700613c000000000420113c1000000002f39000000004879000000004eb9000000002f024879000000004eb9000000002f3c000080004879000000004eb9000000002439000000002d42ffd04fef00184a390000000056c244824eb90000000045f9000000004a9256c14481e789d48282827401c4aeffd082824ab90000000056c24482e98a82827401b580e588828013c10000000042a74879000000004eb90000000042a74879000000004eb900000000487806004879000000004eb90000000020124fef00184a806702700700800000fff82f004879000000004eb900000000508f41eeffd6200e0680ffffffde4218b08866fa41f9000000002d48ffd041eeffd6200e0680ffffffde2248246effd052aeffd012dab08966f243f90000000012d8b08866fa4878002942a72f2e0008487800014eb9000000004fef0010242effc8246effcc4e5e4e75486effde4eb9000000002400588f6000fe94",
+   "hex": "4e56ffd02f0a2f022f2e000c41eeffde4eb900000000588f71aefffe7202b280660001604282420013c000000000720113c100000000700713c000000000420113c1000000002f39000000004879000000004eb9000000002f024879000000004eb9000000002f3c000080004879000000004eb9000000002439000000002d42ffd04fef00184a390000000056c244824eb90000000045f9000000004a9256c14481e789d48282827401c4aeffd082824ab90000000056c24482e98a82827401b580e588828013c10000000042a74879000000004eb90000000042a74879000000004eb900000000487807004879000000004eb90000000020124fef00184a806702700700800000fff82f004879000000004eb900000000508f41eeffd6200e0680ffffffde4218b08866fa41f9000000002d48ffd041eeffd6200e0680ffffffde2248246effd052aeffd012dab08966f243f90000000012d8b08866fa4878002942a72f2e0008487800014eb9000000004fef0010242effc8246effcc4e5e4e75486effde4eb9000000002400588f6000fe94",
    "kind": "text",
    "name": ".text._RNvNtCsdWzhuXZnywa_4dkrt6upload6h_info",
    "size": 404
@@ -43861,7 +43952,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56e7a02f0a2f024eb900000000203c444b4254b0b900000000660c242ee798246ee79c4e5e4e7523c000000000720123c10000000041eee9ca4eb900000000102ee9ca73807401b4816700133a20017202b280660a74011d42e7b06000132e242eebc02d42e7a4487801f4486ee9cc486eebc64eb90000000070013d40ebc4487801f6486eebc4486ee7d44eb90000000041eeefae4eb90000000072013d41e7d4487801f6486ee7d4486ef80e4eb9000000004fef0024487801f4486ef810486eedba4eb9000000004fef000c74011d42e7ab42021d42e7b0307c06002d48f1a243f9000000002d51f1a62d6eefaaf1aa2d6eef9af1ae2d6eef9ef1b2486ef1a248780004487800014eb9000000004eb9000000004eb900000000203947fe0f00243947fe0f042d42e7ac4fef000c0c804b4545506700019e42aee7b44280242ee7b423c2000000002d42fd882d40fd8c42aefd9042aefd9442aefd98486efd8848780004487800124eb90000000020024480c0aee7ac5280207c47fe0f0020bc4b45455023c047fe0f04468023c047fe0f08487800102f084eb9000000004fef0014207c43525348b1f947fe00006700014c4a2ee7ab660004f2428023c000000000246ee7a423ca0000000041eeef9e23d00000000043eeefa623d100000000487801f4486eedba4879000000004eb900000000142ee7ab13c20000000023ca00000000202eefaa4fef000c4a80670623c0000000004a2ee7b066000f9e7001c0aeefa24a806700048a74032d42e7ac2d6eef9af1b6246ee7a42d4af1ba2d6eef9ef1be2d6eefa6f1c22d6eefa2f1c6486ef1b648780004487800044eb900000000700123c000000000242ee7ac23c20000000042b9000000002d42f1ca2d6eef9ef1ce2d6eef9af1d242aef1d642aef1da486ef1ca48780001487800034eb9000000004fef00187003b08267000f344ab90000000066000f6041f900000000203c0000000020fcffffffd4b1c066f66000fd48207947fe0f0822024681b28857c0710044802d40e7b42002b2886700fe4e42aee7b442806000fe4441eefa04200e0680fffffcb84298b08866fa200e0680fffffa04220e0681fffffcb82040227c47fe000093c02031880020c0b28866f6207c47fe00004290487800402f084eb900000000508f7002b0aefa08675c700123c00000000042aefcb842aefcbc42aefcc042aefcc4223c00000bad2d41fcc8486efcb8487800014878000c4eb9000000004fef000c4ab9000000006700fe224ab9000000006700fe1852aeef9e740123c2000000006000fe08487802b0486efa044eb900000000508fb0aefcb4668e487802b4486efa044879000000004eb900000000720113c100000000202efb044fef000c7408b4806402700823c000000000246efc082d4ae7b8242efa282d42e7b441eefd9c200e0680fffffdac4218b08866fa42aefce042aefce442aefce842aefcec43eefd9c41eefccc20d920d920d92091246ee7b82d4afcdc2d6efc20fcf42d6efa18fcf0740442aee7ac2d42e7bc60000f0a7002b0aee7b86700012c7003b0aee7b8670001e4700123c000000000222efa1823c100000000202efa102400758223c20000000041eefa2823d00000000043eefa2023d1000000002d41fd382d40fd3c2d6efa14fd402d6efa1cfd442d6efa0cfd48486efd38487800014878000c4eb9000000002d6efa28fd4c202efa204840424080aefa242d40fd502d6efa34fd542d6efa38fd582d6efa3cfd5c486efd4c48780001487800164eb900000000347c01002d4afd602d6efa2cfd642d6efa30fd682d6efa40fd6c42aefd70486efd6048780001487800164eb900000000242ee7b82d42fd7442aefd7842aefd7c2d6efcf0fd80246ee7b42d4afd844fef0024486efd7448780001487800244eb900000000486efa044eb900000000486efccc4eb90000000023c0000000004fef00146000fdfe700223c000000000242ee7b423c200000000202efc0c2d40fce0222efc142d41fce4206efc102d48fce8226efc182d49fcec206efc1c2d48fcf0e188484142418081720282802d41fcfc242efc102d42fd002d49fd042d48fd08246ee7b42d4afd0c486efcfc48780001487800244eb9000000002d4afd1042aefd142d6efa34fd182d6efa38fd1c2d6efa3cfd20486efd1048780001487800164eb900000000486efa044eb900000000486efccc4eb90000000023c0000000004fef00206000fd3c720123c100000000242ee7b423c2000000002d40fd242d6efa1cfd2842aefd2c42aefd302d42fd34486efd2448780001487800244eb900000000486efa044eb900000000486efccc4eb90000000023c0000000004fef00146000fce0202eef9a6000fb0c487800134eb900000000588f4a8066000b024ab90000000066000b022479000000002d4ae7ac4a8a66000afc202eef9e7201b280640a74012d42e7ac6000fb402d6eef9af1b6242ee7a42d42f1ba2d40f1be2d6eefa6f1c22d6eefa2f1c6486ef1b648780004487800044eb9000000004fef000c4aaeefa666064aaeef9e670c4eb9000000004a006600070c700113c000000000223c444b415323c10000000042b900000000486eef7a41eefdac4eb90000000041eefdac23d80000000023d80000000023d80000000023d80000000023d80000000023d80000000023d80000000023d000000000588f4aaeefa6671c45eeedba2d4ae7bc242ee7ac2d42e7a445eefdec2d4ae7d0600005122479000000002d4ae7b84a8a673c41f900000000724192aee7b87040600a588853804a80670003384290b28066f045f9000000002d4ae7b4242ee7ac2d42e7b074012d42e7c06000011441f90000000045eeedba2d4ae7b443eeef7a222ee7ac2419b49856c071004480828045f900000000b1ca66ea23c1000000004aaeefa66700063e45f9000000002d4ae7b845f9000000002d4ae7c445f9000000002d4ae7c8246ee7b445ea00382d4ae7bc242ee7ac2d42e7a8600007f84879000000004eb90000000080aee7b02f004eb9000000002d40e7a4508f4a806700017c2d40e7a0246ee7ac2d4ae7a4202ee7a00680fffffff0721fc0817201e1a983aee7b0242ee7a0246ee7d025420100242ee7c42d42fe00242ee7a02d42fe04246ee7a42d4afe082d4afe0c42aefe10486efe00487800044878001e4eb9000000004fef000c58aee7b4202ee7c05280242ee7c0b4aee7b86400fef42d40e7c0246ee7b42d4ae7d022122401e08a2d42e7c44a8267d07001b0aee7c0673041f90000000070012d41e7a41200242ee7a4b49856c0c0817201c08132401200b1eee7b466e8220234094a026700ff1245f90000000045ea000c2d4ae7bc204a242ee7ac2242600c588852897008b08967000a3820104a8067eeb3800c80000000ff62e42d49e7a841f90000000024309c0075822d42e7a022020681fffffff0701fc2807001e3a8c0aee7b04a806770242ee7ac2d42e7a44879000000004eb90000000080aee7b02f004eb9000000002d40e7a0508f4a80660000f474013d42e7cc246ee7b841f90000000041f0ac00226ee7bc202ee7ac2d48e7c860582f2ee7b04eb9000000002d40e7a0588f4a806600fe7e242ee7a02d42e7a46000fe884aaee7a06700097a74012d42e7a46000fe60246ee7a42d4ae7a842423d42e7cc60a0206ee7a02d48e7c8588952807208b2806700009622114a8167ee41f900000000246ee7c82d4ae7a02410b3820c82000000ff63cc5888b1eee7a066ece5882440d5fc000000002012240075822d42e7a0e0882d40fdec2d42fdf042aefdf442aefdf842aefdfc486efdec487800014878001f4eb90000000042924fef000c4a826700fde24a6ee7cc6700090e41f900000000202ee7c4e18880aee7a0246ee7a82180ac006000fda8242ee7ac2d42e7a06000fdb22d40e7a87407b4806500fd9060ca48790000000048780040487800404eb900000000242ee7b0b48a62000180200a9082b0aee7b4650001742f2ee7b4242ee7b00682000000002f0241eefe664eb900000000508f4a6efe6666000150246eff742d4ae7a848780080486efe68486eff7c4eb90000000041eeff7c43eefdcc4fef000c202ee7acb0aee7a8670000a07208b2806700086e22d8528060ea242ee7c0d5aee7b052aee7c4246ee7c4b5eee7cc677a242ee7b494aee7b02d42e7c87007b0826468246ee7b8242ee7b0487228044eb900000000588f2d40e7c0720bb280644ab0aee7c86244487228004eb900000000588f7402b48066a27007b0aee7a8659a246ee7b8242ee7b0487228084eb900000000588f246ee7a841f6ac002140fdcc528a2d4ae7a86000ff724aaee7a8677841eefdcc226ee7a843f09c002d49e7a845e800202d4ae7b043f900000000203900000000723fb280654e242ee7a445f90000000025820c00b1eee7b0670001922218203900000000743fb4806500019645f90000000025810c00203900000000723fb2806500019042b10c0052b900000000b1eee7a866a652aee7a47438d5aee7bc246ee7a4b5eeefa66400faf241eefdcc4298b1eee7d066f87408b4aee7a46700011a2f2ee7bc41eefe3c4eb900000000588f4a6efe3c66be246efe622d4ae7a843eefe3e41eefe1420d920d920d920d920d920d920d920d920d92091486efe144eb900000000588f4a80668ab5fc0000009f63824879000000004eb900000000588f0c80444b4d466600ff6c4879000000004eb900000000588fb08a6600ff584879000000004eb9000000002d40e7b02ebc000000004eb900000000588f2d40e7b471b9000000007203b2806700fda0700fb0aee7b46400ff1e242ee7b0b4aee7a86200ff12202ee7a89082b0aee7b46500ff042442d5fc000000002d4ae7b82f0a4eb900000000588f0c80444b52476600fee4486a000c4eb900000000588f2d40e7cc242ee7ac2d42e7c42d42e7a874102d42e7b06000fdbc48790000000048780008487800084eb90000000048790000000048780008487800084eb900000000487900000000487800402f004eb900000000487900000000487800402f004eb90000000052aeef9e487801f4486eedba486ef3d24eb900000000142ee7ab7001c4802f022f2ee7a4486ef3d24eb9000000004fef00186000f8c2420113c10000000074ff23c20000000041f9000000002d48fffc200e5980206efffc4a88670ab1f900000000670000924ab9000000006700f16441eef5fa20f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020b900000000487801f4487900000000486ef61a4eb90000000043eef5fa41eef7da20d920d920d920d920d920d920d920914a390000000056c0448071802f002f3900000000486ef61a4eb9000000004fef00186000f0de42a800046000ff6a48790000000048780008487800084eb9000000004aaee7a467187001b0aee7a4670874013d42e7c0601074043d42e7c06008347c00043d4ae7c0487800382f2ee7a02f2ee7b04eb9000000004fef000c2d40e7cc48780038246ee7a0486a00042f2ee7b04eb9000000004fef000c2d40e7d048780038486a00082f2ee7b04eb9000000004fef000c242ee7a82d42f5c6246ee7a42d4af5ca242ee7cc2d42f5ce246ee7d02d4af5d22d40f5d6486ef5c63f2ee7c04267487800054eb900000000222ee7a006810000001b4fef000c206ee7c8226ee7b07037b0aee7a06516242ee7a010312800670c10c052aee7a0b2aee7a066e272f9b2aee7a4670000aa52aee7a8700cd1aee7c4721cd3aee7c87438d5aee7b4d5aee7bc58aee7b8246ee7a8b5eeefa66400fe1241f90000000020aee7a841f9000000004218b1fc0000000066f67008b0aee7a86700feb6242ee7b42d42e7b041f9000000004a106600025c2f024eb9000000002d40e7a44eb900000000246ee7a423ca00000000206ee7b8214a0028588f4a8a660652b900000000206ee7b4246ee7ac72012d4ae7a0226ee7bc600000ba4a39000000006700ff5041eef5da20f90000000020f90000000020b90000000043eef5da206ee7c420d920d920914878000c42a7486ef5da4eb9000000004fef000c2d40e7a44878000c48780004486ef5da4eb9000000004fef000c2d40e7b04878000c48780008486ef5da4eb9000000004fef000c242ee7a82d42f5e6246ee7a42d4af5ea242ee7b02d42f5ee2d40f5f242aef5f6486ef5e6487800014878002b4eb9000000004fef000c6000feaa5281b1c96700fdb810106700fdb252887180742fb48066e82d41e7a060e274062d42e7ac6000f06e74022d42e7ac6000f06474042d42e7ac6000f05a74052d42e7ac6000f05072fec3aeefa2487801f4486eedba486ef1de4eb900000000142ee7ab7001c4802f022f0a486ef1de4eb9000000004fef00186000f09a41f9000000004218b1fc0000000066f6487800024878000a487800094879000000004879000000004eb90000000041f900000000203c000000004fef0014226ee7acb3d06700009641e8000cb1c066ee4280720148780001487800202f002f014879000000004eb900000000487800014878002e487800114879000000004879000000004eb900000000203c0000000023c00000000042b90000000042b900000000727823c10000000042b90000000074ff23c2000000004fef00284879000000004eb900000000588f4a006700efd4700223c0000000006000efc822280004202800086000ff6e72cf23c100000000246ee7b82541002874cf2d42e7a46000fdbe41eefca0246ee7bc43f288002d51fcf848790000000048780004486efcf84878000441eefcc84870a8004eb90000000058aee7ac588a2d4ae7bc4fef00147014b08a6700f0fa242ee7bcb4aee7ac64b0242ee7bc487900000000487800102f022f2ee7ac4eb90000000042021d42e7b041eeefae4eb900000000487801f4486eefae486eedba4eb9000000004fef000c42021d42e7ab42aee7a46000ed2274012d42e7a46000f6104879000000004eb90000000080aee7b02f004eb9000000002d40e7a4508f4a806700f6662d40e7a0246ee7ac2d4ae7a4246ee7ac200a206ee7bc4a906700f70e588852807208b28066f06000f49a2d40e7a86000f82a",
+   "hex": "4e56e7a02f0a2f024eb900000000203c444b4254b0b900000000660c242ee798246ee79c4e5e4e7523c000000000720123c10000000041eee9ca4eb900000000102ee9ca73807401b4816700133a20017202b280660a74011d42e7b06000132e242eebc02d42e7a4487801f4486ee9cc486eebc64eb90000000070013d40ebc4487801f6486eebc4486ee7d44eb90000000041eeefae4eb90000000072013d41e7d4487801f6486ee7d4486ef80e4eb9000000004fef0024487801f4486ef810486eedba4eb9000000004fef000c74011d42e7ab42021d42e7b0307c07002d48f1a243f9000000002d51f1a62d6eefaaf1aa2d6eef9af1ae2d6eef9ef1b2486ef1a248780004487800014eb9000000004eb9000000004eb900000000203947fe0f00243947fe0f042d42e7ac4fef000c0c804b4545506700019e42aee7b44280242ee7b423c2000000002d42fd882d40fd8c42aefd9042aefd9442aefd98486efd8848780004487800124eb90000000020024480c0aee7ac5280207c47fe0f0020bc4b45455023c047fe0f04468023c047fe0f08487800102f084eb9000000004fef0014207c43525348b1f947fe00006700014c4a2ee7ab660004f2428023c000000000246ee7a423ca0000000041eeef9e23d00000000043eeefa623d100000000487801f4486eedba4879000000004eb900000000142ee7ab13c20000000023ca00000000202eefaa4fef000c4a80670623c0000000004a2ee7b066000f9e7001c0aeefa24a806700048a74032d42e7ac2d6eef9af1b6246ee7a42d4af1ba2d6eef9ef1be2d6eefa6f1c22d6eefa2f1c6486ef1b648780004487800044eb900000000700123c000000000242ee7ac23c20000000042b9000000002d42f1ca2d6eef9ef1ce2d6eef9af1d242aef1d642aef1da486ef1ca48780001487800034eb9000000004fef00187003b08267000f344ab90000000066000f6041f900000000203c0000000020fcffffffd4b1c066f66000fd48207947fe0f0822024681b28857c0710044802d40e7b42002b2886700fe4e42aee7b442806000fe4441eefa04200e0680fffffcb84298b08866fa200e0680fffffa04220e0681fffffcb82040227c47fe000093c02031880020c0b28866f6207c47fe00004290487800402f084eb900000000508f7002b0aefa08675c700123c00000000042aefcb842aefcbc42aefcc042aefcc4223c00000bad2d41fcc8486efcb8487800014878000c4eb9000000004fef000c4ab9000000006700fe224ab9000000006700fe1852aeef9e740123c2000000006000fe08487802b0486efa044eb900000000508fb0aefcb4668e487802b4486efa044879000000004eb900000000720113c100000000202efb044fef000c7408b4806402700823c000000000246efc082d4ae7b8242efa282d42e7b441eefd9c200e0680fffffdac4218b08866fa42aefce042aefce442aefce842aefcec43eefd9c41eefccc20d920d920d92091246ee7b82d4afcdc2d6efc20fcf42d6efa18fcf0740442aee7ac2d42e7bc60000f0a7002b0aee7b86700012c7003b0aee7b8670001e4700123c000000000222efa1823c100000000202efa102400758223c20000000041eefa2823d00000000043eefa2023d1000000002d41fd382d40fd3c2d6efa14fd402d6efa1cfd442d6efa0cfd48486efd38487800014878000c4eb9000000002d6efa28fd4c202efa204840424080aefa242d40fd502d6efa34fd542d6efa38fd582d6efa3cfd5c486efd4c48780001487800164eb900000000347c01002d4afd602d6efa2cfd642d6efa30fd682d6efa40fd6c42aefd70486efd6048780001487800164eb900000000242ee7b82d42fd7442aefd7842aefd7c2d6efcf0fd80246ee7b42d4afd844fef0024486efd7448780001487800244eb900000000486efa044eb900000000486efccc4eb90000000023c0000000004fef00146000fdfe700223c000000000242ee7b423c200000000202efc0c2d40fce0222efc142d41fce4206efc102d48fce8226efc182d49fcec206efc1c2d48fcf0e188484142418081720282802d41fcfc242efc102d42fd002d49fd042d48fd08246ee7b42d4afd0c486efcfc48780001487800244eb9000000002d4afd1042aefd142d6efa34fd182d6efa38fd1c2d6efa3cfd20486efd1048780001487800164eb900000000486efa044eb900000000486efccc4eb90000000023c0000000004fef00206000fd3c720123c100000000242ee7b423c2000000002d40fd242d6efa1cfd2842aefd2c42aefd302d42fd34486efd2448780001487800244eb900000000486efa044eb900000000486efccc4eb90000000023c0000000004fef00146000fce0202eef9a6000fb0c487800134eb900000000588f4a8066000b024ab90000000066000b022479000000002d4ae7ac4a8a66000afc202eef9e7201b280640a74012d42e7ac6000fb402d6eef9af1b6242ee7a42d42f1ba2d40f1be2d6eefa6f1c22d6eefa2f1c6486ef1b648780004487800044eb9000000004fef000c4aaeefa666064aaeef9e670c4eb9000000004a006600070c700113c000000000223c444b415323c10000000042b900000000486eef7a41eefdac4eb90000000041eefdac23d80000000023d80000000023d80000000023d80000000023d80000000023d80000000023d80000000023d000000000588f4aaeefa6671c45eeedba2d4ae7bc242ee7ac2d42e7a445eefdec2d4ae7d0600005122479000000002d4ae7b84a8a673c41f900000000724192aee7b87040600a588853804a80670003384290b28066f045f9000000002d4ae7b4242ee7ac2d42e7b074012d42e7c06000011441f90000000045eeedba2d4ae7b443eeef7a222ee7ac2419b49856c071004480828045f900000000b1ca66ea23c1000000004aaeefa66700063e45f9000000002d4ae7b845f9000000002d4ae7c445f9000000002d4ae7c8246ee7b445ea00382d4ae7bc242ee7ac2d42e7a8600007f84879000000004eb90000000080aee7b02f004eb9000000002d40e7a4508f4a806700017c2d40e7a0246ee7ac2d4ae7a4202ee7a00680fffffff0721fc0817201e1a983aee7b0242ee7a0246ee7d025420100242ee7c42d42fe00242ee7a02d42fe04246ee7a42d4afe082d4afe0c42aefe10486efe00487800044878001e4eb9000000004fef000c58aee7b4202ee7c05280242ee7c0b4aee7b86400fef42d40e7c0246ee7b42d4ae7d022122401e08a2d42e7c44a8267d07001b0aee7c0673041f90000000070012d41e7a41200242ee7a4b49856c0c0817201c08132401200b1eee7b466e8220234094a026700ff1245f90000000045ea000c2d4ae7bc204a242ee7ac2242600c588852897008b08967000a3820104a8067eeb3800c80000000ff62e42d49e7a841f90000000024309c0075822d42e7a022020681fffffff0701fc2807001e3a8c0aee7b04a806770242ee7ac2d42e7a44879000000004eb90000000080aee7b02f004eb9000000002d40e7a0508f4a80660000f474013d42e7cc246ee7b841f90000000041f0ac00226ee7bc202ee7ac2d48e7c860582f2ee7b04eb9000000002d40e7a0588f4a806600fe7e242ee7a02d42e7a46000fe884aaee7a06700097a74012d42e7a46000fe60246ee7a42d4ae7a842423d42e7cc60a0206ee7a02d48e7c8588952807208b2806700009622114a8167ee41f900000000246ee7c82d4ae7a02410b3820c82000000ff63cc5888b1eee7a066ece5882440d5fc000000002012240075822d42e7a0e0882d40fdec2d42fdf042aefdf442aefdf842aefdfc486efdec487800014878001f4eb90000000042924fef000c4a826700fde24a6ee7cc6700090e41f900000000202ee7c4e18880aee7a0246ee7a82180ac006000fda8242ee7ac2d42e7a06000fdb22d40e7a87407b4806500fd9060ca48790000000048780040487800404eb900000000242ee7b0b48a62000180200a9082b0aee7b4650001742f2ee7b4242ee7b00682000000002f0241eefe664eb900000000508f4a6efe6666000150246eff742d4ae7a848780080486efe68486eff7c4eb90000000041eeff7c43eefdcc4fef000c202ee7acb0aee7a8670000a07208b2806700086e22d8528060ea242ee7c0d5aee7b052aee7c4246ee7c4b5eee7cc677a242ee7b494aee7b02d42e7c87007b0826468246ee7b8242ee7b0487228044eb900000000588f2d40e7c0720bb280644ab0aee7c86244487228004eb900000000588f7402b48066a27007b0aee7a8659a246ee7b8242ee7b0487228084eb900000000588f246ee7a841f6ac002140fdcc528a2d4ae7a86000ff724aaee7a8677841eefdcc226ee7a843f09c002d49e7a845e800202d4ae7b043f900000000203900000000723fb280654e242ee7a445f90000000025820c00b1eee7b0670001922218203900000000743fb4806500019645f90000000025810c00203900000000723fb2806500019042b10c0052b900000000b1eee7a866a652aee7a47438d5aee7bc246ee7a4b5eeefa66400faf241eefdcc4298b1eee7d066f87408b4aee7a46700011a2f2ee7bc41eefe3c4eb900000000588f4a6efe3c66be246efe622d4ae7a843eefe3e41eefe1420d920d920d920d920d920d920d920d920d92091486efe144eb900000000588f4a80668ab5fc0000009f63824879000000004eb900000000588f0c80444b4d466600ff6c4879000000004eb900000000588fb08a6600ff584879000000004eb9000000002d40e7b02ebc000000004eb900000000588f2d40e7b471b9000000007203b2806700fda0700fb0aee7b46400ff1e242ee7b0b4aee7a86200ff12202ee7a89082b0aee7b46500ff042442d5fc000000002d4ae7b82f0a4eb900000000588f0c80444b52476600fee4486a000c4eb900000000588f2d40e7cc242ee7ac2d42e7c42d42e7a874102d42e7b06000fdbc48790000000048780008487800084eb90000000048790000000048780008487800084eb900000000487900000000487800402f004eb900000000487900000000487800402f004eb90000000052aeef9e487801f4486eedba486ef3d24eb900000000142ee7ab7001c4802f022f2ee7a4486ef3d24eb9000000004fef00186000f8c2420113c10000000074ff23c20000000041f9000000002d48fffc200e5980206efffc4a88670ab1f900000000670000924ab9000000006700f16441eef5fa20f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020b900000000487801f4487900000000486ef61a4eb90000000043eef5fa41eef7da20d920d920d920d920d920d920d920914a390000000056c0448071802f002f3900000000486ef61a4eb9000000004fef00186000f0de42a800046000ff6a48790000000048780008487800084eb9000000004aaee7a467187001b0aee7a4670874013d42e7c0601074043d42e7c06008347c00043d4ae7c0487800382f2ee7a02f2ee7b04eb9000000004fef000c2d40e7cc48780038246ee7a0486a00042f2ee7b04eb9000000004fef000c2d40e7d048780038486a00082f2ee7b04eb9000000004fef000c242ee7a82d42f5c6246ee7a42d4af5ca242ee7cc2d42f5ce246ee7d02d4af5d22d40f5d6486ef5c63f2ee7c04267487800054eb900000000222ee7a006810000001b4fef000c206ee7c8226ee7b07037b0aee7a06516242ee7a010312800670c10c052aee7a0b2aee7a066e272f9b2aee7a4670000aa52aee7a8700cd1aee7c4721cd3aee7c87438d5aee7b4d5aee7bc58aee7b8246ee7a8b5eeefa66400fe1241f90000000020aee7a841f9000000004218b1fc0000000066f67008b0aee7a86700feb6242ee7b42d42e7b041f9000000004a106600025c2f024eb9000000002d40e7a44eb900000000246ee7a423ca00000000206ee7b8214a0028588f4a8a660652b900000000206ee7b4246ee7ac72012d4ae7a0226ee7bc600000ba4a39000000006700ff5041eef5da20f90000000020f90000000020b90000000043eef5da206ee7c420d920d920914878000c42a7486ef5da4eb9000000004fef000c2d40e7a44878000c48780004486ef5da4eb9000000004fef000c2d40e7b04878000c48780008486ef5da4eb9000000004fef000c242ee7a82d42f5e6246ee7a42d4af5ea242ee7b02d42f5ee2d40f5f242aef5f6486ef5e6487800014878002b4eb9000000004fef000c6000feaa5281b1c96700fdb810106700fdb252887180742fb48066e82d41e7a060e274062d42e7ac6000f06e74022d42e7ac6000f06474042d42e7ac6000f05a74052d42e7ac6000f05072fec3aeefa2487801f4486eedba486ef1de4eb900000000142ee7ab7001c4802f022f0a486ef1de4eb9000000004fef00186000f09a41f9000000004218b1fc0000000066f6487800024878000a487800094879000000004879000000004eb90000000041f900000000203c000000004fef0014226ee7acb3d06700009641e8000cb1c066ee4280720148780001487800202f002f014879000000004eb900000000487800014878002e487800114879000000004879000000004eb900000000203c0000000023c00000000042b90000000042b900000000727823c10000000042b90000000074ff23c2000000004fef00284879000000004eb900000000588f4a006700efd4700223c0000000006000efc822280004202800086000ff6e72cf23c100000000246ee7b82541002874cf2d42e7a46000fdbe41eefca0246ee7bc43f288002d51fcf848790000000048780004486efcf84878000441eefcc84870a8004eb90000000058aee7ac588a2d4ae7bc4fef00147014b08a6700f0fa242ee7bcb4aee7ac64b0242ee7bc487900000000487800102f022f2ee7ac4eb90000000042021d42e7b041eeefae4eb900000000487801f4486eefae486eedba4eb9000000004fef000c42021d42e7ab42aee7a46000ed2274012d42e7a46000f6104879000000004eb90000000080aee7b02f004eb9000000002d40e7a4508f4a806700f6662d40e7a0246ee7ac2d4ae7a4246ee7ac200a206ee7bc4a906700f70e588852807208b28066f06000f49a2d40e7a86000f82a",
    "kind": "text",
    "name": ".text.dkrt_boot",
    "size": 5146
@@ -43903,7 +43994,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffe048d7043c246e000841f90000000026102003528020804a836600017e42b947fe00002412282a0004700223c047fe000441eefffa4eb9000000004a6efffa67000152202efffc23c047fe00082002721ce2a822027a12eaa973812a00e18d828523c147fe000c220273c123c147fe001023c447fe001423c247fe00287a0123c547fe002c7203c08141f20808240823c847fe0018207c47fe00404298b1fc47fe008066f643eafff023d147fe004041eafff423d047fe004443eafff823d147fe0060598a23d247fe0064222e000c068100000018206e000c203c47fe0048908843f008002298b1c166f6206e000c43e8001823d147fe006843e8001c23d147fe006c43e8002023d147fe007043e8002423d147fe007443e8002823d147fe007823c247fe007c2f022f3c47fe00004eb90000000041f90000000023d047fe001c71b90000000023c047fe002070ff23c047fe002442b947fe003042b947fe02a042b947fe003442b947fe02a442b947fe003842b947fe02a842b947fe003c42b947fe02ac41f900000000508f20032403603620036000feb023c047fe002c487800402f3c47fe00004eb9000000004eb900000000528241e800340680000000340c80000001a0675e4a9067e822280028b28462e0d2a8002cb28463d823c247fe00240680000000002d40fff4283c000000002443d5fc47fe0030487800202f032f2efff420444e904fef000c248058837010b08366dc2f022f3c47fe00004eb900000000508f2f3c47fe00004eb900000000588f207c47fe02084298b1fc47fe02a066f6720123c147fe02042a3c0000060023c547fe021c487800014eb900000000588f60fe",
+   "hex": "4e56ffe048d7043c246e000841f90000000026102003528020804a836600017e42b947fe00002412282a0004700223c047fe000441eefffa4eb9000000004a6efffa67000152202efffc23c047fe00082002721ce2a822027a12eaa973812a00e18d828523c147fe000c220273c123c147fe001023c447fe001423c247fe00287a0123c547fe002c7203c08141f20808240823c847fe0018207c47fe00404298b1fc47fe008066f643eafff023d147fe004041eafff423d047fe004443eafff823d147fe0060598a23d247fe0064222e000c068100000018206e000c203c47fe0048908843f008002298b1c166f6206e000c43e8001823d147fe006843e8001c23d147fe006c43e8002023d147fe007043e8002423d147fe007443e8002823d147fe007823c247fe007c2f022f3c47fe00004eb90000000041f90000000023d047fe001c71b90000000023c047fe002070ff23c047fe002442b947fe003042b947fe02a042b947fe003442b947fe02a442b947fe003842b947fe02a842b947fe003c42b947fe02ac41f900000000508f20032403603620036000feb023c047fe002c487800402f3c47fe00004eb9000000004eb900000000528241e800340680000000340c80000001a0675e4a9067e822280028b28462e0d2a8002cb28463d823c247fe00240680000000002d40fff4283c000000002443d5fc47fe0030487800202f032f2efff420444e904fef000c248058837010b08366dc2f022f3c47fe00004eb900000000508f2f3c47fe00004eb900000000588f207c47fe02084298b1fc47fe02a066f6720123c147fe02042a3c0000070023c547fe021c487800014eb900000000588f60fe",
    "kind": "text",
    "name": ".text.dkrt_exc",
    "size": 618
@@ -44043,10 +44134,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fcfc48d73cfc4eb9000000004eb9000000004a0067000244487800204879000000004879000000004eb90000000028404eb9000000004fef000c4a8c6c0c200c4cee3cfcfcfc4e5e4e752439000000002d42fd5842b9000000002a4c2c3c00000000428799cc2d4dfd28600e7a04ba8065225287068600000048beaefd28670001e2244642804a32080067e05280723fb28066f273b208fc762eb68166d4123208fd75817840b88264c87a5aba82650606810000002073817464b48166b4123208fe75817640b68264a8785ab882650606810000002073817a6bba816694103208ff73807440b4816488765ab68165060680000000207180786db8806600ff74b9ee000c6400ff6c761fb68c6500ff64200c78744c0408002a6e0008dbc04878007442a72f0d4eb900000000240e0682fffffde2487800402f0a2f0247f9000000004e93487800402f022f0d4e932b6a004000402b6a00440044242a00404fef002442a72f0241eefe2e4eb900000000508f4a6efe2e67302a3c444b4d46baaefe306624487800302f0241eefe344eb900000000508f4a6efe34670c4aaefe366c06701081ad0048242a004042a72f0241eefe424eb900000000508f4a6efe42670e223c444b4d46b2aefe44670000fc760187ad0048282a00442d44fd382d6a0040fe222d44fe267aff2d45fe2a0c840000009f6200021270014a00660001c0242efda42b42004c262efdac2b430050282efdc82b4400542a2efdcc2b450058242efda82b42005c262efdb02b430060282efdb42b4400642a2efdb82b450068242efdbc2b42006c262efdc02b430070780289ad004860000166387cfff46000fdde47f9000000002a3c000000004286242e00082d42fd2c601a47eb00340685000000400686000000400c86000002006700fdac2a4b4a9367e04a8c67dc282efd2c244445ea0048260406830000003f200c72744c0108002e04de80600014c8740c84802482600014a876021d43fe3a780d1d44fe3b7a011d45fe3c70061d40fe3d1d45fe3e42011d41fe3f1d45fe401d41fe4147eefe3a76382a3c000000002f032f0241eefe6022454e91508f4a6efe60660000b05883588b7040b08366e0487800902f0241eefe4847f9000000004e93382efe48262efe4a487800942f0241eefe4e4e934fef00104a446700fe824a6efe4e6700fe7a4aaefe506700fe72700fc0834a806600fe682f032f0241eefe544eb900000000508f4a6efe546700fe50207c444b5247b1eefe566600fe422243486900082f0241eefe5a4eb900000000508f4a6efe5a6700fe26242efd58b4aefe5c6700fe1a4a826700fe14528c6000fcb0202efe6222007818e8a967167993b88166e879ab00012200424148417381b28462d82200e0894a016700ff2879ab00027381b28466c473ab00037180b0816300ff1260b642a7486efe2241eefe664eb900000000508f4a2efe666600fdd8207c444b4d46b1eefe686600fdca48780004486efe2241eefe6c4eb900000000508f4a2efe6c6600fdaeb6aefe6e6600fda64878000c486efe2241eefe724eb900000000508f4a2efe726600fd8a242efe7448780008486efe2241eefe784eb900000000508f4a2efe786600fd6ab8aefe7a6600fd620c82000000a06600fd5848780064486efe2241eefe7e4eb900000000508f4a2efe7e6600fd3c246efe8048780068486efe2241eefe844eb900000000508f4a2efe846600fd1c226efe862d49fd2c4878006c486efe2241eefe8a4eb900000000508f4a2efe8a6600fcf8242efe8c48780060486efe2241eefe904eb900000000508f4a2efe906600fcd8282efe9248780070486efe2241eefe964eb900000000508f4a2efe966600fcb82a2efe9848780074486efe2241eefe9c4eb900000000508f4a2efe9c6600fc98262efe9e48780078486efe2241eefea24eb900000000508f4a2efea26600fc78266efea44878007c486efe2241eefea84eb900000000508f4a2efea86600fc584a826700fc527010b0826500fc4a20025380c0824a806600fc3e4a8a6700fc38b5eefd386200fc30740fc4844a826600fc260c83000010006200fc1c202efeaa7240b2806500fc10b8aefd386200fc08222efd389284b28a6500fbfcbaaefd386200fbf4e78b222efd389285b2836500fbe6b7eefd386200fbdeeb88222efd38928bb2806500fbd04280222efd2cd28ab5c1630270014a806600fbbc262efd2c4872380041eefec64eb900000000588f4a6efec66700fba02a2efec82d45fdc448780090486efe2241eefeae4eb900000000508f4a2efeae6600fb7c266efeb048780094486efe2241eefeb44eb900000000508f4a2efeb46600fb5cb7eefd386200fb54282efeb62d44fd40202efd38908bb0846500fb404a84660000cc2d44fd6c2d44fd5c48780098486efe2241eefeba4eb900000000508f4a2efeba6600fb16206efebc2d48fd2c4878009c486efe2241eefec04eb900000000508f4a2efec06600faf2206efd2cb1eefd386200fae6282efec2202efd389088b0846500fad64a8467000f6c703fb084650001fc2a02264228022602700471800c80000000ff66000f902d45fdc02a2efd6c2d45fdbc2a2efd5c2d45fdb82d4bfdb42a2efd402d45fdb02d44fda82d43fdcc2d42fdc8242efdc42d42fdac262efd382d43fda442006000fa72700fb0aefd406400fa662f0b486efe2241eefecc4eb900000000508f4a2efecc6600fa4c223c444b5247b2aefece6600fa3e486b0004486efe2241eefed24eb900000000508f4a2efed26600fa227601b6aefed46600fa18486b000c486efe2241eefed84eb900000000508f4a2efed86600f9fc282efeda2d44fd347a20ba846500f9ec24422d42fd6c2d42fd5c28027a10262efd282d43fd2cb5eefd346618262efd2c2d43fd28baaefd406600f9c02d44fd406000fe88baaefd4062000e10262efd4096852d43fd447007b08364000e0a41f358002d48fd302f08486efe2241eefede4eb900000000508f4a2efede66000df4262efee0226efd3048690004486efe2241eefee44eb900000000508f4a2efee466000ddc7001b083661a52aefd5c7050222efee6b0816766242efd2c2d42fd286000f9387202b28366225284706c60e0203c000001a460d8701060d4203c0000009860cc203c0000009060c47003b083660852aefd6c706060b67204b28367d07005b08367d27207b28367d07006b08367d2242efd2c2d42fd286000f8deb2aefd4462000d66528ada816000fefa2f2efd2c486efe2241eefeea4eb900000000508f4a2efeea6710102efeeb2a022642280226026000fde8223c444b4453b2aefeec6600fdd0206efd2c48680004486efe2241eefef04eb900000000508f4a2efef06710102efef12a022642280226026000fdac262efef22d43fd347a01ba83673c7002b0836600009e76302d43fd80206efd2c4868000c486efe2241eefef64eb900000000508f4a2efef66720102efef72a022642280226026000fd627a102d45fd8060ca76402d43fd8060c2266efef8226efd2c48690010486efe2241eefefc4eb900000000508f4a2efefc6656262efefe2d43fd60206efd2c48680014486efe2241eeff064eb900000000508f4a2eff066740102eff072a022642280226026000fcfa7002b0aefd346400fce67205b2aefd34648e2a0226422802260270046000fcda102efefd2a022642280226026000fcca262eff082d43fd702d43ff02206efd2c48680018486efe2241eeff0c4eb900000000508f4a2eff0c6710102eff0d2a022642280226026000fc90262eff0e2d43fd44206efd2c4868001c486efe2241eeff124eb900000000508f4a2eff126710102eff132a022642280226026000fc5a262eff142d43fd64206efd2c48680020486efe2241eeff184eb900000000508f4a2eff186710102eff192a022642280226026000fc24262eff1a2d43fd74206efd2c48680024486efe2241eeff1e4eb900000000508f4a2eff1e6710102eff1f2a022642280226026000fbee262eff202d43fd30206efd2c48680028486efe2241eeff244eb900000000508f4a2eff246710102eff252a022642280226026000fbb8246eff26226efd2c4869002c486efe2241eeff2a4eb900000000508f4a2eff2a6710102eff2b2a022642280226026000fb86206eff2c2d48fd78226efd2c48690030486efe2241eeff304eb900000000508f4a2eff306710102eff312a022642280226026000fb50262eff322d43fd7c7a03baaefd34645a206efd2c48680034486efe2241eeff364eb900000000508f4a2eff366710102eff372a022642280226026000fb12226eff382d49fd68206efd2c48680038486efe2241eeff3c4eb900000000508f4a2eff3c661e2a2eff3e60062a022d42fd684a8b661e2a0b280b260b240b70046000face102eff3d2a022642280226026000fabe260b7003c6804a83660008d47403c4aefd604a82660008d6486eff024879000000004eb900000000508f4a00660e2a0226422802260270046000fa82262efd705383c6aefd704a8366e4242efd740c8200001000630e2a0326432803240370046000fa5a7020b08a65ec7208b2aefd7c65e47404b48565deb8aefd4465d8200490aefd44b08b640e2a0326432803240370046000fa28b8aefd6465ba242efd74e78a2d42fd3c200490aefd64b08265d8b8aefd3065a0200aeb882440200490aefd30b08a65c2b8aefd78658a242efd7c202efd804c0028002d42fd54200490aefd78b08265a2b8aefd686500ff6a2405ed8a2d42fd4c98aefd68b882658a7805b8aefd34660002e6206efd2c4868003c486efe2241eeff424eb900000000508f4a2eff426710102eff432a032643280324036000f988282eff44703fb0846400ff167403c4844a82660007ccb8aefd4463162a0226422802260270046000f95e262efd306000029a202efd449084721fb280640007b042aeff4870042d40ff4c222efd642d41ff50202efd3c2d40ff54222efd302d41ff582d4aff5c206efd782d48ff60202efd542d40ff64206efd682d48ff68202efd4c2d40ff6c45f900000000204441e800202d48fd3048780004486eff4841eeff704e92508f4a6eff706726222eff764a8167e2202eff72b0aefd3064d8d081b08463d22a0226422802260270046000f8b6246efd2cd5c42f0a486efe2241eeff7a4eb900000000508f4a2eff7a6710102eff7b2a022642280226026000f888282eff7c2d44fd3c0c840200000066000094486a0008486efe2241eeff804eb900000000508f4a2eff806710102eff812a022642280226026000f84c282eff822d44fd30486a000c486efe2241eeff864eb900000000508f4a2eff86660000d2282eff882d44fd3c280a06840000001045ea0020b88a670007dc2f04486efe2241eeff8c4eb900000000508f4a2eff8c670000ae102eff8d2a022642280226026000f7e4486a0008486efe2241eeffc04eb900000000508f4a2effc06710102effc12a022642280226026000f7ba282effc22d44fd54486a000c486efe2241eeffca4eb900000000508f4a2effca660002842f2effcc4eb900000000588f28002d40ffc6486a0010486efe2241eeffd04eb900000000508f4a2effd067000266102effd12a022642280226026000f758102eff872a022642280226026000f74858844aaeff8e6700ff2c6000fdd02d42fd842d43fd8848780002486eff9241eeffaa4eb900000000508f4a6effaa6718246effac280a7003c8804a84670000bc242efd546000fd96262efdd8242efd542a2efddc202efd3c068000000100b0aefd306312202efd30068000000200b0aefd3c6200fd684280222efd60d28bb7c1630270014a80660004fc202efd60d08b428178f9b880620272014a81660004f45e8078f8c8807002b0aefd34640003e2206efd2c242efd7845f0283424032d43fd34b4aefd7c670003c4486affd8486efe2241eeffe84eb900000000508f4a2effe8670003e2262efd34102effe92a032643280324036000f64eb5cb630e2a0426442604240470046000f63c242effb0200b908ab082650004a42602e48b2d43fd4c202efd2cd0aefd442600d68a2a04baaefd4c660000842a2efd2cdaaefd642d4afd9842aefd942d42fdd442aefdd0202efdd0222efdd4242efd94d2aefd98d1822d40fd4c2d41fd502d44fd242444242efd84262efd882d45fd84b5eefd746700fe8c2f2efd84486efe2241eeffba4eb900000000508f4a2effba675c282efd242d42fd842d43fd88102effbb2a042644260424046000f58e2f03486efe2241eeffb44eb900000000508f4a2effb46710102effb52a042644260424046000f566528558834aaeffb66700ff446000ff0e528a50aefd846082262effbc4282282efd4c2a2efd509a83998263e442807206d283d182282efd942a2efd989a81998064ce282efd242d42fd842d43fd886000fecc102effcb2a022642280226026000f5044280222efd60d28bb7c1630270014a80660003742204e5892d41fd4c721ee2ac670270014a806600036c2f2efd544eb900000000588f2d40fd304280222efd30d2aefd4cb2aefd30640270014a806600036a282efd3c0c8401000000670e2a0226422802260270046000f498486effc64879000000004eb900000000508f4a0067dc282efd540284030000004a8466ceb7eefd30630e2a0426442604240470046000f460222efd30d2aefd4c202efd60d08bb28062e0202effd224000282030000004a8266d02f004eb900000000588f2d40fd30b08b630e2a0226422802260270046000f41e200b90aefd30720fb280640002b0280a06840000001445ea0020b88a67322f04486efe2241eeffd64eb900000000508f4a2effd66710102effd72a022642280226026000f3d858844aaeffd867cc60a2202efd2cd0aefd44246efd30d5c0282efd3453844a846670246efd2cd5eefd642d44fd3c242efd302d42fda042aefd9c202efd9c222efda04282068100000010d1822d40fd442d41fd482d43fd302d44fd4c2404b4aefd746700fa162f0a486efe2241eeffe24eb900000000508f4a2effe26750282efd4c102effe32a042644260424046000f3462f0a486efe2241eeffdc4eb900000000508f4a2effdc6710102effdd2a022642280226026000f31e588a4aaeffde6700ff5a6000fee65282508a60902d6effe4fd9042aefd8c262efd8c282efd90202efd44222efd489881978064da202efd8c222efd9042835c81d183262efd9c282efda09881978064be282efd4c2a0426442604240470046000f2bc262efd34206efd2c242efd6845f028082403ba82660000822f0b41eefffa4eb900000000588f4a6efffa6600022e26432803240370046000f282262effea2f0a486efe2241eeffee4eb900000000508f4a2effee6600016c0c830100000062000144222efff07040b0816500013e20035e8076f8c0834c01080072002040d1c4b088630272014a81660001265282d5eefd80d8806000fba02f0a486efe2241eefff44eb900000000508f4a2efff46710102efff52a032643280324036000f1fc202efff60c8001000000630000b42a0326432803240370046000f1e02a0226422802260270046000f1d22a0326432803240370046000f1c42a0326432803240370046000f1b62a0326432803240370046000f1a82a0326432803240370046000f19a2a0226422802260270046000f18c2a0426442604240470046000f17e2a0226422802260270046000f1702a0226422802260270046000f1622a0226422802260270046000f1542643280370046000f14a2a0226422802260270046000f13c5e8072f8c08172002044d1c0b888630272014a8167202a0326432803240370046000f118262efd3460ec262efd3460e6262efd3460e0528245ea0040d8806000fe52262efd34102effef2a032643280324036000f0e6282efd2c2d44fd286000eb962a2efd2c2d45fd286000eb8a242efd2c2d42fd286000eb7e262efd2c2d43fd286000eb72282efd2c2d44fd286000eb662d44fdc02a2efd6c2d45fdbc242efd5c2d42fdb82d44fdb4262efd402d43fdb02d44fda82d44fdcc2d44fdc8282efdc42d44fdac2a2efd382d45fda442006000eb2670016000eb20242efffc428072c1b284620270014a806600fefc260406830000003f70c0c680266efd7c282efd7050c06000f03445f9000000002f2efd304e922d40fd302eaefd3c4e92588f2d40fd3c42aeff9270022d40ff96282efd302d44ff9a307c02002d48ff9e282efd3c2d44ffa2307c01002d48ffa62d43fdd82d42fd542d45fddc6000f8ae20127204828024817402b4956700eb5245ea0074068400000074068300000074be846700eaf622452044101075807391b28266dc4a0067c852885289b68866ea60be",
+   "hex": "4e56fcd448d73cfc4eb9000000004eb9000000004a006700025e487800204879000000004879000000004eb90000000028404eb9000000004fef000c4a8c6c0c200c4cee3cfcfcd44e5e4e752439000000002d42fd3c42b9000000002a4c2c3c00000000428799cc2d4dfd00600e7a04ba8065225287068600000048beaefd00670001fc244642804a32080067e05280723fb28066f273b208fc762eb68166d4123208fd75817840b88264c87a5aba82650606810000002073817464b48166b4123208fe75817640b68264a8785ab882650606810000002073817a6bba816694103208ff73807440b4816488765ab68165060680000000207180786db8806600ff74b9ee000c6400ff6c761fb68c6500ff64200c78744c040800206e0008d1c02d48fd044878007442a72f084eb900000000240e0682fffffdd0487800402f0a2f0247f9000000004e93487800402f022f2efd044e9341ea0040226efd042350004041ea004423500044242a00404fef002442a72f0241eefe1c4eb900000000508f4a6efe1c6734227c444b4d46b3eefe1e6628487800302f0241eefe224eb900000000508f4a6efe2267104aaefe246c0a7010206efd0481a800482a6a004042a72f0d41eefe304eb900000000508f4a6efe30670e227c444b4d46b3eefe32670001047801206efd0489a80048242a00442d42fd082d6a0040fe102d42fe1476ff2d43fe180c820000009f6200022670014a00660001f0242efd94206efd042142004c262efd9821430050282efdb0214400542a2efdbc21450058242efdb82142005c262efdb421430060282efd9c214400642a2efda021450068242efda42142006c262efda821430070780289a8004860000192387cfff46000fdc447f9000000002a3c000000004286242e00082d42fd04601a47eb00340685000000400686000000400c86000002006700fd922a4b4a9367e04a8c67dc282efd04244445ea0048260406830000003f200c72744c0108002e04de80600015e2740c84802482600015c2700d1d40fe2972011d41fe2a74061d42fe2b1d41fe2c42031d43fe2d1d41fe2e1d43fe2f42827a382d46fd142c022f052f0d41eefe4e4eb900000000508f4a6efe4e6730282efe5047eefdf1d7c52606741060022400220250812004e2a84a00660000c4548b20020680fffffff052834a8266e0548658857640b68566b02c2efd14487800902f0d41eefe3647f9000000004e93362efe36242efe38487800942f0d41eefe3c4e934fef00104a436700fe4e4a6efe3c6700fe464aaefe3e6700fe3e700fc0824a806600fe342f022f0d41eefe424eb900000000508f4a6efe426700fe1c227c444b5247b3eefe446600fe0e2042486800082f0d41eefe484eb900000000508f4a6efe486700fdf2242efd3cb4aefe4a6700fde64a826700fde0528c6000fc6a71802f002f034eb900000000508f4a00670013ec73932004e4a87180b0816300ff1e2c2efd1460d242a7486efe1041eefe544eb900000000508f4a2efe546600fdc4283c444b4d46b8aefe566600fdb648780004486efe1041eefe5a4eb900000000508f4a2efe5a6600fd9a7a01baaefe5c6600fd904878000c486efe1041eefe604eb900000000508f4a2efe606600fd74242efe6248780008486efe1041eefe664eb900000000508f4a2efe666600fd54262efd08b6aefe686600fd480c82000000a06600fd3e48780064486efe1041eefe6c4eb900000000508f4a2efe6c6600fd22246efe6e48780068486efe1041eefe724eb900000000508f4a2efe726600fd022a6efe744878006c486efe1041eefe784eb900000000508f4a2efe786600fce2242efe7a48780060486efe1041eefe7e4eb900000000508f4a2efe7e6600fcc2282efe8048780070486efe1041eefe844eb900000000508f4a2efe846600fca22a2efe8648780074486efe1041eefe8a4eb900000000508f4a2efe8a6600fc82262efe8c48780078486efe1041eefe904eb900000000508f4a2efe906600fc62266efe924878007c486efe1041eefe964eb900000000508f4a2efe966600fc424a826700fc3c7010b0826500fc3420025380c0824a806600fc284a8a6700fc22b5eefd086200fc1a740fc4844a826600fc100c83000010006200fc06202efe987240b2806500fbfab8aefd086200fbf2222efd089284b28a6500fbe6baaefd086200fbdee78b222efd089285b2836500fbd0b7eefd086200fbc8eb88222efd08928bb2806500fbba4280220ad28db5c1630270014a806600fba84872d80041eefeba4eb900000000588f4a6efeba6700fb902a2efebc2d45fdac48780090486efe1041eefe9c4eb900000000508f4a2efe9c6600fb6c266efe9e48780094486efe1041eefea24eb900000000508f4a2efea26600fb4cb7eefd086200fb44262efea42d43fd14202efd08908bb0836500fb304a83660000c42d43fd382d43fd3448780098486efe1041eefeae4eb900000000508f4a2efeae6600fb062a6efeb04878009c486efe1041eefeb44eb900000000508f4a2efeb46600fae6bbeefd086200fade282efeb6202efd08908db0846500face4a846700107a7a3fba84650003542a02264228022602700471800c80000000ff6600109e2d45fda82a2efd382d45fda42a2efd342d45fda02d4bfd9c2a2efd142d45fdb42d44fdb82d43fdbc2d42fdb0242efdac2d42fd98262efd082d43fd9442006000fa6a48780038486efe1041eefea84eb900000000508f4a2efea86600fa4c283c02ffffffb8aefeaa650001a27a0fbaaefd146400fa342f0b486efe1041eefec04eb900000000508f4a2efec06600fa1a207c444b5247b1eefec26600fa0c486b0004486efe1041eefec64eb900000000508f4a2efec66600f9f07001b0aefec86600f9e6486b000c486efe1041eefecc4eb900000000508f4a2efecc6600f9ca262efece2d43fd1c7820b8836500f9ba2a422d42fd382d42fd3428027a1045f900000000262efd002d43fd0cbbeefd1c6618262efd0c2d43fd00baaefd146600f9882d44fd146000fe60baaefd1462000eee262efd1496852d43fd2c7007b08364000ee841f358002d48fd102f08486efe1041eefed24e92508f4a2efed266000ed6262efed4226efd1048690004486efe1041eefed84e92508f4a2efed866000ec27001b083661a52aefd347050222efedab0816766242efd0c2d42fd006000f9087202b28366225284706c60e0203c000001a460d8701060d4203c0000009860cc203c0000009060c47003b083660852aefd38706060b67204b28367d07005b08367d27207b28367d07006b08367d2242efd0c2d42fd006000f8aeb2aefd2c62000e4c528dda816000ff02700d41eefede53804a806704421860f67a0bbaaefd146400f8844878000c486efede2f0b486efe104eb9000000004fef00104a006700f86671aefee4e188322efd4a738182803d41fd4a102efee51d40fd4b71aefee6e188322efd62738182803d41fd62122efee71d41fd6371aefee8e188322efd82738182803d41fd82162efee91d43fd834a6efd826600f81071eefd4a7820b8806500f80471eefd62b8806500f7fa73eefd4a4a6efd4a66064a806700f7ead081e58806800000000cb0aefd146600f7d871aefedee188322efd76738182803d41fd761a2efedf1d45fd7777eefd762d43fd1471aefee0e188322efd7a738182803d41fd7a182efee11d44fd7b7beefd7a2d45fd3471aefee2e188322efd7e738182803d41fd7e102efee31d40fd7f77eefd7e2d43fd386000fc4e2f0d486efe1041eefeea4eb900000000508f4a2efeea6710102efeeb2a022642280226026000fc92207c444b4453b1eefeec6600fc7a486d0004486efe1041eefef04eb900000000508f4a2efef06710102efef12a022642280226026000fc5a262efef22d43fd0c7a01ba8367387002b0836600009276302d43fd5c486d000c486efe1041eefef64eb900000000508f4a2efef66720102efef72a022642280226026000fc147a102d45fd5c60ce76402d43fd5c60c6266efef8486d0010486efe1041eefefc4eb900000000508f4a2efefc6652262efefe2d43fd2c486d0014486efe1041eeff064eb900000000508f4a2eff066740102eff072a022642280226026000fbb47a02baaefd0c6400fba07005b0aefd0c64962a0226422802260270046000fb94102efefd2a022642280226026000fb842a2eff082d45fd4c2d45ff02486d0018486efe1041eeff0c4eb900000000508f4a2eff0c6710102eff0d2a022642280226026000fb4e262eff0e2d43fd1c486d001c486efe1041eeff124eb900000000508f4a2eff126710102eff132a022642280226026000fb1c2a2eff142d45fd40486d0020486efe1041eeff184eb900000000508f4a2eff186710102eff192a022642280226026000faea262eff1a2d43fd50486d0024486efe1041eeff1e4eb900000000508f4a2eff1e6710102eff1f2a022642280226026000fab82a2eff202d45fd10486d0028486efe1041eeff244eb900000000508f4a2eff246710102eff252a022642280226026000fa86246eff26486d002c486efe1041eeff2a4eb900000000508f4a2eff2a6710102eff2b2a022642280226026000fa58206eff2c2d48fd54486d0030486efe1041eeff304eb900000000508f4a2eff306710102eff312a022642280226026000fa26262eff322d43fd587a03baaefd0c6452486d0034486efe1041eeff364eb900000000508f4a2eff366710102eff372a022642280226026000f9ec206eff382d48fd44486d0038486efe1041eeff3c4eb900000000508f4a2eff3c661e2a2eff3e60062a022d42fd444a8b661e2a0b280b260b240b70046000f9ac102eff3d2a022642280226026000f99c260b7003c6804a83660008c07403c4aefd2c4a82660008c2486eff024879000000004eb900000000508f4a00660e2a0226422802260270046000f960262efd4c5383c6aefd4c4a8366e4242efd500c8200001000630e2a0326432803240370046000f9387020b08a65ec7208b2aefd5865e47404b48565deb8aefd1c65d8200490aefd1cb08b640e2a0326432803240370046000f906b8aefd4065ba242efd50e78a2d42fd18200490aefd40b08265d8b8aefd1065a0200aeb882440200490aefd10b08a65c2b8aefd54658a242efd58202efd5c4c0028002d42fd30200490aefd54b08265a2b8aefd446500ff6a2405ed8a2d42fd2498aefd44b882658a7805b8aefd0c660002e0486d003c486efe1041eeff424eb900000000508f4a2eff426710102eff432a032643280324036000f86a282eff44703fb0846400ff1a7403c4844a82660007bcb8aefd1c63162a0226422802260270046000f840262efd2460000298202efd1c9084721fb280640007a042aeff4870042d40ff4c222efd402d41ff50202efd182d40ff54222efd102d41ff582d4aff5c206efd542d48ff60202efd302d40ff64206efd442d48ff68202efd242d40ff6c45f900000000204441e800202d48fd1048780004486eff4841eeff704e92508f4a6eff706726222eff764a8167e2202eff72b0aefd1064d8d081b08463d22a0226422802260270046000f79845f548002f0a486efe1041eeff7a4eb900000000508f4a2eff7a6710102eff7b2a022642280226026000f76c282eff7c2d44fd180c840200000066000094486a0008486efe1041eeff804eb900000000508f4a2eff806710102eff812a022642280226026000f730282eff822d44fd10486a000c486efe1041eeff864eb900000000508f4a2eff86660000d2282eff882d44fd18280a06840000001045ea0020b88a670007d62f04486efe1041eeff8c4eb900000000508f4a2eff8c670000ae102eff8d2a022642280226026000f6c8486a0008486efe1041eeffc04eb900000000508f4a2effc06710102effc12a022642280226026000f69e282effc22d44fd30486a000c486efe1041eeffca4eb900000000508f4a2effca6600027c2f2effcc4eb900000000588f28002d40ffc6486a0010486efe1041eeffd04eb900000000508f4a2effd06700025e102effd12a022642280226026000f63c102eff872a022642280226026000f62c58844aaeff8e6700ff2c6000fdd22d42fd642d43fd6848780002486eff9241eeffaa4eb900000000508f4a6effaa6718246effac280a7003c8804a84670000b8242efd306000fd98242efd30262efdc82a2efdcc202efd18068000000100b0aefd106312202efd10068000000200b0aefd186200fd6a4280222efd2cd28bb7c1630270014a80660004ee202efd2cd08b428178f9b880620272014a81660004e65e8078f8c8807002b0aefd0c640003d6242efd5445f5283424032d43fd0cb4aefd58670003bc486affd8486efe1041eeffe84eb900000000508f4a2effe8670003dc262efd0c102effe92a032643280324036000f536b5cb630e2a0426442604240470046000f524242effb0200b908ab0826500049a2602e48b2d43fd24202efd1cd08d2600d68a2a04baaefd24660000822a2efd40da8d2d4afd8842aefd842d42fdc442aefdc0202efdc0222efdc4242efd84d2aefd88d1822d40fd242d41fd282d44fcfc2444242efd64262efd682d45fd64b5eefd506700fe942f2efd64486efe1041eeffba4eb900000000508f4a2effba675c282efcfc2d42fd642d43fd68102effbb2a042644260424046000f47a2f03486efe1041eeffb44eb900000000508f4a2effb46710102effb52a042644260424046000f452528558834aaeffb66700ff466000ff12528a50aefd646082262effbc4282282efd242a2efd289a83998263e442807206d283d182282efd842a2efd889a81998064ce282efcfc2d42fd642d43fd686000fed0102effcb2a022642280226026000f3f04280222efd2cd28bb7c1630270014a806600036e2204e5892d41fd24721ee2ac670270014a80660003662f2efd304eb900000000588f2d40fd104280222efd10d2aefd24b2aefd10640270014a8066000364282efd180c8401000000670e2a0226422802260270046000f384486effc64879000000004eb900000000508f4a0067dc282efd300284030000004a8466ceb7eefd10630e2a0426442604240470046000f34c222efd10d2aefd24202efd2cd08bb28062e0202effd224000282030000004a8266d02f004eb900000000588f2d40fd10b08b630e2a0226422802260270046000f30a200b90aefd10720fb280640002aa280a06840000001445ea0020b88a67322f04486efe1041eeffd64eb900000000508f4a2effd66710102effd72a022642280226026000f2c458844aaeffd867cc60a2202efd1cd08d246efd10d5c0282efd0c53844a84666e246efd40d5cd2d44fd18242efd102d42fd9042aefd8c202efd8c222efd904282068100000010d1822d40fd1c2d41fd202d44fd102d43fd242404b4aefd506700fa242f0a486efe1041eeffe24eb900000000508f4a2effe26750282efd10102effe32a042644260424046000f2362f0a486efe1041eeffdc4eb900000000508f4a2effdc6710102effdd2a022642280226026000f20e588a4aaeffde6700ff5c6000feea5282508a60902d6effe4fd7042aefd6c262efd6c282efd70202efd1c222efd209881978064da202efd6c222efd7042835c81d183262efd8c282efd909881978064be282efd102a0426442604240470046000f1ac262efd0c242efd4445f5280824034bf900000000b485660000822f0b41eefffa4eb900000000588f4a6efffa6600023226432803240370046000f170262effea2f0a486efe1041eeffee4eb900000000508f4a2effee660001680c830100000062000140222efff07040b0816500013a20035e8076f8c0834c01080072002040d1c4b088630272014a81660001225282d5eefd5cd8806000fba62f0a486efe1041eefff44e95508f4a2efff46710102efff52a032643280324036000f0ee202efff60c8001000000630000b42a0326432803240370046000f0d22a0226422802260270046000f0c42a0326432803240370046000f0b62a0326432803240370046000f0a82a0326432803240370046000f09a2a0326432803240370046000f08c2a0226422802260270046000f07e2a0426442604240470046000f0702a0226422802260270046000f0622a0226422802260270046000f0542a0226422802260270046000f0462643280370046000f03c2a0226422802260270046000f02e5e8072f8c08172002044d1c0b888630272014a8167202a0326432803240370046000f00a262efd0c60ec262efd0c60e6262efd0c60e0528245ea0040d8806000fe56262efd0c102effef2a032643280324036000efd8282efd0c2d44fd006000ea802a2efd0c2d45fd006000ea74242efd0c2d42fd006000ea68262efd0c2d43fd006000ea5c282efd0c2d44fd006000ea502d44fda82a2efd382d45fda4242efd342d42fda02d44fd9c262efd142d43fdb42d44fdb82d44fdbc2d44fdb0282efdac2d44fd982a2efd082d45fd9442006000ea1070016000ea0a2c2efd146000ebf6242efffc428072c1b284620270014a806600fef4260406830000003f70c0c680266efd58282efd4c50c06000ef1e45f9000000002f2efd104e922d40fd102eaefd184e92588f2d40fd1842aeff9270022d40ff96282efd102d44ff9a307c02002d48ff9e282efd182d44ffa2307c01002d48ffa62d42fd302d43fdc82d45fdcc6000f8b420127204828024817402b4956700ea3845ea0074068400000074068300000074b8876700e9dc22452044101075807391b28266dc4a0067c852885289b68866ea60be",
    "kind": "text",
    "name": ".text.dkrt_scan",
-   "size": 6052
+   "size": 6360
   },
   {
    "align": 2,
@@ -47745,7 +47836,7 @@
    "size": 24
   }
  ],
- "source_sha256": "98d46954a31b992ba242cd4cc4b146fb7cb6708e5be264d3646d53e05a359fb4",
+ "source_sha256": "fe786bb99e7dd73213238d9f0aef1665e6d2c8948e34ee529094d98246797de7",
  "symbols": [
   {
    "global": false,
@@ -49917,6 +50008,12 @@
    "global": false,
    "name": ".sec..text._RNvCsdWzhuXZnywa_4dkrt16debug_track_type",
    "section": ".text._RNvCsdWzhuXZnywa_4dkrt16debug_track_type",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
+   "section": ".text._RNvCsdWzhuXZnywa_4dkrt17contract_major_ok",
    "value": 0
   },
   {
@@ -52747,6 +52844,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
+   "section": ".text._RNvXNtCsdWzhuXZnywa_4dkrt4scanNtB2_8CardFileNtCs7RjeRL46GKI_7dkneeds5Bytes4read",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RNvXNtCsdWzhuXZnywa_4dkrt6tracksNtB2_6DeviceNtNtCsfgJyBKL6YOn_8dkrt_sdk13sample_tracks3Env5close",
    "section": ".text._RNvXNtCsdWzhuXZnywa_4dkrt6tracksNtB2_6DeviceNtNtCsfgJyBKL6YOn_8dkrt_sdk13sample_tracks3Env5close",
    "value": 0
@@ -54722,8 +54825,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_ASSIGN DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CONTRACTS DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_FXP DKRT_FXS DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_PATHS DKRT_PD_CUT DKRT_POLL DKRT_REG DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_page_key dkrt_page_turn dkrt_poll_add dkrt_poll_remove dkrt_poll_set dkrt_pool_done dkrt_pool_lost dkrt_project_changed dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_get dkrt_settings_put dkrt_settings_remove dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_list dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "59428",
-  "isa_check": "73fa17b4a6defe4278bd808dae864e16fc51be4000428bf1b205b0a91fd673ca",
+  "instructions_redecoded": "59621",
+  "isa_check": "55ac7660368ee0bfec40999a50d1c3c9d6208c1269ddd7771f8acb3d41051183",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

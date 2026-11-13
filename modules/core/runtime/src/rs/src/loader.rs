@@ -172,9 +172,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
     while c < 4 {
         let major = *f.add(H_CONTRACT + 2 * c);
         let minor = *f.add(H_CONTRACT + 2 * c + 1);
-        // transition (S3, until the contract is [3, 13] at integration): a module of api major 3 declares through builder calls and has the keys table
-        let major3 = c == 0 && major == 3 && rt[0].0 == 2;
-        if major != 0 && ((major != rt[c].0 && !major3) || minor > rt[c].1) {
+        if major != 0 && (!crate::contract_major_ok(c, major) || minor > rt[c].1) {
             return E_CONTRACT;
         }
         c += 1;
@@ -288,6 +286,13 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         let r = dsp::check(f, dsp_off, dsp_size, size, &mut job);
         if r != OK {
             return r;
+        }
+        if major3 {
+            let (v, stride) = (job.voices, job.vstride as usize);
+            let r = crate::collect::check_dsp_keys(&keys, job.nvoice as usize, |i| rd32(v.add(stride * i)), job.nfx as usize);
+            if r != OK {
+                return r;
+            }
         }
     }
     // already loaded; a free record

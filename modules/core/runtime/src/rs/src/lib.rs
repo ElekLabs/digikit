@@ -122,6 +122,14 @@ pub static mut DKRT_PATHS: [[u8; 64]; MAX_MODULES] = [[0; 64]; MAX_MODULES];
 /// The address of each module record's `menu` (0: none), apart from `State` for the same reason.
 #[no_mangle]
 pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
+/// The api major of a module without a keys table (`.dk.desc` records); loaded next to the current major until S3 package F.
+pub const API_MAJOR_LEGACY: u8 = 2;
+/// Whether a module may declare `major` for contract `c` (0 api, 1 machine, 2 fx, 3 service): the runtime's major, and for the api
+/// also the legacy major, for the transition.
+pub fn contract_major_ok(c: usize, major: u8) -> bool {
+    let rt = [contract::API.0, contract::MACHINE.0, contract::FX.0, contract::SERVICE.0];
+    major == rt[c] || (c == 0 && major == API_MAJOR_LEGACY)
+}
 /// The contract versions each module record declared: api, machine, fx, service as (major, minor) bytes (`MODULES` reports them).
 #[no_mangle]
 pub static mut DKRT_CONTRACTS: [[u8; 8]; MAX_MODULES] = [[0; 8]; MAX_MODULES];

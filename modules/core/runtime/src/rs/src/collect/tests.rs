@@ -157,6 +157,14 @@ fn a_bad_text_is_an_error_at_commit_not_a_failed_call() {
 }
 
 #[test]
+fn an_effect_short_name_longer_than_its_tab_label_is_refused_not_cut() {
+    let mut b = Box::new(Collect::new());
+    b.add_fx(FXID, c(b"Freq shift\0"), c(b"FSHF\0"));
+    assert_eq!(b.err, E_FORMAT);
+    assert_eq!(check_commit(&b, &DT2, &keys(&[], &[FXID], (0, 0, 0)), &[], &FREE), E_FORMAT);
+}
+
+#[test]
 fn commit_refuses_more_rows_than_uses_an_unknown_id_a_duplicate_fx_id_and_no_free_row() {
     let b = analog();
     let ok = keys(&[KEY], &[], (1, 3, 1));
@@ -314,7 +322,7 @@ fn a_flagged_canvas_page_alone_is_an_incomplete_v2_pair_that_the_registry_refuse
 #[test]
 fn an_effect_with_a_page_lowers_to_an_effect_record_in_keys_order() {
     let mut f = Box::new(Collect::new());
-    let fx = f.add_fx(FXID, c(b"Freq shift\0"), c(b"FSHF\0"));
+    let fx = f.add_fx(FXID, c(b"Freq shift\0"), c(b"FSH\0"));
     f.fx_routes(fx, ROUTE_SEND | ROUTE_MASTER, ROUTE_SEND);
     let pg = f.fx_add_page(fx, c(b"Freq shift\0"));
     f.page_add_fx_param(pg, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
@@ -350,4 +358,13 @@ fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refus
     let mut b = analog();
     b.params[0].glyph = 3; // on/off wants 0 to 1, the param has 0 to 127
     assert_eq!(lower(&b, &DN2, &keys(&[KEY], &[], (1, 3, 1)), &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
+}
+
+#[test]
+fn a_dsp_section_must_match_the_keys_table() {
+    let k = keys(&[KEY], &[FXID, 0x77], (1, 0, 0));
+    assert_eq!(check_dsp_keys(&k, 1, |_| KEY, 2), OK);
+    assert_eq!(check_dsp_keys(&k, 1, |_| KEY ^ 1, 2), E_DSP_TYPE, "a voice of a machine that is not in the table");
+    assert_eq!(check_dsp_keys(&k, 1, |_| KEY, 1), E_DECL_ID, "an effect record fewer than the table's effects");
+    assert_eq!(check_dsp_keys(&k, 0, |_| 0, 3), E_DECL_ID, "an effect record more than the table's effects");
 }

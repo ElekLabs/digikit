@@ -21,6 +21,8 @@ const MAX_F: usize = crate::fxpage::MAX_FX;
 const MAX_PG: usize = 16;
 const MAX_PA: usize = MAX_RECORDS;
 const TEXT: usize = 24;
+/// The characters of an effect's short name (the tab label of its page record).
+const FX_SHORT: usize = 3;
 const KNOBS: usize = limits::PAGE_KNOBS;
 const KNOB_PARAM: u32 = 0x8000_0000;
 const FX_KNOBS: usize = 7;
@@ -194,6 +196,9 @@ impl Collect {
         unsafe {
             put_text(&mut f.name, name, &mut e);
             put_text(&mut f.short, short, &mut e);
+        }
+        if len_of(&f.short) > FX_SHORT {
+            e = E_FORMAT; // the effect record's tab label holds 3 characters: refused, not cut
         }
         self.fail(e);
         self.fxs[i] = f;
@@ -821,7 +826,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             o.p32(fx.id);
             let mut tab = [0u8; 8];
             let mut j = 0;
-            while j < 3 && j < len_of(&fx.short) {
+            while j < FX_SHORT && j < len_of(&fx.short) {
                 tab[j] = fx.short[j];
                 j += 1;
             }
@@ -1106,6 +1111,22 @@ pub fn check_commit(c: &Collect, p: &Profile, keys: &KeysCopy, loaded_fx: &[u32]
     }
     if pg > free.page_rows {
         return E_PAGE_FULL;
+    }
+    OK
+}
+
+/// A module of api major 3 binds its DSP section to the machines and effects of its keys table: each voice record names a machine key of the
+/// table (`voice_key(i)`), and the section has one effect record for each effect id of the table, in the table's order (`fx_ordinal`).
+pub fn check_dsp_keys(keys: &KeysCopy, nvoice: usize, voice_key: impl Fn(usize) -> u32, nfx: usize) -> i32 {
+    let mut i = 0;
+    while i < nvoice {
+        if !contains(&keys.mk[..keys.nm], voice_key(i)) {
+            return E_DSP_TYPE;
+        }
+        i += 1;
+    }
+    if nfx != keys.nf {
+        return E_DECL_ID;
     }
     OK
 }

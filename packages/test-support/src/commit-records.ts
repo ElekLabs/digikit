@@ -1,4 +1,4 @@
-// The records a module committed, read from the emulated device (docs/plans/sdk.md 6.4). The runtime's `module_commit` log event names the
+// The records a module committed, read from the emulated device (docs/plans/sdk.md 6.4). The runtime's `MODULE_COMMIT` log event names the
 // RAM address and size of the module's committed record block, in the format of the register table. The block is decoded by
 // `patchkit records --json` (one decoder, `register::Register::parse`), never here.
 //
@@ -7,7 +7,7 @@
 import { execFile } from 'node:child_process';
 import type { LogEvent } from './events.ts';
 
-/** What the `module_commit` event says of one committed module. */
+/** What the `MODULE_COMMIT` event says of one committed module. */
 export interface CommitEvent {
   /** The module's index in the selection (the `index` of MODULES and MOD_LOAD). */
   index: number;
@@ -20,13 +20,13 @@ export interface CommitEvent {
 }
 
 /**
- * The one place that knows how `module_commit` packs its fields into the five log arguments. PROVISIONAL: package B of S3 sets the
- * encoding; this is the agreed content, laid out as [index, machine_rows << 16 | param_rows, page_rows, addr, size]. Change this function
- * (and the fake in tests/commit-records.test.ts) when the runtime's encoding lands.
+ * The one place that knows how `MODULE_COMMIT` (log kind 44, `sdk/sdk.toml`) packs its fields into the five log arguments:
+ * [index, rows, records_addr, records_size, 0] with rows = machine_rows | param_rows << 8 | page_rows << 16. `index` is the selection index
+ * (0xffffffff: not a boot load).
  */
 export function decodeCommitEvent(event: LogEvent): CommitEvent {
-  const [index, rows, pageRows, addr, size] = event.args as [number, number, number, number, number];
-  return { index, machineRows: rows >>> 16, paramRows: rows & 0xffff, pageRows, addr, size };
+  const [index, rows, addr, size] = event.args as [number, number, number, number, number];
+  return { index, machineRows: rows & 0xff, paramRows: (rows >>> 8) & 0xff, pageRows: (rows >>> 16) & 0xff, addr, size };
 }
 
 /** `size` bytes of guest memory at `addr` (a multiple of 4), from longword reads, big-endian as the guest holds them. */
@@ -90,7 +90,7 @@ export async function committedRecords(
   const want = [commit.machineRows, commit.paramRows, commit.pageRows];
   if (got.some((n, i) => n !== want[i])) {
     throw new Error(
-      `module_commit says rows ${want.join('/')} but the record block holds ${got.join('/')} (machine/param/page)`,
+      `MODULE_COMMIT says rows ${want.join('/')} but the record block holds ${got.join('/')} (machine/param/page)`,
     );
   }
   return { commit, records };

@@ -1,7 +1,7 @@
 //! `patchkit records --json [--dkm] FILE|-`: the records of a module's committed record block, decoded.
 //!
 //! The block is in the format of the register table (`register::Register::parse`). `module:check` and conformance read it from the
-//! emulated device (the runtime's `module_commit` event gives its address and size) and take the counts for `[uses]`, the parameter
+//! emulated device (the runtime's `MODULE_COMMIT` event gives its address and size) and take the counts for `[uses]`, the parameter
 //! rows (slot, min, max, default, names) and the pages from this output, so no second decoder exists. With `--dkm` the input is a whole
 //! `.dkm` of api major 2 and the block is its register table (header pair at 0x90 and 0x94).
 

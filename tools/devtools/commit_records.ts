@@ -1,5 +1,5 @@
 // The records one module committed, read from the emulated device: boot the patched runtime with the debug module and the module, wait for
-// the runtime's `module_commit` event, read the record block it names and decode it with `patchkit records --json`.
+// the runtime's `MODULE_COMMIT` event, read the record block it names and decode it with `patchkit records --json`.
 //
 //   node tools/devtools/commit_records.ts --device dn2|dt2 --module ID --dkm FILE.dkm --patchkit BIN [--binary DIGI_EMUD]
 //        [--debug-dkm FILE.dkm] [--emulated-ms 60000]
@@ -7,7 +7,7 @@
 // Prints one JSON object on stdout: { module, commit: {index, machineRows, paramRows, pageRows, addr, size}, records: {counts, params, ...} }.
 // `module:check` (tools/patchkit/pk_modcheck.py) writes `[uses]` and the gallery params from it; conformance reads its cases from it.
 // The event's encoding is isolated in `decodeCommitEvent` (packages/test-support/src/commit-records.ts). Not run end to end yet: it needs
-// a module of api major 3 and the runtime's `module_commit` event (S3 packages B and E), so the first run is at integration.
+// a module of api major 3 and the runtime's `MODULE_COMMIT` event (S3 packages B and E), so the first run is at integration.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -41,8 +41,8 @@ const root = repoRoot();
 const binary = values.binary ?? process.env[`DIGI_EMUD_${device.toUpperCase()}`];
 if (!binary) throw new Error(`no daemon: pass --binary or set DIGI_EMUD_${device.toUpperCase()}`);
 const debugDkm = values['debug-dkm'] ?? path.join(root, 'dist/modules', device, 'debug.dkm');
-const commitKind = (LOG_KIND as Record<string, number>).MOD_COMMIT;
-if (commitKind === undefined) throw new Error('the runtime has no MOD_COMMIT log kind yet (S3 package B)');
+const commitKind = (LOG_KIND as Record<string, number>).MODULE_COMMIT;
+if (commitKind === undefined) throw new Error('the runtime has no MODULE_COMMIT log kind yet (S3 package B)');
 const samples = device === 'dt2' ? path.join(root, 'out/runs/patchkit/samples') : undefined;
 const runDir = fs.mkdtempSync(path.join(root, 'out', `commit-records-${process.pid}-`));
 
