@@ -212,15 +212,19 @@ export async function listLocalNow(): Promise<LocalEntry[] | undefined> {
   return listLocal(localPath());
 }
 
+let localReadGeneration = 0;
 /** Read the open level of the chosen folder and label its files; the same effects as the real `readLocal`. */
 export async function readLocal(): Promise<void> {
+  const generation = ++localReadGeneration;
+  const folder = localFolder();
+  const path = localPath();
   if (!localFolder() || sim.folder === 'none') {
     setLocalEntries(undefined);
     return;
   }
   control.counts.localList++;
   await delay(60);
-  const path = localPath();
+  if (generation !== localReadGeneration || localFolder() !== folder || localPath() !== path) return;
   const entries: LocalEntry[] = listLocal(path);
   setLocalEntries(entries);
   const kinds: Record<string, Prepared['kind']> = {};

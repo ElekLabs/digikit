@@ -31,6 +31,7 @@ import {
   uploads,
 } from './samples-state';
 import SamplesMode from './SamplesMode';
+import { readSamplePanes } from './samples-read';
 
 export const PAUSED =
   'The emulator is paused: nothing would run the transfer. Resume it (the Run button of the workbench), then try again.';
@@ -38,15 +39,7 @@ export const PAUSED =
 const samples: SamplesSlot = {
   Mode: SamplesMode,
   async read() {
-    // the device and the folder fail apart: both are read, the errors are shown together
-    const errors: string[] = [];
-    for (const step of [readSamples, readLocal])
-      try {
-        await step();
-      } catch (e) {
-        errors.push(failureLine(e, targetLabel(target())));
-      }
-    if (errors.length) throw new Error(errors.join('\n'));
+    await readSamplePanes(readLocal, readSamples, (e) => failureLine(e, targetLabel(target())));
   },
   reset() {
     setSampleEntries(undefined);
