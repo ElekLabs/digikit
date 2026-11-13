@@ -4,7 +4,7 @@ import { fmtVersion, type DkSession } from '@digi/dk-session';
 import { parseSoftwareVersion, RPC_SOFTWARE_VERSION } from '../transfer/connection-core';
 import type { Answer } from './firmware-core';
 
-/** The model INFO names (`dt2`, `dn2`), when the runtime answered. Throws when neither answers. */
+/** The model INFO names (a device id), when the runtime answered. Throws when neither answers. */
 export async function askSession(s: Pick<DkSession, 'rpc' | 'info'>): Promise<Answer & { model?: string }> {
   const os = await s
     .rpc(RPC_SOFTWARE_VERSION, undefined, 1500)

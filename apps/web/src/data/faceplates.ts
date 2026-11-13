@@ -125,3 +125,6 @@ export const panels: Readonly<Record<string, Panel>> = (() => {
 
 /** The devices that have a faceplate, in registry order. */
 export const faceplateIds: readonly string[] = Object.keys(panels);
+
+/** The faceplate shown before any device is known: the last one in registry order. */
+export const defaultFaceplate: string = faceplateIds[faceplateIds.length - 1] ?? '';
