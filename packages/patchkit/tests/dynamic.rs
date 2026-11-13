@@ -66,7 +66,16 @@ fn the_register_records_are_the_lowered_typed_sections() {
     // knobs on the Digitakt: SAMPLE's tune and level rows, the module's parameters (index 0 to 2) at the first free positions
     assert_eq!(
         mach.knobs,
-        [0xca, KNOB_PARAM, KNOB_PARAM | 1, 0, KNOB_PARAM | 2, 0, 0, 0xd1]
+        [
+            0xca,
+            KNOB_PARAM,
+            KNOB_PARAM | 1,
+            0,
+            KNOB_PARAM | 2,
+            0,
+            0,
+            0xd1
+        ]
     );
     let p = &reg.params[0];
     assert_eq!((p.template, p.slot, p.min, p.max), (0xcc, 1, 0, 0x7f00));

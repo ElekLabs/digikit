@@ -136,7 +136,9 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
         json.dumps(
             pk_committed.gallery(
                 mid, ids, per, models, [f["id"] for f in manifest.get("fx", [])]
-            ), indent=2, sort_keys=True
+            ),
+            indent=2,
+            sort_keys=True,
         )
         + "\n"
     )

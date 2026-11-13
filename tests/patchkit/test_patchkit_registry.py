@@ -62,7 +62,9 @@ def test_pack_lowers_the_typed_sections_deterministically(tmp_path):
     info = tools.patchkit_run("dkm-info", c)
     assert "device 2 (3 params, 1 machines, 1 pages)" in info
     h = f"h{machine_hash('test/sample-proof', 'sample_proof'):06x}"
-    assert f'machine type {h} "Sample proof" "SMP" clone_of 0 level 10 own_dsp 1' in info
+    assert (
+        f'machine type {h} "Sample proof" "SMP" clone_of 0 level 10 own_dsp 1' in info
+    )
     assert f'page of type {h} "SAMPLE" "Sample proof"' in info
     # a Digitakt II module has no page, and a Digitone II one is refused on the Digitakt
     r = tools.run(

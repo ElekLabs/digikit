@@ -154,7 +154,10 @@ def gallery(
                 "title": e["title"],
                 "mix": e["mix"],
                 "knobs": [
-                    {k: q[k] for k in ("name", "short", "min", "max", "default", "display")}
+                    {
+                        k: q[k]
+                        for k in ("name", "short", "min", "max", "default", "display")
+                    }
                     for q in e["knobs"]
                 ],
             }
