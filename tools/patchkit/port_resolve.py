@@ -910,13 +910,12 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         if rule.get("kind") in MULTI_KINDS:
             pending.append(rule)  # after the single anchors they may exclude
             continue
-        if rule.get("cpu") != "cf" and dsp is None:
+        if rule.get("cpu") == "cf":
+            a = resolve_cf_anchor(cf, rule)
+        elif dsp is None:
             continue  # a SHARC rule cannot apply to a device without a DSP (`[capabilities] dsp = "none"`)
-        a = (
-            resolve_cf_anchor(cf, rule)
-            if rule.get("cpu") == "cf"
-            else resolve_anchor(dsp, rule)
-        )
+        else:
+            a = resolve_anchor(dsp, rule)
         anchor = {
             "name": rule["name"],
             "cpu": rule.get("cpu", "sharc"),

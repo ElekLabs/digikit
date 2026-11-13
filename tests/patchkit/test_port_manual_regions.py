@@ -61,12 +61,21 @@ def test_an_expansion_must_lie_above_the_bss_and_below_the_stack_reserve():
             manual_expansion(f, bad)
 
 
-def test_the_syntakt_port_has_no_dsp_region_stream_limits_or_anchors():
-    port = tomllib.loads((ROOT / "devices/ports/st-1.42.toml").read_text())
-    assert {r["name"] for r in port["region"]} == {"cf.flash_cave", "cf.expansion"}
-    assert "dsp_sha256" not in port["port"]
-    assert set(port["limits"]) == {"container_max", "main_staged_max"}
-    assert all(a["cpu"] == "cf" for a in port["anchor"])
+def test_the_port_of_a_device_without_a_dsp_has_no_dsp_region_stream_limits_or_anchors():
+    bare = [
+        p for p in R.load_profiles().values() if p["port"] and R.dsp_section(p) is None
+    ]
+    assert bare, "no ported firmware without a DSP"
+    for prof in bare:
+        port = tomllib.loads(
+            (
+                ROOT / "devices" / "ports" / f"{prof['device']}-{prof['version']}.toml"
+            ).read_text()
+        )
+        assert {r["name"] for r in port["region"]} == {"cf.flash_cave", "cf.expansion"}
+        assert "dsp_sha256" not in port["port"]
+        assert set(port["limits"]) == {"container_max", "main_staged_max"}
+        assert all(a["cpu"] == "cf" for a in port["anchor"])
 
 
 def test_every_ported_firmware_with_a_dsp_names_its_stream():

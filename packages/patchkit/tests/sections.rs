@@ -2,8 +2,25 @@
 //! container without a trailer, and a section of `[container] readonly` is refused by name of the role, not of the device.
 //! The images are small and synthetic: no firmware file is read.
 
+use patchkit::devdata;
 use patchkit::firmware::{Firmware, Sec};
 use patchkit::syx::{self, Device};
+
+/// A patchable device by what it has (`[capabilities]`), not by name: `sealed` and `dsp` as in `[capabilities]`.
+fn device(seal: &str, dsp: &str) -> Device {
+    let d = devdata::all()
+        .iter()
+        .find(|d| d.identity.capabilities.seal == seal && d.identity.capabilities.dsp == dsp)
+        .unwrap_or_else(|| panic!("no patchable device with seal {seal} and dsp {dsp}"));
+    Device::from_id(d.syx_id).unwrap()
+}
+/// The device without a seal and without a DSP, and one with both.
+fn bare() -> Device {
+    device("none", "none")
+}
+fn sealed() -> Device {
+    device("hmac", "sharc")
+}
 
 fn sec(id: u32, dest: u32, data: &[u8]) -> Sec {
     Sec {
@@ -41,54 +58,55 @@ fn image(device: Device, ids: &[u32]) -> Firmware {
 
 #[test]
 fn a_device_without_a_seal_is_accepted_and_its_container_has_no_trailer_slot() {
-    let st = Device::from_id(0x16).unwrap();
-    assert!(!st.sealed());
-    assert_eq!(st.dsp_section(), None);
-    let fw = image(st, &[2, 3]);
+    let bare_dev = bare();
+    assert!(!bare_dev.sealed());
+    assert_eq!(bare_dev.dsp_section(), None);
+    let fw = image(bare_dev, &[2, 3]);
     let entries: Vec<(u32, u32, &[u8])> = fw
         .sections
         .iter()
         .map(|s| (s.id, s.dest, s.stored.as_slice()))
         .collect();
-    let c = syx::build_container(&fw.header, &entries, fw.first_offset, st).unwrap();
+    let c = syx::build_container(&fw.header, &entries, fw.first_offset, bare_dev).unwrap();
     // the stock container ends at the last section's end rounded up to 16 (finding 70): the sealed layout of the same
     // sections is 32 bytes longer
-    let dt2 = Device::from_id(0x14).unwrap();
-    let with_slot = syx::build_container(&fw.header, &entries, fw.first_offset, dt2).unwrap();
+    let with_seal = sealed();
+    let with_slot = syx::build_container(&fw.header, &entries, fw.first_offset, with_seal).unwrap();
     assert_eq!(with_slot.len(), c.len() + 32);
     assert_eq!(c.len() % 16, 0);
-    assert_eq!(syx::trailer_len(st), 0);
-    let sealed = syx::seal(c.clone(), st);
+    assert_eq!(syx::trailer_len(bare_dev), 0);
+    let sealed = syx::seal(c.clone(), bare_dev);
     assert_eq!(sealed, c, "no seal: the container is unchanged");
-    assert!(syx::trailer(&sealed, st).is_none());
-    assert!(syx::trailer_matches(&sealed, st));
+    assert!(syx::trailer(&sealed, bare_dev).is_none());
+    assert!(syx::trailer_matches(&sealed, bare_dev));
 }
 
 #[test]
 fn a_sealed_device_still_gets_its_hmac() {
-    let dt2 = Device::from_id(0x14).unwrap();
-    assert!(dt2.sealed());
-    let fw = image(dt2, &[2, 3, 7]);
+    let with_seal = sealed();
+    assert!(with_seal.sealed());
+    let fw = image(with_seal, &[2, 3, 7]);
     let entries: Vec<(u32, u32, &[u8])> = fw
         .sections
         .iter()
         .map(|s| (s.id, s.dest, s.stored.as_slice()))
         .collect();
-    let c = syx::build_container(&fw.header, &entries, fw.first_offset, dt2).unwrap();
-    let sealed = syx::seal(c.clone(), dt2);
+    let c = syx::build_container(&fw.header, &entries, fw.first_offset, with_seal).unwrap();
+    let sealed = syx::seal(c.clone(), with_seal);
     assert_ne!(sealed[sealed.len() - 32..], [0u8; 32]);
-    assert!(syx::trailer_matches(&sealed, dt2));
+    assert!(syx::trailer_matches(&sealed, with_seal));
     assert!(
-        !syx::trailer_matches(&c, dt2),
+        !syx::trailer_matches(&c, with_seal),
         "a zero trailer is not the HMAC"
     );
 }
 
 #[test]
 fn a_read_only_section_is_refused_and_main_is_not() {
-    let st = Device::from_id(0x16).unwrap();
-    assert_eq!(st.readonly_sections(), [1, 2, 4, 6, 7, 8]);
-    let mut fw = image(st, &[1, 2, 3, 4, 6, 7, 8]);
+    let bare_dev = bare();
+    // safety pin: the device without a seal (FPGA bitstream in 1, the second CPU in 6 and 7) may only change MAIN
+    assert_eq!(bare_dev.readonly_sections(), [1, 2, 4, 6, 7, 8]);
+    let mut fw = image(bare_dev, &[1, 2, 3, 4, 6, 7, 8]);
     for id in [1u32, 2, 4, 6, 7, 8] {
         let e = fw.replace(id, vec![0; 16]).unwrap_err().to_string();
         assert!(e.contains("read-only"), "section {id}: {e}");
@@ -103,9 +121,9 @@ fn a_read_only_section_is_refused_and_main_is_not() {
 
 #[test]
 fn a_sealed_device_with_a_dsp_changes_main_and_the_dsp_only() {
-    let dt2 = Device::from_id(0x14).unwrap();
-    assert_eq!(dt2.readonly_sections(), [2, 4, 8]);
-    let mut fw = image(dt2, &[2, 3, 4, 7, 8]);
+    let with_seal = sealed();
+    assert_eq!(with_seal.readonly_sections(), [2, 4, 8]);
+    let mut fw = image(with_seal, &[2, 3, 4, 7, 8]);
     for id in [2u32, 4, 8] {
         assert!(fw.replace(id, vec![0; 16]).is_err(), "section {id}");
     }
