@@ -17,8 +17,12 @@ conflicts = []
 
 # Test fixture (docs/design/digikit-registry.md, finding 33): a machine of its own type (the permanent number is
 # modules/core/adapters/machines/types.toml, [dn2.dynamic] "test/dyn-dn2:dyn_pluck") with one parameter page, as digikit/pluck has
-# on the Digitone II, but loaded from the card. The declaration is in src/module.c (DK_MACHINE, DK_PARAM, DK_PAGE).
-# `patchkit pack test/dyn-dn2 --device dn2 -o FILE.dkm` reads it into MACHINE, PARAM and PAGE records. The DSP is test/sine's, read from its folder.
+# on the Digitone II, but loaded from the card. The declaration is builder calls in init (src/module.c).
+# The DSP is test/sine's, read from its folder; its symbols start with `sn`, so `dsp` names the prefix.
+[[machine]]
+id = "dyn_pluck"
+dsp = "sn"
+
 [[object]]
 path = "build/dyn-dn2-cf.dko.json"
 sources = ["src/module.c"]
@@ -28,3 +32,15 @@ place = "cf.expansion"
 path = "build/dyn-dn2-dsp.dko.json"
 sources = ["../sine/src/dsp/sine.s"]
 place = "dsp.l2"
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 4
+page_rows = 1
+record_bytes = 540
+
+[uses.dt2]
+machine_rows = 8
+param_rows = 16
+page_rows = 0
+record_bytes = 0

@@ -10,22 +10,26 @@ from tools.device import dktransfer as T
 from tools.device import dkupload as D
 
 
-def header(
-    name, api=(1, 1), machine=(0, 0), fx=(0, 0), service=(0, 0), size=500, dsp=0
-):
+def header(name, machines=0, fx=0, size=500, dsp=0):
+    """A .dkm header with the keys table behind it (when it lists machines or effects)."""
+    keys = b""
+    if machines or fx:
+        keys = struct.pack(">HHHHHH", machines, 0, 0, machines, fx, 0) + bytes(
+            4 * (machines + fx)
+        )
     h = bytearray(D.HEADER_BYTES)
     h[:4] = b"DKMF"
     struct.pack_into(">II", h, 8, size, 0xA0)
     struct.pack_into(">I", h, 0x34, 0x000102)
-    h[0x38:0x40] = bytes([*api, *machine, *fx, *service])
     h[0x40 : 0x40 + len(name)] = name.encode()
     struct.pack_into(">II", h, 0x64, 100, 20)
+    struct.pack_into(">II", h, 0x90, D.HEADER_BYTES, len(keys))
     struct.pack_into(">I", h, 0x9C, dsp)
-    return bytes(h)
+    return bytes(h) + keys
 
 
 def test_header_groups():
-    m = T.header_info(header("acme/synth", machine=(1, 0), service=(1, 0), dsp=64))
+    m = T.header_info(header("acme/synth", machines=1, dsp=64))
     assert (m["group"], m["name"], m["version"], m["arena"], m["dsp"]) == (
         "Machines",
         "acme/synth",
@@ -33,8 +37,7 @@ def test_header_groups():
         120,
         64,
     )
-    assert T.header_info(header("a", fx=(1, 0)))["group"] == "Effects"
-    assert T.header_info(header("a", service=(1, 0)))["group"] == "Tools"
+    assert T.header_info(header("a", fx=1))["group"] == "Effects"
     assert T.header_info(header("a"))["group"] == "Tools"
     assert T.header_info(b"nope" + bytes(200)) is None
     assert T.header_info(b"DKMF") is None
@@ -99,7 +102,9 @@ def test_merge_state_groups_and_fit():
         ("modules/junk.dkm", 9, "yy"),  # no readable header
     ]
     headers = {
-        "modules/other.dkm": header("someone/effect", fx=(1, 0), size=700),
+        "modules/other.dkm": header("someone/effect", fx=1, size=700)[
+            : D.HEADER_BYTES
+        ],  # the card READ gives the header only
         "modules/junk.dkm": None,
     }
     v = T.merge(rows, card, ["acme/synth", "someone/effect"], CAP, headers)
@@ -122,7 +127,8 @@ def test_merge_state_groups_and_fit():
     assert by["someone/tool"]["fits"] is True
     extra = {r["path"]: r for r in v["card_only"]}
     assert (
-        extra["modules/other.dkm"]["group"] == "Effects"
+        extra["modules/other.dkm"]["group"]
+        == "Tools"  # the group needs the keys table behind the header
         and extra["modules/other.dkm"]["loaded"]
     )
     assert (

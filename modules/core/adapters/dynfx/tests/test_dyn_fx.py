@@ -2,6 +2,7 @@
 header says fx 1.0 and no machine, its DSP section (version 4) holds one effect record that the reference loader and the packer's own numbers agree on, and the needs
 the file infers are one effect slot and no row of any other kind. The emulator proof is modules/core/adapters/dynfx/tests/fx-chain.device.test.ts (both devices)."""
 
+import re
 import struct
 import tomllib
 
@@ -43,32 +44,37 @@ def test_committed_objects_are_current(mod):
     front_end.build_module(modroots.module_dir(mod), check=True)
 
 
-def test_the_header_says_fx_and_not_machine(packed):
+def test_the_header_has_no_contract_pairs(packed):
     _, out = packed
     b = out.read_bytes()
-    sdk = tomllib.loads((ROOT / "sdk" / "sdk.toml").read_text())["contract"]
-    # This fixture links no import with a `since`: the packer writes the newest
-    # `since` among the imports a module links (0 for none), not the latest SDK minor.
-    assert tuple(b[0x38:0x40]) == (sdk["api"][0], 0, 0, 0, *sdk["fx"], 0, 0)
-    assert sdk["fx"][0] != 0  # the runtime implements the contract
+    # 0x38..0x40 are reserved zero; the word at 0x30 is the newest `since` among the imports the fixture links (the builder calls of its init),
+    # packed major << 16 | minor << 8 | patch, with the trace flag in the top bit
+    assert bytes(b[0x38:0x40]) == bytes(8)
+    since = {
+        i["name"]: i["since"]
+        for i in tomllib.loads((ROOT / "sdk/sdk.toml").read_text())["import"]
+        if "since" in i
+    }
+    source = (ROOT / "tests/fixtures/modules/dyn-fx-gain/src/module.c").read_text()
+    linked = {n for n in re.findall(r"\b(dk_\w+)\(", source) if n in since}
+    assert linked == {"dk_module_ctx_add_fx", "dk_fx_add_page", "dk_page_add_fx_param"}
+    want = max(
+        int(a) << 16 | int(b_) << 8 | int(c)
+        for a, b_, c in (since[n].split(".") for n in linked)
+    )
+    assert int.from_bytes(b[0x30:0x34], "big") & 0x7FFFFFFF == want
 
 
 def effect_ids(dkm: bytes) -> list[int]:
-    """The `id` word (the fourth) of each EFFECT record (kind 4) of the file's register section."""
-    at = dkm.find(b"DKRG")
-    assert at >= 0 and struct.unpack_from(">II", dkm, at)[1] == 1
-    n = struct.unpack_from(">I", dkm, at + 12)[0]
-    p, out = at + 16, []
-    for _ in range(n):
-        kind, length = struct.unpack_from(">II", dkm, p)
-        if kind == 4:
-            out.append(struct.unpack_from(">I", dkm, p + 8 + 12)[0])
-        p += length
-    return out
+    """The effect ids of the file's keys table (the header's 0x90 pair): after the row counts and the machine keys."""
+    off, size = struct.unpack_from(">II", dkm, 0x90)
+    nm, nf = struct.unpack_from(">HH", dkm, off + 6)
+    assert size == 12 + 4 * (nm + nf)
+    return list(struct.unpack_from(f">{nf}I", dkm, off + 12 + 4 * nm))
 
 
 def fnv_effect_id(module: str, effect: str) -> int:
-    """`register::effect_id` (patchkit): FNV-1a 32 of `<module id>:<effect id>`, the halves xor-ed, never 0."""
+    """`register::effect_id` (patchkit): FNV-1a 32 of `<packed module name>:<effect id>`, the halves xor-ed, never 0."""
     h = 0x811C9DC5
     for b in f"{module}:{effect}".encode():
         h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
@@ -76,7 +82,7 @@ def fnv_effect_id(module: str, effect: str) -> int:
 
 
 def test_the_effect_record_carries_the_id_the_kit_stores(packed, tmp_path):
-    # the ID is the packer's definition (module id and effect id, not the file's name); the runtime stores it with the values in a kit (finding 61 "Persistence")
+    # the ID is the packer's definition (the packed name and the effect id: an alias made with --name has ids of its own); the runtime stores it with the values in a kit (finding 61 "Persistence")
     tools, out = packed
     ids = effect_ids(out.read_bytes())
     assert ids == [fnv_effect_id(FX, "gain")] and ids[0] == 0x4625
@@ -84,7 +90,9 @@ def test_the_effect_record_carries_the_id_the_kit_stores(packed, tmp_path):
     tools.patchkit_run(
         "pack", FX, "--device", "dt2", "--name", "other/name", "-o", renamed
     )
-    assert effect_ids(renamed.read_bytes()) == ids
+    assert (
+        effect_ids(renamed.read_bytes()) == [fnv_effect_id("other/name", "gain")] != ids
+    )
     other = tmp_path / "b.dkm"
     tools.patchkit_run("pack", "test/dyn-fx-gain-b", "--device", "dt2", "-o", other)
     assert effect_ids(other.read_bytes()) == [

@@ -5,13 +5,13 @@
 //! Format and rules: docs/design/digikit-runtime.md and docs/design/digikit-dkm.md.
 #![no_std]
 
-/// Version of the runtime a module was packed against (`runtime_min` in the `.dkm` header). 2: DSP sections and asynchronous loads
+/// The one version of the SDK: the runtime release. A module records the version it needs in the `.dkm` header (the newest `since` of its imports). 2: DSP sections and asynchronous loads
 /// (finding 32), `register` PAGE records and `own_dsp` (finding 33), codes -25/-26 and -30 to -37. 3: card safety (codes -46/-47, -62), the
 /// debug log and its SysEx commands LOG and PEEK, `dkrt_diag`, `dkrt_debug_set`, the crash record (finding 46). 4: SELECT and RESTART.
 /// 5: the DSP guard (finding 51): voice rows of 16 words with the knob ranges, DSP sections of version 2 (voices of 48 bytes), the 24-word
 /// DSP diagnostics with the guard's fault words, the log events `MACHINE_FAULT` and `MACHINE_DISABLED`.
 /// Versions 1 to 5 were plain integers (they read as 0.0.1 to 0.0.5 packed).
-/// 0.1.0 = semantic version; contract versions in the .dkm header (a module is refused only on a contract mismatch, docs/design/module-sdk.md 11.5 D3); LOGCFG, log levels and sources, `dk_log` with a level.
+/// 0.1.0 = semantic version (a module needs the same major and minor and at most this patch); LOGCFG, log levels and sources, `dk_log` with a level.
 pub use gen_sdk::RUNTIME_VERSION;
 
 /// Facts from the device files (`devices/*.toml`) and `core/machines` types.toml that every device agrees on, written by
@@ -355,10 +355,10 @@ pub mod fault;
 /// Event kinds of the debug log (docs/findings/46-digikit-debug.md has the argument meanings; `tools/device/dklog.py` the readable names).
 /// An event is 32 bytes: `seq`, `time` (the firmware's block counter, 1500 per second), `kind`, `flags` (bit 0: an error, kept when debug is
 /// off), five argument words.
-/// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the contract version numbers (`contract`).
+/// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the runtime version.
 #[rustfmt::skip]
 mod gen_sdk;
-pub use gen_sdk::{contract, limits, logk, proto};
+pub use gen_sdk::{limits, logk, proto};
 
 #[cfg(test)]
 mod tests {

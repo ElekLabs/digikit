@@ -24,7 +24,17 @@ import {
 import { needsOf } from './dkm.ts';
 import { dynType, type PanelMachine } from './project-kit.ts';
 import { dmaHoles } from './write-safety.ts';
-import { DSP_GRANULE, fullSet, geometryOf, LOADED, packSynth, usageOf, type Want } from './synth.ts';
+import {
+  ARENA_HDR,
+  COLLECT_BLOCK,
+  DSP_GRANULE,
+  fullSet,
+  geometryOf,
+  LOADED,
+  packSynth,
+  usageOf,
+  type Want,
+} from './synth.ts';
 
 /**
  * The ColdFire memory audit as a device test (port of the `memaudit` part of pk_digikit_memaudit.py; protected ranges and allowed writers: memaudit-kit.ts).
@@ -127,7 +137,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
             if (spec.full) {
               // the second daemon builds the same card: the files must outlive the first daemon's artifact directory
               const g = geometryOf(device, h.plan);
-              const fill = fullSet(g, (await needsOf(mods.map((m) => m.file))).map(usageOf));
+              const fill = await fullSet(g, (await needsOf(mods.map((m) => m.file))).map(usageOf));
               for (const [i, f] of fill.entries()) {
                 mods.push({
                   name: `modules/full${i}.dkm`,
@@ -162,11 +172,13 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
                 `${m.name}: the block lies inside the arena ${arena.map((a) => a.toString(16))}`,
               ).toBe(true);
 
-            if (spec.full)
+            if (spec.full) {
               expect(
-                [cap.ARENA!.limit - cap.ARENA!.used, cap.ARENA!.largest, cap.DSP_AREA!.largest < DSP_GRANULE],
-                'the full set uses the arena to its last byte and the DSP area to its last whole granule',
-              ).toEqual([0, 0, true]);
+                cap.ARENA!.largest,
+                'the full set uses the arena but the block that every load needs (the holes the declaring modules leave before their record blocks are smaller or equal)',
+              ).toBe(COLLECT_BLOCK - ARENA_HDR);
+              expect(cap.DSP_AREA!.largest, 'the DSP area is used to its last whole granule').toBeLessThan(DSP_GRANULE);
+            }
 
             const plan = guardPlan(device, FIRMWARE[device], h.plan, modules, arena);
             guard = plan;

@@ -88,6 +88,18 @@ mod w {
     pub const PGO_MACH: usize = 58;
     pub const PGO_S: usize = 59;
     pub const PG_FREE: usize = 60;
+    pub const VERSION: usize = 1;
+    // the builder profile (version 3): words 65 to 86
+    pub const P_CLONE: usize = 65;
+    pub const P_LEVEL: usize = 66;
+    pub const P_OWN: usize = 67;
+    pub const P_TUNE: usize = 68;
+    pub const P_TUNE_SLOT: usize = 69;
+    pub const P_LEVEL_CODE: usize = 70;
+    pub const P_LEVEL_KNOB: usize = 71;
+    pub const P_NSLOTS: usize = 72;
+    pub const P_SLOTS: usize = 73; // 8 words
+    pub const P_TPL: usize = 81; // 6 words
 }
 
 #[repr(C, align(4))]
@@ -135,6 +147,66 @@ pub(crate) unsafe fn info() -> *const u32 {
         return core::ptr::null();
     }
     p
+}
+
+/// The device facts of the builder lowering (`collect::lower`) from `dynreg_info` version 3; None without a registry or with an older table.
+pub unsafe fn profile() -> Option<crate::collect::Profile> {
+    let inf = info();
+    if inf.is_null() || iw(inf, w::VERSION) < 3 {
+        return None;
+    }
+    let mut p = crate::collect::Profile {
+        device: iw(inf, w::DEVICE),
+        pages: iw(inf, w::PG_ROWS) != 0,
+        slot_base: iw(inf, w::SLOT_BASE),
+        clone_of: iw(inf, w::P_CLONE),
+        level: iw(inf, w::P_LEVEL),
+        own_dsp: iw(inf, w::P_OWN) != 0,
+        tune_code: iw(inf, w::P_TUNE),
+        tune_slot: iw(inf, w::P_TUNE_SLOT),
+        level_code: iw(inf, w::P_LEVEL_CODE),
+        level_knob: iw(inf, w::P_LEVEL_KNOB),
+        nslots: iw(inf, w::P_NSLOTS).min(8),
+        slots: [0; 8],
+        tpl: [0; 6],
+    };
+    let mut i = 0;
+    while i < 8 {
+        p.slots[i] = iw(inf, w::P_SLOTS + i);
+        i += 1;
+    }
+    i = 0;
+    while i < 6 {
+        p.tpl[i] = iw(inf, w::P_TPL + i);
+        i += 1;
+    }
+    Some(p)
+}
+
+/// Free reserved machine, parameter and page rows, for the commit of a builder module.
+pub unsafe fn free_rows() -> Option<crate::collect::Free> {
+    let inf = info();
+    if inf.is_null() {
+        return None;
+    }
+    let s = rs();
+    Some(crate::collect::Free {
+        machine_rows: capacity::free_rows(&s.mach_owner, iw(inf, w::M_DYN_N)),
+        param_rows: capacity::free_rows(&s.param_owner, iw(inf, w::P_DYN_N)),
+        page_rows: capacity::free_rows(&s.page_owner, iw(inf, w::PG_DYN_N)),
+    })
+}
+
+/// The arguments of the callbacks of the records `apply` is about to write (modules): the k-th ACTION record's `arg` and the k-th
+/// native page record's `arg`. Set by the commit just before `apply`, cleared by it.
+pub struct ApplyArgs {
+    pub click: [u32; 32],
+    pub native: [u32; 8],
+}
+static mut ARGS: Option<ApplyArgs> = None;
+
+pub unsafe fn set_args(a: Option<ApplyArgs>) {
+    *addr_of_mut!(ARGS) = a;
 }
 
 /// The code of the first run-time parameter row (a row `k` of the registry has code `param_first() + k`); `u32::MAX` without a registry.
@@ -625,9 +697,15 @@ pub unsafe fn apply(owner: u8, reg: *const u8, size: u32, base: u32) -> i32 {
     });
     let _ = n;
     // click actions: the callback's address is the module's load address plus its image offset
+    let args = (*addr_of!(ARGS)).as_ref();
+    let mut ai = 0usize;
     each(reg, |kind, b| {
         if kind == KIND_ACTION {
             crate::pageclick::set(rows[rd32(b) as usize], base + rd32(b.add(4)));
+            if let Some(a) = args {
+                crate::pageclick::set_arg(rows[rd32(b) as usize], a.click[ai % 32]);
+            }
+            ai += 1;
         }
     });
     // pages (Digitone II): their machine is published below, so they sit unused until then
@@ -709,6 +787,7 @@ pub unsafe fn apply(owner: u8, reg: *const u8, size: u32, base: u32) -> i32 {
     });
     // effect pages (Digitakt II): the effect's row in the chain is claimed, so its page, parameter rows and list entry can be written
     let mut rc = OK;
+    let mut ni = 0usize;
     each(reg, |kind, b| {
         if crate::nativepage::is_kind(kind) && rc == OK {
             // Snapshot only this machine's existing parameters, independently of
@@ -732,12 +811,14 @@ pub unsafe fn apply(owner: u8, reg: *const u8, size: u32, base: u32) -> i32 {
                     count += 1;
                 }
             }
-            if rc == OK { rc = crate::nativepage::apply(kind, b, base, &codes, &words[..count]); }
+            if rc == OK { rc = crate::nativepage::apply(kind, b, base, &codes, &words[..count], args.map(|a| a.native[ni % 8])); }
+            ni += 1;
         }
         if kind == KIND_EFFECT && rc == OK {
             rc = crate::fxpage::apply(owner, b);
         }
     });
+    *addr_of_mut!(ARGS) = None;
     if rc != OK {
         return rc;
     }

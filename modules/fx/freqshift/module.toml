@@ -18,10 +18,13 @@ conflicts = []
 
 # An effect loaded at run time on the Digitakt II (docs/findings/55-fx-adapter.md): `patchkit pack digikit/freqshift --device dt2 -o freqshift.dkm` makes the
 # .dkm. The digikit runtime sends the DSP object to the DSP and publishes a free effect row of core/dynfx (state reserved behind the image).
-# The page and the knob are declared in src/module.c (DK_FX). The routine and the float32 model that defines it: src/dsp/freqshift.s, modules/fx/freqshift/tests/freqshift_ref.py.
+# The page and the knob are declared by builder calls in init (src/module.c). The routine and the float32 model that defines it: src/dsp/freqshift.s, modules/fx/freqshift/tests/freqshift_ref.py.
 # Cookbook entry: docs/findings/54-module-cookbook.md.
 
-# The effect declaration (DK_FX in src/module.c). It holds only the .dk.desc record; patchkit pack reads it and leaves it out of the .dkm.
+[[fx]]
+id = "fshift"
+dsp = "fs"
+
 [[object]]
 path = "build/freqshift-cf.dko.json"
 sources = ["src/module.c"]
@@ -32,3 +35,15 @@ path = "build/freqshift-dsp.dko.json"
 sources = ["src/dsp/freqshift.s"]
 place = "dsp.l2"
 devices = ["dt2", "dn2"]
+
+[uses.dt2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0
+record_bytes = 436
+
+[uses.dn2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0
+record_bytes = 436

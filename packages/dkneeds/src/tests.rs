@@ -8,7 +8,7 @@ fn put(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_be_bytes());
 }
 
-/// A file with this image, bss, register table and DSP section (both may be empty), laid out like the packer's: header, register table, DSP
+/// A file with this image, bss, keys table and DSP section (both may be empty), laid out like the packer's: header, keys table, DSP
 /// section, image. The tables the loader reads (relocations, imports) are empty.
 fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     let reg_off = HEADER as usize;
@@ -36,28 +36,28 @@ fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     f
 }
 
-/// A register table with these kinds in order.
+const KIND_PARAM: u32 = 1;
+const KIND_MACHINE: u32 = 2;
+const KIND_PAGE: u32 = 3;
+
+/// A keys table whose row counts are those of these kinds (one machine key per machine row).
 fn register(kinds: &[u32]) -> Vec<u8> {
-    let mut t = vec![0u8; REG_HEADER as usize];
-    put(&mut t, 0, REG_MAGIC);
-    put(&mut t, 4, 1);
-    put(&mut t, 12, kinds.len() as u32);
-    for &k in kinds {
-        let len = if k == KIND_PARAM {
-            LEN_PARAM
-        } else if k == KIND_MACHINE {
-            LEN_MACHINE
-        } else if k == KIND_EFFECT {
-            LEN_EFFECT
-        } else if k == KIND_ACTION {
-            LEN_ACTION
-        } else {
-            LEN_PAGE
-        } as usize;
-        let at = t.len();
-        t.resize(at + len, 0);
-        put(&mut t, at, k);
-        put(&mut t, at + 4, len as u32);
+    let n = |k: u32| kinds.iter().filter(|&&x| x == k).count();
+    let machines: Vec<u32> = (0..n(KIND_MACHINE) as u32).map(|i| 0x100 + i).collect();
+    let mut t = vec![0u8; keys::keys_size(machines.len(), 0)];
+    if !t.is_empty() {
+        keys::write_keys(
+            (
+                n(KIND_MACHINE) as u16,
+                n(KIND_PARAM) as u16,
+                n(KIND_PAGE) as u16,
+            ),
+            0,
+            &machines,
+            &[],
+            &mut t,
+        )
+        .unwrap();
     }
     t
 }
@@ -125,30 +125,21 @@ fn a_coldfire_only_module_takes_an_arena_block() {
 }
 
 #[test]
-fn register_records_are_counted_by_kind() {
-    let reg = register(&[KIND_PARAM, KIND_PARAM, KIND_MACHINE, KIND_PAGE, KIND_PARAM]);
-    let n = of(&dkm(4, 0, &reg, &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (3, 1, 1));
-    // an effect's page takes no row of its own
-    let reg = register(&[KIND_EFFECT, KIND_PARAM]);
-    let n = of(&dkm(4, 0, &reg, &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (1, 0, 0));
-    // a click action takes no row either
-    let reg = register(&[KIND_PARAM, KIND_ACTION]);
-    let n = of(&dkm(4, 0, &reg, &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (1, 0, 0));
-    // an empty table (a header only) counts nothing
-    let n = of(&dkm(4, 0, &register(&[]), &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (0, 0, 0));
-    // the most records
-    let n = of(&dkm(
-        4,
-        0,
-        &register(&[KIND_PARAM; MAX_RECORDS as usize]),
-        &[],
-    ))
-    .unwrap();
-    assert_eq!(n.param_rows, MAX_RECORDS);
+fn the_rows_come_from_the_keys_table() {
+    let t = {
+        let mut t = [0u8; 64];
+        let size = keys::write_keys((2, 9, 3), 0x1b0, &[0x11, 0x22], &[0x33], &mut t).unwrap();
+        t[..size].to_vec()
+    };
+    let n = of(&dkm(4, 0, &t, &[])).unwrap();
+    assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (2, 9, 3));
+    // the record block is one more arena block: 0x1b0 payload bytes and the header
+    let plain = of(&dkm(4, 0, &[], &[])).unwrap().arena;
+    assert_eq!(n.arena, plain + arena_block(0x1b0).unwrap());
+    // a module with no machine and no effect has no table
+    assert_eq!(of(&dkm(4, 0, &[], &[])).unwrap().machine_rows, 0);
+    // a table whose size is not the counts' size, is refused
+    assert_eq!(of(&dkm(4, 0, &t[..t.len() - 4], &[])), Err(Error::Register));
 }
 
 #[test]
@@ -343,22 +334,21 @@ fn absurd_sizes_and_counts_are_refused_without_a_panic() {
         of(&edit(H_DSP_SIZE as usize, good.len() as u32)),
         Err(Error::Sizes)
     );
-    // register table
-    assert_eq!(of(&edit(reg_off, 0)), Err(Error::Register));
-    assert_eq!(of(&edit(reg_off + 4, 2)), Err(Error::Register));
+    // keys table
     assert_eq!(
-        of(&edit(reg_off + 12, MAX_RECORDS + 1)),
+        of(&edit(reg_off + keys::K_N_MACHINES, u32::MAX)),
         Err(Error::Register)
     );
-    assert_eq!(of(&edit(reg_off + 12, u32::MAX)), Err(Error::Register));
-    assert_eq!(of(&edit(reg_off + 12, 1)), Err(Error::Register)); // the table is longer than one record
-    assert_eq!(of(&edit(reg_off + 12, 3)), Err(Error::Register)); // and shorter than three
-    assert_eq!(of(&edit(reg_off + 16, 9)), Err(Error::Register)); // a kind that does not exist
-    assert_eq!(of(&edit(reg_off + 20, LEN_PARAM + 4)), Err(Error::Register)); // a length that is not the kind's
-    assert_eq!(of(&edit(reg_off + 20, 0)), Err(Error::Register));
-    assert_eq!(of(&edit(reg_off + 20, u32::MAX)), Err(Error::Register));
-    assert_eq!(of(&edit(H_REG_SIZE as usize, 12)), Err(Error::Register)); // too short for its header
-                                                                          // DSP section
+    assert_eq!(
+        of(&edit(reg_off + keys::K_N_MACHINES, 0)),
+        Err(Error::Register)
+    ); // the table is longer than no key
+    assert_eq!(
+        of(&edit(reg_off + keys::K_N_FX, 1 << 16)),
+        Err(Error::Register)
+    ); // and shorter than one effect key
+    assert_eq!(of(&edit(H_REG_SIZE as usize, 8)), Err(Error::Register)); // too short for its head
+                                                                         // DSP section
     let d = |at: usize, v: u32| edit(dsp_off + at, v);
     assert_eq!(of(&d(0, 0)), Err(Error::Dsp));
     assert_eq!(of(&d(4, 0)), Err(Error::Dsp));

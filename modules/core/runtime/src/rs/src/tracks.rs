@@ -23,7 +23,7 @@
 //!
 //! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
 //! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
-use crate::{dlog, dsp, irq_mask, irq_restore, sample};
+use crate::{dlog, dsp, irq_mask, irq_restore};
 use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
@@ -194,7 +194,7 @@ unsafe fn pump() {
         }
         c += 1;
     }
-    if !dsp::sample_idle() || crate::fxpage::busy() || crate::fxsend::busy() || sample::busy() {
+    if !dsp::sample_idle() || crate::fxpage::busy() || crate::fxsend::busy() {
         return;
     }
     c = 0;
@@ -494,9 +494,6 @@ pub unsafe fn tracks(local_id: u32) -> i32 {
         return E_NOT_FOUND;
     }
     let rec = owner as usize - 1;
-    if sample::has_bank(rec) {
-        return E_CONTRACT;
-    }
     let mut i = 0;
     while i < CLIENTS {
         if OWNER[i] == rec && LOCAL[i] == local_id {

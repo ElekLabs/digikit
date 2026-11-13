@@ -2,7 +2,7 @@
 #ifndef SHOT_H
 #define SHOT_H
 #include <dk/core/module.h>
-#include <dk/machine/machine.h>
+#include <dk/gen/machine.h>
 #include <dk/platform/param.h>
 #include <dk/sample/pool.h>
 #include <dk/sample/view.h>
@@ -13,8 +13,8 @@
 
 extern sample_view shot_samples; /* the pool view of both pages (module.c) */
 
-void shot_controls_draw(const dk_page_frame_v1 *f);
-void shot_range_draw(const dk_page_frame_v1 *f);
-void shot_range_event(const dk_page_event_v1 *event);
+void shot_controls_draw(const dk_page_frame *f);
+void shot_range_draw(const dk_page_frame *f);
+void shot_range_event(const dk_page_event *event);
 
 #endif

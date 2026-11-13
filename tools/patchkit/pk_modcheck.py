@@ -11,6 +11,7 @@ Own tests may build or launch an emulator. A service/raw module with no Python t
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -26,6 +27,178 @@ from tools.patchkit import modroots, pk_conform  # noqa: E402
 
 CONFORMANCE = "tests/modules/test_machine_conformance.py"
 FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
+
+
+USES_KEYS = ("machine_rows", "param_rows", "page_rows", "record_bytes")
+
+
+def write_uses(toml_path: Path, uses: dict[str, dict[str, int]]) -> bool:
+    """Write the `[uses.<device>]` tables of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES maps a device to the counts of
+    USES_KEYS, committed rows read from that device's emulated run. The file changes only when a count differs, and then only the table lines:
+    other text, comments and the order of the tables stay. Returns True when the file was written."""
+    text = toml_path.read_text(encoding="utf-8")
+    for dev, counts in uses.items():
+        text = _write_table(text, dev, counts)
+    if text == toml_path.read_text(encoding="utf-8"):
+        return False
+    toml_path.write_text(text, encoding="utf-8")
+    return True
+
+
+def _write_table(text: str, dev: str, uses: dict[str, int]) -> str:
+    head = f"[uses.{dev}]"
+    want = [f"{k} = {int(uses[k])}" for k in USES_KEYS]
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == head), None)
+    if start is None:
+        # a new table follows the last `[uses.*]` table, else goes to the end
+        last = [i for i, ln in enumerate(lines) if ln.strip().startswith("[uses.")]
+        if not last:
+            return text.rstrip("\n") + f"\n\n{head}\n" + "\n".join(want) + "\n"
+        at = last[-1] + 1
+        while at < len(lines) and not lines[at].lstrip().startswith("["):
+            at += 1
+        while at > 0 and lines[at - 1].strip() == "":
+            at -= 1
+        return "\n".join(lines[:at] + ["", head, *want] + lines[at:])
+    end = start + 1
+    while end < len(lines) and not lines[end].lstrip().startswith("["):
+        end += 1
+    body = lines[start + 1 : end]
+    have = {
+        m.group(1): m.group(2)
+        for ln in body
+        if (m := re.match(r"\s*(\w+)\s*=\s*(\d+)\s*(?:#.*)?$", ln))
+    }
+    if all(have.get(k) == str(int(uses[k])) for k in USES_KEYS):
+        return text
+    # keep comments and blank lines of the table; the count lines take their place, missing ones follow the last count
+    out, seen = [], set()
+    for ln in body:
+        m = re.match(r"\s*(\w+)\s*=", ln)
+        if m and m.group(1) in USES_KEYS:
+            seen.add(m.group(1))
+            out.append(f"{m.group(1)} = {int(uses[m.group(1)])}")
+        else:
+            out.append(ln)
+    missing = [w for w in want if w.split(" ")[0] not in seen]
+    trail = 0
+    while out and out[-1].strip() == "":
+        out.pop()
+        trail += 1
+    out += missing + [""] * trail
+    return "\n".join(lines[: start + 1] + out + lines[end:])
+
+
+def _daemon(device: str) -> str:
+    """The plain emulator daemon of DEVICE: `DIGI_EMUD_<DEV>`, else resolved as `run_device_targets` does."""
+    given = os.environ.get(f"DIGI_EMUD_{device.upper()}")
+    if given:
+        return given
+    from tools.devtools import benchlock
+    from tools.patchkit import pk_harness
+
+    version = {"dt2": "1.17", "dn2": "1.12"}[device]
+    with benchlock.hold("shared", f"module:check daemon resolution {device}"):
+        syx, _ready = pk_harness.firmware_inputs(pk_harness.Cell(device, version))
+        return str(pk_harness.daemon_binary(device, syx, pgo=None))
+
+
+def commit_stage(mid: str, devices: list[str]) -> bool:
+    """For a module with `[[machine]]` or `[[fx]]`: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
+    `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
+    conformance suite that runs next reads that gallery.json. A tool or a service has no rows to commit and is left alone: returns False."""
+    moddir = modroots.module_dir(mid)
+    manifest_path = moddir / "module.toml"
+    original = manifest_path.read_text(encoding="utf-8")
+    if "[[machine]]" not in original and "[[fx]]" not in original:
+        return False  # declares nothing through builder calls: no rows to measure
+    # The measuring build takes the device limits as its `[uses]`: the loader refuses a module whose tables are absent, zero or lower than what its
+    # init declares, so a new or changed module could not be measured with its own numbers. The measured rows replace them below.
+    write_uses(manifest_path, {d: seed_uses(d) for d in devices})
+    try:
+        per = _measure(mid, devices)
+    except BaseException:
+        manifest_path.write_text(original, encoding="utf-8")
+        raise
+    if not per:
+        manifest_path.write_text(original, encoding="utf-8")
+        return False
+    kept = tomllib.loads(original).get("uses", {})
+    write_uses(
+        manifest_path,
+        {
+            d: {k: int(kept[d].get(k, 0)) for k in USES_KEYS}
+            for d in devices
+            if d not in per and d in kept
+        },
+    )
+    return _write_measured(mid, moddir, per, original)
+
+
+def seed_uses(dev: str) -> dict[str, int]:
+    """The `[uses.<dev>]` a module takes while it is measured: every row the device has."""
+    from tools.patchkit import pk_device
+
+    lim = pk_device.limits(dev)
+    return {
+        "machine_rows": lim.machine_rows,
+        "param_rows": lim.param_rows,
+        "page_rows": lim.page_rows,
+        "record_bytes": 0,  # the loader does not check it; the measured size replaces it
+    }
+
+
+def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
+    """Pack MID for each device and read the rows its init committed on the emulated device. {} when no device packs it."""
+    from tools.patchkit import patchkit, pk_committed
+
+    per: dict[str, dict] = {}
+    with tempfile.TemporaryDirectory(prefix="pk-commit-") as tmp:
+        for dev in devices:
+            out = Path(tmp) / f"{mid.rsplit('/', 1)[-1]}-{dev}.dkm"
+            r = patchkit.run(
+                ["pack", mid, "--device", dev, "-o", str(out)], capture=True
+            )
+            if r.returncode:
+                continue  # not packed for this device (ports); the size lines say why
+            per[dev] = pk_committed.committed(
+                mid, dev, out, str(patchkit.binary()), _daemon(dev)
+            )
+    return per
+
+
+def _write_measured(
+    mid: str, moddir: Path, per: dict[str, dict], original: str
+) -> bool:
+    """Write the measured `[uses.<device>]` and `build/gen/gallery.json` of MID."""
+    from tools.patchkit import pk_committed, pk_device
+
+    manifest = tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8"))
+    ids = [m["id"] for m in manifest.get("machine", [])]
+    counts = pk_committed.uses(per)
+    write_uses(moddir / "module.toml", counts)
+    changed = (moddir / "module.toml").read_text(encoding="utf-8") != original
+    models = {d: pk_device.load(d)["modules"]["knobs"] for d in per}
+    text = (
+        json.dumps(
+            pk_committed.gallery(
+                mid, ids, per, models, [f["id"] for f in manifest.get("fx", [])]
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    gallery = moddir / "build/gen/gallery.json"
+    if not gallery.is_file() or gallery.read_text(encoding="utf-8") != text:
+        gallery.parent.mkdir(parents=True, exist_ok=True)
+        gallery.write_text(text, encoding="utf-8")
+    print(
+        f"{mid}: committed rows {counts}; module.toml [uses.<device>] {'written' if changed else 'unchanged'}",
+        flush=True,
+    )
+    return True
 
 
 def resolve(name: str) -> str:
@@ -259,6 +432,7 @@ def main() -> int:
     )
     a = ap.parse_args()
     mid = resolve(a.name)
+    commit_stage(mid, [a.device] if a.device else list(pk_conform.DEVICES))
     paths, env = plan(mid, a.device)
     targets = own_device_targets(mid)
     kind = (

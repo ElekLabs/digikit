@@ -64,7 +64,6 @@ export type Emit = (e: TransferEvent) => void;
 export interface HeaderInfo {
   name: string;
   version: string;
-  contracts: { api: [number, number]; machine: [number, number]; fx: [number, number]; service: [number, number] };
   group: Group;
   size: number;
 }
@@ -86,24 +85,28 @@ export interface LibraryModule extends HeaderInfo {
 
 const MAGIC = [0x44, 0x4b, 0x4d, 0x46]; // "DKMF"
 
-/** Machine contract: Machines; fx: Effects; service or api only: Tools. */
-export function groupOf(c: HeaderInfo['contracts']): Group {
-  if (c.machine[0]) return 'Machines';
-  if (c.fx[0]) return 'Effects';
+/** The group of a .dkm: Machines when its keys table (the header's 0x90 pair) lists a machine, Effects when it lists an effect, else Tools. Without the table
+ * (a header alone) it is Tools. */
+export function groupOf(f: Uint8Array): Group {
+  const v = new DataView(f.buffer, f.byteOffset, f.length);
+  if (f.length < HEADER_BYTES) return 'Tools';
+  const off = v.getUint32(0x90);
+  const size = v.getUint32(0x94);
+  if (size >= 12 && off + size <= f.length) {
+    if (v.getUint16(off + 6)) return 'Machines';
+    if (v.getUint16(off + 8)) return 'Effects';
+  }
   return 'Tools';
 }
 
-/** The header fields of a .dkm (its first 0xa0 bytes); null when the bytes are not one. */
+/** The header fields of a .dkm (its first 0xa0 bytes, or the whole file for the group); null when the bytes are not one. */
 export function headerInfo(h: Uint8Array): HeaderInfo | null {
   if (h.length < HEADER_BYTES || MAGIC.some((b, i) => h[i] !== b)) return null;
   const v = new DataView(h.buffer, h.byteOffset, h.length);
-  const pair = (at: number): [number, number] => [h[at]!, h[at + 1]!];
-  const contracts = { api: pair(0x38), machine: pair(0x3a), fx: pair(0x3c), service: pair(0x3e) };
   return {
     name: new TextDecoder().decode(h.subarray(0x40, 0x60)).split('\0')[0]!,
     version: fmtVersion(v.getUint32(0x34)),
-    contracts,
-    group: groupOf(contracts),
+    group: groupOf(h),
     size: v.getUint32(8),
   };
 }
@@ -117,7 +120,7 @@ export async function libraryModule(
   bytes: Uint8Array,
   needsOf?: (file: Uint8Array) => Needs | null,
 ): Promise<LibraryModule | null> {
-  const h = headerInfo(bytes.subarray(0, HEADER_BYTES));
+  const h = headerInfo(bytes);
   if (!h) return null;
   return {
     ...h,
@@ -323,7 +326,7 @@ export async function buildView(s: DkSession, library: LibraryModule[]): Promise
   if (hasCap(info, 'READ')) {
     for (const c of card) {
       if (mine.has(c.path)) continue;
-      headers[c.path] = await s.header(c.path).catch((e) => {
+      headers[c.path] = await headerWithKeys(s, c.path).catch((e) => {
         if (e instanceof DkError && e.kind === 'device') return null;
         throw e;
       });
@@ -337,6 +340,21 @@ export async function buildView(s: DkSession, library: LibraryModule[]): Promise
     capacity: cap,
     ...mergeView(library, card, loaded, cap, headers, failures),
   };
+}
+
+/** The header of a store file and its keys table (header 0x90/0x94) at their offsets in a buffer, which `groupOf` reads; the rest is zero. */
+async function headerWithKeys(s: DkSession, path: string): Promise<Uint8Array> {
+  const h = await s.header(path);
+  if (h.length < HEADER_BYTES) return h;
+  const v = new DataView(h.buffer, h.byteOffset, h.length);
+  const off = v.getUint32(0x90);
+  const size = v.getUint32(0x94);
+  if (size < 12 || size > 4096 || off < HEADER_BYTES) return h;
+  const t = (await s.read(path, off, size)).bytes;
+  const out = new Uint8Array(off + t.length);
+  out.set(h);
+  out.set(t, off);
+  return out;
 }
 
 /** The most `progress` events one file's upload emits, plus the one at 100 %. */

@@ -21,6 +21,10 @@ conflicts = []
 # nan_legacy.s, loud.s, clean.s: tests/patchkit/test_dsp_guard.py, the old form of a voice row) and are not linked into this module. The machine
 # is harmless on a device: the guard zeroes the block and, after 8 faults in a second, switches the machine off until the next start
 # (docs/findings/51-pluck-tune-guard.md).
+[[machine]]
+id = "guardnan"
+dsp = "gn"
+
 [[object]]
 path = "build/dyn-guard-nan-cf.dko.json"
 sources = ["src/module.c"]
@@ -30,3 +34,15 @@ place = "cf.expansion"
 path = "build/dyn-guard-nan-dsp.dko.json"
 sources = ["src/dsp/nan.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 1
+page_rows = 0
+record_bytes = 204
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 1
+page_rows = 1
+record_bytes = 300

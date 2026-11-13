@@ -17,7 +17,10 @@ conflicts = []
 "dn2-1.12" = "experimental"
 
 # A stereo sample-playback machine (machine contract 1.2, per-module sample pool). `patchkit pack digikit/shot --device dt2|dn2 -o shot.dkm` makes
-# the .dkm. The machine declaration, the parameters and the track table are in src/module.c; the DSP in src/dsp/shot.s.
+# the .dkm. The machine, its parameters and pages are declared by builder calls in init (src/module.c); the DSP in src/dsp/shot.s.
+[[machine]]
+id = "shot"
+
 [[object]]
 path = "build/shot-cf.dko.json"
 sources = ["src/module.c", "src/pages.c", "src/sample_view.c"]
@@ -27,3 +30,15 @@ place = "cf.expansion"
 path = "build/shot-dsp.dko.json"
 sources = ["src/dsp/shot.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 5
+page_rows = 0
+record_bytes = 844
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 5
+page_rows = 1
+record_bytes = 940

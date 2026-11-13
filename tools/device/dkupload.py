@@ -4,7 +4,7 @@
     uv run python -m tools.device.dkupload --emu info                       # the running emulator (out/native/run/current.json)
     uv run python -m tools.device.dkupload --emu ls [PREFIX]               # the store's entries (a folder with nothing in it: size 0)
     uv run python -m tools.device.dkupload --emu mkdir samples/drums
-    uv run python -m tools.device.dkupload --emu modules                   # the loaded modules: ranges, contracts, assigned types, guard faults
+    uv run python -m tools.device.dkupload --emu modules                   # the loaded modules: ranges, needed runtime, assigned types, guard faults
     uv run python -m tools.device.dkupload --emu put build/m.dkm modules/m.dkm
     uv run python -m tools.device.dkupload --emu rm modules/m.dkm
     uv run python -m tools.device.dkupload --emu clear
@@ -453,8 +453,8 @@ class Uploader:
 
     def modules(self) -> dict[str, Any]:
         """MODULES (runtime 0.2.0, capability MODULES): the arena and DSP-area figures and the loaded modules, every page. Returns
-        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is `{index, name, version, contracts
-        ((major, minor) of api, machine, fx, service), cf_base, cf_size, dsp_off, dsp_len, rows (voice-row mask), types (assigned machine
+        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is `{index, name, version, needs
+        (the runtime version it needs, packed major << 16 | minor << 8 | patch), cf_base, cf_size, dsp_off, dsp_len, rows (voice-row mask), types (assigned machine
         types), faults (the guard's count for those types), guard_off (the guard switched one of them off)}`."""
         out: dict[str, Any] = {"modules": []}
         start = 0
@@ -474,7 +474,7 @@ class Uploader:
                 idx = b[at]
                 name = b[at + 1 : at + 33].split(b"\0")[0].decode()
                 version = struct.unpack_from(">I", b, at + 33)[0]
-                cts = [(b[at + 37 + 2 * k], b[at + 38 + 2 * k]) for k in range(4)]
+                needs = struct.unpack_from(">I", b, at + 37)[0]
                 cf_base, cf_size, dsp_off, dsp_len, rows = struct.unpack_from(
                     ">IIIII", b, at + 45
                 )
@@ -487,7 +487,7 @@ class Uploader:
                         "index": idx,
                         "name": name,
                         "version": version,
-                        "contracts": cts,
+                        "needs": needs,
                         "cf_base": cf_base,
                         "cf_size": cf_size,
                         "dsp_off": dsp_off,
@@ -816,10 +816,10 @@ def modules_lines(m: dict[str, Any]) -> list[str]:
         f"arena free {m['arena_free']} (largest {m['arena_largest']}), dsp area free {m['dsp_free']} (largest {m['dsp_largest']}), {m['total']} module(s)"
     ]
     for x in m["modules"]:
-        cts = " ".join(f"{a}.{b}" for a, b in x["contracts"])
+        n = x["needs"]
         v = x["version"]
         out.append(
-            f"{x['index']}  {x['name']}  v{v >> 16}.{v >> 8 & 255}.{v & 255}  contracts {cts}  "
+            f"{x['index']}  {x['name']}  v{v >> 16}.{v >> 8 & 255}.{v & 255}  needs {n >> 16}.{n >> 8 & 255}.{n & 255}  "
             f"cf {x['cf_base']:#x}+{x['cf_size']:#x}  dsp {x['dsp_off']:#x}+{x['dsp_len']:#x}  rows {x['rows']:#x}  "
             f"types {','.join(map(str, x['types'])) or '-'}  faults {x['faults']}{'  GUARD OFF' if x['guard_off'] else ''}"
         )

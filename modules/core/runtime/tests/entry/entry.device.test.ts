@@ -9,7 +9,7 @@ import { installModule, moduleArtifact } from '@digi/regression/runtime/install.
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { E_SET_NOKEY } from '@digi/regression/runtime/project-kit.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { apiContract, linkedApiMinor, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
+import { linkedRuntimeNeed, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
 import { pollEmulated, waitEmulated, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
@@ -81,41 +81,41 @@ runtimeTests('a module of the new entry point loads, ticks and finds an optional
 });
 
 /**
- * Version refusal. The packer writes the api contract (major 2) and the newest api minor its imports need (`since` in sdk/sdk.toml) into the header
- * (of the imports test/entry-demo links). A copy that declares an api minor above the runtime's (0xff), and one that declares major 1 (the Api table of the earlier runtimes),
- * each with the sha256 made right again so that only the version is wrong, are refused with E_CONTRACT and the module list shows no second entry; the file
- * with the real version loads after them.
+ * Version refusal. The packer writes the runtime version a module needs (the newest `since` among the imports it links, in sdk/sdk.toml) into the header word at 0x30
+ * (the imports of test/entry-demo). Copies that need another major, another minor or a higher patch than the runtime's, each with the sha256 made right again so that
+ * only the version is wrong, are refused with E_CONTRACT and the module list shows no second entry; the file with the real version loads after them.
  */
 async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<void> {
   const device = session.options.device;
   await expectRuntimeReady(session);
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'entry-version'), ['DKRT_BOOT']);
   const good = fs.readFileSync(moduleArtifact(device, 'test/entry-demo'));
-  const [apiMajor] = apiContract();
-  expect(good[0x38], 'the packer writes the api major of sdk/sdk.toml').toBe(apiMajor);
-  expect(good[0x39], 'the newest `since` among the linked imports is the header minor').toBe(linkedApiMinor(good));
-  const withVersion = (major: number, minor: number): Buffer => {
+  const need = linkedRuntimeNeed(good);
+  expect(need, 'the newest `since` among the linked imports is the header word').toBe(good.readUInt32BE(0x30) & 0x7fffffff);
+  expect(need >> 8, 'the module needs this runtime\'s major and minor').toBe(runtimeVersion() >> 8);
+  const withNeed = (version: number): Buffer => {
     const file = Buffer.from(good);
-    file[0x38] = major;
-    file[0x39] = minor;
+    file.writeUInt32BE(version, 0x30);
     file.fill(0, 0x10, 0x30);
     createHash('sha256').update(file).digest().copy(file, 0x10);
     return file;
   };
-  await dk.put('modules/entry-old.dkm', withVersion(1, 11));
-  await dk.put('modules/entry-future.dkm', withVersion(2, 0xff));
+  const runtime = runtimeVersion();
+  await dk.put('modules/entry-major.dkm', withNeed(runtime + 0x10000));
+  await dk.put('modules/entry-minor.dkm', withNeed(runtime + 0x100));
+  await dk.put('modules/entry-patch.dkm', withNeed(runtime | 0xff));
   await dk.put('modules/entry-demo.dkm', good);
-  await dk.select(['modules/entry-old.dkm', 'modules/entry-future.dkm', 'modules/entry-demo.dkm']);
+  await dk.select(['modules/entry-major.dkm', 'modules/entry-minor.dkm', 'modules/entry-patch.dkm', 'modules/entry-demo.dkm']);
   await dk.restart();
   await waitForBootEmulated(dk);
   await expect
     .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
     .toEqual(['test/entry-demo']);
   const boot = await bootInfo(session, plan);
-  expect(boot.results, 'the files of api major 1 and of a newer api minor are E_CONTRACT, the real one loads').toEqual([E_CONTRACT, E_CONTRACT, 0]);
+  expect(boot.results, 'another major, another minor or a higher patch is E_CONTRACT, the real one loads').toEqual([E_CONTRACT, E_CONTRACT, E_CONTRACT, 0]);
   await session.expectNoFault('version refusal');
 }
 
-runtimeTests('a module that declares api major 1 or a newer api minor than the runtime is refused with E_CONTRACT', expectVersionRefusal, {
+runtimeTests('a module that needs another runtime major or minor, or a higher patch, than the runtime is refused with E_CONTRACT', expectVersionRefusal, {
   dsp: 'zero',
 });

@@ -31,9 +31,9 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x08 | 4 | file size in bytes |
 | 0x0c | 4 | header size = 0xa0 |
 | 0x10 | 32 | sha256 of the whole file with these 32 bytes read as zeros |
-| 0x30 | 4 | `runtime_min`: informational, the runtime version the module was built for (packed semantic version; informational; `dkrt_sdk::RUNTIME_VERSION`, now 0.1.0); since runtime 0.1.0 the loader does not refuse on it (the contract bytes at 0x38 decide). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
+| 0x30 | 4 | `runtime`: the runtime version the module needs, packed `major << 16 \| minor << 8 \| patch`: the newest `since` of the imports it links (0 when it links none). The loader refuses (`E_CONTRACT`) a module whose version has another major or minor than the runtime's (`dkrt_sdk::RUNTIME_VERSION`) or a higher patch (0.x semver). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
 | 0x34 | 4 | module version, `major << 16 \| minor << 8 \| patch` |
-| 0x38 | 8 | contracts built against, a (major, minor) byte pair each: api, machine, fx, service. Major 0 = the module does not implement that contract (api is never 0). `pack` writes api always (major 2, minor: the newest `since` of the imports the module links, 0 when it links none; a file of major 1, the Api table of the earlier runtimes, is refused with `E_CONTRACT`), machine when the file has a DSP section or its `register` records hold a machine record (a data-only machine), service when it has a real entry point (not the stub of a data-only module), fx when the DSP section has effect records (version 4; a section of effects only carries no machine contract) |
+| 0x38 | 8 | reserved, zero (earlier formats had the (major, minor) pairs of the api, machine, fx and service contracts here; the one version is at 0x30) |
 | 0x40 | 32 | name, NUL padded |
 | 0x60 | 4 | `image_off` (multiple of 16) |
 | 0x64 | 4 | `image_size`: text and data, as the patch-time linker lays them out at base 0 |
@@ -55,7 +55,7 @@ file; the loaded image starts at a 16-byte aligned file offset.
 The four entry points are the fields of the constant `dk_module` of the module (`dk_module_def`, `sdk/include/dk/core/module.h`); the packer finds the symbol, follows the relocation of each field to a function of the image and writes the offsets above. The runtime calls `init(ctx)`, `fini(ctx)`, `tick(ctx)` and `menu(ctx, menu)` with a `dk_module_ctx *` (docs/plans/sdk.md section 5). Until 0.5 the header had a slot table at 0x88 and a header size of 0xa0, 0xa4 or 0xa8; runtime 0.6.0 reads only the layout above.
 
 After the header, in this order, each table where its offset says: imports, relocations, the `register` records,
-the DSP section (16-byte aligned), padding to 16, then the image. A file with a DSP section carries the machine contract at 0x38 (a section of version 2; runtime 5 and later also load version 1).
+the DSP section (16-byte aligned), padding to 16, then the image. 
 
 - **Imports**: `import_count` entries of 32 bytes, a NUL-padded name. Every undefined symbol of the object that a relocation
   names. The names the runtime provides: the `dk_*` imports of `sdk/sdk.toml` (`<dk/gen/imports.h>`), and `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` for the compiler. A name the runtime does not have makes the load fail with `E_IMPORT` before anything is written.
@@ -200,7 +200,7 @@ type 0's (finding 30). A machine that clones SAMPLE, like `pluck`, is right alre
 
 1. Store: header, table checksum, the path, the table's file hash of the file (`E_NOT_FOUND`, `E_BAD_STORE`, `E_SHA`, `E_TOO_BIG`).
 2. Magic, format 1, size fields equal the file (`E_FORMAT`); the file's own sha256 (`E_SHA`).
-3. Contracts (0x38): for each contract the module declares (major not 0), its major equals the runtime's and its minor is not above the runtime's (`E_CONTRACT`: built for another SDK contract, rebuild the module). `runtime_min` is not checked.
+3. Version (0x30): the runtime version the module needs has the runtime's major and minor and a patch that is not above the runtime's (`E_CONTRACT`: rebuild the module); 0 passes.
 4. Name, alignment, table bounds, reloc kinds and offsets, slot numbers and function offsets (`E_FORMAT`).
 5. Every import resolves (`E_IMPORT`); every slot it binds is free (`E_SLOT`); no module of that name is loaded (`E_LOADED`); a
    free module record (`E_TABLE_FULL`).

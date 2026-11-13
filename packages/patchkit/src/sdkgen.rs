@@ -28,7 +28,9 @@ pub const C_FX_VIEW_OUT: &str = "sdk/include/dk/gen/fx.h";
 /// The generated C header of the service imports (`[[import]]` with `service`), relative to the repository root.
 pub const C_IMPORTS_OUT: &str = "sdk/include/dk/gen/imports.h";
 /// The generated C header of the descriptor records, relative to the repository root.
-pub const C_DESC_OUT: &str = "sdk/include/dk/gen/desc.h";
+pub const C_DESC_OUT: &str = "sdk/patched-in/include/dk/gen/desc.h";
+/// The constants of `[desc] shared_consts`, which builders use too: the public header.
+pub const C_PAGE_CONSTS_OUT: &str = "sdk/include/dk/gen/page_consts.h";
 /// The generated C header of the format limits, relative to the repository root.
 pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 /// The generated C header of the status codes (`DK_E_*`), relative to the repository root.
@@ -60,7 +62,6 @@ const TS_WIDTH: usize = 120;
 #[serde(deny_unknown_fields)]
 struct Sdk {
     runtime: Runtime,
-    contract: Contract,
     machine: Machine,
     fx: Fx,
     log: Log,
@@ -81,6 +82,8 @@ struct DescToml {
     /// The section of the module's ColdFire object that holds the records.
     section: String,
     consts: Vec<MachineConst>,
+    /// Constants that builders use too (glyphs, routes, display kinds): written to the public header, not to the patched-in `desc.h`.
+    shared_consts: Vec<MachineConst>,
     record: Vec<DescRecordToml>,
 }
 #[derive(Deserialize)]
@@ -110,8 +113,8 @@ struct Import {
     absent: Option<String>,
     /// The service the import belongs to (`[handle] services`). `service`, `since` and `context` are set together; only a compiler helper has none.
     service: Option<String>,
-    /// The api minor that added the import (1..=`[contract] api` minor).
-    since: Option<u8>,
+    /// The runtime version that added the import, "major.minor.patch" (at most `[runtime] version`).
+    since: Option<String>,
     /// Where the import may be called (`[handle] contexts`).
     context: Option<String>,
 }
@@ -258,6 +261,7 @@ struct FormatLimits {
     granule: u32,
     dsp_slack: u32,
     arena_hdr: u32,
+    collect_bytes: u32,
 }
 /// The format limits in file order, then the ones that come from other keys: (generated name, value).
 /// `MAX_VOICES` and `MAX_FX` are the contract maxima `machine_rows` and `fx_slots`.
@@ -275,6 +279,7 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("GRANULE", f.granule),
         ("DSP_SLACK", f.dsp_slack),
         ("ARENA_HDR", f.arena_hdr),
+        ("COLLECT_BYTES", f.collect_bytes),
         ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
         ("MAX_FX", sdk.limits.max.fx_slots as u32),
     ]
@@ -310,6 +315,7 @@ fn page_knobs_of(sdk: &Sdk) -> usize {
     sdk.desc
         .consts
         .iter()
+        .chain(&sdk.desc.shared_consts)
         .find(|c| c.name == "DK_PAGE_KNOBS")
         .expect("sdk/sdk.toml [desc] has DK_PAGE_KNOBS")
         .value as usize
@@ -411,37 +417,6 @@ pub fn machine(text: &str) -> Result<Machine> {
 struct Runtime {
     version: String,
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Contract {
-    api: [u8; 2],
-    machine: [u8; 2],
-    fx: [u8; 2],
-    service: [u8; 2],
-}
-
-/// The contract versions of `sdk/sdk.toml`, each (major, minor); major 0 = not implemented.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ContractVersions {
-    pub api: (u8, u8),
-    pub machine: (u8, u8),
-    pub fx: (u8, u8),
-    pub service: (u8, u8),
-}
-
-/// The contract versions of the `sdk/sdk.toml` this crate was built with (what `pack` writes into a `.dkm`).
-pub fn embedded() -> ContractVersions {
-    let c = parse(include_str!("../../../sdk/sdk.toml"))
-        .expect("sdk/sdk.toml parses")
-        .contract;
-    ContractVersions {
-        api: (c.api[0], c.api[1]),
-        machine: (c.machine[0], c.machine[1]),
-        fx: (c.fx[0], c.fx[1]),
-        service: (c.service[0], c.service[1]),
-    }
-}
-
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
     let s = &sdk.runtime.version;
@@ -460,6 +435,22 @@ fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
     Ok((v[0], v[1], v[2]))
 }
 
+/// "major.minor.patch" (each part 0 to 255) packed major << 16 | minor << 8 | patch.
+fn parse_runtime(s: &str) -> std::result::Result<u32, String> {
+    let p: Vec<&str> = s.split('.').collect();
+    if p.len() != 3 {
+        return Err("expected major.minor.patch".into());
+    }
+    let mut v = 0u32;
+    for x in p {
+        let n: u8 = x
+            .parse()
+            .map_err(|_| "each part is a number from 0 to 255".to_string())?;
+        v = v << 8 | u32::from(n);
+    }
+    Ok(v)
+}
+
 fn pack_runtime((a, b, c): (u8, u8, u8)) -> u32 {
     u32::from(a) << 16 | u32::from(b) << 8 | u32::from(c)
 }
@@ -470,18 +461,6 @@ pub fn embedded_runtime() -> u32 {
     pack_runtime(runtime_parts(&sdk).expect("sdk/sdk.toml runtime version"))
 }
 
-/// Read the contract versions from `sdk/sdk.toml` under the repository root.
-pub fn contract(root: &std::path::Path) -> Result<ContractVersions> {
-    let path = root.join(SOURCE);
-    let text = std::fs::read_to_string(&path).map_err(|e| err!("{}: {e}", path.display()))?;
-    let c = parse(&text)?.contract;
-    Ok(ContractVersions {
-        api: (c.api[0], c.api[1]),
-        machine: (c.machine[0], c.machine[1]),
-        fx: (c.fx[0], c.fx[1]),
-        service: (c.service[0], c.service[1]),
-    })
-}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Log {
@@ -709,17 +688,7 @@ fn rust(sdk: &Sdk) -> String {
         "pub const RUNTIME_VERSION: u32 = {:#08x};\n",
         pack_runtime(rv)
     );
-    let c = &sdk.contract;
-    s.push_str("pub mod contract {\n");
-    for (n, v) in [
-        ("API", c.api),
-        ("MACHINE", c.machine),
-        ("FX", c.fx),
-        ("SERVICE", c.service),
-    ] {
-        let _ = writeln!(s, "    pub const {n}: (u8, u8) = ({}, {});", v[0], v[1]);
-    }
-    s.push_str("}\n\npub mod logk {\n");
+    s.push_str("pub mod logk {\n");
     for k in &sdk.log.kind {
         let _ = writeln!(s, "    pub const {}: u16 = {};", k.name, k.id);
     }
@@ -928,7 +897,18 @@ fn ts_proto(sdk: &Sdk) -> String {
             "/** [code, name, text] */\nexport const {name}: [number, string, string][] = ["
         );
         for (n, st) in by_code(table) {
-            let _ = writeln!(s, "  [{}, '{n}', {}],", st.code, ts_str(&st.text));
+            let one = format!("  [{}, '{n}', {}],", st.code, ts_str(&st.text));
+            if one.chars().count() <= TS_WIDTH {
+                s.push_str(&one);
+                s.push('\n');
+            } else {
+                let _ = writeln!(
+                    s,
+                    "  [\n    {},\n    '{n}',\n    {},\n  ],",
+                    st.code,
+                    ts_str(&st.text)
+                );
+            }
         }
         s.push_str("];\n\n");
     }
@@ -1105,19 +1085,6 @@ fn python(sdk: &Sdk) -> Result<String> {
     }
     let levels: Vec<String> = LEVELS.iter().map(|n| format!("{n:?}")).collect();
     let _ = writeln!(s, "LEVELS = ({})", levels.join(", "));
-    let c = &sdk.contract;
-    let _ = writeln!(
-        s,
-        "CONTRACT = {{\"api\": ({}, {}), \"machine\": ({}, {}), \"fx\": ({}, {}), \"service\": ({}, {})}}",
-        c.api[0],
-        c.api[1],
-        c.machine[0],
-        c.machine[1],
-        c.fx[0],
-        c.fx[1],
-        c.service[0],
-        c.service[1]
-    );
     Ok(s)
 }
 
@@ -1597,10 +1564,11 @@ pub(crate) fn c_args(sig: &Sig) -> String {
 /// The `[handle.callbacks]`: (name, signature). Their names end in `_fn`.
 fn callback_types(sdk: &Sdk) -> Result<Vec<(&String, Sig)>> {
     let none = BTreeMap::new();
+    let handles: Vec<&str> = sdk.handle.types.iter().map(String::as_str).collect();
     let mut v = Vec::new();
     for (n, s) in &sdk.handle.callbacks {
         let what = format!("[handle.callbacks] {n}");
-        let (name, sig) = parse_fn(&what, s, &none, &[])?;
+        let (name, sig) = parse_fn(&what, s, &none, &handles)?;
         if name.is_some() || !is_ident(n) || !n.ends_with("_fn") || BASES.contains(&n.as_str()) {
             return Err(err!(
                 "{SOURCE}: {what}: bad name (it ends in _fn) or signature"
@@ -1670,7 +1638,7 @@ fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
                 ));
             }
         }
-        match (&im.service, im.since, &im.context) {
+        match (&im.service, &im.since, &im.context) {
             (None, None, None) if im.kind.as_deref() == Some("helper") => {}
             (Some(svc), Some(since), Some(ctx)) => {
                 if !sdk.handle.services.contains(svc) {
@@ -1679,9 +1647,11 @@ fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
                 if !sdk.handle.contexts.contains(ctx) {
                     return Err(err!("{SOURCE}: {what}: unknown context {ctx:?}"));
                 }
-                if since == 0 || since > sdk.contract.api[1] {
+                let v = parse_runtime(since)
+                    .map_err(|e| err!("{SOURCE}: {what}: since {since:?}: {e}"))?;
+                if v == 0 || v > pack_runtime(runtime_parts(sdk)?) {
                     return Err(err!(
-                        "{SOURCE}: {what}: since {since} is not in 1..=[contract] api minor"
+                        "{SOURCE}: {what}: since {since:?} is not in 0.0.1 ..= [runtime] version"
                     ));
                 }
                 if sig.is_none() {
@@ -1703,7 +1673,8 @@ fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportInfo {
     pub service: String,
-    pub since: u8,
+    /// The runtime version that added it, packed major << 16 | minor << 8 | patch.
+    pub since: u32,
     pub context: String,
 }
 
@@ -1713,12 +1684,12 @@ pub fn import_infos() -> BTreeMap<String, ImportInfo> {
     sdk_embedded()
         .import
         .iter()
-        .filter_map(|i| match (&i.service, i.since, &i.context) {
+        .filter_map(|i| match (&i.service, &i.since, &i.context) {
             (Some(s), Some(since), Some(c)) => Some((
                 i.name.clone(),
                 ImportInfo {
                     service: s.clone(),
-                    since,
+                    since: parse_runtime(since).expect("parse checked since"),
                     context: c.clone(),
                 },
             )),
@@ -1943,12 +1914,11 @@ fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
 }
 
 /// `sdk/include/dk/gen/imports.h`: the prototypes of the service imports (`[[import]]` with `service`; the ones with `kind = "helper"` keep
-/// the prototype of their hand-written header), grouped by service, with the context and the api minor in the comment.
+/// the prototype of their hand-written header), grouped by service, with the context and the runtime version in the comment.
 fn imports_h(sdk: &Sdk) -> Result<String> {
     let imps = imports(sdk)?;
-    let major = sdk.contract.api[0];
     let mut s = format!(
-        "/* {HEADER} */\n/* sdk/include/dk/gen/imports.h -- the service imports of a module (docs/plans/sdk.md section 5.1): one prototype per [[import]] with `service`.\n   Each comment gives the context the call may run in and the api minor that added it; `patchkit pack` takes the runtime version a module needs from the newest. */\n#ifndef DK_GEN_IMPORTS_H\n#define DK_GEN_IMPORTS_H\n\n#include <stdint.h>\n\n/* Opaque handles ([handle] types): the runtime or the provider module gives one out in `init`. */\n"
+        "/* {HEADER} */\n/* sdk/include/dk/gen/imports.h -- the service imports of a module (docs/plans/sdk.md section 5.1): one prototype per [[import]] with `service`.\n   Each comment gives the context the call may run in and the runtime version that added it; `patchkit pack` takes the runtime version a module needs from the newest. */\n#ifndef DK_GEN_IMPORTS_H\n#define DK_GEN_IMPORTS_H\n\n#include <stdint.h>\n\n/* Opaque handles ([handle] types): the runtime or the provider module gives one out in `init`. */\n"
     );
     for h in &sdk.handle.types {
         let _ = writeln!(s, "typedef struct {h} {h};");
@@ -1988,10 +1958,10 @@ fn imports_h(sdk: &Sdk) -> Result<String> {
             };
             let _ = writeln!(
                 s,
-                "\n/* {} Context: {}. Since api {major}.{}.{need} */",
+                "\n/* {} Context: {}. Since runtime {}.{need} */",
                 im.doc,
                 im.context.as_deref().unwrap_or_default(),
-                im.since.unwrap_or_default()
+                im.since.as_deref().unwrap_or_default()
             );
             let _ = writeln!(
                 s,
@@ -2163,7 +2133,7 @@ fn desc_layout(d: &DescToml) -> Result<(DescSpec, Vec<Vec<DescText>>)> {
         return Err(err!("{SOURCE}: [desc] section is empty"));
     }
     let mut consts = BTreeMap::new();
-    for c in &d.consts {
+    for c in d.consts.iter().chain(&d.shared_consts) {
         if !is_ident(&c.name) || consts.insert(c.name.clone(), c.value).is_some() {
             return Err(err!(
                 "{SOURCE}: [desc] const {}: bad name or name twice",
@@ -2293,11 +2263,26 @@ fn desc_layout(d: &DescToml) -> Result<(DescSpec, Vec<Vec<DescText>>)> {
     Ok((spec, texts))
 }
 
-/// `sdk/include/dk/gen/desc.h`: the descriptor records as C structs, with the checks of their layout.
+/// `sdk/include/dk/gen/page_consts.h`: the constants of `[desc] shared_consts`, for builders and the patched-in declarations alike.
+fn page_consts_h(sdk: &Sdk) -> String {
+    let mut s = format!(
+        "/* {HEADER} */\n/* sdk/include/dk/gen/page_consts.h -- the knob glyphs, the display of an effect parameter and the routes of an effect (dk_param_glyph, dk_page_add_fx_param, dk_fx_routes). */\n#ifndef DK_GEN_PAGE_CONSTS_H\n#define DK_GEN_PAGE_CONSTS_H\n\n"
+    );
+    for c in &sdk.desc.shared_consts {
+        if let Some(d) = &c.doc {
+            let _ = writeln!(s, "/* {d} */");
+        }
+        let _ = writeln!(s, "#define {} {}", c.name, c.value);
+    }
+    s.push_str("\n#endif /* DK_GEN_PAGE_CONSTS_H */\n");
+    s
+}
+
+/// `sdk/patched-in/include/dk/gen/desc.h`: the descriptor records as C structs, with the checks of their layout.
 fn desc_h(sdk: &Sdk) -> Result<String> {
     let (spec, texts) = desc_layout(&sdk.desc)?;
     let mut s = format!(
-        "/* {HEADER} */\n/* sdk/include/dk/gen/desc.h -- the descriptor records a module declares with the DK_* macros of <dk/fx/fx.h>, <dk/machine/machine.h> and <dk/page/page.h>; `patchkit pack` reads them from the {} section of the object. */\n#ifndef DK_GEN_DESC_H\n#define DK_GEN_DESC_H\n\n#include <stddef.h>\n#include <stdint.h>\n\n",
+        "/* {HEADER} */\n/* sdk/patched-in/include/dk/gen/desc.h -- the descriptor records a patched-in module declares with the DK_* macros of <dk/machine/machine.h>, <dk/fx/fx.h> and <dk/page/decl.h>; `patchkit` reads them from the {} section of the object. */\n#ifndef DK_GEN_DESC_H\n#define DK_GEN_DESC_H\n\n#include <stddef.h>\n#include <stdint.h>\n#include <dk/gen/page_consts.h>\n\n",
         spec.section
     );
     for c in &sdk.desc.consts {
@@ -2373,6 +2358,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),
         (C_DESC_OUT.to_string(), desc_h(&sdk)?),
+        (C_PAGE_CONSTS_OUT.to_string(), page_consts_h(&sdk)),
     ])
 }
 

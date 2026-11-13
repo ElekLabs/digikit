@@ -148,6 +148,11 @@ A manifest with `[[voice]]`, `[[machine]]`, `[[param]]`, `[[page]]` or `[[fx]]` 
 
 ### 5.2 Declaring a machine
 
+> The `DK_MACHINE`, `DK_FX`, `DK_PARAM` and `DK_PAGE` declaration macros of the sections below are for **patched-in** modules only (`dynamic = false`): their
+> headers moved to `sdk/patched-in/include`, which patchkit adds to the include path of patched-in builds only, so a run-time module that includes one does not
+> compile. A run-time module declares in `init` with the builder calls of `<dk/gen/imports.h>` (`dk_module_ctx_add_machine`, `dk_module_ctx_add_fx`, ...) and lists
+> its `[[machine]]` and `[[fx]]` ids in `module.toml`; see `modules/machines/analog` and `sdk/templates`. The guide is rewritten for the builders in S4.
+
 A machine is declared in C, in `src/module.c`, with the macros of `<dk/machine/machine.h>`. This is `modules/machines/pluck/src/module.c`:
 
 ```c
@@ -396,12 +401,13 @@ The generated files are in `sdk/include/dk/gen/`, `sdk/dsp/contract/` and `sdk/i
 | `<dk/core/bytes.h>` | `dk_bytes_put32`, `dk_bytes_get32`: big-endian 32-bit fields of protocols and files. Header only. | Modules that read or write wire fields. |
 | `<dk/core/text.h>` | Bounded text without a C library: `dk_text_len`, `dk_text_copy`, `dk_text_equal`, `dk_text_append`, `dk_text_cat`, `dk_text_utoa`, `dk_text_itoa`, `dk_text_trunc`, `dk_text_size`, `dk_text_secs`. Every writer takes the buffer size and ends with a NUL. The packer links the source (`sdk/src/core/text.c`) when a module calls one. | Modules that build row text or names. |
 | `<dk/core/path.h>` | `dk_path_join` (refuses over 255 bytes), `dk_path_parent`, `dk_path_leaf`. The packer links `sdk/src/core/path.c`. | Modules that handle file paths. |
-| `<dk/machine/machine.h>` | The machine contract and `DK_MACHINE`, `DK_PARAM`. | The machine's `module.c`. Includes `gen/machine.h`. |
-| `<dk/fx/fx.h>` | The effect contract and `DK_FX`, `DK_FX_PARAM`. | The effect's `module.c`. Includes `gen/fx.h`. |
-| `<dk/page/page.h>` | `DK_PAGE`, `DK_KNOB`, `DK_KNOB_AT`. Shared by both. Includes `gen/desc.h`, the record layouts from `[desc]` in `sdk/sdk.toml`. | `<dk/machine/machine.h>`, `<dk/fx/fx.h>`. |
-| `sdk/include/dk/gen/machine_consts.h` | The machine constants as C `#define`s. | `<dk/machine/machine.h>`. |
+| `<dk/gen/machine.h>` | The machine contract: `dk_voice_in`, `dk_machine_desc` and the constants. | The machine's `module.c` and DSP code. |
+| `<dk/gen/fx.h>` | The effect contract: `dk_fx_in`, `dk_fx_desc` and the constants. | The effect's `module.c` and DSP code. |
+| `<dk/page/page.h>` | `dk_page_frame`, `dk_page_event`, the canvas and the page flags of a canvas page. | Modules with a canvas page. |
+| `<dk/gen/page_consts.h>` | The knob glyphs (`DK_GLYPH_*`), the display of an effect parameter (`DK_PERCENT`, `DK_BIPOLAR`) and the routes (`DK_ROUTE_*`). | Modules with a glyph or an effect. |
+| `sdk/include/dk/gen/machine_consts.h` | The machine constants as C `#define`s. | `<dk/gen/machine.h>`. |
 | `sdk/dsp/contract/dk_machine.inc` | The machine constants and field offsets for assembly. | The machine's `.s`. |
-| `sdk/include/dk/gen/fx_consts.h` | The effect constants as C `#define`s. | `<dk/fx/fx.h>`. |
+| `sdk/include/dk/gen/fx_consts.h` | The effect constants as C `#define`s. | `<dk/gen/fx.h>`. |
 | `sdk/dsp/contract/dk_fx.inc` | The effect constants and field offsets for assembly. | The effect's `.s`. |
 | `sdk/include/dk/gen/limits.h` | The `.dkm` format limits (`[limits.format]`) as C `#define`s, such as `DK_ARENA_HDR`. | Core apps in C. |
 | `<dk/core/status.h>` | The status codes `DK_E_*` (`[load.status]` in `sdk/sdk.toml`): the results of loading and of module calls. | Modules that check a status. |
@@ -566,7 +572,7 @@ const dk_module_def dk_module = {.init = init, .tick = tick};
 | `void menu(dk_module_ctx *ctx, dk_ui_menu *menu)` | Optional: the module's settings. The DIGIKIT menu shows SETTINGS... in the side panel of the loaded module and calls it when the user opens it; it adds the rows (`dk_ui_menu_add_text`, `dk_ui_menu_add_action`, ...). The menu is built once and kept, and no module is unloaded at run time, so the `arg` and callbacks of a menu must point at the module's own memory, never at the stack. |
 
 The type is `dk_module_def`; the constant keeps the name `dk_module`, which the packer looks up. `ctx` is only the module context; the user-data pointer of a callback is `arg`. The device is reached through named imports grouped by service
-(`<dk/gen/imports.h>`, generated from `sdk/sdk.toml`; the comment of each prototype gives its context and the api minor that added it):
+(`<dk/gen/imports.h>`, generated from `sdk/sdk.toml`; the comment of each prototype gives its context and the runtime version that added it):
 
 - Without a handle: `dk_alloc`, `dk_free`, `dk_log`, `dk_log_event`, `dk_time_blocks`, `dk_host_register`, `dk_module_ctx_device`,
   `dk_module_ctx_runtime_version`, `dk_hash32_*`, `dk_io_*`, `dk_job_*`, `dk_intro_take`, `dk_param_get/set`, `dk_debug_*`.
@@ -576,34 +582,14 @@ The type is `dk_module_def`; the constant keeps the name `dk_module`, which the 
   `DK_E_MISSING` and leaves the handle NULL; the module loads and decides whether it can run without. The other calls of an absent service
   return `DK_E_MISSING` or do nothing. A module that cannot run without the service returns the code from `init`: the load fails with `E_IMPORT` and
   DIGIKIT shows the provider as the module's need (as for an import that no module in the image provides). A module that tolerates its absence returns `DK_OK` and records nothing.
-- `patchkit pack` writes the newest `since` of the imports a module links as the api minor it needs and prints the services it needs
+- `patchkit pack` writes the newest `since` of the imports a module links as the runtime version it needs and prints the services it needs
   (`services <file>: usb_bulk (dk_usb_bulk_open); runtime (...)`). It refuses an object that has no `dk_module`, and one that still exports `dkm_init`, `dkm_fini`,
   `dkm_menu` or a `dkm_slot_<n>`: the old entry and its Api table are gone.
-- A `.dkm` of the old contract (api major 1) is refused with `E_CONTRACT`: build it again against the SDK.
+- A `.dkm` that needs another runtime major or minor than the loader's, or a higher patch, is refused with `E_CONTRACT`: build it again against the SDK.
 
 The templates and `tests/fixtures/modules/entry-demo` show the entry point. The crash record names what the module code was doing (`init`, `tick`, `fini` or a callback) when the CPU faulted: `dklog crash` prints it.
 
-For the bounded sample-bank proof, include `<dk/sample/bank.h>` and declare
-`DK_SAMPLE_BANK(LOCAL_ID, BANK, DESCRIPTOR, CAPACITY)` in the module's C declaration. Exactly one bank is supported:
-reserve 1–8,192 mono float32 frames in the module's own DSP BSS and a four-word initialized zero descriptor
-(READY, normal-word source pointer, frame count, sample rate). Open the positive opaque handle with `dk_sample_bank_open(ctx, &bank)` in `init`.
-The bank imports (`dk_sample_bank_open`, `dk_sample_bank_load`, `dk_sample_bank_status`) are temporary: S3 deletes the bank with them.
-
-Call `dk_sample_bank_load(bank, path)` from `init` or a host command handler. It copies the NUL-terminated path and queues work
-for the UI task; the handler performs no file I/O. `dk_sample_bank_status(bank)` returns UNUSED=0, QUEUED=1, LOADING=2,
-READY=3, or a negative `DK_SAMPLE_E_*` error. Only an unused bank accepts a load. Input must be a complete canonical
-mono 48 kHz PCM16 native sample, nonempty and at most 8,192 frames. DT2 uses an absolute +Drive path (`/...`), opens
-read-only and requires no concurrent Transfer writes during acquisition. DN2 uses `samples/...` in the digikit store
-and validates a private snapshot before delivery.
-
-Once delivery starts, the bank stays pinned until restart, including on failure; no replacement or eviction is
-supported. Runtime publishes the immutable descriptor's READY word last, after payload and view acknowledgements.
-The [sample-proof fixture](../tests/fixtures/modules/sample-proof/README.md) demonstrates the declarations, service
-calls and tested DSP bridge. Transferred-file playback acceptance passes in the emulator on DT2 OS 1.17 and
-DN2 OS 1.12. Hardware behavior and product capacity/replacement/selection remain unproved; this is not a product sampler.
-
-A stereo or mono sample pool ([design](design/sample-api-1.5.md)) uses `<dk/sample/pool.h>` and
-`DK_SAMPLE_TRACKS(LOCAL_ID, RECORDS, CONTROL)` instead of a bank (a module has one family): 16 `dk_sample_pool_entry` records (512 bytes), one for each
+A stereo or mono sample pool ([design](design/sample-api-1.5.md)) uses `<dk/sample/pool.h>`. The module names its table in the DSP data (`_<id>_sample_rec`, `_<id>_sample_ctl`): 16 `dk_sample_pool_entry` records (512 bytes), one for each
 pool entry, and 16 control sets (256 bytes) in the DSP data (`.PKDATA`, zero, no relocations in them). `pack` writes them as the kind 2 record of
 the DSP section. `dk_sample_pool_open(ctx, &pool)` gives the handle in `init`;
 `dk_sample_pool_add(pool, path)` queues a PCM16 native file (mono or stereo, 48 kHz) from a host command handler or a UI callback and returns its pool index
@@ -730,19 +716,12 @@ Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `modul
 
 ## 9. Versions and compatibility
 
-- `sdk/sdk.toml` is the single source of the runtime version and the contract versions. Each contract is `[major, minor]`.
-
-  | Contract | Version | Covers |
-  | --- | --- | --- |
-  | `api` | `[2, 11]` | The entry point `dk_module` and the imports of `<dk/gen/imports.h>`. Every module has it, `raw` included. `pack` writes the newest `since` among the imports a module links as the minor. Major 1 (the Api table, `dkm_init`, the slots) is gone. |
-  | `machine` | `[1, 6]` | `<dk/machine/machine.h>`; minor 1: `track`; minor 2: stereo machines; minor 6: `gate`, a machine that reads it sets `DK_MACHINE_GATE` and needs runtime 0.5.6 |
-  | `fx` | `[1, 0]` | `<dk/fx/fx.h>` |
-  | `service` | `[1, 0]` | Service modules |
-
-- `pack` writes the contracts a module uses into the `.dkm` header.
-- The runtime refuses a module when the major version of a declared contract differs, or when its minor version is above the runtime's. The error is
+- One version: the runtime release in `sdk/sdk.toml` (`[runtime] version`, semantic; 0.x until 1.0.0, where a MINOR may break and a PATCH only adds).
+  Each import there has `since`, the runtime version that added it (S3 is breaking: all current imports have "0.7.0").
+- `pack` writes the newest `since` among the imports a module links into the `.dkm` header (the runtime version the module needs).
+- The runtime refuses a module when that version has another major or minor than the runtime's, or a higher patch. The error is
   `E_CONTRACT` (-48): rebuild the module.
-- An added import is a minor bump (its `since`). A changed or removed one is a major bump.
+- An added import is a PATCH of the runtime (its `since`); a changed or removed one is a MINOR (0.x).
 - `[module] version` is yours. Change it for every release. The export file name carries it.
 - A run-time machine has no fixed type number. The runtime assigns one at load, and the card remembers it under the global id
   `<module id>:<machine id>`. Never write the number into code or a test.
@@ -785,7 +764,7 @@ allows a known id. Without `--dir` it uses the first folder of `PATCHKIT_MODULES
 | Question | Where |
 | --- | --- |
 | Version numbers, imports, log kinds, protocol numbers | `sdk/sdk.toml` |
-| Machine, effect and service contracts | `<dk/machine/machine.h>`, `<dk/fx/fx.h>`, `<dk/page/page.h>`, `<dk/core/module.h>` |
+| Machine, effect and service contracts | `<dk/gen/machine.h>`, `<dk/gen/fx.h>`, `<dk/page/page.h>`, `<dk/core/module.h>` |
 | What differs between the devices | `devices/digitakt-ii.toml`, `devices/digitone-ii.toml`, `.agents/skills/digikit-module/references/devices.md` |
 | Knob and parameter rules | Sections 5.2, 5.3 and 5.7, `docs/findings/02-machines-and-parameters.md` |
 | DSP recipes and assembler traps | `.agents/skills/digikit-module/references/dsp-recipes.md`, `selas-pitfalls.md` |

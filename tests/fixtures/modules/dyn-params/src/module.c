@@ -1,10 +1,17 @@
-/* The machine declaration of test/dyn-params: one machine `dynp` with four parameters (words 0 .. 3), to check the parameter rows
-   the registry writes. The ranges differ per word. The DSP is test/sine's. patchkit reads these records; the device never sees them. */
-#include <dk/machine/machine.h>
+/* The machine of test/dyn-params, declared by builder calls in init: one machine `dynp`. The DSP is test/sine's (`dsp = "sn"`). */
+#include <dk/core/module.h>
+#include "module_ids.h"
 
-DK_MACHINE(dynp, .name = "DynP", .short_name = "DYP", .render = "_sn_render",
-           .note_on = "_sn_note_on", .desc = "_sn_desc");
-DK_PARAM(dynp, 0, p0, "Param 0", "P0", 0, 127, 16);
-DK_PARAM(dynp, 1, p1, "Param 1", "P1", (1 / 256.0), 126, (4369 / 256.0));
-DK_PARAM(dynp, 2, p2, "Param 2", "P2", (2 / 256.0), 125, (4642 / 256.0));
-DK_PARAM(dynp, 3, p4, "Param 4", "P4", (4 / 256.0), 123, (5188 / 256.0));
+static int32_t init(dk_module_ctx *ctx)
+{
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_DYNP, "DynP", "DYP");
+    /* four parameters on one page; the range differs per word (words 0 .. 3) */
+    dk_page *p = dk_machine_add_page(m, "DYNP", "DYP");
+    dk_page_add_param(p, "Param 0", "P0", 16);
+    dk_param_range(dk_page_add_param(p, "Param 1", "P1", 17), 1, 126);
+    dk_param_range(dk_page_add_param(p, "Param 2", "P2", 18), 2, 125);
+    dk_param_range(dk_page_add_param(p, "Param 4", "P4", 20), 4, 123);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};

@@ -21,7 +21,7 @@ DEVICES = ["dt2", "dn2"]
 
 def render(device: str, note: float, blocks: int, params=None, vel: int = 100):
     rig = MachineRig(MODULE, device)
-    rig.set_params({"sine_level": 0x7F00, **(params or {})})
+    rig.set_params({"level": 0x7F00, **(params or {})})
     rig.set_note(note, vel)
     rig.trigger()
     ys = []
@@ -60,7 +60,7 @@ def test_tune_shifts_the_pitch_by_semitones():
 @pytest.mark.parametrize("device", DEVICES)
 def test_the_level_parameter_scales_the_amplitude(device):
     full = np.max(np.abs(render(device, 60, 101)))
-    half = np.max(np.abs(render(device, 60, 101, {"sine_level": 0x3F80})))
+    half = np.max(np.abs(render(device, 60, 101, {"level": 0x3F80})))
     assert abs(half / full - 0.5) < 0.01
 
 
@@ -69,7 +69,7 @@ def test_a_retrigger_restarts_the_oscillator_and_the_voice_ends_after_two_second
     device,
 ):
     rig = MachineRig(MODULE, device)
-    rig.set_params({"sine_level": 0x7F00})
+    rig.set_params({"level": 0x7F00})
     rig.set_note(60, 100)
     rig.trigger()
     first = rig.block("friendly")

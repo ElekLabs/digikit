@@ -166,8 +166,10 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert!(h.contains("typedef struct dk_settings dk_settings;"));
     assert!(h.contains("int32_t dk_settings_open(dk_module_ctx *ctx, dk_settings **out);"));
     assert!(h.contains("typedef int32_t dk_io_step_fn(void *arg);"));
-    assert!(h.contains("Context: init. Since api 2.11."));
-    assert!(h.contains("Context: io-step. Since api 2.11."));
+    assert!(h.contains("typedef struct dk_page_frame dk_page_frame;"));
+    assert!(h.contains("typedef void dk_page_draw_fn(void *arg, const dk_page_frame *frame);"));
+    assert!(h.contains("Context: init. Since runtime 0.7.0."));
+    assert!(h.contains("Context: io-step. Since runtime 0.7.0."));
     assert!(h.contains(
         "Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING."
     ));
@@ -184,7 +186,7 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert!(!rs.contains("pub struct Api"));
     // only a compiler helper may have no service: an import without one is refused
     let broken = text.replacen(
-        "name = \"dk_alloc\"\nservice = \"runtime\"\nsince = 11\ncontext = \"any\"\n",
+        "name = \"dk_alloc\"\nservice = \"runtime\"\nsince = \"0.7.0\"\ncontext = \"any\"\n",
         "name = \"dk_alloc\"\n",
         1,
     );
@@ -195,17 +197,21 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert_eq!(infos["dk_usb_bulk_open"].service, "usb_bulk");
     assert_eq!(infos["dk_files_write"].context, "io-step");
     assert!(!infos.contains_key("memcpy"));
-    // service, since and context come together, with names the toml lists, and since is a minor that exists
+    // service, since and context come together, with names the toml lists, and since is a runtime version that exists (not above the runtime's)
     for (from, to) in [
         (
-            "service = \"usb_bulk\"\nsince = 11\ncontext = \"init\"",
-            "service = \"usb_bulk\"\nsince = 11",
+            "service = \"usb_bulk\"\nsince = \"0.7.0\"\ncontext = \"init\"",
+            "service = \"usb_bulk\"\nsince = \"0.7.0\"",
         ),
         ("service = \"usb_bulk\"", "service = \"modem\""),
         ("context = \"io-step\"", "context = \"anywhere\""),
         (
-            "since = 11\ncontext = \"isr\"",
-            "since = 13\ncontext = \"isr\"",
+            "since = \"0.7.0\"\ncontext = \"isr\"",
+            "since = \"0.8.0\"\ncontext = \"isr\"",
+        ),
+        (
+            "since = \"0.7.0\"\ncontext = \"isr\"",
+            "since = \"7\"\ncontext = \"isr\"",
         ),
         (
             "requires = \"core/ui\"\nabsent = \"missing\"",

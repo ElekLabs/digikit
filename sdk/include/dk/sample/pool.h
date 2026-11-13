@@ -1,15 +1,31 @@
-/* Per-module stereo sample pool (16 entries; docs/design/sample-api-1.5.md).
-   Additive to <dk/sample/bank.h> (1.3 bank, frozen, mono, 8192 frames, float): a module
-   uses the bank family or the track family, never both (the second is refused with
-   DK_SAMPLE_E_CONTRACT). A pool entry holds one PCM16 sample, mono or stereo, in
+/* Per-module stereo sample pool (16 entries; docs/design/sample-api-1.5.md). A pool entry holds one PCM16 sample, mono or stereo, in
    planar form; the runtime owns the memory and the module never sees a device
    address, a slot or a pool. */
 #ifndef DK_SAMPLE_POOL_H
 #define DK_SAMPLE_POOL_H
-#include <dk/sample/bank.h>
-#include <dk/gen/desc.h>
+#include <dk/core/status.h>
 #include <dk/gen/sample.h>
 #include <stddef.h>
+#include <stdint.h>
+
+/* The states of an entry. */
+#define DK_SAMPLE_UNUSED 0
+#define DK_SAMPLE_QUEUED 1
+#define DK_SAMPLE_LOADING 2
+#define DK_SAMPLE_READY 3
+/* The sample errors are the runtime status codes of <dk/core/status.h>. */
+#define DK_SAMPLE_E_NOT_FOUND DK_E_NOT_FOUND
+#define DK_SAMPLE_E_READ DK_E_READ
+#define DK_SAMPLE_E_SHA DK_E_SHA
+#define DK_SAMPLE_E_FORMAT DK_E_FORMAT
+#define DK_SAMPLE_E_NOMEM DK_E_NOMEM
+#define DK_SAMPLE_E_LOADED DK_E_LOADED
+#define DK_SAMPLE_E_BUSY DK_E_BUSY
+#define DK_SAMPLE_E_TOO_BIG DK_E_TOO_BIG
+#define DK_SAMPLE_E_NO_DSP DK_E_NO_DSP
+#define DK_SAMPLE_E_DSP_XFER DK_E_DSP_XFER
+#define DK_SAMPLE_E_SEL_PATH DK_E_SEL_PATH
+#define DK_SAMPLE_E_CONTRACT DK_E_CONTRACT
 
 /* States are DK_SAMPLE_UNUSED/QUEUED/LOADING/READY (0..3); errors are negative.
    Reused errors: NOT_FOUND -1, READ -3, FORMAT -5, TOO_BIG -13, CONTRACT -48.
@@ -18,7 +34,7 @@
     DK_E_LOST /* the backing was lost (DT2 stock reset) and the reload failed */
 #define DK_SAMPLE_E_POOL DK_E_POOL       /* the pool is full */
 #define DK_SAMPLE_E_CHANGED DK_E_CHANGED /* the file differs from the selection snapshot */
-/* DK_SAMPLE_E_SEL_PATH (bank.h) also means: sample_pool_path: buf too small. */
+/* DK_SAMPLE_E_SEL_PATH also means: sample_pool_path: buf too small. */
 
 /* One record per pool entry in the module's DSP data, eight normal words, the runtime
    writes and the module reads. `ready` is published last. `token` is nonzero,
@@ -82,17 +98,6 @@ typedef struct dk_sample_peak {
    `columns` when out is filled, 0 while the window is computed (call again from the draw callback with the same arguments), or a
    negative error. A call with other arguments replaces a pending window; one window is kept per module. columns is 1..DK_SAMPLE_WINDOW_MAX
    and capacity is at least columns * 4 bytes. UI task only. */
-
-/* Declares the table: RECORDS names 16 zeroed dk_sample_pool_entry in the module's DSP data
-   (DK_SAMPLE_POOL_ENTRIES * 8 words); CONTROL names 16 control sets of 4 zeroed words.
-   The runtime fills the records; the module never writes them. */
-#define DK_SAMPLE_TRACKS(LOCAL_ID, RECORDS, CONTROL)                                               \
-    static const dk_desc_sample_tracks DK_CAT(dk_sample_tracks_, __LINE__)                         \
-        DK_DESC = {.kind = DK_DESC_SAMPLE_TRACKS,                                                  \
-                   .size = sizeof(dk_desc_sample_tracks),                                          \
-                   .local_id = (LOCAL_ID),                                                         \
-                   .records = #RECORDS,                                                            \
-                   .control = #CONTROL}
 
 /* The imports (<dk/platform/samples.h>, <dk/gen/imports.h>): `dk_sample_pool_open(ctx, &pool)` in `init` gives the handle `p` of the module's one pool of
    DK_SAMPLE_POOL_ENTRIES (16) entries; the entry index is the record index the DSP reads (a machine picks it with a parameter, for example SHOT's SMP):
