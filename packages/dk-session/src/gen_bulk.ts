@@ -74,6 +74,9 @@ export const BULK_STATUS = {
   L_E_PARAM_FULL: -24,
   L_E_PAGE_FULL: -25,
   L_E_TYPE_IN_USE: -26,
+  L_E_DECL_ID: -27,
+  L_E_DECL_USES: -28,
+  L_E_FX_ID_DUP: -29,
   L_E_NO_DSP: -30,
   L_E_DSP_FORMAT: -31,
   L_E_DSP_IMPORT: -32,
@@ -93,4 +96,5 @@ export const BULK_STATUS = {
   L_E_CONTRACT: -48,
   L_E_TABLE: -49,
   L_E_MISSING: -73,
+  L_E_DECL_FULL: -74,
 } as const;

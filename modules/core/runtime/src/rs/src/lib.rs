@@ -16,6 +16,7 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
 mod arena;
+pub mod collect;
 mod assign;
 pub mod boot;
 pub mod card;
@@ -393,6 +394,20 @@ import_table! {
     ("dk_intro_take", imp_intro_take),
     ("dk_param_get", imp_param_get),
     ("dk_param_set", imp_param_set),
+    ("dk_module_ctx_add_machine", collect::dk_module_ctx_add_machine),
+    ("dk_module_ctx_add_fx", collect::dk_module_ctx_add_fx),
+    ("dk_machine_add_page", collect::dk_machine_add_page),
+    ("dk_fx_add_page", collect::dk_fx_add_page),
+    ("dk_page_add_param", collect::dk_page_add_param),
+    ("dk_page_add_fx_param", collect::dk_page_add_fx_param),
+    ("dk_param_range", collect::dk_param_range),
+    ("dk_param_glyph", collect::dk_param_glyph),
+    ("dk_param_latched", collect::dk_param_latched),
+    ("dk_param_on_click", collect::dk_param_on_click),
+    ("dk_page_canvas", collect::dk_page_canvas),
+    ("dk_page_bind", collect::dk_page_bind),
+    ("dk_page_bind_local", collect::dk_page_bind_local),
+    ("dk_fx_routes", collect::dk_fx_routes),
     ("dk_sample_pool_open", entry::dk_sample_pool_open),
     ("dk_sample_pool_add", entry::dk_sample_pool_add),
     ("dk_sample_pool_clear", entry::dk_sample_pool_clear),
@@ -450,6 +465,20 @@ const _: dkrt_sdk::api::DkHash32FinishFn = imp_hash32_finish;
 const _: dkrt_sdk::api::DkIntroTakeFn = imp_intro_take;
 const _: dkrt_sdk::api::DkParamGetFn = imp_param_get;
 const _: dkrt_sdk::api::DkParamSetFn = imp_param_set;
+const _: dkrt_sdk::api::DkModuleCtxAddMachineFn = collect::dk_module_ctx_add_machine;
+const _: dkrt_sdk::api::DkModuleCtxAddFxFn = collect::dk_module_ctx_add_fx;
+const _: dkrt_sdk::api::DkMachineAddPageFn = collect::dk_machine_add_page;
+const _: dkrt_sdk::api::DkFxAddPageFn = collect::dk_fx_add_page;
+const _: dkrt_sdk::api::DkPageAddParamFn = collect::dk_page_add_param;
+const _: dkrt_sdk::api::DkPageAddFxParamFn = collect::dk_page_add_fx_param;
+const _: dkrt_sdk::api::DkParamRangeFn = collect::dk_param_range;
+const _: dkrt_sdk::api::DkParamGlyphFn = collect::dk_param_glyph;
+const _: dkrt_sdk::api::DkParamLatchedFn = collect::dk_param_latched;
+const _: dkrt_sdk::api::DkParamOnClickFn = collect::dk_param_on_click;
+const _: dkrt_sdk::api::DkPageCanvasFn = collect::dk_page_canvas;
+const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
+const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
+const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = entry::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = entry::dk_sample_pool_add;
 const _: dkrt_sdk::api::DkSamplePoolClearFn = entry::dk_sample_pool_clear;

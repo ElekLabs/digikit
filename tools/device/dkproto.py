@@ -145,6 +145,18 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -24: ("E_PARAM_FULL", "no free reserved parameter row"),
     -25: ("E_PAGE_FULL", "no free reserved page row (Digitone II)"),
     -26: ("E_TYPE_IN_USE", "reserved (hot reload is archived); never returned"),
+    -27: (
+        "E_DECL_ID",
+        "a builder call names a machine or effect id that the keys table of the header lacks",
+    ),
+    -28: (
+        "E_DECL_USES",
+        "init declared more machine, param or page rows than the [uses] counts of the header say",
+    ),
+    -29: (
+        "E_FX_ID_DUP",
+        "an effect id of the module is already loaded (or twice in the module)",
+    ),
     -30: ("E_NO_DSP", "DSP code in the file, no DSP loader in the image"),
     -31: ("E_DSP_FORMAT", "the DSP section is malformed"),
     -32: ("E_DSP_IMPORT", "a DSP symbol is not exported by the image"),
@@ -167,6 +179,7 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
         "E_MISSING",
         "the service is not in the image (the module that provides it is not loaded)",
     ),
+    -74: ("E_DECL_FULL", "init made more builder calls than the record limit allows"),
 }
 
 CAP: dict[str, int] = {

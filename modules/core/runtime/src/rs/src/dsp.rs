@@ -329,6 +329,48 @@ pub unsafe fn fx_row_of(owner: u8, ordinal: u32) -> Option<usize> {
     None
 }
 
+/// The voice row of machine type `t` that module record `rec` claimed.
+pub unsafe fn voice_row(rec: usize, t: u32) -> Option<usize> {
+    let d = ds();
+    let mut k = 0;
+    while k < MAX_ROWS {
+        if d.row_owner[k] == rec as u8 + 1 && d.row_type[k] == t {
+            return Some(k);
+        }
+        k += 1;
+    }
+    None
+}
+
+/// What `init` declared for the voice row `row` (a module of api major 3): the eight knob ranges and the latch mask, published with the row. A latch mask needs a
+/// note_on routine (as the DSP section check says for version 3). Returns OK or E_FORMAT.
+pub unsafe fn set_declared(row: usize, rng: [u32; 8], latched: u32) -> i32 {
+    let d = ds();
+    if row >= MAX_ROWS || (latched & !0xff != 0) || (latched != 0 && d.row_note_on[row] == 0) {
+        return E_FORMAT;
+    }
+    d.row_rng[row] = rng;
+    d.row_latched[row] = latched;
+    OK
+}
+
+/// What `init` declared for effect record `ordinal` of module `rec`: its route flags (`Some`) and the defaults of the words p0 to p7 (`Some`).
+pub unsafe fn fx_set_declared(rec: usize, ordinal: u32, flags: Option<u32>, par: Option<[u32; 8]>) -> bool {
+    match fx_row_of(rec as u8 + 1, ordinal) {
+        Some(k) => {
+            let d = ds();
+            if let Some(f) = flags {
+                d.fx_flags[k] = f;
+            }
+            if let Some(p) = par {
+                d.fx_par[k] = p;
+            }
+            true
+        }
+        None => false,
+    }
+}
+
 /// The flags word of the record that effect row `k` was claimed for (`FXF_SEND`, `FXF_NOMASTER`, `FXF_DEFAULT_SEND`; 0 for a free row).
 pub unsafe fn fx_flags_of(k: usize) -> u32 {
     if k < MAX_FX {

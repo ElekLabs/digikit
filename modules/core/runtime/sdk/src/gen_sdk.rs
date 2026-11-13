@@ -54,6 +54,7 @@ pub mod logk {
     pub const INPUT_TAKEN: u16 = 41;
     pub const PARAM_CHANGE: u16 = 42;
     pub const MOD_NEEDS: u16 = 43;
+    pub const MODULE_COMMIT: u16 = 44;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;
@@ -250,6 +251,9 @@ pub mod load {
     pub const E_PARAM_FULL: i32 = -24;
     pub const E_PAGE_FULL: i32 = -25;
     pub const E_TYPE_IN_USE: i32 = -26;
+    pub const E_DECL_ID: i32 = -27;
+    pub const E_DECL_USES: i32 = -28;
+    pub const E_FX_ID_DUP: i32 = -29;
     pub const E_NO_DSP: i32 = -30;
     pub const E_DSP_FORMAT: i32 = -31;
     pub const E_DSP_IMPORT: i32 = -32;
@@ -269,6 +273,7 @@ pub mod load {
     pub const E_CONTRACT: i32 = -48;
     pub const E_TABLE: i32 = -49;
     pub const E_MISSING: i32 = -73;
+    pub const E_DECL_FULL: i32 = -74;
 }
 
 /// The imports of a module (`[[import]]`) and the callback types they take (`[handle.callbacks]`).
