@@ -95,6 +95,8 @@ pub struct PeerMem {
     /// since the last `take_pin_edges`. MAIN's EPORT IRQ4 sees them through the bridge.
     pin: bool,
     pin_edges: u32,
+    /// `frame_level` as of the last write to the interrupt controller (read on every step while a frame waits).
+    frame_level_cache: Option<u8>,
 }
 
 impl PeerMem {
@@ -115,6 +117,7 @@ impl PeerMem {
             pit_start: 0,
             pin: false,
             pin_edges: 0,
+            frame_level_cache: None,
         }
     }
 
@@ -196,6 +199,13 @@ impl PeerMem {
     }
 
     fn io_write(&mut self, addr: u32, size: u8, value: u32) {
+        self.io_write_bytes(addr, size, value);
+        if (INTC0..INTC0 + 0x80).contains(&addr) {
+            self.frame_level_cache = self.compute_frame_level();
+        }
+    }
+
+    fn io_write_bytes(&mut self, addr: u32, size: u8, value: u32) {
         self.note(addr, size, true, value);
         if addr == PIT1 && size == 2 {
             // Writing PIF = 1 clears it and, with RLD, restarts the count; enabling starts it.
@@ -270,6 +280,10 @@ impl PeerMem {
 
     /// The interrupt level of the frame vector when the peer has it enabled (ICR set, source unmasked).
     fn frame_level(&self) -> Option<u8> {
+        self.frame_level_cache
+    }
+
+    fn compute_frame_level(&self) -> Option<u8> {
         let src = FRAME_VECTOR - 64;
         let icr = self.io_byte(INTC0 + 0x40 + src);
         let level = icr & 7;
@@ -450,6 +464,8 @@ pub struct PeerCpu {
     pub isr_instructions: u64,
     pub isr_max: u64,
     isr: Option<(u16, u64)>,
+    /// Where the startup clear loop was found: after that only this address is tested (the scan reads memory at every step).
+    clear_pc: Option<u32>,
     /// Instructions inside the frame handler by 64-byte code bucket (`DIGI_PEER_PROFILE=1`), for finding where its time goes.
     pub isr_profile: Option<BTreeMap<u32, u64>>,
 }
@@ -479,6 +495,7 @@ impl PeerCpu {
             isr_instructions: 0,
             isr_max: 0,
             isr: None,
+            clear_pc: None,
             isr_profile: Self::profile_requested().then(BTreeMap::new),
         }
     }
@@ -501,6 +518,7 @@ impl PeerCpu {
         self.mem.sdram[o..o + program.len()].copy_from_slice(program);
         let entry = u32::from_be_bytes(program[0..4].try_into().expect("image has an entry long"));
         self.cpu = Cpu::new();
+        self.clear_pc = None;
         self.cpu.pc = entry;
         self.cpu.a[7] = SRAM_BASE + SRAM_BYTES as u32 - 0x40;
         self.cpu.sr = 0x2700;
@@ -583,10 +601,14 @@ impl PeerCpu {
     fn clear_loop(&mut self, end: u64) -> bool {
         const LOOP: [u8; 6] = [0x42, 0x18, 0xb0, 0x88, 0x66, 0xfa];
         let (a0, d0, pc) = (self.cpu.a[0], self.cpu.d[0], self.cpu.pc);
+        if self.clear_pc.is_some_and(|known| known != pc) {
+            return false;
+        }
         if self.mem.mem(pc, 6) != Some(&LOOP[..]) || a0 >= d0 || self.mem.mem(a0, d0 - a0).is_none()
         {
             return false;
         }
+        self.clear_pc = Some(pc);
         let k = u64::from(d0 - a0 - 1).min((end - self.cpu.icount) / 3);
         if k == 0 {
             return false;
