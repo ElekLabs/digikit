@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 
 from tools.control.digi_client import oled_png
+from tools.firmware import device as device_files
 from tools.patchkit import pk_device
 from tools.patchkit import pk_harness as H
 
@@ -325,7 +326,7 @@ class Demo:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cmd", choices=["shots", "leak", "keys"])
-    ap.add_argument("--device", choices=["dt2", "dn2"], required=True)
+    ap.add_argument("--device", choices=device_files.shorts(), required=True)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--cycles", type=int, default=50)
     ap.add_argument(

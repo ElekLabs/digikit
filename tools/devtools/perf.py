@@ -43,6 +43,7 @@ ROOT = HERE.parent.parent
 from tools import python_env  # noqa: E402
 from tools.devtools import fastcov  # noqa: E402
 from tools.emulator import coupled, digi_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 OUT = ROOT / "out" / "native" / "perf"
 CALIB = OUT / "calibration.json"
@@ -410,7 +411,7 @@ def main() -> int:
     ap.add_argument(
         "--refresh-core", action="store_true", help="regenerate the shared core first"
     )
-    ap.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    ap.add_argument("--device", choices=device_files.shorts(), default="dn2")
     ap.add_argument(
         "--card-image",
         default=None,

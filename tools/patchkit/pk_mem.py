@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.firmware import config
+from tools.firmware import device as device_files
 from tools.patchkit import pk_device
 
 HERE = Path(__file__).resolve().parent
@@ -160,7 +161,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument(
         "modules", nargs="*", help="ids under modules/, e.g. test/patched-pluck"
     )
-    ap.add_argument("--device", default="dt2", choices=("dt2", "dn2"))
+    ap.add_argument("--device", default="dt2", choices=device_files.shorts())
     ap.add_argument("--firmware", help="default: 1.17 (dt2), 1.12 (dn2)")
     ap.add_argument("--json", action="store_true", help="JSON only")
     a = ap.parse_args(argv)

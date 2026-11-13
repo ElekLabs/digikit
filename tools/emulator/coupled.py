@@ -42,6 +42,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 from tools.devtools import render_cache  # noqa: E402
 from tools.emulator import digi_env, native_pgo, native_target  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 TOOLCHAIN = digi_env.TOOLCHAIN
 DEFAULT_FEATURES = "coupled-audio"
@@ -956,7 +957,7 @@ def parser() -> argparse.ArgumentParser:
         )
 
     p = add("build", cmd_build, "build coupled-run")
-    p.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    p.add_argument("--device", choices=device_files.shorts(), default="dn2")
     p.add_argument(
         "--id-out",
         type=pathlib.Path,
@@ -965,7 +966,7 @@ def parser() -> argparse.ArgumentParser:
     p = add("scenario", cmd_scenario, "run named scenarios")
     p.add_argument("names", nargs="*", metavar="NAME")
     p.add_argument("--all", action="store_true", help="run every scenario of the file")
-    p.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    p.add_argument("--device", choices=device_files.shorts(), default="dn2")
     p.add_argument(
         "--check-generated",
         action="store_true",

@@ -35,6 +35,7 @@ from tools.emulator import (  # noqa: E402
     native_pgo,  # noqa: E402
     native_target,  # noqa: E402
 )
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import pk_device  # noqa: E402
 
 FIRMWARE = pk_device.acceptance_firmware()  # the harness' default firmware per device
@@ -141,7 +142,7 @@ def bench(device: str, pairs: int, seconds: float) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cmd", choices=("build", "path", "bench"))
-    ap.add_argument("--device", default="dt2", choices=("dt2", "dn2"))
+    ap.add_argument("--device", default="dt2", choices=device_files.shorts())
     ap.add_argument("--pairs", type=int, default=3)
     ap.add_argument("--seconds", type=float, default=12.0)
     a = ap.parse_args()

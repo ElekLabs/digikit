@@ -276,6 +276,11 @@ def by_syx_id(syx_id, dirpath=None):
     return None
 
 
+def shorts(dirpath=None):
+    """-> the short names of all devices, in file order: the `choices` of a tool's --device."""
+    return [d.short for d in load_all(dirpath)]
+
+
 def dsp_shorts(dirpath=None):
     """-> the short names of the devices with a SHARC DSP, sorted: the `choices` of a DSP tool's --device."""
     return sorted(d.short for d in load_all(dirpath) if d.has_dsp())
