@@ -5,7 +5,7 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/usb-bulk.device.test.ts"],
-        "modules": ["test/usb-echo"],
+        "modules": ["test/usb-echo", "digikit/debug"],
         "plusdrive": true
       }
     ]

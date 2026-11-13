@@ -2773,7 +2773,7 @@ impl Actor {
     }
 
     /// `usb.phy {vbus?, run?}`: `vbus` sets VBUS present (OTGSC.BSV, off by default); `run` sets or clears USBCMD.RS as a write (a controller started or stopped by something else). The USB controller's PHY events since the last call, oldest first (`{"w": [reg, value]}` a ULPI viewport write, `{"r": [reg, value]}` a read,
-    /// `{"rs": 0 | 1}` a change of USBCMD.RS), and the PHY register file as hex.
+    /// `{"rs": 0 | 1}` a change of USBCMD.RS, `{"rst": 1}` a controller reset), and the PHY register file as hex.
     fn rpc_usb_phy(&mut self, p: &Params) -> RpcResult {
         if let Some(on) = p.opt_bool("run")? {
             self.with_runtime(|r| {
@@ -2792,6 +2792,7 @@ impl Actor {
             .iter()
             .map(|(kind, a, b)| match *kind {
                 "rs" => json!({"rs": a}),
+                "rst" => json!({"rst": a}),
                 k => json!({ k: [a, b] }),
             })
             .collect();

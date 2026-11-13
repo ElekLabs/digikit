@@ -7,15 +7,14 @@ import { errorLine } from '@web/modules/backend';
 import { failureModule, fmtVersion, hasCap, type DkSession, type LoadFailure } from '@digi/dk-session';
 import { Sample, prepareUpload, sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples, type SamplesBackend } from '@digi/dk-session/samples';
-import { BulkTakeOver, chooseBulk, type BulkChoice, type TakeOverDevice } from '@digi/dk-session/bulk-select';
+import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
 import { transferEnv } from '@web/transfer/env';
 import { asked, noteConnection } from '@web/transfer/connection-state';
-import { portLost, resetSession, session as running, target } from '@web/transfer/target';
+import { session as running, target } from '@web/transfer/target';
 import { joinPath, type LocalEntry, type Prepare } from './samples-core';
 import { setDeviceInfo, setSampleLink } from '@web/transfer/transfer-state';
 import type { LinkState } from '@web/transfer/link-core';
 import {
-  takeOverOn,
   localFolder,
   localPath,
   sampleFolder,
@@ -69,58 +68,10 @@ let last:
       /** Why usb-fast did not load at the last boot, read once per session when there is no bulk link (`usbFast` unset: it did load, or it is not selected). */
       failure?: { usbFast?: LoadFailure };
       bulk?: BulkChoice;
-      /** usb-fast is loaded but the device is in USB AUDIO/MIDI (no bulk interface); read at each choice while there is no bulk link. */
+      /** usb-fast is loaded but the device is in USB AUDIO/MIDI and no bulk route was found (firmware without core/usb-bulk-audio); read at each choice while there is no bulk link. */
       wrongMode?: boolean;
-      /** The take-over of a device in USB AUDIO/MIDI (made at the first run that needs it). */
-      takeover?: BulkTakeOver;
-      /** The current run called `takeover.begin`: `endRun` calls `end`. */
-      began?: boolean;
     }
   | undefined;
-
-/**
- * The device across a take-over: the MIDI port goes away when the device switches to USB MIDI and returns, so the session is read again each time (`running`
- * opens the port) and `reenumerated` waits until the device answers on it. [O] whether the port keeps its name on every host.
- */
-function takeOverDevice(): TakeOverDevice {
-  const port = () => {
-    const t = target();
-    return t.kind === 'midi' ? t.port : undefined;
-  };
-  const via =
-    <T>(f: (s: DkSession) => Promise<T>) =>
-    async (): Promise<T> =>
-      f(await running());
-  return {
-    sysex: () => ({
-      usbFastNonce: async (n) => (await running()).usbFastNonce(n),
-      usbFastWrongMode: via((s) => s.usbFastWrongMode()),
-      usbFastTakeOver: via((s) => s.usbFastTakeOver()),
-      usbFastRelease: async () => {
-        await (await running()).usbFastRelease();
-        // the device switches back about 50 ms after the reply and the port goes away again: the next request opens it fresh
-        const p = port();
-        setTimeout(() => p && portLost(p), 300);
-      },
-    }),
-    async reenumerated(timeoutMs) {
-      const deadline = Date.now() + timeoutMs;
-      await new Promise((r) => setTimeout(r, 1500));
-      for (;;) {
-        const p = port();
-        if (p) portLost(p);
-        resetSession();
-        try {
-          await (await running()).info();
-          return;
-        } catch (e) {
-          if (Date.now() > deadline) throw e;
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
-    },
-  };
-}
 
 /** The load failure of the usb-fast module (the device's LOADS record), when the last boot selected it and it did not load; undefined when the runtime
  * cannot say (an older runtime) or the module loaded. */
@@ -166,20 +117,9 @@ export async function openDeviceSamples(forRun = false): Promise<OpenedSamples> 
   if (!last.bulk) {
     const env = transferEnv().bulk;
     last.bulk = env && target().kind !== 'none' ? await chooseBulk(s, env, note) : undefined;
-    // a device in USB AUDIO/MIDI has no bulk interface. Only when the user turned the experimental take-over on, a run takes USB over (USB audio
-    // pauses until the linger after the run ends); otherwise the transfer stays on SysEx and the pill says how to get Fast USB.
+    // chooseBulk finds the USB MIDI pair or the OUT-only interface of USB AUDIO/MIDI. A device in USB AUDIO/MIDI with neither (older firmware) stays on
+    // SysEx and the pill says how to get Fast USB.
     last.wrongMode = !last.bulk && target().kind === 'midi' ? await s.usbFastWrongMode() : false;
-    if (forRun && takeOverOn() === 'on' && env && !last.bulk && last.wrongMode) {
-      last.takeover = new BulkTakeOver(takeOverDevice(), env, { note });
-    }
-  }
-  if (forRun && takeOverOn() === 'on' && last.takeover && !last.began) {
-    // `begin` returns the held link at once when the device is still ours, and takes over again when the device gave the mode back
-    last.began = true;
-    const c = await last.takeover.begin();
-    if (!c) last.began = false;
-    last.bulk = c;
-    if (last.opened && !had === !last.bulk && (!had || had === last.bulk)) setSampleLink(linkOf(last.opened.link, !!c));
   }
   if (last.opened && !had === !last.bulk && (!had || had === last.bulk)) {
     // a new choice for the run (the last one had failed and the link is the same again): the pill follows it
@@ -201,24 +141,16 @@ export async function openDeviceSamples(forRun = false): Promise<OpenedSamples> 
     prepare: (name, bytes) => prepareUpload(conv, name, bytes),
     link: last.bulk ? 'bulk' : 'sysex',
   };
-  setSampleLink(linkOf(last.opened.link, last.opened.link === 'bulk' && !!last.takeover?.active));
+  setSampleLink(linkOf(last.opened.link));
   return last.opened;
 }
 
 /** The pill state for a link: a SysEx link says why usb-fast is not in use when the device reported it. */
-function linkOf(link: 'bulk' | 'sysex', takenOver = false): LinkState {
-  if (link === 'bulk') return { state: 'bulk', takenOver };
+function linkOf(link: 'bulk' | 'sysex'): LinkState {
+  if (link === 'bulk') return { state: 'bulk' };
   const failure = last?.failure?.usbFast;
   if (failure) return { state: 'sysex', failure };
-  return last?.wrongMode && takeOverOn() !== 'on' ? { state: 'sysex', wrongMode: true } : { state: 'sysex' };
-}
-
-/** A run ended (also a failed one): the take-over, if any, keeps the device for its linger and then gives the USB mode back. */
-export function endRun(): void {
-  if (last?.takeover && last.began) {
-    last.began = false;
-    last.takeover.end();
-  }
+  return last?.wrongMode ? { state: 'sysex', wrongMode: true } : { state: 'sysex' };
 }
 
 /** Read the device's open folder, its free space and what the backend can do (the On device column of Samples mode). */

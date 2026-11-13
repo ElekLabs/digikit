@@ -1093,7 +1093,7 @@ service = "usb_bulk"
 since = 11
 context = "any"
 sig = "u32 (dk_usb_bulk *ub)"
-doc = "State word: bit 0 enabled, bit 1 connected, bit 2 wrong mode, bit 3 taken over, bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk."
+doc = "State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; read live), bit 3 never set (take-over removed), bit 6 out only (USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only, dk_usb_bulk_send returns E_STATE; read live), bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk."
 requires = "core/usb-bulk"
 absent = "0"
 
@@ -1103,7 +1103,7 @@ service = "usb_bulk"
 since = 11
 context = "any"
 sig = "i32 (dk_usb_bulk *ub)"
-doc = "Take the USB port over for the bulk link, or renew a take-over (call it again at least every 20 s while the host works). Callable from a host command handler."
+doc = "Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists; the bulk OUT interface works in USB AUDIO/MIDI without it). Kept so that the import table does not change."
 requires = "core/usb-bulk"
 absent = "missing"
 
@@ -1113,7 +1113,7 @@ service = "usb_bulk"
 since = 11
 context = "any"
 sig = "i32 (dk_usb_bulk *ub)"
-doc = "End a take-over: about 50 ms later the service switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a host command handler."
+doc = "Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists). Kept so that the import table does not change."
 requires = "core/usb-bulk"
 absent = "missing"
 
@@ -1459,7 +1459,7 @@ id = 43
 name = "MOD_NEEDS"
 args = ["index", "name0", "name1", "name2", "-"]
 
-[protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
+[protocol]        # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
 [protocol.limits]   # sizes of the upload protocol; every host and the runtime take them from here
@@ -1497,9 +1497,8 @@ probe = [0x32, 0x35]   # digikit/probe: collector status, raw reads, reset (docs
 debug = [0x20, 0x22]   # digikit/debug: LOG, PEEK, LOGCFG (docs/findings/46-digikit-debug.md)
 file_write_test = [0x24, 0x27]   # test/file-write: start an I/O job that writes a file, its status, wake it, a file call outside an I/O step
 usb_fast = [0x36, 0x37]   # usb-fast: SET_NONCE (the host proves which USB device is on its MIDI port, docs/plans/usb-fast.md section 5)
-usb_fast_takeover = [0x1e, 0x1f]   # usb-fast: TAKEOVER, RELEASE (docs/plans/usb-fast-takeover.md)
 file_write_test_b = [0x28, 0x2b]   # test/file-write-b: the same commands for a second module
-usb_echo_test = [0x2c, 0x2f]   # test/usb-echo: its status, hold, reenable, takeover (body: op 0 takeover, 1 giveback)
+usb_echo_test = [0x2c, 0x2f]   # test/usb-echo: its status, hold, reenable, disable
 entry_demo_test = [0x1c, 0x1d]   # test/entry-demo: its report (what init and tick saw), and a settings write that tick runs
 
 [protocol.service]  # the commands of run-time service modules, by name; each lies in a range above (a module registers them with dk_host_register)
@@ -1508,10 +1507,8 @@ REMOTE_TURN = 0x39     # encoder (u8), delta (s8); the reply body is the delta t
 REMOTE_RELEASE = 0x3a  # release every key the module holds
 LOG = 0x20             # digikit/debug: body u32 from_seq; reply u32 oldest, u32 newest, u8 n, then n events of 32 bytes
 PEEK = 0x21            # digikit/debug: body u32 addr, u16 len (1 to 512, inside the device file's `[digikit] peek` ranges); reply u32 addr, u16 len, the bytes
-LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded)
+LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded); op 2 = card log get (no more body), op 3 = card log set (body: u8 op=3, u8 on); reply for op 2 and op 3 (16 bytes): u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes (this boot), i32 last_status, u32 ms_since_write (0xffffffff = none yet); a debug module without the card log replies to op 2 with an error status
 USB_FAST_NONCE = 0x36  # usb-fast: body nonce[8]; the module keeps it and returns it in the INFO reply of the bulk link; reply empty
-USB_FAST_TAKEOVER = 0x1e  # usb-fast: no body; the module asks core/usb-bulk to take the USB port over (USB AUDIO/MIDI -> USB MIDI, about 50 ms after the reply); also the renew. Reply empty, or E_STATE (Overbridge)
-USB_FAST_RELEASE = 0x1f   # usb-fast: no body; the module asks core/usb-bulk to give the USB port back. Reply empty
 REMOTE_STATE = 0x3e    # reply: enabled (u8, always 1 while the module is loaded), state format (u8), turn limit (u8)
 
 [protocol.bulk]     # the bulk link: a vendor interface 2 (class 0xFF) on EP2 OUT/IN, no SysEx framing, big-endian (docs/plans/usb-fast.md section 5)

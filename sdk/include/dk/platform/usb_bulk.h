@@ -25,19 +25,15 @@
  * not in USB MIDI mode (USB AUDIO/MIDI uses EP2 IN for the audio clock feedback) or a mode switch is settling (the firmware restarts the device about a second after
  * it): the job calls it again later (a timed wake). Bit 2 of the state word shows the mode live.
  *
- * Take-over (docs/plans/usb-fast-takeover.md). In USB AUDIO/MIDI the bulk pair cannot exist. dk_usb_bulk_takeover(ub) (from a command handler is fine: it only records the
- * request) makes the adapter switch the device to USB MIDI in RAM about 50 ms later, from its UI-pass tick, never in the caller's context; the USB CONFIG setting is
- * not written, so a reboot returns to it. USB audio pauses. In USB MIDI it succeeds at once without a switch. E_STATE in Overbridge or another USB mode. After it the
- * job calls dk_usb_bulk_enable until it stops returning E_STATE (the switch is not done yet). The switch enumerates with the bulk interface already present: one
- * re-enumeration, not two, when the job has called dk_usb_bulk_enable before (in any mode). dk_usb_bulk_giveback(ub) switches back about 50 ms later. The adapter gives back
- * by itself after the host's disconnect, a bus suspend of 0.5 s, or 30 s without host activity (any bulk transfer, or another dk_usb_bulk_takeover call, which renews),
- * and it drops the take-over without switching when the USB mode changes by another route (the user's USB CONFIG choice wins). Bit 3 of the state word shows it.
+ * dk_usb_bulk_takeover and dk_usb_bulk_giveback are removed: both always return E_STATE (the import stays so that the table does not change). In USB AUDIO/MIDI with
+ * core/usb-bulk-audio the bulk OUT interface works without a take-over (bit 6 of the state word).
  *
  * The adapter also wakes the job about four times a second while the interface is enabled (a timer for a module that has none: the retry of dk_usb_bulk_enable,
  * a check for an idle session).
  *
- * Memory. The adapter allocates its 160 KiB of buffers (a 256 KiB block of the firmware's allocator) when the interface can go live (dk_usb_bulk_enable in USB MIDI mode; the take-over's tick before its switch)
- * and frees them when the take-over ends (give-back, host disconnect, suspend, idle, USB CONFIG change, dk_usb_bulk_disable) once EP2 is stopped and you hold no buffer.
+ * Memory. The adapter allocates its 160 KiB of buffers (a 256 KiB block of the firmware's allocator) when the interface can go live (dk_usb_bulk_enable)
+ * and frees them only in dk_usb_bulk_disable (once EP2 is stopped). A host disconnect, suspend or USB CONFIG change does not free them: the module disables on its own rules.
+ * dk_usb_bulk_take gives no buffer (returns 0) after dk_usb_bulk_disable.
  * After that DK_USB_BULK_LIVE is clear: call dk_usb_bulk_enable again (it allocates again; EP2 stays enabled meanwhile, so the host sees NAK, and nothing re-enumerates).
  *
  * One job owns the interface (dk_usb_bulk_enable from another job is E_BUSY); call dk_usb_bulk_disable(ub, id) in `fini`. The job is also woken when the bus is reset.
@@ -55,13 +51,14 @@
 #define DK_USB_BULK_ENABLED 0x1u   /* dk_usb_bulk_enable was called */
 #define DK_USB_BULK_CONNECTED 0x2u /* the host configured the device and EP2 is on */
 #define DK_USB_BULK_WRONG_MODE                                                                     \
-    0x4u /* the device is not in USB MIDI mode (USB CONFIG); live, also after enable */
-#define DK_USB_BULK_TAKEN                                                                          \
-    0x8u /* dk_usb_bulk_takeover is active (requested, or the device is switched) */
+    0x4u /* the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; live, also after enable */
+#define DK_USB_BULK_TAKEN 0x8u /* never set (take-over removed) */
 #define DK_USB_BULK_LIVE                                                                           \
-    0x10u /* the adapter's buffers are allocated; they are freed when a take-over ends, and dk_usb_bulk_enable allocates them again */
+    0x10u /* the adapter's buffers are allocated; dk_usb_bulk_disable frees them and dk_usb_bulk_enable allocates them again */
 #define DK_USB_BULK_NOMEM                                                                          \
-    0x20u /* the last allocation of the buffers failed (dk_usb_bulk_enable returned E_NOMEM, or a take-over was dropped) */
+    0x20u /* the last allocation of the buffers failed (dk_usb_bulk_enable returned E_NOMEM) */
+#define DK_USB_BULK_OUT_ONLY                                                                       \
+    0x40u /* USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only (interface 5, EP2 OUT), dk_usb_bulk_send returns E_STATE; live */
 #define DK_USB_BULK_FULL(st) (((st) >> 8) & 0xffu)     /* receive buffers full and not taken */
 #define DK_USB_BULK_TX_BUSY(st) (((st) >> 16) & 0xffu) /* send slots in flight */
 #define DK_USB_BULK_RESETS(st)                                                                     \

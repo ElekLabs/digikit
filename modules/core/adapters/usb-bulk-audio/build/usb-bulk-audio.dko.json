@@ -1,0 +1,410 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text",
+   "symbol": "ua_prepare",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "ua_init_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ua_connect",
+   "symbol": ".sec..bss.ua_stock_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.ua_connect",
+   "symbol": "usb_bulk_port5_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ua_disconnect",
+   "symbol": "usb_bulk_port5_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.ua_disconnect",
+   "symbol": ".sec..bss.ua_stock_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 216,
+   "offset": 52,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 212,
+   "offset": 60,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_ddr_base",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 110,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_ddr_bytes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 352,
+   "offset": 116,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.usb_bulk_audio_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 160,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 166,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 200,
+   "offset": 236,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 204,
+   "offset": 242,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 262,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..text.ua_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_stock_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 274,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_stock_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 212,
+   "offset": 280,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text.ua_prepare",
+   "symbol": ".sec..text.ua_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 216,
+   "offset": 292,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 200,
+   "offset": 298,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 204,
+   "offset": 304,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 310,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_bulk_port5_attach",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d703034eb9000000004cd703034fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "2f0240c246fc2700207900000000487800014e904eb90000000046c2588f241f4e75",
+   "kind": "text",
+   "name": ".text.ua_connect",
+   "size": 34
+  },
+  {
+   "align": 2,
+   "hex": "2f0240c246fc27004eb90000000046c2227900000000241f4ed1",
+   "kind": "text",
+   "name": ".text.ua_disconnect",
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d7040c4ab900000000661240c246fc27002279000000004a89670c46c24cd7040c4fef000c4e75203c00000148b0b9000000006640203900000000204073907609b681663073a8000155814a81662673a800045b814a81661c2239000000000c8100000000620ed2b9000000000c8100000000640a700223c000000000609c42812041d1fc00000000f4e80681000000100c810000016066e8207900000000d1fc0000000045f10800119298005289b3fc0000014866ee203c09040500263c01ff000021400148227c000705022143014c247c02000200303c5801760621490150214a015443f90000000045f9000000003140000211430004203c00000158263c0000000023d10000000023d20000000023c80000000041f90000000023c00000000023c30000000023c8000000004eb90000000070016000ff3e",
+   "kind": "text",
+   "name": ".text.ua_prepare",
+   "size": 320
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_stock_disconnect",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_stock_connect",
+   "size": 4
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ua_desc",
+   "size": 352
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_audio_state",
+   "size": 4
+  }
+ ],
+ "source_sha256": "e3fb9ac1f565c7b6d8e9f28bd73cd63140538d3062490e85517d8b71be8838e0",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.ua_desc",
+   "section": ".bss.ua_desc",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_stock_connect",
+   "section": ".bss.ua_stock_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ua_stock_disconnect",
+   "section": ".bss.ua_stock_disconnect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.usb_bulk_audio_state",
+   "section": ".bss.usb_bulk_audio_state",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_connect",
+   "section": ".text.ua_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ua_disconnect",
+   "section": ".text.ua_disconnect",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_connect",
+   "section": ".text.ua_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_desc",
+   "section": ".bss.ua_desc",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_disconnect",
+   "section": ".text.ua_disconnect",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_init_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_init_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ua_prepare",
+   "section": ".text.ua_prepare",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_stock_connect",
+   "section": ".bss.ua_stock_connect",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ua_stock_disconnect",
+   "section": ".bss.ua_stock_disconnect",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_alias_delta",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_audio_state",
+   "section": ".bss.usb_bulk_audio_state",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_port5_attach",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_port5_connect",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_port5_disconnect",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_ddr_base",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_ddr_bytes",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_port_table",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "104",
+  "isa_check": "c62b978d206ce7d2cf0a99bc92194b0d2b994bc1ecb94097ee34acd59e0b92a1",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

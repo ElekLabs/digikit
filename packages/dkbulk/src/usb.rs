@@ -7,7 +7,7 @@ use std::time::Duration;
 use nusb::transfer::{Bulk, Direction, In, Out, TransferError};
 use nusb::{DeviceInfo, Endpoint, Interface, MaybeFuture};
 
-use crate::gen_bulk::{CLASS, VID};
+use crate::gen_bulk::{CLASS, PACKET, VID};
 use crate::link::{FrameReader, InPipe, Link, LinkError, OutPipe, send_with_zlp};
 
 /// Size of one IN transfer: replies are small; a multiple of every bulk packet size (64, 512).
@@ -21,10 +21,56 @@ pub struct Candidate {
     /// The product string, for the log.
     pub name: String,
     pub interface: u8,
+    /// The interface has one bulk OUT endpoint and no IN endpoint (USB AUDIO/MIDI): replies come over SysEx.
+    pub out_only: bool,
 }
 
 fn id_of(d: &DeviceInfo) -> String {
     format!("{}:{}", d.bus_id(), d.device_address())
+}
+
+/// The bulk interface of a device and its shape.
+struct Found {
+    number: u8,
+    out_only: bool,
+    out_ep: Option<u8>,
+}
+
+/// The class interface of `d`, and whether it is a bulk pair or OUT only. A device that cannot be opened is taken for a pair.
+fn classify(d: &DeviceInfo) -> Option<Found> {
+    let number = offers(d)?;
+    let pair = Found {
+        number,
+        out_only: false,
+        out_ep: None,
+    };
+    let Ok(device) = d.open().wait() else {
+        return Some(pair);
+    };
+    let (mut out_ep, mut has_in) = (None, false);
+    for alt in device
+        .configurations()
+        .flat_map(|c| c.interface_alt_settings())
+        .filter(|a| a.interface_number() == number && a.class() == CLASS)
+    {
+        for ep in alt.endpoints() {
+            if ep.transfer_type() != nusb::descriptors::TransferType::Bulk {
+                continue;
+            }
+            match ep.direction() {
+                Direction::Out => out_ep = out_ep.or(Some(ep.address())),
+                Direction::In => has_in = true,
+            }
+        }
+    }
+    Some(match (out_ep, has_in) {
+        (Some(_), false) => Found {
+            number,
+            out_only: true,
+            out_ep,
+        },
+        _ => pair,
+    })
 }
 
 fn offers(d: &DeviceInfo) -> Option<u8> {
@@ -42,11 +88,12 @@ pub fn list() -> Result<Vec<Candidate>, String> {
     let all = nusb::list_devices().wait().map_err(|e| e.to_string())?;
     Ok(all
         .filter_map(|d| {
-            let interface = offers(&d)?;
+            let f = classify(&d)?;
             Some(Candidate {
                 id: id_of(&d),
                 name: d.product_string().unwrap_or("?").to_string(),
-                interface,
+                interface: f.number,
+                out_only: f.out_only,
             })
         })
         .collect())
@@ -72,13 +119,13 @@ impl UsbLink {
     pub fn open(id: Option<&str>) -> Result<UsbLink, String> {
         let all = nusb::list_devices().wait().map_err(|e| e.to_string())?;
         let info = all
-            .filter(|d| offers(d).is_some())
-            .find(|d| id.is_none_or(|w| id_of(d) == w))
+            .filter(|d| id.is_none_or(|w| id_of(d) == w))
+            .find_map(|d| classify(&d).filter(|f| !f.out_only).map(|f| (d, f.number)))
             .ok_or_else(|| match id {
                 Some(w) => format!("no USB device {w} with an interface of class {CLASS:#04x}"),
                 None => format!("no USB device {VID:#06x} with an interface of class {CLASS:#04x} (is usb-fast loaded?)"),
             })?;
-        let number = offers(&info).unwrap();
+        let (info, number) = info;
         let device = info.open().wait().map_err(|e| format!("open: {e}"))?;
         let interface = device
             .claim_interface(number)
@@ -122,6 +169,129 @@ impl UsbLink {
     /// The two halves, for a bridge that sends and receives on different threads; the interface stays claimed until the third value drops.
     pub fn split(self) -> (UsbTx, UsbRx, Box<dyn std::any::Any + Send>) {
         (self.tx, self.rx, Box::new(self.interface))
+    }
+}
+
+/// A claimed interface with one bulk OUT endpoint and no IN endpoint (the USB AUDIO/MIDI probe: interface 5, EP 0x02). Only that interface is claimed:
+/// the class drivers keep the others, and no kernel driver is detached.
+pub struct OutOnly {
+    out: Endpoint<Bulk, Out>,
+    _interface: Interface,
+}
+
+impl OutOnly {
+    /// Open the device `id` (`bus:address`), or the first device with the vendor id that has an interface `number`; claim it and take the OUT endpoint `ep`.
+    pub fn open(id: Option<&str>, number: u8, ep: u8) -> Result<OutOnly, String> {
+        let all = nusb::list_devices().wait().map_err(|e| e.to_string())?;
+        let info = all
+            .filter(|d| d.vendor_id() == VID && d.interfaces().any(|i| i.interface_number() == number))
+            .find(|d| id.is_none_or(|w| id_of(d) == w))
+            .ok_or_else(|| match id {
+                Some(w) => format!("no USB device {w} with an interface {number}"),
+                None => format!("no USB device {VID:#06x} with an interface {number} (is the probe image loaded?)"),
+            })?;
+        Self::claim(&info, number, ep)
+    }
+
+    /// Open the OUT-only interface of the device `id` (or the first one that has it): the one `list` marks `out-only`.
+    pub fn open_auto(id: Option<&str>) -> Result<OutOnly, String> {
+        let all = nusb::list_devices().wait().map_err(|e| e.to_string())?;
+        let (info, number, ep) = all
+            .filter(|d| id.is_none_or(|w| id_of(d) == w))
+            .find_map(|d| {
+                let f = classify(&d).filter(|f| f.out_only)?;
+                Some((d, f.number, f.out_ep?))
+            })
+            .ok_or_else(|| match id {
+                Some(w) => format!("no USB device {w} with an OUT-only bulk interface"),
+                None => format!("no USB device {VID:#06x} with an OUT-only bulk interface (is core/usb-bulk-audio loaded?)"),
+            })?;
+        Self::claim(&info, number, ep)
+    }
+
+    fn claim(info: &DeviceInfo, number: u8, ep: u8) -> Result<OutOnly, String> {
+        let device = info.open().wait().map_err(|e| format!("open: {e}"))?;
+        let interface = device
+            .claim_interface(number)
+            .wait()
+            .map_err(|e| format!("claim interface {number}: {e}"))?;
+        let out = interface
+            .endpoint::<Bulk, Out>(ep)
+            .map_err(|e| format!("endpoint {ep:#04x}: {e}"))?;
+        Ok(OutOnly {
+            out,
+            _interface: interface,
+        })
+    }
+
+    /// Write `total` bytes of a pattern in `chunk`-byte transfers, up to `depth` in flight. Returns the bytes the device accepted.
+    pub fn write(
+        &mut self,
+        total: usize,
+        chunk: usize,
+        depth: usize,
+        timeout: Duration,
+    ) -> Result<usize, String> {
+        let (mut submitted, mut done) = (0usize, 0usize);
+        while done < total {
+            while submitted < total && self.out.pending() < depth {
+                let n = chunk.min(total - submitted);
+                let data: Vec<u8> = (0..n).map(|k| (submitted + k) as u8).collect();
+                self.out.submit(data.into());
+                submitted += n;
+            }
+            match self.out.wait_next_complete(timeout) {
+                Some(c) => {
+                    done += c.actual_len;
+                    c.status.map_err(|e| {
+                        if e == TransferError::Stall {
+                            let _ = self.out.clear_halt().wait();
+                        }
+                        format!("after {done} of {total} bytes: {e}")
+                    })?;
+                }
+                None => {
+                    self.out.cancel_all();
+                    let _ = self.out.wait_next_complete(Duration::from_millis(500));
+                    return Err(format!("timeout after {done} of {total} bytes"));
+                }
+            }
+        }
+        // a transfer of a multiple of the packet size ends with a zero-length packet
+        if total > 0 && total.is_multiple_of(PACKET) {
+            OutPipe::out(self, &[], timeout).map_err(|e| format!("zero-length packet: {e:?}"))?;
+        }
+        Ok(done)
+    }
+
+    /// One whole frame, then a zero-length transfer when its length is a multiple of the packet size.
+    pub fn send(&mut self, frame: &[u8], timeout: Duration) -> Result<(), LinkError> {
+        send_with_zlp(self, frame, timeout)
+    }
+}
+
+impl OutPipe for OutOnly {
+    fn out(&mut self, data: &[u8], timeout: Duration) -> Result<(), LinkError> {
+        self.out.submit(data.to_vec().into());
+        match self.out.wait_next_complete(timeout) {
+            Some(c) => c.status.map_err(|e| {
+                if e == TransferError::Stall {
+                    let _ = self.out.clear_halt().wait();
+                }
+                map(e)
+            }),
+            None => {
+                self.out.cancel_all();
+                let _ = self.out.wait_next_complete(Duration::from_millis(500));
+                Err(LinkError::Timeout)
+            }
+        }
+    }
+}
+
+impl Drop for OutOnly {
+    fn drop(&mut self) {
+        self.out.cancel_all();
     }
 }
 

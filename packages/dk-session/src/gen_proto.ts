@@ -46,8 +46,6 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
-  USB_FAST_TAKEOVER: 0x1e,
-  USB_FAST_RELEASE: 0x1f,
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
@@ -162,7 +160,6 @@ export const RANGES = {
   remote_state: [0x3e, 0x3f],
   usb_echo_test: [0x2c, 0x2f],
   usb_fast: [0x36, 0x37],
-  usb_fast_takeover: [0x1e, 0x1f],
 } as const;
 
 export const CAPACITY_KINDS = {

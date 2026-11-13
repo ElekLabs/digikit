@@ -27,8 +27,6 @@ pub const CMD_RENAME: u8 = 0x1a;
 pub const CMD_FAULT: u8 = 0x23;
 pub const CMD_SELECT: u8 = 0x30;
 pub const CMD_RESTART: u8 = 0x31;
-pub const SVC_USB_FAST_TAKEOVER: u8 = 0x1e;
-pub const SVC_USB_FAST_RELEASE: u8 = 0x1f;
 pub const SVC_LOG: u8 = 0x20;
 pub const SVC_PEEK: u8 = 0x21;
 pub const SVC_LOGCFG: u8 = 0x22;
@@ -90,7 +88,7 @@ pub const CAPK_STORE: u8 = 12;
 pub const CAPK_SETTINGS: u8 = 13;
 pub const CAPK_SEND_SLOTS: u8 = 14;
 /// The command ranges a module may register, as (first, last).
-pub const RANGES: [(u8, u8); 10] = [
+pub const RANGES: [(u8, u8); 9] = [
     (0x20, 0x22), // debug
     (0x1c, 0x1d), // entry_demo_test
     (0x24, 0x27), // file_write_test
@@ -100,7 +98,6 @@ pub const RANGES: [(u8, u8); 10] = [
     (0x3e, 0x3f), // remote_state
     (0x2c, 0x2f), // usb_echo_test
     (0x36, 0x37), // usb_fast
-    (0x1e, 0x1f), // usb_fast_takeover
 ];
 pub const RANGE_DEBUG: (u8, u8) = (0x20, 0x22);
 pub const RANGE_ENTRY_DEMO_TEST: (u8, u8) = (0x1c, 0x1d);
@@ -111,4 +108,3 @@ pub const RANGE_REMOTE: (u8, u8) = (0x38, 0x3d);
 pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
 pub const RANGE_USB_ECHO_TEST: (u8, u8) = (0x2c, 0x2f);
 pub const RANGE_USB_FAST: (u8, u8) = (0x36, 0x37);
-pub const RANGE_USB_FAST_TAKEOVER: (u8, u8) = (0x1e, 0x1f);

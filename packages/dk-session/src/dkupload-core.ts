@@ -580,6 +580,84 @@ function parseLogConfig(b: Uint8Array): LogConfig {
   return { level: b[0]!, modules: Array.from(b.subarray(1, 9)), debug: b[9] !== 0 };
 }
 
+/** The card log of the debug module (LOGCFG op 2 and 3): switch, file of this boot, state, writes of this boot, last write status, time since the last write. */
+export type CardLogState = {
+  on: boolean;
+  file: 'a' | 'b';
+  state: 'off' | 'on' | 'full' | 'error';
+  writes: number;
+  lastStatus: number;
+  msSinceWrite: number | null;
+};
+
+function parseCardLogState(b: Uint8Array): CardLogState {
+  if (b.length < 16) throw new DkError({ error: 'logcfg: malformed reply', kind: 'protocol' });
+  return {
+    on: b[0] !== 0,
+    file: b[1] === 0 ? 'a' : 'b',
+    state: (['off', 'on', 'full', 'error'] as const)[b[2]!] ?? 'error',
+    writes: u32(b, 4),
+    lastStatus: u32(b, 8) | 0,
+    msSinceWrite: u32(b, 12) === 0xffffffff ? null : u32(b, 12),
+  };
+}
+
+/** One card log file (data/digikit/debug/cardlog-a.bin or -b.bin): the header fields and the valid events, oldest first. */
+export interface CardLogFile {
+  version: number;
+  writeNo: number;
+  file: 'a' | 'b';
+  /** Rolling (the latest events) or incident (the capture around a warn or error), from header byte 17. */
+  kind: 'rolling' | 'incident';
+  /** The boot counter of the debug module when it wrote the file; the higher number is the newer boot. */
+  bootSeq: number;
+  oldestSeq: number;
+  newestSeq: number;
+  /** The device block clock (1500 per second) at the write. */
+  blocks: number;
+  ringSize: number;
+  events: DkLogEvent[];
+  /** The file bytes as read (set by `readCardLog`, not by `parseCardLog`). */
+  raw?: Uint8Array;
+}
+
+export const CARD_LOG_BYTES = 64 + 512 * 32;
+const CARD_LOG_MAGIC = 0x444b434c;
+
+/** Decode a card log file (a 64 byte header, then 32 byte event records as in the LOG reply). */
+export function parseCardLog(bytes: Uint8Array): CardLogFile {
+  if (bytes.length < 64 || u32(bytes, 0) !== CARD_LOG_MAGIC)
+    throw new DkError({ error: 'card log: bad header', kind: 'protocol' });
+  const headerBytes = u16(bytes, 6);
+  const eventBytes = u16(bytes, 8);
+  if (headerBytes !== 64 || eventBytes !== 32 || u32(bytes, 32) !== 512 || bytes.length !== CARD_LOG_BYTES)
+    throw new DkError({ error: 'card log: bad layout', kind: 'protocol' });
+  const n = Math.min(u16(bytes, 10), 512);
+  const events: DkLogEvent[] = [];
+  for (let i = 0; i < n; i++) {
+    const at = headerBytes + eventBytes * i;
+    events.push({
+      seq: u32(bytes, at),
+      time: u32(bytes, at + 4),
+      kind: u16(bytes, at + 8),
+      flags: u16(bytes, at + 10),
+      args: [0, 1, 2, 3, 4].map((k) => u32(bytes, at + 12 + 4 * k)),
+    });
+  }
+  return {
+    version: u16(bytes, 4),
+    writeNo: u32(bytes, 12),
+    file: bytes[16] === 0 ? 'a' : 'b',
+    kind: bytes[17] === 0 ? 'rolling' : 'incident',
+    bootSeq: u32(bytes, 36),
+    oldestSeq: u32(bytes, 20),
+    newestSeq: u32(bytes, 24),
+    blocks: u32(bytes, 28),
+    ringSize: u32(bytes, 32),
+    events,
+  };
+}
+
 export interface DkModule {
   index: number;
   name: string;
@@ -1129,6 +1207,58 @@ export class DkSession {
       });
     return parseLogConfig(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(1, level, ...modules), quick));
   }
+  /** LOGCFG op 2: the card log state, or null when the device answers with an error status (a debug module without the card log). */
+  async cardLog(quick = false): Promise<CardLogState | null> {
+    const r = await this.request(SERVICE_CMD.LOGCFG, Uint8Array.of(2), quick);
+    return r.status === 0 ? parseCardLogState(r.body) : null;
+  }
+  /** LOGCFG op 3: switch the card log on or off; the reply is the state after the set. */
+  async setCardLog(on: boolean, quick = false): Promise<CardLogState> {
+    return parseCardLogState(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(3, on ? 1 : 0), quick));
+  }
+  /** The four card log files of the store that exist (rolling and incident, a and b), the older boot first (by the boot_seq in the header), rolling before incident. */
+  async readCardLog(): Promise<CardLogFile[]> {
+    const out: CardLogFile[] = [];
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    // a chunk read retries while the device writes the file (E_BUSY)
+    const chunk = async (path: string, at: number, len: number) => {
+      for (let busy = 0; ; busy++) {
+        try {
+          return await this.read(path, at, len);
+        } catch (e) {
+          if (!(e instanceof DkError && e.status === 'E_BUSY') || busy >= 5) throw e;
+          await sleep(50);
+        }
+      }
+    };
+    for (const name of ['a', 'b', 'a-inc', 'b-inc']) {
+      const path = `data/digikit/debug/cardlog-${name}.bin`;
+      try {
+        // header, all chunks, header again: a changed write_no means the file was replaced meanwhile
+        let raw: Uint8Array | null = null;
+        for (let attempt = 0; attempt < 3 && !raw; attempt++) {
+          const head = (await chunk(path, 0, 64)).bytes;
+          const parts: Uint8Array[] = [];
+          let got = 0;
+          for (;;) {
+            const { size, bytes } = await chunk(path, got, Math.min(768, CARD_LOG_BYTES - got));
+            parts.push(bytes);
+            got += bytes.length;
+            if (bytes.length === 0 || got >= Math.min(size, CARD_LOG_BYTES)) break;
+          }
+          const tail = (await chunk(path, 0, 64)).bytes;
+          if (head.length >= 16 && tail.length >= 16 && u32(head, 12) === u32(tail, 12)) raw = concat(...parts);
+        }
+        if (raw) out.push({ ...parseCardLog(raw), raw });
+      } catch (e) {
+        if (!(e instanceof DkError)) throw e;
+        if (e.status === 'E_NOFILE' || e.status === 'E_NOT_FOUND') continue;
+        if (e.kind !== 'protocol') throw e; // an unreadable or foreign file (parseCardLog) is skipped
+      }
+    }
+    const rank = (x: CardLogFile) => (x.kind === 'rolling' ? 0 : 1);
+    return out.sort((x, y) => x.bootSeq - y.bootSeq || rank(x) - rank(y));
+  }
   /** Every event of the log. */
   async readLog(quick = false): Promise<DkLogEvent[]> {
     const out: DkLogEvent[] = [];
@@ -1147,18 +1277,15 @@ export class DkSession {
     await this.ok(SERVICE_CMD.USB_FAST_NONCE, 'usb-fast nonce', nonce);
   }
 
-  /** USB_FAST_TAKEOVER (docs/plans/usb-fast-takeover.md): ask core/usb-bulk to switch USB AUDIO/MIDI to USB MIDI about 50 ms after the reply; also the renew. E_STATE: Overbridge. */
-  async usbFastTakeOver(): Promise<void> {
-    await this.ok(SERVICE_CMD.USB_FAST_TAKEOVER, 'usb-fast take-over');
-  }
-  /** USB_FAST_RELEASE: give the USB mode back (about 50 ms after the reply). OK when nothing is taken over. */
-  async usbFastRelease(): Promise<void> {
-    await this.ok(SERVICE_CMD.USB_FAST_RELEASE, 'usb-fast release');
+  /** USB_FAST 'R' (command 0x37, body 'R'): the reply frames usb-fast queued while the bulk link is OUT only (USB AUDIO/MIDI): zero or more whole frames, oldest first; empty: none pending. */
+  async usbFastReplies(): Promise<Uint8Array> {
+    // quick: one try with a short timeout, no retries (a retry after a lost reply would lose the frames the device already took out of its queue)
+    return this.ok(0x37, 'usb-fast replies', Uint8Array.of(0x52), true);
   }
 
   /**
    * True when usb-fast reports that the device is not in USB MIDI mode (the wrong-mode bit of `usb_bulk_state`, word 8 of its STATUS reply, command 0x37, a
-   * debug aid of the module). False in USB MIDI mode, and when usb-fast is not loaded or does not answer: then a take-over would not help.
+   * debug aid of the module). False in USB MIDI mode, and when usb-fast is not loaded or does not answer: then no route would help.
    */
   async usbFastWrongMode(): Promise<boolean> {
     try {

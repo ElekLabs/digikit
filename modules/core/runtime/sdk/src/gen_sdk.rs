@@ -137,8 +137,6 @@ pub mod proto {
     pub const CMD_FAULT: u8 = 0x23;
     pub const CMD_SELECT: u8 = 0x30;
     pub const CMD_RESTART: u8 = 0x31;
-    pub const SVC_USB_FAST_TAKEOVER: u8 = 0x1e;
-    pub const SVC_USB_FAST_RELEASE: u8 = 0x1f;
     pub const SVC_LOG: u8 = 0x20;
     pub const SVC_PEEK: u8 = 0x21;
     pub const SVC_LOGCFG: u8 = 0x22;
@@ -200,7 +198,7 @@ pub mod proto {
     pub const CAPK_SETTINGS: u8 = 13;
     pub const CAPK_SEND_SLOTS: u8 = 14;
     /// The command ranges a module may register, as (first, last).
-    pub const RANGES: [(u8, u8); 10] = [
+    pub const RANGES: [(u8, u8); 9] = [
         (0x20, 0x22), // debug
         (0x1c, 0x1d), // entry_demo_test
         (0x24, 0x27), // file_write_test
@@ -210,7 +208,6 @@ pub mod proto {
         (0x3e, 0x3f), // remote_state
         (0x2c, 0x2f), // usb_echo_test
         (0x36, 0x37), // usb_fast
-        (0x1e, 0x1f), // usb_fast_takeover
     ];
     pub const RANGE_DEBUG: (u8, u8) = (0x20, 0x22);
     pub const RANGE_ENTRY_DEMO_TEST: (u8, u8) = (0x1c, 0x1d);
@@ -221,7 +218,6 @@ pub mod proto {
     pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
     pub const RANGE_USB_ECHO_TEST: (u8, u8) = (0x2c, 0x2f);
     pub const RANGE_USB_FAST: (u8, u8) = (0x36, 0x37);
-    pub const RANGE_USB_FAST_TAKEOVER: (u8, u8) = (0x1e, 0x1f);
 }
 
 pub mod load {
@@ -689,13 +685,13 @@ pub mod api {
     /// `dk_usb_bulk_send`: Send `len` bytes (1 to 16384) to the host on EP2 IN. The bytes are copied. 0, DK_E_BUSY when both send slots are in flight (the job is woken when one completes), DK_E_AGAIN when nothing is in flight and the engine refused, or another status.
     pub type DkUsbBulkSendFn = unsafe extern "C" fn(ub: *mut u8, buf: *const u8, len: u32) -> i32;
 
-    /// `dk_usb_bulk_state`: State word: bit 0 enabled, bit 1 connected, bit 2 wrong mode, bit 3 taken over, bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk.
+    /// `dk_usb_bulk_state`: State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; read live), bit 3 never set (take-over removed), bit 6 out only (USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only, dk_usb_bulk_send returns E_STATE; read live), bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk.
     pub type DkUsbBulkStateFn = unsafe extern "C" fn(ub: *mut u8) -> u32;
 
-    /// `dk_usb_bulk_takeover`: Take the USB port over for the bulk link, or renew a take-over (call it again at least every 20 s while the host works). Callable from a host command handler.
+    /// `dk_usb_bulk_takeover`: Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists; the bulk OUT interface works in USB AUDIO/MIDI without it). Kept so that the import table does not change.
     pub type DkUsbBulkTakeoverFn = unsafe extern "C" fn(ub: *mut u8) -> i32;
 
-    /// `dk_usb_bulk_giveback`: End a take-over: about 50 ms later the service switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a host command handler.
+    /// `dk_usb_bulk_giveback`: Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists). Kept so that the import table does not change.
     pub type DkUsbBulkGivebackFn = unsafe extern "C" fn(ub: *mut u8) -> i32;
 
     /// `dk_usb_bulk_ring`: The receive ring of the service. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the result word read with the DK_USB_BULK_RING_* macros of <dk/platform/usb_bulk.h>: the switch in bit 0, bit 1 always set (the service has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). 0 without core/usb-bulk or when the adapter has no ring: the old behaviour.
