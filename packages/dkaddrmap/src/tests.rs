@@ -64,6 +64,7 @@ fn fixture() -> (Vec<AddrMap>, LoadTable) {
             id: "test/demo".into(),
             base: 0x2100_0000,
             size: 0x200,
+            dsp_base: None,
         }],
     };
     (vec![ship, module, dev], loads)
@@ -122,6 +123,7 @@ fn module_entries_follow_the_load_address() {
             id: "test/demo".into(),
             base: 0x2200_0000,
             size: 0x200,
+            dsp_base: None,
         }],
     };
     let r = Resolver::new(&maps, &moved).unwrap();
@@ -185,4 +187,61 @@ fn the_file_round_trips_and_is_canonical() {
     assert_eq!(shuffled.to_json(), text);
     assert!(AddrMap::parse(&text.replace("dk-addrmap", "other")).is_err());
     assert!(AddrMap::parse(&text.replace("\"version\":1", "\"version\":2")).is_err());
+}
+
+#[test]
+fn module_dsp_entries_are_rebased_by_the_dsp_base() {
+    let map = AddrMap::new(
+        "module",
+        Key::default(),
+        vec![
+            e(
+                Cpu::Cf,
+                0x30,
+                0x10,
+                "demo_tick",
+                Layer::Our,
+                Some("test/demo"),
+            ),
+            e(
+                Cpu::Sharc,
+                0x10,
+                0x20,
+                "demo_render",
+                Layer::Our,
+                Some("test/demo"),
+            ),
+        ],
+    );
+    let load = |dsp_base| LoadTable {
+        modules: vec![Load {
+            id: "test/demo".into(),
+            base: 0x2100_0000,
+            size: 0x200,
+            dsp_base,
+        }],
+    };
+    let r = Resolver::new(&[map.clone()], &load(Some(0xb8_1000))).unwrap();
+    let hit = r.lookup(Cpu::Sharc, 0xb8_1014).unwrap();
+    assert_eq!((hit.name.as_str(), hit.offset), ("demo_render", 4));
+    assert_eq!(hit.module.as_deref(), Some("test/demo"));
+    assert!(
+        r.lookup(Cpu::Sharc, 0x10).is_none(),
+        "not at the link-relative address"
+    );
+    assert_eq!(name(&r, Cpu::Cf, 0x2100_0030), Some("demo_tick".into()));
+    // a module without a DSP base keeps its ColdFire names and leaves its DSP names out; it is not reported as unloaded
+    let r = Resolver::new(&[map], &load(None)).unwrap();
+    assert!(r.lookup(Cpu::Sharc, 0xb8_1014).is_none());
+    assert_eq!(name(&r, Cpu::Cf, 0x2100_0030), Some("demo_tick".into()));
+    assert!(r.unloaded.is_empty());
+}
+
+#[test]
+fn an_old_load_table_without_dsp_base_parses() {
+    let l: LoadTable = serde_json::from_str(r#"{"modules":[{"id":"a","base":16}]}"#).unwrap();
+    assert_eq!(l.modules[0].dsp_base, None);
+    let l: LoadTable =
+        serde_json::from_str(r#"{"modules":[{"id":"a","base":16,"dsp_base":12058624}]}"#).unwrap();
+    assert_eq!(l.modules[0].dsp_base, Some(0xb8_0000));
 }
