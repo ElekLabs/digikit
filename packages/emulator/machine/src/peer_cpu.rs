@@ -755,7 +755,11 @@ mod tests {
     #[test]
     fn a_short_or_oversized_image_is_an_error_not_a_panic() {
         let mut peer = PeerCpu::new();
-        assert!(peer.start(&[0x40, 0x00]).unwrap_err().contains("4-byte entry"));
+        assert!(
+            peer.start(&[0x40, 0x00])
+                .unwrap_err()
+                .contains("4-byte entry")
+        );
         assert!(peer.start(&[]).is_err());
         let big = vec![0u8; SDRAM_BYTES];
         assert!(peer.start(&big).unwrap_err().contains("does not fit"));

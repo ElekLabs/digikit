@@ -13,10 +13,24 @@ mod tests {
 
     #[test]
     fn the_header_may_have_white_space_or_a_comment_after_it() {
-        for yes in ["[device]", "[device]  ", "[device] # the device", "  [device]\t", "[device]#x"] {
+        for yes in [
+            "[device]",
+            "[device]  ",
+            "[device] # the device",
+            "  [device]\t",
+            "[device]#x",
+        ] {
             assert!(is_device_header(yes), "{yes:?}");
         }
-        for no in ["[device.x]", "[devices]", "# [device]", "[device] x", "device", "[[device]]", ""] {
+        for no in [
+            "[device.x]",
+            "[devices]",
+            "# [device]",
+            "[device] x",
+            "device",
+            "[[device]]",
+            "",
+        ] {
             assert!(!is_device_header(no), "{no:?}");
         }
     }

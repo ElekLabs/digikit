@@ -390,7 +390,7 @@
   "packages/patchkit/Cargo.toml": 3,
   "packages/patchkit/src/aplib.rs": 1,
   "packages/patchkit/src/build/sharc_legal.rs": 2,
-  "packages/patchkit/src/devdata.rs": 47,
+  "packages/patchkit/src/devdata.rs": 45,
   "packages/patchkit/src/devgen.rs": 14,
   "packages/patchkit/src/dkmdsp.rs": 2,
   "packages/patchkit/src/dkmsynth.rs": 15,

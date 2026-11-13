@@ -215,6 +215,9 @@ mod tests {
             assert!(e.contains("dsp_") && e.contains("missing"), "{what}: {e}");
         }
         // a port without a DSP has none
-        assert_eq!(Port::parse(&text(false, "")).unwrap().limits.dsp_stored_max, 0);
+        assert_eq!(
+            Port::parse(&text(false, "")).unwrap().limits.dsp_stored_max,
+            0
+        );
     }
 }

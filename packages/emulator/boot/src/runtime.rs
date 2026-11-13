@@ -5447,9 +5447,24 @@ mod tests {
         assert_eq!(emu.ram_clear_fast_forwarded_instructions, 0);
     }
 
-    /// Boots Syntakt until its peer CPU runs, plays a note, then runs `total` more ticks in chunks of `chunk`.
+    /// The firmware of the device whose second CPU runs a program (`[emulator] peer = "coldfire"`), when it is in `firmware/`.
+    fn peer_cpu_firmware() -> Option<Vec<u8>> {
+        let registry = device_profile::Registry::embedded().unwrap();
+        let device = registry
+            .devices()
+            .iter()
+            .find(|d| d.peer == Some(device_profile::PeerModel::Coldfire))?;
+        let file = device
+            .firmwares
+            .iter()
+            .rev()
+            .find_map(|f| f.filename.clone())?;
+        std::fs::read(format!("../../../firmware/{file}")).ok()
+    }
+
+    /// Boots a peer CPU device until its peer CPU runs, plays a note, then runs `total` more ticks in chunks of `chunk`.
     /// Returns the MAIN tick, the peer CPU's state and the PCM captured.
-    fn syntakt_after_chunks(syx: &[u8], chunk: u32, total: u32) -> (u64, String, Vec<f32>) {
+    fn peer_cpu_device_after_chunks(syx: &[u8], chunk: u32, total: u32) -> (u64, String, Vec<f32>) {
         let mut emu = Emulator::new(syx, None).unwrap();
         emu.enable_ssi_diagnostic(96_000).unwrap();
         while !emu.peer_started {
@@ -5481,15 +5496,15 @@ mod tests {
     }
 
     /// The host's chunking (how many ticks one `step_chunk` call runs) must not change what the peer CPU does or the PCM.
-    /// Boots Syntakt: slow in a debug build, so it runs on request: `cargo test --release -p elektron-native-boot --lib -- --ignored`.
+    /// Boots a device: slow in a debug build, so it runs on request: `cargo test --release -p elektron-native-boot --lib -- --ignored`.
     #[test]
-    #[ignore = "boots Syntakt to its running peer CPU"]
+    #[ignore = "boots a peer CPU device until its peer runs"]
     fn the_peer_frames_do_not_depend_on_the_chunk_size() {
-        let Ok(syx) = std::fs::read("../../../firmware/Syntakt_OS1.42.syx") else {
+        let Some(syx) = peer_cpu_firmware() else {
             return;
         };
-        let a = syntakt_after_chunks(&syx, 5000, 1_000_000);
-        let b = syntakt_after_chunks(&syx, 1000, 1_000_000);
+        let a = peer_cpu_device_after_chunks(&syx, 5000, 1_000_000);
+        let b = peer_cpu_device_after_chunks(&syx, 1000, 1_000_000);
         assert_eq!(a.0, b.0, "MAIN ticks");
         assert_eq!(a.1, b.1, "peer frames");
         assert!(!a.2.is_empty(), "the run produced PCM");
@@ -5499,7 +5514,7 @@ mod tests {
 
     #[test]
     fn save_state_is_refused_while_a_peer_cpu_runs() {
-        let Ok(syx) = std::fs::read("../../../firmware/Syntakt_OS1.42.syx") else {
+        let Some(syx) = peer_cpu_firmware() else {
             return;
         };
         let mut emu = Emulator::new(&syx, None).unwrap();

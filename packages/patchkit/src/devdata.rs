@@ -278,7 +278,9 @@ fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) 
     // the peer CPU and FPGA sections are never patched: they must be declared read-only
     for (role, id) in [("cf2", c.cf2), ("fpga", c.fpga)] {
         if let Some(id) = id.filter(|id| !c.readonly.contains(id)) {
-            return bad(format!("[container] {role} section {id} must be in readonly"));
+            return bad(format!(
+                "[container] {role} section {id} must be in readonly"
+            ));
         }
     }
     if f.digikit.is_some() && f.patch.is_none() {

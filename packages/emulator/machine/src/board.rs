@@ -2473,7 +2473,10 @@ mod tests {
         assert_eq!(bad.read16(t + 0x1e).unwrap() & edma::CSR_DONE, 0);
         let es = bad.read32(edma::EDMA_BASE + 4).unwrap();
         assert_eq!(es, EDMA_ES_VLD | 5 << 8 | EDMA_ES_DAE);
-        assert_eq!(bad.read32(edma::EDMA_BASE + EDMA_ERRL as u32).unwrap(), 1 << 5);
+        assert_eq!(
+            bad.read32(edma::EDMA_BASE + EDMA_ERRL as u32).unwrap(),
+            1 << 5
+        );
     }
     use emmc_card::CardIdentity;
     const RAM: u32 = 0x4000_0000;

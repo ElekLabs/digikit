@@ -845,8 +845,16 @@ mod tests {
                 .unwrap_or_else(|| panic!("{file}: no device {short}"));
             let emu = doc.get("emulator").and_then(|e| e.as_table());
             let key = |k: &str| emu.and_then(|e| e.get(k));
-            assert_eq!(d.board_revision.is_some(), key("board_revision").is_some(), "{file}");
-            assert_eq!(d.calibration_record.is_some(), key("calibration_record").is_some(), "{file}");
+            assert_eq!(
+                d.board_revision.is_some(),
+                key("board_revision").is_some(),
+                "{file}"
+            );
+            assert_eq!(
+                d.calibration_record.is_some(),
+                key("calibration_record").is_some(),
+                "{file}"
+            );
             assert_eq!(
                 d.calibration_record == Some(CalibrationRecord::Synthetic),
                 key("calibration_record").and_then(|v| v.as_str()) == Some("synthetic"),
@@ -857,7 +865,11 @@ mod tests {
                 key("peer").and_then(|v| v.as_str()) == Some("coldfire"),
                 "{file}"
             );
-            assert_eq!(d.peer_audio.is_some(), key("peer_audio").is_some(), "{file}");
+            assert_eq!(
+                d.peer_audio.is_some(),
+                key("peer_audio").is_some(),
+                "{file}"
+            );
             if let Some(a) = key("peer_audio").and_then(|v| v.as_table()) {
                 let slots = a["slots"].as_array().unwrap();
                 assert_eq!(
@@ -876,7 +888,11 @@ mod tests {
             let packed = key("led_protocol").and_then(|v| v.as_str()) == Some("packed-states");
             assert_eq!(
                 d.led_protocol,
-                if packed { LedProtocol::PackedStates } else { LedProtocol::Indexed },
+                if packed {
+                    LedProtocol::PackedStates
+                } else {
+                    LedProtocol::Indexed
+                },
                 "{file}"
             );
             seen += 1;

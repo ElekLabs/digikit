@@ -454,7 +454,10 @@ mod tests {
         p.frame_source(5 * FRAME_TICKS);
         p.delivered(PeerIrq::Frame);
         assert_eq!(p.next_deadline(0), Some(3 * FRAME_TICKS));
-        assert!(MailboxPeer::new().next_deadline().is_none(), "no peer CPU, no deadline");
+        assert!(
+            MailboxPeer::new().next_deadline(0).is_none(),
+            "no peer CPU, no deadline"
+        );
     }
 
     #[test]
