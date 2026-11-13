@@ -245,9 +245,11 @@ export default function TransferPage(): JSX.Element {
         }}
       />
 
-      <div class="notices">
-        <WaitNotice active={!!busy()} cancel={!cancellable(busy())} />
-      </div>
+      <Show when={activeMode() !== 'samples'}>
+        <div class="notices">
+          <WaitNotice active={!!busy()} cancel={!cancellable(busy())} />
+        </div>
+      </Show>
 
       <Show when={error()}>
         <p class="err" role="alert">

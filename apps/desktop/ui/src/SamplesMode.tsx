@@ -7,9 +7,10 @@
 // the same on every device. A WAV is converted to the native sample file before it goes; a native sample goes as it is; any other file is
 // uploaded unchanged. Each upload is verified against the bytes sent. The page speaks the protocol in TypeScript over the selected target; the
 // local files come through the native `local_*` commands (local.rs); no process is started.
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
 import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
-import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocalFile } from './samples-backend';
+import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocal, readLocalFile } from './samples-backend';
+import WaitNotice from '@web/transfer/WaitNotice';
 import {
   applyUpload,
   confirmDeleteLabel,
@@ -111,6 +112,15 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
     up: () => localPath() && openLocal(parentOf(localPath())),
   });
 
+  const refreshLocal = async () => {
+    try {
+      await readLocal();
+    } catch (e) {
+      setError(errorLine(e));
+    }
+  };
+  // A device read may already belong to the other mode or a previous visit to the page.
+  onMount(() => void refreshLocal());
   const choose = async () => {
     try {
       const dir = await pickFolder(localFolder());
@@ -118,7 +128,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
       setLocalFolder(dir);
       setLocalPath('');
       setLocalTicks(new Set<string>());
-      void run('Reading', async () => {});
+      await refreshLocal();
     } catch (e) {
       setError(errorLine(e));
     }
@@ -127,7 +137,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
     if (writing(busy())) return;
     setLocalPath(path);
     setLocalTicks(new Set<string>());
-    void run('Reading', async () => {});
+    void refreshLocal();
   };
   /** Files added by hand join the list (same name: the newer one) and are ticked; their first bytes tell what the upload will do. */
   const addFiles = (files: File[], folders = 0) => {
@@ -358,7 +368,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
             <button
               type="button"
               class="act small"
-              disabled={!!busy()}
+              disabled={writing(busy())}
               title="Choose the folder on this computer that holds your samples"
               onClick={() => void choose()}
             >
@@ -367,7 +377,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
             <button
               type="button"
               class="act small"
-              disabled={!!busy()}
+              disabled={writing(busy())}
               title="Add files to the list, from any folder"
               onClick={() => input?.click()}
             >
@@ -480,6 +490,7 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
           </>
         }
       >
+        <WaitNotice active={!!busy()} cancel={busy() !== 'Uploading'} />
         <Crumbs
           items={crumbs(sampleFolder())}
           current={sampleFolder()}

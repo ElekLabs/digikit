@@ -205,24 +205,31 @@ export async function listLocalNow(): Promise<LocalEntry[] | undefined> {
   }
 }
 
+let localReadGeneration = 0;
 /** Read the open level of the chosen folder and label its files. No folder chosen: an empty list. */
 export async function readLocal(): Promise<void> {
-  if (!localFolder()) {
+  const generation = ++localReadGeneration;
+  const folder = localFolder();
+  if (!folder) {
     setLocalEntries(undefined);
     return;
   }
   const path = localPath();
+  const current = () => generation === localReadGeneration && localFolder() === folder && localPath() === path;
   let entries: LocalEntry[];
   try {
-    entries = await invoke<LocalEntry[]>('local_list', { root: localFolder(), rel: path });
+    entries = await invoke<LocalEntry[]>('local_list', { root: folder, rel: path });
   } catch (e) {
+    if (!current()) return;
     setLocalEntries([]);
     throw new Error(errorLine(e));
   }
+  if (!current()) return;
   setLocalEntries(entries);
   const files = entries.filter((e) => e.kind === 'file').slice(0, LABELLED);
   const kinds: Record<string, Prepared['kind']> = {};
   for (let i = 0; i < files.length; i += 16) {
+    if (!current()) return;
     await Promise.all(
       files.slice(i, i + 16).map(async (f) => {
         const rel = joinPath(path, f.name);
@@ -231,5 +238,6 @@ export async function readLocal(): Promise<void> {
       }),
     );
   }
+  if (!current()) return;
   setLocalKinds((k) => ({ ...Object.fromEntries(Object.entries(k).filter(([key]) => key.startsWith('+'))), ...kinds }));
 }
