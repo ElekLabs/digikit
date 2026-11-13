@@ -4417,7 +4417,13 @@ fn dtcn_mask(device: u8, env: Option<&str>) -> Result<u8, String> {
 /// the same optional lanes enabled (SSI diagnostic), before any execution.
 /// Telemetry marks, bus trace vectors and the DSPI capture recorder are not
 /// state and start empty after a restore.
+///
+/// A snapshot taken at the base rate ([`periph::clock::BASE_IPS`]) has the magic `DT2SNP01`. One taken at another rate (a device that
+/// sets its own `[emulator] instructions_per_second`, or `DIGI_CF_IPS`) has `SNAPSHOT_MAGIC_RATE` and the rate (u64) after it; its
+/// deadlines are counted at that rate, and a restore at a different rate is refused. A base-rate snapshot restores at any rate
+/// (the deadlines are rescaled while it loads).
 const SNAPSHOT_MAGIC: &[u8; 8] = b"DT2SNP01";
+const SNAPSHOT_MAGIC_RATE: &[u8; 8] = b"DT2SNP02";
 
 fn snap_frame(w: &mut periph::snap::Writer, f: &Frame) {
     w.u32(f.owner_tcb);
@@ -4495,12 +4501,6 @@ impl Emulator {
         if self.error.is_some() {
             return Err("cannot snapshot a faulted emulator".into());
         }
-        if periph::clock::cf_ips() != periph::clock::BASE_IPS {
-            // Snapshots hold deadlines at the base rate; load_state rescales from it.
-            return Err(
-                "save_state needs DIGI_CF_IPS unset (snapshots are taken at 132 MHz)".into(),
-            );
-        }
         if self.peer_started {
             // the peer CPU's memory, registers and frame state are not in the snapshot: a restore would have no running peer
             return Err("save_state: a peer CPU is running and its state is not saved".into());
@@ -4516,7 +4516,13 @@ impl Emulator {
             return Err("CPU holds state the snapshot does not carry".into());
         }
         let mut w = Writer::new();
-        w.raw(SNAPSHOT_MAGIC);
+        let ips = periph::clock::cf_ips();
+        if ips == periph::clock::BASE_IPS {
+            w.raw(SNAPSHOT_MAGIC);
+        } else {
+            w.raw(SNAPSHOT_MAGIC_RATE);
+            w.u64(ips);
+        }
         w.bytes(digest(&self.main).as_bytes());
         w.bytes(self.device.as_bytes());
         w.bytes(self.version.as_bytes());
@@ -4680,10 +4686,25 @@ impl Emulator {
             return Err("load_state needs an emulator that has not executed".into());
         }
         let mut r = Reader::new(data);
-        if r.raw(8)? != SNAPSHOT_MAGIC {
+        let ips = periph::clock::cf_ips();
+        // the rate the snapshot's deadlines are counted at
+        let magic = r.raw(8)?;
+        let saved_ips = if magic == SNAPSHOT_MAGIC {
+            periph::clock::BASE_IPS
+        } else if magic == SNAPSHOT_MAGIC_RATE {
+            let saved = r.u64()?;
+            if saved != ips {
+                return Err(format!(
+                    "snapshot was taken at {saved} instructions per second and this emulator runs at {ips}"
+                ));
+            }
+            saved
+        } else {
             return Err("not a DT2SNP01 snapshot".into());
+        };
+        if saved_ips != ips {
+            self.snapshot_time_base();
         }
-        self.snapshot_time_base();
         let main_sha = r.bytes()?;
         let device = r.bytes()?;
         let version = r.bytes()?;
@@ -4876,7 +4897,7 @@ impl Emulator {
         }
         self.rebuild_watch();
         self.replay_restored_frame = true;
-        self.rescale_to_cf_ips();
+        self.rescale_to_cf_ips(saved_ips);
         Ok(())
     }
 
@@ -4897,9 +4918,9 @@ impl Emulator {
 
     /// After a load: move every deadline from the snapshot's base rate to `DIGI_CF_IPS`,
     /// keeping its emulated time.
-    fn rescale_to_cf_ips(&mut self) {
+    fn rescale_to_cf_ips(&mut self, saved_ips: u64) {
         let ips = periph::clock::cf_ips();
-        if ips == periph::clock::BASE_IPS {
+        if ips == saved_ips {
             return;
         }
         let now = self
@@ -5541,6 +5562,30 @@ mod tests {
         assert!(!a.2.is_empty(), "the run produced PCM");
         assert_eq!(a.2.len(), b.2.len(), "PCM length");
         assert_eq!(a.2, b.2, "PCM");
+    }
+
+    #[test]
+    fn a_snapshot_at_the_device_rate_restores_only_at_that_rate() {
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        let ips = periph::clock::cf_ips(); // the device's, set by the constructor
+        assert_ne!(ips, periph::clock::BASE_IPS, "the device has its own rate");
+        let state = emu.save_state().unwrap();
+        assert_eq!(&state[..8], b"DT2SNP02");
+        assert_eq!(u64::from_le_bytes(state[8..16].try_into().unwrap()), ips);
+        Emulator::new(&syx, None)
+            .unwrap()
+            .load_state(&state)
+            .expect("the same rate restores");
+        let mut other = state.clone();
+        other[8..16].copy_from_slice(&(ips + 1).to_le_bytes());
+        let e = Emulator::new(&syx, None)
+            .unwrap()
+            .load_state(&other)
+            .unwrap_err();
+        assert!(e.contains("instructions per second"), "{e}");
     }
 
     #[test]

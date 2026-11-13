@@ -1930,9 +1930,11 @@ impl Actor {
             JobKind::Boot { cache, limit } => {
                 if runtime.status().ready {
                     self.boot_resets = 0;
+                    // The boot cache is an optimisation. A snapshot does not carry a running second CPU (`save_state`), so a device with
+                    // one boots cold every time; an explicit `state.save` still reports it.
                     let saved = match cache {
-                        Some(path) => save_cache(runtime, path),
-                        None => Ok(None),
+                        Some(path) if runtime.peer_cpu().is_none() => save_cache(runtime, path),
+                        _ => Ok(None),
                     };
                     runtime.rebase_clock();
                     Some(saved.map(|cache| json!({"booted": true, "cache_saved": cache})))

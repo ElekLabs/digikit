@@ -550,12 +550,38 @@ const RT021_MODULES: [&str; 10] = [
 ];
 
 #[test]
+fn a_device_without_a_dsp_patches_the_runtime_alone() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    for dev in devdata::all()
+        .iter()
+        .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "none")
+    {
+        for (set, roots) in &dev.patch_sets {
+            let (mut all, _) = lib.with_requires(roots).unwrap();
+            all.sort();
+            assert_eq!(
+                all,
+                ["core/expansion", "core/runtime"],
+                "{} set {set}",
+                dev.short
+            );
+        }
+    }
+}
+
+#[test]
 fn the_patch_sets_are_the_rt021_flash_modules() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    // a device that is patched with explicit modules only (no `[patch_sets]`) has no set to check
-    for dev in devdata::all().iter().filter(|d| !d.patch_sets.is_empty()) {
+    // the sets of a device with a DSP are the DSP machine and effect modules below; a device without one (its set is the runtime alone) is
+    // checked by `a_device_without_a_dsp_patches_the_runtime_alone`
+    for dev in devdata::all()
+        .iter()
+        .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "sharc")
+    {
         // both sets are the flash modules and core/input
         for (set, extra) in [
             ("device", vec!["core/input"]),

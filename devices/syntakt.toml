@@ -104,6 +104,12 @@ send_slots = 0
 param_rows = 0
 page_rows = 0
 
+# Module sets patched in by name (the Digitone II file explains them). `emulator`: the runtime (with core/expansion, which it requires) and nothing else:
+# the other core modules have no Syntakt port yet (no DSP, no run-time machines or effects). There is no `device` set: nothing is flashed to a Syntakt
+# until the emulator proof is complete.
+[patch_sets]
+emulator = ["core/runtime"]
+
 # Where the card keeps things (finding 130 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
 [card]
