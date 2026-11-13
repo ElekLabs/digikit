@@ -38,7 +38,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          --manifest PATH (repeatable, relative to cwd): explicit library instead of discovery; include the module and its requires closure
                                          explicit manifests replace modules/, --modules-dir and PATCHKIT_MODULES
   desc    MODULE_ID                      the effects the module declares (the DK_FX records of its ColdFire object), as JSON
-  synth-dkm SPEC.toml --device SHORT -o OUT.dkm   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
+  synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
@@ -933,7 +933,29 @@ plan.json {}",
             let dev = flag(rest, "--device").ok_or_else(|| Error(USAGE.into()))?;
             let out = flag(rest, "-o").ok_or_else(|| Error(USAGE.into()))?;
             let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
-            write(&out, &patchkit::dkmsynth::synth(&spec, &dev, &models)?)?;
+            // a spec with machines packs the object of the fixture synth-decl (built when stale)
+            let decl_id = patchkit::dkmsynth::DECL_MODULE.to_string();
+            let decl = if spec.machines > 0 {
+                let lib = selected_library(
+                    &a.root,
+                    rest,
+                    false,
+                    std::slice::from_ref(&decl_id),
+                    std::slice::from_ref(&decl_id),
+                )?;
+                let m = lib
+                    .get(&decl_id)
+                    .ok_or_else(|| Error(format!("no module {decl_id}")))?;
+                m.objects.iter().find(|o| o.arch == "cf").cloned()
+            } else {
+                None
+            };
+            let file = patchkit::dkmsynth::synth(&spec, &dev, &models, decl.as_ref())?;
+            if rest.iter().any(|a| a == "--size") {
+                let d = patchkit::dkm::Dkm::parse(&file)?;
+                println!("image {} bss {}", d.image.len(), d.bss);
+            }
+            write(&out, &file)?;
         }
         "records" => patchkit::records_cli::run(rest)?,
         "needs" => {
