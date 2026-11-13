@@ -1332,18 +1332,22 @@ mod tests {
     fn ui_preview_preserves_machine_registration_without_module_code() {
         let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let output = ApplyRoot::new("ui-preview-pack");
-        for dev in ["dt2", "dn2"] {
+        // (device, module, directory, params): the fixtures that still declare with `.dk.desc` records (a module of api major 3 declares in `init`)
+        for (dev, id, dir, n_params) in [
+            ("dt2", "test/dyn-params", "dyn-params", 4),
+            ("dn2", "test/dyn-dn2", "dyn-dn2", 4),
+        ] {
             let pack = |preview: bool| {
                 let path = output.0.join(format!("{dev}-{preview}.dkm"));
                 let mut rest: Vec<String> = vec![
                     "pack".into(),
-                    "test/sine".into(),
+                    id.into(),
                     "--device".into(),
                     dev.into(),
                     "-o".into(),
                     path.display().to_string(),
                     "--manifest".into(),
-                    real.join("tests/fixtures/modules/sine/module.toml")
+                    real.join(format!("tests/fixtures/modules/{dir}/module.toml"))
                         .display()
                         .to_string(),
                 ];
@@ -1364,7 +1368,7 @@ mod tests {
             let reg = patchkit::register::Register::parse(&preview.register).unwrap();
             assert_eq!(
                 (reg.machines.len(), reg.params.len(), reg.pages.len()),
-                (1, 1, usize::from(dev == "dn2"))
+                (1, n_params, usize::from(dev == "dn2"))
             );
             assert!(preview.dsp.is_empty());
             assert_eq!(preview.image, [0x70, 0x00, 0x4e, 0x75]);
@@ -1378,7 +1382,8 @@ mod tests {
     #[test]
     fn ui_preview_refuses_declarations_and_cf_content_it_cannot_preserve() {
         let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let id = "test/sine".to_string();
+        // a module of api major 3 declares in `init`: it has nothing for a preview to preserve (test/dyn-params still has `.dk.desc` records)
+        let id = "test/dyn-params".to_string();
         let lib = selected_library(
             &real,
             &[],
