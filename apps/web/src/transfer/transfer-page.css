@@ -421,6 +421,11 @@
   color: var(--ink-2, #a9adb4);
   font-variant-numeric: tabular-nums;
 }
+.transfer-page .phase {
+  flex: none;
+  width: 9ch;
+  color: var(--ink-2, #a9adb4);
+}
 .transfer-page progress {
   appearance: none;
   border: 0;

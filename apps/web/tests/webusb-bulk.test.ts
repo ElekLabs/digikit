@@ -194,6 +194,24 @@ test('a device without the bulk interface is refused and closed', async () => {
   expect(await webUsbOpener(usbWith(f.device).usb).candidates()).toEqual([]);
 });
 
+test('an OUT-only interface (USB AUDIO/MIDI) is no pair candidate; it opens with no IN reads and its replies come from the poll', async () => {
+  const f = usbDevice(new FakeBulkDevice());
+  f.device.configuration!.interfaces[1]!.alternates[0]!.endpoints.pop(); // only bulk OUT 2 is left
+  expect(findBulk(f.device)).toEqual({ interfaceNumber: 2, alt: 0, out: 2 });
+  const link = await WebUsbBulkLink.open(f.device);
+  expect(link.outOnly).toBe(true);
+  expect(f.log.claimed).toEqual([2]);
+  await link.close();
+  const opener = webUsbOpener(usbWith(f.device).usb);
+  expect(await opener.candidates()).toEqual([]);
+  expect(await opener.outOnlyCandidates!()).toEqual([{ id: '0', name: 'Digitone II' }]);
+  const reply = bulkReply(1, 0, 0);
+  const replied = await opener.openOutOnly!('0', async () => reply);
+  expect(await replied.recv(500)).toEqual(reply);
+  await replied.close();
+  expect(f.log.released).toEqual([2, 2]); // closing the reply link let go of the interface
+});
+
 test('two devices: the nonce handshake picks the one on the MIDI port', async () => {
   const devs = [new FakeBulkDevice(), new FakeBulkDevice()];
   const usbs = devs.map((d) => usbDevice(d));

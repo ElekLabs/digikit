@@ -3,7 +3,8 @@
 import { onCleanup, onMount, type JSX } from 'solid-js';
 import { transferEnv } from './env';
 import { canAutoRefresh, focusReadDue, POLL_MS } from './refresh-core';
-import { activeMode } from './transfer-state';
+import { activeMode, setError } from './transfer-state';
+import { errorLine } from '../modules/backend';
 
 export default function AutoRefresh(props: {
   busy: () => string;
@@ -32,7 +33,9 @@ export default function AutoRefresh(props: {
       if (activeMode() !== 'samples' || !samples) return;
       const changed = await samples.localChanged();
       // a job may have started while the listing ran: leave it alone
-      if (changed && canAutoRefresh(visible(), props.busy())) props.read();
+      if (changed && activeMode() === 'samples' && canAutoRefresh(visible(), props.busy())) await samples.readLocal();
+    } catch (e) {
+      setError(errorLine(e));
     } finally {
       polling = false;
     }

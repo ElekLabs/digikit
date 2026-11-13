@@ -74,7 +74,7 @@ def effect_ids(dkm: bytes) -> list[int]:
 
 
 def fnv_effect_id(module: str, effect: str) -> int:
-    """`register::effect_id` (patchkit): FNV-1a 32 of `<module id>:<effect id>`, the halves xor-ed, never 0."""
+    """`register::effect_id` (patchkit): FNV-1a 32 of `<packed module name>:<effect id>`, the halves xor-ed, never 0."""
     h = 0x811C9DC5
     for b in f"{module}:{effect}".encode():
         h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
@@ -82,7 +82,7 @@ def fnv_effect_id(module: str, effect: str) -> int:
 
 
 def test_the_effect_record_carries_the_id_the_kit_stores(packed, tmp_path):
-    # the ID is the packer's definition (module id and effect id, not the file's name); the runtime stores it with the values in a kit (finding 61 "Persistence")
+    # the ID is the packer's definition (the packed name and the effect id: an alias made with --name has ids of its own); the runtime stores it with the values in a kit (finding 61 "Persistence")
     tools, out = packed
     ids = effect_ids(out.read_bytes())
     assert ids == [fnv_effect_id(FX, "gain")] and ids[0] == 0x4625
@@ -90,7 +90,9 @@ def test_the_effect_record_carries_the_id_the_kit_stores(packed, tmp_path):
     tools.patchkit_run(
         "pack", FX, "--device", "dt2", "--name", "other/name", "-o", renamed
     )
-    assert effect_ids(renamed.read_bytes()) == ids
+    assert (
+        effect_ids(renamed.read_bytes()) == [fnv_effect_id("other/name", "gain")] != ids
+    )
     other = tmp_path / "b.dkm"
     tools.patchkit_run("pack", "test/dyn-fx-gain-b", "--device", "dt2", "-o", other)
     assert effect_ids(other.read_bytes()) == [

@@ -2,7 +2,7 @@
 // One poll loop per origin, once a second while the drawer is open, every 5 s for the device while it is closed, none while the window is hidden (log-follow-core.ts has the rules). Both read through the shared sessions of
 // apps/web/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { readFault, type DkSession, type LogConfig } from '@digi/dk-session';
+import { readFault, type CardLogState, type DkSession, type LogConfig } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';
 import { changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
 import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
@@ -14,6 +14,8 @@ export const followSession = (dk: DkSession): FollowSession => ({
   logPage: (from, quick) => dk.logPage(from, quick),
   logConfig: (quick) => dk.logConfig(quick),
   setLogConfig: (level, modules, quick) => dk.setLogConfig(level, modules, quick),
+  cardLog: (quick) => dk.cardLog(quick),
+  setCardLog: (on, quick) => dk.setCardLog(on, quick),
   modules: () => dk.modules(),
   fault: () => readFault(dk),
 });
@@ -46,6 +48,10 @@ export interface LogFollow {
   levels(origin: Origin): Promise<LevelView | null>;
   /** Set one level, then read LOGCFG again; the new state. The levels are in the runtime's RAM and start again at its next boot. */
   setLevel(origin: Origin, change: LevelChange): Promise<LevelView>;
+  /** The card log state each origin last reported (the follower reads it with every round); null: no card log, undefined: not read yet. */
+  cardlog(): Record<Origin, CardLogState | null | undefined>;
+  /** Switch the card log of the origin on or off; the new state. Throws when it does not answer. */
+  setCardLog(origin: Origin, on: boolean): Promise<CardLogState>;
 }
 
 /** Start following. Call it where an owner exists (a component): the loops end with it. */
@@ -57,6 +63,10 @@ export function createLogFollow(env: FollowEnv): LogFollow {
     device: undefined,
   });
   const [logcfg, setLogcfg] = createSignal<Record<Origin, boolean | undefined>>({
+    emulator: undefined,
+    device: undefined,
+  });
+  const [cardlog, setCardlog] = createSignal<Record<Origin, CardLogState | null | undefined>>({
     emulator: undefined,
     device: undefined,
   });
@@ -97,6 +107,7 @@ export function createLogFollow(env: FollowEnv): LogFollow {
             modules: (names) => setModules((all) => ({ ...all, [origin]: names })),
             config: (cfg) => setCfg(origin, cfg),
             logcfg: (on) => setLogcfg((all) => ({ ...all, [origin]: on })),
+            cardlog: (state) => setCardlog((all) => ({ ...all, [origin]: state })),
           },
         });
         followers.set(`${origin}:${k}`, follower);
@@ -141,7 +152,15 @@ export function createLogFollow(env: FollowEnv): LogFollow {
     return view;
   };
 
+  const setCardLog = async (origin: Origin, on: boolean) => {
+    const s = await sourceOf(origin);
+    if (!s.setCardLog) throw new Error('This target has no card log.');
+    const state = await s.setCardLog(on);
+    setCardlog((all) => ({ ...all, [origin]: state }));
+    return state;
+  };
+
   follow('emulator', () => (env.emulator.running() ? 'emulator' : undefined), env.emulator);
   follow('device', env.device.port, env.device);
-  return { status, modules, config, logcfg, levels, setLevel };
+  return { status, modules, config, logcfg, levels, setLevel, cardlog, setCardLog };
 }

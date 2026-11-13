@@ -87,6 +87,8 @@ export interface SamplesSlot {
   Mode: (props: { ctx: PageCtx }) => JSX.Element;
   /** Read both sides of the mode (throws when either fails). */
   read(): Promise<void>;
+  /** Refresh only local files, without contacting the target. */
+  readLocal(): Promise<void>;
   /** Another target: forget what was read. */
   reset(): void;
   /** The bar along the bottom for a running or finished upload. */
@@ -121,7 +123,7 @@ export interface TransferEnv {
   moduleFiles?(id: string): ModuleFilesSpec | undefined;
   /** The app's log of what happened (a run that ended, with its result). */
   logRun(run: TransferRun): void;
-  /** The site: the devices whose library can be listed when no device answers. The desktop app leaves it out. */
+  /** The devices whose library can be browsed before a device answers. */
   libraryDevices?: string[];
   /** Only the desktop app has these; the pane shows a part only when it is given. */
   extras?: {

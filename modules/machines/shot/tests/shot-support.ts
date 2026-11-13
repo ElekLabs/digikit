@@ -362,7 +362,7 @@ export async function captureNote(
           const windows = (await tapReport()).window_rms;
           return windows.length >= 3 && windows.slice(-3).every((v) => v < 1e-4);
         },
-        { timeout: 40_000, interval: 200 },
+        { timeout: 180_000, interval: 200 }, // wall time only guards a hang: a Delay tail needs about 7 emulated seconds, which take longer on a busy host
       )
       .toBe(true);
     pressedAt = await clock();

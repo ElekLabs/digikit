@@ -1,0 +1,39 @@
+[module]
+id = "core/usb-bulk-audio"
+version = "0.1.0"
+name = "USB bulk in USB AUDIO/MIDI"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "A vendor bulk OUT interface (interface 5, EP2 OUT) in the USB AUDIO/MIDI configuration, with no mode switch: host data reaches core/usb-bulk's receive ring while audio and MIDI keep working"
+requires = ["core/usb-bulk"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The entry of the firmware's USB init jumps to ua_init_hook, which runs ua_prepare (it extends entry 5 of the RAM port table: a copy of the 0x148-byte configuration with
+# interface 5 appended, and our connect and disconnect callbacks) and then the displaced prologue. The init runs at boot and again from the firmware tick after a controller
+# reset. ua_prepare refuses and leaves USB stock if entry 5 is not the stock layout. The wrappers run the stock callbacks and call core/usb-bulk's usb_bulk_port5_connect and
+# usb_bulk_port5_disconnect; usb_bulk_port5_attach marks the port bulk-capable there. Those three and the board's DDR facts (usb_alias_delta, usb_ddr_base, usb_ddr_bytes) are
+# symbols of core/usb-bulk, which patchkit links across the two objects. The engine is identical code at the same addresses on both devices.
+[[object]]
+path = "build/usb-bulk-audio.dko.json"
+sources = ["src/cf/usb_bulk_audio.c", "src/cf/ua_tramp.s"]
+place = "cf.expansion"
+
+[object.externs]
+usb_port_table = "cf.usb.data.port_table"
+ua_init_next = "hook.cf.usb.site.init.tail"
+
+[[op]]
+op = "hook"
+hook = "cf.usb.hook.init"
+to = "ua_init_hook"
+
+[[claim]]
+resource = "cf.usb.site.init"

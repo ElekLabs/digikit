@@ -504,6 +504,10 @@ pattern in the region and the card overlay check, and judges it; `suite IMAGE` r
 Frame SHA-256 goldens: `tests/golden/arena_safety_frames.json` (`suite --update-goldens` rewrites them after a firmware or
 script change; check the frames by eye first).
 
+## Names for addresses
+
+Profiles, crash records and PC dumps name their addresses through the address map ([ADDRMAP.md](ADDRMAP.md)): `tools/devtools/addrnames.py` for tools, `patchkit addr` for everything else. `tools/devtools/cfprof.py` prints `cf.profile` by function, `tools/devtools/pcdump_names.py` adds a `func` column to `pcdump.csv`, `fastcov` and `snapread` use the same lookup.
+
 ## Cargo features
 
 | crate | feature | effect |

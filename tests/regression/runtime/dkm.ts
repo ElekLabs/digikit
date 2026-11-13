@@ -95,8 +95,15 @@ export async function fit(caps: unknown, needs: Record<string, number>[], empty 
   return JSON.parse(stdout);
 }
 
+/** The page defaults of the gain fixtures (one GAIN knob, 0.5 as float bits): the words p0 .. of the committed row. */
+export const GAIN_PAGE_DEFAULTS = [0x3f000000];
+
 /** Relocation and row oracle of a one-effect module placed at BASE. */
-export async function fxExpectations(file: string, base: number): Promise<FxExpectations> {
+export async function fxExpectations(
+  file: string,
+  base: number,
+  pageDefaults = GAIN_PAGE_DEFAULTS,
+): Promise<FxExpectations> {
   const sec = parseDspSection(fs.readFileSync(file));
   if (sec.fxs.length !== 1 || sec.nimports)
     throw new Error('FX oracle requires exactly one effect without DSP imports');
@@ -109,7 +116,9 @@ export async function fxExpectations(file: string, base: number): Promise<FxExpe
       base + effect.desc,
       base + stateAt,
       1,
-      ...effect.defaults,
+      // the section holds placeholders: the commit writes the defaults of the effect's page knobs (init) into the row
+      ...pageDefaults,
+      ...Array<number>(Math.max(0, effect.defaults.length - pageDefaults.length)).fill(0),
     ],
     needs: (await needsOf([file]))[0]!,
   };

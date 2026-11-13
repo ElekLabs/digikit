@@ -1,4 +1,4 @@
-//! The second ColdFire CPU of a two-CPU board (the peer, finding 128) on a second instance of the ColdFire core.
+//! The second ColdFire CPU of a two-CPU board (the peer, finding 129) on a second instance of the ColdFire core.
 //!
 //! The peer has its own memory map: SDRAM 0x40000000..0x48000000 (private), SRAM 0x80000000..0x80010000, its own peripherals (INTC0,
 //! DTIM0, PIT1, eDMA, GPIO, DSPI) and FlexBus chip select 0 at address 0, which is the 128 KB window MAIN sees at 0x10000000. The window

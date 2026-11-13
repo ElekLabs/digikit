@@ -166,7 +166,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
               expect(
                 cap.ARENA!.largest,
                 'the full set uses the arena but the block that every load needs (the holes the declaring modules leave before their record blocks are smaller or equal)',
-              ).toBe(COLLECT_BLOCK);
+              ).toBe(COLLECT_BLOCK - ARENA_HDR);
               expect(cap.DSP_AREA!.largest, 'the DSP area is used to its last whole granule').toBeLessThan(DSP_GRANULE);
             }
 

@@ -1132,6 +1132,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dkaddrmap"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "dkbulk"
 version = "0.1.0"
 dependencies = [
@@ -3146,6 +3154,7 @@ name = "patchkit"
 version = "0.1.0"
 dependencies = [
  "coldfire",
+ "dkaddrmap",
  "dkneeds",
  "dkrt-fit",
  "dkrt-sdk",
@@ -3157,6 +3166,7 @@ dependencies = [
  "object",
  "plusdrive-format",
  "regex-lite",
+ "rustc-demangle",
  "selas",
  "selelf",
  "selinstr",
@@ -3623,6 +3633,12 @@ dependencies = [
  "web-sys",
  "windows-sys 0.60.2",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
 
 [[package]]
 name = "rustc-hash"

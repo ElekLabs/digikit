@@ -33,17 +33,22 @@ import { useFitWasm } from './fit-wasm.ts';
 await useFitWasm();
 
 /** A .dkm with a valid header (docs/design/digikit-dkm.md) of `size` bytes. */
-function dkm(name, { machine = 0, fx = 0, service = 1, size = 700, dsp = 0, version = 0x000102, salt = 0 } = {}) {
+function dkm(name, { machine = 0, fx = 0, size = 700, dsp = 0, version = 0x000102, salt = 0 } = {}) {
   const b = new Uint8Array(size);
   b.set([0x44, 0x4b, 0x4d, 0x46], 0);
   new DataView(b.buffer).setUint32(8, size);
   new DataView(b.buffer).setUint32(0x34, version);
-  b.set([1, 1, machine, 0, fx, 0, service, 0], 0x38);
   b.set(Buffer.from(name), 0x40);
   new DataView(b.buffer).setUint32(0x64, 100);
   new DataView(b.buffer).setUint32(0x68, 20);
   new DataView(b.buffer).setUint32(0x9c, dsp);
   for (let i = 0xa0; i < size; i++) b[i] = (i * 31 + salt) & 255;
+  // the keys table (header 0x90/0x94): u16 words at +6 and +8 count machines and effects
+  new DataView(b.buffer).setUint32(0x90, 0xa0);
+  new DataView(b.buffer).setUint32(0x94, 12);
+  b.fill(0, 0xa0, 0xac);
+  new DataView(b.buffer).setUint16(0xa0 + 6, machine);
+  new DataView(b.buffer).setUint16(0xa0 + 8, fx);
   return b;
 }
 
@@ -119,8 +124,8 @@ test('session: info with caps, list in pages, modules, capacity, read, verify, s
   ); // three entries, two per page
   assert.equal(ls[0].hash, hex(sha(dev.files.get('modules/a.dkm'))));
   assert.deepEqual(
-    (await s.modules()).map((m) => [m.name, m.types, m.contracts[1]]),
-    [['someone/machine', [17], [1, 0]]],
+    (await s.modules()).map((m) => [m.name, m.types, m.needs]),
+    [['someone/machine', [17], 0x204]],
   );
   assert.deepEqual(await s.capacity(), {
     MODULES: { limit: 8, used: 1, largest: 0 },

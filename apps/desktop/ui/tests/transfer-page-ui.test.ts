@@ -11,6 +11,7 @@ import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '../../../web
 import { FOCUS_GAP_MS, canAutoRefresh, focusReadDue, listingChanged } from '../../../web/src/transfer/refresh-core.ts';
 import {
   applyUpload,
+  folderStatus,
   samplesBar,
   uploadCancelled,
   uploadFailure,
@@ -215,16 +216,16 @@ test('the bottom bar of a samples upload: only what this run touched, one messag
   u = ev(u, { event: 'prepared', name: 'k', source: 'k.wav', kind: 'converted', bytes: 1000 });
   u = ev(u, { event: 'prepared', name: 's', source: 's.wav', kind: 'converted', bytes: 3000 });
   let bar = samplesBar(u, base, true)!;
-  assert.deepEqual([bar.sent, bar.total, bar.fraction, bar.message], [0, 4000, 0, 'Preparing…']);
+  assert.deepEqual([bar.sent, bar.total, bar.fraction, bar.message], [0, 4000, 0, 'Transferring 1 of 2 · k.wav']);
   u = ev(u, { event: 'progress', name: 'k', sent: 500, bytes: 1000 });
   bar = samplesBar(u, base, true)!;
-  assert.deepEqual([bar.sent, bar.fraction, bar.message], [500, 0.125, 'Uploading k (1 of 2)']);
+  assert.deepEqual([bar.sent, bar.fraction, bar.message], [500, 0.125, 'Transferring 1 of 2 · k.wav']);
   u = ev(u, { event: 'verifying', name: 'k' });
-  assert.equal(samplesBar(u, base, true)!.message, 'Verifying k (1 of 2)');
+  assert.equal(samplesBar(u, base, true)!.message, 'Transferring 1 of 2 · k.wav');
   u = ev(u, { event: 'verified', name: 'k', ok: true, message: '' });
   u = ev(u, { event: 'progress', name: 's', sent: 1500, bytes: 3000 });
   bar = samplesBar(u, base, true)!;
-  assert.deepEqual([bar.sent, bar.fraction, bar.message], [2500, 0.625, 'Uploading s (2 of 2)']);
+  assert.deepEqual([bar.sent, bar.fraction, bar.message], [2500, 0.625, 'Transferring 2 of 2 · s.wav']);
   u = ev(u, { event: 'verified', name: 's', ok: true, message: '' });
   bar = samplesBar(u, base, false)!;
   assert.deepEqual([bar.fraction, bar.failed, bar.message], [1, false, 'Uploaded 2 files, verified.']);
@@ -238,6 +239,40 @@ test('the bottom bar of a samples upload: only what this run touched, one messag
   const queued = ev(base, { event: 'queued', name: 'q', bytes: 100 });
   bar = samplesBar(queued, base, false)!;
   assert.deepEqual([bar.failed, bar.message], [true, 'Nothing was uploaded.']);
+});
+
+test('sample file and folder bars stay active through checks and the gaps between small files', () => {
+  let u: Uploads = {};
+  const ev = (e: UploadEventWithoutFolder) => (u = applyUpload(u, { folder: 'Drums', ...e }));
+  for (const name of ['kick', 'snare']) ev({ event: 'queued', name, bytes: 1000 });
+  assert.equal(folderStatus(u, 'Drums')?.kind, 'waiting');
+  ev({ event: 'progress', name: 'kick', sent: 1000, bytes: 1000 });
+  const sending = samplesBar(u, {}, true)!;
+  assert.equal(uploadStatus(u['Drums/kick'])?.kind, 'uploading', 'all bytes sent is still active');
+  ev({ event: 'verifying', name: 'kick' });
+  const checking = samplesBar(u, {}, true)!;
+  assert.equal(checking.message, sending.message);
+  assert.equal(checking.checking, 'Drums/kick');
+  assert.deepEqual(
+    [uploadStatus(u['Drums/kick'])?.sent, uploadStatus(u['Drums/kick'])?.bytes],
+    [1000, 1000],
+    'keep a full byte bar until verification finishes',
+  );
+  assert.equal(folderStatus(u, 'Drums')?.checking, 'Drums/kick');
+
+  ev({ event: 'verified', name: 'kick', ok: true, message: '' });
+  const gap = folderStatus(u, 'Drums')!;
+  assert.deepEqual([gap.kind, gap.sent, gap.bytes, gap.checking], ['uploading', 1000, 2000, '']);
+  assert.equal(samplesBar(u, {}, true)!.message, 'Transferring 2 of 2 · snare');
+  ev({ event: 'progress', name: 'snare', sent: 500, bytes: 1000 });
+  assert.deepEqual([folderStatus(u, 'Drums')?.kind, folderStatus(u, 'Drums')?.sent], ['uploading', 1500]);
+  ev({ event: 'verifying', name: 'snare' });
+  assert.equal(samplesBar(u, {}, true)!.fraction, 1, 'the byte bar can be full while the job is active');
+  assert.equal(folderStatus(u, 'Drums')?.kind, 'uploading', 'a full bar is not verification success');
+  ev({ event: 'verified', name: 'snare', ok: false, message: 'hash differs' });
+  assert.equal(folderStatus(u, 'Drums')?.kind, 'failed');
+  assert.equal(samplesBar(u, {}, false)!.checking, '');
+  assert.equal(samplesBar(u, {}, false)!.failed, true);
 });
 
 test('the speed in the bar: BEGIN, END and VERIFY count as time, so a stall pulls it down; it shows in a stall too', () => {
@@ -266,8 +301,8 @@ test('the bar of an upload: the bytes that went, a cancel is not red and not 100
   u = ev(u, { event: 'progress', name: 'a', sent: 1000, bytes: 1000 });
   u = ev(u, { event: 'verified', name: 'a', ok: true, message: '' });
   u = ev(u, { event: 'progress', name: 'b', sent: 400, bytes: 1000 });
-  assert.equal(samplesBar(u, {}, true)!.message, 'Uploading b (2 of 3)');
-  assert.equal(samplesBar(u, {}, true, 5000)!.message, 'Uploading b (2 of 3)', 'the average is for the end text');
+  assert.equal(samplesBar(u, {}, true)!.message, 'Transferring 2 of 3 · b');
+  assert.equal(samplesBar(u, {}, true, 5000)!.message, 'Transferring 2 of 3 · b', 'the average is for the end text');
   // the user cancels: b is cut off, c was not started
   u = ev(u, { event: 'cancelled', name: 'b', message: 'cancelled while sending' });
   u = ev(u, { event: 'cancelled', name: 'c', message: 'not sent: cancelled' });
@@ -433,7 +468,7 @@ test('the busy action outlives the page: a page that comes back during an upload
   u = applyUpload(u, { folder: 'd', event: 'progress', name: 'k', sent: 500, bytes: 1000 });
   assert.equal(
     samplesBar(u, {}, busy() === 'Uploading')!.message,
-    'Uploading k (1 of 1)',
+    'Transferring 1 of 1 · k.wav',
     'still running, not "1 of 1 uploaded."',
   );
   assert.equal(beginJob('Uploading'), false, 'no second upload');
@@ -461,10 +496,10 @@ test('the bar of a resumed upload: files on the device are done at once, but add
   let bar = samplesBar(u, {}, true)!;
   assert.deepEqual([bar.sent, bar.total], [0, 1000], 'the rate sees only what is sent');
   assert.equal(bar.fraction, 2 / 3, 'the fraction counts the skipped files as done');
-  assert.equal(bar.message, 'Preparing…');
+  assert.equal(bar.message, 'Transferring 3 of 3 · c');
   u = ev(u, { event: 'progress', name: 'c', sent: 500, bytes: 1000 });
   bar = samplesBar(u, {}, true)!;
-  assert.deepEqual([bar.sent, bar.total, bar.message], [500, 1000, 'Uploading c (3 of 3)']);
+  assert.deepEqual([bar.sent, bar.total, bar.message], [500, 1000, 'Transferring 3 of 3 · c']);
   u = ev(u, { event: 'verified', name: 'c', ok: true, message: '' });
   bar = samplesBar(u, {}, false, 2_000_000)!;
   assert.deepEqual(

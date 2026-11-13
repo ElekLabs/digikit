@@ -72,13 +72,15 @@ pub struct Profile {
 
 #[derive(Clone, Copy)]
 pub struct CMachine {
-    pub key: u32,
+    /// the machine's index in the module (`DK_MACHINE_ID_<ID>`): the position of its key in the keys table
+    pub index: u32,
     pub name: [u8; TEXT],
     pub short: [u8; TEXT],
 }
 #[derive(Clone, Copy)]
 pub struct CFx {
-    pub id: u32,
+    /// the effect's index in the module (`DK_FX_ID_<ID>`): the position of its id in the keys table, the ordinal of its effect record
+    pub index: u32,
     pub name: [u8; TEXT],
     pub short: [u8; TEXT],
     pub routes_set: bool,
@@ -127,8 +129,8 @@ pub struct CParam {
     pub fdef: u32,
 }
 
-const M0: CMachine = CMachine { key: 0, name: [0; TEXT], short: [0; TEXT] };
-const F0: CFx = CFx { id: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
+const M0: CMachine = CMachine { index: 0, name: [0; TEXT], short: [0; TEXT] };
+const F0: CFx = CFx { index: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
 const G0: CPage = CPage { fx: false, owner: 0, name: [0; TEXT], short: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
 const P0: CParam = CParam {
     page: 0, fx: false, name: [0; 32], short: [0; 16], min: 0, max: 127 * 256, def: 0, glyph: 0, latched: false, click: 0, click_arg: 0, kind: 0, fmin: 0, fmax: 0, fdef: 0,
@@ -173,14 +175,14 @@ impl Collect {
         true
     }
 
-    pub fn add_machine(&mut self, key: u32, name: *const u8, short: *const u8) -> *mut u8 {
+    pub fn add_machine(&mut self, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
         if self.nm >= MAX_M || !self.room() {
             self.fail(E_DECL_FULL);
             return placeholder();
         }
         let i = self.nm;
         let mut m = M0;
-        m.key = key;
+        m.index = index;
         let mut e = 0;
         unsafe {
             put_text(&mut m.name, name, &mut e);
@@ -192,14 +194,14 @@ impl Collect {
         &mut self.machines[i] as *mut CMachine as *mut u8
     }
 
-    pub fn add_fx(&mut self, id: u32, name: *const u8, short: *const u8) -> *mut u8 {
+    pub fn add_fx(&mut self, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
         if self.nf >= MAX_F || !self.room() {
             self.fail(E_DECL_FULL);
             return placeholder();
         }
         let i = self.nf;
         let mut f = F0;
-        f.id = id;
+        f.index = index;
         let mut e = 0;
         unsafe {
             put_text(&mut f.name, name, &mut e);
@@ -457,15 +459,15 @@ unsafe fn active() -> Option<&'static mut Collect> {
 
 // the builder imports (registered in lib.rs)
 
-pub unsafe extern "C" fn dk_module_ctx_add_machine(ctx: *mut u8, id: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
+pub unsafe extern "C" fn dk_module_ctx_add_machine(ctx: *mut u8, index: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
     match active() {
-        Some(c) if crate::entry::is_ctx(ctx) => c.add_machine(id, name, short_name),
+        Some(c) if crate::entry::is_ctx(ctx) => c.add_machine(index, name, short_name),
         _ => placeholder(),
     }
 }
-pub unsafe extern "C" fn dk_module_ctx_add_fx(ctx: *mut u8, id: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
+pub unsafe extern "C" fn dk_module_ctx_add_fx(ctx: *mut u8, index: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
     match active() {
-        Some(c) if crate::entry::is_ctx(ctx) => c.add_fx(id, name, short_name),
+        Some(c) if crate::entry::is_ctx(ctx) => c.add_fx(index, name, short_name),
         _ => placeholder(),
     }
 }
@@ -657,16 +659,16 @@ impl Plan {
     }
 }
 
-/// The index of effect id `id` in the keys table: the ordinal of its effect record in the DSP section.
-pub fn fx_ordinal(keys: &KeysCopy, id: u32) -> Result<u32, i32> {
-    let mut i = 0;
-    while i < keys.nf {
-        if keys.fk[i] == id {
-            return Ok(i as u32);
-        }
-        i += 1;
-    }
-    Err(E_DECL_ID)
+/// The key of a machine of the collection: the keys table row at its index (`check_commit` refused an index outside the table).
+pub fn machine_key(keys: &KeysCopy, m: &CMachine) -> u32 {
+    let i = m.index as usize;
+    if i < keys.nm { keys.mk[i] } else { 0 }
+}
+
+/// The id of an effect of the collection: the keys table row at its index.
+pub fn fx_id(keys: &KeysCopy, f: &CFx) -> u32 {
+    let i = f.index as usize;
+    if i < keys.nf { keys.fk[i] } else { 0 }
 }
 
 /// The knob page of machine `m`: the index of its only non-canvas page, None without one; Err when it has two.
@@ -767,7 +769,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             }
         }
         o.head(KIND_MACHINE, LEN_MACHINE);
-        o.p32(mc.key);
+        o.p32(machine_key(keys, mc));
         o.p32(p.clone_of);
         o.p32(POS_END);
         o.p32((p.own_dsp && voice[m]) as u32);
@@ -809,7 +811,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 }
             };
             o.head(KIND_PAGE, LEN_PAGE);
-            o.p32(mc.key);
+            o.p32(machine_key(keys, mc));
             let mut j = 0;
             while j < KNOBS {
                 o.p32(knobs[j]);
@@ -848,10 +850,10 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 i += 1;
             }
             o.head(KIND_EFFECT, LEN_EFFECT);
-            o.p32(fx_ordinal(keys, fx.id)?); // the effect record of the DSP section: the keys table order
+            o.p32(fx.index); // the effect record of the DSP section: the keys table order
             o.p32(fx.mix); // MIX default
             o.p32(n as u32);
-            o.p32(fx.id);
+            o.p32(fx_id(keys, fx));
             let mut tab = [0u8; 8];
             let label = if len_of(&g.short) > 0 { &g.short } else { &fx.short };
             let mut j = 0;
@@ -935,7 +937,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 o.head(crate::nativepage::KIND_V2, crate::nativepage::LEN_V2 as usize);
                 o.p32(2);
             }
-            o.p32(c.machines[m].key);
+            o.p32(machine_key(keys, &c.machines[m]));
             o.p32(g.draw.wrapping_sub(base));
             o.p32(g.event.wrapping_sub(base));
             o.text(&g.name, TEXT);
@@ -1053,6 +1055,11 @@ pub fn fx_flags(allowed: u32, def: u32) -> u32 {
     f
 }
 
+/// The flags of effect `fx` of the collection: `dk_fx_routes` when it was called, else the master only (allowed and default MASTER).
+pub fn fx_flags_of_decl(fx: &CFx) -> u32 {
+    if fx.routes_set { fx_flags(fx.allowed, fx.def) } else { fx_flags(ROUTE_MASTER, ROUTE_MASTER) }
+}
+
 /// The words p0 .. of an effect's row: the defaults of the knobs of its page (float bits), 0 after them.
 pub fn fx_defaults(c: &Collect, f: usize) -> [u32; 8] {
     let mut out = [0u32; 8];
@@ -1103,17 +1110,17 @@ pub fn check_commit(c: &Collect, p: &Profile, keys: &KeysCopy, loaded_fx: &[u32]
     if c.err != 0 {
         return c.err;
     }
-    // every machine and effect id of a builder call is in the keys table
+    // every machine and effect index of a builder call is a row of the keys table
     let mut i = 0;
     while i < c.nm {
-        if !contains(&keys.mk[..keys.nm], c.machines[i].key) {
+        if c.machines[i].index as usize >= keys.nm {
             return E_DECL_ID;
         }
         i += 1;
     }
     i = 0;
     while i < c.nf {
-        if !contains(&keys.fk[..keys.nf], c.fxs[i].id) {
+        if c.fxs[i].index as usize >= keys.nf {
             return E_DECL_ID;
         }
         i += 1;

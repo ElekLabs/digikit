@@ -132,10 +132,10 @@ test('wasm and CLI produce byte-identical output for core/params and PLUCK', { s
   assert.deepEqual(entries('machines'), [['pluck', 9]]);
   assert.deepEqual(report.registries.find((r) => r.name === 'machines').gaps, [7, 8]);
   assert.deepEqual(entries('params'), [
-    ['decay', 275],
-    ['pick_position', 276],
-    ['brightness', 277],
-    ['excitation_colour', 278],
+    ['pluck_decay', 275],
+    ['pluck_pick', 276],
+    ['pluck_bright', 277],
+    ['pluck_color', 278],
   ]);
   // PLUCK builds for Digitone II too (device-filtered entries and objects): the same parity there
   const outDn2 = join(work, 'dn2-pluck.syx');

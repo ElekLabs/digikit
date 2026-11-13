@@ -9,10 +9,8 @@ export interface LinkState {
   reason?: string;
   /** `sysex` only: usb-fast is selected but did not load at the last boot (the device's LOADS record); `loadFailureText` says why. */
   failure?: LoadFailure;
-  /** `sysex` only: usb-fast is loaded but the device is in USB AUDIO/MIDI mode, which has no bulk interface, and the take-over is off. */
+  /** `sysex` only: usb-fast is loaded but the device is in USB AUDIO/MIDI mode and offers no bulk interface (firmware without core/usb-bulk-audio). */
   wrongMode?: boolean;
-  /** `bulk` only: the device is taken over (it was in USB AUDIO/MIDI and runs in USB MIDI until the linger ends), so its USB audio is paused. */
-  takenOver?: boolean;
 }
 
 /** The pill of the Target row; undefined while the backend has not been opened for the target. */
@@ -20,13 +18,6 @@ export function linkTag(link: LinkState | undefined): RowTag | undefined {
   if (!link) return undefined;
   switch (link.state) {
     case 'bulk':
-      if (link.takenOver)
-        return {
-          text: 'FAST USB (USB audio paused)',
-          tone: 'ok',
-          title:
-            'The device is in USB AUDIO/MIDI. For this transfer the workbench switched it to USB MIDI and samples go over the bulk interface of the usb-fast module. USB audio is paused and returns about 10 s after the last transfer; the stored USB CONFIG is not changed.',
-        };
       return {
         text: 'FAST USB',
         tone: 'ok',

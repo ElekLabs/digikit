@@ -4,7 +4,7 @@
 // Written without TS-only runtime syntax so node can import it.
 import { BULK_CLASS, BULK_VID } from '@digi/dk-session/gen_bulk';
 import { BulkFrames, sendWithZlp, type BulkLink } from '@digi/dk-session/bulk';
-import type { BulkCandidate, BulkOpener } from '@digi/dk-session';
+import { SysExReplyLink, type BulkCandidate, type BulkOpener } from '@digi/dk-session';
 
 /** The parts of the WebUSB API this file uses. */
 export interface UsbEndpointLike {
@@ -52,15 +52,20 @@ export function webUsb(): UsbLike | undefined {
 }
 export const webUsbAvailable = (): boolean => webUsb() !== undefined;
 
-/** The vendor interface of the device with a bulk OUT and a bulk IN endpoint. */
+/**
+ * The vendor interface of the device with a bulk OUT and a bulk IN endpoint (the USB MIDI pair), or else one with a single bulk OUT endpoint (`inp`
+ * undefined: the OUT-only interface of USB AUDIO/MIDI mode, whose replies come over SysEx).
+ */
 export function findBulk(
   d: UsbDeviceLike,
-): { interfaceNumber: number; alt: number; out: number; inp: number } | undefined {
+): { interfaceNumber: number; alt: number; out: number; inp?: number } | undefined {
+  let outOnly: { interfaceNumber: number; alt: number; out: number } | undefined;
   for (const i of d.configuration?.interfaces ?? [])
     for (const a of i.alternates) {
       if (a.interfaceClass !== BULK_CLASS) continue;
-      const out = a.endpoints.find((e) => e.type === 'bulk' && e.direction === 'out');
-      const inp = a.endpoints.find((e) => e.type === 'bulk' && e.direction === 'in');
+      const bulk = a.endpoints.filter((e) => e.type === 'bulk');
+      const out = bulk.find((e) => e.direction === 'out');
+      const inp = bulk.find((e) => e.direction === 'in');
       if (out && inp)
         return {
           interfaceNumber: i.interfaceNumber,
@@ -68,13 +73,15 @@ export function findBulk(
           out: out.endpointNumber,
           inp: inp.endpointNumber,
         };
+      if (out && bulk.length === 1)
+        outOnly ??= { interfaceNumber: i.interfaceNumber, alt: a.alternateSetting, out: out.endpointNumber };
     }
-  return undefined;
+  return outOnly;
 }
 
 export class WebUsbBulkLink implements BulkLink {
   private dev: UsbDeviceLike;
-  private ep: { interfaceNumber: number; out: number; inp: number };
+  private ep: { interfaceNumber: number; out: number; inp?: number };
   private frames = new BulkFrames();
   private ready: Uint8Array[] = [];
   private waiter: (() => void) | null = null;
@@ -82,9 +89,14 @@ export class WebUsbBulkLink implements BulkLink {
   closed = false;
   private failure: Error | null = null;
 
-  private constructor(dev: UsbDeviceLike, ep: { interfaceNumber: number; out: number; inp: number }) {
+  private constructor(dev: UsbDeviceLike, ep: { interfaceNumber: number; out: number; inp?: number }) {
     this.dev = dev;
     this.ep = ep;
+  }
+
+  /** True for the OUT-only interface (USB AUDIO/MIDI mode): nothing comes in on this link; pair it with `SysExReplyLink`. */
+  get outOnly(): boolean {
+    return this.ep.inp === undefined;
   }
 
   /**
@@ -113,17 +125,19 @@ export class WebUsbBulkLink implements BulkLink {
       throw new Error(`Could not claim the bulk interface: ${e instanceof Error ? e.message : String(e)}`);
     }
     const link = new WebUsbBulkLink(dev, found);
-    void link.pump();
+    if (!link.outOnly) void link.pump();
     return link;
   }
 
   /** The IN endpoint is read all the time: a reply never waits for a recv, and a frame may arrive in several packets. */
   private async pump(): Promise<void> {
+    const inp = this.ep.inp;
+    if (inp === undefined) return;
     while (!this.closed) {
       try {
-        const r = await this.dev.transferIn(this.ep.inp, IN_SIZE);
+        const r = await this.dev.transferIn(inp, IN_SIZE);
         if (r.status === 'stall') {
-          await this.dev.clearHalt?.('in', this.ep.inp);
+          await this.dev.clearHalt?.('in', inp);
           continue;
         }
         if (r.status !== 'ok' || !r.data) throw new Error(`bulk IN: ${r.status}`);
@@ -184,14 +198,19 @@ export class WebUsbBulkLink implements BulkLink {
 
 /**
  * The devices the page may use that offer the bulk interface, as the `BulkOpener` of the identity handshake (bulk-select.ts). The ids are positions in the
- * list of the last `candidates()` call.
+ * list of the last `candidates()` call (or of the last `outOnlyCandidates()` call for `openOutOnly`). `candidates()` lists devices with the bulk pair only. A
+ * device with the OUT-only interface (USB AUDIO/MIDI mode) is listed by `outOnlyCandidates()` and opens as a `SysExReplyLink`: OUT over WebUSB, replies
+ * from `poll` (the SysEx 'R' poll, passed by `chooseBulk`).
  */
 export function webUsbOpener(usb: UsbLike | undefined = webUsb()): BulkOpener {
   let seen: UsbDeviceLike[] = [];
+  let seenOutOnly: UsbDeviceLike[] = [];
   return {
     async candidates(): Promise<BulkCandidate[]> {
       seen = usb
-        ? (await usb.getDevices()).filter((d) => d.vendorId === BULK_VID && (findBulk(d) || !d.configuration))
+        ? (await usb.getDevices()).filter(
+            (d) => d.vendorId === BULK_VID && (findBulk(d) ? findBulk(d)!.inp !== undefined : !d.configuration),
+          )
         : [];
       return seen.map((d, i) => ({ id: String(i), name: d.productName }));
     },
@@ -199,6 +218,29 @@ export function webUsbOpener(usb: UsbLike | undefined = webUsb()): BulkOpener {
       const dev = seen[Number(id)];
       if (!dev) throw new Error(`no USB device ${id}`);
       return WebUsbBulkLink.open(dev);
+    },
+    async outOnlyCandidates(): Promise<BulkCandidate[]> {
+      seenOutOnly = usb
+        ? (await usb.getDevices()).filter((d) => {
+            const f = d.vendorId === BULK_VID ? findBulk(d) : undefined;
+            return f !== undefined && f.inp === undefined;
+          })
+        : [];
+      return seenOutOnly.map((d, i) => ({ id: String(i), name: d.productName }));
+    },
+    async openOutOnly(id: string, poll: () => Promise<Uint8Array>): Promise<BulkLink> {
+      const dev = seenOutOnly[Number(id)];
+      if (!dev) throw new Error(`no USB device ${id}`);
+      const out = await WebUsbBulkLink.open(dev);
+      if (!out.outOnly) {
+        await out.close();
+        throw new Error('This device has the bulk pair, not an OUT-only interface');
+      }
+      return new SysExReplyLink(
+        (frame) => out.send(frame),
+        poll,
+        () => out.close(),
+      );
     },
   };
 }

@@ -6,8 +6,8 @@
  * is 1); 2 send the first piece of a buffer, then hold it. A bus reset (the reset count changes) ends a hold: the buffer is released at once.
  * ECHO_CMD + 2 (0x2e) REENABLE, no body: dk_usb_bulk_disable, forget the buffer and the hold mode, and an dk_io_wake of the job: its next step calls dk_usb_bulk_enable again and
  * stores the result (a refused enable leaves the job waiting, so a later REENABLE can enable again).
- * ECHO_CMD + 3 (0x2f) TAKEOVER, body u8 op: 0 dk_usb_bulk_takeover (also the renew), 1 dk_usb_bulk_giveback; reply: i32 result (the module does not enable the interface itself
- * after a take-over: REENABLE does, once the device is in USB MIDI mode).
+ * ECHO_CMD + 3 (0x2f) DISABLE, no body: dk_usb_bulk_disable, forget the buffer, no wake; a step that still runs only waits (it does not enable again), and the
+ * adapter's tick frees the buffers; reply: i32 result (REENABLE enables again).
  * ECHO_CMD (0x2c): STATUS, reply: i32 result of dk_usb_bulk_enable, u32 dk_usb_bulk_state, u32 steps, u32 buffers taken, u32 bytes taken, u32 bytes sent,
  * u32 times a send was busy, i32 job id, u32 the reset count seen by the job. */
 #include <dk/core/bytes.h>
@@ -115,8 +115,14 @@ static i32 command(u32 cmd, u32 seq, const void *request, u32 len, void *reply)
         return 0;
     }
     if (cmd == ECHO_CMD + 3) {
-        dk_bytes_put32(out, (u32)(len > 0 && body[0] == 1 ? dk_usb_bulk_giveback(ub)
-                                                          : dk_usb_bulk_takeover(ub)));
+        dk_bytes_put32(out, (u32)dk_usb_bulk_disable(ub, job_id));
+        /* enabled_done stays 1: a step already queued (a send wake) takes nothing (no buffer after disable) and does not enable again */
+        if (cur != 0)
+            (void)dk_usb_bulk_release(ub, cur);
+        cur = 0;
+        cur_len = 0;
+        cur_off = 0;
+        hold = 0;
         return 4;
     }
     if (cmd != ECHO_CMD)

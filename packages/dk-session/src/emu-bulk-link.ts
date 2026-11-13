@@ -2,7 +2,7 @@
 // The emulator does not model the USB controller: `usb.bulk.in` fills the dTDs the guest's core/usb-bulk adapter has queued on EP2 OUT and runs their completion
 // callbacks at interrupt level, `usb.bulk.out` returns what the adapter queued on EP2 IN. Used by the desktop workbench's Emulator target (so it negotiates
 // Fast USB like a real device) and by the device tests. Written without TS-only runtime syntax so node can import it.
-import { BulkFrames, sendWithZlp, type BulkLink } from './bulk.ts';
+import { BulkFrames, SysExReplyLink, sendWithZlp, type BulkLink } from './bulk.ts';
 import type { BulkCandidate, BulkOpener } from './bulk-select.ts';
 import type { EmuRpcCall } from './emu-usb-transport.ts';
 
@@ -13,6 +13,11 @@ const PORT_ENTRY_BYTES = 0x28;
 const MIDI_PORT = 2;
 /** The stock connect callback of that entry (`FUN_400044b8`): the adapter has not taken the entry over. */
 const STOCK_CONNECT = 0x400044b8;
+
+/** USB AUDIO/MIDI is port entry 5; once core/usb-bulk-audio has attached interface 5, its config length (+0x10) is 0x158 (stock: 0x148). */
+const AUDIO_PORT = 5;
+const PORT_CONFIG_LENGTH = 0x10;
+const ATTACHED_CONFIG_LENGTH = 0x158;
 
 /** The boot (status.epoch) of the guest whose bus reset was delivered, per control connection. */
 const booted = new WeakMap<object, number>();
@@ -131,5 +136,51 @@ export class EmuBulkLink implements BulkLink {
 
   close(): void {
     this.ready = [];
+  }
+}
+
+/**
+ * The emulator's OUT-only link (USB AUDIO/MIDI, port entry 5 with interface 5 attached): frames go OUT through `usb.bulk.in` like `EmuBulkLink` (EP2 OUT),
+ * the replies come from `poll` (`DkSession.usbFastReplies`, the 'R' poll), because the guest has no bulk IN there. `o.connect` is the connect callback of
+ * port entry 5 (`EmuOutOnlyLink.connectCallback`); `opener` supplies it.
+ */
+export class EmuOutOnlyLink extends SysExReplyLink {
+  readonly bulk: EmuBulkLink;
+  constructor(call: EmuRpcCall, poll: () => Promise<Uint8Array>, o: EmuBulkOptions = {}) {
+    const bulk = new EmuBulkLink(call, o);
+    super((frame) => bulk.send(frame), poll);
+    this.bulk = bulk;
+  }
+
+  /** The connect callback of port entry 5 while the guest has attached the OUT-only interface, else undefined. */
+  static async connectCallback(call: EmuRpcCall): Promise<number | undefined> {
+    const peek = async (addr: number) => {
+      const r = await call<{ value: number | string | null }>('mem.cf.peek', { addr });
+      return r.value === null || r.value === undefined ? null : Number(r.value);
+    };
+    const table = await peek(PORT_TABLE_POINTER);
+    if (!table) return undefined;
+    const entry = table + AUDIO_PORT * PORT_ENTRY_BYTES;
+    if ((await peek(entry + PORT_CONFIG_LENGTH)) !== ATTACHED_CONFIG_LENGTH) return undefined;
+    return (await peek(entry)) || undefined;
+  }
+
+  /** An opener with an `emulator` OUT-only candidate while the guest has attached the interface, and no pair candidate. */
+  static opener(call: EmuRpcCall, o: EmuBulkOptions = {}): BulkOpener {
+    return {
+      async candidates(): Promise<BulkCandidate[]> {
+        return [];
+      },
+      async open(): Promise<BulkLink> {
+        throw new Error('the emulator has no bulk pair in USB AUDIO/MIDI');
+      },
+      async outOnlyCandidates(): Promise<BulkCandidate[]> {
+        return (await EmuOutOnlyLink.connectCallback(call)) === undefined ? [] : [{ id: 'emulator', name: 'emulator' }];
+      },
+      async openOutOnly(_id, poll) {
+        const connect = o.connect ?? (await EmuOutOnlyLink.connectCallback(call));
+        return new EmuOutOnlyLink(call, poll, { ...o, connect });
+      },
+    };
   }
 }

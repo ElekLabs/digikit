@@ -95,9 +95,10 @@ fn desc_flags(obj: &Dko, desc: &str) -> Result<bool> {
     Ok(w & dkmdsp::DESC_STEREO != 0)
 }
 
-/// The keys table and the DSP section of a new-style module for `device`; `dsp_obj` is its DSP object (none: refused, a machine or an effect
+/// The keys table and the DSP section of a new-style module for `device`. `name` is the packed module name (`pack --name`, else the module id): the keys hash it with
+/// the `[[machine]]` and `[[fx]]` ids, so an alias made with another name has keys of its own. `dsp_obj` is its DSP object (none: refused, a machine or an effect
 /// needs one).
-pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Sections> {
+pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> Result<Sections> {
     let mf = &m.manifest;
     let id = &mf.module.id;
     let Some(obj) = dsp_obj else {
@@ -133,7 +134,7 @@ pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Secti
             stereo |= st;
         }
         voices.push(VoiceSpec {
-            type_no: crate::register::machine_key(id, &x.id),
+            type_no: crate::register::machine_key(name, &x.id),
             render,
             note_on: Some(note_on),
             desc,
@@ -207,12 +208,12 @@ pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Secti
     let mk: Vec<u32> = mf
         .machines
         .iter()
-        .map(|x| crate::register::machine_key(id, &x.id))
+        .map(|x| crate::register::machine_key(name, &x.id))
         .collect();
     let fk: Vec<u32> = mf
         .fxs
         .iter()
-        .map(|y| crate::register::effect_id(id, &y.id))
+        .map(|y| crate::register::effect_id(name, &y.id))
         .collect();
     let mut keys = vec![0u8; dkneeds::keys::keys_size(mk.len(), fk.len())];
     dkneeds::keys::write_keys(
@@ -325,7 +326,7 @@ mod tests {
 
     #[test]
     fn a_tool_without_tables_has_an_empty_keys_table_and_no_dsp() {
-        let s = sections(&module(""), "dn2", None).unwrap();
+        let s = sections(&module(""), "test/m", "dn2", None).unwrap();
         assert!(s.keys.is_empty() && s.dsp.is_empty());
     }
 
@@ -339,10 +340,12 @@ mod tests {
             dkmdsp::DESC_CONTRACT | dkmdsp::DESC_STEREO,
         );
         // the effect's desc must be a dk_fx_desc: the machine desc is not
-        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&m, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("dk_fx_desc") || e.contains("DKFX"), "{e}");
         let m = module(MACHINE);
-        let s = sections(&m, "dn2", Some(&obj)).unwrap();
+        let s = sections(&m, "test/m", "dn2", Some(&obj)).unwrap();
         assert!(s.stereo);
         let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
         assert_eq!((k.machine_rows(), k.param_rows(), k.page_rows()), (1, 4, 1));
@@ -361,10 +364,26 @@ mod tests {
     }
 
     #[test]
+    fn the_keys_follow_the_packed_name_not_the_module_id() {
+        let m = module(MACHINE);
+        let obj = dsp_object(&["_foo_render", "_foo_note_on"], &[], &[], 0);
+        let s = sections(&m, "test/m-copy", "dn2", Some(&obj)).unwrap();
+        let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+        let key = crate::register::machine_key("test/m-copy", "foo");
+        assert!(k.machine_keys().eq([key]));
+        assert_ne!(key, crate::register::machine_key("test/m", "foo"));
+        let d = dkmdsp::DspSection::parse(&s.dsp).unwrap();
+        assert_eq!(
+            d.voices[0].type_no, key,
+            "the voice record names the same key"
+        );
+    }
+
+    #[test]
     fn the_packed_file_has_the_keys_table_and_the_needed_runtime() {
         let m = module(MACHINE);
         let obj = dsp_object(&["_foo_render", "_foo_note_on"], &[], &[], 0);
-        let s = sections(&m, "dn2", Some(&obj)).unwrap();
+        let s = sections(&m, "test/m", "dn2", Some(&obj)).unwrap();
         let o = crate::dkm::Options {
             name: "test/m".into(),
             version: 0x010203,
@@ -391,19 +410,27 @@ mod tests {
     fn a_missing_entry_symbol_is_refused_by_name() {
         let m = module(MACHINE);
         let obj = dsp_object(&["_foo_render"], &[], &[], 0);
-        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&m, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("_foo_note_on"), "{e}");
         let obj = dsp_object(&["_foo_note_on"], &[], &[], 0);
-        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&m, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("_foo_render"), "{e}");
-        let e = sections(&m, "dn2", None).unwrap_err().to_string();
+        let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
         assert!(e.contains("DSP object"), "{e}");
         let fx = module("[[fx]]\nid = \"bar\"\n");
         let obj = dsp_object(&["_bar_process"], &[], &[], 0);
-        let e = sections(&fx, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&fx, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("_bar_desc"), "{e}");
         let obj = dsp_object(&[], &["_bar_desc"], &[], 0);
-        let e = sections(&fx, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&fx, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("_bar_process"), "{e}");
     }
 
@@ -419,19 +446,21 @@ mod tests {
             dkmdsp::DESC_CONTRACT,
         );
         // the id's own names are not looked for
-        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&m, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(
             e.contains("_bx_desc") && e.contains("\"bx\"") && e.contains("module.toml"),
             "{e}"
         );
         let m = module("[[machine]]\nid = \"foo\"\ndsp = \"sn\"\n");
-        let s = sections(&m, "dn2", Some(&obj)).unwrap();
+        let s = sections(&m, "test/m", "dn2", Some(&obj)).unwrap();
         let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
         assert!(
             k.machine_keys()
                 .eq([crate::register::machine_key("test/m", "foo")])
         );
-        let e = sections(&module(MACHINE), "dn2", Some(&obj))
+        let e = sections(&module(MACHINE), "test/m", "dn2", Some(&obj))
             .unwrap_err()
             .to_string();
         assert!(e.contains("_foo_render") && e.contains("its id"), "{e}");
@@ -446,7 +475,9 @@ mod tests {
             &["_foo_sample_rec"],
             0,
         );
-        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        let e = sections(&m, "test/m", "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("_foo_sample_ctl"), "{e}");
     }
 }

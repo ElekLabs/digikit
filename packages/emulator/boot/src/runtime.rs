@@ -82,7 +82,7 @@ fn usb_dma_reachable(addr: u32) -> bool {
     matches!(addr, 0x4000_0000..=0x4fff_ffff | 0x8000_0000..=0x8bff_ffff)
 }
 
-/// Reads one audio frame of MAIN's output (finding 128 "Audio"): the half of the converter ring that the engine tick filled for the frame
+/// Reads one audio frame of MAIN's output (finding 129 "Audio"): the half of the converter ring that the engine tick filled for the frame
 /// that just ended, named by the TCD of the audio channel (`[emulator.peer_audio]`). It runs at the peer's doorbell edge, which MAIN's
 /// frame handler makes once per frame before the next tick starts. Edges less than half a frame apart (a handler that preempted a tick)
 /// are not read twice.
@@ -3392,7 +3392,7 @@ impl Emulator {
         self.bus.board.set_usb_vbus(present);
     }
 
-    /// Each event is `(kind, a, b)`: `("w", reg, value)` a ULPI viewport write, `("r", reg, value)` a read, `("rs", 0 or 1, 0)` a change of USBCMD.RS.
+    /// Each event is `(kind, a, b)`: `("w", reg, value)` a ULPI viewport write, `("r", reg, value)` a read, `("rs", 0 or 1, 0)` a change of USBCMD.RS, `("rst", 1, 0)` a controller reset (USBCMD.RST written 1).
     pub fn take_usb_phy(&mut self) -> (Vec<(&'static str, u8, u8)>, Vec<u8>) {
         use machine::UsbPhyEvent;
         let (events, regs) = self.bus.board.usb_phy_take();
@@ -3402,6 +3402,7 @@ impl Emulator {
                 UsbPhyEvent::PhyWrite { reg, value } => ("w", reg, value),
                 UsbPhyEvent::PhyRead { reg, value } => ("r", reg, value),
                 UsbPhyEvent::RunStop(on) => ("rs", u8::from(on), 0),
+                UsbPhyEvent::Reset => ("rst", 1, 0),
             })
             .collect();
         (events, regs)
@@ -3811,7 +3812,7 @@ impl Emulator {
     /// The guest is about to execute the instruction at `pc`: at the transmit function record its (length, buffer) arguments (and log the
     /// trace's addresses). This runs after the step's interrupt deliveries, so an arrival that an interrupt takes over does not count:
     /// seen at the top of the step, a send whose first instruction the peer's frame interrupt preempted was recorded twice, once on arrival
-    /// and once when the task resumed (finding 131).
+    /// and once when the task resumed (finding 132).
     fn observe_usb_tx(&mut self, pc: u32) {
         if self.midi.usb.trace && self.midi.usb.trace_pcs.contains(&pc) {
             let sp = self.cpu.a[7];
@@ -5904,7 +5905,7 @@ mod tests {
     }
 
     /// A send is recorded when its first instruction executes, not when the PC arrives: an interrupt that takes the step over (the peer's
-    /// frame, the USB hand-over) makes the task resume at the same PC later, and the arrival used to be seen twice (finding 131).
+    /// frame, the USB hand-over) makes the task resume at the same PC later, and the arrival used to be seen twice (finding 132).
     #[test]
     fn a_transmit_call_that_an_interrupt_preempts_is_recorded_once() {
         // a device with a peer CPU: its constructor sets the clock rate the other tests of that device read

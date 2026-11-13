@@ -4,6 +4,7 @@ import { For, Show, createEffect, createSignal, type JSX } from 'solid-js';
 import TargetSelect from './TargetSelect';
 import { transferEnv } from './env';
 import { fmtRate } from './rate-core';
+import { createCheckingHint } from './checking-hint';
 import type { PaneSelect } from './pane-select';
 import { dragKind, selectState, toggleAll } from './select-core';
 import { linkTag } from './link-core';
@@ -31,9 +32,14 @@ export interface ChipStatus {
   sent?: number;
   bytes?: number;
   message?: string;
+  /** Samples reserve space for a delayed hint, keyed by the path being checked (empty between checks). */
+  checking?: string;
 }
 
 export function Chip(props: { status: ChipStatus }): JSX.Element {
+  const checking = createCheckingHint(() => props.status.checking);
+  const progress = () =>
+    props.status.kind === 'uploading' || (props.status.kind === 'verifying' && props.status.bytes !== undefined);
   const pct = () => (props.status.bytes ? Math.round((100 * (props.status.sent ?? 0)) / props.status.bytes) : 0);
   const rate = () => {
     const r = liveRate();
@@ -44,7 +50,7 @@ export function Chip(props: { status: ChipStatus }): JSX.Element {
       <Show when={props.status.kind === 'waiting'}>
         <span class="check idle">waiting</span>
       </Show>
-      <Show when={props.status.kind === 'verifying'}>
+      <Show when={props.status.kind === 'verifying' && !progress()}>
         <span class="check idle">verifying…</span>
       </Show>
       <Show when={props.status.kind === 'ok'}>
@@ -67,11 +73,23 @@ export function Chip(props: { status: ChipStatus }): JSX.Element {
           cancelled
         </span>
       </Show>
-      <Show when={props.status.kind === 'uploading'}>
-        <span class="up" title={rate() ? `${pct()}% · ${rate()}` : `${pct()}%`}>
+      <Show when={progress()}>
+        <span
+          class="up"
+          title={
+            props.status.checking
+              ? `${pct()}% sent · Awaiting verification`
+              : rate()
+                ? `${pct()}% · ${rate()}`
+                : `${pct()}%`
+          }
+        >
           <progress max={props.status.bytes} value={props.status.sent} />
           <span class="pct">{pct()}%</span>
           <span class="rate">{rate()}</span>
+          <Show when={props.status.checking !== undefined}>
+            <span class="phase">{checking() ? 'Checking…' : ''}</span>
+          </Show>
         </span>
       </Show>
     </>

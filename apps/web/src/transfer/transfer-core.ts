@@ -305,6 +305,8 @@ export interface BarInfo {
   /** Bytes of files sent so far and in all (the speed and the time left come from these; 0 in all: no bytes in this job). */
   sent: number;
   total: number;
+  /** Samples retain their byte bars through verification. Empty between checks; a path identifies the current check. */
+  checking?: string;
 }
 
 /** The bar of an install, delete or restart. */

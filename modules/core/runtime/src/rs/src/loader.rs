@@ -433,7 +433,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut voice = [false; limits::MACHINE_ROWS];
         let mut m = 0;
         while m < c.nm {
-            voice[m] = dsp::voice_row(rec, crate::assign::resolve(c.machines[m].key)).is_some();
+            voice[m] = dsp::voice_row(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m]))).is_some();
             m += 1;
         }
         size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
@@ -456,7 +456,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         // the ranges and latch mask of each machine's voice row, the routes and defaults of each effect's row
         let mut m = 0;
         while m < c.nm {
-            let t = crate::assign::resolve(c.machines[m].key);
+            let t = crate::assign::resolve(col::machine_key(keys, &c.machines[m]));
             if let Some(row) = dsp::voice_row(rec, t) {
                 let (rng, latched) = col::voice_declared(c, &plan, m);
                 if latched != 0 {
@@ -477,14 +477,9 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut f = 0;
         while f < c.nf {
             let fx = &c.fxs[f];
-            let ord = match col::fx_ordinal(keys, fx.id) {
-                Ok(o) => o,
-                Err(e) => {
-                    arena::free(block);
-                    return e;
-                }
-            };
-            let flags = if fx.routes_set { Some(col::fx_flags(fx.allowed, fx.def)) } else { None };
+            let ord = fx.index; // the index in the keys table is the ordinal of the effect record
+            // without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field: unset means the default route)
+            let flags = Some(col::fx_flags_of_decl(fx));
             let par = if fx.page >= 0 { Some(col::fx_defaults(c, f)) } else { None };
             if (flags.is_some() || par.is_some()) && !dsp::fx_set_declared(rec, ord, flags, par) {
                 arena::free(block);

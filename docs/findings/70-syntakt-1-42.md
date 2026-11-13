@@ -2,7 +2,7 @@
 
 All claims are **[D]** (read once) unless marked **[V]** (checked by two
 independent checks) or **[O]** (open). The second CPU (section 7) is in
-[finding 128](128-syntakt-peer-cpu.md). Plan: [syntakt](../plans/syntakt.md).
+[finding 129](129-syntakt-peer-cpu.md). Plan: [syntakt](../plans/syntakt.md).
 
 ## Container
 
@@ -20,8 +20,8 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 | 1 | absent on DT2/DN2. 0xFF padding, then `aa 99 ...`, bitstream-like | 49,252 packed, 149,516 |
 | 3 | MAIN at 0x40000400, same startup words as DT2 | 1,442,812 packed, 3,442,576 |
 | 4 | UPDATER at 0x80000400 | 32,768 raw |
-| 6 | absent on DT2/DN2. The stage-1 loader of the peer CPU, at SRAM 0x80000000 (finding 128) | 1,744 raw |
-| 7 | DT2/DN2: packed SHARC loader stream. Here: the ColdFire program of the peer CPU (finding 128) | 383,760 raw |
+| 6 | absent on DT2/DN2. The stage-1 loader of the peer CPU, at SRAM 0x80000000 (finding 129) | 1,744 raw |
+| 7 | DT2/DN2: packed SHARC loader stream. Here: the ColdFire program of the peer CPU (finding 129) | 383,760 raw |
 | 8 | byte-identical to DT2/DN2 section 8 | |
 
 - The packing codec is the same as on DT2/DN2.
@@ -43,9 +43,9 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
   0x400004e8, SP 0x48000000, flags word read from 4(sp).
 - The Syntakt has no SHARC. Sections 6 and 7 belong to a second ColdFire CPU
   (the peer): section 6 is its loader and section 7 its sound engine. Facts
-  are in [finding 128](128-syntakt-peer-cpu.md).
+  are in [finding 129](129-syntakt-peer-cpu.md).
 - MAIN reads sections 6 and 7 (ids 6 and 7 of the OS directory in NOR) and
-  streams them to the peer through DSPI2 in slave mode (finding 128, "Image
+  streams them to the peer through DSPI2 in slave mode (finding 129, "Image
   upload").
 
 ## FPGA
@@ -92,7 +92,7 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 - Peer state names at 0x4025303e-0x402530df: STATE_LOAD_OS, INIT, BOOT,
   RUNNING, UPLOAD_SAMPLES; FAILURE_TIMEOUT, BUFSIZE, CF_MEM, DSP_MEM;
   BOOT_SUCCESS.
-- The peer is the section 7 ColdFire **[V]** (finding 128). The exact reply
+- The peer is the section 7 ColdFire **[V]** (finding 129). The exact reply
   sequence: **[O]**.
 - To boot in the emulator, stub: the hello magic and 0xA5A5 on the window,
   IRQ4, and DSPI2 eDMA channel 29 data. This is done by the mailbox responder
@@ -180,7 +180,7 @@ Two counts, with different scope:
 
 ## Mailbox responder (`[emulator] peer = "mailbox-responder"`, the fallback) [D]
 
-The default is now `peer = "coldfire"`: the peer's program runs on a second core and answers by itself ([finding 128](128-syntakt-peer-cpu.md) "Peer CPU model"). The responder below keeps the image stream and IRQ4 #1 in both modes.
+The default is now `peer = "coldfire"`: the peer's program runs on a second core and answers by itself ([finding 129](129-syntakt-peer-cpu.md) "Peer CPU model"). The responder below keeps the image stream and IRQ4 #1 in both modes.
 
 - Model: `packages/emulator/periph/src/peer.rs` (state machine, no bus access), wired by `machine/src/board.rs` (channel 29, GPIO) and
   `boot/src/common.rs` `service_peer` (interrupt delivery). It runs no peer code and no FPGA logic: data transport only.
@@ -299,7 +299,7 @@ The default is now `peer = "coldfire"`: the peer's program runs on a second core
 
 ## Open questions
 
-- Who writes the peer's NOR (finding 128).
+- Who writes the peer's NOR (finding 129).
 - The mailbox reply semantics.
 - Which bootstrap code streams section 1.
 - Whether 0xFC05C000 is a DSPI.

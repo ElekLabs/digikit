@@ -15,7 +15,7 @@ All claims are **[D]** (read once) unless marked. Nothing was run on a device or
 | Section 3 (MAIN OS) | 3,442,576 -> 3,442,656 bytes: the 8-byte reset hook at 0x4000053e, the loader (54 bytes) in the cave, and the 80-byte segment chain after the image end |
 | Hook site | stock bytes `4eba ff1c 4eba ff6e` equal the plan's and the port anchor `cf.rtos.fn.reset.init_calls` hash |
 | `cf.flash_cave` 0x40339730..0x4033a000 | zero in stock, ends at the reset clear start 0x4033a000; the loader uses 56 of 2256 bytes |
-| `cf.expansion` 0x47e8b000..0x47fe0000 | above the image end 0x40348b90 and the bss end 0x45566490; the record (64 bytes) is at its start. **This region is inside the 4 MiB delay ring 0x47c00000..0x48000000 and is not usable at run time; the corrected region is in [finding 130](130-syntakt-runtime-facts.md).** The byte check of the dry run is unchanged. |
+| `cf.expansion` 0x47e8b000..0x47fe0000 | above the image end 0x40348b90 and the bss end 0x45566490; the record (64 bytes) is at its start. **This region is inside the 4 MiB delay ring 0x47c00000..0x48000000 and is not usable at run time; the corrected region is in [finding 131](131-syntakt-runtime-facts.md).** The byte check of the dry run is unchanged. |
 | Checksums | 19,811 packet checksums and counters, framing counts, content checksum 0x65ca2f7e over 2,000,880 bytes: both readers agree. There is no trailer slot (finding 70) |
 | Unchanged rebuild | `patchkit rebuild` of the stock file gives the stock file byte for byte **[V]** |
 
@@ -25,7 +25,7 @@ DT2 1.17 has 2 such operands, Syntakt 10. A semantic check of each is **[O]**.
 
 ## Runtime target
 
-core/runtime with core/expansion patches 1.42 and boots in the emulator ([finding 130](130-syntakt-runtime-facts.md) for the device facts).
+core/runtime with core/expansion patches 1.42 and boots in the emulator ([finding 131](131-syntakt-runtime-facts.md) for the device facts).
 What made it possible, all in the tree:
 
 - The runtime has no device value in its code: the facts that differ between devices are the fields of the device object `dkrt_dev`
@@ -37,7 +37,7 @@ What made it possible, all in the tree:
   (no site on 1.42) and their sites; the code checks each link for 0.
 - The hooks `cf.midi.hook.rx`, `cf.rtos.hook.main_os_task` and `cf.view.hook.ui_loop` name no devices (every device whose site resolves has them).
 
-Values of `devices/syntakt.toml [digikit]` and `[board]` are in finding 130. The safe key is the firmware key index 39 (trig 16), because the runtime
+Values of `devices/syntakt.toml [digikit]` and `[board]` are in finding 131. The safe key is the firmware key index 39 (trig 16), because the runtime
 asks `key_down(k)` with a firmware index.
 
 ### Dry run, core/runtime + core/expansion on 1.42 **[D]**
@@ -66,7 +66,7 @@ The patched file boots in the ColdFire-only emulator to the main screen (700 M t
 safe 0, reason 0, `ui_reached` 1; `dkrt_dev` reads back caps 0xc (eSDHC, safe key), safe key 0x27, keep area 0x47bf0000, no DSP facts. The runtime's
 event ring holds BOOT_START (runtime 0.7.0, device 3), RAM_KEEP (not kept: first boot), BOOT_RECORD and UI_FIRST. Over the emulated USB MIDI `dkupload --emu info` answers
 (port `st`, runtime 0.7.0, capacity store 0/0 KiB, fx_slots 0/0) and `modules` lists no module and no DSP area. **Not done:** the debug module is a run-time module loaded from the module
-store, and the Syntakt has no `[card.store]` (`DEV_HAS_STORE` clear), so it cannot load; its event log is the runtime's own ring, read from memory. A store needs the card layout of finding 130
+store, and the Syntakt has no `[card.store]` (`DEV_HAS_STORE` clear), so it cannot load; its event log is the runtime's own ring, read from memory. A store needs the card layout of finding 131
 and an eMMC image the emulator seeds (`capabilities.card` is `unknown`).
 
 Missing anchors and hooks the other adapters need: core/ui (`cf.menu.site.settings_list.system_icon_ref`, `cf.menu.hook.settings_list.tail`), core/health (the DSP block interrupt

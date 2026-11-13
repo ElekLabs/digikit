@@ -119,17 +119,30 @@ async function opened() {
   return { s, info };
 }
 
+function libraryView(device: string, library: LibraryModule[]): TransferView {
+  return { device, runtime: '', free_bytes: 0, loaded: [], capacity: null, ...mergeView(library, [], [], null, {}) };
+}
+
 export const transferBackend = {
   /** The merged list: the library folder and what the device holds (INFO, LIST, MODULES, CAPACITY, READ). */
-  async list(): Promise<TransferView> {
-    const { s, info } = await opened();
-    const library = await loadLibrary(info.port);
+  async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
+    const [local, remote] = await Promise.allSettled([
+      loadLibrary(device).then((library) => {
+        showLibrary(libraryView(device, library));
+        return library;
+      }),
+      opened(),
+    ]);
+    if (remote.status === 'rejected') throw remote.reason;
+    const { s, info } = remote.value;
+    if (local.status === 'rejected' && info.port === device) throw local.reason;
+    const library = local.status === 'fulfilled' && info.port === device ? local.value : await loadLibrary(info.port);
     return asked(() => buildView(s, library));
   },
   /** The library alone, for a device id: nothing is read from a device. */
   async listLibrary(device: string): Promise<TransferView> {
     const library = await loadLibrary(device);
-    return { device, runtime: '', free_bytes: 0, loaded: [], capacity: null, ...mergeView(library, [], [], null, {}) };
+    return libraryView(device, library);
   },
   /** Upload and VERIFY the modules (the same file hash is not sent again). The device's selection is not touched. */
   async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<void> {

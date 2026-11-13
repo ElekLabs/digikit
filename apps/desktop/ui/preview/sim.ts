@@ -19,6 +19,8 @@ export interface SimState {
   dev: 'ok' | 'empty' | 'noreply' | 'error' | 'slow';
   folder: 'files' | 'empty' | 'none';
   speed: number;
+  /** Milliseconds spent verifying each sample (verify=200). */
+  verify: number;
   paused: boolean;
   mode: 'modules' | 'samples';
   /** The device storage can make folders (mkdir=0: it cannot). */
@@ -31,13 +33,25 @@ export interface SimState {
   link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback';
 }
 
-export const PARAMS = ['dev', 'folder', 'speed', 'paused', 'mode', 'mkdir', 'putfail', 'skip', 'link'] as const;
+export const PARAMS = [
+  'dev',
+  'folder',
+  'speed',
+  'verify',
+  'paused',
+  'mode',
+  'mkdir',
+  'putfail',
+  'skip',
+  'link',
+] as const;
 
 const query = new URLSearchParams(location.search);
 export const sim: SimState = {
   dev: (query.get('dev') as SimState['dev']) ?? 'ok',
   folder: (query.get('folder') as SimState['folder']) ?? 'files',
   speed: Number(query.get('speed') ?? 3),
+  verify: Number(query.get('verify') ?? 200),
   paused: query.get('paused') === '1',
   mode: (query.get('mode') as SimState['mode']) ?? 'modules',
   mkdir: query.get('mkdir') !== '0',

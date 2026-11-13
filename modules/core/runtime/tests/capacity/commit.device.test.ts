@@ -28,14 +28,14 @@ const E_DECL_USES = -28;
 const E_FX_ID_DUP = -29;
 /** Header fields of a .dkm (docs/design/digikit-dkm.md). */
 const H_NAME = 0x40;
-const H_IMAGE_OFF = 0x60;
-const H_IMAGE_SIZE = 0x64;
 const H_KEYS_OFF = 0x90;
+const H_KEYS_SIZE = 0x94;
+const H_DSP_SIZE = 0x9c;
 const K_PARAM_ROWS = 2;
 const ROW_BYTES = 96;
 const ROW_RANGE0 = 2;
 const ROW_LATCH = 22;
-/** The machine key and the effect id the fixture's module.toml ids hash to (`patchkit gen`: build/gen/module_ids.h). */
+/** The machine key the packer writes for the fixture's `test/commit-demo:cmach` (the keys table and the DSP voice record; init passes the index 0). */
 const KEY = Buffer.from([0xa6, 0x51, 0x3f, 0x00]);
 const KEY2 = Buffer.from([0xa6, 0x51, 0x3e, 0x00]);
 /** Knob position of each param (`[adapter.machine] param_slots` of the device file), the sound-array slot of knob 0 and the stock row of the default glyph. */
@@ -166,11 +166,12 @@ cardRigs(
       await expectNothing(rig, got, [], 0);
     });
 
-    test('a machine id that the keys table lacks is E_DECL_ID and writes nothing', async () => {
+    test('a machine index that the keys table lacks is E_DECL_ID and writes nothing', async () => {
       await rig.first();
+      // init declares machine 0 and effect 0; with no keys table (and no DSP section, which would name its voice key) there is no row for them
       const file = patched('id.dkm', (f) => {
-        const [off, size] = [f.readUInt32BE(H_IMAGE_OFF), f.readUInt32BE(H_IMAGE_SIZE)];
-        expect(replaceAll(f, KEY, KEY2, off, off + size), 'init passes the machine key once').toBe(1);
+        f.writeUInt32BE(0, H_KEYS_SIZE);
+        f.writeUInt32BE(0, H_DSP_SIZE);
       });
       const got = await bootEntries(rig, 'commit-id', [{ name: ID, file, want: E_DECL_ID }]);
       expect(got.info.results).toEqual([E_DECL_ID]);
@@ -179,11 +180,11 @@ cardRigs(
 
     test('an effect id that a loaded module has is E_FX_ID_DUP and the first module stays intact', async () => {
       await rig.first();
-      // the copy has another name and another machine key (in the table, the DSP section and init), the same effect id
+      // the copy has another name and another machine key (in the keys table and the DSP voice record), the same effect id
       const copy = patched('dup.dkm', (f) => {
         Buffer.alloc(32).copy(f, H_NAME);
         Buffer.from('test/commit-copy').copy(f, H_NAME);
-        expect(replaceAll(f, KEY, KEY2), 'the machine key is in the keys table, the voice record and init').toBeGreaterThanOrEqual(3);
+        expect(replaceAll(f, KEY, KEY2), 'the machine key is in the keys table and the voice record').toBeGreaterThanOrEqual(2);
       });
       const entries: Entry[] = [
         { name: ID, file: moduleArtifact(rig.device, ID), want: LOADED },

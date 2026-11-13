@@ -1,0 +1,18 @@
+[package]
+name = "dkaddrmap"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/ElekLabs/digikit"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+description = "Address map: the file format and the lookup that names a code address (ours, anchors, firmware names) for profiles, crash records and tools"
+
+[lib]
+name = "dkaddrmap"
+path = "src/lib.rs"
+
+# Plain data and a lookup: builds for the host and wasm32.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

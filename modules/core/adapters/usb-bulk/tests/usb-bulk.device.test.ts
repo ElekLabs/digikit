@@ -17,7 +17,7 @@ import type { DkSession } from '@digi/dk-session';
  * the enumeration. What this cannot show (enumeration on a real host, multi-page dTDs, ENDPTFLUSH timing, DMA and cache behaviour) is for the hardware echo.
  */
 
-const ECHO_CMD = 0x2c; // STATUS of test/usb-echo; +1 HOLD
+const ECHO_CMD = 0x2c; // STATUS of test/usb-echo; +1 HOLD, +2 REENABLE, +3 DISABLE
 const STOCK = { connect: 0x400044b8, disconnect: 0x4000436e, length: 0x65 };
 const PORT_ENTRY = 2;
 const ENTRY_WORDS = 10; // 0x28 bytes
@@ -45,7 +45,7 @@ for (const device of DEVICES) {
     const kit = cardRig(device, 'usb-bulk', {
       dsp: 'zero',
       roots: [...RT, 'core/usb-bulk'],
-      symbols: ['DKRT_MAILBOX', 'usb_bulk_connect', 'usb_bulk_disconnect', 'usb_bulk_switches', 'usb_bulk_switch_gap_ms', 'usb_bulk_last_area', 'usb_bulk_last_bytes', 'usb_bulk_last_slots', 'usb_bulk_ring_off', 'usb_bulk_tier_cap', 'usb_bulk_free_why', 'usb_bulk_hold_ticks', 'usb_bulk_phy_late', 'usb_bulk_phy_refused', 'usb_bulk_forced_restarts', 'usb_bulk_phy_why'],
+      symbols: ['DKRT_MAILBOX', 'usb_bulk_connect', 'usb_bulk_disconnect', 'usb_bulk_last_area', 'usb_bulk_last_bytes', 'usb_bulk_last_slots', 'usb_bulk_ring_off', 'usb_bulk_tier_cap', 'usb_bulk_free_why', 'usb_bulk_restarts'],
       initial: () => ({ selection: [] }),
       project: true,
       uploads: true,
@@ -165,6 +165,18 @@ for (const device of DEVICES) {
         }
       }
       return Buffer.concat(got);
+    };
+    /** The echo module's DISABLE command (dk_usb_bulk_disable, the job stays asleep: the tick frees the buffers), and a run in emulated time. */
+    const sessionKit = (rt: PatchedSession) => {
+      const disable = async () => {
+        const r = await usb(rt, (dk) => dk.request(ECHO_CMD + 3));
+        expect(r.status, 'disable').toBe(0);
+        expect(Buffer.from(r.body).readInt32BE(0), 'dk_usb_bulk_disable').toBe(0);
+      };
+      const run = async (ms: number) => {
+        for (let t = 0; t < ms; t += 1000) await advance(rt.session, Math.min(1000, ms - t));
+      };
+      return { disable, run };
     };
 
     test('the module repoints port entry 2 and serves the 124-byte descriptor; unselected, the table is stock', async () => {
@@ -364,105 +376,17 @@ for (const device of DEVICES) {
       }
     }, 1_800_000);
 
-    /** The take-over tests' helpers: the firmware's active port (a menu-style change pokes it), the stored mode byte, the echo module's TAKEOVER command. */
-    const takeoverKit = (rt: PatchedSession) => {
-      const anchor = (name: string) => {
-        const a = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((x) => x.name === name);
-        expect(a.length, name).toBe(1);
-        return a[0]!.addr as number;
-      };
-      const portAddr = anchor('cf.usb.value.active_port');
-      const modeAddr = anchor('cf.usb.value.config_mode');
-      /** A menu-style change of the mode: the active port and the firmware's pointer to its table entry (the word below the port), as the mode switch leaves them. */
-      const setPort = async (value: number) => {
-        await rpc(rt.session, 'mem.cf.poke', { addr: portAddr - 4, value: tableBase() + value * 0x28 });
-        await rpc(rt.session, 'mem.cf.poke', { addr: portAddr, value });
-      };
-      const port = () => word(rt, portAddr);
-      /** The USB CONFIG setting byte (the most significant byte of its aligned word). */
-      const mode = async () => (await word(rt, modeAddr)) >>> 24;
-      const takeover = async (op: number) => {
-        const r = await usb(rt, (dk) => dk.request(ECHO_CMD + 3, Buffer.from([op])));
-        expect(r.status, `takeover op ${op}`).toBe(0);
-        return Buffer.from(r.body).readInt32BE(0);
-      };
-      const taken = async () => ((await echoStatus(rt)).state & 0x8) !== 0;
-      const run = async (ms: number) => {
-        for (let t = 0; t < ms; t += 1000) await advance(rt.session, Math.min(1000, ms - t));
-      };
-      return { setPort, port, mode, takeover, taken, run };
-    };
-
-    test('take-over: USB AUDIO/MIDI to USB MIDI from the tick and back; the stored mode is never written; the watchdog, the renew and the menu rule', async () => {
-      const rt = await boot('echo-takeover', true);
-      await enabled(rt);
-      const { setPort, port, mode, takeover, taken, run } = takeoverKit(rt);
-      const stored = await mode();
-      try {
-        // Overbridge: refused, nothing changes
-        await setPort(6);
-        expect(await takeover(0), 'refused in Overbridge').toBe(-53);
-        await run(300);
-        expect([await port(), await taken()], 'Overbridge untouched').toEqual([6, false]);
-
-        // USB AUDIO/MIDI: the switch runs from the tick, not in the command
-        await setPort(5);
-        expect(await takeover(0), 'takeover').toBe(0);
-        expect(await port(), 'the command itself does not switch').toBe(5);
-        expect(await taken(), 'the state shows the take-over at once').toBe(true);
-        await run(4500); // the boot's enable counts as a switch: the guard (2 s) runs first
-        expect(await port(), 'switched to USB MIDI').toBe(2);
-        expect(await taken(), 'still taken').toBe(true);
-        expect(await mode(), 'the stored mode is unchanged').toBe(stored);
-        expect(await takeover(1), 'giveback').toBe(0);
-        await run(4500); // the guard after the take-over switch
-        expect([await port(), await taken()], 'back in USB AUDIO/MIDI').toEqual([5, false]);
-        expect(await mode(), 'the stored mode is unchanged after the give-back').toBe(stored);
-
-        // the watchdog: 30 s without activity, a renew in between keeps it
-        expect(await takeover(0)).toBe(0);
-        await run(20_000);
-        expect(await takeover(0), 'renew').toBe(0);
-        await run(20_000);
-        expect([await port(), await taken()], 'renewed: still taken after 40 s').toEqual([2, true]);
-        await run(12_000);
-        expect([await port(), await taken()], 'no activity for 30 s: given back').toEqual([5, false]);
-
-        // the user's choice wins: a menu change drops the take-over and nothing switches back
-        expect(await takeover(0)).toBe(0);
-        await run(4500); // after the watchdog's give-back switch
-        expect(await port()).toBe(2);
-        await setPort(5);
-        await run(1000);
-        expect([await port(), await taken()], 'menu change: dropped, no switch back').toEqual([5, false]);
-
-        // already in USB MIDI: no switch
-        await setPort(2);
-        expect(await takeover(0), 'takeover in USB MIDI').toBe(0);
-        await run(500);
-        expect([await port(), await taken()], 'USB MIDI: taken, no switch').toEqual([2, true]);
-        expect(await takeover(1)).toBe(0);
-        await run(500);
-        expect([await port(), await taken()], 'given back without a switch').toEqual([2, false]);
-        expect(await mode(), 'the stored mode is unchanged at the end').toBe(stored);
-        await rt.session.expectNoFault('takeover');
-      } finally {
-        await setPort(2);
-      }
-    }, 1_800_000);
-
-    test('the buffers exist only for a session: freed at the give-back (EP2 stays up, the host is NAKed, nothing lands in the freed block), allocated again by enable without a re-enumeration; a take-over from USB AUDIO/MIDI allocates before its one switch and frees after the give-back', async () => {
+    test('the buffers exist only for a session: freed after disable (EP2 stays up, the host is NAKed, nothing lands in the freed block), allocated again by enable without a re-enumeration', async () => {
       const LIVE = 0x10;
       const rt = await boot('echo-free', true);
       await enabled(rt);
-      const { setPort, port, takeover, run } = takeoverKit(rt);
+      const { disable, run } = sessionKit(rt);
       const state = async () => (await echoStatus(rt)).state;
-      const switches = () => word(rt, planSymbol(kit.plan, 'usb_bulk_switches'));
       const block = async () => ({
         addr: await word(rt, planSymbol(kit.plan, 'usb_bulk_last_area')),
         bytes: await word(rt, planSymbol(kit.plan, 'usb_bulk_last_bytes')),
       });
-      /** REENABLE, then run until the job has stored an enable result of 0 (a refused one is retried: the guard after a switch). */
+      /** REENABLE, then run until the job has stored an enable result of 0 (a refused one is retried). */
       const reenable = async () => {
         for (let i = 0; i < 100; i++) {
           expect((await usb(rt, (dk) => dk.request(ECHO_CMD + 2))).status, 'reenable').toBe(0);
@@ -472,93 +396,89 @@ for (const device of DEVICES) {
         }
         throw new Error('usb_bulk_enable never returned 0');
       };
-      try {
-        expect((await state()) & LIVE, 'the buffers are allocated by the enable in USB MIDI mode').toBe(LIVE);
-        const area = await block();
-        const slots = await slotsOf(rt);
-        expect([area.addr % 4096, slots, area.bytes], 'the block: 4 KiB aligned, the ring of 60 slots of 16 KiB and 2 send slots of 16 KiB').toEqual([0, 60, 60 * 16_384 + 32_768]);
-        const first = pattern(70_000, 41);
-        expect((await echo(rt, first, true)).equals(first), 'transfer 1').toBe(true);
+      expect((await state()) & LIVE, 'the buffers are allocated by the enable in USB MIDI mode').toBe(LIVE);
+      const area = await block();
+      const slots = await slotsOf(rt);
+      expect([area.addr % 4096, slots, area.bytes], 'the block: 4 KiB aligned, the ring of 60 slots of 16 KiB and 2 send slots of 16 KiB').toEqual([0, 60, 60 * 16_384 + 32_768]);
+      const first = pattern(70_000, 41);
+      expect((await echo(rt, first, true)).equals(first), 'transfer 1').toBe(true);
 
-        // a session in USB MIDI mode: take over (no switch), give back: the tick frees the buffers; EP2 stays enabled
-        // the job holds a receive buffer while the session ends: the free waits for it (CPU-owned memory), then happens once it is released
-        const freeWhy = async () => word(rt, planSymbol(kit.plan, 'usb_bulk_free_why'));
-        const taken0 = (await echoStatus(rt)).taken;
-        await hold(rt, 1);
-        await rpc(rt.session, 'usb.bulk.in', { bytes: pattern(3000, 45).toString('hex') });
-        await advance(rt.session, 100);
-        expect((await echoStatus(rt)).taken, 'the job holds a buffer').toBe(taken0 + 1);
-        expect(await takeover(0), 'takeover in USB MIDI').toBe(0);
-        expect(await takeover(1), 'giveback').toBe(0);
-        await run(1500);
-        expect([(await state()) & LIVE, await freeWhy()], 'not freed while a buffer is held (reason 1)').toEqual([LIVE, 1]);
-        await hold(rt, 0);
-        expect((await collect(rt, 3000)).length, 'the held buffer is echoed once released').toBe(3000);
-        await run(1500);
-        const freed = await state();
-        expect(await freeWhy(), 'freed').toBe(0);
-        const why = (await freeWhy()).toString(16);
-        expect([freed & LIVE, freed & 2, freed & 1], `freed (refused for: 0x${why}); EP2 still up (connected); still prepared`).toEqual([0, 2, 1]);
+      // the session ends: the tick frees the buffers; EP2 stays enabled
+      await disable();
+      await run(1500);
+      const freed = await state();
+      const why = (await word(rt, planSymbol(kit.plan, 'usb_bulk_free_why'))).toString(16);
+      expect([freed & LIVE, freed & 2, freed & 1], `freed (free_why 0x${why}); EP2 still up (connected); still prepared`).toEqual([0, 2, 1]);
+      expect(why, 'freed').toBe('0');
 
-        // the host sends while there are no buffers: nothing lands in the freed block (poisoned here), the host is NAKed
-        const poison = 0xa5a5a5a5;
-        const spots = [0, 16_384, slots * 16_384, slots * 16_384 + 16_384].map((o) => area.addr + ALIAS + o);
-        for (const a of spots) for (let k = 0; k < 8; k++) await rpc(rt.session, 'mem.cf.poke', { addr: a + 4 * k, value: poison });
-        const held = pattern(5000, 44);
-        await rpc(rt.session, 'usb.bulk.in', { file: hostFile(rt, 'while-freed.bin', held) });
-        await advance(rt.session, 500);
-        expect((await out(rt)).bytes, 'nothing is echoed while there are no buffers').toBe(0);
-        expect(full((await state())), 'no buffer was filled').toBe(0);
-        for (const a of spots) for (let k = 0; k < 8; k++) expect(await word(rt, a + 4 * k), `the freed block at ${(a + 4 * k).toString(16)} is untouched`).toBe(poison);
+      // the host sends while there are no buffers: nothing lands in the freed block (poisoned here), the host is NAKed
+      const poison = 0xa5a5a5a5;
+      const spots = [0, 16_384, slots * 16_384, slots * 16_384 + 16_384].map((o) => area.addr + ALIAS + o);
+      for (const a of spots) for (let k = 0; k < 8; k++) await rpc(rt.session, 'mem.cf.poke', { addr: a + 4 * k, value: poison });
+      const held = pattern(5000, 44);
+      await rpc(rt.session, 'usb.bulk.in', { file: hostFile(rt, 'while-freed.bin', held) });
+      await advance(rt.session, 500);
+      expect((await out(rt)).bytes, 'nothing is echoed while there are no buffers').toBe(0);
+      expect(full(await state()), 'no buffer was filled').toBe(0);
+      for (const a of spots) for (let k = 0; k < 8; k++) expect(await word(rt, a + 4 * k), `the freed block at ${(a + 4 * k).toString(16)} is untouched`).toBe(poison);
 
-        // enable again: allocated again, the waiting data arrives whole, and enable made no switch of its own (EP2 was up: no re-enumeration)
-        const s0 = await switches();
-        const again = await reenable();
-        expect((await state()) & LIVE, 'allocated again').toBe(LIVE);
-        expect(again.enable).toBe(0);
-        expect(await switches(), 'no stop and restart for a session in USB MIDI mode').toBe(s0);
-        expect((await collect(rt, held.length)).equals(held), 'the data the host had waiting arrives whole').toBe(true);
-        const second = pattern(70_001, 42);
-        expect((await echo(rt, second, false)).equals(second), 'transfer 2 is the new data, whole: no stale DMA of the first session').toBe(true);
-
-        // a take-over from USB AUDIO/MIDI: the buffers exist before the switch connects port 2 (one switch, one enumeration), and are gone after the give-back
-        expect(await takeover(0)).toBe(0);
-        expect(await takeover(1)).toBe(0);
-        await run(1500);
-        expect((await state()) & LIVE, 'freed after the second give-back').toBe(0);
-        await setPort(5);
-        await run(4500); // the guard after the enable's restart
-        const s1 = await switches();
-        expect(await takeover(0), 'takeover from USB AUDIO/MIDI').toBe(0);
-        await run(4500);
-        expect(await port(), 'switched to USB MIDI').toBe(2);
-        expect(await switches(), 'the take-over made exactly one switch').toBe(s1 + 1);
-        expect((await state()) & LIVE, 'the tick allocated before the switch').toBe(LIVE);
-        await enumerate(rt);
-        const third = pattern(40_000, 43);
-        expect((await echo(rt, third, false)).equals(third), 'transfer 3 after a take-over').toBe(true);
-        expect(await takeover(1), 'giveback').toBe(0);
-        await run(4500);
-        expect(await port(), 'back in USB AUDIO/MIDI').toBe(5);
-        expect((await state()) & LIVE, 'freed again; EP2 untouched in USB AUDIO/MIDI').toBe(0);
-        await rt.session.expectNoFault('buffers freed and allocated');
-      } finally {
-        await setPort(2);
-      }
+      // enable again: allocated again and the waiting data arrives whole (EP2 was up: no re-enumeration)
+      const again = await reenable();
+      expect((await state()) & LIVE, 'allocated again').toBe(LIVE);
+      expect(again.enable).toBe(0);
+      expect((await collect(rt, held.length)).equals(held), 'the data the host had waiting arrives whole').toBe(true);
+      const second = pattern(70_001, 42);
+      expect((await echo(rt, second, false)).equals(second), 'transfer 2 is the new data, whole: no stale DMA of the first session').toBe(true);
+      await rt.session.expectNoFault('buffers freed and allocated');
     }, 1_800_000);
+
+    test('enable refuses while a firmware restart is pending, and re-enabling never stops and restarts the firmware a second time', async () => {
+      const LIVE = 0x10;
+      const rt = await boot('echo-restart', true);
+      await enabled(rt);
+      const { disable, run } = sessionKit(rt);
+      const restarts = () => word(rt, planSymbol(kit.plan, 'usb_bulk_restarts'));
+      const anchors = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((a) => a.name === 'cf.usb.value.restart_delay');
+      expect(anchors.length, 'the restart delay anchor').toBe(1);
+      const delayAddr = anchors[0]!.addr as number;
+      const setDelay = (value: number) => rpc(rt.session, 'mem.cf.poke', { addr: delayAddr, value });
+      const reenable = async (want: number) => {
+        expect((await usb(rt, (dk) => dk.request(ECHO_CMD + 2))).status, 'reenable').toBe(0);
+        for (let i = 0; i < 100; i++) {
+          await advance(rt.session, 100);
+          const s = await echoStatus(rt);
+          if (s.enable === want) return s;
+        }
+        throw new Error(`usb_bulk_enable never returned ${want}`);
+      };
+      expect(await restarts(), 'the boot enable in USB MIDI mode restarted once').toBe(1);
+      await reenable(0);
+      await reenable(0);
+      expect(await restarts(), 'a second enable does not stop and restart again').toBe(1);
+
+      await disable();
+      await run(1500);
+      expect((await echoStatus(rt)).state & LIVE, 'freed').toBe(0);
+      await setDelay(30);
+      const refused = await reenable(-53);
+      expect([refused.state & LIVE, await restarts()], 'refused: no buffers, no restart').toEqual([0, 1]);
+      await setDelay(0);
+      const ok = await reenable(0);
+      expect([ok.state & LIVE, await restarts()], 'enabled with the delay at 0').toEqual([LIVE, 1]);
+      await rt.session.expectNoFault('restart pending');
+    }, 900_000);
 
     test('the receive ring: the switch and the allocation tiers size the block (60, 28 or 8 slots; a failure of every tier changes nothing), every size echoes whole through the wrap, and a full ring NAKs the host and loses nothing', async () => {
       const LIVE = 0x10;
       const NOMEM = 0x20;
       const rt = await boot('echo-ring', true);
       await enabled(rt);
-      const { takeover, run } = takeoverKit(rt);
+      const { disable, run } = sessionKit(rt);
       const state = async () => (await echoStatus(rt)).state;
       const bytesOf = (slots: number) => slots * 16_384 + 32_768;
-      /** Free the buffers (a take-over in USB MIDI mode and its give-back), then REENABLE until usb_bulk_enable has an answer other than a retry. */
+      /** Free the buffers (disable ends the session), then REENABLE until usb_bulk_enable has an answer other than a retry. */
       const cycle = async () => {
-        expect(await takeover(0)).toBe(0);
-        expect(await takeover(1)).toBe(0);
+        await disable();
         await run(1500);
         expect((await state()) & LIVE, 'freed').toBe(0);
       };
@@ -608,259 +528,6 @@ for (const device of DEVICES) {
       expect([back.enable, back.state & LIVE, back.state & NOMEM], 'allocated again, ST_NOMEM cleared').toEqual([0, LIVE, 0]);
       expect([await slotsOf(rt), (await collect(rt, 5000)).length], 'the ring again, and the data that waited arrives').toEqual([60, 5000]);
       await rt.session.expectNoFault('receive ring');
-    }, 1_800_000);
-
-    test('take-over hold: the PHY is released while the controller is stopped and put back before the restart, the restart waits 60 ticks, one switch per take-over, and a lost restart is forced', async () => {
-      const rt = await boot('echo-hold', true);
-      await enabled(rt);
-      const { setPort, port, takeover, run } = takeoverKit(rt);
-      const anchor = (name: string) => {
-        const a = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((x) => x.name === name);
-        expect(a.length, name).toBe(1);
-        return a[0]!.addr as number;
-      };
-      const delayAddr = anchor('cf.usb.value.restart_delay');
-      const sym = (name: string) => word(rt, planSymbol(kit.plan, name));
-      type PhyEvent = { w?: number[]; r?: number[]; rs?: number };
-      const phy = () => rpc<{ events: PhyEvent[]; regs: string }>(rt.session, 'usb.phy', {});
-      /** Advance in 20 ms steps and collect the PHY events (without the firmware's own register 0 reads) with the emulated time they were seen at, until `done` or `limitMs`. */
-      let clock = 0; // emulated ms advanced by `watch`
-      const watch = async (done: (events: { t: number; e: PhyEvent }[]) => boolean, limitMs: number) => {
-        const seen: { t: number; e: PhyEvent }[] = [];
-        for (let t = 0; t < limitMs && !done(seen); t += 20) {
-          await advance(rt.session, 20);
-          clock += 20;
-          for (const e of (await phy()).events) seen.push({ t: clock, e });
-        }
-        return seen;
-      };
-      const FC = 4;
-      try {
-        await setPort(5);
-        await run(4500); // the boot's enable is a switch: let its guard pass
-        const before = await phy();
-        const fcBefore = parseInt(before.regs.slice(FC * 2, FC * 2 + 2), 16);
-        const s0 = await sym('usb_bulk_switches');
-        expect(await takeover(0), 'takeover').toBe(0);
-        const writes = (seen: { t: number; e: PhyEvent }[]) => seen.filter((x) => x.e.w !== undefined);
-        const first = await watch((seen) => writes(seen).length >= 1, 8000);
-        expect(writes(first).map((x) => x.e.w), 'the first PHY write releases the line: function control, non-driving, no termination').toEqual([[FC, 0x49]]);
-        expect(await port(), 'the switch ran').toBe(2);
-        const left = await word(rt, delayAddr);
-        expect(left, 'the firmware restart counter was raised from 30 to 60').toBeGreaterThan(30);
-        expect(left).toBeLessThanOrEqual(60);
-        expect(await sym('usb_bulk_hold_ticks')).toBe(60);
-        const detachedAt = writes(first)[0]!.t;
-        const rest = await watch((seen) => seen.some((x) => x.e.rs === 1) || (writes(seen).length >= 1 && seen.length >= 2), 5000);
-        const restore = writes(rest);
-        expect(restore.map((x) => x.e.w), 'then the saved function control is written back').toEqual([[FC, fcBefore]]);
-        const heldMs = restore[0]!.t - detachedAt;
-        expect(heldMs, 'the line is released for about 2 s (57 ticks of 33 ms)').toBeGreaterThanOrEqual(1700);
-        expect(heldMs).toBeLessThanOrEqual(2400);
-        // the order after the detach write: the restore, then RS = 1 (when the model's firmware starts the controller at all)
-        const order = rest.map((x) => (x.e.w !== undefined ? 'w' : x.e.rs === 1 ? 'rs1' : 'rs0'));
-        expect(order.indexOf('w'), 'the restore comes before any RS = 1').toBeGreaterThanOrEqual(0);
-        if (order.includes('rs1')) expect(order.indexOf('rs1'), 'RS is set after the restore').toBeGreaterThan(order.indexOf('w'));
-        expect(await sym('usb_bulk_switches'), 'one switch for the take-over').toBe(s0 + 1);
-        expect(await sym('usb_bulk_forced_restarts'), 'no forced restart on the normal path').toBe(0);
-        expect(await sym('usb_bulk_phy_refused'), 'no refused ULPI access').toBe(0);
-        expect(await sym('usb_bulk_phy_late'), 'the PHY was restored in time').toBe(0);
-
-        // a lost restart: the counter is gone, the controller stopped, VBUS present. The adapter restarts it itself, once.
-        await run(4500);
-        expect(await takeover(1), 'giveback').toBe(0);
-        await run(6000);
-        expect(await port(), 'back in USB AUDIO/MIDI').toBe(5);
-        expect(await takeover(0)).toBe(0);
-        for (let t = 0; t < 8000 && (await port()) !== 2; t += 20) await watch(() => false, 20);
-        expect(await port(), 'the take-over switched').toBe(2);
-        await rpc(rt.session, 'mem.cf.poke', { addr: delayAddr, value: 0 }); // the firmware's tick no longer restarts
-        await rpc(rt.session, 'usb.phy', { vbus: true }); // OTGSC.BSV: VBUS present
-        const forced = await watch((seen) => seen.some((x) => x.e.rs === 1), 8000);
-        expect(forced.some((x) => x.e.rs === 1), 'the adapter forced the restart').toBe(true);
-        const resetAt = forced.findIndex((x) => x.e.w !== undefined && x.e.w[0] === FC && x.e.w[1] === 0x61);
-        expect(resetAt, 'after a PHY reset').toBeGreaterThanOrEqual(0);
-        expect(resetAt, 'which comes before RS = 1').toBeLessThan(forced.findIndex((x) => x.e.rs === 1));
-        expect(await sym('usb_bulk_forced_restarts'), 'once').toBe(1);
-        await rt.session.expectNoFault('takeover hold');
-      } finally {
-        await setPort(2);
-      }
-    }, 1_800_000);
-
-    /** The PHY-log helpers of the hold tests below: the restart counter, symbols, the log of `usb.phy`, and a watch that advances in steps and returns the events seen. */
-    const phyKit = (rt: PatchedSession) => {
-      const a = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((x) => x.name === 'cf.usb.value.restart_delay');
-      expect(a.length, 'cf.usb.value.restart_delay').toBe(1);
-      const delayAddr = a[0]!.addr as number;
-      const sym = (name: string) => word(rt, planSymbol(kit.plan, name));
-      type Ev = { w?: number[]; r?: number[]; rs?: number };
-      let clock = 0;
-      const watch = async (ms: number, done: (seen: { t: number; e: Ev }[]) => boolean = () => false) => {
-        const seen: { t: number; e: Ev }[] = [];
-        for (let t = 0; t < ms && !done(seen); t += 20) {
-          await advance(rt.session, 20);
-          clock += 20;
-          for (const e of (await rpc<{ events: Ev[] }>(rt.session, 'usb.phy', {})).events) seen.push({ t: clock, e });
-        }
-        return seen;
-      };
-      /** Advance until the active port is `want`; the events of that time are dropped. */
-      const untilPort = async (port: () => Promise<number>, want: number) => {
-        for (let t = 0; t < 8000 && (await port()) !== want; t += 20) await watch(20);
-        expect(await port(), `the active port became ${want}`).toBe(want);
-      };
-      return { delayAddr, sym, watch, untilPort };
-    };
-
-    test('take-over hold, late path: a controller started before the write-back is read and restored when it still holds the released value', async () => {
-      const rt = await boot('echo-hold-late', true);
-      await enabled(rt);
-      const { setPort, port, takeover, run } = takeoverKit(rt);
-      const { sym, watch } = phyKit(rt);
-      try {
-        await setPort(5);
-        await run(4500);
-        await rpc(rt.session, 'usb.phy', {});
-        expect(await takeover(0), 'takeover').toBe(0);
-        const detach = await watch(8000, (seen) => seen.some((x) => x.e.w !== undefined));
-        expect(detach.filter((x) => x.e.w !== undefined).map((x) => x.e.w), 'released').toEqual([[4, 0x49]]);
-        // something starts the controller long before the write-back is due (the counter still has 50 ticks to run)
-        await rpc(rt.session, 'usb.phy', { run: true });
-        const seen = await watch(1000, (s2) => s2.some((x) => x.e.w !== undefined));
-        expect(seen.find((x) => x.e.w)?.e.w, 'after RS = 1 the value that was read before the release is written back').toEqual([4, 0]);
-        expect(await sym('usb_bulk_phy_late'), 'counted as late').toBe(1);
-        expect(await sym('usb_bulk_phy_refused')).toBe(0);
-        await rt.session.expectNoFault('late write-back');
-      } finally {
-        await setPort(2);
-      }
-      void port;
-    }, 1_800_000);
-
-    test('take-over recovery: no forced restart on stale state (no VBUS, then plug-in; a menu mode change) and the window starts at the plug-in', async () => {
-      const rt = await boot('echo-stale', true);
-      await enabled(rt);
-      const { setPort, port, takeover, run } = takeoverKit(rt);
-      const { sym, watch, untilPort } = phyKit(rt);
-      const vbus = (on: boolean) => rpc(rt.session, 'usb.phy', { vbus: on });
-      try {
-        await setPort(5);
-        await run(4500);
-        // a switch with no VBUS: the firmware cannot start the controller; the adapter must not either, however long it waits
-        expect(await takeover(0)).toBe(0);
-        await untilPort(port, 2);
-        await watch(6000);
-        expect(await sym('usb_bulk_forced_restarts'), 'no VBUS: nothing forced').toBe(0);
-        // the plug-in: a new window of 4 s starts now
-        await vbus(true);
-        await watch(3000);
-        expect(await sym('usb_bulk_forced_restarts'), 'inside the window after the plug-in').toBe(0);
-        const forced = await watch(3000, (seen) => seen.some((x) => x.e.rs === 1));
-        expect(forced.some((x) => x.e.rs === 1), 'after the window the restart is forced').toBe(true);
-        expect(await sym('usb_bulk_forced_restarts')).toBe(1);
-
-        // a menu mode change disarms: a switch with no VBUS, the user picks another mode, VBUS comes: nothing is forced
-        await vbus(false);
-        await rpc(rt.session, 'usb.phy', { run: false });
-        await setPort(5);
-        await run(4500);
-        expect(await takeover(0)).toBe(0);
-        await untilPort(port, 2);
-        await setPort(5); // the menu
-        await watch(1000);
-        await vbus(true);
-        await watch(7000);
-        expect(await sym('usb_bulk_forced_restarts'), 'a menu change disarmed the recovery').toBe(1);
-        await rt.session.expectNoFault('stale recovery');
-      } finally {
-        await setPort(2);
-      }
-    }, 1_800_000);
-
-    test('switch guard: one firmware mode switch at a time (enable waits, release then take-over and a give-back racing the tick make two spaced switches, never overlapping ones)', async () => {
-      const GUARD_MS = 500; // the adapter's floor on its own clock; the firmware's restart (about 1 s) is waited for through its delay counter
-      const rt = await boot('echo-guard', true);
-      await enabled(rt);
-      const { setPort, port, mode, takeover } = takeoverKit(rt);
-      /** Emulated time that this test has advanced, ms. */
-      let now = 0;
-      const adv = async (ms: number) => {
-        await advance(rt.session, ms);
-        now += ms;
-      };
-      const run = async (ms: number) => {
-        for (let t = 0; t < ms; t += 1000) await adv(Math.min(1000, ms - t));
-      };
-      const switches = () => word(rt, planSymbol(kit.plan, 'usb_bulk_switches'));
-      const gap = () => word(rt, planSymbol(kit.plan, 'usb_bulk_switch_gap_ms'));
-      const reenableOnce = async () => {
-        expect((await usb(rt, (dk) => dk.request(ECHO_CMD + 2))).status, 'reenable').toBe(0);
-        await adv(100);
-        return (await echoStatus(rt)).enable;
-      };
-      /** Advance in small steps until the active port is `want`, then return at once with the time (the switch has just run). */
-      const until = async (want: number, limitMs = 8000) => {
-        for (let t = 0; t < limitMs; t += 5) {
-          if ((await port()) === want) return now;
-          await adv(5);
-        }
-        throw new Error(`the active port never became ${want}`);
-      };
-      const stored = await mode();
-      try {
-        await setPort(5);
-        const s0 = await switches();
-        expect(await takeover(0), 'takeover').toBe(0);
-        await until(2);
-        await until(2);
-        expect(await switches(), 'the take-over made one switch').toBe(s0 + 1);
-
-        // enable inside the guard: retry (E_STATE), no stop or restart of its own; after the guard it succeeds
-        expect(await reenableOnce(), 'enable inside the guard').toBe(-53);
-        expect(await reenableOnce(), 'enable inside the guard, again').toBe(-53);
-        expect(await switches(), 'a refused enable made no switch').toBe(s0 + 1);
-        let enableRc = -53;
-        for (let i = 0; i < 100 && enableRc !== 0; i++) enableRc = await reenableOnce();
-        expect(enableRc, 'enable succeeds once the guard has passed').toBe(0);
-        expect(await switches(), 'the adapter was enabled already: no second restart').toBe(s0 + 1);
-        await run(1000);
-
-        // release, then a take-over after the give-back switch ran: two switches at least the guard apart
-        const s1 = await switches();
-        expect(await takeover(1), 'giveback').toBe(0);
-        const back = await until(5);
-        expect(await switches(), 'the give-back switched').toBe(s1 + 1);
-        expect(await takeover(0), 'take-over right after the give-back').toBe(0);
-        await adv(100);
-        expect([await port(), await switches()], 'the second switch waits for the restart').toEqual([5, s1 + 1]);
-        const again = await until(2);
-        expect(await switches(), 'then the take-over switches').toBe(s1 + 2);
-        expect(again - back, 'two switches at least the firmware restart delay (about 1 s) apart').toBeGreaterThanOrEqual(900);
-        expect(await gap(), 'and the adapter floor on its own clock').toBeGreaterThanOrEqual(GUARD_MS);
-
-        // a give-back requested at the moment the tick switched (the closest the test can get): one switch for each request, spaced
-        expect(await takeover(1)).toBe(0);
-        await run(6000);
-        expect(await port(), 'back in USB AUDIO/MIDI').toBe(5);
-        const s2 = await switches();
-        expect(await takeover(0)).toBe(0);
-        await until(2);
-        const took = now;
-        expect(await takeover(1), 'giveback right after the switch').toBe(0);
-        await adv(300);
-        expect([await port(), await switches()], 'the give-back waits').toEqual([2, s2 + 1]);
-        const gave = await until(5);
-        expect(await switches(), 'one give-back switch, after the restart').toBe(s2 + 2);
-        expect(gave - took, 'spaced by the firmware restart delay').toBeGreaterThanOrEqual(900);
-        expect(await gap(), 'spaced by the floor').toBeGreaterThanOrEqual(GUARD_MS);
-        await run(3000);
-        expect(await switches(), 'nothing else switched').toBe(s2 + 2);
-        expect(await mode(), 'the stored mode is unchanged').toBe(stored);
-        await rt.session.expectNoFault('switch guard');
-      } finally {
-        await setPort(2);
-      }
     }, 1_800_000);
   });
 }

@@ -1,7 +1,7 @@
 # Patched-in modules
 
 A module without `dynamic = true` is linked into a stock firmware image by patchkit (`packages/patchkit`). Use this route for hooks in
-firmware code (master-bus effects, ColdFire UI changes). The project's PLUCK machine (`digikit/pluck`) is a run-time module; its patched-in twin `test/patched-pluck` is a test fixture.
+firmware code (master-bus effects, ColdFire UI changes). Content machines and effects are run-time modules (`docs/MODULES.md`). A patched-in content machine is test-only: the patched-in twin of PLUCK, `test/patched-pluck`, is a test fixture and is deleted in a later step.
 The browser patch page lists patched-in modules only; a `.dkm` goes to the device through `/upload`.
 
 - **Look up declared anchors** in `modules/core/fw/reference.json` or with `mise run fw:reference`.

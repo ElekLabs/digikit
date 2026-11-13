@@ -336,6 +336,30 @@ describe('the nonce handshake (chooseBulk)', () => {
     expect(devs.every((d) => d.closed)).toBe(true);
   });
 
+  test('an OUT-only candidate that never answers INFO is skipped within the probe bound', async () => {
+    const waits: number[] = [];
+    const silent: BulkLink = {
+      send: async () => {},
+      recv: async (ms) => (waits.push(ms), null),
+      close() {},
+    };
+    const dev = new FakeBulkDevice();
+    const opener = {
+      candidates: async () => [],
+      open: async () => dev,
+      outOnlyCandidates: async () => [{ id: 'a' }, { id: 'b' }],
+      openOutOnly: async (id: string) => (id === 'a' ? silent : dev),
+    };
+    const sysex = {
+      usbFastNonce: async (n: Uint8Array) => dev.setNonce(n),
+      usbFastReplies: async () => new Uint8Array(),
+    };
+    const c = await chooseBulk(sysex, opener, () => {}, { timeoutMs: 60_000 });
+    expect(c?.id).toBe('b');
+    expect(waits.length).toBe(1);
+    expect(waits[0]).toBeLessThanOrEqual(2000);
+  });
+
   test('no candidates is quiet; a nonce that is refused is a logged reason', async () => {
     const notes: string[] = [];
     expect(await chooseBulk({ usbFastNonce: async () => {} }, openerOf([]), (n) => notes.push(n))).toBeUndefined();

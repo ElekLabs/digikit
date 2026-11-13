@@ -76,7 +76,7 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   modulesLevels[probe.index] = 4;
   expect(await dk.setLogConfig(1, modulesLevels)).toEqual({ level: 1, modules: modulesLevels, debug: true });
   expect(await dk.logConfig()).toEqual({ level: 1, modules: modulesLevels, debug: true });
-  expect((await dk.request(SERVICE_CMD.LOGCFG, Uint8Array.of(2, 1))).status, 'the old debug switch is gone').toBe(-60);
+  expect((await dk.request(SERVICE_CMD.LOGCFG, Uint8Array.of(4, 1))).status, 'the old debug switch is gone').toBe(-60);
 
   // PEEK: the first range of the device file starts at the firmware's data
   const ok = await dk.request(SERVICE_CMD.PEEK, new Uint8Array([...be32(0x40000000), 0, 16]));
@@ -256,6 +256,44 @@ async function expectParamChange(runtime: PatchedSession): Promise<void> {
   await session.expectNoFault('PARAM_CHANGE');
 }
 
+/** The card log: op 3 turns it on, events are produced (an info event per ABORT, an error event per DELETE of `..`), the tick writes the ring to the rolling and
+ * the incident file of this boot, and both read back whole: the fixed size, continuous sequence numbers. Op 2 reports it on with at least three writes. */
+async function expectCardLog(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
+  await expectRuntimeReady(session);
+  await installWithDebug(runtime);
+  expect((await dk.cardLog())?.on, 'off by default').toBe(false);
+  expect((await dk.setCardLog(true)).on).toBe(true);
+  await dk.request(CMD.ABORT);
+  await dk.request(CMD.DELETE, Uint8Array.from([0x2e, 0x2e, 0]));
+  let state = await dk.cardLog();
+  // the first write comes 3 s after the setting was saved. The error event opens an incident capture: the incident file at once, the rolling file (no
+  // rolling write yet) in the next slot, the incident file again 10 s after the error event. Writes are 2 s apart (3000 blocks), so 3 writes take
+  // about 12 s of emulated time; the wait is bounded at 40 s.
+  for (let i = 0; i < 20 && (state?.writes ?? 0) < 3; i++) {
+    await waitFrames(runtime, 3000);
+    state = await dk.cardLog();
+  }
+  expect(state?.writes, 'incident, rolling and aftermath writes').toBeGreaterThanOrEqual(3);
+  expect(state).toMatchObject({ on: true, state: 'on' });
+
+  const files = (await dk.readCardLog()).filter((f) => f.file === state!.file);
+  const rolling = files.find((f) => f.kind === 'rolling')!;
+  const incident = files.find((f) => f.kind === 'incident')!;
+  expect(rolling, 'the rolling file of this boot').toBeDefined();
+  expect(incident, 'the incident file of this boot').toBeDefined();
+  for (const file of [rolling, incident]) {
+    expect(file.raw?.length, 'fixed size 64 + 512 * 32').toBe(16448);
+    expect(file.bootSeq, 'boot number').toBeGreaterThanOrEqual(1);
+    const seqs = file.events.map((e) => e.seq);
+    expect(seqs.length).toBeGreaterThan(0);
+    expect(seqs, 'sequence numbers count up by one').toEqual(seqs.map((_, i) => seqs[0]! + i));
+    expect(file.events.some((e) => e.kind === LOG_KIND.UPLOAD)).toBe(true);
+  }
+  await session.expectNoFault('card log');
+}
+
+runtimeTests('the card log is written to the store and reads back', expectCardLog, { dsp: 'sharc' });
 runtimeTests(
   'without the debug module the runtime boots, has no log commands and keeps a small ring',
   expectWithoutDebugModule,

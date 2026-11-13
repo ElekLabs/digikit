@@ -197,8 +197,8 @@ int32_t dk_param_get(uint32_t track, uint32_t word);
 /* Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn. Same click flow as dk_param_get. Returns 0, DK_PARAM_E_STATE, DK_PARAM_E_ARG or DK_PARAM_E_HELD. Context: ui. Since runtime 0.7.0. */
 int32_t dk_param_set(uint32_t track, uint32_t word, int32_t raw);
 
-/* Declare a machine of this module: `id` is its DK_MACHINE_ID_<ID> key (build/gen/module_ids.h), `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad id) a placeholder, and the error is reported when `init` returns. Context: init. Since runtime 0.7.0. */
-dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name);
+/* Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[machine]]` list of module.toml, which is the row of its key in the keys table. `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad index) a placeholder, and the error is reported when `init` returns. Context: init. Since runtime 0.7.0. */
+dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t index, const char *name, const char *short_name);
 
 /* Add a page to the machine, after the pages already added: `name` is its title, `short_name` its tab label on a device that keeps knobs in page rows. Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
 dk_page *dk_machine_add_page(dk_machine *m, const char *name, const char *short_name);
@@ -229,8 +229,8 @@ void dk_page_bind_local(dk_page *p, uint32_t local, uint32_t slot);
 
 /* ---- service fx ---- */
 
-/* Declare an effect of this module: `id` is its DK_FX_ID_<ID> key, `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit). Context: init. Since runtime 0.7.0. */
-dk_fx *dk_module_ctx_add_fx(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name);
+/* Declare an effect of this module: `index` is its DK_FX_ID_<ID>: the position of the id in the `[[fx]]` list of module.toml, which is the row of its id in the keys table. `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit). Context: init. Since runtime 0.7.0. */
+dk_fx *dk_module_ctx_add_fx(dk_module_ctx *ctx, uint32_t index, const char *name, const char *short_name);
 
 /* Add the effect's page: `name` is its title, `short_name` its tab label (3 characters at most). Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
 dk_page *dk_fx_add_page(dk_fx *fx, const char *name, const char *short_name);
@@ -325,13 +325,13 @@ int32_t dk_usb_bulk_release(dk_usb_bulk *ub, void *buf);
 /* Send `len` bytes (1 to 16384) to the host on EP2 IN. The bytes are copied. 0, DK_E_BUSY when both send slots are in flight (the job is woken when one completes), DK_E_AGAIN when nothing is in flight and the engine refused, or another status. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING. */
 int32_t dk_usb_bulk_send(dk_usb_bulk *ub, const void *buf, uint32_t len);
 
-/* State word: bit 0 enabled, bit 1 connected, bit 2 wrong mode, bit 3 taken over, bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns 0. */
+/* State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; read live), bit 3 never set (take-over removed), bit 6 out only (USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only, dk_usb_bulk_send returns E_STATE; read live), bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns 0. */
 uint32_t dk_usb_bulk_state(dk_usb_bulk *ub);
 
-/* Take the USB port over for the bulk link, or renew a take-over (call it again at least every 20 s while the host works). Callable from a host command handler. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING. */
+/* Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists; the bulk OUT interface works in USB AUDIO/MIDI without it). Kept so that the import table does not change. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING. */
 int32_t dk_usb_bulk_takeover(dk_usb_bulk *ub);
 
-/* End a take-over: about 50 ms later the service switches back to the USB mode the device had. 0, also when nothing is taken over. Callable from a host command handler. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING. */
+/* Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists). Kept so that the import table does not change. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns DK_E_MISSING. */
 int32_t dk_usb_bulk_giveback(dk_usb_bulk *ub);
 
 /* The receive ring of the service. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the result word read with the DK_USB_BULK_RING_* macros of <dk/platform/usb_bulk.h>: the switch in bit 0, bit 1 always set (the service has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). 0 without core/usb-bulk or when the adapter has no ring: the old behaviour. Context: any. Since runtime 0.7.0. Needs core/usb-bulk: without it the import binds to a stub that returns 0. */

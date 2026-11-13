@@ -8,9 +8,6 @@ import type { LocalEntry, Uploads } from './samples-core';
 /** The folder on the computer that Samples mode lists ('' until one is chosen). */
 export const [localFolder, setLocalFolder] = remembered('digikit.samplesFolder', (v) => v ?? '');
 
-/** Experimental: take USB over when the device is in USB AUDIO/MIDI mode (BulkTakeOver). Off unless the user turned it on; kept across restarts. */
-export const [takeOverOn, setTakeOverOn] = remembered<'on' | ''>('digikit.takeOver', (v) => (v === 'on' ? 'on' : ''));
-
 /** Samples mode, On your computer: the open level of the chosen folder, its entries, what each file will become, the files added by hand,
  * and the ticks. */
 export const [localPath, setLocalPath] = createSignal('');

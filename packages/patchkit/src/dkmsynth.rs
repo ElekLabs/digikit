@@ -101,13 +101,13 @@ pub fn machine_id(i: u32) -> String {
     format!("m{i}")
 }
 
-/// The table `synth_decl` of SPEC (32-bit big-endian words): the machine count, then per machine its key, its parameter count and a record
+/// The table `synth_decl` of SPEC (32-bit big-endian words): the machine count, then per machine its index (the row of its key in the keys table), its parameter count and a record
 /// (min, max, default) for each parameter.
 pub fn decl_table(spec: &Spec) -> Vec<u8> {
     let mut words = vec![spec.machines];
     for i in 0..spec.machines {
         let n = spec.params / spec.machines + u32::from(i < spec.params % spec.machines);
-        words.push(register::machine_key(&spec.name, &machine_id(i)));
+        words.push(i);
         words.push(n);
         for _ in 0..n {
             words.extend([0, 127, 0]);
@@ -438,30 +438,11 @@ mod tests {
             .chunks(4)
             .map(|c| u32::from_be_bytes(c.try_into().unwrap()))
             .collect();
-        let key = |i| register::machine_key("cap/t", &machine_id(i));
         // 3 machines; 2, 1 and 1 parameters, each (min, max, default) = (0, 127, 0)
         assert_eq!(
             w,
             [
-                3,
-                key(0),
-                2,
-                0,
-                127,
-                0,
-                0,
-                127,
-                0,
-                key(1),
-                1,
-                0,
-                127,
-                0,
-                key(2),
-                1,
-                0,
-                127,
-                0
+                3, 0, 2, 0, 127, 0, 0, 127, 0, 1, 1, 0, 127, 0, 2, 1, 0, 127, 0
             ]
         );
         let f = make(

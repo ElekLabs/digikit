@@ -2,7 +2,7 @@
 
 All claims are **[D]** (read once, static) unless marked **[O]** (open). The storage section also holds one emulator observation; nothing was run on a device. Image: st-1.42 MAIN
 (`out/sections/st-1.42/section_3_MAIN_OS.bin`, load 0x40000400, end 0x40348b90) and its bootstrap (section 2). DT2 values are from
-`devices/digitakt-ii.toml` and the DT2 1.17 MAIN. Why these facts: [finding 129](129-syntakt-patch-dry-run.md) "Runtime target",
+`devices/digitakt-ii.toml` and the DT2 1.17 MAIN. Why these facts: [finding 130](130-syntakt-patch-dry-run.md) "Runtime target",
 [device-data](../design/device-data.md). Container and CPUs: [finding 70](70-syntakt-1-42.md).
 
 ## Summary
@@ -15,7 +15,7 @@ All claims are **[D]** (read once, static) unless marked **[O]** (open). The sto
 | DDR cached base, size | 0x40000000, 128 MiB | 0x40000000, 128 MiB | The SDRAM controller setup of the bootstrap (section 2, 512 bytes from file offset 0x2c0 on st, 0x2c6 on DT2) is byte-identical. MAIN sets CACR 0xa50ce100 and ACR0 0x4007e020 (base 0x40, mask 0x07: 0x40000000..0x47ffffff) in the reset path (`movec` at 0x4000055a and 0x40000564), identical on both. The reset SP is 0x48000000 (`movea.l` at 0x400004f2). | D |
 | Uncached alias | 0x48000000 (+0x08000000) | 0x48000000 (+0x08000000) | `clr.l 0x48000000` in the soft-reset function (above). MAIN reaches its DMA data through `0x4d...` and `0x4f...` addresses only (476 operands in 0x48000400..0x50000000, most of them constants; the real ones are in "RAM map" below). That the high half mirrors the DDR is a chip property **[O]**. | D |
 | Keep area 0x47fe0000 (+0x1000) | free | **in use** | See "RAM map": 0x47c00000..0x48000000 is a 4 MiB DMA ring that MAIN clears at boot. Proposal: keep 0x47bf0000 (+0x1000). | D |
-| cf.expansion | 0x47e8b000..0x47fe0000 | **0x478c0000..0x47bf0000** (3.2 MiB) | "RAM map". The region of finding 129 (0x47e8b000..0x47fe0000) lies inside the ring. | D, O (no canary run) |
+| cf.expansion | 0x47e8b000..0x47fe0000 | **0x478c0000..0x47bf0000** (3.2 MiB) | "RAM map". The region of finding 130 (0x47e8b000..0x47fe0000) lies inside the ring. | D, O (no canary run) |
 | Storage | eMMC, MmcFs + path filesystem | eMMC, MmcFs only (no path filesystem); the store is the Digitone II's (first sector 0x800000) | "Storage". | D |
 | Safe key | 19 (RECORD, firmware key index = panel code) | firmware key index 39 (trig 16, panel code 16) | "Safe key". | D, O |
 | PEEK ranges | `[0x40000000, 0x47e30000]`, `[0x47e8b000, 0x47fe1000]` | `[0x40000000, 0x45570000]`, `[0x478c0000, 0x47bf1000]` | "PEEK". | D |
@@ -23,7 +23,7 @@ All claims are **[D]** (read once, static) unless marked **[O]** (open). The sto
 ## RAM map of MAIN 1.42
 
 - Reset path, 0x4000045c and 0x400004b2 (same code as DT2): copy the init table 0x4033a000..0x40348b90 to SRAM, then clear
-  **0x4033a000..0x45566490** (the bss end of finding 129). Nothing above the bss end is cleared by the reset path. The bootstrap has no loop
+  **0x4033a000..0x45566490** (the bss end of finding 130). Nothing above the bss end is cleared by the reset path. The bootstrap has no loop
   over DDR: its `clr.l (a0)+` loops (file offsets 0x3358 and 0x3372) run over SRAM 0x800096f2..0x80009af2 only.
 - Heap: the buddy allocator `FUN_401036d0` with descriptor 0x402d5324 holds `{0, 0x444e48c0, 0x44465004, 0x454e48c0, 0x14, 0x100000}`:
   16 MiB at 0x444e48c0..0x454e48c0, 16-byte blocks, bitmap 0x44465004 (128 KiB), mutex 0x44485004. It is inside the bss: it is below
@@ -42,7 +42,7 @@ All claims are **[D]** (read once, static) unless marked **[O]** (open). The sto
 - Cached references into 0x45566490..0x48000000 (`refscan`, 102 hits) are all data or float constants (0x47c35000 is 100000.0f, 0x47efffff the
   high word of a double, 0x46fe0000 is 32512.0f).
 
-Correction to [finding 129](129-syntakt-patch-dry-run.md): the proposed `cf.expansion` 0x47e8b000..0x47fe0000 is above the bss end, but it is
+Correction to [finding 130](130-syntakt-patch-dry-run.md): the proposed `cf.expansion` 0x47e8b000..0x47fe0000 is above the bss end, but it is
 inside the ring. Proposal from this scan: start above the last peer-buffer byte, 0x478af2cb, plus 64 KiB, aligned: **0x478c0000**; end below
 the ring with 64 KiB margin: **0x47bf0000**. The keep area follows the DT2 rule (the first 4 KiB above `cf.expansion`): **0x47bf0000..0x47bf1000**.
 A canary run in the emulator (regions.py `confirm` on st) must pass before the numbers are used **[O]**. There is also an unreferenced gap

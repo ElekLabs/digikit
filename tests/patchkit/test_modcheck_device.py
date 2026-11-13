@@ -143,6 +143,9 @@ def test_owned_device_stage_follows_python_and_gates_size(
     stages,
 ):
     observed = []
+    (tmp_path / "module.toml").write_text(
+        'id = "owned/module"\n'
+    )  # declares no machine or effect: no rows to commit
     monkeypatch.setattr(sys, "argv", ["pk_modcheck", "owned/module", "--device", "dt2"])
     monkeypatch.setattr(pk_modcheck, "resolve", lambda _name: "owned/module")
     monkeypatch.setattr(

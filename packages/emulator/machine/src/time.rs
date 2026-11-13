@@ -104,7 +104,7 @@ pub struct Time {
     /// is always on. `restore_timer_component` does not touch it.
     force_irq: bool,
     /// Deliver the guest-forced INTC1 source 63 (vector 191) here too. Off while the SSI model delivers it; on for a board without SSI
-    /// pacing, where the audio frame handler forces it to run the engine tick (finding 128).
+    /// pacing, where the audio frame handler forces it to run the engine tick (finding 129).
     forced_191: bool,
 }
 

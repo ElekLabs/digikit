@@ -3,6 +3,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { copyText, filterEntries, formatTime, saveName, saveText, sourceMenu, type Origin } from './log-core';
+import { cardLogView } from './log-cardlog-core';
 import { levelOrigin, levelsOff } from './log-level-core';
 import LogLevelMenu from './LogLevelMenu';
 import type { LogFollow } from './log-follow';
@@ -70,6 +71,20 @@ export default function LogPanel(props: LogPanelProps) {
       live: origin ? live(origin) : false,
       supported: origin ? props.follow.logcfg()[origin] : undefined,
     });
+  };
+  // the Card log button acts on the same origin as the Level menu; its state is read with the follower's rounds
+  const card = () => {
+    const origin = levelTarget();
+    return cardLogView(origin ? props.follow.cardlog()[origin] : undefined, levelOff());
+  };
+  const toggleCard = async () => {
+    const origin = levelTarget();
+    if (!origin || card().disabled) return;
+    try {
+      await props.follow.setCardLog(origin, !card().pressed);
+    } catch {
+      flash('Card log failed', 3000);
+    }
   };
   // the debug module (digikit/debug) is the log: loaded while the origin follows, not loaded when its runtime has no LOG capability
   const debugState = (): boolean | undefined => {
@@ -198,6 +213,20 @@ export default function LogPanel(props: LogPanelProps) {
           {debugState() === false ? 'Debug module: not loaded' : debugState() ? 'Debug module: loaded' : 'Debug module'}{' '}
           <i class="debug-dot" aria-hidden="true" />
         </span>
+        <button
+          type="button"
+          class="tb small"
+          classList={{ on: card().pressed, 'card-warn': card().warn }}
+          aria-pressed={card().pressed}
+          disabled={card().disabled}
+          title={card().title}
+          onClick={() => void toggleCard()}
+        >
+          {card().label}
+          <Show when={card().dot}>
+            <i class="follow-dot" aria-hidden="true" />
+          </Show>
+        </button>
         <LogLevelMenu follow={props.follow} origin={levelTarget} off={levelOff} />
         <button
           type="button"

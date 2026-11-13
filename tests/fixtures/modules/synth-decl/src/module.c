@@ -3,7 +3,7 @@
 
    Table (32-bit words, in the byte order of the CPU):
      word 0                machine count n
-     n machine records:    key, parameter count p, then p parameter records
+     n machine records:    index (DK_MACHINE_ID_<ID>: the row of its key in the keys table), parameter count p, then p parameter records
      parameter record:     min, max, default (knob units)
    The machine's name, its page and its parameters are named after their index (M3, page M3, P0, P1 ...); every machine has one page. */
 #include <dk/core/module.h>
@@ -32,8 +32,8 @@ static int32_t init(dk_module_ctx *ctx)
     uint32_t machines = *t++;
     for (uint32_t i = 0; i < machines; i++) {
         char name[8], pname[8];
-        uint32_t key = *t++, params = *t++;
-        dk_machine *m = dk_module_ctx_add_machine(ctx, key, label(name, 'M', i), name);
+        uint32_t index = *t++, params = *t++;
+        dk_machine *m = dk_module_ctx_add_machine(ctx, index, label(name, 'M', i), name);
         dk_page *pg = dk_machine_add_page(m, name, name);
         for (uint32_t j = 0; j < params; j++, t += 3) {
             dk_param *p = dk_page_add_param(pg, label(pname, 'P', j), pname, t[2]);

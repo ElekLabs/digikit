@@ -11,6 +11,7 @@ import {
   moduleOf,
   runtimeEvent,
   sameFault,
+  type CardLogState,
   type DkLogEvent,
   type Fault,
   type LogConfig,
@@ -26,6 +27,10 @@ export interface FollowSession {
   logConfig(quick?: boolean): Promise<LogConfig>;
   /** LOGCFG set (the Level menu of the Log drawer). */
   setLogConfig(level: number, modules: number[], quick?: boolean): Promise<LogConfig>;
+  /** LOGCFG op 2: the card log state, or null when the debug module has no card log. */
+  cardLog?(quick?: boolean): Promise<CardLogState | null>;
+  /** LOGCFG op 3 (the Card log button of the Log drawer). */
+  setCardLog?(on: boolean, quick?: boolean): Promise<CardLogState>;
   /** The loaded modules; `index` is the module record index. */
   modules(): Promise<{ index: number; name: string }[]>;
   /** The fault record the runtime keeps on the card (`dk/fault`), or null. */
@@ -54,6 +59,8 @@ export interface FollowOut {
   config?(config: LogConfig): void;
   /** Whether the origin's INFO has the LOGCFG capability (the Level menu works on it). */
   logcfg?(supported: boolean): void;
+  /** The card log state read with every round; null when the debug module has no card log. */
+  cardlog?(state: CardLogState | null): void;
 }
 
 export interface FollowOptions {
@@ -108,6 +115,8 @@ export class LogFollower {
   private faultDue = false;
   private configDue = false;
   private modulesDue = false;
+  /** The debug module has no card log (or no LOGCFG): not asked again until the next start. */
+  private noCardLog = false;
   private lastConfig = '';
   private lastFault: Fault | null = null;
   /** The runtime answers but has no debug module: only the fault record is read. */
@@ -175,6 +184,8 @@ export class LogFollower {
     }
     this.configDue = true;
     this.modulesDue = true;
+    this.noCardLog = !hasLogcfg(info.caps);
+    if (this.noCardLog) this.o.out.cardlog?.(null);
     return true;
   }
 
@@ -233,6 +244,16 @@ export class LogFollower {
     if (this.modulesDue) await this.readModules(s);
     if (this.configDue) await this.readConfig(s);
     if (this.faultDue) await this.readFault(s);
+    if (!this.noCardLog) await this.readCardLog(s);
+  }
+
+  /** With every round: the write count and the age of the last write change while the log runs. */
+  private async readCardLog(s: FollowSession): Promise<void> {
+    if (!s.cardLog) return;
+    const state = await this.aux(() => s.cardLog!(true));
+    if (state === undefined) return;
+    this.noCardLog = state === null;
+    this.o.out.cardlog?.(state);
   }
 
   private note(text: string): LogInput {
@@ -274,6 +295,7 @@ export class LogFollower {
     const names = [...this.names].sort(([a], [b]) => a - b).map(([, name]) => name);
     if (names.join('\n') === this.listed) return;
     this.listed = names.join('\n');
+    this.noCardLog = false; // a debug module loaded later may have the card log
     this.o.out.modules(names);
   }
 

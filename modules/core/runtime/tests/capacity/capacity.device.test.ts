@@ -88,7 +88,7 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
       expect(got.cap.ARENA!.used, 'the arena is full but the hole of M and the block every load needs').toBe(
         g.arenaFree - COLLECT_BLOCK - hole,
       );
-      expect(got.cap.ARENA!.largest, 'a free block is left for the next load').toBe(COLLECT_BLOCK);
+      expect(got.cap.ARENA!.largest, 'a free block is left for the next load').toBe(COLLECT_BLOCK - ARENA_HDR);
     },
   );
 

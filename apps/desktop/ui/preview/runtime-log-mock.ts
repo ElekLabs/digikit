@@ -1,7 +1,7 @@
 // A fake runtime log for the Log drawer in the preview (?page=log&log=both|fault|frozen|empty|nodebug: a runtime without the debug module, so without the LOG capability). Each origin is a script of events on a clock:
 // a boot, modules, MOD_LOG lines, then (log=both) a gap in the device's ring, a restart of the emulator, and a boot of the device that found a
 // stopped DSP. The sessions answer as the follower needs them (log-follow-core.ts); the events are the runtime's (docs/findings/46-digikit-debug.md).
-import type { DkLogEvent, Fault, LogConfig } from '@digi/dk-session';
+import type { CardLogState, DkLogEvent, Fault, LogConfig } from '@digi/dk-session';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { FollowSession } from '../src/log-follow-core';
 
@@ -143,6 +143,10 @@ interface Script {
   faults: (Fault | null)[];
   /** From this script time on, nothing answers. */
   silentFrom?: number;
+  /** The card log state; absent: the debug module has no card log. */
+  card?: CardLogState;
+  /** The script time the card log was switched on. */
+  cardOnAt?: number;
 }
 
 /** The ring a script has at `ms`: the events of the latest boot, with sequence numbers from 1 (and the skipped ones left out). */
@@ -166,6 +170,13 @@ function ringAt(script: Script, ms: number): { events: DkLogEvent[]; boot: numbe
     });
   }
   return { events, boot: b };
+}
+
+function cardState(script: Script, ms: number): CardLogState | null {
+  if (!script.card) return null;
+  if (!script.card.on || script.cardOnAt === undefined) return script.card;
+  const since = ms - script.cardOnAt;
+  return { ...script.card, writes: Math.floor(since / 5000), msSinceWrite: since < 5000 ? null : since % 5000 };
 }
 
 function session(script: Script): FollowSession {
@@ -198,6 +209,18 @@ function session(script: Script): FollowSession {
       script.debug = { ...script.debug, level, modules };
       return script.debug;
     },
+    // the card log: the device has it (off at the start), the emulator's debug module does not; while on, one write every 5 s
+    async cardLog() {
+      await gate();
+      return cardState(script, clock());
+    },
+    async setCardLog(on) {
+      await gate();
+      if (script.card) script.card = { ...script.card, on, state: on ? 'on' : 'off' };
+      if (on && script.cardOnAt === undefined) script.cardOnAt = clock();
+      if (!on) script.cardOnAt = undefined;
+      return cardState(script, clock())!;
+    },
     async modules() {
       await gate();
       return script.modules ?? [];
@@ -229,6 +252,7 @@ const deviceScript: Script = {
     { index: 0, name: 'dyn-fx-hang' },
     { index: 1, name: 'freqshift' },
   ],
+  card: { on: false, file: 'b', state: 'off', writes: 0, lastStatus: 0, msSinceWrite: null },
   faults: logMode === 'fault' || noDebug ? [deviceFault] : [null, deviceFault],
   ...(logMode === 'frozen' ? { silentFrom: 3000 } : {}),
 };

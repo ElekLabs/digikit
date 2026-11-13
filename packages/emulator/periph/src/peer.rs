@@ -1,6 +1,6 @@
 //! The second CPU's mailbox, answered without a second CPU.
 //!
-//! A two-CPU board (finding 128): MAIN streams the peer's boot images through DSPI2 (slave, eDMA channel 29) and talks to it through a
+//! A two-CPU board (finding 129): MAIN streams the peer's boot images through DSPI2 (slave, eDMA channel 29) and talks to it through a
 //! 128 KB FlexBus window, a GPIO doorbell (port A bit 4) and EPORT IRQ4. `MailboxPeer` is the peer's side as data transport only: it
 //! consumes the image bytes, counts and keeps them, and answers every doorbell edge with one IRQ4 after a fixed delay. It runs no peer
 //! code and models no FPGA logic. The reply sequence is MAIN's own state machine, read from the firmware (finding 70 "Peer link"):
@@ -45,7 +45,7 @@ pub enum PeerIrq {
     Edma29,
     /// EPORT IRQ4: INTC0 source 4, vector 68.
     Eport4,
-    /// The audio frame: eDMA channel 54 major loop of MAIN's audio DMA, INTC1 source 46, vector 174 (peer CPU mode; finding 128).
+    /// The audio frame: eDMA channel 54 major loop of MAIN's audio DMA, INTC1 source 46, vector 174 (peer CPU mode; finding 129).
     Frame,
 }
 

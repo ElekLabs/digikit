@@ -40,6 +40,7 @@ SOURCE_GLOBS = (
     "rust-toolchain.toml",
     ".cargo/**",
     "packages/emulator/**",
+    "packages/dkaddrmap/**",
     "packages/dkneeds/**",
     "packages/dksample/**",
     "packages/dkupload/**",

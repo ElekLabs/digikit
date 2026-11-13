@@ -326,7 +326,7 @@ export async function buildView(s: DkSession, library: LibraryModule[]): Promise
   if (hasCap(info, 'READ')) {
     for (const c of card) {
       if (mine.has(c.path)) continue;
-      headers[c.path] = await s.header(c.path).catch((e) => {
+      headers[c.path] = await headerWithKeys(s, c.path).catch((e) => {
         if (e instanceof DkError && e.kind === 'device') return null;
         throw e;
       });
@@ -340,6 +340,21 @@ export async function buildView(s: DkSession, library: LibraryModule[]): Promise
     capacity: cap,
     ...mergeView(library, card, loaded, cap, headers, failures),
   };
+}
+
+/** The header of a store file and its keys table (header 0x90/0x94) at their offsets in a buffer, which `groupOf` reads; the rest is zero. */
+async function headerWithKeys(s: DkSession, path: string): Promise<Uint8Array> {
+  const h = await s.header(path);
+  if (h.length < HEADER_BYTES) return h;
+  const v = new DataView(h.buffer, h.byteOffset, h.length);
+  const off = v.getUint32(0x90);
+  const size = v.getUint32(0x94);
+  if (size < 12 || size > 4096 || off < HEADER_BYTES) return h;
+  const t = (await s.read(path, off, size)).bytes;
+  const out = new Uint8Array(off + t.length);
+  out.set(h);
+  out.set(t, off);
+  return out;
 }
 
 /** The most `progress` events one file's upload emits, plus the one at 100 %. */

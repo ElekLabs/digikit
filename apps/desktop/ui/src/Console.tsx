@@ -1,6 +1,7 @@
 // The desktop developer console: the file the app runs, the live panel, and the audio and CPU meters.
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
+import { setBrowseDevice } from '@web/transfer/transfer-state';
 import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
@@ -235,6 +236,7 @@ export default function Console() {
 
   /** Set when a default-modules install has started since the app opened (boot() or the first status of a startup with the runtime). */
   let defaultsStarted = false;
+  let defaultsWork: Promise<void> | undefined;
   /** The app can start the firmware with the runtime itself (boot() does not run): install once the status and the runtime info are both known. */
   const startDefaultsAtLaunch = () => {
     const s = status();
@@ -258,6 +260,8 @@ export default function Console() {
     }
     live?.show(event.snapshot);
     setStatus(event.snapshot.status);
+    if (target().kind === 'emulator' && lastDevice() !== event.snapshot.status.device)
+      setBrowseDevice(event.snapshot.status.device === 'dn2' ? 'dn2' : 'dt2');
     setLastDevice(event.snapshot.status.device);
     startDefaultsAtLaunch();
     setError(event.snapshot.status.error ?? '');
@@ -295,7 +299,11 @@ export default function Console() {
    * The ticked default modules of the device (devices/*.toml `[digikit] default_modules`) go on the emulator's card and are enabled, so the
    * emulator has what a flashed device has. The card keeps them: a later load finds them there and only checks the files.
    */
-  const installDefaultModules = async (deviceId: string) => {
+  const installDefaultModules = (deviceId: string): Promise<void> =>
+    (defaultsWork ??= performDefaultInstall(deviceId).finally(() => {
+      defaultsWork = undefined;
+    }));
+  const performDefaultInstall = async (deviceId: string) => {
     const ids = tickedFor(deviceId);
     if (ids.length === 0) return;
     try {
@@ -322,10 +330,11 @@ export default function Console() {
     name: string,
     imageDevice?: DeviceId,
   ) => {
+    // Defaults may be restarting the runtime. Keep the current UI alive until that transaction is finished.
+    await defaultsWork;
     const r = runtime();
     if (!r) return;
     live?.releaseAll();
-    live?.clear();
     setError('');
     setStatus(undefined);
     setInfo(undefined);
@@ -362,8 +371,11 @@ export default function Console() {
         defaultsStarted = true;
         void installDefaultModules(s.device);
       }
+      return true;
     } catch (e) {
       failLoad(name, imageDevice, e);
+      if (status()) await refreshInfo(); // A refused load can restore the previous live session.
+      return false;
     } finally {
       setBooting(undefined);
     }
@@ -395,7 +407,7 @@ export default function Console() {
     reloading = true;
     try {
       setOpened('');
-      await boot(
+      const loaded = await boot(
         (r) =>
           r.loadPath
             ? // The file at `path` may belong to another device than the running one: send the choices as they are; the
@@ -405,7 +417,7 @@ export default function Console() {
             : Promise.reject(new Error('no reload')),
         source()?.name ?? path,
       );
-      setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
+      if (loaded) setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
     } catch (e) {
       setError(message(e));
     } finally {

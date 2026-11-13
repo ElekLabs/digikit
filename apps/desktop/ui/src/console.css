@@ -672,6 +672,14 @@ body {
   background: #2a2d33;
   border-color: #4a4e56;
 }
+.tb.card-warn {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.tb.card-warn .follow-dot {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
 .tb .follow-dot {
   display: inline-block;
   width: 6px;

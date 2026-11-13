@@ -10,12 +10,12 @@ tier configurations and reports, for each:
 - with a diagnostic run (SHARC_FAST_LOG=summary, SHARC_FAST_COV, SHARC_FAST_HIST;
   not timed): the interpreted instructions ranked by the reason no fast region
   covered them (a refused root, an instruction a region stopped at, a lowering
-  denial), by function (from out/sharcdb/<image>.sqlite) and the instructions
+  denial), by function (the address map: `tools.devtools.addrnames`) and the instructions
   that ran between a kernel exit and the next kernel call, by exit PC.
 
     uv run python -m tools.devtools.fastcov [--scenario trig1-taps] [--seconds S]
         [--config NAME ...] [--diag yes|no|only] [--timeout S] [--top N]
-        [--image dn2-1.11] [--no-build] [--out DIR]
+        [--image dn2-1.12] [--no-build] [--out DIR]
     mise run perf:cov -- --config default --config fast-auto:256,64
 
 Configurations (``--config``, repeatable; default ``default fast-auto``):
@@ -37,7 +37,7 @@ Configurations (``--config``, repeatable; default ``default fast-auto``):
 SHARC_AOT=0 turns off the generated blocks only; the fast tier keeps running
 (packages/emulator/sharc/src/lib.rs block_plan). Timed runs take the exclusive benchmark
 lock (tools/devtools/benchlock.py). The firmware comes from DIGI_EMU_SYX (default: the
-repo-root Digitone II OS 1.11 .syx); the build is the coupled-run build of
+repo-root Digitone II OS 1.12 .syx); the build is the coupled-run build of
 tools/emulator/coupled.py (the prod generated-core target dir of this tree).
 """
 
@@ -47,17 +47,19 @@ import argparse
 import bisect
 import collections
 import datetime
-import functools
 import json
 import os
 import pathlib
 import re
 import sqlite3
 import subprocess
+import sys
+from collections.abc import Iterable
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 from tools.devtools import benchlock  # noqa: E402
+from tools.devtools.addrnames import AddrNames, AddrNamesError  # noqa: E402
 from tools.emulator import coupled, digi_env  # noqa: E402
 
 OUT_DIR = ROOT / "out" / "native" / "fastcov"
@@ -68,7 +70,7 @@ NO_LOCK = False
 NO_FAST = {"SHARC_FAST_REGIONS": "", "SHARC_BLOCKTRANS": ""}
 
 
-STATIC_IMAGE = "dn2-1.11"
+STATIC_IMAGE = "dn2-1.12"
 
 
 def static_entries(what: str, image: str) -> list[int]:
@@ -259,27 +261,33 @@ class Diag:
 
 
 class Functions:
-    """PC -> function through the SHARC program database, if there is one."""
+    """PC -> function through the address map (the firmware names of the SHARC program database), if there is one."""
 
     def __init__(self, image: str):
-        path = DB_DIR / f"{image}.sqlite"
-        self.db = (
-            sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-            if path.is_file()
-            else None
-        )
         self.image = image
+        try:
+            self.names: AddrNames | None = AddrNames.for_stock(image)
+        except AddrNamesError as e:
+            print(f"fastcov: no function names ({e})", file=sys.stderr)
+            self.names = None
+        self.found: dict[int, tuple[int, str]] = {}
 
-    @functools.cache  # noqa: B019
+    def prefetch(self, pcs: Iterable[int]) -> None:
+        """Name many PCs with one lookup process (`of` asks for one PC at a time)."""
+        if self.names is None:
+            return
+        todo = [pc for pc in dict.fromkeys(pcs) if pc not in self.found]
+        for pc, hit in zip(todo, self.names.resolve(todo, "sharc"), strict=True):
+            self.found[pc] = (
+                (hit["sym_addr"], hit["name"]) if hit["name"] else (pc, "?")
+            )
+
     def of(self, pc: int) -> tuple[int, str]:
-        if self.db is None:
+        if self.names is None:
             return (pc, "?")
-        row = self.db.execute(
-            "SELECT entry_sw, COALESCE(name, label, '') FROM functions "
-            "WHERE image=? AND entry_sw<=? AND end_sw>?",
-            (self.image, pc, pc),
-        ).fetchone()
-        return (row[0], row[1]) if row else (pc, "?")
+        if pc not in self.found:
+            self.prefetch([pc])
+        return self.found[pc]
 
 
 def run_once(binary, scenario, seconds, env, label, timed, out, timeout):
@@ -357,6 +365,7 @@ def print_diag(diag: Diag, funcs: Functions, top: int) -> None:
         print("  " + diag.tier_line[:2000])
     for line in diag.engine_lines:
         print("  " + line)
+    funcs.prefetch([*diag.hist, *(at for run in diag.runs for at, *_ in run["exits"])])
     by_reason: collections.Counter[str] = collections.Counter()
     by_func: collections.Counter[tuple[int, str]] = collections.Counter()
     for pc, n in diag.hist.items():
@@ -403,7 +412,7 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=2400, help="per run, seconds")
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument(
-        "--image", default="dn2-1.11", help="sharcdb image for function names"
+        "--image", default="dn2-1.12", help="sharcdb image for function names"
     )
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument(

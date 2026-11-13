@@ -101,5 +101,5 @@ The same holds for card reads: the INFO page of the menu gets the module header 
 ## See also
 
 - [Repository layout](LAYOUT.md), [testing](TESTING.md)
-- [Module reference](../modules/README.md), [SDK](../sdk/README.md)
+- [Modules: what they are and why](MODULES.md), [module reference](../modules/README.md), [SDK](../sdk/README.md)
 - [Firmware declarations](design/firmware-decls.md), [device data](design/device-data.md), [runtime](design/digikit-runtime.md), [boot screen format](design/dkbs.md)

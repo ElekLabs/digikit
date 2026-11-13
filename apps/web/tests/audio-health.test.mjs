@@ -141,21 +141,35 @@ function nativeRuntimeHarness(invoke) {
     .replaceAll('export ', '')
     .concat('\nglobalThis.nativeRuntime = nativeRuntime;');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const timers = [];
+  const timers = new Map();
+  let timerId = 0;
   const context = {
     fakeTauri: async () => ({ isTauri: () => true, invoke }),
     performance: { now: () => 0 },
     window: {
       setTimeout: (fn) => {
-        timers.push(fn);
-        return timers.length;
+        timers.set(++timerId, fn);
+        return timerId;
       },
-      clearTimeout() {},
+      clearTimeout(id) {
+        timers.delete(id);
+      },
     },
     console,
   };
   vm.runInNewContext(js, context);
-  return { runtime: (update = () => {}) => context.nativeRuntime(update), timers };
+  return {
+    runtime: (update = () => {}) => context.nativeRuntime(update),
+    timers,
+    async runTimer() {
+      const next = timers.entries().next().value;
+      if (next) {
+        timers.delete(next[0]);
+        next[1]();
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    },
+  };
 }
 
 test('PCM rate is emitted stereo duration over this session wall time', () => {
@@ -228,6 +242,92 @@ test('native audio health has no session before startup firmware exists', async 
   });
   const runtime = await native.runtime();
   assert.equal(await runtime.nativeAudio(), undefined);
+});
+
+test('a busy firmware load preserves the current session, input and polling; retry uses a fresh token', async () => {
+  const updates = [];
+  const steps = [];
+  const inputs = [];
+  let session = 1;
+  let busy = true;
+  const snapshot = () => ({ status: { ready: true, session } });
+  const native = nativeRuntimeHarness(async (name, args) => {
+    if (name === 'emu_startup') return snapshot();
+    if (name === 'emu_step') {
+      assert.equal(args.sessionId, session);
+      steps.push(args.sessionId);
+      return snapshot();
+    }
+    if (name === 'emu_call' && args.method === 'firmware.load') {
+      if (busy) throw new Error('a job is running; wait for it before loading firmware');
+      session = args.session;
+      return {};
+    }
+    if (name === 'emu_call' && args.method === 'input.button') {
+      inputs.push(args.session);
+      return {};
+    }
+    throw new Error(`unexpected ${name}`);
+  });
+  const runtime = await native.runtime((u) => updates.push(u));
+  await assert.rejects(runtime.loadPath('test.syx'), /a job is running/);
+  assert.equal(updates.filter((u) => u.type === 'snapshot').at(-1).snapshot.status.session, 1);
+  await runtime.press(1);
+  await native.runTimer();
+  assert.deepEqual(inputs, [1]);
+  assert.deepEqual(steps, [1], 'polling resumes on the accepted controller session');
+  busy = false;
+  await runtime.loadPath('test.syx');
+  assert.equal(session, 3, 'the refused request must not reuse its session token');
+  await native.runTimer();
+  assert.deepEqual(steps, [1, 3]);
+});
+
+test('a busy firmware load preserves an explicitly paused session', async () => {
+  const native = nativeRuntimeHarness(async (name, args) => {
+    if (name === 'emu_startup') return { status: { ready: true } };
+    if (name === 'emu_call' && args.method === 'firmware.load')
+      throw new Error('a job is running; wait for it before loading firmware');
+    throw new Error(`unexpected ${name}`);
+  });
+  const runtime = await native.runtime();
+  runtime.pause();
+  await assert.rejects(runtime.loadPath('test.syx'), /a job is running/);
+  assert.equal(native.timers.size, 0, 'a refused load must not resume a paused emulator');
+  runtime.resume();
+  assert.equal(native.timers.size, 1);
+});
+
+test('when a queued load is refused, recover the session accepted by the preceding load', async () => {
+  let session = 1;
+  let acceptFirst;
+  const updates = [];
+  const native = nativeRuntimeHarness(async (name, args) => {
+    if (name === 'emu_startup') return { status: { ready: true, session } };
+    if (name === 'emu_call' && args.method === 'firmware.load') {
+      if (args.session === 2)
+        return new Promise((resolve) => {
+          acceptFirst = () => {
+            session = 2;
+            resolve({});
+          };
+        });
+      throw new Error('a job is running; wait for it before loading firmware');
+    }
+    throw new Error(`unexpected ${name}`);
+  });
+  const runtime = await native.runtime((u) => updates.push(u));
+  const first = runtime.loadPath('first.syx');
+  const second = runtime.loadPath('second.syx');
+  const results = Promise.allSettled([first, second]);
+  await new Promise((resolve) => setImmediate(resolve));
+  acceptFirst();
+  assert.deepEqual(
+    (await results).map((r) => r.status),
+    ['fulfilled', 'rejected'],
+  );
+  assert.equal(updates.filter((u) => u.type === 'snapshot').at(-1).snapshot.status.session, 2);
+  assert.equal(native.timers.size, 1, 'the accepted session has a running pump');
 });
 
 test('buffer threshold has a 0.25 s minimum; stereo output is faded in; initial silence is not underrun', () => {

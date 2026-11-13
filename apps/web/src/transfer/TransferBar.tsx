@@ -2,6 +2,7 @@
 // ~5 s) and the time left, over a thick track. The speed also goes to `liveRate`, which the row of the file being sent shows.
 import { Show, onCleanup, type JSX } from 'solid-js';
 import { createBarRate } from './bar-rate';
+import { createCheckingHint } from './checking-hint';
 import { statsLine } from './rate-core';
 import { setLiveRate } from './transfer-state';
 import type { BarInfo } from './transfer-core';
@@ -15,12 +16,16 @@ export default function TransferBar(props: { bar: BarInfo; running: boolean; onC
   );
   onCleanup(() => setLiveRate(undefined));
   const pct = () => Math.round(100 * props.bar.fraction);
+  const checking = createCheckingHint(() => (props.running ? props.bar.checking : undefined));
   return (
     <footer class="bar" role="status" aria-label="Transfer progress">
       <div class="barline">
         <span class="msg" title={props.bar.message}>
           {props.bar.message}
         </span>
+        <Show when={props.bar.checking !== undefined}>
+          <span class="phase">{checking() ? 'Checking…' : ''}</span>
+        </Show>
         <span class="stats">
           {statsLine(pct(), props.running, speed(), Math.max(0, props.bar.total - props.bar.sent))}
         </span>

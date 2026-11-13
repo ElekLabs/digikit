@@ -2,7 +2,9 @@
 
 Date: 2026-11-06. Base: `main` at 9a849b7b. Targets: DT2 OS 1.17, DN2 OS 1.12.
 
-Status: **draft for Em's review. Nothing is built.** This is the only active plan for this work.
+Status: **draft for Em's review. The service split and the `.dks` format are not built.** This is the only active plan for this work.
+
+Built so far (SDK steps S2b and S3, runtime 0.7.0, see [sdk.md](sdk.md)): modules call the runtime through named imports (no Api table); a module reaches an optional provider (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`, `core/sdhc-large`) through a handle, and an absent provider binds the imports to stubs that answer `DK_E_MISSING` and record the missing provider as the module's need; one runtime version with `since` per import and a loader check (same major and minor, patch not higher); and the builder commit (machines, pages and parameters declared in `init`, checked and written at commit). Section 12 item 1 (`since` and the loader check) is done; the text below is the design these parts follow.
 
 2026-11-10: proposals added for Em's review, each marked **Proposal**: DSP cycles as a resource (5.3), sink slots (5.11), the owner of per-block DSP dispatch (6.1), DSP rules, cycle cost and `DK_SPAN` in the contract (now [sdk.md](sdk.md) section 9), and the SDK contract earlier in the order (13.1). They come from the [profiling plan](profiling.md). The order across the plans is in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md).
 
@@ -348,9 +350,9 @@ Target: `submit(owner, addr, bytes, done)` with one FIFO. Delete all `busy()` cr
 
 ### 6.1 Per-block DSP dispatch
 
-Today the per-block calls into machine and FX DSP code sit in the `dsp-voice` and `fx` adapters (26 and 2 SHARC hooks, section 11.1). This plan does not yet say who owns that dispatch in the target.
+Today the per-block calls into machine and FX DSP code sit in the `dsp-voice` and `fx` adapters (28 and 2 SHARC hooks, section 11.1). This plan does not yet say who owns that dispatch in the target.
 
-**Proposal:** each kind's per-block dispatcher belongs to the service that owns the kind: `machines` for voice rows, `fx` for effect rows, and a new kind's service brings its own. If SHARC hooks cannot move (section 11.2), the dispatcher stays in the image as a generic stub that walks the rows services registered. Either way the dispatcher is the one place for `DK_SPAN` ([sdk.md](sdk.md) section 9) and the DSP stack guard (section 8), so content modules need neither.
+**Decided** ([finding 128](../findings/128-r4-hooks-in-services.md)): SHARC hooks cannot move into a `.dks`, so the image keeps every SHARC hook site as a thin stub. The stub jumps through a pointer slot; a zero slot runs the stock path. Each kind's per-block dispatch code and rows belong to the service that owns the kind: `machines` for voice rows, `fx` for effect rows, and a new kind's service brings its own. A service loads its DSP code at run time (already relocated by the runtime) and writes its entry into the slot. `DK_SPAN` ([sdk.md](sdk.md) section 9) and the DSP stack guard (section 8) live in the stub, so content modules need neither. The stub overhead per block is checked in R8 whole-path spike.
 
 ## 7. SDK
 
@@ -465,7 +467,7 @@ Question: can a service with its hooks load from device storage at boot? If yes,
 ### 11.1 Static part (item 4)
 
 1. Static classifier under `tools/`, as described in `module-architecture.md` 11.2: when each hook site first runs, what it writes, its context. No such tool exists. Hooks are `op = "hook"` entries in module manifests: 55 ColdFire and 38 SHARC, proof adapters included. Port files hold anchors only.
-2. SHARC hooks (`dsp-voice` 26, `fx` 2): can they move? DSP code comes from the boot stream. `dsp-link` writes to DSP memory while running, but only inside its own area today (`README:74`). Writing live hook sites is unproven. This is the biggest unknown.
+2. SHARC hooks (`dsp-voice` 28, `fx` 2): **answered, they cannot move** ([finding 128](../findings/128-r4-hooks-in-services.md), [D], about 80% confidence). The boot routine uploads the whole DSP image before our code can read the card, and live writes into running stock DSP code are unproven. The image keeps each SHARC hook site as a stub that jumps through a pointer slot; section 6.1.
 3. Row reservations: firmware table changes written at patch time. Can they happen at boot, before the firmware reads the tables?
 4. Writing a jump while other tasks and interrupts run: a 6-byte write is not atomic. Mark sites where this is a risk, such as the audio interrupt.
 5. Measure `machines` and `dsp-voice` output sizes against the 64 KiB limit.

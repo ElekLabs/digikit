@@ -132,7 +132,7 @@ impl Manifest {
 pub struct IdRef {
     pub id: String,
     /// The prefix of the DSP entry symbols (`_<prefix>_render`, ...) when it is not the id: for DSP code that exists already. It never changes the id,
-    /// which the keys and `module_ids.h` use.
+    /// which the keys hash and `module_ids.h` names its constant from.
     #[serde(default)]
     pub dsp: Option<String>,
 }
