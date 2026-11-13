@@ -1,0 +1,19 @@
+[package]
+name = "dksharc"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/ElekLabs/digikit"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+description = "Static analysis of a module's SHARC+ DSP section: functions, basic blocks, DO loops, calls and memory operands, from the DKDS image and the .dko symbols"
+
+[lib]
+name = "dksharc"
+path = "src/lib.rs"
+
+# Plain data and the decoder of the SHARC+ runtime (public ISA table): builds for the host and wasm32.
+[dependencies]
+sharc-rt = { path = "../emulator/sharc-rt" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
