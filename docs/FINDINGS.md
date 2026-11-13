@@ -142,6 +142,7 @@ with one bounded support/session timing pair. Rust/runtime cache audits and merg
 | [`plans/usb-fast-audio-bulk.md`](plans/usb-fast-audio-bulk.md) | Fast USB in USB AUDIO/MIDI with a bulk OUT endpoint, no mode switch |
 | [`refs/`](refs/) | Notes on public references (MCF5441x, Linux and QEMU sources, DSPI2/eDMA) |
 | [`INSTRUMENTATION.md`](INSTRUMENTATION.md) | Where run output goes and the diagnostic and tuning switches |
+| [`ADDRMAP.md`](ADDRMAP.md) | The address map: names for code addresses (format, layers, lookup, consumers) |
 | [`TOOLS.md`](TOOLS.md) | Index of the tools |
 | `UNICORN.md` (removed with the Unicorn emulator; in git history at tag `unicorn-reference-final`) | The patched Unicorn requirement |
 | [`handovers/`](handovers/) | Dated handovers: state and next steps at the time, not results |

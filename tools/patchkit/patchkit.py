@@ -16,7 +16,8 @@
 
 `DIGI_PK_ROOT=DIR` runs the binary with another repository root (a module variant, tools/patchkit/pk_variant.py).
 
-`patch` defaults the output to out/patch/<firmware stem>+<modules>.syx and writes plan.json next to it. `explain`
+`patch` defaults the output to out/patch/<firmware stem>+<modules>.syx and writes plan.json and the ship address map (docs/ADDRMAP.md)
+next to it (X.plan.json, X.addrmap.json; `pack` writes OUT.addrmap.json, the module's map, next to the .dkm). `explain`
 adds a SHARC+ listing of the DSP sites to the report of the Rust binary. Output files are firmware-derived: they stay
 under out/ and are never committed.
 """
@@ -359,10 +360,12 @@ def cmd_patch(args: list[str]) -> int:
         d.mkdir(parents=True, exist_ok=True)
         out = str(d / f"{Path(fw).stem}+{re.sub(r'[^A-Za-z0-9.-]+', '_', label)}.syx")
     plan = flag(args, "--plan") or str(Path(out).with_suffix(".plan.json"))
-    rest = [a for a in args if a not in ("-o", out, "--plan", plan)]
-    r = run(["apply", *rest, "-o", out, "--plan", plan])
+    amap = flag(args, "--addrmap") or str(Path(out).with_suffix(".addrmap.json"))
+    rest = [a for a in args if a not in ("-o", out, "--plan", plan, "--addrmap", amap)]
+    r = run(["apply", *rest, "-o", out, "--plan", plan, "--addrmap", amap])
     if r.returncode == 0:
         print(f"plan: {plan}")
+        print(f"addrmap: {amap}")
     return r.returncode
 
 
@@ -387,13 +390,15 @@ def cmd_pack(args: list[str]) -> int:
             d / (module.rsplit("/", 1)[-1] + (f"-{device}" if device else "") + ".dkm")
         )
         args = [*args, "-o", out]
+    if flag(args, "--addrmap") is None:
+        args = [*args, "--addrmap", str(Path(out).with_suffix(".addrmap.json"))]
     r = run(["pack", *args])
     if r.returncode == 0:
         print(f"dkm: {out}")
     return r.returncode
 
 
-VALUE_FLAGS = ("-o", "--device", "--name")
+VALUE_FLAGS = ("-o", "--device", "--name", "--addrmap")
 
 
 def cmd_inject(args: list[str]) -> int:

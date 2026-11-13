@@ -107,6 +107,8 @@ export async function prepareRuntimePlanOffline(
       syx,
       '--plan',
       planFile,
+      '--addrmap',
+      planFile.replace(/\.plan\.json$/, '.addrmap.json'),
     ],
     { timeout: 30_000 },
   );

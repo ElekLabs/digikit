@@ -19,7 +19,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
 
   inspect X.syx                          device, version, port, patch record
   check   --firmware X.syx [--modules a,b]  which modules fit, and why not
-  apply   --firmware X.syx [--modules a,b | --set NAME] [-o OUT.syx] [--plan plan.json] [--no-record (oracles only)]
+  apply   --firmware X.syx [--modules a,b | --set NAME] [-o OUT.syx] [--plan plan.json] [--addrmap map.json] [--no-record (oracles only)]
+                                         --addrmap: the ship address map (names of the code the patch placed and of the port's anchors)
                                          without --modules: the device's patch set (devices/*.toml [patch_sets]), `device` by default
   (any command that reads modules: [--modules-dir DIR], PATCHKIT_MODULES=dir:dir for extra module roots)
   explain --firmware X.syx (--modules a,b | --plan plan.json)   what a patch does, site by site
@@ -30,7 +31,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
                                          (X.plan.json as for preflight)
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
-  pack    MODULE_ID -o OUT.dkm [--name N] [--device SHORT] [--trace] [--ui-preview] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
+  addr    --map FILE... [--loads FILE | --load ID=BASE...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
+                                         names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
+  pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--ui-preview] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
                                          (a `dynamic = true` module: its machine and param records for --device)
                                          (--trace: built with DK_TRACE defined, trace bit set in the header; objects cached apart)
@@ -439,6 +442,12 @@ fn run(a: Args) -> Result<()> {
                     let j = serde_json::to_string_pretty(&out.plan)?;
                     write(&p, (j + "\n").as_bytes())?;
                 }
+                if let Some(p) = flag(rest, "--addrmap") {
+                    write(
+                        &p,
+                        patchkit::addrmap::ship_map(&out.plan).to_json().as_bytes(),
+                    )?;
+                }
                 let o = out.plan.output.as_ref().unwrap();
                 println!(
                     "applied {} to {} {}: {} writes, container {} bytes",
@@ -843,6 +852,22 @@ plan.json {}",
             let file = patchkit::dkm::pack_keys(cf.first().map(|c| c.0), &reg, &dsp, &opts)?;
             write(&out, &file)?;
             let d = patchkit::dkm::Dkm::parse(&file)?;
+            if let Some(p) = flag(rest, "--addrmap") {
+                // the map of the code the loader places; a data-only module has none
+                let map = match cf.first().map(|c| c.0) {
+                    Some(o) => patchkit::addrmap::module_map(o, &opts.name, &d.sha256)?,
+                    None => dkaddrmap::AddrMap::new(
+                        "module",
+                        dkaddrmap::Key {
+                            module: Some(opts.name.clone()),
+                            dkm_sha256: Some(d.sha256.clone()),
+                            ..Default::default()
+                        },
+                        vec![],
+                    ),
+                };
+                write(&p, map.to_json().as_bytes())?;
+            }
             println!(
                 "{out}: {} bytes, {} (image {} + bss {}, {} relocations, {} imports), sha256 {}",
                 file.len(),
@@ -968,6 +993,7 @@ plan.json {}",
             write(&out, &file)?;
         }
         "records" => patchkit::records_cli::run(rest)?,
+        "addr" => patchkit::addrmap::run(rest)?,
         "needs" => {
             let json = rest.iter().any(|a| a == "--json");
             let files: Vec<&String> = rest.iter().filter(|a| *a != "--json").collect();

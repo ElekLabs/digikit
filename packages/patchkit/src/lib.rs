@@ -21,6 +21,7 @@ pub mod syx;
 
 pub use error::{Error, Result};
 pub mod abigen;
+pub mod addrmap;
 pub mod apply;
 pub mod bootrom;
 pub mod build;
