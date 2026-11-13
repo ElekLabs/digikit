@@ -7,7 +7,7 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_PLUCK, "Pluck", "PLK");
-    dk_page *p = dk_machine_add_page(m, "Pluck");
+    dk_page *p = dk_machine_add_page(m, "Pluck", "PLUCK");
     dk_page_add_param(p, "Decay", "DECAY", 64);
     dk_page_add_param(p, "Pick position", "PICK", 32);
     dk_page_add_param(p, "Brightness", "BRIGHT", 80);

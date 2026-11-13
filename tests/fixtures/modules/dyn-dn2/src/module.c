@@ -6,7 +6,7 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_DYN_PLUCK, "DynSyn", "DSY");
-    dk_page *p = dk_machine_add_page(m, "Dyn Synth");
+    dk_page *p = dk_machine_add_page(m, "Dyn Synth", "DYN");
     dk_param *a = dk_page_add_param(p, "Dyn Alpha", "ALPH", 32);
     (void)a;
     dk_param *b = dk_page_add_param(p, "Dyn Beta", "BETA", 16);

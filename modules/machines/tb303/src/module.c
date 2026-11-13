@@ -7,7 +7,7 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_TB303, "TB303", "303");
-    dk_page *p = dk_machine_add_page(m, "TB303");
+    dk_page *p = dk_machine_add_page(m, "TB303", "303");
     dk_param *wave = dk_page_add_param(p, "Wave", "WAVE", 0);
     dk_param_range(wave, 0, 1);
     dk_page_add_param(p, "Accent", "ACC", 127);

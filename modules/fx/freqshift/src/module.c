@@ -14,7 +14,7 @@ static int32_t init(dk_module_ctx *ctx)
 {
     dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq Shifter", "FSH");
     dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
-    dk_page *p = dk_fx_add_page(fx, "Freq Shifter");
+    dk_page *p = dk_fx_add_page(fx, "Freq Shifter", "FSH");
     dk_page_add_fx_param(p, "Freq Shift", "SHIFT", DK_BIPOLAR, -64.0f, 63.0f, 0.0f);
     return DK_OK;
 }

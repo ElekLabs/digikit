@@ -200,8 +200,8 @@ int32_t dk_param_set(uint32_t track, uint32_t word, int32_t raw);
 /* Declare a machine of this module: `id` is its DK_MACHINE_ID_<ID> key (build/gen/module_ids.h), `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad id) a placeholder, and the error is reported when `init` returns. Context: init. Since runtime 0.7.0. */
 dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name);
 
-/* Add a page to the machine, after the pages already added. Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
-dk_page *dk_machine_add_page(dk_machine *m, const char *name);
+/* Add a page to the machine, after the pages already added: `name` is its title, `short_name` its tab label on a device that keeps knobs in page rows. Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
+dk_page *dk_machine_add_page(dk_machine *m, const char *name, const char *short_name);
 
 /* Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
 dk_param *dk_page_add_param(dk_page *p, const char *name, const char *short_name, uint32_t def);
@@ -232,8 +232,8 @@ void dk_page_bind_local(dk_page *p, uint32_t local, uint32_t slot);
 /* Declare an effect of this module: `id` is its DK_FX_ID_<ID> key, `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit). Context: init. Since runtime 0.7.0. */
 dk_fx *dk_module_ctx_add_fx(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name);
 
-/* Add the effect's page. Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
-dk_page *dk_fx_add_page(dk_fx *fx, const char *name);
+/* Add the effect's page: `name` is its title, `short_name` its tab label (3 characters at most). Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
+dk_page *dk_fx_add_page(dk_fx *fx, const char *name, const char *short_name);
 
 /* Add an effect parameter on the next knob of the page. `kind` is DK_PERCENT or DK_BIPOLAR (the display); `min`, `max` and `def` are in the parameter's unit. Returns the parameter handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
 dk_param *dk_page_add_fx_param(dk_page *p, const char *name, const char *short_name, uint32_t kind, float min, float max, float def);

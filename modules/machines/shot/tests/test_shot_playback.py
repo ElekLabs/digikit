@@ -308,10 +308,6 @@ def test_two_smp_values_pick_two_records(device):
     assert not np.array_equal(first, second)
 
 
-# TODO(S3): the rig learns the latched words from gallery.json, and the committed records carry no latched flag (the runtime sets the
-# latched mask from `dk_param_latched` at commit, which nothing here reads back). Open for the integration: add the flag to the records, or read
-# the mask from the DSP row.
-@pytest.mark.skip(reason="S3: the committed records do not carry the latched flag the rig needs")
 @pytest.mark.parametrize("device", DEVICES)
 def test_smp_is_latched_but_other_parameter_words_remain_live(device):
     s = Shot(device, index=2)
@@ -330,9 +326,7 @@ def test_smp_is_latched_but_other_parameter_words_remain_live(device):
     called = nw(r.built.data["_dv_call_params"])
     assert r.sess.peek(live) == 5 << 8
     assert r.sess.peek(called) == 2 << 8
-    for word, pid in enumerate(
-        ("start", "end", "play", "pitch"), 1
-    ):
+    for word, pid in enumerate(("start", "end", "play", "pitch"), 1):
         assert r.sess.peek(called + word) == changed[pid]
     # Entry 5 is empty: a new trigger must now use it and finish silently.
     s.index = 5

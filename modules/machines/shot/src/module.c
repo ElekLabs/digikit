@@ -46,7 +46,7 @@ static int32_t init(dk_module_ctx *ctx)
        START .. END (the glyph is the stock PLAY knob on the Digitakt II).
        PITCH: 64 is the played note unchanged, each unit is 0.375 semitones, so 0 .. 127 is -24 .. +23.6 semitones.
        The words are in the order of SHOT_P_*: SMP, START, END, PLAY, PITCH. */
-    dk_page *knobs = dk_machine_add_page(m, "SHOT");
+    dk_page *knobs = dk_machine_add_page(m, "SHOT", "SHT");
     dk_param *smp = dk_page_add_param(knobs, "Sample", "SMP", 0);
     dk_param_range(smp, 0, 15);
     dk_param_latched(smp);
@@ -58,7 +58,7 @@ static int32_t init(dk_module_ctx *ctx)
     dk_param_glyph(play, DK_GLYPH_PLAY);
     dk_param *pitch = dk_page_add_param(knobs, "Pitch", "TUNE", 64);
 
-    dk_page *controls = dk_machine_add_page(m, "SHOT");
+    dk_page *controls = dk_machine_add_page(m, "SHOT", "SHT");
     dk_page_canvas(controls, DK_PAGE_STOCK_OVERLAY, controls_draw, range_event, 0);
     dk_page_bind(controls, pitch, 0);
     dk_page_bind(controls, play, 1);
@@ -66,7 +66,7 @@ static int32_t init(dk_module_ctx *ctx)
     dk_page_bind(controls, start, 4);
     dk_page_bind(controls, end, 7);
 
-    dk_page *wave = dk_machine_add_page(m, "SHOT WAVE");
+    dk_page *wave = dk_machine_add_page(m, "SHOT WAVE", "SHT");
     dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event, 0);
     dk_page_bind(wave, start, 4);
     dk_page_bind_local(wave, 0, 6);

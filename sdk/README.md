@@ -105,7 +105,7 @@ static int32_t init(dk_module_ctx *ctx)
 {
     dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq Shifter", "FSH");
     dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
-    dk_page *p = dk_fx_add_page(fx, "Freq Shifter");
+    dk_page *p = dk_fx_add_page(fx, "Freq Shifter", "FSH");
     dk_page_add_fx_param(p, "Freq Shift", "SHIFT", DK_BIPOLAR, -64.0f, 63.0f, 0.0f);
     return DK_OK;
 }
@@ -128,7 +128,7 @@ A machine is built the same way (`dk_module_ctx_add_machine`, `dk_machine_add_pa
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANA");
-    dk_page *p = dk_machine_add_page(m, "Analog");
+    dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
     dk_page_add_param(p, "Detune", "DET", 40);
     dk_page_add_param(p, "Wave", "WAVE", 0);
     dk_page_add_param(p, "Sub", "SUB", 0);

@@ -61,7 +61,7 @@ const FREE: Free = Free { machine_rows: 8, param_rows: 16, page_rows: 8 };
 fn analog() -> Box<Collect> {
     let mut b = Box::new(Collect::new());
     let m = b.add_machine(KEY, c(b"Analog\0"), c(b"ANLG\0"));
-    let p = b.machine_add_page(m, c(b"Analog\0"));
+    let p = b.machine_add_page(m, c(b"Analog\0"), c(b"S\0"));
     b.page_add_param(p, c(b"Tone\0"), c(b"TONE\0"), 64);
     let decay = b.page_add_param(p, c(b"Decay\0"), c(b"DECAY\0"), 80);
     b.param_range(decay, 0, 100);
@@ -83,7 +83,7 @@ fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
     unsafe {
         end();
         assert_eq!(dk_module_ctx_add_machine(core::ptr::null_mut(), KEY, c(b"A\0"), c(b"A\0")), placeholder());
-        assert_eq!(dk_machine_add_page(placeholder(), c(b"A\0")), placeholder());
+        assert_eq!(dk_machine_add_page(placeholder(), c(b"A\0"), c(b"S\0")), placeholder());
         assert_eq!(dk_page_add_param(placeholder(), c(b"A\0"), c(b"A\0"), 1), placeholder());
         dk_param_range(placeholder(), 1, 2);
         dk_param_latched(placeholder());
@@ -102,7 +102,7 @@ fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
 fn a_ninth_knob_is_an_error_kept_for_the_commit() {
     let mut b = Box::new(Collect::new());
     let m = b.add_machine(KEY, c(b"A\0"), c(b"A\0"));
-    let p = b.machine_add_page(m, c(b"A\0"));
+    let p = b.machine_add_page(m, c(b"A\0"), c(b"S\0"));
     for _ in 0..KNOBS {
         assert_ne!(b.page_add_param(p, c(b"P\0"), c(b"P\0"), 0), placeholder());
     }
@@ -120,7 +120,7 @@ fn the_collection_is_bounded_by_max_records_and_the_call_past_it_returns_the_pla
     }
     let mut first = core::ptr::null_mut();
     for i in 0..MAX_PG {
-        let g = b.machine_add_page(machines[i % MAX_M], c(b"G\0"));
+        let g = b.machine_add_page(machines[i % MAX_M], c(b"G\0"), c(b"S\0"));
         if i == 0 {
             first = g;
         }
@@ -144,7 +144,7 @@ fn the_collection_is_bounded_by_max_records_and_the_call_past_it_returns_the_pla
     assert_eq!(b.page_add_param(over, c(b"X\0"), c(b"X\0"), 1), placeholder());
     assert_eq!((b.np, b.nparam, b.records), before);
     // a 17th page is the same
-    assert_eq!(b.machine_add_page(machines[0], c(b"G\0")), placeholder());
+    assert_eq!(b.machine_add_page(machines[0], c(b"G\0"), c(b"S\0")), placeholder());
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn commit_refuses_more_rows_than_uses_an_unknown_id_a_duplicate_fx_id_and_no_fre
     // an effect: its id missing from the header, an id another loaded module has, an id twice in the header
     let mut f = Box::new(Collect::new());
     let fx = f.add_fx(FXID, c(b"Shift\0"), c(b"FSH\0"));
-    let pg = f.fx_add_page(fx, c(b"Shift\0"));
+    let pg = f.fx_add_page(fx, c(b"Shift\0"), c(b"S\0"));
     f.page_add_fx_param(pg, c(b"Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
     assert_eq!(f.err, 0);
     assert_eq!(check_commit(&f, &DT2, &keys(&[], &[FXID], (0, 0, 0)), &[], &FREE), OK);
@@ -243,14 +243,14 @@ fn a_digitakt_machine_lowers_to_the_records_the_packer_wrote() {
 fn a_digitone_machine_with_canvas_pages_lowers_pages_and_native_records() {
     let mut b = Box::new(Collect::new());
     let m = b.add_machine(KEY, c(b"Shot\0"), c(b"SHOT\0"));
-    let knobs = b.machine_add_page(m, c(b"SHOT\0"));
+    let knobs = b.machine_add_page(m, c(b"SHOT\0"), c(b"S\0"));
     let smp = b.page_add_param(knobs, c(b"Sample\0"), c(b"SMP\0"), 0);
     let start = b.page_add_param(knobs, c(b"Start\0"), c(b"START\0"), 0);
     b.param_on_click(smp, 0x1100, 0x77);
-    let ctl = b.machine_add_page(m, c(b"SHOT\0"));
+    let ctl = b.machine_add_page(m, c(b"SHOT\0"), c(b"S\0"));
     b.page_canvas(ctl, 1, 0x1200, 0x1300, 0x88);
     b.page_bind(ctl, start, 0);
-    let wave = b.machine_add_page(m, c(b"SHOT WAVE\0"));
+    let wave = b.machine_add_page(m, c(b"SHOT WAVE\0"), c(b"S\0"));
     b.page_canvas(wave, 2, 0x1400, 0x1500, 0x99);
     b.page_bind(wave, start, 4);
     b.page_bind_local(wave, 0, 6);
@@ -287,7 +287,7 @@ fn a_digitone_machine_with_canvas_pages_lowers_pages_and_native_records() {
 fn one_canvas_page_without_flags_is_a_v1_page() {
     let mut b = analog();
     let m = &mut b.machines[0] as *mut CMachine as *mut u8;
-    let g = b.machine_add_page(m, c(b"W\0"));
+    let g = b.machine_add_page(m, c(b"W\0"), c(b"S\0"));
     b.page_canvas(g, 0, 0x1400, 0x1500, 0);
     b.page_bind_local(g, 3, 5);
     let k = keys(&[KEY], &[], (1, 3, 1));
@@ -304,7 +304,7 @@ fn one_canvas_page_without_flags_is_a_v1_page() {
 fn a_flagged_canvas_page_alone_is_an_incomplete_v2_pair_that_the_registry_refuses() {
     let mut b = analog();
     let m = &mut b.machines[0] as *mut CMachine as *mut u8;
-    let g = b.machine_add_page(m, c(b"W\0"));
+    let g = b.machine_add_page(m, c(b"W\0"), c(b"S\0"));
     b.page_canvas(g, 2, 0x1400, 0x1500, 0);
     b.page_bind_local(g, 0, 0);
     let k = keys(&[KEY], &[], (1, 3, 1));
@@ -324,7 +324,7 @@ fn an_effect_with_a_page_lowers_to_an_effect_record_in_keys_order() {
     let mut f = Box::new(Collect::new());
     let fx = f.add_fx(FXID, c(b"Freq shift\0"), c(b"FSH\0"));
     f.fx_routes(fx, ROUTE_SEND | ROUTE_MASTER, ROUTE_SEND);
-    let pg = f.fx_add_page(fx, c(b"Freq shift\0"));
+    let pg = f.fx_add_page(fx, c(b"Freq shift\0"), c(b"FSH\0"));
     f.page_add_fx_param(pg, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
     let k = keys(&[], &[0x77, FXID], (0, 0, 0));
     let mut plan = Plan::new();
@@ -346,7 +346,7 @@ fn an_effect_with_a_page_lowers_to_an_effect_record_in_keys_order() {
 fn dk_fx_mix_sets_the_mix_default_of_the_effect_record_and_127_without_it() {
     let mut f = Box::new(Collect::new());
     let fx = f.add_fx(FXID, c(b"Freq shift\0"), c(b"FSH\0"));
-    let pg = f.fx_add_page(fx, c(b"Freq shift\0"));
+    let pg = f.fx_add_page(fx, c(b"Freq shift\0"), c(b"FSH\0"));
     f.page_add_fx_param(pg, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
     let k = keys(&[], &[0x77, FXID], (0, 0, 0));
     let mix_of = |f: &Collect| {
@@ -365,7 +365,7 @@ fn dk_fx_mix_sets_the_mix_default_of_the_effect_record_and_127_without_it() {
 fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refused() {
     let mut b = Box::new(Collect::new());
     let m = b.add_machine(KEY, c(b"A\0"), c(b"A\0"));
-    let p = b.machine_add_page(m, c(b"A\0"));
+    let p = b.machine_add_page(m, c(b"A\0"), c(b"S\0"));
     for _ in 0..7 {
         b.page_add_param(p, c(b"P\0"), c(b"P\0"), 0);
     }
@@ -389,10 +389,10 @@ fn a_dsp_section_must_match_the_keys_table() {
 }
 
 #[test]
-fn a_digitone_knob_page_has_its_name_in_capitals_and_its_title_as_given() {
+fn a_digitone_knob_page_has_the_short_name_and_title_it_was_given() {
     let mut b = Box::new(Collect::new());
     let m = b.add_machine(KEY, c(b"Sine\0"), c(b"SIN\0"));
-    let pg = b.machine_add_page(m, c(b"Sine\0"));
+    let pg = b.machine_add_page(m, c(b"Sine\0"), c(b"SNE\0"));
     b.page_add_param(pg, c(b"Level\0"), c(b"LEVEL\0"), 127);
     let k = keys(&[KEY], &[], (1, 1, 1));
     let mut plan = Plan::new();
@@ -401,6 +401,6 @@ fn a_digitone_knob_page_has_its_name_in_capitals_and_its_title_as_given() {
     lower(&b, &DN2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
     let page = 16 + 0x50 + 0x6c;
     assert_eq!(rd(&buf, page), 3);
-    assert_eq!(&buf[page + 8 + 4 * 10..][..5], b"SINE\0");
+    assert_eq!(&buf[page + 8 + 4 * 10..][..5], b"SNE\0\0");
     assert_eq!(&buf[page + 8 + 4 * 10 + 24..][..5], b"Sine\0");
 }

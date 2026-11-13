@@ -459,6 +459,13 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
             let t = crate::assign::resolve(c.machines[m].key);
             if let Some(row) = dsp::voice_row(rec, t) {
                 let (rng, latched) = col::voice_declared(c, &plan, m);
+                if latched != 0 {
+                    crate::dlog::ev(
+                        logk::MODULE_LATCH,
+                        crate::dlog::INFO,
+                        [read_volatile(addr_of!(BOOT_IDX)), m as u32, latched, 0, 0],
+                    );
+                }
                 let r = dsp::set_declared(row, rng, latched);
                 if r != OK {
                     arena::free(block);

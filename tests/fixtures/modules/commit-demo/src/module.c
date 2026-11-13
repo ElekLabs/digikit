@@ -14,7 +14,7 @@ static void go_click(void *arg, uint32_t track)
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_CMACH, "Commit", "CMT");
-    dk_page *p = dk_machine_add_page(m, "Commit");
+    dk_page *p = dk_machine_add_page(m, "Commit", "CMT");
     dk_page_add_param(p, "Tone", "TONE", 64);
     dk_param *mode = dk_page_add_param(p, "Mode", "MODE", 0);
     dk_param_range(mode, 0, 3);
@@ -24,7 +24,7 @@ static int32_t init(dk_module_ctx *ctx)
 
     dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_CFX, "Commit FX", "CFX");
     dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
-    dk_page *fp = dk_fx_add_page(fx, "Commit FX");
+    dk_page *fp = dk_fx_add_page(fx, "Commit FX", "CFX");
     dk_page_add_fx_param(fp, "Gain", "GAIN", DK_PERCENT, 0.0f, 1.27f, 0.5f);
     return DK_OK;
 }

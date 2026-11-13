@@ -43,10 +43,10 @@ static int32_t status(uint32_t cmd, uint32_t seq, const void *request, uint32_t 
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_NATIVE, "NATIVE", "NAT");
-    dk_page *knobs = dk_machine_add_page(m, "Native proof");
+    dk_page *knobs = dk_machine_add_page(m, "Native proof", "NAT");
     dk_param *start = dk_page_add_param(knobs, "Start", "START", 16);
     dk_param *end = dk_page_add_param(knobs, "End", "END", 112);
-    dk_page *page = dk_machine_add_page(m, "Native proof");
+    dk_page *page = dk_machine_add_page(m, "Native proof", "NAT");
     dk_page_canvas(page, 0, native_draw, native_event, NULL);
     dk_page_bind(page, start, 0);
     dk_page_bind_local(page, 0, 2);

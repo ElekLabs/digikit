@@ -6,7 +6,7 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SINE, "Sine", "SIN");
-    dk_page *p = dk_machine_add_page(m, "Sine");
+    dk_page *p = dk_machine_add_page(m, "Sine", "SINE");
     dk_page_add_param(p, "Level", "LEVEL", 127);
     return DK_OK;
 }

@@ -48,6 +48,7 @@ pub mod logk {
     pub const PARAM_CHANGE: u16 = 42;
     pub const MOD_NEEDS: u16 = 43;
     pub const MODULE_COMMIT: u16 = 44;
+    pub const MODULE_LATCH: u16 = 45;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;
@@ -624,11 +625,11 @@ pub mod api {
     /// `dk_module_ctx_add_fx`: Declare an effect of this module: `id` is its DK_FX_ID_<ID> key, `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit).
     pub type DkModuleCtxAddFxFn = unsafe extern "C" fn(ctx: *mut u8, id: u32, name: *const u8, short_name: *const u8) -> *mut u8;
 
-    /// `dk_machine_add_page`: Add a page to the machine, after the pages already added. Returns the page handle (a placeholder on an error).
-    pub type DkMachineAddPageFn = unsafe extern "C" fn(m: *mut u8, name: *const u8) -> *mut u8;
+    /// `dk_machine_add_page`: Add a page to the machine, after the pages already added: `name` is its title, `short_name` its tab label on a device that keeps knobs in page rows. Returns the page handle (a placeholder on an error).
+    pub type DkMachineAddPageFn = unsafe extern "C" fn(m: *mut u8, name: *const u8, short_name: *const u8) -> *mut u8;
 
-    /// `dk_fx_add_page`: Add the effect's page. Returns the page handle (a placeholder on an error).
-    pub type DkFxAddPageFn = unsafe extern "C" fn(fx: *mut u8, name: *const u8) -> *mut u8;
+    /// `dk_fx_add_page`: Add the effect's page: `name` is its title, `short_name` its tab label (3 characters at most). Returns the page handle (a placeholder on an error).
+    pub type DkFxAddPageFn = unsafe extern "C" fn(fx: *mut u8, name: *const u8, short_name: *const u8) -> *mut u8;
 
     /// `dk_page_add_param`: Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error).
     pub type DkPageAddParamFn = unsafe extern "C" fn(p: *mut u8, name: *const u8, short_name: *const u8, def: u32) -> *mut u8;
