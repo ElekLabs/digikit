@@ -41,3 +41,12 @@ fn without_the_model_dtcn0_is_a_plain_register() {
     b.set_clock(periph::clock::cf_ips());
     assert_eq!(b.read32(DTCN0), Ok(0));
 }
+
+#[test]
+fn enabled_channels_count_the_bus_clock_and_others_stay_plain() {
+    let mut b = board();
+    b.enable_dtcn_channels(0b0100); // DTCN2 only
+    b.set_clock(periph::clock::cf_ips() / 1000);
+    assert_eq!(b.read32(0xfc07_800c), Ok(132_000));
+    assert_eq!(b.read32(DTCN0), Ok(0));
+}

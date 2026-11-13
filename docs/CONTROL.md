@@ -40,7 +40,7 @@ flags. `--scenario` needs a coupled-audio build.
 | Subcommand | Does |
 |---|---|
 | `status` | Print the `status` result |
-| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]` (`load` also `--card`) |
+| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]`, `--dsp on\|off` (starts over; see below) (`load` also `--card`) |
 | `restart` | Back to the ready state of the running firmware |
 | `step N` | Run N guest instructions |
 | `tap CODE [--hold N] [--at-instr N]` | Press and release a key (default hold 40000000 instructions) |
@@ -96,6 +96,10 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
 
+`firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
+only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
+the UI is fast), `dsp: true` the DSP session when its inputs are set and the peer program. The choice is kept for the loads after it
+(`status.dsp_enabled`); `--no-dsp` on `digi-emud` and the app is the choice before the first load (`status.dsp_flag` tells a webview).
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)
 and loads the result with the stock image as its base. A `syx` that already has a patch record is loaded as it is. The patched image is
@@ -182,8 +186,9 @@ the same digest. It is the oracle for a change to those paths: boot paused to a 
 compare the digests of a daemon built before the change with one built after.
 
 `--dsp zero --cf-snapshot FILE` (on `digi-emud` and the app) starts without a DSP: SSI paced, the DSPI2 peer
-answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` is `"zero"`,
-`"sharc"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
+answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` names the device's second
+processor as it runs: `"sharc"`, `"peer"` (a peer CPU runs its program), `"responder"` (the mailbox stand-in for a peer CPU),
+`"zero"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
 work. No PCM is produced.
 
 `guard.set {protect: [{lo, hi, label}], allow_pc: [{lo, hi}]}` arms write-range guards (addresses are integers or
@@ -255,7 +260,7 @@ restored or replaced runtime resets it). On the device in the emulator, the runt
 (its EMUCLK ticks once per instruction), so compare it with `model_pct`, not `real_pct`. The real values are estimates from the public manuals' cycle tables and our instruction counts, not measurements. The
 factors are one file, `devices/cycle-factors.json` (cited findings inside; `tools/patchkit/pk_dsp_budget.py` reads the
 same numbers). Each closed window is blended 50/50 into the shown value; a restored or replaced runtime clears it.
-`dsp` is `null` without a DSP session (`status.dsp` is `"zero"` or `"none"`). The desktop panel gets the same object as
+`dsp` is `null` without a DSP session (`status.dsp` is not `"sharc"`). The desktop panel gets the same object as
 `load` in its audio status. The browser (wasm) build has no controller and shows no meter.
 
 ## Events

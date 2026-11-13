@@ -13,7 +13,9 @@ name = "digi_coupled"
 
 [features]
 # Local-only DN2 coupling: generated DSP code must never be distributed.
-coupled-audio = ["elektron-native-boot/sharc", "elektron-native-boot/play", "dep:sharc-fast-cl", "dep:sharc-native"]
+coupled-audio = ["cf-audio", "elektron-native-boot/sharc", "dep:sharc-fast-cl", "dep:sharc-native"]
+# Audio output of a ColdFire-only emulation (a device with `[emulator.peer_audio]`): the PCM goes to the same player as the DSP session.
+cf-audio = ["elektron-native-boot/play"]
 # A second generated core (SHARC_GEN_DIR_2) next to the first: the firmware's device picks the core
 # (src/dsp_core.rs). Implies coupled-audio.
 second-core = ["coupled-audio", "elektron-native-boot/second-core", "dep:sharc-native-2", "dep:sharc-fast-cl-2"]

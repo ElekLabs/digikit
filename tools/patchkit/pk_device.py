@@ -203,3 +203,31 @@ def port_images(short: str) -> tuple[str, ...]:
         for fw in load(short).get("firmware", [])
         if fw.get("port")
     )
+
+
+def acceptance_firmware() -> dict[str, str]:
+    """short name -> the firmware version the device's tests and tools run (`[acceptance] firmware`)."""
+    return {
+        s: d["acceptance"]["firmware"]
+        for s, d in load_all().items()
+        if "acceptance" in d
+    }
+
+
+def port_firmware() -> dict[tuple[str, str], str]:
+    """(short name, version) -> .syx file name of every firmware that has a port lockfile."""
+    return {
+        (s, fw["version"]): fw["filename"]
+        for s, d in load_all().items()
+        for fw in d.get("firmware", [])
+        if fw.get("port")
+    }
+
+
+def ready_dir(short: str, version: str) -> str:
+    """The ready-snapshot directory of a firmware: `[acceptance] ready_dir` for the acceptance firmware, else
+    `out/ready-<short>-<version without dots>`."""
+    acc = load(short).get("acceptance", {})
+    if acc.get("firmware") == version and "ready_dir" in acc:
+        return acc["ready_dir"]
+    return f"out/ready-{short}-{version.replace('.', '')}"

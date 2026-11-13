@@ -1,8 +1,9 @@
-import { parse } from 'smol-toml';
-import dt2Source from '../../../../devices/digitakt-ii.toml?raw';
-import dn2Source from '../../../../devices/digitone-ii.toml?raw';
+// The devices the site knows, from the registry (devices/*.toml through @digi/devices): names, firmware identities and the
+// short ids. No device is named in code; a device file added to devices/ shows up here.
+import { registry } from '@digi/devices/vite';
 
-export type DeviceId = 'dt2' | 'dn2';
+/** A device id: the `[device] short` of a device file. */
+export type DeviceId = string;
 export type BootContract = 'main-os-oracle-v1';
 export type SymbolProfile = 'elektron-rtos-v1';
 export type FirmwareIdentity = Readonly<{
@@ -15,61 +16,74 @@ export type FirmwareIdentity = Readonly<{
 }>;
 export type DeviceProfile = Readonly<{ name: string; short: DeviceId; firmware: readonly FirmwareIdentity[] }>;
 
-type ParsedDocument = { device?: { name?: unknown; short?: unknown }; firmware?: unknown };
-type ParsedFirmware = {
-  version?: unknown;
-  sha256?: unknown;
-  filename?: unknown;
-  main_sha256?: unknown;
-  boot_contract?: unknown;
-  symbol_profile?: unknown;
-};
-const HEX = /^[0-9a-f]{64}$/i;
+export { registry };
 
-function string(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.length === 0)
-    throw new Error(`device profile ${field} must be a non-empty string`);
-  return value;
+/** Every device of the registry, in file-name order. */
+export const deviceIds: readonly DeviceId[] = registry.ids;
+
+/** The devices that run the digikit runtime: the ones with module lists and runtime sets. */
+export const runtimeDeviceIds: readonly DeviceId[] = registry.runtimeIds;
+
+/** The registry's name of a device (`[device] name`), or the id itself when the id is not a device. */
+export const deviceNameOf = (id: string): string => (deviceIds.includes(id) ? registry.get(id).name : id);
+
+/** The short label of a device on a card (the id in upper case). */
+export const deviceShort = (id: string): string => id.toUpperCase();
+
+/** The names of the runtime devices as prose: "A and B" (`and`) or "A or B" (`or`). */
+export function deviceNamesText(conj: 'and' | 'or'): string {
+  const names = runtimeDeviceIds.map(deviceNameOf);
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} ${conj} ${names[names.length - 1]}`;
 }
 
-function hash(value: unknown, field: string): string {
-  const result = string(value, field).toLowerCase();
-  if (!HEX.test(result)) throw new Error(`device profile ${field} must be a SHA-256 hex digest`);
-  return result;
+/** The newest firmware release of each runtime device that the site can patch (it has a boot profile), as prose: "A OS 1.2 or B OS 3.4". */
+export function newestReleasesText(): string {
+  return runtimeDeviceIds
+    .flatMap((id) => {
+      const newest = deviceProfiles[id]?.firmware.filter((f) => f.main_sha256).at(-1);
+      return newest ? [`${deviceNameOf(id)} OS ${newest.version}`] : [];
+    })
+    .join(' or ');
 }
 
-function profile(source: string, expected: DeviceId): DeviceProfile {
-  const parsed = parse(source) as ParsedDocument;
-  const name = string(parsed.device?.name, 'device.name');
-  const short = string(parsed.device?.short, 'device.short');
-  if (short !== expected) throw new Error(`device profile device.short must be ${expected}`);
-  if (!Array.isArray(parsed.firmware)) throw new Error('device profile firmware must be an array');
-  const firmware = parsed.firmware.map((entry): FirmwareIdentity => {
-    if (entry === null || typeof entry !== 'object') throw new Error('device profile firmware entry must be a table');
-    const raw = entry as ParsedFirmware;
-    const main = raw.main_sha256;
-    const contract = raw.boot_contract;
-    const symbols = raw.symbol_profile;
-    const hasBoot = main !== undefined || contract !== undefined || symbols !== undefined;
-    if (hasBoot && (main === undefined || contract !== 'main-os-oracle-v1' || symbols !== 'elektron-rtos-v1'))
+/** Is `id` a device of the registry? */
+export const isDeviceId = (id: string): boolean => deviceIds.includes(id);
+
+/** Which device a MIDI port name belongs to: the first word of a device name in the port name ("Elektron A II" is the device named "A II"). */
+export function deviceOfPort(port: string): DeviceId | undefined {
+  const p = port.toLowerCase();
+  return registry.devices.find((d) =>
+    new RegExp(`(?<![a-z0-9])${d.name.split(/\s+/)[0]?.toLowerCase()}(?![a-z0-9])`).test(p),
+  )?.id;
+}
+
+const BOOT_CONTRACT = 'main-os-oracle-v1';
+const SYMBOL_PROFILE = 'elektron-rtos-v1';
+
+function profile(id: DeviceId): DeviceProfile {
+  const d = registry.get(id);
+  const firmware = d.firmware.map((f): FirmwareIdentity => {
+    if (f.boot && (f.boot.contract !== BOOT_CONTRACT || f.boot.symbolProfile !== SYMBOL_PROFILE))
       throw new Error('device profile boot fields must be a supported complete contract');
     return {
-      version: string(raw.version, 'firmware.version'),
-      sha256: hash(raw.sha256, 'firmware.sha256'),
-      ...(raw.filename === undefined ? {} : { filename: string(raw.filename, 'firmware.filename') }),
-      ...(hasBoot
-        ? { main_sha256: hash(main, 'firmware.main_sha256'), boot_contract: contract, symbol_profile: symbols }
+      version: f.version,
+      sha256: f.sha256,
+      ...(f.filename === undefined ? {} : { filename: f.filename }),
+      ...(f.boot
+        ? { main_sha256: f.boot.mainSha256, boot_contract: BOOT_CONTRACT, symbol_profile: SYMBOL_PROFILE }
         : {}),
-    };
+    } as FirmwareIdentity;
   });
-  return { name, short: expected, firmware };
+  return { name: d.name, short: id, firmware };
 }
 
-export const deviceProfiles = { dt2: profile(dt2Source, 'dt2'), dn2: profile(dn2Source, 'dn2') } as const;
+export const deviceProfiles: Readonly<Record<DeviceId, DeviceProfile>> = Object.fromEntries(
+  deviceIds.map((id) => [id, profile(id)]),
+);
 
-/** The DN2 firmware the private ready inputs (dev server, `/__digi-local/`) were captured from. */
+/** The DN2 firmware the private ready inputs (dev server, `/__digi-local/`) were captured from; empty when the registry lacks it. */
 export const localReadyFirmwareSha256 =
-  deviceProfiles.dn2.firmware.find((firmware) => firmware.version === '1.11')?.sha256 ?? '';
+  deviceProfiles.dn2?.firmware.find((firmware) => firmware.version === '1.11')?.sha256 ?? '';
 
 const allHashes = new Set<string>();
 for (const device of Object.values(deviceProfiles))

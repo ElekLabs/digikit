@@ -21,6 +21,9 @@ const iconPaths: Record<string, string> = {
   noteedit: 'M14 3.5 V18',
   plus: 'M12 5 V19 M5 12 H19',
   minus: 'M5 12 H19',
+  // sound: three dots, drawn as circles below; routing: the letters FX
+  sound: '',
+  routing: 'M3 20 V4 H10.5 M3 12 H9.5 M13.5 4 L21.5 20 M21.5 4 L13.5 20',
   headphones: 'M4.5 15 V12 C4.5 2 19.5 2 19.5 12 V15',
 };
 function Icon(props: { name: string }) {
@@ -54,6 +57,11 @@ function Icon(props: { name: string }) {
         <rect class="icon-fill" x="6" y="3" width="3" height="11" />
         <rect class="icon-fill" x="10.5" y="3" width="3" height="11" />
         <rect class="icon-fill" x="15" y="3" width="3" height="11" />
+      </Show>
+      <Show when={props.name === 'sound'}>
+        <circle class="icon-fill" cx="4.5" cy="12" r="2.6" />
+        <circle class="icon-fill" cx="12" cy="12" r="2.6" />
+        <circle class="icon-fill" cx="19.5" cy="12" r="2.6" />
       </Show>
       <Show when={props.name === 'headphones'}>
         <rect class="icon-fill" x="3" y="13.5" width="4.5" height="7.5" />
@@ -127,12 +135,43 @@ export default function PanelArt(props: PanelArtProps) {
             </For>
           )}
         </For>
+        <For each={panel().leds.extra ?? []}>
+          {(led, i) => {
+            const style = () => ledStyle(panel().leds.y.length * panel().leds.x.length + i());
+            return (
+              <circle
+                class={`led ${style() ? 'lit' : ''}`}
+                style={style()}
+                cx={led.x}
+                cy={led.y}
+                r={led.r ?? panel().leds.r}
+              />
+            );
+          }}
+        </For>
         <For each={panel().texts}>
           {(t) =>
             t.style === 'icon' ? (
               <g class="panel-icon" transform={`translate(${t.x - 1.7} ${t.y - 1.7}) scale(.142)`}>
                 <Icon name="headphones" />
               </g>
+            ) : t.style === 'updown' ? (
+              <>
+                <path
+                  class="silk-glyph"
+                  d={`M${t.x - t.text.length * 0.55 - 2.6} ${t.y - 1.6} l.9 -1 l.9 1 M${t.x - t.text.length * 0.55 - 1.7} ${t.y - 2.6} v3.2 M${t.x - t.text.length * 0.55 - 2.6} ${t.y - 0.4} l.9 1 l.9 -1`}
+                />
+                <text class="silk label" x={t.x} y={t.y}>
+                  {t.text}
+                </text>
+              </>
+            ) : t.style === 'split' ? (
+              <text class="silk" x={t.x} y={t.y}>
+                {t.text.split('/')[0]}
+                <tspan class="silk-accent">
+                  {t.text.includes('/') ? `/${t.text.slice(t.text.indexOf('/') + 1)}` : ''}
+                </tspan>
+              </text>
             ) : (
               <text class={`silk ${t.style}`} x={t.x} y={t.y}>
                 {t.text}
@@ -182,7 +221,11 @@ export default function PanelArt(props: PanelArtProps) {
                 {knob.label}
               </text>
               <Show when={knob.sub}>
-                <text class="knob-sub" x={knob.x} y={(knob.label_y ?? knob.y + knob.r + 3.1) + 2.4}>
+                <text
+                  class={`knob-sub ${knob.sub_style === 'accent' ? 'accent' : ''}`}
+                  x={knob.x}
+                  y={(knob.label_y ?? knob.y + knob.r + 3.1) + 2.4}
+                >
                   {knob.sub}
                 </text>
               </Show>

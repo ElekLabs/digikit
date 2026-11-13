@@ -160,6 +160,8 @@ export interface CoupledStats {
 /** Native desktop only: `runtime` patches the digikit runtime into a stock image (the controller's `firmware.load {runtime}`). */
 export interface LoadOptions {
   runtime?: boolean;
+  /** Native desktop only: false boots without the DSP (ColdFire only; a peer CPU is replaced by the mailbox responder). Default: the controller's choice. */
+  dsp?: boolean;
 }
 /** The controller's report of the runtime patch of the running image: `patched` with the set and whether the image came from the
  * cache, or `patched: false` for an image that already had a patch record. `null`: stock, no runtime requested. */
@@ -173,6 +175,8 @@ export interface RuntimePatch {
 }
 export interface FirmwareInfo {
   runtime: RuntimePatch | null;
+  /** The DSP choice of the running image (`status.dsp_enabled`) and the launcher's flag (`status.dsp_flag`), when it gave one. */
+  dsp?: { enabled: boolean; flag: boolean | null };
 }
 /** The controller's heartbeat (`status.heartbeat`): whether the guest's main loop has stopped, and the stall threshold in emulated ms. */
 export interface RuntimeHealth {
@@ -411,6 +415,14 @@ export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void): Emula
   };
 }
 
+/** The params of the controller's `firmware.load` for a load of the webview (`dsp` only when the caller chose). */
+const loadParams = (syx: string, options?: LoadOptions) => ({
+  syx,
+  replace: true,
+  runtime: !!options?.runtime,
+  ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+});
+
 export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): Promise<EmulatorRuntime | undefined> {
   let api: typeof import('@tauri-apps/api/core');
   try {
@@ -585,15 +597,21 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
         const syx = await api.invoke<string>('emu_stage_syx', bytes, {
           headers: { 'x-name': encodeURIComponent(name) },
         });
-        await call('firmware.load', { syx, replace: true, runtime: !!options?.runtime }, token);
+        await call('firmware.load', loadParams(syx, options), token);
       }),
     loadPath: (syx, options) =>
       newSession(async (token) => {
-        await call('firmware.load', { syx, replace: true, runtime: !!options?.runtime }, token);
+        await call('firmware.load', loadParams(syx, options), token);
       }),
     async firmwareInfo() {
-      const status = await call<{ firmware: { runtime?: RuntimePatch | null } | null }>('status');
-      return { runtime: status.firmware?.runtime ?? null };
+      const status = await call<{
+        firmware: { runtime?: RuntimePatch | null } | null;
+        dsp_enabled?: boolean;
+        dsp_flag?: boolean | null;
+      }>('status');
+      const info: FirmwareInfo = { runtime: status.firmware?.runtime ?? null };
+      if (status.dsp_enabled !== undefined) info.dsp = { enabled: status.dsp_enabled, flag: status.dsp_flag ?? null };
+      return info;
     },
     async health() {
       const status = await call<{ heartbeat?: RuntimeHealth }>('status');

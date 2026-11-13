@@ -19,6 +19,8 @@ use std::{
 /// Largest number of ColdFire instructions a host runs per `step_chunk`.
 pub const STEP_CHUNK: u32 = 250_000;
 
+#[cfg(feature = "cf-audio")]
+pub mod cf_audio;
 #[cfg(feature = "coupled-audio")]
 pub mod cold;
 #[cfg(feature = "coupled-audio")]
@@ -109,7 +111,18 @@ pub struct CoupledRuntime {
     /// Zero-DSP mode (`AudioOptions::zero`): restored from the ColdFire
     /// snapshot, the DSP side answers zeros, no audio session.
     zero: bool,
+    /// The audio session of a device whose peer CPU makes the sound (`[emulator.peer_audio]`).
+    #[cfg(feature = "cf-audio")]
+    cf_audio: Option<cf_audio::CfAudio>,
 }
+
+/// `DIGI_EMU_PEER_AUDIO=1`: a device whose MAIN mixes its peer's voices (`[emulator.peer_audio]`) plays them on the default output device
+/// (the desktop launcher sets it; the daemon and the tests do not).
+#[cfg(feature = "cf-audio")]
+fn peer_audio_playback() -> bool {
+    std::env::var_os("DIGI_EMU_PEER_AUDIO").is_some_and(|v| v != "0")
+}
+
 fn matches_automatic_profile(options: &AudioOptions, syx: &[u8]) -> bool {
     !options.automatic
         || options
@@ -148,8 +161,14 @@ impl CoupledRuntime {
             inputs: Vec::new(),
             input_base: 0,
             zero: false,
+            #[cfg(feature = "cf-audio")]
+            cf_audio: None,
         };
         runtime.attach(options)?;
+        #[cfg(feature = "cf-audio")]
+        if runtime.emulator.has_peer_audio() {
+            runtime.cf_audio = Some(cf_audio::CfAudio::new(peer_audio_playback()));
+        }
         runtime.input_base = runtime.emulator.icount();
         Ok(runtime)
     }
@@ -164,6 +183,8 @@ impl CoupledRuntime {
             inputs: Vec::new(),
             input_base: 0,
             zero: false,
+            #[cfg(feature = "cf-audio")]
+            cf_audio: None,
         };
         runtime.input_base = runtime.emulator.icount();
         Ok(runtime)
@@ -186,6 +207,8 @@ impl CoupledRuntime {
             inputs: Vec::new(),
             input_base: 0,
             zero: false,
+            #[cfg(feature = "cf-audio")]
+            cf_audio: None,
         };
         runtime.attach(Some(options))?;
         runtime.input_base = runtime.emulator.icount();
@@ -217,6 +240,10 @@ impl CoupledRuntime {
     }
     /// Whether a DSP audio session is attached.
     pub fn has_audio(&self) -> bool {
+        #[cfg(feature = "cf-audio")]
+        if self.cf_audio.is_some() {
+            return true;
+        }
         #[cfg(feature = "coupled-audio")]
         {
             self.audio.is_some()
@@ -224,6 +251,36 @@ impl CoupledRuntime {
         #[cfg(not(feature = "coupled-audio"))]
         {
             false
+        }
+    }
+
+    /// What the device's second processor is, as the board has it: "peer" (a peer CPU runs its program), "zero" (the DSP stand-in that
+    /// answers zeros), "sharc" (a SHARC DSP session), "responder" (the mailbox stand-in for a peer CPU) or "none".
+    pub fn companion(&self) -> &'static str {
+        if self.emulator.has_peer_cpu() {
+            "peer"
+        } else if self.zero {
+            "zero"
+        } else if self.has_audio() {
+            "sharc"
+        } else if self.emulator.has_peer_responder() {
+            "responder"
+        } else {
+            "none"
+        }
+    }
+
+    /// Whether the device has a peer CPU that runs a program (see `Emulator::has_peer_cpu`).
+    pub fn has_peer_cpu(&self) -> bool {
+        self.emulator.has_peer_cpu()
+    }
+
+    /// Replaces the peer CPU by the mailbox responder: no peer audio. Call on a fresh runtime.
+    pub fn use_peer_responder(&mut self) {
+        self.emulator.use_peer_responder();
+        #[cfg(feature = "cf-audio")]
+        {
+            self.cf_audio = None;
         }
     }
 
@@ -245,6 +302,10 @@ impl CoupledRuntime {
     pub fn audio_ahead(&self) -> bool {
         #[cfg(feature = "coupled-audio")]
         if let Some(audio) = &self.audio {
+            return audio.queue_ahead();
+        }
+        #[cfg(feature = "cf-audio")]
+        if let Some(audio) = &self.cf_audio {
             return audio.queue_ahead();
         }
         false
@@ -365,6 +426,10 @@ impl CoupledRuntime {
             .as_mut()
             .and_then(coupled::AudioSession::spike_step_start);
         let snapshot = self.emulator.step_chunk(budget);
+        #[cfg(feature = "cf-audio")]
+        if let Some(audio) = &mut self.cf_audio {
+            audio.feed(&self.emulator.take_pcm());
+        }
         #[cfg(feature = "coupled-audio")]
         if let Some(audio) = &mut self.audio {
             if let Some(start) = cf_step_start {
@@ -413,6 +478,10 @@ impl CoupledRuntime {
     /// Lightweight native-output observation for the periodic desktop UI poll.
     /// It deliberately does not synchronize the peer or serialize emulator diagnostics.
     pub fn audio_status(&mut self) -> Option<Value> {
+        #[cfg(feature = "cf-audio")]
+        if let Some(audio) = &self.cf_audio {
+            return Some(audio.report());
+        }
         #[cfg(feature = "coupled-audio")]
         if let Some(audio) = &mut self.audio {
             audio.poll();

@@ -20,13 +20,20 @@ from typing import Any
 from urllib.parse import quote
 
 from tools.coldfire import fw
+from tools.firmware import config, device
 
 Row = dict[str, str]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(HERE, "catalog_page.html")
-OTHER_IMAGE = {"dt2-1.17": "dn2-1.12", "dn2-1.12": "dt2-1.17"}
-DEVICE_NAMES = {"dt2": "Digitakt II", "dn2": "Digitone II"}
+# the acceptance image of the other device, when there are exactly two devices
+_ACCEPTANCE = sorted(config.DEVICE_SYX)
+OTHER_IMAGE = (
+    {a: b for a, b in zip(_ACCEPTANCE, reversed(_ACCEPTANCE), strict=True)}
+    if len(_ACCEPTANCE) == 2
+    else {}
+)
+DEVICE_NAMES = {d.short: d.name for d in device.load_all(config.DEVICES_DIR)}
 MAX_NEIGHBOURS = 8
 
 

@@ -1,6 +1,7 @@
 // The Transfer page's state (Modules mode and the mode), kept for the life of the window: closing the page and opening it again shows the last list at once
 // (it is refreshed behind it), and an install's verify results stay until the next restart.
 import { createSignal } from 'solid-js';
+import { isDeviceId, runtimeDeviceIds } from '../data/device-profiles';
 import { transferEnv } from './env';
 import type { LinkState } from './link-core';
 import { parseMode, type Mode, type Progress, type TransferView, type Verified } from './transfer-core';
@@ -61,8 +62,8 @@ export const [deviceInfo, setDeviceInfo] = createSignal<DeviceInfo>();
 export const [sampleLink, setSampleLink] = createSignal<LinkState>();
 
 /** The device whose library the list shows while no device answers (the site). */
-export const [browseDevice, setBrowseDevice] = remembered<'dt2' | 'dn2'>('digikit.transferBrowseDevice', (v) =>
-  v === 'dn2' ? 'dn2' : 'dt2',
+export const [browseDevice, setBrowseDevice] = remembered<string>('digikit.transferBrowseDevice', (v) =>
+  v !== null && isDeviceId(v) ? v : (runtimeDeviceIds[0] ?? ''),
 );
 /** The list shows the library alone, with no device behind it. */
 export const [browsing, setBrowsing] = createSignal(false);

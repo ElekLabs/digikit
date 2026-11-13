@@ -10,6 +10,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 from tools.emulator import digi_env  # noqa: E402
+from tools.firmware import device as device_data  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +23,13 @@ def pinned_rustc(monkeypatch):
 def fresh_gen(monkeypatch):
     """The fake gen dirs here carry no CORE_FINGERPRINT."""
     monkeypatch.setenv("DIGI_ALLOW_STALE_GEN", "1")
+
+
+@pytest.fixture(autouse=True)
+def known_device(monkeypatch):
+    """The fake firmware files of these tests belong to a device with a DSP; a test of another device sets its own."""
+    short = [d.short for d in device_data.load_all() if d.has_dsp()][-1]
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: short)
 
 
 @pytest.fixture(autouse=True)
@@ -797,6 +805,17 @@ def test_no_syx_argument_takes_the_same_way(monkeypatch, tmp_path):
     assert calls[-1][1:] == ["--device-folders"]
 
 
+def test_no_dsp_reaches_the_binary_and_is_not_taken_for_the_firmware(
+    monkeypatch, tmp_path
+):
+    scope, calls, built, syx = _card_run(
+        monkeypatch, tmp_path, next(iter(digi_env.READY_DIRS))
+    )
+    scope["main"](["--no-dsp", str(syx), "--cf-only"])
+    # The controller owns the choice (`--no-dsp` starts it off, `firmware.load {dsp}` changes it): the launcher only passes it on.
+    assert calls[-1][1:] == ["--no-dsp", str(syx), "--device-folders"]
+
+
 def test_no_sync_turns_the_exit_export_and_the_mirror_off(monkeypatch, tmp_path):
     scope, calls, built, syx = _card_run(monkeypatch, tmp_path, "dt2")
     scope["main"]([str(syx), "--cf-only", "--no-sync"])
@@ -934,3 +953,82 @@ def test_fallback_defaults_single_and_dual_core(monkeypatch, tmp_path):
     env = {}
     scope["set_fast_regions"](["--audio-profile-syx", str(unknown)], env)
     assert "SHARC_FAST_FALLBACK_REGIONS" not in env
+
+
+# --- a device without DSP, runtime or card ---------------------------------------------------------------------------------
+
+
+def _no_dsp_device():
+    """The short id of a device file that has no DSP, no `[digikit]` and no card the launcher can seed."""
+    return next(
+        d.short
+        for d in device_data.load_all()
+        if not d.has_dsp() and not d.runtime_target and not d.has_card()
+    )
+
+
+def test_a_device_without_dsp_runtime_or_card_launches_stock_and_cf_only(
+    monkeypatch, tmp_path, capsys
+):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, _no_dsp_device())
+    monkeypatch.setitem(
+        scope["main"].__globals__,
+        "default_audio_args",
+        lambda *a, **k: pytest.fail("a device without a DSP gets no audio inputs"),
+    )
+    scope["main"]([str(syx)])
+    # the ColdFire-only build: no coupled feature, no generated core (cf-audio only for a device with peer audio), no card options
+    assert "coupled-audio" not in calls[0] and "second-core" not in calls[0]
+    assert calls[-1][1:] == [str(syx), "--no-runtime"]
+    assert "not a digikit runtime target" in capsys.readouterr().err
+
+
+def test_a_device_without_a_card_refuses_a_card_folder(monkeypatch, tmp_path):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, _no_dsp_device())
+    with pytest.raises(SystemExit, match="no card"):
+        scope["main"]([str(syx), "--plus-drive", str(tmp_path)])
+    assert built == []
+
+
+def test_a_device_that_is_not_a_runtime_target_refuses_runtime(monkeypatch, tmp_path):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, _no_dsp_device())
+    with pytest.raises(SystemExit, match="not a digikit runtime target"):
+        scope["main"]([str(syx), "--runtime"])
+
+
+def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_path):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, None)
+    with pytest.raises(SystemExit, match="cannot tell which device"):
+        scope["main"]([str(syx)])
+    assert calls == []
+
+
+def _peer_audio_device():
+    return next(d.short for d in device_data.load_all() if "peer_audio" in d.emulator)
+
+
+def test_a_device_with_peer_audio_builds_cf_audio_in_its_own_target_dir(
+    monkeypatch, tmp_path
+):
+    """The device comes from the launcher's device data, so a patched image (resolved through its patch record by
+    device_for_syx) gets the same build as the stock one; the build does not share the plain nogen target dir."""
+    short = _peer_audio_device()
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: short)
+    scope = launcher()
+    patched = tmp_path / "patched.syx"
+    patched.write_bytes(b"not a stock image")
+    command = scope["cargo_command"]([str(patched)])
+    assert command[command.index("--features") + 1] == "cf-audio"
+    target = command[command.index("--target-dir") + 1]
+    assert target.endswith("/nogen/cf-audio")
+
+
+def test_a_device_without_peer_audio_keeps_the_plain_cf_build(monkeypatch, tmp_path):
+    other = next(
+        d.short for d in device_data.load_all() if "peer_audio" not in d.emulator
+    )
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: other)
+    scope = launcher()
+    command = scope["cargo_command"]([str(tmp_path / "x.syx")])
+    assert "--features" not in command
+    assert command[command.index("--target-dir") + 1].endswith("/nogen")

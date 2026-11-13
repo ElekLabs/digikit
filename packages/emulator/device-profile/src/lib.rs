@@ -16,27 +16,14 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 mod card;
+#[cfg(test)]
+mod device_header;
 pub use card::{
     CardLayout, PathFsLayout, Pool, PoolLayout, PoolSet, RegionLayout, RegionRole, StoreLayout,
 };
 
-/// The profiles embedded at compile time: file name under `devices/` and its text. A new device is one more line.
-const EMBEDDED: &[(&str, &str)] = &[
-    (
-        "digitakt-ii.toml",
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../devices/digitakt-ii.toml"
-        )),
-    ),
-    (
-        "digitone-ii.toml",
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../devices/digitone-ii.toml"
-        )),
-    ),
-];
+// The profiles embedded at compile time: file name under `devices/` and its text, one for every device file (`build.rs`).
+include!(concat!(env!("OUT_DIR"), "/device_files.rs"));
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registry {
@@ -56,6 +43,105 @@ pub struct DeviceProfile {
     pub keep_ram: Option<(u32, u32)>,
     /// Which backend takes samples and modules (`[storage]`), for the Transfer page.
     pub storage: Option<StorageProfile>,
+    /// `[capabilities]`: what the device can do. Checked against the tables by `patchkit` (`devdata.rs`), not here.
+    pub capabilities: Option<Capabilities>,
+    /// `[container]`: the section roles of the firmware container.
+    pub container: Option<ContainerProfile>,
+    /// `[acceptance]`: the device's test cell.
+    pub acceptance: Option<Acceptance>,
+    /// `[emulator] free_running_dtcn`: the DMA timer counter channels (0..=3) that the firmware reads as free-running counters at the
+    /// bus clock. Empty when absent.
+    pub free_running_dtcn: Vec<u8>,
+    /// `[emulator] board_revision`: the PCB revision byte that MAIN reads from FlexBus CS1 at address 0 (letter in bits 0-4, number - 1 in
+    /// bits 5-7). The emulator serves it as a constant; `None` leaves address 0 unmodelled.
+    pub board_revision: Option<u8>,
+    /// `[emulator] calibration_record`: the analog calibration record in the emulated SPI NOR, when the firmware checks one.
+    pub calibration_record: Option<CalibrationRecord>,
+    /// `[emulator] peer`: the model that stands in for the second CPU's mailbox, when the device has one.
+    pub peer: Option<PeerModel>,
+    /// `[emulator.peer_audio]`: where MAIN's own mixed output of the peer's voices is found, when the device has audio from its peer.
+    pub peer_audio: Option<PeerAudio>,
+    /// `[emulator] led_protocol`: how the panel UART carries LED state. `Indexed` when absent.
+    pub led_protocol: LedProtocol,
+}
+
+/// What the emulated NOR holds at the calibration record offset. `Synthetic` is a record built from the format alone: valid, tables zero.
+/// The emulator never serves a record from a real unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CalibrationRecord {
+    Synthetic,
+}
+
+/// The second CPU of a two-CPU device. `MailboxResponder` answers MAIN's mailbox handshake from the shared window and runs no peer code
+/// (data transport only; no FPGA logic). `Coldfire` runs the peer's program on a second ColdFire core (`machine::peer_cpu`); the mailbox
+/// model then only streams the image and stands in for the stage-1 loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PeerModel {
+    MailboxResponder,
+    Coldfire,
+}
+
+/// `[emulator.peer_audio]`: MAIN mixes the peer's voices itself and streams the result to the converter by eDMA. The channel's TCD names the
+/// ring (`SADDR`, `NBYTES` bytes a frame, `BITER` frames), its half-way interrupt is the audio frame (vector 120 + channel: INTC1), the second
+/// half is the one the engine tick fills, and each frame is `NBYTES / 4` words with the left and right sample in `slots`, right-aligned
+/// signed in `bits` bits (the scale is `2^-(bits - 1)`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PeerAudio {
+    pub dma_channel: u8,
+    pub slots: [u8; 2],
+    pub bits: u8,
+}
+
+/// The panel LED records on UART8. `Indexed`: `b9 idx val` and `b5 idx r g b`. `PackedStates`: `b5` and `b0..b3`
+/// palette records plus `0x20 + k` records of four LEDs at two bits each (finding 70 "Panel sweep").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LedProtocol {
+    #[default]
+    Indexed,
+    PackedStates,
+}
+
+impl DeviceProfile {
+    /// The free-running DMA timer counters as a channel mask (bit n = DTCNn).
+    pub fn free_running_dtcn_mask(&self) -> u8 {
+        self.free_running_dtcn.iter().fold(0, |m, c| m | 1 << c)
+    }
+}
+
+/// `[capabilities]`: closed sets of words (`dsp`: sharc | none; `seal`: hmac | none; `sample_pool`: stock | ddr | none; `card`:
+/// path-fs | slots | none | unknown).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Capabilities {
+    pub dsp: String,
+    pub seal: String,
+    pub sample_pool: String,
+    pub card: String,
+}
+
+/// `[container]`: section ids by role; roles a device lacks are absent. `readonly` sections are never changed.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainerProfile {
+    pub main: u32,
+    pub dsp: Option<u32>,
+    pub cf2: Option<u32>,
+    pub fpga: Option<u32>,
+    #[serde(default)]
+    pub readonly: Vec<u32>,
+}
+
+/// `[acceptance]`: the firmware version, ready-snapshot directory and sample-card need of the device's acceptance tests.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Acceptance {
+    pub firmware: String,
+    pub ready_dir: String,
+    pub sample_card: bool,
 }
 
 /// `[storage]`: the backend of each kind of content. `samples`: "stock-rpc" (the device's MidiRpc file commands) or "digikit" (the digikit store).
@@ -204,6 +290,24 @@ struct SourceDocument {
     card: Option<CardLayout>,
     digikit: Option<SourceDigikit>,
     storage: Option<StorageProfile>,
+    capabilities: Option<Capabilities>,
+    container: Option<ContainerProfile>,
+    acceptance: Option<Acceptance>,
+    emulator: Option<SourceEmulator>,
+}
+
+/// `[emulator]`: board facts that only the emulator uses.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceEmulator {
+    #[serde(default)]
+    free_running_dtcn: Vec<u8>,
+    board_revision: Option<u8>,
+    calibration_record: Option<CalibrationRecord>,
+    peer: Option<PeerModel>,
+    peer_audio: Option<PeerAudio>,
+    #[serde(default)]
+    led_protocol: LedProtocol,
 }
 
 #[derive(Debug, Deserialize)]
@@ -326,6 +430,38 @@ impl Registry {
                     detail: format!("[card] {detail}"),
                 })?;
             }
+            let emulator = parsed.emulator.unwrap_or(SourceEmulator {
+                free_running_dtcn: Vec::new(),
+                board_revision: None,
+                calibration_record: None,
+                peer: None,
+                peer_audio: None,
+                led_protocol: LedProtocol::default(),
+            });
+            if emulator.peer_audio.is_some() && emulator.peer != Some(PeerModel::Coldfire) {
+                return invalid(source, "[emulator] peer_audio needs peer = \"coldfire\"");
+            }
+            if let Some(a) = &emulator.peer_audio
+                && (!(32..64).contains(&a.dma_channel)
+                    || a.slots.iter().any(|&s| s >= 16)
+                    || !(8..=32).contains(&a.bits))
+            {
+                return invalid(
+                    source,
+                    "[emulator.peer_audio] dma_channel 32..=63, slots below 16, bits 8..=32",
+                );
+            }
+            let free_running_dtcn = emulator.free_running_dtcn;
+            if free_running_dtcn.iter().any(|&c| c > 3) || {
+                let mut seen = free_running_dtcn.clone();
+                seen.sort_unstable();
+                seen.windows(2).any(|w| w[0] == w[1])
+            } {
+                return invalid(
+                    source,
+                    "[emulator] free_running_dtcn lists distinct channels 0..=3",
+                );
+            }
             devices.push(DeviceProfile {
                 name: parsed.device.name,
                 short: parsed.device.short,
@@ -336,6 +472,15 @@ impl Registry {
                     .digikit
                     .and_then(|k| Some((k.keep_base?, k.keep_bytes?))),
                 storage: parsed.storage,
+                capabilities: parsed.capabilities,
+                container: parsed.container,
+                acceptance: parsed.acceptance,
+                free_running_dtcn,
+                board_revision: emulator.board_revision,
+                calibration_record: emulator.calibration_record,
+                peer: emulator.peer,
+                peer_audio: emulator.peer_audio,
+                led_protocol: emulator.led_protocol,
             });
         }
         Ok(Self { devices })
@@ -610,9 +755,56 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../devices/digitone-ii.toml"
     ));
+    const ST: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../devices/syntakt.toml"
+    ));
 
     #[test]
-    fn embedded_registry_has_the_four_canonical_releases() {
+    fn embedded_devices_carry_capabilities_container_and_acceptance() {
+        let registry = Registry::embedded().unwrap();
+        for device in registry.devices() {
+            let caps = device.capabilities.as_ref().unwrap();
+            assert_eq!(device.container.as_ref().unwrap().main, 3);
+            assert_eq!(
+                caps.dsp == "sharc",
+                device.container.as_ref().unwrap().dsp.is_some(),
+                "{}",
+                device.short
+            );
+            // An identity-level device has no test cell yet.
+            let Some(acceptance) = device.acceptance.as_ref() else {
+                continue;
+            };
+            assert!(
+                device
+                    .firmwares
+                    .iter()
+                    .any(|f| f.version == acceptance.firmware),
+                "{} acceptance firmware is a [[firmware]] version",
+                device.short
+            );
+        }
+        let syntakt = "[device]\nname = \"S\"\nshort = \"st\"\n[capabilities]\ndsp = \"none\"\nseal = \"none\"\nsample_pool = \"none\"\ncard = \"unknown\"\n[container]\nmain = 3\ncf2 = 7\nfpga = 1\nreadonly = [1, 2, 4, 6, 7, 8]\n";
+        let parsed = Registry::parse(&[("s.toml", syntakt)]).unwrap();
+        let container = parsed.devices()[0].container.as_ref().unwrap();
+        assert_eq!((container.cf2, container.fpga), (Some(7), Some(1)));
+        let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[capabilities]\ndsp = \"sharc\"\nseal = \"hmac\"\nsample_pool = \"none\"\ncard = \"none\"\nextra = 1\n";
+        assert!(Registry::parse(&[("x.toml", bad)]).is_err());
+        // peer_audio belongs to a coldfire peer and names a channel of the second eDMA half.
+        let audio = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\n[emulator.peer_audio]\ndma_channel = 54\nslots = [5, 3]\nbits = 24\n";
+        assert!(Registry::parse(&[("x.toml", audio)]).is_err());
+        let ok = format!(
+            "{}\n",
+            audio.replace("[emulator]\n", "[emulator]\npeer = \"coldfire\"\n")
+        );
+        assert!(Registry::parse(&[("x.toml", &ok)]).is_ok());
+        let low = ok.replace("54", "12");
+        assert!(Registry::parse(&[("x.toml", &low)]).is_err());
+    }
+
+    #[test]
+    fn embedded_registry_has_the_canonical_releases() {
         let registry = Registry::embedded().unwrap();
         let releases: Vec<_> = registry
             .devices()
@@ -632,9 +824,82 @@ mod tests {
                 ("dt2", "1.17"),
                 ("dn2", "1.10E"),
                 ("dn2", "1.11"),
-                ("dn2", "1.12")
+                ("dn2", "1.12"),
+                ("st", "1.42")
             ]
         );
+    }
+
+    #[test]
+    fn emulator_section_carries_the_board_models() {
+        let registry = Registry::embedded().unwrap();
+        // Each device carries what its own file's [emulator] table says, and nothing for a key its file leaves out.
+        let mut seen = 0;
+        for &(file, text) in EMBEDDED {
+            let doc: toml::Table = toml::from_str(text).unwrap();
+            let short = doc["device"]["short"].as_str().unwrap();
+            let d = registry
+                .devices()
+                .iter()
+                .find(|d| d.short == short)
+                .unwrap_or_else(|| panic!("{file}: no device {short}"));
+            let emu = doc.get("emulator").and_then(|e| e.as_table());
+            let key = |k: &str| emu.and_then(|e| e.get(k));
+            assert_eq!(
+                d.board_revision.is_some(),
+                key("board_revision").is_some(),
+                "{file}"
+            );
+            assert_eq!(
+                d.calibration_record.is_some(),
+                key("calibration_record").is_some(),
+                "{file}"
+            );
+            assert_eq!(
+                d.calibration_record == Some(CalibrationRecord::Synthetic),
+                key("calibration_record").and_then(|v| v.as_str()) == Some("synthetic"),
+                "{file}"
+            );
+            assert_eq!(
+                d.peer == Some(PeerModel::Coldfire),
+                key("peer").and_then(|v| v.as_str()) == Some("coldfire"),
+                "{file}"
+            );
+            assert_eq!(
+                d.peer_audio.is_some(),
+                key("peer_audio").is_some(),
+                "{file}"
+            );
+            if let Some(a) = key("peer_audio").and_then(|v| v.as_table()) {
+                let slots = a["slots"].as_array().unwrap();
+                assert_eq!(
+                    d.peer_audio,
+                    Some(PeerAudio {
+                        dma_channel: a["dma_channel"].as_integer().unwrap() as u8,
+                        slots: [
+                            slots[0].as_integer().unwrap() as u8,
+                            slots[1].as_integer().unwrap() as u8
+                        ],
+                        bits: a["bits"].as_integer().unwrap() as u8,
+                    }),
+                    "{file}"
+                );
+            }
+            let packed = key("led_protocol").and_then(|v| v.as_str()) == Some("packed-states");
+            assert_eq!(
+                d.led_protocol,
+                if packed {
+                    LedProtocol::PackedStates
+                } else {
+                    LedProtocol::Indexed
+                },
+                "{file}"
+            );
+            seen += 1;
+        }
+        assert_eq!(seen, registry.devices().len());
+        let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\npeer = \"fpga\"\n";
+        assert!(Registry::parse(&[("x.toml", bad)]).is_err());
     }
 
     #[test]
@@ -672,6 +937,7 @@ mod tests {
         );
         std::fs::write(dir.join("digitakt-ii.toml"), extra).unwrap();
         std::fs::write(dir.join("digitone-ii.toml"), DN2).unwrap();
+        std::fs::write(dir.join("syntakt.toml"), ST).unwrap();
         // SAFETY: no other test in this crate reads the variable.
         unsafe { std::env::set_var("DIGI_DEVICES_DIR", &dir) };
         let registry = Registry::load().unwrap();
@@ -715,7 +981,7 @@ mod tests {
             .flat_map(|device| device.firmwares.iter())
             .filter(|firmware| firmware.build_stamp.is_some())
             .count();
-        assert_eq!(stamps, 6, "every canonical release has its stamp");
+        assert_eq!(stamps, 7, "every canonical release has its stamp");
     }
 
     #[test]

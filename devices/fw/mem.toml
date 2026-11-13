@@ -6,7 +6,9 @@ name = "cf.mem.fn.free"
 was = ["dkrt.fw.free"]
 cpu = "cf"
 sig = "void (u8 *p)"
-rule = { kind = "cf_func", hash = "b591a5e50d0db4780b36812232691efa", offset = 0x0, len = 2 }
+rule.dt2 = { kind = "cf_func", hash = "b591a5e50d0db4780b36812232691efa", offset = 0x0, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "b591a5e50d0db4780b36812232691efa", offset = 0x0, len = 2 }
+rule.st = { kind = "cf_func", hash = "956e9dcb7c20b391361c692826fbc736", offset = 0x0, len = 2, mark = "D" }
 mark = "D"
 users = ["core/runtime"]
 doc = "The firmware's free, `void f(u8 *p)`, paired with operator new (32 MiB buddy allocator). core/runtime registers it as fw_free."

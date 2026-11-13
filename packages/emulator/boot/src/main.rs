@@ -291,15 +291,7 @@ fn run() -> Result<(), String> {
     let readiness_contract = firmware_profile
         .readiness_contract
         .ok_or("firmware has no readiness contract")?;
-    let task_create = if main
-        .bytes
-        .get((0x4000_12c8 - MAIN_LOAD) as usize..)
-        .is_some_and(|b| b.starts_with(&[0x20, 0x2f, 0x00, 0x0c, 0x72, 0xfc, 0xc2, 0xaf]))
-    {
-        0x4000_12c8
-    } else {
-        return Err("task_create prefix verification failed".into());
-    };
+    let task_create = resolve_task_create(&main.bytes)?;
     let mainloop = unique_signature_data(&main.bytes, MAINLOOP_SIG, Some(15))
         .ok_or("mainloop signature ambiguous")?;
     let panel_diff = unique(
@@ -388,12 +380,8 @@ fn run() -> Result<(), String> {
         &uart_wait_sig,
         &data_mask(&uart_wait_sig, None),
     )?;
-    let uart_init = 0x4000_243e;
-    let uart_prefix = hex("2f02740f41f9ec09404b1210202f000843f9ec07000042b9");
+    let uart_init = resolve_uart_init(&main.bytes)?;
     let uart_at = (uart_init - MAIN_LOAD) as usize;
-    if main.bytes.get(uart_at..uart_at + uart_prefix.len()) != Some(uart_prefix.as_slice()) {
-        return Err("uart8_init prefix verification failed".into());
-    }
     if main
         .bytes
         .get(uart_at + 0x19a..)

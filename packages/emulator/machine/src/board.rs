@@ -13,6 +13,7 @@ use periph::{
     esdhc::{self, DmaCompletion, Esdhc, RegisterPolicy},
     gpio::{GPIO_BASE, PPDSDR_C, SdGate},
     intc::BASES as INTC_BASES,
+    peer::{self, MailboxPeer},
     pit::BASES as PIT_BASES,
     regfile::SLOT_SIZE,
     spilink::SerqEffect,
@@ -41,6 +42,10 @@ pub const MIDI_UDR: u32 = 0xec07_400c;
 /// DMA timer 0's counter (DTCN0, MCF5441XRM chapter 39). Stock DN2 1.11 reads it as a free-running
 /// clock, and nothing in the main OS starts the timer: code before the main OS does.
 pub const DTCN0: u32 = 0xfc07_000c;
+/// Address of DTCN of DMA timer `channel` (0-3): the channels are 16 KiB apart.
+const fn dtcn_addr(channel: u32) -> u32 {
+    DTCN0 + channel * 0x4000
+}
 /// The bus clock DTCN0 counts in the [`Board::enable_dtcn0`] model (`periph::pit::F_BUS`).
 const DTCN0_HZ: u128 = 132_000_000;
 /// eDMA channel that drains the DN2 MIDI DIN transmit ring into [`MIDI_UDR`] (finding 25).
@@ -160,6 +165,14 @@ pub enum UsbPhyEvent {
     RunStop(bool),
 }
 
+/// eDMA error status (RM 19.4.2) and error latches, as offsets from `EDMA_BASE`; `EDMA_ES_*` are its bits.
+const EDMA_ES: usize = 0x04;
+const EDMA_ERRH: usize = 0x28;
+const EDMA_ERRL: usize = 0x2C;
+const EDMA_ES_VLD: u32 = 1 << 31;
+const EDMA_ES_SAE: u32 = 1 << 7;
+const EDMA_ES_DAE: u32 = 1 << 4;
+
 /// Caller-mapped 1 MiB RAM pages.  The tagged 4096-entry table is indexed by
 /// address bits 31:20, so ordinary 1/2/4-byte RAM accesses take one table
 /// lookup.  MMIO is always dispatched before this table.
@@ -217,8 +230,8 @@ pub struct Board {
     /// Bytes the guest stored to the MIDI DIN UART (UART9) data register, by itself or through
     /// eDMA channel 37. Host observation only: not part of a checkpoint.
     midi_tx: Vec<u8>,
-    /// `enable_dtcn0`: DTCN0 reads the bus clock since reset, from `clock`.
-    dtcn0: bool,
+    /// `enable_dtcn_channels`: bit n set means DTCNn reads the bus clock since reset, from `clock`.
+    dtcn_mask: u8,
     /// The guest's instruction count, set by the host before each instruction.
     clock: u64,
     /// eDMA channel 37 (MIDI DIN transmit): a major loop runs whole at its SERQ write.
@@ -229,6 +242,12 @@ pub struct Board {
     /// DSPI1 RX completion (eDMA channel 14) waiting for the host to raise
     /// its interrupt. Not part of the snapshot: `snap_save` refuses while set.
     dspi1_irq: bool,
+    /// The second CPU's mailbox (`enable_peer`): eDMA channel 29 is its image stream, a GPIO port A pin its doorbell. `None` on a
+    /// board without a peer.
+    peer: Option<MailboxPeer>,
+    /// Peer CPU board: a TCD started with scatter/gather (CSR START and E_SG) reloads the next descriptor at once (`scatter_gather_reload`).
+    /// Off on every other board.
+    sg_reload: bool,
 }
 impl Board {
     /// Enable the recovered SSI/eDMA clock only for bounded diagnostics.
@@ -467,12 +486,239 @@ impl Board {
             sd_gate: None,
             uart_tx: vec![],
             midi_tx: vec![],
-            dtcn0: false,
+            dtcn_mask: 0,
             clock: 0,
             midi_tx37: edma::TxChannel::new(MIDI_TX_CHAN, u16::from(MIDI_TX_VECTOR)),
             midi_tx37_started: 0,
             dspi1_irq: false,
+            peer: None,
+            sg_reload: false,
         }
+    }
+
+    /// Gives the board a mailbox peer (`[emulator] peer`): maps the FlexBus window it shares with MAIN (plain RAM, 1 MiB page; the window is the
+    /// first `peer::WINDOW_BYTES`), takes over eDMA channel 29 as the peer's image stream and watches the GPIO doorbell.
+    pub fn enable_peer(&mut self, cpu_mode: bool) -> Result<(), BusError> {
+        self.map_zeroed_ram_page(peer::WINDOW_BASE)?;
+        let mut peer = MailboxPeer::new();
+        peer.cpu_mode = cpu_mode;
+        self.sg_reload = cpu_mode;
+        self.peer = Some(peer);
+        Ok(())
+    }
+
+    /// Switches the peer window to the mailbox responder (no peer program runs): hello, 0xA5A5, IRQ4 and the image stream answer
+    /// MAIN's handshake. Call before guest execution, on a board that `enable_peer(true)` set up.
+    pub fn use_peer_responder(&mut self) {
+        if let Some(peer) = self.peer.as_mut() {
+            peer.cpu_mode = false;
+        }
+        self.sg_reload = false;
+    }
+
+    pub fn peer(&self) -> Option<&MailboxPeer> {
+        self.peer.as_ref()
+    }
+
+    pub fn peer_mut(&mut self) -> Option<&mut MailboxPeer> {
+        self.peer.as_mut()
+    }
+
+    /// Stores `bytes` at `offset` in the peer window (host side; no MMIO, no access record).
+    pub fn peer_window_store(&mut self, offset: u32, bytes: &[u8]) {
+        for (i, byte) in bytes.iter().enumerate() {
+            let wrote = self.ram_write(peer::WINDOW_BASE + offset + i as u32, 1, u32::from(*byte));
+            debug_assert!(wrote, "peer window page is mapped by enable_peer");
+        }
+    }
+
+    /// A channel started by software (SSRT) runs its whole transfer at once: `nbytes` per minor loop, `citer` loops (nine bits when channel
+    /// linking is enabled, where every minor loop requests the next), then the major-loop writeback (SADDR and DADDR advanced plus SLAST
+    /// and DLASTSGA, CITER reloaded from BITER, DONE set, START cleared). Peer CPU board only: MAIN copies the peer's voices out of the
+    /// window this way every frame (finding 128). Guest memory that is not mapped ends the transfer with an eDMA error (ES, ERRH/ERRL) and no DONE.
+    fn edma_software_start(&mut self, chan: usize) {
+        let base = edma::tcd_offset(chan);
+        let r = &self.dma.edma_regs;
+        let (mut src, mut dst) = (r.u32_at(base + edma::SADDR), r.u32_at(base + edma::DADDR));
+        let (attr, nbytes) = (r.u16_at(base + edma::ATTR), r.u32_at(base + edma::NBYTES));
+        let (soff, doff) = (
+            r.u16_at(base + edma::SOFF) as i16,
+            r.u16_at(base + edma::DOFF) as i16,
+        );
+        let (slast, dlast) = (
+            r.u32_at(base + edma::SLAST) as i32,
+            r.u32_at(base + edma::DLAST) as i32,
+        );
+        let raw = r.u16_at(base + edma::CITER);
+        let biter = r.u16_at(base + edma::BITER);
+        let loops = if raw & 0x8000 != 0 {
+            raw & 0x1ff
+        } else {
+            raw & 0x7fff
+        };
+        // Transfer sizes are coded 0..5 for 1, 2, 4, 8, 16 and 32 bytes.
+        let (ssize, dsize) = (1u32 << ((attr >> 8) & 7).min(5), 1u32 << (attr & 7).min(5));
+        if nbytes == 0 || loops == 0 || ssize != dsize || !nbytes.is_multiple_of(ssize) {
+            return;
+        }
+        // The eDMA stops at the first access that fails and reports it in ES (source or destination address error) and ERR.
+        let mut error = 0u32;
+        'run: for _ in 0..loops {
+            for _ in 0..nbytes / ssize {
+                for k in 0..ssize {
+                    let Some(v) = self.ram_read(src.wrapping_add(k), 1) else {
+                        error = EDMA_ES_SAE;
+                        break 'run;
+                    };
+                    if !self.ram_write(dst.wrapping_add(k), 1, v) {
+                        error = EDMA_ES_DAE;
+                        break 'run;
+                    }
+                }
+                src = src.wrapping_add_signed(i32::from(soff));
+                dst = dst.wrapping_add_signed(i32::from(doff));
+            }
+        }
+        if error != 0 {
+            let r = &mut self.dma.edma_regs;
+            r.set_u32_at(EDMA_ES, EDMA_ES_VLD | (chan as u32) << 8 | error);
+            let (reg, bit) = if chan >= 32 {
+                (EDMA_ERRH, chan - 32)
+            } else {
+                (EDMA_ERRL, chan)
+            };
+            let old = r.u32_at(reg);
+            r.set_u32_at(reg, old | 1 << bit);
+            let csr = r.u16_at(base + edma::CSR);
+            r.set_u16_at(base + edma::CSR, csr & !edma::CSR_START);
+            return;
+        }
+        let r = &mut self.dma.edma_regs;
+        r.set_u32_at(base + edma::SADDR, src.wrapping_add_signed(slast));
+        r.set_u32_at(base + edma::DADDR, dst.wrapping_add_signed(dlast));
+        r.set_u16_at(base + edma::CITER, biter);
+        let csr = r.u16_at(base + edma::CSR);
+        r.set_u16_at(base + edma::CSR, (csr & !edma::CSR_START) | edma::CSR_DONE);
+    }
+
+    /// A channel started with E_SG loads the descriptor at its DLASTSGA into its TCD, as the eDMA does when the major loop ends, and the
+    /// guest's wait for E_SG to clear ends. The loop's own data movement is not modelled (MAIN's delay-ring channel on the peer CPU board:
+    /// the ring only feeds effects). The loaded descriptor keeps its CSR except START.
+    fn scatter_gather_reload(&mut self, chan: usize) {
+        let base = edma::tcd_offset(chan);
+        // A chain of descriptors runs to the first one without E_SG (bounded).
+        for _ in 0..32 {
+            let next = self.dma.edma_regs.u32_at(base + edma::DLAST);
+            let mut raw = [0u8; 32];
+            for (i, byte) in raw.iter_mut().enumerate() {
+                let Some(v) = self.ram_read(next.wrapping_add(i as u32), 1) else {
+                    return;
+                };
+                *byte = v as u8;
+            }
+            for (i, byte) in raw.iter().enumerate() {
+                self.dma.edma_regs.set_u8_at(base + i, *byte);
+            }
+            let csr = self.dma.edma_regs.u16_at(base + edma::CSR) & !edma::CSR_START;
+            self.dma.edma_regs.set_u16_at(base + edma::CSR, csr);
+            if csr & edma::CSR_E_SG == 0 {
+                return;
+            }
+        }
+    }
+
+    /// One 32-bit word of guest RAM (host side; no MMIO, no access record).
+    pub fn peer_ram_word(&self, addr: u32) -> Option<u32> {
+        self.ram_read(addr, 4)
+    }
+
+    /// Reads the peer window at `offset` (host side; no MMIO, no access record).
+    pub fn peer_window_load(&self, offset: u32, size: u8) -> Option<u32> {
+        self.ram_read(peer::WINDOW_BASE + offset, size)
+    }
+
+    /// eDMA channel 29 armed with a peer on the board: the peer clocks the bytes out of the DSPI2 slave. Runs major loops now, feeding the
+    /// peer's frame parser, until a loop with DREQ is done or (free-running loop) the second image is complete. A major loop with INT_MAJOR
+    /// tells the peer to raise the channel interrupt. At most `LOOPS` major loops per arm.
+    fn peer_stream_run(&mut self) -> Result<(), BoardWriteError> {
+        const LOOPS: usize = 64;
+        let now = self.clock;
+        if let Some(peer) = self.peer.as_mut() {
+            peer.begin_transfer();
+        }
+        for _ in 0..LOOPS {
+            let (mask, tcd) = {
+                let view = edma::TcdView::new(&mut self.dma.edma_regs, peer::STREAM_CHAN);
+                (view.smod_mask(), view.snapshot())
+            };
+            if tcd.citer == 0 {
+                break;
+            }
+            let elem = 1usize << (tcd.attr & 7);
+            let nbytes = tcd.nbytes as usize;
+            if nbytes == 0 || !nbytes.is_multiple_of(elem) {
+                return Err(BoardWriteError::DspiDma {
+                    address: tcd.saddr,
+                    bytes: nbytes,
+                });
+            }
+            let free_running = tcd.csr & edma::CSR_D_REQ == 0;
+            let base = tcd.saddr & !mask;
+            let mut addr = tcd.saddr;
+            let mut citer = tcd.citer;
+            let mut booted = false;
+            let mut minor = Vec::with_capacity(nbytes);
+            while citer > 0 {
+                minor.clear();
+                for _ in 0..nbytes / elem {
+                    for offset in 0..elem {
+                        let at = addr.wrapping_add(offset as u32);
+                        let byte = if Self::owned_mmio(at) {
+                            None
+                        } else {
+                            self.ram_read(at, 1)
+                        };
+                        minor.push(byte.ok_or(BoardWriteError::DspiDma {
+                            address: at,
+                            bytes: nbytes,
+                        })? as u8);
+                    }
+                    addr = addr.wrapping_add_signed(i32::from(tcd.soff));
+                    if mask != 0 {
+                        addr = base | (addr & mask);
+                    }
+                }
+                citer -= 1;
+                booted = self
+                    .peer
+                    .as_mut()
+                    .is_some_and(|peer| peer.consume(&minor, now));
+                if free_running && booted {
+                    break;
+                }
+            }
+            let view_base = edma::tcd_offset(peer::STREAM_CHAN);
+            let regs = &mut self.dma.edma_regs;
+            if citer == 0 {
+                addr = addr.wrapping_add_signed(tcd.slast);
+                if mask != 0 {
+                    addr = base | (addr & mask);
+                }
+                regs.set_u32_at(view_base + edma::SADDR, addr);
+                regs.set_u16_at(view_base + edma::CITER, tcd.biter);
+                regs.set_u16_at(view_base + edma::CSR, tcd.csr | edma::CSR_DONE);
+                if let Some(peer) = self.peer.as_mut() {
+                    peer.end_major_loop(now, tcd.csr & edma::CSR_INT_MAJOR != 0);
+                }
+            } else {
+                regs.set_u32_at(view_base + edma::SADDR, addr);
+                regs.set_u16_at(view_base + edma::CITER, citer);
+            }
+            if !free_running || booted {
+                break;
+            }
+        }
+        Ok(())
     }
 
     /// Opt-in machine snapshot: RAM pages (zero 4 KiB blocks elided), DMA/DSPI/
@@ -524,6 +770,10 @@ impl Board {
             gate.snap_save(w);
         }
         w.bytes(&self.uart_tx);
+        if let Some(peer) = &self.peer {
+            w.tag("PEE2");
+            peer.snap_save(w);
+        }
         Ok(())
     }
 
@@ -571,6 +821,14 @@ impl Board {
             _ => return Err("snapshot SD gate presence differs".into()),
         }
         self.uart_tx = r.bytes()?.to_vec();
+        if let Some(peer) = self.peer.as_mut() {
+            // "PEER" is the older section without the frame deadline.
+            let with_frame = r.tag_if("PEE2");
+            if !with_frame {
+                r.tag("PEER")?;
+            }
+            peer.snap_load(r, with_frame)?;
+        }
         Ok(())
     }
 
@@ -980,11 +1238,18 @@ impl Board {
     pub fn take_midi_tx(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.midi_tx)
     }
-    /// Model DTCN0 as a counter of the bus clock since reset, read from the instruction count the
-    /// host sets with [`Board::set_clock`] (one bus tick per instruction at 132 MHz). This assumes
-    /// the configuration that code before the main OS sets up. Off by default.
+    /// Model DTCN0 as a counter of the bus clock since reset (see [`Board::enable_dtcn_channels`]).
     pub fn enable_dtcn0(&mut self) {
-        self.dtcn0 = true;
+        self.enable_dtcn_channels(0b0001);
+    }
+
+    /// Model DTCNn of every DMA timer channel n whose bit is set in `mask` (bits 0-3) as a counter
+    /// of the bus clock since reset, read from the instruction count the host sets with
+    /// [`Board::set_clock`] (one bus tick per instruction at 132 MHz). All channels share one
+    /// clock rule. This assumes the configuration that code before the main OS sets up. Off by
+    /// default.
+    pub fn enable_dtcn_channels(&mut self, mask: u8) {
+        self.dtcn_mask |= mask & 0b1111;
     }
 
     /// The guest's instruction count: the host sets it before each instruction.
@@ -993,7 +1258,7 @@ impl Board {
         self.clock = icount;
     }
 
-    fn dtcn0_value(&self) -> u32 {
+    fn dtcn_value(&self) -> u32 {
         let ips = u128::from(periph::clock::cf_ips().max(1));
         (u128::from(self.clock) * DTCN0_HZ / ips) as u32
     }
@@ -1698,8 +1963,11 @@ impl Board {
     }
 
     fn read_inner_unforced(&mut self, addr: u32, size: u8) -> Result<u32, BusError> {
-        if self.dtcn0 && addr == DTCN0 && size == 4 {
-            return Ok(self.dtcn0_value());
+        if self.dtcn_mask != 0
+            && size == 4
+            && (0..4).any(|n| self.dtcn_mask & (1 << n) != 0 && addr == dtcn_addr(n))
+        {
+            return Ok(self.dtcn_value());
         }
         if Time::owns(addr) {
             return self
@@ -1819,6 +2087,15 @@ impl Board {
             {
                 return Ok(());
             }
+            // The peer's image stream: the DSPI2 slave channel is not the master link of the SHARC path.
+            if self.peer.is_some()
+                && addr == edma::SERQ
+                && size == 1
+                && value as u8 & 0xc0 == 0
+                && (value as u8 & 0x3f) as usize == peer::STREAM_CHAN
+            {
+                return self.peer_stream_run();
+            }
             let tx35_citer =
                 edma::TcdView::new(&mut self.dma.edma_regs, self.dma.tx35.chan).citer();
             let is_tx35_serq = addr == edma::SERQ
@@ -1910,6 +2187,18 @@ impl Board {
                 }
             }
             self.update_dma59_request(addr, size, value);
+            if self.sg_reload
+                && size == 2
+                && (edma::TCD_BASE..edma::TCD_BASE + 64 * 0x20).contains(&addr)
+                && (addr - edma::TCD_BASE) % 0x20 == edma::CSR as u32
+                && value as u16 & (edma::CSR_START | edma::CSR_E_SG)
+                    == edma::CSR_START | edma::CSR_E_SG
+            {
+                self.scatter_gather_reload(((addr - edma::TCD_BASE) / 0x20) as usize);
+            }
+            if self.sg_reload && addr == edma::SSRT && size == 1 && value as u8 & 0xc0 == 0 {
+                self.edma_software_start((value as u8 & 0x3f) as usize);
+            }
             if addr == edma::SERQ
                 && size == 1
                 && value as u8 & 0xC0 == 0
@@ -1943,6 +2232,13 @@ impl Board {
                 .ok_or(BoardWriteError::Bus(Self::bus_error(addr, true)));
             if wrote.is_ok() && addr == RCM_RCR && size == 1 && value & 0x80 != 0 {
                 self.soft_reset = true;
+            }
+            if wrote.is_ok()
+                && size == 1
+                && matches!(addr, peer::PPDSDR_A | peer::PCLRR_A)
+                && let Some(peer) = self.peer.as_mut()
+            {
+                peer.gpio_write(addr, value as u8, self.clock);
             }
             if wrote.is_ok()
                 && addr >= GPIO_BASE
@@ -2151,6 +2447,41 @@ impl Bus for Board {
 mod tests {
     use super::*;
     use coldfire::Bus;
+
+    /// A peer CPU board with one software-started eDMA channel: 8 bytes from RAM + 0x200 to `dst`.
+    fn edma_channel_5(dst: u32) -> Board {
+        let mut b = board(CompletionPolicy::Oracle);
+        b.enable_peer(true).unwrap();
+        b.write32(RAM + 0x200, 0x0102_0304).unwrap();
+        let t = edma::TCD_BASE + 5 * 0x20;
+        b.write32(t, RAM + 0x200).unwrap();
+        b.write16(t + 4, 0x0202).unwrap();
+        b.write16(t + 6, 4).unwrap();
+        b.write32(t + 8, 4).unwrap();
+        b.write32(t + 0x10, dst).unwrap();
+        b.write16(t + 0x14, 1).unwrap();
+        b.write16(t + 0x16, 4).unwrap();
+        b.write16(t + 0x1c, 1).unwrap();
+        b.write8(edma::SSRT, 5).unwrap();
+        b
+    }
+
+    #[test]
+    fn a_software_started_transfer_to_unmapped_memory_faults_and_is_not_done() {
+        let t = edma::TCD_BASE + 5 * 0x20;
+        let mut ok = edma_channel_5(RAM + 0x300);
+        assert_eq!(ok.read32(RAM + 0x300).unwrap(), 0x0102_0304);
+        assert_ne!(ok.read16(t + 0x1e).unwrap() & edma::CSR_DONE, 0);
+        assert_eq!(ok.read32(edma::EDMA_BASE + 4).unwrap(), 0, "no error");
+        let mut bad = edma_channel_5(0x7000_0000);
+        assert_eq!(bad.read16(t + 0x1e).unwrap() & edma::CSR_DONE, 0);
+        let es = bad.read32(edma::EDMA_BASE + 4).unwrap();
+        assert_eq!(es, EDMA_ES_VLD | 5 << 8 | EDMA_ES_DAE);
+        assert_eq!(
+            bad.read32(edma::EDMA_BASE + EDMA_ERRL as u32).unwrap(),
+            1 << 5
+        );
+    }
     use emmc_card::CardIdentity;
     const RAM: u32 = 0x4000_0000;
     const NEXT: u32 = RAM + PAGE_SIZE as u32;
@@ -2790,5 +3121,15 @@ mod tests {
             edma::CSR_DONE
         );
         assert!(!b.dma59_armed());
+    }
+}
+
+/// The peer CPU reaches the same 128 KB the board maps at 0x10000000.
+impl crate::peer_cpu::Window for Board {
+    fn read(&mut self, offset: u32, size: u8) -> Option<u32> {
+        self.peer_window_load(offset, size)
+    }
+    fn write(&mut self, offset: u32, size: u8, value: u32) -> bool {
+        self.ram_write(peer::WINDOW_BASE + offset, size, value)
     }
 }

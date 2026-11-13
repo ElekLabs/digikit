@@ -165,6 +165,10 @@
    "owner": "python:tools/devtools",
    "purpose": "Path of the DSP ready state (default READY/digi-audio-m5.snap.dsp)"
   },
+  "DIGI_EMU_PEER_AUDIO": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 plays the audio a device's MAIN mixes from its peer CPU ([emulator.peer_audio] in devices/*.toml); 0 or unset leaves it off. The workbench launcher sets 1 unless --cf-only."
+  },
   "DIGI_DEVICE": {
    "owner": "ts:tests/regression",
    "purpose": "dt2 or dn2 runs a device test file for that device only (unset: both); Nx sets it for the --dt2 and --dn2 halves"
@@ -316,6 +320,10 @@
   "DIGI_PANEL_TX_LOG": {
    "owner": "rust:packages/emulator",
    "purpose": "File path; the emulator appends one line per front-panel UART8 drain and per injected panel button."
+  },
+  "DIGI_PEER_PROFILE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Set to 1 to add a profile of the peer CPU's frame handler to the panel_drive peer report."
   },
   "DIGI_PATCHED_CACHE_MAX_GB": {
    "owner": "python:tools/patchkit",

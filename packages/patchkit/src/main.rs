@@ -725,8 +725,8 @@ plan.json {}",
             let path = need(rest)?;
             let fw = Firmware::parse(&read(path)?)?;
             let dsp = fw
-                .section(7)
-                .ok_or_else(|| Error("the image has no DSP section (7)".into()))?;
+                .dsp()
+                .ok_or_else(|| Error("the device has no DSP section".into()))?;
             if rest.iter().any(|a| a == "--list") {
                 // every scanned instruction (comparison aid)
                 for l in patchkit::dspscan::list(&dsp.data)? {

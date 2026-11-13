@@ -16,6 +16,7 @@ pub mod dsp_stream;
 mod guard;
 mod late_send;
 pub mod midi;
+mod nor_records;
 pub mod panel_leds;
 #[cfg(feature = "play")]
 pub mod pcm_play;
@@ -39,7 +40,7 @@ pub use telemetry::DiagnosticReport;
 pub use watch::{After, FlushHit, WatchConfig, Writer, parse_ranges};
 
 pub use runtime::{
-    CAPTURE_MAX, CallResult, CallSpec, Capture, Emulator, GuestCall, REG_LOG_MAX, RegHit, Snapshot,
-    Status,
+    CAPTURE_MAX, CallResult, CallSpec, Capture, Emulator, GuestCall, PeerReport, REG_LOG_MAX,
+    RegHit, Snapshot, Status,
 };
 pub use softfloat::ExecutionPolicy;

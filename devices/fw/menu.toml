@@ -34,7 +34,9 @@ name = "cf.menu.fn.vertical_menu_view_ctor"
 was = ["cf.menu.fn.view_ctor"]
 cpu = "cf"
 sig = "void (u8 *this, const char *name, u32 reserve, const u32 *title, const u8 *icon)"
-rule = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "68fd5bf65ff832320bafafb6c02bcf2b", offset = 0x0, len = 4, mark = "O" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "`VerticalMenuView(this, name cstr, reserve, const std::string *title, icon)`; `title` points at the one-pointer COW string."
@@ -46,6 +48,7 @@ bind = "static"
 cpu = "cf"
 rule = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x382, len = 6 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its operand is the address of a stock icon object built at run time."
 
@@ -55,6 +58,7 @@ was = ["cf.menu.settings_tail", "cf.menu.site.settings_tail"]
 cpu = "cf"
 rule = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x3a8, len = 8 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "The last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding a menu item."
 

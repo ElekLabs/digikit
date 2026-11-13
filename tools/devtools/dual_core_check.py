@@ -34,6 +34,7 @@ from tools.control.digi_client import ROOT, Emu
 from tools.device import dkrun
 from tools.device import dkupload as D
 from tools.emulator import digi_env
+from tools.firmware import device as device_files
 from tools.patchkit import modroots
 from tools.patchkit import pk_harness as H
 
@@ -428,7 +429,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--start",
-        choices=("dn2", "dt2"),
+        choices=device_files.shorts(),
         default="dn2",
         help="the device the daemon starts on (the other one is opened next)",
     )
@@ -446,7 +447,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--bench",
-        choices=("dn2", "dt2"),
+        choices=device_files.shorts(),
         help="measure this device with the runtime patched in (DSP CPU per audio second, AOT share, real-time factor) on each --binary, alternating --pairs; no fast tier",
     )
     ap.add_argument(
@@ -457,7 +458,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--bench-start",
-        choices=("dn2", "dt2"),
+        choices=device_files.shorts(),
         help="--bench: the device the daemon starts on (default: the other one)",
     )
     ap.add_argument("--pairs", type=int, default=3)

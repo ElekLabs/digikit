@@ -8,7 +8,7 @@ import { firmwareEnv } from './env';
 import './default-modules.css';
 
 export interface DefaultModulesProps {
-  /** The device id (`dt2`, `dn2`) the list is for; undefined until it is known. */
+  /** The device id the list is for; undefined until it is known. */
   device: string | undefined;
   /** Why the control is off (shown as its title), or empty. */
   off?: string;

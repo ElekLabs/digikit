@@ -425,6 +425,10 @@ pub struct Config {
     /// The repository root that `firmware.load {runtime: true}` reads the module library and device files from
     /// (default: `$DIGI_REPO_ROOT`, else the working directory's repository; see `runtime_patch::find_root`).
     pub repo_root: Option<PathBuf>,
+    /// The DSP choice the launcher asked for (`--no-dsp`, `--dsp-on`); the loads that do not name one use it (`firmware.load {dsp}`),
+    /// None meaning on. On: coupled DSP audio when its inputs are set, a peer CPU that runs its program. Off: no DSP session, and the
+    /// mailbox responder for a peer CPU. A webview reads it as `status.dsp_flag` and adopts it instead of its own saved choice.
+    pub dsp: Option<bool>,
 }
 
 /// A +Drive folder and what to do with the firmware's changes to its card.
@@ -453,6 +457,7 @@ impl Config {
             mirror_dir: None,
             device_folders: None,
             repo_root: None,
+            dsp: None,
         }
     }
 }
@@ -768,6 +773,10 @@ struct Actor {
     /// `card.reset_overlay` set the saved overlay aside: this session's card writes are not saved or exported at quit. A new
     /// runtime (the reload that follows) clears it.
     overlay_set_aside: bool,
+    /// The DSP choice in force (`Config::dsp`, then the last `firmware.load {dsp}`): false boots ColdFire only, with the responder for a peer CPU.
+    dsp: bool,
+    /// `Config::dsp`, kept for `status.dsp_flag`.
+    dsp_flag: Option<bool>,
     /// Soft resets in a row before the boot got ready (a bound for boot loops).
     boot_resets: u32,
     /// CPU exceptions run the guest's handler (RPC `cpu.exceptions`), for every runtime installed from now on.
@@ -823,7 +832,7 @@ impl Actor {
             rx,
             audio_default: config.audio.clone(),
             audio_alt: config.audio_alt,
-            audio: config.audio,
+            audio: config.audio.filter(|_| config.dsp != Some(false)),
             run_dir: config.run_dir,
             events: config.events,
             on_quit: config.on_quit,
@@ -888,6 +897,8 @@ impl Actor {
             boot_resets: 0,
             deliver_exceptions: false,
             reset_ram: None,
+            dsp: config.dsp.unwrap_or(true),
+            dsp_flag: config.dsp,
         }
     }
 
@@ -1278,6 +1289,10 @@ impl Actor {
 
     fn install(&mut self, mut runtime: Runtime, error: Option<ReadError>) {
         runtime.set_deliver_exceptions(self.deliver_exceptions);
+        // DSP off on a device with a second CPU that runs a program: the mailbox responder answers instead (no peer audio, fast UI).
+        if !self.dsp && runtime.has_peer_cpu() {
+            runtime.use_peer_responder();
+        }
         self.runtime = Some(runtime);
         self.overlay_set_aside = false;
         self.read_error = error;
@@ -2202,17 +2217,11 @@ impl Actor {
         let cf = serde_json::to_value(&status).unwrap_or(Value::Null);
         let audio = summarize_audio(runtime);
         let load = poll_load(&mut self.load_meter, &status, &audio);
-        let dsp = if runtime.has_audio() {
-            "sharc"
-        } else if runtime.is_zero() {
-            "zero"
-        } else {
-            "none"
-        };
+        let dsp = runtime.companion();
         let frame = runtime.current_frame().map(|(revision, _)| revision);
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),
-            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "job": job, "boot": boot,
+            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "dsp_enabled": self.dsp, "dsp_flag": self.dsp_flag, "job": job, "boot": boot,
             "scheduled_inputs": scheduled, "frame_revision": frame,
             "heartbeat": {"mainloop_hits": cf["mainloop_hits"], "stalled": self.health.stalled(),
                           "stall_count": self.health.stall_count, "stall_ms": self.health.stall_ms,
@@ -3422,7 +3431,23 @@ impl Actor {
 
     /// `firmware.load`: decide how to get from the running firmware to `bytes`
     /// (see the design's "Firmware injection"), do it, and report.
+    /// Loads firmware. The load reads the DSP choice from `self.dsp`, so a `dsp` parameter is applied first and put back when the
+    /// load fails: a rejected image must not change the choice of the running firmware.
     fn firmware_load(
+        &mut self,
+        p: &Params,
+        bytes: Vec<u8>,
+        reply: &RpcReply,
+    ) -> Result<Option<Value>, RpcError> {
+        let before = self.dsp;
+        let result = self.firmware_load_inner(p, bytes, reply);
+        if result.is_err() {
+            self.dsp = before;
+        }
+        result
+    }
+
+    fn firmware_load_inner(
         &mut self,
         p: &Params,
         mut bytes: Vec<u8>,
@@ -3460,8 +3485,36 @@ impl Actor {
         // `replace`: load as the first firmware (nothing of the running one is reused, and a different device is fine): the webview's
         // Open and Reload. Without it the image is a variant of the running one (injection).
         let replace = p.opt_bool("replace")?.unwrap_or(false);
+        // The image's device decides which of the caller's preferences apply (the UI sends its own unconditionally).
+        let offers = LoadOffers::of(&bytes);
+        let mut dsp_note = None;
+        // `dsp`: the DSP choice of this load and the loads after it (true when the controller started without `--no-dsp`).
+        if let Some(dsp) = p.opt_bool("dsp")? {
+            if !offers.dsp_choice {
+                dsp_note = Some(json!({
+                    "requested": dsp, "in_force": self.dsp, "applied": false,
+                    "reason": "device has no DSP choice",
+                }));
+            } else if dsp != self.dsp && !replace {
+                return Err(RpcError::bad_params(
+                    "dsp changes with replace: true (a load that starts the firmware over)",
+                ));
+            } else {
+                self.dsp = dsp;
+            }
+        }
         let mut stock_base: Option<Vec<u8>> = None;
         let mut runtime_report = None;
+        let runtime_requested = if runtime_requested && !offers.runtime {
+            runtime_report = Some(json!({
+                "patched": false,
+                "skipped": "device has no digikit runtime",
+                "reason": "runtime: skipped (device has no digikit runtime)",
+            }));
+            false
+        } else {
+            runtime_requested
+        };
         if runtime_requested {
             let set = patch_set.unwrap_or("emulator");
             let started = Instant::now();
@@ -3511,6 +3564,12 @@ impl Actor {
         });
         if let Some(r) = runtime_report {
             report["runtime"] = r;
+        }
+        if let Some(note) = dsp_note {
+            report["dsp_choice"] = note;
+        }
+        if let Some(error) = offers.registry_error {
+            report["offers_error"] = json!(error);
         }
         // Fields a caller that loads on behalf of another method (`dev.reload`) adds to the report, the cold boot's included.
         if let Some(extra) = p.get("report_extra").and_then(Value::as_object) {
@@ -3567,7 +3626,11 @@ impl Actor {
         if replace {
             // As `ui_load` always did: forget the running firmware, its card job and its audio setup.
             self.cancel_card();
-            self.audio = self.audio_for_base(base_param.as_deref().unwrap_or(&new.sha256));
+            self.audio = if self.dsp {
+                self.audio_for_base(base_param.as_deref().unwrap_or(&new.sha256))
+            } else {
+                None
+            };
             self.card_last = json!({"state": "idle"});
             self.read_error = None;
             self.runtime = None;
@@ -3625,7 +3688,7 @@ impl Actor {
             let base_sha = loaded.base_sha.clone();
             let changed = running.changed_sections(&new);
             report["sections_changed"] = json!(changed);
-            let main_changed = changed.contains(&firmware::SECTION_MAIN);
+            let main_changed = changed.contains(&new.roles.main);
             report["main_changed"] = main_changed.into();
             if !main_changed && !force {
                 if initial_buttons.is_some() {
@@ -3702,7 +3765,9 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" {
+        // A stock firmware with a DSP restores a ready snapshot (it holds the DSP state); one
+        // without a DSP has none and boots cold.
+        if start == "cold" && firmware::stock_has_dsp(&new.sha256) {
             return Err(RpcError::bad_params(
                 "start cold needs a patched MAIN; a stock firmware restores its snapshot",
             ));
@@ -3746,7 +3811,7 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" {
+        if start == "cold" && firmware::stock_has_dsp(&new.sha256) {
             return Err(RpcError::bad_params(
                 "start cold is for a patched MAIN; this MAIN is the base's",
             ));
@@ -3799,7 +3864,8 @@ impl Actor {
     ) -> Result<bool, RpcError> {
         let dsp_changed = running
             .changed_sections(&new)
-            .contains(&firmware::SECTION_DSP);
+            .iter()
+            .any(|id| Some(*id) == new.roles.dsp);
         report["start_used"] = "none".into();
         if dsp_changed {
             let has_audio = self.runtime.as_ref().is_some_and(Runtime::has_audio);
@@ -5019,6 +5085,105 @@ fn summarize_audio(runtime: &mut Runtime) -> Value {
     })
 }
 
+/// What the device of a firmware image offers the caller: the preferences of a load (`runtime`, `dsp`) apply only where it does.
+/// An image that cannot be identified offers everything: the load then fails or proceeds on its own checks, as it always did.
+struct LoadOffers {
+    /// `[digikit]` is in the device file: the digikit runtime can be patched in.
+    runtime: bool,
+    /// The device has a DSP (`[capabilities] dsp = "sharc"`) or a peer CPU (`[emulator] peer`): there is something to switch.
+    dsp_choice: bool,
+    /// The device registry did not parse: the offers fall back to everything, and the load report carries this error.
+    registry_error: Option<String>,
+}
+
+impl LoadOffers {
+    fn of(syx: &[u8]) -> Self {
+        let all = Self {
+            runtime: true,
+            dsp_choice: true,
+            registry_error: None,
+        };
+        let Ok(fw) = patchkit::firmware::Firmware::parse(syx) else {
+            return all;
+        };
+        let short = fw.device.short();
+        let Some(id) = patchkit::devdata::identities()
+            .iter()
+            .find(|i| i.short == short)
+        else {
+            return all;
+        };
+        let registry = match plusdrive_format::device_profile::Registry::load() {
+            Ok(registry) => registry,
+            Err(error) => {
+                return Self {
+                    registry_error: Some(format!("device registry: {error}")),
+                    ..all
+                };
+            }
+        };
+        let peer = registry
+            .devices()
+            .iter()
+            .any(|d| d.short == short && d.peer.is_some());
+        Self::from_device(id.runtime_target, &id.capabilities.dsp, peer)
+    }
+
+    fn from_device(runtime_target: bool, dsp: &str, peer: bool) -> Self {
+        Self {
+            runtime: runtime_target,
+            dsp_choice: dsp == "sharc" || peer,
+            registry_error: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod load_offers_tests {
+    use super::*;
+
+    #[test]
+    fn a_device_offers_the_runtime_and_the_dsp_choice_by_its_data() {
+        let full = LoadOffers::from_device(true, "sharc", false);
+        assert!((full.runtime, full.dsp_choice) == (true, true));
+        // a peer CPU is a choice too; without a DSP or a peer there is none, and without [digikit] there is no runtime
+        let peer = LoadOffers::from_device(false, "none", true);
+        assert!((peer.runtime, peer.dsp_choice) == (false, true));
+        let plain = LoadOffers::from_device(false, "none", false);
+        assert!((plain.runtime, plain.dsp_choice) == (false, false));
+    }
+
+    /// Every firmware in `firmware/` is judged by its own device file: the runtime offer follows `[digikit]`, the DSP choice follows
+    /// the DSP or the peer CPU; an image that is no firmware offers everything.
+    #[test]
+    fn real_images_are_judged_by_their_device_file() {
+        let registry = plusdrive_format::device_profile::Registry::load().unwrap();
+        let mut judged = 0;
+        for device in registry.devices() {
+            let id = patchkit::devdata::identities()
+                .iter()
+                .find(|i| i.short == device.short)
+                .unwrap();
+            for file in device.firmwares.iter().filter_map(|f| f.filename.as_ref()) {
+                let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
+                    continue;
+                };
+                let offers = LoadOffers::of(&syx);
+                assert_eq!(offers.runtime, id.runtime_target, "{file}");
+                assert_eq!(
+                    offers.dsp_choice,
+                    id.capabilities.dsp == "sharc" || device.peer.is_some(),
+                    "{file}"
+                );
+                judged += 1;
+            }
+        }
+        eprintln!("{judged} images judged");
+        let garbage = LoadOffers::of(b"not firmware");
+        assert!(garbage.runtime && garbage.dsp_choice);
+    }
+}
+
 #[cfg(test)]
 mod first_coupled_base_tests {
     use super::*;
@@ -5571,6 +5736,20 @@ mod mem_write_tests {
 #[cfg(test)]
 mod framebuffer_tests {
     use super::*;
+
+    #[test]
+    fn a_rejected_load_keeps_the_dsp_choice() {
+        let (_commands, rx) = mpsc::channel();
+        let mut actor = Actor::new(rx, Config::new(None));
+        let (reply, _answers) = mpsc::channel();
+        let before = actor.dsp;
+        let params = json!({"replace": true, "dsp": !before});
+        let e = actor
+            .firmware_load(&Params(&params), b"not firmware".to_vec(), &reply)
+            .unwrap_err();
+        assert_eq!(e.code, code::FIRMWARE_REJECTED);
+        assert_eq!(actor.dsp, before);
+    }
 
     #[test]
     fn source_is_validated_before_runtime_access_with_current_as_default() {
