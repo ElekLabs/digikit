@@ -3,9 +3,16 @@
 Status: implemented in Phase 8 (lane b). Rule: a fact about a device, its board or its firmware that the digikit runtime, the core
 modules, patchkit or `port_resolve` use comes from a data file, and code that needs a constant gets it generated
 (`patchkit gen`, kept current by `patchkit gen --check` and the Rust test `packages/patchkit/tests/devdata.rs`). Code must not list
-devices by name: `tools/nx/device-literals.mjs` (part of `lint`) counts device ids and names outside the allowed places and fails
-when the count in any file differs from `tools/nx/device-literals.baseline.json`. The baseline holds the sites not yet moved to
-the registry; it only shrinks (`node tools/nx/device-literals.mjs --write` after a removal).
+devices by name: `tools/nx/device-literals.mjs` (the Nx target `workspace:device-literals`; `lint` depends on it, and any change of
+a tracked file selects it in the affected gate) counts device ids and names outside the allowed places and fails when the count in
+any file differs from `tools/nx/device-literals.baseline.json`. The baseline holds the sites not yet moved to the registry; it
+only shrinks (`node tools/nx/device-literals.mjs --write` after a removal).
+
+What counts as a literal: a device name word (`digitakt`, `syntakt`, bounded by non-alphanumerics) and an id of three or more
+characters (`dt2`) anywhere. An id of two characters (`st`) is an ordinary word, so it counts only at the start of a string token:
+as the whole string (`"st"`) or followed by `-`, `_` or `${` (`"st-1.42"`, `` `st-${v}` ``). Not counted: `devices/` and `docs/`, a
+path that has a token equal to an id or name word (`foo_dt2.py`, `dt2/`), a file with the comment line `device-literals: allow` in
+its first 5 lines, and in a `.toml` file the table headers and the values of `ports =` and `devices =`.
 
 ## Device levels
 
@@ -27,7 +34,24 @@ written; a section may have a role and be read-only, but `main` may not be read-
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
 
 Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator/device-profile`); TS and Nx use `@digi/devices`
-(`packages/devices`, Node and Vite loaders); Python uses `tools/firmware/device.py`.
+(`packages/devices`, Node and Vite loaders); Python uses `tools/firmware/device.py`. The four readers do not share one validator:
+each reads the tables it needs and checks those.
+
+- patchkit (`devdata.rs`): `[device]`, `[[firmware]]`, `[capabilities]`, `[container]`, `[patch]`, `[digikit]`, `[board]`,
+  `[card]`, `[limits]`, `[acceptance]`; it also checks that the tables agree with the capabilities.
+- `device-profile` (the emulator): `[device]`, `[[firmware]]` (boot and DSP fields), `[panel]`, `[card]`, `[digikit]` (keep area),
+  `[capabilities]`, `[container]`, `[acceptance]` and `[emulator]`; it refuses an unknown key in `[emulator]`.
+- `@digi/devices`: `[device]`, `[[firmware]]`, `[capabilities]`, `[container]`, `[patch]`, `[digikit]` (level, ids, default
+  modules), `[acceptance]`; it checks the capability words, the level rule and that no id is described twice.
+- `tools/firmware/device.py`: `[device]`, `[[firmware]]`, `[panel]`, `[capabilities]`, `[container]`, `[acceptance]` and
+  `[emulator]` (kept as a dict, not checked), and whether `[digikit]` exists. It requires `[device] short`, checks the capability
+  words against the same closed sets and refuses a repeated `short` or `syx_id`. The Python build tools read the rest of the
+  file themselves (`tools/patchkit/pk_device.py`).
+
+Faceplates and LED maps are not device-file tables. The web app and the workbench pair files by the stem of the device file
+(`devices/<stem>.toml`): the faceplate is `apps/web/src/data/faceplates/<stem>.toml`, the LED map `devices/<stem>-leds.toml`. A
+device has a faceplate when its faceplate file exists; the LED map is optional. The LED maps carry no `[device]` table, so
+readers that scan `devices/` skip them. The public site offers only the faceplates of runtime targets.
 
 ## Where each fact lives
 
@@ -47,9 +71,24 @@ Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator
 | RAM ranges the PEEK command may read (at most four `[lo, hi)`: the firmware's data, the runtime's region with the keep area; no peripheral registers) | `[digikit] peek` | runtime `upload.rs` (`cmd_peek`) | `PEEK_N`, `PEEK_LO_i`, `PEEK_HI_i` in `build/gen/device-<dev>.inc`; `device.s` lays them out as `dkrt_peek_ranges` (the ranges differ per device, so they are a per-device object, not a shared constant) |
 | DSP clock and blocks per second (so cycles per block) | `[board] dsp_clock_hz`, `dsp_blocks_per_second`. The clock word in the start-up code decodes to 1 GHz **[D]** ([finding 100](../findings/100-module-limits.md); the control-register write is not traced). | runtime HEALTH figures | `DSP_BLOCK_CYCLES` (rounded) |
 | Container and section limits of a port, DSP L2 range and its excluded ranges, MAIN OS load address | `[patch]` | `port_resolve.py` (written into `devices/ports/*.toml` `[limits]`), patchkit `verify.rs` (an image with no port) | `port_resolve.load_profiles()`; `devdata.rs` |
+| User manual of the device (glob of its extracted pages under `out/refs/`; optional) | `[device] manual` | `tools/coldfire/atlas.py` | `Device.manual` in `tools/firmware/device.py` |
+| Board facts that only the emulator uses (below, "The `[emulator]` table") | `[emulator]` | emulator boot, launcher, panel | `device-profile` fields; `Device.emulator` in Python |
 | Which firmware has a port | `[[firmware]] port = true` | `port_resolve resolve-all` | read directly |
 | Device list for manifests (`devices = [...]`), `pack --device` | all device files | `prim.rs`, `module.rs`, `main.rs` | `devdata::by_short` |
 | Per-device knob and frame layout of machines | `[modules.knobs]`, `[modules.frame]` | typed sections of modules (`typed.rs`) | existing generator (`consts.rs`, `<dev>.inc`) |
+
+## The `[emulator]` table
+
+Board facts that only the emulator uses. Every key is optional; an unknown key is an error in `device-profile`.
+
+| Key | Meaning |
+|---|---|
+| `free_running_dtcn` | Channels 0..3 of the DMA timer counters that run free at the bus clock, for a firmware that polls a counter without starting it. Absent: none. |
+| `board_revision` | The PCB revision byte that MAIN reads from FlexBus CS1 at address 0. An emulator choice (the smallest value that passes the firmware's checks), not read from a unit. |
+| `calibration_record` | What the emulated NOR holds at the calibration record offset. `"synthetic"`: a valid record built from the format alone, tables zero; never data from a unit. |
+| `peer` | The second CPU. `"coldfire"`: its program runs on a second ColdFire core. `"mailbox-responder"`: no peer code; the emulator only answers MAIN's handshake. |
+| `peer_audio` | Sub-table `[emulator.peer_audio]` (`dma_channel` 32..=63, `slots` two words below 16, `bits` 8..=32): MAIN mixes the peer's voices itself and streams them to the converter by eDMA. Needs `peer = "coldfire"`. The launcher builds the audio output (`cf-audio`, its own cargo target dir) and sets `DIGI_EMU_PEER_AUDIO` only for a device that has it. |
+| `led_protocol` | How the panel UART carries LED state: `"indexed"` (default, `b9 idx val` records) or `"packed-states"` (palette records and packed 2-bit states). |
 
 CPU-architecture registers of the MCF5441x itself (the UART status register offset, `RCM.RCR`, the eSDHC `PRSSTAT` offset) are
 named constants in the code (`MCF5441X_*`): they are the same on every board that uses the chip. Which UART is the console, where
