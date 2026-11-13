@@ -83,6 +83,10 @@ describe('parse', () => {
     const fw = `[[firmware]]\nversion = "1.0"\nsha256 = "AB"\n${boot}`;
     const rec = parse({ 'dev-one.toml': identity('x', fw) }).get('x');
     expect(rec.stem).toBe('dev-one');
+    expect(rec.patchSets).toEqual({});
+    expect(
+      parse({ 'x.toml': identity('x', '[patch_sets]\ndevice = ["core/a", "core/b"]\n') }).get('x').patchSets,
+    ).toEqual({ device: ['core/a', 'core/b'] });
     expect(rec.firmware[0]?.boot).toEqual({ mainSha256: h, contract: 'c', symbolProfile: 's' });
     expect(() =>
       parse({ 'x.toml': identity('x', `[[firmware]]\nversion = "1"\nsha256 = "AB"\nboot_contract = "c"\n`) }),

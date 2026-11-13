@@ -43,7 +43,7 @@ export type Level = 'identity' | 'patchable' | 'runtime';
 
 export interface DeviceRecord {
   id: Device;
-  /** The file name stem of the device file (`digitakt-ii`): it pairs the device with `<stem>-leds.toml` and with a faceplate file. */
+  /** The file name stem of the device file (for example `some-device`): it pairs the device with `<stem>-leds.toml` and with a faceplate file. */
   stem: string;
   name: string;
   level: Level;
@@ -53,12 +53,16 @@ export interface DeviceRecord {
   container: Container;
   acceptance?: Acceptance;
   firmware: readonly Firmware[];
+  /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
+  patchSets: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface Registry {
   /** In file-name order. */
   readonly devices: readonly DeviceRecord[];
   readonly ids: readonly Device[];
+  /** The ids of the devices of level `runtime` (they run the digikit runtime: module lists, patch sets). */
+  readonly runtimeIds: readonly Device[];
   /** `id` when it is a known device, else an error that lists the known ids. */
   device(id: string): Device;
   get(id: string): DeviceRecord;
@@ -140,6 +144,18 @@ function firmware(file: string, t: unknown): Firmware[] {
   });
 }
 
+function patchSets(file: string, t: unknown): Record<string, string[]> {
+  if (t === undefined) return {};
+  const sets = need(file, '[patch_sets]', t, isTable);
+  const out: Record<string, string[]> = {};
+  for (const [name, ids] of Object.entries(sets)) {
+    if (!Array.isArray(ids) || !ids.every(isString))
+      throw new Error(`devices/${file}: [patch_sets] ${name} must list module ids`);
+    out[name] = ids;
+  }
+  return out;
+}
+
 function acceptance(file: string, t: unknown, fw: readonly Firmware[]): Acceptance | undefined {
   if (t === undefined) return undefined;
   const a = need(file, '[acceptance]', t, isTable);
@@ -176,6 +192,7 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
       capabilities: caps,
       container: container(file, doc.container, caps),
       firmware: fw,
+      patchSets: patchSets(file, doc.patch_sets),
     };
     if (d.syx_id !== undefined) rec.syxId = need(file, '[device] syx_id', d.syx_id, isInt);
     const acc = acceptance(file, doc.acceptance, fw);
@@ -193,5 +210,6 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     if (!r) throw new Error(`unknown device ${JSON.stringify(id)} (known: ${ids.join(', ')})`);
     return r;
   };
-  return { devices, ids, device: (id) => get(id).id, get };
+  const runtimeIds = devices.filter((x) => x.level === 'runtime').map((x) => x.id);
+  return { devices, ids, runtimeIds, device: (id) => get(id).id, get };
 }
