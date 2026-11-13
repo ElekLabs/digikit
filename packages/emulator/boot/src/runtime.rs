@@ -369,6 +369,8 @@ struct ActiveCall {
 /// Persistent, bounded Oracle diagnostic state. It has no host I/O and does
 /// not claim a hardware or interrupt-device model.
 pub struct Emulator {
+    /// Guest instructions per emulated second, resolved once at creation (`clock::resolve_ips`).
+    ips: u64,
     main: Vec<u8>,
     cpu: Cpu,
     bus: LoggingBus<CAPTURE_BUS_TRACE>,
@@ -543,6 +545,11 @@ impl Emulator {
         self.dspi2_capture.as_ref().map(Dspi2Capture::bytes)
     }
 
+    /// Guest instructions per emulated second of this emulator.
+    pub fn cf_ips(&self) -> u64 {
+        self.ips
+    }
+
     pub fn enable_ssi_diagnostic(&mut self, request_hz: u64) -> Result<(), String> {
         if request_hz == 0 || request_hz > 132_000_000 {
             return Err("SSI request clock must be between 1 and 132000000 Hz".into());
@@ -552,7 +559,7 @@ impl Emulator {
         }
         self.bus
             .board
-            .enable_ssi_diagnostic(request_hz, periph::clock::cf_ips())
+            .enable_ssi_diagnostic(request_hz, self.ips)
             .then_some(())
             .ok_or_else(|| "SSI diagnostic is already enabled".into())
     }
@@ -730,9 +737,10 @@ impl Emulator {
                     .map_err(|e| format!("empty +Drive card identity: {e:?}"))?
             }
         };
-        // The device's instruction rate (before anything reads `cf_ips`).
-        periph::clock::set_device_default(device.instructions_per_second);
+        // This emulator's instruction rate: `DIGI_CF_IPS`, else the device's, else the base.
+        let ips = periph::clock::resolve_ips(device.instructions_per_second);
         let mut board = Board::new(card, semaphores, CompletionPolicy::Oracle);
+        board.set_cf_ips(ips);
         // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`): the device's
         // `[emulator] free_running_dtcn`, or every channel of `DIGI_DTCN0` (`bus` / `off`) for channel 0.
         let dtcn_mask = dtcn_mask(
@@ -747,7 +755,7 @@ impl Emulator {
             TimerPolicy::Oracle,
             vec![3, 2, 0],
             vec![3, 1],
-            periph::clock::cf_ips() as f64,
+            ips as f64,
         ));
         for base in [0xfc04_8000, 0xfc04_c000, 0xfc05_0000] {
             board
@@ -792,7 +800,7 @@ impl Emulator {
             if let (Some(audio), Some(peer)) = (&device.peer_audio, board.peer_mut()) {
                 peer.frame_vector = 120 + u16::from(audio.dma_channel);
                 peer.set_frame_ticks(periph::clock::frame_ticks(
-                    periph::clock::cf_ips(),
+                    ips,
                     audio.sample_rate,
                     audio.frame_samples,
                 ));
@@ -835,6 +843,7 @@ impl Emulator {
         cpu.sr = 0x2700;
         cpu.a[7] = STACK;
         let mut emulator = Self {
+            ips,
             main,
             cpu,
             bus,
@@ -2983,8 +2992,7 @@ impl Emulator {
         }
         let started = self.bus.board.take_midi_tx_started();
         if started != 0 {
-            let per_byte =
-                periph::clock::scale_instr(crate::midi::WIRE_PERIOD, periph::clock::cf_ips());
+            let per_byte = periph::clock::scale_instr(crate::midi::WIRE_PERIOD, self.ips);
             let from = self.midi.tx_due.unwrap_or(0).max(self.cpu.icount);
             self.midi.tx_due = Some(from + started * per_byte);
             self.midi.tx_dma += 1;
@@ -3297,7 +3305,7 @@ impl Emulator {
                 .ok_or("this image has no USB MIDI callback this emulator knows")?;
             self.midi.usb.rx_cb = rx;
             self.midi.usb.tx_fn = tx;
-            self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, periph::clock::cf_ips());
+            self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, self.ips);
             self.midi.usb.enabled = true;
             self.rebuild_watch();
         }
@@ -4495,7 +4503,7 @@ impl Emulator {
         if self.error.is_some() {
             return Err("cannot snapshot a faulted emulator".into());
         }
-        if periph::clock::cf_ips() != periph::clock::BASE_IPS {
+        if self.ips != periph::clock::BASE_IPS {
             // Snapshots hold deadlines at the base rate; load_state rescales from it.
             return Err(
                 "save_state needs DIGI_CF_IPS unset (snapshots are taken at 132 MHz)".into(),
@@ -4884,7 +4892,7 @@ impl Emulator {
     /// the clocks run at that base so the SSI check and the deadlines agree.
     fn snapshot_time_base(&mut self) {
         let base = periph::clock::BASE_IPS;
-        if periph::clock::cf_ips() == base {
+        if self.ips == base {
             return;
         }
         if let Some(time) = self.bus.board.time_mut() {
@@ -4898,7 +4906,7 @@ impl Emulator {
     /// After a load: move every deadline from the snapshot's base rate to `DIGI_CF_IPS`,
     /// keeping its emulated time.
     fn rescale_to_cf_ips(&mut self) {
-        let ips = periph::clock::cf_ips();
+        let ips = self.ips;
         if ips == periph::clock::BASE_IPS {
             return;
         }
@@ -5232,6 +5240,39 @@ mod tests {
         }
     }
 
+    /// Two emulators of different devices in one process keep their own instruction rates: the USB frame period, the DMA timer counters
+    /// and the rate itself follow each emulator, in any order of creation and use (the rate is no process-wide state).
+    #[test]
+    fn emulators_of_two_devices_keep_their_own_rate() {
+        let load = |file: &str| std::fs::read(format!("../../../firmware/{file}")).ok();
+        let (Some(syntakt_syx), Some(dt2_syx)) =
+            (load("Syntakt_OS1.42.syx"), load("Digitakt_II_OS1.17.syx"))
+        else {
+            return;
+        };
+        let mut syntakt = Emulator::new(&syntakt_syx, None).unwrap();
+        let mut dt2 = Emulator::new(&dt2_syx, None).unwrap();
+        // started in the opposite order, then used alternately
+        syntakt.enable_usb().unwrap();
+        dt2.enable_usb().unwrap();
+        let (want_syntakt, want_dt2) = if std::env::var_os("DIGI_CF_IPS").is_some() {
+            (dt2.cf_ips(), dt2.cf_ips())
+        } else {
+            (189_928_000, periph::clock::BASE_IPS)
+        };
+        for (emu, want) in [(&mut syntakt, want_syntakt), (&mut dt2, want_dt2)] {
+            assert_eq!(emu.cf_ips(), want);
+            assert_eq!(
+                emu.midi.usb.period,
+                periph::clock::scale_instr(crate::midi::USB_PERIOD, want)
+            );
+            // 1 ms of emulated time is 132,000 bus ticks at any instruction rate
+            emu.bus.board.enable_dtcn_channels(0b0001);
+            emu.bus.board.set_clock(want / 1000);
+            assert_eq!(emu.bus.board.read32(0xfc07_000c), Ok(132_000));
+        }
+    }
+
     fn main_of(file: &str) -> Option<Vec<u8>> {
         let syx = std::fs::read(format!("../../../firmware/{file}")).ok()?;
         let firmware = parse(&syx).unwrap();
@@ -5550,6 +5591,8 @@ mod tests {
         };
         let mut emu = Emulator::new(&syx, None).unwrap();
         assert!(emu.has_peer_cpu());
+        // snapshots are taken at the base rate (`save_state` refuses another); this test is about the peer
+        emu.ips = periph::clock::BASE_IPS;
         emu.save_state().expect("before the peer starts");
         emu.peer_started = true;
         let e = emu.save_state().unwrap_err();

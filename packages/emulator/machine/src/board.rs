@@ -206,6 +206,8 @@ pub struct Board {
     /// Optional PIT/INTC facade in a stable allocation; ownership transfers by pointer.
     /// Its owned MMIO is never backed by sparse RAM.
     time: Option<Box<Time>>,
+    /// Guest instructions per emulated second (the DMA timer counters follow it).
+    cf_ips: u64,
     /// Oracle read hooks: each value overlays four big-endian bytes before a
     /// guest read, without changing the backing page or later guest writes.
     forced_mmio: BTreeMap<u32, u32>,
@@ -482,6 +484,7 @@ impl Board {
             dma_sources: vec![],
             last_error: None,
             time: None,
+            cf_ips: periph::clock::BASE_IPS,
             forced_mmio: BTreeMap::new(),
             forced_master_only: Vec::new(),
             sdram_fast: true,
@@ -1307,6 +1310,11 @@ impl Board {
         self.dtcn_mask |= mask & 0b1111;
     }
 
+    /// Set the instruction rate of this board's machine (default [`periph::clock::BASE_IPS`]).
+    pub fn set_cf_ips(&mut self, ips: u64) {
+        self.cf_ips = ips;
+    }
+
     /// The guest's instruction count: the host sets it before each instruction.
     #[inline(always)]
     pub fn set_clock(&mut self, icount: u64) {
@@ -1314,7 +1322,7 @@ impl Board {
     }
 
     fn dtcn_value(&self) -> u32 {
-        let ips = u128::from(periph::clock::cf_ips().max(1));
+        let ips = u128::from(self.cf_ips.max(1));
         (u128::from(self.clock) * DTCN0_HZ / ips) as u32
     }
 

@@ -515,12 +515,17 @@ impl CoupledRuntime {
     /// Queue bytes on the MIDI DIN input, one byte per wire time (31,250 baud), recording them for replay
     /// (a scenario's `midi` event). `Emulator::midi_in` takes its own period and records nothing.
     pub fn midi_in_at_wire_rate(&mut self, bytes: &[u8]) -> Result<(), String> {
-        let ips = elektron_native_boot::clock::cf_ips();
+        let ips = self.cf_ips();
         let period =
             elektron_native_boot::clock::scale_instr(elektron_native_boot::midi::WIRE_PERIOD, ips);
         self.emulator.midi_in(bytes, period)?;
         self.record_input(json!({"midi": bytes}));
         Ok(())
+    }
+
+    /// Guest instructions per emulated second of this runtime's emulator.
+    pub fn cf_ips(&self) -> u64 {
+        self.emulator.cf_ips()
     }
 
     /// ColdFire instructions since this runtime was ready (the clock
@@ -533,11 +538,9 @@ impl CoupledRuntime {
         if self.inputs.len() >= INPUT_LOG_LIMIT {
             return;
         }
-        event["at_instr"] = elektron_native_boot::clock::unscale_instr(
-            self.elapsed_instructions(),
-            elektron_native_boot::clock::cf_ips(),
-        )
-        .into();
+        event["at_instr"] =
+            elektron_native_boot::clock::unscale_instr(self.elapsed_instructions(), self.cf_ips())
+                .into();
         #[cfg(feature = "coupled-audio")]
         if let Some(audio) = &self.audio {
             event["dsp_frame"] = audio.handle.frames_sent().into();
@@ -553,7 +556,7 @@ impl CoupledRuntime {
             "description": "Inputs recorded from an interactive session",
             "instructions": elektron_native_boot::clock::unscale_instr(
                 self.elapsed_instructions(),
-                elektron_native_boot::clock::cf_ips(),
+                self.cf_ips(),
             )
             .max(1),
             "exact_events": true,
