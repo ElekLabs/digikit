@@ -24,7 +24,12 @@ id = "cmach"
 id = "cfx"
 
 # The rows init declares, written by `mise run module:check` (the DN2 page row counts as a page row; the DT2 machine keeps its knobs in its row).
-[uses]
+[uses.dt2]
+machine_rows = 1
+param_rows = 3
+page_rows = 1
+
+[uses.dn2]
 machine_rows = 1
 param_rows = 3
 page_rows = 1

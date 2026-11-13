@@ -84,11 +84,14 @@ def test_knobs_follow_the_codes_and_a_page_device_reads_its_page():
     assert dn2["page"] == {"name": "T", "title": "Tone"}
 
 
-def test_uses_is_the_largest_device():
+def test_uses_is_one_table_per_device():
     a, b = device([0] * 8, []), device([0] * 8, [])
     b["records"]["counts"] = {"machine_rows": 1, "param_rows": 9, "page_rows": 2}
     assert pk_committed.uses({"dt2": a, "dn2": b}) == {
-        "machine_rows": 1,
-        "param_rows": 9,
-        "page_rows": 2,
+        "dt2": {
+            "machine_rows": a["records"]["counts"]["machine_rows"],
+            "param_rows": a["records"]["counts"]["param_rows"],
+            "page_rows": a["records"]["counts"]["page_rows"],
+        },
+        "dn2": {"machine_rows": 1, "param_rows": 9, "page_rows": 2},
     }

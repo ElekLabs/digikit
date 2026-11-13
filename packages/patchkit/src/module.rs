@@ -51,9 +51,10 @@ pub struct Manifest {
     /// `[[fx]] id = "..."`: the same for effects (DK_FX).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
-    /// `[uses]`: registry rows the module takes (the keys table's three counts).
+    /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
+    /// builds different rows per device (DT2 has no page rows).
     #[serde(default)]
-    pub uses: Uses,
+    pub uses: UsesByDevice,
     /// Removed forms (`[[param]]`, `[[page]]`, `[[voice]]`): kept only to refuse them with a clear error.
     #[serde(default, rename = "param")]
     param_old: Option<toml::Value>,
@@ -146,7 +147,29 @@ impl IdRef {
     }
 }
 
-/// `[uses]`: registry rows a module takes, all default 0.
+/// `[uses.<device>]`: one table per device (short names as in `devices/*.toml`); a module has only the tables of the devices it builds for.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct UsesByDevice {
+    #[serde(default)]
+    pub dt2: Option<Uses>,
+    #[serde(default)]
+    pub dn2: Option<Uses>,
+}
+
+impl UsesByDevice {
+    /// The counts for DEVICE (`dt2`, `dn2`); all 0 when the module has no table for it.
+    pub fn for_device(&self, device: &str) -> Uses {
+        match device {
+            "dt2" => self.dt2,
+            "dn2" => self.dn2,
+            _ => None,
+        }
+        .unwrap_or_default()
+    }
+}
+
+/// One device's registry rows a module takes, all default 0.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Uses {
@@ -1234,18 +1257,22 @@ mod manifest_tests {
 
     #[test]
     fn machine_fx_and_uses_are_read() {
-        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses]\nmachine_rows = 2\npage_rows = 3\n").unwrap();
+        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
         let ids = |v: &[IdRef]| v.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&m.machines), ["analog", "b-2_x"]);
         assert_eq!(ids(&m.fxs), ["fshift"]);
         assert_eq!(
-            m.uses,
+            m.uses.for_device("dt2"),
             Uses {
                 machine_rows: 2,
                 param_rows: 0,
                 page_rows: 3
             }
         );
+        assert_eq!(m.uses.for_device("dn2").page_rows, 4);
+        let m = load("[uses.dn2]\nparam_rows = 1\n").unwrap();
+        assert_eq!(m.uses.dt2, None);
+        assert_eq!(m.uses.for_device("dt2"), Uses::default());
     }
 
     #[test]
@@ -1263,7 +1290,7 @@ mod manifest_tests {
     fn no_tables_parse_as_before() {
         let m = load("").unwrap();
         assert!(m.machines.is_empty() && m.fxs.is_empty());
-        assert_eq!(m.uses, Uses::default());
+        assert_eq!(m.uses, UsesByDevice::default());
     }
 
     #[test]
@@ -1278,7 +1305,12 @@ mod manifest_tests {
     fn other_keys_are_refused() {
         let e = load("[[machine]]\nid = \"a\"\nname = \"A\"\n").unwrap_err();
         assert!(e.to_string().contains("unknown field"), "{e}");
-        let e = load("[uses]\nvoices = 1\n").unwrap_err();
+        let e = load("[uses.dn2]\nvoices = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        // one table for all devices, and a device that does not exist
+        let e = load("[uses]\nmachine_rows = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[uses.dt3]\nmachine_rows = 1\n").unwrap_err();
         assert!(e.to_string().contains("unknown field"), "{e}");
     }
 }

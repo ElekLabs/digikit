@@ -17,12 +17,17 @@ conflicts = []
 "dn2-1.12" = "experimental"
 
 # The machine is declared by builder calls in init (src/module.c). The id `analog` is what the keys hash; the DSP symbols start with `va`.
-# `[uses]` is written by `mise run module:check`.
+# `[uses.<device>]` is written by `mise run module:check`.
 [[machine]]
 id = "analog"
 dsp = "va"
 
-[uses]
+[uses.dt2]
+machine_rows = 1
+param_rows = 4
+page_rows = 1
+
+[uses.dn2]
 machine_rows = 1
 param_rows = 4
 page_rows = 1

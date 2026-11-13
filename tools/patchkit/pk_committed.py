@@ -6,7 +6,7 @@ emulator memory and decodes it with `patchkit records --json` (the one decoder o
 output into what the callers need:
 
   * `committed(mid, device)`: the decoded records of module MID on DEVICE;
-  * `uses(per_device)`: the `[uses]` counts (the largest over the devices);
+  * `uses(per_device)`: the `[uses.<device>]` counts, one table per device;
   * `gallery(mid, machine_ids, per_device)`: `build/gen/gallery.json` in the schema `patchkit gen` writes for a major-2 module;
 
 Conformance (`pk_conform._params`) reads that gallery.json, so it gets its cases (slot, min, max, default) from the committed rows too.
@@ -41,12 +41,12 @@ def committed(
     return json.loads(r.stdout)
 
 
-def uses(per_device: dict[str, dict[str, Any]]) -> dict[str, int]:
-    """The `[uses]` counts: what the largest device needs (one table serves both devices)."""
+def uses(per_device: dict[str, dict[str, Any]]) -> dict[str, dict[str, int]]:
+    """The `[uses.<device>]` counts: what each device committed (the runtime builds different rows per device)."""
     keys = ("machine_rows", "param_rows", "page_rows")
     return {
-        k: max(int(d["records"]["counts"][k]) for d in per_device.values())
-        for k in keys
+        dev: {k: int(d["records"]["counts"][k]) for k in keys}
+        for dev, d in per_device.items()
     }
 
 

@@ -1,5 +1,5 @@
 //! The sections of a module of api major 3 (docs/plans/sdk.md 6.1, 6.3): no `.dk.desc` records. The keys table comes from `module.toml`
-//! (`[[machine]]`, `[[fx]]`, `[uses]`) and the DSP entry points are found by name in the DSP object.
+//! (`[[machine]]`, `[[fx]]`, `[uses.<device>]`) and the DSP entry points are found by name in the DSP object.
 //!
 //! The names are the toolchain's symbols, with its leading underscore. The prefix `x` is the id with `-` as `_`, or `dsp` of the `[[machine]]` or
 //! `[[fx]]` entry of module.toml when DSP code exists under another prefix (the id stays what the keys hash):
@@ -192,7 +192,7 @@ pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Secti
         None,
         tracks.as_ref(),
     )?;
-    let u = mf.uses;
+    let u = mf.uses.for_device(device);
     let mk: Vec<u32> = mf
         .machines
         .iter()
@@ -296,7 +296,7 @@ mod tests {
     }
 
     const MACHINE: &str =
-        "[[machine]]\nid = \"foo\"\n[uses]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\n";
+        "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\n";
 
     #[test]
     fn a_module_with_tables_and_no_declarations_is_new_style() {

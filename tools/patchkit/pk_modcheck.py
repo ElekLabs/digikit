@@ -32,48 +32,62 @@ FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
 USES_KEYS = ("machine_rows", "param_rows", "page_rows")
 
 
-def write_uses(toml_path: Path, uses: dict[str, int]) -> bool:
-    """Write the `[uses]` table of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES has the three counts of USES_KEYS, committed
-    rows read from the emulated device. The file changes only when a count differs, and then only the `[uses]` lines: other text,
-    comments and the order of the tables stay. Returns True when the file was written."""
-    want = [f"{k} = {int(uses[k])}" for k in USES_KEYS]
+def write_uses(toml_path: Path, uses: dict[str, dict[str, int]]) -> bool:
+    """Write the `[uses.<device>]` tables of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES maps a device to the three counts of
+    USES_KEYS, committed rows read from that device's emulated run. The file changes only when a count differs, and then only the table lines:
+    other text, comments and the order of the tables stay. Returns True when the file was written."""
     text = toml_path.read_text(encoding="utf-8")
-    lines = text.split("\n")
-    start = next((i for i, ln in enumerate(lines) if ln.strip() == "[uses]"), None)
-    if start is None:
-        new = text.rstrip("\n") + "\n\n[uses]\n" + "\n".join(want) + "\n"
-    else:
-        end = start + 1
-        while end < len(lines) and not lines[end].lstrip().startswith("["):
-            end += 1
-        body = lines[start + 1 : end]
-        have = {
-            m.group(1): m.group(2)
-            for ln in body
-            if (m := re.match(r"\s*(\w+)\s*=\s*(\d+)\s*(?:#.*)?$", ln))
-        }
-        if all(have.get(k) == str(int(uses[k])) for k in USES_KEYS):
-            return False
-        # keep comments and blank lines of the table; the count lines take their place, missing ones follow the last count
-        out, seen = [], set()
-        for ln in body:
-            m = re.match(r"\s*(\w+)\s*=", ln)
-            if m and m.group(1) in USES_KEYS:
-                seen.add(m.group(1))
-                out.append(f"{m.group(1)} = {int(uses[m.group(1)])}")
-            else:
-                out.append(ln)
-        missing = [w for w in want if w.split(" ")[0] not in seen]
-        trail = 0
-        while out and out[-1].strip() == "":
-            out.pop()
-            trail += 1
-        out += missing + [""] * trail
-        new = "\n".join(lines[: start + 1] + out + lines[end:])
-    if new == text:
+    for dev, counts in uses.items():
+        text = _write_table(text, dev, counts)
+    if text == toml_path.read_text(encoding="utf-8"):
         return False
-    toml_path.write_text(new, encoding="utf-8")
+    toml_path.write_text(text, encoding="utf-8")
     return True
+
+
+def _write_table(text: str, dev: str, uses: dict[str, int]) -> str:
+    head = f"[uses.{dev}]"
+    want = [f"{k} = {int(uses[k])}" for k in USES_KEYS]
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == head), None)
+    if start is None:
+        # a new table follows the last `[uses.*]` table, else goes to the end
+        last = [i for i, ln in enumerate(lines) if ln.strip().startswith("[uses.")]
+        if not last:
+            return text.rstrip("\n") + f"\n\n{head}\n" + "\n".join(want) + "\n"
+        at = last[-1] + 1
+        while at < len(lines) and not lines[at].lstrip().startswith("["):
+            at += 1
+        while at > 0 and lines[at - 1].strip() == "":
+            at -= 1
+        return "\n".join(lines[:at] + ["", head, *want] + lines[at:])
+    end = start + 1
+    while end < len(lines) and not lines[end].lstrip().startswith("["):
+        end += 1
+    body = lines[start + 1 : end]
+    have = {
+        m.group(1): m.group(2)
+        for ln in body
+        if (m := re.match(r"\s*(\w+)\s*=\s*(\d+)\s*(?:#.*)?$", ln))
+    }
+    if all(have.get(k) == str(int(uses[k])) for k in USES_KEYS):
+        return text
+    # keep comments and blank lines of the table; the count lines take their place, missing ones follow the last count
+    out, seen = [], set()
+    for ln in body:
+        m = re.match(r"\s*(\w+)\s*=", ln)
+        if m and m.group(1) in USES_KEYS:
+            seen.add(m.group(1))
+            out.append(f"{m.group(1)} = {int(uses[m.group(1)])}")
+        else:
+            out.append(ln)
+    missing = [w for w in want if w.split(" ")[0] not in seen]
+    trail = 0
+    while out and out[-1].strip() == "":
+        out.pop()
+        trail += 1
+    out += missing + [""] * trail
+    return "\n".join(lines[: start + 1] + out + lines[end:])
 
 
 def _daemon(device: str) -> str:
@@ -92,7 +106,7 @@ def _daemon(device: str) -> str:
 
 def commit_stage(mid: str, devices: list[str]) -> bool:
     """For a module of api major 3: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
-    `patchkit records`), write `[uses]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
+    `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
     conformance suite that runs next reads that gallery.json. A module of api major 2 declares in `.dk.desc` and is left alone: returns False."""
     from tools.patchkit import patchkit, pk_committed, pk_device
 
@@ -129,7 +143,7 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
         gallery.parent.mkdir(parents=True, exist_ok=True)
         gallery.write_text(text, encoding="utf-8")
     print(
-        f"{mid}: committed rows {counts}; module.toml [uses] {'written' if changed else 'unchanged'}",
+        f"{mid}: committed rows {counts}; module.toml [uses.<device>] {'written' if changed else 'unchanged'}",
         flush=True,
     )
     return True

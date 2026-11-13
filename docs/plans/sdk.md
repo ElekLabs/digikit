@@ -212,13 +212,13 @@ Only what the device needs before any module code runs:
 | --- | --- | --- |
 | Module id | `module.toml` | Identity |
 | One `[[machine]] id` or `[[fx]] id` line per machine or effect | `module.toml` | Machine type numbers are assigned for all selected modules before any loads (`assign::plan`), and stay the same across boots so projects stay valid. Projects refer to these ids |
-| `[uses]`: machine rows, param rows, page rows | `module.toml`, written by `module:check` | The tick check in the device menu (`dkrt_scan`, `dkrt_fit`) reads counts and sizes only |
+| `[uses.dt2]`, `[uses.dn2]`: machine rows, param rows, page rows per device | `module.toml`, written by `module:check` | The tick check in the device menu (`dkrt_scan`, `dkrt_fit`) reads counts and sizes only |
 | DSP section (code, relocations, named imports, voice and FX entries) | Built from `src/dsp/` as today | Voice rows, FX slots, DSP memory |
 
-`module:check` runs the module in the emulator and writes `[uses]` from what `init` declared, like a lock file. Nobody maintains it by
-hand.
+`module:check` runs the module in the emulator and writes each device's `[uses.<device>]` table from what `init` declared on that device, like a lock file. Nobody maintains it by
+hand. The tables are per device because the runtime builds different rows per device (DT2 has no page rows); a module has only the tables of the devices it builds for.
 
-The packer copies the machine and effect keys and the `[uses]` counts into the keys table of the `.dkm` header (6.3).
+The packer copies the machine and effect keys and the device's `[uses.<device>]` counts into the keys table of the `.dkm` header (6.3).
 
 Ids are written once. `patchkit gen` writes `build/gen/module_ids.h` from the `module.toml` ids, in the same way it writes other
 committed per-module files (for example `build/gen/dl-limits.h`), and `patchkit gen --check` guards it. Every module has `build/gen`
@@ -260,7 +260,12 @@ id = "analog"
 id = "analog"
 dsp = "va"          # optional: the prefix of the DSP symbols (_va_render, ...) when it is not the id
 
-[uses]
+[uses.dt2]
+machine_rows = 1
+param_rows = 4
+page_rows = 0       # DT2 has no page rows
+
+[uses.dn2]
 machine_rows = 1
 param_rows = 4
 page_rows = 1
