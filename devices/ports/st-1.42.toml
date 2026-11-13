@@ -410,6 +410,36 @@ mark = "O"
 rule = "fw/menu:cf_func"
 
 [[anchor]]
+name = "cf.menu.site.settings_list.system_icon_ref"
+cpu = "cf"
+kind = "code"
+addr = 0x4005f150
+len = 6
+sha256 = "a2bafb4a7883aa649e0f4388193777c0beef549882f5d5fdf25017e22ec440ff"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
+name = "cf.menu.site.settings_list.tail"
+cpu = "cf"
+kind = "code"
+addr = 0x4005f176
+len = 8
+sha256 = "49e7ab0d372e41be14161fa480629cdcfabc16a9f5e09a55e2efdc28f465e12a"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
+name = "cf.menu.site.vertical_menu_view_ctor.font_ref"
+cpu = "cf"
+kind = "code"
+addr = 0x400fee10
+len = 6
+sha256 = "d3535e0ce6aa354a5c3b19b337c6b01758edd99ed4109e330aa189332ed3b1c7"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
 name = "cf.midi.fn.send"
 cpu = "cf"
 kind = "code"
@@ -1115,8 +1145,23 @@ mark = "O"
 rule = "fw/window:cf_ptr"
 
 [[hook]]
+name = "cf.menu.hook.settings_list.tail"
+site = "cf.menu.site.settings_list.tail"
+mode = "before"
+
+[[hook]]
 name = "cf.midi.hook.rx"
 site = "cf.midi.site.rx"
+mode = "before"
+
+[[hook]]
+name = "cf.rtos.hook.idle"
+site = "cf.rtos.site.idle"
+mode = "replace"
+
+[[hook]]
+name = "cf.rtos.hook.intro_setup.table_arg"
+site = "cf.rtos.site.intro_setup.table_arg"
 mode = "before"
 
 [[hook]]

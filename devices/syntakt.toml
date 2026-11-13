@@ -135,6 +135,11 @@ bits = 24
 sample_rate = 48000
 frame_samples = 32
 
+# The input backend core/input uses (the panel MCU's UART packets decoded by the firmware's own key and encoder decoders; anchors by hash in the
+# port file). The key code layout is [panel] below.
+[input]
+backend = "panel-uart"
+
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:
 # the code is a wire position, not the firmware's control number. Channel 6 has one key, LEVEL push, at bit 0.

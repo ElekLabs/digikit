@@ -165,7 +165,7 @@ site = "cf.rtos.site.idle"
 cpu = "cf"
 mode = "replace"
 regs = { in = [], clobbers = [] }   # never continues into firmware code
-devices = ["dt2", "dn2"]
+devices = ["dt2", "dn2", "st"]
 mark = "D"
 users = ["core/health"]
 doc = "The boot thread's last call (create the main-OS task), after which the thread idles; the hook makes that call itself and then counts idle iterations forever."
@@ -195,7 +195,7 @@ site = "cf.rtos.site.intro_setup.table_arg"
 cpu = "cf"
 mode = "before"
 regs = { in = [], clobbers = ["d0", "a0", "ccr"] }   # the argument is at (0x24,sp); the displaced `move.l (0x24,sp),d0; movea.l d0,a0` load d0 and a0 next
-devices = ["dt2", "dn2"]
+devices = ["dt2", "dn2", "st"]
 mark = "D"
 users = ["core/introblank"]
 doc = "The intro setup function, before it reads its scene table argument from (0x24,sp); a hook that writes another table pointer there changes the whole intro."

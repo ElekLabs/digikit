@@ -124,6 +124,8 @@ read over USB MIDI.
       `dk_time_blocks` has no SHARC block source (report unsupported); Sound layout and machine ids unchecked.
 - [ ] Runtime services without a Syntakt equivalent return "unsupported" (e.g. `dk_debug_track_type` -> -2, which
       digikit/debug already handles).
+- [x] core/ui, core/health, core/input, core/digikit-menu and core/introblank run on st [D] (finding 129 "Adapters on 1.42"): the SETTINGS hook,
+      the idle hook, `[input]` and the input device object; the block interrupt anchors are optional (no DSP: no health windows).
 - [ ] Modules declare their devices; tool and UI modules run on `st`.
 
 ### P4 Digital audio (later)

@@ -43,7 +43,6 @@ extern const uint8_t fw_choice_cb_vt __asm__("cf.window.site.multichoice_cb_vptr
 void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 
 #define VIEW_AT 0x38     /* the View sub-object of a Menu view */
-#define VMV_FONT_AT 0xa8 /* VerticalMenuView: pointer to the font */
 #define CMP_FONT_AT 0x94 /* CompactVerticalMenuView: the font object itself */
 #define POP_PANEL_AT 0x380
 #define POP_EXT_AT 0x548 /* our word behind a popout view: the dk_ui_menu */
@@ -167,6 +166,14 @@ static void invalidate(dk_ui_menu *m)
 static uint8_t *view_manager(void)
 {
     return dk_fw_view_brain_view_manager(dk_fw_view_brain_instance());
+}
+
+/* The font of a VerticalMenuView: the operand of the `move.l #font,d0` in its constructor (the field has another offset on some devices). */
+static uint8_t *vmv_font(void)
+{
+    const uint16_t *r = (const uint16_t *)&dk_fw_menu_vertical_menu_view_ctor_font_ref;
+    __asm__("" : "+r"(r)); /* the compiler must not see the 1-byte object */
+    return (uint8_t *)(((uint32_t)r[1] << 16) | r[2]);
 }
 
 /* The stock icon the builder always wants: the operand of the `pea` of the SETTINGS > SYSTEM item. */
@@ -652,7 +659,7 @@ static int build_menu(dk_ui_menu *m, const dk_ui_menu_desc *d)
             goto fail;
         dk_fw_menu_vertical_menu_view_ctor(obj, d->name, 8, &title, 0);
         m->obj = obj;
-        m->font = *(uint8_t **)(obj + VMV_FONT_AT);
+        m->font = vmv_font();
         if (m->kind == K_TEXT &&
             !own_vtable(obj, g_text_vt, &g_text_stock_paint, 0, (void *)text_paint, 0))
             goto fail;

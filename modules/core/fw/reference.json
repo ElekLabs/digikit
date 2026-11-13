@@ -5958,6 +5958,11 @@
           {
             "addr": "0x400a5eac"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005f176"
+          }
         ]
       },
       "bindings": {
@@ -5968,7 +5973,8 @@
       "cpu": "cf",
       "devices": [
         "dt2",
-        "dn2"
+        "dn2",
+        "st"
       ],
       "doc": "Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item.",
       "file": "devices/fw/menu.toml",
@@ -6019,6 +6025,12 @@
             "addr": "0x400a5e86",
             "len": 6
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005f150",
+            "len": 6
+          }
         ]
       },
       "bind": "static",
@@ -6027,10 +6039,6 @@
         "rust": "dkfw::menu::SETTINGS_LIST_SYSTEM_ICON_REF"
       },
       "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
       "doc": "The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its operand is the address of a stock icon object built at run time.",
       "file": "devices/fw/menu.toml",
       "kind": "site",
@@ -6046,6 +6054,12 @@
           "kind": "cf_func",
           "len": 6,
           "offset": 898
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 6,
+          "mark": "D",
+          "offset": 990
         }
       },
       "subsystem": "menu",
@@ -6076,13 +6090,15 @@
             "addr": "0x400a5eac",
             "len": 8
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005f176",
+            "len": 8
+          }
         ]
       },
       "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
       "doc": "The last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding a menu item.",
       "file": "devices/fw/menu.toml",
       "kind": "site",
@@ -6098,6 +6114,12 @@
           "kind": "cf_func",
           "len": 8,
           "offset": 936
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "mark": "D",
+          "offset": 1028
         }
       },
       "subsystem": "menu",
@@ -6108,6 +6130,62 @@
         "cf.menu.settings_tail",
         "cf.menu.site.settings_tail"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.12": [
+          {
+            "addr": "0x4011b996",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011a022",
+            "len": 6
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400fee10",
+            "len": 6
+          }
+        ]
+      },
+      "bind": "static",
+      "bindings": {
+        "c": "dk_fw_menu_vertical_menu_view_ctor_font_ref",
+        "rust": "dkfw::menu::VERTICAL_MENU_VIEW_CTOR_FONT_REF"
+      },
+      "cpu": "cf",
+      "doc": "The `move.l #font,d0` instruction (6 bytes of code) in the VerticalMenuView constructor: its operand is the address of the font object that the constructor stores twice in the view. The field offset is not the same in every firmware, so a module reads the font from this literal, not from a fixed offset.",
+      "file": "devices/fw/menu.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.menu.site.vertical_menu_view_ctor.font_ref",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 182
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 182
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 6,
+          "mark": "D",
+          "offset": 164
+        }
+      },
+      "subsystem": "menu",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
     },
     {
       "bindings": {
@@ -10860,12 +10938,18 @@
           {
             "addr": "0x400cce4a"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40082896"
+          }
         ]
       },
       "cpu": "cf",
       "devices": [
         "dt2",
-        "dn2"
+        "dn2",
+        "st"
       ],
       "doc": "The boot thread's last call (create the main-OS task), after which the thread idles; the hook makes that call itself and then counts idle iterations forever.",
       "file": "devices/fw/rtos.toml",
@@ -10900,12 +10984,18 @@
           {
             "addr": "0x400d183a"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40087d0a"
+          }
         ]
       },
       "cpu": "cf",
       "devices": [
         "dt2",
-        "dn2"
+        "dn2",
+        "st"
       ],
       "doc": "The intro setup function, before it reads its scene table argument from (0x24,sp); a hook that writes another table pointer there changes the whole intro.",
       "file": "devices/fw/rtos.toml",
@@ -20850,7 +20940,7 @@
       "name": "mem"
     },
     {
-      "count": 30,
+      "count": 31,
       "cpu": "cf",
       "file": "devices/fw/menu.toml",
       "meaning": "Menu, MenuItem, menu views, the SETTINGS menu",
