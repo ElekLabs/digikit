@@ -1,17 +1,7 @@
 import type { Session } from '@digi/test-support';
 import { word } from './fx-live.ts';
 import { patchkit } from './patchkit.ts';
-
-/** The runtime's module table (modules/core/runtime/src/rs/src/lib.rs, `State`): ten header words, then one record of 13 words per slot:
- * used, name[32], version, base, size, fini (the same layout `tools/devtools/addrnames.py` reads). */
-const STATE_HEADER_BYTES = 40;
-const MODULE_RECORD_BYTES = 52;
-/** DKRT_DSP (`DspState`, modules/core/runtime/src/rs/src/dsp.rs): 13 words, then mod_off[slots] and mod_len[slots]. The area is word 3 of
- * `dyndsp_info`, an L2 byte address; L2_BYTE_BASE and L2_SW_BASE are the constants of packages/patchkit/src/dsp.rs. */
-const DSP_HEADER_BYTES = 52;
-const INFO_AREA_BYTES = 12;
-const L2_BYTE_BASE = 0x2000_0000;
-const L2_SW_BASE = 0x00b8_0000;
+import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 export interface ModuleLoad {
   id: string;
@@ -23,34 +13,27 @@ export interface ModuleLoad {
   dspBase?: number;
 }
 
-/** The load table of the running emulator, read from the module table at DKRT_STATE. With `dsp` (the symbols DKRT_DSP and dyndsp_info) a module
- * with a DSP part also gets its `dspBase` (the slot index is the DKRT_DSP record index). */
-export async function readLoadTable(
-  session: Session,
-  state: number,
-  slots: number,
-  dsp?: { state: number; info: number },
-): Promise<ModuleLoad[]> {
-  const loads: ModuleLoad[] = [];
-  const area = dsp ? await word(session, dsp.info + INFO_AREA_BYTES) : 0;
-  for (let slot = 0; slot < slots; slot++) {
-    const at = state + STATE_HEADER_BYTES + slot * MODULE_RECORD_BYTES;
-    if ((await word(session, at)) === 0) continue;
-    const name = Buffer.alloc(32);
-    for (let i = 0; i < 8; i++) name.writeUInt32BE(await word(session, at + 4 + 4 * i), 4 * i);
-    const load: ModuleLoad = {
-      id: name.toString('latin1').split('\0')[0]!,
-      base: await word(session, at + 40),
-      size: await word(session, at + 44),
-      fini: await word(session, at + 48),
-    };
-    if (dsp && area && (await word(session, dsp.state + DSP_HEADER_BYTES + 4 * (slots + slot))) !== 0) {
-      const off = await word(session, dsp.state + DSP_HEADER_BYTES + 4 * slot);
-      load.dspBase = L2_SW_BASE + (area + off - L2_BYTE_BASE) / 2;
-    }
-    loads.push(load);
+/**
+ * The load table of the running emulator. `patchkit addr --format reads` names the symbols to read (the ship map knows the slot count and the
+ * layout); the raw bytes go back to patchkit, which decodes the records (`dkaddrmap::snapshot`).
+ */
+export async function readLoadTable(session: Session, plan: RuntimePlan, shipMap: string): Promise<ModuleLoad[]> {
+  const reads = JSON.parse((await patchkit(['addr', '--map', shipMap, '--format', 'reads'])).stdout) as {
+    symbol: string;
+    len: number;
+  }[];
+  const snapshot: string[] = [];
+  for (const { symbol, len } of reads) {
+    const at = planSymbol(plan, symbol);
+    const bytes = Buffer.alloc(Math.ceil(len / 4) * 4);
+    for (let i = 0; i < bytes.length; i += 4) bytes.writeUInt32BE(await word(session, at + i), i);
+    snapshot.push('--snapshot', `${symbol}=${bytes.subarray(0, len).toString('hex')}`);
   }
-  return loads;
+  const { stdout } = await patchkit(['addr', '--map', shipMap, ...snapshot, '--format', 'loads']);
+  const table = JSON.parse(stdout) as {
+    modules: { id: string; base: number; size: number; fini?: number; dsp_base?: number }[];
+  };
+  return table.modules.map((m) => ({ id: m.id, base: m.base, size: m.size, fini: m.fini ?? 0, dspBase: m.dsp_base }));
 }
 
 export interface Resolved {

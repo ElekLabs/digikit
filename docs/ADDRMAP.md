@@ -34,7 +34,7 @@ JSON, one object. `kind` is `ship`, `module` or `dev`.
 - `module`: set on the entries of a module map. `addr` is then the offset from the module's load address; the lookup adds the base from the load
   table. A module that is not in the load table has no names. For a `sharc` entry `addr` is the offset in words from the start of the module's DSP
   image and the lookup adds the module's `dsp_base` (below); a module without `dsp_base` has no DSP names.
-- `key` of a ship map: the stock image (`image_sha256`), the patched image (`output_sha256`) and the modules the patch placed. A module map has
+- `key` of a ship map: the stock image (`image_sha256`), the patched image (`output_sha256`), the modules the patch placed and the `loader` header (below). A module map has
   `module` (the name the runtime reports), `source_sha256` (its object) and `dkm_sha256`. The dev map has the stock image hash from the port file.
   The lookup refuses maps that name different stock images.
 - Entries are sorted by (cpu, layer, module, addr, name): equal inputs give equal files.
@@ -53,16 +53,24 @@ A ship map and a module map hold no firmware bytes and no firmware-derived text 
 
 ## Load table
 
-`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512, "dsp_base": 12062720}]}`. `dsp_base` is optional: the software PC where the module's
-DSP image starts. A module without a DSP part, or a table written without it, leaves it out. In the emulator it is read from the runtime's module table
-`DKRT_STATE` (symbol of the patch plan; `State` in `modules/core/runtime/src/rs/src/lib.rs`: ten header words, then one record of 13 words per
-slot: used, name[32], version, base, size, fini). `tools.devtools.addrnames.read_load_table` and `tests/regression/runtime/addrmap.ts` read it.
-No firmware or runtime change.
+`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512, "fini": 1196000064, "dsp_base": 12062720}]}`. `dsp_base` is optional: the software PC
+where the module's DSP image starts. A module without a DSP part, or a table written without it, leaves it out. `fini` is optional too.
 
-The DSP placement comes from `DKRT_DSP` (`DspState` in `modules/core/runtime/src/rs/src/dsp.rs`) and the `dyndsp_info` table of `core/dyndsp`. The
-module record index of `DKRT_STATE` is also the index in `DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]`
-(`area` is word 3 of `dyndsp_info`); `dsp_base` is `0xB80000 + (that address - 0x20000000) / 2`. The readers (`read_load_table` with `dsp=dsp_symbols(plan)`,
-`readLoadTable` with its `dsp` argument) fill it.
+Hosts do not decode the table. They read raw memory and `dkaddrmap::snapshot` (one Rust decoder, also built for wasm32) turns it into the table:
+
+- A ship map has `key.loader`: `{"modules": slots, "l2_byte_base": ..., "l2_sw_base": ..., "dsp": true}`. `patchkit apply --addrmap` writes it from the device
+  file (`[limits] modules`) and the L2 constants of `packages/patchkit/src/dsp.rs`; `dsp` says the image has the run-time DSP loader.
+- `patchkit addr --map SHIP --format reads` lists what to read: the plan symbols `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` with their byte counts.
+- `patchkit addr --map SHIP --snapshot SYMBOL=HEX ... [--format loads]` takes the bytes (hex, one flag per symbol) and decodes them; `--format loads` prints
+  the table, any other format names addresses with it.
+
+Layout: `DKRT_STATE` (`State` in `modules/core/runtime/src/rs/src/lib.rs`) has ten header words, then one record of 13 words per slot: used, name[32], version,
+base, size, fini. `DKRT_DSP` (`DspState` in `.../dsp.rs`) has 13 words, then `mod_off[slots]` and `mod_len[slots]`. The record index of `DKRT_STATE` is the index in
+`DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]` (`area` is word 3 of `dyndsp_info`); `dsp_base` is
+`l2_sw_base + (that address - l2_byte_base) / 2`. The slot count is read from the length of the `DKRT_STATE` bytes. No firmware or runtime change.
+
+Callers: `tools.devtools.addrnames.AddrNames.for_image(..., peek=)` (Python tools: `dklog`, `cfprof`) and `readLoadTable` in `tests/regression/runtime/addrmap.ts`
+only peek the symbols and pass the bytes on.
 
 ## Lookup
 

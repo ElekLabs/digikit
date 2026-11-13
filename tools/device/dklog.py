@@ -51,9 +51,6 @@ from tools.device.dklog_kinds import (
 from tools.devtools.addrnames import (
     AddrNames,
     AddrNamesError,
-    dsp_symbols,
-    plan_symbol,
-    read_load_table,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -857,23 +854,9 @@ def names_for_crash(
 ) -> AddrNames | None:
     """The names of a running device: the image's address map, the modules' maps and the load table read from the runtime's module table."""
     try:
-        plan = json.loads(image.with_suffix(".plan.json").read_text())
-        table = plan_symbol(plan, "DKRT_STATE") + 40
-        dsp = dsp_symbols(plan)
-        # the module table, and the DSP placement words: DKRT_DSP mod_off and mod_len (2 x 8 words) and the area word of dyndsp_info
-        spans = {table: peek_range(up, table, 8 * 52)}
-        if dsp:
-            spans[dsp[0] + 52] = peek_range(up, dsp[0] + 52, 64)
-            spans[dsp[1] + 12] = peek_range(up, dsp[1] + 12, 4)
-
-        def peek32(a: int) -> int | None:
-            for at, raw in spans.items():
-                if at <= a < at + len(raw):
-                    return int.from_bytes(raw[a - at : a - at + 4], "big")
-            return None
-
-        loads = read_load_table(peek32, table - 40, dsp=dsp)
-        return AddrNames.for_image(image, modules, loads)
+        return AddrNames.for_image(
+            image, modules, peek=lambda a, n: peek_range(up, a, n)
+        )
     except (AddrNamesError, OSError, KeyError, D.UploadError, TimeoutError) as e:
         print(f"no names: {e}", file=sys.stderr)
         return None

@@ -13,6 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub mod snapshot;
+
 pub const FORMAT: &str = "dk-addrmap";
 pub const VERSION: u32 = 1;
 
@@ -41,6 +43,9 @@ pub struct Key {
     pub source_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dkm_sha256: Option<String>,
+    /// A ship map: what a host needs to read the load table of the running image (slots, L2 bases).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader: Option<snapshot::Loader>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -152,6 +157,14 @@ pub struct Load {
     /// has no DSP part, or the reader did not find where it sits (its DSP entries stay unresolved).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dsp_base: Option<u64>,
+    /// The address of the module's `fini` function, when the table was read from the runtime (None: none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fini: Option<u64>,
+}
+
+/// The loader description of the first map that has one.
+pub fn loader_of(maps: &[AddrMap]) -> Option<&snapshot::Loader> {
+    maps.iter().find_map(|m| m.key.loader.as_ref())
 }
 
 /// A name for an address.

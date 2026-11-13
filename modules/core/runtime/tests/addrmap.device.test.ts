@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect } from 'vitest';
-import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { resolveAddresses, readLoadTable } from '@digi/regression/runtime/addrmap.ts';
 import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/runtime/install.ts';
@@ -31,10 +30,7 @@ runtimeTests('the address map names a runtime function and a loaded module funct
     { id: DEBUG_MODULE, artifact: moduleArtifact(device, DEBUG_MODULE) },
   ]);
 
-  const loads = await readLoadTable(session, planSymbol(plan, 'DKRT_STATE'), deviceProfile(device).limits.modules!, {
-    state: planSymbol(plan, 'DKRT_DSP'),
-    info: planSymbol(plan, 'dyndsp_info'),
-  });
+  const loads = await readLoadTable(session, plan, shipMap);
   expect(loads.map((l) => l.id)).toEqual([ID, DEBUG_MODULE]);
   const load = loads[0]!;
   expect(

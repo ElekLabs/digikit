@@ -134,7 +134,23 @@ pub fn anchor_entries(port: &Port) -> Vec<Entry> {
 
 /// The ship map of an applied plan.
 pub fn ship_map(plan: &crate::apply::Plan) -> AddrMap {
+    let has = |name: &str| {
+        plan.symbols
+            .keys()
+            .any(|k| k.rsplit(':').next() == Some(name))
+    };
+    // how a host reads the load table of this image: the runtime's tables and the L2 bases of the DSP placement
+    let loader = crate::devdata::by_short(&plan.base.device)
+        .and_then(|d| d.modules)
+        .filter(|_| has(dkaddrmap::snapshot::SYM_STATE))
+        .map(|modules| dkaddrmap::snapshot::Loader {
+            modules,
+            l2_byte_base: crate::dsp::L2_BYTE_BASE as u64,
+            l2_sw_base: crate::dsp::L2_SW_BASE as u64,
+            dsp: has(dkaddrmap::snapshot::SYM_DSP) && has(dkaddrmap::snapshot::SYM_INFO),
+        });
     let key = Key {
+        loader,
         device: Some(plan.base.device.clone()),
         firmware: Some(plan.base.version.clone()),
         image_sha256: Some(plan.base.syx_sha256.clone()),
@@ -169,9 +185,11 @@ pub fn module_map(
     Ok(AddrMap::new("module", key, entries))
 }
 
-const USAGE: &str = "usage: patchkit addr --map FILE... [--loads FILE] [--load ID=BASE]... [--dsp-base ID=PC]... [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
+const USAGE: &str = "usage: patchkit addr --map FILE... [--loads FILE] [--load ID=BASE]... [--dsp-base ID=PC]... [--snapshot SYMBOL=HEX]... [--cpu cf|sharc] [--ret] [--format json|text|reads|loads] (ADDR... | --stdin)
   ADDR is hex (0x...) or decimal, optionally CPU:ADDR (sharc:0xb80010). --stdin reads one ADDR per line.
   --loads is a JSON load table {\"modules\":[{\"id\":NAME,\"base\":N}]}; --load adds one module (hex base).
+  --snapshot gives the raw bytes of a runtime symbol (DKRT_STATE, DKRT_DSP, dyndsp_info) as read from the emulator or device; the load table is decoded from them
+  with the map's loader header. --format reads lists the symbols and byte counts to read; --format loads prints the decoded load table.
   --dsp-base sets where the DSP image of a loaded module starts (hex software PC); `sharc` names of the module need it.
   --ret names a return address (the address minus 2).";
 
@@ -190,7 +208,9 @@ pub fn run(rest: &[String]) -> Result<()> {
     let mut maps = vec![];
     let mut loads = LoadTable::default();
     let mut cpu = Cpu::Cf;
-    let (mut ret, mut stdin, mut text) = (false, false, false);
+    let (mut ret, mut stdin) = (false, false);
+    let mut format = String::from("json");
+    let mut snapshot = dkaddrmap::snapshot::Snapshot::new();
     let mut addrs: Vec<String> = vec![];
     let mut dsp_bases: Vec<(String, u64)> = vec![];
     let mut it = rest.iter();
@@ -222,6 +242,7 @@ pub fn run(rest: &[String]) -> Result<()> {
                     base: number(&format!("0x{}", base.trim_start_matches("0x")))?,
                     size: 0,
                     dsp_base: None,
+                    fini: None,
                 });
             }
             "--dsp-base" => {
@@ -238,7 +259,16 @@ pub fn run(rest: &[String]) -> Result<()> {
                 let v = value("--cpu")?;
                 cpu = Cpu::parse(v).ok_or_else(|| Error(format!("--cpu cf|sharc\n{USAGE}")))?;
             }
-            "--format" => text = value("--format")? == "text",
+            "--format" => format = value("--format")?.clone(),
+            "--snapshot" => {
+                let v = value("--snapshot")?;
+                let (sym, hex) = v
+                    .split_once('=')
+                    .ok_or_else(|| Error(format!("--snapshot SYMBOL=HEX\n{USAGE}")))?;
+                let bytes = dkaddrmap::snapshot::parse_hex(hex)
+                    .map_err(|e| Error(format!("--snapshot {sym}: {e}")))?;
+                snapshot.insert(sym.into(), bytes);
+            }
             "--ret" => ret = true,
             "--stdin" => stdin = true,
             _ => addrs.push(a.clone()),
@@ -249,6 +279,34 @@ pub fn run(rest: &[String]) -> Result<()> {
         std::io::Read::read_to_string(&mut std::io::stdin(), &mut b)
             .map_err(|e| Error(format!("stdin: {e}")))?;
         addrs.extend(b.lines().filter(|l| !l.trim().is_empty()).map(String::from));
+    }
+    let text = format == "text";
+    if !["json", "text", "reads", "loads"].contains(&format.as_str()) {
+        return Err(Error(format!("--format json|text|reads|loads\n{USAGE}")));
+    }
+    if format == "reads" {
+        let l = dkaddrmap::loader_of(&maps).ok_or_else(|| {
+            Error(
+                "no map describes the load table (a ship map from `patchkit apply --addrmap` does)"
+                    .into(),
+            )
+        })?;
+        println!("{}", serde_json::json!(l.reads()));
+        return Ok(());
+    }
+    if !snapshot.is_empty() {
+        let l = dkaddrmap::loader_of(&maps).ok_or_else(|| {
+            Error("--snapshot needs a ship map (it holds the loader header)".into())
+        })?;
+        let t = dkaddrmap::snapshot::decode_loads(l, &snapshot).map_err(Error)?;
+        loads.modules.extend(t.modules);
+    }
+    if format == "loads" {
+        println!(
+            "{}",
+            serde_json::to_string(&loads).expect("load table serialises")
+        );
+        return Ok(());
     }
     if maps.is_empty() || addrs.is_empty() {
         return Err(Error(USAGE.into()));
@@ -400,6 +458,7 @@ mod tests {
                 base: 0x2100_0000,
                 size: 0x100,
                 dsp_base: None,
+                fini: None,
             }],
         };
         let r = Resolver::new(&[map.clone()], &loads).unwrap();
@@ -445,6 +504,7 @@ mod tests {
                 base: 0x2100_0000,
                 size: 0x100,
                 dsp_base: Some(0xb8_1000),
+                fini: None,
             }],
         };
         let r = Resolver::new(&[map], &loads).unwrap();
