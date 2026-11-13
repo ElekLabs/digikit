@@ -18,6 +18,11 @@ conflicts = []
 
 # `patchkit pack test/trace-demo --device dt2 -o trace-demo.dkm` makes the .dkm; add `--trace` for the traced one. The test
 # packages/patchkit/tests/trace.rs proves that the file without --trace equals the file of the sources without the trace lines.
+# The effect is declared by builder calls in init (src/module.c). The id `gain` is what the keys hash; the DSP symbols start with `dg`.
+[[fx]]
+id = "gain"
+dsp = "dg"
+
 [[object]]
 path = "build/trace-demo-cf.dko.json"
 sources = ["src/module.c"]

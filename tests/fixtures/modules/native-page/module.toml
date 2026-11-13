@@ -12,6 +12,10 @@ ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
 
+[[machine]]
+id = "native"
+dsp = "np"
+
 [[object]]
 path = "build/native-page-cf.dko.json"
 sources = ["src/module.c"]

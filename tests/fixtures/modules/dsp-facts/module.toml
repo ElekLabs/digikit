@@ -16,7 +16,11 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The effect declaration (DK_FX in src/module.c). It holds only the .dk.desc record; patchkit pack reads it and leaves it out of the .dkm.
+# The effect is declared by a builder call in init (src/module.c). The id `facts` is what the keys hash; the DSP symbols start with `fc`.
+[[fx]]
+id = "facts"
+dsp = "fc"
+
 [[object]]
 path = "build/dsp-facts-cf.dko.json"
 sources = ["src/module.c"]
