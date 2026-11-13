@@ -44,6 +44,8 @@ PORTS = {
     for d in device_files.load_all(str(REPO / "devices"))
     if d.short in LEDS
 }
+# The device probed when --device is not given.
+DEFAULT_DEVICE = "dt2"
 RATE = 48000
 
 # A run is "consistent" when the hits agree: f0 within 3 %, length within 15 %,
@@ -445,7 +447,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--device", choices=sorted(LEDS), default=next(iter(LEDS)))
+    ap.add_argument("--device", choices=sorted(LEDS), default=DEFAULT_DEVICE)
     ap.add_argument("--port", help="MIDI port substring (default by device)")
     ap.add_argument("--audio", help="audio device name substring (default by device)")
     ap.add_argument("--steps", default="trig1*10@500")

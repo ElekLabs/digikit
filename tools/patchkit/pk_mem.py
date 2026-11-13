@@ -161,7 +161,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument(
         "modules", nargs="*", help="ids under modules/, e.g. test/patched-pluck"
     )
-    ap.add_argument("--device", default="dt2", choices=device_files.shorts())
+    ap.add_argument("--device", default="dt2", choices=device_files.dsp_shorts())
     ap.add_argument("--firmware", help="default: 1.17 (dt2), 1.12 (dn2)")
     ap.add_argument("--json", action="store_true", help="JSON only")
     a = ap.parse_args(argv)

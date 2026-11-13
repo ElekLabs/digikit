@@ -20,7 +20,6 @@ import sys
 from tools.emulator import native_target, panel_tx
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-LEDS = 44
 
 
 def codes_of(text: str) -> list[int]:
@@ -119,6 +118,7 @@ def main() -> None:
     if boot.returncode:
         sys.exit(boot.stdout + boot.stderr)
     frames = []
+    failed = 0
     for code in codes_of(a.codes):
         log = out / f"code{code}.log"
         env = {**os.environ, "DIGI_PANEL_TX_LOG": str(log)}
@@ -131,6 +131,7 @@ def main() -> None:
         )
         if run.returncode:
             print(f"{code:3d}  {run.stdout.strip()[-120:]}")
+            failed += 1
             continue
         frames.append((code, out / f"code{code}.pbm"))
         marks = [m for m in panel_tx.marks(str(log)) if m[1] == code]
@@ -141,6 +142,8 @@ def main() -> None:
         print(f"{code:3d}  leds {' '.join(changes) or '-'}")
     sheet(frames, out)
     print(f"sheets in {out}")
+    if failed:
+        sys.exit(f"{failed} code run(s) failed")
 
 
 if __name__ == "__main__":

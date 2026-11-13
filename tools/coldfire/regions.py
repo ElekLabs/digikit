@@ -87,7 +87,7 @@ SNAPSHOTS = {
     name: "out/snapshots/%s-audio-ready-cold-2026-10-07/digi-audio-m5.snap"
     % b.device.short
     for name, b in device.boot_images(config.DEVICES_DIR).items()
-    if b.base is None
+    if b.base is None and b.device.has_dsp()
 }
 
 # The reset helpers, with their address operands masked ("." = any byte).
