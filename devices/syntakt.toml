@@ -42,30 +42,82 @@ readonly = [1, 2, 4, 6, 7, 8]
 [emulator]
 free_running_dtcn = [2]
 
-# The panel is a placeholder, from finding 70 "Panel wire" (measured by use on OS 1.41): codes follow the linear scheme of the
-# other devices (code = channel * 8 + bit + 1), which the panel sweep has not confirmed here. Only the controls named below are known;
-# every other code of the linear channels is unknown. The panel sweep replaces this table.
+# Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
+# linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:
+# the code is a wire position, not the firmware's control number. Channel 6 has one key, LEVEL push, at bit 0.
 [panel]
 linear_channels = 6
-button_channels = 6
+button_channels = 7
 encoders = 9
 
-# Known: channel 0 bits 0-7 are tracks 1-8 (codes 1-8), channel 1 bits 0-3 are tracks 9-12 (codes 9-12).
-[[panel.group]]
-name = "tracks"
-kind = "button"
-codes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-layout = "grid"
-columns = 6
+[panel.exceptions]
+49 = [6, 0]
 
-# Known: channel 2 bit 7 is the LFO page (code 24), channel 3 bit 3 is NO (code 28).
+# Codes 1-16 are the trig keys (1-12 also select the track); 21 is wired to nothing.
 [[panel.group]]
-name = "known"
+name = "trigs"
 kind = "button"
-codes = [24, 28]
+codes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+layout = "grid"
+columns = 8
+
+[[panel.group]]
+name = "modifiers"
+kind = "button"
+codes = [17, 18]
 layout = "row"
 
-# Encoder rotation: A-H are channels 0-7, LEVEL is channel 8.
+[[panel.group]]
+name = "pages"
+kind = "button"
+codes = [19, 20, 22, 23, 24]
+layout = "row"
+
+[[panel.group]]
+name = "modes"
+kind = "button"
+codes = [35, 25, 26, 27]
+layout = "row"
+
+[[panel.group]]
+name = "transport"
+kind = "button"
+codes = [36, 37, 38]
+layout = "row"
+
+[[panel.group]]
+name = "confirm"
+kind = "button"
+codes = [39, 28]
+layout = "row"
+
+[[panel.group]]
+name = "arrows"
+kind = "button"
+codes = [40, 29, 30, 31]
+layout = "dpad"
+
+[[panel.group]]
+name = "select"
+kind = "button"
+codes = [32, 34, 33]
+layout = "row"
+
+# Encoder push keys: A, B, C, D, E, F, G, H are 45, 44, 47, 46, 43, 42, 41, 48; LEVEL is 49.
+[[panel.group]]
+name = "encoder_push"
+kind = "button"
+codes = [45, 44, 47, 46, 43, 42, 41, 48]
+layout = "grid"
+columns = 4
+
+[[panel.group]]
+name = "level_push"
+kind = "button"
+codes = [49]
+layout = "single"
+
+# Encoder rotation is a separate code space: 1-8 are A-H, 9 is LEVEL.
 [[panel.group]]
 name = "encoders"
 kind = "encoder"
