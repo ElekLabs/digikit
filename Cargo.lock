@@ -1180,6 +1180,15 @@ name = "dksample"
 version = "0.1.0"
 
 [[package]]
+name = "dksharc"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sharc-rt",
+]
+
+[[package]]
 name = "dkui-host"
 version = "0.1.0"
 dependencies = [
