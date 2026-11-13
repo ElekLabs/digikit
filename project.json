@@ -5,13 +5,13 @@
     "device-literals": {
       "executor": "nx:run-commands",
       "cache": false,
-      "inputs": [],
+      "inputs": ["{workspaceRoot}/**/*", "{workspaceRoot}/devices/*.toml"],
       "outputs": [],
       "options": {
         "command": "node tools/nx/device-literals.mjs",
         "cwd": "."
       },
-      "description": "Device ids and names outside the allowed places may not grow beyond tools/nx/device-literals.baseline.json (reads every tracked file, so it is not cached; `lint` depends on it)."
+      "description": "Device ids and names outside the allowed places may not grow beyond tools/nx/device-literals.baseline.json (reads every tracked file: not cached, and any tracked-file change selects it in the affected gate; `lint` depends on it)."
     },
     "lint": {
       "dependsOn": ["device-literals"],
