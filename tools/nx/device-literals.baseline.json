@@ -739,7 +739,7 @@
   "tools/coldfire/task_stacks.py": 6,
   "tools/coldfire/vtcheck.py": 5,
   "tools/control/digi_client.py": 3,
-  "tools/device/devprobe.py": 4,
+  "tools/device/devprobe.py": 3,
   "tools/device/devrpc.py": 2,
   "tools/device/dkcardinfo.py": 6,
   "tools/device/dklog.py": 3,
