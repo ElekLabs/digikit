@@ -3,6 +3,8 @@
 //! `[device]` table (the LED maps) is not a device file and is left out.
 
 use std::fmt::Write;
+#[path = "src/device_header.rs"]
+mod device_header;
 use std::path::PathBuf;
 
 fn main() {
@@ -20,7 +22,7 @@ fn main() {
         let path = dir.join(&name);
         println!("cargo:rerun-if-changed={}", path.display());
         let text = std::fs::read_to_string(&path).unwrap();
-        if !text.lines().any(|l| l.trim_end() == "[device]") {
+        if !text.lines().any(|l| device_header::is_device_header(l)) {
             continue;
         }
         let path = path.canonicalize().unwrap();
