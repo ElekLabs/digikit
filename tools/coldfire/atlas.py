@@ -55,6 +55,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 
 from tools.coldfire import fw  # noqa: E402
 from tools.firmware import catalog as shared  # noqa: E402
+from tools.firmware import config, device  # noqa: E402
 from tools.firmware.catalog import (  # noqa: E402
     STRONG_PAIR,
     catalog_grade,
@@ -553,9 +554,11 @@ def extract_structs(img: fw.CF) -> list[dict[str, Any]]:
 
 
 def manual_dir(image: str) -> str | None:
-    pat = {"dt": "Digitakt-2-User-Manual*", "dn": "Digitone-2-User-Manual*"}.get(
-        image[:2]
+    dev = next(
+        (d for d in device.load_all(config.DEVICES_DIR) if image.startswith(d.short + "-")),
+        None,
     )
+    pat = dev.manual if dev else None
     if not pat:
         return None
     hits = sorted(glob.glob(os.path.join(ROOT, "out", "refs", pat)))
@@ -907,7 +910,11 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
 # --- catalog: candidate functions for anchors -----------------------------------------
 
 # Old firmware per image, for the stability column (same h_strict as the matched old function).
-CATALOG_OLD = {"dt2-1.17": "dt2-1.16", "dn2-1.12": "dn2-1.11"}
+CATALOG_OLD = {
+    name: b.base
+    for name, b in device.boot_images(config.DEVICES_DIR).items()
+    if b.base
+}
 # Score weights (see catalog_score).
 W_GRADE, W_PAIR, W_UI_CALLERS, W_NEAR, W_STRING, W_ROLE, W_ANCHORED = (
     4.0,

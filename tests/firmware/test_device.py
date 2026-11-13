@@ -160,6 +160,16 @@ main_sha256 = "b"
             self.assertEqual(device.acceptance_images(d), {"td-2.0": "T2.syx"})
             self.assertEqual(device.dsp_shorts(d), ["td"])
 
+    def test_syx_id_and_manual_are_optional_device_keys(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_device(
+                d, self.TWO.replace('short = "td"', 'short = "td"\nsyx_id = 0x30\nmanual = "M*"')
+            )
+            self.assertEqual(device.by_syx_id(0x30, d).manual, "M*")
+            self.assertIsNone(device.by_syx_id(0x31, d))
+            write_device(d, self.TWO)
+            self.assertIsNone(device.by_short("td", d).manual)
+
 
 class WireMappingTest(unittest.TestCase):
     def setUp(self):

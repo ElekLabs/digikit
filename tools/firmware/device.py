@@ -86,6 +86,8 @@ class Device:
         container=None,
         acceptance=None,
         has_panel=True,
+        syx_id=None,
+        manual=None,
     ):
         self.name = name
         self.short = short
@@ -101,6 +103,9 @@ class Device:
         self.acceptance = dict(acceptance or {})
         # False: the file has no [panel], so the wire mapping above is only a default and means nothing.
         self.has_panel = has_panel
+        # `[device] syx_id` (the device byte of the .syx framing) and `[device] manual` (glob of the user manual under out/refs/); None when absent.
+        self.syx_id = syx_id
+        self.manual = manual
 
     def __repr__(self):
         return "<Device %s>" % self.name
@@ -216,6 +221,8 @@ def _from_raw(raw, path):
         container=raw.get("container"),
         acceptance=raw.get("acceptance"),
         has_panel="panel" in raw,
+        syx_id=dev.get("syx_id"),
+        manual=dev.get("manual"),
     )
 
 
@@ -250,6 +257,14 @@ def by_short(short, dirpath=None):
     raise DeviceError(
         "No device %r (known: %s)" % (short, ", ".join(d.short for d in devices))
     )
+
+
+def by_syx_id(syx_id, dirpath=None):
+    """-> the Device with `[device] syx_id` equal to `syx_id`, or None."""
+    for d in load_all(dirpath):
+        if d.syx_id == syx_id:
+            return d
+    return None
 
 
 def dsp_shorts(dirpath=None):
