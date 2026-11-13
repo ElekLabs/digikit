@@ -3574,6 +3574,9 @@ impl Actor {
         if let Some(note) = dsp_note {
             report["dsp_choice"] = note;
         }
+        if let Some(error) = offers.registry_error {
+            report["offers_error"] = json!(error);
+        }
         // Fields a caller that loads on behalf of another method (`dev.reload`) adds to the report, the cold boot's included.
         if let Some(extra) = p.get("report_extra").and_then(Value::as_object) {
             for (key, value) in extra {
@@ -5095,6 +5098,8 @@ struct LoadOffers {
     runtime: bool,
     /// The device has a DSP (`[capabilities] dsp = "sharc"`) or a peer CPU (`[emulator] peer`): there is something to switch.
     dsp_choice: bool,
+    /// The device registry did not parse: the offers fall back to everything, and the load report carries this error.
+    registry_error: Option<String>,
 }
 
 impl LoadOffers {
@@ -5102,6 +5107,7 @@ impl LoadOffers {
         let all = Self {
             runtime: true,
             dsp_choice: true,
+            registry_error: None,
         };
         let Ok(fw) = patchkit::firmware::Firmware::parse(syx) else {
             return all;
@@ -5113,13 +5119,19 @@ impl LoadOffers {
         else {
             return all;
         };
-        let peer = plusdrive_format::device_profile::Registry::load()
-            .ok()
-            .is_some_and(|r| {
-                r.devices()
-                    .iter()
-                    .any(|d| d.short == short && d.peer.is_some())
-            });
+        let registry = match plusdrive_format::device_profile::Registry::load() {
+            Ok(registry) => registry,
+            Err(error) => {
+                return Self {
+                    registry_error: Some(format!("device registry: {error}")),
+                    ..all
+                };
+            }
+        };
+        let peer = registry
+            .devices()
+            .iter()
+            .any(|d| d.short == short && d.peer.is_some());
         Self::from_device(id.runtime_target, &id.capabilities.dsp, peer)
     }
 
@@ -5127,6 +5139,7 @@ impl LoadOffers {
         Self {
             runtime: runtime_target,
             dsp_choice: dsp == "sharc" || peer,
+            registry_error: None,
         }
     }
 }
