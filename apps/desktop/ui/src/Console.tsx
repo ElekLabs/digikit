@@ -260,8 +260,10 @@ export default function Console() {
     }
     live?.show(event.snapshot);
     setStatus(event.snapshot.status);
-    if (target().kind === 'emulator' && lastDevice() !== event.snapshot.status.device)
-      setBrowseDevice(event.snapshot.status.device === 'dn2' ? 'dn2' : 'dt2');
+    const running = event.snapshot.status.device;
+    // the module browser follows the emulator's device when it is one modules are built for
+    if (target().kind === 'emulator' && lastDevice() !== running && registry.runtimeIds.includes(running))
+      setBrowseDevice(running);
     setLastDevice(event.snapshot.status.device);
     startDefaultsAtLaunch();
     setError(event.snapshot.status.error ?? '');
