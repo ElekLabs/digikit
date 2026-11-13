@@ -481,7 +481,7 @@ fn main() -> ExitCode {
                 }
                 "peer" => {
                     let report = run.emulator.peer_report().ok_or("no peer on this board")?;
-                    results.push(json!({"peer": report, "icount": run.icount}));
+                    results.push(json!({"peer": report, "icount": run.icount, "position": run.emulator.diagnostics().at}));
                     Ok(())
                 }
                 "peerpeek" => {
@@ -626,6 +626,7 @@ fn main() -> ExitCode {
             "fault": fault, "boot": boot, "results": results, "watched": hits,
             "regs": regs, "regs_dropped": regs_dropped, "captures": captured,
             "icount": run.icount, "wall_seconds": started.elapsed().as_secs_f64(),
+            "position": run.emulator.diagnostics().at,
         })
     );
     ExitCode::from(if fault.is_some() { 1 } else { 0 })
