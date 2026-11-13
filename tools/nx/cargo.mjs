@@ -7,6 +7,11 @@ import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
 import { parse } from 'smol-toml';
 
+// The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
+const NEEDS_PACKS = JSON.parse(
+  readFileSync(new URL('../../tests/regression/runtime/needs-packs.json', import.meta.url), 'utf8'),
+).modules;
+
 const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
 const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
@@ -51,6 +56,21 @@ const CRATE_TARGETS = {
       dependsOn: [{ target: 'build-objects', projects: ['tag:acceptance-image'] }],
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
+    },
+    'pack-verdicts': {
+      executor: 'nx:run-commands',
+      cache: false, // under a second: the file it writes is part of the key of the device tasks that read it
+      parallelism: true,
+      description:
+        'Writes dist/bytes/pack-verdicts.json: the `patchkit needs` verdict of each pack in tests/regression/runtime/needs-packs.json.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/pack-verdicts.mjs',
+        '{workspaceRoot}/tests/regression/runtime/needs-packs.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', ...NEEDS_PACKS.map((id) => `${id}:pack`)],
+      outputs: ['{workspaceRoot}/dist/bytes/pack-verdicts.json'],
+      options: { command: 'node tools/nx/pack-verdicts.mjs', cwd: '.' },
     },
     'device-images': {
       executor: 'nx:run-commands',

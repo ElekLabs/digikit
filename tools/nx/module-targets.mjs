@@ -10,6 +10,9 @@ export const DEVICE_BYTES = 'patchkit:device-bytes';
 // Writes the hash of the image, plan and address map that `patchkit apply` makes for each acceptance firmware and patch set
 // (tools/nx/device-images.mjs).
 export const DEVICE_IMAGES = 'patchkit:device-images';
+// Writes the `needs` verdict of the packs in tests/regression/runtime/needs-packs.json (tools/nx/pack-verdicts.mjs).
+export const PACK_VERDICTS = 'patchkit:pack-verdicts';
+const PACK_NEEDS = '{workspaceRoot}/tests/regression/runtime/pack-needs.ts';
 // Shared compiler/contract surfaces. Optional implementation sources are named by their consumers.
 export const SHARED_SDK_INPUTS = [
   '{workspaceRoot}/sdk/sdk.toml',
@@ -220,7 +223,7 @@ export const builtSourceExclusions = (root, base = '.') =>
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
 // `uploadable`); `subjects` are the projects a test-only project tests.
 export const deviceTarget = (root, tests, recs, imageInput, importInputs, uploadable = false, opts = {}) => {
-  const dependsOn = ['patchkit:cli', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES];
+  const dependsOn = ['patchkit:cli', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS];
   if (uploadable) dependsOn.push('pack');
   for (const rec of recs) {
     for (const id of rec.modules ?? []) dependsOn.push(`${id}:pack`);
@@ -238,6 +241,8 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
     executor: 'nx:run-commands',
     cache: true,
     inputs: [
+      // a test that reads the precomputed `needs` of committed packs keys on that file's content
+      ...(imports.includes(PACK_NEEDS) ? outputFiles(['dist/bytes/pack-verdicts.json']) : []),
       ...(opts.narrow && patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
       ...(opts.narrow
         ? [

@@ -398,6 +398,8 @@ patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow). The rule 
 `addrmap.ts`, `runtime-plan-modules.ts` for `apply --modules`, the opt-in proofs through `optInPatchkit`) or
 `packages/test-support/src/commit-records.ts` (import it as `@digi/test-support/commit-records`), or the record patches fixture modules
 (`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`.
+`fx-live.ts` reads the `needs` of the gain pack from `dist/bytes/pack-verdicts.json` (`patchkit:pack-verdicts`, packs listed in
+`tests/regression/runtime/needs-packs.json`; `pack-needs.ts`, no patchkit; a missing entry fails): the key of a test that imports it hashes that file.
 `test-device-all` (a real run for every test, merge tests included), the non-twin targets (`test-device-full`) and `test-conformance`
 keep the full key: the patchkit binary and `dist/daemons.json`. A merge key lists a shared file of `SHARED_READS` (`sdk/sdk.toml`, `types.toml`, core `module.toml`) only when a
 helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) or the test runs patchkit; the full key lists all of them.
