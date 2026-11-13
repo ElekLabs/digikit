@@ -1,7 +1,8 @@
 //! The sections of a module of api major 3 (docs/plans/sdk.md 6.1, 6.3): no `.dk.desc` records. The keys table comes from `module.toml`
 //! (`[[machine]]`, `[[fx]]`, `[uses]`) and the DSP entry points are found by name in the DSP object.
 //!
-//! The names are the toolchain's symbols, with its leading underscore, and `-` of an id becomes `_`:
+//! The names are the toolchain's symbols, with its leading underscore. The prefix `x` is the id with `-` as `_`, or `dsp` of the `[[machine]]` or
+//! `[[fx]]` entry of module.toml when DSP code exists under another prefix (the id stays what the keys hash):
 //! machine `x`: `_x_render`, `_x_note_on` (global text), optional `_x_desc` (global data, a `dk_machine_desc`: state bytes, stereo, gate);
 //! effect `y`: `_y_process` (global text), `_y_desc` (global data, a `dk_fx_desc`);
 //! sample pool of machine `x`: `_x_sample_rec` and `_x_sample_ctl` (both or none; one machine of a module has the pool).
@@ -33,11 +34,6 @@ pub fn is_new_style(m: &Module) -> Result<bool> {
         ));
     }
     Ok(tables)
-}
-
-/// A C identifier from an id (`-` is not allowed in one).
-fn ident(id: &str) -> String {
-    id.replace('-', "_")
 }
 
 #[derive(Debug)]
@@ -112,8 +108,8 @@ pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Secti
     let mut stereo = false;
     let mut tracks: Option<SampleTracksDef> = None;
     for x in &mf.machines {
-        let c = ident(&x.id);
-        let what = format!("machine {:?}", x.id);
+        let (c, src) = x.dsp_prefix();
+        let what = format!("machine {:?} (DSP symbol prefix {c:?} from {src})", x.id);
         let render = format!("_{c}_render");
         let note_on = format!("_{c}_note_on");
         require(obj, id, &what, &render, "text")?;
@@ -173,8 +169,8 @@ pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Secti
         }
     }
     for y in &mf.fxs {
-        let c = ident(&y.id);
-        let what = format!("effect {:?}", y.id);
+        let (c, src) = y.dsp_prefix();
+        let what = format!("effect {:?} (DSP symbol prefix {c:?} from {src})", y.id);
         let process = format!("_{c}_process");
         let desc = format!("_{c}_desc");
         require(obj, id, &what, &process, "text")?;
@@ -393,6 +389,36 @@ mod tests {
         let obj = dsp_object(&[], &["_bar_desc"], &[], 0);
         let e = sections(&fx, "dn2", Some(&obj)).unwrap_err().to_string();
         assert!(e.contains("_bar_process"), "{e}");
+    }
+
+    #[test]
+    fn a_dsp_prefix_replaces_the_id_in_the_symbols_and_not_in_the_keys() {
+        let m = module(
+            "[[machine]]\nid = \"foo\"\ndsp = \"sn\"\n[[fx]]\nid = \"bar-x\"\ndsp = \"bx\"\n",
+        );
+        let obj = dsp_object(
+            &["_sn_render", "_sn_note_on", "_bx_process"],
+            &["_sn_desc"],
+            &[],
+            dkmdsp::DESC_CONTRACT,
+        );
+        // the id's own names are not looked for
+        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(
+            e.contains("_bx_desc") && e.contains("\"bx\"") && e.contains("module.toml"),
+            "{e}"
+        );
+        let m = module("[[machine]]\nid = \"foo\"\ndsp = \"sn\"\n");
+        let s = sections(&m, "dn2", Some(&obj)).unwrap();
+        let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+        assert!(
+            k.machine_keys()
+                .eq([crate::register::machine_key("test/m", "foo")])
+        );
+        let e = sections(&module(MACHINE), "dn2", Some(&obj))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("_foo_render") && e.contains("its id"), "{e}");
     }
 
     #[test]

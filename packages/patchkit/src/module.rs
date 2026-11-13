@@ -97,6 +97,17 @@ impl Manifest {
                 if !seen.insert(r.id.as_str()) {
                     return Err(err!("[[{table}]] id {:?} is declared twice", r.id));
                 }
+                if let Some(d) = &r.dsp {
+                    let ok = !d.is_empty()
+                        && d.bytes()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_');
+                    if !ok {
+                        return Err(err!(
+                            "[[{table}]] id {:?}: dsp {d:?}: use lowercase ascii letters, digits and `_`",
+                            r.id
+                        ));
+                    }
+                }
             }
         }
         for (name, old) in [
@@ -114,11 +125,25 @@ impl Manifest {
     }
 }
 
-/// An entry of `[[machine]]` or `[[fx]]`: the id only (any other key is refused).
+/// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct IdRef {
     pub id: String,
+    /// The prefix of the DSP entry symbols (`_<prefix>_render`, ...) when it is not the id: for DSP code that exists already. It never changes the id,
+    /// which the keys and `module_ids.h` use.
+    #[serde(default)]
+    pub dsp: Option<String>,
+}
+
+impl IdRef {
+    /// The prefix of this entry's DSP symbols and where it came from: `dsp` of module.toml, else the id with `-` as `_`.
+    pub fn dsp_prefix(&self) -> (String, &'static str) {
+        match &self.dsp {
+            Some(p) => (p.clone(), "`dsp` of its [[machine]]/[[fx]] in module.toml"),
+            None => (self.id.replace('-', "_"), "its id"),
+        }
+    }
 }
 
 /// `[uses]`: registry rows a module takes, all default 0.
@@ -1221,6 +1246,17 @@ mod manifest_tests {
                 page_rows: 3
             }
         );
+    }
+
+    #[test]
+    fn a_dsp_prefix_is_optional_and_checked() {
+        let m = load("[[machine]]\nid = \"sine\"\ndsp = \"sn\"\n[[fx]]\nid = \"a-b\"\n").unwrap();
+        assert_eq!(m.machines[0].dsp_prefix().0, "sn");
+        assert_eq!(m.fxs[0].dsp_prefix().0, "a_b");
+        for bad in ["Sn", "s-n", "", "s n"] {
+            let e = load(&format!("[[machine]]\nid = \"a\"\ndsp = \"{bad}\"\n")).unwrap_err();
+            assert!(e.to_string().contains("dsp"), "{bad}: {e}");
+        }
     }
 
     #[test]

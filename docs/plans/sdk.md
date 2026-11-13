@@ -235,7 +235,11 @@ DSP entry points are found by name, so the packer needs no declaration to build 
 `_analog_render`, `_analog_note_on` and `_fshift_process` (as `shot` declares `_shot_render` today), and the packer looks up the
 underscored symbol. A machine with a sample pool also has `<machine>_sample_rec` and `<machine>_sample_ctl` (`_shot_rec` and
 `_shot_ctl` for `shot`, passed today to `DK_SAMPLE_TRACKS(0, _shot_rec, _shot_ctl)`). The packer refuses a module when a symbol is
-missing.
+missing; the message names the symbol and says whether the prefix came from the id or from `dsp`.
+
+The symbol prefix is the id (with `-` as `_`) by default. For DSP code that exists under another prefix, `dsp = "<prefix>"` on the
+`[[machine]]` or `[[fx]]` line overrides it (lowercase ascii letters, digits and `_`). The id stays what the keys hash, and
+`module_ids.h` uses the id; only the symbol names use the prefix.
 
 The first argument of `DK_SAMPLE_TRACKS` is a per-module table id: the number of the sample table of the module. A module has one table
 (`dk_sample_pool_open` takes the lowest id), so the id is always 0 and the packer writes 0; the pool symbols carry no id.
@@ -254,6 +258,7 @@ id = "analog"
 
 [[machine]]
 id = "analog"
+dsp = "va"          # optional: the prefix of the DSP symbols (_va_render, ...) when it is not the id
 
 [uses]
 machine_rows = 1
