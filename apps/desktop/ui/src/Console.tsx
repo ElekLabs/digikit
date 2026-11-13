@@ -17,6 +17,7 @@ import {
 } from '@web/runtime/runtime';
 import { booting as startBoot, bootingScreen, bootingStatus, loadFailure, type Booting } from './boot-core';
 import { bumpCardRefresh } from './card-state';
+import { pageFor, type Page } from './page-core';
 import {
   CHART,
   DOWN,
@@ -189,7 +190,7 @@ export default function Console() {
   const [dockSaved, setDockSaved] = createSignal(readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
-  const [page, setPage] = createSignal<'emulator' | 'transfer' | 'remote' | 'firmware'>('emulator');
+  const [page, setPage] = createSignal<Page>('emulator');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [cardBusy, setCardBusy] = createSignal(false);
@@ -227,7 +228,7 @@ export default function Console() {
   const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
   createEffect(() => {
-    if (!runtimeHere() && (page() === 'transfer' || page() === 'remote')) setPage('emulator');
+    setPage(pageFor(page(), target(), runtimeHere()));
   });
 
   /** Set when a default-modules install has started since the app opened (boot() or the first status of a startup with the runtime). */
