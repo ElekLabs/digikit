@@ -761,10 +761,10 @@ impl Emulator {
         forced.insert(UART8_USR, 0x0d00_0000);
         forced.insert(DSPI0_SR, 0x1000_00f0);
         forced.insert(DSPI2_SR, 0x9000_0000);
-        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI3 (0xFC03C000, a serial link to the board's
+        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI1 (0xFC03C000, a serial link to the board's
         // converter logic) and polls SR for the end of the queue (`FUN_4010222a`, bit 28). The transfer is not modelled: it is complete.
         if device.peer == Some(device_profile::PeerModel::Coldfire) {
-            forced.insert(0xfc03_c02c, 0x9000_0000);
+            forced.insert(DSPI1_SR, 0x9000_0000);
         }
         // `[emulator] board_revision`: the PCB revision byte at FlexBus CS1 address 0.
         if let Some(revision) = device.board_revision {
@@ -778,6 +778,10 @@ impl Emulator {
         board
             .install_forced_mmio(forced)
             .expect("install forced status hooks");
+        // TCF and EOQF are a master's flags: EOQF does not function in slave mode (RM p.1189), so a DSPI2 that the guest runs as a
+        // slave (MCR MSTR = 0) shows its own register. DSPI1 is not gated: MAIN's earliest boot code polls its EOQF before any MCR write,
+        // with the MCR state the board's boot stage leaves, which this model does not have.
+        board.install_forced_master_only(&[DSPI2_SR]);
         board.enable_oracle_sdram_faults();
         // `[emulator] peer`: the second CPU's mailbox (window, image stream, doorbell, IRQ4).
         if let Some(model) = device.peer {

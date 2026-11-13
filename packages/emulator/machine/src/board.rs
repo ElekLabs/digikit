@@ -209,6 +209,8 @@ pub struct Board {
     /// Oracle read hooks: each value overlays four big-endian bytes before a
     /// guest read, without changing the backing page or later guest writes.
     forced_mmio: BTreeMap<u32, u32>,
+    /// Forced DSPI status words that apply only while the port is a master (`install_forced_master_only`).
+    forced_master_only: Vec<u32>,
     /// False when a forced read word overlaps SDRAM; otherwise SDRAM accesses
     /// skip every MMIO ownership check (no device owns that range).
     sdram_fast: bool,
@@ -481,6 +483,7 @@ impl Board {
             last_error: None,
             time: None,
             forced_mmio: BTreeMap::new(),
+            forced_master_only: Vec::new(),
             sdram_fast: true,
             mmio_epoch: 0,
             last_epoch_addr: 0,
@@ -972,11 +975,31 @@ impl Board {
         Ok(())
     }
 
+    /// Marks forced DSPI status registers (`install_forced_mmio` words at `SR` addresses) as valid only while the port's MCR has MSTR set: the
+    /// forced words carry TCF and EOQF, and EOQF does not function in slave mode (RM p.1189). A port whose registers the board does not own
+    /// is taken as a master. The MCR resets to slave mode (0x4001, p.1181), so a port is a master once the guest has set MSTR.
+    pub fn install_forced_master_only(&mut self, sr_addrs: &[u32]) {
+        self.forced_master_only = sr_addrs.to_vec();
+    }
+
+    /// MSTR (MCR bit 31) of the DSPI whose status register is at `sr`.
+    fn dspi_is_master(&self, sr: u32) -> bool {
+        let regs = match sr - 0x2c {
+            periph::spilink::DSPI2_SLOT => &self.dma.dspi2_regs,
+            periph::spilink::DSPI1_SLOT => &self.dma.dspi1_regs,
+            _ => return true,
+        };
+        regs.u32_at(0) >> 31 != 0
+    }
+
     /// Forced bytes available at the start of a guest read.  If the read
     /// extends past the four-byte hook write, its suffix must come from the
     /// normal bus (as Unicorn observes after the hook has written the word).
     fn forced_prefix(&self, addr: u32, size: u8) -> Option<(u32, u8)> {
         self.forced_mmio.iter().find_map(|(&base, &word)| {
+            if self.forced_master_only.contains(&base) && !self.dspi_is_master(base) {
+                return None;
+            }
             let word_end = base.checked_add(4)?;
             (addr >= base && addr < word_end).then(|| {
                 let count = size.min((word_end - addr) as u8);
@@ -2518,6 +2541,27 @@ mod tests {
         assert_eq!(bad.read32(t + 0x10).unwrap(), 0x7000_0000);
         assert_eq!(bad.read16(t + 0x14).unwrap(), 1);
         assert_eq!(bad.read16(t + 0x1e).unwrap() & edma::CSR_START, 0);
+    }
+
+    #[test]
+    fn a_forced_dspi_status_is_a_masters_flag_and_the_mcr_resets_to_slave() {
+        let (mcr, sr) = (0xec03_8000, 0xec03_802c);
+        let mut b = board(CompletionPolicy::Oracle);
+        b.install_forced_mmio(BTreeMap::from([(sr, 0x9000_0000)]))
+            .unwrap();
+        b.install_forced_master_only(&[sr]);
+        // DSPIx_MCR resets to 0x4001 (RM p.1181): a slave, so the forced TCF|EOQF is not shown.
+        assert_eq!(b.read32(mcr).unwrap(), 0x4001);
+        assert_eq!(b.read32(sr).unwrap(), 0);
+        b.write32(mcr, 0x8000_4001).unwrap();
+        assert_eq!(b.read32(sr).unwrap(), 0x9000_0000, "master");
+        b.write32(mcr, 0x0001_0c00).unwrap();
+        assert_eq!(b.read32(sr).unwrap(), 0, "slave again");
+        // Without the marker the word is always forced.
+        let mut b = board(CompletionPolicy::Oracle);
+        b.install_forced_mmio(BTreeMap::from([(sr, 0x9000_0000)]))
+            .unwrap();
+        assert_eq!(b.read32(sr).unwrap(), 0x9000_0000);
     }
 
     #[test]

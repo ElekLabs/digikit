@@ -118,7 +118,12 @@ What replaces hardware (data transport and CPU-side peripherals only; no FPGA lo
 - The mailbox model still streams the images and raises IRQ4 #1 at the end of the stream: that is stage 1's toggle. Stage 1 itself does not
   run. It is equivalent because its only effects are the DDR (zero in the model), the toggle, and the wait for the first doorbell edge; the
   program starts at MAIN's first doorbell edge after the stream (SP in SRAM, the stack word the entry copies is 0).
-- Stubbed status bits: GPIO 0xEC09401C bit 0 (INIT), 0xEC09401D bit 7 (DONE), DSPI 0xFC03C02C bits 31 and 28.
+- Stubbed status bits: GPIO 0xEC09401C bit 0 (INIT), 0xEC09401D bit 7 (DONE), DSPI1 (0xFC03C000, RM Table 40-2) SR bits 31 and 28. DSPI2's
+  forced TCF|EOQF applies only while the guest runs it as a master: EOQF does not work in slave mode (RM p.1189), and MAIN's DSPI2 is a
+  slave here. The DSPI MCR resets to 0x4001, a slave (p.1181). DSPI1's flags stay forced: MAIN's first boot code polls its EOQF before any
+  MCR write, and the board's boot stage that sets it before is not modelled.
+- The peer's INTC0 resets with every source masked (IMRH/IMRL all ones, no mask-all bit: IMRL bit 0 is source 0, not used) and level masks
+  0xF; SIMR/CIMR take the source in bits 5:0 and SALL/CALL in bit 6 (RM 17.2, p.338-345).
 - The frame source is host timed: one eDMA ch 54 interrupt per frame, at most one pending. The converter runs from its own 48 kHz clock
   (SSI1 is a slave), a frame is 32 samples, so the frame rate is 1500 Hz of emulated time. The period in MAIN ticks is derived:
   `ips * frame_samples / sample_rate` (`[emulator.peer_audio] sample_rate, frame_samples`, `periph::clock::frame_ticks`): 126,619 ticks at
