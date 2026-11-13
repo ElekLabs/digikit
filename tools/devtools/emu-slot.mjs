@@ -19,10 +19,12 @@ import { constants } from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { retryDecision } from '../nx/retry.mjs';
 import { ADMIT_IDLE_CORES, RAMP_MS, budget, idleCores, reserve, workCores } from '../nx/resources.mjs';
 
 const UNREADABLE_LOCK_MS = 10 * 60_000;
 const POLL_MS = 500;
+const MAX_TAIL = 2_000_000;
 
 const alive = (pid) => {
   try {
@@ -107,6 +109,7 @@ export const slotCount = (env = process.env) => {
 const liveCheck = (env = process.env) => env.DIGI_EMU_SLOTS === undefined || env.DIGI_EMU_SLOTS === '';
 
 const slotDir = () => {
+  if (process.env.DIGI_EMU_SLOT_DIR) return path.resolve(process.env.DIGI_EMU_SLOT_DIR); // tests use their own
   const done = spawnSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' });
   if (done.status !== 0) throw new Error('emu-slot: not in a git checkout');
   return path.join(path.resolve(done.stdout.trim()), 'emu-slots');
@@ -191,6 +194,18 @@ const traceEvent = (name, startMs, endMs) => {
   }
 };
 
+// One JSON line per retry event in the gate trace dir; tools/nx/gate-history.mjs reads it.
+const recordRetry = (event) => {
+  const dir = process.env.DIGI_TRACE_DIR;
+  if (!dir) return;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'retries.jsonl'), `${JSON.stringify(event)}\n`);
+  } catch {
+    /* a record is advice and never fails a task */
+  }
+};
+
 const main = async () => {
   const argv = process.argv.slice(2);
   const split = argv.indexOf('--');
@@ -217,15 +232,44 @@ const main = async () => {
     release(admit);
   });
   if (signalled) process.exit(128 + constants.signals[signalled]);
-  child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit' });
-  child.on('error', (error) => {
-    console.error(`emu-slot: ${error.message}`);
-    process.exit(127);
-  });
-  child.on('exit', (code, signal) => {
-    traceEvent('run', takenAt, Date.now());
-    process.exit(code ?? 128 + (constants.signals[signal] ?? 0));
-  });
+  const target = process.env.NX_TASK_TARGET_PROJECT
+    ? `${process.env.NX_TASK_TARGET_PROJECT}:${process.env.NX_TASK_TARGET_TARGET}`
+    : cmd.join(' ').slice(0, 80);
+  // The command runs with piped output (forwarded as it comes); the tail of it decides whether a failure is a
+  // load symptom that earns one rerun (tools/nx/retry.mjs).
+  const attempt = (n) => {
+    let tail = '';
+    child = spawn(cmd[0], cmd.slice(1), { stdio: ['inherit', 'pipe', 'pipe'] });
+    child.on('error', (error) => {
+      console.error(`emu-slot: ${error.message}`);
+      process.exit(127);
+    });
+    const keep = (stream, sink) =>
+      stream.on('data', (chunk) => {
+        sink.write(chunk);
+        tail = (tail + chunk).slice(-MAX_TAIL);
+      });
+    keep(child.stdout, process.stdout);
+    keep(child.stderr, process.stderr);
+    child.on('close', (code, signal) => {
+      const status = code ?? 128 + (constants.signals[signal] ?? 0);
+      const decision = signalled ? { retry: false } : retryDecision({ status, attempt: n, output: tail });
+      if (decision.retry) {
+        console.error(`emu-slot: RETRY ${target}: load symptom "${decision.symptom}"; rerunning once`);
+        recordRetry({ target, symptom: decision.symptom, attempt: n, retried: true });
+        attempt(n + 1);
+        return;
+      }
+      if (n > 1) {
+        const passed = status === 0;
+        console.error(`emu-slot: retry of ${target} ${passed ? 'passed' : `failed (exit ${status})`}`);
+        recordRetry({ target, attempt: n, passed });
+      }
+      traceEvent('run', takenAt, Date.now());
+      process.exit(status);
+    });
+  };
+  attempt(1);
 };
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
