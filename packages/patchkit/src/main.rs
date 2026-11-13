@@ -3,7 +3,7 @@
 use patchkit::apply;
 use patchkit::error::{Error, Result, sha256_hex};
 use patchkit::firmware::Firmware;
-use patchkit::module::Library;
+use patchkit::module::{Library, LibrarySource, library_with, selected_library};
 use patchkit::port::Registry;
 use patchkit::verify;
 use std::path::{Path, PathBuf};
@@ -119,94 +119,37 @@ fn registry(root: &Path) -> Result<Registry> {
 /// environment variable (a path list), in that order. Generated modules (derived from a firmware) live there. Content modules get their
 /// objects from the cache `out/cache/dko`; a stale object is built.
 fn library(root: &Path, rest: &[String]) -> Result<Library> {
-    library_with(root, rest, false, None)
+    library_with(root, &library_source(rest), false, None)
 }
 
-/// `library`; with `lenient`, a module whose object files are missing still loads (for `gen`); with `only`, the objects of these
-/// content modules only are loaded or built (`pack` and `apply`: the others load without objects).
-fn library_with(
-    root: &Path,
-    rest: &[String],
-    lenient: bool,
-    only: Option<&[String]>,
-) -> Result<Library> {
-    // `--trace` builds the modules with DK_TRACE defined (C: -DDK_TRACE; SHARC+: `#ifdef DK_TRACE`)
-    let defines: Vec<String> = if rest.iter().any(|a| a == "--trace") {
-        vec!["DK_TRACE".into()]
-    } else {
-        vec![]
-    };
-    let mut lib = Library::scan_repo_defined(root, lenient, only, &defines)?;
-    let mut extra: Vec<PathBuf> = flag(rest, "--modules-dir")
-        .into_iter()
-        .map(PathBuf::from)
-        .collect();
-    if let Some(v) = std::env::var_os("PATCHKIT_MODULES") {
-        extra.extend(std::env::split_paths(&v));
-    }
-    let build = patchkit::module::Build {
-        root,
-        only,
-        defines: &defines,
-    };
-    for d in extra {
-        if d.is_dir() {
-            lib.extend_unique(Library::scan_in(Some(build), &d, lenient)?.modules)?;
-        }
-    }
-    lib.lower(&patchkit::typed::Models::from_dir(&root.join("devices"))?)?;
-    Ok(lib)
-}
-
-/// Explicit manifests replace all discovery roots, including PATCHKIT_MODULES. They must include
-/// the selected IDs, their requires closure and any allocation providers used by generation.
-fn selected_library(
-    root: &Path,
-    rest: &[String],
-    lenient: bool,
-    only: &[String],
-    selected: &[String],
-) -> Result<Library> {
-    let mut paths = vec![];
+/// The `--manifest`, `--modules-dir` and `--trace` flags. A `--manifest` without a path is an error only in `selected_source`.
+fn library_source(rest: &[String]) -> LibrarySource {
+    let mut manifests = vec![];
     for (i, arg) in rest.iter().enumerate() {
-        if arg == "--manifest" {
-            let path = rest
-                .get(i + 1)
-                .filter(|p| !p.starts_with('-'))
-                .ok_or_else(|| Error("--manifest requires a path".into()))?;
-            paths.push(PathBuf::from(path));
+        if arg == "--manifest"
+            && let Some(path) = rest.get(i + 1).filter(|p| !p.starts_with('-'))
+        {
+            manifests.push(PathBuf::from(path));
         }
     }
-    if paths.is_empty() {
-        return library_with(root, rest, lenient, Some(only));
+    LibrarySource {
+        manifests,
+        modules_dirs: flag(rest, "--modules-dir")
+            .into_iter()
+            .map(PathBuf::from)
+            .collect(),
+        trace: rest.iter().any(|a| a == "--trace"),
     }
-    let defines = if rest.iter().any(|a| a == "--trace") {
-        vec!["DK_TRACE".to_string()]
-    } else {
-        vec![]
-    };
-    let mut lib = Library::from_manifests(
-        patchkit::module::Build {
-            root,
-            only: Some(only),
-            defines: &defines,
-        },
-        &paths,
-        lenient,
-        selected,
-    )?;
-    lib.lower(&patchkit::typed::Models::from_dir(&root.join("devices"))?)?;
-    if lenient && lib.get("core/machines").is_none() {
-        for id in selected {
-            let m = lib.get(id).unwrap();
-            if !m.manifest.gens.is_empty() || !m.manifest.machine.is_empty() {
-                return Err(Error(format!(
-                    "{id}: generation requires --manifest for core/machines (machine allocations)"
-                )));
-            }
+}
+
+/// `library_source`; refuses a `--manifest` without a path (for `selected_library`).
+fn selected_source(rest: &[String]) -> Result<LibrarySource> {
+    for (i, arg) in rest.iter().enumerate() {
+        if arg == "--manifest" && rest.get(i + 1).is_none_or(|p| p.starts_with('-')) {
+            return Err(Error("--manifest requires a path".into()));
         }
     }
-    Ok(lib)
+    Ok(library_source(rest))
 }
 
 /// The selection plus its requirements; says what it added.
@@ -239,9 +182,10 @@ fn library_for_apply(
     ids: Vec<String>,
 ) -> Result<(Library, Vec<String>)> {
     // Discover requires before building content: unrelated sources need not be buildable.
-    let manifests = library_with(root, rest, false, Some(&[]))?;
+    let src = library_source(rest);
+    let manifests = library_with(root, &src, false, Some(&[]))?;
     let ids = with_requires(&manifests, ids)?;
-    Ok((library_with(root, rest, false, Some(&ids))?, ids))
+    Ok((library_with(root, &src, false, Some(&ids))?, ids))
 }
 
 fn preflight_known(root: &Path) -> Result<Vec<patchkit::preflight::Known>> {
@@ -450,7 +394,7 @@ fn run(a: Args) -> Result<()> {
                 if rest.iter().any(|a| a == "--manifest") && only.is_empty() {
                     return Err(Error("gen --manifest requires --modules a,b".into()));
                 }
-                let lib = selected_library(&a.root, rest, true, &[], &only)?;
+                let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &only)?;
                 let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
                 for m in &lib.modules {
@@ -686,104 +630,25 @@ plan.json {}",
             // builds what is stale (the objects of this module only) and packs the objects as they are in memory
             let lib = selected_library(
                 &a.root,
-                rest,
+                &selected_source(rest)?,
                 false,
                 std::slice::from_ref(id),
                 std::slice::from_ref(id),
             )?;
-            let m = lib
-                .get(id)
-                .ok_or_else(|| Error(format!("no module {id}")))?;
-            let cf: Vec<_> = m
-                .objects
-                .iter()
-                .zip(&m.manifest.object)
-                .filter(|(o, _)| o.arch == "cf")
-                .collect();
-            let dynamic = m.manifest.module.dynamic;
-            if cf.len() > 1 || (cf.is_empty() && !dynamic) {
-                return Err(Error(format!(
-                    "{id} has {} ColdFire objects; a .dkm packs exactly one",
-                    cf.len()
-                )));
-            }
-            let mut opts = patchkit::dkm::Options {
-                name: flag(rest, "--name").unwrap_or_else(|| id.clone()),
-                version: patchkit::dkm::parse_version(&m.manifest.module.version)?,
+            let opts = patchkit::pack::PackOptions {
+                device: flag(rest, "--device"),
+                name: flag(rest, "--name"),
                 trace: rest.iter().any(|a| a == "--trace"),
-                stereo: false,
-                gate: false,
             };
-            // a run-time module declares in `init`: `[[machine]]`/`[[fx]]` in module.toml; the table at 0x90 is the keys table
-            let mut dsp: Vec<u8> = vec![];
-            let reg = if dynamic {
-                let dev = flag(rest, "--device").ok_or_else(|| {
-                    Error(format!(
-                        "a run-time module needs --device {}",
-                        patchkit::devdata::short_list()
-                    ))
-                })?;
-                let ports = &m.manifest.module.ports;
-                if !ports.is_empty()
-                    && !ports
-                        .iter()
-                        .any(|p| p.split('-').next() == Some(dev.as_str()))
-                {
-                    return Err(Error(format!(
-                        "{id} is not built for {dev}: its ports are {}",
-                        ports.join(", ")
-                    )));
-                }
-                let sharc: Vec<_> = m
-                    .objects
-                    .iter()
-                    .zip(&m.manifest.object)
-                    .filter(|(o, r)| {
-                        o.arch == "sharc"
-                            && (r.devices.is_empty() || r.devices.iter().any(|d| *d == dev))
-                    })
-                    .collect();
-                if sharc.len() > 1 {
-                    return Err(Error(format!(
-                        "{id} has {} DSP objects for {dev}; a .dkm packs one",
-                        sharc.len()
-                    )));
-                }
-                let s = patchkit::major3::sections(
-                    m,
-                    &opts.name,
-                    &dev,
-                    sharc.first().map(|(o, _)| *o),
-                )?;
-                opts.stereo = s.stereo;
-                opts.gate = s.gate;
-                dsp = s.dsp;
-                s.keys
-            } else {
-                vec![]
-            };
-            let file = patchkit::dkm::pack_keys(cf.first().map(|c| c.0), &reg, &dsp, &opts)?;
-            write(&out, &file)?;
-            let d = patchkit::dkm::Dkm::parse(&file)?;
+            let packed = patchkit::pack::pack_module(&lib, id, &opts)?;
+            write(&out, &packed.bytes)?;
             if let Some(p) = flag(rest, "--addrmap") {
-                // the map of the code the loader places; a data-only module has none
-                let map = match cf.first().map(|c| c.0) {
-                    Some(o) => patchkit::addrmap::module_map(o, &opts.name, &d.sha256)?,
-                    None => dkaddrmap::AddrMap::new(
-                        "module",
-                        dkaddrmap::Key {
-                            module: Some(opts.name.clone()),
-                            dkm_sha256: Some(d.sha256.clone()),
-                            ..Default::default()
-                        },
-                        vec![],
-                    ),
-                };
-                write(&p, map.to_json().as_bytes())?;
+                write(&p, packed.addrmap()?.to_json().as_bytes())?;
             }
+            let d = packed.dkm;
             println!(
                 "{out}: {} bytes, {} (image {} + bss {}, {} relocations, {} imports), sha256 {}",
-                file.len(),
+                packed.bytes.len(),
                 d.name,
                 d.image.len(),
                 d.bss,
@@ -791,7 +656,7 @@ plan.json {}",
                 d.imports.len(),
                 d.sha256
             );
-            println!("size     {out}: {}", d.size_summary(file.len()));
+            println!("size     {out}: {}", d.size_summary(packed.bytes.len()));
             // the entry point and what the module needs of the runtime, from the imports it links (docs/plans/sdk.md section 5.1)
             let at = |v: Option<u32>| v.map_or("-".to_string(), |o| format!("{o:#x}"));
             println!(
@@ -852,7 +717,7 @@ plan.json {}",
             let decl = if spec.machines > 0 {
                 let lib = selected_library(
                     &a.root,
-                    rest,
+                    &selected_source(rest)?,
                     false,
                     std::slice::from_ref(&decl_id),
                     std::slice::from_ref(&decl_id),
@@ -1123,7 +988,7 @@ uses = ["DEVICE_ID"]
             .map(String::from)
             .collect(),
         };
-        let lib = library_with(&fixture.0, &[], true, Some(&[])).unwrap();
+        let lib = library_with(&fixture.0, &LibrarySource::default(), true, Some(&[])).unwrap();
         let facts = patchkit::devgen::Facts::from_dir(&fixture.0.join("devices")).unwrap();
         let module_files = patchkit::devgen::generate(&lib, &facts, "test/generation").unwrap();
         assert!(!module_files.is_empty());
@@ -1383,12 +1248,12 @@ uses = ["DEVICE_ID"]
         root.module("modules", "test/unrelated", &[], false);
         let selected = vec!["test/selected".into()];
         let path = |id: &str| root.0.join("modules").join(id).join("module.toml");
-        let rest = |ids: &[&str]| {
-            ids.iter()
-                .flat_map(|id| ["--manifest".to_string(), path(id).display().to_string()])
-                .collect::<Vec<_>>()
+        let rest = |ids: &[&str]| LibrarySource {
+            manifests: ids.iter().map(|id| path(id)).collect(),
+            ..Default::default()
         };
-        let load = |r: &[String], ids: &[String]| selected_library(&root.0, r, false, &[], ids);
+        let load =
+            |r: &LibrarySource, ids: &[String]| selected_library(&root.0, r, false, &[], ids);
         let both = rest(&["test/selected", "test/dependency"]);
         assert!(
             load(&both, &["test/unknown".into()])
