@@ -111,7 +111,7 @@ function Shell() {
             <TransferPage />
           </Show>
           <Show when={page() === 'remote'}>
-            <RemotePage fallbackDevice={device()} />
+            <RemotePage fallbackDevice={device()} emulatorLoaded={true} />
           </Show>
         </div>
       </div>

@@ -28,9 +28,23 @@ struct Host {
     staging: PathBuf,
     /// Where firmware files picked with Open... are put for `firmware.load` (`<run dir>/open`).
     open_dir: PathBuf,
-    /// The .syx the app was started with (`mise run workbench -- FILE`); the console shows it and reloads it
-    /// when it changes. The page can read only this file.
-    source: Option<PathBuf>,
+    /// The firmware file the console shows, reloads and watches: the startup file, or the file set with `emu_set_source`
+    /// (Open, Load on start).
+    source: std::sync::Mutex<Option<PathBuf>>,
+    launch: Launch,
+}
+
+/// What the command line asked the first load to be (`emu_launch`). The webview starts that load, so the window shows at once.
+#[derive(Clone, serde::Serialize)]
+struct Launch {
+    /// The startup .syx, or null: the app opens with nothing loaded.
+    syx: Option<String>,
+    /// `--card-image`: the card of that first load.
+    card: Option<String>,
+    /// `--runtime` / `--no-runtime`; null: the console's "Boot with runtime" tick decides.
+    runtime: Option<bool>,
+    /// True when the app loaded it before the window (a `--scenario` replay); the webview loads nothing then.
+    loaded: bool,
 }
 
 fn parse_args() -> Result<StartupArgs, String> {
@@ -101,16 +115,69 @@ fn save_diagnostics(name: &str, json: &str) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
-/// The startup .syx: its path, size and modification time (milliseconds since the epoch), or null
-/// when the app was started without one.
+/// The console's firmware file (see `Host::source`): its path, size and modification time (milliseconds since the epoch),
+/// or null when there is none.
 #[tauri::command]
 async fn emu_source_info(host: State<'_, Host>) -> Result<Option<Value>, String> {
-    let Some(path) = host.source.clone() else {
+    let Some(path) = host.source.lock().map_err(|e| e.to_string())?.clone() else {
         return Ok(None);
     };
     tauri::async_runtime::spawn_blocking(move || source_info(&path))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// What the command line asked the first load to be.
+#[tauri::command]
+async fn emu_launch(host: State<'_, Host>) -> Result<Launch, String> {
+    Ok(host.launch.clone())
+}
+
+/// Make PATH the console's firmware file (null: none); returns its info as `emu_source_info` does.
+#[tauri::command]
+async fn emu_set_source(
+    host: State<'_, Host>,
+    path: Option<String>,
+) -> Result<Option<Value>, String> {
+    let path = path
+        .map(PathBuf::from)
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p));
+    *host.source.lock().map_err(|e| e.to_string())? = path.clone();
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    tauri::async_runtime::spawn_blocking(move || source_info(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The native file picker for a firmware file (.syx), opened in the folder of START when it exists; the path, or null when
+/// cancelled.
+#[tauri::command]
+async fn emu_pick_syx(
+    app: tauri::AppHandle,
+    start: Option<String>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Open firmware")
+        .add_filter("Firmware", &["syx"]);
+    if let Some(dir) = start
+        .as_deref()
+        .map(std::path::Path::new)
+        .and_then(|p| p.parent())
+        .filter(|d| d.is_dir())
+    {
+        dialog = dialog.set_directory(dir);
+    }
+    let picked = tauri::async_runtime::spawn_blocking(move || dialog.blocking_pick_file())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(picked
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string()))
 }
 
 /// How the running binary was built: the PGO state the launcher passed in the environment (null when unknown).
@@ -522,16 +589,16 @@ fn main() {
     if has_scenario {
         exit_on_scenario_done(&handle, startup.report.clone());
     }
-    if let Some(path) = startup.syx.clone() {
-        // The first session is 1 (`emu_startup` and the webview's pump use it). The digikit runtime is patched in unless
-        // `--no-runtime` or a scenario run (scenarios are stock).
-        let runtime = startup.runtime.unwrap_or(!has_scenario);
-        if runtime {
-            eprintln!(
-                "emulator startup: patching the digikit runtime in; a first boot of a new image takes a while, later ones come from the cache"
-            );
-        }
-        if let Err(error) = load_startup(&handle, &path, startup.card_image.as_deref(), runtime) {
+    // A scenario replay loads its firmware here (it is stock and must start at once); otherwise the webview starts the first load
+    // (`emu_launch`), so the window shows without waiting for the runtime patch and the boot.
+    let loaded = has_scenario && startup.syx.is_some();
+    if let Some(path) = startup.syx.clone().filter(|_| has_scenario) {
+        if let Err(error) = load_startup(
+            &handle,
+            &path,
+            startup.card_image.as_deref(),
+            startup.runtime.unwrap_or(false),
+        ) {
             eprintln!("emulator startup: {error}");
             process::exit(2);
         }
@@ -564,10 +631,18 @@ fn main() {
         handle,
         staging: run_dir_for_staging.join("cards").join("staging"),
         open_dir: run_dir_for_staging.join("open"),
-        source: startup
-            .syx
-            .clone()
-            .map(|path| std::fs::canonicalize(&path).unwrap_or(path)),
+        source: std::sync::Mutex::new(
+            startup
+                .syx
+                .clone()
+                .map(|path| std::fs::canonicalize(&path).unwrap_or(path)),
+        ),
+        launch: Launch {
+            syx: startup.syx.as_ref().map(|p| p.display().to_string()),
+            card: startup.card_image.as_ref().map(|p| p.display().to_string()),
+            runtime: startup.runtime,
+            loaded,
+        },
     };
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -586,6 +661,9 @@ fn main() {
             emu_stage_syx,
             emu_save_diagnostics,
             emu_source_info,
+            emu_launch,
+            emu_set_source,
+            emu_pick_syx,
             emu_build_info,
             emu_audio_status,
             emu_startup,

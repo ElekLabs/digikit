@@ -160,6 +160,8 @@ export interface CoupledStats {
 /** Native desktop only: `runtime` patches the digikit runtime into a stock image (the controller's `firmware.load {runtime}`). */
 export interface LoadOptions {
   runtime?: boolean;
+  /** Native desktop only: the card image of this load (`--card-image`). */
+  card?: string;
 }
 /** The controller's report of the runtime patch of the running image: `patched` with the set and whether the image came from the
  * cache, or `patched: false` for an image that already had a patch record. `null`: stock, no runtime requested. */
@@ -606,7 +608,11 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
       }),
     loadPath: (syx, options) =>
       newSession(async (token) => {
-        await call('firmware.load', { syx, replace: true, runtime: !!options?.runtime }, token);
+        await call(
+          'firmware.load',
+          { syx, replace: true, runtime: !!options?.runtime, ...(options?.card ? { card: options.card } : {}) },
+          token,
+        );
       }),
     async firmwareInfo() {
       const status = await call<{ firmware: { runtime?: RuntimePatch | null } | null }>('status');

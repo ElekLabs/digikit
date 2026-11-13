@@ -15,6 +15,10 @@
       ],
       "outputs": ["{projectRoot}/ui/dist"]
     },
+    "workbench-inputs": {
+      "executor": "nx:noop",
+      "dependsOn": ["build:ui", { "projects": ["@digi/web"], "target": "patchkit-wasm" }]
+    },
     "check:ui": {
       "cache": true,
       "inputs": [
