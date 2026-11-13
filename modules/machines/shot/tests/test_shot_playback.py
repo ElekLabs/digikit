@@ -1,6 +1,6 @@
 """digikit/shot on the concrete SHARC+ core through core/dsp-voice (the real adapter), against a float32 model of the stereo PCM16 reader.
 
-The pool table (`_shot_rec` records and `_shot_ctl` control sets, one of each for every pool index) is written the way the runtime does: PCM
+The pool table (`_shot_sample_rec` records and `_shot_sample_ctl` control sets, one of each for every pool index) is written the way the runtime does: PCM
 planes in free L2, the record published with `ready` last. The SMP parameter (word 0, index << 8) picks the record of a note. Checks: SMP
 picks the record (two values, two records; an empty or out-of-range entry is silent); start, end, play (reverse and loop modes) and pitch; L and R differ for a
 stereo sample; a mono sample plays centred; the voice ends after the sample; a stale token or a closed entry is silent with no PCM read;
@@ -56,8 +56,8 @@ class Shot:
         self.left = LEFT[:frames]
         self.right = self.left if channels == 1 else RIGHT[:frames]
         d = self.rig.built.data
-        self.rec = nw(d["_shot_rec"]) + 8 * index
-        self.ctl = nw(d["_shot_ctl"]) + 4 * index
+        self.rec = nw(d["_shot_sample_rec"]) + 8 * index
+        self.ctl = nw(d["_shot_sample_ctl"]) + 4 * index
         self.state = nw(self.rig.built.state)
         poke = self.rig.sess.poke
         for k, w in enumerate(pack(self.left)):
@@ -298,7 +298,7 @@ def test_two_smp_values_pick_two_records(device):
     for k, w in enumerate(pack(pcm(4))):
         poke(other_r + k, w)
     d = s.rig.built.data
-    rec5 = nw(d["_shot_rec"]) + 8 * 5
+    rec5 = nw(d["_shot_sample_rec"]) + 8 * 5
     s.publish(token=TOKEN + 1, rec=rec5, plane_l=other_l, plane_r=other_r)
     first, _ = s.play(blocks=8)  # SMP 2
     assert np.array_equal(first, model(s.left, 0, FRAMES, 65536, False, 8))

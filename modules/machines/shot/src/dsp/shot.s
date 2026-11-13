@@ -3,8 +3,8 @@
 // R4 = this voice's state, R8 = the `dk_voice_in` (pitch in semitones << 8 with the tune folded in, the track, the outputs `out` (L) and `out_r` (R)),
 // R12 = the five parameter words SMP, START, END, PLAY, PITCH (unit << 8: 0 .. 0x7f00 = UI 0 .. 127; SMP is 0 .. 15, 0 .. 0x0f00).
 //
-// The sample is a pool entry's `dk_sample_pool_entry` record (<dk/sample/pool.h>), written by the runtime into `_shot_rec` (16 records of 8 words, one for
-// each pool index; the control sets of 4 words are in `_shot_ctl`). `note_on` takes the pool index from the SMP word (word >> 8, so a p-lock of
+// The sample is a pool entry's `dk_sample_pool_entry` record (<dk/sample/pool.h>), written by the runtime into `_shot_sample_rec` (16 records of 8 words, one for
+// each pool index; the control sets of 4 words are in `_shot_sample_ctl`). `note_on` takes the pool index from the SMP word (word >> 8, so a p-lock of
 // SMP picks the entry of that step) and, in one masked scope, checks the admission (the record
 // is ready, not closed, count in range), latches the epoch (the record's token) in the voice and acquires the track. It copies the plane
 // bases, the frame count, the channels and the source rate, releases the track and sets up the cursor. Every `render` checks the admission and
@@ -86,12 +86,12 @@
 // I5 = the record and I1 = the control set of the track in R0 (normal-word addresses); the DAG registers are ready 3 instructions later.
 // Clobbers R1, R2.
 #define SHOT_TRACK_PTRS \
-    R1 = _shot_rec; \
+    R1 = _shot_sample_rec; \
     R1 = LSHIFT R1 BY -2; \
     R2 = LSHIFT R0 BY 3; \
     R1 = R1 + R2; \
     I5 = R1; \
-    R1 = _shot_ctl; \
+    R1 = _shot_sample_ctl; \
     R1 = LSHIFT R1 BY -2; \
     R2 = LSHIFT R0 BY 2; \
     R1 = R1 + R2; \
@@ -380,8 +380,8 @@ _shot_note_return:
 
 .SECTION/DM seg_dmda;
 // The pool table (<dk/sample/pool.h>): the runtime fills the records and moves the control words; the module only reads them.
-.PKDATA _shot_rec, 512;                  // 16 dk_sample_pool_entry records of 8 words, one for each pool index
-.PKDATA _shot_ctl, 256;                  // 16 control sets of 4 words: closed, count, fault, reserved
+.PKDATA _shot_sample_rec, 512;                 // 16 dk_sample_pool_entry records of 8 words, one for each pool index
+.PKDATA _shot_sample_ctl, 256;                 // 16 control sets of 4 words: closed, count, fault, reserved
 // dk_machine_desc: magic, contract (machine contract 1.2: stereo), n_params, voices, state_bytes, state_clear_bytes, max_cycles_block,
 // max_cycles_note_on, max_call_depth, stack_bytes. Cycles are instruction ceilings: the stereo kernel's 5,428 with its call (with the loop option), the rate (exp2 and
 // about 60 more), the gain ramp (254 with its call and a dozen setup instructions), the two masked scopes and the live range and direction

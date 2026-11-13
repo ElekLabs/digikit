@@ -13,7 +13,7 @@ pytestmark = pytest.mark.skipif(
     reason="selache not built (tools/patchkit/pk_toolchains.py selache)",
 )
 
-IDS = ("tb303_wave", "tb303_cut", "tb303_res", "tb303_env", "tb303_dec", "tb303_acc")
+IDS = ("wave", "cutoff", "resonance", "env_mod", "decay", "accent")
 
 
 def word(x: float) -> int:

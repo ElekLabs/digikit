@@ -16,7 +16,10 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The machine declaration (DK_MACHINE and DK_PARAM in src/module.c). It holds only .dk.desc records.
+# The machine is declared by builder calls in init (src/module.c).
+[[machine]]
+id = "bd"
+
 [[object]]
 path = "build/bd-cf.dko.json"
 sources = ["src/module.c"]
