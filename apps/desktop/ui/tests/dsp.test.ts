@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { registry } from '../../../web/src/data/device-profiles';
-import { dspLine, dspPending, hasDspChoice, startupDsp } from '../src/dsp-core';
+import {
+  DSP_KEY,
+  dspLine,
+  dspOption,
+  dspPending,
+  hasDspChoice,
+  readDspChoice,
+  startupDsp,
+  writeDspChoice,
+} from '../src/dsp-core';
 
 describe('DSP tick', () => {
   it('is offered by a device with a DSP or a second CPU, from the device data', () => {
@@ -24,5 +33,36 @@ describe('DSP tick', () => {
     expect(dspLine({ enabled: false, flag: null })).toBe('DSP off');
     expect(dspLine({ enabled: true, flag: null })).toBe('DSP on');
     expect(dspLine(undefined)).toBe('—');
+  });
+  it('keeps the saved choice: on unless saved off, and only an explicit write changes it', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    expect(readDspChoice(storage)).toBe(true);
+    writeDspChoice(storage, false);
+    expect(store.get(DSP_KEY)).toBe('off');
+    // the launcher's flag is adopted for the session (startupDsp) and never written: the saved choice stays
+    expect(startupDsp(readDspChoice(storage), { enabled: true, flag: true })).toBe(true);
+    expect(readDspChoice(storage)).toBe(false);
+    writeDspChoice(storage, true);
+    expect(readDspChoice(storage)).toBe(true);
+  });
+  it('reads "on" and ignores a write when the storage throws', () => {
+    const broken = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    expect(readDspChoice(broken)).toBe(true);
+    expect(() => writeDspChoice(broken, false)).not.toThrow();
+  });
+  it('sends the tick only for a device that offers the choice', () => {
+    for (const d of registry.devices) expect(dspOption(d, false)).toBe(hasDspChoice(d) ? false : undefined);
+    expect(dspOption(undefined, false)).toBe(false);
   });
 });

@@ -186,8 +186,9 @@ the same digest. It is the oracle for a change to those paths: boot paused to a 
 compare the digests of a daemon built before the change with one built after.
 
 `--dsp zero --cf-snapshot FILE` (on `digi-emud` and the app) starts without a DSP: SSI paced, the DSPI2 peer
-answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` is `"zero"`,
-`"sharc"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
+answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` names the device's second
+processor as it runs: `"sharc"`, `"peer"` (a peer CPU runs its program), `"responder"` (the mailbox stand-in for a peer CPU),
+`"zero"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
 work. No PCM is produced.
 
 `guard.set {protect: [{lo, hi, label}], allow_pc: [{lo, hi}]}` arms write-range guards (addresses are integers or
@@ -259,7 +260,7 @@ restored or replaced runtime resets it). On the device in the emulator, the runt
 (its EMUCLK ticks once per instruction), so compare it with `model_pct`, not `real_pct`. The real values are estimates from the public manuals' cycle tables and our instruction counts, not measurements. The
 factors are one file, `devices/cycle-factors.json` (cited findings inside; `tools/patchkit/pk_dsp_budget.py` reads the
 same numbers). Each closed window is blended 50/50 into the shown value; a restored or replaced runtime clears it.
-`dsp` is `null` without a DSP session (`status.dsp` is `"zero"` or `"none"`). The desktop panel gets the same object as
+`dsp` is `null` without a DSP session (`status.dsp` is not `"sharc"`). The desktop panel gets the same object as
 `load` in its audio status. The browser (wasm) build has no controller and shows no meter.
 
 ## Events

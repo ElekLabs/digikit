@@ -1018,6 +1018,12 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
     }
     # the dsp_* limits are absent from the `[patch]` of a device without a DSP
     limits = {k: prof["patch"][k] for k in LIMIT_KEYS if k in prof["patch"]}
+    if dsp_sec is not None:
+        for k in ("dsp_stored_max", "dsp_depacked_max"):
+            if k not in limits:
+                raise ResolveError(
+                    f"{device}: [patch] {k} is missing, and the firmware has a DSP section"
+                )
     return f"{device}-{version}", render(port, limits, regions, unique, hooks)
 
 

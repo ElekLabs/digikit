@@ -249,9 +249,7 @@ impl PeerMem {
                         self.io.insert(r, if set { 0xff } else { 0 });
                     }
                 } else {
-                    let reg = if src >= 32 { INTC0 + 8 } else { INTC0 + 12 };
-                    let byte = reg + (3 - (src & 31) / 8);
-                    let bit = 1u8 << (src & 7);
+                    let (byte, bit) = intc_mask_bit(src);
                     let old = self.io.get(&byte).copied().unwrap_or(0);
                     self.io
                         .insert(byte, if set { old | bit } else { old & !bit });
@@ -287,13 +285,23 @@ impl PeerMem {
         let src = FRAME_VECTOR - 64;
         let icr = self.io_byte(INTC0 + 0x40 + src);
         let level = icr & 7;
-        let masked = self.io_byte(INTC0 + 8) & 1 != 0 || self.io_byte(INTC0 + 15) & 1 != 0;
+        // the source's own mask bit, or IMRL bit 0 (mask all)
+        let (byte, bit) = intc_mask_bit(src);
+        let (all_byte, all_bit) = intc_mask_bit(0);
+        let masked = self.io_byte(byte) & bit != 0 || self.io_byte(all_byte) & all_bit != 0;
         (level != 0 && !masked).then_some(level)
     }
 
     pub fn take_pin_edges(&mut self) -> u32 {
         std::mem::take(&mut self.pin_edges)
     }
+}
+
+/// The IMRH/IMRL byte and bit that mask INTC0 source number `source` (0..=63, not a vector; sources 32..=63 are in IMRH, IMRL bit 0 is
+/// mask-all).
+fn intc_mask_bit(source: u32) -> (u32, u8) {
+    let reg = if source >= 32 { INTC0 + 8 } else { INTC0 + 12 };
+    (reg + (3 - (source & 31) / 8), 1u8 << (source & 7))
 }
 
 /// The bus the core sees: the private memory plus the shared window.
@@ -513,10 +521,22 @@ impl PeerCpu {
 
     /// Loads the program at `PROGRAM_BASE` and starts at its entry (the first long of the image), as the stage-1 loader does with
     /// `jmp *(0x40000400)`. The stage-1 stack lives in SRAM; the program reads one stack argument at entry and switches to its own stack.
-    pub fn start(&mut self, program: &[u8]) {
+    /// MAIN supplies the image, so a short or oversized one is an error, not a panic.
+    pub fn start(&mut self, program: &[u8]) -> Result<(), String> {
         let o = (PROGRAM_BASE - SDRAM_BASE) as usize;
-        self.mem.sdram[o..o + program.len()].copy_from_slice(program);
-        let entry = u32::from_be_bytes(program[0..4].try_into().expect("image has an entry long"));
+        let Some(entry) = program.first_chunk::<4>().map(|e| u32::from_be_bytes(*e)) else {
+            return Err(format!(
+                "peer program image is {} bytes: it needs at least the 4-byte entry",
+                program.len()
+            ));
+        };
+        let Some(dest) = self.mem.sdram.get_mut(o..o + program.len()) else {
+            return Err(format!(
+                "peer program image of {} bytes does not fit in the peer SDRAM",
+                program.len()
+            ));
+        };
+        dest.copy_from_slice(program);
         self.cpu = Cpu::new();
         self.clear_pc = None;
         self.cpu.pc = entry;
@@ -525,6 +545,7 @@ impl PeerCpu {
         // The stage-1 loader raised the pin once before it waited for MAIN (MAIN's IRQ4 #1, queued by the mailbox model when the stream
         // ended); the program's first toggle therefore clears it.
         self.mem.pin = true;
+        Ok(())
     }
 
     /// A frame tick (DTIM0 event): the program's ISR runs when it has enabled the interrupt.
@@ -666,7 +687,7 @@ mod tests {
         code.extend_from_slice(&[0x42, 0x18, 0xb0, 0x88, 0x66, 0xfa]); // clr.b (a0)+; cmp.l a0,d0; bne.b
         code.extend_from_slice(&[0x60, 0xfe]); // bra.b .
         let mut peer = PeerCpu::new();
-        peer.start(&image(&code));
+        peer.start(&image(&code)).unwrap();
         let o = (start - SDRAM_BASE) as usize;
         peer.mem.sdram[o..o + count as usize + 4].fill(0xff);
         let mut window = vec![0u8; WINDOW_BYTES as usize];
@@ -703,7 +724,7 @@ mod tests {
         code.extend(moveb_imm_abs(47, EDMA_SSRT)); // start channel 47
         code.extend_from_slice(&[0x60, 0xfe]);
         let mut peer = PeerCpu::new();
-        peer.start(&image(&code));
+        peer.start(&image(&code)).unwrap();
         for i in 0..32u8 {
             peer.mem.sram[0x100 + usize::from(i)] = i + 1;
         }
@@ -719,6 +740,34 @@ mod tests {
     }
 
     #[test]
+    fn the_frame_source_mask_is_the_same_bit_for_the_writer_and_the_reader() {
+        let mut mem = PeerMem::new();
+        mem.io_write(INTC0 + 0x40 + 32, 1, 3); // ICR32 level 3
+        mem.io_write(INTC0 + 0x1d, 1, 32); // CIMR: unmask source 32
+        assert_eq!(mem.frame_level(), Some(3));
+        mem.io_write(INTC0 + 0x1c, 1, 32); // SIMR: mask source 32
+        assert_eq!(mem.frame_level(), None, "masked through SIMR");
+        mem.io_write(INTC0 + 8, 4, 0xFFFF_FFFE); // IMRH: source 32 unmasked, the rest masked
+        assert_eq!(mem.frame_level(), Some(3), "unmasked through IMRH");
+        mem.io_write(INTC0 + 8, 4, 0x0000_0001); // IMRH: only source 32 masked
+        assert_eq!(mem.frame_level(), None);
+    }
+
+    #[test]
+    fn a_short_or_oversized_image_is_an_error_not_a_panic() {
+        let mut peer = PeerCpu::new();
+        assert!(
+            peer.start(&[0x40, 0x00])
+                .unwrap_err()
+                .contains("4-byte entry")
+        );
+        assert!(peer.start(&[]).is_err());
+        let big = vec![0u8; SDRAM_BYTES];
+        assert!(peer.start(&big).unwrap_err().contains("does not fit"));
+        peer.start(&[0x40, 0x00, 0x04, 0x04]).unwrap();
+    }
+
+    #[test]
     fn the_output_pin_edges_are_level_changes_and_start_high() {
         let mut code = vec![];
         code.extend(moveb_imm_abs(0xfb, PIN_CLEAR)); // pin low: an edge (stage 1 left it high)
@@ -726,7 +775,7 @@ mod tests {
         code.extend(moveb_imm_abs(4, PIN_SET)); // high: an edge
         code.extend_from_slice(&[0x60, 0xfe]);
         let mut peer = PeerCpu::new();
-        peer.start(&image(&code));
+        peer.start(&image(&code)).unwrap();
         let mut window = vec![0u8; WINDOW_BYTES as usize];
         peer.run(&mut window, 6).unwrap();
         assert_eq!(peer.mem.take_pin_edges(), 2);
@@ -753,7 +802,7 @@ mod tests {
         // The handler saves nothing: moveq #1, d0 ; move.b d0, DTER (write one clears) ; rte.
         image.extend_from_slice(&[0x70, 0x01, 0x13, 0xc0, 0xfc, 0x07, 0x00, 0x03, 0x4e, 0x73]);
         let mut peer = PeerCpu::new();
-        peer.start(&image);
+        peer.start(&image).unwrap();
         let mut window = vec![0u8; WINDOW_BYTES as usize];
         peer.run(&mut window, 30).unwrap();
         assert_eq!(peer.frames_taken, 0, "no tick yet");

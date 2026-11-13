@@ -16,6 +16,8 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 mod card;
+#[cfg(test)]
+mod device_header;
 pub use card::{
     CardLayout, PathFsLayout, Pool, PoolLayout, PoolSet, RegionLayout, RegionRole, StoreLayout,
 };
@@ -831,33 +833,71 @@ mod tests {
     #[test]
     fn emulator_section_carries_the_board_models() {
         let registry = Registry::embedded().unwrap();
-        // The device without a DSP has the peer CPU, the synthetic calibration record and the packed LED protocol.
-        let twin: Vec<_> = registry
-            .devices()
-            .iter()
-            .filter(|d| d.capabilities.as_ref().is_some_and(|c| c.dsp == "none"))
-            .collect();
-        assert_eq!(twin.len(), 1);
-        let twin = twin[0];
-        assert_eq!(twin.calibration_record, Some(CalibrationRecord::Synthetic));
-        assert_eq!(twin.peer, Some(PeerModel::Coldfire));
-        assert_eq!(
-            twin.peer_audio,
-            Some(PeerAudio {
-                dma_channel: 54,
-                slots: [5, 3],
-                bits: 24
-            })
-        );
-        assert_eq!(twin.led_protocol, LedProtocol::PackedStates);
-        assert!(twin.board_revision.is_some());
-        for d in registry.devices().iter().filter(|d| d.short != twin.short) {
-            assert_eq!(d.calibration_record, None);
-            assert_eq!(d.peer, None);
-            assert_eq!(d.peer_audio, None);
-            assert_eq!(d.led_protocol, LedProtocol::Indexed);
-            assert_eq!(d.board_revision, None);
+        // Each device carries what its own file's [emulator] table says, and nothing for a key its file leaves out.
+        let mut seen = 0;
+        for &(file, text) in EMBEDDED {
+            let doc: toml::Table = toml::from_str(text).unwrap();
+            let short = doc["device"]["short"].as_str().unwrap();
+            let d = registry
+                .devices()
+                .iter()
+                .find(|d| d.short == short)
+                .unwrap_or_else(|| panic!("{file}: no device {short}"));
+            let emu = doc.get("emulator").and_then(|e| e.as_table());
+            let key = |k: &str| emu.and_then(|e| e.get(k));
+            assert_eq!(
+                d.board_revision.is_some(),
+                key("board_revision").is_some(),
+                "{file}"
+            );
+            assert_eq!(
+                d.calibration_record.is_some(),
+                key("calibration_record").is_some(),
+                "{file}"
+            );
+            assert_eq!(
+                d.calibration_record == Some(CalibrationRecord::Synthetic),
+                key("calibration_record").and_then(|v| v.as_str()) == Some("synthetic"),
+                "{file}"
+            );
+            assert_eq!(
+                d.peer == Some(PeerModel::Coldfire),
+                key("peer").and_then(|v| v.as_str()) == Some("coldfire"),
+                "{file}"
+            );
+            assert_eq!(
+                d.peer_audio.is_some(),
+                key("peer_audio").is_some(),
+                "{file}"
+            );
+            if let Some(a) = key("peer_audio").and_then(|v| v.as_table()) {
+                let slots = a["slots"].as_array().unwrap();
+                assert_eq!(
+                    d.peer_audio,
+                    Some(PeerAudio {
+                        dma_channel: a["dma_channel"].as_integer().unwrap() as u8,
+                        slots: [
+                            slots[0].as_integer().unwrap() as u8,
+                            slots[1].as_integer().unwrap() as u8
+                        ],
+                        bits: a["bits"].as_integer().unwrap() as u8,
+                    }),
+                    "{file}"
+                );
+            }
+            let packed = key("led_protocol").and_then(|v| v.as_str()) == Some("packed-states");
+            assert_eq!(
+                d.led_protocol,
+                if packed {
+                    LedProtocol::PackedStates
+                } else {
+                    LedProtocol::Indexed
+                },
+                "{file}"
+            );
+            seen += 1;
         }
+        assert_eq!(seen, registry.devices().len());
         let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\npeer = \"fpga\"\n";
         assert!(Registry::parse(&[("x.toml", bad)]).is_err());
     }

@@ -275,6 +275,14 @@ fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) 
     if c.readonly.contains(&c.main) {
         return bad(format!("[container] main section {} is read-only", c.main));
     }
+    // the peer CPU and FPGA sections are never patched: they must be declared read-only
+    for (role, id) in [("cf2", c.cf2), ("fpga", c.fpga)] {
+        if let Some(id) = id.filter(|id| !c.readonly.contains(id)) {
+            return bad(format!(
+                "[container] {role} section {id} must be in readonly"
+            ));
+        }
+    }
     if f.digikit.is_some() && f.patch.is_none() {
         return bad("[digikit] needs [patch]: a runtime target must be patchable".into());
     }
@@ -423,9 +431,8 @@ mod tests {
         assert_eq!(dn2.capabilities.sample_pool, "ddr");
         assert_eq!(dn2.container.readonly, [2, 4, 8]);
         assert_eq!(dn2.acceptance.as_ref().unwrap().firmware, "1.12");
-        // the real files, with their [[firmware]] tables, agree with their capabilities
-        let both = [("dt2.toml", DT2), ("dn2.toml", DN2)];
-        parse_all(&both).unwrap();
+        // every real file, with its [[firmware]] tables, agrees with its capabilities
+        parse_all(DEVICE_FILES).unwrap();
     }
 
     #[test]
@@ -502,6 +509,14 @@ mod tests {
             (
                 "main section is read-only",
                 edit(DT2, "readonly = [2, 4, 8]", "readonly = [2, 3, 4, 8]"),
+            ),
+            (
+                "cf2 section not read-only",
+                edit(DT2, "dsp = 7\n", "dsp = 7\ncf2 = 9\n"),
+            ),
+            (
+                "fpga section not read-only",
+                edit(DT2, "dsp = 7\n", "dsp = 7\nfpga = 9\n"),
             ),
             (
                 "one section, two roles",

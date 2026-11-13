@@ -10,7 +10,7 @@ fn main() {
     let mut window = vec![0u8; 0x2_0000];
     let mut peer = PeerCpu::new();
     peer.mem.log_limit = 400;
-    peer.start(&blob);
+    peer.start(&blob).expect("peer image");
     let mut done = 0;
     let mut slice_end = 0;
     let mut hist = std::collections::BTreeMap::<u32, u64>::new();

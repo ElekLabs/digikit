@@ -178,7 +178,7 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
     };
     let record = find_record(&fw)?;
     let mut segments: Vec<(u64, u64, u64)> = vec![];
-    if let Some(main) = fw.section(3) {
+    if let Some(main) = fw.main() {
         let segs = read_segments(&main.data, main.dest as u64)?;
         for (dest, payload, bss) in &segs {
             segments.push((*dest, payload.len() as u64, *bss));

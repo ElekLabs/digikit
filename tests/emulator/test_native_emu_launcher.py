@@ -977,8 +977,8 @@ def test_a_device_without_dsp_runtime_or_card_launches_stock_and_cf_only(
         lambda *a, **k: pytest.fail("a device without a DSP gets no audio inputs"),
     )
     scope["main"]([str(syx)])
-    # the ColdFire-only build: no coupled feature, no generated core, no card options
-    assert "--features" not in calls[0]
+    # the ColdFire-only build: no coupled feature, no generated core (cf-audio only for a device with peer audio), no card options
+    assert "coupled-audio" not in calls[0] and "second-core" not in calls[0]
     assert calls[-1][1:] == [str(syx), "--no-runtime"]
     assert "not a digikit runtime target" in capsys.readouterr().err
 
@@ -1001,3 +1001,34 @@ def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_p
     with pytest.raises(SystemExit, match="cannot tell which device"):
         scope["main"]([str(syx)])
     assert calls == []
+
+
+def _peer_audio_device():
+    return next(d.short for d in device_data.load_all() if "peer_audio" in d.emulator)
+
+
+def test_a_device_with_peer_audio_builds_cf_audio_in_its_own_target_dir(
+    monkeypatch, tmp_path
+):
+    """The device comes from the launcher's device data, so a patched image (resolved through its patch record by
+    device_for_syx) gets the same build as the stock one; the build does not share the plain nogen target dir."""
+    short = _peer_audio_device()
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: short)
+    scope = launcher()
+    patched = tmp_path / "patched.syx"
+    patched.write_bytes(b"not a stock image")
+    command = scope["cargo_command"]([str(patched)])
+    assert command[command.index("--features") + 1] == "cf-audio"
+    target = command[command.index("--target-dir") + 1]
+    assert target.endswith("/nogen/cf-audio")
+
+
+def test_a_device_without_peer_audio_keeps_the_plain_cf_build(monkeypatch, tmp_path):
+    other = next(
+        d.short for d in device_data.load_all() if "peer_audio" not in d.emulator
+    )
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: other)
+    scope = launcher()
+    command = scope["cargo_command"]([str(tmp_path / "x.syx")])
+    assert "--features" not in command
+    assert command[command.index("--target-dir") + 1].endswith("/nogen")

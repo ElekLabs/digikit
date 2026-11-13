@@ -116,6 +116,11 @@ function container(file: string, t: unknown, caps: Capabilities): Container {
   if (new Set(roles).size !== roles.length) throw new Error(`devices/${file}: [container] two roles share a section`);
   // a role section may be read-only (a device with a bootstrap or peer CPU), except the MAIN OS: patchkit has to change it
   if (ro.includes(out.main)) throw new Error(`devices/${file}: [container] the main section is read-only`);
+  for (const role of ['cf2', 'fpga'] as const) {
+    const id = out[role];
+    if (id !== undefined && !ro.includes(id))
+      throw new Error(`devices/${file}: [container] ${role} section ${id} must be in readonly`);
+  }
   if ((caps.dsp === 'sharc') !== (out.dsp !== undefined))
     throw new Error(`devices/${file}: [container] dsp is present exactly when [capabilities] dsp = "sharc"`);
   return out;

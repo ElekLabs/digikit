@@ -254,6 +254,22 @@ impl CoupledRuntime {
         }
     }
 
+    /// What the device's second processor is, as the board has it: "peer" (a peer CPU runs its program), "zero" (the DSP stand-in that
+    /// answers zeros), "sharc" (a SHARC DSP session), "responder" (the mailbox stand-in for a peer CPU) or "none".
+    pub fn companion(&self) -> &'static str {
+        if self.emulator.has_peer_cpu() {
+            "peer"
+        } else if self.zero {
+            "zero"
+        } else if self.has_audio() {
+            "sharc"
+        } else if self.emulator.has_peer_responder() {
+            "responder"
+        } else {
+            "none"
+        }
+    }
+
     /// Whether the device has a peer CPU that runs a program (see `Emulator::has_peer_cpu`).
     pub fn has_peer_cpu(&self) -> bool {
         self.emulator.has_peer_cpu()

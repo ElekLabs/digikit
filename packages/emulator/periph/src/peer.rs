@@ -123,6 +123,9 @@ pub struct MailboxPeer {
     /// Peer CPU mode: the next audio frame is due at this MAIN tick; `frame_pending` while its interrupt waits for MAIN to take it.
     next_frame: u64,
     frame_pending: bool,
+    /// Times the frame deadline lagged by a period or more and was moved to `now + FRAME_TICKS` (a restore, or MAIN masked the frame
+    /// interrupt for a long stretch) instead of firing the missed frames back to back.
+    pub frame_resyncs: u64,
     /// The vector of the audio frame interrupt (INTC1: 120 + the eDMA channel), 174 unless the device names its audio channel.
     pub frame_vector: u16,
 }
@@ -239,12 +242,33 @@ impl MailboxPeer {
             .chain(self.frame_pending.then_some(PeerIrq::Frame))
     }
 
-    /// Peer CPU mode: the audio frame source. Once per `FRAME_TICKS` of MAIN time the frame interrupt becomes pending (at most one waits).
+    /// Peer CPU mode: the audio frame source. The frame interrupt becomes pending at exact multiples of `FRAME_TICKS` of MAIN time (at
+    /// most one waits). The next deadline moves by one period from the last one, not from `now`: the frame rate does not depend on how
+    /// late the caller looked. The run loop stops at `next_deadline` so it never looks late. When the deadline is still due after the
+    /// step (the caller looked a period or more late: a snapshot restored at a later tick, a long masked stretch), the missed frames are
+    /// dropped: the deadline moves to `now + FRAME_TICKS` and `frame_resyncs` counts it.
     pub fn frame_source(&mut self, now: u64) {
         if self.cpu_mode && now >= self.next_frame {
             self.frame_pending = true;
-            self.next_frame = now + FRAME_TICKS;
+            self.next_frame += FRAME_TICKS;
+            if now >= self.next_frame {
+                self.next_frame = now + FRAME_TICKS;
+                self.frame_resyncs += 1;
+            }
         }
+    }
+
+    /// Peer CPU mode: the MAIN tick after `now` of the next event the run loop must stop at, the frame or the next queued reply.
+    /// A deadline that has passed is not returned: its interrupt waits for MAIN, and stopping again would not move it.
+    pub fn next_deadline(&self, now: u64) -> Option<u64> {
+        if !self.cpu_mode {
+            return None;
+        }
+        [Some(self.next_frame), self.queue.front().map(|(at, _)| *at)]
+            .into_iter()
+            .flatten()
+            .filter(|at| *at > now)
+            .min()
     }
 
     /// The window bytes to store at +0 before the due interrupt is delivered (the hello block for IRQ4 #2 and #3).
@@ -273,12 +297,13 @@ impl MailboxPeer {
         !self.queue.is_empty() || self.frame_pending
     }
 
-    /// Run state for a snapshot: the counters, the pin, the queue and the image lengths (not the images).
+    /// Run state for a snapshot (section `PEER2`): the counters, the pin, the frame deadline, the queue and the image lengths (not the images).
     pub fn snap_save(&self, w: &mut Writer) {
         w.u64(self.stream_bytes);
         w.u64(self.doorbell_edges);
         w.u64(self.irq4_delivered);
         w.bool(self.pin_high);
+        w.u64(self.next_frame);
         w.u64(self.queue.len() as u64);
         for (at, irq) in &self.queue {
             w.u64(*at);
@@ -294,11 +319,15 @@ impl MailboxPeer {
         }
     }
 
-    pub fn snap_load(&mut self, r: &mut Reader) -> SnapResult<()> {
+    /// Loads the run state. `with_frame` is false for a snapshot of the older `PEER` section, which has no `next_frame`: the deadline
+    /// restarts at 0 and the first `frame_source` call resyncs it.
+    pub fn snap_load(&mut self, r: &mut Reader, with_frame: bool) -> SnapResult<()> {
         self.stream_bytes = r.u64()?;
         self.doorbell_edges = r.u64()?;
         self.irq4_delivered = r.u64()?;
         self.pin_high = r.bool()?;
+        self.next_frame = if with_frame { r.u64()? } else { 0 };
+        self.frame_pending = false;
         let n = r.len(1 << 12)?;
         self.queue = (0..n)
             .map(|_| {
@@ -425,6 +454,28 @@ mod tests {
     }
 
     #[test]
+    fn frames_fall_on_exact_ticks_however_late_the_source_is_looked_at() {
+        let mut p = MailboxPeer::new();
+        p.cpu_mode = true;
+        p.frame_source(0);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.next_deadline(0), Some(FRAME_TICKS));
+        // looked at 100 ticks late: the next deadline is still the next multiple
+        p.frame_source(FRAME_TICKS + 100);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.next_deadline(0), Some(2 * FRAME_TICKS));
+        // a gap of more than a period: one frame, then the deadline restarts from now
+        p.frame_source(5 * FRAME_TICKS);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.next_deadline(0), Some(6 * FRAME_TICKS));
+        assert_eq!(p.frame_resyncs, 1);
+        assert!(
+            MailboxPeer::new().next_deadline(0).is_none(),
+            "no peer CPU, no deadline"
+        );
+    }
+
+    #[test]
     fn snapshot_keeps_counters_and_queue() {
         let mut p = MailboxPeer::new();
         p.gpio_write(PPDSDR_A, 0x10, 5);
@@ -433,10 +484,70 @@ mod tests {
         let mut w = Writer::new();
         p.snap_save(&mut w);
         let mut q = MailboxPeer::new();
-        q.snap_load(&mut Reader::new(&w.buf)).unwrap();
+        q.snap_load(&mut Reader::new(&w.buf), true).unwrap();
         assert_eq!(q.doorbell_edges, 1);
         assert_eq!(q.due(5 + REPLY_DELAY), Some(PeerIrq::Eport4));
         q.delivered(PeerIrq::Eport4);
         assert_eq!(q.due(6 + REPLY_DELAY), Some(PeerIrq::Edma29));
+    }
+
+    #[test]
+    fn a_restore_at_a_large_tick_raises_one_frame_not_a_burst() {
+        let mut p = MailboxPeer::new();
+        p.cpu_mode = true;
+        p.frame_source(10 * FRAME_TICKS);
+        p.delivered(PeerIrq::Frame);
+        let mut w = Writer::new();
+        p.snap_save(&mut w);
+        let mut q = MailboxPeer::new();
+        q.cpu_mode = true;
+        q.snap_load(&mut Reader::new(&w.buf), true).unwrap();
+        let now = 1_000_000 * FRAME_TICKS;
+        let mut taken = 0;
+        for i in 0..100 {
+            q.frame_source(now + i);
+            if q.due_list(0).next().is_some() {
+                q.delivered(PeerIrq::Frame);
+                taken += 1;
+            }
+        }
+        assert_eq!(taken, 1);
+        assert_eq!(q.frame_resyncs, 1);
+        // a snapshot of the older section has no deadline: same result
+        let mut old = MailboxPeer::new();
+        old.cpu_mode = true;
+        old.snap_load(&mut Reader::new(&legacy(&p)), false).unwrap();
+        old.frame_source(now);
+        old.delivered(PeerIrq::Frame);
+        old.frame_source(now + 1);
+        assert_eq!(old.due_list(0).count(), 0);
+        assert_eq!(old.frame_resyncs, 1);
+    }
+
+    /// The `PEER` section as older snapshots wrote it (no frame deadline).
+    fn legacy(p: &MailboxPeer) -> Vec<u8> {
+        let mut w = Writer::new();
+        w.u64(p.stream_bytes);
+        w.u64(p.doorbell_edges);
+        w.u64(p.irq4_delivered);
+        w.bool(p.pin_high);
+        w.u64(0);
+        w.u64(0);
+        w.buf.clone()
+    }
+
+    #[test]
+    fn a_long_mask_then_unmask_raises_one_frame() {
+        let mut p = MailboxPeer::new();
+        p.cpu_mode = true;
+        p.frame_source(0); // pending, MAIN has the frame interrupt masked and does not take it
+        p.frame_source(50 * FRAME_TICKS); // one look after a long stretch
+        assert_eq!(p.frame_resyncs, 1, "the first look at tick 0 is on time");
+        p.delivered(PeerIrq::Frame); // unmasked
+        p.frame_source(50 * FRAME_TICKS);
+        p.frame_source(51 * FRAME_TICKS - 1);
+        assert_eq!(p.due_list(0).count(), 0);
+        p.frame_source(51 * FRAME_TICKS);
+        assert_eq!(p.due_list(0).count(), 1);
     }
 }

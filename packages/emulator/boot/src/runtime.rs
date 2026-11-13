@@ -30,6 +30,8 @@ pub struct PeerReport {
     pub irq4_delivered: u64,
     /// Audio frame interrupts MAIN took (peer CPU mode).
     pub frames_delivered: u64,
+    /// Times the frame deadline was moved to now because it lagged by a period or more (a restore or a long masked stretch).
+    pub frame_resyncs: u64,
     /// The peer CPU (`[emulator] peer = "coldfire"`), once started.
     pub cpu: Option<PeerCpuReport>,
 }
@@ -974,7 +976,7 @@ impl Emulator {
             #[cfg(feature = "cf-profile")]
             let t0 = crate::cputime::thread_cpu_ns();
             let fast = self.run_fast(if self.peer_cpu.is_some() {
-                (budget - iterations).min(PEER_SLICE as u32)
+                (budget - iterations).min(self.peer_slice_limit())
             } else {
                 budget - iterations
             });
@@ -1088,6 +1090,7 @@ impl Emulator {
             doorbell_edges: peer.doorbell_edges,
             irq4_delivered: peer.irq4_delivered,
             frames_delivered: peer.frames_delivered,
+            frame_resyncs: peer.frame_resyncs,
             cpu: self
                 .peer_cpu
                 .as_ref()
@@ -1145,6 +1148,11 @@ impl Emulator {
         self.peer_cpu.is_some()
     }
 
+    /// Whether the mailbox responder stands in for the second CPU (`[emulator] peer = "mailbox-responder"`).
+    pub fn has_peer_responder(&self) -> bool {
+        self.peer_cpu.is_none() && self.bus.board.peer().is_some()
+    }
+
     /// Replaces the peer CPU with the mailbox responder (`[emulator] peer = "mailbox-responder"`): no peer program, no peer audio,
     /// the fast path for the UI. Call on a fresh runtime, before it runs or restores a state.
     pub fn use_peer_responder(&mut self) {
@@ -1191,6 +1199,15 @@ impl Emulator {
             .collect()
     }
 
+    /// MAIN instructions to run before the next peer slice: `PEER_SLICE`, cut at the next frame or reply deadline, so the audio frame
+    /// starts at its own tick and not up to a slice late.
+    fn peer_slice_limit(&self) -> u32 {
+        match (self.oracle_ticks(), self.bus.board.peer()) {
+            (Ok(now), Some(m)) => peer_slice(now, m.next_deadline(now)),
+            _ => PEER_SLICE as u32,
+        }
+    }
+
     /// Runs the peer CPU up to MAIN's current tick: first the doorbell edges MAIN made (the first one after the program arrived is what the
     /// stage-1 loader waits for; later ones are DTIM0 capture events, the frame tick), then the instructions MAIN ran since the last slice.
     /// The peer's output pin changes become IRQ4 for MAIN.
@@ -1228,7 +1245,10 @@ impl Emulator {
                 );
                 peer.frame_tick(board);
             } else if let Some(program) = board.peer().and_then(|m| m.program()) {
-                peer.start(program);
+                if let Err(error) = peer.start(program) {
+                    self.set_error(format!("PeerCpuStart({error})"));
+                    return;
+                }
                 self.peer_started = true;
                 self.peer_clock = now;
                 // MAIN's frame handler now forces vector 191 (the engine tick) and nothing else delivers it.
@@ -2112,6 +2132,13 @@ impl Emulator {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
+        // A running peer CPU has its own events: the audio frame and the replies. Idle time never skips past one.
+        let peer_deadline = self
+            .peer_cpu
+            .is_some()
+            .then(|| self.bus.board.peer().and_then(|m| m.next_deadline(now)))
+            .flatten();
+        let deadline = earliest(deadline, peer_deadline);
         // Instructions to skip. The counting loop has no yield pass (it never
         // had one while interpreted) and skips whole passes of two.
         let count = if counter.is_some() {
@@ -4337,6 +4364,19 @@ fn decode_intro_bitmap(board: &mut Board, bmp: u32) -> Option<Vec<u8>> {
     Some(raw)
 }
 
+/// MAIN instructions to run before the peer's next event: `PEER_SLICE`, cut at `deadline` (a tick after `now`; none without a peer).
+fn peer_slice(now: u64, deadline: Option<u64>) -> u32 {
+    deadline.map_or(PEER_SLICE, |at| at.saturating_sub(now).min(PEER_SLICE)) as u32
+}
+
+/// The earlier of two optional deadlines.
+fn earliest(a: Option<u64>, b: Option<u64>) -> Option<u64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
 fn idle_advance_limit(remaining: u32, passes: u64, now: u64, deadline: Option<u64>) -> u32 {
     let before_yield = 19_999 - passes % 20_000;
     let before_timer = deadline.map_or(u64::MAX, |due| due.saturating_sub(now).saturating_sub(1));
@@ -4446,6 +4486,10 @@ impl Emulator {
             return Err(
                 "save_state needs DIGI_CF_IPS unset (snapshots are taken at 132 MHz)".into(),
             );
+        }
+        if self.peer_started {
+            // the peer CPU's memory, registers and frame state are not in the snapshot: a restore would have no running peer
+            return Err("save_state: a peer CPU is running and its state is not saved".into());
         }
         if self.irq1_pending {
             return Err("a DSPI1 peer interrupt is pending".into());
@@ -5418,6 +5462,84 @@ mod tests {
         assert_eq!(emu.ram_clear_fast_forwarded_instructions, 0);
     }
 
+    /// The firmware of the device whose second CPU runs a program (`[emulator] peer = "coldfire"`), when it is in `firmware/`.
+    fn peer_cpu_firmware() -> Option<Vec<u8>> {
+        let registry = device_profile::Registry::embedded().unwrap();
+        let device = registry
+            .devices()
+            .iter()
+            .find(|d| d.peer == Some(device_profile::PeerModel::Coldfire))?;
+        let file = device
+            .firmwares
+            .iter()
+            .rev()
+            .find_map(|f| f.filename.clone())?;
+        std::fs::read(format!("../../../firmware/{file}")).ok()
+    }
+
+    /// Boots a peer CPU device until its peer CPU runs, plays a note, then runs `total` more ticks in chunks of `chunk`.
+    /// Returns the MAIN tick, the peer CPU's state and the PCM captured.
+    fn peer_cpu_device_after_chunks(syx: &[u8], chunk: u32, total: u32) -> (u64, String, Vec<f32>) {
+        let mut emu = Emulator::new(syx, None).unwrap();
+        emu.enable_ssi_diagnostic(96_000).unwrap();
+        while !emu.peer_started {
+            emu.step_chunk(250_000);
+            assert!(emu.error.is_none(), "{:?}", emu.error);
+        }
+        // past the main UI, then trig 1 and PLAY, as the headless proof does
+        for _ in 0..2800 {
+            emu.step_chunk(250_000);
+        }
+        for code in [1, 37] {
+            emu.button(code, true).unwrap();
+            for _ in 0..40 {
+                emu.step_chunk(250_000);
+            }
+            emu.button(code, false).unwrap();
+            for _ in 0..40 {
+                emu.step_chunk(250_000);
+            }
+        }
+        emu.take_pcm();
+        for _ in 0..total / chunk {
+            emu.step_chunk(chunk);
+        }
+        assert!(emu.error.is_none(), "{:?}", emu.error);
+        let peer = emu.peer_cpu().unwrap();
+        let state = format!("raised {} taken {}", peer.frames_raised, peer.frames_taken);
+        (emu.cpu.icount, state, emu.take_pcm())
+    }
+
+    /// The host's chunking (how many ticks one `step_chunk` call runs) must not change what the peer CPU does or the PCM.
+    /// Boots a device: slow in a debug build, so it runs on request: `cargo test --release -p elektron-native-boot --lib -- --ignored`.
+    #[test]
+    #[ignore = "boots a peer CPU device until its peer runs"]
+    fn the_peer_frames_do_not_depend_on_the_chunk_size() {
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let a = peer_cpu_device_after_chunks(&syx, 5000, 1_000_000);
+        let b = peer_cpu_device_after_chunks(&syx, 1000, 1_000_000);
+        assert_eq!(a.0, b.0, "MAIN ticks");
+        assert_eq!(a.1, b.1, "peer frames");
+        assert!(!a.2.is_empty(), "the run produced PCM");
+        assert_eq!(a.2.len(), b.2.len(), "PCM length");
+        assert_eq!(a.2, b.2, "PCM");
+    }
+
+    #[test]
+    fn save_state_is_refused_while_a_peer_cpu_runs() {
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        assert!(emu.has_peer_cpu());
+        emu.save_state().expect("before the peer starts");
+        emu.peer_started = true;
+        let e = emu.save_state().unwrap_err();
+        assert!(e.contains("peer CPU is running"), "{e}");
+    }
+
     #[test]
     fn diagnostics_preserves_cpu_and_pending_frame_delivery() {
         let Ok(syx) = std::fs::read("../../../firmware/Digitakt_II_OS1.17.syx") else {
@@ -5678,6 +5800,42 @@ mod tests {
         assert_eq!(idle_advance_limit(20, 1, 100, Some(101)), 0);
         assert_eq!(idle_advance_limit(20, 1, 100, Some(99)), 0);
         assert_eq!(idle_advance_limit(3, 1, 100, None), 3);
+    }
+
+    /// The run loop's deadline handling for a peer CPU, without firmware: the MAIN slice stops at the peer's deadline and the idle
+    /// fast-forward never jumps past it; with no peer both limits are the ones MAIN already had.
+    #[test]
+    fn the_peer_deadline_cuts_the_main_slice_and_the_idle_fast_forward() {
+        let now = 1_000_000;
+        let mut peer = periph::peer::MailboxPeer::new();
+        peer.cpu_mode = true;
+        peer.frame_source(0);
+        peer.delivered(periph::peer::PeerIrq::Frame);
+        // the next frame is due at FRAME_TICKS: far away, so the slice is the full PEER_SLICE
+        let far = peer.next_deadline(0).unwrap();
+        assert_eq!(peer_slice(0, Some(far)), PEER_SLICE as u32);
+        // a deadline 100 ticks ahead cuts the slice there, and the idle skip stops one instruction before it
+        let due = now + 100;
+        assert_eq!(peer_slice(now, Some(due)), 100);
+        let skip = idle_advance_limit(250_000, 1, now, earliest(None, Some(due)));
+        assert_eq!(u64::from(skip), 99);
+        assert!(now + u64::from(skip) < due);
+        // a timer deadline that is earlier still wins; a later one does not
+        assert_eq!(earliest(Some(now + 10), Some(due)), Some(now + 10));
+        assert_eq!(earliest(Some(now + 500), Some(due)), Some(due));
+        // a deadline that has passed (MAIN has not taken its interrupt) does not stall the slice
+        assert_eq!(peer_slice(now, Some(now - 5)), 0);
+        // no peer: inert
+        assert_eq!(peer_slice(now, None), PEER_SLICE as u32);
+        assert_eq!(earliest(None, None), None);
+        assert_eq!(
+            idle_advance_limit(250_000, 1, now, earliest(None, None)),
+            19_998
+        );
+        assert_eq!(
+            idle_advance_limit(250_000, 1, now, earliest(Some(now + 50), None)),
+            49
+        );
     }
 
     /// Code in DDR (outside MAIN), written at run time and rewritten by the

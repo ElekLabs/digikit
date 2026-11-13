@@ -165,6 +165,14 @@ pub enum UsbPhyEvent {
     RunStop(bool),
 }
 
+/// eDMA error status (RM 19.4.2) and error latches, as offsets from `EDMA_BASE`; `EDMA_ES_*` are its bits.
+const EDMA_ES: usize = 0x04;
+const EDMA_ERRH: usize = 0x28;
+const EDMA_ERRL: usize = 0x2C;
+const EDMA_ES_VLD: u32 = 1 << 31;
+const EDMA_ES_SAE: u32 = 1 << 7;
+const EDMA_ES_DAE: u32 = 1 << 4;
+
 /// Caller-mapped 1 MiB RAM pages.  The tagged 4096-entry table is indexed by
 /// address bits 31:20, so ordinary 1/2/4-byte RAM accesses take one table
 /// lookup.  MMIO is always dispatched before this table.
@@ -527,7 +535,7 @@ impl Board {
     /// A channel started by software (SSRT) runs its whole transfer at once: `nbytes` per minor loop, `citer` loops (nine bits when channel
     /// linking is enabled, where every minor loop requests the next), then the major-loop writeback (SADDR and DADDR advanced plus SLAST
     /// and DLASTSGA, CITER reloaded from BITER, DONE set, START cleared). Peer CPU board only: MAIN copies the peer's voices out of the
-    /// window this way every frame (finding 128). Guest memory that is not mapped ends the transfer.
+    /// window this way every frame (finding 128). Guest memory that is not mapped ends the transfer with an eDMA error (ES, ERRH/ERRL) and no DONE.
     fn edma_software_start(&mut self, chan: usize) {
         let base = edma::tcd_offset(chan);
         let r = &self.dma.edma_regs;
@@ -553,19 +561,37 @@ impl Board {
         if nbytes == 0 || loops == 0 || ssize != dsize || !nbytes.is_multiple_of(ssize) {
             return;
         }
+        // The eDMA stops at the first access that fails and reports it in ES (source or destination address error) and ERR.
+        let mut error = 0u32;
         'run: for _ in 0..loops {
             for _ in 0..nbytes / ssize {
                 for k in 0..ssize {
                     let Some(v) = self.ram_read(src.wrapping_add(k), 1) else {
+                        error = EDMA_ES_SAE;
                         break 'run;
                     };
                     if !self.ram_write(dst.wrapping_add(k), 1, v) {
+                        error = EDMA_ES_DAE;
                         break 'run;
                     }
                 }
                 src = src.wrapping_add_signed(i32::from(soff));
                 dst = dst.wrapping_add_signed(i32::from(doff));
             }
+        }
+        if error != 0 {
+            let r = &mut self.dma.edma_regs;
+            r.set_u32_at(EDMA_ES, EDMA_ES_VLD | (chan as u32) << 8 | error);
+            let (reg, bit) = if chan >= 32 {
+                (EDMA_ERRH, chan - 32)
+            } else {
+                (EDMA_ERRL, chan)
+            };
+            let old = r.u32_at(reg);
+            r.set_u32_at(reg, old | 1 << bit);
+            let csr = r.u16_at(base + edma::CSR);
+            r.set_u16_at(base + edma::CSR, csr & !edma::CSR_START);
+            return;
         }
         let r = &mut self.dma.edma_regs;
         r.set_u32_at(base + edma::SADDR, src.wrapping_add_signed(slast));
@@ -745,7 +771,7 @@ impl Board {
         }
         w.bytes(&self.uart_tx);
         if let Some(peer) = &self.peer {
-            w.tag("PEER");
+            w.tag("PEE2");
             peer.snap_save(w);
         }
         Ok(())
@@ -796,8 +822,12 @@ impl Board {
         }
         self.uart_tx = r.bytes()?.to_vec();
         if let Some(peer) = self.peer.as_mut() {
-            r.tag("PEER")?;
-            peer.snap_load(r)?;
+            // "PEER" is the older section without the frame deadline.
+            let with_frame = r.tag_if("PEE2");
+            if !with_frame {
+                r.tag("PEER")?;
+            }
+            peer.snap_load(r, with_frame)?;
         }
         Ok(())
     }
@@ -2417,6 +2447,41 @@ impl Bus for Board {
 mod tests {
     use super::*;
     use coldfire::Bus;
+
+    /// A peer CPU board with one software-started eDMA channel: 8 bytes from RAM + 0x200 to `dst`.
+    fn edma_channel_5(dst: u32) -> Board {
+        let mut b = board(CompletionPolicy::Oracle);
+        b.enable_peer(true).unwrap();
+        b.write32(RAM + 0x200, 0x0102_0304).unwrap();
+        let t = edma::TCD_BASE + 5 * 0x20;
+        b.write32(t, RAM + 0x200).unwrap();
+        b.write16(t + 4, 0x0202).unwrap();
+        b.write16(t + 6, 4).unwrap();
+        b.write32(t + 8, 4).unwrap();
+        b.write32(t + 0x10, dst).unwrap();
+        b.write16(t + 0x14, 1).unwrap();
+        b.write16(t + 0x16, 4).unwrap();
+        b.write16(t + 0x1c, 1).unwrap();
+        b.write8(edma::SSRT, 5).unwrap();
+        b
+    }
+
+    #[test]
+    fn a_software_started_transfer_to_unmapped_memory_faults_and_is_not_done() {
+        let t = edma::TCD_BASE + 5 * 0x20;
+        let mut ok = edma_channel_5(RAM + 0x300);
+        assert_eq!(ok.read32(RAM + 0x300).unwrap(), 0x0102_0304);
+        assert_ne!(ok.read16(t + 0x1e).unwrap() & edma::CSR_DONE, 0);
+        assert_eq!(ok.read32(edma::EDMA_BASE + 4).unwrap(), 0, "no error");
+        let mut bad = edma_channel_5(0x7000_0000);
+        assert_eq!(bad.read16(t + 0x1e).unwrap() & edma::CSR_DONE, 0);
+        let es = bad.read32(edma::EDMA_BASE + 4).unwrap();
+        assert_eq!(es, EDMA_ES_VLD | 5 << 8 | EDMA_ES_DAE);
+        assert_eq!(
+            bad.read32(edma::EDMA_BASE + EDMA_ERRL as u32).unwrap(),
+            1 << 5
+        );
+    }
     use emmc_card::CardIdentity;
     const RAM: u32 = 0x4000_0000;
     const NEXT: u32 = RAM + PAGE_SIZE as u32;

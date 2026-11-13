@@ -17,6 +17,7 @@ import {
 } from '@web/runtime/runtime';
 import { booting as startBoot, bootingScreen, bootingStatus, loadFailure, type Booting } from './boot-core';
 import { bumpCardRefresh } from './card-state';
+import { pageFor, type Page } from './page-core';
 import {
   CHART,
   DOWN,
@@ -65,7 +66,7 @@ import {
 } from '@web/transfer/target';
 import { noteConnection } from '@web/transfer/connection-state';
 import { setReloadWithRuntime } from './emulator-actions';
-import { dspLine, dspPending, hasDspChoice, startupDsp } from './dsp-core';
+import { dspLine, dspOption, dspPending, hasDspChoice, readDspChoice, startupDsp, writeDspChoice } from './dsp-core';
 import { transferEnv } from '@web/transfer/env';
 import { run as flashRun } from '@web/firmware/firmware-state';
 import { running as flashRunning } from '@web/firmware/firmware-core';
@@ -82,20 +83,19 @@ type Status = RuntimeSnapshot['status'];
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// "DSP": on unless the user turned it off; kept like the runtime tick.
-const DSP_KEY = 'digikit.bootDsp';
+// "DSP": on unless the user turned it off; kept like the runtime tick (dsp-core.ts).
 const readDspPref = () => {
   try {
-    return localStorage.getItem(DSP_KEY) !== 'off';
+    return readDspChoice(localStorage);
   } catch {
     return true;
   }
 };
 const writeDspPref = (on: boolean) => {
   try {
-    localStorage.setItem(DSP_KEY, on ? 'on' : 'off');
+    writeDspChoice(localStorage, on);
   } catch {
-    /* the choice lasts until the window closes */
+    /* no storage: the choice lasts until the window closes */
   }
 };
 
@@ -189,7 +189,7 @@ export default function Console() {
   const [dockSaved, setDockSaved] = createSignal(readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
-  const [page, setPage] = createSignal<'emulator' | 'transfer' | 'remote' | 'firmware'>('emulator');
+  const [page, setPage] = createSignal<Page>('emulator');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [cardBusy, setCardBusy] = createSignal(false);
@@ -212,7 +212,7 @@ export default function Console() {
   const knownDevice = () => status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
   const device = () => {
     const d = knownDevice();
-    return d !== undefined && d in panels ? d : defaultFaceplate;
+    return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
   };
   const panel = () => panels[device()];
   /** A device without `[digikit]` has no runtime, no modules and no remote: it starts stock, and those pages say so. */
@@ -223,11 +223,14 @@ export default function Console() {
     const id = knownDevice();
     return id === undefined || !registry.ids.includes(id) || hasDspChoice(registry.get(id));
   };
+  /** The `dsp` option for a load of an image of this device: only a device that offers the choice gets it. */
+  const dspFor = (id: string | undefined) =>
+    dspOption(id !== undefined && registry.ids.includes(id) ? registry.get(id) : undefined, bootDsp());
   /** The tick differs from the running image: it applies at the next Reload or Open. */
   const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
   createEffect(() => {
-    if (!runtimeHere() && (page() === 'transfer' || page() === 'remote')) setPage('emulator');
+    setPage(pageFor(page(), target(), runtimeHere()));
   });
 
   /** Set when a default-modules install has started since the app opened (boot() or the first status of a startup with the runtime). */
@@ -360,18 +363,27 @@ export default function Console() {
         void installDefaultModules(s.device);
       }
     } catch (e) {
-      setError(message(e));
-      setFailed(startBoot(name, imageDevice));
-      setReloadNote(loadFailure(name, message(e)));
-      logInput(failureEntry('firmware', `loading ${name}`, message(e)));
+      failLoad(name, imageDevice, e);
     } finally {
       setBooting(undefined);
     }
   };
+  const failLoad = (name: string, imageDevice: DeviceId | undefined, e: unknown) => {
+    setError(message(e));
+    setFailed(startBoot(name, imageDevice));
+    setReloadNote(loadFailure(name, message(e)));
+    logInput(failureEntry('firmware', `loading ${name}`, message(e)));
+  };
   const load = async (bytes: Uint8Array, name: string) => {
-    const imageDevice = await deviceOfImage(bytes);
+    let imageDevice: DeviceId | undefined;
+    try {
+      imageDevice = await deviceOfImage(bytes);
+    } catch (e) {
+      failLoad(name, undefined, e);
+      return;
+    }
     return boot(
-      (r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice), dsp: bootDsp() }),
+      (r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice), dsp: dspFor(imageDevice) }),
       name,
       imageDevice,
     );
@@ -386,7 +398,10 @@ export default function Console() {
       await boot(
         (r) =>
           r.loadPath
-            ? r.loadPath(path, { runtime: bootRuntime() && runtimeHere(), dsp: bootDsp() })
+            ? // The file at `path` may belong to another device than the running one: send the choices as they are; the
+              // controller applies them by the loaded firmware's device data (runtime only on a runtime target, dsp only
+              // where the device offers the choice).
+              r.loadPath(path, { runtime: bootRuntime(), dsp: bootDsp() })
             : Promise.reject(new Error('no reload')),
         source()?.name ?? path,
       );
@@ -512,12 +527,9 @@ export default function Console() {
         // the pump may deliver no later snapshot (a hidden window): check once here, now that the runtime info is known
         startDefaultsAtLaunch();
         // The app starts with the runtime patched in; a user who turned that off gets the startup file as it is.
-        // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice; otherwise the saved choice applies.
+        // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice for this session; only a click on the tick saves a choice.
         const dsp = startupDsp(bootDsp(), info()?.dsp);
-        if (dsp !== bootDsp()) {
-          setBootDsp(dsp);
-          writeDspPref(dsp);
-        }
+        if (dsp !== bootDsp()) setBootDsp(dsp);
         if (!bootRuntime() && info()?.runtime?.set) await reload('Started without the runtime at');
         else if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
       })();
@@ -702,7 +714,11 @@ export default function Console() {
       <Show when={card()}>
         <p class="note">{cardLine(card())}</p>
       </Show>
-      <Show when={registry.get(device()).capabilities.card === 'path-fs' && runtime()?.cards}>
+      <Show
+        when={
+          registry.ids.includes(device()) && registry.get(device()).capabilities.card === 'path-fs' && runtime()?.cards
+        }
+      >
         <div class="acts">
           <input
             ref={(el) => {
