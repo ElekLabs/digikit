@@ -386,13 +386,24 @@ TypeScript import closure of the test files and of the Vitest setup file (`tools
 built bytes (full set; the narrow set of a file outside `mergeTests` is described above): `patchkit:device-bytes` writes
 `dist/bytes/core-objects.sha256`, one line per committed core object (`modules/core/**/build/*.dko.json`) with its hash without
 `source_sha256`, the only field that follows the source text (a comment edit changes no other field; checked for Rust, C and assembly).
-The patched image is a function of these objects, the core manifests, the device files, the patchkit binary and the firmware, and all of
-them are inputs, so every patch set and every `--modules` combination of core roots is covered. The sources, SDK headers and
-`source_sha256` of the image are not inputs: a comment, an unused constant or a rebuilt object with the same bytes changes no key. The key
-also holds the pack outputs (`dist/modules/*/*.dkm`), the `patchkit`, daemon, `plusdrive` and `dksample.wasm` outputs, the module's own
-production files without its object sources (`src`, `include`, `fit`, `sdk`; they reach the run through the packs and the object hashes), the
-files in `READ_BY_TESTS` (`tools/nx/module-targets.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`, `sdk/sdk.toml`, `types.toml`,
-fixture files, the Vitest and TypeScript config; tests read these without importing them),
+The patched image is a function of these objects, the core manifests, the device files, the patchkit code and the firmware. A
+merge key (the target of a file in `mergeTests`, and the narrow keys, see above) hashes the result instead of the patchkit code:
+`patchkit:device-images` runs `patchkit apply` for each acceptance firmware (`CELLS` of `tools/nx/device-inputs.mjs`) with each patch set of
+its device file and writes `dist/bytes/images.sha256`, one line `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>`
+(the plan and the address map are what `runtime-plan.ts` reads). `digi-control:daemons` also writes `dist/bytes/daemon-test.key`, the
+daemon key without the sources that only patchkit reads (`tools/devtools/daemon_test_key.py`; the store key of the daemon is unchanged).
+So a patchkit edit that changes no packed byte (image, plan, address map, `.dkm`, core object) selects no merge target. A test that runs
+patchkit for its own sake keeps `dist/patchkit/patchkit` in its merge key. The rule is the import closure: it holds `runtime/patchkit.ts`
+(the `patchkit` helper of tests; `runtime-plan.ts` and `dkm.ts` import `patchkit-exec.ts` instead), `synth.ts`, `addrmap.ts` or
+`packages/test-support/src/commit-records.ts` (import it as `@digi/test-support/commit-records`), or the record patches fixture modules
+(`patchModules`). `test-device-all`, the non-twin targets (`test-device-full`) and `test-conformance` keep the full key: the patchkit binary
+and `dist/daemons.json`. A merge key lists a shared file of `SHARED_READS` (`sdk/sdk.toml`, `types.toml`, core `module.toml`) only when a
+helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) or the test runs patchkit; the full key lists all of them.
+The sources, SDK headers and `source_sha256` of the image are not inputs: a comment, an unused constant or a rebuilt object with the same
+bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`), the `plusdrive` and `dksample.wasm` outputs, the
+module's own production files without its object sources (`src`, `include`, `fit`, `sdk`; they reach the run through the packs and the
+object hashes), the files in `READ_BY_TESTS` (`tools/nx/module-targets.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`,
+`sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them),
 each record's `sources`. A record that runs `patchkit build` or `pack` at run time, or patches with explicit fixture modules (`patchModules`),
 also keeps the SDK and the toolchain as inputs (record flag `compiles`; a record that patches fixture modules or packs at run time sets it),
 the toolchain, the emulator env switches,

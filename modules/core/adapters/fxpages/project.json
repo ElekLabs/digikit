@@ -66,13 +66,6 @@
           "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
           "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
         },
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_digikit_fxsend.py"
-        ],
-        "pythonTools": true,
         "plusdrive": true
       },
       {
@@ -82,13 +75,6 @@
           "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
           "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
         },
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_digikit_fxsend.py"
-        ],
-        "pythonTools": true,
         "plusdrive": true
       },
       {
