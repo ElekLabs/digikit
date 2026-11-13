@@ -127,6 +127,7 @@ def load_profiles(root: Path = ROOT) -> dict[str, dict]:
                 "device": d["device"]["short"],
                 "version": fw["version"],
                 "dsp": (fw.get("dsp") or {}).get("image"),
+                "container": d.get("container") or {},
                 "filename": fw.get("filename"),
                 "port": bool(fw.get("port")),
                 "patch": d.get("patch") or {},
@@ -134,6 +135,12 @@ def load_profiles(root: Path = ROOT) -> dict[str, dict]:
                 "cf_expansion_excludes": fw.get("cf_expansion_excludes", []),
             }
     return out
+
+
+def dsp_section(prof: dict) -> int | None:
+    """The container section of the DSP stream of a firmware profile, None when the firmware has no DSP image (a device with
+    `[capabilities] dsp = "none"`)."""
+    return prof["container"].get("dsp") if prof["dsp"] else None
 
 
 def ported_firmware(root: Path = ROOT) -> list[str]:
@@ -856,8 +863,9 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         raise ResolveError(f"{syx}: not a firmware listed in devices/*.toml ({digest})")
     secs = sections_of(syx)
     device, version = prof["device"], prof["version"]
-    dsp = Dsp(secs[7], prof["dsp"])
-    cf = CfFacts(f"{device}-{version}", secs[3])
+    main_sec, dsp_sec = prof["container"]["main"], dsp_section(prof)
+    dsp = Dsp(secs[dsp_sec], prof["dsp"]) if dsp_sec is not None else None
+    cf = CfFacts(f"{device}-{version}", secs[main_sec])
     anchors = []
     pending = []
     for rule in fw_rules(root):
@@ -866,6 +874,8 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         if rule.get("kind") in MULTI_KINDS:
             pending.append(rule)  # after the single anchors they may exclude
             continue
+        if rule.get("cpu") != "cf" and dsp is None:
+            raise ResolveError(f"{rule['name']}: needs a DSP image, {device} has none")
         a = (
             resolve_cf_anchor(cf, rule)
             if rule.get("cpu") == "cf"
@@ -910,8 +920,8 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
             "cpu": "cf",
             "kind": "code",
             "addr": main_dest,
-            "len": len(secs[3]),
-            "sha256": sha(secs[3]),
+            "len": len(secs[main_sec]),
+            "sha256": sha(secs[main_sec]),
             "mark": "V",
             "rule": "builtin",
         }
@@ -953,14 +963,14 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
             ),
             "mark": "D",
         },
-        dsp_l2_region(dsp.stream, prof["patch"]),
+        *([dsp_l2_region(dsp.stream, prof["patch"])] if dsp is not None else []),
     ]
     port = {
         "device": device,
         "version": version,
         "syx_sha256": digest,
-        "main_sha256": sha(secs[3]),
-        "dsp_sha256": sha(secs[7]),
+        "main_sha256": sha(secs[main_sec]),
+        "dsp_sha256": sha(secs[dsp_sec]) if dsp_sec is not None else "",
         "resolved_by": RESOLVED_BY,
     }
     limits = {k: prof["patch"][k] for k in LIMIT_KEYS}
@@ -980,15 +990,19 @@ def stock_profile(name: str, root: Path = ROOT) -> tuple[Path, dict]:
 @functools.cache
 def load_cf(name: str, root: Path = ROOT) -> CfFacts:
     """The ColdFire facts of the stock firmware NAME; depacks only the MAIN OS section."""
-    syx, _prof = stock_profile(name, root)
-    return CfFacts(name, sections_of(syx, (3,))[3])
+    syx, prof = stock_profile(name, root)
+    main_sec = prof["container"]["main"]
+    return CfFacts(name, sections_of(syx, (main_sec,))[main_sec])
 
 
 @functools.cache
 def load_dsp(name: str, root: Path = ROOT) -> Dsp:
     """The DSP of the stock firmware NAME; depacks only the DSP section."""
     syx, prof = stock_profile(name, root)
-    return Dsp(sections_of(syx, (7,))[7], prof["dsp"])
+    dsp_sec = dsp_section(prof)
+    if dsp_sec is None:
+        raise ResolveError(f"{name}: the device has no DSP image")
+    return Dsp(sections_of(syx, (dsp_sec,))[dsp_sec], prof["dsp"])
 
 
 def load_image(name: str, root: Path = ROOT) -> tuple[CfFacts, Dsp]:

@@ -23,11 +23,14 @@ from pathlib import Path
 from typing import Any
 
 from tools.firmware import config
+from tools.patchkit import pk_device
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
-DEFAULT_FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}
+DEFAULT_FIRMWARE = (
+    pk_device.acceptance_firmware()
+)  # the harness' default firmware per device
 
 
 def port_regions(device: str, firmware: str) -> dict[str, dict[str, Any]]:

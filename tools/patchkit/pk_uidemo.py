@@ -20,11 +20,12 @@ import tomllib
 from pathlib import Path
 
 from tools.control.digi_client import oled_png
+from tools.patchkit import pk_device
 from tools.patchkit import pk_harness as H
 
 ROOT = H.ROOT
 MODULES = ["core/runtime", "core/ui", "test/ui-demo"]
-FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}
+FIRMWARE = pk_device.acceptance_firmware()  # the harness' default firmware per device
 # rows of the demo menu (tests/fixtures/modules/ui-demo/src/ui_demo.c)
 TOGGLE, VALUE, TOAST, CONFIRM, CHOICE, PAGE, LIST, EMPTY, TEXT = range(9)
 

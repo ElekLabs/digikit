@@ -35,8 +35,9 @@ from tools.emulator import (  # noqa: E402
     native_pgo,  # noqa: E402
     native_target,  # noqa: E402
 )
+from tools.patchkit import pk_device  # noqa: E402
 
-FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}  # the harness' default firmware per device
+FIRMWARE = pk_device.acceptance_firmware()  # the harness' default firmware per device
 
 
 def generated_core(device: str) -> Path:
