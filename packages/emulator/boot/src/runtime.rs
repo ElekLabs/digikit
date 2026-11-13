@@ -4472,6 +4472,10 @@ impl Emulator {
                 "save_state needs DIGI_CF_IPS unset (snapshots are taken at 132 MHz)".into(),
             );
         }
+        if self.peer_started {
+            // the peer CPU's memory, registers and frame state are not in the snapshot: a restore would have no running peer
+            return Err("save_state: a peer CPU is running and its state is not saved".into());
+        }
         if self.irq1_pending {
             return Err("a DSPI1 peer interrupt is pending".into());
         }
@@ -5491,6 +5495,19 @@ mod tests {
         assert!(!a.2.is_empty(), "the run produced PCM");
         assert_eq!(a.2.len(), b.2.len(), "PCM length");
         assert_eq!(a.2, b.2, "PCM");
+    }
+
+    #[test]
+    fn save_state_is_refused_while_a_peer_cpu_runs() {
+        let Ok(syx) = std::fs::read("../../../firmware/Syntakt_OS1.42.syx") else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        assert!(emu.has_peer_cpu());
+        emu.save_state().expect("before the peer starts");
+        emu.peer_started = true;
+        let e = emu.save_state().unwrap_err();
+        assert!(e.contains("peer CPU is running"), "{e}");
     }
 
     #[test]
