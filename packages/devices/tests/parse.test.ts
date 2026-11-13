@@ -58,6 +58,12 @@ describe('parse', () => {
       '[container]\nmain = 3\ncf2 = 7\nfpga = 1\nreadonly = [1, 2, 4, 6, 7, 8]\n';
     const c = parse({ 's.toml': st }).get('st').container;
     expect([c.cf2, c.fpga, c.readonly]).toEqual([7, 1, [1, 2, 4, 6, 7, 8]]);
+    expect(() => parse({ 's.toml': st.replace('readonly = [1, 2, 4, 6, 7, 8]', 'readonly = [1, 2, 4, 6, 8]') })).toThrow(
+      /cf2 section 7 must be in readonly/,
+    );
+    expect(() => parse({ 's.toml': st.replace('readonly = [1, 2, 4, 6, 7, 8]', 'readonly = [2, 4, 6, 7, 8]') })).toThrow(
+      /fpga section 1 must be in readonly/,
+    );
     expect(() => parse({ 's.toml': st + '[digikit]\nid = 5\n' })).toThrow(/must be patchable/);
   });
 
