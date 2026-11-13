@@ -171,9 +171,6 @@ export async function openDeviceSamples(_forRun = false): Promise<OpenedSamples>
   };
 }
 
-/** A run ended: the real backend lets go of a take-over; the mock has none. */
-export function endRun(): void {}
-
 export async function readSamples(): Promise<void> {
   control.counts.deviceRead++;
   const { name, runtime, samples } = await openDeviceSamples();

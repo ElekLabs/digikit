@@ -13951,7 +13951,7 @@
       "site": "cf.usb.site.init",
       "subsystem": "usb",
       "users": [
-        "core/usb-bulk"
+        "core/usb-bulk-audio"
       ],
       "was": []
     },
@@ -13990,7 +13990,7 @@
       },
       "subsystem": "usb",
       "users": [
-        "core/usb-bulk"
+        "core/usb-bulk-audio"
       ],
       "was": []
     },

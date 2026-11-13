@@ -10,7 +10,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use dkbulk::LinkError;
-use dkbulk::usb::{self, UsbRx, UsbTx};
+use dkbulk::usb::{self, OutOnly, UsbRx, UsbTx};
 use serde::Serialize;
 use tauri::State;
 
@@ -22,15 +22,19 @@ pub struct BulkPort {
     rx: Arc<Mutex<Option<UsbRx>>>,
     keep: Mutex<Option<Box<dyn std::any::Any + Send>>>,
     pending: Mutex<Option<Arc<AtomicBool>>>,
+    /// The open OUT-only interface (USB AUDIO/MIDI mode): frames go out here, the replies come over SysEx in the page.
+    out_only: Arc<Mutex<Option<OutOnly>>>,
 }
 
 #[derive(Serialize)]
 pub struct BulkCandidate {
     id: String,
     name: String,
+    /// The interface has one bulk OUT endpoint and no IN endpoint: open it with `bulk_open_out_only`, not `bulk_open`.
+    out_only: bool,
 }
 
-/// The devices on the bus that offer the bulk interface (usb-fast loaded): empty means the page stays on SysEx.
+/// The devices on the bus that offer the bulk interface (usb-fast loaded), pairs and OUT-only (`out_only`): empty means the page stays on SysEx.
 #[tauri::command]
 pub async fn bulk_list() -> Result<Vec<BulkCandidate>, String> {
     tauri::async_runtime::spawn_blocking(|| {
@@ -39,6 +43,7 @@ pub async fn bulk_list() -> Result<Vec<BulkCandidate>, String> {
                 .map(|c| BulkCandidate {
                     id: c.id,
                     name: c.name,
+                    out_only: c.out_only,
                 })
                 .collect()
         })
@@ -82,6 +87,55 @@ pub async fn bulk_open(state: State<'_, BulkPort>, id: String) -> Result<(), Str
 #[tauri::command]
 pub async fn bulk_close(state: State<'_, BulkPort>) -> Result<(), String> {
     release(&state).await
+}
+
+/// Let go of the open OUT-only interface (on a worker: dropping cancels transfers).
+async fn release_out_only(state: &BulkPort) -> Result<(), String> {
+    let slot = state.out_only.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        *slot.lock().map_err(|e| e.to_string())? = None;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Claim the OUT-only interface of the device `id` (`bus:address` of `bulk_list`, `out_only`), after releasing the open one. The replies come over SysEx.
+#[tauri::command]
+pub async fn bulk_open_out_only(state: State<'_, BulkPort>, id: String) -> Result<(), String> {
+    release_out_only(&state).await?;
+    let link = tauri::async_runtime::spawn_blocking(move || OutOnly::open_auto(Some(&id)))
+        .await
+        .map_err(|e| e.to_string())??;
+    *state.out_only.lock().map_err(|e| e.to_string())? = Some(link);
+    Ok(())
+}
+
+/// Send one whole frame on the open OUT-only interface (the raw body); the zero-length packet after a 512-multiple frame is sent here. Returns when done.
+#[tauri::command]
+pub async fn bulk_send_out_only(
+    state: State<'_, BulkPort>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
+        _ => return Err("a bulk frame must use a raw byte body".into()),
+    };
+    let slot = state.out_only.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = slot.lock().map_err(|e| e.to_string())?;
+        let link = guard.as_mut().ok_or("no OUT-only bulk link is open")?;
+        link.send(&bytes, Duration::from_secs(10))
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Release the OUT-only interface.
+#[tauri::command]
+pub async fn bulk_close_out_only(state: State<'_, BulkPort>) -> Result<(), String> {
+    release_out_only(&state).await
 }
 
 /// End the pending `bulk_recv` now (it answers as if the time had run out). Nothing pending: no effect.

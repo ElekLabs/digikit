@@ -7,6 +7,7 @@ import {
   BulkDeviceError,
   BulkSession,
   EmuBulkLink,
+  EmuOutOnlyLink,
   bulkRequest,
   chooseBulk,
   fileHash,
@@ -44,6 +45,24 @@ const slot = (b: Buffer, dt2: boolean) => Buffer.from(fileHash(dt2 ? withTail(b)
 const hashU32 = (b: Buffer, dt2: boolean) => slot(b, dt2).readUInt32BE(0);
 const hex = (b: Buffer, dt2: boolean) => slot(b, dt2).toString('hex');
 
+/**
+ * The two routes of the core upload tests: the bulk pair of USB MIDI (port entry 2, replies on EP2 IN) and the OUT-only interface 5 of USB AUDIO/MIDI (port entry 5 with
+ * core/usb-bulk-audio, replies over the SysEx 'R' poll). A mode picks the active port after the boot and the link class that talks to the guest.
+ */
+interface Mode {
+  label: string;
+  port: number;
+  /** INFO flags bit 0: replies over SysEx. */
+  outOnly: boolean;
+  callback: typeof EmuBulkLink.connectCallback;
+  opener: typeof EmuBulkLink.opener;
+}
+const PAIR: Mode = { label: 'bulk pair', port: 2, outOnly: false, callback: EmuBulkLink.connectCallback, opener: EmuBulkLink.opener };
+const MODES: Mode[] = [
+  PAIR,
+  { label: 'OUT-only', port: 5, outOnly: true, callback: EmuOutOnlyLink.connectCallback, opener: EmuOutOnlyLink.opener },
+];
+
 interface Entry {
   size: number;
   hash: string;
@@ -69,7 +88,7 @@ for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} digikit/usb-fast`, () => {
     const rig: CardRig = cardRig(device, 'usb-fast', {
       dsp: 'zero',
-      roots: [...RT, 'core/usb-bulk', 'core/sdhc-large', ...(dt2 ? ['core/plusdrive-write'] : [])],
+      roots: [...RT, 'core/usb-bulk', 'core/usb-bulk-audio', 'core/sdhc-large', ...(dt2 ? ['core/plusdrive-write'] : [])],
       symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', 'DKRT_UPLOAD_FLIP', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
       project: true,
       uploads: true,
@@ -135,32 +154,54 @@ for (const device of DEVICES) {
     /** Run until the module's job has enabled the interface (the guest's port table points at the adapter), then do what the host does: SET_NONCE over SysEx, find the device by its nonce. */
     const connect = async (
       dk: DkSession,
-      options: { stepInstructions?: number; zlp?: boolean; timeoutMs?: number; chunk?: number } = {},
+      options: { stepInstructions?: number; zlp?: boolean; timeoutMs?: number; chunk?: number; mode?: Mode } = {},
     ): Promise<BulkChoice> => {
+      const mode = options.mode ?? PAIR;
       if (dt2 && !recovered.has(dk)) {
         recovered.add(dk);
         await advance(rig.session, 2000); // the boot recovery of the staging folder
       }
-      for (let i = 0; i < 100 && (await EmuBulkLink.connectCallback(call)) === undefined; i++) await advance(rig.session, 100);
+      for (let i = 0; i < 100 && (await mode.callback(call)) === undefined; i++) await advance(rig.session, 100);
       const notes: string[] = [];
-      const opener = EmuBulkLink.opener(call, { stepInstructions: options.stepInstructions ?? STEP, zlp: options.zlp });
+      const opener = mode.opener(call, { stepInstructions: options.stepInstructions ?? STEP, zlp: options.zlp });
       const choice = await chooseBulk(dk, opener, (l) => notes.push(l), { timeoutMs: options.timeoutMs ?? 20_000, resyncMs: 200, chunk: options.chunk, log: (l) => notes.push(l) });
       const dbg = choice ? '' : JSON.stringify(await rpc(rig.session, 'usb.bulk.out', {}).then((r) => (r as { status: unknown }).status)) + ' module ' + Buffer.from((await dk.request(0x37)).body).toString('hex');
       expect(choice, `${dbg} a bulk link is negotiated (${JSON.stringify(options)}, connect ${++connects}: ${notes.join('; ')})`).toBeDefined();
       return choice!;
     };
-    const boot = async (name = 'uf-base') => {
+    /** The firmware's active USB port and the stored USB CONFIG byte, by their anchors. */
+    const usbAnchors = () => {
+      const anchor = (name: string) => {
+        const a = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((x) => x.name === name);
+        expect(a.length, name).toBe(1);
+        return a[0]!.addr as number;
+      };
+      return { port: anchor('cf.usb.value.active_port'), mode: anchor('cf.usb.value.config_mode'), table: anchor('cf.usb.data.port_table') };
+    };
+    /** A menu-style change of the mode: the active port and the firmware's pointer to its table entry (the word below the port). */
+    const setPort = async (value: number) => {
+      const a = usbAnchors();
+      await rpc(rig.session, 'mem.cf.poke', { addr: a.port - 4, value: a.table + value * 0x28 });
+      await rpc(rig.session, 'mem.cf.poke', { addr: a.port, value });
+    };
+    /** Boot, put the device in the mode's USB port (the boot is in USB MIDI) and negotiate the link. */
+    const boot = async (mode: Mode = PAIR, name = 'uf-base') => {
       const dk = await rig.pausedBoot(await baseCard(name));
-      return { dk, bulk: await connect(dk) };
+      if (mode.port !== 2) {
+        await advance(rig.session, 2500); // the boot's enable first
+        await setPort(mode.port);
+      }
+      return { dk, bulk: await connect(dk, { mode }) };
     };
     const elapsed = async () => Number((await rig.session.status()).elapsed);
 
-    test('uploads reach the DN2 store or the DT2 +Drive with their hash; INFO carries the nonce; VERIFY is reserved; REPLACE and E_EXISTS', async () => {
-      const { dk, bulk } = await boot();
+    test.each(MODES)('$label: uploads reach the DN2 store or the DT2 +Drive with their hash; INFO carries the nonce and the replies-over-SysEx flag; VERIFY is reserved; REPLACE and E_EXISTS', async (mode) => {
+      const { dk, bulk } = await boot(mode);
       const before = (await state(dk, 'uf0')).files;
       expect(before.size, 'the seed files are there').toBeGreaterThanOrEqual(2);
       const info = await bulk.session.info();
       expect([info.version, info.dataMax, info.align, info.nonce.length]).toEqual([1, 65536, 512, 8]);
+      expect(info.flags & 1, 'INFO flags bit 0: replies over SysEx only in OUT-only mode').toBe(mode.outOnly ? 1 : 0);
 
       // a file of several 64 KiB frames, a tail that is not a multiple of 512, and a one-byte file
       const big = pattern(200_003);
@@ -261,8 +302,8 @@ for (const device of DEVICES) {
       }
     }, 3_600_000);
 
-    test('ABORT drops the open file and a cancel mid-transfer leaves the old file; a USB reset in the middle of a file leaves nothing and the next upload works', async () => {
-      const { dk, bulk } = await boot('uf-base');
+    test.each(MODES)('$label: ABORT drops the open file and a cancel mid-transfer leaves the old file; a USB reset in the middle of a file leaves nothing and the next upload works', async (mode) => {
+      const { dk, bulk } = await boot(mode);
       const before = (await state(dk, 'ua0')).files;
       await bulk.session.abort(); // nothing open: ok
 
@@ -284,9 +325,9 @@ for (const device of DEVICES) {
       await expectFile(dk, s, 'aborted.bin', ok, 'after the aborts');
 
       // a bus reset while the file is open (the host's request is lost): the module aborts the file and clears the parser; the host fails the upload and resyncs
-      const reset = await connect(dk, { timeoutMs: 1500 });
+      const reset = await connect(dk, { timeoutMs: 1500, mode });
       const big = pattern(600_000, 6);
-      const connectAddr = await EmuBulkLink.connectCallback(call);
+      const connectAddr = await mode.callback(call);
       let cut = false;
       const failed = await reset.session
         .put(SAMPLES, rp('reset.bin'), big, {
@@ -305,15 +346,15 @@ for (const device of DEVICES) {
       expect(s.files.has('reset.bin'), 'no partial file').toBe(false);
       expect([...s.files.keys()].sort(), 'the files are those of before and the one before the reset').toEqual([...before.keys(), 'aborted.bin'].sort());
       // the host starts again on a fresh link: the same destination takes the file, so no session was left open
-      const again = await connect(dk);
+      const again = await connect(dk, { mode });
       await again.session.put(SAMPLES, rp('reset.bin'), ok, { expected: hashU32(ok, dt2) });
       s = await state(dk, 'ua4');
       await expectFile(dk, s, 'reset.bin', ok, 'after the reset');
       await rig.session.expectNoFault('usb-fast abort and reset');
     }, 1_800_000);
 
-    test('frames that span receive buffers and buffers with many frames, around 16 KiB and the 512-byte packet, with and without the zero-length packet', async () => {
-      const { dk } = await boot();
+    test.each(MODES)('$label: frames that span receive buffers and buffers with many frames, around 16 KiB and the 512-byte packet, with and without the zero-length packet', async (mode) => {
+      const { dk } = await boot(mode);
       const before = (await state(dk, 'uz0')).files;
       // chunk sizes: 512 (528-byte frames, about 31 to a 16 KiB buffer), 16 KiB (a frame is 16 bytes over a buffer), 65536 (a frame spans five buffers). File sizes: the last
       // DATA frame is 12 + 4 + n bytes: n = 496 and 16368 make a frame of exactly 512 and 16384 bytes (the zero-length packet ends it; 16384 fills a buffer
@@ -321,7 +362,7 @@ for (const device of DEVICES) {
       const sizes = [1, 496, 497, 511, 512, 1000, 16_368, 16_369, 16_384, 16_385, 16_368 + 512 * 3, 65_536, 65_536 + 496, 100_000];
       let k = 0;
       for (const chunk of [512, 16_384, 65_536]) {
-        const { session } = await connect(dk, { chunk });
+        const { session } = await connect(dk, { chunk, mode });
         for (const size of sizes) {
           const data = pattern(size, size + chunk);
           const got = await session.put(SAMPLES, rp(`f${chunk}-${size}.bin`), data, { expected: hashU32(data, dt2) });
@@ -335,7 +376,7 @@ for (const device of DEVICES) {
         await expectFile(dk, s, name, pattern(size, size + chunk), name);
 
       // without the zero-length packet the device never sees a frame of exactly 512 bytes: no reply; the packet completes it
-      const raw = (await connect(dk, { zlp: false })).link;
+      const raw = (await connect(dk, { zlp: false, mode })).link;
       const rq = (cmd: number, seq: number, body: Buffer) => raw.send(bulkRequest(cmd, seq, body));
       const be32 = (n: number) => Buffer.from([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
       const data = pattern(496, 77);
@@ -715,24 +756,10 @@ for (const device of DEVICES) {
       await rig.session.expectNoFault('usb-fast storage bench');
     }, 1_800_000);
 
-    /** The firmware's active USB port and the stored USB CONFIG byte, by their anchors. */
-    const usbAnchors = () => {
-      const anchor = (name: string) => {
-        const a = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((x) => x.name === name);
-        expect(a.length, name).toBe(1);
-        return a[0]!.addr as number;
-      };
-      return { port: anchor('cf.usb.value.active_port'), mode: anchor('cf.usb.value.config_mode'), table: anchor('cf.usb.data.port_table') };
-    };
-
     test('take-over: TAKEOVER over SysEx switches USB AUDIO/MIDI to USB MIDI with one mode switch, the bulk link works, RELEASE gives the mode back, the stored mode is never written', async () => {
       const { dk } = await boot();
       const a = usbAnchors();
       const switches = () => word(rig.session, planSymbol(rig.plan, 'usb_bulk_switches'));
-      const setPort = async (value: number) => {
-        await rpc(rig.session, 'mem.cf.poke', { addr: a.port - 4, value: a.table + value * 0x28 });
-        await rpc(rig.session, 'mem.cf.poke', { addr: a.port, value });
-      };
       const port = () => word(rig.session, a.port);
       const stored = (await word(rig.session, a.mode)) >>> 24;
       try {
@@ -763,8 +790,8 @@ for (const device of DEVICES) {
       }
     }, 1_800_000);
 
-    test('the staging buffer is freed when the runtime expires the session (the host is gone)', async () => {
-      const { dk, bulk } = await boot();
+    test.each(MODES)('$label: the staging buffer is freed when the runtime expires the session (the host is gone)', async (mode) => {
+      const { dk, bulk } = await boot(mode);
       const link = bulk.link;
       const status = async () => {
         const b = Buffer.from((await dk.request(0x37)).body);
@@ -778,13 +805,22 @@ for (const device of DEVICES) {
       expect((await status()).cap, 'a staging buffer is held').toBeGreaterThan(0);
       for (let t = 0; t < 23_000; t += 1000) await advance(rig.session, 1000);
       expect(await status(), 'freed, one session dropped').toEqual({ cap: 0, expired: 1 });
-      await link.send(dataFrame(3, 65_536, f.subarray(65_536, 131_072)));
-      expect((await replies(link, 1))[0]!.status, 'the host sees the session gone').toBe(BULK_STATUS.E_STATE);
+      if (mode.outOnly) {
+        // OUT-only: the module also frees the receive ring at expiry, so a DATA frame is NAKed and nothing is queued for the 'R' poll; the next nonce starts a session again
+        const b = Buffer.from((await dk.request(0x37)).body);
+        expect(b.readUInt32BE(32) & 0x10, 'the receive ring is freed (DK_USB_BULK_LIVE clear)').toBe(0);
+        expect((await dk.usbFastReplies()).length, 'the R poll has nothing').toBe(0);
+        const again = await connect(dk, { mode });
+        expect((await again.session.info()).flags & 1, 'a new session: INFO answers over SysEx').toBe(1);
+      } else {
+        await link.send(dataFrame(3, 65_536, f.subarray(65_536, 131_072)));
+        expect((await replies(link, 1))[0]!.status, 'the host sees the session gone').toBe(BULK_STATUS.E_STATE);
+      }
       await rig.session.expectNoFault('usb-fast session expiry');
     }, 1_800_000);
 
-    test('the receive ring: INFO reports the window and the host keeps that many DATA frames in flight, a bus reset with a full ring commits nothing, the switch off or a host that never asked INFO keeps 2', async () => {
-      const { dk, bulk } = await boot();
+    test.each(MODES)('$label: the receive ring: INFO reports the window and the host keeps that many DATA frames in flight, a bus reset with a full ring commits nothing, the switch off or a host that never asked INFO keeps 2', async (mode) => {
+      const { dk, bulk } = await boot(mode);
       /** STATUS 'S' 1 [value]: the ring switch of core/usb-bulk, bit 1 of the mask (reads without a value). */
       const ring = async (value?: number) => {
         const r = await dk.request(0x37, Uint8Array.from(value === undefined ? [0x53] : [0x53, 1, value]));
@@ -825,8 +861,8 @@ for (const device of DEVICES) {
       expect(m2.max, 'no INFO read: two in flight').toBe(2);
 
       // a bus reset while the ring is full: nothing is committed, the next upload works on a new link
-      const reset = await connect(dk, { timeoutMs: 1500 });
-      const connectAddr = await EmuBulkLink.connectCallback(call);
+      const reset = await connect(dk, { timeoutMs: 1500, mode });
+      const connectAddr = await mode.callback(call);
       let cut = false;
       const failed = await reset.session
         .put(SAMPLES, rp('ring-reset.bin'), pattern(4 << 20, 23), {
@@ -842,7 +878,7 @@ for (const device of DEVICES) {
       expect(failed, 'the upload fails').toBeInstanceOf(Error);
       s = await state(dk, 'ur2');
       expect(s.files.has('ring-reset.bin'), 'no partial file').toBe(false);
-      const again = await connect(dk);
+      const again = await connect(dk, { mode });
       const ok = pattern(300_000, 24);
       await again.session.put(SAMPLES, rp('ring-reset.bin'), ok, { expected: hashU32(ok, dt2) });
       s = await state(dk, 'ur3');
@@ -850,13 +886,13 @@ for (const device of DEVICES) {
 
       // the switch off: the old 8 slots, the host keeps 2; on again: 12
       expect(await ring(0), 'switch off').toEqual({ on: 0 });
-      const off = await connect(dk);
+      const off = await connect(dk, { mode });
       expect((await off.session.info()).window, 'INFO: no window').toBe(0);
       const m3 = meter(off.link);
       await off.session.put(SAMPLES, rp('ring-off.bin'), small, { expected: hashU32(small, dt2) });
       expect(m3.max, 'switch off: two in flight').toBe(2);
       expect(await ring(1), 'switch on').toEqual({ on: 1 });
-      const on = await connect(dk);
+      const on = await connect(dk, { mode });
       const m4 = meter(on.link);
       await on.session.put(SAMPLES, rp('ring-on.bin'), small, { expected: hashU32(small, dt2) });
       expect(m4.max, 'switch on: twelve in flight').toBe(12);

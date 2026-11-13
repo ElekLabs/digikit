@@ -9,7 +9,7 @@
 // local files come through the native `local_*` commands (local.rs); no process is started.
 import { For, Show, createSignal, type JSX } from 'solid-js';
 import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
-import { endRun, openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocalFile } from './samples-backend';
+import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocalFile } from './samples-backend';
 import {
   applyUpload,
   confirmDeleteLabel,
@@ -66,7 +66,6 @@ import {
   sampleEntries,
   sampleFolder,
   sampleTicks,
-  takeOverOn,
   setAddedFiles,
   setLocalFolder,
   setLocalKinds,
@@ -74,7 +73,6 @@ import {
   setLocalTicks,
   setSampleFolder,
   setSampleTicks,
-  setTakeOverOn,
   setUploadAverage,
   setUploadBase,
   setUploadNotes,
@@ -146,42 +144,38 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
   /** Send `items` (and make `mkdirs` first) into the device; the bar counts them all. */
   const send = async (mkdirs: string[], items: UploadItem[]): Promise<boolean> => {
     let done = false;
-    try {
-      await run('Uploading', async (): Promise<void | CancelledRun> => {
-        const o = await openDeviceSamples(true);
-        if (mkdirs.length && !(await o.backend.canMkdir())) throw new Error(noFoldersMessage(o.name));
-        setNote('');
-        const base = uploads();
-        setUploadBase(base);
-        setUploadNotes([]);
-        const started = Date.now();
-        setUploadAverage(undefined);
-        await uploadItems(
-          o.backend,
-          o.prepare,
-          mkdirs,
-          items,
-          (e) => {
-            noteActivity();
-            if (e.event === 'note') setUploadNotes((n) => [...n, e.message]);
-            setUploads((u) => applyUpload(u, e));
-          },
-          stopWasAsked,
-        );
-        // the run's bytes over its time, for the end text of the bar
-        const sent = samplesBar(uploads(), base, false)?.sent ?? 0;
-        setUploadAverage(sent > 0 && Date.now() > started ? sent / ((Date.now() - started) / 1000) : undefined);
-        // the real error of a file is on the row only; the run shows and logs it, and the selection stays for a retry
-        const failure = uploadFailure(uploads(), base);
-        if (failure) throw new Error(failure);
-        // stopped by the user: not an error; the bar and the Log say what was done, and the selection stays for a retry
-        const stopped = uploadCancelled(uploads(), base);
-        if (stopped) return { cancelled: stopped };
-        done = true;
-      });
-    } finally {
-      endRun();
-    }
+    await run('Uploading', async (): Promise<void | CancelledRun> => {
+      const o = await openDeviceSamples(true);
+      if (mkdirs.length && !(await o.backend.canMkdir())) throw new Error(noFoldersMessage(o.name));
+      setNote('');
+      const base = uploads();
+      setUploadBase(base);
+      setUploadNotes([]);
+      const started = Date.now();
+      setUploadAverage(undefined);
+      await uploadItems(
+        o.backend,
+        o.prepare,
+        mkdirs,
+        items,
+        (e) => {
+          noteActivity();
+          if (e.event === 'note') setUploadNotes((n) => [...n, e.message]);
+          setUploads((u) => applyUpload(u, e));
+        },
+        stopWasAsked,
+      );
+      // the run's bytes over its time, for the end text of the bar
+      const sent = samplesBar(uploads(), base, false)?.sent ?? 0;
+      setUploadAverage(sent > 0 && Date.now() > started ? sent / ((Date.now() - started) / 1000) : undefined);
+      // the real error of a file is on the row only; the run shows and logs it, and the selection stays for a retry
+      const failure = uploadFailure(uploads(), base);
+      if (failure) throw new Error(failure);
+      // stopped by the user: not an error; the bar and the Log say what was done, and the selection stays for a retry
+      const stopped = uploadCancelled(uploads(), base);
+      if (stopped) return { cancelled: stopped };
+      done = true;
+    });
     return done;
   };
   const itemOf = (folder: string, name: string, size: number, read: () => Promise<Uint8Array>): UploadItem => ({
@@ -469,19 +463,6 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
         }
         actions={
           <>
-            <label
-              class="tests toggle"
-              title="Experimental. When the device is in USB AUDIO/MIDI mode, switch it to USB MIDI for the transfer so Fast USB works. On macOS the device can fail to come back until a power cycle. Off: the transfer stays on SysEx."
-            >
-              <input
-                type="checkbox"
-                role="switch"
-                checked={takeOverOn() === 'on'}
-                disabled={!!busy()}
-                onChange={(e) => setTakeOverOn(e.currentTarget.checked ? 'on' : '')}
-              />{' '}
-              take USB over
-            </label>
             <Show when={deviceInfo()?.canMkdir}>
               <button type="button" class="act" disabled={!!busy()} onClick={() => setNaming(!naming())}>
                 New folder

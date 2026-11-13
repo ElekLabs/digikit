@@ -116,7 +116,26 @@ static u32 last_len; /* length of the last buffer taken */
 #define REP_SLOT (HDR + 20u)
 static u8 repq[REPQ][REP_SLOT];
 static u8 rep_n[REPQ];
-static u32 rep_head, rep_count;
+/* rep_head, rep_count and the slots are shared by the job (I/O task) and the MIDI task (the 'R' drain): every change is made with the interrupt mask on. */
+static volatile u32 rep_head, rep_count;
+
+static inline u32 sr_mask(void)
+{
+    u32 old;
+    __asm__ volatile("move.w %%sr,%0\n\tmove.w #0x2700,%%sr" : "=d"(old) : : "memory", "cc");
+    return old;
+}
+
+static inline void sr_restore(u32 old)
+{
+    __asm__ volatile("move.w %0,%%sr" : : "d"(old) : "memory", "cc");
+}
+
+/* the port is USB AUDIO/MIDI with only the bulk OUT endpoint: replies are not sent, the host takes them with `0x37 'R'` */
+static int out_only(void)
+{
+    return (usb_bulk_state() & DK_USB_BULK_OUT_ONLY) != 0;
+}
 
 /* the file */
 static i32 handle; /* > 0 while a file is open */
@@ -125,6 +144,12 @@ static u32 st_steps, st_frames, st_tx_busy, st_last_rc, st_bufs, st_bytes, st_fa
     st_send_err;
 static i32 enable_rc;
 static int wm_logged; /* the wrong-mode line is logged once per wait */
+/* OUT-only mode: the bulk session (ring, staging buffer) exists only while a host works. SET_NONCE (MIDI task) counts a session request and wakes the job; the job
+ * enables when the count differs from the one it served. The host sends SET_NONCE before INFO, and its INFO is a bulk OUT transfer that the controller NAKs until the
+ * ring is primed by the enable, so INFO needs no retry. nonce_at is the block clock of the last request: the session expires 21 s after the later of it and the last
+ * file activity (sess_at). */
+static volatile u32 nonce_seq, nonce_at;
+static u32 served_seq;
 static u32
     sess_at; /* the block clock at the last file_create or successful file_write of the open file */
 static u32 st_expired; /* sessions the job dropped for the runtime's idle expiry */
@@ -350,7 +375,10 @@ static void reply(u8 cmd, u8 seq, i32 status, const u8 *body, u32 n)
         drop_file();
         return;
     }
-    u8 *rep = repq[(rep_head + rep_count) % REPQ];
+    u32 sr =
+        sr_mask(); /* the tail index, the copy (at most 32 bytes) and the count are one masked step: the MIDI task's 'R' drain pops and flushes too */
+    u32 at = (rep_head + rep_count) % REPQ;
+    u8 *rep = repq[at];
     rep[0] = 'D';
     rep[1] = 'K';
     rep[2] = 'B';
@@ -362,8 +390,9 @@ static void reply(u8 cmd, u8 seq, i32 status, const u8 *body, u32 n)
     dk_bytes_put32(rep + 8, n);
     for (u32 i = 0; i < n; i++)
         rep[HDR + i] = body[i];
-    rep_n[(rep_head + rep_count) % REPQ] = (u8)(HDR + n);
+    rep_n[at] = (u8)(HDR + n);
     rep_count++;
+    sr_restore(sr);
 }
 
 /* The frame in `frame` is handled. Returns 0 when its reply is staged, 1 when a file_* call was busy and the same frame is run again. */
@@ -377,8 +406,11 @@ static int dispatch(void)
 
     if (cmd == CMD_INFO) {
         u8 b[20];
+        u32 sr0 = sr_mask(); /* INFO starts a session: replies of an old one are dropped */
+        rep_count = 0;
+        sr_restore(sr0);
         b[0] = BULK_VERSION;
-        b[1] = 0;
+        b[1] = out_only() ? 1u : 0u; /* flags bit 0: replies over SysEx (`0x37 'R'` poll) */
         /* byte 2: the receive window in DATA frames of 64 KiB that the device takes before the USB controller NAKs (usb_bulk_ring); 0: an older device, or the old
          * 8-slot buffers: the host keeps 2 in flight. At most REPQ - 2, so the reply queue always has room. */
         u32 win = (u32)DK_USB_BULK_RING_WINDOW(usb_bulk_ring(-1));
@@ -762,6 +794,10 @@ static i32 step(u8 *ctx)
         res_free();
     }
     if (!enabled) {
+        u32 want = nonce_seq;
+        if (out_only() &&
+            want == served_seq) /* OUT-only: nothing is allocated until a host asks (SET_NONCE) */
+            return DK_IO_WAIT;
         u32 st0 = usb_bulk_state();
         if (!(st0 & DK_USB_BULK_WRONG_MODE))
             res_reserve(); /* before the adapter allocates its ring */
@@ -795,6 +831,7 @@ static i32 step(u8 *ctx)
             return rc;
         }
         enabled = 1;
+        served_seq = want;
         wm_logged = 0;
         epoch = DK_USB_BULK_RESETS(usb_bulk_state());
         return DK_IO_WAIT;
@@ -805,9 +842,31 @@ static i32 step(u8 *ctx)
             epoch = now;
             st_resets++;
             clear_stream();
+            u32 sr = sr_mask();
             rep_count = 0;
+            sr_restore(sr);
             busy_tries = 0;
             drop_file();
+        }
+        if (out_only() &&
+            dkrt_blocks() !=
+                0u) { /* OUT-only: an idle session is closed, so nothing stays allocated while the user only plays audio */
+            u32 act = nonce_at;
+            if ((i32)(sess_at - act) > 0)
+                act = sess_at;
+            if (dkrt_blocks() - act >= SESS_IDLE_BLOCKS) {
+                st_expired++;
+                usb_bulk_disable(job_id);
+                enabled = 0;
+                clear_stream();
+                u32 sr = sr_mask();
+                rep_count = 0;
+                sr_restore(sr);
+                busy_tries = 0;
+                drop_file();
+                res_free();
+                return DK_IO_WAIT;
+            }
         }
         if (handle > 0 && dkrt_blocks() != 0u &&
             dkrt_blocks() - sess_at >=
@@ -822,7 +881,9 @@ static i32 step(u8 *ctx)
             busy_tries = 0;
             abort_h = 0;
         }
-        while (rep_count) {
+        while (
+            rep_count &&
+            !out_only()) { /* in OUT-only mode the replies wait for the host's 'R' poll, which wakes the job */
             i32 r = usb_bulk_send(repq[rep_head], rep_n[rep_head]);
             if (r ==
                 DK_FILE_E_BUSY) { /* both send slots in flight: the adapter wakes the job; meanwhile the stream goes on */
@@ -835,13 +896,19 @@ static i32 step(u8 *ctx)
             if (r <
                 0) { /* the reply cannot go out: the host's view of the stream is lost, so start over */
                 st_send_err++;
+                u32 sr = sr_mask();
                 rep_count = 0;
+                sr_restore(sr);
                 clear_stream();
                 drop_file();
                 break;
             }
-            rep_head = (rep_head + 1u) % REPQ;
-            rep_count--;
+            u32 sr = sr_mask();
+            if (rep_count) { /* re-checked under the mask: never below 0 */
+                rep_head = (rep_head + 1u) % REPQ;
+                rep_count--;
+            }
+            sr_restore(sr);
         }
         if (rep_count >=
             REPQ -
@@ -917,11 +984,41 @@ static i32 status_speed(const u8 *body, u32 len, u8 *out)
     return 4;
 }
 
+/* 'R': the host's poll for replies in OUT-only mode. Reply: the oldest queued reply frames, whole and in order, as many as fit in 879 bytes (the SysEx
+ * reply body); length 0 when none is queued. They are removed from the queue; the job is woken, as it may have waited with the queue nearly full. */
+#define REPLY_POLL_MAX 879u
+static i32 status_replies(const u8 *body, u32 len, u8 *out)
+{
+    (void)body;
+    (void)len;
+    u32 n = 0;
+    if (!out_only())
+        return 0;
+    for (;;) {
+        u32 sr = sr_mask();
+        if (!rep_count || n + rep_n[rep_head] > REPLY_POLL_MAX) {
+            sr_restore(sr);
+            break;
+        }
+        u32 h = rep_head, m = rep_n[h];
+        for (u32 i = 0; i < m; i++)
+            out[n + i] = repq[h][i];
+        rep_head = (h + 1u) % REPQ;
+        rep_count--;
+        sr_restore(sr);
+        n += m;
+    }
+    if (n)
+        sdk->io_wake(job_id);
+    return (i32)n;
+}
+
 static const struct {
     u8 tag;
     status_fn fn;
 } status_tab[] = {
     {'S', status_speed},
+    {'R', status_replies},
 };
 
 /* SysEx service command USB_FAST_NONCE (0x36): body nonce[8], the host's proof of which USB device is on its MIDI port; reply empty. The INFO reply of the
@@ -995,6 +1092,10 @@ static i32 command(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     for (u32 i = 0; i < NONCE_LEN; i++)
         nonce[i] = body[i];
     nonce_gen++;
+    nonce_at = dkrt_blocks();
+    nonce_seq++;
+    sdk->io_wake(
+        job_id); /* OUT-only: the job enables the session before the host's INFO arrives (the controller NAKs it until then) */
     return 0;
 }
 

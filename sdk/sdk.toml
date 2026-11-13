@@ -564,7 +564,7 @@ requires = "core/usb-bulk"
 [[import]]
 name = "usb_bulk_state"
 sig = "u32 ()"
-doc = "State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the device is not in USB MIDI mode; read live), bit 3 taken over (usb_bulk_takeover is active), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then)."
+doc = "State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; read live), bit 3 taken over (usb_bulk_takeover is active), bit 6 out only (USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only, usb_bulk_send returns E_STATE; read live), bits 8..15 receive buffers full, bits 16..23 send slots in flight, bits 24..31 the reset count (it changes when the USB bus is reset or the host disconnects; a transfer in progress is void then)."
 requires = "core/usb-bulk"
 
 [[import]]

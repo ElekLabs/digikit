@@ -81,6 +81,9 @@ export const desktopEnv: TransferEnv = {
   bulk: {
     candidates: () => (target().kind === 'emulator' ? emulatorBulk.candidates() : TauriBulkLink.candidates()),
     open: (id) => (id === 'emulator' ? emulatorBulk.open(id) : TauriBulkLink.open(id)),
+    // the OUT-only interface of a real device (USB AUDIO/MIDI mode); the Emulator target has none here
+    outOnlyCandidates: () => (target().kind === 'emulator' ? Promise.resolve([]) : TauriBulkLink.outOnlyCandidates()),
+    openOutOnly: (id, poll) => TauriBulkLink.openOutOnly(id, poll),
   },
   targets: {
     emulator: true,

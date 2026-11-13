@@ -37,6 +37,77 @@ export interface BulkLink {
   readonly closed?: boolean;
 }
 
+/**
+ * A bulk link whose device side has an OUT endpoint only (USB AUDIO/MIDI, `core/usb-bulk-audio`): `out` writes one whole request frame (the writer does the
+ * zero-length packet), the replies come from `poll`, which is the `0x37 'R'` request of usb-fast (`DkSession.usbFastReplies`): zero or more whole reply frames,
+ * an empty result when none is pending. `recv` polls back to back while a reply is awaited; after an empty poll it waits 1 ms.
+ */
+export class SysExReplyLink implements BulkLink {
+  private out: (frame: Uint8Array) => Promise<void>;
+  private poll: () => Promise<Uint8Array>;
+  private onClose: () => Promise<void> | void;
+  private frames = new BulkFrames();
+  private ready: Uint8Array[] = [];
+  private end = false;
+  private stale = true;
+  constructor(
+    out: (frame: Uint8Array) => Promise<void>,
+    poll: () => Promise<Uint8Array>,
+    onClose: () => Promise<void> | void = () => {},
+  ) {
+    this.out = out;
+    this.poll = poll;
+    this.onClose = onClose;
+  }
+
+  get closed(): boolean {
+    return this.end;
+  }
+
+  /** The first send drains the replies left over from an earlier link (the stale ones would be taken for answers). */
+  async send(frame: Uint8Array): Promise<void> {
+    if (this.stale) {
+      this.stale = false;
+      await this.drain();
+    }
+    return this.out(frame);
+  }
+
+  /** Poll until an empty body (at most `max` polls) and discard what came. */
+  async drain(max = 20): Promise<void> {
+    for (let i = 0; i < max; i++) if ((await this.pollFatal()).length === 0) return;
+  }
+
+  /** A failed poll means a lost SysEx reply, and the frames it carried are gone: the link ends, and the session treats it as fatal. */
+  private async pollFatal(): Promise<Uint8Array> {
+    try {
+      return await this.poll();
+    } catch (e) {
+      this.end = true;
+      throw new BulkFrameError(`the reply poll failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async recv(timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array | null> {
+    const until = Date.now() + timeoutMs;
+    for (;;) {
+      const next = this.ready.shift();
+      if (next) return next;
+      if (signal?.aborted || this.end) return null;
+      const got = await this.pollFatal();
+      if (got.length > 0) this.ready.push(...this.frames.feed(got));
+      if (this.ready.length > 0) continue;
+      if (Date.now() >= until) return null;
+      if (got.length === 0) await new Promise<void>((r) => setTimeout(r, 1));
+    }
+  }
+
+  async close(): Promise<void> {
+    this.end = true;
+    await this.onClose();
+  }
+}
+
 /** The ZLP rule: `out` is one OUT transfer. */
 export async function sendWithZlp(out: (data: Uint8Array) => Promise<unknown>, frame: Uint8Array): Promise<void> {
   await out(frame);

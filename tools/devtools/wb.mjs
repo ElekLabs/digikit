@@ -31,9 +31,10 @@
 // `mise run dkmidi:build` builds it). `samples put` needs apps/web/public/dksample.wasm (`mise run wasm:dksample`).
 // `samples put` sends the file bytes over the USB bulk link when the device offers its interface (usb-fast; the `dkbulk` bridge, `mise run dkbulk:build`,
 // $DKBULK_BIN or --bulk-bin) and over SysEx or MidiRpc otherwise; --bulk off forces SysEx, --bulk force fails when there is no bulk link. It prints the
-// When the device is in USB AUDIO/MIDI (no bulk interface there), `samples put` stays on SysEx; with --takeover (experimental: on macOS the device can end up
-// unreachable until a power cycle) it takes USB over for the run (the device switches to USB MIDI in RAM, USB audio pauses) and gives it back when the run
-// ends. --bulk off never touches the USB mode.
+// In USB AUDIO/MIDI with core/usb-bulk-audio, `samples put` uses the OUT-only bulk interface automatically (frames over `dkbulk open --out-only`, replies over
+// the SysEx 'R' poll; audio and MIDI keep running). Without that interface (old firmware) it stays on SysEx; with --takeover (experimental: on macOS the device
+// can end up unreachable until a power cycle) it takes USB over for the run (the device switches to USB MIDI in RAM, USB audio pauses) and gives it back when
+// the run ends. --bulk off never touches the USB mode.
 // --speed MASK (4 bits, decimal or 0x): sets the four speed switches through usb-fast STATUS 'S' before the put (bit 0 hash once, bit 1 USB receive ring,
 // bit 2 read-back hash overlap, bit 3 large card commands; all on at boot); the run prints the resulting mask and the usb-fast STATUS words 18 (staging bytes)
 // and 19 (receive ring slots): the hardware A/B of docs/findings/126-usb-fast-transfer-ceilings.md.
@@ -191,28 +192,45 @@ async function withSession(run) {
 
 /** The `dkbulk` bridge as a BulkOpener; the exit promises of the children it starts go to `children`. */
 function bulkOpener(bin, children) {
+  /** `dkbulk list`: pair interfaces, or the OUT-only ones (USB AUDIO/MIDI, marked `out-only` in the fourth field). */
+  const list = (outOnly) => {
+    const listed = spawnSync(bin, ['list'], { encoding: 'utf8' });
+    if (listed.status !== 0) throw new Error(`dkbulk list failed: ${listed.stderr.trim()}`);
+    return listed.stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [id, name, , flag] = line.split('\t');
+        return { id, name, outOnly: flag === 'out-only' };
+      })
+      .filter((c) => c.outOnly === outOnly)
+      .map(({ id, name }) => ({ id, name }));
+  };
+  const start = (args, onData, poll) => {
+    const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'inherit'] });
+    const exited = new Promise((resolve) => child.on('exit', resolve));
+    child.stdin.on('error', () => {});
+    children.push(exited);
+    return new ProcessBulkLink(
+      (b) => child.stdin.write(b),
+      (cb) => onData && child.stdout.on('data', (d) => cb(new Uint8Array(d))),
+      () => child.stdin.end(),
+      poll,
+    );
+  };
   return {
     async candidates() {
-      const listed = spawnSync(bin, ['list'], { encoding: 'utf8' });
-      if (listed.status !== 0) throw new Error(`dkbulk list failed: ${listed.stderr.trim()}`);
-      return listed.stdout
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => {
-          const [id, name] = line.split('\t');
-          return { id, name };
-        });
+      return list(false);
     },
     async open(id) {
-      const child = spawn(bin, ['open', id], { stdio: ['pipe', 'pipe', 'inherit'] });
-      const exited = new Promise((resolve) => child.on('exit', resolve));
-      child.stdin.on('error', () => {});
-      children.push(exited);
-      return new ProcessBulkLink(
-        (b) => child.stdin.write(b),
-        (cb) => child.stdout.on('data', (d) => cb(new Uint8Array(d))),
-        () => child.stdin.end(),
-      );
+      return start(['open', id], true);
+    },
+    async outOnlyCandidates() {
+      return list(true);
+    },
+    // frames go OUT through `dkbulk open --out-only`; the replies come from the SysEx 'R' poll
+    async openOutOnly(id, poll) {
+      return start(['open', '--out-only', id], false, poll);
     },
   };
 }
@@ -221,7 +239,8 @@ function bulkOpener(bin, children) {
  * The bulk session for the device on the MIDI port (--port), or undefined (--bulk off, no dkbulk binary, no candidate, no candidate with this device's nonce).
  * The selection is the dk-session `chooseBulk` the desktop app uses: SET_NONCE over SysEx to the MIDI target, then each `dkbulk list` candidate is opened
  * (`dkbulk open ID`, a child process) and asked INFO; only the one that returns the nonce is used. --bulk force: those are errors.
- * When no device offers the interface and usb-fast reports that the device is not in USB MIDI mode (USB AUDIO/MIDI), only with --takeover the device is taken over (`BulkTakeOver`
+ * In USB AUDIO/MIDI with core/usb-bulk-audio, `chooseBulk` finds the OUT-only interface (`dkbulk open --out-only`, replies over the SysEx 'R' poll): no take-over, no USB CONFIG change.
+ * When no device offers any interface and usb-fast reports that the device is not in USB MIDI mode (an old firmware without core/usb-bulk-audio), only with --takeover the device is taken over (`BulkTakeOver`
  * of dk-session: TAKEOVER, the device re-enumerates in USB MIDI mode, the handshake) and given back by `close`, at once. `holder.link` is the SysEx link; the
  * take-over replaces it (the MIDI port goes away and returns), so callers read `holder.link.session` after this returns.
  */
@@ -240,7 +259,7 @@ async function connectBulk(holder) {
   if (!choice && (await holder.link.session.usbFastWrongMode())) {
     if (!opts.takeover)
       return none(
-        'the device is in USB AUDIO/MIDI; set USB CONFIG to USB MIDI on the device, or pass --takeover (experimental)',
+        'the device is in USB AUDIO/MIDI and has no OUT-only bulk interface (core/usb-bulk-audio not loaded?); set USB CONFIG to USB MIDI on the device, or pass --takeover (experimental)',
       );
     console.error('wb: the device is in USB AUDIO/MIDI: taking USB over for this run (USB audio pauses)');
     takeover = new BulkTakeOver(

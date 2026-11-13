@@ -58,13 +58,15 @@
 #define DK_USB_BULK_ENABLED 0x1u   /* usb_bulk_enable was called */
 #define DK_USB_BULK_CONNECTED 0x2u /* the host configured the device and EP2 is on */
 #define DK_USB_BULK_WRONG_MODE                                                                     \
-    0x4u /* the device is not in USB MIDI mode (USB CONFIG); live, also after enable */
+    0x4u /* the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; live, also after enable */
 #define DK_USB_BULK_TAKEN                                                                          \
     0x8u /* usb_bulk_takeover is active (requested, or the device is switched) */
 #define DK_USB_BULK_LIVE                                                                           \
     0x10u /* the adapter's buffers are allocated; they are freed when a take-over ends, and usb_bulk_enable allocates them again */
 #define DK_USB_BULK_NOMEM                                                                          \
     0x20u /* the last allocation of the buffers failed (usb_bulk_enable returned E_NOMEM, or a take-over was dropped) */
+#define DK_USB_BULK_OUT_ONLY                                                                       \
+    0x40u /* USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only (interface 5, EP2 OUT), usb_bulk_send returns E_STATE; live */
 #define DK_USB_BULK_FULL(st) (((st) >> 8) & 0xffu)     /* receive buffers full and not taken */
 #define DK_USB_BULK_TX_BUSY(st) (((st) >> 16) & 0xffu) /* send slots in flight */
 #define DK_USB_BULK_RESETS(st)                                                                     \

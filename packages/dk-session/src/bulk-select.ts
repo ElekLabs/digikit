@@ -15,10 +15,15 @@ export interface BulkOpener {
   /** The devices that offer the bulk interface now (cheap, no claim). Empty: no bulk link, stay on SysEx. */
   candidates(): Promise<BulkCandidate[]>;
   open(id: string): Promise<BulkLink>;
+  /** The devices with an OUT-only bulk interface (USB AUDIO/MIDI: a single bulk OUT endpoint, vendor class 0xFF). Absent or empty: none. */
+  outOnlyCandidates?(): Promise<BulkCandidate[]>;
+  /** The link of an OUT-only candidate: frames go OUT, the replies come from `poll` (`SysExReplyLink`). */
+  openOutOnly?(id: string, poll: () => Promise<Uint8Array>): Promise<BulkLink>;
 }
-/** The SysEx side: `DkSession.usbFastNonce`. */
+/** The SysEx side: `DkSession.usbFastNonce`; `usbFastReplies` (the 'R' poll) is needed for OUT-only candidates. */
 export interface NonceSender {
   usbFastNonce(nonce: Uint8Array): Promise<void>;
+  usbFastReplies?(): Promise<Uint8Array>;
 }
 
 export interface BulkChoice {
@@ -47,7 +52,15 @@ export async function chooseBulk(
     note(`USB bulk link not used: listing the devices failed: ${why(e)}`);
     return undefined;
   }
-  if (candidates.length === 0) return undefined;
+  let outOnly: BulkCandidate[] = [];
+  if (opener.outOnlyCandidates && opener.openOutOnly && sysex.usbFastReplies) {
+    try {
+      outOnly = await opener.outOnlyCandidates();
+    } catch (e) {
+      note(`USB OUT-only link not used: listing the devices failed: ${why(e)}`);
+    }
+  }
+  if (candidates.length === 0 && outOnly.length === 0) return undefined;
   const nonce = new Uint8Array(BULK_NONCE_LEN);
   globalThis.crypto.getRandomValues(nonce);
   try {
@@ -70,7 +83,22 @@ export async function chooseBulk(
     }
     await Promise.resolve(link?.close()).catch(() => {});
   }
-  note(`USB bulk link not used: none of ${candidates.length} candidate(s) returned this device's nonce`);
+  // the OUT-only candidates after the pairs: INFO goes OUT, the reply comes back over SysEx ('R' poll)
+  for (const c of outOnly) {
+    let link: BulkLink | undefined;
+    try {
+      link = await opener.openOutOnly!(c.id, () => sysex.usbFastReplies!());
+      const session = new BulkSession(link, options);
+      if (same((await session.info()).nonce, nonce)) return { session, link, id: c.id };
+      note(`USB device ${c.name ?? c.id}: not the one on the MIDI port (other nonce)`);
+    } catch (e) {
+      note(`USB device ${c.name ?? c.id}: ${why(e)}`);
+    }
+    await Promise.resolve(link?.close()).catch(() => {});
+  }
+  note(
+    `USB bulk link not used: none of ${candidates.length + outOnly.length} candidate(s) returned this device's nonce`,
+  );
   return undefined;
 }
 
