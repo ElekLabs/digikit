@@ -140,7 +140,7 @@ each has a module docstring with its full command line.
 
 | Tool | Purpose |
 | --- | --- |
-| `tools/emulator/native_emu.py` | `mise run workbench` (`-- --build-only` builds only), `emu:serve`: build the desktop emulator once and run it (`--plus-drive DIR` or `--samples DIR`; default `plus_drive/<device>/`, `--dsp-patch FILE`, `--cf-only`, `--daemon`). |
+| `tools/emulator/native_emu.py` | `mise run workbench` (`-- --build-only` builds only), `emu:serve`: build the desktop emulator once and run it (`--plus-drive DIR` or `--samples DIR`; default `plus_drive/<device>/`, `--dsp-patch FILE`, `--cf-only`, `--no-dsp`, `--daemon`). |
 | `tools/emulator/native_target.py` | Pick the cargo target dir for a generated core (`prod`, `nogen`, `generic`, `g-<hash>`). |
 | `tools/emulator/native_pgo.py` | Profile-guided optimisation of the desktop build (`mise run perf:pgo`; `bench-bins`). |
 | `tools/nx/wasm.mjs` | `mise run web:wasm`: build the browser cores. |

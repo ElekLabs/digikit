@@ -805,6 +805,17 @@ def test_no_syx_argument_takes_the_same_way(monkeypatch, tmp_path):
     assert calls[-1][1:] == ["--device-folders"]
 
 
+def test_no_dsp_reaches_the_binary_and_is_not_taken_for_the_firmware(
+    monkeypatch, tmp_path
+):
+    scope, calls, built, syx = _card_run(
+        monkeypatch, tmp_path, next(iter(digi_env.READY_DIRS))
+    )
+    scope["main"](["--no-dsp", str(syx), "--cf-only"])
+    # The controller owns the choice (`--no-dsp` starts it off, `firmware.load {dsp}` changes it): the launcher only passes it on.
+    assert calls[-1][1:] == ["--no-dsp", str(syx), "--device-folders"]
+
+
 def test_no_sync_turns_the_exit_export_and_the_mirror_off(monkeypatch, tmp_path):
     scope, calls, built, syx = _card_run(monkeypatch, tmp_path, "dt2")
     scope["main"]([str(syx), "--cf-only", "--no-sync"])

@@ -40,7 +40,7 @@ flags. `--scenario` needs a coupled-audio build.
 | Subcommand | Does |
 |---|---|
 | `status` | Print the `status` result |
-| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]` (`load` also `--card`) |
+| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]`, `--dsp on\|off` (starts over; see below) (`load` also `--card`) |
 | `restart` | Back to the ready state of the running firmware |
 | `step N` | Run N guest instructions |
 | `tap CODE [--hold N] [--at-instr N]` | Press and release a key (default hold 40000000 instructions) |
@@ -96,6 +96,10 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
 
+`firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
+only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
+the UI is fast), `dsp: true` the DSP session when its inputs are set and the peer program. The choice is kept for the loads after it
+(`status.dsp_enabled`); `--no-dsp` on `digi-emud` and the app is the choice before the first load (`status.dsp_flag` tells a webview).
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)
 and loads the result with the stock image as its base. A `syx` that already has a patch record is loaded as it is. The patched image is

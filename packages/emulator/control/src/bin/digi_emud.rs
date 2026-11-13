@@ -39,6 +39,7 @@ fn main() {
         .unwrap_or_else(|| PathBuf::from("out/native/run"));
     let mut config = Config::new(startup.audio.clone());
     config.audio_alt = startup.audio_alt.clone();
+    config.dsp = startup.dsp;
     config.mode = if free { Mode::Free } else { Mode::Paused };
     config.run_dir = run_dir.clone();
     config.mirror_dir = startup.mirror_dir.clone();

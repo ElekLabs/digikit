@@ -254,6 +254,20 @@ impl CoupledRuntime {
         }
     }
 
+    /// Whether the device has a peer CPU that runs a program (see `Emulator::has_peer_cpu`).
+    pub fn has_peer_cpu(&self) -> bool {
+        self.emulator.has_peer_cpu()
+    }
+
+    /// Replaces the peer CPU by the mailbox responder: no peer audio. Call on a fresh runtime.
+    pub fn use_peer_responder(&mut self) {
+        self.emulator.use_peer_responder();
+        #[cfg(feature = "cf-audio")]
+        {
+            self.cf_audio = None;
+        }
+    }
+
     /// Whether this runtime is in zero-DSP mode (`AudioOptions::zero`).
     pub fn is_zero(&self) -> bool {
         self.zero

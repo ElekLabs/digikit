@@ -57,6 +57,8 @@ export interface FirmwareLoadParams {
   /** Patch the stock image with the device profile patch set (cached by content). */
   runtime?: boolean;
   patch_set?: string;
+  /** With `replace`: a DSP session (true, default) or ColdFire only with the mailbox responder for a peer CPU (false). Kept for the loads after it. */
+  dsp?: boolean;
   /** At most 32 transitions; requires a patched coupled start:cold. Empty preserves the existing cache key. */
   initial_buttons?: readonly InitialButton[];
 }
