@@ -14,7 +14,7 @@ description = "Install the Python and web dependencies"
 
 [workbench]
 alias = "wb"
-depends = ["module:pack-all", "workbench:inputs"]
+depends = ["workbench:inputs"]
 run = "uv run python -m tools.emulator.native_emu"
 description = "Build once and open the desktop app with nothing loaded (DN2 and DT2 audio cores when both local input sets are ready; DIGI_EMU_SECOND_CORE=0 selects one core). `mise run workbench -- FILE.syx` loads that firmware at start, else the Emulator page's \"Load on start\" tick loads the last opened file. The digikit runtime is patched in unless `-- --no-runtime` (otherwise the \"Boot with runtime\" tick decides); `-- --build-only` builds without launching. The +Drive is plus_drive/<device>/ when it exists (`-- --plus-drive DIR` picks another folder, `--samples DIR` is the same option; the firmware's changes are exported back to the folder on exit, `-- --no-sync` turns that off)"
 
