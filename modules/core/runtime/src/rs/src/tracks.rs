@@ -1,6 +1,6 @@
-//! Per-module stereo sample pool of 16 entries (API 1.5, docs/design/sample-api-1.5.md). The state machine is
+//! Per-module stereo sample pool of 16 entries (docs/design/sample-api-1.5.md). The state machine is
 //! `dkrt_sdk::sample_tracks` (device-neutral, host-tested); this file binds it to the runtime:
-//! the Api entries `sample_pool_add`, `_set`, `_clear`, `_status`, `_info` and (1.6) `_path`, the optional `dkpool_*` backing symbols (plug-in point `dkrt_pool.h`, version 1)
+//! the imports `dk_sample_pool_add`, `_set`, `_clear`, `_status`, `_info` and `_path`, the optional `dkpool_*` backing symbols (plug-in point `dkrt_pool.h`, version 1)
 //! and the events adapters call (`dkrt_pool_done`, `dkrt_pool_lost`, `dkrt_project_changed`).
 //! No firmware address and no `cf.*` anchor is used here. Without the backing adapter every
 //! `sample_pool_add` returns E_CONTRACT.

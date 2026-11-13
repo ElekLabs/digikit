@@ -208,6 +208,7 @@ Reason: the menu and Transfer tab can say "does not fit" without running code, a
 - Services load only when a selected module needs them, transitively, in dependency order, and before the modules that use them. Load order is by dependency, then id, not selection order.
 - A provider that fails makes its dependents REFUSED. Safe mode skips loadable providers and their dependents.
 - The registry checks hook tables during planning. Two services claiming one site are refused before any code runs.
+- [O] A module must be able to mark an imported service as optional (usb-fast imports sdhc_large but runs without it). The packer then writes only the hard needs into the `.dkm` header, the registry refuses a missing hard need before any module code runs, and stubs stay only for optional services. Until the registry exists, the loader records the need at `init` time (sdk.md 5.1).
 
 ### 5.3 Resources
 
@@ -308,6 +309,17 @@ A new plug-in point starts as an experimental `.dks` with its own hook table, an
 - With no sink set, a producer pays one pointer test.
 
 Users: `digikit/debug` (`log`), `profile.dks` (`span`, [profiling plan](profiling.md) section 7). The probe's per-block `dl_set_tick_cb` slot in dsp-link can follow the same rule later.
+
+### 5.12 Service anatomy
+
+A service is a module with a role.
+
+- Same as a module: `module.toml` with `role = "service"`, the folder layout (`src/`, `tests/`, `build/gen/`), the `dk_module` entry point with `init`, `fini` and `tick`, imports through `sdk.toml`, the naming rules of sdk.md section 10, the declare-check-commit pattern of sdk.md 6.3, and tests that live with the service.
+- Only a service has: exports (`sdk.toml` imports with `requires`), a hook table, record-kind handlers, and its adapter linked into the same file.
+
+The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bindings, as the runtime does today.
+
+**[O]** Settled with Em before R7.
 
 ## 6. DSP
 
@@ -512,7 +524,7 @@ Items 7, 9 and 10 link services into the image as a temporary step, so each boun
 | # | Item | Sections | Agent time | Payoff | Confidence |
 | --- | --- | --- | --- | --- | --- |
 | 1 | SDK cleanup with hash task: moved to [sdk.md](sdk.md) S1 | 7 | | | |
-| 2 | Runtime deletions and split | 10 | 2-3 days | High: navigation | High |
+| 2 | Runtime deletions and split. Settle the service anatomy (section 5.12) before R7. | 10 | 2-3 days | High: navigation | High |
 | 3 | Platform adapter, layer rule | 10 | 1-2 days | High: no firmware calls in the runtime | Medium |
 | 4 | Spike, static part | 11.1 | 1 day | High: decides how adapters get built | High for the answer |
 | **Stop** | Report to Em; next estimates | | | | |

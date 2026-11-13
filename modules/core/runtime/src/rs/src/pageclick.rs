@@ -262,14 +262,14 @@ impl paramapi::Fw for PageFw {
     }
 }
 
-/// `Api.param_get`.
+/// `dk_param_get`.
 #[cfg(not(test))]
 pub unsafe fn param_get(track: u32, word: u32) -> i32 {
     let owners = &(*addr_of!(registry::DKRT_REG)).param_owner;
     paramapi::get(&PageFw, (*addr_of!(HELD)).ctx(), owners, registry::param_first(), track, word)
 }
 
-/// `Api.param_set`.
+/// `dk_param_set`.
 #[cfg(not(test))]
 pub unsafe fn param_set(track: u32, word: u32, raw: i32) -> i32 {
     let owners = &(*addr_of!(registry::DKRT_REG)).param_owner;

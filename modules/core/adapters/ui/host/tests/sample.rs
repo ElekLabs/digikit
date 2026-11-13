@@ -236,7 +236,7 @@ fn missing_capabilities_do_nothing_and_return_minus_one() {
     let _g = session();
     for cap in [CAP_CONFIRM, CAP_CHOICE, CAP_TOAST] {
         set_cap(cap, false);
-        assert_eq!(dk_ui_has(cap), 0);
+        assert!(!cap_on(cap));
     }
     assert!(!unsafe { s_init() }.is_null());
     assert_eq!(open(unsafe { s_main() }), 0);
@@ -261,10 +261,7 @@ fn missing_toggle_and_value_are_left_out() {
     set_cap(CAP_VALUE, false);
     unsafe { s_init() };
     open(unsafe { s_main() });
-    assert_eq!(
-        render(),
-        rows(&["APPLY", "TOOLS", "REMOTE N/A", "APPLIED 0"])
-    );
+    assert_eq!(render(), rows(&["APPLY", "TOOLS", "APPLIED 0"]));
 }
 
 #[test]

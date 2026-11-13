@@ -451,7 +451,7 @@ runs it for one module as `memaudit-module.device.test.ts` (docs/MODULE-AUTHORIN
 is `tests/regression/runtime/memaudit-kit.ts` and `memaudit-suite.ts`. The rig is ColdFire-only. The
 first daemon protects the `cpu = "cf"` regions of `devices/ports/<image>.toml` minus each module's
 block, allows writes only from placed patch code, drives the UI and expects `guard.report` total 0. A
-second daemon boots the same card with the write watch on the same ranges, so the load and `dkm_init`
+second daemon boots the same card with the write watch on the same ranges, so the load and `init`
 are audited too. DMA and host writes are not seen. The full-tier variant loads the full synthetic set
 of the capacity tests behind `test/dyn-demo` (`fullSet` in `synth.ts`) and also expects no free arena byte and
 no whole free DSP granule.

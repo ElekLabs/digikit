@@ -735,10 +735,16 @@ pub unsafe fn write(b: &Bufs, kind: u8, owner: u8, handle: i32, off: u32, data: 
     r
 }
 
+extern "C" {
+    // Optional symbols of the adapter (`dkrt_sdhc.h`; `optional` in module.toml): 0 when core/sdhc-large is not in the image.
+    fn sdhc_large_range(lo: u32, hi: u32);
+    fn sdhc_large_ctl(key: u32, val: u32) -> u32;
+}
+
 /// Tell core/sdhc-large which buffer the next card transfers use (`lo` = `hi` = 0: none). A no-op when the module is not in the image (the symbol is 0).
 #[inline(never)]
 unsafe fn large_range(lo: u32, hi: u32) {
-    let f: unsafe extern "C" fn(u32, u32) = crate::optional::sdhc_large_range;
+    let f: unsafe extern "C" fn(u32, u32) = sdhc_large_range;
     if core::hint::black_box(f as usize) != 0 {
         f(lo, hi);
     }
@@ -877,10 +883,10 @@ const RB_DEFAULT: usize = store::MAX_IO_SECTORS as usize * 512;
 const RB_LARGE: usize = 256 * 1024;
 
 /// Whether the large-command adapter (core/sdhc-large) is present and its switch is on (`sdhc_large_ctl` key 0), so a block read of a registered buffer
-/// can exceed `store::MAX_IO_SECTORS` sectors. The absent stub returns 0: false. Without it the piece stays at `RB_DEFAULT`.
+/// can exceed `store::MAX_IO_SECTORS` sectors. An absent adapter (the symbol is 0): false. Without it the piece stays at `RB_DEFAULT`.
 #[cfg(not(test))]
 fn large_reads_allowed() -> bool {
-    let f: unsafe extern "C" fn(u32, u32) -> u32 = crate::optional::sdhc_large_ctl;
+    let f: unsafe extern "C" fn(u32, u32) -> u32 = sdhc_large_ctl;
     // val 2 changes nothing: it reads the switch
     core::hint::black_box(f as usize) != 0 && unsafe { f(0, 2) } == 1
 }

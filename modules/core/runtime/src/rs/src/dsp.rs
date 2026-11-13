@@ -146,7 +146,7 @@ const DL_DONE: u32 = 2;
 const DL_ERROR: u32 = 3;
 
 /// The CF-side half of a load whose DSP part is under way: everything is in place except publishing (the machine row, `init`,
-/// the slots).
+/// the tick).
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Pending {
@@ -154,11 +154,9 @@ pub struct Pending {
     /// Copy of the `register` records (arena block), 0 if none.
     pub reg: u32,
     pub reg_size: u32,
-    /// Absolute address of `dkm_init`, 0 if none.
+    /// Absolute address of `init`, 0 if none.
     pub init: u32,
-    pub mask: u32,
-    pub fns: [u32; SLOTS],
-    /// 1: the CF side went live at boot (machine rows, `init`, slots); only the DSP part is left, and a failure takes the module down.
+    /// 1: the CF side went live at boot (machine rows, `init`, tick); only the DSP part is left, and a failure takes the module down.
     pub early: u32,
     /// The selection index of a module loaded by the boot hook (`u32::MAX`: none), for the boot report.
     pub boot_idx: u32,
@@ -1252,7 +1250,7 @@ unsafe fn next_job() {
 unsafe fn fail(code: i32) {
     let d = ds();
     let rec = d.pending.rec as usize;
-    // Teardown invalidates once, after closing/waiting CF slots, before any fini/free.
+    // Teardown invalidates once, after the tick is stopped, before any fini/free.
     let reclaimed = crate::loader::undo_early(rec) == OK;
     crate::boot::note_result(d.pending.boot_idx, code);
     d.failures += 1;
@@ -1357,7 +1355,7 @@ pub unsafe fn step() {
                     }
                 }
                 if row == MAX_ROWS && frow == MAX_FX {
-                    // every row is in: list the machine, run init, publish the slots
+                    // every row is in: list the machine
                     crate::sample::ready(rec);
                     crate::tracks::ready(rec);
                     crate::boot::note_result(d.pending.boot_idx, OK);

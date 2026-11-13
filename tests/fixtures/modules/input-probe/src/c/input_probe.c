@@ -4,39 +4,50 @@
  *   0x38  key:  body = code (u8), down (u8)       reply: status 0, or core/input's negative result
  *   0x39  turn: body = encoder (u8), delta (i8)   reply: status 0, or the negative result
  *
- * input_key and input_turn are imports of the runtime's table (the names core/input provides); a runtime without core/input does not find them and the
- * module does not load. */
+ * dk_input_open gives the handle in init; a runtime without core/input answers DK_E_MISSING and this module does not load (it has nothing else to do). */
 
-#include <dk/core/api.h>
+#include <dk/core/log.h>
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
+#include <dk/platform/input.h>
 
 typedef uint32_t u32;
 typedef uint8_t u8;
 typedef int8_t s8;
 
-static int32_t key(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
+static dk_input *input;
+
+static int32_t key(u32 cmd, u32 seq, const void *request, u32 len, void *reply)
 {
+    const u8 *body = request;
     (void)cmd;
     (void)seq;
-    (void)out;
+    (void)reply;
     if (len != 2u)
         return -50; /* E_MSG */
-    return input_key(body[0], body[1]);
+    return dk_input_key(input, body[0], body[1]);
 }
 
-static int32_t turn(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
+static int32_t turn(u32 cmd, u32 seq, const void *request, u32 len, void *reply)
 {
+    const u8 *body = request;
     (void)cmd;
     (void)seq;
-    (void)out;
+    (void)reply;
     if (len != 2u)
         return -50;
-    return input_turn(body[0], (s8)body[1]);
+    return dk_input_turn(input, body[0], (s8)body[1]);
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    int a = api->register_cmds(0x38, 1, key);
-    int b = api->register_cmds(0x39, 1, turn);
-    api->log((const u8 *)"input-probe registered", (u32)(a | b));
-    return 0;
+    int32_t r = dk_input_open(ctx, &input);
+    if (r != DK_OK)
+        return r;
+    int a = dk_host_register(0x38, 1, key);
+    int b = dk_host_register(0x39, 1, turn);
+    dk_log(DK_LOG_INFO, "input-probe registered", (u32)(a | b));
+    return DK_OK;
 }
+
+const dk_module_def dk_module = {.init = init};

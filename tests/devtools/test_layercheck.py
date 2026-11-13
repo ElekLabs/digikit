@@ -49,8 +49,10 @@ def dko(root: Path, rel: str, undefined: list[str]) -> None:
 def tree(tmp_path: Path) -> Path:
     """A tree that holds: runtime, installer, one adapter, one app, one content module."""
     r = tmp_path
-    write(r, "sdk/sdk.toml", '[[import]]\nname = "fw_alloc"\nsig = "u8 *(u32 size)"\n')
-    write(r, "sdk/include/dk/core/api.h", "/* sdk */\n")
+    write(
+        r, "sdk/sdk.toml", '[[import]]\nname = "dk_fw_alloc"\nsig = "u8 *(u32 size)"\n'
+    )
+    write(r, "sdk/include/dk/core/module.h", "/* sdk */\n")
     write(r, "sdk/dsp/contract/dk_machine.inc", "/* sdk asm */\n")
     write(r, "sdk/templates/m/src/dsp/m.s", ".EXTERN _dv_exp2;\n")
     module(r, "modules/core/runtime", "core/runtime", "core", "runtime")
@@ -69,7 +71,7 @@ def tree(tmp_path: Path) -> Path:
     write(
         r,
         "modules/core/apps/menu/src/menu.c",
-        '#include <stdint.h>\n#include <dk/core/api.h>\n#include "dkrt.h"\n#include <dk_ui_core.h>\n#include "own.h"\n',
+        '#include <stdint.h>\n#include <dk/core/module.h>\n#include "dkrt.h"\n#include <dk_ui_core.h>\n#include "own.h"\n',
     )
     write(r, "modules/core/apps/menu/src/own.h", "/* own */\n")
     module(
@@ -83,7 +85,7 @@ def tree(tmp_path: Path) -> Path:
     dko(
         r,
         "modules/core/apps/menu/build/menu.dko.json",
-        ["dk_ui_text", "dkrt_scan", "fw_alloc"],
+        ["dk_ui_text", "dkrt_scan", "dk_fw_alloc"],
     )
     module(r, "modules/fx/gain", "digikit/gain", "fx", None)
     write(
@@ -91,7 +93,7 @@ def tree(tmp_path: Path) -> Path:
         "modules/fx/gain/src/dsp/gain.s",
         '#include "dk_machine.inc"\n.EXTERN _dv_exp2;\n',
     )
-    write(r, "modules/fx/gain/src/cf/gain.c", "#include <dk/core/api.h>\n")
+    write(r, "modules/fx/gain/src/cf/gain.c", "#include <dk/core/module.h>\n")
     return r
 
 
@@ -142,7 +144,7 @@ def test_content_module_may_not_include_runtime_or_adapter_headers(tree: Path) -
     write(
         tree,
         "modules/fx/gain/src/cf/gain.c",
-        '#include <dk/core/api.h>\n#include "dkrt.h"\n#include "dk_ui_core.h"\n',
+        '#include <dk/core/module.h>\n#include "dkrt.h"\n#include "dk_ui_core.h"\n',
     )
     found = layercheck.check(tree)
     assert [v.rule for v in found] == ["sources", "sources"]

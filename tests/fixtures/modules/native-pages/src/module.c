@@ -1,7 +1,8 @@
 /* Neutral replacement pair. A's click action follows its new binding; E/H are
  * saved words, G on page one is local, and LEVEL stays independent. */
-#include <dk/core/api.h>
 #include <dk/machine/machine.h>
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 DK_MACHINE(twin, .name = "TWIN", .short_name = "TWN", .render = "_np_render",
            .note_on = "_np_note_on", .desc = "_np_desc");
 DK_PARAM(twin, 0, twin_smp, "Sample", "SMP", 0, 15, 0);
@@ -20,11 +21,12 @@ void twin_click(uint32_t track)
     if (track < 16)
         clicks++;
 }
-static int32_t status(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *out)
+static int32_t status(uint32_t cmd, uint32_t seq, const void *request, uint32_t len, void *reply)
 {
+    uint8_t *out = reply;
     (void)cmd;
     (void)seq;
-    (void)body;
+    (void)request;
     if (len)
         return -1;
     uint32_t words[] = {draws[0],          draws[1],          clicks,
@@ -38,13 +40,12 @@ static int32_t status(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t 
     }
     return sizeof(words);
 }
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    if (api->version != 1 ||
-        api->size < offsetof(dk_api, register_cmds) + sizeof(api->register_cmds))
-        return -1;
-    return api->register_cmds(0x3f, 1, status);
+    (void)ctx;
+    return dk_host_register(0x3f, 1, status);
 }
+const dk_module_def dk_module = {.init = init};
 static void number(const dk_page_canvas_v1 *c, int x, int y, unsigned value)
 {
     char text[12], *at = text + sizeof(text) - 1;

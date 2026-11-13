@@ -18,9 +18,9 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A run-time module (`.dkm`, `patchkit pack digikit/remote --device dt2`): its dkm_init registers the remote range of sdk/sdk.toml with Api.register_cmds
-# and calls core/input's `input_key` and `input_turn` (runtime imports). It is on exactly when it is loaded. Its `dkm_menu` (DK_MENU) gives the SETTINGS...
-# page of DIGIKIT > MODULES: the keys it holds, the last command and RELEASE ALL KEYS; the `dk_ui_*` calls are imports that are stubs when core/ui is not in the image.
+# A run-time module (`.dkm`, `patchkit pack digikit/remote --device dt2`): its `init` registers the remote range of sdk/sdk.toml with `dk_host_register`
+# and calls core/input's `dk_input_key` and `dk_input_turn`. It is on exactly when it is loaded. Its `menu` function gives the SETTINGS...
+# page of DIGIKIT > MODULES: the keys it holds, the last command and RELEASE ALL KEYS; the `dk_ui_*` calls are imports that bind to stubs when core/ui is not in the image.
 [[object]]
 path = "build/remote.dko.json"
 sources = ["src/c/remote.c"]

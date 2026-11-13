@@ -1,24 +1,26 @@
-/* test/settings-b: the code of test/settings-a with its own command numbers (0x3a, 0x3b), run from a job `done` callback because only one module binds slot 0. */
+/* test/settings-b: the code of test/settings-a with its own command numbers (0x3a, 0x3b), run from a job `done` callback (the other way to reach the UI task). */
 #define PROOF_CMD 0x3a
 #define PROOF_VIA_JOB
-/* Module settings API fixture (<dk/platform/settings.h>). `dkm_init` takes the handle and reads the key "boot"; a service command queues one put, get or remove
-   request and `dkm_slot_0` runs it in the UI task (the settings API is not for the MIDI task, where service commands run).
+/* Module settings API fixture (<dk/platform/settings.h>). `init` takes the handle and reads the key "boot"; a service command queues one put, get or remove
+   request and `tick` runs it in the UI task (the settings API is not for the MIDI task, where service commands run).
    test/settings-b builds this file with another command number and PROOF_VIA_JOB, so two module names use the same key. */
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 #include <dk/platform/settings.h>
 #ifndef PROOF_CMD
 #define PROOF_CMD 0x38 /* request; PROOF_CMD + 1 reads the result */
 #endif
 #define VAL 16u
 #define KEYS 64u
-static const dk_api *sdk;
-static int32_t client, init_rc, result;
+static dk_settings *settings;
+static int32_t init_rc, result;
 static uint8_t init_val[VAL], val[VAL], req_val[VAL];
 static char req_key[KEYS];
 static uint8_t op, vlen;
 static volatile uint32_t pending;
 #ifdef PROOF_VIA_JOB
-static int32_t job_step(uint8_t *ctx);
-static void job_done(uint8_t *ctx, int32_t status);
+static int32_t job_step(void *arg);
+static void job_done(void *arg, int32_t status);
 #endif
 static void put32(uint8_t *p, uint32_t v)
 {
@@ -28,10 +30,12 @@ static void put32(uint8_t *p, uint32_t v)
     p[3] = v;
 }
 /* Request: op (1 put, 2 get, 3 remove), key length, the key bytes, the value (at most VAL bytes).
-   Reply of PROOF_CMD + 1: pending (u8), the last result (i32), the result of the read in dkm_init (i32), its value (VAL bytes), the last get's value (VAL bytes). */
+   Reply of PROOF_CMD + 1: pending (u8), the last result (i32), the result of the read in init (i32), its value (VAL bytes), the last get's value (VAL bytes). */
 __attribute__((optimize("no-jump-tables"))) static int32_t
-command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *out)
+command(uint32_t cmd, uint32_t seq, const void *request, uint32_t len, void *reply)
 {
+    const uint8_t *body = request;
+    uint8_t *out = reply;
     (void)seq;
     if (cmd == PROOF_CMD) {
         if (len < 2 || pending)
@@ -49,7 +53,7 @@ command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *
         __asm__ volatile("" ::: "memory");
         pending = 1;
 #ifdef PROOF_VIA_JOB
-        if (sdk->job_post(job_step, job_done, 0) <= 0) {
+        if (dk_job_post(job_step, job_done, 0) <= 0) {
             pending = 0;
             return -50;
         }
@@ -73,44 +77,46 @@ static void run_request(void)
     if (!pending)
         return;
     if (op == 1)
-        result = dk_settings_put(sdk, client, req_key, req_val, vlen);
+        result = dk_settings_put(settings, req_key, req_val, vlen);
     else if (op == 2)
-        result = dk_settings_get(sdk, client, req_key, val, VAL);
+        result = dk_settings_get(settings, req_key, val, VAL);
     else if (op == 3)
-        result = dk_settings_remove(sdk, client, req_key);
+        result = dk_settings_remove(settings, req_key);
     else
         result = -50;
     __asm__ volatile("" ::: "memory");
     pending = 0;
 }
 #ifdef PROOF_VIA_JOB
-/* Only one module can bind slot 0, so this one runs its request in the `done` callback of a job (the UI task). */
-static int32_t job_step(uint8_t *ctx)
+/* This one runs its request in the `done` callback of a job (the UI task), the other path of the same code. */
+static int32_t job_step(void *arg)
 {
-    (void)ctx;
+    (void)arg;
     return 0;
 }
-static void job_done(uint8_t *ctx, int32_t status)
+static void job_done(void *arg, int32_t status)
 {
-    (void)ctx;
+    (void)arg;
     (void)status;
     run_request();
 }
 #else
-void dkm_slot_0(const dk_api *api)
+static void tick(dk_module_ctx *ctx)
 {
-    (void)api;
+    (void)ctx;
     run_request();
 }
 #endif
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    if (api->size < sizeof(dk_api))
-        return -48;
-    sdk = api;
-    client = dk_settings_client(api);
-    if (client <= 0)
-        return client ? client : -1;
-    init_rc = dk_settings_get(api, client, "boot", init_val, VAL);
-    return api->register_cmds(PROOF_CMD, 2, command);
+    int32_t r = dk_settings_open(ctx, &settings);
+    if (r != DK_OK)
+        return r;
+    init_rc = dk_settings_get(settings, "boot", init_val, VAL);
+    return dk_host_register(PROOF_CMD, 2, command);
 }
+#ifdef PROOF_VIA_JOB
+const dk_module_def dk_module = {.init = init};
+#else
+const dk_module_def dk_module = {.init = init, .tick = tick};
+#endif

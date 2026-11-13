@@ -1,4 +1,4 @@
-//! `intro_take` (api 1.9): a module in `dkm_init` replaces the stock boot animation with frames of its own.
+//! `dk_intro_take`: a module in `init` replaces the stock boot animation with frames of its own.
 //!
 //! The firmware's intro tick (30 a second, intro task) reads the current-entry pointer `{callback, count}` each frame and calls
 //! `callback(index, count, bitmap)`. It then reads the pointer and the entry's count again and does a signed compare: `count > index` goes on,
@@ -9,10 +9,10 @@
 //! `end_blank` (core/introblank): the adapter's own scene table replaces the stock tables with a black one; after the module loads, `dkrt_boot` ends it
 //! when nothing else took the intro (count 0 in the adapter's entry; the stock compare then ends the intro at the next tick).
 //!
-//! `take` (in `dkm_init`) only records the request. The loader's `commit` fills the static entry and publishes it with one aligned write to the
+//! `take` (in `init`) only records the request. The loader's `commit` fills the static entry and publishes it with one aligned write to the
 //! pointer once the module's load has finished; a rolled-back module's request is dropped (`discard`), so no published entry points into freed code. `tramp` is the callback: it asks the module for the
 //! bitmap of the tick, blits it and counts. The count in the entry is 0x7FFF_FFFF (not 0xFFFF_FFFF: the compare is signed) until the last
-//! tick or a NULL frame; then `tramp` writes 0 and the stock compare ends the intro. `tramp` calls no `dk_api` function, no allocator and
+//! tick or a NULL frame; then `tramp` writes 0 and the stock compare ends the intro. `tramp` calls no import, no allocator and
 //! no logger (`dlog::CURRENT_SRC` is one global and tasks preempt each other). The module's `done` runs once in the UI task at the first
 //! UI pass (`ui_pass`), with the module as the log source: the module frees its buffer there, never in `frame`.
 //!
@@ -22,7 +22,7 @@ use crate::dlog;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 #[cfg(not(test))]
 use core::sync::atomic::{compiler_fence, Ordering};
-use dkrt_sdk::api::{IntroDone, IntroFrame};
+use dkrt_sdk::api::{IntroDoneFn, IntroFrameFn};
 use dkrt_sdk::*;
 
 /// The most ticks one animation has (10 s at 30 a second).
@@ -38,8 +38,8 @@ struct Entry {
 }
 
 static mut ENTRY: Entry = Entry { callback: 0, count: 0 };
-static mut FRAME: Option<IntroFrame> = None;
-static mut DONE: Option<IntroDone> = None;
+static mut FRAME: Option<IntroFrameFn> = None;
+static mut DONE: Option<IntroDoneFn> = None;
 static mut CTX: *mut u8 = core::ptr::null_mut();
 static mut TICKS: u32 = 0;
 static mut TICK: u32 = 0;
@@ -53,7 +53,7 @@ static mut SAFE_BUF: [u8; crate::safe_screen::FRAME_BYTES] = [0; crate::safe_scr
 pub const SAFE_TICKS: u32 = 120;
 /// Record index of the module that took the intro.
 static mut OWNER: usize = 0;
-/// 0 free, 1 requested (`take` in `dkm_init`, not published), 2 committed (pointer written), 3 `done` has run (or there was none).
+/// 0 free, 1 requested (`take` in `init`, not published), 2 committed (pointer written), 3 `done` has run (or there was none).
 static mut STATE: u32 = 0;
 const REQUESTED: u32 = 1;
 const COMMITTED: u32 = 2;
@@ -64,7 +64,7 @@ pub fn owns_request(state: u32, owner: usize, rec: usize) -> bool {
     state == REQUESTED && owner == rec
 }
 
-/// The result of `intro_take` before anything is written: `E_NOT_FOUND` outside `dkm_init`, `E_CONTRACT` for no `frame` or `ticks` outside
+/// The result of `dk_intro_take` before anything is written: `E_NOT_FOUND` outside `init`, `E_CONTRACT` for no `frame` or `ticks` outside
 /// 1 to `TICKS_MAX`, `E_BUSY` when an intro is taken already, `E_BOOT_ONLY` when the firmware's intro pointer is NULL (the intro is over).
 pub fn check(in_init: bool, taken: bool, has_frame: bool, ticks: u32, intro_running: bool) -> i32 {
     if !in_init {
@@ -135,10 +135,10 @@ unsafe extern "C" fn tramp(_index: u32, _count: u32, bitmap: *mut u8) {
     }
 }
 
-/// `intro_take`: see the module comment and sdk/sdk.toml. Only inside `dkm_init`. It records the request and writes nothing the firmware reads:
-/// the pointer is written by `commit` when the module's load has finished (a module that is rolled back after `dkm_init` must not be reachable).
+/// `dk_intro_take`: see the module comment and sdk/sdk.toml. Only inside `init`. It records the request and writes nothing the firmware reads:
+/// the pointer is written by `commit` when the module's load has finished (a module that is rolled back after `init` must not be reachable).
 #[cfg(not(test))]
-pub unsafe fn take(frame: Option<IntroFrame>, done: Option<IntroDone>, ctx: *mut u8, ticks: u32) -> i32 {
+pub unsafe fn take(frame: Option<IntroFrameFn>, done: Option<IntroDoneFn>, ctx: *mut u8, ticks: u32) -> i32 {
     let source = dlog::current_source();
     let in_init = source != 0 && crate::files::in_init(source as usize - 1);
     let r = check(in_init, read_volatile(addr_of!(STATE)) != 0, frame.is_some(), ticks, intro_running());
@@ -178,7 +178,7 @@ unsafe fn install(callback: usize) -> bool {
     true
 }
 
-/// The loader, when module `rec` is fully loaded (`dkm_init` returned 0 and its slots are in): publish its request, if it has one. The intro may
+/// The loader, when module `rec` is fully loaded (`init` returned 0): publish its request, if it has one. The intro may
 /// have ended since `take`: then nothing is published (the request stays, so `done` still runs at the first UI pass).
 #[cfg(not(test))]
 pub unsafe fn commit(rec: usize) {
@@ -250,7 +250,7 @@ pub unsafe fn discard(rec: usize) {
 }
 
 #[cfg(test)]
-pub unsafe fn take(_: Option<IntroFrame>, _: Option<IntroDone>, _: *mut u8, _: u32) -> i32 {
+pub unsafe fn take(_: Option<IntroFrameFn>, _: Option<IntroDoneFn>, _: *mut u8, _: u32) -> i32 {
     E_BOOT_ONLY
 }
 #[cfg(test)]
@@ -269,7 +269,7 @@ pub unsafe fn ui_pass() {
     }
     write_volatile(addr_of_mut!(STATE), FINISHED);
     if let Some(done) = read_volatile(addr_of!(DONE)) {
-        let prev = dlog::enter_module(read_volatile(addr_of!(OWNER)));
+        let prev = dlog::enter_module(read_volatile(addr_of!(OWNER)), dlog::PHASE_CALLBACK);
         done(read_volatile(addr_of!(CTX)));
         dlog::leave_module(prev);
     }

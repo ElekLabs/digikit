@@ -55,7 +55,7 @@ fn loaded(path: &str, name: &str) {
     unsafe { fk_loaded(p.as_ptr(), n.as_ptr()) }
 }
 
-/// A loaded module that exports dkm_menu.
+/// A loaded module that has a menu function.
 fn loaded_menu(path: &str, name: &str) {
     let (p, n) = (CString::new(path).unwrap(), CString::new(name).unwrap());
     unsafe { fk_loaded_menu(p.as_ptr(), n.as_ptr()) }
@@ -366,7 +366,7 @@ fn a_loaded_module_with_a_menu_gets_settings_in_the_side_panel() {
     select("modules/tool.dkm");
     select("modules/gain-fx.dkm");
     open_modules();
-    // only the module with a dkm_menu has the row; a loaded effect without one does not
+    // only the module with a menu function has the row; a loaded effect without one does not
     press_right(0);
     assert_eq!(render(), ["UNLOAD", "SETTINGS...", "INFO"]);
     press_no();
@@ -377,7 +377,7 @@ fn a_loaded_module_with_a_menu_gets_settings_in_the_side_panel() {
     press_right(2);
     assert_eq!(render(), ["LOAD", "INFO"]);
     press_no();
-    // the module's dkm_menu runs only when the user opens SETTINGS..., and again at each open
+    // the module's menu function runs only when the user opens SETTINGS..., and again at each open
     assert_eq!(unsafe { fk_settings_runs() }, 0);
     press_right(0);
     choose_panel_row(1);

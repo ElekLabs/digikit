@@ -65,7 +65,7 @@ enum { R_ACTION, R_SUBMENU, R_TEXT, R_TOGGLE, R_VALUE };
 
 typedef struct row {
     uint8_t kind;
-    dk_ui_act_fn *fn;
+    dk_ui_action_fn *fn;
     void *ctx;
     int arg;
     int *value;
@@ -333,10 +333,10 @@ static void add_item(dk_ui_menu *m, const char *text, int i, int with_value)
 /* For other core modules: a row among the rows of a stock menu (SETTINGS), with its icon. fn(ctx, 0) runs on YES. */
 static void inv_stock(const uint32_t *any)
 {
-    ((dk_ui_act_fn *)any[0])((void *)any[1], 0);
+    ((dk_ui_action_fn *)any[0])((void *)any[1], 0);
 }
 
-void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_act_fn *fn_, void *ctx)
+void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_action_fn *fn_, void *ctx)
 {
     fn act = make_fn((uint32_t)fn_, (uint32_t)ctx, inv_stock);
     fn adj = make_fn(0, 0, 0);
@@ -346,7 +346,7 @@ void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_act_fn *fn_, v
         dk_fw_menu_add_item(stock_menu, item);
 }
 
-static void add(dk_ui_menu *m, const char *text, uint8_t kind, dk_ui_act_fn *fn_, void *ctx,
+static void add(dk_ui_menu *m, const char *text, uint8_t kind, dk_ui_action_fn *fn_, void *ctx,
                 int arg, int with_value)
 {
     if (!m)
@@ -369,7 +369,7 @@ static void list_focus_main(dk_ui_menu *m)
         dk_fw_menu_popout_set_active(m->owner->obj, m->owner->obj);
 }
 
-int dk_ui_open(dk_ui_menu *m);
+static int ui_open(dk_ui_menu *m);
 
 static void run_row(dk_ui_menu *m, int i)
 {
@@ -384,7 +384,7 @@ static void run_row(dk_ui_menu *m, int i)
             r.fn(r.ctx, r.arg);
         break;
     case R_SUBMENU:
-        dk_ui_open(r.sub);
+        ui_open(r.sub);
         break;
     case R_TOGGLE:
         if (r.value) {
@@ -431,12 +431,12 @@ static void draw_row(dk_ui_menu *m, int i, uint8_t *canvas, int x, int y)
         dk_fw_text_draw_box(canvas, m->font, x + 0x4e, y + 2, 2, 0, 0, "%03d", v);
 }
 
-void dk_ui_action(dk_ui_menu *m, const char *text, dk_ui_act_fn *fn_, void *ctx, int arg)
+static void ui_action(dk_ui_menu *m, const char *text, dk_ui_action_fn *fn_, void *ctx, int arg)
 {
     add(m, text, R_ACTION, fn_, ctx, arg, 0);
 }
 
-void dk_ui_submenu(dk_ui_menu *m, const char *text, dk_ui_menu *sub)
+static void ui_submenu(dk_ui_menu *m, const char *text, dk_ui_menu *sub)
 {
     if (!sub)
         return;
@@ -452,12 +452,13 @@ void dk_ui_submenu(dk_ui_menu *m, const char *text, dk_ui_menu *sub)
     }
 }
 
-void dk_ui_text(dk_ui_menu *m, const char *text)
+static void ui_text(dk_ui_menu *m, const char *text)
 {
     add(m, text, R_TEXT, 0, 0, 0, 0);
 }
 
-void dk_ui_toggle(dk_ui_menu *m, const char *text, int *value, dk_ui_act_fn *changed, void *ctx)
+static void ui_toggle(dk_ui_menu *m, const char *text, int *value, dk_ui_action_fn *changed,
+                      void *ctx)
 {
     if (!m)
         return;
@@ -473,8 +474,8 @@ void dk_ui_toggle(dk_ui_menu *m, const char *text, int *value, dk_ui_act_fn *cha
     invalidate(m);
 }
 
-void dk_ui_value(dk_ui_menu *m, const char *text, int *value, int min, int max,
-                 dk_ui_act_fn *changed, void *ctx)
+static void ui_value(dk_ui_menu *m, const char *text, int *value, int min, int max,
+                     dk_ui_action_fn *changed, void *ctx)
 {
     if (!m)
         return;
@@ -561,7 +562,7 @@ static void open_panel(dk_ui_menu *m)
     dk_fw_menu_clear_items(pm->obj);
     pm->n = 0;
     pm->filling = 1;
-    m->d->panel(pm, row_, m->d->ctx);
+    m->d->panel(pm, row_, m->d->arg);
     pm->filling = 0;
     if (pm->n > 0)
         dk_fw_menu_popout_set_active(obj, pm->obj);
@@ -575,7 +576,7 @@ static uint32_t list_key(uint8_t *view, uint8_t *ev)
     MenuWithPopoutSideBarsView *p = (MenuWithPopoutSideBarsView *)obj;
     uint32_t id = read_u32(ev + 0xc), fl = read_u32(ev + 0x10);
     if (m && m->d && p->active == (uint32_t)obj) {
-        if (id == KEY_NO && (fl & 16) && m->d->back && m->d->back(m->d->ctx) == 1)
+        if (id == KEY_NO && (fl & 16) && m->d->back && m->d->back(m->d->arg) == 1)
             return 1;
         if (m->n == 0) /* only the hidden item: nothing to move on or act on; NO closes */
             return id == KEY_NO ? ((uint32_t (*)(uint8_t *, uint8_t *))g_list_stock_key)(view, ev)
@@ -667,13 +668,9 @@ fail:
     return 0;
 }
 
-int dk_ui_has(int cap)
+dk_ui_menu *dk_ui_menu_new(dk_ui *ui, const dk_ui_menu_desc *d)
 {
-    return cap >= DK_UI_CAP_MENU && cap <= DK_UI_CAP_TICK;
-}
-
-dk_ui_menu *dk_ui_menu_new(const dk_ui_menu_desc *d)
-{
+    (void)ui;
     if (!d)
         return 0;
     if (!g_parent) {
@@ -703,7 +700,7 @@ static void refill(dk_ui_menu *m, int top)
     m->n = 0;
     m->filling = 1;
     if (m->d->fill)
-        m->d->fill(m, m->d->ctx);
+        m->d->fill(m, m->d->arg);
     m->filling = 0;
     if (m->n == 0 && m->kind == K_LIST)
         add_item(m, "", 0,
@@ -719,7 +716,7 @@ static void refill(dk_ui_menu *m, int top)
     invalidate(m);
 }
 
-int dk_ui_is_open(const dk_ui_menu *m)
+static int ui_is_open(const dk_ui_menu *m)
 {
     if (!m || !m->obj || m->kind == K_PANEL)
         return 0;
@@ -727,35 +724,35 @@ int dk_ui_is_open(const dk_ui_menu *m)
     return read_u32(v + offsetof(View, mgr)) != 0 && v[0x30] == 0;
 }
 
-int dk_ui_open(dk_ui_menu *m)
+static int ui_open(dk_ui_menu *m)
 {
     if (!m || !m->obj || !m->d || m->kind == K_PANEL)
         return -1;
-    refill(m, m->kind == K_TEXT && !dk_ui_is_open(m)); /* a text page opens at its first row */
-    if (dk_ui_is_open(m))
+    refill(m, m->kind == K_TEXT && !ui_is_open(m)); /* a text page opens at its first row */
+    if (ui_is_open(m))
         return 0;
     return dk_fw_view_view_controller_push(view_manager(), m->sp, 0) ? 0 : -1;
 }
 
-void dk_ui_refresh(dk_ui_menu *m)
+static void ui_refresh(dk_ui_menu *m)
 {
     if (m && m->obj && m->d && m->kind != K_PANEL)
         refill(m, 0);
 }
 
-void dk_ui_select(dk_ui_menu *m, int row_)
+static void ui_select(dk_ui_menu *m, int row_)
 {
     if (!m || !m->obj || !m->d || m->kind == K_PANEL || row_ < 0)
         return;
     ((CompactVerticalMenuView *)m->obj)->selected =
         (uint32_t)row_; /* the next fill puts the cursor there (clamped to the rows) */
-    if (dk_ui_is_open(m))
+    if (ui_is_open(m))
         refill(m, 0);
 }
 
-void dk_ui_close(dk_ui_menu *m)
+static void ui_close(dk_ui_menu *m)
 {
-    if (!dk_ui_is_open(m))
+    if (!ui_is_open(m))
         return;
     uint8_t *v = m->obj + VIEW_AT;
     ((void (*)(uint8_t *))vtable(v)[VT_CLOSE])(v);
@@ -763,18 +760,18 @@ void dk_ui_close(dk_ui_menu *m)
 
 /* ---- check marks ------------------------------------------------------------------------------------------------------ */
 
-int dk_ui_checked(const dk_ui_menu *list, int row_)
+static int ui_checked(const dk_ui_menu *list, int row_)
 {
     if (!list || list->kind != K_LIST || row_ < 0)
         return 0;
     return dk_fw_menu_is_checked(list->obj, row_) & 1;
 }
 
-void dk_ui_check(dk_ui_menu *list, int row_, int on)
+static void ui_check(dk_ui_menu *list, int row_, int on)
 {
     if (!list || list->kind != K_LIST || row_ < 0)
         return;
-    int cur = dk_ui_checked(list, row_);
+    int cur = ui_checked(list, row_);
     if (on && !cur)
         dk_fw_menu_check(list->obj, row_);
     else if (!on && cur)
@@ -784,10 +781,10 @@ void dk_ui_check(dk_ui_menu *list, int row_, int on)
 
 static void toggle_check(dk_ui_menu *m, int row_)
 {
-    int on = !dk_ui_checked(m, row_);
-    dk_ui_check(m, row_, on);
+    int on = !ui_checked(m, row_);
+    ui_check(m, row_, on);
     if (m->d->check)
-        m->d->check(m->d->ctx, row_, on);
+        m->d->check(m->d->arg, row_, on);
 }
 
 /* ---- dialogs ---------------------------------------------------------------------------------------------------------- */
@@ -842,8 +839,10 @@ static int show(uint8_t *blk, uint32_t serial)
     return ok ? 0 : -1;
 }
 
-int dk_ui_confirm(const char *title, const char *text, void (*done)(void *, int), void *ctx)
+int32_t dk_ui_confirm(dk_ui *ui, const char *title, const char *text, dk_ui_confirm_fn *done,
+                      void *arg)
 {
+    (void)ui;
     if (g_open)
         return -1;
     uint8_t *blk = fw_new(0x8c);
@@ -856,7 +855,7 @@ int dk_ui_confirm(const char *title, const char *text, void (*done)(void *, int)
     uint32_t st, sx;
     dk_fw_string_std_string_ctor(&st, t, &alloc);
     dk_fw_string_std_string_ctor(&sx, x, &alloc);
-    fn cb = make_fn((uint32_t)done, (uint32_t)ctx, inv_answer_bool);
+    fn cb = make_fn((uint32_t)done, (uint32_t)arg, inv_answer_bool);
     uint32_t serial = ++g_serial;
     init_block(blk, &fw_confirm_cb_vt);
     dk_fw_window_confirm_ctor(blk + 0x10, &st, &sx, (const std_function *)&cb, 0);
@@ -870,9 +869,10 @@ int dk_ui_confirm(const char *title, const char *text, void (*done)(void *, int)
     return 0;
 }
 
-int dk_ui_choice(const char *title, const char *const *items, int n, void (*done)(void *, int),
-                 void *ctx)
+int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                     dk_ui_choice_fn *done, void *arg)
 {
+    (void)ui;
     if (g_open || !items || n <= 0 || n > MAX_CHOICE)
         return -1;
     uint8_t *blk = fw_new(0xe8);
@@ -889,7 +889,7 @@ int dk_ui_choice(const char *title, const char *const *items, int n, void (*done
     uint32_t st;
     cut(buf, sizeof buf, title);
     dk_fw_string_std_string_ctor(&st, buf, &alloc);
-    fn cb = make_fn((uint32_t)done, (uint32_t)ctx, inv_answer);
+    fn cb = make_fn((uint32_t)done, (uint32_t)arg, inv_answer);
     uint32_t serial = ++g_serial;
     init_block(blk, &fw_choice_cb_vt);
     dk_fw_window_multichoice_ctor(blk + 0x10, vec, &st, (const std_function *)&cb, 1);
@@ -905,8 +905,9 @@ int dk_ui_choice(const char *title, const char *const *items, int n, void (*done
     return 0;
 }
 
-int dk_ui_toast(const char *text)
+int32_t dk_ui_toast(dk_ui *ui, const char *text)
 {
+    (void)ui;
     char buf[DK_UI_TOAST + 1];
     cut(buf, sizeof buf, text);
     dk_fw_window_toast(dk_fw_window_ui_states(), "%s", buf);
@@ -942,13 +943,14 @@ static void ui_poll(void)
     }
 }
 
-int dk_ui_tick(dk_ui_tick_fn *fn, void *ctx, uint32_t period_ms)
+int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms)
 {
+    (void)ui;
     uint32_t per_s, now = tick_clock(&per_s);
-    int r = ui_ticks_set(&g_ticks, fn, ctx, period_ms, now);
+    int r = ui_ticks_set(&g_ticks, fn, arg, period_ms, now);
     if (r == 0 && !g_polling && ui_ticks_active(&g_ticks)) {
         if (dkrt_poll_add((uintptr_t)ui_poll) != 0) {
-            ui_ticks_set(&g_ticks, fn, ctx, 0, now);
+            ui_ticks_set(&g_ticks, fn, arg, 0, now);
             return -1;
         }
         g_polling = 1;
@@ -957,11 +959,16 @@ int dk_ui_tick(dk_ui_tick_fn *fn, void *ctx, uint32_t period_ms)
 }
 
 /* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ----
-   The new names of the calls above, for the modules of the new entry. The old names stay until the modules move (S2b-2). */
+   The menu calls: thin functions over the ui_* functions above. The dialogs, dk_ui_menu_new and dk_ui_tick are defined where they are implemented. */
 
 static int ui_token; /* the dk_ui handle: only a token, there is one UI service per image */
 
-int32_t dk_ui_service_open(dk_module_ctx *ctx, dk_ui **out)
+dk_ui *dk_ui_core_handle(void)
+{
+    return (dk_ui *)&ui_token;
+}
+
+int32_t dk_ui_open(dk_module_ctx *ctx, dk_ui **out)
 {
     if (!ctx || !out)
         return DK_E_CONTRACT;
@@ -971,63 +978,63 @@ int32_t dk_ui_service_open(dk_module_ctx *ctx, dk_ui **out)
 
 int32_t dk_ui_menu_open(dk_ui_menu *m)
 {
-    return dk_ui_open(m);
+    return ui_open(m);
 }
 
 void dk_ui_menu_close(dk_ui_menu *m)
 {
-    dk_ui_close(m);
+    ui_close(m);
 }
 
 void dk_ui_menu_select(dk_ui_menu *m, int32_t row)
 {
-    dk_ui_select(m, (int)row);
+    ui_select(m, (int)row);
 }
 
 void dk_ui_menu_refresh(dk_ui_menu *m)
 {
-    dk_ui_refresh(m);
+    ui_refresh(m);
 }
 
 int32_t dk_ui_menu_is_open(const dk_ui_menu *m)
 {
-    return dk_ui_is_open(m);
+    return ui_is_open(m);
 }
 
 void dk_ui_menu_add_text(dk_ui_menu *m, const char *text)
 {
-    dk_ui_text(m, text);
+    ui_text(m, text);
 }
 
 void dk_ui_menu_add_action(dk_ui_menu *m, const char *text, dk_ui_action_fn *run, void *arg,
                            int32_t value)
 {
-    dk_ui_action(m, text, (dk_ui_act_fn *)run, arg, (int)value);
+    ui_action(m, text, (dk_ui_action_fn *)run, arg, (int)value);
 }
 
 void dk_ui_menu_add_submenu(dk_ui_menu *m, const char *text, dk_ui_menu *sub)
 {
-    dk_ui_submenu(m, text, sub);
+    ui_submenu(m, text, sub);
 }
 
 void dk_ui_menu_add_toggle(dk_ui_menu *m, const char *text, int32_t *value,
                            dk_ui_action_fn *changed, void *arg)
 {
-    dk_ui_toggle(m, text, (int *)value, (dk_ui_act_fn *)changed, arg);
+    ui_toggle(m, text, (int *)value, (dk_ui_action_fn *)changed, arg);
 }
 
 void dk_ui_menu_add_value(dk_ui_menu *m, const char *text, int32_t *value, int32_t min, int32_t max,
                           dk_ui_action_fn *changed, void *arg)
 {
-    dk_ui_value(m, text, (int *)value, (int)min, (int)max, (dk_ui_act_fn *)changed, arg);
+    ui_value(m, text, (int *)value, (int)min, (int)max, (dk_ui_action_fn *)changed, arg);
 }
 
 void dk_ui_menu_check(dk_ui_menu *list, int32_t row, int32_t on)
 {
-    dk_ui_check(list, (int)row, (int)on);
+    ui_check(list, (int)row, (int)on);
 }
 
 int32_t dk_ui_menu_checked(const dk_ui_menu *list, int32_t row)
 {
-    return dk_ui_checked(list, (int)row);
+    return ui_checked(list, (int)row);
 }

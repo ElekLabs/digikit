@@ -17,17 +17,13 @@
 #[rustfmt::skip]
 mod gen_limits;
 /// The loader's format limits, from `[limits.format]` of sdk/sdk.toml (`HEADER`, `DSP_HEADER`, `MAX_RECORDS`, `MAX_RELOCS`, `MAX_IMPORTS`,
-/// `MAX_CF_IMPORTS`, `SLOTS`, `MAX_VOICES`, `MAX_FX`, `MAX_STATE_VOICES`, `MAX_STATE_BYTES`, `GRANULE`, `DSP_SLACK`, `ARENA_HDR`).
+/// `MAX_CF_IMPORTS`, `MAX_VOICES`, `MAX_FX`, `MAX_STATE_VOICES`, `MAX_STATE_BYTES`, `GRANULE`, `DSP_SLACK`, `ARENA_HDR`).
 pub use gen_limits::*;
 
 /// Magic of a `.dkm`, "DKMF".
 pub const MAGIC: u32 = 0x444b_4d46;
 /// The only `.dkm` format.
 pub const FORMAT: u32 = 1;
-/// The header size of a module with a `dkm_menu` (a menu address follows the 0xa0 bytes).
-pub const HEADER_MENU: u32 = 0xa4;
-/// The header size of a module with the entry point `dk_module` (the menu and tick addresses follow the 0xa0 bytes).
-pub const HEADER_TICK: u32 = 0xa8;
 /// Header offsets read.
 pub const H_SIZE: u32 = 0x08;
 pub const H_HDRSIZE: u32 = 0x0c;
@@ -39,8 +35,8 @@ pub const H_RELOC_OFF: u32 = 0x70;
 pub const H_RELOC_N: u32 = 0x74;
 pub const H_IMPORT_OFF: u32 = 0x78;
 pub const H_IMPORT_N: u32 = 0x7c;
-pub const H_SLOT_OFF: u32 = 0x88;
-pub const H_SLOT_N: u32 = 0x8c;
+pub const H_MENU: u32 = 0x88;
+pub const H_TICK: u32 = 0x8c;
 pub const H_REG_OFF: u32 = 0x90;
 pub const H_REG_SIZE: u32 = 0x94;
 pub const H_DSP_OFF: u32 = 0x98;
@@ -200,10 +196,7 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         return Err(Error::Header);
     }
     let hdr = word(src, H_HDRSIZE)?;
-    if word(src, H_SIZE)? != size
-        || (hdr != HEADER && hdr != HEADER_MENU && hdr != HEADER_TICK)
-        || size < hdr
-    {
+    if word(src, H_SIZE)? != size || hdr != HEADER {
         return Err(Error::Header);
     }
     let image = word(src, H_IMAGE_SIZE)?;
@@ -215,7 +208,6 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         word(src, H_RELOC_N)?,
     );
     let (import_off, import_n) = (word(src, H_IMPORT_OFF)?, word(src, H_IMPORT_N)?);
-    let (slot_off, slot_n) = (word(src, H_SLOT_OFF)?, word(src, H_SLOT_N)?);
     // the loader's own checks of what it copies (bss against the arena is the one it makes with the device's size: a fit says it)
     if align == 0
         || align > 16
@@ -225,11 +217,9 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         || image_off & 15 != 0
         || reloc_n > MAX_RELOCS
         || import_n > MAX_CF_IMPORTS
-        || slot_n > SLOTS
         || !inside(image_off, image, size)
         || !inside(reloc_off, reloc_n * 8, size)
         || !inside(import_off, import_n * 32, size)
-        || !inside(slot_off, slot_n * 8, size)
     {
         return Err(Error::Sizes);
     }

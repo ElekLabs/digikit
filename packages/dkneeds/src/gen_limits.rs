@@ -11,6 +11,5 @@ pub const MAX_STATE_BYTES: u32 = 16777216;
 pub const GRANULE: u32 = 64;
 pub const DSP_SLACK: u32 = 8;
 pub const ARENA_HDR: u32 = 16;
-pub const SLOTS: u32 = 8;
 pub const MAX_VOICES: u32 = 8;
 pub const MAX_FX: u32 = 4;

@@ -1,6 +1,6 @@
 # Sample publication proof fixture
 
-`test/sample-proof` is an emulator test machine for the bounded sample-bank API.
+`test/sample-proof` is an emulator test machine for the bounded sample-bank imports (dk_sample_bank_open, dk_sample_bank_load, dk_sample_bank_status).
 It declares one module-owned bank of 8,192 mono float32 frames. Its four-word
 initialized descriptor starts at READY=0; the runtime publishes READY after the
 payload and immutable view have been acknowledged. The bank stays owned until

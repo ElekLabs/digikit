@@ -1,6 +1,6 @@
 # core/input
 
-Presses keys and turns encoders from software: `input_key(code, down)` and `input_turn(encoder, delta)`, imported by name by a run-time module
+Presses keys and turns encoders from software: `dk_input_key(code, down)` and `dk_input_turn(encoder, delta)`, imported by name by a run-time module
 (`digikit/remote`). Both call the firmware's own panel decoders, the functions the UART packet handler calls, so the events are the ones a real
 panel produces.
 

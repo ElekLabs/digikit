@@ -1,11 +1,11 @@
 /* Host test of core/digikit-menu: the menu's own C source, compiled here with fakes of the runtime's dkrt_* calls and of
    dk_ui_stock_row. The fake <dk/platform/ui.h> (src/lib.rs) shows the screens, and modules/core/adapters/ui/host/tests/menu.rs presses the keys.
    The menu source is included, not linked, so that fk_reset can clear its statics between tests. */
-/* an address of a module's dkm_menu is 32 bits on the device; here the fake modules use 1 for fake_dkm_menu */
+/* an address of a module's menu function is 32 bits on the device; here the fake modules use 1 for fake_module_menu */
 #include <stdint.h>
 #include <dk/platform/ui.h>
-static void fake_dkm_menu_call(uint32_t a, dk_ui_menu *m);
-#define DK_CALL_MENU(a, m) fake_dkm_menu_call((a), (m))
+static void fake_module_menu_call(uint32_t a, dk_ui_menu *m);
+#define DK_CALL_MENU(a, c, m) (void)(c), fake_module_menu_call((a), (m))
 #include "../../../../../apps/digikit-menu/src/menu.c"
 #include <string.h>
 #include <stdio.h>
@@ -37,9 +37,15 @@ static struct {
 } fk;
 static int settings_runs, settings_acts;
 
-static dk_ui_act_fn *stock_fn;
+static int ui_token;
+dk_ui *dk_ui_core_handle(void)
+{
+    return (dk_ui *)&ui_token;
+}
 
-void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_act_fn *fn, void *ctx)
+static dk_ui_action_fn *stock_fn;
+
+void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_action_fn *fn, void *ctx)
 {
     (void)stock_menu;
     (void)text;
@@ -260,18 +266,17 @@ void fk_loaded(const char *path, const char *name)
     snprintf((char *)m->name, sizeof m->name, "%s", name);
 }
 
-/* A loaded module that has a dkm_menu: the menu gets the fake settings entry, which adds a text row and an action row. */
-static void settings_action(void *ctx, int arg)
+/* A loaded module that has a menu function: the menu gets the fake settings entry, which adds a text row and an action row. */
+static void settings_action(void *arg, int32_t value)
 {
-    (void)ctx;
-    settings_acts += arg;
+    (void)arg;
+    settings_acts += value;
 }
-static void fake_dkm_menu(dk_ui_menu *m, void *ctx)
+static void fake_module_menu(dk_ui_menu *m)
 {
     settings_runs++;
-    assert(ctx == 0);
-    dk_ui_text(m, "HELD 0");
-    dk_ui_action(m, "RELEASE", settings_action, 0, 1);
+    dk_ui_menu_add_text(m, "HELD 0");
+    dk_ui_menu_add_action(m, "RELEASE", settings_action, 0, 1);
 }
 void fk_loaded_menu(const char *path, const char *name)
 {
@@ -288,10 +293,10 @@ int fk_settings_acts(void)
     return settings_acts;
 }
 
-static void fake_dkm_menu_call(uint32_t a, dk_ui_menu *m)
+static void fake_module_menu_call(uint32_t a, dk_ui_menu *m)
 {
     assert(a == 1);
-    fake_dkm_menu(m, 0);
+    fake_module_menu(m);
 }
 
 void fk_fx(const char *id, uint32_t allowed, uint32_t saved)

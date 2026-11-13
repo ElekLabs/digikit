@@ -169,6 +169,6 @@ test('only the last boot counts, and other codes keep the loader text', () => {
   expect(fails).toEqual([{ name: 'b.dkm', result: -9 }]);
   expect(loadFailureText(fails[0]!)).toBe('b not loaded: init returned non-zero');
   expect(loadFailureText({ name: 'x.dkm', result: -7 })).toBe(
-    "x not loaded: an import name is not in the runtime's table",
+    'x not loaded: an import is unknown, or a provider the module needs is absent',
   );
 });

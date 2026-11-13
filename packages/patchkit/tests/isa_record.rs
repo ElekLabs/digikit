@@ -17,7 +17,6 @@ fn opts() -> dkm::Options {
         trace: false,
         stereo: false,
         gate: false,
-        api_minor: 0,
     }
 }
 
@@ -51,7 +50,7 @@ fn every_committed_coldfire_object_carries_a_matching_record() {
     assert!(n >= 20, "only {n} ColdFire objects found");
 }
 
-/// The `size` line of `pack` is the header's own fields: file = header + slots + padding (under 32) + the listed sections.
+/// The `size` line of `pack` is the header's own fields: file = header + padding (under 32) + the listed sections.
 #[test]
 fn pack_size_summary_parts_sum_to_the_file() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
@@ -84,7 +83,7 @@ fn pack_size_summary_parts_sum_to_the_file() {
         + d.imports.len() * dkm::IMPORT_LEN
         + d.register.len()
         + d.dsp.len();
-    let pad = f.len() - dkm::HEADER - d.slots.len() * 8 - listed;
+    let pad = f.len() - dkm::HEADER - listed;
     assert!(pad < 32, "{pad} bytes of padding in {line}");
 }
 

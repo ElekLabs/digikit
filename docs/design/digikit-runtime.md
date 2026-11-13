@@ -15,7 +15,7 @@ like any static object:
 | code and read-only data | 10 054 code (+ about 1 KiB data) | loader, store reader, allocator, SHA-256, API |
 | `DKRT_STAGE` (bss) | 65 536 | staging buffer for the store directory and one module file |
 | `DKRT_ARENA` (bss) | 524 288 | the module arena, 16-byte aligned blocks |
-| `DKRT_STATE`, `DKRT_MAILBOX` (bss) | 1 256 + 108 | slots, module records, log ring; the host mailbox |
+| `DKRT_STATE`, `DKRT_MAILBOX` (bss) | 904 + 108 | module records, log ring; the host mailbox |
 | trampoline, device id | 78 + 4 | `src/cf/tramp.s`, `src/cf/<dev>/device.s` |
 
 Total 602 324 bytes of the 1 396 736 in `cf.expansion` on DT2 1.16 (794 412 left for other modules); 26 MB regions on DN2. The
@@ -43,8 +43,8 @@ task, which also calls the card filesystem and block read, finding 23 S3), once 
 per million instructions in an idle emulator, **[D]** finding 29), before the task blocks, and nothing live is in d0/d1/a0/a1 there.
 It is not an interrupt, so the loader may block in the card read.
 
-`dkrt_tick` (a) polls the host mailbox for a command (selection, restart) and (b) calls slot 0 when a module bound one, counting
-the call in `entered[0]`.
+`dkrt_tick` (a) polls the host mailbox for a command (selection, restart) and (b) calls the `tick` of every loaded module (`entry::tick_all`),
+with the module as the source of what it logs and counting each call in `tick_calls`.
 
 ## C ABI (stable names; declared in `modules/core/runtime/sdk/src/lib.rs`, crate `dkrt-sdk`)
 
@@ -80,24 +80,22 @@ module in `DKRT_PATHS` (apart from `State`) and returns it in `DkrtModule.path`,
 
 `dkrt_tick` is also exported, for the hook only.
 
-### API table (`Api`, passed to `init`, `fini` and slot functions; also `dkrt_api`)
+### Imports (the `IMPORTS` table of `lib.rs`; `[[import]]` of `sdk/sdk.toml`)
 
-Versioned (`version` = 1, `size` = bytes present), fields only appended. `device` (1 = DT2, 2 = DN2), `runtime`, then function
-pointers (gcc m68k cdecl): `import(name) -> addr or 0`, `alloc(n)`, `free(p)` (the arena; 16-byte aligned; not zeroed),
-`store_read(path, dst, cap) -> size or code` (reads a store file; through the staging buffer, so at most 64 KiB), `log(msg, value)`
-(24 bytes of message and one word into a 16-entry ring in `DKRT_STATE`; no `core::fmt`), then addresses of `memcpy`, `memset`,
-`memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` so a C module need not carry them. A Rust module built with the repo's pipeline
-still links its own copies of the compiler helpers (`compiler_builtins`) into its object; sharing them needs the module build to
-leave them undefined, which is not done in v0 **[O]**.
+A module reaches the runtime through named imports: the loader resolves each name of the module's import table to an address of the runtime's `IMPORTS` table, or, for a
+service another module provides (`requires`), to that module's function or to a stub that answers `DK_E_MISSING`. The imports are grouped by service (`runtime`,
+`samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`) and each has a `since` and a `context` (docs/plans/sdk.md section 5.1). Memory is `dk_alloc`/`dk_free` (the
+arena; 16-byte aligned; not zeroed), `dk_files_read` reads a store file (through the staging buffer, so at most 64 KiB), `dk_log` writes 24 bytes of message and one word into a
+16-entry ring in `DKRT_STATE` (no `core::fmt`). The helpers `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` are the runtime's own copies, so a C module need not carry
+them. A Rust module built with the repo's pipeline still links its own copies of the compiler helpers (`compiler_builtins`) into its object **[O]**.
 
-### Slots
+### The entry point and the tick
 
-`SLOTS = 8` function pointers in `DKRT_STATE`. A module binds slot n by exporting `dkm_slot_<n>`; the loader publishes it after
-`init` with one aligned 32-bit store; the take-down of a boot-time DSP failure clears it first. Slot 0 is called once per UI-loop pass as
-`void (*)(const Api *)`. Slots 1 to 7 are bound but nothing calls them yet (later hooks: the sequencer, key handlers, ...).
-`entered[n]` counts tasks inside slot n's function (maintained by the caller of the slot); the take-down (`loader::unload_rec`, used only
-when the DSP part of a boot-time load fails) spins on it (2 000 000 iterations) after clearing the slot and, if it never drops, restores the
-slot and returns `E_BUSY`. Only slot 0, from the UI task, exists today, so the count is 0 when it runs from the same task.
+A module defines `dk_module` (`init`, `fini`, `tick`, `menu`); the loader reads the four offsets from the header, binds a `dk_module_ctx` (`DKRT_CTXS[rec]`) and calls
+`init(ctx)` once after the copy. After a successful `init` it publishes `tick` in `DKRT_TICKS[rec]` with one aligned 32-bit store; `dkrt_tick` calls it once per UI-loop
+pass as `void (*)(dk_module_ctx *)`. The take-down of a boot-time DSP failure clears the tick first and then runs `fini(ctx)`; it runs in the UI task, the task that calls
+`tick`, so no call can be in flight. The crash record names what the module code was doing (`dlog::PHASE_*`: `init`, `tick`, `fini` or a callback). The earlier slot table
+(`SLOTS = 8`, `dkm_slot_<n>`, `entered[n]`) is gone with runtime 0.6.0.
 
 ### Mailbox (emulator, tests)
 
@@ -118,13 +116,13 @@ block is merged with its neighbours. 524 288 bytes minus 16 at start. `free` ign
 - Code written through the data cache is pushed (`cpushl bc`, every 16-byte line of the block) before it can be fetched; the
   emulator's flush check reports 0 hits, and reports hits when the flush is disabled (finding 29).
 - Writers into `cf.expansion` are the runtime's code and code running from the arena; the write watch sees nothing else.
-- Slots are published after `init` and cleared before `fini`; the runtime never runs a partly loaded module.
+- The tick is published after `init` and cleared before `fini`; the runtime never runs a partly loaded module.
 - There is no run-time unload: the module set is fixed per session (hot reload is archived, docs/plans/digikit-hot-reload.md, tag
   `digikit-hot-reload-v1`; `git revert` of the Phase 6 archive commit restores it).
 
 ## Limits (v0)
 
-Module file at most 64 KiB; 8 modules; 8 slots; imports at most 64; no streaming; one task context; no autoload; no safe-mode key.
+Module file at most 64 KiB; 8 modules; imports at most 64; no streaming; one task context; no autoload; no safe-mode key.
 DN2: the flush check sees few CPUSHL on DN2 images (finding 25), so the 0-hit result there is weaker evidence.
 
 ## Registry (machines and parameters)
@@ -143,13 +141,13 @@ shared tail of a load. Link: `dl_send`, `dl_send_win`, `dl_poll` of `core/dsp-li
    bounds, imports resolve in `dyndsp_info`, free voice rows, voice types (a machine key resolved to its assigned type, or a pinned number) in 16..23 and unused). Then `dsp::reserve` takes a range of the
    DSP area (first fit over the per-module table `DKRT_DSP.mod_off/mod_len`, 64-byte granules, aligned for the object), copies the image
    into an arena block and applies the relocations there (`abs24`/`abs32`, shifts for the placement, import values), and claims the
-   voice rows. The ColdFire image is copied, relocated and flushed, the machine and parameter rows, `init` and the slots go live at once
+   voice rows. The ColdFire image is copied, relocated and flushed, the machine and parameter rows, `init` and the tick go live at once
    (the DSP frames do not flow yet at the task entry; see "Boot-time loading"), and the load returns `LOADING` (1).
 2. **Asynchronous part**, one step per UI-loop pass (`dsp::step`, called from `dkrt_tick`): `PH_SEND` starts `dl_send` of the image to the
    reserved range and polls `dl_poll`; at DONE (the DSP has the bytes and has invalidated its instruction caches) `PH_ROWS` publishes each
    voice row with two one-word `dl_send_win(1, ...)` transfers (pc, then type) and waits for each; then the boot report gets the result.
    Any failure (`dl` error, 6000 passes without progress) clears the rows it published, takes the module down again
-   (`loader::undo_early`: slots, `fini`, machine rows, range, arena block) and leaves `last_result` at `E_DSP_XFER`.
+   (`loader::undo_early`: tick, `fini`, machine rows, range, arena block) and leaves `last_result` at `E_DSP_XFER`.
    Several modules queue behind each other in `DspState.waiting`, one transfer at a time.
 
 (Hot reload archived: a load while the firmware ran used `used = 2`, a request queue of four paths, `loader::start_queued`,
@@ -183,7 +181,7 @@ anything of a module runs; load each selected path with the loader of old (the s
 reported in `DkrtBootInfo::results`, the others load). The counter is cleared by `boot::ui_pass` (called from `dkrt_tick`) once the session has been stable: 45,000 DSP blocks (30 s of the firmware's block counter) after the first UI-loop pass, at the first pass in a safe boot (`DkrtBootInfo::stable`).
 
 **DSP code.** Measured: a transfer started at the task entry is never acknowledged (finding 37); the cause is not traced. A module with a DSP section is
-therefore published in two steps: the CF part at once (machine and parameter rows, `init`, slots; `used = 1`), the DSP part queued in the
+therefore published in two steps: the CF part at once (machine and parameter rows, `init`, tick; `used = 1`), the DSP part queued in the
 state machine of finding 32 (`Pending.early`), which sends the image and publishes the voice rows over the first UI-loop passes. Jobs
 queue (`DspState.waiting`), one transfer at a time. The result of a module shows `LOADING` until then; a failure of the DSP part takes the
 module down again (`loader::undo_early`, the only user of the take-down). Until the voice row is in, a saved track on the machine plays as type 0.

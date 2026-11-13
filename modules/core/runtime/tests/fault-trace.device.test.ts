@@ -236,7 +236,7 @@ async function expectCpuCrashFault(runtime: PatchedSession): Promise<void> {
   await expectRuntimeReady(session);
   // the daemon stops the run at a CPU exception unless the guest's handler (the runtime's crash capture) is to run
   await session.client.call('cpu.exceptions', { deliver: true });
-  const cfg = Uint8Array.of(0, 0, 0x0b, 0xb8, 0); // 3000 blocks (2 s) after the first slot call, an illegal instruction
+  const cfg = Uint8Array.of(0, 0, 0x0b, 0xb8, 0); // 3000 blocks (2 s) after the first tick, an illegal instruction
   await dk.put('cfg/crash-after.bin', cfg);
   const device = session.options.device;
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', 'DKRT_BOOT', ...RING_SYMBOLS]);

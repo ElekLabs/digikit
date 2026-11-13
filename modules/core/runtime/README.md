@@ -1,7 +1,7 @@
 # core/runtime
 
 The digikit runtime: at boot, from the main-OS task entry, loads the `.dkm` modules of the saved selection from the card module store into
-a private arena, and runs their slot-0 function once per UI-loop pass. The module set is fixed per session (no run-time load or unload:
+a private arena, and calls the `tick` of every module once per UI-loop pass. The module set is fixed per session (no run-time load or unload:
 hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu changes the selection and restarts. Emulator only.
 
 - Design, C ABI, sizes, hook: `docs/design/digikit-runtime.md`. File format: `docs/design/digikit-dkm.md`. Results:
@@ -11,7 +11,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   (about 25 s); tests: `tests/patchkit/test_patchkit_dkrt.py`.
 - Try it by hand: `patchkit pack test/dyn-demo -o plus_drive/dt2/digikit/modules/dyn-demo.dkm`, patch with `--modules core/runtime`,
   boot with that `plus_drive/`; put `modules/dyn-demo.dkm` in `plus_drive/dt2/digikit/selection.txt` (or use DIGIKIT > MODULES), and the boot loads it.
-- Layout: `sdk/` is the crate both the runtime and modules use (`Api`, result codes); `src/rs/` the runtime; `src/cf/tramp.s` the
+- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime; `src/cf/tramp.s` the
   hook trampoline and `dkrt_flush`; `src/cf/<dev>/device.s` the device id.
 - Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/upload.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
 - Safe mode (finding 37): the boot counter is cleared after a stable period (45,000 DSP blocks = 30 s of UI loop, clock: the firmware's block counter,
@@ -21,7 +21,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
 - Card safety (finding 46): every card write goes through `block_write` (`card.rs`): outside the store range it is refused (`E_RANGE`); on a card whose
   area is neither ours (valid store header or selection copy) nor blank (all 0x00 or 0xFF) the runtime is read-only (`E_CARD_RO`: no boot counter, no
   selection, uploads answer `E_INUSE`, ABOUT says so). `dkrt_diag` reports it. An upload on a blank card claims the range with an empty store header pair first.
-- Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dkrt_log_sink_set`); the module `digikit/debug` (`modules/tools/debug`) holds the
+- Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dk_debug_log_sink_set`); the module `digikit/debug` (`modules/tools/debug`) holds the
   512-event ring and answers LOG 0x20, PEEK 0x21 (over `[digikit] peek` of the device file) and LOGCFG 0x22 for `tools/device/dklog.py`; the DSP diagnostics poll (`dl_diag`, optional) and its
   heartbeat watch (`watch.rs`); the firmware's exception hook (`cf.rtos.site.exc_hook_lit`) records a crash in kept RAM (`[digikit] keep_base`) and soft-resets, the next boot
   reports it and counts the boot as bad. Test knob: `CMD_CARD_PROBE`; test module `test/dyn-crash`.
@@ -36,7 +36,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   equal the runtime's, the minor must not be above it). Header byte 0x30 is informational.
 - Log levels and sources (0.1.0): a log event has a level (flags bits 1-3: error, warn, info, debug, trace) and a source (bits 8-15; 0 = runtime, n = module
   record index + 1). The default level is info; the level filter is the debug module's. SysEx LOGCFG (0x22) sets the default and per-module levels. They are not
-  stored on the card (reset at boot). Modules use `Api.log(msg, value)` (info) or `Api.log_lv(level, msg, value)`. Host: `tools/device/dklog.py level`.
+  stored on the card (reset at boot). Modules use `dk_log(level, msg, value)`. Host: `tools/device/dklog.py level`.
 - Table check (0.1.0): after every load and unload the runtime checks its module table (ranges inside their area, disjoint, rows owned by live modules).
   A violation logs TABLE_BAD and refuses further loads (`E_TABLE` -49). Limits per type are `[limits]` in `devices/*.toml`, generated into the runtime.
 - Capacity (finding 57, 0.2.3): `dkrt_capacity(DkrtCap *out, max)` writes the CAPACITY command's entries (limit, used, largest per resource) and returns how many; the SysEx command and the DIGIKIT MEMORY page read the same call.
@@ -44,5 +44,5 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   clock), `dkrt_poll_set(fn)` (a function the UI-loop tick calls once per pass; the DIGIKIT HEALTH page refreshes itself with it; `dkrt_poll_add(fn)` and `dkrt_poll_remove(fn)` are a second list of four for `core/ui`'s `dk_ui_tick`), `dkrt_store_stat` and `dkrt_store_read` (a store file's size, file hash slot and a sector range read, for the sample-pool adapters), `dkrt_store_lease` and `dkrt_store_unlease` (a stat that also keeps the file from being replaced or deleted until the lease ends: `E_FILE_IN_USE`), mailbox command `CMD_HEALTH`.
 - Settings store (finding 63, 0.5.1): digikit's own key/value settings in two copies of 16 sectors before the selection record (`settings.rs`; the format and rules are `docs/design/digikit-store.md`, "The settings record"; the codec is `dkrt_sdk::settings`). The record is read into RAM
   at the boot, changed with `put` and `remove`, and written to the copy that is not current 2 s after the last change (through `block_write`, so with the range and ownership checks). C ABI for core modules: `dkrt_settings_get(key, buf, cap)`, `dkrt_settings_put(key, value, len)`,
-  `dkrt_settings_remove(key)` (task context, not the MIDI task); a `.dkm` module has no API yet. SysEx `SETTINGS` (0x19) reads the record (`tools/device/dkupload.py settings`), CAPACITY kind `SETTINGS` reports its bytes, mailbox test commands 9 to 12. Host reader: `patchkit store dump`.
+  `dkrt_settings_remove(key)` (task context, not the MIDI task); a `.dkm` module uses `dk_settings_*`. SysEx `SETTINGS` (0x19) reads the record (`tools/device/dkupload.py settings`), CAPACITY kind `SETTINGS` reports its bytes, mailbox test commands 9 to 12. Host reader: `patchkit store dump`.
 - Send effects (finding 64, `fxsend.rs`): an effect's route (`fx/route/<module id>`, the settings) and its 16 send amounts (`fx/send/<module id>`); an effect on the send route (within `[limits] send_slots`) gets a knob on the second page of the FX key (`core/fxpages`), the amounts follow the knob into the settings and the DSP row (route and amount words are published with the row, before its pc); the kit loads that zero the knob's Sound indices are undone from the settings. CAPACITY kind `SEND_SLOTS`. Both devices (finding 67): the runtime reads the send cells from `fxpages_info` version 2 (`send_slots` is 2 on the Digitakt II, 1 on the Digitone II). On the Digitone II the Sound objects are not aligned, so every access is bytewise.

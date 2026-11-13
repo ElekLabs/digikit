@@ -29,7 +29,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | S1 | SDK restructure, byte-identical, with hash task | - | done | PR 416 |
 | 1 | S2a | SDK C hygiene: clang-format, `-std=c11`, helpers into `core/`, SDK sources linked automatically | S1 | done | lane/sdk-design |
-| 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated | S2a | active: S2b-1 done, S2b-2 next | lane/sdk-design |
+| 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated; the Api table, `dkm_init` and the slots deleted | S2a | done | lane/sdk-design |
 | 1 | S3 | SDK builders in `init` and the runtime commit path; machines, FX and fixtures migrated | S2b | todo | |
 | 1 | S4 | SDK templates and docs | S3 | todo | |
 | 1 | P7 | Clock audit (static) | - | done | finding 125 |
@@ -40,7 +40,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 2 | P3 | sharcdb tables for module DSP sections | P1 | todo | |
 | 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |
-| 3 | R2 | Runtime deletions and split; sink slots | S4 | todo | |
+| 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | todo | |
 | 3 | R3 | Platform adapter, layer rule | R2 | todo | |
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |

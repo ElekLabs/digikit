@@ -924,7 +924,7 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
             let out = (addr_of_mut!(RBODY) as *mut u8).add(1);
             // what the handler logs carries its module's source (owner 255: registered by no module)
             let owner = service_of(cmd).map_or(255, |s| s.owner);
-            let prev = if owner != 255 && owner > 0 { dlog::enter_module(owner as usize - 1) } else { dlog::current_source() };
+            let prev = if owner != 255 && owner > 0 { dlog::enter_module(owner as usize - 1, dlog::PHASE_CALLBACK) } else { 0 };
             let r = h(cmd as u32, seq, body, blen as u32, out);
             if owner != 255 && owner > 0 {
                 dlog::leave_module(prev);
@@ -1061,7 +1061,7 @@ fn logged(cmd: u8, status: i32) -> bool {
     }
 }
 
-// ---- commands that modules register (Api::register_cmds) ------------------------------------------------------------------
+// ---- commands that modules register (dk_host_register) ------------------------------------------------------------------
 
 /// Registered ranges at most (a module takes one per command group: digikit/remote 2, digikit/probe 1).
 const SVC_MAX: usize = 8;
@@ -1072,7 +1072,7 @@ struct Svc {
     last: u8,
     /// `dlog::current_source()` of the registering module (record index + 1); 0: the slot is free.
     owner: u8,
-    h: Option<dkrt_sdk::ServiceCmd>,
+    h: Option<dkrt_sdk::HostCmdFn>,
 }
 
 static mut SVC: [Svc; SVC_MAX] = [Svc { first: 0, last: 0, owner: 0, h: None }; SVC_MAX];
@@ -1082,7 +1082,7 @@ fn svc() -> &'static mut [Svc; SVC_MAX] {
 }
 
 /// The handler of a registered command.
-fn service(cmd: u8) -> Option<dkrt_sdk::ServiceCmd> {
+fn service(cmd: u8) -> Option<dkrt_sdk::HostCmdFn> {
     service_of(cmd).and_then(|s| s.h)
 }
 
@@ -1098,9 +1098,9 @@ fn service_of(cmd: u8) -> Option<&'static Svc> {
     None
 }
 
-/// `Api::register_cmds`: `E_CMD_RANGE` when the range is empty, outside every reserved range, over a registered one, or there is no free
+/// `dk_host_register`: `E_CMD_RANGE` when the range is empty, outside every reserved range, over a registered one, or there is no free
 /// slot; else 0.
-pub unsafe fn register_cmds(first: u32, count: u32, handler: Option<dkrt_sdk::ServiceCmd>) -> i32 {
+pub unsafe fn host_register(first: u32, count: u32, handler: Option<dkrt_sdk::HostCmdFn>) -> i32 {
     if handler.is_none() || count == 0 || first == 0 || first > 0xff || count > 0xff || first + count - 1 > 0xff {
         return E_CMD_RANGE as i32;
     }

@@ -1,24 +1,27 @@
-/* __ID__: a service module (docs/design/module-sdk.md).
+/* __ID__: a service module (docs/plans/sdk.md section 5).
  *
- * dkm_init runs when the runtime loads the module; dkm_fini when it unloads it.
+ * `init` runs when the runtime loads the module; `fini` when it unloads it. `dk_module` is the module's one entry point: the packer finds it by its symbol.
  *
- * To add SysEx commands, allocate a range in sdk/sdk.toml [protocol.ranges] and register it in dkm_init:
+ * To add SysEx commands, allocate a range in sdk/sdk.toml [protocol.ranges] and register it in `init`:
  *
- *     api->register_cmds(FIRST_CMD, COUNT, handler);
+ *     dk_host_register(FIRST_CMD, COUNT, handler);        (<dk/platform/host.h>)
  *
- * Trace marks (optional, no code without `pack --trace`): `#include <dk/core/trace.h>`, call `DK_TRACE_INIT(api);` in dkm_init, then
- * `DK_TRACE_LOG("message", value);` anywhere in this file. See sdk/README.md, "Tracing".
+ * A service with a handle (settings, files, ui, ...) is opened in `init`: `dk_settings_open(ctx, &settings)`.
  */
 
-#include <dk/core/api.h>
+#include <dk/core/module.h>
+#include <dk/core/log.h>
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    api->log_lv(2, (const uint8_t *)"__NAME__: hello", 0);
-    return 0;
+    (void)ctx;
+    dk_log(DK_LOG_INFO, "__NAME__: hello", 0);
+    return DK_OK;
 }
 
-void dkm_fini(const dk_api *api)
+static void fini(dk_module_ctx *ctx)
 {
-    (void)api;
+    (void)ctx;
 }
+
+const dk_module_def dk_module = {.init = init, .fini = fini};

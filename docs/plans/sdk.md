@@ -3,7 +3,7 @@
 Date: 2026-11-12. Base: `main` at 25378434. Targets: DT2 OS 1.17, DN2 OS 1.12.
 
 Status: **design agreed with Em on 2026-11-12, S2 detail (sections 5, 5.1, S2a, S2b) agreed the same day. S1 (restructure) shipped
-(PR 416); S2 to S5 not built.**
+(PR 416); S2a (C hygiene) and S2b (entry point and imports, the old contract deleted) are built on `lane/sdk-design`; S3 to S5 not built.**
 
 This plan replaces sections 7.1 (Cleanup) and 7.2 (Contract) of [runtime-and-services.md](runtime-and-services.md), that is the SDK
 parts of its items 1 and 5. The order of its steps is in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). It links to
@@ -23,7 +23,7 @@ firmware, as device-agnostic as possible.
 - Tested on the host where possible. A module change never reruns SDK tests.
 - Low churn: move files once, into the final structure.
 
-Versions stay experimental. No version bumps are needed while this lands.
+Versions stay experimental. S2b bumped the runtime to 0.6.0 and the api contract to major 2 (the Api table is gone).
 
 ## 2. Today
 
@@ -34,8 +34,8 @@ Facts from the 2026-11-12 review of `main`:
   separate ColdFire object that the device never sees. `patchkit` lowers the records into the `.dkm` register section and DSP section.
   Callbacks are name strings, because `.dk.desc` refuses relocations.
 - Five of six machines and the one FX are only declarations (11 to 14 lines, no C functions). `shot` is the only machine with C code
-  (pages, actions, sample view). The tools are plain C over `dkm_init(const dk_api *api)`.
-- Two runtime mechanisms exist: the Api table (`dkm_init(api)`, `api->size`, `DK_API_HAS`, `uses_api`) and named imports.
+  (pages, actions, sample view). Before S2b the tools were plain C over `dkm_init(const dk_api *api)`, and two runtime mechanisms existed: the Api table
+  (`api->size`, `DK_API_HAS`, `uses_api`) and named imports. Only the named imports remain.
 - Duplication: `put32`/`get32` in three tools; number-to-text and text centring in `shot/src/pages.c`; error constants copied by hand
   into each header (-40 three times); modules compile SDK sources by relative path (`../../../sdk/src/picker_logic.c`).
 - Naming: `pk_*` beside `dk_*`; `chooser`, `sample_picker`, `picker_logic`; `sample`, `sample_track`, `sample_region`; `_v1` and
@@ -60,10 +60,10 @@ sdk/
   sdk.toml            binary contract: records, imports, status codes, kinds, sample pool layout
   README.md           map of the layers and where to add new things
   include/dk/
-    core/             api.h, trace.h, status.h (generated)
+    core/             module.h, log.h, mem.h, time.h, trace.h, status.h (generated)
     platform/         what the device provides, one header per service group:
-                      ui.h, param.h, settings.h, files.h, file.h, io.h, job.h, hash32.h,
-                      usb_bulk.h, intro.h, data.h
+                      ui.h, param.h, settings.h, files.h, host.h, samples.h, io.h, job.h, hash32.h,
+                      usb_bulk.h, input.h, dsp_link.h, sdhc_large.h, debug.h, intro.h, data.h
     page/             page.h, widgets.h
     machine/          machine.h
     fx/               fx.h
@@ -79,9 +79,9 @@ sdk/
 modules/core/runtime/vectors/   fit and settings expected results (moved from sdk/vectors)
 ```
 
-Planned for later steps (not shipped): `core/` gets `bytes.h`, `text.h` and `path.h` (S2a), and `module.h`, `log.h`, `mem.h` and
-`time.h` (S2b; `module.h` replaces `api.h`); `platform/` gets `host.h`, `samples.h`, `input.h`, `dsp_link.h` and `debug.h`, and `file.h`
-merges into `files.h` (S2b, section 5.1); `page/canvas.h` (S3); `platform/draw.h` when a text-width query exists; `dsp/env/` when a module
+Shipped in S2b: `core/` has `module.h`, `log.h`, `mem.h` and `time.h` (`module.h` replaced `api.h`), `platform/` has `host.h`, `samples.h`, `input.h`, `dsp_link.h`, `sdhc_large.h` and `debug.h`, and `file.h` is merged into `files.h`.
+Shipped in S2a: `core/` has `bytes.h`, `text.h` and `path.h`.
+Planned for later steps (not shipped): `page/canvas.h` (S3); `platform/draw.h` when a text-width query exists; `dsp/env/` when a module
 needs it.
 
 Include direction: `core` <- `platform` <- components (`page`, `machine`, `fx`, `sample`, later `lfo`, `filter`, `mixer`).
@@ -110,8 +110,7 @@ const dk_module_def dk_module = {
 
 - The type is `dk_module_def` and the constant is `dk_module`: C keeps a typedef and an object in one namespace, so the two names differ. The
   packer looks up the symbol `dk_module`. Modules write `const dk_module_def dk_module = {...}`.
-- The packer finds `dk_module` by symbol and writes `init`, `fini`, `tick` and `menu` into the `.dkm` header. The runtime calls them as
-  it calls the `dkm_*` entries today.
+- The packer finds `dk_module` by symbol and writes `init`, `fini`, `tick` and `menu` into the `.dkm` header. The runtime calls them with a `dk_module_ctx`.
 - `dk_module_ctx` is opaque. The runtime passes it to every lifecycle function, always as the parameter `ctx`. It identifies the module (today implicit in
   a global) and answers `dk_module_ctx_device()` and `dk_module_ctx_runtime_version()` (the runtime version); S3 adds `dk_module_ctx_has()`. Callbacks (host command handlers, I/O and job steps, intro
   frames) keep their signatures: none of them needed the Api table either.
@@ -127,9 +126,9 @@ A module reaches the device through named imports, grouped by service in `sdk.to
 
 - Stateless functions are plain imports: `dk_alloc`, `dk_log`, `dk_hash32_*`, `dk_io_post`.
 - A service with per-module state, or one that may be absent, has a handle opened in `init`: `dk_settings_open`, `dk_files_open`,
-  `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`.
+  `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
-  code or do nothing. The module decides whether it can run without the service. Today a missing provider fails the load.
+  code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
 
 ```toml
@@ -144,29 +143,32 @@ since    = 11
 ```
 
 - The packer derives the runtime minor version a module needs from the newest `since` among the imports it links, and the services it
-  needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` go.
-- `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`. Today
+  needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone.
+- `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,
   `machines` and `fx` into `.dks` services, the same names resolve to the service exports and the loader loads a service only when a
   selected module imports it. Modules do not change.
 
 | Service | Header | Today in | Target (runtime-and-services) |
 | --- | --- | --- | --- |
-| memory, log, time | `core/mem.h`, `core/log.h`, `core/time.h` | runtime | runtime |
+| memory (the module arena and the firmware's allocator and card read), log, time | `core/mem.h`, `core/log.h`, `core/time.h` | runtime | runtime |
 | host commands (SysEx) | `platform/host.h` | runtime | runtime |
 | settings, files (read and write), I/O and jobs, hash, intro | `platform/settings.h`, `files.h`, `io.h`, `hash32.h`, `intro.h` | runtime | runtime |
 | debug reads and log sink | `platform/debug.h` | runtime | runtime |
-| sample pool | `platform/samples.h` (drawing and picker stay in `sample/`) | runtime | `samples` service |
+| sample pool (and the sample bank, removed with the bank in S3) | `platform/samples.h` (drawing and picker stay in `sample/`) | runtime | `samples` service |
 | params | `platform/param.h` | runtime | `machines` service |
 | UI menus, dialogs, ticks | `platform/ui.h` | `core/ui` module | runtime-and-services decides |
-| input, USB bulk, DSP link | `platform/input.h`, `usb_bulk.h`, `dsp_link.h` | provider modules | provider modules |
+| input, USB bulk, DSP link, large card commands | `platform/input.h`, `usb_bulk.h`, `dsp_link.h`, `sdhc_large.h` | provider modules | provider modules |
 
 Renames that make the names consistent (the naming rules are in section 10): the file calls are one service, `dk_files_*` (`dk_files_open` gives one handle for
 listing and writing; `dk_file_create/write/close/abort/delete` become `dk_files_create/write/close/abort/delete` and take that handle first); menu functions become `dk_ui_menu_*` (`dk_ui_menu_new/open/close/select/refresh`), items
 `dk_ui_menu_add_*` (`text`, `action`, `toggle`, `value`, `submenu`) and `dk_ui_menu_check`/`dk_ui_menu_checked`, dialogs keep `dk_ui_toast/confirm/choice`; `register_cmds` becomes
 `dk_host_register`; `dkrt_blocks` becomes `dk_time_blocks`; `dkrt_log_ev` becomes `dk_log_event`; `dkrt_peek_range`, `dkrt_track_type`,
-`dkrt_selected_params` and `dkrt_log_sink_set` move to `platform/debug.h` as `dk_debug_*`. `fw_block_read`, `fw_alloc` and `fw_free` are
-deleted (no users). `DK_TRACE_INIT` goes; `DK_TRACE_LOG` calls `dk_log`.
+`dkrt_selected_params` and `dkrt_log_sink_set` move to `platform/debug.h` as `dk_debug_*`. `fw_block_read`, `fw_alloc` and `fw_free` become
+`dk_fw_block_read`, `dk_fw_alloc` and `dk_fw_free` (service `runtime`, documented in `core/mem.h`; `usb-fast` uses them for its staging buffer and its storage bench).
+The sample bank calls `sample_bank`, `sample_load` and `sample_status` become `dk_sample_bank_open(ctx, &bank)`, `dk_sample_bank_load(bank, path)` and
+`dk_sample_bank_status(bank)` (service `samples`, since 11, context `init` and `any`); they exist only for the fixture `test/sample-proof` and are removed with the bank in S3.
+`DK_TRACE_INIT` is gone; `DK_TRACE_LOG` calls `dk_log` and stays a macro, so that its arguments are not evaluated when `DK_TRACE` is off.
 
 Limits checked on 2026-11-12: at most 64 imports per module (the largest module, `usb-fast`, needs about 25); runtime import names at most
 31 characters (the table field is 32 bytes, as in the `.dkm`; all proposed names fit). `dk_store_read` becomes `dk_files_read(files, path, buf, cap)`.
@@ -393,7 +395,7 @@ These come from the profiling work and land after the steps in section 12 that t
 - A repository `.clang-format` and a format check target for C. `clang-tidy` later.
 - Names: functions `dk_<area>_<verb>`, types `dk_<thing>`, constants `DK_<AREA>_<NAME>`. No version suffixes (`_v1`, `_V2`); versions
   live in `sdk.toml`.
-- Naming (agreed 2026-11-12, for the new contract; the old Api table, the `dkm_*` entries and the old `dk_ui_*` menu names keep their names until S2b-2):
+- Naming (agreed 2026-11-12):
 
 | Rule | Form | Examples |
 | --- | --- | --- |
@@ -410,7 +412,7 @@ These come from the profiling work and land after the steps in section 12 that t
 
   A callback of `dk_ui_action_fn` gets `void (void *arg, int32_t value)`: `arg` is the user pointer, `value` the value the row was added with (an action) or the
   new value (a toggle or number row). The old typedef names (`dk_service_cmd`, `dk_file_event`, `dk_ui_act`, `dk_io_step`, `dk_io_done`, `dk_job_step`, `dk_job_done`,
-  `dk_intro_frame`, `dk_intro_done`) stay in `<dk/gen/api.h>` for the Api table until S2b-2.
+  `dk_intro_frame`, `dk_intro_done`) are gone; only the `_fn` names exist.
 - Macros only where a function cannot do the job: `DK_TRACE_*` and `DK_SPAN_*` (arguments must not be evaluated when off). Error checks
   such as `DK_PARAM_IS_ERROR` become `static inline` functions.
 - `layercheck` rules: the include direction between layers; imports declared only in `platform/`; modules include only public headers;
@@ -465,41 +467,37 @@ Rule: every built `.dkm` stays byte-identical. What shipped:
   listing `sdk/src` files in `module.toml`. A received `.dkmod` (source only) builds against the receiver's SDK, with a version check.
 - Check: hashes for the format commit; device tests of the modules whose bytes change; static checks.
 
-### S2b Entry point and imports
+### S2b Entry point and imports: done
 
-- Runtime: the import table grows from 15 names to the services of 5.1, pointing at the existing functions (the implementations in
-  `settings.rs`, `files.rs`, `tracks.rs`, `io.rs` and the rest stay); `dk_module_ctx`; stubs for absent providers (`absent = "missing"`); a
-  per-module `tick` called for every loaded module once per UI pass. Slot 0 has one owner today and slots 1 to 7 are never called
-  (`lib.rs:1155-1157`); the slot table goes. Delete the Api table (`lib.rs:521-579`) after the last module moves.
-- Packer: find `dk_module` and write the lifecycle fields; derive the runtime minor version from `since`; report the needed services from
-  `service`.
-- `sdk.toml`: `service`, `since`, `context` and `sig` on every import; `context` is generated into the header comments. The runtime checks
-  that exist stay as they are.
-- Migrate the five tools (`usb-fast`, `debug`, `remote`, `probe`, `bootscreen`), `shot` and its picker, the chooser, the 21 C fixtures,
-  the two Rust fixtures (`dyn-demo`, `dyn-demo-stray`) and the `tool` template.
-- Tests that test the Api mechanism itself (size checks returning -48, `files-api.test.ts` header offsets and "API1.4" text,
-  `offsetof`/`sizeof` checks in `native-page(s)`, `track-select`, `sample-proof`) are rewritten as tests of version refusal and of a
-  missing service. These test changes get an independent review before merge.
-- Check: device tests of every migrated module and fixture on both devices; record new hashes.
+What shipped, in three steps on `lane/sdk-design`:
 
-#### S2b-1 (done, uncommitted at the time of writing): the new contract beside the old one
+- **S2b-1, the new contract beside the old one.** The entry type is `dk_module_def` and the constant `dk_module` (a typedef and an object of one name share a namespace in
+  C, so `const dk_module dk_module` does not compile). The imports got `service`, `since`, `context` and `sig`; `dk_module_ctx` and the handle types are opaque; the
+  providers (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`) export the new names; a per-module `tick` runs once per UI pass; the loader binds a stub for an
+  absent provider and records the provider of the last `_open` stub that answered `DK_E_MISSING` during `init` as the module's need when `init` returns `DK_E_MISSING`.
+- **S2b-2, migration.** The five tools, `shot` and its picker, the chooser, the C fixtures, the two Rust fixtures and the `tool` template moved to `dk_module` and the named
+  imports. The UI calls take the `dk_ui *` handle (`dk_ui_menu_new`, `dk_ui_toast`, `dk_ui_confirm`, `dk_ui_choice`, `dk_ui_tick`). The tests of the Api mechanism itself were
+  rewritten as tests of the version refusal (a module that declares a newer api minor, or major 1, gets `E_CONTRACT`) and of a missing service. These test changes get an
+  independent review before merge.
+- **S2b-2 end, the old contract deleted.** The Api table (`[api]` and `[api.types]` of `sdk.toml`, `gen/api.h`, `dkrt_api`, `uses_api`, `DK_API_HAS`, `api->size`,
+  `core/api.h`), the loader's `dkm_init`, `dkm_fini`, `dkm_menu` and `dkm_slot_<n>` path with the slot table (`SLOTS`, `E_SLOT`, `H_SLOT_*`, slot ownership, the slot-0 call of the UI pass),
+  `DK_MENU`, the legacy branches of `settings.h` and `intro.h`, `platform/file.h`, the old imports without a service (`input_key`, `input_turn`, `usb_bulk_*`, `dl_set_tick_cb`,
+  `dkrt_blocks`, `dkrt_log_ev`, `dkrt_peek_range`, `dkrt_track_type`, `dkrt_selected_params`, `dkrt_log_sink_set`, `fw_*`, `register_cmds`) and the providers' old exports are gone. Only a compiler
+  helper (`memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3`) is an import without a service.
 
-Every existing module is byte-identical (`sdk:hashes compare`). What S2b-2 inherits:
+What changed in the binary contract (runtime 0.6.0, every `.dkm` changes):
 
-- The entry type is `dk_module_def` and the constant `dk_module`: `const dk_module dk_module = {...}` (the first form of sections 5 and 5.1) does not compile, because a typedef and an
-  object of one name share a namespace in C. The naming rules of section 10 apply to every name S2b-1 introduced. The `.dkm` header is 0xa8 bytes for such a module (`menu` at 0xa0, `tick` at 0xa4); `DkrtModule` has a new `ctx`
-  field, and the DIGIKIT menu calls `menu(ctx, m)` when it is not 0.
-- Names that clash with an old name of another meaning: `dk_ui_open` (old: open a menu; new: the service accessor) is `dk_ui_service_open` until the
-  old call goes; `dk_settings_get/put/remove` and `dk_intro_take` are old inline wrappers in their headers, defined only when
-  `<dk/core/module.h>` was not included first. `dk_ui_menu_new`, `dk_ui_toast`, `dk_ui_confirm`, `dk_ui_choice` and `dk_ui_tick` are one import
-  with the same signature in both entries (the `service`, `since` and `context` fields were added to those entries). S2b-2 renames
-  `dk_ui_service_open` to `dk_ui_open`, makes the UI functions that old modules share (`dk_ui_menu_new`, `dk_ui_toast`, `dk_ui_confirm`, `dk_ui_choice`, `dk_ui_tick`) take the `dk_ui *ui` handle as first argument, deletes the old ui entries, the old typedef names (`dk_service_cmd`, `dk_file_event`, `dk_ui_act` and the other types of `[api.types]`) and the
-  Api-table names, deletes the legacy branches of `settings.h` and `intro.h`, and folds `file.h` away (it only includes `files.h` now).
-- The callback types of the new contract are `[handle.callbacks]` of `sdk.toml` (C `dk_<name>`, Rust `<Name>`); the old ones stay in `[api.types]`. The write calls take the `dk_files *` handle first; the runtime does not look it up yet.
-- The service providers (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`) export the new names as thin functions over the old ones.
-- The old imports without `service` have no `since`; the packer derives the minor from `since` only for a module that defines `dk_module`.
-  A module of the old entry still gets its minor from `uses_api`.
-- The runtime version in `sdk.toml` is not bumped: a bump changes every `.dkm`. Bump it when the contract ships.
+- The api contract is `[2, 11]`: major 2 refuses every file of the Api table with `E_CONTRACT`; the minor numbers go on, so the `since` values stay. The packer writes the newest `since`
+  among the imports a module links (0 when it links none).
+- The `.dkm` header is 0xa0 bytes in one form: `init`, `fini`, `menu` and `tick` are the offsets at 0x80, 0x84, 0x88 and 0x8c (the slot table is gone, so no header size 0xa4 or 0xa8). A data-only module has the
+  stub as `init`. The packer refuses an object that has no `dk_module`, or that still exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`.
+- `DkrtModule.slots` and `DkrtStatus.slot_calls` are gone (`DkrtStatus.tick_calls` counts the module ticks); the `MOD_LIST` event carries whether the module has a tick, where it carried the slot mask.
+- The crash record's `slots_entered` word is now the phase of the module code at the fault (`dlog::PHASE_*`: 1 `init`, 2 `tick`, 3 `fini`, 4 a callback, 0 none); `CRASH_MOD` names its
+  argument `phase_stable`, and `dklog crash` prints "during init", "during tick" and so on.
+- The runtime `State` shrinks to 904 bytes (no slot table: `ST_*` offsets of `tools/patchkit/pk_dkrt.py`). `E_SLOT` (-11) is retired.
+- The firmware memory and card calls are `dk_fw_alloc`, `dk_fw_free` and `dk_fw_block_read` (service `runtime`). The sample bank has three temporary imports for `test/sample-proof`
+  (`dk_sample_bank_open`, `dk_sample_bank_load`, `dk_sample_bank_status`), removed with the bank in S3.
+- `DK_TRACE_LOG` calls `dk_log` at the trace level and stays a macro, so the arguments are not evaluated when `DK_TRACE` is off; `DK_TRACE_INIT` is gone.
 
 ### S3 Builders and the runtime commit path
 

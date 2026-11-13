@@ -51,7 +51,6 @@ pub const L_E_IMPORT: i16 = -7;
 pub const L_E_NOMEM: i16 = -8;
 pub const L_E_INIT: i16 = -9;
 pub const L_E_LOADED: i16 = -10;
-pub const L_E_SLOT: i16 = -11;
 pub const L_E_BUSY: i16 = -12;
 pub const L_E_TOO_BIG: i16 = -13;
 pub const L_E_TABLE_FULL: i16 = -14;

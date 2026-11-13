@@ -2,6 +2,8 @@
 #include <dk/platform/ui.h>
 #include <stdio.h>
 
+static dk_ui *ui;
+static int ctx_token;
 static dk_ui_menu *main_menu, *tools_menu, *info_page, *files_list, *empty_list;
 
 static int applied, last_arg, remote, level, level_changes, remote_changes;
@@ -89,11 +91,11 @@ int s_back_calls(void)
 }
 int s_is_open_files(void)
 {
-    return dk_ui_is_open(files_list);
+    return dk_ui_menu_is_open(files_list);
 }
 int s_files_checked(int row)
 {
-    return dk_ui_checked(files_list, row);
+    return dk_ui_menu_checked(files_list, row);
 }
 dk_ui_menu *s_main(void)
 {
@@ -117,63 +119,63 @@ void s_set_remote(int v)
 }
 void s_refresh_main(void)
 {
-    dk_ui_refresh(main_menu);
+    dk_ui_menu_refresh(main_menu);
 }
 
-static void apply(void *ctx, int arg)
+static void apply(void *ctx, int32_t arg)
 {
     (void)ctx;
     applied++;
     last_arg = arg;
-    dk_ui_refresh(main_menu);
+    dk_ui_menu_refresh(main_menu);
 }
-static void remote_cb(void *ctx, int v)
+static void remote_cb(void *ctx, int32_t v)
 {
     (void)ctx;
     remote_changes++;
     remote = v;
 }
-static void level_cb(void *ctx, int v)
+static void level_cb(void *ctx, int32_t v)
 {
     (void)ctx;
     level_changes++;
     level = v;
 }
 
-static void confirm_done(void *ctx, int yes)
+static void confirm_done(void *ctx, int32_t yes)
 {
     (void)ctx;
     confirm_answer = yes;
 }
-static void choice_done(void *ctx, int index)
+static void choice_done(void *ctx, int32_t index)
 {
     (void)ctx;
     picked = index;
 }
-static void ask(void *ctx, int arg)
+static void ask(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
-    rc_confirm = dk_ui_confirm("ERASE", "Erase everything?", confirm_done, 0);
+    rc_confirm = dk_ui_confirm(ui, "ERASE", "Erase everything?", confirm_done, 0);
 }
-static void pick(void *ctx, int arg)
+static void pick(void *ctx, int32_t arg)
 {
     static const char *const items[] = {"ONE", "TWO", "THREE"};
     (void)ctx;
     (void)arg;
-    rc_choice = dk_ui_choice("PICK ONE", items, 3, choice_done, 0);
+    rc_choice = dk_ui_choice(ui, "PICK ONE", items, 3, choice_done, 0);
 }
-static void note(void *ctx, int arg)
+static void note(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
-    rc_toast = dk_ui_toast("SAVED 123456789012345678901234567890");
+    rc_toast = dk_ui_toast(ui, "SAVED 123456789012345678901234567890");
 }
-static void open_files(void *ctx, int arg)
+static void open_files(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
-    rc_open_list = dk_ui_open(files_list);
+    rc_open_list = dk_ui_menu_open(files_list);
 }
 
 static void main_fill(dk_ui_menu *m, void *ctx)
@@ -181,62 +183,58 @@ static void main_fill(dk_ui_menu *m, void *ctx)
     char buf[DK_UI_ROW];
     (void)ctx;
     snprintf(buf, sizeof buf, "APPLIED %d", applied); /* the menu copies the text */
-    dk_ui_action(m, "APPLY", apply, 0, 42);
-    dk_ui_submenu(m, "TOOLS", tools_menu);
-    if (dk_ui_has(DK_UI_CAP_TOGGLE))
-        dk_ui_toggle(m, "REMOTE", &remote, remote_cb, 0);
-    else
-        dk_ui_text(m, "REMOTE N/A");
-    if (dk_ui_has(DK_UI_CAP_VALUE))
-        dk_ui_value(m, "LEVEL", &level, 0, 127, level_cb, 0);
-    dk_ui_text(m, buf);
+    dk_ui_menu_add_action(m, "APPLY", apply, 0, 42);
+    dk_ui_menu_add_submenu(m, "TOOLS", tools_menu);
+    dk_ui_menu_add_toggle(m, "REMOTE", &remote, remote_cb, 0);
+    dk_ui_menu_add_value(m, "LEVEL", &level, 0, 127, level_cb, 0);
+    dk_ui_menu_add_text(m, buf);
 }
 
 static void tools_fill(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
-    dk_ui_submenu(m, "INFO", info_page);
-    dk_ui_action(m, "FILES", open_files, 0, 0);
-    dk_ui_action(m, "EMPTY", (dk_ui_act_fn *)0, 0, 0);
-    dk_ui_action(m, "ERASE", ask, 0, 0);
-    dk_ui_action(m, "PICK", pick, 0, 0);
-    dk_ui_action(m, "NOTE", note, 0, 0);
+    dk_ui_menu_add_submenu(m, "INFO", info_page);
+    dk_ui_menu_add_action(m, "FILES", open_files, 0, 0);
+    dk_ui_menu_add_action(m, "EMPTY", (dk_ui_action_fn *)0, 0, 0);
+    dk_ui_menu_add_action(m, "ERASE", ask, 0, 0);
+    dk_ui_menu_add_action(m, "PICK", pick, 0, 0);
+    dk_ui_menu_add_action(m, "NOTE", note, 0, 0);
 }
 
 static void info_fill(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
-    dk_ui_text(m, "DIGIKIT MENU");
-    dk_ui_text(m, "THIS LINE IS MUCH TOO LONG FOR A ROW");
+    dk_ui_menu_add_text(m, "DIGIKIT MENU");
+    dk_ui_menu_add_text(m, "THIS LINE IS MUCH TOO LONG FOR A ROW");
 }
 
 static void files_fill(dk_ui_menu *m, void *ctx)
 {
     (void)ctx;
-    dk_ui_text(m, "ALPHA");
-    dk_ui_text(m, "BETA");
-    dk_ui_text(m, "GAMMA");
+    dk_ui_menu_add_text(m, "ALPHA");
+    dk_ui_menu_add_text(m, "BETA");
+    dk_ui_menu_add_text(m, "GAMMA");
 }
-static void file_check(void *ctx, int row, int on)
+static void file_check(void *ctx, int32_t row, int32_t on)
 {
     (void)ctx;
     check_row = row;
     check_on = on;
     changed = 1;
 }
-static void panel_act(void *ctx, int arg)
+static void panel_act(void *ctx, int32_t arg)
 {
     (void)ctx;
     panel_action = arg & 1; /* 0 RENAME, 1 DELETE */
     panel_row = arg >> 1;
 }
-static void files_panel(dk_ui_menu *p, int row, void *ctx)
+static void files_panel(dk_ui_menu *p, int32_t row, void *ctx)
 {
     (void)ctx;
-    dk_ui_action(p, "RENAME", panel_act, 0, row << 1);
-    dk_ui_action(p, "DELETE", panel_act, 0, (row << 1) | 1);
+    dk_ui_menu_add_action(p, "RENAME", panel_act, 0, row << 1);
+    dk_ui_menu_add_action(p, "DELETE", panel_act, 0, (row << 1) | 1);
 }
-static void save_done(void *ctx, int yes)
+static void save_done(void *ctx, int32_t yes)
 {
     (void)ctx;
     confirm_answer = yes;
@@ -245,15 +243,15 @@ static void save_done(void *ctx, int yes)
     else
         discarded++;
     changed = 0;
-    dk_ui_close(files_list);
+    dk_ui_menu_close(files_list);
 }
-static int files_back(void *ctx)
+static int32_t files_back(void *ctx)
 {
     (void)ctx;
     files_back_calls++;
     if (!changed)
         return 0;
-    dk_ui_confirm("SAVE?", "Keep the changes?", save_done, 0);
+    dk_ui_confirm(ui, "SAVE?", "Keep the changes?", save_done, 0);
     return 1; /* stay until answered */
 }
 
@@ -288,10 +286,12 @@ dk_ui_menu *s_init(void)
     check_row = check_on = panel_row = panel_action = confirm_answer = picked = -1;
     changed = saved = discarded = files_back_calls = 0;
     rc_confirm = rc_choice = rc_toast = rc_open_list = 1;
-    tools_menu = dk_ui_menu_new(&tools_desc);
-    info_page = dk_ui_menu_new(&info_desc);
-    files_list = dk_ui_menu_new(&files_desc);
-    empty_list = dk_ui_menu_new(&empty_desc);
-    main_menu = dk_ui_menu_new(&main_desc);
+    if (dk_ui_open((dk_module_ctx *)&ctx_token, &ui) != 0)
+        return 0;
+    tools_menu = dk_ui_menu_new(ui, &tools_desc);
+    info_page = dk_ui_menu_new(ui, &info_desc);
+    files_list = dk_ui_menu_new(ui, &files_desc);
+    empty_list = dk_ui_menu_new(ui, &empty_desc);
+    main_menu = dk_ui_menu_new(ui, &main_desc);
     return main_menu;
 }

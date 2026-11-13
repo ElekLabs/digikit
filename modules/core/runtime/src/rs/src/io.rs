@@ -15,7 +15,7 @@
 //! Rules: no `match` on integers, no `core::fmt`, no slice indexing; a step runs on a 16 KiB stack.
 
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
-use dkrt_sdk::api::{IoDone, IoStep};
+use dkrt_sdk::api::{IoDoneFn, IoStepFn};
 use dkrt_sdk::*;
 
 pub const IO_MORE: i32 = 1;
@@ -44,8 +44,8 @@ struct Job {
     id: u32,
     /// Source index of the posting module (record index + 1); 0: the runtime or an adapter.
     owner: u8,
-    step: Option<IoStep>,
-    done: Option<IoDone>,
+    step: Option<IoStepFn>,
+    done: Option<IoDoneFn>,
     ctx: *mut u8,
     state: u8,
     /// A wake that came while the step was running or the job was queued: the next `IO_WAIT` does not sleep.
@@ -322,7 +322,7 @@ unsafe fn ensure_task() -> bool {
 
 /// Add a job. Returns its id (> 0), `E_CONTRACT` for a null step, `E_BUSY` when all entries are in use or another poster is creating the task,
 /// `E_NOT_FOUND` when the kernel refused the task. Task context.
-pub unsafe fn post(owner: u8, step: Option<IoStep>, done: Option<IoDone>, ctx: *mut u8) -> i32 {
+pub unsafe fn post(owner: u8, step: Option<IoStepFn>, done: Option<IoDoneFn>, ctx: *mut u8) -> i32 {
     if step.is_none() {
         return E_CONTRACT;
     }
@@ -481,7 +481,7 @@ unsafe fn deliver(job: Job) {
     }
     if let Some(done) = job.done {
         if job.owner != 0 {
-            let prev = crate::dlog::enter_module(job.owner as usize - 1);
+            let prev = crate::dlog::enter_module(job.owner as usize - 1, crate::dlog::PHASE_CALLBACK);
             done(job.ctx, job.status);
             crate::dlog::leave_module(prev);
         } else {

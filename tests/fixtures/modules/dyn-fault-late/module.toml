@@ -14,8 +14,8 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# C, packed like test/dyn-fault. `dkm_init` reads the store file `cfg/fault-after.bin` (4 bytes big endian: blocks after the first UI-loop
-# pass; 1 byte: 0 = write SOFTRST, as the firmware's exception path does, 1 = hang in the UI task) and `dkm_slot_0` stops the machine once
+# C, packed like test/dyn-fault. `init` reads the store file `cfg/fault-after.bin` (4 bytes big endian: blocks after the first UI-loop
+# pass; 1 byte: 0 = write SOFTRST, as the firmware's exception path does, 1 = hang in the UI task) and `tick` stops the machine once
 # that many blocks (the runtime's `dkrt_blocks` import, 1500 per second) have passed.
 [[object]]
 path = "build/dyn-fault-late.dko.json"

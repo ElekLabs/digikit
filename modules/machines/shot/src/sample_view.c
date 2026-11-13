@@ -1,8 +1,7 @@
 #include "sample_view.h"
 
-void sample_view_init(sample_view *v, const dk_api *api, uint32_t pool)
+void sample_view_init(sample_view *v, dk_sample_pool *pool)
 {
-    v->api = api;
     v->pool = pool;
     v->slot = DK_SAMPLE_POOL_ENTRIES;
     v->token = 0;
@@ -18,9 +17,7 @@ int sample_view_update(sample_view *v, unsigned slot, dk_sample_info *info, int 
 {
     if (slot >= DK_SAMPLE_POOL_ENTRIES)
         return DK_SAMPLE_E_CONTRACT;
-    int ready = v->api && v->api->sample_pool_info
-                    ? v->api->sample_pool_info(v->pool, slot, (uint8_t *)info)
-                    : DK_SAMPLE_E_CONTRACT;
+    int ready = v->pool ? dk_sample_pool_info(v->pool, slot, info) : DK_SAMPLE_E_CONTRACT;
     if (ready != 0) {
         v->slot = DK_SAMPLE_POOL_ENTRIES;
         v->token = 0;
@@ -33,9 +30,9 @@ int sample_view_update(sample_view *v, unsigned slot, dk_sample_info *info, int 
         v->peak_count = 0;
     }
     if (want_peaks && v->peak_count == 0 && v->peak_failed[slot] != info->token) {
-        if (DK_API_HAS(v->api, sample_pool_peaks))
-            v->peak_count = v->api->sample_pool_peaks(v->pool, slot, info->token,
-                                                      (uint8_t *)v->peaks, sizeof(v->peaks));
+        if (v->pool)
+            v->peak_count =
+                dk_sample_pool_peaks(v->pool, slot, info->token, v->peaks, sizeof(v->peaks));
         if (v->peak_count <= 0)
             v->peak_failed[slot] = info->token;
     }
@@ -57,10 +54,10 @@ const dk_sample_peak *sample_view_window(sample_view *v, unsigned slot, uint32_t
                                          unsigned *count)
 {
     *count = 0;
-    if (!DK_API_HAS(v->api, sample_pool_peaks_window))
+    if (!v->pool)
         return 0;
-    int32_t r = v->api->sample_pool_peaks_window(v->pool, slot, token, first, span, columns,
-                                                 (uint8_t *)v->window, sizeof(v->window));
+    int32_t r = dk_sample_pool_peaks_window(v->pool, slot, token, first, span, columns, v->window,
+                                            sizeof(v->window));
     int same = v->win_state != SAMPLE_VIEW_WIN_NONE && v->win_slot == slot &&
                v->win_token == token && v->win_first == first && v->win_span == span &&
                v->win_columns == columns;
@@ -119,6 +116,5 @@ const dk_sample_peak *sample_view_last_window(const sample_view *v, unsigned slo
 
 int sample_view_status(const sample_view *v, unsigned slot)
 {
-    return DK_API_HAS(v->api, sample_pool_status) ? v->api->sample_pool_status(v->pool, slot)
-                                                  : DK_SAMPLE_E_CONTRACT;
+    return v->pool ? dk_sample_pool_status(v->pool, slot) : DK_SAMPLE_E_CONTRACT;
 }

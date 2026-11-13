@@ -63,7 +63,14 @@ export function crashRecord(events: DkLogEvent[]) {
     stack: kind(LOG_KIND.CRASH_STACK).flatMap((e) => e.args.slice(1)),
     /** Pairs of CRASH_TAIL events make one event of the boot before. */
     tail: Math.floor(kind(LOG_KIND.CRASH_TAIL).length / 2),
-    module: mod ? { index: mod.args[0] === NONE ? null : mod.args[0]!, name: asciiOf(...mod.args.slice(2, 5)) } : null,
+    module: mod
+      ? {
+          index: mod.args[0] === NONE ? null : mod.args[0]!,
+          /** 0 outside module code, 1 init, 2 tick, 3 fini, 4 a callback (`PHASES` of tools/device/dklog.py). */
+          phase: mod.args[1]! & 0xffff,
+          name: asciiOf(...mod.args.slice(2, 5)),
+        }
+      : null,
   };
 }
 

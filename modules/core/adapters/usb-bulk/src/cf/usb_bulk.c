@@ -2,7 +2,7 @@
  * Plan: docs/plans/usb-fast.md section 4. Facts: docs/findings/42-usb-transfer-routes.md sections 1 and 4 (static, DT2 1.17 and DN2 1.12).
  *
  * The USB engine is the firmware's and is not patched. Its port table is RAM: entry 2 (USB MIDI) holds the connect and disconnect callbacks and the
- * pointer and length of the configuration descriptor. usb_bulk_enable repoints those four words (a 124-byte copy of the stock 101-byte descriptor
+ * pointer and length of the configuration descriptor. ub_enable repoints those four words (a 124-byte copy of the stock 101-byte descriptor
  * with interface 2 appended; callbacks of ours that call the stock ones) and re-enumerates through the firmware's own stop and restart pair.
  *
  * RX: a ring of up to RX_MAX slots of RX_BYTES (RX_PAGES 4 KiB pages: the firmware only builds single-page dTDs; ours name all five page pointers, see queue_transfer). Each is queued
@@ -10,7 +10,7 @@
  * sends a zero-length packet after any frame whose length is a multiple of 512 bytes. The completion callback runs in the USB interrupt: it marks the buffer
  * full and queues a free one. With no free buffer nothing is queued, the host gets NAK, and that is the whole flow control. The dTDs come from the firmware's
  * pool (the engine's own EP1 callback does the same from the interrupt); its free callback is wrapped to see the status byte, and a halted or error status
- * drops the transfer. TX: usb_bulk_send copies into one of TX_SLOTS slots and queues one dTD on EP2 IN (64-byte packets, see QH_CAPS_IN); the completion frees it.
+ * drops the transfer. TX: ub_send copies into one of TX_SLOTS slots and queues one dTD on EP2 IN (64-byte packets, see QH_CAPS_IN); the completion frees it.
  *
  * Buffers are accessed through the uncached alias of DDR, so the DMA and the CPU never see stale cache lines; only the receive reads of a module use the
  * cached address, after an invalidate (UB_CACHED_RX). The stock disconnect callback polls
@@ -18,8 +18,8 @@
  * copy: the state is touched by the I/O task, the UI loop tick and the USB interrupt. A refused dTD leaves `need_prime`, retried from the module's calls
  * and from usb_bulk_tick (dkrt_poll_add).
  *
- * Take-over (docs/plans/usb-fast-takeover.md): usb_bulk_takeover switches the device from USB AUDIO/MIDI (port 5) to USB MIDI (port 2) in RAM with the firmware's own
- * mode switch, and usb_bulk_giveback (or an automatic give-back) switches back. The stored USB CONFIG setting byte is never written, so a reboot always returns
+ * Take-over (docs/plans/usb-fast-takeover.md): ub_takeover switches the device from USB AUDIO/MIDI (port 5) to USB MIDI (port 2) in RAM with the firmware's own
+ * mode switch, and ub_giveback (or an automatic give-back) switches back. The stored USB CONFIG setting byte is never written, so a reboot always returns
  * to the stored mode. The calls only record a request; the switch runs from usb_bulk_tick (UI task) at least TO_DELAY_MS later, so a SysEx reply is out first and the
  * switch never runs in the MIDI task or an interrupt. The tick is on the runtime's list from the first takeover call on (bulk need not be enabled).
  * One switch at a time: the firmware's switch has no lock and restarts the device some ticks after it writes the port. Every switch, and enable's own stop and restart,
@@ -172,7 +172,7 @@ extern const u32 usb_ddr_bytes;
 extern void dkrt_io_wake(i32 id);
 extern i32 dkrt_poll_add(u32 f); /* the UI loop calls f once a pass */
 extern u32 dkrt_blocks(void);    /* DSP blocks since boot (1500 a second); 0 without core/health */
-extern void dkrt_log_ev(u32 kind, u32 flags, const u32 *a);
+extern void dk_log_event(u32 kind, u32 flags, const u32 *a);
 
 /* sdk.toml [[log.kind]] 14 MOD_LOG: args msg0..msg3 (16 ASCII chars, big-endian words) and value */
 #define UB_KIND_MOD_LOG 14u
@@ -196,7 +196,7 @@ static void ub_log(const char *tag, u32 value)
         a[i >> 2] |= c << (24u - 8u * (i & 3u));
     }
     a[4] = value;
-    dkrt_log_ev(UB_KIND_MOD_LOG, UB_FLAGS, a);
+    dk_log_event(UB_KIND_MOD_LOG, UB_FLAGS, a);
 }
 /* UB_LOG: trace builds only. UB_NOTE: always, for the rare events that a hardware run must be able to see (a forced restart). UI task only. */
 #if UB_TRACE
@@ -261,7 +261,7 @@ static u32
 static volatile i32 io_job;
 /* Take-over state. `taken`: a take-over is active. `to_req`: 0 none, 1 the switch to port 2 is requested, 2 the switch back is requested; the tick runs it when
  * `to_due_ms` have passed since it first saw the request. `to_orig`: the port to give back to. `to_active`: set by any transfer or renew (interrupt or task),
- * consumed by the tick, which stamps `to_act_at`. `to_gone`: the disconnect callback ran while taken over. `to_quiet`: usb_bulk_enable is re-enumerating
+ * consumed by the tick, which stamps `to_act_at`. `to_gone`: the disconnect callback ran while taken over. `to_quiet`: ub_enable is re-enumerating
  * (its own stop runs our disconnect callback). Times are in clock units of the tick (blocks, or tick passes without a block clock; `to_per_s` per second). */
 static volatile u32 taken, to_req, to_active, to_gone, to_quiet;
 static u32 to_orig, to_due_ms, to_due_set, to_due_at, to_act_at, to_sus, to_sus_at, to_per_s,
@@ -285,21 +285,21 @@ volatile u32 usb_bulk_switches, usb_bulk_switch_gap_ms;
 volatile u32
     usb_bulk_rx_errors; /* transfers dropped for a halted, buffer-error or transaction-error status */
 volatile u32
-    usb_bulk_rx_inval_lines; /* data cache lines invalidated by usb_bulk_take (0 with UB_CACHED_RX 0); the emulator has no data cache model */
+    usb_bulk_rx_inval_lines; /* data cache lines invalidated by ub_take (0 with UB_CACHED_RX 0); the emulator has no data cache model */
 
-/* UB_CACHED_RX 1: usb_bulk_take hands out the CACHED address of a receive buffer, after it invalidated the buffer's data cache lines, so the module's reads
+/* UB_CACHED_RX 1: ub_take hands out the CACHED address of a receive buffer, after it invalidated the buffer's data cache lines, so the module's reads
  * fill whole 16-byte lines in bursts (the uncached alias costs one bus access per longword). 0: the uncached alias, as before (the A/B switch).
  * DEFAULT 0 until the emulator aliases DDR: its board keeps the cached window 0x40000000 and the uncached alias +0x08000000 in separate pages
  * (packages/emulator/machine/src/board.rs page_index), so the emulator's DMA data (written at the alias) reads as zeros at the cached address. Hardware: -DUB_CACHED_RX=1.
  * Rules, all in this file:
  *  1. The CPU never writes a receive buffer through its cached address. Only the USB DMA writes these buffers (enable writes only the descriptor, through the
  *     alias; the receive buffers are never written by the CPU). A dirty line could be written back over DMA data later. The cached address exists only as the
- *     result of rx_cached(), which only usb_bulk_take returns, and the module reads it (its parameter is documented read-only).
- *  2. usb_bulk_take invalidates the lines of the received bytes after the DMA completed (the completion callback marked the buffer full) and before the
+ *     result of rx_cached(), which only ub_take returns, and the module reads it (its parameter is documented read-only).
+ *  2. ub_take invalidates the lines of the received bytes after the DMA completed (the completion callback marked the buffer full) and before the
  *     first CPU read. `cpushl dc,(Ax)` pushes a line if modified and invalidates it (CACR[DDPI] = 0, CFPRM CPUSHL p.8-2, MCF5441x RM 6.4.8 Table 6-10). The firmware
  *     writes CACR = 0xa50ce100 once (finding 07-emulator): SPA (bit 14) = 1 so Ax is a physical address and only the line that holds it is touched, IVO = 0,
  *     DDPI = 0. The lines are clean (rule 1), so the push writes nothing. The caches do not snoop DMA (RM 6.1).
- *  3. The cached address is returned only after the invalidate; usb_bulk_release takes either address. */
+ *  3. The cached address is returned only after the invalidate; ub_release takes either address. */
 #ifndef UB_CACHED_RX
 #define UB_CACHED_RX 0
 #endif
@@ -336,7 +336,7 @@ static u8 *desc_buf(void)
     return alias_of(desc_mem);
 }
 
-/* the index of the receive buffer that `p` points into (the uncached alias, or the cached address that usb_bulk_take may have returned), or -1 */
+/* the index of the receive buffer that `p` points into (the uncached alias, or the cached address that ub_take may have returned), or -1 */
 static i32 rx_index(const u8 *p)
 {
     u32 off;
@@ -593,7 +593,7 @@ static void ep2_stop(void)
     order_head = order_count = 0;
     for (i = 0; i < TX_SLOTS; i++)
         if (tx_state[i] !=
-            T_RESERVED) /* a send is copying into this slot (usb_bulk_send, interrupts on): it frees the slot itself when it sees the reset */
+            T_RESERVED) /* a send is copying into this slot (ub_send, interrupts on): it frees the slot itself when it sees the reset */
             tx_state[i] = T_FREE;
     need_prime = 0;
     qh_ready = 1;
@@ -1278,7 +1278,7 @@ static void takeover_tick(void)
     }
 }
 
-/* The job is woken every HK_WAKE_MS while the interface is enabled: the module has no timer of its own (a retry of usb_bulk_enable while the mode switch settles,
+/* The job is woken every HK_WAKE_MS while the interface is enabled: the module has no timer of its own (a retry of ub_enable while the mode switch settles,
  * a check for an idle session). */
 #define HK_WAKE_MS 250u
 static u32 hk_set, hk_at, hk_per, hk_passes;
@@ -1413,7 +1413,7 @@ static i32 enable_prepare(i32 io_id)
 /* The caller (the module's I/O job) calls this until it returns 0. The first call prepares entry 2 whatever the mode (see enable_prepare), so a take-over
  * from USB AUDIO/MIDI enumerates once, with the bulk interface already in the descriptor. E_STATE: the device is not in USB MIDI mode, or a switch is
  * settling (the firmware restarts the device a second after it, and the guard keeps a second stop out); call again later. */
-i32 usb_bulk_enable(i32 io_id)
+static i32 ub_enable(i32 io_id)
 {
     u32 sr, ok;
     i32 r;
@@ -1470,7 +1470,7 @@ i32 usb_bulk_enable(i32 io_id)
 }
 
 /* the job that enabled the interface goes away (the module's fini): no more wakes. The table stays as it is until the next boot. */
-i32 usb_bulk_disable(i32 io_id)
+static i32 ub_disable(i32 io_id)
 {
     u32 sr, i;
     if (io_id <= 0 || io_job != io_id)
@@ -1490,7 +1490,7 @@ i32 usb_bulk_disable(i32 io_id)
     return 0;
 }
 
-i32 usb_bulk_take(u8 **buf, u32 *len)
+static i32 ub_take(u8 **buf, u32 *len)
 {
     u32 sr = sr_mask();
     i32 r = 0;
@@ -1519,7 +1519,7 @@ i32 usb_bulk_take(u8 **buf, u32 *len)
     return r;
 }
 
-i32 usb_bulk_release(u8 *buf)
+static i32 ub_release(u8 *buf)
 {
     u32 sr = sr_mask();
     i32 i = rx_index(buf); /* -1 when the buffers are gone */
@@ -1534,7 +1534,7 @@ i32 usb_bulk_release(u8 *buf)
 }
 
 /* A slot is reserved under the mask, the bytes are copied with interrupts on (16 KiB is long), and the dTD is queued under the mask again. */
-i32 usb_bulk_send(const u8 *buf, u32 len)
+static i32 ub_send(const u8 *buf, u32 len)
 {
     u32 sr, i, k, before;
     u8 *p;
@@ -1585,8 +1585,8 @@ i32 usb_bulk_send(const u8 *buf, u32 len)
 /* Take the USB port over for the bulk link, or renew a take-over (host activity for the watchdog). In USB AUDIO/MIDI (port 5) it records the original port and the
  * tick switches to USB MIDI about TO_DELAY_MS later; in USB MIDI it succeeds without switching. Refused (E_STATE) in Overbridge (port 6) and any other port.
  * A pending give-back is cancelled. Callable from the MIDI task (a command handler): it only sets state; the switch runs in the tick.
- * The caller then calls usb_bulk_enable until it stops returning E_STATE. */
-i32 usb_bulk_takeover(void)
+ * The caller then calls ub_enable until it stops returning E_STATE. */
+static i32 ub_takeover(void)
 {
     u32 sr = sr_mask();
     u32 port = to_pend_port != 0u
@@ -1622,7 +1622,7 @@ i32 usb_bulk_takeover(void)
 }
 
 /* End a take-over: the tick switches back to the remembered port about TO_DELAY_MS later. Nothing taken: 0. A switch that has not run yet is dropped. */
-i32 usb_bulk_giveback(void)
+static i32 ub_giveback(void)
 {
     u32 sr = sr_mask();
     if (taken) {
@@ -1638,7 +1638,7 @@ i32 usb_bulk_giveback(void)
     return 0;
 }
 
-u32 usb_bulk_state(void)
+static u32 ub_state(void)
 {
     u32 sr = sr_mask();
     u32 i, tx = 0;
@@ -1668,7 +1668,7 @@ u32 usb_bulk_state(void)
 /* The run-time ring switch and the receive window. `set` below 0 only reads; 0 or 1 sets the switch (bit 1 of the usb-fast switch mask: 1 = the ring, the default; 0 = the old 8 slots,
  * all queued). The switch is read when the buffers are allocated (a block is sized by it) and at every queueing. Returns the switch in bit 0, bit 1 always set (so 0 means "no ring": the SDK's stub for an adapter without it), in bits 16..23 the slots of the live block and, in bits 8..15, the receive
  * window in frames of 64 KiB that the buffers allocated now can take: 0 when none are live or the window is the old one (the host keeps 2 DATA frames in flight then). */
-i32 usb_bulk_ring(i32 set)
+static i32 ub_ring(i32 set)
 {
     u32 sr = sr_mask();
     u32 frames;
@@ -1684,7 +1684,7 @@ i32 usb_bulk_ring(i32 set)
 }
 
 /* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ----
-   The new names of the calls above, with the handle that dk_usb_bulk_open gives out. The service has one owner (the I/O job of usb_bulk_enable), so the
+   The new names of the calls above, with the handle that dk_usb_bulk_open gives out. The service has one owner (the I/O job of ub_enable), so the
    handle is only a token. */
 
 static int usb_bulk_token;
@@ -1700,47 +1700,53 @@ int32_t dk_usb_bulk_open(dk_module_ctx *ctx, dk_usb_bulk **out)
 int32_t dk_usb_bulk_enable(dk_usb_bulk *ub, int32_t io_id)
 {
     (void)ub;
-    return usb_bulk_enable(io_id);
+    return ub_enable(io_id);
 }
 
 int32_t dk_usb_bulk_disable(dk_usb_bulk *ub, int32_t io_id)
 {
     (void)ub;
-    return usb_bulk_disable(io_id);
+    return ub_disable(io_id);
 }
 
 int32_t dk_usb_bulk_take(dk_usb_bulk *ub, void **buf, uint32_t *len)
 {
     (void)ub;
-    return usb_bulk_take((u8 **)buf, (u32 *)len);
+    return ub_take((u8 **)buf, (u32 *)len);
 }
 
 int32_t dk_usb_bulk_release(dk_usb_bulk *ub, void *buf)
 {
     (void)ub;
-    return usb_bulk_release((u8 *)buf);
+    return ub_release((u8 *)buf);
 }
 
 int32_t dk_usb_bulk_send(dk_usb_bulk *ub, const void *buf, uint32_t len)
 {
     (void)ub;
-    return usb_bulk_send((const u8 *)buf, len);
+    return ub_send((const u8 *)buf, len);
 }
 
 uint32_t dk_usb_bulk_state(dk_usb_bulk *ub)
 {
     (void)ub;
-    return usb_bulk_state();
+    return ub_state();
 }
 
 int32_t dk_usb_bulk_takeover(dk_usb_bulk *ub)
 {
     (void)ub;
-    return usb_bulk_takeover();
+    return ub_takeover();
 }
 
 int32_t dk_usb_bulk_giveback(dk_usb_bulk *ub)
 {
     (void)ub;
-    return usb_bulk_giveback();
+    return ub_giveback();
+}
+
+int32_t dk_usb_bulk_ring(dk_usb_bulk *ub, int32_t set)
+{
+    (void)ub;
+    return ub_ring(set);
 }

@@ -84,6 +84,7 @@ pub unsafe fn poll_state() -> (u32, u32) {
 }
 pub unsafe fn fini(rec: usize, addr: u32) {
     assert_eq!((rec, addr), (0, 1));
+    assert!(!entry::has_tick(0), "the tick stops before fini");
     assert_eq!(dsp::ds().row_pub[0], 0);
     assert_eq!(dsp::ds().fx_pub[0], 0);
     assert_eq!(dsp::ds().mod_len[0], 256); // invalidated but still owned at fini
@@ -122,9 +123,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     s.modules[0].base = CF;
     s.modules[0].size = 256;
     s.modules[0].fini = 1;
-    s.modules[0].slot_mask = 1;
-    s.modules[0].slot_fn[0] = 0x9000;
-    s.slots[0] = 0x9000;
+    entry::publish_tick(0, 0x9000);
     let d = dsp::ds();
     d.phase = if published {
         dsp::PH_ROWS
@@ -187,6 +186,7 @@ fn voice_latch_mask_is_published_before_the_type() {
 unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     let d = dsp::ds();
     assert!(dsp::retained());
+    assert!(!entry::has_tick(0), "teardown stops the tick before fini");
     assert_eq!(d.pending.rec, 0);
     assert_eq!(d.pending.send_buf, pending_buf);
     assert_eq!(d.mod_len[0], 256);
@@ -201,7 +201,6 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert_eq!(boot::info().results[0], E_DSP_XFER);
     assert_eq!(st().modules[0].used, 1);
     assert_eq!(st().modules[0].base, CF);
-    assert_eq!(st().slots[0], 0);
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(512));
     if fx {
         assert_eq!((d.fx_owner[0], d.fx_pub[0]), (1, 1));
@@ -303,31 +302,11 @@ fn missing_fx_info_retains_published_row() {
         assert_eq!(LINK.accepted, 0);
     }
 }
-#[test]
-fn cf_entered_timeout_retains_image_and_closes_slots_before_fini() {
-    let _g = LOCK.lock().unwrap();
-    unsafe {
-        seed(Completion::Ack, false, false, true);
-        st().entered[0] = 1;
-        dsp::step();
-        // No DSP publication existed, but CF drain failure still retains everything.
-        assert!(dsp::retained());
-        assert_eq!(dsp::ds().pending.send_buf, IMAGE);
-        assert_eq!(dsp::ds().mod_len[0], 256);
-        assert_eq!(st().modules[0].used, 1);
-        assert_eq!(st().slots[0], 0);
-        assert!(LINK.events.is_empty());
-        let word = dsp::ds().word;
-        dsp::step();
-        assert_eq!(dsp::ds().word, word);
-        assert_eq!(dsp::ds().failures, 1);
-        assert_eq!(dsp::ds().nwait, 1);
-    }
-}
 unsafe fn successful_case(fx: bool, published: bool) {
     seed(Completion::Ack, fx, published, true);
     dsp::step();
     assert!(!dsp::retained());
+    assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
     assert_eq!(dsp::ds().mod_len[0], 0);
     assert_eq!((dsp::ds().row_owner[0], dsp::ds().fx_owner[0]), (0, 0));
@@ -407,6 +386,14 @@ pub extern "C" fn dkpool_free_frames() -> u32 {
 }
 #[no_mangle]
 pub extern "C" fn dkpool_tick() {}
+
+// core/sdhc-large, absent in this host fixture.
+#[no_mangle]
+pub extern "C" fn sdhc_large_range(_: u32, _: u32) {}
+#[no_mangle]
+pub extern "C" fn sdhc_large_ctl(_: u32, _: u32) -> u32 {
+    0
+}
 
 // The +Drive write adapter, absent in this host fixture (version 0 is refused).
 #[no_mangle]

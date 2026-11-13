@@ -29,11 +29,11 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x00 | 4 | magic `DKMF` (0x444b4d46) |
 | 0x04 | 4 | format version = 1 |
 | 0x08 | 4 | file size in bytes |
-| 0x0c | 4 | header size = 0xa0, 0xa4 when the file has the `menu` field (below), or 0xa8 for a module with the entry point `dk_module` (menu and tick) |
+| 0x0c | 4 | header size = 0xa0 |
 | 0x10 | 32 | sha256 of the whole file with these 32 bytes read as zeros |
 | 0x30 | 4 | `runtime_min`: informational, the runtime version the module was built for (packed semantic version; informational; `dkrt_sdk::RUNTIME_VERSION`, now 0.1.0); since runtime 0.1.0 the loader does not refuse on it (the contract bytes at 0x38 decide). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
 | 0x34 | 4 | module version, `major << 16 \| minor << 8 \| patch` |
-| 0x38 | 8 | contracts built against, a (major, minor) byte pair each: api, machine, fx, service. Major 0 = the module does not implement that contract (api is never 0). `pack` writes api always, machine when the file has a DSP section or its `register` records hold a machine record (a data-only machine), service when it has slot functions or a real `dkm_init`/`dkm_fini`, fx when the DSP section has effect records (version 4; a section of effects only carries no machine contract) |
+| 0x38 | 8 | contracts built against, a (major, minor) byte pair each: api, machine, fx, service. Major 0 = the module does not implement that contract (api is never 0). `pack` writes api always (major 2, minor: the newest `since` of the imports the module links, 0 when it links none; a file of major 1, the Api table of the earlier runtimes, is refused with `E_CONTRACT`), machine when the file has a DSP section or its `register` records hold a machine record (a data-only machine), service when it has a real entry point (not the stub of a data-only module), fx when the DSP section has effect records (version 4; a section of effects only carries no machine contract) |
 | 0x40 | 32 | name, NUL padded |
 | 0x60 | 4 | `image_off` (multiple of 16) |
 | 0x64 | 4 | `image_size`: text and data, as the patch-time linker lays them out at base 0 |
@@ -43,55 +43,51 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x74 | 4 | `reloc_count` (at most 4096) |
 | 0x78 | 4 | `import_off` |
 | 0x7c | 4 | `import_count` (at most 64) |
-| 0x80 | 4 | `init`: image offset of `dkm_init`, or 0xffffffff |
-| 0x84 | 4 | `fini`: image offset of `dkm_fini`, or 0xffffffff |
-| 0x88 | 4 | `slot_off` |
-| 0x8c | 4 | `slot_count` (at most 8) |
+| 0x80 | 4 | `init`: image offset of `dk_module.init`, or 0xffffffff |
+| 0x84 | 4 | `fini`: image offset of `dk_module.fini`, or 0xffffffff |
+| 0x88 | 4 | `menu`: image offset of `dk_module.menu`, or 0xffffffff |
+| 0x8c | 4 | `tick`: image offset of `dk_module.tick`, or 0xffffffff |
 | 0x90 | 4 | `register_off` |
 | 0x94 | 4 | `register_size` (0: none) |
 | 0x98 | 4 | `dsp_off`: offset of the DSP section (0: none) |
 | 0x9c | 4 | `dsp_size`: its size in bytes |
-| 0xa0 | 4 | `menu`: image offset of `dkm_menu`. Only a module that exports `dkm_menu` has this field: its header size (0x0c) is 0xa4 instead of 0xa0, and the tables follow the header. Readers take the header size from the file and accept 0xa0, 0xa4 and 0xa8 |
-| 0xa4 | 4 | `tick`: image offset of `dk_module.tick` (`0xffffffff`: none). Only a module that defines `dk_module` has this field: its header size is 0xa8, `menu` (0xa0) holds `dk_module.menu` or `0xffffffff`, `init` and `fini` (0x80, 0x84) hold `dk_module.init` and `dk_module.fini`, the slot table is empty, and the runtime calls `init`, `fini`, `tick` and `menu` with a `dk_ctx *` instead of the Api table (docs/plans/sdk.md section 5). The Api minor in the header (0x39) is the newest `since` of the imports the module links, at least 11 |
 
-After the header, in this order, each table where its offset says: imports, relocations, slot bindings, the `register` records,
+The four entry points are the fields of the constant `dk_module` of the module (`dk_module_def`, `sdk/include/dk/core/module.h`); the packer finds the symbol, follows the relocation of each field to a function of the image and writes the offsets above. The runtime calls `init(ctx)`, `fini(ctx)`, `tick(ctx)` and `menu(ctx, menu)` with a `dk_module_ctx *` (docs/plans/sdk.md section 5). Until 0.5 the header had a slot table at 0x88 and a header size of 0xa0, 0xa4 or 0xa8; runtime 0.6.0 reads only the layout above.
+
+After the header, in this order, each table where its offset says: imports, relocations, the `register` records,
 the DSP section (16-byte aligned), padding to 16, then the image. A file with a DSP section carries the machine contract at 0x38 (a section of version 2; runtime 5 and later also load version 1).
 
 - **Imports**: `import_count` entries of 32 bytes, a NUL-padded name. Every undefined symbol of the object that a relocation
-  names. The names the v0 runtime provides: `fw_block_read`, `fw_alloc`, `fw_free`, `memcpy`, `memset`, `memcmp`, `__muldi3`,
-  `__udivdi3`, `__umoddi3`. A name the runtime does not have makes the load fail with `E_IMPORT` before anything is written.
+  names. The names the runtime provides: the `dk_*` imports of `sdk/sdk.toml` (`<dk/gen/imports.h>`), and `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` for the compiler. A name the runtime does not have makes the load fail with `E_IMPORT` before anything is written.
 - **Relocations**: entries of 8 bytes: `u32 offset` (into the loaded memory; the image only, never bss; any byte alignment, since
   m68k code holds 32-bit operands at even addresses) and `u32 kind << 24 | index`. Kind 0: the 32-bit word at the offset is a
   module-relative address; the loader adds the module's load address. Kind 1: the word is an addend; the loader adds the address
   of import `index`. The word is stored big endian. Only 32-bit absolute relocations (`R_68K_32`) can be loaded; PC-relative
   references between the module's own sections are resolved by the packer (the base cancels), and a PC-relative reference to an
   import is refused by the packer (the distance to the firmware would depend on where the module is loaded).
-- **Slot bindings**: entries of 8 bytes: `u32 slot`, `u32 function offset`. They come from exported symbols
-  `dkm_slot_<n>`, n = 0 to 7. The loader publishes each with one aligned 32-bit store after `init` returned 0.
 - **`register` records**: typed machine and parameter records (`docs/design/digikit-registry.md`; layout in
   `packages/patchkit/src/register.rs`). `patchkit pack MODULE --device dt2` lowers a `dynamic = true` module's `[[machine]]` and `[[param]]`
   sections into them (and an `[[fx]]` with a `tab` into an EFFECT record, kind 4, the page of the effect: "Effect pages" in the registry design); the loader checks them with the rest of the file (before anything is written) and hands them to the registry
-  (`registry.rs`), which fills the rows `core/dynreg` reserved. A module with no code at all packs with a four-byte image (`dkm_init` is
+  (`registry.rs`), which fills the rows `core/dynreg` reserved. A module with no code at all packs with a four-byte image (`init` is
   `moveq #0,d0; rts`).
 - **Image**: the linked bytes at base 0; every word named by a relocation holds `S + A` (symbol offset plus addend) for kind 0 and
   `A` for kind 1.
 
-Exports by name (symbols of the object): `dkm_init(const Api *) -> i32` (0 = ok), `dkm_fini(const Api *)`,
-`dkm_slot_N(const Api *)` and `dkm_menu(dk_ui_menu *, void *)` (the module's settings: `DK_MENU(fill)` of `<dk/platform/ui.h>`; the DIGIKIT menu calls it when the user opens SETTINGS... of the module). At least one must exist. `init` runs once after the copy, relocation and cache flush; if it returns
-non-zero the load is undone (`E_INIT`).
+The module defines the constant `dk_module` (`const dk_module_def dk_module = {.init = ..., .fini = ..., .tick = ..., .menu = ...}`), every field optional; an object without it, or one that still exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`, is refused by the packer. `init` runs once after the copy, relocation and cache flush; if it returns
+non-zero the load is undone (`E_INIT`; `E_IMPORT` when it returns `DK_E_MISSING` because a provider module the module needs is not in the image). `tick` runs once per pass of the UI task after `init` succeeded.
 
 ## Needs are inferred from the contents
 
 A module does not say what a load of it takes of the device. The needs are worked out from the file's own contents, by one function, `needs_of(source)` of
 the crate `packages/dkneeds` (no_std, no dependency). Why: a module that reported its own needs could misreport them, by mistake or on purpose, and every reader
 (the menu, the host app, the tools) would have to trust it; a contributed or hand-built `.dkm` has no field to lie in. The runtime enforces the same limits when it
-loads (its loader reads the real tables), so the inferred needs are the answer before the load, never the check itself. There is no needs block in the header: the header is the 0xa0-byte (with a menu 0xa4-byte, with `dk_module` 0xa8-byte)
+loads (its loader reads the real tables), so the inferred needs are the answer before the load, never the check itself. There is no needs block in the header: the header is the 0xa0-byte
 header of format 1, and every format 1 file has needs.
 
 `needs_of` reads the file through a byte source (`dkneeds::Bytes`: a size and a read at an offset), so the device can feed it from store sector reads without staging the file and a host from a
 slice. It reads, and checks as the loader checks (bounds, counts; a file the loader refuses for its format has no needs, never a crash):
 
-- the header: magic, format 1, the size fields against the file, the image size and offset, `bss`, alignment, and the reloc, import and slot tables in the file;
+- the header: magic, format 1, the size fields against the file, the image size and offset, `bss`, alignment, and the reloc and import tables in the file;
 - the `register` table: its header (magic, count at most 32) and each record's kind and length word (the loader's walk: the length of its kind, the table ends where the last record does);
 - the DSP section: its header (magic, version 1 to 4, the sizes, the table bounds and counts), for a version 3 or 4 section the `state_bytes` and `voices` words of each voice record, and for a version 4 section the `state_bytes` word of each effect record.
 

@@ -9,7 +9,7 @@ fn put(b: &mut [u8], at: usize, v: u32) {
 }
 
 /// A file with this image, bss, register table and DSP section (both may be empty), laid out like the packer's: header, register table, DSP
-/// section, image. The tables the loader reads (relocations, imports, slots) are empty.
+/// section, image. The tables the loader reads (relocations, imports) are empty.
 fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     let reg_off = HEADER as usize;
     let dsp_off = (reg_off + reg.len()).div_ceil(16) * 16;
@@ -24,7 +24,7 @@ fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     put(&mut f, H_IMAGE_SIZE as usize, image);
     put(&mut f, H_BSS as usize, bss);
     put(&mut f, H_ALIGN as usize, 4);
-    for at in [H_RELOC_OFF, H_IMPORT_OFF, H_SLOT_OFF] {
+    for at in [H_RELOC_OFF, H_IMPORT_OFF] {
         put(&mut f, at as usize, HEADER);
     }
     put(&mut f, H_REG_OFF as usize, reg_off as u32);
@@ -330,7 +330,6 @@ fn absurd_sizes_and_counts_are_refused_without_a_panic() {
     assert_eq!(of(&edit(H_RELOC_N as usize, 4097)), Err(Error::Sizes));
     assert_eq!(of(&edit(H_RELOC_N as usize, u32::MAX)), Err(Error::Sizes));
     assert_eq!(of(&edit(H_IMPORT_N as usize, 65)), Err(Error::Sizes));
-    assert_eq!(of(&edit(H_SLOT_N as usize, 9)), Err(Error::Sizes));
     assert_eq!(
         of(&edit(H_IMAGE_OFF as usize, u32::MAX - 15)),
         Err(Error::Sizes)

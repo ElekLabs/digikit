@@ -105,7 +105,7 @@ const SHARED_READS = [
   '{workspaceRoot}/devices/**/*.toml',
   // the manifests of the core modules: `patchkit apply` reads them with the objects
   '{workspaceRoot}/modules/core/**/module.toml',
-  // upload-kit.ts and files-api.test.ts read the runtime version and the [api] table
+  // upload-kit.ts reads the runtime version
   '{workspaceRoot}/sdk/sdk.toml',
   // synth.ts reads the machine types
   '{workspaceRoot}/modules/core/adapters/machines/types.toml',

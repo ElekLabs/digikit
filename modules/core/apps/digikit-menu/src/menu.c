@@ -2,7 +2,7 @@
  *
  * DIGIKIT is a menu: ABOUT, HEALTH and MEMORY (text pages), and MODULES (a list). MODULES has one
  * row per .dkm file of the store. The check mark of a row means "load at the next restart"; it starts from the saved selection.
- * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a dkm_menu, INFO).
+ * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a menu function, INFO).
  * The check mark is the only on/off of a module. Nothing is saved until NO leaves the list with
  * changes pending and APPLY & RESTART? is answered with YES.
  *
@@ -95,18 +95,16 @@ static int
     g_lead; /* 1: the rows start with a mark column, ticked as " " and a selected module that is not loaded as "-" */
 
 static dk_ui_menu *g_main, *g_about, *g_mem, *g_modules, *g_info;
+static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 
-/* The settings menu of each loaded module that has a dkm_menu, by the module's index in dkrt_module order. Each is built the first
+/* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
    time the user opens it and kept: no module is unloaded at run time, so the module's code and the ctx it passes stay valid. */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
-/* Calls the module's dkm_menu at address a (DkrtModule.menu) with the menu to fill. The host tests, where an address is wider than 32 bits, define their own. */
+/* Calls the module's menu function (dk_module.menu) at address a (DkrtModule.menu) with the module's ctx (DkrtModule.ctx) and the menu to fill: menu(ctx, menu).
+   The host tests, where an address is wider than 32 bits, define their own. */
 #ifndef DK_CALL_MENU
-#define DK_CALL_MENU(a, m) ((void (*)(dk_ui_menu *, void *))(uintptr_t)(a))((m), 0)
-#endif
-/* The same for a module of the new entry (dk_module.menu, DkrtModule.ctx not 0): menu(ctx, menu). */
-#ifndef DK_CALL_MENU_CTX
-#define DK_CALL_MENU_CTX(a, c, m)                                                                  \
+#define DK_CALL_MENU(a, c, m)                                                                      \
     ((void (*)(void *, dk_ui_menu *))(uintptr_t)(a))((void *)(uintptr_t)(c), (m))
 #endif
 static dk_ui_menu *g_set[MAX_SET];
@@ -383,12 +381,12 @@ static void row_name(int i, int max, txt *t)
 
 /* ---- dialogs --------------------------------------------------------------------------------------------------------- */
 
-static void say(const char *title, const char *text, void (*done)(void *, int))
+static void say(const char *title, const char *text, dk_ui_confirm_fn *done)
 {
     copy_text(DK_POPUP, sizeof DK_POPUP, title);
     copy_text(DK_POPUP_TEXT, sizeof DK_POPUP_TEXT, text);
     DK_POPUPS++;
-    dk_ui_confirm(title, text, done, 0);
+    dk_ui_confirm(g_ui, title, text, done, 0);
 }
 
 static void fail_text(const char *what, int32_t code)
@@ -562,7 +560,7 @@ static int restart_pending(void)
 
 /* ---- the DIGIKIT menu ------------------------------------------------------------------------------------------------ */
 
-static void safe_notice(void *ctx, int arg)
+static void safe_notice(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
@@ -572,8 +570,8 @@ static void safe_notice(void *ctx, int arg)
     say("SAFE MODE", t.b, 0);
 }
 
-static void open_health(void *ctx, int arg);
-static void open_modules(void *ctx, int arg);
+static void open_health(void *ctx, int32_t arg);
+static void open_modules(void *ctx, int32_t arg);
 
 static void fill_main(dk_ui_menu *m, void *ctx)
 {
@@ -583,12 +581,12 @@ static void fill_main(dk_ui_menu *m, void *ctx)
         t_init(&t);
         t_s(&t, "SAFE: ");
         safe_reason(&t, g_boot.reason);
-        dk_ui_action(m, t.b, safe_notice, 0, 0);
+        dk_ui_menu_add_action(m, t.b, safe_notice, 0, 0);
     }
-    dk_ui_submenu(m, "ABOUT", g_about);
-    dk_ui_action(m, "HEALTH", open_health, 0, 0);
-    dk_ui_submenu(m, "MEMORY", g_mem);
-    dk_ui_action(m, "MODULES", open_modules, 0, 0);
+    dk_ui_menu_add_submenu(m, "ABOUT", g_about);
+    dk_ui_menu_add_action(m, "HEALTH", open_health, 0, 0);
+    dk_ui_menu_add_submenu(m, "MEMORY", g_mem);
+    dk_ui_menu_add_action(m, "MODULES", open_modules, 0, 0);
 }
 
 /* ---- ABOUT ----------------------------------------------------------------------------------------------------------- */
@@ -613,7 +611,7 @@ static void arow(dk_ui_menu *m, const char *s)
 {
     if (DK_ABOUT_N < 24)
         keep(DK_ABOUT[DK_ABOUT_N++], s);
-    dk_ui_text(m, s);
+    dk_ui_menu_add_text(m, s);
 }
 
 static void fill_about(dk_ui_menu *m, void *ctx)
@@ -745,7 +743,7 @@ static void mem_row(dk_ui_menu *m, const char *label, const DkrtCap *e, int pct)
     }
     if (DK_MEM_N < 8)
         keep(DK_MEM[DK_MEM_N++], t.b);
-    dk_ui_text(m, t.b);
+    dk_ui_menu_add_text(m, t.b);
 }
 
 static void fill_mem(dk_ui_menu *m, void *ctx)
@@ -816,7 +814,7 @@ static void hrow(dk_ui_menu *m, const txt *t)
 {
     if (g_hrows < 12)
         keep(DK_LINES[g_hrows++], t->b);
-    dk_ui_text(m, t->b);
+    dk_ui_menu_add_text(m, t->b);
 }
 
 static void fill_health(dk_ui_menu *m, void *ctx)
@@ -915,7 +913,7 @@ static void fill_health(dk_ui_menu *m, void *ctx)
 static void refresh_health(void)
 {
     dkrt_health(&DK_HEALTH);
-    dk_ui_refresh(DK_HEALTH_MENU);
+    dk_ui_menu_refresh(DK_HEALTH_MENU);
     DK_REDRAWS++;
 }
 
@@ -928,7 +926,7 @@ void dk_poll(void)
         dkrt_poll_set(0);
         return;
     }
-    if (dk_ui_is_open(DK_HEALTH_MENU)) {
+    if (dk_ui_menu_is_open(DK_HEALTH_MENU)) {
         g_seen = 1;
     } else if (g_seen) {
         dkrt_poll_set(0);
@@ -950,13 +948,13 @@ void dk_poll(void)
     refresh_health();
 }
 
-static void open_health(void *ctx, int arg)
+static void open_health(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
     dkrt_health(&DK_HEALTH);
     DK_REDRAWS++;
-    dk_ui_open(DK_HEALTH_MENU);
+    dk_ui_menu_open(DK_HEALTH_MENU);
     g_seen = 0;
     g_last = 0;
     g_calls = 0;
@@ -1044,7 +1042,7 @@ static void module_row(dk_ui_menu *m, int i)
         module_text(i, 0, &t);
     if (DK_LOAD_N < 40)
         keep(DK_LOAD[DK_LOAD_N++], t.b);
-    dk_ui_text(m, t.b);
+    dk_ui_menu_add_text(m, t.b);
 }
 
 static void fill_modules(dk_ui_menu *m, void *ctx)
@@ -1073,21 +1071,21 @@ static void fill_modules(dk_ui_menu *m, void *ctx)
             g_lead = 1;
     g_hdr = g_boot.safe != 0;
     if (g_hdr)
-        dk_ui_text(m, "SAFE MODE: NOT LOADED");
+        dk_ui_menu_add_text(m, "SAFE MODE: NOT LOADED");
     for (uint32_t i = 0; i < NENT; i++)
         module_row(m, (int)i);
     for (uint32_t i = 0; i < MAX_ENT; i++)
-        dk_ui_check(m, (int)i + g_hdr, i < NENT && TICK[i] && !dashed((int)i));
+        dk_ui_menu_check(m, (int)i + g_hdr, i < NENT && TICK[i] && !dashed((int)i));
     if (g_hdr)
-        dk_ui_check(m, 0, 0);
+        dk_ui_menu_check(m, 0, 0);
 }
 
 /* The check mark of a row after TICK changed. A saved row that is not loaded also changes its "-", which is row text. */
 static void show_tick(int row)
 {
-    dk_ui_check(g_modules, row + g_hdr, TICK[row] && !dashed(row));
+    dk_ui_menu_check(g_modules, row + g_hdr, TICK[row] && !dashed(row));
     if (g_saved[row] && !LOADED[row])
-        dk_ui_refresh(g_modules);
+        dk_ui_menu_refresh(g_modules);
 }
 
 static void refuse(int row, const char *what)
@@ -1139,12 +1137,12 @@ static void set_tick(int row, int on)
     show_tick(row);
 }
 
-static void modules_check(void *ctx, int row, int on)
+static void modules_check(void *ctx, int32_t row, int32_t on)
 {
     (void)ctx;
     row -= g_hdr;
     if (row < 0) { /* the header is not a module */
-        dk_ui_check(g_modules, 0, 0);
+        dk_ui_menu_check(g_modules, 0, 0);
         return;
     }
     if (row < (int)NENT &&
@@ -1153,14 +1151,14 @@ static void modules_check(void *ctx, int row, int on)
     set_tick(row, on);
 }
 
-static void panel_load(void *ctx, int row)
+static void panel_load(void *ctx, int32_t row)
 {
     (void)ctx;
     if (row >= 0 && row < (int)NENT)
         set_tick(row, !TICK[row]);
 }
 
-static void route_done(void *ctx, int index)
+static void route_done(void *ctx, int32_t index)
 {
     (void)ctx;
     if (index < 0 || (uint32_t)index >= DK_ROUTE_N || g_route_row < 0)
@@ -1174,7 +1172,7 @@ static void route_done(void *ctx, int index)
 }
 
 /* ROUTE...: SEND and MASTER, limited to the routes the effect allows and to the send slots that are free. */
-static void panel_route(void *ctx, int row)
+static void panel_route(void *ctx, int32_t row)
 {
     (void)ctx;
     int j = row >= 0 && row < (int)NENT ? g_row_fx[row] : -1;
@@ -1193,10 +1191,10 @@ static void panel_route(void *ctx, int row)
         DK_ROUTE_ITEM[DK_ROUTE_N++] = ROUTE_MASTER;
     }
     if (DK_ROUTE_N)
-        dk_ui_choice("ROUTE", items, (int)DK_ROUTE_N, route_done, 0);
+        dk_ui_choice(g_ui, "ROUTE", items, (int)DK_ROUTE_N, route_done, 0);
 }
 
-/* The loaded module of a store row that has a dkm_menu: its dkrt_module index, or -1. */
+/* The loaded module of a store row that has a menu function: its dkrt_module index, or -1. */
 static int settings_module(int row, DkrtModule *mod)
 {
     if (row < 0 || row >= (int)NENT)
@@ -1211,15 +1209,11 @@ static int settings_module(int row, DkrtModule *mod)
 static void fill_settings(dk_ui_menu *m, void *ctx)
 {
     static DkrtModule mod;
-    if (dkrt_module((uint32_t)(uintptr_t)ctx, &mod) == DKRT_OK && mod.menu) {
-        if (mod.ctx)
-            DK_CALL_MENU_CTX(mod.menu, mod.ctx, m);
-        else
-            DK_CALL_MENU(mod.menu, m);
-    }
+    if (dkrt_module((uint32_t)(uintptr_t)ctx, &mod) == DKRT_OK && mod.menu)
+        DK_CALL_MENU(mod.menu, mod.ctx, m);
 }
 
-static void panel_settings(void *ctx, int row)
+static void panel_settings(void *ctx, int32_t row)
 {
     (void)ctx;
     static DkrtModule mod;
@@ -1239,28 +1233,28 @@ static void panel_settings(void *ctx, int row)
         g_set_desc[k].title = g_set_title[k];
         g_set_desc[k].flags = DK_UI_WIDE;
         g_set_desc[k].fill = fill_settings;
-        g_set_desc[k].ctx = (void *)(uintptr_t)k;
-        g_set[k] = dk_ui_menu_new(&g_set_desc[k]);
+        g_set_desc[k].arg = (void *)(uintptr_t)k;
+        g_set[k] = dk_ui_menu_new(g_ui, &g_set_desc[k]);
     }
     if (g_set[k])
-        dk_ui_open(g_set[k]);
+        dk_ui_menu_open(g_set[k]);
 }
 
-static void panel_info(void *ctx, int row)
+static void panel_info(void *ctx, int32_t row)
 {
     (void)ctx;
     g_info_row = row;
-    dk_ui_open(g_info);
+    dk_ui_menu_open(g_info);
 }
 
-static void prow(dk_ui_menu *p, const char *text, dk_ui_act_fn *fn, int row)
+static void prow(dk_ui_menu *p, const char *text, dk_ui_action_fn *fn, int32_t row)
 {
     if (DK_PANEL_N < 4)
         keep(DK_PANEL[DK_PANEL_N++], text);
-    dk_ui_action(p, text, fn, 0, row);
+    dk_ui_menu_add_action(p, text, fn, 0, row);
 }
 
-static void modules_panel(dk_ui_menu *p, int row, void *ctx)
+static void modules_panel(dk_ui_menu *p, int32_t row, void *ctx)
 {
     (void)ctx;
     DK_PANEL_N = 0;
@@ -1283,7 +1277,7 @@ static void modules_panel(dk_ui_menu *p, int row, void *ctx)
         t_needs(&t, needs);
         if (DK_PANEL_N < 4)
             keep(DK_PANEL[DK_PANEL_N++], t.b);
-        dk_ui_text(p, t.b);
+        dk_ui_menu_add_text(p, t.b);
     }
 }
 
@@ -1291,7 +1285,7 @@ static void modules_panel(dk_ui_menu *p, int row, void *ctx)
 
 static void irow(dk_ui_menu *m, const txt *t)
 {
-    dk_ui_text(m, t->b);
+    dk_ui_menu_add_text(m, t->b);
 }
 
 static void fill_info(dk_ui_menu *m, void *ctx)
@@ -1299,7 +1293,7 @@ static void fill_info(dk_ui_menu *m, void *ctx)
     (void)ctx;
     int i = g_info_row;
     if (i < 0 || i >= (int)NENT) {
-        dk_ui_text(m, "NO MODULE");
+        dk_ui_menu_add_text(m, "NO MODULE");
         return;
     }
     const DkrtScan *e = &g_ent[i];
@@ -1465,10 +1459,10 @@ static void discard(void)
         TICK[i] = g_saved[i];
     for (uint32_t j = 0; j < g_fx_n; j++)
         DK_FXR_PEND[j] = g_fx_saved[j];
-    dk_ui_close(g_modules);
+    dk_ui_menu_close(g_modules);
 }
 
-static void apply_answer(void *ctx, int yes)
+static void apply_answer(void *ctx, int32_t yes)
 {
     (void)ctx;
     if (yes)
@@ -1477,7 +1471,7 @@ static void apply_answer(void *ctx, int yes)
         discard();
 }
 
-static int modules_back(void *ctx)
+static int32_t modules_back(void *ctx)
 {
     (void)ctx;
     uint32_t n = changes();
@@ -1496,7 +1490,7 @@ static int modules_back(void *ctx)
     return 1;
 }
 
-static void open_modules(void *ctx, int arg)
+static void open_modules(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
@@ -1504,10 +1498,10 @@ static void open_modules(void *ctx, int arg)
     scan_store();
     read_fx();
     match_fx();
-    dk_ui_select(g_modules,
-                 STORE == 1 && NENT > 0 &&
-                     g_boot.safe != 0); /* the first module, below the safe-mode header */
-    dk_ui_open(g_modules);
+    dk_ui_menu_select(g_modules,
+                      STORE == 1 && NENT > 0 &&
+                          g_boot.safe != 0); /* the first module, below the safe-mode header */
+    dk_ui_menu_open(g_modules);
 }
 
 /* ---- the SETTINGS row ------------------------------------------------------------------------------------------------ */
@@ -1531,22 +1525,23 @@ static const dk_ui_menu_desc modules_desc = {.name = "DigikitModulesMenu",
                                              .check = modules_check,
                                              .back = modules_back};
 
-static void open_main(void *ctx, int arg)
+static void open_main(void *ctx, int32_t arg)
 {
     (void)ctx;
     (void)arg;
     read_boot();
     if (!g_main) {
-        g_about = dk_ui_menu_new(&about_desc);
-        DK_HEALTH_MENU = dk_ui_menu_new(&health_desc);
-        g_mem = dk_ui_menu_new(&mem_desc);
-        g_info = dk_ui_menu_new(&info_desc);
-        g_modules = dk_ui_menu_new(&modules_desc);
-        g_main = dk_ui_menu_new(&main_desc);
+        g_ui = dk_ui_core_handle();
+        g_about = dk_ui_menu_new(g_ui, &about_desc);
+        DK_HEALTH_MENU = dk_ui_menu_new(g_ui, &health_desc);
+        g_mem = dk_ui_menu_new(g_ui, &mem_desc);
+        g_info = dk_ui_menu_new(g_ui, &info_desc);
+        g_modules = dk_ui_menu_new(g_ui, &modules_desc);
+        g_main = dk_ui_menu_new(g_ui, &main_desc);
     }
     if (!g_main)
         return;
-    dk_ui_open(g_main);
+    dk_ui_menu_open(g_main);
     if (g_boot.safe != 0 && !g_safe_shown) {
         g_safe_shown = 1;
         safe_notice(0, 0);

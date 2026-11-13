@@ -1,12 +1,12 @@
 //! test/dyn-demo: the smallest module the digikit runtime can load. Packed into `dyn-demo.dkm` by `patchkit pack`.
 //!
-//! `dkm_slot_0` runs once per pass of the UI task's event loop while the module is loaded: it stores a magic and adds one
-//! to a counter in the module's own bss (in the arena). `dkm_init` zeroes the counter and logs its address (the log ring
-//! is in the runtime's state); `dkm_fini` leaves a marker behind.
+//! The entry point is the constant `dk_module` (docs/plans/sdk.md section 5), the same record as C's `const dk_module_def dk_module`. Its `tick` runs once per
+//! pass of the UI task's event loop while the module is loaded: it stores a magic and adds one to a counter in the module's own bss (in the arena). `init`
+//! zeroes the counter and logs its address (the log ring is in the runtime's state); `fini` leaves a marker behind. `dk_log` is an import of the runtime,
+//! linked by name.
 #![no_std]
 
 use core::panic::PanicInfo;
-use dkrt_sdk::Api;
 
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
@@ -15,30 +15,61 @@ fn panic(_: &PanicInfo) -> ! {
 
 pub const MAGIC: u32 = 0x4459_4e4d; // "DYNM"
 pub const FINI_MARK: u32 = 0xf1f1_0001;
+const LOG_INFO: u32 = 2;
 
-/// [0] MAGIC after the first slot call, [1] the number of slot calls, [2] FINI_MARK after `dkm_fini`, [3] unused.
+/// `dk_module_ctx`: opaque, the runtime passes it to every lifecycle function.
+#[repr(C)]
+pub struct DkModuleCtx {
+    _private: [u8; 0],
+}
+
+/// `dk_module_def` of `<dk/core/module.h>`: the four lifecycle functions, each optional.
+#[repr(C)]
+pub struct DkModuleDef {
+    pub init: Option<unsafe extern "C" fn(*mut DkModuleCtx) -> i32>,
+    pub fini: Option<unsafe extern "C" fn(*mut DkModuleCtx)>,
+    pub tick: Option<unsafe extern "C" fn(*mut DkModuleCtx)>,
+    pub menu: Option<unsafe extern "C" fn(*mut DkModuleCtx, *mut u8)>,
+}
+unsafe impl Sync for DkModuleDef {}
+
+extern "C" {
+    fn dk_log(level: u32, msg: *const u8, value: u32);
+}
+
+/// [0] MAGIC after the first tick, [1] the number of ticks, [2] FINI_MARK after `fini`, [3] unused.
 #[no_mangle]
 pub static mut DYN_COUNTER: [u32; 4] = [0; 4];
 
-#[no_mangle]
-pub unsafe extern "C" fn dkm_init(api: *const Api) -> i32 {
+unsafe extern "C" fn init(_ctx: *mut DkModuleCtx) -> i32 {
     let c = &raw mut DYN_COUNTER;
     c.write([0; 4]);
-    ((*api).log)(b"dyn-demo counter\0".as_ptr(), c as u32);
+    dk_log(LOG_INFO, b"dyn-demo counter\0".as_ptr(), c as u32);
     0
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn dkm_slot_0(_api: *const Api) {
+unsafe extern "C" fn tick(_ctx: *mut DkModuleCtx) {
     let c = &raw mut DYN_COUNTER as *mut u32;
     c.write_volatile(MAGIC);
     c.add(1)
         .write_volatile(c.add(1).read_volatile().wrapping_add(1));
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn dkm_fini(api: *const Api) {
+unsafe extern "C" fn fini(_ctx: *mut DkModuleCtx) {
     let c = &raw mut DYN_COUNTER as *mut u32;
     c.add(2).write_volatile(FINI_MARK);
-    ((*api).log)(b"dyn-demo fini\0".as_ptr(), c.add(1).read_volatile());
+    dk_log(
+        LOG_INFO,
+        b"dyn-demo fini\0".as_ptr(),
+        c.add(1).read_volatile(),
+    );
 }
+
+#[no_mangle]
+#[allow(non_upper_case_globals)]
+pub static dk_module: DkModuleDef = DkModuleDef {
+    init: Some(init),
+    fini: Some(fini),
+    tick: Some(tick),
+    menu: None,
+};

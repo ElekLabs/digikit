@@ -6,7 +6,7 @@ category = "test"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Test fixture: a module the digikit runtime loads from the card store; a counter in its slot 0"
+summary = "Test fixture: a module the digikit runtime loads from the card store; a counter in its `tick`"
 requires = []
 conflicts = []
 
