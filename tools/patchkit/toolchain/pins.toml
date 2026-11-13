@@ -15,5 +15,3 @@ cf = [
   "sdk/include",
 ]
 sharc = ["sdk/dsp/contract", "sdk"]
-# Added for a patched-in module (`dynamic = false`) only: the declaration macros (`DK_MACHINE`, `DK_FX`, `DK_PAGE`, ...). A run-time module does not see them.
-patched = ["sdk/patched-in/include"]

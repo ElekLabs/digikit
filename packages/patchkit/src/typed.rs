@@ -12,7 +12,7 @@
 //! generator (`modgen.rs`: gallery JSON).
 
 use crate::error::*;
-use crate::module::{EntryDef, Manifest};
+use crate::module::Manifest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -416,17 +416,6 @@ pub struct RVoice {
     pub desc: Option<String>,
     pub stereo: bool,
     pub latched: u32,
-    /// A patched-in contract voice: the state block `Library::lower` reserved for it (`desc` read from the object).
-    pub state: Option<VoiceState>,
-}
-
-/// The state of a patched-in contract voice (`dk_machine_desc`): the global bss symbol that `Library::lower` added to the module's DSP object
-/// (`voices` x `stride` bytes), the bytes between two voices' states and the bytes the adapter zeroes at note-on.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct VoiceState {
-    pub symbol: String,
-    pub stride: u32,
-    pub clear: u32,
 }
 
 /// The typed sections of one module as one device sees them.
@@ -678,7 +667,6 @@ pub fn resolve(m: &Manifest, models: &Models) -> Result<Vec<DevResolved>> {
                     .iter()
                     .filter(|p| p.machine == v.machine && p.latched)
                     .fold(0, |mask, p| mask | (1 << p.word)),
-                state: m.voice_state.get(&v.machine).cloned(),
             })
             .collect();
         let native_pages = m
@@ -719,179 +707,12 @@ pub fn resolve(m: &Manifest, models: &Models) -> Result<Vec<DevResolved>> {
 
 // ---- lowering ------------------------------------------------------------------------------------------------
 
-fn kv(k: &str, v: toml::Value) -> (String, toml::Value) {
-    (k.to_string(), v)
-}
-
-fn ent(id: &str, registry: &str, dev: &str, fields: Vec<(String, toml::Value)>) -> EntryDef {
-    EntryDef {
-        registry: registry.into(),
-        id: id.into(),
-        devices: vec![dev.into()],
-        fields: fields.into_iter().collect(),
-    }
-}
-
-fn int(i: i64) -> toml::Value {
-    toml::Value::Integer(i)
-}
-fn s(t: &str) -> toml::Value {
-    toml::Value::String(t.into())
-}
-
-/// The value a knob puts in a row field: a code, or the symbol `params.<id>.index`.
-fn knob_value(k: Option<&Knob>) -> toml::Value {
-    match k {
-        None => int(0),
-        Some(Knob::Code(c)) => int(*c),
-        Some(Knob::Param(p)) => s(&format!("params.{p}.index")),
-    }
-}
-
-/// The declared ranges of a machine's eight knobs for the voice row (core/dsp-voice's runtime guard): knob j of the machine is a `Param` whose
-/// `min`/`max` become `min | max << 16`; a stock code, an empty knob or a range outside 0 ..= 0xffff stays 0 (undeclared: the guard
-/// clamps to 0 .. 0x7f00). Both devices: the adapter of a contract voice clamps the parameter in knob position j (the Digitone II's page knobs
-/// are the machine's knob list too) to the range of knob j.
-pub fn voice_ranges(r: &DevResolved, machine: &str) -> [u32; 8] {
-    let mut out = [0u32; 8];
-    let Some(m) = r.machines.iter().find(|m| m.id == machine) else {
-        return out;
-    };
-    for (j, k) in m.knobs.iter().take(8).enumerate() {
-        if let Knob::Param(id) = k {
-            if let Some(p) = r.params.iter().find(|p| &p.id == id) {
-                if (0..=0xffff).contains(&p.min) && (0..=0xffff).contains(&p.max) && p.min <= p.max
-                {
-                    out[j] = (p.min as u32) | (p.max as u32) << 16;
-                }
-            }
-        }
-    }
-    out
-}
-
-/// The `[[entry]]` rows of the typed sections of one module, in the order the hand-written form had them:
-/// voices, machines, params, pages, per device.
-pub fn entries(resolved: &[DevResolved]) -> Vec<EntryDef> {
-    let mut out = vec![];
-    for r in resolved {
-        let kn = &r.model.knobs;
-        let dev = r.dev.as_str();
-        for v in &r.voices {
-            let mut f = vec![
-                kv("type", s(&format!("machines.{}.index", v.machine))),
-                kv("pc", s(&v.entry)),
-            ];
-            for (j, w) in voice_ranges(r, &v.machine).iter().enumerate() {
-                if *w != 0 {
-                    f.push(kv(&format!("rng{j}"), int(*w as i64)));
-                }
-            }
-            if let Some(n) = &v.note_on {
-                f.push(kv("note_on", s(n)));
-            }
-            if v.latched != 0 {
-                f.push(kv("latched", int(v.latched as i64)));
-            }
-            if let Some(st) = &v.state {
-                f.push(kv("state_base", s(&st.symbol)));
-                f.push(kv("stride", int(st.stride as i64)));
-                f.push(kv("clear", int(st.clear as i64)));
-            }
-            out.push(ent(&v.machine, "voices", dev, f));
-        }
-        for m in &r.machines {
-            let mut f = vec![
-                kv("name", s(&m.name)),
-                kv("short", s(&m.short)),
-                kv("clone_of", int(m.clone_of)),
-            ];
-            if let Some(p) = m.position {
-                f.push(kv("position", int(p)));
-            }
-            if m.own_dsp {
-                f.push(kv("own_dsp", int(1)));
-            }
-            if kn.to == "machine" {
-                let names: Vec<String> = (0..kn.count)
-                    .map(|i| format!("{}{i}", kn.knob_field))
-                    .collect();
-                for (i, n) in names.iter().enumerate() {
-                    f.push(kv(n, knob_value(m.knobs.get(i))));
-                }
-                f.push(kv(&kn.level_field, int(m.level)));
-            }
-            out.push(ent(&m.id, "machines", dev, f));
-        }
-        for p in &r.params {
-            out.push(ent(
-                &p.id,
-                "params",
-                dev,
-                vec![
-                    kv("name", s(&p.name)),
-                    kv("short", s(&p.short)),
-                    kv("template", int(p.template)),
-                    kv("slot", int(p.slot)),
-                    kv("min", int(p.min)),
-                    kv("max", int(p.max)),
-                    kv("default", int(p.default)),
-                ],
-            ));
-        }
-        for g in &r.pages {
-            let mut f = vec![
-                kv("machine", s(&format!("machines.{}.index", g.machine))),
-                kv("name", s(&g.name)),
-                kv("title", s(&g.title)),
-            ];
-            let c: Vec<String> = (0..kn.count)
-                .map(|i| format!("{}{i}", kn.knob_field))
-                .collect();
-            let sl: Vec<String> = (0..kn.count)
-                .map(|i| format!("{}{i}", kn.slot_field.as_deref().unwrap_or("s")))
-                .collect();
-            for (i, k) in g.knobs.iter().enumerate() {
-                f.push(kv(&c[i], knob_value(Some(k))));
-                if matches!(k, Knob::Param(_)) {
-                    f.push(kv(&sl[i], int(kn.slot_base + i as i64)));
-                }
-            }
-            f.push(kv(&kn.level_field, int(g.level)));
-            out.push(ent(&g.id, "pages", dev, f));
-        }
-    }
-    out
-}
-
-/// Lower the typed sections of a manifest into `[[entry]]` rows (once). A manifest with typed sections that is
-/// never lowered is refused when it is applied (`prim.rs`).
-pub fn lower(m: &mut Manifest, models: &Models) -> Result<()> {
-    if m.lowered || !has_typed(m) {
-        return Ok(());
-    }
-    if m.module.dynamic {
-        // loaded at run time: the packer lowers it into `.dkm` records, nothing is patched
-        m.lowered = true;
-        return Ok(());
-    }
-    if let Some(p) = m.param.iter().find(|p| p.action.is_some()) {
-        return Err(err!(
-            "{}: param {} has a click action (DK_PARAM_ACTION); only a run-time module (dynamic = true) can declare one",
-            m.module.id,
-            p.id
-        ));
-    }
-    if models.by_device.is_empty() {
-        return Err(err!(
-            "{}: has machine records, but no device file with [modules] is available",
-            m.module.id
-        ));
-    }
-    let rows = entries(&resolve(m, models)?);
-    m.entry.extend(rows);
+/// Mark the typed sections of a manifest as lowered. A module declares its machines in `init` and its typed sections stay empty; `resolve`
+/// reads them for `modgen` and the register lowering. A manifest with typed sections that is never lowered is refused when it is applied
+/// (`prim.rs`).
+pub fn lower(m: &mut Manifest, _models: &Models) -> Result<()> {
     m.lowered = true;
-    crate::prim::validate_manifest(m)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1024,9 +845,6 @@ summary = "t."
         }];
         m
     }
-    fn field<'a>(e: &'a EntryDef, k: &str) -> Option<&'a toml::Value> {
-        e.fields.get(k)
-    }
     fn p(n: &str) -> Knob {
         Knob::Param(n.into())
     }
@@ -1038,70 +856,6 @@ summary = "t."
     }
     fn bad(m: &Manifest) -> String {
         resolve(m, &models()).unwrap_err().0
-    }
-
-    #[test]
-    fn dt2_lowering_puts_knobs_in_the_machine_row() {
-        let mut m = manifest(2, &[&[(0, None), (1, None)]]);
-        lower(&mut m, &models()).unwrap();
-        let on = |dev: &str, reg: &str| -> Vec<&EntryDef> {
-            m.entry
-                .iter()
-                .filter(|e| e.devices == [dev] && e.registry == reg)
-                .collect()
-        };
-        let e = on("dt2", "machines")[0];
-        assert_eq!(field(e, "f0"), Some(&int(0xca)));
-        assert_eq!(field(e, "f1"), Some(&s("params.t_0.index")));
-        assert_eq!(field(e, "f2"), Some(&s("params.t_1.index")));
-        assert_eq!(field(e, "f3"), Some(&int(0)));
-        assert_eq!(field(e, "f7"), Some(&int(0xd1)));
-        assert_eq!(field(e, "f8"), Some(&int(10)));
-        assert_eq!(field(e, "clone_of"), Some(&int(0)));
-        assert!(field(e, "position").is_none() && field(e, "own_dsp").is_none());
-        // slots are the knob positions
-        let q = on("dt2", "params");
-        assert_eq!(field(q[0], "slot"), Some(&int(1)));
-        assert_eq!(field(q[0], "template"), Some(&int(0xcc)));
-        assert_eq!(field(q[1], "slot"), Some(&int(2)));
-        assert!(on("dt2", "pages").is_empty());
-        // the runtime guard's ranges: knobs 1 and 2 are params (0 .. 100 = 100 << 16)
-        let v = on("dt2", "voices")[0];
-        assert_eq!(field(v, "pc"), Some(&s("_t_render")));
-        assert_eq!(field(v, "rng1"), Some(&int(100 << 16)));
-        assert!(field(v, "rng0").is_none() && field(v, "rng3").is_none());
-        let r = resolve(&m, &models()).unwrap();
-        let dt2 = r.iter().find(|x| x.dev == "dt2").unwrap();
-        assert_eq!(
-            voice_ranges(dt2, "t"),
-            [0, 100 << 16, 100 << 16, 0, 0, 0, 0, 0]
-        );
-    }
-
-    #[test]
-    fn dn2_lowering_puts_knobs_in_a_page_and_slots_after_25() {
-        let mut m = manifest(2, &[&[(0, None), (1, None)]]);
-        lower(&mut m, &models()).unwrap();
-        let on = |reg: &str| -> Vec<&EntryDef> {
-            m.entry
-                .iter()
-                .filter(|e| e.devices == ["dn2"] && e.registry == reg)
-                .collect()
-        };
-        let mach = on("machines");
-        assert_eq!(field(mach[0], "own_dsp"), Some(&int(1)));
-        assert_eq!(field(mach[0], "position"), Some(&int(4)));
-        assert!(field(mach[0], "c0").is_none());
-        let q = on("params");
-        assert_eq!(field(q[0], "slot"), Some(&int(25)));
-        assert_eq!(field(q[1], "template"), Some(&int(0xd5)));
-        assert_eq!(field(q[1], "slot"), Some(&int(26)));
-        let g = on("pages");
-        assert_eq!(field(g[0], "machine"), Some(&s("machines.t.index")));
-        assert_eq!(field(g[0], "name"), Some(&s("PG0")));
-        assert_eq!(field(g[0], "c0"), Some(&s("params.t_0.index")));
-        assert_eq!(field(g[0], "s1"), Some(&int(26)));
-        assert_eq!(field(g[0], "c8"), Some(&int(10)));
     }
 
     #[test]
@@ -1222,13 +976,10 @@ summary = "t."
     }
 
     #[test]
-    fn a_click_action_reaches_the_register_record_of_a_run_time_module_only() {
+    fn a_click_action_reaches_the_register_record() {
         let mut m = manifest(3, &[]);
         m.param[1].action = Some("_t_click".into());
-        // a patched-in module has no registry rows for it
-        let e = lower(&mut m.clone(), &models()).unwrap_err().0;
-        assert!(e.contains("click action") && e.contains("t_1"), "{e}");
-        // a run-time one: the resolved parameter carries the symbol and the register record the image offset
+        // the resolved parameter carries the symbol and the register record the image offset
         let res = resolve(&m, &models()).unwrap();
         for r in &res {
             assert_eq!(
@@ -1286,15 +1037,6 @@ summary = "t."
         assert_eq!(templates(&m, "dn2"), [0xd5, 0xd5]);
     }
 
-    #[test]
-    fn lowering_runs_once_and_needs_models() {
-        let mut m = manifest(2, &[]);
-        assert!(lower(&mut m, &Models::default()).is_err());
-        lower(&mut m, &models()).unwrap();
-        let n = m.entry.len();
-        lower(&mut m, &models()).unwrap();
-        assert_eq!(m.entry.len(), n);
-    }
 }
 
 /// A module-owned table of 16 per-track sample records, declared by DK_SAMPLE_TRACKS (<dk/sample/pool.h>, API 1.5): the symbols of the

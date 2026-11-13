@@ -27,9 +27,7 @@ pub const C_MACHINE_VIEW_OUT: &str = "sdk/include/dk/gen/machine.h";
 pub const C_FX_VIEW_OUT: &str = "sdk/include/dk/gen/fx.h";
 /// The generated C header of the service imports (`[[import]]` with `service`), relative to the repository root.
 pub const C_IMPORTS_OUT: &str = "sdk/include/dk/gen/imports.h";
-/// The generated C header of the descriptor records, relative to the repository root.
-pub const C_DESC_OUT: &str = "sdk/patched-in/include/dk/gen/desc.h";
-/// The constants of `[desc] shared_consts`, which builders use too: the public header.
+/// The constants of `[page] consts`: the public header.
 pub const C_PAGE_CONSTS_OUT: &str = "sdk/include/dk/gen/page_consts.h";
 /// The generated C header of the format limits, relative to the repository root.
 pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
@@ -73,28 +71,16 @@ struct Sdk {
     sample: SampleToml,
     handle: Handle,
     import: Vec<Import>,
-    desc: DescToml,
+    page: PageToml,
 }
-/// The descriptor records a module declares with the `DK_*` macros: `[desc]` of `sdk/sdk.toml`.
+/// The page constants: `[page]` of `sdk/sdk.toml`.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct DescToml {
-    /// The section of the module's ColdFire object that holds the records.
-    section: String,
+struct PageToml {
+    /// `DK_PAGE_KNOBS`: the encoders on a page.
+    knobs: usize,
+    /// Glyphs, display kinds and routes that builders use: written to the public header.
     consts: Vec<MachineConst>,
-    /// Constants that builders use too (glyphs, routes, display kinds): written to the public header, not to the patched-in `desc.h`.
-    shared_consts: Vec<MachineConst>,
-    record: Vec<DescRecordToml>,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DescRecordToml {
-    name: String,
-    /// The name of the const that is the record kind; a record without one is only a part of another record.
-    kind: Option<String>,
-    doc: String,
-    /// `"<type> <name> // doc"`; `<type>` is `u32`, `i32`, `float`, `char` or an earlier record, the last two with `name[N]`.
-    fields: Vec<String>,
 }
 /// A name a module may import: `[[import]]`, in the order of the runtime's table.
 #[derive(Deserialize)]
@@ -310,15 +296,9 @@ pub struct LimitsMax {
     pub stage_bytes: u64,
 }
 
-/// `DK_PAGE_KNOBS` of `[desc]` in `sdk/sdk.toml`: the encoders on a page.
+/// `DK_PAGE_KNOBS` (`[page] knobs` in `sdk/sdk.toml`): the encoders on a page.
 fn page_knobs_of(sdk: &Sdk) -> usize {
-    sdk.desc
-        .consts
-        .iter()
-        .chain(&sdk.desc.shared_consts)
-        .find(|c| c.name == "DK_PAGE_KNOBS")
-        .expect("sdk/sdk.toml [desc] has DK_PAGE_KNOBS")
-        .value as usize
+    sdk.page.knobs
 }
 
 /// `DK_PAGE_KNOBS` of the `sdk/sdk.toml` this crate was built with.
@@ -1765,7 +1745,6 @@ fn check_views(sdk: &Sdk) -> Result<()> {
     imports(sdk)?;
     machine_view(sdk)?;
     fx_view(sdk)?;
-    desc_layout(&sdk.desc)?;
     Ok(())
 }
 
@@ -2062,213 +2041,12 @@ fn fx_h(sdk: &Sdk) -> Result<String> {
     ))
 }
 
-// ---- the descriptor records ---------------------------------------------------------------------------------------------
-
-/// The type of a field of a descriptor record.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DescTy {
-    U32,
-    I32,
-    F32,
-    /// Text: this many bytes.
-    Char(usize),
-    /// An array of an earlier record.
-    Rec {
-        rec: String,
-        count: usize,
-    },
-}
-
-/// A field of a descriptor record: its place in bytes.
-#[derive(Clone, Debug)]
-pub struct DescField {
-    pub name: String,
-    pub ty: DescTy,
-    pub off: usize,
-    pub size: usize,
-}
-
-/// A descriptor record: `kind` is `None` for a record that is only a part of another one.
-#[derive(Clone, Debug)]
-pub struct DescRecord {
-    pub name: String,
-    pub kind: Option<u32>,
-    pub size: usize,
-    pub fields: Vec<DescField>,
-}
-
-impl DescRecord {
-    pub fn field(&self, name: &str) -> Result<&DescField> {
-        self.fields
-            .iter()
-            .find(|f| f.name == name)
-            .ok_or_else(|| err!("{SOURCE}: [[desc.record]] {}: no field {name}", self.name))
-    }
-}
-
-/// The layout of the descriptor records: `[desc]` of `sdk/sdk.toml`.
-#[derive(Clone, Debug)]
-pub struct DescSpec {
-    /// The section of the ColdFire object that holds the records.
-    pub section: String,
-    pub consts: BTreeMap<String, u32>,
-    pub records: Vec<DescRecord>,
-}
-
-/// The `[desc]` layout of the `sdk/sdk.toml` this crate was built with.
-pub fn desc_spec() -> DescSpec {
-    let sdk = parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses");
-    desc_layout(&sdk.desc).expect("parse checked [desc]").0
-}
-
-/// What the header prints of a field: its doc and the text of its array length (a number or a const name).
-struct DescText {
-    doc: String,
-    count: Option<String>,
-}
-
-/// The layout of `[desc]`, checked, and the texts of the fields (per record, per field).
-fn desc_layout(d: &DescToml) -> Result<(DescSpec, Vec<Vec<DescText>>)> {
-    if d.section.is_empty() {
-        return Err(err!("{SOURCE}: [desc] section is empty"));
-    }
-    let mut consts = BTreeMap::new();
-    for c in d.consts.iter().chain(&d.shared_consts) {
-        if !is_ident(&c.name) || consts.insert(c.name.clone(), c.value).is_some() {
-            return Err(err!(
-                "{SOURCE}: [desc] const {}: bad name or name twice",
-                c.name
-            ));
-        }
-    }
-    let mut records: Vec<DescRecord> = Vec::new();
-    let mut texts = Vec::new();
-    for r in &d.record {
-        let what = format!("[[desc.record]] {}", r.name);
-        if !is_ident(&r.name) || records.iter().any(|o| o.name == r.name) {
-            return Err(err!("{SOURCE}: {what}: bad name or name twice"));
-        }
-        if r.doc.is_empty() || r.doc.contains("*/") {
-            return Err(err!("{SOURCE}: {what}: needs a doc without a comment end"));
-        }
-        let kind = match &r.kind {
-            Some(k) => {
-                let v = *consts
-                    .get(k)
-                    .ok_or_else(|| err!("{SOURCE}: {what}: kind {k:?} is not a const of [desc]"))?;
-                if records.iter().any(|o| o.kind == Some(v)) {
-                    return Err(err!("{SOURCE}: {what}: kind {k} is used twice"));
-                }
-                Some(v)
-            }
-            None => None,
-        };
-        let mut fields: Vec<DescField> = Vec::new();
-        let mut text = Vec::new();
-        let mut off = 0;
-        for entry in &r.fields {
-            let (decl, doc) = entry.split_once(" // ").unwrap_or((entry, ""));
-            if doc.contains("*/") {
-                return Err(err!(
-                    "{SOURCE}: {what}: {entry:?}: the doc has a comment end"
-                ));
-            }
-            let Some((ty_text, rest)) = decl.trim().split_once(char::is_whitespace) else {
-                return Err(err!("{SOURCE}: {what}: {entry:?} needs a type and a name"));
-            };
-            let (name, count_text) = match rest.trim().split_once('[') {
-                Some((n, c)) => {
-                    let Some(c) = c.strip_suffix(']') else {
-                        return Err(err!("{SOURCE}: {what}: {entry:?}: bad array length"));
-                    };
-                    (n.trim(), Some(c.trim()))
-                }
-                None => (rest.trim(), None),
-            };
-            if !is_ident(name) || fields.iter().any(|o| o.name == name) {
-                return Err(err!(
-                    "{SOURCE}: {what}: field {name:?}: bad name or name twice"
-                ));
-            }
-            let count = |t: &str| -> Result<usize> {
-                let n = match t.parse::<u32>() {
-                    Ok(n) => n,
-                    Err(_) => *consts.get(t).ok_or_else(|| {
-                        err!("{SOURCE}: {what}: field {name}: {t:?} is not a number or a const of [desc]")
-                    })?,
-                };
-                if n == 0 {
-                    return Err(err!("{SOURCE}: {what}: field {name}: array length is 0"));
-                }
-                Ok(n as usize)
-            };
-            let (ty, size) = match (ty_text, count_text) {
-                ("u32", None) => (DescTy::U32, 4),
-                ("i32", None) => (DescTy::I32, 4),
-                ("float", None) => (DescTy::F32, 4),
-                ("char", Some(c)) => {
-                    let n = count(c)?;
-                    if n % 4 != 0 {
-                        return Err(err!(
-                            "{SOURCE}: {what}: field {name}: char array length {n} is not a multiple of 4"
-                        ));
-                    }
-                    (DescTy::Char(n), n)
-                }
-                (t, Some(c)) if records.iter().any(|o| o.name == t) => {
-                    let n = count(c)?;
-                    let size = records.iter().find(|o| o.name == t).map_or(0, |o| o.size);
-                    (
-                        DescTy::Rec {
-                            rec: t.to_string(),
-                            count: n,
-                        },
-                        n * size,
-                    )
-                }
-                (t, _) => {
-                    return Err(err!(
-                        "{SOURCE}: {what}: field {name}: unknown type {t:?} (or a missing or extra array length)"
-                    ));
-                }
-            };
-            fields.push(DescField {
-                name: name.to_string(),
-                ty,
-                off,
-                size,
-            });
-            text.push(DescText {
-                doc: doc.to_string(),
-                count: count_text.map(str::to_string),
-            });
-            off += size;
-        }
-        if fields.is_empty() {
-            return Err(err!("{SOURCE}: {what}: has no fields"));
-        }
-        records.push(DescRecord {
-            name: r.name.clone(),
-            kind,
-            size: off,
-            fields,
-        });
-        texts.push(text);
-    }
-    let spec = DescSpec {
-        section: d.section.clone(),
-        consts,
-        records,
-    };
-    Ok((spec, texts))
-}
-
-/// `sdk/include/dk/gen/page_consts.h`: the constants of `[desc] shared_consts`, for builders and the patched-in declarations alike.
+/// `sdk/include/dk/gen/page_consts.h`: the constants of `[page] consts`.
 fn page_consts_h(sdk: &Sdk) -> String {
     let mut s = format!(
         "/* {HEADER} */\n/* sdk/include/dk/gen/page_consts.h -- the knob glyphs, the display of an effect parameter and the routes of an effect (dk_param_glyph, dk_page_add_fx_param, dk_fx_routes). */\n#ifndef DK_GEN_PAGE_CONSTS_H\n#define DK_GEN_PAGE_CONSTS_H\n\n"
     );
-    for c in &sdk.desc.shared_consts {
+    for c in &sdk.page.consts {
         if let Some(d) = &c.doc {
             let _ = writeln!(s, "/* {d} */");
         }
@@ -2276,59 +2054,6 @@ fn page_consts_h(sdk: &Sdk) -> String {
     }
     s.push_str("\n#endif /* DK_GEN_PAGE_CONSTS_H */\n");
     s
-}
-
-/// `sdk/patched-in/include/dk/gen/desc.h`: the descriptor records as C structs, with the checks of their layout.
-fn desc_h(sdk: &Sdk) -> Result<String> {
-    let (spec, texts) = desc_layout(&sdk.desc)?;
-    let mut s = format!(
-        "/* {HEADER} */\n/* sdk/patched-in/include/dk/gen/desc.h -- the descriptor records a patched-in module declares with the DK_* macros of <dk/machine/machine.h>, <dk/fx/fx.h> and <dk/page/decl.h>; `patchkit` reads them from the {} section of the object. */\n#ifndef DK_GEN_DESC_H\n#define DK_GEN_DESC_H\n\n#include <stddef.h>\n#include <stdint.h>\n#include <dk/gen/page_consts.h>\n\n",
-        spec.section
-    );
-    for c in &sdk.desc.consts {
-        if let Some(d) = &c.doc {
-            let _ = writeln!(s, "/* {d} */");
-        }
-        let _ = writeln!(s, "#define {} {}", c.name, c.value);
-    }
-    for ((rec, toml), text) in spec.records.iter().zip(&sdk.desc.record).zip(&texts) {
-        let _ = writeln!(s, "\n/* {} */\ntypedef struct {{", toml.doc);
-        for (f, t) in rec.fields.iter().zip(text) {
-            let count = t.count.as_deref().unwrap_or_default();
-            let decl = match &f.ty {
-                DescTy::U32 => format!("uint32_t {}", f.name),
-                DescTy::I32 => format!("int32_t {}", f.name),
-                DescTy::F32 => format!("float {}", f.name),
-                DescTy::Char(_) => format!("char {}[{count}]", f.name),
-                DescTy::Rec { rec, .. } => format!("{rec} {}[{count}]", f.name),
-            };
-            let d = format!("    {decl};");
-            if t.doc.is_empty() {
-                let _ = writeln!(s, "{d}");
-            } else {
-                let _ = writeln!(s, "{d:<44} /* {} */", t.doc);
-            }
-        }
-        let _ = writeln!(s, "}} {};", rec.name);
-    }
-    s.push('\n');
-    for rec in &spec.records {
-        let n = &rec.name;
-        let _ = writeln!(
-            s,
-            "_Static_assert(sizeof({n}) == {}, \"{n} size\");",
-            rec.size
-        );
-        for f in &rec.fields {
-            let _ = writeln!(
-                s,
-                "_Static_assert(offsetof({n}, {}) == {}, \"{n}.{}\");",
-                f.name, f.off, f.name
-            );
-        }
-    }
-    s.push_str("\n#endif /* DK_GEN_DESC_H */\n");
-    Ok(s)
 }
 
 /// The outputs from the text of `sdk/sdk.toml`: (path relative to the repository root, text).
@@ -2357,7 +2082,6 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (C_MACHINE_VIEW_OUT.to_string(), machine_h(&sdk)?),
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),
-        (C_DESC_OUT.to_string(), desc_h(&sdk)?),
         (C_PAGE_CONSTS_OUT.to_string(), page_consts_h(&sdk)),
     ])
 }
