@@ -32,7 +32,7 @@
           "name": "SHOT",
           "own_dsp": true,
           "page": {
-            "name": "SHOT",
+            "name": "SHT",
             "title": "SHOT"
           },
           "position": null,
@@ -92,6 +92,7 @@
       {
         "default": 0,
         "id": "sample",
+        "latched_word": 0,
         "max": 3840,
         "min": 0,
         "name": "Sample",
@@ -144,6 +145,7 @@
       {
         "default": 0,
         "id": "sample",
+        "latched_word": 0,
         "max": 3840,
         "min": 0,
         "name": "Sample",

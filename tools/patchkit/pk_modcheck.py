@@ -133,7 +133,7 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
             if d not in per and d in kept
         },
     )
-    return _write_measured(mid, moddir, per)
+    return _write_measured(mid, moddir, per, original)
 
 
 def seed_uses(dev: str) -> dict[str, int]:
@@ -169,14 +169,17 @@ def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
     return per
 
 
-def _write_measured(mid: str, moddir: Path, per: dict[str, dict]) -> bool:
+def _write_measured(
+    mid: str, moddir: Path, per: dict[str, dict], original: str
+) -> bool:
     """Write the measured `[uses.<device>]` and `build/gen/gallery.json` of MID."""
     from tools.patchkit import pk_committed, pk_device
 
     manifest = tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8"))
     ids = [m["id"] for m in manifest.get("machine", [])]
     counts = pk_committed.uses(per)
-    changed = write_uses(moddir / "module.toml", counts)
+    write_uses(moddir / "module.toml", counts)
+    changed = (moddir / "module.toml").read_text(encoding="utf-8") != original
     models = {d: pk_device.load(d)["modules"]["knobs"] for d in per}
     text = (
         json.dumps(
