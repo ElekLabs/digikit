@@ -10,7 +10,7 @@ status = "experimental"
 summary = "Emulator-only DT2 UI-task read-only directory iterator diagnostic."
 ports = ["dt2-1.17"]
 requires = ["core/expansion"]
-conflicts = ["core/runtime", "core/dsp-lp0-proof"]
+conflicts = ["core/runtime"]
 
 [targets]
 "dt2-1.17" = "untested"

@@ -1,6 +1,8 @@
 /* Neutral replacement pair. A's click action follows its new binding; E/H are
  * saved words, G on page one is local, and LEVEL stays independent. */
-#include <dk/machine/machine.h>
+#include <stddef.h>
+#include <dk/gen/machine.h>
+#include <dk/page/page.h>
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
 #include "module_ids.h"

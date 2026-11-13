@@ -7,7 +7,7 @@
 //! (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle. The handle is the client number the existing code
 //! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `lib.rs`.
 
-use crate::{dlog, files, peakwin, sample, settings, store, store_writer, tracks, MAX_MODULES};
+use crate::{dlog, files, peakwin, settings, store, store_writer, tracks, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -277,26 +277,6 @@ pub unsafe extern "C" fn dk_sample_pool_peaks_window(
     peakwin::window(client(p), index, token, first, frames, columns, out, capacity)
 }
 
-// ---- the sample bank (temporary: S3 deletes the bank with these three calls) -----------------------------------------------------
-
-pub unsafe extern "C" fn dk_sample_bank_open(ctx: *mut u8, out: *mut *mut u8) -> i32 {
-    if out.is_null() {
-        return E_CONTRACT;
-    }
-    match own_rec(ctx) {
-        Some(rec) => give(out, sample::open(rec)),
-        None => E_CONTRACT,
-    }
-}
-
-pub unsafe extern "C" fn dk_sample_bank_load(b: *mut u8, path: *const u8) -> i32 {
-    sample::load(client(b), path)
-}
-
-pub unsafe extern "C" fn dk_sample_bank_status(b: *mut u8) -> i32 {
-    sample::status(client(b))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,7 +322,6 @@ mod tests {
             assert_eq!(dk_settings_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_files_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
-            assert_eq!(dk_sample_bank_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert!(out.is_null());
         }
     }

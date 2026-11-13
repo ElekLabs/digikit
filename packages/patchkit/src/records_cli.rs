@@ -1,9 +1,8 @@
-//! `patchkit records --json [--dkm] FILE|-`: the records of a module's committed record block, decoded.
+//! `patchkit records --json FILE|-`: the records of a module's committed record block, decoded.
 //!
 //! The block is in the format of the register table (`register::Register::parse`). `module:check` and conformance read it from the
 //! emulated device (the runtime's `MODULE_COMMIT` event gives its address and size) and take the counts for `[uses]`, the parameter
-//! rows (slot, min, max, default, names) and the pages from this output, so no second decoder exists. With `--dkm` the input is a whole
-//! `.dkm` of api major 2 and the block is its register table (header pair at 0x90 and 0x94).
+//! rows (slot, min, max, default, names) and the pages from this output, so no second decoder exists.
 
 use crate::error::*;
 use crate::register::Register;
@@ -59,33 +58,11 @@ pub fn records_json(bytes: &[u8]) -> Result<Value> {
     }))
 }
 
-/// The register table of a `.dkm` of api major 2 (header pair at 0x90 and 0x94).
-fn register_of_dkm(raw: &[u8]) -> Result<&[u8]> {
-    let g = |o: usize| -> Result<usize> {
-        raw.get(o..o + 4)
-            .map(|b| u32::from_be_bytes(b.try_into().unwrap()) as usize)
-            .ok_or_else(|| err!("dkm: header past the end"))
-    };
-    let (off, size) = (g(0x90)?, g(0x94)?);
-    raw.get(
-        off..off
-            .checked_add(size)
-            .ok_or_else(|| err!("dkm: bad table"))?,
-    )
-    .filter(|_| size != 0)
-    .ok_or_else(|| {
-        err!("dkm: no register table (a module of api major 3 has the keys table there)")
-    })
-}
-
 /// The subcommand: arguments after `records`.
 pub fn run(rest: &[String]) -> Result<()> {
-    let dkm = rest.iter().any(|a| a == "--dkm");
     let files: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
     let [f] = files.as_slice() else {
-        return Err(Error(
-            "usage: patchkit records --json [--dkm] FILE|-".into(),
-        ));
+        return Err(Error("usage: patchkit records --json FILE|-".into()));
     };
     let raw = if f.as_str() == "-" {
         let mut b = vec![];
@@ -95,12 +72,7 @@ pub fn run(rest: &[String]) -> Result<()> {
     } else {
         std::fs::read(f).map_err(|e| Error(format!("{f}: {e}")))?
     };
-    let block = if dkm {
-        register_of_dkm(&raw)?
-    } else {
-        &raw[..]
-    };
-    println!("{}", serde_json::to_string_pretty(&records_json(block)?)?);
+    println!("{}", serde_json::to_string_pretty(&records_json(&raw)?)?);
     Ok(())
 }
 

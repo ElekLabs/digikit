@@ -1,4 +1,4 @@
-//! The builder calls of a module of api major 3 (docs/plans/sdk.md 6.2) and their commit (6.3).
+//! The builder calls of a module (docs/plans/sdk.md 6.2) and their commit (6.3).
 //!
 //! During `init` every builder call appends to a `Collect`, one block in the module's arena share (`begin` .. `end`). A handle is the address of
 //! an element of that block. A call never fails one by one: on overflow, on a bad argument, outside `init` or with a handle that is not ours it
@@ -1128,7 +1128,7 @@ pub fn check_commit(c: &Collect, p: &Profile, keys: &KeysCopy, loaded_fx: &[u32]
     OK
 }
 
-/// A module of api major 3 binds its DSP section to the machines and effects of its keys table: each voice record names a machine key of the
+/// A module binds its DSP section to the machines and effects of its keys table: each voice record names a machine key of the
 /// table (`voice_key(i)`), and the section has one effect record for each effect id of the table, in the table's order (`fx_ordinal`).
 pub fn check_dsp_keys(keys: &KeysCopy, nvoice: usize, voice_key: impl Fn(usize) -> u32, nfx: usize) -> i32 {
     let mut i = 0;

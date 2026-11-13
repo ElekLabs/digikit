@@ -323,7 +323,7 @@ patchkit refuses an entry for an unknown registry, an unknown or missing field, 
 
 ### Machine rows (lowering of the C declarations)
 
-**Note.** A machine is declared in C with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` (`sdk/include/dk/machine/machine.h`; see
+**Note.** A patched-in machine is declared in C with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` (`sdk/patched-in/include/dk/machine/machine.h`, visible to patched-in builds only; see
 [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 5.2), not in the manifest. The manifest parser ignores unknown keys,
 so `patchkit` keeps a short refusal: a manifest with `[[fx]]`, `[[voice]]`, `[[machine]]`, `[[param]]` or `[[page]]` fails with the
 name of the C macro to use. The text below describes how the declarations are lowered into registry rows.
@@ -506,7 +506,7 @@ The machine is declared in C (`src/module.c`: `DK_MACHINE`, `DK_PARAM`, `DK_PAGE
 ### An effect: `[[entry]] registry = "fx"`
 
 An effect module requires `core/fx` (the effects adapter, `modules/core/adapters/fx/`) and adds one row to its registry `fx`; the chain runs in module order, at most
-`DK_FX_MAX` (4) effects. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object (`<dk/fx/fx.h>`,
+`DK_FX_MAX` (4) effects. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object (`<dk/gen/fx.h>`,
 [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 7.2):
 
 ```toml
@@ -520,7 +520,7 @@ state = "_fg_state"      # .PKBSS _fg_state, <state_bytes>;
 
 `tests/fixtures/modules/fx-gain` (0.5 gain) is the example and the fixture of `core/fx`'s tests; `fx-nan` is the negative one. An empty chain plays the stock audio.
 
-A run-time effect (`dynamic = true`, a `.dkm`) declares a `DK_FX` record in C (`modules/fx/freqshift/src/module.c`)
+A run-time effect (`dynamic = true`, a `.dkm`) builds its effect in `init` with builder calls (`modules/fx/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
 instead of the `[[entry]]` row. It takes one of the 3 free rows that `core/dynfx`
 reserves, and `core/fxpages` reserves the pages. Its manifest, pages and routes are in [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md),
 sections 5.4 and 7.2. The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.

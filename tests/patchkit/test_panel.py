@@ -523,7 +523,7 @@ def test_default_zero_service_uses_normal_pack(module_tree, module_launch, capsy
 
 
 @pytest.mark.parametrize("device", ["dn2", "dt2"])
-@pytest.mark.parametrize("declaration", ["sample_bank", "sample_tracks"])
+@pytest.mark.parametrize("declaration", ["sample_tracks"])
 def test_sample_machine_automatically_uses_full_preview(
     module_launch, capsys, device, declaration
 ):

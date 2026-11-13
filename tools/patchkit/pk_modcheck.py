@@ -105,12 +105,15 @@ def _daemon(device: str) -> str:
 
 
 def commit_stage(mid: str, devices: list[str]) -> bool:
-    """For a module of api major 3: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
+    """For a module with `[[machine]]` or `[[fx]]`: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
     `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
-    conformance suite that runs next reads that gallery.json. A module of api major 2 declares in `.dk.desc` and is left alone: returns False."""
+    conformance suite that runs next reads that gallery.json. A tool or a service has no rows to commit and is left alone: returns False."""
     from tools.patchkit import patchkit, pk_committed, pk_device
 
     moddir = modroots.module_dir(mid)
+    tables = tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8"))
+    if not tables.get("machine") and not tables.get("fx"):
+        return False
     per: dict[str, dict] = {}
     with tempfile.TemporaryDirectory(prefix="pk-commit-") as tmp:
         for dev in devices:
@@ -120,8 +123,6 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
             )
             if r.returncode:
                 continue  # not packed for this device (ports); the size lines say why
-            if out.read_bytes()[0x38] != 3:
-                return False
             per[dev] = pk_committed.committed(
                 mid, dev, out, str(patchkit.binary()), _daemon(dev)
             )
@@ -136,7 +137,9 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
         json.dumps(
             pk_committed.gallery(
                 mid, ids, per, models, [f["id"] for f in manifest.get("fx", [])]
-            ), indent=2, sort_keys=True
+            ),
+            indent=2,
+            sort_keys=True,
         )
         + "\n"
     )

@@ -20,10 +20,8 @@ const NONE: u32 = 0xffff_ffff;
 const H_SIZE: usize = 0x08;
 const H_HDRSIZE: usize = 0x0c;
 const H_SHA: usize = 0x10;
-#[allow(dead_code)]
-const H_RUNTIME: usize = 0x30; // informational since runtime 0.1.0
+const H_RUNTIME: usize = 0x30; // the runtime version the module needs (bit 31: built with DK_TRACE)
 const H_VERSION: usize = 0x34;
-const H_CONTRACT: usize = 0x38; // api, machine, fx, service: (major, minor) bytes
 const H_NAME: usize = 0x40;
 const H_IMAGE_OFF: usize = 0x60;
 const H_IMAGE_SIZE: usize = 0x64;
@@ -46,7 +44,7 @@ unsafe fn in_file(off: u32, len: u32, size: u32) -> bool {
     off <= size && len <= size - off
 }
 
-/// The machine keys (first word of each MACHINE record of the `register` section) of the `.dkm` at `path`, for the boot's type assignment
+/// The machine keys of the keys table of the `.dkm` at `path`, for the boot's type assignment
 /// (`assign::plan`): at most 8, the count returned. Reads the file into the staging buffer, so it runs before the first load. A file that is
 /// missing, torn or not a `.dkm` has none (its load reports the error).
 pub unsafe fn machine_keys(path: *const u8, out: &mut [u32; 8]) -> usize {
@@ -63,48 +61,20 @@ pub unsafe fn machine_keys(path: *const u8, out: &mut [u32; 8]) -> usize {
         return 0;
     }
     let (off, len) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
-    if *f.add(H_CONTRACT) == 3 {
-        // api major 3: the keys table of the header (the pair at 0x90 is keys_off, keys_size)
-        if !in_file(off, len, size) {
-            return 0;
-        }
-        let k = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(f.add(off as usize), len as usize)) {
-            Ok(k) => k,
-            Err(_) => return 0,
-        };
-        let mut n = 0;
-        while n < k.nm && n < 8 {
-            out[n] = k.mk[n];
-            n += 1;
-        }
-        return n;
-    }
-    if len < 16 || !in_file(off, len, size) {
+    // the keys table of the header (the pair at 0x90 is keys_off, keys_size)
+    if !in_file(off, len, size) {
         return 0;
     }
-    let reg = f.add(off as usize);
-    if rd32(reg) != 0x444b_5247 {
-        return 0;
+    let k = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(f.add(off as usize), len as usize)) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let mut n = 0;
+    while n < k.nm && n < 8 {
+        out[n] = k.mk[n];
+        n += 1;
     }
-    let (n, mut at) = (rd32(reg.add(12)), 16u32);
-    let mut found_n = 0;
-    let mut i = 0;
-    while i < n {
-        if len - at < 8 {
-            break;
-        }
-        let (kind, rl) = (rd32(reg.add(at as usize)), rd32(reg.add(at as usize + 4)));
-        if rl < 12 || rl > len - at {
-            break;
-        }
-        if kind == 2 && found_n < 8 {
-            out[found_n] = rd32(reg.add(at as usize + 8));
-            found_n += 1;
-        }
-        at += rl;
-        i += 1;
-    }
-    found_n
+    n
 }
 
 /// Validate and load the `.dkm` at `path`. See `dkrt_load`. The tables are checked after every attempt, and none starts once a check has
@@ -160,22 +130,10 @@ unsafe fn load_inner(path: *const u8) -> i32 {
     if got != want {
         return E_SHA;
     }
-    // contracts (D3): refused only when a contract the module declares (major != 0) has another major than the runtime's, or a
-    // minor above the runtime's. The runtime version in H_RUNTIME is informational.
-    let rt = [
-        contract::API,
-        contract::MACHINE,
-        contract::FX,
-        contract::SERVICE,
-    ];
-    let mut c = 0;
-    while c < 4 {
-        let major = *f.add(H_CONTRACT + 2 * c);
-        let minor = *f.add(H_CONTRACT + 2 * c + 1);
-        if major != 0 && (!crate::contract_major_ok(c, major) || minor > rt[c].1) {
-            return E_CONTRACT;
-        }
-        c += 1;
+    // the runtime version the module needs: another major or minor than the runtime's, or a higher patch, refuses (0.x: a minor breaks)
+    let needs = rd32(f.add(H_RUNTIME));
+    if !crate::runtime_accepts(needs) {
+        return E_CONTRACT;
     }
     let name = f.add(H_NAME);
     let nlen = cstr_len(name, 32);
@@ -264,21 +222,11 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         return E_FORMAT;
     }
     let reg = f.add(reg_off as usize);
-    let major3 = *f.add(H_CONTRACT) == 3;
-    // api major 3: the table is the keys table; the records come from the builder calls of `init` (complete3)
-    let mut keys = crate::collect::KeysCopy::empty();
-    if major3 {
-        keys = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(reg, reg_size as usize)) {
-            Ok(k) => k,
-            Err(e) => return e,
-        };
-    } else {
-        let r = crate::registry::check(reg, reg_size, image_size);
-        if r != OK {
-            return r;
-        }
-    }
-    let keys_ref = if major3 { Some(&keys) } else { None };
+    // the table is the keys table; the records come from the builder calls of `init` (complete)
+    let keys = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(reg, reg_size as usize)) {
+        Ok(k) => k,
+        Err(e) => return e,
+    };
     // the DSP section, if any
     let (dsp_off, dsp_size) = (rd32(f.add(H_DSP_OFF)), rd32(f.add(H_DSP_SIZE)));
     let mut job = dsp::Job::empty();
@@ -287,12 +235,10 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         if r != OK {
             return r;
         }
-        if major3 {
-            let (v, stride) = (job.voices, job.vstride as usize);
-            let r = crate::collect::check_dsp_keys(&keys, job.nvoice as usize, |i| rd32(v.add(stride * i)), job.nfx as usize);
-            if r != OK {
-                return r;
-            }
+        let (v, stride) = (job.voices, job.vstride as usize);
+        let r = crate::collect::check_dsp_keys(&keys, job.nvoice as usize, |i| rd32(v.add(stride * i)), job.nfx as usize);
+        if r != OK {
+            return r;
         }
     }
     // already loaded; a free record
@@ -360,12 +306,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         i += 1;
     }
     m.version = rd32(f.add(H_VERSION));
-    let ct = &mut (*addr_of_mut!(crate::DKRT_CONTRACTS))[rec];
-    i = 0;
-    while i < 8 {
-        ct[i] = *f.add(H_CONTRACT + i);
-        i += 1;
-    }
+    (*addr_of_mut!(crate::DKRT_MODULE_RUNTIME))[rec] = needs & !crate::FLAG_TRACE;
     m.base = base;
     m.size = total;
     m.fini = if fini == NONE { 0 } else { base + fini };
@@ -377,7 +318,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         // the CF part goes live now (rows in place before the machine view is built); the DSP code and the voice rows follow
         // when the frames flow
         m.used = 1;
-        let r = complete(rec, reg, reg_size, initaddr, tickaddr, keys_ref, image_size);
+        let r = complete(rec, &keys, initaddr, tickaddr, image_size);
         if r != OK {
             if dsp::retained() { return E_BUSY; }
             dsp::cancel(rec);
@@ -400,7 +341,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         });
         return LOADING;
     }
-    let r = complete(rec, reg, reg_size, initaddr, tickaddr, keys_ref, image_size);
+    let r = complete(rec, &keys, initaddr, tickaddr, image_size);
     if r != OK {
         if dsp::retained() || !crate::files::retire(rec) || !retire_sdk(rec) { return E_BUSY; }
         arena::free(mem);
@@ -410,58 +351,9 @@ unsafe fn load_inner(path: *const u8) -> i32 {
     r
 }
 
-/// The end of a load, shared by the immediate and the DSP path (both run in the boot hook): the registry rows (the machine is listed from here), `init`, the
-/// tick. On an error everything it did is undone (the DSP part too) and the caller frees the module's memory.
-unsafe fn complete(rec: usize, reg: *const u8, reg_size: u32, init: u32, tick: u32, keys: Option<&crate::collect::KeysCopy>, image_size: u32) -> i32 {
-    if let Some(k) = keys {
-        return complete3(rec, k, init, tick, image_size);
-    }
-    let s = st();
-    let owner = rec as u8 + 1;
-    crate::files::init_begin(rec);
-    // registry rows before `init` (which may reuse the staging buffer through `store_read`)
-    let r = crate::registry::apply(owner, reg, reg_size, s.modules[rec].base);
-    if r != OK {
-        crate::registry::remove(owner);
-        let held = !crate::files::retire(rec) | !retire_sdk(rec);
-        if !dsp::release(rec) || held { return E_BUSY; }
-        return r;
-    }
-    if init != 0 {
-        let call: unsafe extern "C" fn(*const Ctx) -> i32 = core::mem::transmute(init as usize);
-        let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
-        CALLED_NEED = [0; NEEDS_LEN];
-        let r = crate::dlog::call_init(rec as usize, call, ctx);
-        if r != 0 {
-            // the last service accessor whose provider is not in the image answered DK_E_MISSING: the boot shows the provider as the module's need
-            let missing = r == E_MISSING && CALLED_NEED[0] != 0;
-            if missing && MISSING[0] == 0 {
-                MISSING = CALLED_NEED;
-            }
-            crate::intro::discard(rec);
-            let held = !crate::files::retire(rec) | !retire_sdk(rec);
-            crate::upload::release_cmds(owner);
-            crate::registry::remove(owner);
-            if !dsp::release(rec) || held { return E_BUSY; }
-            // the load fails as for an unresolved import of a module that is not in the image (the LOADS and BOOT views know that code)
-            return if missing { E_IMPORT } else { E_INIT };
-        }
-    }
-    if tick != 0 {
-        crate::entry::publish_tick(rec, tick);
-    }
-    let m: &mut Module = &mut s.modules[rec];
-    m.used = 1;
-    s.loads = s.loads.wrapping_add(1);
-    crate::files::ready(rec);
-    // fully loaded: a boot animation the module asked for in `init` goes live now (never before: a rolled-back module is not reachable)
-    crate::intro::commit(rec);
-    OK
-}
-
-/// `complete` for a module of api major 3 (docs/plans/sdk.md 6.3): `init` runs first and its builder calls are collected; then the commit checks them, fills the
+/// The end of a load, shared by the immediate and the DSP path (both run in the boot hook; docs/plans/sdk.md 6.3): `init` runs first and its builder calls are collected; then the commit checks them, fills the
 /// voice rows' ranges, writes the registry rows and keeps the record block. Anything that fails undoes what `init` did and writes no row.
-unsafe fn complete3(rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick: u32, image_size: u32) -> i32 {
+unsafe fn complete(rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick: u32, image_size: u32) -> i32 {
     let s = st();
     let owner = rec as u8 + 1;
     crate::files::init_begin(rec);

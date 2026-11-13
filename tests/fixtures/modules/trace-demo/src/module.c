@@ -1,6 +1,6 @@
 /* The effect of test/trace-demo: one effect `gain` with one knob (as test/dyn-fx-gain), declared with builder calls in init, and trace marks in init. */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include <dk/core/trace.h>
 #include "module_ids.h"
 

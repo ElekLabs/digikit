@@ -5,7 +5,7 @@ import TomlVersionActions from '../release-version-actions.cjs';
 const modulePath = 'modules/example/module.toml';
 const moduleText =
   '# owner\r\n[module]\r\nid = "example/owner"\r\nversion = \'0.5.4\'  # keep me\r\n\r\n[other]\r\nversion = "9.9.9"\r\n';
-const sdkText = '[runtime]\nversion = "0.5.4" # runtime release\n[contract]\napi = [1, 6]\n';
+const sdkText = '[runtime]\nversion = "0.5.4" # runtime release\n[limits]\nslots = 6\n';
 
 async function actions(tree: ReturnType<typeof createTreeWithEmptyWorkspace>, runtime = false) {
   const action = new TomlVersionActions(
@@ -38,7 +38,7 @@ it('changes only the owner version token, preserving comments, quotes, line endi
   expect(action.excludeManifestsFromFormatting).toBe(true);
 });
 
-it('versions the canonical runtime and its mirror together without changing SDK contracts or another module', async () => {
+it('versions the canonical runtime and its mirror together without changing other SDK tables or another module', async () => {
   const tree = createTreeWithEmptyWorkspace();
   tree.write(modulePath, moduleText);
   tree.write('sdk/sdk.toml', sdkText);

@@ -210,7 +210,7 @@ def test_modules_pages_by_start_index_and_decodes_the_records():
             bytes([index])
             + name.encode().ljust(32, b"\0")
             + struct.pack(">I", 0x010203)
-            + bytes([1, 1, 1, 0, 0, 0, 1, 0])
+            + struct.pack(">II", 0x000700, 0)
             + struct.pack(
                 ">IIIII",
                 0x1000 + index,
@@ -273,11 +273,7 @@ def test_modules_pages_by_start_index_and_decodes_the_records():
         a["faults"],
         a["guard_off"],
     ) == (1, "a/one", 0x010203, [16], 0, False)
-    assert (
-        a["contracts"] == [(1, 1), (1, 0), (0, 0), (1, 0)]
-        and a["dsp_off"] == 0x40
-        and a["rows"] == 2
-    )
+    assert a["needs"] == 0x000700 and a["dsp_off"] == 0x40 and a["rows"] == 2
     assert (b["index"], b["types"], b["faults"], b["guard_off"], b["dsp_len"]) == (
         3,
         [17, 18],

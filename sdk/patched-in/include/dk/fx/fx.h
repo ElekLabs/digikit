@@ -1,5 +1,5 @@
-/* <dk/fx/fx.h>: the effect contract for content modules.
-   Hand-written. Layouts come from the generated <dk/gen/fx.h> and <dk/gen/desc.h> (from sdk/sdk.toml).
+/* <dk/fx/fx.h>: the declaration macros of a PATCHED-IN effect module (`dynamic = false`; patchkit adds this directory for those builds only).
+   A run-time module builds its effect in `init` (dk_module_ctx_add_fx); its contract structs are in <dk/gen/fx.h>. Hand-written. Layouts come from the generated <dk/gen/fx.h> and <dk/gen/desc.h> (from sdk/sdk.toml).
 
    Declare each effect in a C file of the module:
 
@@ -14,7 +14,7 @@
 #ifndef DK_FX_H
 #define DK_FX_H
 #include <dk/gen/fx.h>
-#include <dk/page/page.h>
+#include <dk/page/decl.h>
 
 /* An effect: ID is a C identifier and becomes the effect id. The rest are dk_desc_fx field initializers. */
 #define DK_FX(ID, ...)                                                                             \

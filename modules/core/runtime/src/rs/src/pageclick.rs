@@ -95,8 +95,7 @@ pub fn resolve(actions: &[u32], first: u32, code: i32, track: impl FnOnce() -> u
 
 static mut DET: Detector = Detector::new();
 static mut ACTIONS: [u32; limits::PARAM_ROWS] = [0; limits::PARAM_ROWS];
-/// The `arg` of an action registered through `dk_param_on_click` (api major 3): such a callback is `void fn(void *arg, u32 track)`; the callback of a
-/// module of api major 2 is `void fn(u32 track)` and has no argument.
+/// The `arg` of an action registered through `dk_param_on_click` : such a callback is `void fn(void *arg, u32 track)`.
 static mut ARGS: [(bool, u32); limits::PARAM_ROWS] = [(false, 0); limits::PARAM_ROWS];
 /// The number of parameter rows that have an action: 0 keeps both hooks at one test.
 static mut ARMED: u32 = 0;

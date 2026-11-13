@@ -1,6 +1,6 @@
 /* The effect of test/dyn-fx-hang: one effect `hang` with one knob (unused by the routine), declared with builder calls in init. Starts as a send. */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include "module_ids.h"
 
 static int32_t init(dk_module_ctx *ctx)

@@ -162,7 +162,7 @@ def fx_records(mid: str) -> list[dict]:
 
 
 def _fx_records(mid: str, man: dict) -> list[dict]:
-    """The effects of an effect module: for a module of api major 3 (`[[fx]]` in module.toml) the DSP entry names (`_<prefix>_process`,
+    """The effects of an effect module: for a module (`[[fx]]` in module.toml) the DSP entry names (`_<prefix>_process`,
     `_<prefix>_desc`; the prefix is the id, or `dsp`) and the knob ranges of the committed rows (build/gen/gallery.json, written by `module:check`);
     otherwise the records `patchkit desc` finds. Only `type = "fx"` modules, so `desc` does not run for every module."""
     if man.get("module", {}).get("type") != "fx":
@@ -189,7 +189,7 @@ def _fx_records(mid: str, man: dict) -> list[dict]:
 
 
 def _voices(mid: str, man: dict) -> list[dict]:
-    """The voice records of a machine module: `patchkit desc` for a module with `.dk.desc` records, and for a module of api major 3 (`[[machine]]` in
+    """The voice records of a machine module: `patchkit desc` for a module with `.dk.desc` records, and for a module (`[[machine]]` in
     module.toml) the DSP entry names of its machine (`_<prefix>_render`, `_<prefix>_note_on`, `_<prefix>_desc`; the prefix is the id, or `dsp`).
     Only `type = "machine"` modules, so `desc` does not run for every module."""
     if man.get("module", {}).get("type") == "machine":
@@ -247,7 +247,7 @@ def _type_number(mid: str, man: dict, device: str, literal: str | None) -> int:
     types = tomllib.loads(
         (ROOT / "modules/core/adapters/machines/types.toml").read_text()
     )[device]
-    if man.get("machine"):  # a module of api major 3: the id of module.toml
+    if man.get("machine"):  # a module: the id of module.toml
         mach = man["machine"][0]["id"]
     else:
         recs = (

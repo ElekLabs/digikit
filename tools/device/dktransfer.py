@@ -14,10 +14,10 @@ dev tooling; the app starts no process.
     mise run transfer -- install <author/name> --port Digitakt
 
 `list` is one merged view for the target's device (INFO): the repo's run-time modules that pack for it (never `core/*`; `test/` ones are
-marked), with group (machine, fx or service contract in the packed header: Machines, Effects, Tools), version, sizes, build state
+marked), with group (machine or effect keys in the packed file: Machines, Effects, Tools), version, sizes, build state
 (`unchanged` = the built objects carry the hash of their sources; `needs build`), whether the file is on the card (LIST, same file hash),
 whether it is loaded (MODULES), and whether it fits (CAPACITY; a warning only). Card files that match no repo module are listed with
-their group, read from the 0xa0-byte header (READ, runtime 0.2.4).
+their name and version, read from the 0xa0-byte header (READ, runtime 0.2.4; the group needs the keys table behind the header, so it is Tools).
 
 `install MOD...` (it emits `progress` events with the bytes sent of each upload, at most about ten per file) builds only the modules whose objects changed, packs them, uploads the files the card does not have (same file hash),
 VERIFYs each file on the card (the device hashes it from a fresh read). That is all: the device's selection is not touched, because
@@ -68,29 +68,29 @@ def header_info(h: bytes) -> dict[str, Any] | None:
         return None
     size, _hdr = struct.unpack_from(">II", h, 8)
     version = struct.unpack_from(">I", h, 0x34)[0]
-    contracts = {
-        k: (h[0x38 + 2 * i], h[0x39 + 2 * i])
-        for i, k in enumerate(("api", "machine", "fx", "service"))
-    }
     image, bss = struct.unpack_from(">II", h, 0x64)
     dsp = struct.unpack_from(">I", h, 0x9C)[0]
     return {
         "name": h[0x40:0x60].split(b"\0")[0].decode("ascii", "replace"),
         "version": D.fmt_runtime(version),
-        "contracts": contracts,
-        "group": group_of(contracts),
+        "group": group_of(h),
         "size": size,
         "arena": image + bss,
         "dsp": dsp,
     }
 
 
-def group_of(contracts: dict[str, tuple[int, int]]) -> str:
-    """Machine contract: Machines; fx: Effects; service or api only: Tools."""
-    if contracts["machine"][0]:
-        return "Machines"
-    if contracts["fx"][0]:
-        return "Effects"
+def group_of(f: bytes) -> str:
+    """Machines for a file whose keys table lists a machine, Effects for one that lists an effect, else Tools. The table is at the header's 0x90
+    pair (offset, size); a header alone, without the table, gives Tools."""
+    off, size = struct.unpack_from(">II", f, 0x90)
+    t = f[off : off + size]
+    if size >= 12 and len(t) == size:
+        machines, effects = struct.unpack_from(">HH", t, 6)
+        if machines:
+            return "Machines"
+        if effects:
+            return "Effects"
     return "Tools"
 
 
@@ -181,7 +181,7 @@ def repo_rows(
         except R.RunError:
             continue
         data = dkm.read_bytes()
-        h = header_info(data[: D.HEADER_BYTES])
+        h = header_info(data)
         if h is None:
             continue
         # what a load takes, inferred from the file (`patchkit needs`); a file the loader would refuse has none and no verdict

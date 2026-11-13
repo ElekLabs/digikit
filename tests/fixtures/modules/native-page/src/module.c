@@ -1,6 +1,8 @@
 /* Neutral SDK fixture: the second native page reuses two saved words.
  * LOCAL zoom is UI-only state, independent per source track. No firmware calls. */
-#include <dk/machine/machine.h>
+#include <stddef.h>
+#include <dk/gen/machine.h>
+#include <dk/page/page.h>
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
 #include "module_ids.h"

@@ -2,7 +2,7 @@
    Tab GSO. GAIN is p0, 0 to 1.27: the shown value 0 .. 127 is the gain in percent, so the default 50 is 0.5.
    The MIX knob starts at 127 (wet). The effect starts as a send and can only be a send. */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include "module_ids.h"
 
 static int32_t init(dk_module_ctx *ctx)

@@ -2,7 +2,7 @@
 #ifndef SHOT_H
 #define SHOT_H
 #include <dk/core/module.h>
-#include <dk/machine/machine.h>
+#include <dk/gen/machine.h>
 #include <dk/platform/param.h>
 #include <dk/sample/pool.h>
 #include <dk/sample/view.h>

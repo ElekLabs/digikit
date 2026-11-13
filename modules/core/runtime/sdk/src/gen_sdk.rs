@@ -3,13 +3,6 @@
 // 0.7.0
 pub const RUNTIME_VERSION: u32 = 0x000700;
 
-pub mod contract {
-    pub const API: (u8, u8) = (3, 13);
-    pub const MACHINE: (u8, u8) = (1, 6);
-    pub const FX: (u8, u8) = (1, 0);
-    pub const SERVICE: (u8, u8) = (1, 0);
-}
-
 pub mod logk {
     pub const BOOT_START: u16 = 1;
     pub const CARD_CHECK: u16 = 2;
@@ -324,7 +317,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 109] = [
+    pub const IMPORT_NAMES: [&str; 106] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -396,9 +389,6 @@ pub mod api {
         "dk_sample_pool_set",
         "dk_sample_pool_peaks",
         "dk_sample_pool_peaks_window",
-        "dk_sample_bank_open",
-        "dk_sample_bank_load",
-        "dk_sample_bank_status",
         "dk_ui_open",
         "dk_ui_menu_open",
         "dk_ui_menu_close",
@@ -437,7 +427,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`.
-    pub const BUILTIN_NAMES: [&str; 74] = [
+    pub const BUILTIN_NAMES: [&str; 71] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -504,9 +494,6 @@ pub mod api {
         "dk_sample_pool_set",
         "dk_sample_pool_peaks",
         "dk_sample_pool_peaks_window",
-        "dk_sample_bank_open",
-        "dk_sample_bank_load",
-        "dk_sample_bank_status",
         "dk_debug_peek",
         "dk_debug_track_type",
         "dk_debug_selected_params",
@@ -702,15 +689,6 @@ pub mod api {
 
     /// `dk_sample_pool_peaks_window`: Min/max of `columns` equal parts of the frames [first, first + frames) of a READY pool entry matching token, computed in the background. Returns `columns` when ready, 0 while it is computed, or a negative error. Poll from the draw callback.
     pub type DkSamplePoolPeaksWindowFn = unsafe extern "C" fn(p: *mut u8, index: u32, token: u32, first: u32, frames: u32, columns: u32, out: *mut u8, capacity: u32) -> i32;
-
-    /// `dk_sample_bank_open`: Open the module's sample bank (its one DK_SAMPLE_BANK): `*out` is the handle, the result 0. A negative DK_E_* result when the module has no bank, has a sample pool too, or this is not init; `*out` is untouched then.
-    pub type DkSampleBankOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
-
-    /// `dk_sample_bank_load`: Queue the one load from a NUL-terminated device sample path (copies the path, no file IO here). May be called from init or a host command handler. Returns 0 or a negative DK_E_* code. The bank is retained once delivery starts.
-    pub type DkSampleBankLoadFn = unsafe extern "C" fn(b: *mut u8, path: *const u8) -> i32;
-
-    /// `dk_sample_bank_status`: DK_SAMPLE_UNUSED, QUEUED, LOADING or READY, or a negative DK_E_* code.
-    pub type DkSampleBankStatusFn = unsafe extern "C" fn(b: *mut u8) -> i32;
 
     /// `dk_ui_open`: Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched.
     pub type DkUiOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;

@@ -39,31 +39,8 @@ pub const H_MENU: u32 = 0x88;
 pub const H_TICK: u32 = 0x8c;
 pub const H_REG_OFF: u32 = 0x90;
 pub const H_REG_SIZE: u32 = 0x94;
-/// The api contract is the first pair at `H_CONTRACT`; a file of api major 3 has a keys table at `H_REG_OFF` (`keys.rs`), not a register table.
-pub const H_CONTRACT: u32 = 0x38;
-pub const API_KEYS_MAJOR: u32 = 3;
 pub const H_DSP_OFF: u32 = 0x98;
 pub const H_DSP_SIZE: u32 = 0x9c;
-
-/// The `register` table: magic "DKRG", version, device, record count; then the records, `kind`, `len`, body.
-pub const REG_MAGIC: u32 = 0x444b_5247;
-pub const REG_HEADER: u32 = 16;
-pub const KIND_PARAM: u32 = 1;
-pub const KIND_MACHINE: u32 = 2;
-pub const KIND_PAGE: u32 = 3;
-pub const LEN_PARAM: u32 = 0x50;
-pub const LEN_MACHINE: u32 = 0x6c;
-pub const LEN_PAGE: u32 = 0x60;
-/// An effect's page: it takes no row of its own (it belongs to the effect's slot, counted by the DSP section's effect record).
-pub const KIND_EFFECT: u32 = 4;
-pub const LEN_EFFECT: u32 = 0x1a4;
-/// A parameter's click callback: it takes no row (the parameter's row is counted by its PARAM record).
-pub const KIND_ACTION: u32 = 5;
-pub const LEN_ACTION: u32 = 0x10;
-pub const KIND_NATIVE_PAGE: u32 = 6;
-pub const LEN_NATIVE_PAGE: u32 = 0x90;
-pub const KIND_NATIVE_PAGE_V2: u32 = 7;
-pub const LEN_NATIVE_PAGE_V2: u32 = 0x98;
 
 /// The DSP section: magic "DKDS", versions 1 to 5, header 0x40 bytes, voices of 16, 48 or 64 bytes (version 4: voices of 64 bytes and effect records).
 pub const DSP_MAGIC: u32 = 0x444b_4453;
@@ -237,11 +214,7 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         return Err(Error::Sizes);
     }
     if reg_size != 0 {
-        if word(src, H_CONTRACT)? >> 24 >= API_KEYS_MAJOR {
-            keys_table(src, reg_off, reg_size, &mut n)?;
-        } else {
-            registry(src, reg_off, reg_size, &mut n)?;
-        }
+        keys_table(src, reg_off, reg_size, &mut n)?;
     }
     let (dsp_off, dsp_size) = (word(src, H_DSP_OFF)?, word(src, H_DSP_SIZE)?);
     if !inside(dsp_off, dsp_size, size) {
@@ -253,7 +226,7 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
     Ok(n)
 }
 
-/// The keys table of a file of api major 3 (`keys.rs`): the `[uses]` row counts the packer wrote.
+/// The keys table of the file (`keys.rs`): the `[uses]` row counts the packer wrote.
 fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), Error> {
     // only the 12 byte head is read; the size must be the one its counts give (the check of `Keys::parse`)
     let mut b = [0u8; keys::K_KEYS];
@@ -272,56 +245,6 @@ fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Resu
     n.machine_rows = w(keys::K_MACHINE_ROWS) as u32;
     n.param_rows = w(keys::K_PARAM_ROWS) as u32;
     n.page_rows = w(keys::K_PAGE_ROWS) as u32;
-    Ok(())
-}
-
-/// The records of the `register` table at `off` (`size` bytes): the rows each kind takes. The walk is the loader's (`registry::check`): every
-/// record has the length of its kind and the table ends where the last one does.
-fn registry<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), Error> {
-    if size < REG_HEADER || word(src, off)? != REG_MAGIC || word(src, off + 4)? != 1 {
-        return Err(Error::Register);
-    }
-    let count = word(src, off + 12)?;
-    if count > MAX_RECORDS {
-        return Err(Error::Register);
-    }
-    let mut at = REG_HEADER;
-    let mut i = 0;
-    while i < count {
-        if at > size || size - at < 8 {
-            return Err(Error::Register);
-        }
-        let kind = word(src, off + at)?;
-        let len = word(src, off + at + 4)?;
-        let want = if kind == KIND_PARAM {
-            n.param_rows += 1;
-            LEN_PARAM
-        } else if kind == KIND_MACHINE {
-            n.machine_rows += 1;
-            LEN_MACHINE
-        } else if kind == KIND_PAGE {
-            n.page_rows += 1;
-            LEN_PAGE
-        } else if kind == KIND_EFFECT {
-            LEN_EFFECT
-        } else if kind == KIND_ACTION {
-            LEN_ACTION
-        } else if kind == KIND_NATIVE_PAGE_V2 {
-            LEN_NATIVE_PAGE_V2
-        } else if kind == KIND_NATIVE_PAGE {
-            LEN_NATIVE_PAGE
-        } else {
-            return Err(Error::Register);
-        };
-        if len != want || size - at < len {
-            return Err(Error::Register);
-        }
-        at += len;
-        i += 1;
-    }
-    if at != size {
-        return Err(Error::Register);
-    }
     Ok(())
 }
 
