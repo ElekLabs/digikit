@@ -60,7 +60,7 @@ test('the progress line of a running upload carries the suffix, and a finished r
   u = applyUpload(u, { event: 'queued', folder: '', name: 'kick.wav', bytes: 1000 });
   u = applyUpload(u, { event: 'progress', folder: '', name: 'kick.wav', sent: 10, bytes: 1000 });
   const run = (link?: Parameters<typeof samplesBar>[4]) => samplesBar(u, {}, true, undefined, link)?.message;
-  assert.match(run({ state: 'bulk' }) ?? '', /^Uploading kick\.wav \(1 of 1\) · via Fast USB$/);
+  assert.match(run({ state: 'bulk' }) ?? '', /^Transferring 1 of 1 · kick\.wav · via Fast USB$/);
   assert.match(run({ state: 'fallback', reason: 'x' }) ?? '', / · via SysEx$/);
   assert.doesNotMatch(run() ?? '', /via/);
   assert.doesNotMatch(samplesBar(u, {}, false, undefined, { state: 'bulk' })?.message ?? '', /via/);

@@ -50,6 +50,22 @@ const upload3 = async (p) => {
   await p.click(/^Upload/);
   await p.wait(2300);
 };
+/** A slow sample check keeps the same progress element and reveals the hint in both the row and footer. */
+const checkingSample = async (p) => {
+  await p.tick('^Upload kick_punchy');
+  await p.click(/^Upload/);
+  await p.wait(600);
+  const state = await p.eval(`new Promise((resolve) => {
+    const bar = document.querySelectorAll('section.col')[1].querySelector('.up progress');
+    setTimeout(() => resolve({
+      sameBar: !!bar && bar.isConnected && bar.value === bar.max,
+      hints: [...document.querySelectorAll('.phase')].filter((el) => el.textContent === 'Checking…').length,
+      message: document.querySelector('.bar .msg')?.textContent,
+    }), 2600);
+  })`);
+  if (!state.sameBar || state.hints !== 2 || !state.message?.startsWith('Transferring 1 of 1'))
+    throw new Error(`sample check lost its progress bar or hints: ${JSON.stringify(state)}`);
+};
 /** Wait (up to 10 s) until the Transfer page has read the device: no "reading…" or "Connecting…" text and a module row. */
 const modulesReady = async (p) => {
   for (let i = 0; i < 100; i++) {
@@ -200,6 +216,8 @@ const SCENES = [
       await p.wait(4000);
     },
   },
+  { name: 'samples-checking', q: 'mode=samples&speed=0.8&verify=4000', size: WIDE, steps: checkingSample },
+  { name: 'samples-narrow-checking', q: 'mode=samples&speed=0.8&verify=4000', size: MIN, steps: checkingSample },
   { name: 'samples-narrow', q: 'mode=samples', size: MIN },
   {
     name: 'samples-narrow-uploading',

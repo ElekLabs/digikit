@@ -107,7 +107,7 @@ test('rows: folders first, then files by name; an upload that is not listed yet 
     ],
   );
   assert.equal(rows[1].status, undefined);
-  assert.deepEqual(rows[2].status, { kind: 'uploading', sent: 5, bytes: 20, message: '' });
+  assert.deepEqual(rows[2].status, { kind: 'uploading', sent: 5, bytes: 20, message: '', checking: '' });
   assert.deepEqual(rows[3].status, { kind: 'ok', message: 'device content hash matches\nthe firmware hash' });
 });
 
@@ -125,7 +125,7 @@ test('the state of an upload: waiting, uploading, verifying, ok, failed', () => 
   assert.equal(uploadStatus(undefined), undefined);
   assert.equal(uploadStatus(u('waiting')).kind, 'waiting');
   assert.equal(uploadStatus(u('uploading', 3)).kind, 'uploading');
-  assert.equal(uploadStatus(u('uploading', 10)).kind, 'verifying'); // all sent: the device is checking
+  assert.equal(uploadStatus(u('uploading', 10)).kind, 'uploading'); // all sent: still awaiting completion
   assert.equal(uploadStatus(u('verifying', 10)).kind, 'verifying');
   assert.equal(uploadStatus(u('ok', 10, 10, 'm')).message, 'm');
   assert.equal(uploadStatus(u('failed', 0, 10, 'no space')).kind, 'failed');
@@ -661,7 +661,7 @@ test('a folder row: pending while an upload fills it, with the state of the uplo
       ['init', 'file', false],
     ],
   );
-  assert.deepEqual(top[0].status, { kind: 'uploading', sent: 15, bytes: 40, message: '' });
+  assert.deepEqual(top[0].status, { kind: 'uploading', sent: 15, bytes: 40, message: '', checking: '' });
   // inside it: the files of this level and the folders below, each with its own state
   const inside = sampleRows('loops', [folder('breaks'), file('a', 10)], uploads);
   assert.deepEqual(
